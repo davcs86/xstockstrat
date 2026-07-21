@@ -405,6 +405,10 @@ export async function startMockBackend(): Promise<void> {
                 description: 'High-conviction momentum strategy',
                 rating: 'A',
                 overallScore: 0.87,
+                // feature 065: well-evidenced grade (above the symbol/day floor → not provisional).
+                evidenceSymbols: 8,
+                evidenceDays: 2100,
+                provisional: false,
               },
               {
                 strategyId: 'strat-mid-002',
@@ -412,6 +416,10 @@ export async function startMockBackend(): Promise<void> {
                 description: 'Statistical arbitrage mean reversion',
                 rating: 'B',
                 overallScore: 0.68,
+                // feature 065: thin evidence → provisional grade.
+                evidenceSymbols: 1,
+                evidenceDays: 60,
+                provisional: true,
               },
               {
                 strategyId: 'strat-low-003',
@@ -419,6 +427,9 @@ export async function startMockBackend(): Promise<void> {
                 description: 'Simple trend following strategy',
                 rating: 'D',
                 overallScore: 0.42,
+                evidenceSymbols: 4,
+                evidenceDays: 900,
+                provisional: false,
               },
             ],
           };
@@ -495,8 +506,13 @@ export async function startMockBackend(): Promise<void> {
           };
         },
         async getStrategyReport(req) {
+          // feature 065: a strategy whose grade was cleared (never earned / definition changed)
+          // answers NOT_FOUND — the detail page renders the cleared-grade empty state.
+          if (req.strategyId === 'strat-notfound-001') {
+            throw new ConnectError('no eligible evidence', Code.NotFound);
+          }
           if (req.strategyId === 'strat-history-001') {
-            // A strategy with a persisted score (the run-history rows come from ListBacktests).
+            // A strategy with a persisted, derived score (run-history rows come from ListBacktests).
             return {
               strategyId: req.strategyId,
               score: {
@@ -504,6 +520,10 @@ export async function startMockBackend(): Promise<void> {
                 overallScore: 0.72,
                 rating: 'B',
                 componentScores: { sharpe: 0.75, drawdown: 0.7, win_rate: 0.6 },
+                // feature 065: evidence provenance behind the derived headline grade.
+                evidenceSymbols: 8,
+                evidenceDays: 2100,
+                provisional: false,
               },
             };
           }
@@ -529,6 +549,9 @@ export async function startMockBackend(): Promise<void> {
                   overallScore: 0.72,
                   rating: 'B',
                   completedAt: { seconds: BigInt(1717286400), nanos: 0 }, // 2024-06-02
+                  // feature 065: this run carries a range window (rendered in the Range column).
+                  rangeStart: { seconds: BigInt(1704067200), nanos: 0 }, // 2024-01-01
+                  rangeEnd: { seconds: BigInt(1717200000), nanos: 0 }, // 2024-06-01
                 },
                 {
                   backtestId: 'bt-hist-1',

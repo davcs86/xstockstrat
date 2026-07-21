@@ -32,6 +32,8 @@ def test_list_tools_returns_all_registered_tools():
         "manage_formula",
         "manage_signal_source",
         "set_strategy_live",
+        "trigger_backfill",
+        "get_backfill_status",
     }
 
 
@@ -44,6 +46,9 @@ def test_list_tools_entries_have_description_and_input_schema():
     assert "Ingest a trading signal" in ingest_signal["description"]
     assert ingest_signal["inputSchema"]["type"] == "object"
     assert "symbol" in ingest_signal["inputSchema"]["properties"]
+    # feature 066: the backfill tool's docstring/schema surfaced in the catalog (C-10 proof).
+    trigger = by_name["trigger_backfill"]
+    assert "symbols" in trigger["inputSchema"]["properties"]
 
 
 def test_list_tools_does_not_require_auth():

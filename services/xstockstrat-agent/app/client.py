@@ -27,6 +27,11 @@ def _metadata() -> list[tuple[str, str]]:
     return []
 
 
+def _admin_metadata() -> list[tuple[str, str]]:
+    """x-mcp-secret plus the hardcoded admin x-access-scope for write/management RPCs."""
+    return [*_metadata(), ("x-access-scope", "7")]
+
+
 def _iso_to_timestamp(iso_str: str) -> Timestamp:
     dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
     if dt.tzinfo is None:
@@ -148,6 +153,11 @@ async def run_backtest(
         resp = await stub.RunBacktest(
             analysis_pb2.RunBacktestRequest(
                 strategy_id=strategy_id,
+                # feature 065: run the strategy's REGISTERED definition (strategy_id_ref ==
+                # strategy_id) so agent-triggered runs earn fingerprinted evidence toward the
+                # derived headline grade. An unregistered id now returns NOT_FOUND instead of
+                # silently running a legacy SMA backtest (design.md § Callers; C-10(b) parity).
+                strategy_id_ref=strategy_id,
                 symbols=list(symbols),
                 initial_capital=initial_capital,
             ),
@@ -285,7 +295,7 @@ async def manage_strategy(
         pb_def.signal_params.CopyFrom(sp)
 
     # Analysis does a role check on the propagated x-access-scope (admin bit).
-    meta = list(_metadata()) + [("x-access-scope", "7")]
+    meta = _admin_metadata()
     async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.ManageStrategy(
@@ -453,7 +463,7 @@ async def manage_signal_source(
         req.credentials_ref = credentials_ref
 
     # Forward the admin access scope so ingest's role check (x-access-scope & 0x04) passes.
-    meta = list(_metadata()) + [("x-access-scope", "7")]
+    meta = _admin_metadata()
     async with grpc.aio.insecure_channel(INGEST_ENDPOINT) as channel:
         stub = ingest_pb2_grpc.IngestServiceStub(channel)
         resp = await stub.ManageSignalSource(req, metadata=meta)
@@ -595,7 +605,7 @@ async def set_strategy_live(strategy_id: str, live_enabled: bool) -> dict[str, A
     """
     from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
 
-    meta = list(_metadata()) + [("x-access-scope", "7")]
+    meta = _admin_metadata()
     async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.SetStrategyLive(
@@ -629,3 +639,140 @@ async def get_config_value(key: str) -> str | None:
             return v.string_val or None
     except Exception:
         return None
+
+
+# ── backfill client (feature 066) ────────────────────────────────────────────
+
+# Mirror of ingest's accepted timeframe strings and enum values
+# (services/xstockstrat-ingest/app/handlers/servicer.py _TF_ALIASES/_STR_TO_ENUM).
+# Accepted drift risk: if ingest adds a timeframe, extend these maps (design.md, feature 066).
+_TF_ALIASES = {"15m": "15m", "15Min": "15m", "1h": "1h", "1Hour": "1h", "1d": "1d", "1Day": "1d"}
+_TF_TO_ENUM = {"15m": 5, "1h": 3, "1d": 4}  # common.v1.Timeframe values
+_FILL_MODE_MAP = {"full": 1, "gaps_only": 2}  # ingest.v1.FillMode; None → UNSPECIFIED (server FULL)
+_BACKFILL_MAX_SYMBOLS = 50  # client-side cost-sanity cap on a paid-fetch operation
+
+
+async def trigger_backfill(
+    symbols: list[str],
+    timeframe: str = "1d",
+    start: str | None = None,
+    end: str | None = None,
+    overwrite: bool = False,
+    fill_mode: str | None = None,
+) -> dict[str, Any]:
+    """Trigger a historical OHLCV backfill via gRPC TriggerBackfill (admin-scoped write).
+
+    Ingest queues unconditionally (no synchronous input validation), so the ValueError
+    guards below are the caller's only immediate feedback — bad input that passes them
+    surfaces later as a terminal FAILED/PARTIAL job via get_backfill_status.
+    """
+    from gen.common.v1 import common_pb2  # noqa: PLC0415
+    from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # noqa: PLC0415
+
+    if not symbols:
+        raise ValueError("symbols must be a non-empty list of tickers")
+    if len(symbols) > _BACKFILL_MAX_SYMBOLS:
+        raise ValueError(
+            f"too many symbols ({len(symbols)}) — max {_BACKFILL_MAX_SYMBOLS} per call"
+        )
+    if timeframe not in _TF_ALIASES:
+        raise ValueError(f"unknown timeframe '{timeframe}' (expected 15m/15Min/1h/1Hour/1d/1Day)")
+    if fill_mode is not None and fill_mode not in _FILL_MODE_MAP:
+        raise ValueError(f"unknown fill_mode '{fill_mode}' (expected full/gaps_only)")
+
+    start_ts = _iso_to_timestamp(start) if start else None
+    end_ts = _iso_to_timestamp(end) if end else None
+    if (
+        start_ts is not None
+        and end_ts is not None
+        and (start_ts.seconds, start_ts.nanos) > (end_ts.seconds, end_ts.nanos)
+    ):
+        raise ValueError("start must not be after end")
+
+    canonical = _TF_ALIASES[timeframe]
+    req = ingest_pb2.TriggerBackfillRequest(
+        symbols=list(symbols),
+        # Dual-field send (FR-2): the deprecated string is populated with the canonical
+        # form alongside the enum — never the string alone (ingest persists it raw).
+        timeframe=canonical,
+        timeframe_enum=_TF_TO_ENUM[canonical],
+        overwrite=overwrite,
+        fill_mode=_FILL_MODE_MAP[fill_mode] if fill_mode else 0,
+    )
+    if start_ts is not None or end_ts is not None:
+        tr = common_pb2.TimeRange()
+        if start_ts is not None:
+            tr.start.CopyFrom(start_ts)
+        if end_ts is not None:
+            tr.end.CopyFrom(end_ts)
+        # One-sided ranges are safe: ingest treats an unset bound (seconds == 0) as open.
+        req.range.CopyFrom(tr)
+
+    async with grpc.aio.insecure_channel(INGEST_ENDPOINT) as channel:
+        stub = ingest_pb2_grpc.IngestServiceStub(channel)
+        resp = await stub.TriggerBackfill(req, metadata=_admin_metadata())
+    return {"job_id": resp.job_id, "status": ingest_pb2.BackfillStatus.Name(resp.status)}
+
+
+async def get_backfill_status(
+    job_id: str = "",
+    status_filter: str | None = None,
+    symbol: str = "",
+    limit: int = 0,
+    page_token: str = "",
+) -> dict[str, Any]:
+    """Check one backfill job or list recent jobs (read-only — no admin scope).
+
+    With ``job_id``: gRPC GetBackfillStatus → ``{"job": {...}}``. Without: gRPC
+    ListBackfillJobs → ``{"jobs": [...], "next_page_token": ...}`` — discriminated
+    one-key envelopes so callers never key-sniff. AioRpcError (incl. NOT_FOUND)
+    propagates; mapping to a tool error happens in the tool layer.
+    """
+    from gen.common.v1 import common_pb2  # noqa: PLC0415
+    from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # noqa: PLC0415
+
+    if job_id:
+        async with grpc.aio.insecure_channel(INGEST_ENDPOINT) as channel:
+            stub = ingest_pb2_grpc.IngestServiceStub(channel)
+            resp = await stub.GetBackfillStatus(
+                ingest_pb2.GetBackfillStatusRequest(job_id=job_id), metadata=_metadata()
+            )
+        # run_backtest's MessageToDict variant: snake_case keys, zero-valued fields
+        # (bars_processed=0 while queued) stay visible during polling.
+        return {
+            "job": MessageToDict(
+                resp,
+                preserving_proto_field_name=True,
+                always_print_fields_with_no_presence=True,
+            )
+        }
+
+    if status_filter is None or status_filter == "unspecified":
+        mapped = 0
+    else:
+        try:
+            mapped = ingest_pb2.BackfillStatus.Value("BACKFILL_STATUS_" + status_filter.upper())
+        except ValueError as e:
+            raise ValueError(
+                f"unknown status_filter '{status_filter}' "
+                "(expected queued/running/completed/failed/partial/canceled/unspecified)"
+            ) from e
+    req = ingest_pb2.ListBackfillJobsRequest(
+        status_filter=mapped,
+        symbol=symbol,
+        page=common_pb2.PageRequest(page_size=limit, page_token=page_token),
+    )
+    async with grpc.aio.insecure_channel(INGEST_ENDPOINT) as channel:
+        stub = ingest_pb2_grpc.IngestServiceStub(channel)
+        resp = await stub.ListBackfillJobs(req, metadata=_metadata())
+    return {
+        "jobs": [
+            MessageToDict(
+                j,
+                preserving_proto_field_name=True,
+                always_print_fields_with_no_presence=True,
+            )
+            for j in resp.jobs
+        ],
+        "next_page_token": resp.page.next_page_token,
+    }

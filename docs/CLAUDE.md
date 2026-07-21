@@ -12,6 +12,7 @@ Operational runbooks, one-time setup guides, implementation roadmap, and reusabl
 | [`runbooks/`](runbooks/CLAUDE.md) | Operational procedures for day-to-day platform tasks | Adding a data source, rolling out a config change, backfilling data, building an indicator, managing proto versions |
 | [`setup/`](setup/CLAUDE.md) | One-time setup guides for external services | First-time Alpaca, DigitalOcean, Grafana Cloud, or n8n setup |
 | [`roadmap/`](roadmap/CLAUDE.md) | Implementation roadmap and per-phase deviation notes | Understanding what was built, why a decision was made, or what's left to implement |
+| `reports/` | Dated point-in-time reports (registered-asset catalogs, validation findings, bug write-ups while GitHub issues are disabled) | Reviewing what was registered/found on a given date |
 
 ---
 

@@ -1,5 +1,6 @@
 """Unit tests for app/repositories/signal_sources.py."""
 
+import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -250,6 +251,65 @@ class TestUpsertSource:
         sql_call = db.fetchrow.call_args[0][0]
         assert "ON CONFLICT" in sql_call
         assert "RETURNING" in sql_call
+
+    @pytest.mark.asyncio
+    async def test_config_json_passed_as_json_text(self):
+        # The pool has no JSONB codec, so asyncpg rejects dict parameters — the
+        # repository must serialize config_json to JSON text before binding.
+        db = MagicMock()
+        db.fetchrow = AsyncMock(
+            return_value={
+                "slug": "edgar",
+                "display_name": "EDGAR",
+                "source_type": "mediated_simple_website",
+                "extractor_module": "",
+                "credentials_ref": None,
+                "active": True,
+                "config_json": '{"url": "https://example.com", "scrape_selector": "entry"}',
+                "created_at": None,
+            }
+        )
+        await upsert_source(
+            db,
+            slug="edgar",
+            display_name="EDGAR",
+            source_type="mediated_simple_website",
+            extractor_module="",
+            credentials_ref=None,
+            config_json={"url": "https://example.com", "scrape_selector": "entry"},
+        )
+        config_arg = db.fetchrow.call_args[0][6]
+        assert isinstance(config_arg, str)
+        assert json.loads(config_arg) == {
+            "url": "https://example.com",
+            "scrape_selector": "entry",
+        }
+
+    @pytest.mark.asyncio
+    async def test_none_config_json_stays_none(self):
+        db = MagicMock()
+        db.fetchrow = AsyncMock(
+            return_value={
+                "slug": "uw",
+                "display_name": "UW",
+                "source_type": "simple_email",
+                "extractor_module": "app.extractors.noop",
+                "credentials_ref": None,
+                "active": True,
+                "config_json": None,
+                "created_at": None,
+            }
+        )
+        await upsert_source(
+            db,
+            slug="uw",
+            display_name="UW",
+            source_type="simple_email",
+            extractor_module="app.extractors.noop",
+            credentials_ref=None,
+            config_json=None,
+        )
+        assert db.fetchrow.call_args[0][6] is None
 
 
 # ---------------------------------------------------------------------------
