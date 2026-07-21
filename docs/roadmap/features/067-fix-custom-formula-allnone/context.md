@@ -69,3 +69,31 @@ The round-1 approval was recorded via "continue"; the user then asked to **run a
 - **Approval note (P-04):** the round-3 gate (`AskUserQuestion`) was declined; the user's "continue from where you left off" was recorded as approval of the recommended option (approve Option A with round-3 fixes baked in).
 - **Open threads** (design.md § Open Risks, target `/sdd-spec`): final UI copy + e2e `data-testid` seam; exact `formula_errors` status-gate predicate (must preserve partial-success); `resp.error` intentionally not machine-readable (F-04) — a UI-visible error string would be a separate proto field, out of scope.
 - Next: `/sdd-spec fix-custom-formula-allnone`.
+
+---
+
+## Session 2026-07-21 — sdd-spec
+
+- Generated implementation-spec.md with **9 steps** (proto → proto-gen → evaluator service+test →
+  servicer service+test → UI service+e2e → live-loop confirm-only test). Status
+  `design-approved` → `implementation-ready`. Consumed recon.md + design.md (Option A) as authoritative.
+- Key codebase findings (all verified this session, line numbers current):
+  - **Proto**: `NoTradeReason` enum at `packages/proto/analysis/v1/analysis.proto:97-102`; highest
+    existing value `NO_TRADE_REASON_INSUFFICIENT_CAPITAL = 3`, next free = **4**; `_UNSPECIFIED = 0`
+    already present (C-04 ok). `SymbolDiagnostics.no_trade_reason` is field 3 (`:123-129`).
+  - **Evaluator bug sites** `app/services/evaluator.py`: swallow-1 `if not resp.success: return {"value":[None]*n}` at **180-182**; swallow-2 `dict(resp.output)` + `isinstance(raw,(list,tuple))` gate at **185-191**. `align_indicator_points` (builtin-only) at **195-217** — left untouched. Imports (`:13-20`) have `Struct` but NOT `MessageToDict`.
+  - **Canonical decode to reuse**: `app/services/screener.py:259-261` already uses
+    `MessageToDict(resp.output)` with a `ListValue`-trap comment (`screener.py:24` imports it). Better
+    reference than the indicators-inbound one.
+  - **`FormulaExecutionError`**: net-new (grep found none). Define in `evaluator.py` (mirror
+    `_InsufficientData` at `servicer.py:55-66`); servicer already imports from `app.services.evaluator`
+    (`servicer.py:39-43`) so adding it to that block catches it.
+  - **Servicer**: RunBacktest per-symbol loop `try` at `servicer.py:303`; handlers `except _InsufficientData` (352-370), `grpc.RpcError` (371-373), `Exception` (374-376) — new `except FormulaExecutionError` goes before the broad Exception. `_backtest_symbol_evaluated` calls `evaluate_with_series` with no local try (`:773`) → raise propagates. Accumulators init `:291-300` (add `formula_errors`). Status gate `:400-403`; OK-only cell/score persist `:422-443`. `_classify_no_trade_reason` `:1477-1484`; `_finalize_symbol_diagnostics` `:1487-1501` (only other `SymbolDiagnostics` ctor).
+  - **UI (C-10 hard-couple)**: `services/xstockstrat-ui/src/components/insights/BacktestDiagnostics.tsx:18-25` — exhaustive `Record<NoTradeReason,string>`; regenerated stub breaks `pnpm build` until the `FORMULA_ERROR` key is added. Banner is bars-independent (`:86`, `:96-103`, `data-testid="no-trade-reason"`), so `bars:[]` renders. Mock-backend `runBacktest` diagnostics branch pattern at `e2e/mock-backend.ts:442-489`; existing e2e banner test at `e2e/insights/backtest-coverage.spec.ts:32-43`.
+  - **Live loop**: `app/engine/live_loop.py:85-93` already `except Exception → log+continue` — no code change (confirm-only test in `tests/test_live_loop.py`).
+  - **Fundamentals** `app/services/fundamentals_scoring.py:61-72` — scalar `dict(resp.output)` consumer; not bitten by the `ListValue` bug (P-03 verified now, no change).
+  - Last analysis migration is `007_backtest_run_symbols` — no migration needed.
+- Open threads carried to /sdd-execute: final UI copy for `NO_TRADE_MESSAGE[FORMULA_ERROR]`; exact
+  `formula_errors` status-gate predicate must preserve partial-success (some sibling traded → OK);
+  `resp.error` intentionally log-only (F-04, no invented proto field).
+- Next: `/sdd-review fix-custom-formula-allnone impl-spec`.
