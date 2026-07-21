@@ -99,6 +99,7 @@ enum NoTradeReason {
   NO_TRADE_REASON_ENTIRE_RANGE_WARMUP = 1;  // the whole range was warm-up
   NO_TRADE_REASON_ENTRY_NEVER_TRUE = 2;     // entry condition never satisfied
   NO_TRADE_REASON_INSUFFICIENT_CAPITAL = 3; // reserved; not emitted this version
+  NO_TRADE_REASON_FORMULA_ERROR = 4;        // a custom-formula component failed to execute / returned an out-of-contract series
 }
 
 // One row of day-by-day backtest diagnostics for a single bar.
@@ -138,6 +139,10 @@ message StrategyScore {
   double overall_score = 2;
   map<string, double> component_scores = 3; // e.g. sharpe, drawdown, consistency
   string rating = 4; // A/B/C/D/F
+  // Evidence provenance for the derived cross-stock headline grade (feature 065).
+  int32 evidence_symbols = 5; // distinct symbols contributing eligible evidence cells
+  int32 evidence_days = 6;    // total trading days of evidence across those symbols
+  bool provisional = 7;       // true when evidence is below the symbol/day floor
 }
 
 message StrategyReport {
@@ -171,6 +176,9 @@ message BacktestRunSummary {
   double overall_score = 12; // 0 when the run earned no score (e.g. INSUFFICIENT_DATA)
   string rating = 13;        // "" when the run earned no score
   google.protobuf.Timestamp completed_at = 14;
+  // Backtest range covered by this run (feature 065); unset on legacy rows.
+  google.protobuf.Timestamp range_start = 15;
+  google.protobuf.Timestamp range_end = 16;
 }
 
 message ListBacktestsResponse {

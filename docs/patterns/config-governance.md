@@ -30,3 +30,81 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 1. Add the key to the config service's seed data.
 2. Declare it in the consuming service's `CLAUDE.md` under "Config Keys Consumed".
 3. Approval: service owner + config team (see `docs/runbooks/approval-flow.md`).
+4. Add a row to the "Per-Feature Registered Keys" log below.
+
+## Per-Feature Registered Keys
+
+Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
+
+### feature 064 — backtest debug diagnostics (`xstockstrat-analysis`)
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.backtest.max_range_days` | int | `730` | Max backtest range span in days (≈2 years). A `RunBacktest` whose `range` exceeds it is rejected with `INVALID_ARGUMENT`; an unset bound is defaulted to the last `max_range_days`. Applies to all callers. Bounds the always-included per-bar diagnostics to ~504 rows/symbol. |
+
+### Alpaca API compliance audit — PR #699 (`xstockstrat-marketdata`)
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `marketdata.alpaca.adjustment` | string | `all` | Corporate-action adjustment for historical bars (`raw`/`split`/`dividend`/`all`); sent as `adjustment=` on every Alpaca bars request so splits/dividends do not distort backtest OHLCV. |
+
+### feature 057 — backfill management UI (`xstockstrat-marketdata`)
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `marketdata.backfill.max_delete_days` | int | `0` | Max date-range span (days) a single scoped `DeleteBackfilledData` may cover; `0` = no window cap (current behavior). Whole-symbol deletes (no range) are exempt and double-confirmed in the UI (FR-5). |
+
+### feature 062 — fundamentals signal producer (`xstockstrat-analysis`)
+
+A daily background loop reads cached fundamentals via marketdata `GetFundamentalsMulti` (never FMP), scores, and emits `buy`/`sell`/`hold` `ExternalSignal`s through ingest. Analysis also gains a `PORTFOLIO_ENDPOINT` (gRPC `xstockstrat-portfolio:50052`) for the watchlist universe, and ingest migration `006_signal_source_type_derived` adds the `derived` source type.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.fundsignal.enabled` | bool | `false` | Master gate for the producer loop; off by default |
+| `analysis.fundsignal.run_interval_hours` | int | `24` | Hours between scheduled cycles |
+| `analysis.fundsignal.universe_source` | string | `watchlists` | `watchlists` \| `explicit` \| `both` (watchlists union pends a global portfolio RPC; falls back to `explicit`) |
+| `analysis.fundsignal.explicit_symbols` | string | `""` | Comma-separated symbols for the explicit universe |
+| `analysis.fundsignal.max_symbols_per_run` | int | `200` | Cap on symbols scanned per cycle |
+| `analysis.fundsignal.daily_call_budget` | int | `200` | Max cached `GetFundamentalsMulti` calls per cycle; ≤ `marketdata.fmp.daily_request_cap` (250) |
+| `analysis.fundsignal.source_slug` | string | `fundamentals` | Slug of the registered `derived` signal source |
+| `analysis.fundsignal.scoring_formula_id` | string | `""` | Optional 063 scoring formula id; empty → built-in default score |
+| `analysis.fundsignal.buy_quantile` | float | `0.80` | Cross-sectional quantile ≥ → `buy` |
+| `analysis.fundsignal.sell_quantile` | float | `0.20` | Cross-sectional quantile ≤ → `sell` |
+| `analysis.fundsignal.min_conviction_to_emit` | float | `0.0` | Drop symbols below this score before emitting |
+| `analysis.fundsignal.valid_days` | int | `90` | Emitted signal validity window in days |
+
+### feature 059 — fundamentals data source (`xstockstrat-marketdata`)
+
+Establishes the `marketdata.<source>.enabled` convention (a source is off until its `enabled` key is flipped).
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `marketdata.fmp.enabled` | bool | `false` | Master gate for the FMP fundamentals source; off by default |
+| `secret.marketdata.fmp.api_key` | string (secret) | — | FMP API key; first seeded secret (`is_secret=TRUE`), value is a `secret://` reference, never plaintext |
+| `marketdata.fmp.cache_ttl_hours` | int | `24` | Hours a cached fundamentals row stays fresh before re-fetch |
+| `marketdata.fmp.daily_request_cap` | int | `250` | Max FMP requests per UTC day (free Basic budget) |
+| `marketdata.fmp.base_url` | string | `https://financialmodelingprep.com` | FMP API base URL |
+| `marketdata.fmp.metrics` | string | `core,extended` | Metric tiers to fetch (`core`, `extended`) |
+
+### feature 060 — screener engine (`xstockstrat-analysis`)
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.screener.max_universe_size` | int | `100` | Max symbols a single `ScreenSymbols` scan may cover |
+| `analysis.screener.max_duration_seconds` | int | `120` | Overall deadline for one screener scan |
+| `analysis.screener.default_rank_limit` | int | `50` | Default ranked results returned when `rank_limit` is omitted |
+| `analysis.screener.max_concurrent_formula_evals` | int | `4` | Max concurrent `ExecuteFormula` evals during a scan |
+
+### feature 058 — watchlist management (`xstockstrat-portfolio`)
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `portfolio.watchlist.max_per_user` | int | `50` | Max watchlists a single user may own |
+| `portfolio.watchlist.max_symbols_per_list` | int | `500` | Max symbols allowed in one watchlist |
+
+### feature 049 Part B — MCP OAuth 2.1 edge auth (`xstockstrat-agent`)
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `agent.oauth.registration_enabled` | bool | `true` | Allow RFC 7591 Dynamic Client Registration at `/oauth/register` |
+| `agent.oauth.allowed_redirect_uris` | string | `""` | Comma-separated exact redirect URIs; empty = require `https://` at registration only (no allow-any) |

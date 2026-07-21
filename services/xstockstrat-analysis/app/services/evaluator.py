@@ -12,14 +12,42 @@ BarDecision has fields: bar_index (int), entry (bool), exit (bool), conviction (
 
 import json
 import logging
+import math
 from dataclasses import dataclass
 from typing import Any
 
 from gen.analysis.v1 import analysis_pb2
 from gen.indicators.v1 import indicators_pb2
+from google.protobuf.json_format import MessageToDict
 from google.protobuf.struct_pb2 import Struct
 
 log = logging.getLogger(__name__)
+
+
+class FormulaExecutionError(Exception):
+    """A custom-formula component failed to execute or returned an out-of-contract
+    series (feature 067). Carries the ``formula_id`` and the indicators ``resp.error``
+    so the RunBacktest loop can stamp a distinct ``NO_TRADE_REASON_FORMULA_ERROR``
+    diagnostic. Mirrors the failure-carrying shape of ``servicer._InsufficientData``."""
+
+    def __init__(self, formula_id: str, error: str):
+        super().__init__(f"formula {formula_id} failed: {error}")
+        self.formula_id = formula_id
+        self.error = error
+
+
+def _finite_or_none(v) -> float | None:
+    """Normalize a decoded series element: ``None``/``NaN``/``Inf`` → ``None``,
+    otherwise the value as a ``float``. A non-numeric element is treated as ``None``
+    (out of a numeric series' contract)."""
+    if v is None:
+        return None
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f if math.isfinite(f) else None
+
 
 _SUPPORTED_INDICATORS = {"SMA", "EMA", "RSI", "MACD", "BB", "ATR", "VWAP", "STOCH"}
 
@@ -160,17 +188,7 @@ class StrategyEvaluator:
                 ),
                 metadata=self._meta,
             )
-            # Build aligned series — None for warm-up bars where the result is absent.
-            # Each IndicatorPoint carries the primary `.value` plus an `.extra` map of
-            # secondary series (upper/lower/signal/…). Capture them all.
-            series: dict[str, list[float | None]] = {"value": [None] * n}
-            for i, p in enumerate(resp.result):
-                if i >= n:
-                    break
-                series["value"][i] = p.value
-                for k, v in dict(getattr(p, "extra", {}) or {}).items():
-                    series.setdefault(k, [None] * n)[i] = v
-            return series
+            return align_indicator_points(resp.result, n)
         elif comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA:
             input_struct = Struct()
             input_struct.update({"close": closes})
@@ -188,18 +206,71 @@ class StrategyEvaluator:
                 metadata=self._meta,
             )
             if not resp.success:
-                log.warning("formula %s execution failed: %s", comp.formula_id, resp.error)
-                return {"value": [None] * n}
-            # Formula output must contain a "value" key with a list. Any additional
-            # list-valued outputs are exposed as secondary series ("<ref_name>.<key>").
-            output = dict(resp.output)
-            series = {}
+                # feature 067: a failed formula is a genuine error, not an all-None series.
+                raise FormulaExecutionError(comp.formula_id, resp.error)
+            # feature 067: MessageToDict recursively converts the Struct (incl. ListValue)
+            # to native python — dict(resp.output) leaves a list output as a ListValue,
+            # which the old isinstance(list, tuple) gate dropped → all-None (canonical
+            # decode: screener.py). Formula output must contain a "value" key with a list;
+            # any additional list-valued outputs become secondary series ("<ref_name>.<key>").
+            # MessageToDict refuses to serialize NaN/Inf number_values (JSON has no such
+            # literal); a formula emitting them is out-of-contract, so surface it as a
+            # visible FORMULA_ERROR rather than letting the ValueError degrade silently.
+            # A legitimate warm-up head is a null (None) element, which decodes cleanly.
+            try:
+                output = MessageToDict(resp.output)
+            except ValueError as e:
+                raise FormulaExecutionError(comp.formula_id, resp.error or str(e)) from e
+            series: dict[str, list[float | None]] = {}
             for key, raw in output.items():
-                if isinstance(raw, (list, tuple)):
-                    series[key] = [float(v) if v is not None else None for v in raw]
-            series.setdefault("value", [None] * n)
+                # Non-list (scalar) values are dropped; scalar-broadcast is deferred
+                # (design § Rejected).
+                if not isinstance(raw, list):
+                    continue
+                # Custom-formula length policy: require len == n and raise on any
+                # mismatch (len<n, len>n, empty). Unlike the builtin path, an arbitrary
+                # user formula has no contiguous warm-up-head invariant to tail-align
+                # against, so tail-aligning a short list would silently misalign bars.
+                if len(raw) != n:
+                    raise FormulaExecutionError(
+                        comp.formula_id,
+                        resp.error or f"series '{key}' length {len(raw)} != {n} bars",
+                    )
+                series[key] = [_finite_or_none(v) for v in raw]
+            if "value" not in series:
+                # An absent/empty "value" series is the AC-3 failure, not a silent
+                # [None] * n. (An all-None/all-NaN len==n series passes through above as
+                # a legitimate warm-up range.)
+                raise FormulaExecutionError(
+                    comp.formula_id, resp.error or "formula output missing a 'value' series"
+                )
             return series
         return {"value": [None] * n}
+
+
+def align_indicator_points(result_points, n: int) -> dict[str, list[float | None]]:
+    """Tail-align ``ComputeIndicatorResponse.result`` points to the ``n`` input bars.
+
+    The indicators servicer omits warm-up rows (the engine's contiguous NaN head)
+    from its result without preserving indices, so a shorter result describes the
+    LAST ``len(result_points)`` bars. Placing point ``i`` at bar
+    ``i + (n - len(result_points))`` restores bar alignment; the leading bars stay
+    ``None`` as warm-up. Relies on the invariant that the only absent rows are that
+    contiguous head — true for every built-in engine (rolling-window NaN heads).
+
+    Each ``IndicatorPoint`` carries the primary ``.value`` plus an ``.extra`` map of
+    secondary series (upper/lower/signal/…); all are captured and aligned.
+    """
+    series: dict[str, list[float | None]] = {"value": [None] * n}
+    offset = max(0, n - len(result_points))
+    for i, p in enumerate(result_points):
+        idx = i + offset
+        if idx >= n:
+            break
+        series["value"][idx] = p.value
+        for k, v in dict(getattr(p, "extra", {}) or {}).items():
+            series.setdefault(k, [None] * n)[idx] = v
+    return series
 
 
 def _validate_definition(definition, formula_outputs: dict | None = None) -> None:

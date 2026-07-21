@@ -65,3 +65,60 @@ reusing.
   reproduces committed stubs byte-for-byte before touching any `.proto`.
 - **Evidence**: PRs #746–753; `Dockerfile.codegen` version pins.
 - **Rule it implies**: verify the codegen toolchain against the committed stubs (empty diff) before the first proto edit.
+
+### 2026-07-13 — cross-stock-score-derivation — design
+- **Pattern**: When derived data must stay valid only for the *content* that produced it (here:
+  backtest evidence valid only for the strategy definition it executed), stamp each row with a
+  **canonical content fingerprint** (sha256 of the stored JSONB, non-behavioral keys excluded,
+  always hashed from the DB-returned form) and make eligibility a fingerprint-equality predicate —
+  not an `updated_at`-style timestamp comparison. Timestamps failed three ways the design debate
+  proved concretely: unrelated writers bump them (live-toggle/deactivate), they can't tell *which*
+  content an in-flight writer executed (mid-update race), and they can't reject look-alike callers
+  (a run keyed to the right id but executing different content).
+- **Evidence**: `docs/roadmap/features/065-cross-stock-score-derivation/design.md` § Chosen
+  Approach (fingerprint mechanics verified by the round-2 design-adversary);
+  `services/xstockstrat-analysis/app/repositories/strategies.py:54-93` (`updated_at` bumped by
+  update, set_live_enabled, and deactivate alike).
+- **Rule it implies**: content-scoped validity gets a content hash, not a clock; hash only the
+  stored (post-JSONB-round-trip) form so every writer sees identical bytes.
+
+### 2026-07-13 — cross-stock-score-derivation — reuse
+- **Pattern**: Seeding a **unit-test layer in a large e2e-only frontend** without an unearnable
+  coverage floor: set vitest `coverage.all: false` so the threshold applies only to files a unit test
+  actually exercises (grows as tests are added), instead of `include: ['src/**']` which counts every
+  untested module as 0%. Pairs with node-environment logic-only tests (`src/lib/**`) and an lcov
+  reporter matching the existing `node-test` CI artifact contract.
+- **Evidence**: `services/xstockstrat-ui/vitest.config.ts` (`all: false`, `src/lib` scope),
+  `src/lib/scoreDisplay.test.ts`; `.github/workflows/ci.yml` `node-test` matrix (feature 065 step 13).
+- **Rule it implies**: when adding coverage gates to a codebase with large untested surface, gate on
+  tested files, not the whole tree — a floor you can't reach on day one gets disabled, not met.
+
+### 2026-07-20 — trigger-backfill-mcp-tool — design
+- **Pattern**: A new MCP agent tool has **five** discovery/documentation surfaces, not one: the
+  `app/tools.py` module-docstring tool count + enumeration, the agent `CLAUDE.md` tool table, the
+  `docs/runbooks/mcp-tools.md` reference (header count + per-tool section), the
+  `docs/runbooks/CLAUDE.md` index line, and any **operational runbook** that documents how to do
+  the underlying task (e.g. `historical-backfill.md` for a backfill tool). Recon found four; the
+  adversarial round caught the fifth — the operational runbook is the surface that makes the
+  capability *findable* by an operator solving a problem. The `/api/tools` catalog itself is
+  automatic (FastMCP registration), but its name-set test is the built-in reachability proof.
+- **Evidence**: feature 066 design.md § Chosen Approach (Docs — five surfaces); adversary round-1
+  C-10(a) finding; `services/xstockstrat-agent/app/main.py:180` (auto catalog);
+  `tests/test_tools_endpoint.py:23-35` (name-set test).
+- **Rule it implies**: C-10(a) applies to tool/CLI/API additions, not just UI routes — enumerate
+  the discovery surfaces (including task-oriented runbooks) at recon time and prove the shared one
+  with a test.
+
+### 2026-07-21 — fix-custom-formula-allnone — reuse
+- **Pattern**: Decoding a `google.protobuf.Struct` response field with `dict(resp.field)` +
+  `isinstance(raw, (list, tuple))` silently **drops every list value** — `Struct.update()` marshals a
+  native list into a proto `ListValue`, which is not a `list`/`tuple`, so the gate skips it and any
+  `[None]*n` fallback yields an all-`None` series (here: empty backtest `indicators` → `ENTRY_NEVER_TRUE`).
+  Use `json_format.MessageToDict(struct)` for the recursive `ListValue`→native unwrap (already the
+  inbound-decode pattern on the indicators side), and NaN/length-normalize the result rather than
+  assuming the producer returns full-length series.
+- **Evidence**: `services/xstockstrat-analysis/app/services/evaluator.py:185-191` (the buggy gate);
+  producer `services/xstockstrat-indicators/app/handlers/servicer.py:171-176` (`Struct().update(...)`),
+  `:126` (`MessageToDict` inbound); feature 067 recon.md § Root Cause + design.md.
+- **Rule it implies**: never index/`isinstance`-filter a `Struct` field's raw values — recursively
+  convert (`MessageToDict`) before use; reinforces P-03 (no silent drop) without a new ID.

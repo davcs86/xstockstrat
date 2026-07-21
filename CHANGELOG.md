@@ -13,6 +13,20 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ---
 
+## 2026-07-20
+
+### Features
+- phase7-observability: Completes the pending Phase 7 implementation roadmap item: activates the OTel SDK already stubbed in every service, routes telemetry to Grafana Cloud via the OTLP collector, and delivers service health, latency, and signal pipeline throughput dashboards — providing operational visibility before live capital is at risk.
+- cross-stock-score-derivation: Replace the last-run-wins strategy headline score with a statistically robust derivation over
+
+### Proto Changes
+- analysis/v1/analysis.proto
+
+### Summary
+4 commits, 1 feature merges since last promotion.
+
+---
+
 ## 2026-07-12
 
 ### Features

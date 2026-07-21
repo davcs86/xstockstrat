@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/button';
 import { AccountPortfolioSelector } from '@/components/insights/AccountPortfolioSelector';
 import { useStrategies } from '@/hooks/useStrategies';
 import { useStrategyDefinitions } from '@/hooks/useStrategyDefinitions';
+import { ratingVariant, scoreColor } from '@/lib/scoreDisplay';
 import type { StrategyScore } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
 function DashboardSkeleton() {
@@ -118,6 +119,7 @@ function InsightsDashboard() {
                               {d.displayName || d.strategyId}
                             </span>
                             <div className="flex items-center gap-2 shrink-0">
+                              {score?.provisional && <Badge variant="secondary">Provisional</Badge>}
                               {score?.rating && (
                                 <Badge variant={ratingVariant(score.rating)}>{score.rating}</Badge>
                               )}
@@ -208,19 +210,6 @@ function InsightsDashboard() {
       </div>
     </AppShell>
   );
-}
-
-function scoreColor(score: number): string {
-  if (score >= 0.8) return 'text-buy';
-  if (score >= 0.6) return 'text-paper';
-  return 'text-destructive';
-}
-
-function ratingVariant(rating: string): 'buy' | 'info' | 'warning' | 'destructive' {
-  if (rating === 'A') return 'buy';
-  if (rating === 'B') return 'info';
-  if (rating === 'C') return 'warning';
-  return 'destructive';
 }
 
 function chartData(strategies: StrategyScore[]): { label: string; score: number }[] {

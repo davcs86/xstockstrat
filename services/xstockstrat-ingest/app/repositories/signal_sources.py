@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 
 async def get_active_source(db_pool, slug: str) -> dict | None:
     row = await db_pool.fetchrow(
@@ -36,6 +38,9 @@ async def upsert_source(
     config_json: dict | None,
     active: bool = True,
 ) -> dict:
+    # The pool registers no JSONB codec, so asyncpg expects JSONB parameters as
+    # JSON text, not dicts. Readers already handle both str and dict rows.
+    config_param = json.dumps(config_json) if config_json is not None else None
     row = await db_pool.fetchrow(
         "INSERT INTO ingest.signal_sources"
         " (slug, display_name, source_type, extractor_module, credentials_ref, config_json, active)"
@@ -53,7 +58,7 @@ async def upsert_source(
         source_type,
         extractor_module,
         credentials_ref,
-        config_json,
+        config_param,
         active,
     )
     return dict(row)
