@@ -1926,3 +1926,80 @@ class TestTradedFirstDedupContract:
         req.strategy_id = "s1"
         score = await svc.ScoreStrategy(req, context=MagicMock())
         assert score.evidence_days == 100  # the traded cell's window, per fetch_eligible
+
+
+# ---------------------------------------------------------------------------
+# Feature 068 — engine equity capture (per-bar equity + effective initial capital)
+# ---------------------------------------------------------------------------
+
+
+class TestEquityCapture:
+    def test_finalize_stamps_equity_per_bar(self):
+        """_finalize_symbol_diagnostics copies daily_equity[i] onto bars[i].equity."""
+        from app.handlers.servicer import _build_bar_diagnostic, _finalize_symbol_diagnostics
+
+        bars = [_bar(1000 + i, 10.0 + i) for i in range(4)]
+        hold = analysis_pb2.BAR_ACTION_HOLD_FLAT
+        diags = [
+            _build_bar_diagnostic("AAPL", i, b, {}, 0.0, 0.0, hold, False)
+            for i, b in enumerate(bars)
+        ]
+        daily_equity = [100_000.0, 100_100.0, 99_950.0, 100_200.0]
+        sd = _finalize_symbol_diagnostics("AAPL", diags, 1, [], daily_equity)
+        assert [b.equity for b in sd.bars] == daily_equity
+        # forced-close consistency: the (patched) last daily_equity value lands on the last bar
+        assert sd.bars[-1].equity == daily_equity[-1]
+
+    @pytest.mark.asyncio
+    async def test_full_backtest_bars_carry_equity_and_initial_capital(self):
+        """End-to-end: a traded legacy run stamps per-bar equity and the effective seed."""
+        bars = [_bar(1000 + i, c) for i, c in enumerate([10, 11, 12, 13, 14, 9])]
+        fast = [9, 10, 12, 13, 9]
+        slow = [11, 11, 11, 11]
+        svc = TestBacktestDiagnostics()._svc_with(bars, fast, slow)
+        req = TestBacktestDiagnostics()._legacy_req()
+
+        result = await svc.RunBacktest(req, context=MagicMock())
+
+        assert result.status == analysis_pb2.BACKTEST_STATUS_OK
+        assert result.initial_capital == 100_000.0
+        sd = result.diagnostics[0]
+        # bar 0 carries the seed; every bar carries a positive portfolio value
+        assert sd.bars[0].equity == 100_000.0
+        assert all(b.equity > 0 for b in sd.bars)
+        # the traded run changes equity after entry (bar 3 onward differs from the seed)
+        assert sd.bars[4].equity != 100_000.0
+
+    @pytest.mark.asyncio
+    async def test_effective_initial_capital_default(self):
+        """request.initial_capital omitted/0 → the engine's 100k default is stamped."""
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        req = MagicMock()
+        req.strategy_id = "s1"
+        req.symbols = []
+        req.initial_capital = 0.0
+        req.strategy_id_ref = ""
+        req.HasField = MagicMock(return_value=False)
+        req.range = common_pb2.TimeRange()
+
+        result = await svc.RunBacktest(req, context=MagicMock())
+        assert result.initial_capital == 100_000.0
+
+    @pytest.mark.asyncio
+    async def test_effective_initial_capital_explicit(self):
+        """An explicit request capital is stamped verbatim."""
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        req = MagicMock()
+        req.strategy_id = "s1"
+        req.symbols = []
+        req.initial_capital = 25_000.0
+        req.strategy_id_ref = ""
+        req.HasField = MagicMock(return_value=False)
+        req.range = common_pb2.TimeRange()
+
+        result = await svc.RunBacktest(req, context=MagicMock())
+        assert result.initial_capital == 25_000.0

@@ -418,6 +418,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             profit_factor=metrics["profit_factor"],
             completed_at=now,
             trades=all_trades,
+            # feature 068: the effective seed (100k default when the request omitted it) —
+            # required to interpret the persisted equity curve for a historical run.
+            initial_capital=initial_equity,
         )
         # FR-2: if every symbol was insufficient (no trades, no usable bars beyond the seed
         # equity point), report INSUFFICIENT_DATA instead of a fabricated flat-equity success.
@@ -764,7 +767,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             # feature 064: the forced close labels the last bar an exit (AC-3)
             diags[-1].action = analysis_pb2.BAR_ACTION_EXIT_LONG
 
-        symbol_diag = _finalize_symbol_diagnostics(symbol, diags, warmup_bars, trades)
+        symbol_diag = _finalize_symbol_diagnostics(symbol, diags, warmup_bars, trades, daily_equity)
         return trades, equity, daily_equity, symbol_diag
 
     async def _backtest_symbol_evaluated(
@@ -911,7 +914,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             daily_equity[-1] = equity
             diags[-1].action = analysis_pb2.BAR_ACTION_EXIT_LONG
 
-        symbol_diag = _finalize_symbol_diagnostics(symbol, diags, warmup_bars, trades)
+        symbol_diag = _finalize_symbol_diagnostics(symbol, diags, warmup_bars, trades, daily_equity)
         return trades, equity, daily_equity, symbol_diag
 
     async def _compute_evaluated_warmup(
@@ -1513,10 +1516,19 @@ def _classify_no_trade_reason(trades, warmup_bars, n):
     return analysis_pb2.NO_TRADE_REASON_ENTRY_NEVER_TRUE
 
 
-def _finalize_symbol_diagnostics(symbol, diags, warmup_bars, trades):
+def _finalize_symbol_diagnostics(symbol, diags, warmup_bars, trades, daily_equity):
     """Apply the Option-C warm-up override pass (bar < warmup_bars → warmup=True, action=WARMUP)
-    and classify no_trade_reason, then wrap the rows in a SymbolDiagnostics."""
+    and classify no_trade_reason, then wrap the rows in a SymbolDiagnostics.
+
+    Also stamps per-bar equity (feature 068): ``daily_equity`` is aligned 1:1 with ``diags``
+    by construction (seed point + one append per simulated bar, forced-close patch included),
+    and this shared finalize pass is the single stamping point for both engine paths — the
+    shared builder ``_build_bar_diagnostic`` runs before the simulation loop computes equity,
+    so it cannot carry the value (context.md, sdd-spec session).
+    """
     n = len(diags)
+    for i in range(min(n, len(daily_equity))):
+        diags[i].equity = daily_equity[i]
     for i in range(n):
         if i < warmup_bars:
             diags[i].warmup = True
