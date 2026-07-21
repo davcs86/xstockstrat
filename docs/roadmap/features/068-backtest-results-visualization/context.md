@@ -34,3 +34,34 @@
   no merge-order row needed.
 - Reviewer note carried to design: `INSUFFICIENT_DATA` runs get no persisted detail
   (permanent FR-6 state) — confirm intentional at design.
+
+## Session 2026-07-21 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: analysis, ui, proto; key reuse patterns:
+  `_persist_backtest_run` best-effort wrapper + `backtest_runs.py` repo shape; BFF `forward()`
+  + `useBacktestHistory` hook shape; `_build_bar_diagnostic` single builder).
+- Phase 1 Grilling: 1 round (quick). Chosen approach: persist OK runs' full `BacktestResult`
+  as serialized-proto BYTEA in `analysis.backtest_details` (migration 008, FK→backtest_runs,
+  explicit completed_at, insert-time eviction clamped ≥1); additive proto
+  `GetBacktest` RPC + `BacktestResult.initial_capital=15` + `BarDiagnostic.equity=15`;
+  DB-only read path; in-page historical view reusing the single result seam; per-symbol
+  time-aligned equity curve (normalized % default for multi-symbol) with nearest-bar trade
+  markers; `src/lib/equityCurve.ts` + `src/lib/protoTime.ts`. Rejected: memory-first read,
+  JSONB, normalized rows, no-FK table, new route, trades-cumulative fallback, aggregate curve,
+  summary-sourced metrics grid (full list in design.md).
+- Adversary objections: 12 raised, all accepted with fixes folded into design.md (notably
+  DB-only reads killing 3 staleness/collision bugs; FK for existence parity; normalized
+  multi-symbol rendering; seam-clear on fresh run). Objection 12c (no-detail rows show empty
+  state only, no summary-sourced grid) decided in favor of AC-5 single render path — P-03
+  recorded here rather than silently assumed.
+- Constitution rules touched: C-01, C-04, C-05, C-07, C-08, C-09, C-10(a/b), P-03, P-06,
+  F-01, F-06, F-07. Floor breaches: none.
+- Approval: standing authorization — the initiating user instruction directed the full SDD
+  pipeline through implementation in this autonomous session (recorded per P-04/C-11).
+- Status: spec-ready → design-approved.
+
+### Open Threads
+
+- BYTEA↔proto wire-compat coupling — guard at proto step (buf breaking note). Target: step 1.
+- Insert+evict not transactional (≤1 extra row transiently) — re-check at analysis step.
+- No "has detail" flag on `BacktestRunSummary` (discover-on-open UX) — post-launch only.
