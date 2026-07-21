@@ -456,17 +456,19 @@ Test passes; coverage ≥ 40%.
 - **Disposition**: in-scope test correction (the step changes formula-failure semantics; a test
   asserting the old semantics had to be updated). Recorded, not a spec-body edit (F-09).
 
-### D-3 (Step 8) — UI e2e run via CI-equivalent fallback
+### D-3 (Step 8) — UI e2e is slow in the sandbox but PASSES (real green + CI-equivalent backup)
 
-- **Sanctioned tool**: `pnpm test:e2e -- backtest-coverage` (Playwright). In this environment the
-  Playwright `webServer` (production `next build && next start`) exceeds the available wall-clock and the
-  webServer process is torn down mid-run (`[WebServer] ⨯ [Error: aborted]`), failing all six
-  backtest-coverage specs — a harness/resource limitation, not a defect in the new test.
-- **CI-equivalent fallback applied** (sequential-mode verification fallback + spec's documented e2e
-  fallback): `pnpm exec tsc --noEmit` + `pnpm lint` + `pnpm build`. Red→green proof captured at the
-  type-exhaustiveness layer: **RED** — removing the `[NoTradeReason.FORMULA_ERROR]` map key fails `tsc`
-  (`TS2741: Property '[NoTradeReason.FORMULA_ERROR]' is missing … required in type
-  'Record<NoTradeReason, string>'`); **GREEN** — with the key, `tsc --noEmit` exit 0, `pnpm lint` clean,
-  `pnpm build` succeeds. The added Playwright test mirrors the adjacent, established `strat-diag-001`
-  banner test verbatim (same page, same `data-testid="no-trade-reason"` assertion).
-- **Disposition**: `**Disposition**: CI-equivalent fallback` — logged per sequential-mode rules.
+- **Sanctioned tool**: `pnpm test:e2e -- backtest-coverage` (Playwright). The Playwright `webServer`
+  (production `next build && next start`) is very slow here — the in-band `webServer` first attempt was
+  torn down by a wall-clock limit (`[WebServer] ⨯ [Error: aborted]`). Re-run against a pre-built server
+  (`NEXT_DISABLE_STANDALONE=1 pnpm build` + `pnpm start`, `reuseExistingServer`), the new test **passed**:
+  `e2e/insights/backtest-coverage.spec.ts:48 › formula-error backtest renders the FORMULA_ERROR no-trade
+  banner` → **`1 passed (15.0m)`**. The 15-minute wall-clock is a sandbox resource limitation, not a
+  test defect; CI's `frontend-e2e` job runs it in normal time.
+- **Also captured — CI-equivalent proof** (sequential-mode verification fallback + spec's documented e2e
+  fallback): red→green at the type-exhaustiveness layer — **RED** removing the
+  `[NoTradeReason.FORMULA_ERROR]` map key fails `tsc` (`TS2741: Property '[NoTradeReason.FORMULA_ERROR]'
+  is missing … required in type 'Record<NoTradeReason, string>'`); **GREEN** with the key, `tsc --noEmit`
+  exit 0, `pnpm lint` clean, `pnpm build` succeeds.
+- **Disposition**: verified — the sanctioned Playwright test passed (slow), with the CI-equivalent
+  checks as corroboration.

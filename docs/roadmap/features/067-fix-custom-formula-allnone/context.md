@@ -136,8 +136,10 @@ lockfile) and validated an **empty** pre-edit stub diff before touching the `.pr
 - **D-2**: existing `test_formula_warmup_uses_declared_not_observed` used `success=False` to fake an
   all-None series (the bug). Now `success=False` raises; test switched to a legitimate all-null
   `success=True` series, intent + assertions preserved.
-- **D-3**: UI e2e via CI-equivalent fallback (tsc/lint/build) — Playwright webServer times out/aborts in
-  the sandbox. Logged per sequential-mode verification fallbacks.
+- **D-3**: UI e2e is very slow in the sandbox (webServer aborts in-band on the wall-clock limit) but
+  **passes** when run against a pre-built `pnpm start` server — the formula-error banner test reported
+  `1 passed (15.0m)`. CI-equivalent checks (tsc red→green, lint, build) captured as corroboration; CI's
+  `frontend-e2e` job runs it in normal time.
 
 Files modified: `packages/proto/analysis/v1/analysis.proto` (+ regenerated `gen/{go,python,ts}` +
 `gen/ts/dist`), `services/xstockstrat-analysis/app/services/evaluator.py`,
