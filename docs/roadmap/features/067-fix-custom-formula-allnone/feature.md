@@ -1,7 +1,7 @@
 # Feature: fix-custom-formula-allnone
 
 **Type**: bug
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `design-approved`
 **Development Branch**: `feature/fix-custom-formula-allnone`
 **GitHub Issue**: n/a — GitHub Issues are disabled on `davcs86/xstockstrat`; bug captured directly via `/sdd-triage` (Track C)
 **Severity**: SEV-2
@@ -15,12 +15,15 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-07-21 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from staging backtest evidence (Issues disabled — no GitHub issue) |
+| 2026-07-21 | `draft` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written. Dir renumbered 065→067 (collision). |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — bug description and fix scope
+- [Recon Dossier](recon.md) — grounded codebase map, confirmed root cause, patterns to reuse
+- [Design](design.md) — debated & approved architecture, rejected alternatives, open risks
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-custom-formula-allnone`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -35,4 +38,4 @@ same data are unaffected. Blocks validation/grading of any custom-formula strate
 
 ## Next Action
 
-`/sdd-design fix-custom-formula-allnone quick` — recommended design depth (quick) from triage; see context.md
+`/sdd-spec fix-custom-formula-allnone` — generate the implementation spec from the approved design

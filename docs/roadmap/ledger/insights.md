@@ -108,3 +108,17 @@ reusing.
 - **Rule it implies**: C-10(a) applies to tool/CLI/API additions, not just UI routes — enumerate
   the discovery surfaces (including task-oriented runbooks) at recon time and prove the shared one
   with a test.
+
+### 2026-07-21 — fix-custom-formula-allnone — reuse
+- **Pattern**: Decoding a `google.protobuf.Struct` response field with `dict(resp.field)` +
+  `isinstance(raw, (list, tuple))` silently **drops every list value** — `Struct.update()` marshals a
+  native list into a proto `ListValue`, which is not a `list`/`tuple`, so the gate skips it and any
+  `[None]*n` fallback yields an all-`None` series (here: empty backtest `indicators` → `ENTRY_NEVER_TRUE`).
+  Use `json_format.MessageToDict(struct)` for the recursive `ListValue`→native unwrap (already the
+  inbound-decode pattern on the indicators side), and NaN/length-normalize the result rather than
+  assuming the producer returns full-length series.
+- **Evidence**: `services/xstockstrat-analysis/app/services/evaluator.py:185-191` (the buggy gate);
+  producer `services/xstockstrat-indicators/app/handlers/servicer.py:171-176` (`Struct().update(...)`),
+  `:126` (`MessageToDict` inbound); feature 067 recon.md § Root Cause + design.md.
+- **Rule it implies**: never index/`isinstance`-filter a `Struct` field's raw values — recursively
+  convert (`MessageToDict`) before use; reinforces P-03 (no silent drop) without a new ID.
