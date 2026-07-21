@@ -134,6 +134,15 @@ class TestLiveEvaluationLoopIsolation:
             ]
         )
         loop._symbols_for = MagicMock(return_value=["AAA", "BBB"])
+        # Force the alert throttle to 0 so the healthy pair's entry alert is not suppressed.
+        # (_run_cycle reads alert_throttle_seconds, default 300; on a freshly-booted host
+        # time.monotonic() can be < 300, which would throttle the first-ever alert and make
+        # the await_count assertion flaky — as it did on CI.)
+        loop._cfg.get_int = MagicMock(
+            side_effect=lambda key, default=0: (
+                0 if key == "analysis.engine.alert_throttle_seconds" else default
+            )
+        )
         # The evaluator raises FormulaExecutionError for AAA, returns a clean entry for BBB.
         evaluated = []
 
