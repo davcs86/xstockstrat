@@ -298,3 +298,10 @@
 **Verification**: proto buf lint+breaking; codegen idempotent; migration 007 up/down/re-up reversible (throwaway PG); analysis 220 tests / 77.7% cov / ruff clean; agent 54 tests / 61% cov / ruff clean; ui vitest 10 tests / 100% scoreDisplay + tsc --noEmit + lint + prettier clean; ci.yml valid YAML.
 **Deviations (Deviation Log)**: single-PR workflow (user-directed); buf-breaking baseline origin/main-dev; migration via throwaway PG; vitest coverage all:false (earnable floor); e2e via CI-equivalent static gates. All CI-equivalent or user-directed.
 **Next**: integration PR → main-dev (merge-order gate: no entry for this slug).
+
+## Session 2026-07-21 (CI: feature status automation)
+
+- Promotion PR #767 merged to main
+- Feature promoted and committed: 52adaa26702553f9d51f3cf458479a9b7729f930
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-07-21
