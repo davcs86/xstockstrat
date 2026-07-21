@@ -65,3 +65,35 @@
 - BYTEA↔proto wire-compat coupling — guard at proto step (buf breaking note). Target: step 1.
 - Insert+evict not transactional (≤1 extra row transiently) — re-check at analysis step.
 - No "has detail" flag on `BacktestRunSummary` (discover-on-open UX) — post-launch only.
+
+## Session 2026-07-21 — sdd-spec
+
+- Generated implementation-spec.md with 12 steps. Status → implementation-ready.
+- Key codebase findings (all recon.md anchors re-verified live before writing):
+  - Migration number confirmed **008** (`ls services/xstockstrat-analysis/migrations/` →
+    007_backtest_run_symbols is last); parent-table + index precedent in `006_backtest_runs.up.sql`.
+  - Proto insert points verified free: `BacktestResult` highest field 14 (`analysis.proto:70`),
+    `BarDiagnostic` highest 14 (`:120`); single-line request-message precedent
+    `GetStrategyReportRequest` at `:198`; CI buf invocation confirmed at
+    `.github/workflows/ci.yml:103-120` (`buf lint packages/proto/` + `buf breaking . --against`).
+  - **Design refinement (recorded, not silent — P-03)**: design.md said per-bar equity is "wired
+    through the single shared builder `_build_bar_diagnostic`", but that builder runs BEFORE the
+    simulation loop computes equity (diags are pre-built; the loop mutates `diags[i].action`,
+    `servicer.py:737-738,886`). The spec instead stamps `diags[i].equity = daily_equity[i]` in the
+    shared finalize pass `_finalize_symbol_diagnostics` (`servicer.py:1516-1530`, called by both
+    engine paths after the forced-close patch) — same single-shared-assembly intent (ledger
+    insights 2026-07-09), physically possible ordering. Step 4 carries the rationale.
+  - `GetBacktest` no-DB path: repo None → abort NOT_FOUND with the single FR-6 message (precedent:
+    `ListBacktests` returns empty when repo None, `servicer.py:1255-1256`).
+  - UI: `forward()` registration anchor `insightsBff.ts:39`; `useBacktestHistory`/`useStrategyReport`
+    hook shapes confirmed in `src/hooks/useStrategies.ts` (NOT_FOUND-aware retry via
+    `isNotFoundError`); page seams live at `page.tsx:95-98` (onSuccess), `:103` (result seam),
+    `:109-116` (trade-ordinal derivation to delete), `:364-398` (chart block to replace),
+    `:429-471` (Past Runs rows); mock backend `AnalysisService` object at `mock-backend.ts:396+`
+    with `bt-hist-2`/`bt-hist-1` fixtures; `xstockstrat-ui` scripts confirmed
+    (`test:coverage` = vitest, `test:e2e` = playwright, `lint` = next lint).
+  - Reviewers snapshot finalized in feature.md: analysis owner, ui owner, Proto Reviewer, DBA.
+- Step layout: 1 proto → 2 proto-gen (+frontend build check per ledger trap) → 3 migration 008 →
+  4/5 analysis engine capture + tests → 6/7 detail repo/persist/evict/GetBacktest + tests (incl.
+  AC-4 parity) → 8/9 UI lib derivation + unit tests → 10/11 UI wiring + e2e → 12 config-key docs
+  (C-05).
