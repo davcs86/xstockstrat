@@ -290,7 +290,36 @@ def register_tools(server: FastMCP) -> None:
         strategy_id: lowercase/underscore identifier (e.g. 'sma_crossover').
         display_name: human-readable name.
         components: list of {ref_name, kind ('builtin'|'formula'), indicator, formula_id, params}.
-        entry_rule / exit_rule: JSON-encoded condition trees.
+            kind='builtin': indicator must be one of the built-in enum ATR, BB, EMA, MACD, RSI,
+            SMA, STOCH, VWAP (case-insensitive). For an indicator outside this set (e.g. a
+            z-score or efficiency-ratio calculation), register a custom formula first via
+            manage_formula and reference it here as kind='formula', formula_id=<id>.
+
+        entry_rule / exit_rule: JSON-encoded condition trees (a JSON string, not a raw object).
+            Two node shapes, nestable to arbitrary depth:
+              - Combinator node: {"op": "AND"|"OR", "conditions": [<node>, ...]}. There is no NOT.
+              - Leaf/comparison node: {"fn": <op>, "lhs": <operand>, "rhs": <operand>}, where
+                <op> is one of '>', '<', '>=', '<=', 'crosses_above', 'crosses_below'
+                (no '==' or '!=').
+            An <operand> is either a JSON number (a literal threshold, rhs only) or a string
+            referencing a component: a bare ref_name (must match a components[].ref_name)
+            resolves to that component's primary "value" series; the dotted form
+            "<ref_name>.<series>" addresses a secondary output series of a multi-output
+            component (e.g. 'bb.upper'/'bb.lower' for Bollinger Bands, 'macd.signal'/
+            'macd.histogram', 'stoch.d'). Every ref referenced in a rule must resolve to a
+            components[] entry or the strategy is rejected (INVALID_ARGUMENT) at write time.
+
+            Worked example — entry when a z-score component 'z' is below -1.0 AND an
+            efficiency-ratio component 'er' is below 0.25 (both registered as kind='formula'
+            components, since neither is a built-in indicator):
+                {
+                  "op": "AND",
+                  "conditions": [
+                    {"fn": "<", "lhs": "z", "rhs": -1.0},
+                    {"fn": "<", "lhs": "er", "rhs": 0.25}
+                  ]
+                }
+            (pass this dict JSON-encoded, e.g. json.dumps(...), as the entry_rule string.)
         signal_params: optional signal-weighting params."""
         definition: dict = {
             "strategy_id": strategy_id,
@@ -328,7 +357,28 @@ def register_tools(server: FastMCP) -> None:
         parameters: typed parameter definitions for register/update — a list of
             {name, type, default, description, required, min, max} where type is one of
             'int'|'float'|'bool'|'string' and min/max apply to numeric params only. Values
-            are read inside the formula via params["<name>"]."""
+            are read inside the formula via params["<name>"].
+
+        source: plain Python, executed in a subprocess sandbox (no filesystem/network access).
+            Two dicts are already in scope — data (series input, e.g. data["close"], a list of
+            floats) and params (validated typed scalars, e.g. params["period"]) — and the
+            formula must assign its output to a `result` dict with at least a "value" key (the
+            primary series); any other keys are declared output series (see the `outputs` field
+            on the underlying RegisterFormula RPC, e.g. for a z-score or efficiency-ratio
+            indicator that emits more than one series).
+            Only imports in the `indicators.sandbox.allowed_imports` config key are permitted
+            (default: numpy, pandas, math, statistics). Within those, at least these functions
+            are available for building custom indicators:
+              - mean(), std(), diff(), shift() — pandas Series/DataFrame methods, e.g.
+                pd.Series(data["close"]).rolling(20).mean() / .std() / .diff() / .shift(1)
+                (or the numpy equivalents, e.g. np.mean(), np.std()).
+              - sum(), abs() — plain Python builtins, no import needed.
+            Example z-score formula body:
+                import pandas as pd
+                s = pd.Series(data["close"])
+                mean = s.rolling(params["period"]).mean()
+                std = s.rolling(params["period"]).std()
+                result = {"value": ((s - mean) / std).tolist()}"""
         formula: dict = {
             "formula_id": formula_id,
             "user_id": formula_author_user_id,
