@@ -52,7 +52,8 @@ FR-6. **Legacy rows degrade gracefully.** Past Runs rows without persisted detai
 
 FR-7. **Retention bound.** Persisted detail is bounded (e.g. most recent N runs per strategy,
       configurable) so the detail table cannot grow without limit; evicted runs fall back to
-      FR-6 behavior. Exact policy decided in design.
+      FR-6 behavior. Policy: count-based, most recent 20 per strategy (see Open Questions
+      resolution); design decides only eviction mechanics and storage encoding.
 
 ## Out of Scope
 
@@ -80,16 +81,19 @@ Exact service names from CLAUDE.md Service Registry:
 ## Config Key Changes
 
 - [ ] ~~No new config keys~~
-- `analysis.backtest.detail_retention_per_strategy` (int) — max persisted detailed runs per
-  strategy; exact name/default finalized at design time (owner: `xstockstrat-analysis`).
+- `analysis.backtest.detail_retention_per_strategy` (int, default **20**) — max persisted
+  detailed runs per strategy (matches the `ListBacktests` server default of the most recent
+  20 rows); owner: `xstockstrat-analysis`. Default to be declared in
+  `services/xstockstrat-analysis/CLAUDE.md` at implementation (C-05).
 
 ## Database Changes
 
 - [ ] ~~No schema changes~~
-- New migration in `services/xstockstrat-analysis/migrations/`: table(s) for per-run detail
-  (trades + equity/diagnostics payload) keyed by `backtest_id`, with an index on
-  `(strategy_id, completed_at)` for retention eviction. Exact shape (normalized rows vs JSONB
-  payload) decided at design time; DBA review required.
+- New migration `008_*` in `services/xstockstrat-analysis/migrations/` (next after
+  `007_backtest_run_symbols`, applied via `scripts/db-migrate.sh` in the standard run order):
+  table(s) for per-run detail (trades + equity/diagnostics payload) keyed by `backtest_id`,
+  with an index on `(strategy_id, completed_at)` for retention eviction. Exact shape
+  (normalized rows vs JSONB payload) decided at design time; DBA review required.
 
 ## Feature Workflow Notes
 
@@ -116,15 +120,23 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Open Questions
 
-- [ ] Persist per-bar `SymbolDiagnostics` for every run, or only trades + equity points, given
-      payload size (≈504 bars/symbol × symbols)? Design phase decides (JSONB vs rows, and what
-      FR-6 shows when diagnostics were elided).
-- [ ] Retention policy default (N runs per strategy? age-based?) and whether eviction also
-      trims `backtest_runs` summary rows (proposal: never — summaries stay).
-- [ ] Known trap (Ledger 2026-07-01, C-10(a)): if the historical view becomes a new route
-      rather than in-page state, it must be nav-reachable and covered by a reachability e2e.
-- [ ] Known trap (Ledger 2026-07-01, C-10(b)): metrics now surface via two read paths
-      (`ListBacktests` and the new `GetBacktest`) — spec requires a parity test across both.
-- [ ] Known trap (Ledger 2026-07-21, C-10(d)): any new/extended proto enum must update every
-      exhaustive TS `Record<Enum,…>` map in the same PR (frontend build in the proto step's
-      paired check).
+- [x] **Resolved 2026-07-21**: persist the full run detail — trades, per-bar equity points,
+      *and* per-bar `SymbolDiagnostics` — in one payload per run. Size is bounded twice over:
+      ≤ ~504 bars/symbol (`analysis.backtest.max_range_days`, feature 064) and ≤ 20 detailed
+      runs/strategy (retention key below). The storage encoding (JSONB payload vs normalized
+      rows) is a design-phase implementation choice, not a product question.
+- [x] **Resolved 2026-07-21**: retention default is the most recent **20** detailed runs per
+      strategy (count-based, matching the `ListBacktests` server default), configurable via
+      `analysis.backtest.detail_retention_per_strategy`. Eviction removes detail payloads
+      **only** — `backtest_runs` summary rows are never trimmed; evicted runs degrade to FR-6.
+
+## Known Traps (from Ledger — carried into design/spec phases)
+
+- Ledger 2026-07-01, C-10(a): if the historical view becomes a new route rather than in-page
+  state, it must be nav-reachable and covered by a reachability e2e. (Current intent: in-page
+  state on the existing strategy detail page.)
+- Ledger 2026-07-01, C-10(b): metrics surface via two read paths (`ListBacktests` and the new
+  `GetBacktest`) — AC-4 mandates a parity test across both.
+- Ledger 2026-07-21 fails.md entry (cited there as "C-10(a/d)" shorthand; not a Constitution
+  ID): any new/extended proto enum must update every exhaustive TS `Record<Enum,…>` map in the
+  same PR, verified by a frontend build in the proto step's paired check.

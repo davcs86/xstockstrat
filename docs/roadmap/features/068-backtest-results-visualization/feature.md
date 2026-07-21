@@ -1,6 +1,6 @@
 # Feature: backtest-results-visualization
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/backtest-results-visualization`
 **Created**: 2026-07-21
 **Last Updated**: 2026-07-21
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-07-21 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-07-21 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings) |
 
 ---
 
@@ -45,4 +46,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review backtest-results-visualization product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design backtest-results-visualization quick` — grounded design (recon + adversarial round) before /sdd-spec
