@@ -97,3 +97,54 @@ The round-1 approval was recorded via "continue"; the user then asked to **run a
   `formula_errors` status-gate predicate must preserve partial-success (some sibling traded → OK);
   `resp.error` intentionally log-only (F-04, no invented proto field).
 - Next: `/sdd-review fix-custom-formula-allnone impl-spec`.
+
+---
+
+## Session 2026-07-21 — sdd-execute (sequential, single-PR)
+
+Executed all 9 steps end-to-end in `sequential` mode; per the user's explicit instruction the work
+was committed to the harness branch `claude/feature-067-sequence-mode-20vup4` and pushed as **one
+integration PR** (not stacked per-step PRs). Toolchain: Docker/buf absent → provisioned the codegen
+toolchain on the host pinned to the CI `proto-freshness` versions (buf 1.69.0, protoc-gen-go v1.36.11,
+protoc-gen-go-grpc v1.6.2, protoc-gen-connect-go v1.19.2, grpcio-tools 1.80.0, TS plugins from the
+lockfile) and validated an **empty** pre-edit stub diff before touching the `.proto`.
+
+### Steps
+- **Step 1–2 (proto + gen)** [done]: appended `NO_TRADE_REASON_FORMULA_ERROR = 4`; `buf lint` + `buf
+  breaking` (non-breaking) pass; `./scripts/buf-gen.sh` regenerated stubs — diff limited to
+  `analysis/v1` + `gen/ts/dist/`; `FORMULA_ERROR = 4` present in Go/Python/TS.
+- **Step 3–4 (evaluator + test)** [done]: `MessageToDict` decode + `FormulaExecutionError` +
+  length-policy (len==n else raise). Red captured (`[None]*n` != closes) → green. 10 decode tests.
+- **Step 5–6 (servicer + test)** [done]: `except FormulaExecutionError` stamps a direct
+  `SymbolDiagnostics(no_trade_reason=FORMULA_ERROR, bars=[])`, `formula_errors` counter, status gate
+  extended to `not all_trades and len(daily_equity)<=1 and (coverage_gaps or formula_errors)`. Red →
+  green; partial run stays OK+keeps sibling cell, all-failed run → INSUFFICIENT_DATA + score=None,
+  classify-invariant holds. Full analysis suite 236 passed, coverage 79%.
+- **Step 7–8 (UI + e2e)** [done]: added the `[NoTradeReason.FORMULA_ERROR]` key to the exhaustive
+  `NO_TRADE_MESSAGE` record + a `strat-formula-error-001` mock-backend branch + a Playwright banner test.
+  C-10 build-coupling proven: RED `tsc` `TS2741` without the key → GREEN with it; `pnpm lint` + `pnpm
+  build` clean. e2e run fell back to CI-equivalent (tsc+lint+build) — Playwright webServer exceeds the
+  sandbox wall-clock (Deviation D-3); the test mirrors the adjacent `strat-diag-001` banner test.
+- **Step 9 (live loop)** [done]: confirm-only — added a test proving the loop's broad `except Exception`
+  absorbs `FormulaExecutionError` (continues, `_last_state` untouched, sibling still alerts). No code change.
+
+### Deviations (full detail in implementation-spec.md § Deviation Log)
+- **D-1**: `MessageToDict` (protobuf 6.33.x) refuses NaN/Inf number_values — the canonical decode both
+  screener and this fix use. Realistic warm-up is `null`/`None` (decodes cleanly); a genuinely NaN/Inf
+  output is out-of-contract and now surfaces as a visible `FORMULA_ERROR` (wrapped `try/except
+  ValueError → raise`), honoring P-03. Design table's "all-NaN passes through" corrected to null-based.
+- **D-2**: existing `test_formula_warmup_uses_declared_not_observed` used `success=False` to fake an
+  all-None series (the bug). Now `success=False` raises; test switched to a legitimate all-null
+  `success=True` series, intent + assertions preserved.
+- **D-3**: UI e2e is very slow in the sandbox (webServer aborts in-band on the wall-clock limit) but
+  **passes** when run against a pre-built `pnpm start` server — the formula-error banner test reported
+  `1 passed (15.0m)`. CI-equivalent checks (tsc red→green, lint, build) captured as corroboration; CI's
+  `frontend-e2e` job runs it in normal time.
+
+Files modified: `packages/proto/analysis/v1/analysis.proto` (+ regenerated `gen/{go,python,ts}` +
+`gen/ts/dist`), `services/xstockstrat-analysis/app/services/evaluator.py`,
+`services/xstockstrat-analysis/app/handlers/servicer.py`, `.../tests/test_strategy_evaluator.py`,
+`.../tests/test_analysis_servicer.py`, `.../tests/test_live_loop.py`,
+`services/xstockstrat-ui/src/components/insights/BacktestDiagnostics.tsx`,
+`services/xstockstrat-ui/e2e/mock-backend.ts`,
+`services/xstockstrat-ui/e2e/insights/backtest-coverage.spec.ts`.

@@ -140,6 +140,7 @@ const (
 	NoTradeReason_NO_TRADE_REASON_ENTIRE_RANGE_WARMUP  NoTradeReason = 1 // the whole range was warm-up
 	NoTradeReason_NO_TRADE_REASON_ENTRY_NEVER_TRUE     NoTradeReason = 2 // entry condition never satisfied
 	NoTradeReason_NO_TRADE_REASON_INSUFFICIENT_CAPITAL NoTradeReason = 3 // reserved; not emitted this version
+	NoTradeReason_NO_TRADE_REASON_FORMULA_ERROR        NoTradeReason = 4 // a custom-formula component failed to execute / returned an out-of-contract series
 )
 
 // Enum value maps for NoTradeReason.
@@ -149,12 +150,14 @@ var (
 		1: "NO_TRADE_REASON_ENTIRE_RANGE_WARMUP",
 		2: "NO_TRADE_REASON_ENTRY_NEVER_TRUE",
 		3: "NO_TRADE_REASON_INSUFFICIENT_CAPITAL",
+		4: "NO_TRADE_REASON_FORMULA_ERROR",
 	}
 	NoTradeReason_value = map[string]int32{
 		"NO_TRADE_REASON_UNSPECIFIED":          0,
 		"NO_TRADE_REASON_ENTIRE_RANGE_WARMUP":  1,
 		"NO_TRADE_REASON_ENTRY_NEVER_TRUE":     2,
 		"NO_TRADE_REASON_INSUFFICIENT_CAPITAL": 3,
+		"NO_TRADE_REASON_FORMULA_ERROR":        4,
 	}
 )
 
@@ -2952,12 +2955,13 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x14BAR_ACTION_HOLD_FLAT\x10\x02\x12\x19\n" +
 	"\x15BAR_ACTION_ENTER_LONG\x10\x03\x12\x18\n" +
 	"\x14BAR_ACTION_EXIT_LONG\x10\x04\x12\x18\n" +
-	"\x14BAR_ACTION_HOLD_LONG\x10\x05*\xa9\x01\n" +
+	"\x14BAR_ACTION_HOLD_LONG\x10\x05*\xcc\x01\n" +
 	"\rNoTradeReason\x12\x1f\n" +
 	"\x1bNO_TRADE_REASON_UNSPECIFIED\x10\x00\x12'\n" +
 	"#NO_TRADE_REASON_ENTIRE_RANGE_WARMUP\x10\x01\x12$\n" +
 	" NO_TRADE_REASON_ENTRY_NEVER_TRUE\x10\x02\x12(\n" +
-	"$NO_TRADE_REASON_INSUFFICIENT_CAPITAL\x10\x03*x\n" +
+	"$NO_TRADE_REASON_INSUFFICIENT_CAPITAL\x10\x03\x12!\n" +
+	"\x1dNO_TRADE_REASON_FORMULA_ERROR\x10\x04*x\n" +
 	"\rComponentKind\x12\x1e\n" +
 	"\x1aCOMPONENT_KIND_UNSPECIFIED\x10\x00\x12$\n" +
 	" COMPONENT_KIND_BUILTIN_INDICATOR\x10\x01\x12!\n" +

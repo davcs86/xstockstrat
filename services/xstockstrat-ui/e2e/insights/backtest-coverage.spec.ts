@@ -42,6 +42,21 @@ test.describe('Backtest data coverage', () => {
     );
   });
 
+  // feature 067 — a custom-formula that fails to execute renders a distinct FORMULA_ERROR
+  // no-trade banner. The diagnostic carries bars:[] (bars-independent banner), proving the
+  // shared NO_TRADE_MESSAGE map key is reachable (C-10 renderer parity).
+  test('formula-error backtest renders the FORMULA_ERROR no-trade banner', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/insights/strategies/strat-formula-error-001');
+
+    await page.getByRole('button', { name: 'Run Backtest' }).click();
+
+    await expect(page.getByTestId('no-trade-reason')).toContainText(
+      'custom-formula component failed',
+      { timeout: 10000 },
+    );
+  });
+
   // feature 065: the derived "Strategy Grade" card and the per-run "Run score" column are BOTH
   // labelled (OQ-5 — closes the C-10(b) two-read-paths trap with distinct copy), the evidence
   // caption renders, and the legacy run (no range) shows the Range placeholder.

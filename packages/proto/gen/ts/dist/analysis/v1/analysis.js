@@ -178,6 +178,8 @@ var NoTradeReason;
     NoTradeReason["NO_TRADE_REASON_ENTRY_NEVER_TRUE"] = "NO_TRADE_REASON_ENTRY_NEVER_TRUE";
     /** NO_TRADE_REASON_INSUFFICIENT_CAPITAL - reserved; not emitted this version */
     NoTradeReason["NO_TRADE_REASON_INSUFFICIENT_CAPITAL"] = "NO_TRADE_REASON_INSUFFICIENT_CAPITAL";
+    /** NO_TRADE_REASON_FORMULA_ERROR - a custom-formula component failed to execute / returned an out-of-contract series */
+    NoTradeReason["NO_TRADE_REASON_FORMULA_ERROR"] = "NO_TRADE_REASON_FORMULA_ERROR";
     NoTradeReason["UNRECOGNIZED"] = "UNRECOGNIZED";
 })(NoTradeReason || (exports.NoTradeReason = NoTradeReason = {}));
 function noTradeReasonFromJSON(object) {
@@ -194,6 +196,9 @@ function noTradeReasonFromJSON(object) {
         case 3:
         case "NO_TRADE_REASON_INSUFFICIENT_CAPITAL":
             return NoTradeReason.NO_TRADE_REASON_INSUFFICIENT_CAPITAL;
+        case 4:
+        case "NO_TRADE_REASON_FORMULA_ERROR":
+            return NoTradeReason.NO_TRADE_REASON_FORMULA_ERROR;
         case -1:
         case "UNRECOGNIZED":
         default:
@@ -210,6 +215,8 @@ function noTradeReasonToJSON(object) {
             return "NO_TRADE_REASON_ENTRY_NEVER_TRUE";
         case NoTradeReason.NO_TRADE_REASON_INSUFFICIENT_CAPITAL:
             return "NO_TRADE_REASON_INSUFFICIENT_CAPITAL";
+        case NoTradeReason.NO_TRADE_REASON_FORMULA_ERROR:
+            return "NO_TRADE_REASON_FORMULA_ERROR";
         case NoTradeReason.UNRECOGNIZED:
         default:
             return "UNRECOGNIZED";
@@ -225,6 +232,8 @@ function noTradeReasonToNumber(object) {
             return 2;
         case NoTradeReason.NO_TRADE_REASON_INSUFFICIENT_CAPITAL:
             return 3;
+        case NoTradeReason.NO_TRADE_REASON_FORMULA_ERROR:
+            return 4;
         case NoTradeReason.UNRECOGNIZED:
         default:
             return -1;

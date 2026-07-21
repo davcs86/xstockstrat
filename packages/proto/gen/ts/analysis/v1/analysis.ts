@@ -178,6 +178,8 @@ export enum NoTradeReason {
   NO_TRADE_REASON_ENTRY_NEVER_TRUE = "NO_TRADE_REASON_ENTRY_NEVER_TRUE",
   /** NO_TRADE_REASON_INSUFFICIENT_CAPITAL - reserved; not emitted this version */
   NO_TRADE_REASON_INSUFFICIENT_CAPITAL = "NO_TRADE_REASON_INSUFFICIENT_CAPITAL",
+  /** NO_TRADE_REASON_FORMULA_ERROR - a custom-formula component failed to execute / returned an out-of-contract series */
+  NO_TRADE_REASON_FORMULA_ERROR = "NO_TRADE_REASON_FORMULA_ERROR",
   UNRECOGNIZED = "UNRECOGNIZED",
 }
 
@@ -195,6 +197,9 @@ export function noTradeReasonFromJSON(object: any): NoTradeReason {
     case 3:
     case "NO_TRADE_REASON_INSUFFICIENT_CAPITAL":
       return NoTradeReason.NO_TRADE_REASON_INSUFFICIENT_CAPITAL;
+    case 4:
+    case "NO_TRADE_REASON_FORMULA_ERROR":
+      return NoTradeReason.NO_TRADE_REASON_FORMULA_ERROR;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -212,6 +217,8 @@ export function noTradeReasonToJSON(object: NoTradeReason): string {
       return "NO_TRADE_REASON_ENTRY_NEVER_TRUE";
     case NoTradeReason.NO_TRADE_REASON_INSUFFICIENT_CAPITAL:
       return "NO_TRADE_REASON_INSUFFICIENT_CAPITAL";
+    case NoTradeReason.NO_TRADE_REASON_FORMULA_ERROR:
+      return "NO_TRADE_REASON_FORMULA_ERROR";
     case NoTradeReason.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
@@ -228,6 +235,8 @@ export function noTradeReasonToNumber(object: NoTradeReason): number {
       return 2;
     case NoTradeReason.NO_TRADE_REASON_INSUFFICIENT_CAPITAL:
       return 3;
+    case NoTradeReason.NO_TRADE_REASON_FORMULA_ERROR:
+      return 4;
     case NoTradeReason.UNRECOGNIZED:
     default:
       return -1;

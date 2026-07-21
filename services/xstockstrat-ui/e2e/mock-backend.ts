@@ -487,6 +487,27 @@ export async function startMockBackend(): Promise<void> {
               ],
             };
           }
+          if (req.strategyId === 'strat-formula-error-001') {
+            // feature 067: a custom-formula component failed to execute — the symbol carries
+            // a distinct FORMULA_ERROR reason with no bars, and the banner still renders.
+            return {
+              backtestId: 'bt-formula-error-1',
+              strategyId: req.strategyId,
+              status: 1, // BACKTEST_STATUS_OK (a partial run; the banner is bars-independent)
+              totalTrades: 0,
+              trades: [],
+              coverageGaps: [],
+              diagnostics: [
+                {
+                  symbol: req.symbols[0] ?? 'AAPL',
+                  barsTotal: 0,
+                  warmupBars: 0,
+                  noTradeReason: 4, // NO_TRADE_REASON_FORMULA_ERROR
+                  bars: [],
+                },
+              ],
+            };
+          }
           return {
             backtestId: 'bt-e2e-1',
             strategyId: req.strategyId,

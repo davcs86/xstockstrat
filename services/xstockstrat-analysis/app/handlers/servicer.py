@@ -37,6 +37,7 @@ from app.repositories.strategies import StrategiesRepository
 from app.repositories.strategy_scores import StrategyScoresRepository
 from app.services import scoring
 from app.services.evaluator import (
+    FormulaExecutionError,
     StrategyEvaluator,
     _validate_definition,
     align_indicator_points,
@@ -294,6 +295,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         daily_equity: list[float] = [equity]
         coverage_gaps: list[analysis_pb2.CoverageGap] = []
         all_diagnostics: list[analysis_pb2.SymbolDiagnostics] = []  # feature 064
+        # feature 067: count symbols dropped by a custom-formula execution error. Used by the
+        # status gate below so a no-usable-evidence run reports INSUFFICIENT_DATA (never OK+scored).
+        formula_errors: int = 0
         # feature 065: one per-symbol evidence cell buffered per traded symbol; flushed on OK.
         symbol_cells: list[dict] = []
         # feature 064: declared formula warm-ups fetched once per run, reused across symbols.
@@ -368,6 +372,27 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     )
                 )
                 continue
+            except FormulaExecutionError as fe:
+                # feature 067: a custom-formula component failed to execute / returned an
+                # out-of-contract series. Surface it as a distinct, UI-visible reason instead
+                # of silently degrading to an all-None series (→ ENTRY_NEVER_TRUE). The
+                # indicators resp.error is surfaced via log only (F-04 — no invented proto
+                # error field). Stamp the reason DIRECTLY here — this branch is the single
+                # site that sets FORMULA_ERROR; _classify_no_trade_reason (which only sees
+                # trades/warmup/n) never returns it and this symbol never reaches
+                # _finalize_symbol_diagnostics.
+                log.warning("backtest symbol %s formula error: %s — skipping", symbol, fe.error)
+                all_diagnostics.append(
+                    analysis_pb2.SymbolDiagnostics(
+                        symbol=symbol,
+                        bars=[],
+                        no_trade_reason=analysis_pb2.NO_TRADE_REASON_FORMULA_ERROR,
+                        bars_total=0,
+                        warmup_bars=0,
+                    )
+                )
+                formula_errors += 1
+                continue
             except grpc.RpcError as e:
                 log.warning("backtest symbol %s failed: %s — skipping", symbol, e)
                 continue
@@ -397,7 +422,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # FR-2: if every symbol was insufficient (no trades, no usable bars beyond the seed
         # equity point), report INSUFFICIENT_DATA instead of a fabricated flat-equity success.
         # A partial multi-symbol backtest stays OK but still carries the per-symbol gaps.
-        if coverage_gaps and not all_trades and len(daily_equity) <= 1:
+        # feature 067: an all-failed / single-symbol-failed formula run (no trades, no usable
+        # curve) is likewise no-usable-evidence — fold formula_errors into the gate so it does
+        # not masquerade as OK and persist a spurious per-run score (feature 053 regression).
+        # A partial run where some sibling traded (all_trades non-empty or the curve grew) stays OK.
+        if not all_trades and len(daily_equity) <= 1 and (coverage_gaps or formula_errors):
             result.status = analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
         else:
             result.status = analysis_pb2.BACKTEST_STATUS_OK

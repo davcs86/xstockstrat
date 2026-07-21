@@ -1,6 +1,6 @@
 # Implementation Spec: fix-custom-formula-allnone
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-07-21
 **Feature**: `docs/roadmap/features/067-fix-custom-formula-allnone/feature.md`
 **Total Steps**: 9
@@ -47,7 +47,7 @@ only changes how its response is decoded. C-03 unaffected.
 
 ### Step 1 — proto: append `NO_TRADE_REASON_FORMULA_ERROR` to the `NoTradeReason` enum
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -79,7 +79,7 @@ Both pass (appending an enum value is non-breaking).
 
 ### Step 2 — proto-gen: regenerate stubs for the new enum value
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/analysis/v1/` — modify (regenerated)
@@ -119,7 +119,7 @@ it as a regression here.
 
 ### Step 3 — service: decode `ExecuteFormula` output via `MessageToDict` and raise `FormulaExecutionError`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/evaluator.py` — modify
@@ -179,7 +179,7 @@ it as a regression here.
 
 ### Step 4 — test: evaluator decode + raise regression (red-before-green)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_strategy_evaluator.py` — modify
@@ -221,7 +221,7 @@ All tests pass; coverage ≥ 40%.
 
 ### Step 5 — service: surface `FORMULA_ERROR` per-symbol + guard the all-failed-run status
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -281,7 +281,7 @@ All tests pass; coverage ≥ 40%.
 
 ### Step 6 — test: servicer `FORMULA_ERROR` surfacing + all-failed status + classify invariant
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -318,7 +318,7 @@ All tests pass; coverage ≥ 40%.
 
 ### Step 7 — service: add the `FORMULA_ERROR` key to the shared UI `NO_TRADE_MESSAGE` record
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/BacktestDiagnostics.tsx` — modify
@@ -359,7 +359,7 @@ build-coupling note.
 
 ### Step 8 — test: UI e2e banner render for a `FORMULA_ERROR` symbol
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/backtest-coverage.spec.ts` — modify
@@ -393,7 +393,7 @@ The new test passes (existing insights e2e coverage; no numeric coverage thresho
 
 ### Step 9 — test: confirm the live loop contains a `FormulaExecutionError` (no code change)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_live_loop.py` — modify
@@ -426,4 +426,49 @@ Test passes; coverage ≥ 40%.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### D-1 (Step 3) — `MessageToDict` refuses NaN/Inf; warm-up is `null`, not `NaN`
+
+- **What the spec/design said**: normalize `NaN`/`Inf`→`None` and pass an all-`None`/all-`NaN`
+  `len==n` series through as a legitimate warm-up range (design.md § Custom-formula length policy).
+- **What was found**: `google.protobuf.json_format.MessageToDict` (protobuf 6.33.x, the canonical
+  decode used by both `screener.py:261` and this fix) **raises `ValueError`** on a `NaN`/`Inf`
+  number_value ("Fail to serialize NaN for Value.number_value") — so a `NaN` in the response `Struct`
+  can never round-trip through the decode both consumers use; normalization can't run after it. The
+  realistic, JSON-serializable warm-up representation is a `null` (Python `None`) element, which
+  `MessageToDict` decodes cleanly to `None`.
+- **Resolution (P-03 — surface, don't silently degrade)**: wrapped the `MessageToDict` call in
+  `try/except ValueError → raise FormulaExecutionError`, so a genuinely `NaN`/`Inf`-laden
+  (out-of-contract) output surfaces as a visible `FORMULA_ERROR` instead of a `ValueError` swallowed by
+  the servicer's broad `except`. `_finite_or_none` retains the `NaN`/`Inf`→`None` guard defensively.
+  Warm-up passthrough is proven with `null`-valued series (`test_null_warmup_head_passes_through_as_none`,
+  `test_all_null_len_n_passes_through_as_warmup`); the `NaN` case now asserts a raise
+  (`test_nan_output_raises`). No user decision needed — a factual correction with one correct resolution.
+- **Disposition**: in-scope (the fix changes formula-decode semantics); a clear factual correction.
+
+### D-2 (Step 4) — existing feature-064 test encoded the bug (`success=False` → all-`None`)
+
+- `tests/test_analysis_servicer.py::test_formula_warmup_uses_declared_not_observed` produced its
+  "all-`None` primary series" by mocking `ExecuteFormula` with `success=False`. That is exactly the
+  masquerade this feature removes: `success=False` now raises `FormulaExecutionError` (→ `FORMULA_ERROR`),
+  a distinct outcome. The test's true intent — declared warm-up (not observed) drives classification for
+  a legitimately all-warm-up series → `ENTRY_NEVER_TRUE` — was preserved by switching the mock to a
+  legitimate all-warm-up response (`success=True` with a length-`n` `null` `value`). Assertions unchanged.
+- **Disposition**: in-scope test correction (the step changes formula-failure semantics; a test
+  asserting the old semantics had to be updated). Recorded, not a spec-body edit (F-09).
+
+### D-3 (Step 8) — UI e2e is slow in the sandbox but PASSES (real green + CI-equivalent backup)
+
+- **Sanctioned tool**: `pnpm test:e2e -- backtest-coverage` (Playwright). The Playwright `webServer`
+  (production `next build && next start`) is very slow here — the in-band `webServer` first attempt was
+  torn down by a wall-clock limit (`[WebServer] ⨯ [Error: aborted]`). Re-run against a pre-built server
+  (`NEXT_DISABLE_STANDALONE=1 pnpm build` + `pnpm start`, `reuseExistingServer`), the new test **passed**:
+  `e2e/insights/backtest-coverage.spec.ts:48 › formula-error backtest renders the FORMULA_ERROR no-trade
+  banner` → **`1 passed (15.0m)`**. The 15-minute wall-clock is a sandbox resource limitation, not a
+  test defect; CI's `frontend-e2e` job runs it in normal time.
+- **Also captured — CI-equivalent proof** (sequential-mode verification fallback + spec's documented e2e
+  fallback): red→green at the type-exhaustiveness layer — **RED** removing the
+  `[NoTradeReason.FORMULA_ERROR]` map key fails `tsc` (`TS2741: Property '[NoTradeReason.FORMULA_ERROR]'
+  is missing … required in type 'Record<NoTradeReason, string>'`); **GREEN** with the key, `tsc --noEmit`
+  exit 0, `pnpm lint` clean, `pnpm build` succeeds.
+- **Disposition**: verified — the sanctioned Playwright test passed (slow), with the CI-equivalent
+  checks as corroboration.

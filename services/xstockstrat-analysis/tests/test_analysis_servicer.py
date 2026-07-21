@@ -1158,6 +1158,11 @@ class TestBacktestDiagnostics:
     async def test_formula_warmup_uses_declared_not_observed(self):
         # An all-None formula primary series must NOT inflate warmup to len(bars); the declared
         # warmup_period (via GetFormula) is used → ENTRY_NEVER_TRUE, not ENTIRE_RANGE_WARMUP.
+        # feature 067: an all-null (warm-up) series is produced legitimately (success=True with
+        # a length-n null "value"), not via success=False — a failed formula now raises
+        # FormulaExecutionError (→ NO_TRADE_REASON_FORMULA_ERROR), a distinct outcome.
+        from google.protobuf.struct_pb2 import Struct
+
         bars = [_bar(6000 + i, c) for i, c in enumerate([10, 11, 12, 13, 14, 15])]
         definition = analysis_pb2.StrategyDefinition(
             components=[
@@ -1175,9 +1180,11 @@ class TestBacktestDiagnostics:
         svc._marketdata = MagicMock()
         svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=bars))
         svc._indicators = MagicMock()
-        # formula execution "fails" → primary series is all None
+        # A legitimate all-warm-up series: success=True with a full-length null "value".
+        out = Struct()
+        out.update({"value": [None] * len(bars)})
         svc._indicators.ExecuteFormula = AsyncMock(
-            return_value=SimpleNamespace(success=False, output={}, error="boom")
+            return_value=SimpleNamespace(success=True, output=out, error="")
         )
         svc._indicators.GetFormula = AsyncMock(
             return_value=indicators_pb2.FormulaDefinition(formula_id="f-1", warmup_period=3)
@@ -1188,6 +1195,117 @@ class TestBacktestDiagnostics:
         assert result.total_trades == 0
         assert sd.no_trade_reason == analysis_pb2.NO_TRADE_REASON_ENTRY_NEVER_TRUE
         svc._indicators.GetFormula.assert_awaited()
+
+
+class TestFormulaErrorSurfacing:
+    """feature 067 — a failing custom-formula surfaces a distinct FORMULA_ERROR diagnostic,
+    and an all-failed run reports INSUFFICIENT_DATA without persisting a spurious score."""
+
+    def _req(self, definition, symbols):
+        req = analysis_pb2.RunBacktestRequest(
+            strategy_id="s1", symbols=symbols, initial_capital=100_000.0
+        )
+        req.inline_definition.CopyFrom(definition)
+        req.range.CopyFrom(common_pb2.TimeRange())
+        return req
+
+    def _formula_def(self):
+        return analysis_pb2.StrategyDefinition(
+            components=[
+                analysis_pb2.StrategyComponent(
+                    ref_name="ff",
+                    kind=analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
+                    formula_id="f-1",
+                )
+            ],
+            entry_rule=json.dumps({"fn": ">", "lhs": "ff", "rhs": 0}),
+        )
+
+    def _wire(self, svc, bars, execute_side_effect):
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=bars))
+        svc._indicators = MagicMock()
+        svc._indicators.ExecuteFormula = AsyncMock(side_effect=execute_side_effect)
+        svc._indicators.GetFormula = AsyncMock(
+            return_value=indicators_pb2.FormulaDefinition(formula_id="f-1", warmup_period=0)
+        )
+
+    @pytest.mark.asyncio
+    async def test_partial_run_stamps_formula_error_and_keeps_sibling(self):
+        from google.protobuf.struct_pb2 import Struct
+
+        bars = [_bar(7000 + i, c) for i, c in enumerate([10, 11, 12, 13, 14, 15])]
+        ok_out = Struct()
+        ok_out.update({"value": [1.0] * len(bars)})  # sibling trades (ff > 0)
+        # AAPL formula fails (success=False → FormulaExecutionError); MSFT succeeds.
+        side_effect = [
+            SimpleNamespace(success=False, output=Struct(), error="boom"),
+            SimpleNamespace(success=True, output=ok_out, error=""),
+        ]
+        svc = make_servicer()
+        self._wire(svc, bars, side_effect)
+        persisted_cells = {}
+
+        async def _spy(cells, **kw):
+            persisted_cells["cells"] = list(cells)
+
+        svc._persist_symbol_cells = AsyncMock(side_effect=_spy)
+
+        result = await svc.RunBacktest(
+            self._req(self._formula_def(), ["AAPL", "MSFT"]), MagicMock()
+        )
+
+        by_symbol = {d.symbol: d for d in result.diagnostics}
+        assert by_symbol["AAPL"].no_trade_reason == analysis_pb2.NO_TRADE_REASON_FORMULA_ERROR
+        assert not by_symbol["AAPL"].bars  # bars=[] for the failed symbol
+        assert result.status == analysis_pb2.BACKTEST_STATUS_OK  # partial success stays OK
+        # MSFT kept its feature-065 evidence cell.
+        cell_symbols = {c["symbol"] for c in persisted_cells.get("cells", [])}
+        assert "MSFT" in cell_symbols
+        assert "AAPL" not in cell_symbols
+
+    @pytest.mark.asyncio
+    async def test_all_failed_run_is_insufficient_and_unscored(self):
+        from google.protobuf.struct_pb2 import Struct
+
+        bars = [_bar(7100 + i, c) for i, c in enumerate([10, 11, 12, 13, 14, 15])]
+        side_effect = [
+            SimpleNamespace(success=False, output=Struct(), error="boom"),
+            SimpleNamespace(success=False, output=Struct(), error="boom"),
+        ]
+        svc = make_servicer()
+        self._wire(svc, bars, side_effect)
+        svc._persist_backtest_run = AsyncMock()
+
+        result = await svc.RunBacktest(
+            self._req(self._formula_def(), ["AAPL", "MSFT"]), MagicMock()
+        )
+
+        assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
+        assert result.total_trades == 0
+        # Both symbols surface a FORMULA_ERROR diagnostic.
+        reasons = {d.symbol: d.no_trade_reason for d in result.diagnostics}
+        assert reasons == {
+            "AAPL": analysis_pb2.NO_TRADE_REASON_FORMULA_ERROR,
+            "MSFT": analysis_pb2.NO_TRADE_REASON_FORMULA_ERROR,
+        }
+        # No per-run score persisted for a no-usable-evidence run.
+        svc._persist_backtest_run.assert_awaited_once()
+        assert svc._persist_backtest_run.await_args.args[2] is None  # score arg
+
+    def test_classify_no_trade_reason_never_returns_formula_error(self):
+        from app.handlers.servicer import _classify_no_trade_reason
+
+        # FORMULA_ERROR is stamped ONLY by the RunBacktest loop branch, never by classification.
+        for trades in ([], [object()]):
+            for warmup in (0, 3, 10):
+                for n in (0, 3, 6):
+                    assert (
+                        _classify_no_trade_reason(trades, warmup, n)
+                        != analysis_pb2.NO_TRADE_REASON_FORMULA_ERROR
+                    )
 
 
 class TestBacktestRangeCap:
