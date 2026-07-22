@@ -1,6 +1,8 @@
 # Feature: trigger-backfill-mcp-tool
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 52adaa26702553f9d51f3cf458479a9b7729f930
+**Launched date**: 2026-07-21
 **Development Branch**: `feature/trigger-backfill-mcp-tool`
 **Created**: 2026-07-20
 **Last Updated**: 2026-07-20
@@ -18,6 +20,7 @@
 | 2026-07-20 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Step 1) |
 | 2026-07-20 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done; integration rides PR #769 (recorded branch deviation) |
 
+| 2026-07-21 | `code-completed` → `launched` | CI workflow | Promoted via PR #767; committed 52adaa26702553f9d51f3cf458479a9b7729f930 |
 ---
 
 ## Artifacts

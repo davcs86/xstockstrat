@@ -148,3 +148,10 @@ Files modified: `packages/proto/analysis/v1/analysis.proto` (+ regenerated `gen/
 `services/xstockstrat-ui/src/components/insights/BacktestDiagnostics.tsx`,
 `services/xstockstrat-ui/e2e/mock-backend.ts`,
 `services/xstockstrat-ui/e2e/insights/backtest-coverage.spec.ts`.
+
+## Session 2026-07-21 (CI: feature status automation)
+
+- Promotion PR #767 merged to main
+- Feature promoted and committed: 52adaa26702553f9d51f3cf458479a9b7729f930
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-07-21

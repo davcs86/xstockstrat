@@ -1,6 +1,8 @@
 # Feature: cross-stock-score-derivation
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 52adaa26702553f9d51f3cf458479a9b7729f930
+**Launched date**: 2026-07-21
 **Development Branch**: `feature/cross-stock-score-derivation`
 **Created**: 2026-07-12
 **Last Updated**: 2026-07-13
@@ -19,6 +21,7 @@
 | 2026-07-13 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (proto additive fields); sequential run, single-PR (user-directed) on branch claude/cross-stock-score-derivation-94k11z |
 | 2026-07-13 | `in-progress` → `code-completed` | /sdd-execute | All 14 steps done; verified locally (analysis 220 tests/77%, agent 54/61%, ui vitest 100% + tsc/lint clean, proto buf lint/breaking, migration 007 reversible). Integration PR → main-dev next. |
 
+| 2026-07-21 | `code-completed` → `launched` | CI workflow | Promoted via PR #767; committed 52adaa26702553f9d51f3cf458479a9b7729f930 |
 ---
 
 ## Artifacts
