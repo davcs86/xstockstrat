@@ -37,6 +37,8 @@ router.service(AnalysisService, {
   screenSymbols: forward((req, opts) => analysisClient.screenSymbols(req, opts)),
   getStrategyReport: forward((req, opts) => analysisClient.getStrategyReport(req, opts)),
   listBacktests: forward((req, opts) => analysisClient.listBacktests(req, opts)),
+  // feature 068: persisted full result of a past run; NOT_FOUND for legacy/evicted runs.
+  getBacktest: forward((req, opts) => analysisClient.getBacktest(req, opts)),
   async manageStrategy(req, ctx) {
     const claims = await requireSession(ctx);
     // Mutations (register/update/deactivate) are admin-only per FR-8 — enforced
