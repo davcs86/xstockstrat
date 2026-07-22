@@ -122,3 +122,17 @@ reusing.
   `:126` (`MessageToDict` inbound); feature 067 recon.md § Root Cause + design.md.
 - **Rule it implies**: never index/`isinstance`-filter a `Struct` field's raw values — recursively
   convert (`MessageToDict`) before use; reinforces P-03 (no silent drop) without a new ID.
+
+### 2026-07-21 — backtest-results-visualization — design
+- **Pattern**: "Store what you serve" — for a persisted payload whose only consumer is the RPC
+  that returns it verbatim (no SQL ever inspects it), store the serialized proto message itself
+  (`SerializeToString()` → BYTEA, `FromString()` on read) instead of JSONB or normalized rows.
+  Sidesteps the NaN/Inf JSON round-trip trap (fails.md 2026-07-21 — `profit_factor` is
+  legitimately `inf` on no-loss runs), gives byte-exact parity between the fresh response and the
+  historical read (C-10(b) for free), and needs zero row↔proto mapping code. Pair it with a FK to
+  the summary/list table so payload-exists ⇒ listed-exists stays structural.
+- **Evidence**: feature 068 design.md § Chosen Approach + § Rejected Alternatives (JSONB,
+  normalized rows); adversary round-1 objection 4 (FK existence-parity).
+- **Rule it implies**: byte-serialized proto is the default encoding for read-back-only payload
+  columns; JSONB only when SQL must query inside the payload (and then never with non-finite
+  floats — fails.md 2026-07-21).

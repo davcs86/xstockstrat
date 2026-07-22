@@ -98,6 +98,76 @@ test.describe('Backtest data coverage', () => {
     expect(body).toContain('"strategyId":"strat-history-001"');
   });
 
+  // feature 068: opening a past run renders its persisted detail — metrics parity with the
+  // Past Runs row (AC-4 surface parity), the time-axis equity curve, and trade markers with
+  // a tooltip carrying the trade payload (FR-4, AC-2).
+  test('opening a past run renders persisted metrics, time-axis curve, and trade markers', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/insights/strategies/strat-history-001');
+
+    const rows = page.getByTestId('past-run-row');
+    await expect(rows).toHaveCount(2, { timeout: 10000 });
+    await rows.first().click(); // newest first → bt-hist-2 (has detail)
+
+    // Metrics grid renders the persisted values — equal to the Past Runs row's (15.00%).
+    await expect(page.getByText('Backtest Results')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('15.00%').first()).toBeVisible();
+    await expect(page.getByTestId('past-runs')).toContainText('15.00%');
+    // Time-axis equity curve with trade markers (2 trades → 4 markers).
+    await expect(page.getByTestId('equity-curve-chart')).toBeVisible();
+    const markers = page.getByTestId('trade-marker');
+    await expect(markers).toHaveCount(4);
+    // Marker tooltip carries the trade payload: symbol/side/qty/entry/exit/P&L.
+    await markers.first().hover({ force: true });
+    const tooltip = page.getByTestId('marker-tooltip');
+    await expect(tooltip).toBeVisible();
+    await expect(tooltip).toContainText('AAPL');
+    await expect(tooltip).toContainText('long');
+    await expect(tooltip).toContainText('Qty 100');
+    await expect(tooltip).toContainText('$185.50');
+    await expect(tooltip).toContainText('$192.30');
+    await expect(tooltip).toContainText('P&L $680.00');
+    // The persisted per-bar diagnostics render through the same component (AC-5).
+    await expect(page.getByTestId('diagnostics-table')).toBeVisible();
+  });
+
+  // feature 068: a legacy run without persisted detail renders the explicit empty state
+  // while its summary row stays in the table (AC-3, FR-6).
+  test('legacy run without detail renders the no-detail empty state', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/insights/strategies/strat-history-001');
+
+    const rows = page.getByTestId('past-run-row');
+    await expect(rows).toHaveCount(2, { timeout: 10000 });
+    await rows.nth(1).click(); // bt-hist-1 → NOT_FOUND
+
+    await expect(page.getByTestId('run-detail-empty')).toBeVisible({ timeout: 10000 });
+    // The row's summary metrics remain visible in the table.
+    await expect(page.getByTestId('past-runs')).toContainText('MSFT');
+    await expect(page.getByTestId('past-runs')).toContainText('-3.00%');
+  });
+
+  // feature 068: running a fresh backtest clears an open historical selection so the fresh
+  // result is never shadowed by a stale run (design.md seam-clear).
+  test('fresh run clears an open historical selection', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/insights/strategies/strat-history-001');
+
+    const rows = page.getByTestId('past-run-row');
+    await expect(rows).toHaveCount(2, { timeout: 10000 });
+    await rows.first().click();
+    await expect(page.getByText('Backtest Results')).toBeVisible({ timeout: 10000 });
+    await expect(rows.first()).toHaveAttribute('aria-selected', 'true');
+
+    // The mock returns INSUFFICIENT_DATA for strat-history-001 runs — the fresh result's
+    // gap panel must replace the historical run's metrics surface.
+    await page.getByRole('button', { name: 'Run Backtest' }).click();
+    await expect(page.getByTestId('insufficient-data')).toBeVisible({ timeout: 10000 });
+    await expect(rows.first()).toHaveAttribute('aria-selected', 'false');
+  });
+
   // feature 065: a strategy whose grade is NOT_FOUND renders the cleared-grade empty state while
   // keeping the backtest form (and Past Runs, when present) rendered.
   test('cleared grade renders empty state without hiding the backtest form', async ({ page }) => {

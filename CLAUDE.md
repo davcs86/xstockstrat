@@ -159,6 +159,15 @@ Recently added keys (feature 065 — cross-stock score derivation, owned by `xst
 | `analysis.scoring.min_evidence_symbols` | int | `3` | Below this many distinct evidence symbols the grade is flagged `provisional`. |
 | `analysis.scoring.min_evidence_days` | int | `500` | Below this many total evidence trading-days the grade is flagged `provisional`. |
 
+Recently added keys (feature 068 — backtest results visualization, owned by `xstockstrat-analysis`).
+Every OK `RunBacktest` persists its full serialized result (`analysis.backtest_details`, migration
+`008`) so past runs stay visualizable via the `GetBacktest` RPC; eviction keeps the newest N detailed
+runs per strategy (summary rows in `backtest_runs` are never trimmed):
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.backtest.detail_retention_per_strategy` | int | `20` | Max persisted detailed runs per strategy; count-based eviction at insert, clamped ≥1. `get_int` zero-trap: `0` reads as the default. |
+
 ---
 
 ## Environment Variable Naming Convention

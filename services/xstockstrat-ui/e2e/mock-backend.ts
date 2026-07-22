@@ -338,6 +338,111 @@ export async function startMockBackend(): Promise<void> {
   });
 
   // ── Port 9092 — Insights segment ────────────────────────────────────────
+
+  // feature 068: ONE fixture object feeds both listBacktests (summary rows) and
+  // getBacktest (full detail) so the two read paths cannot drift (structural C-10(b)
+  // parity — the e2e asserts the opened run's metrics equal the row's).
+  const HIST_RUN_METRICS = {
+    strategyId: 'strat-history-001',
+    // bt-hist-2 — the run with persisted detail.
+    detailed: {
+      backtestId: 'bt-hist-2',
+      status: 1, // BACKTEST_STATUS_OK
+      totalReturn: 0.15,
+      annualizedReturn: 0.12,
+      sharpeRatio: 1.6,
+      maxDrawdown: 0.08,
+      winRate: 0.62,
+      totalTrades: 5,
+      profitFactor: 1.4,
+      symbols: ['AAPL'],
+      overallScore: 0.72,
+      rating: 'B',
+      completedAt: { seconds: BigInt(1717286400), nanos: 0 }, // 2024-06-02
+      rangeStart: { seconds: BigInt(1704067200), nanos: 0 }, // 2024-01-01
+      rangeEnd: { seconds: BigInt(1717200000), nanos: 0 }, // 2024-06-01
+    },
+    // bt-hist-1 — legacy run, no persisted detail (getBacktest answers NOT_FOUND).
+    legacy: {
+      backtestId: 'bt-hist-1',
+      status: 1,
+      totalReturn: -0.03,
+      annualizedReturn: -0.02,
+      sharpeRatio: 0.4,
+      maxDrawdown: 0.2,
+      winRate: 0.45,
+      totalTrades: 3,
+      profitFactor: 0.9,
+      symbols: ['MSFT'],
+      overallScore: 0.41,
+      rating: 'D',
+      completedAt: { seconds: BigInt(1717200000), nanos: 0 }, // 2024-06-01
+    },
+  };
+  const histDay = (i: number) => ({ seconds: BigInt(1704067200 + i * 86400), nanos: 0 });
+  // Full persisted detail for bt-hist-2: same seven metrics as its summary row, plus
+  // trades with entry/exit timestamps and per-bar diagnostics carrying equity.
+  const HIST_RUN_DETAIL = {
+    backtestId: HIST_RUN_METRICS.detailed.backtestId,
+    strategyId: HIST_RUN_METRICS.strategyId,
+    totalReturn: HIST_RUN_METRICS.detailed.totalReturn,
+    annualizedReturn: HIST_RUN_METRICS.detailed.annualizedReturn,
+    sharpeRatio: HIST_RUN_METRICS.detailed.sharpeRatio,
+    maxDrawdown: HIST_RUN_METRICS.detailed.maxDrawdown,
+    winRate: HIST_RUN_METRICS.detailed.winRate,
+    totalTrades: HIST_RUN_METRICS.detailed.totalTrades,
+    profitFactor: HIST_RUN_METRICS.detailed.profitFactor,
+    completedAt: HIST_RUN_METRICS.detailed.completedAt,
+    status: 1,
+    initialCapital: 100000,
+    trades: [
+      {
+        symbol: 'AAPL',
+        side: 'long',
+        qty: 100,
+        entryPrice: 185.5,
+        exitPrice: 192.3,
+        pnl: 680,
+        entryTime: histDay(1),
+        exitTime: histDay(3),
+      },
+      {
+        symbol: 'AAPL',
+        side: 'long',
+        qty: 100,
+        entryPrice: 190.1,
+        exitPrice: 188.2,
+        pnl: -190,
+        entryTime: histDay(4),
+        exitTime: histDay(5),
+      },
+    ],
+    diagnostics: [
+      {
+        symbol: 'AAPL',
+        noTradeReason: 0,
+        barsTotal: 6,
+        warmupBars: 1,
+        bars: Array.from({ length: 6 }, (_, i) => ({
+          symbol: 'AAPL',
+          barIndex: i,
+          timestamp: histDay(i),
+          open: 185 + i,
+          high: 186 + i,
+          low: 184 + i,
+          close: 185.5 + i,
+          volume: BigInt(1000 + i),
+          vwap: 185.4 + i,
+          warmup: i < 1,
+          signalScore: 0.1 * i,
+          conviction: 0.2 + 0.1 * i,
+          action: i === 1 ? 3 : i === 3 ? 4 : 2, // ENTER_LONG / EXIT_LONG / HOLD_FLAT
+          equity: 100000 + i * 150,
+        })),
+      },
+    ],
+  };
+
   const insightsHandler = connectNodeAdapter({
     routes(router) {
       router.service(AnalysisService, {
@@ -463,47 +568,24 @@ export async function startMockBackend(): Promise<void> {
         },
         async listBacktests(req) {
           if (req.strategyId === 'strat-history-001') {
+            // Newest first; rows come from the shared 068 fixture (see HIST_RUN_METRICS).
             return {
               runs: [
-                {
-                  backtestId: 'bt-hist-2',
-                  strategyId: req.strategyId,
-                  status: 1, // BACKTEST_STATUS_OK
-                  totalReturn: 0.15,
-                  annualizedReturn: 0.12,
-                  sharpeRatio: 1.6,
-                  maxDrawdown: 0.08,
-                  winRate: 0.62,
-                  totalTrades: 5,
-                  profitFactor: 1.4,
-                  symbols: ['AAPL'],
-                  overallScore: 0.72,
-                  rating: 'B',
-                  completedAt: { seconds: BigInt(1717286400), nanos: 0 }, // 2024-06-02
-                  // feature 065: this run carries a range window (rendered in the Range column).
-                  rangeStart: { seconds: BigInt(1704067200), nanos: 0 }, // 2024-01-01
-                  rangeEnd: { seconds: BigInt(1717200000), nanos: 0 }, // 2024-06-01
-                },
-                {
-                  backtestId: 'bt-hist-1',
-                  strategyId: req.strategyId,
-                  status: 1,
-                  totalReturn: -0.03,
-                  annualizedReturn: -0.02,
-                  sharpeRatio: 0.4,
-                  maxDrawdown: 0.2,
-                  winRate: 0.45,
-                  totalTrades: 3,
-                  profitFactor: 0.9,
-                  symbols: ['MSFT'],
-                  overallScore: 0.41,
-                  rating: 'D',
-                  completedAt: { seconds: BigInt(1717200000), nanos: 0 }, // 2024-06-01
-                },
+                { ...HIST_RUN_METRICS.detailed, strategyId: req.strategyId },
+                { ...HIST_RUN_METRICS.legacy, strategyId: req.strategyId },
               ],
             };
           }
           return { runs: [] };
+        },
+        // feature 068: persisted full detail keyed by backtest_id. bt-hist-2 → full result
+        // (same metrics as its summary row); bt-hist-1 → NOT_FOUND (legacy/evicted state);
+        // anything else → NOT_FOUND.
+        async getBacktest(req) {
+          if (req.backtestId === HIST_RUN_DETAIL.backtestId) {
+            return HIST_RUN_DETAIL;
+          }
+          throw new ConnectError('no detailed data for this run', Code.NotFound);
         },
         // Feature 060: deterministic ranked screen result — 3 results, score-ordered,
         // one with INSUFFICIENT_DATA + a coverage gap.

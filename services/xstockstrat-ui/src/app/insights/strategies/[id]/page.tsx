@@ -1,15 +1,6 @@
 'use client';
 import { useState, use } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
 import { AppShell } from '@/components/insights/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -18,13 +9,14 @@ import { Input } from '@/components/ui/input';
 import { cn } from '@/components/ui/utils';
 import { ConnectError } from '@connectrpc/connect';
 import { formatSymbolYears, isNotFoundError } from '@/lib/scoreDisplay';
-import { useStrategyReport, useBacktestHistory } from '@/hooks/useStrategies';
+import { timestampToDate } from '@/lib/protoTime';
+import { useStrategyReport, useBacktestHistory, useBacktestDetail } from '@/hooks/useStrategies';
 import { useRunBacktest, useTriggerBackfill } from '@/hooks/useBacktest';
 import { useGetStrategy, useSetStrategyLiveInsights } from '@/hooks/useStrategyDefinitions';
 import { useIsAdmin } from '@/hooks/useLiveStrategies';
-import type { TradeRecord } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { BacktestStatus } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { BacktestDiagnostics } from '@/components/insights/BacktestDiagnostics';
+import { EquityCurveChart } from '@/components/insights/EquityCurveChart';
 
 // feature 064: cap the backtest range to 2 calendar years (matches the analysis service cap).
 const MAX_RANGE_DAYS = 730;
@@ -69,6 +61,15 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
     initial_capital: '100000',
   });
 
+  // feature 068: an opened Past Runs row; its persisted detail feeds the same results
+  // surface the fresh run uses (single render path, AC-5).
+  const [selectedRunId, setSelectedRunId] = useState<string | undefined>(undefined);
+  const {
+    data: selectedDetail,
+    isLoading: detailLoading,
+    isNotFound: detailNotFound,
+  } = useBacktestDetail(selectedRunId);
+
   const runError =
     runErrorObj instanceof ConnectError
       ? (runErrorObj as ConnectError).rawMessage
@@ -92,7 +93,10 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
       {
         // The run now persists a score + a history row server-side; refetch the report and
         // the history so the Strategy Score card and Past Runs list reflect the new run.
+        // feature 068: also clear any opened historical run so the fresh result is never
+        // shadowed by a stale selection (design.md seam-clear; e2e-asserted).
         onSuccess: () => {
+          setSelectedRunId(undefined);
           queryClient.invalidateQueries({ queryKey: ['analysis-report', id] });
           queryClient.invalidateQueries({ queryKey: ['analysis-backtests', id] });
         },
@@ -100,20 +104,15 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
     );
   }
 
-  const result = backtestResult ?? report?.latestBacktest;
+  // feature 068: with a historical run open, the results surface renders ONLY that run's
+  // persisted detail (or its explicit empty/loading state) — the fresh-run/latest fallback
+  // applies only when no row is selected, so a NOT_FOUND legacy row never leaks another
+  // run's metrics.
+  const result = selectedRunId ? selectedDetail : (backtestResult ?? report?.latestBacktest);
   const pastRuns = history?.runs ?? [];
   // feature 065: the derived grade is cleared (NOT_FOUND) or absent for an unscored strategy — the
   // backtest form + Past Runs stay rendered so the user can earn evidence.
   const gradeCleared = isNotFoundError(reportError) || (!!report && !report.score);
-
-  const equityCurve = (() => {
-    if (!result?.trades?.length) return [];
-    let equity = parseFloat(form.initial_capital) || 100000;
-    return result.trades.map((t: TradeRecord, i: number) => {
-      equity += t.pnl ?? 0;
-      return { trade: i + 1, equity: Math.round(equity) };
-    });
-  })();
 
   return (
     <AppShell>
@@ -269,6 +268,25 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
 
           {/* Right: results */}
           <div className="flex-1 min-w-0 space-y-4">
+            {/* feature 068: a legacy/evicted run has no persisted detail — explicit empty
+                state; the row's summary metrics remain visible in the Past Runs table. */}
+            {selectedRunId && detailNotFound && (
+              <Card>
+                <CardContent className="pt-5">
+                  <p data-testid="run-detail-empty" className="text-sm text-muted-foreground">
+                    No detailed data for this run — it predates detail persistence or its detail was
+                    evicted. Summary metrics remain in the Past Runs table below.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+            {selectedRunId && detailLoading && (
+              <Card>
+                <CardContent className="pt-5">
+                  <p className="text-sm text-muted-foreground">Loading run detail…</p>
+                </CardContent>
+              </Card>
+            )}
             {result &&
               result.status === BacktestStatus.INSUFFICIENT_DATA &&
               result.coverageGaps[0] && (
@@ -354,51 +372,9 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                   </CardContent>
                 </Card>
 
-                {/* Equity curve */}
-                {equityCurve.length > 0 && (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>Equity Curve</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <ResponsiveContainer width="100%" height={220}>
-                        <LineChart data={equityCurve}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(222 20% 14%)" />
-                          <XAxis
-                            dataKey="trade"
-                            tick={{ fill: 'hsl(215 16% 47%)', fontSize: 11 }}
-                            label={{
-                              value: 'Trade #',
-                              position: 'insideBottom',
-                              fill: 'hsl(215 16% 47%)',
-                              fontSize: 11,
-                            }}
-                          />
-                          <YAxis tick={{ fill: 'hsl(215 16% 47%)', fontSize: 11 }} />
-                          <Tooltip
-                            contentStyle={{
-                              backgroundColor: 'hsl(222 47% 7%)',
-                              border: '1px solid hsl(222 20% 14%)',
-                              borderRadius: 8,
-                            }}
-                            labelStyle={{ color: 'hsl(215 16% 47%)' }}
-                            formatter={(v: unknown) => [
-                              `$${typeof v === 'number' ? v.toLocaleString() : '0'}`,
-                              'Equity',
-                            ]}
-                          />
-                          <Line
-                            type="monotone"
-                            dataKey="equity"
-                            stroke="hsl(163 100% 44%)"
-                            dot={false}
-                            strokeWidth={2}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </CardContent>
-                  </Card>
-                )}
+                {/* Equity curve — time-based, per-symbol, with trade markers (feature 068).
+                    Shared by the fresh-run and historical views (AC-5). */}
+                <EquityCurveChart diagnostics={result.diagnostics} trades={result.trades} />
 
                 {/* Day-by-day debug diagnostics (feature 064) */}
                 <BacktestDiagnostics diagnostics={result.diagnostics} />
@@ -427,11 +403,26 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                       </thead>
                       <tbody>
                         {pastRuns.map((run) => (
-                          <tr key={run.backtestId} className="border-t border-border">
+                          <tr
+                            key={run.backtestId}
+                            data-testid="past-run-row"
+                            role="button"
+                            tabIndex={0}
+                            aria-selected={selectedRunId === run.backtestId}
+                            onClick={() => setSelectedRunId(run.backtestId)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                setSelectedRunId(run.backtestId);
+                              }
+                            }}
+                            className={cn(
+                              'border-t border-border cursor-pointer hover:bg-secondary/60',
+                              selectedRunId === run.backtestId && 'bg-secondary',
+                            )}
+                          >
                             <td className="py-1.5 pr-3 text-muted-foreground whitespace-nowrap">
-                              {run.completedAt
-                                ? new Date(Number(run.completedAt.seconds) * 1000).toLocaleString()
-                                : '—'}
+                              {timestampToDate(run.completedAt)?.toLocaleString() ?? '—'}
                             </td>
                             <td className="py-1.5 pr-3 font-mono text-xs">
                               {run.symbols.join(', ') || '—'}
@@ -439,9 +430,9 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                             {/* feature 065: the range each run covered; legacy rows have none. */}
                             <td className="py-1.5 pr-3 text-xs text-muted-foreground whitespace-nowrap">
                               {run.rangeStart && run.rangeEnd
-                                ? `${new Date(Number(run.rangeStart.seconds) * 1000)
+                                ? `${timestampToDate(run.rangeStart)!
                                     .toISOString()
-                                    .slice(0, 10)}–${new Date(Number(run.rangeEnd.seconds) * 1000)
+                                    .slice(0, 10)}–${timestampToDate(run.rangeEnd)!
                                     .toISOString()
                                     .slice(0, 10)}`
                                 : '—'}
