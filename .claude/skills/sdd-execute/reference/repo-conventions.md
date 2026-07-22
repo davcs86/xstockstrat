@@ -1,7 +1,8 @@
 # sdd-execute — REPO CONVENTIONS
 
 Conventions from `docs/runbooks/feature-workflow.md` that govern execution. Load this during a
-step when you touch proto, migrations, config keys, lint, or header propagation.
+step when you touch proto, migrations, config keys, lint, header propagation, or frontend
+test mocks.
 
 - **Branch model**: `**Development Branch**` in `feature.md` is the integration branch (PR target).
   Per-step work happens on `feature-steps/<slug>-step-<N>` sub-branches created by BRANCH SYNC. Boot
@@ -29,5 +30,10 @@ step when you touch proto, migrations, config keys, lint, or header propagation.
   `x-access-scope` / `x-trace-id` via the service's existing mechanism
   (`docs/patterns/header-propagation.md`). Confirm in Phase 1 discovery; do not introduce a bare client
   that drops them.
+- **Frontend test mocks (C-12)**: a step that adds/modifies `xstockstrat-ui` tests imports its
+  mocked domain objects from the test-data inventory (`services/xstockstrat-ui/e2e/fixtures/`,
+  auth helpers from `e2e/helpers/auth.ts`) instead of inline literals; a new domain object gets a
+  fixture module + `INVENTORY.md` catalog row in the same step
+  (`docs/patterns/test-data-inventory.md`; `/test-data` skill).
 
 > Sequential-mode verification fallbacks live in `reference/sequential-mode.md`.

@@ -14,7 +14,6 @@
 import * as http2 from 'node:http2';
 import { ConnectError, Code } from '@connectrpc/connect';
 import { connectNodeAdapter } from '@connectrpc/connect-node';
-import { SignJWT } from 'jose';
 import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
 import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
@@ -24,7 +23,19 @@ import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_p
 import { NotifyService, type Alert } from '@xstockstrat/proto/notify/v1/notify_pb';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
-import { TEST_JWT_SECRET } from './helpers/auth';
+import { signTestJwt } from './helpers/auth';
+import {
+  TEST_USER_ID,
+  TEST_USER_EMAIL,
+  BROKER_ACCOUNT_ALPACA,
+  BROKER_ACCOUNT_NEW,
+  BROKER_ACCOUNTS,
+  PORTFOLIO_ALPACA,
+  PORTFOLIOS,
+  STRATEGY_SCORES,
+  STRATEGY_DEF_LIVE,
+  STRATEGY_DEFINITIONS,
+} from './fixtures';
 
 export const TRADER_MOCK_PORT = 9091;
 export const INSIGHTS_MOCK_PORT = 9092;
@@ -34,21 +45,6 @@ let traderServer: http2.Http2Server | null = null;
 let insightsServer: http2.Http2Server | null = null;
 let configUiServer: http2.Http2Server | null = null;
 
-async function makeTestToken(): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
-  const secret = new TextEncoder().encode(TEST_JWT_SECRET);
-  return new SignJWT({
-    user_id: 'test-user-001',
-    email: 'test@example.com',
-    roles: [],
-    issued_at: now,
-    expires_at: now + 3600,
-  })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setExpirationTime('1h')
-    .sign(secret);
-}
-
 function stopServer(srv: http2.Http2Server | null): Promise<void> {
   return new Promise((resolve, reject) => {
     if (!srv) return resolve();
@@ -57,21 +53,21 @@ function stopServer(srv: http2.Http2Server | null): Promise<void> {
 }
 
 export async function startMockBackend(): Promise<void> {
-  const testAccessToken = await makeTestToken();
+  const testAccessToken = await signTestJwt();
 
   const identityHandlers = {
     async authenticateUser() {
       return {
         accessToken: testAccessToken,
         refreshToken: 'test-refresh-token',
-        claims: { userId: 'test-user-001', email: 'test@example.com', roles: [] },
+        claims: { userId: TEST_USER_ID, email: TEST_USER_EMAIL, roles: [] },
       };
     },
     async refreshToken() {
       return {
         accessToken: testAccessToken,
         refreshToken: 'test-refresh-token',
-        claims: { userId: 'test-user-001', email: 'test@example.com', roles: [] },
+        claims: { userId: TEST_USER_ID, email: TEST_USER_EMAIL, roles: [] },
       };
     },
     async revokeToken() {
@@ -130,53 +126,16 @@ export async function startMockBackend(): Promise<void> {
           };
         },
         async listBrokerAccounts() {
-          return {
-            accounts: [
-              {
-                id: 'alpaca-default',
-                displayName: 'Alpaca Paper',
-                brokerType: 1,
-                isPaper: true,
-                isActive: true,
-                credentialStatus: 1,
-              },
-              {
-                id: 'ibkr-001',
-                displayName: 'IBKR Paper',
-                brokerType: 2,
-                isPaper: true,
-                isActive: true,
-                credentialStatus: 1,
-              },
-            ],
-          };
+          return { accounts: BROKER_ACCOUNTS };
         },
         async registerBrokerAccount() {
-          return {
-            account: {
-              id: 'new-account-001',
-              displayName: 'New Account',
-              brokerType: 1,
-              isPaper: true,
-              isActive: true,
-              credentialStatus: 1,
-            },
-          };
+          return { account: BROKER_ACCOUNT_NEW };
         },
         async deregisterBrokerAccount() {
           return {};
         },
         async updateBrokerAccountCredentials() {
-          return {
-            account: {
-              id: 'alpaca-default',
-              displayName: 'Alpaca Paper',
-              brokerType: 1,
-              isPaper: true,
-              isActive: true,
-              credentialStatus: 1,
-            },
-          };
+          return { account: BROKER_ACCOUNT_ALPACA };
         },
         async getTradingEnvironment() {
           return { tradingMode: 1, applicationEnv: 'development' };
@@ -199,21 +158,7 @@ export async function startMockBackend(): Promise<void> {
           };
         },
         async listPortfolios() {
-          return {
-            portfolios: [
-              {
-                portfolioId: 'port-001',
-                accountId: 'alpaca-default',
-                equity: 50000.0,
-                cash: 20000.0,
-                buyingPower: 40000.0,
-                dayPnl: 150.0,
-                dayPnlPct: 0.003,
-                totalPnl: 1500.0,
-                positions: [{ symbol: 'AAPL', unrealizedPnl: 100.0 }],
-              },
-            ],
-          };
+          return { portfolios: [PORTFOLIO_ALPACA] };
         },
         async listPositions() {
           return {
@@ -397,42 +342,7 @@ export async function startMockBackend(): Promise<void> {
     routes(router) {
       router.service(AnalysisService, {
         async listStrategies() {
-          return {
-            strategies: [
-              {
-                strategyId: 'strat-high-001',
-                name: 'Momentum Alpha',
-                description: 'High-conviction momentum strategy',
-                rating: 'A',
-                overallScore: 0.87,
-                // feature 065: well-evidenced grade (above the symbol/day floor → not provisional).
-                evidenceSymbols: 8,
-                evidenceDays: 2100,
-                provisional: false,
-              },
-              {
-                strategyId: 'strat-mid-002',
-                name: 'Mean Reversion',
-                description: 'Statistical arbitrage mean reversion',
-                rating: 'B',
-                overallScore: 0.68,
-                // feature 065: thin evidence → provisional grade.
-                evidenceSymbols: 1,
-                evidenceDays: 60,
-                provisional: true,
-              },
-              {
-                strategyId: 'strat-low-003',
-                name: 'Trend Follow',
-                description: 'Simple trend following strategy',
-                rating: 'D',
-                overallScore: 0.42,
-                evidenceSymbols: 4,
-                evidenceDays: 900,
-                provisional: false,
-              },
-            ],
-          };
+          return { strategies: STRATEGY_SCORES };
         },
         async scoreStrategy() {
           return { overallScore: 0.5, rating: 'C' };
@@ -635,29 +545,15 @@ export async function startMockBackend(): Promise<void> {
         // so the live-strategy methods are mocked here.
         async listStrategyDefinitions() {
           return {
-            definitions: [
-              {
-                strategyId: 'strat-live-001',
-                displayName: 'Live Test Strategy',
-                active: true,
-                liveEnabled: true,
-              },
-              {
-                strategyId: 'strat-live-002',
-                displayName: 'Inactive Strategy',
-                active: true,
-                liveEnabled: false,
-              },
-            ],
-            totalCount: 2,
+            definitions: STRATEGY_DEFINITIONS,
+            totalCount: STRATEGY_DEFINITIONS.length,
           };
         },
         async setStrategyLive(req) {
           return {
             definition: {
+              ...STRATEGY_DEF_LIVE,
               strategyId: req.strategyId,
-              displayName: 'Live Test Strategy',
-              active: true,
               liveEnabled: req.liveEnabled,
             },
           };
@@ -698,53 +594,13 @@ export async function startMockBackend(): Promise<void> {
 
       router.service(TradingService, {
         async listBrokerAccounts() {
-          return {
-            accounts: [
-              {
-                id: 'alpaca-default',
-                displayName: 'Alpaca Paper',
-                brokerType: 1,
-                isPaper: true,
-                isActive: true,
-              },
-              {
-                id: 'ibkr-001',
-                displayName: 'IBKR Paper',
-                brokerType: 2,
-                isPaper: true,
-                isActive: true,
-              },
-            ],
-          };
+          return { accounts: BROKER_ACCOUNTS };
         },
       });
 
       router.service(PortfolioService, {
         async listPortfolios() {
-          return {
-            portfolios: [
-              {
-                portfolioId: 'port-001',
-                accountId: 'alpaca-default',
-                equity: 50000,
-                cash: 20000,
-                dayPnl: 150,
-                dayPnlPct: 0.003,
-                totalPnl: 1500,
-                positions: [],
-              },
-              {
-                portfolioId: 'port-002',
-                accountId: 'ibkr-001',
-                equity: 30000,
-                cash: 10000,
-                dayPnl: -50,
-                dayPnlPct: -0.0017,
-                totalPnl: 800,
-                positions: [],
-              },
-            ],
-          };
+          return { portfolios: PORTFOLIOS };
         },
       });
     },

@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
+import { STRATEGY_SCORES } from '../fixtures';
 
 /**
  * E2E tests for the InsightsDashboard page.
@@ -26,12 +27,6 @@ interface MockStrategy {
   evidenceDays?: number;
   provisional?: boolean;
 }
-
-const MOCK_STRATEGIES: MockStrategy[] = [
-  { strategyId: 'strat-high-001', name: 'Momentum Alpha', rating: 'A', overallScore: 0.87 },
-  { strategyId: 'strat-mid-002', name: 'Mean Reversion', rating: 'B', overallScore: 0.68 },
-  { strategyId: 'strat-low-003', name: 'Trend Follow', rating: 'D', overallScore: 0.42 },
-];
 
 /**
  * Mock both analysis list RPCs. Definitions default to one-per-score (same ids,
@@ -69,7 +64,7 @@ async function mockAnalysis(
 test.describe('InsightsDashboard', () => {
   test('Strategy Scores card is visible', async ({ page }) => {
     await addAuthCookie(page);
-    await mockAnalysis(page, MOCK_STRATEGIES);
+    await mockAnalysis(page, STRATEGY_SCORES);
 
     await page.goto('/insights');
     await expect(page.getByRole('heading', { name: 'Strategy Scores' })).toBeVisible();
@@ -77,12 +72,12 @@ test.describe('InsightsDashboard', () => {
 
   test('renders strategy cards for each returned strategy', async ({ page }) => {
     await addAuthCookie(page);
-    await mockAnalysis(page, MOCK_STRATEGIES);
+    await mockAnalysis(page, STRATEGY_SCORES);
 
     await page.goto('/insights');
 
     // Each strategy's ID is shown in the list (font-mono span)
-    for (const s of MOCK_STRATEGIES) {
+    for (const s of STRATEGY_SCORES) {
       await expect(page.getByText(s.strategyId, { exact: true })).toBeVisible({ timeout: 5000 });
     }
   });

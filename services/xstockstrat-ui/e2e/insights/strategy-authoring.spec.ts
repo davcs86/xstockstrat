@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
-import { SignJWT } from 'jose';
+import { addAuthCookie, addAdminCookie } from '../helpers/auth';
+import { FORMULAS } from '../fixtures';
 
 /**
  * E2E coverage for the strategy creation flow (feature 050).
@@ -16,41 +17,12 @@ import { SignJWT } from 'jose';
  * formulas.spec.ts.
  */
 
-const TEST_JWT_SECRET = 'test-jwt-secret-for-e2e-tests-min32c';
-const BASE_URL = 'http://localhost:3000';
-
-async function addCookieWithRoles(page: Page, roles: string[]): Promise<void> {
-  const now = Math.floor(Date.now() / 1000);
-  const token = await new SignJWT({
-    user_id: 'test-user-001',
-    email: 'test@example.com',
-    roles,
-    issued_at: now,
-    expires_at: now + 3600,
-  })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setExpirationTime('1h')
-    .sign(new TextEncoder().encode(TEST_JWT_SECRET));
-
-  await page.context().addCookies([
-    { name: 'access_token', value: token, url: BASE_URL, httpOnly: true, sameSite: 'Lax' },
-  ]);
-}
-
-const addAuthCookie = (page: Page) => addCookieWithRoles(page, []);
-const addAdminCookie = (page: Page) => addCookieWithRoles(page, ['admin']);
-
-const MOCK_FORMULAS = [
-  { formulaId: 'f-rsi', name: 'RSI Divergence', author: 'test-user-001', isPublic: true },
-  { formulaId: 'f-macd', name: 'MACD Cross', author: 'test-user-001', isPublic: false },
-];
-
 async function stubListFormulas(page: Page): Promise<void> {
   await page.route('**/xstockstrat.indicators.v1.IndicatorsService/ListFormulas', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ formulas: MOCK_FORMULAS, totalCount: MOCK_FORMULAS.length }),
+      body: JSON.stringify({ formulas: FORMULAS, totalCount: FORMULAS.length }),
     });
   });
 }
@@ -123,14 +95,11 @@ test.describe('Strategy authoring — insights BFF', () => {
     await addAuthCookie(page);
     await page.goto('/insights/strategies');
     const result = await page.evaluate(async () => {
-      const res = await fetch(
-        '/insights/api/xstockstrat.analysis.v1.AnalysisService/GetStrategy',
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ strategyId: 'strat-edit-001' }),
-        },
-      );
+      const res = await fetch('/insights/api/xstockstrat.analysis.v1.AnalysisService/GetStrategy', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ strategyId: 'strat-edit-001' }),
+      });
       return { status: res.status, body: (await res.json()) as Record<string, unknown> };
     });
     expect(result.status).toBe(200);
@@ -160,7 +129,9 @@ test.describe('Strategy authoring — UI', () => {
   test('admin sees the New Strategy button; read-only user does not (AC-5)', async ({ page }) => {
     await addAdminCookie(page);
     await page.goto('/insights/strategies');
-    await expect(page.getByRole('button', { name: 'New Strategy' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('button', { name: 'New Strategy' })).toBeVisible({
+      timeout: 10000,
+    });
 
     await addAuthCookie(page);
     await page.goto('/insights/strategies');
@@ -168,7 +139,9 @@ test.describe('Strategy authoring — UI', () => {
     await expect(page.getByRole('button', { name: 'New Strategy' })).toHaveCount(0);
   });
 
-  test('wizard gates Next per step and only submits on Step 5 (ACs 1, 11, 12)', async ({ page }) => {
+  test('wizard gates Next per step and only submits on Step 5 (ACs 1, 11, 12)', async ({
+    page,
+  }) => {
     await addAdminCookie(page);
     await stubListFormulas(page);
     await page.goto('/insights/strategies/new');

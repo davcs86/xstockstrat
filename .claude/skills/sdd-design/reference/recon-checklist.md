@@ -24,7 +24,10 @@ Load this at the start of **Phase 0**. Recon owns discovery for the design phase
   number, config-read patterns (all `path:line` from the digests).
 - **Patterns to REUSE** — the anti-duplication core. For each thing the feature needs, name the
   existing pattern/helper/type to reuse and its `path:line`. Cross-reference `dry-reviewer`-style
-  thinking: prefer an existing canonical home over a new one.
+  thinking: prefer an existing canonical home over a new one. When the feature touches
+  `xstockstrat-ui`, this includes the test-data inventory: list the existing fixtures
+  (`services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`) the feature's tests will reuse or extend
+  (Constitution **C-12**; `docs/patterns/test-data-inventory.md`).
 - **Dependencies** — proto/RPC touchpoints (+ existing field numbers), migration chain position,
   config keys, inter-service edges, new env vars (and whether they're absent from
   `docker-compose.yml` / `.do/app.dev.yaml` / `.do/app.yaml`).
