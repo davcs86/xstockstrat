@@ -117,3 +117,25 @@
   proto edit. Local Postgres 16 (no TimescaleDB ext) provisioned; analysis migrations 001–007
   applied via golang-migrate with the script's `analysis_schema_migrations` tracking-table
   convention (TimescaleDB not needed by analysis migrations).
+
+## Session 2026-07-21 — sdd-execute (completion)
+
+- All 12 steps executed and verified; status → code-completed. Per-step commits on
+  `claude/backtest-results-visualization-ljhyyj` (see Deviation Log D-1..D-3 in
+  implementation-spec.md).
+- Verification summary:
+  - proto: buf lint + buf breaking clean (run from packages/proto with subdir form);
+    stub regen confined to analysis/v1; frontend build green (ledger-trap paired check).
+  - migration 008: up → down 1 → re-up clean on local Postgres 16 (golang-migrate,
+    script-convention tracking table); FK + eviction index confirmed.
+  - analysis: 252 tests passed, coverage 79.6% (≥40); ruff clean. TDD red proven before
+    steps 4 and 6. AC-4 parity test in place.
+  - ui: vitest 25 passed (equityCurve/protoTime at 100% stmts); next build + lint clean;
+    e2e CI-mode (build+start) 18/18 passed incl. the 3 new feature tests. Local dev-mode
+    first-compile timeouts on the file's first two tests are a pre-existing sandbox
+    artifact (playwright.config.ts comments) — D-3.
+  - config docs: key declared in service CLAUDE.md + root CLAUDE.md (C-05).
+- Open Threads status: BYTEA wire-compat guard → comment added above BacktestResult +
+  buf breaking (closed); non-transactional insert+evict → accepted risk documented in repo
+  docstring + migration comment (closed); "has detail" flag on summaries → deferred
+  post-launch (unchanged).

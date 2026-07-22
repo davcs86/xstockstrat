@@ -1,6 +1,6 @@
 # Implementation Spec: backtest-results-visualization
 
-**Status**: `pending`
+**Status**: `completed`
 **Created**: 2026-07-21
 **Feature**: `docs/roadmap/features/068-backtest-results-visualization/feature.md`
 **Total Steps**: 12
@@ -57,7 +57,7 @@ Open Risks carried in: BYTEA↔wire-compat note → Step 1; non-transactional in
 
 ### Step 1 — proto: Add `GetBacktest` RPC and additive fields to `analysis/v1`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -112,7 +112,7 @@ buf lint packages/proto/ && buf breaking . --against ".git#branch=feature/backte
 
 ### Step 2 — proto-gen: Regenerate stubs and prove the frontend still builds
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/analysis/v1/` — modify (regenerated)
@@ -144,7 +144,7 @@ cd services/xstockstrat-ui && pnpm build
 
 ### Step 3 — migration: `008_backtest_details` detail table
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/008_backtest_details.up.sql` — create
@@ -196,7 +196,7 @@ cd services/xstockstrat-ui && pnpm build
 
 ### Step 4 — service: Analysis engine captures per-bar equity + effective initial capital
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -225,7 +225,7 @@ Step 5's paired tests fail before this step and pass after (P-06). Behavioral ch
 
 ### Step 5 — test: Engine capture tests (equity in diagnostics, effective initial capital)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -256,7 +256,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 
 ### Step 6 — service: Detail persistence (repo + best-effort insert + eviction) and `GetBacktest` handler
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/backtest_details.py` — create
@@ -305,7 +305,7 @@ Step 7's paired tests fail before this step and pass after (P-06). Behavioral ch
 
 ### Step 7 — test: Detail persistence + `GetBacktest` tests (incl. AC-4 parity)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_backtest_details_repo.py` — create
@@ -340,7 +340,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check .
 
 ### Step 8 — service: UI derivation libraries (`equityCurve.ts`, `protoTime.ts`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/protoTime.ts` — create
@@ -371,7 +371,7 @@ Step 9's paired tests fail before (modules absent) and pass after. Type check: `
 
 ### Step 9 — test: Unit tests for the derivation libraries
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/equityCurve.test.ts` — create
@@ -404,7 +404,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 10 — service: UI wiring — BFF forward, detail hook, `EquityCurveChart`, openable Past Runs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/insightsBff.ts` — modify
@@ -450,7 +450,7 @@ Step 11's e2e additions fail before this step and pass after. Interim:
 
 ### Step 11 — test: E2E — open a past run, legacy empty state, fresh-run clears selection
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify
@@ -484,7 +484,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 12 — config: Declare `analysis.backtest.detail_retention_per_strategy` (C-05)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
@@ -515,4 +515,17 @@ grep -n "detail_retention_per_strategy" CLAUDE.md services/xstockstrat-analysis/
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **D-1 (process, recorded 2026-07-21)**: steps executed as sequential verified commits on the
+  harness-assigned branch `claude/backtest-results-visualization-ljhyyj` (feature-branch role)
+  with one final PR into `main-dev`, instead of per-step sub-branch PRs — the harness forbids
+  pushing other branches. Rationale + F-02/F-03/F-05 compliance in context.md (sdd-execute start).
+- **D-2 (verification env, Step 3)**: no Docker/TimescaleDB locally — `./scripts/db-migrate.sh`
+  aborts at the global `CREATE EXTENSION timescaledb` step. Analysis migrations need no
+  timescale, so 008 was verified with golang-migrate directly using the script's
+  `analysis_schema_migrations` tracking convention: up → down 1 → re-up, all clean (FK + index
+  confirmed via `\d`). CI/deploy still runs the standard script path.
+- **D-3 (verification env, Step 11)**: local Playwright runs use `next dev` with a 10s per-test
+  timeout; in this sandbox the first two tests in the file time out on first-compile latency
+  (pre-existing artifact acknowledged in playwright.config.ts comments). Authoritative CI-mode
+  run (`CI=true` → `pnpm build && pnpm start`, 30s timeouts): **18/18 passed** including the
+  three new feature-068 tests.
