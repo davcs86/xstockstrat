@@ -1,7 +1,9 @@
 # Feature: fix-custom-formula-allnone
 
 **Type**: bug
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 52adaa26702553f9d51f3cf458479a9b7729f930
+**Launched date**: 2026-07-21
 **Development Branch**: `feature/fix-custom-formula-allnone`
 **GitHub Issue**: n/a — GitHub Issues are disabled on `davcs86/xstockstrat`; bug captured directly via `/sdd-triage` (Track C)
 **Severity**: SEV-2
@@ -20,6 +22,7 @@
 | 2026-07-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 | 2026-07-21 | `implementation-ready` → `code-completed` | /sdd-execute (sequential) | All 9 steps executed & verified; 3 deviations logged (D-1 MessageToDict-NaN, D-2 test corrected, D-3 UI e2e CI-equivalent fallback). Pushed as a single PR. |
 
+| 2026-07-21 | `code-completed` → `launched` | CI workflow | Promoted via PR #767; committed 52adaa26702553f9d51f3cf458479a9b7729f930 |
 ---
 
 ## Reviewers

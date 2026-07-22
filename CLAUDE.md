@@ -31,6 +31,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 | OTel setup, env vars, per-language modules | `docs/patterns/observability.md` |
 | CI job matrix, coverage thresholds, deploys | `docs/patterns/ci-overview.md` |
 | DRY guard rail (no repeated constants/literals/types/helpers) — pre-commit hook, jscpd tool, `dry-reviewer` subagent | `docs/patterns/dry-guard-rail.md` |
+| Frontend test mocks / dummy data — centralized fixture inventory, `INVENTORY.md` catalog, `/test-data` skill, Constitution C-12 | `docs/patterns/test-data-inventory.md` |
 | Proto / buf changes | `docs/runbooks/proto-versioning.md` |
 | Provisioning the codegen toolchain on a host (Docker unavailable / GitHub-releases egress blocked) | `docs/runbooks/codegen-toolchain-host-setup.md` |
 | Adding a data source (Polygon, Tiingo, etc.) | `docs/runbooks/add-data-source.md` |
@@ -467,6 +468,8 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon
 | DRY duplication check (jscpd) | `scripts/check-duplication.sh`, `.jscpd.json` |
 | DRY pre-commit hook | `.husky/pre-commit` |
 | DRY semantic reviewer subagent | `.claude/agents/dry-reviewer.md` |
+| Frontend test-data inventory (fixtures + catalog) | `services/xstockstrat-ui/e2e/fixtures/`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` |
+| Test-data steward skill | `.claude/skills/test-data/SKILL.md` |
 | CI workflow | `.github/workflows/ci.yml` |
 | Dev deploy workflow | `.github/workflows/deploy-dev.yml` |
 | Prod deploy workflow | `.github/workflows/deploy-prod.yml` |

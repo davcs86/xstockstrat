@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
+import { BROKER_ACCOUNT_ALPACA } from '../fixtures';
 
 /**
  * E2E tests for the OrderForm component.
@@ -14,15 +15,16 @@ test.describe('OrderForm', () => {
   test.beforeEach(async ({ page }) => {
     await addAuthCookie(page);
     // Provide a valid account so AccountContext auto-selects it and the submit button is enabled.
-    await page.route('**/xstockstrat.trading.v1.TradingService/ListBrokerAccounts', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          accounts: [{ id: 'alpaca-default', displayName: 'Alpaca Paper', brokerType: 1, isPaper: true, isActive: true }],
-        }),
-      });
-    });
+    await page.route(
+      '**/xstockstrat.trading.v1.TradingService/ListBrokerAccounts',
+      async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ accounts: [BROKER_ACCOUNT_ALPACA] }),
+        });
+      },
+    );
     await page.goto('/trader');
   });
 
@@ -57,7 +59,10 @@ test.describe('OrderForm', () => {
   test('successful order submission shows orderId and status', async ({ page }) => {
     await page.getByPlaceholder('Symbol (e.g. AAPL)').fill('aapl');
     await page.getByPlaceholder('Quantity').fill('5');
-    await page.getByRole('button', { name: /place order|buy|sell/i }).last().click();
+    await page
+      .getByRole('button', { name: /place order|buy|sell/i })
+      .last()
+      .click();
 
     // Mock returns { orderId: 'mock-order-001', status: 3 }
     // Component shows: "Order placed: mock-order-001 (FILLED)" (OrderStatus[3] = 'FILLED')
@@ -78,7 +83,10 @@ test.describe('OrderForm', () => {
 
     await page.getByPlaceholder('Symbol (e.g. AAPL)').fill('TSLA');
     await page.getByPlaceholder('Quantity').fill('1000');
-    await page.getByRole('button', { name: /buy|sell/i }).last().click();
+    await page
+      .getByRole('button', { name: /buy|sell/i })
+      .last()
+      .click();
 
     await expect(page.getByText('Insufficient buying power')).toBeVisible({ timeout: 10000 });
   });
