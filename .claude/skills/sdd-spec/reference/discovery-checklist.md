@@ -34,6 +34,19 @@ h. Deployment-file env-var audit. Record current wiring and detect missing entri
    (no change). New ports must also be absent from the `ports:` block in `docker-compose.yml`
    and from port entries in the app specs.
 
+## Frontend survey (only if `xstockstrat-ui` is in Affected Services)
+
+Frontend test steps must reuse the test-data inventory (`docs/patterns/test-data-inventory.md`,
+Constitution **C-12**) instead of declaring inline mock literals:
+
+i. Read `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`. For each domain entity the
+   feature's UI touches (accounts, portfolios, strategies, formulas, user identity, …),
+   report the existing fixture symbol + module the test steps must import — or report
+   "**not found** — new fixture required in `e2e/fixtures/` + catalog row" when the domain
+   is missing or listed under "Not yet centralized".
+j. `grep -rn "addAuthCookie\|addAdminCookie\|addCookieWithRoles" services/xstockstrat-ui/e2e/helpers/auth.ts`
+   — cite the canonical auth helpers; new specs never re-implement JWT signing.
+
 ## Trading-domain survey (only if trading-domain-relevant)
 
 Run this extra survey when any of these is true: `xstockstrat-trading` or

@@ -31,6 +31,7 @@ Operational runbooks, one-time setup guides, implementation roadmap, and reusabl
 | Add Polygon, Tiingo, or a newsletter signal source | `runbooks/add-data-source.md` |
 | Backfill historical OHLCV bars | `runbooks/historical-backfill.md` |
 | Build and register a custom indicator formula | `runbooks/indicator-builder.md` |
+| Add mocked/dummy data to a frontend test (fixtures, catalog, `/test-data` skill) | `patterns/test-data-inventory.md` |
 | Manage a v1→v2 proto migration | `runbooks/proto-versioning.md` |
 | Start a new feature branch or deploy to production | `runbooks/feature-workflow.md` |
 | Seed golang-migrate state on an existing database | `runbooks/db-seed-migration-state.md` |
