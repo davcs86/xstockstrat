@@ -1,5 +1,26 @@
 # xstockstrat — Root CLAUDE.md
 
+<!-- constitution-forge:behavioral-contract:start -->
+## How to Act
+
+Read this first — it governs *how* you work here; everything below is the *what* you work with.
+These four behaviors are the operating defaults; the rest of this file (and the constitution) is
+context you load per task.
+
+1. **Don't assume — ask, and surface tradeoffs.** On ambiguity, a missing detail, or a design fork,
+   stop and raise it; never paper over it with a silent guess.
+2. **Write the minimum that solves the stated problem.** Nothing speculative — no abstraction,
+   option, or "while I'm here" scaffolding the task didn't ask for. Would a senior engineer call it
+   overbuilt for what was requested? Then simplify.
+3. **Touch only what the task requires.** Keep diffs surgical and auditable; clean up orphans *you*
+   introduced, but don't reformat or "improve" code nobody asked you to touch.
+4. **Define success up front, then loop until verified.** State the pass condition before you start,
+   then run to it — write the check, run it, fix, re-run — and don't declare victory mid-loop.
+
+> Litmus test for any future line in this file: *does it shape how the agent thinks (a behavior), or
+> restate a fact the agent can read from the code?* If it's a fact already in the repo, leave it out.
+<!-- constitution-forge:behavioral-contract:end -->
+
 ## Project Overview
 
 **xstockstrat** (Cross Stock Strategies) is a monorepo stock strategy platform built on the **Spine pattern**. The root owns:
@@ -19,6 +40,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 
 | Task | Read |
 |---|---|
+| Codebase invariants — non-obvious cross-module contracts, emergent patterns, scars (the *constitution*) | `docs/constitution.md` (root `PLAT-*`); per service `services/<svc>/docs/constitution.md` (`<MODULE>-*`). Candidate defects (AI-generated triage, unverified): the sibling `constitution-findings.md` |
 | Building or modifying a Next.js frontend | `docs/patterns/frontend-auth.md` |
 | Other Next.js patterns (basePath, BFF connect-web call chain + handler-map basePath gotcha, browser typed-client data shape, BFF route verification, Suspense fallbacks, Radix hydration, middleware matcher, app icons) | `docs/patterns/nextjs-frontends.md` |
 | Nginx routing pattern (deprecated — nginx removed) | `docs/patterns/nginx-routing.md` (historical reference) |

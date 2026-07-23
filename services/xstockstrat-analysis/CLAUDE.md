@@ -1,5 +1,9 @@
 # xstockstrat-analysis — CLAUDE.md
 
+<!-- constitution-forge:constitution-pointer:start -->
+> **Codebase invariants for this service** — non-obvious contracts, patterns, and scars an agent would miss on a normal read: see [`docs/constitution.md`](docs/constitution.md) (inherits the root `PLAT-*` rules).
+<!-- constitution-forge:constitution-pointer:end -->
+
 ## Role
 
 Python gRPC service for strategy backtesting, scoring, and report generation. Reads historical market data from xstockstrat-marketdata and computed indicators from xstockstrat-indicators. Optionally fetches newsletter signals from xstockstrat-ingest for signal-weighted strategies. Writes backtest results to xstockstrat-ledger.
