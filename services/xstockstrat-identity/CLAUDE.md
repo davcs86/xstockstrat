@@ -1,5 +1,9 @@
 # xstockstrat-identity — CLAUDE.md
 
+<!-- constitution-forge:constitution-pointer:start -->
+> **Codebase invariants for this service** — non-obvious contracts, patterns, and scars an agent would miss on a normal read: see [`docs/constitution.md`](docs/constitution.md) (inherits the root `PLAT-*` rules). Candidate defects (AI-generated triage, unverified): [`docs/constitution-findings.md`](docs/constitution-findings.md).
+<!-- constitution-forge:constitution-pointer:end -->
+
 ## Role
 
 Node.js gRPC service for authentication and JWT management. All services validate tokens against this service. Issues short-lived access JWTs and longer-lived refresh tokens, and is the durable OAuth 2.1 state store behind the MCP agent.
