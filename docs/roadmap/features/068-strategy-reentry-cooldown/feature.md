@@ -1,6 +1,6 @@
 # Feature: strategy-reentry-cooldown
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/strategy-reentry-cooldown`
 **Created**: 2026-07-24
 **Last Updated**: 2026-07-24
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-07-24 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-07-24 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
 
 ---
 
@@ -43,4 +44,4 @@ MCP tool, and the `StrategyWizard` UI form all expose the new field.
 
 ## Next Action
 
-`/sdd-review strategy-reentry-cooldown product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design strategy-reentry-cooldown` — ground a debated design before implementation planning

@@ -84,5 +84,21 @@ Explicitly scoped OUT of FR-10 (and noted why): the agent `CLAUDE.md` tool table
 *new* tool, not a parameter added to an existing one — only the tool signature/docstring and the
 `mcp-tools.md` parameter table need updating here.
 
-Next action unchanged: `/sdd-review strategy-reentry-cooldown product-spec`, then
-`/sdd-design strategy-reentry-cooldown quick`.
+## Session 2026-07-24T07:05:26Z (cont.) — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Criteria pass (spec-reviewer): PASS WITH WARNINGS. No BLOCKERs, no Floor (`F-*`) breaches. Every
+  code citation in the spec re-verified against the live codebase (proto field 9, migration `008`
+  numbering, `servicer.py:849`, `_definition_fingerprint` exclusion list at `servicer.py:1678`,
+  `live_loop.py:54,125-144` `_last_state`, `tools.py:290-345`, `StrategyWizard.tsx:115-128`).
+- Warnings: (1) two Open Questions still unresolved (cooldown-snapshot column shape;
+  sync-vs-deferred write path) — both deferred to `/sdd-design` by design, standard at this stage;
+  (2) C-10(b) read-path parity for the new field across `insights/strategies` list/detail pages and
+  `useStrategyDefinitions.ts` is asserted in the spec but not yet verified — `/sdd-spec` must
+  actually confirm this, not just inherit the spec's own deferral note.
+- Overlap findings: CLEAN. No collision on proto field 9, config key, or migration `008` against
+  any other in-flight feature. Low-risk watch item: `042-order-snapshots-pnl-patterns` (still
+  `draft`) will also need a migration number in `xstockstrat-analysis`; re-check if it reaches
+  `spec-ready` before this feature merges.
+
+Next action: `/sdd-design strategy-reentry-cooldown` (full debate mode, per user request).
