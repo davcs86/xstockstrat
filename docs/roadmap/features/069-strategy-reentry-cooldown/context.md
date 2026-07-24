@@ -334,3 +334,36 @@ cooldown, negative → INVALID_ARGUMENT.
 - Files modified: `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/app/client.py`,
   `docs/runbooks/mcp-tools.md`, `tests/test_tools.py`, `tests/test_client.py`
 - Deviations: none.
+
+### Step 11 — service: `StrategyWizard` cooldown input (FR-11) [done]
+### Step 12 — test: `StrategyWizard` cooldown Playwright e2e (AC-11) [done]
+- StrategyWizard.tsx: `parseCooldownDays` helper (blank → undefined/omit; "0" → 0; negative/non-integer
+  → invalid), `cooldownDaysRaw` state seeded `!== undefined ? String() : ''` (NOT `?? 0` — an unset
+  strategy stays blank so an unrelated edit never writes `cooldown_days: 0`), numeric input in Step-1
+  Identity (`placeholder="31 (default)"`, inline error), validity folded into `canAdvance` step-1,
+  presence-honest spread in `handleSubmit`, `stepForError` cooldown→step 1. mock-backend.ts `getStrategy`
+  returns `cooldownDays: 14` only for id `strat-cooldown-14`. e2e adds 5 scenarios (blank→omit,
+  explicit-0→present, negative→blocks Next, edit-prepopulation→"14", edit-unset→no write).
+- Verification: `tsc --noEmit` exit 0 + `pnpm run lint` clean. Playwright harness not runnable here
+  (dev-mode cold-start `ERR_ABORTED`; CI-mode `next build` > 13 min) → CI-equivalent fallback
+  (Deviation Log D2). The dev run did compile + drive the wizard through the test bodies, catching a
+  route-glob bug and a hyphenated-edit-id issue (both fixed) — the e2e is authored to pass in CI.
+- Files modified: `services/xstockstrat-ui/src/components/insights/StrategyWizard.tsx`,
+  `services/xstockstrat-ui/e2e/mock-backend.ts`,
+  `services/xstockstrat-ui/e2e/insights/strategy-authoring.spec.ts`
+- Deviations: D2 (e2e via tsc+lint fallback).
+
+### Step 13 — docs: register `analysis.strategy.default_cooldown_days` (AC-6) [done]
+- Registered the key in `docs/patterns/config-governance.md` (new newest-first feature-069 entry) and
+  `services/xstockstrat-analysis/CLAUDE.md` §Config Keys Consumed, both with default `31`, the wash-sale
+  rationale, and the `get_int` zero-trap note (documented, not fixed — matches the `shrinkage_days`
+  precedent; per-strategy explicit-0 works via proto presence).
+- Files modified: `docs/patterns/config-governance.md`, `services/xstockstrat-analysis/CLAUDE.md`
+- Deviations: none.
+
+## Session end — sdd-execute (sequential, single-PR)
+All 13 steps done → feature `code-completed`. Backend tests green (analysis `277 passed`/80% cov,
+agent `70 passed`/66% cov, cooldown helper 100%). Proto additive+non-breaking, stubs regenerated with
+CI-pinned buf 1.69.0. Migration reversible (ephemeral-postgres fallback, D1). UI tsc+lint green
+(Playwright fallback, D2). Single integration PR: `claude/strategy-reentry-cooldown-sequential-c1udg7`
+→ `main-dev`.

@@ -36,6 +36,14 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 069 — strategy re-entry cooldown (`xstockstrat-analysis`)
+
+Per-strategy re-entry cooldown so a rule-based strategy's `entry_rule` can't immediately refire on a symbol right after an exit. The per-strategy duration travels via the proto field `StrategyDefinition.cooldown_days` (explicit presence: unset → this default, explicit `0` → no cooldown, negative → rejected); this config key is only the platform-wide default applied when the field is unset.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.strategy.default_cooldown_days` | int | `31` | Per-strategy default re-entry cooldown in calendar days when `StrategyDefinition.cooldown_days` is unset; `31` sits outside the IRS 30-day-each-side wash-sale window. `get_int` zero-trap: a platform-wide value of `0` reads back as the default `31` — a per-strategy explicit-`0` (no cooldown) is unaffected because it travels via proto explicit presence, not this config read. |
+
 ### feature 064 — backtest debug diagnostics (`xstockstrat-analysis`)
 
 | Key | Type | Default | Description |

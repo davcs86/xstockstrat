@@ -168,3 +168,10 @@ reusing.
 - **Rule it implies**: if a scalar's zero is a real choice, declare it `optional` and check presence at
   every read/write layer — never `?? 0`, `x or default`, or a truthy guard; reinforces P-03 (verify the
   decoder/codegen contract), no new ID.
+
+- 2026-07-24 (069 strategy-reentry-cooldown): A single shared **pure** gate module
+  (`app/services/cooldown.py`, no DB/proto/gRPC imports) consumed identically by the backtest engine
+  and the live loop, with the tz-awareness invariant enforced *inside* the helper (`_require_aware`)
+  rather than by a per-call-site comment, made backtest/live parity (FR-4) directly unit-testable and
+  killed the class of "two enforcement paths drift apart" bugs (cf. fails 056). Feed both call sites the
+  **same** time source (bar time), never one wall-clock + one bar-time.
