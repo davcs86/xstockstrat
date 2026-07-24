@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { SignJWT } from 'jose';
+import { addAuthCookie, addAdminCookie } from '../helpers/auth';
 
 /**
  * E2E coverage for the Backfills management page (feature 057).
@@ -9,32 +9,6 @@ import { SignJWT } from 'jose';
  * via `page.route()`, intercepting the browser → `/insights/api` calls. Admin vs. non-admin is
  * driven by the JWT `roles` claim (admin-only chrome is gated by `useIsAdmin()` → `/api/auth/me`).
  */
-
-const TEST_JWT_SECRET = 'test-jwt-secret-for-e2e-tests-min32c';
-const BASE_URL = 'http://localhost:3000';
-
-async function addCookieWithRoles(page: Page, roles: string[]): Promise<void> {
-  const now = Math.floor(Date.now() / 1000);
-  const token = await new SignJWT({
-    user_id: 'test-user-001',
-    email: 'test@example.com',
-    roles,
-    issued_at: now,
-    expires_at: now + 3600,
-  })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setExpirationTime('1h')
-    .sign(new TextEncoder().encode(TEST_JWT_SECRET));
-
-  await page
-    .context()
-    .addCookies([
-      { name: 'access_token', value: token, url: BASE_URL, httpOnly: true, sameSite: 'Lax' },
-    ]);
-}
-
-const addAuthCookie = (page: Page) => addCookieWithRoles(page, []);
-const addAdminCookie = (page: Page) => addCookieWithRoles(page, ['admin']);
 
 const IngestPath = (m: string) => `**/xstockstrat.ingest.v1.IngestService/${m}`;
 const MarketDataPath = (m: string) => `**/xstockstrat.marketdata.v1.MarketDataService/${m}`;

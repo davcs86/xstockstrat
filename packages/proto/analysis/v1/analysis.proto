@@ -15,6 +15,10 @@ service AnalysisService {
   rpc GetStrategyReport(GetStrategyReportRequest) returns (StrategyReport);
   // List past backtest runs (summary metrics + earned score) for a strategy, newest first.
   rpc ListBacktests(ListBacktestsRequest) returns (ListBacktestsResponse);
+  // Fetch the persisted full result (trades, per-bar equity, diagnostics) of a past run
+  // (feature 068). NOT_FOUND when the run has no persisted detail (legacy/evicted/
+  // INSUFFICIENT_DATA runs).
+  rpc GetBacktest(GetBacktestRequest) returns (BacktestResult);
   rpc ManageStrategy(ManageStrategyRequest) returns (StrategyDefinition);
   rpc GetStrategy(GetStrategyRequest) returns (StrategyDefinition);
   rpc ListStrategyDefinitions(ListStrategyDefinitionsRequest) returns (ListStrategyDefinitionsResponse);
@@ -53,6 +57,10 @@ message CoverageGap {
   xstockstrat.common.v1.TimeRange gap = 6;
 }
 
+// NOTE: this message's wire bytes are persisted verbatim in analysis.backtest_details
+// (feature 068, "store what you serve") — renumbering or retyping any field here or in
+// BarDiagnostic silently corrupts previously persisted runs. Additive changes only;
+// buf breaking guards this on every PR.
 message BacktestResult {
   string backtest_id = 1;
   string strategy_id = 2;
@@ -68,6 +76,10 @@ message BacktestResult {
   BacktestStatus status = 12;
   repeated CoverageGap coverage_gaps = 13; // populated per-symbol when status == INSUFFICIENT_DATA
   repeated SymbolDiagnostics diagnostics = 14; // per-bar debug data for every simulated symbol (feature 064)
+  // Effective starting capital the engine seeded the simulation with (the 100k default
+  // when the request omitted it) — required to rebuild the equity curve for a
+  // historical run (feature 068).
+  double initial_capital = 15;
 }
 
 message TradeRecord {
@@ -118,6 +130,9 @@ message BarDiagnostic {
   double signal_score = 12;
   double conviction = 13;
   BarAction action = 14;
+  // Portfolio value (cash + position * close) after this bar — the per-bar equity
+  // point the time-based equity curve plots (feature 068).
+  double equity = 15;
 }
 
 // Per-symbol diagnostics bundle attached to a BacktestResult.
@@ -184,6 +199,8 @@ message BacktestRunSummary {
 message ListBacktestsResponse {
   repeated BacktestRunSummary runs = 1;
 }
+
+message GetBacktestRequest { string backtest_id = 1; }
 
 message ListStrategiesRequest {
   xstockstrat.common.v1.PageRequest page = 1;

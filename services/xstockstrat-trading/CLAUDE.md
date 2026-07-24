@@ -1,5 +1,9 @@
 # xstockstrat-trading — CLAUDE.md
 
+<!-- context-forge:constitution-pointer:start -->
+> **Constitution:** non-obvious local invariants (the Connect+gRPC adapter twin, enum→string/0→NULL persistence, broker credential sentinel) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects/doc-drift (dead retry config, IBKR timeout oversight) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+<!-- context-forge:constitution-pointer:end -->
+
 ## Role
 
 Go gRPC service responsible for order execution and trade lifecycle management. Submits orders to Alpaca's broker REST API (paper or live). Writes all order events to xstockstrat-ledger.

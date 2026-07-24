@@ -1,5 +1,9 @@
 # xstockstrat-portfolio — CLAUDE.md
 
+<!-- context-forge:constitution-pointer:start -->
+> **Constitution:** non-obvious local invariants (broker-authoritative valuation, total-signed `cost_basis`, ledger reconnect/resume, hand-written JSON payload structs) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (P&L/equity/risk parity break) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+<!-- context-forge:constitution-pointer:end -->
+
 ## Role
 
 Go gRPC service that tracks open positions, portfolio equity, and P&L. Maintains portfolio snapshots in TimescaleDB. All portfolio state changes are sourced from ledger events (order fills, manual adjustments).
