@@ -76,7 +76,7 @@ entry decisions, breaking the `xstockstrat-analysis` reproducibility invariant (
 bias" / deterministic backtests, per `docs/runbooks/reviewer-registry.md`).
 
 FR-8. **The live evaluation loop's per-`(strategy_id, symbol)` last-exit timestamp MUST persist
-durably** (new table, migration `008_strategy_cooldowns` — see Database Changes) so the cooldown
+durably** (new table, migration `009_strategy_cooldowns` — see Database Changes) so the cooldown
 survives a service restart. On boot, the live loop hydrates its cooldown state from this table
 (mirroring the existing hydrate-at-boot pattern documented in this service's CLAUDE.md for
 `strategy_scores`); each write is best-effort (log-and-continue on DB failure, consistent with this
@@ -151,8 +151,10 @@ needed beyond whatever pre-fills `initial` props from the existing definition.
 
 - [ ] No schema changes
 - [x] New table for the live loop's durable cooldown state (FR-8), migration
-  `services/xstockstrat-analysis/migrations/008_strategy_cooldowns.{up,down}.sql` (next free
-  number after `007_backtest_run_symbols`). Proposed shape (final column/index design deferred to
+  `services/xstockstrat-analysis/migrations/009_strategy_cooldowns.{up,down}.sql` (next free
+  number after `008_backtest_details`, which merged from main-dev via feature
+  `068-backtest-results-visualization`; originally recorded as `008` before that feature landed —
+  see the collision-resolution note in context.md). Proposed shape (final column/index design deferred to
   `/sdd-design`): `analysis.strategy_cooldowns (strategy_id TEXT, symbol TEXT, last_exit_at
   TIMESTAMPTZ NOT NULL, PRIMARY KEY (strategy_id, symbol))` — upserted on every live-loop exit,
   read once at boot to hydrate in-memory cooldown state (mirrors the existing `strategy_scores`
@@ -166,7 +168,7 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
   config key; `xstockstrat-analysis`, `xstockstrat-agent`, `xstockstrat-ui` all affected, none
   breaking)
 - [ ] 2 service owners + platform lead (breaking proto change) — not applicable, additive field only
-- [x] DBA review + service owner (schema migration) — new `008_strategy_cooldowns` migration
+- [x] DBA review + service owner (schema migration) — new `009_strategy_cooldowns` migration
   (FR-8/Database Changes); up+down pair required per `docs/runbooks/feature-workflow.md`
 
 ## Acceptance Criteria

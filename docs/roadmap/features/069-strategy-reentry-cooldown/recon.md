@@ -123,7 +123,10 @@ the `StrategyWizard` UI form.
 
 - Proto/RPC: `StrategyDefinition.cooldown_days = 9` (`analysis.proto:216-225`); no RPC signature
   change (`ManageStrategy`/`GetStrategy` already carry the whole message).
-- Migration: next number `008` for `services/xstockstrat-analysis/migrations/` (last is `007`).
+- Migration: next number `009` for `services/xstockstrat-analysis/migrations/` (last is
+  `008_backtest_details`, merged from main-dev via feature `068-backtest-results-visualization`;
+  recon originally recorded `008` before that feature landed — see the collision-resolution note in
+  context.md).
 - Config keys: `analysis.strategy.default_cooldown_days` (new, int, default `31`).
 - Inter-service edges: none new — agent→analysis gRPC and UI→BFF→analysis gRPC shapes unchanged;
   a new in-process repo reuses the existing `db_pool`.
@@ -166,7 +169,7 @@ Advisory step boundaries for `/sdd-spec` (not binding):
 
 1. **proto** — add `cooldown_days = 9` to `StrategyDefinition`; `buf lint`/`buf breaking`/
    `buf-gen.sh` (Constitution **C-09**).
-2. **migration** (DBA + service owner) — `008_strategy_cooldowns.{up,down}.sql`, mirroring `007`'s
+2. **migration** (DBA + service owner) — `009_strategy_cooldowns.{up,down}.sql`, mirroring `007`'s
    style; resolve the Open Question on column shape (`(strategy_id, symbol)` PK + `last_exit_at`,
    confirm no `cooldown_days`-snapshot column needed — re-reading the live definition at check time
    is simpler and avoids staleness).

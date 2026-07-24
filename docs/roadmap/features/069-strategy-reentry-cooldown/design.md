@@ -72,9 +72,10 @@ outer per-pair guard in `_run_cycle` (`live_loop.py:85-93`), which only prevents
 whole cycle. Without the inner guard, a failed write would leave the pair stuck "in position", freezing all
 future entry/exit alerting for it until the DB recovered.
 
-### Persistence — migration `008` + repository + boot hydration
+### Persistence — migration `009` + repository + boot hydration
 
-- Migration `008_strategy_cooldowns.{up,down}.sql` (next free after `007`), mirroring `007`'s style
+- Migration `009_strategy_cooldowns.{up,down}.sql` (next free after `008_backtest_details`, which
+  merged from main-dev via feature `068-backtest-results-visualization`), mirroring `007`'s style
   (schema-prefixed `analysis.strategy_cooldowns`, `IF NOT EXISTS`, composite PK, symmetric down):
   `(strategy_id TEXT NOT NULL, symbol TEXT NOT NULL, last_exit_at TIMESTAMPTZ NOT NULL, PRIMARY KEY
   (strategy_id, symbol))`. **No `cooldown_days` snapshot column** — the live definition is re-read at
@@ -187,7 +188,7 @@ identical to any entry/exit rule edit. No code change needed beyond leaving the 
 - **C-05 / F-07** (config governance / no hardcoded values) — honored: `analysis.strategy.default_cooldown_days`
   follows `<service>.<category>.<key>` and is read via `get_int`, never hardcoded (the UI's `31` placeholder
   is an informational hint only, server stays authoritative).
-- **C-07 / F-01** (migration naming / never edit applied migration) — honored: new `008_strategy_cooldowns.
+- **C-07 / F-01** (migration naming / never edit applied migration) — honored: new `009_strategy_cooldowns.
   {up,down}.sql`, next free number, up+down pair, no existing migration edited.
 - **C-08 / P-06** (test pairing / red-before-green) — honored: parity test (backtest vs live agree on the
   same inputs), restart-durability test, reproducibility-isolation test, fingerprint-change test,

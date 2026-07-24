@@ -1,8 +1,8 @@
 # Context: strategy-reentry-cooldown
 
-**Feature**: `docs/roadmap/features/068-strategy-reentry-cooldown/feature.md`
-**Product Spec**: `docs/roadmap/features/068-strategy-reentry-cooldown/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/068-strategy-reentry-cooldown/implementation-spec.md`
+**Feature**: `docs/roadmap/features/069-strategy-reentry-cooldown/feature.md`
+**Product Spec**: `docs/roadmap/features/069-strategy-reentry-cooldown/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/069-strategy-reentry-cooldown/implementation-spec.md`
 
 ---
 
@@ -34,7 +34,7 @@ Reviewed Out of Scope / Open Questions with the user and resolved three previous
    the *default duration* only, not the trigger condition.
 2. **Restart durability**: live-loop cooldown state MUST persist across restarts (FR-8) — this
    reverses the original draft's "in-memory only, out of scope" stance. Added new migration
-   `008_strategy_cooldowns` (next free number after `007_backtest_run_symbols`) to Database Changes,
+   `009_strategy_cooldowns` (next free number after `007_backtest_run_symbols`) to Database Changes,
    added DBA to feature.md Reviewers, added DBA approval gate to Feature Workflow Notes.
 3. **Cross-stock score fingerprint**: `cooldown_days` IS included (FR-9) — no exclusion added to
    `_definition_fingerprint`'s existing `display_name`/`active`/`live_enabled` exclusion list.
@@ -134,7 +134,7 @@ Next action: `/sdd-design strategy-reentry-cooldown` (full debate mode, per user
     safety note recorded in design.md.
 - Chosen approach: single shared pure `cooldown.py` helper (tz-awareness enforced *inside* the
   helper, not by convention), fed **bar time** at both call sites; ephemeral per-run state for
-  backtest (FR-7), durable `008_strategy_cooldowns` + boot hydration for live (FR-8); best-effort
+  backtest (FR-7), durable `009_strategy_cooldowns` + boot hydration for live (FR-8); best-effort
   isolated `_write_cooldown`; `cooldowns_repo=None` default so existing tests need no constructor
   change. Rejected: wall-clock live clock, snapshot column, plain-int32 "0→default", required repo
   param, fixing `get_int` service-wide.
@@ -153,4 +153,23 @@ Next action: `/sdd-design strategy-reentry-cooldown` (full debate mode, per user
   `:33`) are same-step scope with the bar-time change → target: live-loop service+test step.
 - `mock-backend.ts` `GetStrategy` presence round-trip (unset stays unset) unverified → target:
   UI/e2e step.
+
+## Session 2026-07-24 (cont.) — feature-number + migration collision resolution
+
+On pushing the design-phase artifacts, a `git fetch`/rebase pulled main-dev, which had meanwhile
+merged and promoted feature **`068-backtest-results-visualization`** — it had also claimed number
+`068` and, more consequentially, migration **`008_backtest_details`** (now present on disk in
+`services/xstockstrat-analysis/migrations/`). Per the feature-numbering collision rule
+(`docs/runbooks/feature-workflow.md` § Feature Numbering — the later/racing feature renumbers), this
+feature was **renumbered `068` → `069`** (`git mv` of the directory; branch is slug-based so no branch
+rename), and its migration **`008_strategy_cooldowns` → `009_strategy_cooldowns`** (008 is taken).
+
+No other collision: `068-backtest-results-visualization` touched `BacktestResult`/`BarDiagnostic`
+proto fields (field 15) and added no `analysis.strategy.*` config key, so this feature's
+`StrategyDefinition.cooldown_days = 9` and `analysis.strategy.default_cooldown_days` remain
+collision-free. The earlier `/sdd-review` overlap scan (which reported migration `008` free) was
+accurate at the time — the collision arose only when the other feature merged afterward; the earlier
+session-log entries recording `008` are left intact as accurate history, and design.md / recon.md /
+product-spec.md (the living artifacts `/sdd-spec` consumes) are updated to `009`. `merge-order.md`
+needed no change (it references neither feature by number).
 

@@ -43,7 +43,7 @@ MCP tool, and the `StrategyWizard` UI form all expose the new field.
 | `xstockstrat-agent` (service owner) | `manage_strategy` MCP tool parameter/docstring accuracy, docs/runbooks/mcp-tools.md parity |
 | `xstockstrat-ui` (service owner) | Strategy wizard form correctness, Connect-RPC call safety |
 | Proto Reviewer | Field number uniqueness, backward compatibility (no field removal/type change without deprecation), naming conventions |
-| DBA | Migration NNN numbering (no gaps/conflicts), up+down pair present, index correctness — new `008_strategy_cooldowns` migration |
+| DBA | Migration NNN numbering (no gaps/conflicts), up+down pair present, index correctness — new `009_strategy_cooldowns` migration |
 
 ## Next Action
 
