@@ -36,6 +36,7 @@ persistent decline.
 |---|---|
 | `xstockstrat-analysis` (service owner) | Backtest reproducibility, strategy scoring determinism, no look-ahead bias |
 | Proto Reviewer | Field number uniqueness, backward compatibility (no field removal/type change without deprecation), naming conventions |
+| DBA | Migration NNN numbering (no gaps/conflicts), up+down pair present, index correctness — new `008_strategy_cooldowns` migration |
 
 ## Next Action
 

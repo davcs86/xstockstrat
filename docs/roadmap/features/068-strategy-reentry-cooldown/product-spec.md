@@ -41,31 +41,57 @@ entry condition must not fire again until at least `cooldown_days` calendar days
 timestamps, not trading-day bar counts — weekends/holidays must not shrink the effective wait) have
 elapsed since the exit.
 
-FR-4. The cooldown must be enforced identically in both the backtest engine
-(`_backtest_symbol_evaluated`, `servicer.py`) and the live evaluation loop (`app/engine/live_loop.py`)
-— this service's stated backtest/live parity invariant applies to the cooldown exactly as it does
-to entry/exit evaluation itself.
+FR-4. The cooldown gate logic (given a last-exit timestamp, a current bar timestamp, and an
+effective `cooldown_days`, decide whether entry is suppressed) MUST be implemented as a single
+shared helper used by both the backtest engine (`_backtest_symbol_evaluated`, `servicer.py`) and the
+live evaluation loop (`app/engine/live_loop.py`) — not two independently-written copies. This is not
+optional/design-time discretion: it directly reinforces this service's stated backtest/live parity
+invariant, and this repo's own ledger (`fails.md`, 2026-07-01, 056-open-positions-ui) records a prior
+incident where two read paths for the same value drifted out of sync. A parity test must assert both
+call sites agree given the same inputs.
 
-FR-5. Default behavior applies the cooldown after **any** exit (win or loss), not only realized
-losses, for implementation simplicity and consistency — a losing-exits-only variant is a legitimate
-alternative (closer to the literal wash-sale rule, which only disallows loss claims) but adds
-per-trade P&L-sign tracking to the cooldown gate; the design phase should weigh both and record the
-choice.
+FR-5. The cooldown applies after **any** exit (win or loss), not only realized losses — decided
+explicitly to keep the gate simple (no per-trade P&L-sign tracking required); the wash-sale rule
+motivates the *default duration* (FR-2), not the trigger condition, so this is not a literal
+wash-sale implementation.
 
 FR-6. `ManageStrategy` register/update must accept and echo `cooldown_days`, and reject a negative
 value with `INVALID_ARGUMENT` (mirroring existing definition-validation patterns in this service).
 
+FR-7. **Backtest cooldown state is ephemeral, scoped to a single `RunBacktest` call, and MUST NOT
+read from or write to any durable cross-run store.** A backtest tracks each symbol's last-exit
+timestamp in-memory for the duration of that one request only (same lifetime as today's `position`/
+`entry_price` locals in `_backtest_symbol_evaluated`). This is a correctness requirement, not a
+simplification: if backtests shared the live loop's persisted cooldown store (FR-8), two unrelated
+backtest runs — or a backtest and live trading — would silently cross-contaminate each other's
+entry decisions, breaking the `xstockstrat-analysis` reproducibility invariant ("no look-ahead
+bias" / deterministic backtests, per `docs/runbooks/reviewer-registry.md`).
+
+FR-8. **The live evaluation loop's per-`(strategy_id, symbol)` last-exit timestamp MUST persist
+durably** (new table, migration `008_strategy_cooldowns` — see Database Changes) so the cooldown
+survives a service restart. On boot, the live loop hydrates its cooldown state from this table
+(mirroring the existing hydrate-at-boot pattern documented in this service's CLAUDE.md for
+`strategy_scores`); each write is best-effort (log-and-continue on DB failure, consistent with this
+service's existing best-effort persistence convention) so a DB hiccup never blocks live evaluation.
+
+FR-9. `cooldown_days` is a behavioral field and is therefore included in the feature-065 cross-stock
+score definition fingerprint (`_definition_fingerprint`) with no special-case exclusion — changing a
+strategy's cooldown resets its accumulated evidence/grade, identical to any other entry/exit rule
+change. No code change is required beyond *not* adding `cooldown_days` to the fingerprint's existing
+exclusion list (`display_name`/`active`/`live_enabled`).
+
 ## Out of Scope
 
-- Persisting cooldown/last-exit state across a service restart. The live loop's existing
-  per-`(strategy_id, symbol)` transition state (`_last_state`, `live_loop.py:54`) is already
-  in-memory-only and resets on restart; the cooldown's last-exit timestamp follows the same
-  established pattern. Making that durable is a separate concern, not introduced by this feature.
-- A losing-exits-only cooldown variant (see FR-5) — may be adopted during design, not assumed here.
+- A losing-exits-only cooldown variant (see FR-5 — resolved as "any exit" for this feature; a
+  losses-only mode is a possible future enhancement, not part of this spec).
 - Applying a cooldown to non-`entry_rule`/`exit_rule` strategies (the legacy SMA-crossover fallback
   path, `_backtest_symbol`) — this feature targets the composable-rule (`active_definition`) path
   only, matching where the observed whipsaw behavior occurs.
-- Retroactively recomputing existing `backtest_run_symbols` evidence cells or cross-stock scores.
+- Retroactively recomputing existing `backtest_run_symbols` evidence cells or cross-stock scores
+  (FR-9 means a `cooldown_days` change naturally invalidates old evidence going forward; no backfill
+  of historical cells is in scope).
+- Persisting *backtest* cooldown state (see FR-7 — backtests are intentionally ephemeral/per-run;
+  only the live loop's cooldown state is durable, per FR-8).
 
 ## Affected Services
 
@@ -88,9 +114,14 @@ value with `INVALID_ARGUMENT` (mirroring existing definition-validation patterns
 
 ## Database Changes
 
-- [x] No schema changes — cooldown state (per-symbol last-exit timestamp) is tracked in-memory,
-  mirroring the existing `_last_state` transition-tracking pattern in `live_loop.py` (see Out of
-  Scope).
+- [ ] No schema changes
+- [x] New table for the live loop's durable cooldown state (FR-8), migration
+  `services/xstockstrat-analysis/migrations/008_strategy_cooldowns.{up,down}.sql` (next free
+  number after `007_backtest_run_symbols`). Proposed shape (final column/index design deferred to
+  `/sdd-design`): `analysis.strategy_cooldowns (strategy_id TEXT, symbol TEXT, last_exit_at
+  TIMESTAMPTZ NOT NULL, PRIMARY KEY (strategy_id, symbol))` — upserted on every live-loop exit,
+  read once at boot to hydrate in-memory cooldown state (mirrors the existing `strategy_scores`
+  hydrate-at-boot pattern). **Backtests never read or write this table** (FR-7).
 
 ## Feature Workflow Notes
 
@@ -99,7 +130,8 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 - [x] 1 service owner approval (non-breaking proto field addition + new config key — both
   non-breaking; `xstockstrat-analysis` is the sole affected service)
 - [ ] 2 service owners + platform lead (breaking proto change) — not applicable, additive field only
-- [ ] DBA review + service owner (schema migration) — not applicable, no schema change
+- [x] DBA review + service owner (schema migration) — new `008_strategy_cooldowns` migration
+  (FR-8/Database Changes); up+down pair required per `docs/runbooks/feature-workflow.md`
 
 ## Acceptance Criteria
 
@@ -118,24 +150,23 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
    shows no immediate re-entry into a symbol within 31 calendar days of exiting it.
 6. `docs/patterns/config-governance.md` and `services/xstockstrat-analysis/CLAUDE.md` are updated
    with the new config key per the existing config-key documentation convention.
+7. Restart durability: a live-loop exit is followed by a simulated service restart (state
+   re-hydrated from `analysis.strategy_cooldowns`); the cooldown gate still suppresses entry until
+   the full `cooldown_days` window has elapsed, proving the cooldown is not reset by the restart.
+8. Reproducibility: two separate `RunBacktest` calls for the same strategy/symbol (or a backtest
+   run interleaved with a live-loop exit on the same symbol) produce identical backtest results —
+   proving backtest cooldown state never reads the live loop's persisted store (FR-7).
+9. A strategy's cross-stock score definition fingerprint changes when its `cooldown_days` changes
+   (FR-9), verified by a test asserting `_definition_fingerprint` differs across two otherwise-
+   identical definitions that differ only in `cooldown_days`.
 
 ## Open Questions
 
-- [ ] **Known trap (ledger `fails.md` 2026-07-01 — 056-open-positions-ui, duplication / C-10(b))**:
-  this feature has exactly two enforcement paths (backtest engine, live loop) for the same
-  cooldown rule — confirm the design phase specifies one shared cooldown-check helper (or two call
-  sites against one shared function) rather than two independently-implemented copies, and that a
-  parity test asserts both paths agree, mirroring the C-10(b) lesson from the portfolio
-  `ListPositions`/`ListPortfolios` divergence.
-- [ ] Should `cooldown_days` be included in the feature-065 cross-stock-score definition fingerprint
-  (`_definition_fingerprint`, which hashes `definition_json` excluding only `display_name`/`active`/
-  `live_enabled`)? Since it changes realized trading behavior, the existing fingerprint rule already
-  implies "yes, include it" (any behavioral field is hashed by default) — flagging for explicit
-  confirmation at design time since it means a `cooldown_days` change resets evidence eligibility,
-  same as any other entry/exit rule change.
-- [ ] Confirm FR-5's "any exit" default vs. a losses-only cooldown variant during design — the user
-  story requested the wash-sale-safe *default value* (31 days) explicitly; whether the trigger
-  condition is "any exit" or "losing exit only" is a separate, still-open design choice.
-- [ ] Does the live-loop cooldown need to survive a service restart, or is in-memory-only
-  (matching `_last_state`) acceptable for v1? Leaning toward "acceptable" (see Out of Scope) but
-  flagging since a restart mid-cooldown would let an entry fire early.
+- [ ] Exact index/column shape for `analysis.strategy_cooldowns` (Database Changes proposes a
+  minimal `(strategy_id, symbol)` primary key with `last_exit_at`; confirm at `/sdd-design` whether
+  any additional column — e.g. an explicit `cooldown_days` snapshot at exit time, in case the
+  strategy's cooldown setting changes mid-window — is needed, or whether re-reading the live
+  `StrategyDefinition.cooldown_days` at check time is sufficient).
+- [ ] Upsert/write path for FR-8: should the live loop write `strategy_cooldowns` synchronously on
+  every exit transition (in `live_loop.py`, alongside `_last_state` update), or via the same
+  best-effort deferred pattern used for ledger emits — confirm at design time.

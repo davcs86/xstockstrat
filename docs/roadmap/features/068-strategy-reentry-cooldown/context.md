@@ -25,3 +25,33 @@
   `analysis.strategy.default_cooldown_days` config key and `StrategyDefinition.cooldown_days` field.
 - No production strategy or shadow strategy has been modified as part of this `/sdd-story` step —
   this is spec-only.
+
+## Session 2026-07-24 — product-spec review with user
+
+Reviewed Out of Scope / Open Questions with the user and resolved three previously-open decisions:
+
+1. **Cooldown trigger**: any exit (win or loss), not losses-only (FR-5). Wash-sale rule motivates
+   the *default duration* only, not the trigger condition.
+2. **Restart durability**: live-loop cooldown state MUST persist across restarts (FR-8) — this
+   reverses the original draft's "in-memory only, out of scope" stance. Added new migration
+   `008_strategy_cooldowns` (next free number after `007_backtest_run_symbols`) to Database Changes,
+   added DBA to feature.md Reviewers, added DBA approval gate to Feature Workflow Notes.
+3. **Cross-stock score fingerprint**: `cooldown_days` IS included (FR-9) — no exclusion added to
+   `_definition_fingerprint`'s existing `display_name`/`active`/`live_enabled` exclusion list.
+
+Also converted the "shared cooldown-check helper" open question into a hard requirement (FR-4) —
+this repo's ledger (`fails.md`, 056-open-positions-ui) already records the exact failure mode of two
+independently-implemented read paths drifting apart, so it isn't a genuine open design choice.
+
+Added FR-7 (new) to explicitly guard against a reproducibility hazard the restart-durability
+decision introduces: backtests must stay ephemeral/per-run and never read/write the new persisted
+`strategy_cooldowns` table, or two unrelated backtest runs (or a backtest overlapping live trading)
+would cross-contaminate each other's entry decisions. Added corresponding Acceptance Criteria 7–9
+(restart-survival test, backtest-reproducibility test, fingerprint-change test).
+
+Remaining Open Questions (both implementation-shape, deferred to `/sdd-design`): exact
+`strategy_cooldowns` column/index shape, and whether the live-loop write is synchronous or
+best-effort-deferred.
+
+Next action unchanged: `/sdd-review strategy-reentry-cooldown product-spec`, then
+`/sdd-design strategy-reentry-cooldown quick`.
