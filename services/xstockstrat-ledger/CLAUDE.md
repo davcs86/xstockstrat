@@ -1,8 +1,8 @@
 # xstockstrat-ledger — CLAUDE.md
 
-<!-- constitution-forge:constitution-pointer:start -->
-> **Codebase invariants for this service** — non-obvious contracts, patterns, and scars an agent would miss on a normal read: see [`docs/constitution.md`](docs/constitution.md) (inherits the root `PLAT-*` rules). Candidate defects (AI-generated triage, unverified): [`docs/constitution-findings.md`](docs/constitution-findings.md).
-<!-- constitution-forge:constitution-pointer:end -->
+<!-- context-forge:constitution-pointer:start -->
+> **Constitution:** non-obvious local invariants (dedup lookup reuses the txn connection at pool=1, `StreamEvents` subscribe→replay→flush→live ordering, resume-from-sequence, global_sequence default) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (NOTIFY 8KB-trim Invalid-Date, migrate-tool mismatch) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+<!-- context-forge:constitution-pointer:end -->
 
 ## Role
 

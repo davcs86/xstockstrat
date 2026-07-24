@@ -1,8 +1,8 @@
 # xstockstrat-ui — CLAUDE.md
 
-<!-- constitution-forge:constitution-pointer:start -->
-> **Codebase invariants for this service** — non-obvious contracts, patterns, and scars an agent would miss on a normal read: see [`docs/constitution.md`](docs/constitution.md) (inherits the root `PLAT-*` rules). Candidate defects (AI-generated triage, unverified): [`docs/constitution-findings.md`](docs/constitution-findings.md).
-<!-- constitution-forge:constitution-pointer:end -->
+<!-- context-forge:constitution-pointer:start -->
+> **Constitution:** non-obvious local invariants (protobuf-es `{seconds: bigint}` Timestamp, per-(service×segment) browser clients, `forward`/`forwardAdmin`+userId-injection IDOR guard, `/accounts` REST divergence) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (⚠ audit-route admin gap, missing `BASE_PATH_ACCOUNTS`) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+<!-- context-forge:constitution-pointer:end -->
 
 ## Role
 
@@ -159,14 +159,6 @@ covered by the Playwright e2e suite below.
 `e2e/auth.spec.ts`) against a mock gRPC backend (`e2e/mock-backend.ts`, `e2e/global-setup.ts`,
 `e2e/helpers/`). Run `pnpm test:e2e` (or `pnpm test:e2e:ui`).
 
-**Test-data inventory (Constitution C-12).** Mocked/dummy domain objects for both test layers are
-centralized in `e2e/fixtures/` (barrel `index.ts`; catalog `e2e/fixtures/INVENTORY.md`), with auth
-helpers (`signTestJwt`, `addAuthCookie`, `addAdminCookie`, `addCookieWithRoles`, `TEST_JWT_SECRET`)
-canonical in `e2e/helpers/auth.ts`. New or modified tests import these fixtures instead of
-declaring inline mock literals; a new domain object gets a fixture module + catalog row in the
-same commit (use the `/test-data` skill). Scenario one-offs and reserved sentinel ids (see the
-catalog) stay inline. Rules: `docs/patterns/test-data-inventory.md`.
-
 **Browser resolution.** `@playwright/test` is pinned to an **exact** version (no `^`) so the
 managed browser build never drifts out from under a pre-baked sandbox. `playwright.config.ts`
 adapts to environments that pre-install browsers and block downloads (`PLAYWRIGHT_BROWSERS_PATH`
@@ -207,4 +199,3 @@ Requires backend gRPC services on 50051–50060 (and TimescaleDB for the config-
 | Dockerfile | `Dockerfile` |
 | OTel | `src/telemetry.ts` |
 | E2E | `e2e/`, `playwright.config.ts` |
-| Test-data inventory | `e2e/fixtures/` (catalog: `e2e/fixtures/INVENTORY.md`; auth helpers: `e2e/helpers/auth.ts`) |

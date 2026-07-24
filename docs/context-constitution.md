@@ -1,0 +1,69 @@
+# xstockstrat (root) — Constitution
+
+Derived by `/context-constitution` (context-forge) on 2026-07-24. This file captures the
+**non-obvious** — patterns this repo follows but never wrote down, the places that break those
+patterns, the contracts between modules, and the scars behind them — the things an agent would
+otherwise miss and get wrong. It does **not** restate what the docs already say or CI already
+enforces (see `## Pointers`). Refresh by re-running `/context-constitution`.
+
+> **ID scheme (CF-N5).** The repo already has an SDD Constitution (`docs/sdd/constitution.md`,
+> prefixes `C-*`/`P-*`/`F-*`) that governs **process/workflow** (review gates, branch policy, the SDD
+> pipeline). The rules below are **codebase/runtime invariants** — a different *kind* of rule — so they
+> use a sibling namespace `PLAT-*` and cross-reference the SDD IDs where they overlap, rather than
+> renumbering into the process scheme. Per-module constitutions use `<MODULE>-*`.
+
+## Floor (`PLAT-*`) — never-do, non-overridable
+
+| ID | Rule | Why | Evidence |
+|---|---|---|---|
+| **PLAT-F1** | Never persist a proto **enum integer** directly into a column whose stored form is a hand-mapped string (or vice-versa) — always route through the service's `*ToNumber`/`*FromJSON` / lowercase-string mapper at the DB boundary. | ts-proto `stringEnums` decodes enums to strings; binding the raw string into an `INTEGER` column throws `invalid input syntax for type integer`, and binding the raw int re-encodes to `UNRECOGNIZED`. Both shipped as bugs. | `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts:47,183` + PR #698; Go string maps `services/xstockstrat-trading/internal/repository/trading_repo.go:283-384` |
+| **PLAT-F2** | Never let a `google.protobuf.Timestamp` reach a Node.js gRPC response (or a DB bind) as a `{seconds}` plain object, and never persist an Invalid `Date`. | ts-proto maps Timestamp to a JS `Date` and calls `.getTime()` during encode **after** the handler returns `callback(null,res)` — a plain object throws an uncatchable INTERNAL trailers-only error; a `new Date(undefined)` serializes to a NaN timestamp Postgres rejects. | PR #442 (identity), #443 (notify/ledger/config), #697 (ledger `toValidDate`); guard at `services/xstockstrat-ledger/src/grpc/ledgerServiceImpl.ts:299-302` |
+
+## Rules (`PLAT-*`) — binding, easy-to-miss conventions
+
+| ID | Rule | Why | Evidence | Example (canonical `path:line`) |
+|---|---|---|---|---|
+| **PLAT-1** | **Node.js gRPC handlers must return JS `Date` instances for every Timestamp field** and read inbound Timestamps *as* `Date` (never `.seconds`). | See PLAT-F2 — the failure is invisible until runtime, past the try/catch. Surfaced when frontends moved from Connect-HTTP (protobuf-es, tolerates `{seconds}`) to gRPC (ts-proto, requires `Date`). | `identityServiceImpl.ts:18-20` (`secondsToDate`), `ledgerServiceImpl.ts:299-316`; PRs #442/#443/#697 | `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts:18-20` |
+| **PLAT-2** | **`stringEnums` enum ↔ int conversion happens at the DB boundary**, both directions (write: `*ToNumber` before INSERT; read: `*FromJSON` after SELECT). | Column is `INTEGER`, wire form is a string; see PLAT-F1. | `notifyServiceImpl.ts:47,183`; PR #698 | `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts:47` |
+| **PLAT-3** | **OTLP export port is chosen by language runtime**: Node.js/Next.js → `otel-collector:4318` (OTLP/HTTP); Go/Python → `:4317` (OTLP/gRPC). The collector exposes **both** receivers. | The SDK default protocol differs by language (Node → http/protobuf, Go/Python → gRPC); a Node exporter aimed at `:4317` fails silently — telemetry just never arrives, no startup error. 12/12 compose blocks obey it; only the collector-config header documents the split. | `docker-compose.yml:119,150,182,216,470` (4318) vs `:253,284,321,360,396,428,515` (4317); receivers `packages/otel/otel-collector-config.yaml:31,33`, rationale `:6-8` | `packages/otel/otel-collector-config.yaml:6-8` |
+| **PLAT-4** | **Propagate `x-user-id` / `x-access-scope` / `x-trace-id` on every *outbound per-request* gRPC call** (Go interceptor, Python `_propagation_meta` per method). Services that make **no** outbound per-request calls (the 4 Node leaf services: ledger/identity/notify/config) have nothing to forward — their `middleware/propagation.ts` is dead (see findings). | Nginx/edge strips these from external requests, so they are trusted platform-internal identity; a dropped header makes downstream `scope & 0x04` role checks and trace correlation fail. | Go: `services/xstockstrat-portfolio/internal/middleware/propagation.go:27-35`; Python: `services/xstockstrat-analysis/app/handlers/servicer.py:160-165`; doc `docs/patterns/header-propagation.md` | `services/xstockstrat-portfolio/internal/middleware/propagation.go:27-35` |
+| **PLAT-5** | **`x-access-scope` is a bitmask** — READ `0x01`, WRITE `0x02`, ADMIN `0x04`, TRADING `0x08` — produced by the UI from roles and gated by backends via `scope & 0x04`. Keep the bit meanings in parity across the UI producer and every backend consumer. | The value is computed in one place (UI) and interpreted everywhere; a divergence silently grants or denies admin. | producer `services/xstockstrat-ui/src/lib/auth.ts:65-76`; consumers `marketdata_service.go:293` (`&0x04`), `indicators servicer.py:37`, `ingest servicer.py:119` | `services/xstockstrat-ui/src/lib/auth.ts:65-76` |
+| **PLAT-6** | **Config is read fresh from the `Watcher`/`ConfigWatcher` getters at each use with an inline literal default — never cached in a field, never sourced from the DB `default_value` column.** An unset key resolves to the *reading code's* literal, not the DB default. | This is what makes a live config change take effect immediately; caching it defeats `WatchConfig`. Secrets are the deliberate exception (env-only, see IDENTITY/module rules). | `services/xstockstrat-portfolio/internal/service/portfolio_service.go:546,595`; `services/xstockstrat-config/src/services/configWatcher.ts:83-101` | `services/xstockstrat-config/src/services/configWatcher.ts:83-101` |
+
+## Norms (`PLAT-*`) — defaults & asymmetry guidance
+
+| ID | Norm | Why | Evidence | Example (canonical `path:line`) |
+|---|---|---|---|---|
+| **PLAT-N1** | **Ledger/notify emissions are best-effort and never fail the RPC** — wrap in `try/except → log.warn` (Python/Node) or `_ = repo.Emit(...)` / detached goroutine (Go); async emits run on a **detached** context (`context.Background()`), never the request ctx. | A completed trade/backtest must not be rolled back by a transient ledger bounce; the request ctx is canceled on return and would silently drop the event. Documented exception: analysis `ScoreStrategy`'s stale-grade delete is *not* best-effort. | Go detached emits `services/xstockstrat-trading/internal/service/trading.go:315-346`; Python best-effort `services/xstockstrat-analysis/app/handlers/servicer.py:1051,1141` | `services/xstockstrat-trading/internal/service/trading.go:642-682` |
+| **PLAT-N2** | **Go (distroless) services carry no `WAIT_FOR` entrypoint and no compose `healthcheck`;** Node/Python services do. Don't copy a Node service's `WAIT_FOR` into a Go block. | The distroless Go image has no shell to run `scripts/wait-for-deps.sh`; adding it makes the container fail to start. Go relies on `depends_on` + in-process readiness. | absent on `docker-compose.yml` marketdata/portfolio/trading; present ledger:145, indicators:281; anchor comment `docker-compose.yml:36-40` | `docker-compose.yml:36-40` |
+| **PLAT-N3** | **Internal gRPC is plaintext** (`grpc.aio.insecure_channel` / `insecure` dials); keepalive is tuned on inter-service dials to survive idle DO App Platform GOAWAYs, and `codes.Unavailable` on a stream is treated as a benign reconnect, not an error to alert on. | Platform-internal traffic isn't TLS-terminated between services; routine GOAWAYs would otherwise trip alerting or double-count on reconnect-from-0. | `services/xstockstrat-agent/app/client.py:56` (insecure); keepalive `portfolio_service.go:57-61`; benign-close `portfolio_service.go:165-170` | `services/xstockstrat-portfolio/internal/service/portfolio_service.go:165-170` |
+
+## Gotchas & scars
+
+- **Python config zero-trap (asymmetric with Node).** The Python `ConfigWatcher.get_int/get_str/get_float` use `v.int_val or default`, so a stored `0`/`""`/`0.0` reads as the **default** — `get_bool` alone uses `HasField`. The Node getter uses `??` and correctly preserves `0`. Root CLAUDE.md documents this only for `analysis.scoring.shrinkage_days`, but it applies to *every* numeric/string Python key. The `config.ConfigValue` proto is a `oneof` that *does* distinguish 0 from unset, so this is a consumer choice, not a contract limit (also logged as a defect to fix, CF-N10). Evidence: `services/xstockstrat-indicators/app/config/watcher.py:66,74,90` vs `services/xstockstrat-config/src/services/configWatcher.ts:88-91`; oneof `packages/proto/config/v1/config.proto:49-55`.
+- **ts-proto is the strict path; protobuf-es tolerated the old shape.** The whole Timestamp/enum class of bugs (PLAT-F1/F2/1/2) stayed latent for as long as the frontends called backends over Connect-HTTP (protobuf-es), which tolerates `{seconds}`/ints; it surfaced *en masse* when everything moved to the gRPC path. When touching any Node gRPC (de)serialization, assume ts-proto's stricter rules. Evidence: PR #442 message body.
+- **The proto `Timeframe` enum is not interval-ordered** (`15MIN=5, 1HOUR=3, 1DAY=4, 1MIN=1, 5MIN=2`) and 1m/5m are deprecated; never infer bar duration from the enum number. Evidence: `packages/proto/common/v1/common.proto:79-83`.
+
+## Candidate rules (unverified)
+
+| Candidate | Why suspected | What would confirm it |
+|---|---|---|
+| "Return the bare domain message for a single-object read, a `*Response` wrapper only when >1 field" is the intended proto RPC-shape rule | `PlaceOrder/GetOrder→Order`, `GetBackfillStatus→BackfillJob` vs `List*→*Response`; enabled by buf lint exceptions `packages/proto/buf.yaml:11-12` | a maintainer ruling — exceptions exist (`ManageStrategy→StrategyDefinition`) so it isn't yet a clean rule |
+| Free-text `string` is reserved for genuinely open/runtime-registered sets only | `ExternalSignal.source`, `event_type`, `category` are operator-registered; but `side`/`rating`/`time_in_force` are closed sets left as strings | an owner decision on whether the closed-set strings are cleanup targets (see proto findings) |
+
+## Pointers (already documented or CI-enforced — not restated here)
+
+| What | Where |
+|---|---|
+| Env-var naming `<SERVICE>_ENDPOINT` (gRPC host:port), no `_URL`/`XSTOCKSTRAT_` prefix | root `CLAUDE.md` §Environment Variable Naming; `.do/app.yaml` |
+| DB connection-pool budget ≤ 20 total; per-service cap + `DB_POOL_MAX` | root `CLAUDE.md` §Connection Pool Budget; e.g. `internal/repository/pool.go:15-28` |
+| Enum-over-string + `_UNSPECIFIED = 0` sentinel; proto PR + `buf lint`/`buf breaking` | root `CLAUDE.md` §Proto Contract Governance; `.github/workflows/ci.yml` `proto-freshness` |
+| Config `WatchConfig`-at-startup, 90s snapshot gate before serving | `docs/patterns/config-startup.md`; e.g. `config.go:131-140` |
+| Migration naming `NNN_*.up/down.sql`, never edit an applied one | root `CLAUDE.md` §Database; `docs/patterns/database.md:24-29` |
+| Branch/merge strategy (branch from `main-dev`; hotfix/promotion = merge-commit, feature = squash) | root `CLAUDE.md` §Branch Strategy; SDD `C-06`/`F-02`/`F-03` |
+| DRY guard rail (jscpd + ESLint literal bans + `dry-reviewer`) | `docs/patterns/dry-guard-rail.md`, `.husky/pre-commit`, `.jscpd.json` |
+| OTel init gated on `OTEL_ENABLED=true`, never blocks startup | `docs/patterns/observability.md`; e.g. `internal/telemetry/otel.go:18-21` |
+
+---
+_Forged by [context-forge](https://github.com/davcs86/agent-plugins). It captures the
+non-obvious — nothing here is invented; re-run `/context-constitution` to refresh after the code changes._

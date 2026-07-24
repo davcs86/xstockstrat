@@ -1,8 +1,8 @@
 # xstockstrat-analysis — CLAUDE.md
 
-<!-- constitution-forge:constitution-pointer:start -->
-> **Codebase invariants for this service** — non-obvious contracts, patterns, and scars an agent would miss on a normal read: see [`docs/constitution.md`](docs/constitution.md) (inherits the root `PLAT-*` rules).
-<!-- constitution-forge:constitution-pointer:end -->
+<!-- context-forge:constitution-pointer:start -->
+> **Constitution:** non-obvious local invariants (tail-align indicator results, empirical-Bayes evidence-weighted scoring, definition-json fingerprint eligibility, custom-formula `len==n` requirement) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (`client_id="indicators-"` copy-paste, ⚠ self-granted admin scope) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+<!-- context-forge:constitution-pointer:end -->
 
 ## Role
 
@@ -210,7 +210,6 @@ Namespace: `analysis`
 | `analysis.backtest.default_commission_pct` | float | `0.001` | Assumed commission per trade |
 | `analysis.backtest.default_slippage_pct` | float | `0.0005` | Assumed slippage |
 | `analysis.backtest.max_range_days` | int | `730` | Max backtest range span in days (≈2 years, feature 064); a request whose `range` exceeds it is rejected with `INVALID_ARGUMENT`, an unset bound is defaulted to the last `max_range_days`. Applies to all `RunBacktest` callers. |
-| `analysis.backtest.detail_retention_per_strategy` | int | `20` | Max persisted detailed runs kept per strategy (feature 068); count-based eviction at insert, clamped ≥1. Eviction removes `backtest_details` payloads only — `backtest_runs` summary rows are never trimmed. Note the `get_int` zero-trap: a stored `0` reads as the default 20. |
 | `analysis.scoring.sharpe_weight` | float | `0.4` | Weight of Sharpe in overall score |
 | `analysis.scoring.drawdown_weight` | float | `0.3` | Weight of max drawdown |
 | `analysis.scoring.win_rate_weight` | float | `0.3` | Weight of win rate |

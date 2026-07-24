@@ -1,8 +1,8 @@
 # xstockstrat-ingest — CLAUDE.md
 
-<!-- constitution-forge:constitution-pointer:start -->
-> **Codebase invariants for this service** — non-obvious contracts, patterns, and scars an agent would miss on a normal read: see [`docs/constitution.md`](docs/constitution.md) (inherits the root `PLAT-*` rules). Candidate defects (AI-generated triage, unverified): [`docs/constitution-findings.md`](docs/constitution-findings.md).
-<!-- constitution-forge:constitution-pointer:end -->
+<!-- context-forge:constitution-pointer:start -->
+> **Constitution:** non-obvious local invariants (proto-free repos, allow-listed dynamic SQL, `page_token`-as-int-offset, `QuerySignals` producer semantics) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (9 dead config keys, unimplemented dedup, `client_id="indicators-"` copy-paste) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+<!-- context-forge:constitution-pointer:end -->
 
 ## Role
 

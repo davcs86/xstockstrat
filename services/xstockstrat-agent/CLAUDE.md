@@ -1,8 +1,8 @@
 # xstockstrat-agent — CLAUDE.md
 
-<!-- constitution-forge:constitution-pointer:start -->
-> **Codebase invariants for this service** — non-obvious contracts, patterns, and scars an agent would miss on a normal read: see [`docs/constitution.md`](docs/constitution.md) (inherits the root `PLAT-*` rules). Candidate defects (AI-generated triage, unverified): [`docs/constitution-findings.md`](docs/constitution-findings.md).
-<!-- constitution-forge:constitution-pointer:end -->
+<!-- context-forge:constitution-pointer:start -->
+> **Constitution:** non-obvious local invariants (ephemeral per-call gRPC channels, lazy `gen.*` imports, hardcoded admin metadata, `MCP_AGENT_SECRET` triple-purpose, `aud`-bound JWT) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (`namespace="agent"` hardcode, `MCP_TRANSPORT` stdio default) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+<!-- context-forge:constitution-pointer:end -->
 
 ## Role
 

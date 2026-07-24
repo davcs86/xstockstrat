@@ -1,8 +1,8 @@
 # xstockstrat-config — CLAUDE.md
 
-<!-- constitution-forge:constitution-pointer:start -->
-> **Codebase invariants for this service** — non-obvious contracts, patterns, and scars an agent would miss on a normal read: see [`docs/constitution.md`](docs/constitution.md) (inherits the root `PLAT-*` rules). Candidate defects (AI-generated triage, unverified): [`docs/constitution-findings.md`](docs/constitution-findings.md).
-<!-- constitution-forge:constitution-pointer:end -->
+<!-- context-forge:constitution-pointer:start -->
+> **Constitution:** non-obvious local invariants (DELTA carries the full namespace + wholesale replace, defaults from call-site not DB `default_value`, enum→scope-string maps, pg_notify env+mode requirement) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (⚠ camelCase/snake_case trading-mode scoping collapse, audit-on-UPDATE-only) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+<!-- context-forge:constitution-pointer:end -->
 
 ## Role
 
