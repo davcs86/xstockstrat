@@ -241,3 +241,26 @@ Read-path parity (C-10(b)) and mock-echo shape confirmed against the live UI:
   (+ `INVENTORY.md`) — update only if cooldown must appear in a list/detail e2e (not required by Step 12's
   wizard-focused scenarios). Step 12 already reflects this scope.
 
+
+## Session 2026-07-24 — sdd-execute (sequential, single-PR)
+
+**Mode**: sequential, all 13 steps on `claude/strategy-reentry-cooldown-sequential-c1udg7` (based on
+`origin/main-dev`), landing as ONE integration PR into `main-dev` (per user directive — deviates from
+standard stacked per-step PRs). Semantics locked to design: unset → default 31, explicit 0 → no
+cooldown, negative → INVALID_ARGUMENT.
+
+**Toolchain (sequential-mode verification fallbacks — no host buf/migrate, Docker daemon started):**
+- `buf` + Go proto plugins installed via `go install` (proxy.golang.org reachable): buf `1.69.0` (CI
+  pin), `protoc-gen-go@v1.36.11`, `protoc-gen-go-grpc@v1.6.2`, `protoc-gen-connect-go@v1.19.2`;
+  `grpcio-tools==1.80.0` (CI pin) via pip; TS plugins via `pnpm install` in `packages/proto/gen/ts`.
+- Migration verified against a throwaway local `initdb` postgres cluster (no `migrate` binary / no
+  TimescaleDB container). Logged as CI-equivalent fallback in the Deviation Log.
+
+### Step 1 — proto: add `cooldown_days` field + regenerate stubs [done]
+- Added `optional int32 cooldown_days = 9` to `StrategyDefinition`; regenerated Go/Python/TS stubs.
+  First regen used buf `1.47.2` which drifted the unrelated `google/protobuf/timestamp.ts` WKT
+  docstring; reinstalled the CI-pinned buf `1.69.0`, reverted gen/, regenerated → diff scoped to
+  `analysis.*` only. `buf lint` + `buf breaking` (additive, non-breaking) pass; codegen idempotent
+  across repeated runs.
+- Files modified: `packages/proto/analysis/v1/analysis.proto`, `packages/proto/gen/**` (analysis only)
+- Deviations: none (toolchain-install fallback noted above; not a spec deviation)

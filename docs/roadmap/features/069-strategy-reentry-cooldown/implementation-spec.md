@@ -44,7 +44,7 @@ explicit `0` → no cooldown, negative → rejected**. No test asserts the old `
 
 ### Step 1 — proto: add `cooldown_days` field + regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
