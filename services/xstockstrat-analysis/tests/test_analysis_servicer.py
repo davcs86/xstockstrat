@@ -2183,3 +2183,148 @@ class TestGetBacktest:
         code, msg = context.abort.await_args.args
         assert code == grpc.StatusCode.NOT_FOUND
         assert msg == "no detailed data for this run"
+
+
+# ---------------------------------------------------------------------------
+# Re-entry cooldown — backtest gate (feature 069, FR-7 / FR-6 / FR-9)
+# ---------------------------------------------------------------------------
+
+
+def _cooldown_bar(close, day):
+    """A real marketdata Bar with a daily-incrementing tz-aware timestamp."""
+    from gen.marketdata.v1 import marketdata_pb2
+
+    bar = marketdata_pb2.Bar(
+        symbol="AAPL", open=close, high=close, low=close, close=close, volume=1000, vwap=close
+    )
+    bar.time.FromSeconds(1_700_000_000 + day * 86_400)
+    return bar
+
+
+async def _run_evaluated(svc, definition, decisions, n_bars):
+    """Drive _backtest_symbol_evaluated with a controlled decisions sequence.
+
+    Patches StrategyEvaluator so entry/exit are exactly ``decisions`` (length ``n_bars``),
+    and feeds daily bars so the cooldown's calendar-day math is exercised via bar.time.
+    """
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    from gen.common.v1 import common_pb2
+
+    bars = [_cooldown_bar(100.0, i) for i in range(n_bars)]
+    svc._marketdata = MagicMock()
+    svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=bars))
+    svc._compute_evaluated_warmup = AsyncMock(return_value=0)
+    fake_eval = MagicMock()
+    fake_eval.evaluate_with_series = AsyncMock(return_value=(decisions, {}))
+    with patch("app.handlers.servicer.StrategyEvaluator", return_value=fake_eval):
+        return await svc._backtest_symbol_evaluated(
+            "AAPL", common_pb2.TimeRange(), definition, 100_000.0, 0.0, 0.0
+        )
+
+
+def _decisions(n, entries=(), exits=()):
+    from app.services.evaluator import BarDecision
+
+    ds = [BarDecision(bar_index=i, entry=False, exit=False, conviction=0.0) for i in range(n)]
+    for i in entries:
+        ds[i].entry = True
+        ds[i].conviction = 1.0
+    for i in exits:
+        ds[i].exit = True
+    return ds
+
+
+class TestBacktestCooldown:
+    @pytest.mark.asyncio
+    async def test_whipsaw_reentry_suppressed_by_default_cooldown(self):
+        """AC-3: entry refiring on the bar right after an exit is suppressed by the default."""
+        svc = make_servicer()
+        # entry@1, exit@2, entry@3 (immediate re-entry attempt), nothing else.
+        decisions = _decisions(40, entries=(1, 3), exits=(2,))
+        definition = _valid_definition()  # cooldown_days unset → default 31
+        trades, _, _, _ = await _run_evaluated(svc, definition, decisions, 40)
+        # Only the first trade (entry@1 → exit@2); the day-3 re-entry is gated, so no open
+        # position remains to be force-closed at the last bar.
+        assert len(trades) == 1
+
+    @pytest.mark.asyncio
+    async def test_explicit_zero_cooldown_allows_immediate_reentry(self):
+        """Explicit cooldown_days=0 → immediate re-entry allowed (no gate)."""
+        svc = make_servicer()
+        decisions = _decisions(40, entries=(1, 3), exits=(2,))
+        definition = _valid_definition()
+        definition.cooldown_days = 0
+        trades, _, _, _ = await _run_evaluated(svc, definition, decisions, 40)
+        # entry@1→exit@2 (trade 1) then entry@3 re-enters, held open, force-closed at last bar.
+        assert len(trades) == 2
+
+    @pytest.mark.asyncio
+    async def test_reentry_allowed_after_window_elapses(self):
+        """After the cooldown's calendar days pass, a later entry is allowed again."""
+        svc = make_servicer()
+        # entry@1, exit@2 (day 2), entry@3 (gated), entry@35 (day 35 > day2+31 → allowed).
+        decisions = _decisions(40, entries=(1, 3, 35), exits=(2,))
+        definition = _valid_definition()  # default 31
+        trades, _, _, _ = await _run_evaluated(svc, definition, decisions, 40)
+        assert len(trades) == 2  # first trade + the post-window re-entry (open→force-closed)
+
+    @pytest.mark.asyncio
+    async def test_backtest_reproducible_across_runs(self):
+        """AC-8 (FR-7): two runs of the same strategy/symbol produce identical trades.
+
+        Cooldown state is a per-call local, never a shared/persisted store, so runs cannot
+        cross-contaminate.
+        """
+        svc = make_servicer()
+        decisions = _decisions(40, entries=(1, 3, 35), exits=(2,))
+        definition = _valid_definition()
+        t1, _, _, _ = await _run_evaluated(svc, definition, decisions, 40)
+        t2, _, _, _ = await _run_evaluated(
+            svc, _valid_definition(), _decisions(40, (1, 3, 35), (2,)), 40
+        )
+        assert len(t1) == len(t2)
+        assert [(round(t.pnl, 6), t.entry_time.seconds) for t in t1] == [
+            (round(t.pnl, 6), t.entry_time.seconds) for t in t2
+        ]
+
+    def test_fingerprint_changes_with_cooldown_days(self):
+        """AC-9 (FR-9): differing cooldown_days yield different fingerprints."""
+        from app.handlers.servicer import _definition_fingerprint
+
+        base = {"entry_rule": "x"}
+        assert _definition_fingerprint(base) != _definition_fingerprint(
+            {**base, "cooldown_days": 14}
+        )
+
+    @pytest.mark.asyncio
+    async def test_manage_strategy_rejects_negative_cooldown(self):
+        """AC-1: ManageStrategy register aborts INVALID_ARGUMENT on a negative cooldown."""
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.create = AsyncMock(return_value=_row_for(_valid_definition()))
+        definition = _valid_definition()
+        definition.cooldown_days = -1
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_REGISTER, definition=definition
+        )
+        ctx = _admin_ctx()
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(req, ctx)
+        code, _ = ctx.abort.await_args.args
+        assert code == grpc.StatusCode.INVALID_ARGUMENT
+
+    @pytest.mark.asyncio
+    async def test_manage_strategy_accepts_zero_cooldown(self):
+        """Explicit cooldown_days=0 passes write-time validation (register proceeds)."""
+        svc = make_servicer()
+        definition = _valid_definition()
+        definition.cooldown_days = 0
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.create = AsyncMock(return_value=_row_for(definition))
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_REGISTER, definition=definition
+        )
+        result = await svc.ManageStrategy(req, context=_admin_ctx())
+        assert result.strategy_id == "sma_x"

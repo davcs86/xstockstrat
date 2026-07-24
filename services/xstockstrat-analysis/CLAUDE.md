@@ -216,6 +216,7 @@ Namespace: `analysis`
 | `analysis.scoring.shrinkage_days` | int | `250` | Empirical-Bayes shrinkage pseudo-count `k` (in trading days) for the derived headline grade (feature 065). `overall = (Σ wᵢ·sᵢ + 0.5·k) / (Σ wᵢ + k)`; larger `k` → stronger pull toward the neutral 0.5 prior, so a strong grade needs more evidence. `get_int` zero-trap: a config value of `0` reads as the default 250. |
 | `analysis.scoring.min_evidence_symbols` | int | `3` | Below this many distinct evidence symbols the derived grade is flagged `provisional`. |
 | `analysis.scoring.min_evidence_days` | int | `500` | Below this many total evidence trading-days the derived grade is flagged `provisional`. |
+| `analysis.strategy.default_cooldown_days` | int | `31` | Per-strategy default re-entry cooldown in calendar days when `StrategyDefinition.cooldown_days` is unset (feature 069); `31` sits outside the IRS 30-day-each-side wash-sale window. `get_int` zero-trap: a platform-wide value of `0` reads back as the default `31` — a per-strategy explicit-`0` (no cooldown) is unaffected because it travels via proto explicit presence, not this config read. |
 | `analysis.signals.source_weights` | string (JSON) | `"{}"` | JSON object mapping source name to reliability weight in [0.0, 1.0]. Empty → all sources use 1.0 (neutral). Values outside [0.0, 1.0] are clamped at read time. |
 | `analysis.engine.eval_interval_seconds` | int | `60` | Live evaluation polling cadence in seconds |
 | `analysis.engine.max_strategies_per_cycle` | int | `50` | Max (strategy × symbol) pairs evaluated per cycle |

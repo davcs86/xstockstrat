@@ -1874,15 +1874,19 @@ func (x *StrategyComponent) GetParams() map[string]float64 {
 }
 
 type StrategyDefinition struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	StrategyId    string                 `protobuf:"bytes,1,opt,name=strategy_id,json=strategyId,proto3" json:"strategy_id,omitempty"`
-	DisplayName   string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
-	Components    []*StrategyComponent   `protobuf:"bytes,3,rep,name=components,proto3" json:"components,omitempty"`
-	EntryRule     string                 `protobuf:"bytes,4,opt,name=entry_rule,json=entryRule,proto3" json:"entry_rule,omitempty"` // JSON-encoded condition tree
-	ExitRule      string                 `protobuf:"bytes,5,opt,name=exit_rule,json=exitRule,proto3" json:"exit_rule,omitempty"`    // JSON-encoded condition tree
-	SignalParams  *structpb.Struct       `protobuf:"bytes,6,opt,name=signal_params,json=signalParams,proto3" json:"signal_params,omitempty"`
-	Active        bool                   `protobuf:"varint,7,opt,name=active,proto3" json:"active,omitempty"`
-	LiveEnabled   bool                   `protobuf:"varint,8,opt,name=live_enabled,json=liveEnabled,proto3" json:"live_enabled,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	StrategyId   string                 `protobuf:"bytes,1,opt,name=strategy_id,json=strategyId,proto3" json:"strategy_id,omitempty"`
+	DisplayName  string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	Components   []*StrategyComponent   `protobuf:"bytes,3,rep,name=components,proto3" json:"components,omitempty"`
+	EntryRule    string                 `protobuf:"bytes,4,opt,name=entry_rule,json=entryRule,proto3" json:"entry_rule,omitempty"` // JSON-encoded condition tree
+	ExitRule     string                 `protobuf:"bytes,5,opt,name=exit_rule,json=exitRule,proto3" json:"exit_rule,omitempty"`    // JSON-encoded condition tree
+	SignalParams *structpb.Struct       `protobuf:"bytes,6,opt,name=signal_params,json=signalParams,proto3" json:"signal_params,omitempty"`
+	Active       bool                   `protobuf:"varint,7,opt,name=active,proto3" json:"active,omitempty"`
+	LiveEnabled  bool                   `protobuf:"varint,8,opt,name=live_enabled,json=liveEnabled,proto3" json:"live_enabled,omitempty"`
+	// Per-symbol re-entry cooldown in calendar days (feature 069). optional = explicit presence:
+	// unset → platform default (analysis.strategy.default_cooldown_days); explicit 0 → no cooldown
+	// (immediate re-entry allowed); negative → rejected at write time (INVALID_ARGUMENT).
+	CooldownDays  *int32 `protobuf:"varint,9,opt,name=cooldown_days,json=cooldownDays,proto3,oneof" json:"cooldown_days,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1971,6 +1975,13 @@ func (x *StrategyDefinition) GetLiveEnabled() bool {
 		return x.LiveEnabled
 	}
 	return false
+}
+
+func (x *StrategyDefinition) GetCooldownDays() int32 {
+	if x != nil && x.CooldownDays != nil {
+		return *x.CooldownDays
+	}
+	return 0
 }
 
 type ManageStrategyRequest struct {
@@ -2931,7 +2942,7 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x06params\x18\x05 \x03(\v26.xstockstrat.analysis.v1.StrategyComponent.ParamsEntryR\x06params\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\"\xd9\x02\n" +
+	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\"\x95\x03\n" +
 	"\x12StrategyDefinition\x12\x1f\n" +
 	"\vstrategy_id\x18\x01 \x01(\tR\n" +
 	"strategyId\x12!\n" +
@@ -2944,7 +2955,9 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\texit_rule\x18\x05 \x01(\tR\bexitRule\x12<\n" +
 	"\rsignal_params\x18\x06 \x01(\v2\x17.google.protobuf.StructR\fsignalParams\x12\x16\n" +
 	"\x06active\x18\a \x01(\bR\x06active\x12!\n" +
-	"\flive_enabled\x18\b \x01(\bR\vliveEnabled\"\xae\x01\n" +
+	"\flive_enabled\x18\b \x01(\bR\vliveEnabled\x12(\n" +
+	"\rcooldown_days\x18\t \x01(\x05H\x00R\fcooldownDays\x88\x01\x01B\x10\n" +
+	"\x0e_cooldown_days\"\xae\x01\n" +
 	"\x15ManageStrategyRequest\x12H\n" +
 	"\toperation\x18\x01 \x01(\x0e2*.xstockstrat.analysis.v1.StrategyOperationR\toperation\x12K\n" +
 	"\n" +
@@ -3230,6 +3243,7 @@ func file_analysis_v1_analysis_proto_init() {
 	if File_analysis_v1_analysis_proto != nil {
 		return
 	}
+	file_analysis_v1_analysis_proto_msgTypes[17].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

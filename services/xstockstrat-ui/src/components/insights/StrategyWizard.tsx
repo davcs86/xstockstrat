@@ -39,6 +39,20 @@ function readStringArray(obj: Record<string, unknown> | undefined, key: string):
   return Array.isArray(v) ? v.map(String) : [];
 }
 
+// Parse the cooldown-days input honestly w.r.t. proto explicit presence (feature 069):
+// blank → OMIT the field (server applies the platform default 31); "0" → explicit 0 (no cooldown);
+// a non-negative integer → that value; anything else → invalid. Never collapses blank into 0.
+function parseCooldownDays(
+  raw: string,
+): { valid: true; value: number | undefined } | { valid: false; error: string } {
+  if (raw.trim() === '') return { valid: true, value: undefined };
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0) {
+    return { valid: false, error: 'cooldown days must be a non-negative integer' };
+  }
+  return { valid: true, value: n };
+}
+
 interface StrategyWizardProps {
   mode: 'create' | 'edit';
   initial?: StrategyDefinition;
@@ -55,6 +69,11 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
 
   const [strategyId, setStrategyId] = useState(initial?.strategyId ?? '');
   const [displayName, setDisplayName] = useState(initial?.displayName ?? '');
+  // Seed from explicit presence, NOT `?? 0`: an unset strategy must stay blank so an unrelated edit
+  // never silently writes cooldown_days: 0 over the strategy's implicit platform default (feature 069).
+  const [cooldownDaysRaw, setCooldownDaysRaw] = useState(
+    initial?.cooldownDays !== undefined ? String(initial.cooldownDays) : '',
+  );
   const [components, setComponents] = useState<StrategyComponentDraft[]>(() =>
     (initial?.components ?? []).map((c) => ({
       refName: c.refName,
@@ -82,6 +101,7 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
     if (m.includes('rule')) return 3;
     if (m.includes('indicator') || m.includes('component') || m.includes('ref')) return 2;
     if (m.includes('strategy_id') || m.includes('display')) return 1;
+    if (m.includes('cooldown')) return 1;
     return 5;
   }
 
@@ -103,9 +123,10 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
   const operands = operandRefs(components, formulaOutputs);
 
   const idValid = STRATEGY_ID_RE.test(strategyId);
+  const cooldownParsed = parseCooldownDays(cooldownDaysRaw);
   const canAdvance =
     step === 1
-      ? idValid && displayName.trim() !== ''
+      ? idValid && displayName.trim() !== '' && cooldownParsed.valid
       : step === 2
         ? components.length >= 1
         : step === 3
@@ -113,6 +134,7 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
           : true;
 
   function handleSubmit() {
+    const cd = parseCooldownDays(cooldownDaysRaw);
     const definition = {
       strategyId,
       displayName,
@@ -125,6 +147,8 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
         technical_weight: signal.technicalWeight,
         min_conviction: signal.minConviction,
       },
+      // Presence-honest: blank omits the key (server default drives the gate); "0" sends cooldownDays: 0.
+      ...(cd.valid && cd.value !== undefined ? { cooldownDays: cd.value } : {}),
     };
     mutate(
       {
@@ -198,6 +222,21 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
                   placeholder="SMA Crossover"
                   onChange={(e) => setDisplayName(e.target.value)}
                 />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground">
+                  Re-entry cooldown (days)
+                </label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={cooldownDaysRaw}
+                  placeholder="31 (default)"
+                  onChange={(e) => setCooldownDaysRaw(e.target.value)}
+                />
+                {!cooldownParsed.valid && (
+                  <p className="mt-1 text-xs text-destructive">{cooldownParsed.error}</p>
+                )}
               </div>
             </div>
           )}

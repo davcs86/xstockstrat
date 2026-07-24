@@ -55,6 +55,29 @@ class TestValidateDefinition:
         )
         _validate_definition(d)  # should not raise
 
+    def test_rejects_negative_cooldown_days(self):
+        # AC-1 (FR-6): a negative cooldown is rejected at write time.
+        d = analysis_pb2.StrategyDefinition(
+            strategy_id="s",
+            display_name="S",
+            components=[_builtin()],
+            entry_rule=json.dumps({"fn": ">", "lhs": "sma_fast", "rhs": 100}),
+            cooldown_days=-1,
+        )
+        with pytest.raises(ValueError, match="cooldown_days must be >= 0"):
+            _validate_definition(d)
+
+    def test_accepts_zero_and_unset_cooldown_days(self):
+        # explicit 0 (no cooldown) and unset both pass validation.
+        base = dict(
+            strategy_id="s",
+            display_name="S",
+            components=[_builtin()],
+            entry_rule=json.dumps({"fn": ">", "lhs": "sma_fast", "rhs": 100}),
+        )
+        _validate_definition(analysis_pb2.StrategyDefinition(cooldown_days=0, **base))
+        _validate_definition(analysis_pb2.StrategyDefinition(**base))  # unset
+
     def test_rejects_unknown_indicator(self):
         d = analysis_pb2.StrategyDefinition(components=[_builtin(indicator="NOPE")])
         with pytest.raises(ValueError, match="Unknown built-in indicator"):

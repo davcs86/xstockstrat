@@ -320,6 +320,7 @@ Registers, updates, or deactivates a stored strategy definition in `xstockstrat-
 | `entry_rule` | `string` | No | JSON-encoded condition tree |
 | `exit_rule` | `string` | No | JSON-encoded condition tree |
 | `signal_params` | `object` | No | Optional signal-weighting params |
+| `cooldown_days` | `int` | No | Per-symbol re-entry cooldown in calendar days. Omit → platform default (31); `0` → no cooldown; negative rejected |
 
 **Return**
 
@@ -332,6 +333,7 @@ Registers, updates, or deactivates a stored strategy definition in `xstockstrat-
 | Condition | Error |
 |---|---|
 | Invalid definition (unknown indicator, bad rule JSON, undefined ref_name) | `invalid argument` (INVALID_ARGUMENT) |
+| Negative `cooldown_days` | `invalid argument` (INVALID_ARGUMENT) |
 | `update`/`deactivate` on unknown strategy | `strategy not found` (NOT_FOUND) |
 
 ---

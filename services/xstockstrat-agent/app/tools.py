@@ -295,6 +295,7 @@ def register_tools(server: FastMCP) -> None:
         entry_rule: str = "",
         exit_rule: str = "",
         signal_params: dict | None = None,
+        cooldown_days: int | None = None,
     ) -> dict:
         """Register/update/deactivate a stored strategy in xstockstrat-analysis.
         operation: 'register' | 'update' | 'deactivate'.
@@ -331,7 +332,9 @@ def register_tools(server: FastMCP) -> None:
                   ]
                 }
             (pass this dict JSON-encoded, e.g. json.dumps(...), as the entry_rule string.)
-        signal_params: optional signal-weighting params."""
+        signal_params: optional signal-weighting params.
+        cooldown_days: optional per-symbol re-entry cooldown in calendar days — omit → platform
+            default (31); 0 → no cooldown; negative → rejected (INVALID_ARGUMENT)."""
         definition: dict = {
             "strategy_id": strategy_id,
             "display_name": display_name,
@@ -341,6 +344,10 @@ def register_tools(server: FastMCP) -> None:
         }
         if signal_params:
             definition["signal_params"] = signal_params
+        # An `is not None` check (not the truthy `if signal_params:` pattern) — an explicit 0
+        # (no-cooldown) must not be dropped, only an omitted arg.
+        if cooldown_days is not None:
+            definition["cooldown_days"] = cooldown_days
         try:
             return await client.manage_strategy(operation=operation, definition=definition)
         except grpc.aio.AioRpcError as e:

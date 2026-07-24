@@ -136,3 +136,42 @@ reusing.
 - **Rule it implies**: byte-serialized proto is the default encoding for read-back-only payload
   columns; JSONB only when SQL must query inside the payload (and then never with non-finite
   floats — fails.md 2026-07-21).
+
+### 2026-07-24 — 069-strategy-reentry-cooldown — design
+- **Pattern**: When two code paths must apply the *same* rule via a shared helper (here: backtest and
+  live loop both calling `is_cooldown_active`), sharing the *function* is not enough — a cross-cutting
+  input invariant (tz-aware-UTC datetimes) will silently drift if it is enforced by a comment at each
+  call site. Enforce the invariant **inside the helper** (raise `ValueError` on a naive datetime) and
+  unit-test the guard directly, so a third call site or a careless edit fails loudly instead of
+  reintroducing the two-paths-drift failure the shared helper was meant to prevent. Complements C-10(b):
+  the parity test proves the callers agree; the internal guard proves they *can't* feed the helper
+  incompatible inputs.
+- **Evidence**: `docs/roadmap/features/069-strategy-reentry-cooldown/design.md` § Chosen Approach
+  (`cooldown.py` `_require_aware`); 5-round design debate (the naive/aware split was flagged R2, "fix by
+  comment" rejected R3, moved inside the helper R4).
+- **Rule it implies**: a shared helper reused across paths owns its input-contract enforcement (assert
+  inside + a dedicated guard test), not a convention repeated at each call site — reinforces C-10(b), no new ID.
+
+### 2026-07-24 — 069-strategy-reentry-cooldown — design
+- **Pattern**: A proto3 scalar where the zero value is a *meaningful distinct choice* from "unset" (here:
+  `cooldown_days = 0` = no cooldown vs. unset = platform default) MUST be declared `optional` (explicit
+  presence) — `HasField`/`isFieldSet` is illegal on a plain scalar, and a bare `?? 0` / `x or default` /
+  truthy `if x:` read collapses explicit-0 into unset, silently corrupting data (an unset field gets
+  written back as an explicit 0 on the next edit). Verified the generated-code contract against Context7
+  before designing the UI read: protobuf-es `optional int32` → `field?: number | undefined`, and
+  `msg.field = 0` sets presence true. Same trap recurs at three layers — proto declaration, Python
+  `get_int` config read (`v.int_val or default`), and the TS `?? 0` seed — each must be handled, not just
+  the proto.
+- **Evidence**: `design.md` § Chosen Approach (proto `optional`, UI `!== undefined ? String() : ''`,
+  omit-on-blank submit); Context7 `/bufbuild/protobuf-es` presence contract; config zero-trap documented
+  (not fixed) matching the `analysis.scoring.shrinkage_days` precedent.
+- **Rule it implies**: if a scalar's zero is a real choice, declare it `optional` and check presence at
+  every read/write layer — never `?? 0`, `x or default`, or a truthy guard; reinforces P-03 (verify the
+  decoder/codegen contract), no new ID.
+
+- 2026-07-24 (069 strategy-reentry-cooldown): A single shared **pure** gate module
+  (`app/services/cooldown.py`, no DB/proto/gRPC imports) consumed identically by the backtest engine
+  and the live loop, with the tz-awareness invariant enforced *inside* the helper (`_require_aware`)
+  rather than by a per-call-site comment, made backtest/live parity (FR-4) directly unit-testable and
+  killed the class of "two enforcement paths drift apart" bugs (cf. fails 056). Feed both call sites the
+  **same** time source (bar time), never one wall-clock + one bar-time.

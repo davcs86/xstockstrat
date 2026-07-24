@@ -670,6 +670,14 @@ export type StrategyDefinition = Message<"xstockstrat.analysis.v1.StrategyDefini
      * @generated from field: bool live_enabled = 8;
      */
     liveEnabled: boolean;
+    /**
+     * Per-symbol re-entry cooldown in calendar days (feature 069). optional = explicit presence:
+     * unset → platform default (analysis.strategy.default_cooldown_days); explicit 0 → no cooldown
+     * (immediate re-entry allowed); negative → rejected at write time (INVALID_ARGUMENT).
+     *
+     * @generated from field: optional int32 cooldown_days = 9;
+     */
+    cooldownDays?: number | undefined;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.StrategyDefinition.

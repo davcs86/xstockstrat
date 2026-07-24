@@ -249,3 +249,115 @@ test.describe('Strategy authoring — UI', () => {
     await expect(page.getByText('MACD Cross')).toHaveCount(0);
   });
 });
+
+/**
+ * Feature 069 — re-entry cooldown reachability through the wizard (AC-11).
+ * Presence-honest semantics: blank → key OMITTED (server default 31 drives the gate);
+ * "0" → cooldownDays: 0 (explicit no-cooldown); an unset strategy edited on an unrelated field
+ * must NOT gain cooldown_days: 0. No "0 → 31" collapse is asserted anywhere.
+ */
+test.describe('Strategy authoring — re-entry cooldown (feature 069)', () => {
+  // Capture the exact ManageStrategy payload the wizard submits (browser → BFF), then stub a success.
+  async function captureManageStrategy(page: Page): Promise<() => Record<string, unknown> | null> {
+    let captured: Record<string, unknown> | null = null;
+    await page.route('**/xstockstrat.analysis.v1.AnalysisService/ManageStrategy', async (route) => {
+      captured = JSON.parse(route.request().postData() ?? '{}');
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ strategyId: 'cool_test' }),
+      });
+    });
+    return () => captured;
+  }
+
+  async function fillToReview(
+    page: Page,
+    id: string,
+    display: string,
+    cooldown: string,
+  ): Promise<void> {
+    await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
+    await page.getByPlaceholder('e.g. sma_crossover').fill(id);
+    await page.getByPlaceholder('SMA Crossover').fill(display);
+    if (cooldown !== '') await page.getByPlaceholder('31 (default)').fill(cooldown);
+    const next = page.getByRole('button', { name: 'Next', exact: true });
+    await next.click();
+    await page.getByRole('button', { name: 'Add component' }).click();
+    await next.click();
+    const jsonButtons = page.getByRole('button', { name: 'JSON' });
+    await jsonButtons.nth(0).click();
+    await page.getByLabel('Entry rule JSON').fill('{"op":"and","conditions":[]}');
+    await jsonButtons.nth(1).click();
+    await page.getByLabel('Exit rule JSON').fill('{"op":"or","conditions":[]}');
+    await next.click();
+    await page.getByRole('button', { name: 'Skip' }).click();
+    await expect(page.getByText('Step 5 — Review')).toBeVisible();
+  }
+
+  test('create with a blank cooldown omits cooldownDays from the payload', async ({ page }) => {
+    await addAdminCookie(page);
+    await stubListFormulas(page);
+    const getCaptured = await captureManageStrategy(page);
+    await page.goto('/insights/strategies/new');
+    await fillToReview(page, 'cool_blank', 'Cool Blank', ''); // blank cooldown
+    await page.getByRole('button', { name: 'Create Strategy' }).click();
+    await expect.poll(getCaptured).not.toBeNull();
+    const def = getCaptured()!.definition as Record<string, unknown>;
+    expect(def.cooldownDays).toBeUndefined();
+  });
+
+  test('create with an explicit 0 sends cooldownDays: 0', async ({ page }) => {
+    await addAdminCookie(page);
+    await stubListFormulas(page);
+    const getCaptured = await captureManageStrategy(page);
+    await page.goto('/insights/strategies/new');
+    await fillToReview(page, 'cool_zero', 'Cool Zero', '0'); // explicit no-cooldown
+    await page.getByRole('button', { name: 'Create Strategy' }).click();
+    await expect.poll(getCaptured).not.toBeNull();
+    const def = getCaptured()!.definition as Record<string, unknown>;
+    expect(def.cooldownDays).toBe(0);
+  });
+
+  test('a negative cooldown blocks advancing past Step 1', async ({ page }) => {
+    await addAdminCookie(page);
+    await stubListFormulas(page);
+    await page.goto('/insights/strategies/new');
+    await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
+    await page.getByPlaceholder('e.g. sma_crossover').fill('cool_neg');
+    await page.getByPlaceholder('SMA Crossover').fill('Cool Neg');
+    await page.getByPlaceholder('31 (default)').fill('-5');
+    await expect(page.getByText('cooldown days must be a non-negative integer')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeDisabled();
+  });
+
+  test('edit pre-populates a non-default cooldown (AC-11)', async ({ page }) => {
+    await addAdminCookie(page);
+    await stubListFormulas(page);
+    await page.goto('/insights/strategies/strat-cooldown-14/edit');
+    await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByPlaceholder('31 (default)')).toHaveValue('14');
+  });
+
+  test('editing an unset strategy on an unrelated field does not write cooldownDays', async ({
+    page,
+  }) => {
+    await addAdminCookie(page);
+    await stubListFormulas(page);
+    const getCaptured = await captureManageStrategy(page);
+    await page.goto('/insights/strategies/strat_unset/edit'); // getStrategy leaves cooldown unset
+    await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByPlaceholder('31 (default)')).toHaveValue(''); // stays blank
+    // Change an unrelated field (display name) and save.
+    await page.getByPlaceholder('SMA Crossover').fill('Renamed Only');
+    const next = page.getByRole('button', { name: 'Next', exact: true });
+    await next.click(); // Step 2 (component pre-populated)
+    await next.click(); // Step 3 (rules pre-populated)
+    await next.click(); // Step 4
+    await page.getByRole('button', { name: 'Skip' }).click();
+    await page.getByRole('button', { name: 'Save Changes' }).click();
+    await expect.poll(getCaptured).not.toBeNull();
+    const def = getCaptured()!.definition as Record<string, unknown>;
+    expect(def.cooldownDays).toBeUndefined();
+  });
+});

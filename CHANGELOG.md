@@ -17,6 +17,20 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ### Features
 - phase7-observability: Completes the pending Phase 7 implementation roadmap item: activates the OTel SDK already stubbed in every service, routes telemetry to Grafana Cloud via the OTLP collector, and delivers service health, latency, and signal pipeline throughput dashboards — providing operational visibility before live capital is at risk.
+- strategy-reentry-cooldown: Add a configurable per-strategy re-entry cooldown (default 31 calendar days, chosen to sit outside
+
+### Proto Changes
+- analysis/v1/analysis.proto
+
+### Summary
+-3 commits, 0 feature merges since last promotion.
+
+---
+
+## 2026-07-24
+
+### Features
+- phase7-observability: Completes the pending Phase 7 implementation roadmap item: activates the OTel SDK already stubbed in every service, routes telemetry to Grafana Cloud via the OTLP collector, and delivers service health, latency, and signal pipeline throughput dashboards — providing operational visibility before live capital is at risk.
 - backtest-results-visualization: Make past backtest runs fully visualizable in the insights UI: persist each run's detailed
 
 ### Proto Changes
