@@ -173,3 +173,71 @@ session-log entries recording `008` are left intact as accurate history, and des
 product-spec.md (the living artifacts `/sdd-spec` consumes) are updated to `009`. `merge-order.md`
 needed no change (it references neither feature by number).
 
+## Session 2026-07-24 — sdd-spec
+
+- Generated implementation-spec.md with **13 steps**. Status → `implementation-ready`.
+- **Line-drift correction (important for /sdd-execute):** the backtest trade loop in
+  `servicer.py` drifted ~+14 lines from recon's Codebase Map after feature 068 merged
+  `008_backtest_details`. Current authoritative lines: `_backtest_symbol_evaluated` def
+  `servicer.py:784`; entry gate `if position == 0.0 and decision.entry:` **`servicer.py:863`**
+  (recon said 849); exit branch `elif position > 0.0 and decision.exit:` **`servicer.py:873`**
+  (recon said 859); trade-loop locals `position/entry_price/entry_time` init `servicer.py:847-850`.
+  The spec cites the current lines; recon's older numbers are left intact as history.
+- Confirmed migration numbering: last on disk is `008_backtest_details` → new `009_strategy_cooldowns`.
+- Confirmed composable path only: `_backtest_symbol_evaluated(definition=active_definition)` is
+  called at `servicer.py:311-323` under `if active_definition is not None:`; the legacy SMA
+  `_backtest_symbol` (`servicer.py:527`) is Out of Scope, as the product spec states.
+- FR-9 free (no code): `_definition_fingerprint` (`servicer.py:1754-1773`) excludes only
+  `{display_name, active, live_enabled}`; `cooldown_days` enters `definition_json` via
+  `MessageToDict(..., preserving_proto_field_name=True)` at register/update, so unset vs explicit-0
+  produce different fingerprints automatically.
+- Config key `analysis.strategy.default_cooldown_days` has **no seed file** to edit (grep found none
+  for existing `analysis.*` int keys); it resolves via the in-code `get_int` default (31) and is set
+  at runtime via `SetConfig`. Docs step (13) registers it in `config-governance.md` + analysis
+  `CLAUDE.md` (AC-6), including the `get_int` zero-trap note.
+- UI read-path parity (C-10(b)) confirmed for the wizard: `useStrategyDefinitions.ts:10`
+  `StrategyDefinitionInit = MessageInitShape<typeof StrategyDefinitionSchema>` is proto-generated, so
+  `cooldownDays` flows through `useManageStrategy`/`useGetStrategy` with no read-path edit. A
+  `codebase-discovery` pass is confirming the insights list/detail pages + `insightsBff.ts` are
+  forward-only and the exact `mock-backend.ts` echo shape; Step 12 is written to "modify
+  `mock-backend.ts` per the digest" either way. Digest folded in below once returned.
+
+### Decisions
+
+- Proto + regenerated stubs land in **one** step/PR (proto-freshness CI fails a proto-only PR).
+- Shared gate helper (`app/services/cooldown.py`) is the single source for both paths; tz-awareness
+  enforced inside the helper (`_require_aware` → `ValueError`), unit-tested directly (Step 4).
+- Live path durable (`009` table + `StrategyCooldownsRepository`, reuse existing `db_pool` — F-06,
+  pool stays 2); backtest path ephemeral per-`RunBacktest` local (FR-7, never touches the table).
+- Semantics locked to design (supersede product-spec FR-1/FR-2/AC-2/AC-11): unset → default 31,
+  explicit 0 → no cooldown, negative → INVALID_ARGUMENT. No `0 → 31` test authored anywhere.
+- FR-10 gap closed: `client.py:283-290` gains a `cooldown_days=` kwarg (recon-discovered — the tool
+  dict alone would be dropped by the field-by-field message build).
+
+### Open Threads
+
+- Carried from design: cross-restart durability on a failed best-effort cooldown write is accepted
+  for v1 (mirrors `strategy_scores`); config default zero-trap documented, not fixed.
+
+### UI codebase-discovery digest (folded in — resolves the two design.md UI open-risks)
+
+Read-path parity (C-10(b)) and mock-echo shape confirmed against the live UI:
+
+- **Read paths carry `cooldownDays` automatically — no drop, no edit needed.** `StrategyDefinitionInit`
+  is proto-generated `MessageInitShape<typeof StrategyDefinitionSchema>` (`useStrategyDefinitions.ts:10`);
+  `insightsBff.ts` `getStrategy`/`manageStrategy`/`listStrategyDefinitions` are plain whole-message
+  forwards (`:42-56`); the edit page passes `initial={data}` untouched
+  (`strategies/[id]/edit/page.tsx:30`). No exhaustive `Record<StrategyDefinition, …>`/switch exists in
+  `src/` to break (the C-10(a/d) proto-enum-map trap does not apply — `cooldown_days` is a scalar). The
+  list/detail pages render only `displayName`/`active`/`liveEnabled` today; surfacing cooldown there
+  would be a *display* addition, not a correctness drop — **out of scope** for this feature (FR-11 is
+  the wizard write path only).
+- **Write-back drop site = the wizard's `handleSubmit` (`StrategyWizard.tsx:116-128`)** — field-by-field
+  literal, omits `cooldownDays`. Covered by Step 11.
+- **Mock `manageStrategy` echoes `req.definition` verbatim (`mock-backend.ts:644-652`)** → register/update
+  round-trips `cooldownDays` with **no mock change**. **Mock `getStrategy` builds the definition
+  field-by-field (`:654-671`), no `cooldownDays`** → Step 12 must add `cooldownDays: 14` there for the
+  edit-prepopulation assertion. Hand-written fixtures `e2e/fixtures/strategies.ts:53-65` also omit it
+  (+ `INVENTORY.md`) — update only if cooldown must appear in a list/detail e2e (not required by Step 12's
+  wizard-focused scenarios). Step 12 already reflects this scope.
+
