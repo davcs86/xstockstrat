@@ -139,3 +139,10 @@
   buf breaking (closed); non-transactional insert+evict → accepted risk documented in repo
   docstring + migration comment (closed); "has detail" flag on summaries → deferred
   post-launch (unchanged).
+
+## Session 2026-07-24 (CI: feature status automation)
+
+- Promotion PR #783 merged to main
+- Feature promoted and committed: 026bbf512990c5b63986d3c7449351638c1b8993
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-07-24

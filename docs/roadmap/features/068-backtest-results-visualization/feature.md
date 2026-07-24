@@ -1,6 +1,8 @@
 # Feature: backtest-results-visualization
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 026bbf512990c5b63986d3c7449351638c1b8993
+**Launched date**: 2026-07-24
 **Development Branch**: `feature/backtest-results-visualization`
 **Created**: 2026-07-21
 **Last Updated**: 2026-07-21
@@ -18,6 +20,7 @@
 | 2026-07-21 | `implementation-ready` → `in-progress` | /sdd-execute | Execution started; impl-spec advisory review PASS WITH WARNINGS (no Floor risk) |
 | 2026-07-21 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps done and verified (analysis 252 tests, vitest 25, e2e 18/18 CI-mode, buf clean, migration up/down) |
 
+| 2026-07-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #783; committed 026bbf512990c5b63986d3c7449351638c1b8993 |
 ---
 
 ## Artifacts
