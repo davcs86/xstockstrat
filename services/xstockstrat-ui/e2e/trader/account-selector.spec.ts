@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
+import { BROKER_ACCOUNT_ALPACA, BROKER_ACCOUNT_NEW } from '../fixtures';
 
 /**
  * E2E tests for AccountSelector and AccountManagementPanel.
@@ -18,13 +19,16 @@ test.describe('AccountSelector', () => {
   });
 
   test('Place Order button is disabled when no account is selected', async ({ page }) => {
-    await page.route('**/xstockstrat.trading.v1.TradingService/ListBrokerAccounts', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ accounts: [] }),
-      });
-    });
+    await page.route(
+      '**/xstockstrat.trading.v1.TradingService/ListBrokerAccounts',
+      async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ accounts: [] }),
+        });
+      },
+    );
     await addAuthCookie(page);
     await page.goto('/trader');
     const submitBtn = page.getByRole('button', { name: /buy|sell/i }).last();
@@ -32,15 +36,16 @@ test.describe('AccountSelector', () => {
   });
 
   test('Place Order button is enabled when an account is selected', async ({ page }) => {
-    await page.route('**/xstockstrat.trading.v1.TradingService/ListBrokerAccounts', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          accounts: [{ id: 'alpaca-default', displayName: 'Alpaca Paper', brokerType: 1, isPaper: true, isActive: true }],
-        }),
-      });
-    });
+    await page.route(
+      '**/xstockstrat.trading.v1.TradingService/ListBrokerAccounts',
+      async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ accounts: [BROKER_ACCOUNT_ALPACA] }),
+        });
+      },
+    );
     await addAuthCookie(page);
     await page.goto('/trader');
     const submitBtn = page.getByRole('button', { name: /buy|sell/i }).last();
@@ -56,24 +61,26 @@ test.describe('AccountSelector', () => {
   });
 
   test('Add Account form clears credential fields on success', async ({ page }) => {
-    await page.route('**/xstockstrat.trading.v1.TradingService/ListBrokerAccounts', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          accounts: [{ id: 'alpaca-default', displayName: 'Alpaca Paper', brokerType: 1, isPaper: true, isActive: true }],
-        }),
-      });
-    });
-    await page.route('**/xstockstrat.trading.v1.TradingService/RegisterBrokerAccount', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          account: { id: 'new-account-001', displayName: 'New', brokerType: 1, isPaper: true, isActive: true },
-        }),
-      });
-    });
+    await page.route(
+      '**/xstockstrat.trading.v1.TradingService/ListBrokerAccounts',
+      async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ accounts: [BROKER_ACCOUNT_ALPACA] }),
+        });
+      },
+    );
+    await page.route(
+      '**/xstockstrat.trading.v1.TradingService/RegisterBrokerAccount',
+      async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ account: BROKER_ACCOUNT_NEW }),
+        });
+      },
+    );
     await addAuthCookie(page);
     // Navigate directly to the accounts submodule page.
     await page.goto('/trader/accounts');

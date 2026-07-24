@@ -126,6 +126,12 @@ export interface CoverageGap {
     /** The range a caller should backfill to satisfy this backtest. */
     gap?: TimeRange | undefined;
 }
+/**
+ * NOTE: this message's wire bytes are persisted verbatim in analysis.backtest_details
+ * (feature 068, "store what you serve") — renumbering or retyping any field here or in
+ * BarDiagnostic silently corrupts previously persisted runs. Additive changes only;
+ * buf breaking guards this on every PR.
+ */
 export interface BacktestResult {
     backtestId: string;
     strategyId: string;
@@ -143,6 +149,12 @@ export interface BacktestResult {
     coverageGaps: CoverageGap[];
     /** per-bar debug data for every simulated symbol (feature 064) */
     diagnostics: SymbolDiagnostics[];
+    /**
+     * Effective starting capital the engine seeded the simulation with (the 100k default
+     * when the request omitted it) — required to rebuild the equity curve for a
+     * historical run (feature 068).
+     */
+    initialCapital: number;
 }
 export interface TradeRecord {
     symbol: string;
@@ -173,6 +185,11 @@ export interface BarDiagnostic {
     signalScore: number;
     conviction: number;
     action: BarAction;
+    /**
+     * Portfolio value (cash + position * close) after this bar — the per-bar equity
+     * point the time-based equity curve plots (feature 068).
+     */
+    equity: number;
 }
 export interface BarDiagnostic_IndicatorsEntry {
     key: string;
@@ -246,6 +263,9 @@ export interface BacktestRunSummary {
 }
 export interface ListBacktestsResponse {
     runs: BacktestRunSummary[];
+}
+export interface GetBacktestRequest {
+    backtestId: string;
 }
 export interface ListStrategiesRequest {
     page?: PageRequest | undefined;
@@ -390,6 +410,7 @@ export declare const StrategyReport: MessageFns<StrategyReport>;
 export declare const ListBacktestsRequest: MessageFns<ListBacktestsRequest>;
 export declare const BacktestRunSummary: MessageFns<BacktestRunSummary>;
 export declare const ListBacktestsResponse: MessageFns<ListBacktestsResponse>;
+export declare const GetBacktestRequest: MessageFns<GetBacktestRequest>;
 export declare const ListStrategiesRequest: MessageFns<ListStrategiesRequest>;
 export declare const ListStrategiesResponse: MessageFns<ListStrategiesResponse>;
 export declare const GetStrategyReportRequest: MessageFns<GetStrategyReportRequest>;
@@ -457,6 +478,20 @@ export declare const AnalysisServiceService: {
         readonly responseSerialize: (value: ListBacktestsResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => ListBacktestsResponse;
     };
+    /**
+     * Fetch the persisted full result (trades, per-bar equity, diagnostics) of a past run
+     * (feature 068). NOT_FOUND when the run has no persisted detail (legacy/evicted/
+     * INSUFFICIENT_DATA runs).
+     */
+    readonly getBacktest: {
+        readonly path: "/xstockstrat.analysis.v1.AnalysisService/GetBacktest";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetBacktestRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetBacktestRequest;
+        readonly responseSerialize: (value: BacktestResult) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => BacktestResult;
+    };
     readonly manageStrategy: {
         readonly path: "/xstockstrat.analysis.v1.AnalysisService/ManageStrategy";
         readonly requestStream: false;
@@ -521,6 +556,12 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
     getStrategyReport: handleUnaryCall<GetStrategyReportRequest, StrategyReport>;
     /** List past backtest runs (summary metrics + earned score) for a strategy, newest first. */
     listBacktests: handleUnaryCall<ListBacktestsRequest, ListBacktestsResponse>;
+    /**
+     * Fetch the persisted full result (trades, per-bar equity, diagnostics) of a past run
+     * (feature 068). NOT_FOUND when the run has no persisted detail (legacy/evicted/
+     * INSUFFICIENT_DATA runs).
+     */
+    getBacktest: handleUnaryCall<GetBacktestRequest, BacktestResult>;
     manageStrategy: handleUnaryCall<ManageStrategyRequest, StrategyDefinition>;
     getStrategy: handleUnaryCall<GetStrategyRequest, StrategyDefinition>;
     listStrategyDefinitions: handleUnaryCall<ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse>;
@@ -547,6 +588,14 @@ export interface AnalysisServiceClient extends Client {
     listBacktests(request: ListBacktestsRequest, callback: (error: ServiceError | null, response: ListBacktestsResponse) => void): ClientUnaryCall;
     listBacktests(request: ListBacktestsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListBacktestsResponse) => void): ClientUnaryCall;
     listBacktests(request: ListBacktestsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListBacktestsResponse) => void): ClientUnaryCall;
+    /**
+     * Fetch the persisted full result (trades, per-bar equity, diagnostics) of a past run
+     * (feature 068). NOT_FOUND when the run has no persisted detail (legacy/evicted/
+     * INSUFFICIENT_DATA runs).
+     */
+    getBacktest(request: GetBacktestRequest, callback: (error: ServiceError | null, response: BacktestResult) => void): ClientUnaryCall;
+    getBacktest(request: GetBacktestRequest, metadata: Metadata, callback: (error: ServiceError | null, response: BacktestResult) => void): ClientUnaryCall;
+    getBacktest(request: GetBacktestRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: BacktestResult) => void): ClientUnaryCall;
     manageStrategy(request: ManageStrategyRequest, callback: (error: ServiceError | null, response: StrategyDefinition) => void): ClientUnaryCall;
     manageStrategy(request: ManageStrategyRequest, metadata: Metadata, callback: (error: ServiceError | null, response: StrategyDefinition) => void): ClientUnaryCall;
     manageStrategy(request: ManageStrategyRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: StrategyDefinition) => void): ClientUnaryCall;

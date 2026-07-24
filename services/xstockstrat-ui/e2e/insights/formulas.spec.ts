@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
+import { FORMULAS } from '../fixtures';
 
 /**
  * E2E smoke tests for the formula management UI (`/insights/formulas`).
@@ -8,11 +9,6 @@ import { addAuthCookie } from '../helpers/auth';
  * the ListFormulas BFF call is stubbed at the browser level with page.route().
  * An auth cookie is injected so the middleware does not redirect to /auth/login.
  */
-
-const MOCK_FORMULAS = [
-  { formulaId: 'f-001', name: 'RSI Divergence', author: 'test-user-001', isPublic: true },
-  { formulaId: 'f-002', name: 'MACD Cross', author: 'test-user-001', isPublic: false },
-];
 
 test.describe('Formula management UI', () => {
   test('formulas list page renders returned formulas', async ({ page }) => {
@@ -23,7 +19,7 @@ test.describe('Formula management UI', () => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({ formulas: MOCK_FORMULAS, totalCount: MOCK_FORMULAS.length }),
+          body: JSON.stringify({ formulas: FORMULAS, totalCount: FORMULAS.length }),
         });
       },
     );

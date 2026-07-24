@@ -24,6 +24,7 @@ const (
 	AnalysisService_ListStrategies_FullMethodName          = "/xstockstrat.analysis.v1.AnalysisService/ListStrategies"
 	AnalysisService_GetStrategyReport_FullMethodName       = "/xstockstrat.analysis.v1.AnalysisService/GetStrategyReport"
 	AnalysisService_ListBacktests_FullMethodName           = "/xstockstrat.analysis.v1.AnalysisService/ListBacktests"
+	AnalysisService_GetBacktest_FullMethodName             = "/xstockstrat.analysis.v1.AnalysisService/GetBacktest"
 	AnalysisService_ManageStrategy_FullMethodName          = "/xstockstrat.analysis.v1.AnalysisService/ManageStrategy"
 	AnalysisService_GetStrategy_FullMethodName             = "/xstockstrat.analysis.v1.AnalysisService/GetStrategy"
 	AnalysisService_ListStrategyDefinitions_FullMethodName = "/xstockstrat.analysis.v1.AnalysisService/ListStrategyDefinitions"
@@ -42,6 +43,10 @@ type AnalysisServiceClient interface {
 	GetStrategyReport(ctx context.Context, in *GetStrategyReportRequest, opts ...grpc.CallOption) (*StrategyReport, error)
 	// List past backtest runs (summary metrics + earned score) for a strategy, newest first.
 	ListBacktests(ctx context.Context, in *ListBacktestsRequest, opts ...grpc.CallOption) (*ListBacktestsResponse, error)
+	// Fetch the persisted full result (trades, per-bar equity, diagnostics) of a past run
+	// (feature 068). NOT_FOUND when the run has no persisted detail (legacy/evicted/
+	// INSUFFICIENT_DATA runs).
+	GetBacktest(ctx context.Context, in *GetBacktestRequest, opts ...grpc.CallOption) (*BacktestResult, error)
 	ManageStrategy(ctx context.Context, in *ManageStrategyRequest, opts ...grpc.CallOption) (*StrategyDefinition, error)
 	GetStrategy(ctx context.Context, in *GetStrategyRequest, opts ...grpc.CallOption) (*StrategyDefinition, error)
 	ListStrategyDefinitions(ctx context.Context, in *ListStrategyDefinitionsRequest, opts ...grpc.CallOption) (*ListStrategyDefinitionsResponse, error)
@@ -104,6 +109,16 @@ func (c *analysisServiceClient) ListBacktests(ctx context.Context, in *ListBackt
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListBacktestsResponse)
 	err := c.cc.Invoke(ctx, AnalysisService_ListBacktests_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *analysisServiceClient) GetBacktest(ctx context.Context, in *GetBacktestRequest, opts ...grpc.CallOption) (*BacktestResult, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(BacktestResult)
+	err := c.cc.Invoke(ctx, AnalysisService_GetBacktest_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -180,6 +195,10 @@ type AnalysisServiceServer interface {
 	GetStrategyReport(context.Context, *GetStrategyReportRequest) (*StrategyReport, error)
 	// List past backtest runs (summary metrics + earned score) for a strategy, newest first.
 	ListBacktests(context.Context, *ListBacktestsRequest) (*ListBacktestsResponse, error)
+	// Fetch the persisted full result (trades, per-bar equity, diagnostics) of a past run
+	// (feature 068). NOT_FOUND when the run has no persisted detail (legacy/evicted/
+	// INSUFFICIENT_DATA runs).
+	GetBacktest(context.Context, *GetBacktestRequest) (*BacktestResult, error)
 	ManageStrategy(context.Context, *ManageStrategyRequest) (*StrategyDefinition, error)
 	GetStrategy(context.Context, *GetStrategyRequest) (*StrategyDefinition, error)
 	ListStrategyDefinitions(context.Context, *ListStrategyDefinitionsRequest) (*ListStrategyDefinitionsResponse, error)
@@ -211,6 +230,9 @@ func (UnimplementedAnalysisServiceServer) GetStrategyReport(context.Context, *Ge
 }
 func (UnimplementedAnalysisServiceServer) ListBacktests(context.Context, *ListBacktestsRequest) (*ListBacktestsResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListBacktests not implemented")
+}
+func (UnimplementedAnalysisServiceServer) GetBacktest(context.Context, *GetBacktestRequest) (*BacktestResult, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetBacktest not implemented")
 }
 func (UnimplementedAnalysisServiceServer) ManageStrategy(context.Context, *ManageStrategyRequest) (*StrategyDefinition, error) {
 	return nil, status.Error(codes.Unimplemented, "method ManageStrategy not implemented")
@@ -336,6 +358,24 @@ func _AnalysisService_ListBacktests_Handler(srv interface{}, ctx context.Context
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AnalysisServiceServer).ListBacktests(ctx, req.(*ListBacktestsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AnalysisService_GetBacktest_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetBacktestRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalysisServiceServer).GetBacktest(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalysisService_GetBacktest_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalysisServiceServer).GetBacktest(ctx, req.(*GetBacktestRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -474,6 +514,10 @@ var AnalysisService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListBacktests",
 			Handler:    _AnalysisService_ListBacktests_Handler,
+		},
+		{
+			MethodName: "GetBacktest",
+			Handler:    _AnalysisService_GetBacktest_Handler,
 		},
 		{
 			MethodName: "ManageStrategy",

@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.BacktestStatus = exports.protobufPackage = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.BacktestStatus = exports.protobufPackage = void 0;
 exports.backtestStatusFromJSON = backtestStatusFromJSON;
 exports.backtestStatusToJSON = backtestStatusToJSON;
 exports.backtestStatusToNumber = backtestStatusToNumber;
@@ -884,6 +884,7 @@ function createBaseBacktestResult() {
         status: BacktestStatus.BACKTEST_STATUS_UNSPECIFIED,
         coverageGaps: [],
         diagnostics: [],
+        initialCapital: 0,
     };
 }
 exports.BacktestResult = {
@@ -929,6 +930,9 @@ exports.BacktestResult = {
         }
         for (const v of message.diagnostics) {
             exports.SymbolDiagnostics.encode(v, writer.uint32(114).fork()).join();
+        }
+        if (message.initialCapital !== 0) {
+            writer.uint32(121).double(message.initialCapital);
         }
         return writer;
     },
@@ -1037,6 +1041,13 @@ exports.BacktestResult = {
                     message.diagnostics.push(exports.SymbolDiagnostics.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 15: {
+                    if (tag !== 121) {
+                        break;
+                    }
+                    message.initialCapital = reader.double();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1109,6 +1120,11 @@ exports.BacktestResult = {
             diagnostics: globalThis.Array.isArray(object?.diagnostics)
                 ? object.diagnostics.map((e) => exports.SymbolDiagnostics.fromJSON(e))
                 : [],
+            initialCapital: isSet(object.initialCapital)
+                ? globalThis.Number(object.initialCapital)
+                : isSet(object.initial_capital)
+                    ? globalThis.Number(object.initial_capital)
+                    : 0,
         };
     },
     toJSON(message) {
@@ -1155,6 +1171,9 @@ exports.BacktestResult = {
         if (message.diagnostics?.length) {
             obj.diagnostics = message.diagnostics.map((e) => exports.SymbolDiagnostics.toJSON(e));
         }
+        if (message.initialCapital !== 0) {
+            obj.initialCapital = message.initialCapital;
+        }
         return obj;
     },
     create(base) {
@@ -1176,6 +1195,7 @@ exports.BacktestResult = {
         message.status = object.status ?? BacktestStatus.BACKTEST_STATUS_UNSPECIFIED;
         message.coverageGaps = object.coverageGaps?.map((e) => exports.CoverageGap.fromPartial(e)) || [];
         message.diagnostics = object.diagnostics?.map((e) => exports.SymbolDiagnostics.fromPartial(e)) || [];
+        message.initialCapital = object.initialCapital ?? 0;
         return message;
     },
 };
@@ -1378,6 +1398,7 @@ function createBaseBarDiagnostic() {
         signalScore: 0,
         conviction: 0,
         action: BarAction.BAR_ACTION_UNSPECIFIED,
+        equity: 0,
     };
 }
 exports.BarDiagnostic = {
@@ -1423,6 +1444,9 @@ exports.BarDiagnostic = {
         }
         if (message.action !== BarAction.BAR_ACTION_UNSPECIFIED) {
             writer.uint32(112).int32(barActionToNumber(message.action));
+        }
+        if (message.equity !== 0) {
+            writer.uint32(121).double(message.equity);
         }
         return writer;
     },
@@ -1534,6 +1558,13 @@ exports.BarDiagnostic = {
                     message.action = barActionFromJSON(reader.int32());
                     continue;
                 }
+                case 15: {
+                    if (tag !== 121) {
+                        break;
+                    }
+                    message.equity = reader.double();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1571,6 +1602,7 @@ exports.BarDiagnostic = {
                     : 0,
             conviction: isSet(object.conviction) ? globalThis.Number(object.conviction) : 0,
             action: isSet(object.action) ? barActionFromJSON(object.action) : BarAction.BAR_ACTION_UNSPECIFIED,
+            equity: isSet(object.equity) ? globalThis.Number(object.equity) : 0,
         };
     },
     toJSON(message) {
@@ -1623,6 +1655,9 @@ exports.BarDiagnostic = {
         if (message.action !== BarAction.BAR_ACTION_UNSPECIFIED) {
             obj.action = barActionToJSON(message.action);
         }
+        if (message.equity !== 0) {
+            obj.equity = message.equity;
+        }
         return obj;
     },
     create(base) {
@@ -1649,6 +1684,7 @@ exports.BarDiagnostic = {
         message.signalScore = object.signalScore ?? 0;
         message.conviction = object.conviction ?? 0;
         message.action = object.action ?? BarAction.BAR_ACTION_UNSPECIFIED;
+        message.equity = object.equity ?? 0;
         return message;
     },
 };
@@ -2765,6 +2801,63 @@ exports.ListBacktestsResponse = {
     fromPartial(object) {
         const message = createBaseListBacktestsResponse();
         message.runs = object.runs?.map((e) => exports.BacktestRunSummary.fromPartial(e)) || [];
+        return message;
+    },
+};
+function createBaseGetBacktestRequest() {
+    return { backtestId: "" };
+}
+exports.GetBacktestRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.backtestId !== "") {
+            writer.uint32(10).string(message.backtestId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetBacktestRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.backtestId = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            backtestId: isSet(object.backtestId)
+                ? globalThis.String(object.backtestId)
+                : isSet(object.backtest_id)
+                    ? globalThis.String(object.backtest_id)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.backtestId !== "") {
+            obj.backtestId = message.backtestId;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetBacktestRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetBacktestRequest();
+        message.backtestId = object.backtestId ?? "";
         return message;
     },
 };
@@ -4806,6 +4899,20 @@ exports.AnalysisServiceService = {
         requestDeserialize: (value) => exports.ListBacktestsRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.ListBacktestsResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.ListBacktestsResponse.decode(value),
+    },
+    /**
+     * Fetch the persisted full result (trades, per-bar equity, diagnostics) of a past run
+     * (feature 068). NOT_FOUND when the run has no persisted detail (legacy/evicted/
+     * INSUFFICIENT_DATA runs).
+     */
+    getBacktest: {
+        path: "/xstockstrat.analysis.v1.AnalysisService/GetBacktest",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.GetBacktestRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.GetBacktestRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.BacktestResult.encode(value).finish()),
+        responseDeserialize: (value) => exports.BacktestResult.decode(value),
     },
     manageStrategy: {
         path: "/xstockstrat.analysis.v1.AnalysisService/ManageStrategy",

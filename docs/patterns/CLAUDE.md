@@ -15,3 +15,4 @@ Reusable implementation patterns for new services. Each file is a self-contained
 | `ci-overview.md` | Debugging CI failures, checking coverage thresholds, understanding deploys |
 | `docker-build.md` | Docker build patterns, service healthchecks, `WAIT_FOR` entrypoint, `depends_on` conditions |
 | `context-engineering.md` | Adding or refactoring a skill, subagent (`.claude/agents/`), or `CLAUDE.md` — subagent delegation, progressive disclosure, and the structured `context.md` memory schema |
+| `test-data-inventory.md` | Adding or modifying `xstockstrat-ui` tests that use mocked/dummy domain data — canonical fixtures (`e2e/fixtures/`), the `INVENTORY.md` catalog, the `/test-data` skill, Constitution C-12 |

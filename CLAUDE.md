@@ -54,6 +54,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 | OTel setup, env vars, per-language modules | `docs/patterns/observability.md` |
 | CI job matrix, coverage thresholds, deploys | `docs/patterns/ci-overview.md` |
 | DRY guard rail (no repeated constants/literals/types/helpers) — pre-commit hook, jscpd tool, `dry-reviewer` subagent | `docs/patterns/dry-guard-rail.md` |
+| Frontend test mocks / dummy data — centralized fixture inventory, `INVENTORY.md` catalog, `/test-data` skill, Constitution C-12 | `docs/patterns/test-data-inventory.md` |
 | Proto / buf changes | `docs/runbooks/proto-versioning.md` |
 | Provisioning the codegen toolchain on a host (Docker unavailable / GitHub-releases egress blocked) | `docs/runbooks/codegen-toolchain-host-setup.md` |
 | Adding a data source (Polygon, Tiingo, etc.) | `docs/runbooks/add-data-source.md` |
@@ -181,6 +182,15 @@ Recently added keys (feature 065 — cross-stock score derivation, owned by `xst
 | `analysis.scoring.shrinkage_days` | int | `250` | Empirical-Bayes shrinkage pseudo-count `k` (trading days) toward the 0.5 prior; perfect evidence earns an A once total evidence `W ≥ 1.5·k`. `get_int` zero-trap: `0` reads as the default. |
 | `analysis.scoring.min_evidence_symbols` | int | `3` | Below this many distinct evidence symbols the grade is flagged `provisional`. |
 | `analysis.scoring.min_evidence_days` | int | `500` | Below this many total evidence trading-days the grade is flagged `provisional`. |
+
+Recently added keys (feature 068 — backtest results visualization, owned by `xstockstrat-analysis`).
+Every OK `RunBacktest` persists its full serialized result (`analysis.backtest_details`, migration
+`008`) so past runs stay visualizable via the `GetBacktest` RPC; eviction keeps the newest N detailed
+runs per strategy (summary rows in `backtest_runs` are never trimmed):
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.backtest.detail_retention_per_strategy` | int | `20` | Max persisted detailed runs per strategy; count-based eviction at insert, clamped ≥1. `get_int` zero-trap: `0` reads as the default. |
 
 ---
 
@@ -482,6 +492,8 @@ SDD skills: `/sdd-story` → `/sdd-review product-spec` → `/sdd-design` (recon
 | DRY duplication check (jscpd) | `scripts/check-duplication.sh`, `.jscpd.json` |
 | DRY pre-commit hook | `.husky/pre-commit` |
 | DRY semantic reviewer subagent | `.claude/agents/dry-reviewer.md` |
+| Frontend test-data inventory (fixtures + catalog) | `services/xstockstrat-ui/e2e/fixtures/`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` |
+| Test-data steward skill | `.claude/skills/test-data/SKILL.md` |
 | CI workflow | `.github/workflows/ci.yml` |
 | Dev deploy workflow | `.github/workflows/deploy-dev.yml` |
 | Prod deploy workflow | `.github/workflows/deploy-prod.yml` |

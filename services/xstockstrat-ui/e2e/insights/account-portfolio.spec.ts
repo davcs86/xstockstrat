@@ -1,29 +1,20 @@
 import { test, expect, type Page } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
-
-const MOCK_ACCOUNTS = [
-  { id: 'alpaca-default', displayName: 'Alpaca Paper', brokerType: 1, isPaper: true, isActive: true },
-  { id: 'ibkr-001', displayName: 'IBKR Paper', brokerType: 2, isPaper: true, isActive: true },
-];
-
-const MOCK_PORTFOLIOS = [
-  { portfolioId: 'port-001', accountId: 'alpaca-default', equity: '50000.00', cash: '20000.00', dayPnl: '150.00', dayPnlPct: '0.003', totalPnl: '1500.00', positions: [] },
-  { portfolioId: 'port-002', accountId: 'ibkr-001', equity: '30000.00', cash: '10000.00', dayPnl: '-50.00', dayPnlPct: '-0.0017', totalPnl: '800.00', positions: [] },
-];
+import { BROKER_ACCOUNTS, PORTFOLIOS } from '../fixtures';
 
 async function mockAccountsAndPortfolios(page: Page): Promise<void> {
   await page.route('**/xstockstrat.trading.v1.TradingService/ListBrokerAccounts', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ accounts: MOCK_ACCOUNTS }),
+      body: JSON.stringify({ accounts: BROKER_ACCOUNTS }),
     });
   });
   await page.route('**/xstockstrat.portfolio.v1.PortfolioService/ListPortfolios', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ portfolios: MOCK_PORTFOLIOS }),
+      body: JSON.stringify({ portfolios: PORTFOLIOS }),
     });
   });
 }

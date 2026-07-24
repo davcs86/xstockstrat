@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
+import { BROKER_ACCOUNT_ALPACA } from '../fixtures';
 
 /**
  * E2E tests for the /trader/orders management page (feature 055).
@@ -12,10 +13,66 @@ import { addAuthCookie } from '../helpers/auth';
  */
 
 const ORDERS = [
-  { orderId: 'ord-new', symbol: 'AAPL', side: 1, orderType: 2, status: 1, qty: 10, filledQty: 0, limitPrice: 150, stopPrice: 0, filledAvgPrice: 0, timeInForce: 'day', accountId: 'alpaca-default', brokerType: 1 },
-  { orderId: 'ord-partial', symbol: 'MSFT', side: 1, orderType: 2, status: 2, qty: 20, filledQty: 5, limitPrice: 300, stopPrice: 0, filledAvgPrice: 299, timeInForce: 'day', accountId: 'alpaca-default', brokerType: 1 },
-  { orderId: 'ord-filled', symbol: 'TSLA', side: 2, orderType: 1, status: 3, qty: 3, filledQty: 3, limitPrice: 0, stopPrice: 0, filledAvgPrice: 250, timeInForce: 'day', accountId: 'alpaca-default', brokerType: 1 },
-  { orderId: 'ord-pending', symbol: 'NVDA', side: 1, orderType: 1, status: 7, qty: 1000, filledQty: 0, limitPrice: 0, stopPrice: 0, filledAvgPrice: 0, timeInForce: 'day', accountId: 'alpaca-default', brokerType: 1 },
+  {
+    orderId: 'ord-new',
+    symbol: 'AAPL',
+    side: 1,
+    orderType: 2,
+    status: 1,
+    qty: 10,
+    filledQty: 0,
+    limitPrice: 150,
+    stopPrice: 0,
+    filledAvgPrice: 0,
+    timeInForce: 'day',
+    accountId: 'alpaca-default',
+    brokerType: 1,
+  },
+  {
+    orderId: 'ord-partial',
+    symbol: 'MSFT',
+    side: 1,
+    orderType: 2,
+    status: 2,
+    qty: 20,
+    filledQty: 5,
+    limitPrice: 300,
+    stopPrice: 0,
+    filledAvgPrice: 299,
+    timeInForce: 'day',
+    accountId: 'alpaca-default',
+    brokerType: 1,
+  },
+  {
+    orderId: 'ord-filled',
+    symbol: 'TSLA',
+    side: 2,
+    orderType: 1,
+    status: 3,
+    qty: 3,
+    filledQty: 3,
+    limitPrice: 0,
+    stopPrice: 0,
+    filledAvgPrice: 250,
+    timeInForce: 'day',
+    accountId: 'alpaca-default',
+    brokerType: 1,
+  },
+  {
+    orderId: 'ord-pending',
+    symbol: 'NVDA',
+    side: 1,
+    orderType: 1,
+    status: 7,
+    qty: 1000,
+    filledQty: 0,
+    limitPrice: 0,
+    stopPrice: 0,
+    filledAvgPrice: 0,
+    timeInForce: 'day',
+    accountId: 'alpaca-default',
+    brokerType: 1,
+  },
 ];
 
 test.describe('Orders management page', () => {
@@ -28,22 +85,26 @@ test.describe('Orders management page', () => {
 
     await addAuthCookie(page);
 
-    await page.route('**/xstockstrat.trading.v1.TradingService/ListBrokerAccounts', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          accounts: [{ id: 'alpaca-default', displayName: 'Alpaca Paper', brokerType: 1, isPaper: true, isActive: true }],
-        }),
-      });
-    });
+    await page.route(
+      '**/xstockstrat.trading.v1.TradingService/ListBrokerAccounts',
+      async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ accounts: [BROKER_ACCOUNT_ALPACA] }),
+        });
+      },
+    );
 
     await page.route('**/xstockstrat.trading.v1.TradingService/ListOrders', async (route) => {
       listOrdersCount += 1;
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ orders: ORDERS, page: { totalCount: ORDERS.length, nextPageToken: '' } }),
+        body: JSON.stringify({
+          orders: ORDERS,
+          page: { totalCount: ORDERS.length, nextPageToken: '' },
+        }),
       });
     });
 
@@ -65,13 +126,16 @@ test.describe('Orders management page', () => {
     });
 
     // Fail the live stream fast so useOrderUpdates stops silently.
-    await page.route('**/xstockstrat.trading.v1.TradingService/StreamOrderUpdates', async (route) => {
-      await route.fulfill({
-        status: 400,
-        contentType: 'application/connect+json',
-        body: JSON.stringify({ code: 'unavailable', message: 'no stream in test' }),
-      });
-    });
+    await page.route(
+      '**/xstockstrat.trading.v1.TradingService/StreamOrderUpdates',
+      async (route) => {
+        await route.fulfill({
+          status: 400,
+          contentType: 'application/connect+json',
+          body: JSON.stringify({ code: 'unavailable', message: 'no stream in test' }),
+        });
+      },
+    );
 
     await page.goto('/trader/orders');
   });

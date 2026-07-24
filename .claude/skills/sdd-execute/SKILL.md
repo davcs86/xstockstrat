@@ -13,7 +13,7 @@ execution, commit/PR, and the HARD CONSTRAINTS safety rails). Three `reference/`
 when their path activates — do not read them up front:
 - `reference/sequential-mode.md` — read **only** when `$ARGUMENTS[1] == sequential`.
 - `reference/deviation-handling.md` — read when a deviation or in-scope-unresolvable gap arises.
-- `reference/repo-conventions.md` — read when a step touches proto / migrations / config keys / lint / header propagation.
+- `reference/repo-conventions.md` — read when a step touches proto / migrations / config keys / lint / header propagation / frontend test mocks.
 - `reference/tdd-gate.md` — read in Phase 3 when the step is **code-bearing** (`service`/`test`), to run red-before-green.
 
 ## Arguments

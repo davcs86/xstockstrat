@@ -587,6 +587,12 @@ export interface CoverageGap {
   gap?: TimeRange | undefined;
 }
 
+/**
+ * NOTE: this message's wire bytes are persisted verbatim in analysis.backtest_details
+ * (feature 068, "store what you serve") — renumbering or retyping any field here or in
+ * BarDiagnostic silently corrupts previously persisted runs. Additive changes only;
+ * buf breaking guards this on every PR.
+ */
 export interface BacktestResult {
   backtestId: string;
   strategyId: string;
@@ -604,6 +610,12 @@ export interface BacktestResult {
   coverageGaps: CoverageGap[];
   /** per-bar debug data for every simulated symbol (feature 064) */
   diagnostics: SymbolDiagnostics[];
+  /**
+   * Effective starting capital the engine seeded the simulation with (the 100k default
+   * when the request omitted it) — required to rebuild the equity curve for a
+   * historical run (feature 068).
+   */
+  initialCapital: number;
 }
 
 export interface TradeRecord {
@@ -634,6 +646,11 @@ export interface BarDiagnostic {
   signalScore: number;
   conviction: number;
   action: BarAction;
+  /**
+   * Portfolio value (cash + position * close) after this bar — the per-bar equity
+   * point the time-based equity curve plots (feature 068).
+   */
+  equity: number;
 }
 
 export interface BarDiagnostic_IndicatorsEntry {
@@ -714,6 +731,10 @@ export interface BacktestRunSummary {
 
 export interface ListBacktestsResponse {
   runs: BacktestRunSummary[];
+}
+
+export interface GetBacktestRequest {
+  backtestId: string;
 }
 
 export interface ListStrategiesRequest {
@@ -1223,6 +1244,7 @@ function createBaseBacktestResult(): BacktestResult {
     status: BacktestStatus.BACKTEST_STATUS_UNSPECIFIED,
     coverageGaps: [],
     diagnostics: [],
+    initialCapital: 0,
   };
 }
 
@@ -1269,6 +1291,9 @@ export const BacktestResult: MessageFns<BacktestResult> = {
     }
     for (const v of message.diagnostics) {
       SymbolDiagnostics.encode(v!, writer.uint32(114).fork()).join();
+    }
+    if (message.initialCapital !== 0) {
+      writer.uint32(121).double(message.initialCapital);
     }
     return writer;
   },
@@ -1392,6 +1417,14 @@ export const BacktestResult: MessageFns<BacktestResult> = {
           message.diagnostics.push(SymbolDiagnostics.decode(reader, reader.uint32()));
           continue;
         }
+        case 15: {
+          if (tag !== 121) {
+            break;
+          }
+
+          message.initialCapital = reader.double();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1465,6 +1498,11 @@ export const BacktestResult: MessageFns<BacktestResult> = {
       diagnostics: globalThis.Array.isArray(object?.diagnostics)
         ? object.diagnostics.map((e: any) => SymbolDiagnostics.fromJSON(e))
         : [],
+      initialCapital: isSet(object.initialCapital)
+        ? globalThis.Number(object.initialCapital)
+        : isSet(object.initial_capital)
+        ? globalThis.Number(object.initial_capital)
+        : 0,
     };
   },
 
@@ -1512,6 +1550,9 @@ export const BacktestResult: MessageFns<BacktestResult> = {
     if (message.diagnostics?.length) {
       obj.diagnostics = message.diagnostics.map((e) => SymbolDiagnostics.toJSON(e));
     }
+    if (message.initialCapital !== 0) {
+      obj.initialCapital = message.initialCapital;
+    }
     return obj;
   },
 
@@ -1534,6 +1575,7 @@ export const BacktestResult: MessageFns<BacktestResult> = {
     message.status = object.status ?? BacktestStatus.BACKTEST_STATUS_UNSPECIFIED;
     message.coverageGaps = object.coverageGaps?.map((e) => CoverageGap.fromPartial(e)) || [];
     message.diagnostics = object.diagnostics?.map((e) => SymbolDiagnostics.fromPartial(e)) || [];
+    message.initialCapital = object.initialCapital ?? 0;
     return message;
   },
 };
@@ -1751,6 +1793,7 @@ function createBaseBarDiagnostic(): BarDiagnostic {
     signalScore: 0,
     conviction: 0,
     action: BarAction.BAR_ACTION_UNSPECIFIED,
+    equity: 0,
   };
 }
 
@@ -1797,6 +1840,9 @@ export const BarDiagnostic: MessageFns<BarDiagnostic> = {
     }
     if (message.action !== BarAction.BAR_ACTION_UNSPECIFIED) {
       writer.uint32(112).int32(barActionToNumber(message.action));
+    }
+    if (message.equity !== 0) {
+      writer.uint32(121).double(message.equity);
     }
     return writer;
   },
@@ -1923,6 +1969,14 @@ export const BarDiagnostic: MessageFns<BarDiagnostic> = {
           message.action = barActionFromJSON(reader.int32());
           continue;
         }
+        case 15: {
+          if (tag !== 121) {
+            break;
+          }
+
+          message.equity = reader.double();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1964,6 +2018,7 @@ export const BarDiagnostic: MessageFns<BarDiagnostic> = {
         : 0,
       conviction: isSet(object.conviction) ? globalThis.Number(object.conviction) : 0,
       action: isSet(object.action) ? barActionFromJSON(object.action) : BarAction.BAR_ACTION_UNSPECIFIED,
+      equity: isSet(object.equity) ? globalThis.Number(object.equity) : 0,
     };
   },
 
@@ -2017,6 +2072,9 @@ export const BarDiagnostic: MessageFns<BarDiagnostic> = {
     if (message.action !== BarAction.BAR_ACTION_UNSPECIFIED) {
       obj.action = barActionToJSON(message.action);
     }
+    if (message.equity !== 0) {
+      obj.equity = message.equity;
+    }
     return obj;
   },
 
@@ -2047,6 +2105,7 @@ export const BarDiagnostic: MessageFns<BarDiagnostic> = {
     message.signalScore = object.signalScore ?? 0;
     message.conviction = object.conviction ?? 0;
     message.action = object.action ?? BarAction.BAR_ACTION_UNSPECIFIED;
+    message.equity = object.equity ?? 0;
     return message;
   },
 };
@@ -3273,6 +3332,70 @@ export const ListBacktestsResponse: MessageFns<ListBacktestsResponse> = {
   fromPartial<I extends Exact<DeepPartial<ListBacktestsResponse>, I>>(object: I): ListBacktestsResponse {
     const message = createBaseListBacktestsResponse();
     message.runs = object.runs?.map((e) => BacktestRunSummary.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseGetBacktestRequest(): GetBacktestRequest {
+  return { backtestId: "" };
+}
+
+export const GetBacktestRequest: MessageFns<GetBacktestRequest> = {
+  encode(message: GetBacktestRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.backtestId !== "") {
+      writer.uint32(10).string(message.backtestId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetBacktestRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetBacktestRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.backtestId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetBacktestRequest {
+    return {
+      backtestId: isSet(object.backtestId)
+        ? globalThis.String(object.backtestId)
+        : isSet(object.backtest_id)
+        ? globalThis.String(object.backtest_id)
+        : "",
+    };
+  },
+
+  toJSON(message: GetBacktestRequest): unknown {
+    const obj: any = {};
+    if (message.backtestId !== "") {
+      obj.backtestId = message.backtestId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetBacktestRequest>, I>>(base?: I): GetBacktestRequest {
+    return GetBacktestRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetBacktestRequest>, I>>(object: I): GetBacktestRequest {
+    const message = createBaseGetBacktestRequest();
+    message.backtestId = object.backtestId ?? "";
     return message;
   },
 };
@@ -5528,6 +5651,20 @@ export const AnalysisServiceService = {
       Buffer.from(ListBacktestsResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): ListBacktestsResponse => ListBacktestsResponse.decode(value),
   },
+  /**
+   * Fetch the persisted full result (trades, per-bar equity, diagnostics) of a past run
+   * (feature 068). NOT_FOUND when the run has no persisted detail (legacy/evicted/
+   * INSUFFICIENT_DATA runs).
+   */
+  getBacktest: {
+    path: "/xstockstrat.analysis.v1.AnalysisService/GetBacktest" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetBacktestRequest): Buffer => Buffer.from(GetBacktestRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetBacktestRequest => GetBacktestRequest.decode(value),
+    responseSerialize: (value: BacktestResult): Buffer => Buffer.from(BacktestResult.encode(value).finish()),
+    responseDeserialize: (value: Buffer): BacktestResult => BacktestResult.decode(value),
+  },
   manageStrategy: {
     path: "/xstockstrat.analysis.v1.AnalysisService/ManageStrategy" as const,
     requestStream: false as const,
@@ -5602,6 +5739,12 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
   getStrategyReport: handleUnaryCall<GetStrategyReportRequest, StrategyReport>;
   /** List past backtest runs (summary metrics + earned score) for a strategy, newest first. */
   listBacktests: handleUnaryCall<ListBacktestsRequest, ListBacktestsResponse>;
+  /**
+   * Fetch the persisted full result (trades, per-bar equity, diagnostics) of a past run
+   * (feature 068). NOT_FOUND when the run has no persisted detail (legacy/evicted/
+   * INSUFFICIENT_DATA runs).
+   */
+  getBacktest: handleUnaryCall<GetBacktestRequest, BacktestResult>;
   manageStrategy: handleUnaryCall<ManageStrategyRequest, StrategyDefinition>;
   getStrategy: handleUnaryCall<GetStrategyRequest, StrategyDefinition>;
   listStrategyDefinitions: handleUnaryCall<ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse>;
@@ -5688,6 +5831,26 @@ export interface AnalysisServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: ListBacktestsResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Fetch the persisted full result (trades, per-bar equity, diagnostics) of a past run
+   * (feature 068). NOT_FOUND when the run has no persisted detail (legacy/evicted/
+   * INSUFFICIENT_DATA runs).
+   */
+  getBacktest(
+    request: GetBacktestRequest,
+    callback: (error: ServiceError | null, response: BacktestResult) => void,
+  ): ClientUnaryCall;
+  getBacktest(
+    request: GetBacktestRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: BacktestResult) => void,
+  ): ClientUnaryCall;
+  getBacktest(
+    request: GetBacktestRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: BacktestResult) => void,
   ): ClientUnaryCall;
   manageStrategy(
     request: ManageStrategyRequest,

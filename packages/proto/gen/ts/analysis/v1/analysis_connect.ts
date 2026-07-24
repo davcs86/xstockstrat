@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BacktestResult, FundamentalsScanSummary, GetStrategyReportRequest, GetStrategyRequest, ListBacktestsRequest, ListBacktestsResponse, ListStrategiesRequest, ListStrategiesResponse, ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse, ManageStrategyRequest, RunBacktestRequest, RunFundamentalsScanRequest, ScoreStrategyRequest, ScreenSymbolsRequest, ScreenSymbolsResponse, SetStrategyLiveRequest, SetStrategyLiveResponse, StrategyDefinition, StrategyReport, StrategyScore } from "./analysis_pb.js";
+import { BacktestResult, FundamentalsScanSummary, GetBacktestRequest, GetStrategyReportRequest, GetStrategyRequest, ListBacktestsRequest, ListBacktestsResponse, ListStrategiesRequest, ListStrategiesResponse, ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse, ManageStrategyRequest, RunBacktestRequest, RunFundamentalsScanRequest, ScoreStrategyRequest, ScreenSymbolsRequest, ScreenSymbolsResponse, SetStrategyLiveRequest, SetStrategyLiveResponse, StrategyDefinition, StrategyReport, StrategyScore } from "./analysis_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -57,6 +57,19 @@ export const AnalysisService = {
       name: "ListBacktests",
       I: ListBacktestsRequest,
       O: ListBacktestsResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Fetch the persisted full result (trades, per-bar equity, diagnostics) of a past run
+     * (feature 068). NOT_FOUND when the run has no persisted detail (legacy/evicted/
+     * INSUFFICIENT_DATA runs).
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.GetBacktest
+     */
+    getBacktest: {
+      name: "GetBacktest",
+      I: GetBacktestRequest,
+      O: BacktestResult,
       kind: MethodKind.Unary,
     },
     /**

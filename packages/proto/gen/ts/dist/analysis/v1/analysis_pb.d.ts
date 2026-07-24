@@ -85,6 +85,11 @@ export type CoverageGap = Message<"xstockstrat.analysis.v1.CoverageGap"> & {
  */
 export declare const CoverageGapSchema: GenMessage<CoverageGap>;
 /**
+ * NOTE: this message's wire bytes are persisted verbatim in analysis.backtest_details
+ * (feature 068, "store what you serve") — renumbering or retyping any field here or in
+ * BarDiagnostic silently corrupts previously persisted runs. Additive changes only;
+ * buf breaking guards this on every PR.
+ *
  * @generated from message xstockstrat.analysis.v1.BacktestResult
  */
 export type BacktestResult = Message<"xstockstrat.analysis.v1.BacktestResult"> & {
@@ -148,6 +153,14 @@ export type BacktestResult = Message<"xstockstrat.analysis.v1.BacktestResult"> &
      * @generated from field: repeated xstockstrat.analysis.v1.SymbolDiagnostics diagnostics = 14;
      */
     diagnostics: SymbolDiagnostics[];
+    /**
+     * Effective starting capital the engine seeded the simulation with (the 100k default
+     * when the request omitted it) — required to rebuild the equity curve for a
+     * historical run (feature 068).
+     *
+     * @generated from field: double initial_capital = 15;
+     */
+    initialCapital: number;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.BacktestResult.
@@ -262,6 +275,13 @@ export type BarDiagnostic = Message<"xstockstrat.analysis.v1.BarDiagnostic"> & {
      * @generated from field: xstockstrat.analysis.v1.BarAction action = 14;
      */
     action: BarAction;
+    /**
+     * Portfolio value (cash + position * close) after this bar — the per-bar equity
+     * point the time-based equity curve plots (feature 068).
+     *
+     * @generated from field: double equity = 15;
+     */
+    equity: number;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.BarDiagnostic.
@@ -510,6 +530,20 @@ export type ListBacktestsResponse = Message<"xstockstrat.analysis.v1.ListBacktes
  * Use `create(ListBacktestsResponseSchema)` to create a new message.
  */
 export declare const ListBacktestsResponseSchema: GenMessage<ListBacktestsResponse>;
+/**
+ * @generated from message xstockstrat.analysis.v1.GetBacktestRequest
+ */
+export type GetBacktestRequest = Message<"xstockstrat.analysis.v1.GetBacktestRequest"> & {
+    /**
+     * @generated from field: string backtest_id = 1;
+     */
+    backtestId: string;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.GetBacktestRequest.
+ * Use `create(GetBacktestRequestSchema)` to create a new message.
+ */
+export declare const GetBacktestRequestSchema: GenMessage<GetBacktestRequest>;
 /**
  * @generated from message xstockstrat.analysis.v1.ListStrategiesRequest
  */
@@ -1269,6 +1303,18 @@ export declare const AnalysisService: GenService<{
         methodKind: "unary";
         input: typeof ListBacktestsRequestSchema;
         output: typeof ListBacktestsResponseSchema;
+    };
+    /**
+     * Fetch the persisted full result (trades, per-bar equity, diagnostics) of a past run
+     * (feature 068). NOT_FOUND when the run has no persisted detail (legacy/evicted/
+     * INSUFFICIENT_DATA runs).
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.GetBacktest
+     */
+    getBacktest: {
+        methodKind: "unary";
+        input: typeof GetBacktestRequestSchema;
+        output: typeof BacktestResultSchema;
     };
     /**
      * @generated from rpc xstockstrat.analysis.v1.AnalysisService.ManageStrategy

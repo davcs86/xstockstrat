@@ -5,6 +5,7 @@ import { isNotFoundError } from '@/lib/scoreDisplay';
 type ListStrategiesResult = Awaited<ReturnType<typeof analysisClient.listStrategies>>;
 type GetStrategyReportResult = Awaited<ReturnType<typeof analysisClient.getStrategyReport>>;
 type ListBacktestsResult = Awaited<ReturnType<typeof analysisClient.listBacktests>>;
+type GetBacktestResult = Awaited<ReturnType<typeof analysisClient.getBacktest>>;
 
 export function useStrategies(): {
   data: ListStrategiesResult | undefined;
@@ -45,4 +46,22 @@ export function useBacktestHistory(strategyId: string | undefined): {
     queryFn: () => analysisClient.listBacktests({ strategyId: strategyId! }),
     enabled: !!strategyId,
   });
+}
+
+// feature 068: the persisted full result of one past run (analysis.backtest_details).
+// NOT_FOUND is the terminal legacy/evicted/insufficient state, not a transient error —
+// the page renders the "no detailed data" empty state for it (FR-6).
+export function useBacktestDetail(backtestId: string | undefined): {
+  data: GetBacktestResult | undefined;
+  isLoading: boolean;
+  error: Error | null;
+  isNotFound: boolean;
+} {
+  const query = useQuery({
+    queryKey: ['analysis-backtest-detail', backtestId],
+    queryFn: () => analysisClient.getBacktest({ backtestId: backtestId! }),
+    enabled: !!backtestId,
+    retry: (failureCount, err) => !isNotFoundError(err) && failureCount < 1,
+  });
+  return { ...query, isNotFound: isNotFoundError(query.error) };
 }

@@ -59,6 +59,11 @@ class AnalysisServiceStub(object):
                 request_serializer=analysis_dot_v1_dot_analysis__pb2.ListBacktestsRequest.SerializeToString,
                 response_deserializer=analysis_dot_v1_dot_analysis__pb2.ListBacktestsResponse.FromString,
                 _registered_method=True)
+        self.GetBacktest = channel.unary_unary(
+                '/xstockstrat.analysis.v1.AnalysisService/GetBacktest',
+                request_serializer=analysis_dot_v1_dot_analysis__pb2.GetBacktestRequest.SerializeToString,
+                response_deserializer=analysis_dot_v1_dot_analysis__pb2.BacktestResult.FromString,
+                _registered_method=True)
         self.ManageStrategy = channel.unary_unary(
                 '/xstockstrat.analysis.v1.AnalysisService/ManageStrategy',
                 request_serializer=analysis_dot_v1_dot_analysis__pb2.ManageStrategyRequest.SerializeToString,
@@ -120,6 +125,15 @@ class AnalysisServiceServicer(object):
 
     def ListBacktests(self, request, context):
         """List past backtest runs (summary metrics + earned score) for a strategy, newest first.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetBacktest(self, request, context):
+        """Fetch the persisted full result (trades, per-bar equity, diagnostics) of a past run
+        (feature 068). NOT_FOUND when the run has no persisted detail (legacy/evicted/
+        INSUFFICIENT_DATA runs).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -190,6 +204,11 @@ def add_AnalysisServiceServicer_to_server(servicer, server):
                     servicer.ListBacktests,
                     request_deserializer=analysis_dot_v1_dot_analysis__pb2.ListBacktestsRequest.FromString,
                     response_serializer=analysis_dot_v1_dot_analysis__pb2.ListBacktestsResponse.SerializeToString,
+            ),
+            'GetBacktest': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetBacktest,
+                    request_deserializer=analysis_dot_v1_dot_analysis__pb2.GetBacktestRequest.FromString,
+                    response_serializer=analysis_dot_v1_dot_analysis__pb2.BacktestResult.SerializeToString,
             ),
             'ManageStrategy': grpc.unary_unary_rpc_method_handler(
                     servicer.ManageStrategy,
@@ -357,6 +376,33 @@ class AnalysisService(object):
             '/xstockstrat.analysis.v1.AnalysisService/ListBacktests',
             analysis_dot_v1_dot_analysis__pb2.ListBacktestsRequest.SerializeToString,
             analysis_dot_v1_dot_analysis__pb2.ListBacktestsResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetBacktest(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.analysis.v1.AnalysisService/GetBacktest',
+            analysis_dot_v1_dot_analysis__pb2.GetBacktestRequest.SerializeToString,
+            analysis_dot_v1_dot_analysis__pb2.BacktestResult.FromString,
             options,
             channel_credentials,
             insecure,
