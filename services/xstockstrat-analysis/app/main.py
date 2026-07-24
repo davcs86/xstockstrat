@@ -92,6 +92,7 @@ async def serve():
             log.warning("failed to hydrate strategy scores: %s", e)
 
         from app.engine.live_loop import LiveEvaluationLoop
+        from app.repositories.strategy_cooldowns import StrategyCooldownsRepository
         from app.services.evaluator import StrategyEvaluator
 
         live_loop = LiveEvaluationLoop(
@@ -102,7 +103,16 @@ async def serve():
             notify_stub=servicer._notify,
             ledger_stub=servicer._ledger,
             evaluator=StrategyEvaluator(servicer._indicators, ()),
+            # feature 069 — reuses db_pool (F-06)
+            cooldowns_repo=StrategyCooldownsRepository(db_pool),
         )
+        # ── Hydrate persisted re-entry cooldowns (feature 069) ───────────
+        # Best-effort, alongside hydrate_scores — a failure never blocks startup.
+        try:
+            await live_loop.hydrate_cooldowns()
+            log.info("strategy cooldowns hydrated from DB")
+        except Exception as e:
+            log.warning("failed to hydrate strategy cooldowns: %s", e)
         asyncio.get_event_loop().create_task(live_loop.run_forever())
         log.info("live evaluation loop started")
 

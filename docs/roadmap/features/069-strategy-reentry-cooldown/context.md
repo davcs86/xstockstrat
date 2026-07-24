@@ -301,3 +301,21 @@ cooldown, negative → INVALID_ARGUMENT.
 - Files modified: `app/handlers/servicer.py`, `app/services/evaluator.py`,
   `tests/test_analysis_servicer.py`, `tests/test_strategy_evaluator.py`
 - Deviations: none.
+
+### Step 7 — service: live-loop durable cooldown (FR-8) + boot hydration + main.py wiring [done]
+### Step 8 — test: live-loop suppression + restart durability + parity + fixture updates [done]
+- live_loop.py: `__init__` gains `cooldowns_repo=None` + `_last_exit_at` dict; `hydrate_cooldowns()`
+  (mirrors hydrate_scores); `_eval_pair` computes bar-time + cooldown_days, suppresses in-window
+  re-entries, and on exit sets `_last_exit_at` + `await _write_cooldown(...)` BEFORE the throttle
+  check (design R1); `_write_cooldown` mirrors `_emit_ledger`'s isolated try/except (best-effort,
+  never propagates). main.py: wires `StrategyCooldownsRepository(db_pool)` inside the `db_pool is not
+  None` block + best-effort `hydrate_cooldowns()` alongside hydrate_scores.
+- Test fixture updates (same-step scope): `_make_loop` bar mock switched from `object()` to a real
+  `Timestamp`-backed marketdata Bar; `_make_loop(cooldowns_repo=None)` param added (None default keeps
+  the 5 existing call sites working).
+- TDD red→green: red — constructor rejected `cooldowns_repo`, `_last_exit_at`/`hydrate_cooldowns`
+  absent → green — 13 live-loop tests pass (in-window suppression, post-window allow, exit-persists,
+  throttled-exit still persists, write-failure swallowed, restart-durability-via-hydrate, parity).
+  Full suite `277 passed`, coverage 80.21%; ruff clean.
+- Files modified: `app/engine/live_loop.py`, `app/main.py`, `tests/test_live_loop.py`
+- Deviations: none.

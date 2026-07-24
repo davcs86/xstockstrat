@@ -27,6 +27,7 @@ from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.handlers.servicer import _row_to_strategy_definition
+from app.services.cooldown import effective_cooldown_days, is_cooldown_active
 
 log = logging.getLogger(__name__)
 
@@ -43,6 +44,7 @@ class LiveEvaluationLoop:
         notify_stub,
         ledger_stub,
         evaluator,
+        cooldowns_repo=None,
     ):
         self._cfg = config_watcher
         self._db = db_pool
@@ -53,7 +55,19 @@ class LiveEvaluationLoop:
         self._evaluator = evaluator  # 047 shared StrategyEvaluator instance
         self._last_state: dict[tuple[str, str], bool] = {}  # (strategy_id, symbol) → in_position
         self._last_alert_ts: dict[tuple[str, str], float] = {}  # throttle tracking
+        # feature 069: durable re-entry cooldown. _last_exit_at parallels _last_state; the repo
+        # (None in tests / no-DB) persists it so the cooldown survives a restart (FR-8). Default
+        # None keeps the existing 7-arg constructor callers working.
+        self._cooldowns_repo = cooldowns_repo
+        self._last_exit_at: dict[tuple[str, str], datetime] = {}
         self._lock = asyncio.Lock()
+
+    async def hydrate_cooldowns(self):
+        """Load persisted last-exit timestamps into _last_exit_at at boot (like hydrate_scores)."""
+        if self._cooldowns_repo is None:
+            return
+        for r in await self._cooldowns_repo.list_all():
+            self._last_exit_at[(r["strategy_id"], r["symbol"])] = r["last_exit_at"]
 
     async def run_forever(self):
         """Entry point — runs indefinitely. Call as asyncio.create_task(loop.run_forever())."""
@@ -124,11 +138,27 @@ class LiveEvaluationLoop:
         key = (definition.strategy_id, symbol)
         in_position = self._last_state.get(key, False)
 
+        # feature 069: re-entry cooldown inputs. Uses bar time (bars[-1]) — the SAME time-source
+        # the backtest gate feeds the shared helper — both call sites stay in parity (FR-4/C-10(b)).
+        current_bar_dt = bars[-1].time.ToDatetime(tzinfo=UTC)
+        cooldown_days = effective_cooldown_days(
+            definition.cooldown_days if definition.HasField("cooldown_days") else None,
+            self._cfg.get_int("analysis.strategy.default_cooldown_days", 31),
+        )
+
         # FR-4 edge-triggered: only act on a False→True (entry) or True→False (exit) transition.
         if not in_position and latest.entry:
+            # feature 069: suppress a re-entry inside the cooldown window (treat as steady state —
+            # no alert, no state change), exactly as the backtest gate skips the entry.
+            if is_cooldown_active(self._last_exit_at.get(key), current_bar_dt, cooldown_days):
+                return
             trigger, new_state = "entry", True
         elif in_position and latest.exit:
             trigger, new_state = "exit", False
+            # feature 069: start the cooldown clock on the exit fact, BEFORE the alert-throttle
+            # check below — the throttle governs alert cadence, not the exit fact (design R1).
+            self._last_exit_at[key] = current_bar_dt
+            await self._write_cooldown(key, current_bar_dt)
         else:
             return  # steady state — no alert
 
@@ -184,3 +214,17 @@ class LiveEvaluationLoop:
             )
         except Exception as e:
             log.warning("live_loop: ledger emit failed: %s", e)
+
+    async def _write_cooldown(self, key, ts):
+        """Best-effort durable upsert of a pair's last-exit timestamp (feature 069, FR-8).
+
+        Mirrors _emit_ledger's isolation: a DB failure is swallowed here so it can never propagate
+        out of _eval_pair and never prevents the in-memory state transition from completing (which
+        would otherwise wedge the pair "in position" until the DB recovered).
+        """
+        if self._cooldowns_repo is None:
+            return
+        try:
+            await self._cooldowns_repo.upsert(key[0], key[1], ts)
+        except Exception as e:
+            log.warning("live_loop: cooldown write failed: %s", e)

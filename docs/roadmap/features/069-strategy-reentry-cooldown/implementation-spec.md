@@ -249,7 +249,7 @@ explicit `0` → no cooldown, negative → rejected**. No test asserts the old `
 
 ### Step 7 — service: live-loop durable cooldown (FR-8) + boot hydration + main.py wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/live_loop.py` — modify
@@ -284,7 +284,7 @@ explicit `0` → no cooldown, negative → rejected**. No test asserts the old `
 
 ### Step 8 — test: live-loop suppression + restart durability + backtest/live parity + fixture updates
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_live_loop.py` — modify
