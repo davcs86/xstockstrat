@@ -367,3 +367,10 @@ agent `70 passed`/66% cov, cooldown helper 100%). Proto additive+non-breaking, s
 CI-pinned buf 1.69.0. Migration reversible (ephemeral-postgres fallback, D1). UI tsc+lint green
 (Playwright fallback, D2). Single integration PR: `claude/strategy-reentry-cooldown-sequential-c1udg7`
 → `main-dev`.
+
+## Session 2026-07-24 (CI: feature status automation)
+
+- Promotion PR #787 merged to main
+- Feature promoted and committed: 5a7904abd8a7dd3935757a00a699c2f46cae4c88
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-07-24

@@ -1,6 +1,8 @@
 # Feature: strategy-reentry-cooldown
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 5a7904abd8a7dd3935757a00a699c2f46cae4c88
+**Launched date**: 2026-07-24
 **Development Branch**: `feature/strategy-reentry-cooldown`
 **Created**: 2026-07-24
 **Last Updated**: 2026-07-24
@@ -18,6 +20,7 @@
 | 2026-07-24 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (all steps, single PR on `claude/strategy-reentry-cooldown-sequential-c1udg7` → main-dev) |
 | 2026-07-24 | `in-progress` → `code-completed` | /sdd-execute | All 13 steps done; backend suites green (analysis 277, agent 70), UI tsc+lint green (e2e authored, CI-equivalent fallback — see Deviation Log D1/D2) |
 
+| 2026-07-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #787; committed 5a7904abd8a7dd3935757a00a699c2f46cae4c88 |
 ---
 
 ## Artifacts
