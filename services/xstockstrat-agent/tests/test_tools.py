@@ -351,6 +351,30 @@ class TestManageStrategyTool:
         assert kwargs["definition"]["strategy_id"] == "sma_x"
 
     @pytest.mark.asyncio
+    async def test_forwards_cooldown_days(self):
+        """FR-10: an explicit cooldown_days (incl. 0) is forwarded; omitting it omits the key."""
+        server = _make_server()
+        with patch.object(
+            client, "manage_strategy", AsyncMock(return_value={"strategy_id": "s"})
+        ) as m:
+            # Non-zero value forwarded.
+            await _tool_fn(server, "manage_strategy")(
+                operation="register", strategy_id="s", cooldown_days=14
+            )
+            assert m.call_args.kwargs["definition"]["cooldown_days"] == 14
+
+            # Explicit 0 (no cooldown) must NOT be dropped by a truthy check.
+            await _tool_fn(server, "manage_strategy")(
+                operation="register", strategy_id="s", cooldown_days=0
+            )
+            defn = m.call_args.kwargs["definition"]
+            assert "cooldown_days" in defn and defn["cooldown_days"] == 0
+
+            # Omitted → key absent (server applies the platform default).
+            await _tool_fn(server, "manage_strategy")(operation="register", strategy_id="s")
+            assert "cooldown_days" not in m.call_args.kwargs["definition"]
+
+    @pytest.mark.asyncio
     async def test_grpc_error_reraised_as_clear_message(self):
         import grpc  # noqa: PLC0415
 

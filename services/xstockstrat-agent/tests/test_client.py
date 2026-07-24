@@ -104,6 +104,32 @@ class TestManageStrategyClient:
         assert result["strategyId"] == "x"
 
     @pytest.mark.asyncio
+    async def test_cooldown_days_round_trips_presence(self):
+        """FR-10: the client sets proto presence for 14 and 0, and leaves it unset when absent."""
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+
+        async def _constructed_definition(defn: dict):
+            resp = analysis_pb2.StrategyDefinition(strategy_id="x")
+            mock_stub = MagicMock()
+            mock_stub.ManageStrategy = AsyncMock(return_value=resp)
+            with patch("app.client.grpc") as mock_grpc:
+                mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+                with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
+                    await client.manage_strategy(operation="register", definition=defn)
+            return mock_stub.ManageStrategy.call_args.args[0].definition
+
+        base = {"strategy_id": "x", "display_name": "X", "components": []}
+
+        d14 = await _constructed_definition({**base, "cooldown_days": 14})
+        assert d14.HasField("cooldown_days") and d14.cooldown_days == 14
+
+        d0 = await _constructed_definition({**base, "cooldown_days": 0})
+        assert d0.HasField("cooldown_days") and d0.cooldown_days == 0
+
+        d_unset = await _constructed_definition(base)
+        assert not d_unset.HasField("cooldown_days")
+
+    @pytest.mark.asyncio
     async def test_unknown_operation_raises(self):
         with pytest.raises(ValueError):
             await client.manage_strategy(operation="bogus", definition={})

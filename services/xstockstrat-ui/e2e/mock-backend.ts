@@ -668,6 +668,9 @@ export async function startMockBackend(): Promise<void> {
             exitRule: '{"op":"or","conditions":[]}',
             active: true,
             liveEnabled: false,
+            // Feature 069: only this id carries a non-default cooldown (edit-prepopulation e2e);
+            // every other id leaves cooldownDays unset so the "edit unset strategy" case stays honest.
+            ...(req.strategyId === 'strat-cooldown-14' ? { cooldownDays: 14 } : {}),
           };
         },
       });

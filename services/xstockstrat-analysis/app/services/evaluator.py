@@ -304,6 +304,11 @@ def _validate_definition(definition, formula_outputs: dict | None = None) -> Non
         else:
             raise ValueError(f"Unknown ComponentKind: {comp.kind}")
 
+    # Re-entry cooldown (feature 069, FR-6): a negative value is rejected at write time. Unset never
+    # triggers this (no HasField); an explicit 0 (no-cooldown) passes.
+    if definition.HasField("cooldown_days") and definition.cooldown_days < 0:
+        raise ValueError("cooldown_days must be >= 0")
+
     # Validate rule JSON parsability and ref_name references
     for rule_name, rule_json in [
         ("entry_rule", definition.entry_rule),

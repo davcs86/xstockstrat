@@ -16,6 +16,7 @@ import json
 import logging
 import math
 import uuid
+from datetime import UTC
 
 import grpc
 import numpy as np
@@ -37,6 +38,7 @@ from app.repositories.backtest_runs import BacktestRunsRepository
 from app.repositories.strategies import StrategiesRepository
 from app.repositories.strategy_scores import StrategyScoresRepository
 from app.services import scoring
+from app.services.cooldown import effective_cooldown_days, is_cooldown_active
 from app.services.evaluator import (
     FormulaExecutionError,
     StrategyEvaluator,
@@ -850,6 +852,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         entry_time = None
         daily_equity = [equity]
 
+        # Re-entry cooldown (feature 069). Ephemeral per-RunBacktest state (FR-7): last_exit_time is
+        # a plain local, never read from or written to analysis.strategy_cooldowns, so two runs of
+        # the same strategy/symbol can never cross-contaminate. Resolved once per symbol-run.
+        cooldown_days = effective_cooldown_days(
+            definition.cooldown_days if definition.HasField("cooldown_days") else None,
+            self._cfg.get_int("analysis.strategy.default_cooldown_days", 31),
+        )
+        last_exit_time = None
+
         for i in range(1, n):
             bar = bars[i]
             price = bar.close
@@ -860,7 +871,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 else analysis_pb2.BAR_ACTION_HOLD_FLAT
             )
 
-            if position == 0.0 and decision.entry:
+            if (
+                position == 0.0
+                and decision.entry
+                and not is_cooldown_active(
+                    last_exit_time, bar.time.ToDatetime(tzinfo=UTC), cooldown_days
+                )
+            ):
                 fill_price = price * (1 + slippage)
                 shares = (equity * 0.95) / fill_price
                 cost = shares * fill_price * (1 + commission)
@@ -894,6 +911,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 position = 0.0
                 entry_price = 0.0
                 entry_time = None
+                last_exit_time = bar.time.ToDatetime(tzinfo=UTC)  # feature 069: cooldown clock
                 bar_action = analysis_pb2.BAR_ACTION_EXIT_LONG
 
             diags[i].action = bar_action

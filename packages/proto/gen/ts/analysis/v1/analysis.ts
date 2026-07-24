@@ -777,6 +777,12 @@ export interface StrategyDefinition {
   signalParams?: { [key: string]: any } | undefined;
   active: boolean;
   liveEnabled: boolean;
+  /**
+   * Per-symbol re-entry cooldown in calendar days (feature 069). optional = explicit presence:
+   * unset → platform default (analysis.strategy.default_cooldown_days); explicit 0 → no cooldown
+   * (immediate re-entry allowed); negative → rejected at write time (INVALID_ARGUMENT).
+   */
+  cooldownDays?: number | undefined;
 }
 
 export interface ManageStrategyRequest {
@@ -3871,6 +3877,7 @@ function createBaseStrategyDefinition(): StrategyDefinition {
     signalParams: undefined,
     active: false,
     liveEnabled: false,
+    cooldownDays: undefined,
   };
 }
 
@@ -3899,6 +3906,9 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
     }
     if (message.liveEnabled !== false) {
       writer.uint32(64).bool(message.liveEnabled);
+    }
+    if (message.cooldownDays !== undefined) {
+      writer.uint32(72).int32(message.cooldownDays);
     }
     return writer;
   },
@@ -3974,6 +3984,14 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
           message.liveEnabled = reader.bool();
           continue;
         }
+        case 9: {
+          if (tag !== 72) {
+            break;
+          }
+
+          message.cooldownDays = reader.int32();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -4019,6 +4037,11 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
         : isSet(object.live_enabled)
         ? globalThis.Boolean(object.live_enabled)
         : false,
+      cooldownDays: isSet(object.cooldownDays)
+        ? globalThis.Number(object.cooldownDays)
+        : isSet(object.cooldown_days)
+        ? globalThis.Number(object.cooldown_days)
+        : undefined,
     };
   },
 
@@ -4048,6 +4071,9 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
     if (message.liveEnabled !== false) {
       obj.liveEnabled = message.liveEnabled;
     }
+    if (message.cooldownDays !== undefined) {
+      obj.cooldownDays = Math.round(message.cooldownDays);
+    }
     return obj;
   },
 
@@ -4064,6 +4090,7 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
     message.signalParams = object.signalParams ?? undefined;
     message.active = object.active ?? false;
     message.liveEnabled = object.liveEnabled ?? false;
+    message.cooldownDays = object.cooldownDays ?? undefined;
     return message;
   },
 };

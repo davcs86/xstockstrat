@@ -1,6 +1,6 @@
 # Implementation Spec: strategy-reentry-cooldown
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-07-24
 **Feature**: `docs/roadmap/features/069-strategy-reentry-cooldown/feature.md`
 **Total Steps**: 13
@@ -44,7 +44,7 @@ explicit `0` → no cooldown, negative → rejected**. No test asserts the old `
 
 ### Step 1 — proto: add `cooldown_days` field + regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -79,7 +79,7 @@ explicit `0` → no cooldown, negative → rejected**. No test asserts the old `
 
 ### Step 2 — migration: `009_strategy_cooldowns`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/009_strategy_cooldowns.up.sql` — create
@@ -122,7 +122,7 @@ explicit `0` → no cooldown, negative → rejected**. No test asserts the old `
 
 ### Step 3 — service: shared cooldown gate helper + `StrategyCooldownsRepository`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/cooldown.py` — create
@@ -157,7 +157,7 @@ explicit `0` → no cooldown, negative → rejected**. No test asserts the old `
 
 ### Step 4 — test: cooldown helper unit tests (incl. tz-awareness guard)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_cooldown.py` — create
@@ -184,7 +184,7 @@ explicit `0` → no cooldown, negative → rejected**. No test asserts the old `
 
 ### Step 5 — service: backtest cooldown gate (FR-7) + write-time negative validation (FR-6) + config default (FR-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -220,7 +220,7 @@ explicit `0` → no cooldown, negative → rejected**. No test asserts the old `
 
 ### Step 6 — test: backtest whipsaw suppression + negative-reject + reproducibility-isolation + fingerprint change
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -249,7 +249,7 @@ explicit `0` → no cooldown, negative → rejected**. No test asserts the old `
 
 ### Step 7 — service: live-loop durable cooldown (FR-8) + boot hydration + main.py wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/live_loop.py` — modify
@@ -284,7 +284,7 @@ explicit `0` → no cooldown, negative → rejected**. No test asserts the old `
 
 ### Step 8 — test: live-loop suppression + restart durability + backtest/live parity + fixture updates
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_live_loop.py` — modify
@@ -312,7 +312,7 @@ explicit `0` → no cooldown, negative → rejected**. No test asserts the old `
 
 ### Step 9 — service: `manage_strategy` MCP tool + client `cooldown_days` (FR-10)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -342,7 +342,7 @@ explicit `0` → no cooldown, negative → rejected**. No test asserts the old `
 
 ### Step 10 — test: agent `manage_strategy` cooldown round-trip
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify
@@ -369,7 +369,7 @@ explicit `0` → no cooldown, negative → rejected**. No test asserts the old `
 
 ### Step 11 — service: `StrategyWizard` cooldown input (FR-11)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/StrategyWizard.tsx` — modify
@@ -399,7 +399,7 @@ explicit `0` → no cooldown, negative → rejected**. No test asserts the old `
 
 ### Step 12 — test: `StrategyWizard` cooldown Playwright e2e (AC-11)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/strategy-authoring.spec.ts` — modify
@@ -429,7 +429,7 @@ explicit `0` → no cooldown, negative → rejected**. No test asserts the old `
 
 ### Step 13 — docs: register `analysis.strategy.default_cooldown_days` (AC-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` (config governance)
 **Files**:
 - `docs/patterns/config-governance.md` — modify
@@ -457,4 +457,24 @@ explicit `0` → no cooldown, negative → rejected**. No test asserts the old `
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### D1 — Step 2 migration verified on a local ephemeral postgres (CI-equivalent fallback)
+- **What**: the spec's `**Verification**` uses `./scripts/db-migrate.sh` (golang-migrate). Neither
+  `migrate` nor the TimescaleDB compose container was available in the execution environment.
+- **Disposition**: CI-equivalent fallback (sequential-mode). Applied `009_*.up.sql` → `.down.sql` →
+  re-`up` against a throwaway host `initdb` postgres 16 cluster (run as an unprivileged user), asserting
+  the composite PK `(strategy_id, symbol)`, `last_exit_at TIMESTAMPTZ NOT NULL`, clean down, and
+  idempotent re-up. Proves the same reversibility the runbook check does. No SQL change.
+
+### D2 — Step 12 Playwright e2e verified via `tsc --noEmit` + `lint` (CI-equivalent fallback)
+- **What**: the spec's `**Verification**` runs `pnpm test:e2e -- e2e/insights/strategy-authoring.spec.ts`.
+  The Playwright harness could not complete in this environment: `next dev` cold-start route compilation
+  aborted every navigation (`net::ERR_ABORTED`) past the 10s local test timeout, and the CI-mode
+  `next build` (production bundle) did not finish within a 13-minute window.
+- **Disposition**: CI-equivalent fallback (sequential-mode — "Playwright dev-server harness times out →
+  `tsc --noEmit` + `lint`"). The wizard, spec, and mock all type-check (`tsc --noEmit` exit 0) and lint
+  clean. During the first dev-mode run the harness DID compile and drive the wizard through the test
+  bodies (which surfaced — and led to fixing — a `page.route` glob bug and a hyphenated-edit-id issue),
+  so the e2e is authored correctly and will run in CI, where the widened 30s/240s timeouts apply. No
+  behavioral change; the spec/tests are unchanged from their authored form.
+
+_No spec step body was modified; all divergence is confined to verification tooling._

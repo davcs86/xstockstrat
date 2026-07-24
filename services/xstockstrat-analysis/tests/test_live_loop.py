@@ -7,18 +7,31 @@ throttling (FR-3), and per-(strategy, symbol) isolation (FR-8).
 
 import inspect
 import time
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from gen.analysis.v1 import analysis_pb2
+from gen.marketdata.v1 import marketdata_pb2
 
 import app.engine.live_loop as live_loop_module
 from app.engine.live_loop import LiveEvaluationLoop
 from app.services.evaluator import FormulaExecutionError
 
+# Fixed default bar time; feature 069 made _eval_pair read bars[-1].time, so the mock bar must
+# carry a real, tz-aware protobuf Timestamp (an object() stub has no .time).
+_DEFAULT_BAR_DT = datetime(2026, 1, 1, tzinfo=UTC)
 
-def _make_loop() -> LiveEvaluationLoop:
+
+def _bar_at(dt: datetime):
+    """A real marketdata Bar whose ``time`` is ``dt`` (tz-aware)."""
+    bar = marketdata_pb2.Bar(symbol="AAPL", close=100.0)
+    bar.time.FromDatetime(dt)
+    return bar
+
+
+def _make_loop(cooldowns_repo=None) -> LiveEvaluationLoop:
     cfg = MagicMock()
     cfg.get_int = MagicMock(side_effect=lambda key, default=0: default)
     loop = LiveEvaluationLoop(
@@ -29,8 +42,11 @@ def _make_loop() -> LiveEvaluationLoop:
         notify_stub=AsyncMock(),
         ledger_stub=AsyncMock(),
         evaluator=AsyncMock(),
+        cooldowns_repo=cooldowns_repo,
     )
-    loop._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=[object()]))
+    loop._marketdata.GetBars = AsyncMock(
+        return_value=SimpleNamespace(bars=[_bar_at(_DEFAULT_BAR_DT)])
+    )
     loop._notify.EmitAlert = AsyncMock(return_value=MagicMock())
     loop._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
     return loop
@@ -164,3 +180,117 @@ class TestLiveEvaluationLoopIsolation:
         assert ("s1", "AAA") not in loop._last_state
         assert loop._last_state.get(("s1", "BBB")) is True
         assert loop._notify.EmitAlert.await_count == 1
+
+
+class TestLiveEvaluationLoopCooldown:
+    """Feature 069 — durable re-entry cooldown on the live path (FR-8) + backtest/live parity."""
+
+    @pytest.mark.asyncio
+    async def test_entry_suppressed_inside_cooldown_window(self):
+        """AC-4: an in-window re-entry emits no alert / no state flip; after the window it does."""
+        loop = _make_loop()
+        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", display_name="S1")  # unset → 31
+        key = ("s1", "AAPL")
+        last_exit = datetime(2026, 3, 1, tzinfo=UTC)
+        loop._last_exit_at[key] = last_exit
+        loop._evaluator.evaluate = AsyncMock(return_value=[_decision(True, False)])
+
+        # Bar 5 days after the exit → inside the 31-day window → suppressed.
+        loop._marketdata.GetBars = AsyncMock(
+            return_value=SimpleNamespace(bars=[_bar_at(last_exit + timedelta(days=5))])
+        )
+        await loop._eval_pair(defn, "AAPL", throttle=0)
+        loop._notify.EmitAlert.assert_not_called()
+        assert key not in loop._last_state  # no transition recorded
+
+        # Bar 35 days after the exit → window elapsed → entry allowed.
+        loop._marketdata.GetBars = AsyncMock(
+            return_value=SimpleNamespace(bars=[_bar_at(last_exit + timedelta(days=35))])
+        )
+        await loop._eval_pair(defn, "AAPL", throttle=0)
+        assert loop._notify.EmitAlert.await_count == 1
+        assert loop._last_state[key] is True
+
+    @pytest.mark.asyncio
+    async def test_exit_persists_cooldown_via_repo(self):
+        """An exit upserts the last-exit timestamp to the durable repo (bar time)."""
+        repo = AsyncMock()
+        loop = _make_loop(cooldowns_repo=repo)
+        defn = analysis_pb2.StrategyDefinition(strategy_id="s1")
+        loop._last_state[("s1", "AAPL")] = True  # currently in position
+        loop._evaluator.evaluate = AsyncMock(return_value=[_decision(False, True)])
+        bar_dt = datetime(2026, 4, 1, tzinfo=UTC)
+        loop._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=[_bar_at(bar_dt)]))
+
+        await loop._eval_pair(defn, "AAPL", throttle=0)
+        repo.upsert.assert_awaited_once()
+        args = repo.upsert.await_args.args
+        assert args[0] == "s1" and args[1] == "AAPL" and args[2] == bar_dt
+
+    @pytest.mark.asyncio
+    async def test_exit_persists_even_when_alert_throttled(self):
+        """R1: the cooldown clock starts on the exit fact even when the alert is throttled."""
+        repo = AsyncMock()
+        loop = _make_loop(cooldowns_repo=repo)
+        defn = analysis_pb2.StrategyDefinition(strategy_id="s1")
+        loop._last_state[("s1", "AAPL")] = True
+        loop._last_alert_ts[("s1", "AAPL")] = time.monotonic()  # force throttle
+        loop._evaluator.evaluate = AsyncMock(return_value=[_decision(False, True)])
+        bar_dt = datetime(2026, 4, 1, tzinfo=UTC)
+        loop._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=[_bar_at(bar_dt)]))
+
+        await loop._eval_pair(defn, "AAPL", throttle=10_000)
+        loop._notify.EmitAlert.assert_not_called()  # alert throttled
+        repo.upsert.assert_awaited_once()  # but the cooldown still persisted
+
+    @pytest.mark.asyncio
+    async def test_write_cooldown_failure_never_propagates(self):
+        """FR-8 best-effort: a DB write failure is swallowed and state still advances."""
+        repo = AsyncMock()
+        repo.upsert = AsyncMock(side_effect=RuntimeError("db down"))
+        loop = _make_loop(cooldowns_repo=repo)
+        defn = analysis_pb2.StrategyDefinition(strategy_id="s1")
+        loop._last_state[("s1", "AAPL")] = True
+        loop._evaluator.evaluate = AsyncMock(return_value=[_decision(False, True)])
+        loop._marketdata.GetBars = AsyncMock(
+            return_value=SimpleNamespace(bars=[_bar_at(datetime(2026, 4, 1, tzinfo=UTC))])
+        )
+        await loop._eval_pair(defn, "AAPL", throttle=0)  # must not raise
+        assert loop._last_state[("s1", "AAPL")] is False  # state still flipped
+
+    @pytest.mark.asyncio
+    async def test_restart_durability_via_hydrate(self):
+        """AC-7: a fresh loop hydrated from the repo still suppresses an in-window re-entry."""
+        last_exit = datetime(2026, 3, 1, tzinfo=UTC)
+        repo = AsyncMock()
+        repo.list_all = AsyncMock(
+            return_value=[{"strategy_id": "s1", "symbol": "AAPL", "last_exit_at": last_exit}]
+        )
+        loop = _make_loop(cooldowns_repo=repo)  # simulates a restart — in-memory state empty
+        await loop.hydrate_cooldowns()
+        assert loop._last_exit_at[("s1", "AAPL")] == last_exit
+
+        defn = analysis_pb2.StrategyDefinition(strategy_id="s1")
+        loop._evaluator.evaluate = AsyncMock(return_value=[_decision(True, False)])
+        loop._marketdata.GetBars = AsyncMock(
+            return_value=SimpleNamespace(bars=[_bar_at(last_exit + timedelta(days=5))])
+        )
+        await loop._eval_pair(defn, "AAPL", throttle=0)
+        loop._notify.EmitAlert.assert_not_called()  # cooldown survived the "restart"
+
+    @pytest.mark.asyncio
+    async def test_hydrate_noop_without_repo(self):
+        loop = _make_loop(cooldowns_repo=None)
+        await loop.hydrate_cooldowns()  # must not raise
+        assert loop._last_exit_at == {}
+
+    def test_parity_with_backtest_gate(self):
+        """FR-4 / C-10(b): both sites feed the SAME shared helper the same inputs."""
+        from app.services.cooldown import is_cooldown_active
+
+        last_exit = datetime(2026, 3, 1, tzinfo=UTC)
+        inside = last_exit + timedelta(days=5)
+        outside = last_exit + timedelta(days=31)
+        # Identical (last_exit, current_ts, cooldown_days) → identical verdict at both call sites.
+        assert is_cooldown_active(last_exit, inside, 31) is True
+        assert is_cooldown_active(last_exit, outside, 31) is False

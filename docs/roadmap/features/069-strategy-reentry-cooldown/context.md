@@ -241,3 +241,129 @@ Read-path parity (C-10(b)) and mock-echo shape confirmed against the live UI:
   (+ `INVENTORY.md`) — update only if cooldown must appear in a list/detail e2e (not required by Step 12's
   wizard-focused scenarios). Step 12 already reflects this scope.
 
+
+## Session 2026-07-24 — sdd-execute (sequential, single-PR)
+
+**Mode**: sequential, all 13 steps on `claude/strategy-reentry-cooldown-sequential-c1udg7` (based on
+`origin/main-dev`), landing as ONE integration PR into `main-dev` (per user directive — deviates from
+standard stacked per-step PRs). Semantics locked to design: unset → default 31, explicit 0 → no
+cooldown, negative → INVALID_ARGUMENT.
+
+**Toolchain (sequential-mode verification fallbacks — no host buf/migrate, Docker daemon started):**
+- `buf` + Go proto plugins installed via `go install` (proxy.golang.org reachable): buf `1.69.0` (CI
+  pin), `protoc-gen-go@v1.36.11`, `protoc-gen-go-grpc@v1.6.2`, `protoc-gen-connect-go@v1.19.2`;
+  `grpcio-tools==1.80.0` (CI pin) via pip; TS plugins via `pnpm install` in `packages/proto/gen/ts`.
+- Migration verified against a throwaway local `initdb` postgres cluster (no `migrate` binary / no
+  TimescaleDB container). Logged as CI-equivalent fallback in the Deviation Log.
+
+### Step 1 — proto: add `cooldown_days` field + regenerate stubs [done]
+- Added `optional int32 cooldown_days = 9` to `StrategyDefinition`; regenerated Go/Python/TS stubs.
+  First regen used buf `1.47.2` which drifted the unrelated `google/protobuf/timestamp.ts` WKT
+  docstring; reinstalled the CI-pinned buf `1.69.0`, reverted gen/, regenerated → diff scoped to
+  `analysis.*` only. `buf lint` + `buf breaking` (additive, non-breaking) pass; codegen idempotent
+  across repeated runs.
+- Files modified: `packages/proto/analysis/v1/analysis.proto`, `packages/proto/gen/**` (analysis only)
+- Deviations: none (toolchain-install fallback noted above; not a spec deviation)
+
+### Step 2 — migration: `009_strategy_cooldowns` [done]
+- Created `009_strategy_cooldowns.{up,down}.sql` mirroring `007`'s style (schema-prefixed table,
+  `IF NOT EXISTS`, composite PK `(strategy_id, symbol)`, `last_exit_at TIMESTAMPTZ NOT NULL`, no
+  secondary index, symmetric `DROP TABLE IF EXISTS` down). No `cooldown_days` snapshot column.
+- Verified up→down→up on a throwaway local `initdb` postgres 16 cluster (CI-equivalent fallback — no
+  `migrate` binary / TimescaleDB container available): `\d` shows composite PK + TIMESTAMPTZ NOT NULL;
+  down drops cleanly; re-up idempotent (`IF NOT EXISTS` NOTICE).
+- Files modified: `services/xstockstrat-analysis/migrations/009_strategy_cooldowns.{up,down}.sql`
+- Deviations: verification via local ephemeral postgres instead of `migrate` (Deviation Log entry D1).
+
+### Step 3 — service: shared cooldown gate helper + StrategyCooldownsRepository [done]
+### Step 4 — test: cooldown helper unit tests (incl. tz-awareness guard) [done]
+- Created pure `app/services/cooldown.py` (`effective_cooldown_days`, `is_cooldown_active` with
+  in-helper `_require_aware` tz guard) and `app/repositories/strategy_cooldowns.py`
+  (`StrategyCooldownsRepository`, upsert-on-PK + `list_all`, reuses existing db_pool — no new pool).
+- TDD red→green: red `ModuleNotFoundError: No module named 'app.services.cooldown'` (module absent) →
+  green `9 passed`. Full suite `261 passed`, coverage 79.37% (≥40); `cooldown.py` 100%. ruff clean.
+- Files modified: `app/services/cooldown.py`, `app/repositories/strategy_cooldowns.py`,
+  `tests/test_cooldown.py`
+- Deviations: none.
+
+### Step 5 — service: backtest cooldown gate (FR-7) + negative validation (FR-6) + config default (FR-2) [done]
+### Step 6 — test: backtest whipsaw suppression + negative-reject + reproducibility + fingerprint [done]
+- servicer.py: imported the shared helper + `from datetime import UTC`; in `_backtest_symbol_evaluated`
+  resolve `cooldown_days` once (proto `HasField` → default via `get_int("analysis.strategy.default_cooldown_days", 31)`),
+  add per-call `last_exit_time` local (ephemeral, never touches the table), gate the entry with
+  `is_cooldown_active(last_exit_time, bar.time.ToDatetime(tzinfo=UTC), cooldown_days)`, and stamp
+  `last_exit_time` on the in-loop exit. evaluator.py `_validate_definition`: reject negative
+  `cooldown_days` (INVALID_ARGUMENT via the existing wrapper); unset/0 pass.
+- TDD red→green: red — whipsaw gave 2 trades (no gate), `_validate_definition(-1)` and ManageStrategy(-1)
+  did not raise → green — whipsaw suppressed to 1 trade, both negatives reject. Full suite `270 passed`,
+  coverage 80.24%; ruff clean. FR-9 fingerprint + FR-7 reproducibility are characterization tests
+  (green pre-impl — no code change needed, per design).
+- Files modified: `app/handlers/servicer.py`, `app/services/evaluator.py`,
+  `tests/test_analysis_servicer.py`, `tests/test_strategy_evaluator.py`
+- Deviations: none.
+
+### Step 7 — service: live-loop durable cooldown (FR-8) + boot hydration + main.py wiring [done]
+### Step 8 — test: live-loop suppression + restart durability + parity + fixture updates [done]
+- live_loop.py: `__init__` gains `cooldowns_repo=None` + `_last_exit_at` dict; `hydrate_cooldowns()`
+  (mirrors hydrate_scores); `_eval_pair` computes bar-time + cooldown_days, suppresses in-window
+  re-entries, and on exit sets `_last_exit_at` + `await _write_cooldown(...)` BEFORE the throttle
+  check (design R1); `_write_cooldown` mirrors `_emit_ledger`'s isolated try/except (best-effort,
+  never propagates). main.py: wires `StrategyCooldownsRepository(db_pool)` inside the `db_pool is not
+  None` block + best-effort `hydrate_cooldowns()` alongside hydrate_scores.
+- Test fixture updates (same-step scope): `_make_loop` bar mock switched from `object()` to a real
+  `Timestamp`-backed marketdata Bar; `_make_loop(cooldowns_repo=None)` param added (None default keeps
+  the 5 existing call sites working).
+- TDD red→green: red — constructor rejected `cooldowns_repo`, `_last_exit_at`/`hydrate_cooldowns`
+  absent → green — 13 live-loop tests pass (in-window suppression, post-window allow, exit-persists,
+  throttled-exit still persists, write-failure swallowed, restart-durability-via-hydrate, parity).
+  Full suite `277 passed`, coverage 80.21%; ruff clean.
+- Files modified: `app/engine/live_loop.py`, `app/main.py`, `tests/test_live_loop.py`
+- Deviations: none.
+
+### Step 9 — service: `manage_strategy` MCP tool + client `cooldown_days` (FR-10) [done]
+### Step 10 — test: agent `manage_strategy` cooldown round-trip [done]
+- tools.py: `manage_strategy` gains `cooldown_days: int | None = None`; forwarded via an `is not None`
+  check (not the truthy `if signal_params:` pattern, so an explicit 0 is not dropped) + docstring line.
+  client.py: added `cooldown_days=definition.get("cooldown_days")` as an ordinary
+  `StrategyDefinition(...)` kwarg (protobuf omits `field=None` for an optional field — the
+  recon-discovered field-by-field build gap). mcp-tools.md: param-table row + negative→INVALID_ARGUMENT
+  errors-table note.
+- TDD red→green: red — tool rejected `cooldown_days` kwarg; client left presence unset for 14 →
+  green — tool forwards 14/0 (omit → absent), client round-trips presence (`HasField` true for 14 & 0,
+  false when absent). Full agent suite `70 passed`, coverage 65.80%; ruff clean.
+- Files modified: `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/app/client.py`,
+  `docs/runbooks/mcp-tools.md`, `tests/test_tools.py`, `tests/test_client.py`
+- Deviations: none.
+
+### Step 11 — service: `StrategyWizard` cooldown input (FR-11) [done]
+### Step 12 — test: `StrategyWizard` cooldown Playwright e2e (AC-11) [done]
+- StrategyWizard.tsx: `parseCooldownDays` helper (blank → undefined/omit; "0" → 0; negative/non-integer
+  → invalid), `cooldownDaysRaw` state seeded `!== undefined ? String() : ''` (NOT `?? 0` — an unset
+  strategy stays blank so an unrelated edit never writes `cooldown_days: 0`), numeric input in Step-1
+  Identity (`placeholder="31 (default)"`, inline error), validity folded into `canAdvance` step-1,
+  presence-honest spread in `handleSubmit`, `stepForError` cooldown→step 1. mock-backend.ts `getStrategy`
+  returns `cooldownDays: 14` only for id `strat-cooldown-14`. e2e adds 5 scenarios (blank→omit,
+  explicit-0→present, negative→blocks Next, edit-prepopulation→"14", edit-unset→no write).
+- Verification: `tsc --noEmit` exit 0 + `pnpm run lint` clean. Playwright harness not runnable here
+  (dev-mode cold-start `ERR_ABORTED`; CI-mode `next build` > 13 min) → CI-equivalent fallback
+  (Deviation Log D2). The dev run did compile + drive the wizard through the test bodies, catching a
+  route-glob bug and a hyphenated-edit-id issue (both fixed) — the e2e is authored to pass in CI.
+- Files modified: `services/xstockstrat-ui/src/components/insights/StrategyWizard.tsx`,
+  `services/xstockstrat-ui/e2e/mock-backend.ts`,
+  `services/xstockstrat-ui/e2e/insights/strategy-authoring.spec.ts`
+- Deviations: D2 (e2e via tsc+lint fallback).
+
+### Step 13 — docs: register `analysis.strategy.default_cooldown_days` (AC-6) [done]
+- Registered the key in `docs/patterns/config-governance.md` (new newest-first feature-069 entry) and
+  `services/xstockstrat-analysis/CLAUDE.md` §Config Keys Consumed, both with default `31`, the wash-sale
+  rationale, and the `get_int` zero-trap note (documented, not fixed — matches the `shrinkage_days`
+  precedent; per-strategy explicit-0 works via proto presence).
+- Files modified: `docs/patterns/config-governance.md`, `services/xstockstrat-analysis/CLAUDE.md`
+- Deviations: none.
+
+## Session end — sdd-execute (sequential, single-PR)
+All 13 steps done → feature `code-completed`. Backend tests green (analysis `277 passed`/80% cov,
+agent `70 passed`/66% cov, cooldown helper 100%). Proto additive+non-breaking, stubs regenerated with
+CI-pinned buf 1.69.0. Migration reversible (ephemeral-postgres fallback, D1). UI tsc+lint green
+(Playwright fallback, D2). Single integration PR: `claude/strategy-reentry-cooldown-sequential-c1udg7`
+→ `main-dev`.

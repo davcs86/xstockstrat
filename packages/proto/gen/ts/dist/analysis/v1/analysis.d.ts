@@ -306,6 +306,12 @@ export interface StrategyDefinition {
     } | undefined;
     active: boolean;
     liveEnabled: boolean;
+    /**
+     * Per-symbol re-entry cooldown in calendar days (feature 069). optional = explicit presence:
+     * unset → platform default (analysis.strategy.default_cooldown_days); explicit 0 → no cooldown
+     * (immediate re-entry allowed); negative → rejected at write time (INVALID_ARGUMENT).
+     */
+    cooldownDays?: number | undefined;
 }
 export interface ManageStrategyRequest {
     operation: StrategyOperation;
