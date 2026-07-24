@@ -274,3 +274,14 @@ cooldown, negative → INVALID_ARGUMENT.
   down drops cleanly; re-up idempotent (`IF NOT EXISTS` NOTICE).
 - Files modified: `services/xstockstrat-analysis/migrations/009_strategy_cooldowns.{up,down}.sql`
 - Deviations: verification via local ephemeral postgres instead of `migrate` (Deviation Log entry D1).
+
+### Step 3 — service: shared cooldown gate helper + StrategyCooldownsRepository [done]
+### Step 4 — test: cooldown helper unit tests (incl. tz-awareness guard) [done]
+- Created pure `app/services/cooldown.py` (`effective_cooldown_days`, `is_cooldown_active` with
+  in-helper `_require_aware` tz guard) and `app/repositories/strategy_cooldowns.py`
+  (`StrategyCooldownsRepository`, upsert-on-PK + `list_all`, reuses existing db_pool — no new pool).
+- TDD red→green: red `ModuleNotFoundError: No module named 'app.services.cooldown'` (module absent) →
+  green `9 passed`. Full suite `261 passed`, coverage 79.37% (≥40); `cooldown.py` 100%. ruff clean.
+- Files modified: `app/services/cooldown.py`, `app/repositories/strategy_cooldowns.py`,
+  `tests/test_cooldown.py`
+- Deviations: none.

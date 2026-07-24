@@ -122,7 +122,7 @@ explicit `0` → no cooldown, negative → rejected**. No test asserts the old `
 
 ### Step 3 — service: shared cooldown gate helper + `StrategyCooldownsRepository`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/cooldown.py` — create
@@ -157,7 +157,7 @@ explicit `0` → no cooldown, negative → rejected**. No test asserts the old `
 
 ### Step 4 — test: cooldown helper unit tests (incl. tz-awareness guard)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_cooldown.py` — create
