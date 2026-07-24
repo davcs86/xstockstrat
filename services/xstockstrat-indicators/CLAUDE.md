@@ -1,5 +1,10 @@
 # xstockstrat-indicators — CLAUDE.md
 
+<!-- context-forge:constitution-pointer:start -->
+> **Constitution:** non-obvious sandbox invariants (thread-pinning before numpy import, `RLIMIT_DATA` not `RLIMIT_AS`, `MessageToDict` not `dict()`, copy-into-fresh-builtins) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (fictional ledger/notify deps, ⚠ sandbox env inheritance) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+<!-- context-forge:constitution-pointer:end -->
+
+
 ## Role
 
 Python gRPC service providing two capabilities:

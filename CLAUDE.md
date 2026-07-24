@@ -1,3 +1,26 @@
+<!-- context-forge:behavioral-contract:start -->
+## How to Act
+
+Read this first — it governs *how* you work here; everything below is the *what* you work with.
+These four behaviors are the operating defaults; the rest of this file (and the constitution) is
+context you load per task.
+
+1. **Don't assume — ask, and surface tradeoffs.** On ambiguity, a missing detail, or a design fork,
+   stop and raise it; never paper over it with a silent guess. *(Enforced by the SDD design gate
+   **C-11** and the platform cross-module contracts **PLAT-4/PLAT-5**, where a silent guess breaks the seams.)*
+2. **Write the minimum that solves the stated problem.** Nothing speculative — no abstraction,
+   option, or "while I'm here" scaffolding the task didn't ask for. Would a senior engineer call it
+   overbuilt for what was requested? Then simplify. *(Enforced by the DRY guard rail and the CF-N4 litmus.)*
+3. **Touch only what the task requires.** Keep diffs surgical and auditable; clean up orphans *you*
+   introduced, but don't reformat or "improve" code nobody asked you to touch.
+4. **Define success up front, then loop until verified.** State the pass condition before you start,
+   then run to it — write the check, run it, fix, re-run — and don't declare victory mid-loop.
+   *(Enforced by the best-effort/verify norms **PLAT-N1** and the migration/proto CI gates.)*
+
+> Litmus test for any future line in this file: *does it shape how the agent thinks (a behavior), or
+> restate a fact the agent can read from the code?* If it's a fact already in the repo, leave it out.
+<!-- context-forge:behavioral-contract:end -->
+
 # xstockstrat — Root CLAUDE.md
 
 ## Project Overview
@@ -44,6 +67,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 | Using or troubleshooting the agent MCP tools | `docs/runbooks/mcp-tools.md` |
 | Adding/refactoring a skill, subagent, or `CLAUDE.md`; how the AI tooling curates context (subagent delegation, progressive disclosure, structured `context.md` memory) | `docs/patterns/context-engineering.md` |
 | SDD binding rules — Constitution constraint IDs (`C-*`/`P-*`/`F-*`) cited by review/design/execute | `docs/sdd/constitution.md` |
+| Codebase/runtime invariants (`PLAT-*`/`<MODULE>-*`) — non-obvious patterns, cross-module contracts, and scars an agent would otherwise miss; plus the defects/doc-drift log | `docs/context-constitution.md`, `docs/context-constitution-findings.md` (per-module: `services/*/docs/`, `packages/*/docs/`) |
 | Cross-feature SDD memory — insights (patterns that worked) and fails (mistakes that recurred) | `docs/roadmap/ledger/insights.md`, `docs/roadmap/ledger/fails.md` |
 
 ---
