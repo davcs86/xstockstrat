@@ -27,14 +27,22 @@ enough to avoid triggering U.S. wash-sale disallowance on a repurchase.
 
 ## Functional Requirements
 
-FR-1. `StrategyDefinition` gains an optional `cooldown_days` field (calendar days, not trading-day
-bar counts). `0`/unset means "use the platform default."
+FR-1. `StrategyDefinition` gains an `optional int32 cooldown_days` field (proto3 explicit presence;
+calendar days, not trading-day bar counts). **Presence semantics (refined at /sdd-design, approved by
+the user 2026-07-24):** field **unset** → use the platform default; field **explicitly set to `0`** →
+genuine no-cooldown (immediate re-entry allowed); **negative** → rejected (FR-6). `optional` is
+required, not stylistic — `HasField` is illegal on a plain proto3 scalar, and explicit presence is the
+only way to distinguish "unset → default" from "explicit 0 → no cooldown". (This supersedes the earlier
+draft's "`0`/unset both mean the default" wording; see design.md § Chosen Approach for the safety note.)
 
 FR-2. A new config key `analysis.strategy.default_cooldown_days` (int, default `31`) supplies the
-default when a strategy's `cooldown_days` is `0` — 31 calendar days is chosen specifically to sit
+default when a strategy's `cooldown_days` is **unset** — 31 calendar days is chosen specifically to sit
 outside the IRS wash-sale window (30 calendar days before/after a sale at a loss), matching this
-repo's existing "no hardcoded values in source" config convention and the `get_int` zero-trap
-pattern already used by `analysis.scoring.shrinkage_days`.
+repo's existing "no hardcoded values in source" config convention. **`get_int` zero-trap (documented,
+not fixed):** an operator setting this key to `0` platform-wide silently gets `31` back (same trap
+documented for `analysis.scoring.shrinkage_days`); a *per-strategy* explicit-0 is unaffected because it
+travels via proto explicit presence, not this config read. Fixing `get_int` service-wide is out of scope
+(design.md § Rejected Alternatives).
 
 FR-3. The cooldown is enforced per `(strategy_id, symbol)` pair: after an exit on that symbol, the
 entry condition must not fire again until at least `cooldown_days` calendar days (measured via bar
@@ -165,8 +173,10 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 1. Registering/updating a strategy with `cooldown_days` set persists and round-trips the value via
    `ManageStrategy`; a negative value is rejected with `INVALID_ARGUMENT`.
-2. A strategy with `cooldown_days` unset (`0`) uses `analysis.strategy.default_cooldown_days` (31)
-   as its effective cooldown.
+2. A strategy with `cooldown_days` **unset** (no proto presence) uses
+   `analysis.strategy.default_cooldown_days` (31) as its effective cooldown; a strategy with
+   `cooldown_days` **explicitly `0`** has no cooldown (immediate re-entry allowed) — the two are
+   distinct, per FR-1's explicit-presence semantics.
 3. Backtest: given a symbol whose entry condition is true again the bar immediately after an exit,
    no new entry is recorded until at least the effective cooldown's worth of calendar days (by bar
    timestamp) have elapsed since that exit; this is covered by a unit test reproducing the WSM-style
@@ -192,8 +202,12 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
     `manage_strategy` parameter table lists `cooldown_days`.
 11. UI: creating or editing a strategy through `StrategyWizard.tsx` with a cooldown value set
     persists it end-to-end (FR-11), covered by a Playwright e2e case in `e2e/insights/` alongside
-    existing strategy-wizard coverage; leaving the field blank round-trips as `0`/unset and the
-    effective default (31) is what the backtest/live gate actually uses.
+    existing strategy-wizard coverage. **Presence round-trip (per FR-1 explicit-presence semantics):**
+    leaving the field **blank** omits the key from the payload → the field stays **unset** → the
+    effective default (31) drives the gate; typing an explicit **`0`** persists `cooldown_days: 0`
+    (present) → no cooldown. The e2e must assert blank→omitted-and-default-behavior and `0`→present,
+    and must NOT assert `0 → 31` (the superseded collapse). Editing a pre-existing (unset) strategy
+    and saving an unrelated change must NOT silently write `cooldown_days: 0`.
 
 ## Open Questions
 

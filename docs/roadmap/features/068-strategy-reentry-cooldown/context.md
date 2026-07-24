@@ -102,3 +102,55 @@ Explicitly scoped OUT of FR-10 (and noted why): the agent `CLAUDE.md` tool table
   `spec-ready` before this feature merges.
 
 Next action: `/sdd-design strategy-reentry-cooldown` (full debate mode, per user request).
+
+## Session 2026-07-24T10:19:57Z — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-analysis, packages/proto, xstockstrat-agent,
+  xstockstrat-ui). Key reuse patterns surfaced: `hydrate_scores()` best-effort/db_pool-gated boot
+  hydration; `StrategyScoresRepository` upsert-on-PK shape; `007_backtest_run_symbols` migration
+  style; `get_int` config-read shape; `_emit_ledger` isolated try/except. Recon also found a spec gap
+  the product-spec missed: agent `client.py:283-290` builds `StrategyDefinition` field-by-field, so
+  FR-10 needs `client.py` touched too, not just `tools.py` + the runbook.
+- Phase 1 Grilling: **5 rounds (full)** — the debate did real work, not a rubber stamp:
+  - R1 → NEEDS WORK: proto3 zero-value trap (0 vs unset inexpressible), live-loop throttled-exit
+    write-site gap, unaddressed protobuf Timestamp→datetime conversion.
+  - **User decision (R1 gate):** make `cooldown_days=0` explicitly settable → `optional int32`
+    (proto3 explicit presence), unset→default / explicit-0→no-cooldown.
+  - R2 → NEEDS WORK: client.py post-construction-assignment rested on a false protobuf premise
+    (adversary verified `field=None` already omits); UI NaN guard bug; backtest-side wiring never
+    shown; naive/aware datetime left as a comment convention; `get_int` zero-trap (config layer).
+  - R3 → NEEDS WORK: `_write_cooldown` unguarded await could wedge live alerting (stuck "in
+    position"); live loop used wall-clock instead of the already-fetched bar time.
+  - R4 → NEEDS WORK: two concrete `test_live_loop.py` fixture breakages (missing `cooldowns_repo`
+    arg; `object()` bar mock has no `.time`); **critical edit-mode data-corruption bug** — seeding an
+    unset field's input as "0" and writing `cooldown_days: 0` would silently destroy a pre-existing
+    strategy's implicit 31-day default on any unrelated edit.
+  - R5 (final) → APPROVABLE: all closed. Loaded **Context7** (`/bufbuild/protobuf-es`) to ground the
+    protobuf-es `optional` contract: generates `cooldownDays?: number | undefined`, presence via
+    `isFieldSet`, and `msg.cooldownDays = 0` sets presence true — confirming the fix (seed
+    `!== undefined ? String() : ''`, blank→omit key, "0"→include). Model switched to opus for R5.
+  - **User decision (final gate):** approve, keeping explicit-0-settable; reconcile the superseded
+    product-spec ACs (FR-1/FR-2/AC-2/AC-11) to "unset→default, explicit 0→no-cooldown", with the
+    safety note recorded in design.md.
+- Chosen approach: single shared pure `cooldown.py` helper (tz-awareness enforced *inside* the
+  helper, not by convention), fed **bar time** at both call sites; ephemeral per-run state for
+  backtest (FR-7), durable `008_strategy_cooldowns` + boot hydration for live (FR-8); best-effort
+  isolated `_write_cooldown`; `cooldowns_repo=None` default so existing tests need no constructor
+  change. Rejected: wall-clock live clock, snapshot column, plain-int32 "0→default", required repo
+  param, fixing `get_int` service-wide.
+- Constitution rules touched: C-01, C-05/F-07, C-07/F-01, C-08/P-06, C-10(b), F-06, P-03/P-04. Floor
+  breaches: none across all 5 rounds.
+- Status: spec-ready → design-approved.
+
+### Open Threads (from design.md Open Risks)
+
+- Cross-restart durability on a failed best-effort write (accepted for v1, mirrors `strategy_scores`)
+  — no fix, stated limitation.
+- Product-spec AC reconciliation reconciled here; `/sdd-spec` must not author a `0 → 31` test and the
+  e2e must assert blank→omitted / `0`→present. → target: /sdd-spec + UI/e2e step.
+- Config default zero-trap documented (not fixed) → target: config/docs step (CLAUDE.md config row).
+- Two `test_live_loop.py` fixture updates (`cooldowns_repo=None` + real-`Timestamp` bar mock at
+  `:33`) are same-step scope with the bar-time change → target: live-loop service+test step.
+- `mock-backend.ts` `GetStrategy` presence round-trip (unset stays unset) unverified → target:
+  UI/e2e step.
+
