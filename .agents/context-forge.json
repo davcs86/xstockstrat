@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "constitutionPath": "docs/context-constitution.md",
+  "citeIds": true,
+  "scrubberFindingsPath": "context-scrubber-findings.md",
+  "created": "2026-07-24"
+}
