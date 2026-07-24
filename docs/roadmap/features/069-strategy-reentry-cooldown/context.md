@@ -319,3 +319,18 @@ cooldown, negative → INVALID_ARGUMENT.
   Full suite `277 passed`, coverage 80.21%; ruff clean.
 - Files modified: `app/engine/live_loop.py`, `app/main.py`, `tests/test_live_loop.py`
 - Deviations: none.
+
+### Step 9 — service: `manage_strategy` MCP tool + client `cooldown_days` (FR-10) [done]
+### Step 10 — test: agent `manage_strategy` cooldown round-trip [done]
+- tools.py: `manage_strategy` gains `cooldown_days: int | None = None`; forwarded via an `is not None`
+  check (not the truthy `if signal_params:` pattern, so an explicit 0 is not dropped) + docstring line.
+  client.py: added `cooldown_days=definition.get("cooldown_days")` as an ordinary
+  `StrategyDefinition(...)` kwarg (protobuf omits `field=None` for an optional field — the
+  recon-discovered field-by-field build gap). mcp-tools.md: param-table row + negative→INVALID_ARGUMENT
+  errors-table note.
+- TDD red→green: red — tool rejected `cooldown_days` kwarg; client left presence unset for 14 →
+  green — tool forwards 14/0 (omit → absent), client round-trips presence (`HasField` true for 14 & 0,
+  false when absent). Full agent suite `70 passed`, coverage 65.80%; ruff clean.
+- Files modified: `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/app/client.py`,
+  `docs/runbooks/mcp-tools.md`, `tests/test_tools.py`, `tests/test_client.py`
+- Deviations: none.

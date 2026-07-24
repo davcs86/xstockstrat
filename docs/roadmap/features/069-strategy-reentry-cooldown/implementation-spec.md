@@ -312,7 +312,7 @@ explicit `0` → no cooldown, negative → rejected**. No test asserts the old `
 
 ### Step 9 — service: `manage_strategy` MCP tool + client `cooldown_days` (FR-10)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -342,7 +342,7 @@ explicit `0` → no cooldown, negative → rejected**. No test asserts the old `
 
 ### Step 10 — test: agent `manage_strategy` cooldown round-trip
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify
