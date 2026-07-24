@@ -55,3 +55,34 @@ best-effort-deferred.
 
 Next action unchanged: `/sdd-review strategy-reentry-cooldown product-spec`, then
 `/sdd-design strategy-reentry-cooldown quick`.
+
+## Session 2026-07-24 (cont.) — scope clarification with user
+
+User asked two clarifying questions:
+
+1. "Are the cooldown days per ticker?" — confirmed and left as-is: the *duration* (`cooldown_days`)
+   is one value per strategy (not configurable per symbol); the *enforcement clock* (last-exit
+   timestamp) is tracked per `(strategy_id, symbol)` pair, so each traded symbol gets its own
+   independent timer using that same duration. User accepted this as designed (no spec change).
+2. "Are UI and agent in scope?" — they were NOT in the original Affected Services list. Checked the
+   actual code and confirmed a real gap: `services/xstockstrat-agent/app/tools.py:290-345`
+   (`manage_strategy` tool) has an explicit parameter allowlist that would not forward
+   `cooldown_days` even after the proto field exists, and
+   `services/xstockstrat-ui/src/components/insights/StrategyWizard.tsx:115-128` (`handleSubmit`)
+   builds the definition payload with no cooldown field — same "shipped the producer, forgot the
+   consumer surface" shape as ledger entries 056/060/066. User directed: expand scope to both.
+
+Added FR-10 (agent: `manage_strategy` gains `cooldown_days` param + `docs/runbooks/mcp-tools.md`
+parameter table update) and FR-11 (UI: `StrategyWizard.tsx` gains a cooldown input, flows through
+`handleSubmit`). Added `xstockstrat-agent` and `xstockstrat-ui` to Affected Services, feature.md
+Reviewers, and the approval-gate checklist (now "service owner approval from each affected service"
+rather than singular). Added Acceptance Criteria 10 (agent round-trip) and 11 (UI e2e coverage in
+`e2e/insights/`).
+
+Explicitly scoped OUT of FR-10 (and noted why): the agent `CLAUDE.md` tool table and
+`docs/runbooks/CLAUDE.md` index, since the 066 "five discovery surfaces" ledger insight applies to a
+*new* tool, not a parameter added to an existing one — only the tool signature/docstring and the
+`mcp-tools.md` parameter table need updating here.
+
+Next action unchanged: `/sdd-review strategy-reentry-cooldown product-spec`, then
+`/sdd-design strategy-reentry-cooldown quick`.

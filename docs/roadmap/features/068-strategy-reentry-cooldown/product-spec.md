@@ -80,6 +80,28 @@ strategy's cooldown resets its accumulated evidence/grade, identical to any othe
 change. No code change is required beyond *not* adding `cooldown_days` to the fingerprint's existing
 exclusion list (`display_name`/`active`/`live_enabled`).
 
+FR-10. **Agent reachability.** The `manage_strategy` MCP tool
+(`services/xstockstrat-agent/app/tools.py:290-345`) MUST gain a `cooldown_days: int | None = None`
+parameter, forwarded into the `definition` dict alongside `components`/`entry_rule`/`exit_rule` (only
+when set, mirroring the existing `signal_params` "include only if provided" pattern at
+`tools.py:342-343`), and the tool's docstring updated to document it. Without this, the proto field
+exists but is unreachable through the agent — the exact gap this repo's own ledger already names for
+new-tool additions (`insights.md`, 2026-07-20, trigger-backfill-mcp-tool: "a new MCP agent tool has
+five discovery/documentation surfaces, not one"); for a *parameter* addition to an existing tool the
+relevant subset is: (a) the tool function signature/docstring itself, and (b) the parameter table in
+`docs/runbooks/mcp-tools.md` (`### manage_strategy`, currently lines 308–336) — both must be updated
+in the same PR. (The agent `CLAUDE.md` tool table and `docs/runbooks/CLAUDE.md` index only need
+updates for a wholly *new* tool, not a parameter addition, so are not in scope here.)
+
+FR-11. **UI reachability.** `StrategyWizard.tsx`
+(`services/xstockstrat-ui/src/components/insights/StrategyWizard.tsx`) MUST gain a cooldown input
+(numeric, optional, labeled with the effective default so an author who leaves it blank can see
+"31 days" rather than a silent zero) and include it in the `definition` payload built in
+`handleSubmit` (currently `strategyId`/`displayName`/`components`/`entryRule`/`exitRule`/
+`signalParams`, `StrategyWizard.tsx:115-128`) sent on register/update. Both create mode and edit mode
+(`/insights/strategies/[id]/edit`) go through this same component, so no separate edit-page change is
+needed beyond whatever pre-fills `initial` props from the existing definition.
+
 ## Out of Scope
 
 - A losing-exits-only cooldown variant (see FR-5 — resolved as "any exit" for this feature; a
@@ -99,6 +121,11 @@ exclusion list (`display_name`/`active`/`live_enabled`).
   config key, `ManageStrategy` validation.
 - `packages/proto` — additive field on `StrategyDefinition` (`analysis/v1/analysis.proto`), no other
   message changes anticipated.
+- `xstockstrat-agent` — `manage_strategy` MCP tool gains `cooldown_days` (FR-10); regenerated TS/Go/
+  Python stubs are consumed here as a plain new field, no RPC signature change.
+- `xstockstrat-ui` — `StrategyWizard.tsx` create/edit form gains a cooldown input (FR-11); read paths
+  (`insights/strategies` list/detail pages, `useStrategyDefinitions.ts`) pick up the new field
+  automatically via regenerated TS stubs, no separate change expected there but verify at `/sdd-spec`.
 
 ## Proto Contract Changes
 
@@ -127,8 +154,9 @@ exclusion list (`display_name`/`active`/`live_enabled`).
 
 Branch to create: `feature/strategy-reentry-cooldown` (branch from `main-dev`)
 Approval gates required (per docs/runbooks/feature-workflow.md):
-- [x] 1 service owner approval (non-breaking proto field addition + new config key — both
-  non-breaking; `xstockstrat-analysis` is the sole affected service)
+- [x] Service owner approval from each affected service (non-breaking proto field addition + new
+  config key; `xstockstrat-analysis`, `xstockstrat-agent`, `xstockstrat-ui` all affected, none
+  breaking)
 - [ ] 2 service owners + platform lead (breaking proto change) — not applicable, additive field only
 - [x] DBA review + service owner (schema migration) — new `008_strategy_cooldowns` migration
   (FR-8/Database Changes); up+down pair required per `docs/runbooks/feature-workflow.md`
@@ -159,6 +187,13 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 9. A strategy's cross-stock score definition fingerprint changes when its `cooldown_days` changes
    (FR-9), verified by a test asserting `_definition_fingerprint` differs across two otherwise-
    identical definitions that differ only in `cooldown_days`.
+10. Agent: calling `manage_strategy(operation="register"|"update", ..., cooldown_days=N)` persists
+    `N` and it round-trips on a subsequent read (FR-10); `docs/runbooks/mcp-tools.md`'s
+    `manage_strategy` parameter table lists `cooldown_days`.
+11. UI: creating or editing a strategy through `StrategyWizard.tsx` with a cooldown value set
+    persists it end-to-end (FR-11), covered by a Playwright e2e case in `e2e/insights/` alongside
+    existing strategy-wizard coverage; leaving the field blank round-trips as `0`/unset and the
+    effective default (31) is what the backtest/live gate actually uses.
 
 ## Open Questions
 

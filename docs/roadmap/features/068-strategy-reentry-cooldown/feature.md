@@ -28,13 +28,16 @@
 Add a configurable per-strategy re-entry cooldown (default 31 calendar days, chosen to sit outside
 the U.S. wash-sale window) so a rule-based strategy's `entry_rule` cannot immediately refire on a
 symbol on the very next bar after an exit, which today produces whipsaw re-entries during a
-persistent decline.
+persistent decline. Reachable end-to-end: backend (backtest engine + live loop), the `manage_strategy`
+MCP tool, and the `StrategyWizard` UI form all expose the new field.
 
 ## Reviewers
 
 | Role | Review Focus |
 |---|---|
 | `xstockstrat-analysis` (service owner) | Backtest reproducibility, strategy scoring determinism, no look-ahead bias |
+| `xstockstrat-agent` (service owner) | `manage_strategy` MCP tool parameter/docstring accuracy, docs/runbooks/mcp-tools.md parity |
+| `xstockstrat-ui` (service owner) | Strategy wizard form correctness, Connect-RPC call safety |
 | Proto Reviewer | Field number uniqueness, backward compatibility (no field removal/type change without deprecation), naming conventions |
 | DBA | Migration NNN numbering (no gaps/conflicts), up+down pair present, index correctness — new `008_strategy_cooldowns` migration |
 
