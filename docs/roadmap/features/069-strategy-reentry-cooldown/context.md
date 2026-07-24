@@ -285,3 +285,19 @@ cooldown, negative → INVALID_ARGUMENT.
 - Files modified: `app/services/cooldown.py`, `app/repositories/strategy_cooldowns.py`,
   `tests/test_cooldown.py`
 - Deviations: none.
+
+### Step 5 — service: backtest cooldown gate (FR-7) + negative validation (FR-6) + config default (FR-2) [done]
+### Step 6 — test: backtest whipsaw suppression + negative-reject + reproducibility + fingerprint [done]
+- servicer.py: imported the shared helper + `from datetime import UTC`; in `_backtest_symbol_evaluated`
+  resolve `cooldown_days` once (proto `HasField` → default via `get_int("analysis.strategy.default_cooldown_days", 31)`),
+  add per-call `last_exit_time` local (ephemeral, never touches the table), gate the entry with
+  `is_cooldown_active(last_exit_time, bar.time.ToDatetime(tzinfo=UTC), cooldown_days)`, and stamp
+  `last_exit_time` on the in-loop exit. evaluator.py `_validate_definition`: reject negative
+  `cooldown_days` (INVALID_ARGUMENT via the existing wrapper); unset/0 pass.
+- TDD red→green: red — whipsaw gave 2 trades (no gate), `_validate_definition(-1)` and ManageStrategy(-1)
+  did not raise → green — whipsaw suppressed to 1 trade, both negatives reject. Full suite `270 passed`,
+  coverage 80.24%; ruff clean. FR-9 fingerprint + FR-7 reproducibility are characterization tests
+  (green pre-impl — no code change needed, per design).
+- Files modified: `app/handlers/servicer.py`, `app/services/evaluator.py`,
+  `tests/test_analysis_servicer.py`, `tests/test_strategy_evaluator.py`
+- Deviations: none.

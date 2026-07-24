@@ -184,7 +184,7 @@ explicit `0` → no cooldown, negative → rejected**. No test asserts the old `
 
 ### Step 5 — service: backtest cooldown gate (FR-7) + write-time negative validation (FR-6) + config default (FR-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -220,7 +220,7 @@ explicit `0` → no cooldown, negative → rejected**. No test asserts the old `
 
 ### Step 6 — test: backtest whipsaw suppression + negative-reject + reproducibility-isolation + fingerprint change
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
