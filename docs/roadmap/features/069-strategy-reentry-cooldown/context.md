@@ -264,3 +264,13 @@ cooldown, negative → INVALID_ARGUMENT.
   across repeated runs.
 - Files modified: `packages/proto/analysis/v1/analysis.proto`, `packages/proto/gen/**` (analysis only)
 - Deviations: none (toolchain-install fallback noted above; not a spec deviation)
+
+### Step 2 — migration: `009_strategy_cooldowns` [done]
+- Created `009_strategy_cooldowns.{up,down}.sql` mirroring `007`'s style (schema-prefixed table,
+  `IF NOT EXISTS`, composite PK `(strategy_id, symbol)`, `last_exit_at TIMESTAMPTZ NOT NULL`, no
+  secondary index, symmetric `DROP TABLE IF EXISTS` down). No `cooldown_days` snapshot column.
+- Verified up→down→up on a throwaway local `initdb` postgres 16 cluster (CI-equivalent fallback — no
+  `migrate` binary / TimescaleDB container available): `\d` shows composite PK + TIMESTAMPTZ NOT NULL;
+  down drops cleanly; re-up idempotent (`IF NOT EXISTS` NOTICE).
+- Files modified: `services/xstockstrat-analysis/migrations/009_strategy_cooldowns.{up,down}.sql`
+- Deviations: verification via local ephemeral postgres instead of `migrate` (Deviation Log entry D1).

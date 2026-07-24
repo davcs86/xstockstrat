@@ -79,7 +79,7 @@ explicit `0` → no cooldown, negative → rejected**. No test asserts the old `
 
 ### Step 2 — migration: `009_strategy_cooldowns`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/009_strategy_cooldowns.up.sql` — create
