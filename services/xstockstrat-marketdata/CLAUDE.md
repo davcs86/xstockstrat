@@ -4,7 +4,6 @@
 > **Constitution:** non-obvious local invariants (canonical-timeframe-string contract, live-fallback→cache→reread, `do()` chokepoint, streamed-1m-not-persisted, non-blocking fan-out) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (fictional CAGG/compression docs, dead retention keys) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
 <!-- context-forge:constitution-pointer:end -->
 
-
 ## Role
 
 Go gRPC service that is the **sole integration point for Alpaca's market data APIs**. Responsible for:

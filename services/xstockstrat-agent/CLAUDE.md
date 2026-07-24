@@ -4,7 +4,6 @@
 > **Constitution:** non-obvious local invariants (ephemeral per-call gRPC channels, lazy `gen.*` imports, hardcoded admin metadata, `MCP_AGENT_SECRET` triple-purpose, `aud`-bound JWT) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (`namespace="agent"` hardcode, `MCP_TRANSPORT` stdio default) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
 <!-- context-forge:constitution-pointer:end -->
 
-
 ## Role
 
 Python MCP (Model Context Protocol) server exposing AI-agent tools for signal ingestion,

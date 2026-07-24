@@ -4,7 +4,6 @@
 > **Constitution:** non-obvious local invariants (protobuf-es `{seconds: bigint}` Timestamp, per-(service×segment) browser clients, `forward`/`forwardAdmin`+userId-injection IDOR guard, `/accounts` REST divergence) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (⚠ audit-route admin gap, missing `BASE_PATH_ACCOUNTS`) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
 <!-- context-forge:constitution-pointer:end -->
 
-
 ## Role
 
 Consolidated Next.js frontend serving all three UI segments under path prefixes:
