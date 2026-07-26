@@ -2643,3 +2643,89 @@ class TestPartialStrategyUpdate:
 
         assert ctx.abort.await_args.args[0] == grpc.StatusCode.NOT_FOUND
         repo.update_locked.assert_not_awaited()  # no write attempted
+
+
+# ---------------------------------------------------------------------------
+# feature 071 step 3 — trade_start_idx plumbing
+# ---------------------------------------------------------------------------
+
+
+class TestTradeStartIndex:
+    """The pre-window prefix (step 4) will pass trade_start_idx > 0. Step 3 lands the plumbing
+    with k = 0 everywhere and proves it is a no-op; these additionally exercise k > 0 so the
+    alignment arithmetic is verified BEFORE anything depends on it.
+
+    The invariant under test is `len(daily_equity) == len(diags)`, which
+    `_finalize_symbol_diagnostics` stamps positionally. It is now asserted in that shared pass,
+    so a drift raises rather than silently shifting every per-bar equity value.
+    """
+
+    @staticmethod
+    def _svc(bars, fast_series, slow_series):
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars))
+        svc._indicators = MagicMock()
+        svc._indicators.ComputeIndicator = AsyncMock(
+            side_effect=[_points(fast_series), _points(slow_series)]
+        )
+        return svc
+
+    async def _run(self, k, n=8):
+        bars = [_bar(1000 + i, c) for i, c in enumerate([10, 11, 12, 13, 14, 15, 12, 9][:n])]
+        svc = self._svc(bars, [9, 10, 12, 13, 14, 13, 9], [11, 11, 11, 11, 11, 11])
+        return await svc._backtest_symbol(
+            "AAPL",
+            common_pb2.TimeRange(),
+            fast_period=2,
+            slow_period=3,
+            signal_sources=[],
+            signal_weight=0.0,
+            technical_weight=1.0,
+            min_conviction=0.0,
+            initial_equity=100_000.0,
+            commission=0.0,
+            slippage=0.0,
+            source_weights={},
+            trade_start_idx=k,
+        )
+
+    @pytest.mark.asyncio
+    async def test_default_k_zero_covers_every_bar(self):
+        _, _, daily_equity, sd = await self._run(k=0)
+        assert sd.bars_total == 8
+        assert len(sd.bars) == 8
+        assert len(daily_equity) == 8  # seed + 7 simulated
+        assert [b.bar_index for b in sd.bars][:3] == [0, 1, 2]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("k", [1, 3, 5])
+    async def test_prefix_bars_are_excluded_and_indices_renumbered(self, k):
+        _, _, daily_equity, sd = await self._run(k=k)
+        # Diagnostics cover only the in-window bars…
+        assert sd.bars_total == 8 - k
+        assert len(sd.bars) == 8 - k
+        # …renumbered from 0, so the caller never sees prefix indices.
+        assert [b.bar_index for b in sd.bars] == list(range(8 - k))
+        # The invariant the shared finalize pass asserts.
+        assert len(daily_equity) == len(sd.bars)
+
+    @pytest.mark.asyncio
+    async def test_first_in_window_bar_keeps_its_real_timestamp(self):
+        """Renumbering bar_index must not renumber time — the prefix is dropped from the
+        output, not shifted onto it."""
+        _, _, _, sd = await self._run(k=3)
+        assert sd.bars[0].bar_index == 0
+        assert sd.bars[0].timestamp.seconds == 1003  # bar 3, not bar 0
+
+    @pytest.mark.asyncio
+    async def test_no_trade_is_reported_before_the_window(self):
+        """FR-3: a prefix seeds indicators but must never open a position before `start`."""
+        trades, _, _, sd = await self._run(k=5)
+        first_ts = 1005
+        for t in trades:
+            assert t.entry_time.seconds >= first_ts
+        for bar in sd.bars:
+            assert bar.timestamp.seconds >= first_ts

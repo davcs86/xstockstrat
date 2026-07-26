@@ -163,3 +163,44 @@ the node plugins from `packages/proto/gen/ts` devDependencies, and `grpcio-tools
 byte-identical reproduction check against the committed stubs (ledger insight 2026-07-09) before
 any `.proto` edit. Not attempted this session. **071 needs no proto change, so it is unblocked;
 070 is blocked on this.**
+
+## Session 2026-07-26 — implementation (step 3)
+
+- **Step 3 DONE.** `trade_start_idx` threaded through both engine paths, landed at `k = 0`
+  everywhere. **Gate met: 332 → 338 tests, all pre-existing ones unchanged** — the restructure is a
+  verified no-op on the default path before any prefix code exists.
+
+### The seed-row arithmetic — the design's own version was off by one
+
+The design said "loop from `max(1, trade_start_idx)`" and "`diags` slices to `[k:]`,
+`bars_total = n - k`", with `len(daily_equity) == len(diags)`. Those three cannot all hold:
+
+- `k = 0`: seed + `range(1, n)` → `n` equity points, `diags[0:]` → `n`. ✓
+- `k = 1`: seed + `range(1, n)` → `n` equity points, `diags[1:]` → `n-1`. ✗
+
+The seed row exists because bar 0 is never simulated on an unprefixed run. With a prefix, the
+first simulated bar **is** bar `k`, so there is no separate seed. Implemented as
+`daily_equity = [equity] if trade_start_idx == 0 else []`, which satisfies both:
+`k = 0` → `n`/`n`; `k > 0` → `n-k`/`n-k`. Documented inline at both call sites.
+
+### The 1:1 invariant is now asserted, not assumed
+
+`_finalize_symbol_diagnostics` stamps `diags[j].equity = daily_equity[j]` **positionally**, and
+that alignment was previously implicit. Added an assertion in the shared finalize pass — shared
+because the two paths build the lists differently (the legacy loop has two `continue`-with-append
+branches, the evaluator appends unconditionally), which is precisely the ledger-056
+"fixed one path, forgot the second" shape.
+
+### k > 0 verified now, not deferred
+
+Rather than land the plumbing untested and discover the off-by-one in step 4, `TestTradeStartIndex`
+exercises `k ∈ {1, 3, 5}` directly against `_backtest_symbol`: `bars_total == n - k`, `bar_index`
+renumbered from 0, `len(daily_equity) == len(diags)`, the first in-window bar keeping its **real**
+timestamp (renumbering the index must not shift time), and no trade or diagnostic row before the
+window.
+
+### Remaining for 071
+
+Steps 4–8: wire the prefix end-to-end (`start_set` → `warmup_prefix` → `required_prefix_bars` →
+prefixed fetch → truncate to exactly `P` → `trade_start_idx` → `to_reported_warmup` → shortfall
+`CoverageGap`), agent `start`/`end` surface, parity/determinism tests, docs, UI e2e.

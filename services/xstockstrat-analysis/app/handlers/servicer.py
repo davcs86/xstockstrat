@@ -614,6 +614,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         slippage,
         source_weights,
         propagation_meta=(),
+        *,
+        trade_start_idx: int = 0,
     ):
         """Run SMA crossover backtest for a single symbol.
 
@@ -695,7 +697,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # feature 064: one diagnostic row per bar, iterated independently of the trade loop
         # (which starts at index 1) so bar 0 is captured. Present-only indicators map.
         diags = []
-        for i in range(n):
+        for i in range(trade_start_idx, n):
             indicators = {}
             if i in fast_values:
                 indicators["sma_fast"] = fast_values[i]
@@ -704,7 +706,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             diags.append(
                 _build_bar_diagnostic(
                     symbol=symbol,
-                    bar_index=i,
+                    bar_index=i - trade_start_idx,
                     bar=bars[i],
                     indicators=indicators,
                     signal_score=0.0,
@@ -720,11 +722,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         position = 0.0  # shares held
         entry_price = 0.0
         entry_time = None
-        daily_equity = [equity]
+        # feature 071: daily_equity[j] pairs with diags[j]. On an unprefixed run (k == 0) index 0
+        # is the seed point at bar 0, which is never simulated. With a pre-window prefix the first
+        # simulated bar IS bar k, so there is no separate seed row — otherwise the two lists would
+        # differ in length by one and every per-bar equity stamp would shift.
+        daily_equity = [equity] if trade_start_idx == 0 else []
         buy_threshold = scoring.buy_threshold(min_conviction)
         sell_threshold = scoring.sell_threshold()
 
-        for i in range(1, n):
+        for i in range(max(1, trade_start_idx), n):
             bar = bars[i]
             price = bar.close
 
@@ -763,8 +769,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 technical_weight,
                 signals_present=bool(signals_map),
             )
-            diags[i].signal_score = signal_score
-            diags[i].conviction = combined
+            diags[i - trade_start_idx].signal_score = signal_score
+            diags[i - trade_start_idx].conviction = combined
             bar_action = (
                 analysis_pb2.BAR_ACTION_HOLD_LONG
                 if position > 0.0
@@ -813,7 +819,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 entry_time = None
                 bar_action = analysis_pb2.BAR_ACTION_EXIT_LONG
 
-            diags[i].action = bar_action
+            diags[i - trade_start_idx].action = bar_action
             portfolio_value = equity + position * price
             daily_equity.append(portfolio_value)
 
@@ -857,6 +863,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         slippage,
         propagation_meta=(),
         formula_warmup_cache=None,
+        *,
+        trade_start_idx: int = 0,
     ):
         """Run a stored/inline StrategyDefinition for one symbol via the shared evaluator.
 
@@ -882,7 +890,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Present-only indicators map, dropping the redundant "<ref>.value" alias (the bare
         # ref_name already carries the primary series).
         diags = []
-        for i in range(n):
+        for i in range(trade_start_idx, n):
             indicators = {
                 key: series[i]
                 for key, series in component_series.items()
@@ -891,7 +899,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             diags.append(
                 _build_bar_diagnostic(
                     symbol=symbol,
-                    bar_index=i,
+                    bar_index=i - trade_start_idx,
                     bar=bars[i],
                     indicators=indicators,
                     signal_score=0.0,  # evaluator path carries no newsletter signals (FR-4a)
@@ -906,7 +914,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         position = 0.0
         entry_price = 0.0
         entry_time = None
-        daily_equity = [equity]
+        # feature 071: daily_equity[j] pairs with diags[j]. On an unprefixed run (k == 0) index 0
+        # is the seed point at bar 0, which is never simulated. With a pre-window prefix the first
+        # simulated bar IS bar k, so there is no separate seed row — otherwise the two lists would
+        # differ in length by one and every per-bar equity stamp would shift.
+        daily_equity = [equity] if trade_start_idx == 0 else []
 
         # Re-entry cooldown (feature 069). Ephemeral per-RunBacktest state (FR-7): last_exit_time is
         # a plain local, never read from or written to analysis.strategy_cooldowns, so two runs of
@@ -917,7 +929,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         )
         last_exit_time = None
 
-        for i in range(1, n):
+        for i in range(max(1, trade_start_idx), n):
             bar = bars[i]
             price = bar.close
             decision = decisions[i]
@@ -970,7 +982,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 last_exit_time = bar.time.ToDatetime(tzinfo=UTC)  # feature 069: cooldown clock
                 bar_action = analysis_pb2.BAR_ACTION_EXIT_LONG
 
-            diags[i].action = bar_action
+            diags[i - trade_start_idx].action = bar_action
             daily_equity.append(equity + position * price)
 
         # Close any open position at the last bar price
@@ -1734,6 +1746,15 @@ def _finalize_symbol_diagnostics(symbol, diags, warmup_bars, trades, daily_equit
     so it cannot carry the value (context.md, sdd-spec session).
     """
     n = len(diags)
+    # feature 071: the two lists must stay 1:1 — `diags[j].equity = daily_equity[j]` below is
+    # positional. The two engine paths build them differently (the legacy loop has two
+    # continue-with-append branches, the evaluator appends unconditionally), which is exactly the
+    # shape of ledger fail 056 "fixed one path, forgot the second". Assert it in the shared pass
+    # so a drift in either path fails loudly instead of silently shifting every equity stamp.
+    assert n == len(daily_equity), (
+        f"diags/daily_equity length mismatch for {symbol}: {n} vs {len(daily_equity)} — "
+        f"the per-bar equity stamps would be misaligned"
+    )
     for i in range(min(n, len(daily_equity))):
         diags[i].equity = daily_equity[i]
     for i in range(n):
