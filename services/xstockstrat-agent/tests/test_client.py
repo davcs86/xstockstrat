@@ -492,3 +492,58 @@ class TestGetBackfillStatusClient:
         assert mock_stub.ListBackfillJobs.call_args[0][0].status_filter == 0
         with pytest.raises(ValueError, match="queued/running/completed/failed/partial/canceled"):
             await client.get_backfill_status(status_filter="bogus")
+
+
+class TestManageStrategyUpdateMask:
+    """feature 070 — the mask must reach the wire, and `active` must not."""
+
+    @pytest.mark.asyncio
+    async def test_mask_is_attached_and_absent_when_not_given(self):
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+
+        mock_stub = MagicMock()
+        mock_stub.ManageStrategy = AsyncMock(
+            return_value=analysis_pb2.StrategyDefinition(strategy_id="x")
+        )
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
+                await client.manage_strategy(
+                    operation="update",
+                    definition={"strategy_id": "x", "cooldown_days": 45},
+                    update_mask=["cooldown_days"],
+                )
+                masked = mock_stub.ManageStrategy.call_args[0][0]
+                await client.manage_strategy(
+                    operation="update", definition={"strategy_id": "x", "display_name": "X"}
+                )
+                maskless = mock_stub.ManageStrategy.call_args[0][0]
+
+        assert masked.HasField("update_mask") is True
+        assert list(masked.update_mask.paths) == ["cooldown_days"]
+        assert masked.definition.cooldown_days == 45
+        # Absent mask => full replace, the pre-070 contract.
+        assert maskless.HasField("update_mask") is False
+
+    @pytest.mark.asyncio
+    async def test_active_is_no_longer_injected(self):
+        """`active` is column-authoritative — the server overlays it and never writes it from
+        the definition, so sending it only polluted the stored definition_json."""
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+
+        mock_stub = MagicMock()
+        mock_stub.ManageStrategy = AsyncMock(
+            return_value=analysis_pb2.StrategyDefinition(strategy_id="x")
+        )
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
+                await client.manage_strategy(
+                    operation="register", definition={"strategy_id": "x", "display_name": "X"}
+                )
+                sent = mock_stub.ManageStrategy.call_args[0][0]
+
+        from google.protobuf import json_format  # noqa: PLC0415
+
+        as_dict = json_format.MessageToDict(sent.definition, preserving_proto_field_name=True)
+        assert "active" not in as_dict

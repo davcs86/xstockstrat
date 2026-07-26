@@ -30,11 +30,18 @@ convenience copy and will drift. Also keep in mind the caveat in the
 
 ## Steps
 
-### 1. Install `buf` via the Go module proxy (egress-safe)
+### 1. Install `buf`
 
-`Dockerfile.codegen` downloads the `buf` release binary from GitHub releases. When
-GitHub-releases egress is blocked (the download 403s), install `buf` from the Go module proxy
-instead — `proxy.golang.org` is typically allowlisted:
+`Dockerfile.codegen` downloads the `buf` release binary from GitHub releases. **Try that first** —
+egress is not always blocked, and it is the same binary the container uses:
+
+```bash
+curl -fsSL "https://github.com/bufbuild/buf/releases/latest/download/buf-Linux-x86_64" \
+  -o "$(go env GOPATH)/bin/buf" && chmod +x "$(go env GOPATH)/bin/buf"
+```
+
+If that 403s or times out, fall back to the Go module proxy — `proxy.golang.org` is typically
+allowlisted:
 
 ```bash
 go install github.com/bufbuild/buf/cmd/buf@latest
@@ -72,7 +79,35 @@ python3 -m pip install grpcio-tools==1.80.0
 # On Debian trixie (PEP 668) add: --break-system-packages
 ```
 
+### 4b. Install the TS package's own dependencies
+
+`buf-gen.sh`'s final step compiles `gen/ts` to `gen/ts/dist/` with `tsc`, and **`dist/` is
+committed** (48 tracked files), so this step is not optional — skipping it leaves the compiled
+output stale and fails the `proto-freshness` CI gate. It needs the package's own `node_modules`:
+
+```bash
+cd packages/proto/gen/ts && pnpm install
+```
+
+Without it, `pnpm build` falls back to whatever global `tsc` is on PATH. A newer global
+TypeScript fails with `TS5107: Option 'moduleResolution=node10' is deprecated`, which looks like
+a repo misconfiguration but is really just the wrong compiler — the package pins
+`typescript ^5.4.5`.
+
 ### 5. Validate against the committed stubs (do this BEFORE any proto edit)
+
+> **Create a local `main-dev` ref first, or the breaking check silently no-ops.** `buf-gen.sh`
+> guards its `buf breaking` step with `git show-ref --verify refs/heads/main-dev`, which tests for
+> a **local branch**. On a fresh clone that only has `origin/main-dev`, the guard fails and the
+> whole breaking check is skipped **without any warning** — you get a green run that never
+> compared anything. Fix it before relying on the result:
+>
+> ```bash
+> git branch -f main-dev origin/main-dev
+> ```
+>
+> A correct run prints `==> buf breaking (against main-dev)`. If that line is absent, the check
+> did not run.
 
 Run codegen and confirm the working tree is unchanged — an **empty** diff proves the host
 toolchain matches the one that produced the committed stubs:

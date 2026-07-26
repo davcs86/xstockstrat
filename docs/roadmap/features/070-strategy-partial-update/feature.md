@@ -1,6 +1,6 @@
 # Feature: strategy-partial-update
 
-**Lifecycle Status**: `design-approved`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/strategy-partial-update` (see context.md — implemented on the
 harness-assigned `claude/features-070-071-rnbkqo` branch this session)
 **Created**: 2026-07-26
@@ -17,6 +17,7 @@ harness-assigned `claude/features-070-071-rnbkqo` branch this session)
 | 2026-07-26 | `draft` → (fail) | /sdd-review | FAIL r2 — two C-10 blockers: FR-4 listed 3 of 5 tool-inventory surfaces; `manage_strategy` tool's default-fabrication (`tools.py:338-344`) was unscoped despite being a co-cause |
 | 2026-07-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved r3 (4 warnings, all advisory). OQ-1/OQ-2 deferred to /sdd-design |
 | 2026-07-26 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round + adversary, verdict NEEDS WORK, all objections resolved) and approved; recon.md + design.md written. OQ-1 → FieldMask; OQ-2 → evidence wipe accepted |
+| 2026-07-26 | `design-approved` → `in-progress` | implementation | Steps 1-6 of 6 implemented (proto+codegen, servicer merge, agent client, agent tool + 14th tool, six doc surfaces, integration-test case) |
 
 ---
 
@@ -59,4 +60,6 @@ if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec strategy-partial-update` — generate implementation spec from the approved design
+Verify in CI, then open the integration PR. Remaining optional coverage: UI e2e merge-modelling in
+`e2e/mock-backend.ts` + C-12 fixture centralization of the inline `getStrategy` literal
+(`e2e/fixtures/INVENTORY.md:49`). No UI **production** change is required — verified.

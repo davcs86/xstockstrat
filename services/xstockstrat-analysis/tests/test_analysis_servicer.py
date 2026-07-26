@@ -616,8 +616,7 @@ class TestManageStrategy:
     async def test_update_path(self):
         svc = make_servicer()
         definition = _valid_definition(display_name="Renamed")
-        svc._strategies_repo = AsyncMock()
-        svc._strategies_repo.update = AsyncMock(return_value=_row_for(definition))
+        _stub_update_repo(svc, _row_for(definition))
         req = analysis_pb2.ManageStrategyRequest(
             operation=analysis_pb2.STRATEGY_OPERATION_UPDATE, definition=definition
         )
@@ -1718,23 +1717,76 @@ class TestAggregateCells:
 # ---------------------------------------------------------------------------
 
 
-def _update_req(strategy_id="s1", entry_rule="y"):
+def _rule(rhs=1):
+    """A valid entry-rule tree referencing component 'a'. Vary `rhs` to change the fingerprint."""
+    return json.dumps({"fn": ">", "lhs": "a", "rhs": rhs})
+
+
+def _update_req(strategy_id="s1", rhs=1, mask_paths=None):
+    """A REAL ManageStrategyRequest — not a MagicMock.
+
+    feature 070 reads `request.HasField("update_mask")`, and a MagicMock returns a truthy
+    sentinel for that, which would silently drive every test down the partial-merge path.
+    The rule must also be valid JSON now: the UPDATE branch validates the merged definition
+    directly (with pre-fetched formula outputs) instead of via the stubbable
+    `_validate_definition_proto`.
+    """
     definition = analysis_pb2.StrategyDefinition(
-        strategy_id=strategy_id, display_name="S1", entry_rule=entry_rule
+        strategy_id=strategy_id,
+        display_name="S1",
+        components=[
+            analysis_pb2.StrategyComponent(
+                ref_name="a",
+                kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                indicator="SMA",
+                params={"period": 10.0},
+            )
+        ],
+        entry_rule=_rule(rhs),
     )
-    req = MagicMock()
-    req.definition = definition
-    req.operation = analysis_pb2.STRATEGY_OPERATION_UPDATE
+    req = analysis_pb2.ManageStrategyRequest(
+        operation=analysis_pb2.STRATEGY_OPERATION_UPDATE, definition=definition
+    )
+    if mask_paths is not None:
+        req.update_mask.paths.extend(mask_paths)
     return req
 
 
-def _updated_row(strategy_id="s1", entry_rule="y"):
+def _stub_update_repo(svc, current_row):
+    """Wire a strategies repo for the feature-070 merge path.
+
+    `update_locked` genuinely invokes the apply_fn against `current_row`, so tests exercise the
+    real merge / erasure-guard / validation logic instead of mocking past it.
+    """
+    repo = AsyncMock()
+    repo.get_by_id = AsyncMock(return_value=current_row)
+
+    async def _locked(strategy_id, apply_fn):
+        name, new_json = await apply_fn(current_row)
+        return {**current_row, "display_name": name, "definition_json": new_json}
+
+    repo.update_locked = AsyncMock(side_effect=_locked)
+    svc._strategies_repo = repo
+    return repo
+
+
+def _updated_row(strategy_id="s1", rhs=1):
     return {
         "strategy_id": strategy_id,
         "display_name": "S1",
         "active": True,
         "live_enabled": False,
-        "definition_json": {"entry_rule": entry_rule},
+        "definition_json": {
+            "components": [
+                {
+                    "ref_name": "a",
+                    "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                    "indicator": "SMA",
+                    "params": {"period": 10.0},
+                }
+            ],
+            "entry_rule": _rule(rhs),
+        },
     }
 
 
@@ -1772,9 +1824,8 @@ class TestHeadlineTriggers:
         svc._strategies["s1"] = analysis_pb2.StrategyScore(
             strategy_id="s1", overall_score=0.9, rating="A"
         )
-        svc._strategies_repo.update = AsyncMock(return_value=_updated_row())
+        _stub_update_repo(svc, _updated_row())
         svc._scores_repo.delete = AsyncMock(side_effect=Exception("db down"))
-        svc._validate_definition_proto = AsyncMock()
         svc._has_admin_scope = lambda ctx: True
 
         await svc.ManageStrategy(_update_req(), context=MagicMock())
@@ -1786,8 +1837,7 @@ class TestHeadlineTriggers:
     async def test_update_recompute_no_deadlock(self):
         # UPDATE holds the lock then calls the inner (non-reentrant) recompute — must not deadlock.
         svc = _derivation_svc([_eligible_cell(symbol=s, days=600) for s in ("A", "B", "C", "D")])
-        svc._strategies_repo.update = AsyncMock(return_value=_updated_row())
-        svc._validate_definition_proto = AsyncMock()
+        _stub_update_repo(svc, _updated_row())
         svc._has_admin_scope = lambda ctx: True
 
         await asyncio.wait_for(svc.ManageStrategy(_update_req(), context=MagicMock()), timeout=2.0)
@@ -2343,3 +2393,253 @@ class TestBacktestCooldown:
         )
         result = await svc.ManageStrategy(req, context=_admin_ctx())
         assert result.strategy_id == "sma_x"
+
+
+# ---------------------------------------------------------------------------
+# feature 070 — partial strategy update (update_mask)
+# ---------------------------------------------------------------------------
+
+
+def _stored_row(strategy_id="s1", cooldown=None):
+    """A fully-populated stored strategy — the thing the incident wiped."""
+    definition = analysis_pb2.StrategyDefinition(
+        strategy_id=strategy_id,
+        display_name="Range MR v3",
+        components=[
+            analysis_pb2.StrategyComponent(
+                ref_name="z",
+                kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                indicator="SMA",
+                params={"period": 20.0},
+            )
+        ],
+        entry_rule=json.dumps({"fn": "<", "lhs": "z", "rhs": -1.0}),
+        exit_rule=json.dumps({"fn": ">", "lhs": "z", "rhs": 1.0}),
+    )
+    if cooldown is not None:
+        definition.cooldown_days = cooldown
+    return {
+        "strategy_id": strategy_id,
+        "display_name": definition.display_name,
+        "active": True,
+        "live_enabled": False,
+        "definition_json": json_format.MessageToDict(definition, preserving_proto_field_name=True),
+    }
+
+
+def _masked_req(strategy_id="s1", paths=(), **fields):
+    definition = analysis_pb2.StrategyDefinition(strategy_id=strategy_id, **fields)
+    req = analysis_pb2.ManageStrategyRequest(
+        operation=analysis_pb2.STRATEGY_OPERATION_UPDATE, definition=definition
+    )
+    req.update_mask.paths.extend(paths)
+    return req
+
+
+class TestPartialStrategyUpdate:
+    """The reported incident: `manage_strategy update` with only cooldown_days wiped the
+    strategy's components and rules. These pin the server half of the fix."""
+
+    @pytest.mark.asyncio
+    async def test_cooldown_only_update_preserves_components_and_rules(self):
+        """AC-1 at the servicer layer — the exact shape that caused the incident."""
+        svc = make_servicer()
+        stored = _stored_row()
+        repo = _stub_update_repo(svc, stored)
+
+        req = _masked_req(paths=["cooldown_days"], cooldown_days=45)
+        result = await svc.ManageStrategy(req, context=_admin_ctx())
+
+        assert result.cooldown_days == 45
+        # The whole point: nothing else moved.
+        assert [c.ref_name for c in result.components] == ["z"]
+        assert result.components[0].indicator == "SMA"
+        assert json.loads(result.entry_rule) == {"fn": "<", "lhs": "z", "rhs": -1.0}
+        assert json.loads(result.exit_rule) == {"fn": ">", "lhs": "z", "rhs": 1.0}
+        assert result.display_name == "Range MR v3"  # not blanked
+        repo.update_locked.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_masked_rename_applies_without_touching_the_definition(self):
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row())
+
+        req = _masked_req(paths=["display_name"], display_name="Renamed")
+        result = await svc.ManageStrategy(req, context=_admin_ctx())
+
+        assert result.display_name == "Renamed"
+        assert [c.ref_name for c in result.components] == ["z"]
+
+    @pytest.mark.asyncio
+    async def test_masked_but_absent_path_clears_the_field(self):
+        """AIP-161: a masked path with no value in the request is an explicit erase. This is
+        the only way to express 'clear', since proto3 gives these fields no presence."""
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row())
+
+        req = _masked_req(paths=["exit_rule"])  # exit_rule deliberately not supplied
+        result = await svc.ManageStrategy(req, context=_admin_ctx())
+
+        assert result.exit_rule == ""
+        assert json.loads(result.entry_rule)["lhs"] == "z"  # untouched
+
+    @pytest.mark.asyncio
+    async def test_cooldown_days_can_be_cleared_back_to_platform_default(self):
+        """The inverse of the feature-069 explicit-presence trap: an explicit 0 must be
+        settable AND revertible to unset. Masking without supplying does the revert."""
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row(cooldown=0))
+
+        result = await svc.ManageStrategy(
+            _masked_req(paths=["cooldown_days"]), context=_admin_ctx()
+        )
+        assert not result.HasField("cooldown_days")
+
+    @pytest.mark.asyncio
+    async def test_maskless_update_is_still_a_full_replace(self):
+        """FR-5 / AC-6 regression guard: absent mask keeps pre-070 semantics, so the
+        StrategyWizard (which always sends a complete definition) needs no change."""
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row())
+        replacement = _valid_definition(display_name="Wholly New")
+        # Carry an exit_rule: the stored strategy has one, and the erasure guard applies to
+        # maskless UPDATE too (see test_maskless_replace_cannot_silently_drop_a_rule).
+        replacement.exit_rule = json.dumps({"fn": ">", "lhs": "fast", "rhs": 200})
+
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_UPDATE, definition=replacement
+        )
+        result = await svc.ManageStrategy(req, context=_admin_ctx())
+
+        assert result.display_name == "Wholly New"
+        assert [c.ref_name for c in result.components] == ["fast"]  # old 'z' gone
+        assert json.loads(result.exit_rule)["rhs"] == 200
+
+    @pytest.mark.asyncio
+    async def test_maskless_replace_cannot_silently_drop_a_rule(self):
+        """A deliberate, documented narrowing of the pre-070 contract.
+
+        A maskless full replace that omits a rule the stored strategy HAS is now rejected —
+        the guard cannot tell that apart from the incident. The StrategyWizard never trips it
+        (its step gates require non-blank rules before submit), but a raw grpcurl/ops caller
+        that legitimately wants to drop a rule must now say so via update_mask."""
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row())
+        replacement = _valid_definition(display_name="No Exit")  # no exit_rule
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_UPDATE, definition=replacement
+        )
+        ctx = _abort_ctx()
+        svc._has_admin_scope = lambda c: True
+
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(req, context=ctx)
+
+        code, msg = ctx.abort.await_args.args
+        assert code == grpc.StatusCode.INVALID_ARGUMENT
+        assert "refusing to blank 'exit_rule'" in msg
+
+    @pytest.mark.asyncio
+    async def test_maskless_wipe_is_rejected_even_from_an_unpatched_client(self):
+        """FR-2b, fail-closed. This is the incident replayed byte-for-byte: an empty
+        definition carrying only cooldown_days, no mask. The server alone must stop it."""
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row())
+        bare = analysis_pb2.StrategyDefinition(strategy_id="s1")
+        bare.cooldown_days = 45
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_UPDATE, definition=bare
+        )
+        ctx = _abort_ctx()
+        svc._has_admin_scope = lambda c: True
+
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(req, context=ctx)
+
+        code, msg = ctx.abort.await_args.args
+        assert code == grpc.StatusCode.INVALID_ARGUMENT
+        assert "refusing to clear 'components'" in msg
+        assert "update_mask" in msg  # names the escape hatch
+
+    @pytest.mark.asyncio
+    async def test_explicitly_masked_erasure_is_allowed(self):
+        """The guard must not block a deliberate clear — only an accidental one."""
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row())
+
+        req = _masked_req(paths=["components", "entry_rule", "exit_rule"])
+        result = await svc.ManageStrategy(req, context=_admin_ctx())
+
+        assert list(result.components) == []
+        assert result.entry_rule == ""
+
+    @pytest.mark.asyncio
+    async def test_merged_result_is_validated_not_just_the_request(self):
+        """FR-2a: swapping components out from under a stored rule must be caught. The
+        request alone looks fine — only the MERGED definition is orphaned."""
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row())
+        ctx = _abort_ctx()
+        svc._has_admin_scope = lambda c: True
+
+        # Replace 'z' with 'q'; the stored entry_rule still references 'z'.
+        req = _masked_req(
+            paths=["components"],
+            components=[
+                analysis_pb2.StrategyComponent(
+                    ref_name="q",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="SMA",
+                    params={"period": 5.0},
+                )
+            ],
+        )
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(req, context=ctx)
+
+        code, msg = ctx.abort.await_args.args
+        assert code == grpc.StatusCode.INVALID_ARGUMENT
+        assert "not defined as a component ref_name" in msg
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("path", ["strategy_id", "active", "live_enabled"])
+    async def test_column_authoritative_paths_are_rejected(self, path):
+        """Masking these would write a value the next read silently discards."""
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row())
+        ctx = _abort_ctx()
+        svc._has_admin_scope = lambda c: True
+
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(_masked_req(paths=[path]), context=ctx)
+
+        code, msg = ctx.abort.await_args.args
+        assert code == grpc.StatusCode.INVALID_ARGUMENT
+        assert "column-authoritative" in msg
+
+    @pytest.mark.asyncio
+    async def test_unknown_mask_path_is_rejected(self):
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row())
+        ctx = _abort_ctx()
+        svc._has_admin_scope = lambda c: True
+
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(_masked_req(paths=["nope"]), context=ctx)
+
+        assert "unknown update_mask path" in ctx.abort.await_args.args[1]
+
+    @pytest.mark.asyncio
+    async def test_missing_strategy_is_not_found_before_any_write(self):
+        svc = make_servicer()
+        repo = AsyncMock()
+        repo.get_by_id = AsyncMock(return_value=None)
+        svc._strategies_repo = repo
+        ctx = _abort_ctx()
+        svc._has_admin_scope = lambda c: True
+
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(_masked_req(paths=["display_name"]), context=ctx)
+
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.NOT_FOUND
+        repo.update_locked.assert_not_awaited()  # no write attempted

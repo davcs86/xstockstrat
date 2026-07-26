@@ -1,5 +1,5 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import type { FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
 import type { PageRequest, PageResponse, Timeframe, TimeRange } from "../../common/v1/common_pb";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 /**
@@ -696,6 +696,24 @@ export type ManageStrategyRequest = Message<"xstockstrat.analysis.v1.ManageStrat
      * @generated from field: xstockstrat.analysis.v1.StrategyDefinition definition = 2;
      */
     definition?: StrategyDefinition | undefined;
+    /**
+     * Feature 070 — partial update. Applies to STRATEGY_OPERATION_UPDATE only; ignored for
+     * REGISTER/DEACTIVATE.
+     *
+     *   present  → MERGE: only the listed top-level StrategyDefinition paths are taken from
+     *              `definition`; every other stored field is preserved. A masked path whose value
+     *              is absent from the request CLEARS that field (AIP-161 semantics) — that is the
+     *              only way to express "erase this", since proto3 gives `components`/`entry_rule`/
+     *              `exit_rule` no field presence.
+     *   absent   → FULL REPLACE: byte-for-byte the pre-070 behavior, so existing clients (the
+     *              StrategyWizard, which always sends a complete definition) are unaffected.
+     *
+     * Allowed paths: display_name, components, entry_rule, exit_rule, signal_params, cooldown_days.
+     * strategy_id/active/live_enabled are column-authoritative and rejected with INVALID_ARGUMENT.
+     *
+     * @generated from field: google.protobuf.FieldMask update_mask = 3;
+     */
+    updateMask?: FieldMask | undefined;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.ManageStrategyRequest.

@@ -1425,13 +1425,82 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             )
             return _row_to_strategy_definition(row)
         if op == analysis_pb2.STRATEGY_OPERATION_UPDATE:
-            await self._validate_definition_proto(definition, context)
-            definition_json = json_format.MessageToDict(
-                definition, preserving_proto_field_name=True
-            )
-            row = await self._strategies_repo.update(
-                definition.strategy_id, definition.display_name, definition_json
-            )
+            # feature 070: an update_mask turns UPDATE into a partial merge. Absent mask keeps the
+            # pre-070 full-replace path byte-for-byte, so existing clients are unaffected.
+            has_mask = request.HasField("update_mask")
+            mask_paths = list(request.update_mask.paths) if has_mask else []
+            for path in mask_paths:
+                if path in _COLUMN_AUTHORITATIVE_PATHS:
+                    await context.abort(
+                        grpc.StatusCode.INVALID_ARGUMENT,
+                        f"update_mask path '{path}' is column-authoritative and cannot be masked; "
+                        f"use the dedicated operation instead",
+                    )
+                    return
+                if path not in _MASKABLE_PATHS:
+                    await context.abort(
+                        grpc.StatusCode.INVALID_ARGUMENT,
+                        f"unknown update_mask path '{path}'. Allowed: {sorted(_MASKABLE_PATHS)}",
+                    )
+                    return
+
+            propagation_meta = [
+                (k, v)
+                for k, v in context.invocation_metadata()
+                if k in ("x-user-id", "x-access-scope", "x-trace-id")
+            ]
+            # Pre-fetch formula outputs BEFORE opening the transaction — `apply_fn` runs with the
+            # row locked and must not do I/O. Fetch for the union of the request's components and
+            # the stored ones, so any merge outcome is covered. A component that somehow escapes
+            # the union fails closed: `_validate_definition` treats a missing entry as {"value"}.
+            pre = await self._strategies_repo.get_by_id(definition.strategy_id)
+            if pre is None:
+                await context.abort(
+                    grpc.StatusCode.NOT_FOUND,
+                    f"strategy '{definition.strategy_id}' not found",
+                )
+                return
+            union = analysis_pb2.StrategyDefinition()
+            union.CopyFrom(_row_to_strategy_definition(pre))
+            union.components.extend(definition.components)
+            formula_outputs = await self._fetch_formula_outputs(union, propagation_meta)
+
+            async def _apply(current, _defn=definition, _mask=mask_paths, _has=has_mask):
+                old_json = current["definition_json"] or {}
+                if _has:
+                    merged_json = _merge_definition_json(old_json, _defn, _mask)
+                    # Rebuild through the shared row→proto mapper so the column-authoritative
+                    # overlay stays the single source of that logic — but feed it the merged
+                    # display_name, or a masked rename would be overwritten by the stored value.
+                    synthetic = {
+                        **current,
+                        "definition_json": merged_json,
+                        "display_name": merged_json.get("display_name", current["display_name"]),
+                    }
+                    to_write = _row_to_strategy_definition(synthetic)
+                    # Persist what was validated, not the raw merged dict: ParseDict drops
+                    # unknown keys and coerces map<string,double>, so the two can differ.
+                    new_json = json_format.MessageToDict(to_write, preserving_proto_field_name=True)
+                    new_name = to_write.display_name
+                else:
+                    to_write = _defn
+                    new_json = json_format.MessageToDict(_defn, preserving_proto_field_name=True)
+                    new_name = _defn.display_name
+
+                err = _guard_erasure(old_json, new_json, set(_mask))
+                if err is not None:
+                    raise _MergeRejected(err)
+                try:
+                    _validate_definition(to_write, formula_outputs)
+                except ValueError as e:
+                    raise _MergeRejected(str(e)) from e
+                return new_name, new_json
+
+            try:
+                row = await self._strategies_repo.update_locked(definition.strategy_id, _apply)
+            except _MergeRejected as e:
+                await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+                return
             if row is None:
                 await context.abort(
                     grpc.StatusCode.NOT_FOUND,
@@ -1823,6 +1892,79 @@ def _row_to_backtest_summary(row: dict) -> "analysis_pb2.BacktestRunSummary":
         ts.FromDatetime(completed)
         summary.completed_at.CopyFrom(ts)
     return summary
+
+
+# ── Feature 070: partial strategy update ─────────────────────────────────────
+#
+# Top-level StrategyDefinition paths an update_mask may name. Deliberately flat and closed —
+# a mask is an authorization-shaped input and an open path set invites surprises.
+_MASKABLE_PATHS = frozenset(
+    {"display_name", "components", "entry_rule", "exit_rule", "signal_params", "cooldown_days"}
+)
+
+# These live in real columns and are overlaid at read time by _row_to_strategy_definition, so
+# masking them would write a value that the next read silently discards. Rejected outright.
+_COLUMN_AUTHORITATIVE_PATHS = frozenset({"strategy_id", "active", "live_enabled"})
+
+
+class _MergeRejected(Exception):
+    """A merged definition failed validation or the erasure guard — abort INVALID_ARGUMENT."""
+
+
+def _merge_definition_json(stored_json: dict, definition, mask_paths) -> dict:
+    """AIP-161 field-mask merge of `definition` onto the stored JSON (feature 070).
+
+    One uniform rule for every path — deliberately NOT "scalars from the proto object, repeated
+    and message fields from the dict". `MessageToDict` omits default-valued no-presence fields,
+    so a two-rule merge silently no-ops three of the six maskable paths: a masked
+    ``components: []`` never appears in the dict (component clear does nothing), and a
+    masked-unset ``signal_params`` read off the proto persists ``{}`` where the key was
+    previously absent — changing the JSONB key set and therefore the definition fingerprint.
+
+    So: **masked path present in the request → overwrite; masked path absent → clear.** That
+    "absent means clear" half is the only way to express erasure at all, because proto3 gives
+    ``components`` / ``entry_rule`` / ``exit_rule`` no field presence.
+    """
+    full = json_format.MessageToDict(definition, preserving_proto_field_name=True)
+    merged = dict(stored_json or {})
+    for path in mask_paths:
+        if path in full:
+            merged[path] = full[path]
+        else:
+            merged.pop(path, None)
+    return merged
+
+
+def _guard_erasure(old_json: dict, new_json: dict, mask_paths: set) -> str | None:
+    """Reject a write that would strip an existing strategy's components or rules (FR-2b).
+
+    "Explicitly requested" means the path is named in the mask. This deliberately applies to a
+    **maskless** UPDATE too, so the reported incident fails closed even against a completely
+    unpatched client — the server alone stops the data loss. No legitimate caller trips it: the
+    StrategyWizard's own step gates require a non-empty component list and non-blank rules
+    before it can submit.
+
+    Returns an error message, or None when the write is safe.
+    """
+    old_json = old_json or {}
+    new_json = new_json or {}
+
+    if old_json.get("components") and not new_json.get("components"):
+        if "components" not in mask_paths:
+            return (
+                "refusing to clear 'components' on an existing strategy: the request carried no "
+                "components and did not name it in update_mask. To erase deliberately, include "
+                "'components' in update_mask."
+            )
+
+    for rule in ("entry_rule", "exit_rule"):
+        if old_json.get(rule) and not new_json.get(rule) and rule not in mask_paths:
+            return (
+                f"refusing to blank '{rule}' on an existing strategy: the request carried no "
+                f"{rule} and did not name it in update_mask. To erase deliberately, include "
+                f"'{rule}' in update_mask."
+            )
+    return None
 
 
 _FINGERPRINT_EXCLUDED_KEYS = frozenset({"display_name", "active", "live_enabled"})
