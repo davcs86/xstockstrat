@@ -1,7 +1,8 @@
 # Feature: strategy-partial-update
 
-**Lifecycle Status**: `draft`
-**Development Branch**: `feature/strategy-partial-update`
+**Lifecycle Status**: `spec-ready`
+**Development Branch**: `feature/strategy-partial-update` (see context.md — implemented on the
+harness-assigned `claude/features-070-071-rnbkqo` branch this session)
 **Created**: 2026-07-26
 **Last Updated**: 2026-07-26
 
@@ -12,6 +13,9 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-07-26 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-07-26 | `draft` → (fail) | /sdd-review | FAIL r1 — FR-2/FR-3 + AC-2/AC-3 described already-shipped behavior (`GetStrategy` exists; orphan-ref check exists) |
+| 2026-07-26 | `draft` → (fail) | /sdd-review | FAIL r2 — two C-10 blockers: FR-4 listed 3 of 5 tool-inventory surfaces; `manage_strategy` tool's default-fabrication (`tools.py:338-344`) was unscoped despite being a co-cause |
+| 2026-07-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved r3 (4 warnings, all advisory). OQ-1/OQ-2 deferred to /sdd-design |
 
 ---
 
@@ -52,4 +56,7 @@ if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review strategy-partial-update product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design strategy-partial-update` — recon dossier + design debate; must close OQ-1 (merge
+mechanism: `FieldMask` vs `patch` op — proto3 no-presence on `components`/`entry_rule`/`exit_rule` is
+the deciding factor) and OQ-2 (feature-065 evidence wipe), plus FR-2(b)'s "explicitly requested"
+erasure mechanism, which falls out of OQ-1

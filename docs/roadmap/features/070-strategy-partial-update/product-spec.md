@@ -217,7 +217,7 @@ FR-5).
 
 - **Ledger C-10 (fails 056/060/067) — "shipped the producer, forgot the shared consumer."** Changes
   here hard-couple the `manage_strategy` MCP tool docstring, `docs/runbooks/mcp-tools.md`, and the
-  StrategyWizard, and the new read tool additionally couples the four tool-inventory surfaces
+  StrategyWizard, and the new read tool additionally couples the five tool-inventory surfaces
   enumerated in FR-4. All must be updated in the *same* feature, each with a test.
 - **Rebase-only overlap with feature 071** (`backtest-time-window`, developed in parallel): shared
   files `analysis.proto`, `servicer.py`, `tools.py`, `client.py`, `insightsBff.ts`, `mcp-tools.md` —

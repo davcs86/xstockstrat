@@ -52,3 +52,18 @@
 - **Deviation:** implemented on the harness-assigned branch `claude/features-070-071-rnbkqo`
   (rebased onto `main-dev`) rather than `feature/strategy-partial-update` with per-step PRs, because
   the harness pins the branch. Features 070 and 071 share this one branch/PR.
+
+## Session 2026-07-26 — sdd-review product-spec (round 3: PASS)
+
+- **Verdict: PASS WITH WARNINGS.** Status: `draft` → `spec-ready`.
+- Both round-2 C-10 blockers verified closed. The five-surface enumeration was confirmed
+  **exhaustive** by a repo-wide grep for "thirteen" — no live surface exists outside those five.
+- Verified safe, needs no change: the `/accounts/mcp-tools` UI page renders `GET /api/tools`
+  dynamically, and its e2e fixture `SAMPLE_TOOLS`
+  (`services/xstockstrat-ui/e2e/accounts/mcp-tools.spec.ts:12`) is a deliberate two-tool sample that
+  asserts no count — C-12 clean, no fixture update needed.
+- Fixed a stale "four surfaces" phrase in the Risks section (FR-4/AC-5 both say five).
+- Carried into /sdd-spec: expand bare filenames to full repo paths (C-01). Real paths are two levels
+  deeper than they read — `app/handlers/servicer.py`, `app/services/evaluator.py`.
+- Still open for /sdd-design: OQ-1 (merge mechanism), OQ-2 (feature-065 evidence wipe), and FR-2(b)'s
+  "explicitly requested" erasure mechanism (falls out of OQ-1).
