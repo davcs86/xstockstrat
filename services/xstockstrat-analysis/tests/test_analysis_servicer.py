@@ -8,6 +8,7 @@ populating _backtests/_strategies directly, same pattern as ingest.
 import asyncio
 import json
 import math
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import grpc
@@ -96,6 +97,12 @@ def _derivation_svc(cells, definition_json=None, strategy_id="s1"):
 # ---------------------------------------------------------------------------
 
 
+
+# feature 071: GetBars is paged now, so a fake response must carry a page whose token says
+# "no more pages" — an auto-created MagicMock token would read as "another page exists".
+_EOF_PAGE = SimpleNamespace(next_page_token="")
+
+
 class TestScoreFromMetrics:
     """Grade-blend + letter-grade math (extracted from the old _score_from_result, feature 065)."""
 
@@ -178,6 +185,7 @@ class TestRunBacktest:
         # Only 3 bars — far below the default slow_period(50)+2.
         bars_resp = MagicMock()
         bars_resp.bars = [MagicMock(), MagicMock(), MagicMock()]
+        bars_resp.page.next_page_token = ""
         svc._marketdata = MagicMock()
         svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
 
@@ -199,6 +207,7 @@ class TestRunBacktest:
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         bars_resp = MagicMock()
         bars_resp.bars = [MagicMock(), MagicMock()]  # insufficient → short-circuits after GetBars
+        bars_resp.page.next_page_token = ""
         svc._marketdata = MagicMock()
         svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
 
@@ -325,6 +334,7 @@ class TestRunBacktestPersistence:
         svc._backtest_runs_repo = AsyncMock()
         bars_resp = MagicMock()
         bars_resp.bars = [MagicMock(), MagicMock(), MagicMock()]  # too few → INSUFFICIENT_DATA
+        bars_resp.page.next_page_token = ""
         svc._marketdata = MagicMock()
         svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
 
@@ -788,7 +798,7 @@ class TestScreenSymbols:
 
         from gen.marketdata.v1 import marketdata_pb2
 
-        return SimpleNamespace(bars=[marketdata_pb2.Bar(close=c) for c in closes])
+        return SimpleNamespace(page=_EOF_PAGE, bars=[marketdata_pb2.Bar(close=c) for c in closes])
 
     @staticmethod
     def _formula_resp(value):
@@ -1006,7 +1016,7 @@ class TestBacktestDiagnostics:
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         svc._marketdata = MagicMock()
-        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=bars))
+        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars))
         svc._indicators = MagicMock()
         svc._indicators.ComputeIndicator = AsyncMock(
             side_effect=[_points(fast_series), _points(slow_series)]
@@ -1105,7 +1115,9 @@ class TestBacktestDiagnostics:
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         svc._marketdata = MagicMock()
         svc._marketdata.GetBars = AsyncMock(
-            return_value=SimpleNamespace(bars=[_bar(1, 10), _bar(2, 11), _bar(3, 12)])
+            return_value=SimpleNamespace(
+                page=_EOF_PAGE, bars=[_bar(1, 10), _bar(2, 11), _bar(3, 12)]
+            )
         )
         result = await svc.RunBacktest(self._legacy_req(), context=MagicMock())
         assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
@@ -1138,7 +1150,7 @@ class TestBacktestDiagnostics:
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         svc._marketdata = MagicMock()
-        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=bars))
+        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars))
         svc._indicators = MagicMock()
         svc._indicators.ComputeIndicator = AsyncMock(
             return_value=SimpleNamespace(
@@ -1178,7 +1190,7 @@ class TestBacktestDiagnostics:
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         svc._marketdata = MagicMock()
-        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=bars))
+        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars))
         svc._indicators = MagicMock()
         # A legitimate all-warm-up series: success=True with a full-length null "value".
         out = Struct()
@@ -1225,7 +1237,7 @@ class TestFormulaErrorSurfacing:
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         svc._marketdata = MagicMock()
-        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=bars))
+        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars))
         svc._indicators = MagicMock()
         svc._indicators.ExecuteFormula = AsyncMock(side_effect=execute_side_effect)
         svc._indicators.GetFormula = AsyncMock(
@@ -1316,7 +1328,9 @@ class TestBacktestRangeCap:
         svc._marketdata = MagicMock()
         # enough bars so the legacy path runs (>= slow_period(3)+2); values irrelevant here
         svc._marketdata.GetBars = AsyncMock(
-            return_value=SimpleNamespace(bars=[_bar(1000 + i, 10) for i in range(6)])
+            return_value=SimpleNamespace(
+                page=_EOF_PAGE, bars=[_bar(1000 + i, 10) for i in range(6)]
+            )
         )
         svc._indicators = MagicMock()
         svc._indicators.ComputeIndicator = AsyncMock(
@@ -1602,6 +1616,7 @@ class TestRunBacktestCells:
         self._wire(svc)
         bars_resp = MagicMock()
         bars_resp.bars = [MagicMock(), MagicMock(), MagicMock()]  # too few → INSUFFICIENT
+        bars_resp.page.next_page_token = ""
         svc._marketdata = MagicMock()
         svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
 
@@ -2066,6 +2081,7 @@ class TestBacktestDetailPersistence:
         svc._backtest_details_repo = AsyncMock()
         bars_resp = MagicMock()
         bars_resp.bars = [MagicMock(), MagicMock(), MagicMock()]  # too few bars
+        bars_resp.page.next_page_token = ""
         svc._marketdata = MagicMock()
         svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
 
@@ -2214,7 +2230,7 @@ async def _run_evaluated(svc, definition, decisions, n_bars):
 
     bars = [_cooldown_bar(100.0, i) for i in range(n_bars)]
     svc._marketdata = MagicMock()
-    svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=bars))
+    svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars))
     svc._compute_evaluated_warmup = AsyncMock(return_value=0)
     fake_eval = MagicMock()
     fake_eval.evaluate_with_series = AsyncMock(return_value=(decisions, {}))

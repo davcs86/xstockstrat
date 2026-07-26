@@ -79,7 +79,8 @@ def builtin_lookback_bars(indicator: str, params) -> int:
     params = params or {}
 
     if name in ("SMA", "BB"):
-        period = _int_param(params, "period", _DEFAULT_BB_PERIOD if name == "BB" else _DEFAULT_PERIOD)
+        default = _DEFAULT_BB_PERIOD if name == "BB" else _DEFAULT_PERIOD
+        period = _int_param(params, "period", default)
         # rolling(period) is first valid at index period-1.
         return max(0, period - 1) + _CROSSOVER_LOOKBACK
 

@@ -5,10 +5,16 @@ Pure — no I/O, no gRPC, no DB. The lookback table is the contract these pin.
 
 import json
 import math
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from app.services import warmup
 from gen.analysis.v1 import analysis_pb2
+from gen.common.v1 import common_pb2
+from gen.marketdata.v1 import marketdata_pb2
+
+from app.handlers.servicer import _MAX_BAR_PAGES, AnalysisServicer, _BarFetchError
+from app.services import warmup
 
 
 def _comp(ref_name, indicator, **params):
@@ -176,3 +182,94 @@ class TestPrefixCalendarDays:
     def test_is_monotonic(self):
         spans = [warmup.prefix_calendar_days(b) for b in range(1, 300)]
         assert spans == sorted(spans)
+
+
+# ── feature 071: bounded bar pagination ──────────────────────────────────────
+#
+# Lives here rather than in test_analysis_servicer.py because these exercise the
+# fetch helper in isolation; the servicer's own suite covers the engine paths.
+
+
+def _bar(sec):
+    b = marketdata_pb2.Bar(close=float(sec))
+    b.time.seconds = sec
+    return b
+
+
+def _page(bars, token=""):
+    return SimpleNamespace(bars=bars, page=SimpleNamespace(next_page_token=token))
+
+
+def _svc_with_pages(pages):
+    svc = AnalysisServicer.__new__(AnalysisServicer)
+    svc._marketdata = MagicMock()
+    svc._marketdata.GetBars = AsyncMock(side_effect=pages)
+    return svc
+
+
+class TestFetchBarsPaged:
+    async def test_single_page_returns_all_bars(self):
+        svc = _svc_with_pages([_page([_bar(1), _bar(2)])])
+        bars = await svc._fetch_bars_paged("AAPL", common_pb2.TimeRange(), [])
+        assert [b.time.seconds for b in bars] == [1, 2]
+
+    async def test_follows_the_cursor_across_pages(self):
+        """The regression this helper exists for: an unpaged fetch stopped at page 1 and
+        silently lost the newest bars."""
+        svc = _svc_with_pages(
+            [
+                _page([_bar(1), _bar(2)], token="t1"),
+                _page([_bar(3), _bar(4)], token="t2"),
+                _page([_bar(5)]),
+            ]
+        )
+        bars = await svc._fetch_bars_paged("AAPL", common_pb2.TimeRange(), [])
+        assert [b.time.seconds for b in bars] == [1, 2, 3, 4, 5]
+        assert svc._marketdata.GetBars.await_count == 3
+
+    async def test_forwards_the_page_token_it_was_given(self):
+        svc = _svc_with_pages([_page([_bar(1)], token="tok"), _page([_bar(2)])])
+        await svc._fetch_bars_paged("AAPL", common_pb2.TimeRange(), [])
+        second = svc._marketdata.GetBars.await_args_list[1].args[0]
+        assert second.page.page_token == "tok"
+
+    async def test_identical_page_with_identical_token_terminates(self):
+        """marketdata falls back to `cursor = start` on an unparseable page token, re-serving
+        the same page with the same token. Without the monotonicity guard this loops forever."""
+        repeated = [_page([_bar(1), _bar(2)], token="stuck") for _ in range(_MAX_BAR_PAGES + 5)]
+        svc = _svc_with_pages(repeated)
+        bars = await svc._fetch_bars_paged("AAPL", common_pb2.TimeRange(), [])
+        assert [b.time.seconds for b in bars] == [1, 2]
+        assert svc._marketdata.GetBars.await_count == 2
+
+    async def test_overlapping_page_keeps_only_strictly_newer_bars(self):
+        svc = _svc_with_pages(
+            [
+                _page([_bar(1), _bar(2)], token="t1"),
+                _page([_bar(2), _bar(3)]),  # re-sends the boundary bar
+            ]
+        )
+        bars = await svc._fetch_bars_paged("AAPL", common_pb2.TimeRange(), [])
+        assert [b.time.seconds for b in bars] == [1, 2, 3]
+
+    async def test_exceeding_the_page_cap_raises_rather_than_truncating(self):
+        """Returning what it has would silently drop the newest bars — exactly the bug this
+        helper fixes — and would do so as a function of a config value (F-07)."""
+        pages = [
+            _page([_bar(i)], token=f"t{i}") for i in range(1, _MAX_BAR_PAGES + 3)
+        ]
+        svc = _svc_with_pages(pages)
+        with pytest.raises(_BarFetchError, match="refusing to return a truncated series"):
+            await svc._fetch_bars_paged("AAPL", common_pb2.TimeRange(), [])
+
+    async def test_empty_first_page_returns_empty(self):
+        svc = _svc_with_pages([_page([])])
+        assert await svc._fetch_bars_paged("AAPL", common_pb2.TimeRange(), []) == []
+
+    async def test_full_page_with_empty_token_is_treated_as_eof(self):
+        """marketdata queries LIMIT pageSize+1 and only sets a token when it saw the extra
+        row, so it cannot both fill a page and forget the cursor. No probe needed."""
+        svc = _svc_with_pages([_page([_bar(1), _bar(2)])])
+        bars = await svc._fetch_bars_paged("AAPL", common_pb2.TimeRange(), [])
+        assert len(bars) == 2
+        assert svc._marketdata.GetBars.await_count == 1
