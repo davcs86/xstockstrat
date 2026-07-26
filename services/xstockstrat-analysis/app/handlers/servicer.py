@@ -37,7 +37,7 @@ from app.repositories.backtest_run_symbols import BacktestRunSymbolsRepository
 from app.repositories.backtest_runs import BacktestRunsRepository
 from app.repositories.strategies import StrategiesRepository
 from app.repositories.strategy_scores import StrategyScoresRepository
-from app.services import scoring
+from app.services import scoring, warmup
 from app.services.cooldown import effective_cooldown_days, is_cooldown_active
 from app.services.evaluator import (
     FormulaExecutionError,
@@ -63,11 +63,15 @@ class _InsufficientData(Exception):
     fabricating a flat-equity "success" (feature 053, FR-2 / AC-2).
     """
 
-    def __init__(self, symbol: str, bars_have: int, bars_need: int):
+    def __init__(self, symbol: str, bars_have: int, bars_need: int, gap_range=None):
         super().__init__(f"{symbol}: have {bars_have} bars, need {bars_need}")
         self.symbol = symbol
         self.bars_have = bars_have
         self.bars_need = bars_need
+        # feature 071: for a pre-window warm-up shortfall the actionable backfill span is the
+        # PREFIX (start - warmup … start), not the caller's window — the window itself may be
+        # fully covered. None → the caller's requested range, as before.
+        self.gap_range = gap_range
 
 
 # feature 071: marketdata's GetBars defaults to a 500-bar page and orders ASC, so an
@@ -339,6 +343,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         slippage=slippage,
                         propagation_meta=propagation_meta,
                         formula_warmup_cache=formula_warmup_cache,
+                        # feature 071 / FR-2: prefix ONLY when the caller supplied an explicit
+                        # start. `start_set` is snapshotted before the defaulting block above
+                        # mutates request.range in place and destroys the distinction.
+                        warmup_prefix=start_set,
                     )
                 else:
                     trades, equity, daily_eq, sym_diag = await self._backtest_symbol(
@@ -355,6 +363,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         slippage=slippage,
                         source_weights=source_weights,
                         propagation_meta=propagation_meta,
+                        warmup_prefix=start_set,
                     )
                 # feature 065: buffer one evidence cell for this symbol before merging into the
                 # aggregate curve. daily_eq[0] is the symbol's own (compounded) starting equity,
@@ -392,7 +401,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         requested_range=request.range,
                         bars_have=ins.bars_have,
                         bars_need=ins.bars_need,
-                        gap=request.range,
+                        # feature 071: for a warm-up shortfall the actionable backfill span is
+                        # the prefix, not the caller's window (which may be fully covered).
+                        gap=ins.gap_range if ins.gap_range is not None else request.range,
                     )
                 )
                 continue
@@ -599,6 +610,46 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             f"({len(bars)} bars so far) — refusing to return a truncated series"
         )
 
+    async def _resolve_prefixed_bars(self, symbol, range_msg, required_prefix, propagation_meta):
+        """Fetch bars with `required_prefix` bars of pre-window history (feature 071).
+
+        Returns ``(bars, trade_start_idx)`` where ``bars[trade_start_idx]`` is the first bar
+        inside the caller's window. Indicators are computed over the whole list so they are
+        already warm at that bar; the engine simulates only from ``trade_start_idx`` onward, so
+        no trade can open before `start` and the prefix is pure seeding.
+
+        The fetched prefix is truncated to **exactly** `required_prefix` bars. That is what makes
+        `prefix_calendar_days`' bars→days conversion sizing-only: an over-estimate is discarded
+        deterministically here, and an under-estimate raises below. The conversion can therefore
+        never quietly change a result — only over-fetch or report.
+        """
+        if required_prefix <= 0:
+            return await self._fetch_bars_paged(symbol, range_msg, propagation_meta), 0
+
+        prefix_days = warmup.prefix_calendar_days(required_prefix)
+        prefixed = common_pb2.TimeRange()
+        prefixed.CopyFrom(range_msg)
+        prefixed.start.seconds = max(0, range_msg.start.seconds - prefix_days * 86_400)
+        prefixed.start.nanos = 0
+
+        bars = await self._fetch_bars_paged(symbol, prefixed, propagation_meta)
+
+        window_start = range_msg.start.seconds
+        available = 0
+        for bar in bars:
+            if bar.time.seconds >= window_start:
+                break
+            available += 1
+
+        if available < required_prefix:
+            gap = common_pb2.TimeRange()
+            gap.start.CopyFrom(prefixed.start)
+            gap.end.CopyFrom(range_msg.start)
+            raise _InsufficientData(symbol, available, required_prefix, gap_range=gap)
+
+        # Discard the surplus so the anchor is a deterministic function of (definition, start).
+        return bars[available - required_prefix :], required_prefix
+
     async def _backtest_symbol(
         self,
         symbol,
@@ -615,15 +666,21 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         source_weights,
         propagation_meta=(),
         *,
-        trade_start_idx: int = 0,
+        warmup_prefix: bool = False,
     ):
         """Run SMA crossover backtest for a single symbol.
 
         Returns (trades, final_equity, daily_equity, diagnostics) — feature 064.
         """
 
-        # 1. Fetch OHLCV bars from marketdata (feature 071: paged — see _fetch_bars_paged)
-        bars = await self._fetch_bars_paged(symbol, range_msg, propagation_meta)
+        # 1. Fetch OHLCV bars (feature 071: paged, plus a pre-window prefix when the caller
+        # supplied an explicit start). The legacy engine's binding lookback is slow_period.
+        required_prefix = (
+            warmup.builtin_lookback_bars("SMA", {"period": slow_period}) if warmup_prefix else 0
+        )
+        bars, trade_start_idx = await self._resolve_prefixed_bars(
+            symbol, range_msg, required_prefix, propagation_meta
+        )
         if len(bars) < slow_period + 2:
             log.warning(
                 "symbol %s has insufficient bars (%d < %d)", symbol, len(bars), slow_period + 2
@@ -693,6 +750,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         # feature 064: warm-up = first bar where BOTH SMAs are resolved (observed Option-C).
         warmup_bars = max(min(fast_values, default=n - 1), min(slow_values, default=n - 1))
+        # feature 071: warmup_bars indexes the fetched series, which may carry a pre-window
+        # prefix. Report it relative to the first in-window bar — a fully-warmed prefixed run
+        # legitimately reports 0. On an unprefixed run (k == 0) this is a no-op.
+        warmup_bars = max(0, warmup_bars - trade_start_idx)
 
         # feature 064: one diagnostic row per bar, iterated independently of the trade loop
         # (which starts at index 1) so bar 0 is captured. Present-only indicators map.
@@ -864,15 +925,21 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         propagation_meta=(),
         formula_warmup_cache=None,
         *,
-        trade_start_idx: int = 0,
+        warmup_prefix: bool = False,
     ):
         """Run a stored/inline StrategyDefinition for one symbol via the shared evaluator.
 
         Drives entry/exit from StrategyEvaluator decisions (backtest/live parity).
         Returns (trades, final_equity, daily_equity, diagnostics) — feature 064.
         """
-        # feature 071: paged — see _fetch_bars_paged
-        bars = await self._fetch_bars_paged(symbol, range_msg, propagation_meta)
+        # feature 071: paged, plus a pre-window prefix when the caller supplied an explicit
+        # start. Declared (never observed) — see app/services/warmup.py.
+        required_prefix = (
+            warmup.required_prefix_bars(definition, formula_warmup_cache) if warmup_prefix else 0
+        )
+        bars, trade_start_idx = await self._resolve_prefixed_bars(
+            symbol, range_msg, required_prefix, propagation_meta
+        )
         if len(bars) < 2:
             log.warning("symbol %s has insufficient bars (%d)", symbol, len(bars))
             raise _InsufficientData(symbol, len(bars), 2)
@@ -882,9 +949,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         decisions, component_series = await evaluator.evaluate_with_series(definition, bars, None)
 
         n = len(bars)
-        warmup_bars = await self._compute_evaluated_warmup(
+        warmup_bars_full = await self._compute_evaluated_warmup(
             definition, component_series, n, formula_warmup_cache, propagation_meta
         )
+        # feature 071: that index is into the fetched series, which may carry a pre-window
+        # prefix. Report it relative to the first in-window bar — a fully-warmed prefixed run
+        # legitimately reports 0. On an unprefixed run (k == 0) this is a no-op.
+        warmup_bars = max(0, warmup_bars_full - trade_start_idx)
 
         # feature 064: per-bar diagnostics (independent of the trade loop → bar 0 captured).
         # Present-only indicators map, dropping the redundant "<ref>.value" alias (the bare

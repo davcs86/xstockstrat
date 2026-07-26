@@ -204,3 +204,39 @@ window.
 Steps 4–8: wire the prefix end-to-end (`start_set` → `warmup_prefix` → `required_prefix_bars` →
 prefixed fetch → truncate to exactly `P` → `trade_start_idx` → `to_reported_warmup` → shortfall
 `CoverageGap`), agent `start`/`end` surface, parity/determinism tests, docs, UI e2e.
+
+## Session 2026-07-26 — implementation (step 4)
+
+- **Step 4 DONE.** Prefix wired end-to-end: `start_set` → `warmup_prefix` → `required_prefix_bars`
+  → prefixed fetch → truncate to exactly `P` → derived `trade_start_idx` → window-relative
+  `warmup_bars` → shortfall `CoverageGap`. 338 tests, ruff clean.
+- Shared `_resolve_prefixed_bars` serves both engine paths, so the prefix logic exists once.
+- `trade_start_idx` is now **derived**, so step 3's parameter was removed rather than left as a
+  dead knob the production path always overwrites. The step-3 tests were reworked to drive the
+  real path (bars straddling `range_msg.start` + `warmup_prefix=True`) instead of injecting `k`.
+- `_InsufficientData` gained `gap_range`: for a warm-up shortfall the actionable backfill span is
+  the **prefix** (`start − warmup … start`), not the caller's window, which may be fully covered.
+
+### ⚠ Behavior change that needs a product decision
+
+**Any caller supplying an explicit `start` now needs pre-window history or the run reports
+`INSUFFICIENT_DATA`.** This is the designed OQ-1 resolution ("prefer a clear error over silent
+short data", AC-4a) and it is working as specified — but the practical blast radius is larger than
+the design's Open Risks quantified:
+
+- **The UI always sends an explicit range** (`strategies/[id]/page.tsx:91`, defaulting to
+  `2024-01-01`/`2024-12-31`). Every UI backtest whose start predates the symbol's stored history
+  now fails instead of running short-warmed.
+- It surfaced immediately in `TestBacktestRangeCap::test_at_cap_range_runs`, whose fixture bars all
+  post-dated the requested start. Fixture corrected to straddle the boundary — the test's intent
+  was the range cap, not coverage — but that it broke at all is the signal.
+
+The adversary's **alternative E (short-warm-and-report:** run with whatever prefix exists, emit a
+**non-fatal** `CoverageGap`, keep the run OK) was rejected at design time in favour of failing
+loudly. Given the UI impact, that trade-off is worth revisiting before this ships. Flagged to the
+user rather than silently switched — the design decision is recorded and reversing it is a product
+call, not an implementation one.
+
+### Remaining for 071
+
+Steps 5–8: agent `start`/`end` surface, parity/determinism tests (FR-4/6/7), docs, UI e2e.

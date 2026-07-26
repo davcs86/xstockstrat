@@ -20,7 +20,7 @@ from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.config.watcher import ConfigWatcher
-from app.handlers.servicer import AnalysisServicer
+from app.handlers.servicer import AnalysisServicer, _InsufficientData
 
 
 def make_servicer() -> AnalysisServicer:
@@ -1324,10 +1324,12 @@ class TestBacktestRangeCap:
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         svc._marketdata = MagicMock()
-        # enough bars so the legacy path runs (>= slow_period(3)+2); values irrelevant here
+        # Enough bars so the legacy path runs (>= slow_period(3)+2); values irrelevant here.
+        # feature 071: they straddle DAY (the explicit start these tests use) so an
+        # explicit-start run has the pre-window history the warm-up prefix now requires.
         svc._marketdata.GetBars = AsyncMock(
             return_value=SimpleNamespace(
-                page=_EOF_PAGE, bars=[_bar(1000 + i, 10) for i in range(6)]
+                page=_EOF_PAGE, bars=[_bar(i * 86_400, 10) for i in range(8)]
             )
         )
         svc._indicators = MagicMock()
@@ -1361,7 +1363,8 @@ class TestBacktestRangeCap:
     @pytest.mark.asyncio
     async def test_at_cap_range_runs(self):
         svc = self._svc()
-        req = self._req(1, 700 * 86_400)  # 700 days < 730 cap
+        # Start at day 4 so 4 pre-window bars exist — slow_period(3) needs 3 (feature 071).
+        req = self._req(4 * 86_400, 4 * 86_400 + 700 * 86_400)  # 700-day span < 730 cap
         result = await svc.RunBacktest(req, MagicMock())
         assert result.status == analysis_pb2.BACKTEST_STATUS_OK
 
@@ -2651,17 +2654,19 @@ class TestPartialStrategyUpdate:
 
 
 class TestTradeStartIndex:
-    """The pre-window prefix (step 4) will pass trade_start_idx > 0. Step 3 lands the plumbing
-    with k = 0 everywhere and proves it is a no-op; these additionally exercise k > 0 so the
-    alignment arithmetic is verified BEFORE anything depends on it.
+    """feature 071 — the pre-window prefix seeds indicators without becoming tradeable.
+
+    `trade_start_idx` is DERIVED inside the engine by `_resolve_prefixed_bars`, so these drive
+    the real path: bars that predate `range_msg.start` are the prefix, and `warmup_prefix=True`
+    (set when the caller supplied an explicit start) turns the mechanism on.
 
     The invariant under test is `len(daily_equity) == len(diags)`, which
-    `_finalize_symbol_diagnostics` stamps positionally. It is now asserted in that shared pass,
-    so a drift raises rather than silently shifting every per-bar equity value.
+    `_finalize_symbol_diagnostics` stamps positionally and now asserts.
     """
 
-    @staticmethod
-    def _svc(bars, fast_series, slow_series):
+    WINDOW_START = 1_000_000
+
+    def _svc(self, bars, fast_series, slow_series):
         svc = make_servicer()
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
@@ -2673,14 +2678,28 @@ class TestTradeStartIndex:
         )
         return svc
 
-    async def _run(self, k, n=8):
-        bars = [_bar(1000 + i, c) for i, c in enumerate([10, 11, 12, 13, 14, 15, 12, 9][:n])]
-        svc = self._svc(bars, [9, 10, 12, 13, 14, 13, 9], [11, 11, 11, 11, 11, 11])
+    def _bars(self, n_prefix, n_window):
+        """n_prefix bars before WINDOW_START, then n_window at/after it (1 day apart)."""
+        day = 86_400
+        out = []
+        for i in range(n_prefix):
+            out.append(_bar(self.WINDOW_START - (n_prefix - i) * day, 10 + i))
+        for i in range(n_window):
+            out.append(_bar(self.WINDOW_START + i * day, 20 + i))
+        return out
+
+    async def _run(self, n_prefix, n_window, *, warmup_prefix=True, slow=3):
+        bars = self._bars(n_prefix, n_window)
+        total = len(bars)
+        svc = self._svc(bars, [9] * (total - 1), [11] * (total - 2))
+        rng = common_pb2.TimeRange()
+        rng.start.seconds = self.WINDOW_START
+        rng.end.seconds = self.WINDOW_START + 10 * 86_400
         return await svc._backtest_symbol(
             "AAPL",
-            common_pb2.TimeRange(),
+            rng,
             fast_period=2,
-            slow_period=3,
+            slow_period=slow,
             signal_sources=[],
             signal_weight=0.0,
             technical_weight=1.0,
@@ -2689,43 +2708,59 @@ class TestTradeStartIndex:
             commission=0.0,
             slippage=0.0,
             source_weights={},
-            trade_start_idx=k,
+            warmup_prefix=warmup_prefix,
         )
 
     @pytest.mark.asyncio
-    async def test_default_k_zero_covers_every_bar(self):
-        _, _, daily_equity, sd = await self._run(k=0)
+    async def test_without_prefix_every_bar_is_in_scope(self):
+        """warmup_prefix=False is the default/rolling path — unchanged pre-071 behavior."""
+        _, _, daily_equity, sd = await self._run(0, 8, warmup_prefix=False)
         assert sd.bars_total == 8
-        assert len(sd.bars) == 8
-        assert len(daily_equity) == 8  # seed + 7 simulated
+        assert len(daily_equity) == len(sd.bars) == 8
         assert [b.bar_index for b in sd.bars][:3] == [0, 1, 2]
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("k", [1, 3, 5])
-    async def test_prefix_bars_are_excluded_and_indices_renumbered(self, k):
-        _, _, daily_equity, sd = await self._run(k=k)
-        # Diagnostics cover only the in-window bars…
-        assert sd.bars_total == 8 - k
-        assert len(sd.bars) == 8 - k
-        # …renumbered from 0, so the caller never sees prefix indices.
-        assert [b.bar_index for b in sd.bars] == list(range(8 - k))
-        # The invariant the shared finalize pass asserts.
+    async def test_prefix_bars_are_excluded_and_indices_renumbered(self):
+        """slow_period=3 → 3 prefix bars required and consumed; only the window is reported."""
+        _, _, daily_equity, sd = await self._run(3, 6)
+        assert sd.bars_total == 6
+        assert [b.bar_index for b in sd.bars] == list(range(6))
         assert len(daily_equity) == len(sd.bars)
 
     @pytest.mark.asyncio
     async def test_first_in_window_bar_keeps_its_real_timestamp(self):
-        """Renumbering bar_index must not renumber time — the prefix is dropped from the
-        output, not shifted onto it."""
-        _, _, _, sd = await self._run(k=3)
+        """Renumbering bar_index must not renumber time — the prefix is dropped, not shifted."""
+        _, _, _, sd = await self._run(3, 6)
         assert sd.bars[0].bar_index == 0
-        assert sd.bars[0].timestamp.seconds == 1003  # bar 3, not bar 0
+        assert sd.bars[0].timestamp.seconds == self.WINDOW_START
 
     @pytest.mark.asyncio
-    async def test_no_trade_is_reported_before_the_window(self):
-        """FR-3: a prefix seeds indicators but must never open a position before `start`."""
-        trades, _, _, sd = await self._run(k=5)
-        first_ts = 1005
+    async def test_nothing_before_the_window_is_traded_or_reported(self):
+        """FR-3: the prefix seeds indicators; it must never produce a trade or a diag row."""
+        trades, _, _, sd = await self._run(3, 6)
         for t in trades:
-            assert t.entry_time.seconds >= first_ts
+            assert t.entry_time.seconds >= self.WINDOW_START
         for bar in sd.bars:
-            assert bar.timestamp.seconds >= first_ts
+            assert bar.timestamp.seconds >= self.WINDOW_START
+
+    @pytest.mark.asyncio
+    async def test_surplus_prefix_is_discarded_deterministically(self):
+        """Over-fetching is harmless: the engine keeps exactly the required prefix, which is
+        what makes the bars→calendar-days conversion sizing-only rather than semantic."""
+        _, _, _, sd_exact = await self._run(3, 6)
+        _, _, _, sd_surplus = await self._run(9, 6)  # far more prefix than needed
+        assert sd_exact.bars_total == sd_surplus.bars_total == 6
+        assert [b.timestamp.seconds for b in sd_exact.bars] == [
+            b.timestamp.seconds for b in sd_surplus.bars
+        ]
+
+    @pytest.mark.asyncio
+    async def test_insufficient_prefix_reports_a_shortfall(self):
+        """AC-4a / OQ-1: a clear error beats silently running short-warmed."""
+        with pytest.raises(_InsufficientData) as ei:
+            await self._run(1, 6)  # needs 3 prefix bars, only 1 available
+        assert ei.value.bars_have == 1
+        assert ei.value.bars_need == 3
+        # The actionable backfill span is the PREFIX, not the caller's window.
+        assert ei.value.gap_range is not None
+        assert ei.value.gap_range.end.seconds == self.WINDOW_START
