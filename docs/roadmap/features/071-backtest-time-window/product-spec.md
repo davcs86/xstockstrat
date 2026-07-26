@@ -43,6 +43,10 @@ build a `common.v1.TimeRange`, as `client.py:706-712` already does for another R
 provided, the backtest covers exactly that window. No new proto field is introduced.
 FR-2. When `start`/`end` are omitted, behavior MUST be unchanged (today's rolling-window default) —
 backward compatible.
+FR-2a. **One-sided windows** MUST be supported and MUST match the servicer's existing semantics
+(`servicer.py:289-297`): an unset bound (`seconds == 0`) is open and is defaulted — `end` unset →
+`now`; `start` unset → `end − max_range_days`. This matches the existing agent precedent for
+one-sided ranges (`client.py:705-712`).
 FR-3. When a window is given, the engine MUST load sufficient **pre-window history** so indicators
 are already warm at `start` (e.g. a 20-bar z-score has ≥20 prior bars before the first in-window
 bar), rather than beginning warm-up at `start` and delaying early signals. Pre-window bars are used
@@ -62,6 +66,19 @@ the already-shipped UI backtest form (`strategies/[id]/page.tsx:91`) too. Both p
 identical results for the same window, covered by a regression test. The design MUST also state
 whether pre-window warm-up shifts previously persisted feature-065 evidence cells
 (`backtest_run_symbols`) and, if so, whether existing cells are invalidated or left as-is.
+
+FR-7. **Backtest/live parity (C-10).** The live evaluation loop is a *third* consumer of the same
+shared evaluator: `app/engine/live_loop.py:116-121` (`_recent_range`) builds its own
+`now`-anchored rolling window and `live_loop.py:133` calls the same `evaluator.evaluate(...)` the
+backtest path reaches via `evaluate_with_series` (`servicer.py:818`). `services/xstockstrat-analysis/CLAUDE.md`
+documents this shared evaluator as "guaranteeing backtest/live parity". The design MUST state
+explicitly whether live evaluation is in scope for the FR-3 warm-up change:
+- if warm-up moves **into the evaluator**, live evaluation changes too and that must be intended and
+  tested;
+- if warm-up is applied **only on the backtest path**, the documented parity invariant silently
+  drifts and that divergence must be recorded.
+
+Either answer is acceptable; leaving it unstated is not.
 
 ## Out of Scope
 
@@ -92,7 +109,7 @@ Exact service names from CLAUDE.md Service Registry:
 
 ## Config Key Changes
 
-- [ ] No new config keys — **pending design decision.**
+- [x] No new config keys — **pending design confirmation** (see below).
 - FR-3's warm-up lookback is exactly the kind of tunable that becomes a hardcoded literal
   (Constitution **F-07** breach) if not declared. The design MUST decide explicitly: derive it from
   the already-declared warm-up (`FormulaOutput.warmup_period` / `_compute_evaluated_warmup`,
@@ -101,15 +118,15 @@ Exact service names from CLAUDE.md Service Registry:
 
 ## Database Changes
 
-- [ ] No schema changes — reads existing OHLCV history; requires only that coverage spans
+- [x] No schema changes — reads existing OHLCV history; requires only that coverage spans
   `start − warmup` … `end` (relates to backfill features 052–054/057).
 
 ## Feature Workflow Notes
 
 Branch to create: `feature/backtest-time-window` (branch from `main-dev`)
 Approval gates required (per docs/runbooks/feature-workflow.md):
-- [x] 1 service owner approval (non-breaking proto or config change)
-- [ ] 2 service owners + platform lead (breaking proto change) — not expected (additive fields)
+- [x] 1 service owner approval — behavior change in `xstockstrat-analysis` + new agent tool params (no proto, no config)
+- [ ] 2 service owners + platform lead (breaking proto change) — N/A, this feature makes no proto change
 - [ ] DBA review + service owner (schema migration) — not expected
 
 ## Acceptance Criteria
@@ -123,8 +140,12 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
    clock**, i.e. the resolved range for the same invocation instant is unchanged. (Not
    "byte-for-byte" across days: the omit-range default is `now`-anchored by construction,
    `servicer.py:290-297`, so cross-day byte equality is impossible and is not the guarantee.)
-4. A train/test split is expressible: fit a parameter on `[t0, t1]`, evaluate on `[t1, t2]`, subject
-   to the existing `max_range_days` cap (default `730` ≈ 2 years) per window.
+4. A train/test split is expressible **from the MCP agent**: fit a parameter on `[t0, t1]`, evaluate
+   on `[t1, t2]`, subject to the existing `max_range_days` cap (default `730` ≈ 2 years) per window.
+   *(Already possible from the UI today — `strategies/[id]/page.tsx:91` — so the agent qualifier is
+   what makes this discriminating.)*
+4a. When history is insufficient to satisfy `start − warmup`, the run reports the shortfall
+   explicitly (per OQ-1's resolution) rather than silently running with a shortened warm-up.
 5. `run_backtest` docstring and `docs/runbooks/mcp-tools.md` (`:241-257`) document the parameters and
    guarantees.
 6. The agent path and the UI path return identical results for the same window (FR-6 parity test).
@@ -137,16 +158,20 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
   reported separately? Prefer a clear error over silent short data; do not auto-trigger a backfill.
 - [ ] **OQ-2 — Warm-up lookback source (design phase):** derived from declared warm-up, or a new
   `analysis.backtest.*` config key? See Config Key Changes (**F-07** risk).
-- [ ] **OQ-3 — `max_range_days` applicability (design phase):** does the cap bind the requested
-  window or the warm-up-extended fetch span? See FR-3a.
-- [ ] **OQ-4 — Feature-065 evidence cells (design phase):** does pre-window warm-up shift previously
+- [ ] **OQ-3 — Feature-065 evidence cells (design phase):** does pre-window warm-up shift previously
   persisted `backtest_run_symbols` metrics, and if so are existing cells invalidated? See FR-6.
+- [ ] **OQ-4 — Live-loop scope (design phase):** is the FR-3 warm-up change applied in the shared
+  evaluator (changing live evaluation too) or only on the backtest path (diverging from the
+  documented backtest/live parity invariant)? See FR-7.
 
 **Resolved during review** (previously open):
 - ~~Type for `start`/`end`: `Timestamp` vs ISO `string`?~~ **Moot** — the field already exists as
   `google.protobuf.Timestamp` via `TimeRange` (`common.proto:42-45`), and the UI already converts
   ISO → `{seconds, nanos}` (`strategies/[id]/page.tsx:79-82`). The MCP tool accepts ISO strings and
   converts, matching the UI.
+- ~~Does `max_range_days` bind the requested window or the warm-up-extended fetch span?~~
+  **Answered declaratively by FR-3a**: the cap binds the caller-requested window; the fetch span may
+  exceed it. (Was previously listed as an open question that contradicted its own FR.)
 
 ## Risks / Known Traps
 
@@ -159,6 +184,11 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
   effectively the substrate 032 would build on. No resource collision (032's
   `analysis.walkforward.max_total_window_days` key does not clash — 071 declares none), but the
   relationship should be confirmed rather than discovered later.
+- **Persisted-run comparability.** `GetBacktest` (`analysis.proto:21`) replays runs persisted
+  verbatim in `analysis.backtest_details` (feature 068). After FR-3 ships, the UI's Past Runs table
+  will mix pre- and post-warm-up-change results with no marker distinguishing them. Not a
+  correctness bug (old bytes are never recomputed), but a user-facing comparability issue the
+  design should name alongside OQ-3.
 - **Rebase-only overlap with feature 070** (`strategy-partial-update`, developed in parallel): shared
   files `analysis.proto`, `servicer.py`, `tools.py`, `client.py`, `insightsBff.ts`, `mcp-tools.md` —
   disjoint regions, no field-number/config/migration collision. Whichever merges second rebases.

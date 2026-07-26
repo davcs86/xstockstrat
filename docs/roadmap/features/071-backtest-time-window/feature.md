@@ -1,7 +1,8 @@
 # Feature: backtest-time-window
 
-**Lifecycle Status**: `draft`
-**Development Branch**: `feature/backtest-time-window`
+**Lifecycle Status**: `spec-ready`
+**Development Branch**: `feature/backtest-time-window` (see context.md — implemented on the
+harness-assigned `claude/features-070-071-rnbkqo` branch this session)
 **Created**: 2026-07-26
 **Last Updated**: 2026-07-26
 
@@ -12,6 +13,8 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-07-26 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-07-26 | `draft` → (fail) | /sdd-review | FAIL — premise contradicted by code: `RunBacktestRequest.range` already ships end-to-end incl. UI; proposed proto fields would duplicate it |
+| 2026-07-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved after re-scope (no proto change; agent plumbing + pre-window warm-up). 7 warnings addressed |
 
 ---
 
@@ -51,4 +54,5 @@ _Proto Reviewer row removed at review: this feature makes no proto change (see p
 
 ## Next Action
 
-`/sdd-review backtest-time-window product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design backtest-time-window` — recon dossier + design debate; must resolve OQ-1…OQ-4
+(warm-up shortfall reporting, warm-up lookback source, feature-065 evidence cells, live-loop scope)

@@ -18,6 +18,26 @@ Write-time validation does not catch this: `_validate_definition` short-circuits
 (`evaluator.py:317-318`, `if not rule_json: continue`), and the destructive update wipes components
 *and* rules together — an internally consistent empty definition that passes cleanly.
 
+**The MCP tool is a co-cause, not just a victim.** `manage_strategy`
+(`services/xstockstrat-agent/app/tools.py:338-344`) unconditionally materialises a full definition
+dict from Python defaults:
+
+```python
+definition: dict = {
+    "strategy_id": strategy_id,
+    "display_name": display_name,   # default ""
+    "components": components or [], # default []
+    "entry_rule": entry_rule,       # default ""
+    "exit_rule": exit_rule,         # default ""
+}
+```
+
+So `manage_strategy(operation="update", strategy_id="x", cooldown_days=45)` transmits *explicit*
+empty components, empty rules, **and a blanked `display_name`** (which `servicer.py:1376-1378` also
+writes). A server-side merge alone therefore does **not** fix the reported incident: the tool would
+still send empty values that are indistinguishable from a deliberate erasure. Both layers must
+change — the tool must distinguish "caller omitted" from "caller passed empty" (FR-6).
+
 **Recovery is available but not from the agent.** A read op already ships at the proto, servicer, UI,
 and agent-client layers (`analysis.proto:23`/`:260`, `servicer.py:1410`, `insightsBff.ts:55`,
 `client.py:311`). The gap is only that **no MCP tool wraps it**, so an agent-driven caller who did not
@@ -53,18 +73,34 @@ including each component's `formula_id` and `params`, so an agent can fetch a de
 editing and verify it after. No new RPC, request, or response message is required.
 
 FR-4. Partial-update semantics MUST be reflected in the `manage_strategy` MCP tool docstring and
-`docs/runbooks/mcp-tools.md`. Adding the FR-3 read tool additionally requires updating every shared
-surface that hardcodes the tool inventory:
-- `docs/runbooks/mcp-tools.md:3` and `:29` — both state **"thirteen tools"**;
-- `services/xstockstrat-agent/app/tools.py:4-18` — module-docstring tool inventory;
-- `services/xstockstrat-agent/tests/test_tools_endpoint.py:17-22` — asserts the exact registered
+`docs/runbooks/mcp-tools.md`. Adding the FR-3 read tool additionally requires updating **all five**
+shared surfaces that hardcode the tool inventory, plus the catalog test:
+- `docs/runbooks/mcp-tools.md:3` — "the **thirteen** tools exposed by `xstockstrat-agent`";
+- `docs/runbooks/mcp-tools.md:29` — "the same **thirteen** tools' `name`" (`GET /api/tools` catalog);
+- `services/xstockstrat-agent/app/tools.py:4` — "**Thirteen** tools:" module-docstring inventory
+  (`:4-18`);
+- `services/xstockstrat-agent/CLAUDE.md:26` — "The agent registers **thirteen** tools", plus the
+  13-row tool table and the Management-tool authorization list below it;
+- `docs/runbooks/CLAUDE.md:17` — "all **thirteen** agent tools";
+- `services/xstockstrat-agent/tests/test_tools_endpoint.py:23-37` — asserts the exact registered
   tool-name set served by `GET /api/tools`.
+
+Precedent: feature 066 (`trigger-backfill-mcp-tool`) updated this same surface set —
+`docs/roadmap/features/066-trigger-backfill-mcp-tool/implementation-spec.md:246-250`.
 
 FR-5. The StrategyWizard edit path MUST remain correct under the chosen mechanism. It currently
 hydrates the full definition and always sends `components`/`entryRule`/`exitRule`
 (`StrategyWizard.tsx:138-156`), so it is already safe against definition-wiping partials — but a
 `FieldMask` mechanism requires it to send an all-fields mask (or the server to treat an absent mask
 as full-replace) or component **removal** will silently stop working.
+
+FR-6. The `manage_strategy` MCP tool MUST stop fabricating a full definition from Python defaults
+(`services/xstockstrat-agent/app/tools.py:338-344`). Optional parameters MUST default to `None` and
+only caller-supplied fields may be transmitted — following the existing `cooldown_days` precedent in
+the same function (`tools.py:348-350`, an `is not None` check specifically so an explicit `0`
+survives while an omitted arg is dropped). Under the FieldMask branch of OQ-1 the tool is also
+responsible for building the mask from which kwargs the caller actually supplied. Without this,
+the server-side merge lands and the incident **still reproduces through the MCP path**.
 
 ## Out of Scope
 
@@ -79,8 +115,10 @@ Exact service names from CLAUDE.md Service Registry:
   (`servicer.py:1350`); implements the merge (FR-1) and extends validation to the merged result
   (FR-2). The orphan-ref check (`evaluator.py:323`) and the `GetStrategy` handler
   (`servicer.py:1410`) already exist and are reused, not rebuilt.
-- `xstockstrat-agent` — `manage_strategy` docstring (FR-4) and a **new** thin MCP tool wrapping the
-  existing `client.get_strategy` (FR-3), plus the tool-inventory surfaces listed in FR-4.
+- `xstockstrat-agent` — **co-owner of the defect.** `manage_strategy`'s definition construction
+  (`app/tools.py:338-344`) must stop sending default-fabricated empties (FR-6); plus the
+  `manage_strategy` docstring (FR-4), a **new** thin MCP tool wrapping the existing
+  `client.get_strategy` (FR-3), and the five tool-inventory surfaces listed in FR-4.
 - `xstockstrat-ui` — `StrategyWizard` edit path (FR-5); already sends full definitions, so this is a
   verification/regression-test obligation unless the chosen mechanism requires a mask.
 - `packages/proto` — `ManageStrategyRequest` only, if the design picks a mask (next free field
@@ -117,11 +155,11 @@ Exact service names from CLAUDE.md Service Registry:
 
 ## Config Key Changes
 
-- [ ] No new config keys
+- [x] No new config keys
 
 ## Database Changes
 
-- [ ] No schema changes — behavioral change to the update handler; the existing strategy table/rows
+- [x] No schema changes — behavioral change to the update handler; the existing strategy table/rows
   are sufficient. (Confirm at design that a merge does not require a new column.)
 
 ## Feature Workflow Notes
@@ -134,11 +172,16 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Acceptance Criteria
 
-Each criterion below **fails on unmodified `main-dev`** and passes only with this feature's changes.
+AC-1 through AC-5 **fail on unmodified `main-dev`** and pass only with this feature's changes. AC-6
+is the exception: it passes today and is a **regression guard** against the FieldMask branch (see
+FR-5).
 
-1. Updating only `cooldown_days` (or any single field) preserves `components` and rules; a
-   subsequent backtest reproduces the prior results except for the intended change. *(Today this
-   wipes the definition — `servicer.py:1373-1376`.)*
+1. Updating only `cooldown_days` (or any single field) preserves `components`, rules, **and
+   `display_name`**; a subsequent backtest reproduces the prior results except for the intended
+   change. **This MUST be exercised end-to-end through the `manage_strategy` MCP tool path**, not
+   only as an analysis-service unit test — the tool is a co-cause (FR-6), so a server-only test
+   would pass while the real path stays broken. *(Today this wipes the definition —
+   `tools.py:338-344` → `servicer.py:1373-1378`.)*
 2. A partial update whose **merged result** would leave a rule referencing an absent component is
    rejected with a clear `INVALID_ARGUMENT`. *(Today validation runs against the request, so a
    wholesale-empty definition passes — `evaluator.py:317-318`.)*
@@ -147,12 +190,13 @@ Each criterion below **fails on unmodified `main-dev`** and passes only with thi
    silently accepted — this is the exact incident path.)*
 4. An MCP tool returns the full stored definition including component `formula_id`s and `params`.
    *(Today the RPC exists but no MCP tool reaches it — `tools.py` registers no strategy read.)*
-5. `manage_strategy` docstring, `docs/runbooks/mcp-tools.md` (including both "thirteen tools" counts
-   at `:3` and `:29`), the `tools.py:4-18` inventory docstring, and
-   `test_tools_endpoint.py:17-22`'s name-set assertion all reflect the new tool and partial-update
-   semantics.
-6. Component **removal** via the StrategyWizard still works after the mechanism change
-   (`StrategyWizard.tsx:141` sends a reduced component list).
+5. All **five** tool-inventory surfaces enumerated in FR-4 (`mcp-tools.md:3`, `mcp-tools.md:29`,
+   `tools.py:4`, `services/xstockstrat-agent/CLAUDE.md:26`, `docs/runbooks/CLAUDE.md:17`) plus the
+   `test_tools_endpoint.py:23-37` name-set assertion and the `manage_strategy` docstring reflect the
+   new tool and partial-update semantics. No surface is left saying "thirteen".
+6. *(Regression guard — passes today.)* Component **removal** via the StrategyWizard still works
+   after the mechanism change (`StrategyWizard.tsx:138-152` sends a reduced component list), and an
+   agent caller can still deliberately clear a rule.
 
 ## Open Questions
 
