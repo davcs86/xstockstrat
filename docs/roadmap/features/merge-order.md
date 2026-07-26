@@ -56,6 +56,17 @@ cache, and 062 reserves call-budget headroom (200/250) for 060's interactive sca
 > collision — so per the Coverage note above they are intentionally **not** listed as hard ordering rows;
 > whichever lands second simply rebases.
 
+> **Note on the `run_backtest` / `manage_strategy` agent surface (070 + 071 + 072):** all three touch
+> `services/xstockstrat-agent/app/tools.py` and `app/client.py`, and all three edit
+> `docs/runbooks/mcp-tools.md`. They are in **disjoint blocks**: 070 → `manage_strategy` (+ a new
+> `get_strategy` tool, which is the only one of the three that changes the tool *count* and therefore
+> the five "thirteen tools" inventory surfaces); 071 → `run_backtest` **inputs** (`start`/`end`);
+> 072 → `run_backtest` **output** (summary inline + attachment). No field-number, config-key, or
+> migration collision — only 071 and 072 share a function, and even then one edits its signature and
+> the other its return. **Rebase-only**; per the Coverage note above these are intentionally not hard
+> ordering rows. One real caveat: if 070 lands first it renumbers the tool inventory to fourteen, so
+> 071/072 must not reintroduce a stale "thirteen" in `mcp-tools.md` when they rebase.
+
 ---
 
 ## How to add an entry manually
