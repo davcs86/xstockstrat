@@ -58,14 +58,34 @@ cache, and 062 reserves call-budget headroom (200/250) for 060's interactive sca
 
 > **Note on the `run_backtest` / `manage_strategy` agent surface (070 + 071 + 072):** all three touch
 > `services/xstockstrat-agent/app/tools.py` and `app/client.py`, and all three edit
-> `docs/runbooks/mcp-tools.md`. They are in **disjoint blocks**: 070 → `manage_strategy` (+ a new
-> `get_strategy` tool, which is the only one of the three that changes the tool *count* and therefore
-> the five "thirteen tools" inventory surfaces); 071 → `run_backtest` **inputs** (`start`/`end`);
-> 072 → `run_backtest` **output** (summary inline + attachment). No field-number, config-key, or
-> migration collision — only 071 and 072 share a function, and even then one edits its signature and
-> the other its return. **Rebase-only**; per the Coverage note above these are intentionally not hard
-> ordering rows. One real caveat: if 070 lands first it renumbers the tool inventory to fourteen, so
-> 071/072 must not reintroduce a stale "thirteen" in `mcp-tools.md` when they rebase.
+> `docs/runbooks/mcp-tools.md`. **Rebase-only** — no field-number, config-key, or migration collision
+> — so per the Coverage note above these are intentionally not hard ordering rows. Details:
+>
+> - **070 and 071 are ONE merge, not two.** Both are implemented on the shared harness branch
+>   `claude/features-070-071-rnbkqo` (see each feature's `context.md`), so the real ordering is
+>   two-way: `{070 + 071}` as a unit vs `072` — not three independent merges.
+> - **Blocks are disjoint.** 070 → `manage_strategy` (`tools.py:289-354`) plus a new `get_strategy`
+>   tool; 071 → `run_backtest` **inputs** (`start`/`end`); 072 → `run_backtest` **output**
+>   (summary inline + attachment). Only 071 and 072 share a function, and one edits its signature
+>   while the other edits its return.
+> - **Sharpest conflict is a test, not source.**
+>   `services/xstockstrat-agent/tests/test_tools.py:485-527`
+>   (`test_run_backtest_projects_full_result_with_diagnostics`) asserts the full result *is*
+>   projected inline. **072 must invert that exact assertion** while 071 extends the same file for
+>   new kwargs — a contradictory test, not an adjacent edit. `tests/test_client.py` likewise.
+> - **Doc sub-blocks.** In `docs/runbooks/mcp-tools.md` §`run_backtest`, 071 owns the Parameters
+>   table (`:245-251`) and 072 owns the Return block (`:253-257`); both specs previously claimed the
+>   whole `:241-257` range. (That Return block is already stale on trunk — it predates feature 064.)
+> - **Tool-count caveat — SIX surfaces, not five.** 070 renumbers the inventory from "thirteen" to
+>   "fourteen" across `docs/runbooks/mcp-tools.md:3`, `:29`, `app/tools.py:4`,
+>   `services/xstockstrat-agent/CLAUDE.md:26`, `docs/runbooks/CLAUDE.md:17` — **plus** the name-set
+>   assertion at `services/xstockstrat-agent/tests/test_tools_endpoint.py:23-37`. 071/072 must not
+>   reintroduce a stale "thirteen" when they rebase.
+> - **Forward-looking (re-evaluate at `/sdd-spec` time).** If 072's design resolves OQ-1 with a
+>   `ResourceLink` **and** closes the dangling-link gap by persisting `INSUFFICIENT_DATA` runs, it
+>   acquires an `xstockstrat-analysis` edit at `app/handlers/servicer.py:507-511` — inside the
+>   `RunBacktest` region 071 restructures. That would upgrade this from rebase-only to a genuine
+>   dependency and **would need a hard ordering row**.
 
 ---
 

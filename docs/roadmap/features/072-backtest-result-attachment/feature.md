@@ -1,6 +1,6 @@
 # Feature: backtest-result-attachment
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/backtest-result-attachment`
 **Created**: 2026-07-26
 **Last Updated**: 2026-07-26
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-07-26 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-07-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS with 4 warnings, all addressed). No blockers, no Floor breach |
 
 ---
 
@@ -49,5 +50,6 @@ No Proto Reviewer row: this feature makes no proto change. No DBA row: no migrat
 
 ## Next Action
 
-`/sdd-review backtest-result-attachment product-spec` — AI review of product spec before running
-/sdd-design
+`/sdd-design backtest-result-attachment` — recon dossier + design debate. Must close OQ-1
+(`EmbeddedResource` vs `ResourceLink` — load-bearing; the feature-068 reuse has four verified gaps),
+OQ-2 (format), OQ-3 (resource-read auth), OQ-4 (MCP SDK floor if ResourceLink wins)
