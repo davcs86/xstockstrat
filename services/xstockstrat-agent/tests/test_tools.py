@@ -382,7 +382,10 @@ class TestManageStrategyTool:
         err = _rpc_error(grpc.StatusCode.NOT_FOUND, "nope")
         with patch.object(client, "manage_strategy", AsyncMock(side_effect=err)):
             with pytest.raises(RuntimeError, match="strategy not found"):
-                await _tool_fn(server, "manage_strategy")(operation="update", strategy_id="x")
+                # supply a field: an empty update is now rejected client-side before the RPC
+                await _tool_fn(server, "manage_strategy")(
+                    operation="update", strategy_id="x", display_name="X"
+                )
 
 
 class TestManageFormulaTool:
@@ -619,3 +622,105 @@ class TestGetBackfillStatusTool:
         with patch.object(client, "get_backfill_status", AsyncMock(side_effect=err)):
             with pytest.raises(RuntimeError, match="backfill job not found"):
                 await _tool_fn(server, "get_backfill_status")(job_id="missing")
+
+
+class TestManageStrategyPartialUpdate:
+    """feature 070 — the MCP tool is a co-cause of the wipe, not just a victim.
+
+    Pre-070 the tool defaulted display_name/components/entry_rule/exit_rule and shipped them
+    unconditionally, so a cooldown-only update transmitted explicit empties. A server-side merge
+    alone could not have fixed the incident; these pin the client half.
+    """
+
+    @pytest.mark.asyncio
+    async def test_cooldown_only_update_sends_only_cooldown(self):
+        """The incident, at the layer that caused it."""
+        server = _make_server()
+        with patch.object(client, "manage_strategy", AsyncMock(return_value={})) as m:
+            await _tool_fn(server, "manage_strategy")(
+                operation="update", strategy_id="range_mr_v3", cooldown_days=45
+            )
+        kwargs = m.await_args.kwargs
+        assert kwargs["definition"] == {"strategy_id": "range_mr_v3", "cooldown_days": 45}
+        assert kwargs["update_mask"] == ["cooldown_days"]
+        # The fields that used to be fabricated are simply absent.
+        for wiped in ("components", "entry_rule", "exit_rule", "display_name"):
+            assert wiped not in kwargs["definition"]
+
+    @pytest.mark.asyncio
+    async def test_explicit_zero_cooldown_still_survives(self):
+        """feature 069's explicit-presence contract: 0 means 'no cooldown', not 'unset'."""
+        server = _make_server()
+        with patch.object(client, "manage_strategy", AsyncMock(return_value={})) as m:
+            await _tool_fn(server, "manage_strategy")(
+                operation="update", strategy_id="x", cooldown_days=0
+            )
+        assert m.await_args.kwargs["definition"]["cooldown_days"] == 0
+        assert m.await_args.kwargs["update_mask"] == ["cooldown_days"]
+
+    @pytest.mark.asyncio
+    async def test_clear_fields_joins_the_mask_without_a_value(self):
+        """The only way to express erase: masked path, no value (AIP-161)."""
+        server = _make_server()
+        with patch.object(client, "manage_strategy", AsyncMock(return_value={})) as m:
+            await _tool_fn(server, "manage_strategy")(
+                operation="update", strategy_id="x", clear_fields=["exit_rule"]
+            )
+        kwargs = m.await_args.kwargs
+        assert kwargs["update_mask"] == ["exit_rule"]
+        assert "exit_rule" not in kwargs["definition"]
+
+    @pytest.mark.asyncio
+    async def test_empty_update_is_rejected_before_the_rpc(self):
+        """The tool can never emit a maskless update, so the MCP path cannot full-replace by
+        accident."""
+        server = _make_server()
+        with patch.object(client, "manage_strategy", AsyncMock()) as m:
+            with pytest.raises(ValueError, match="at least one field to change"):
+                await _tool_fn(server, "manage_strategy")(operation="update", strategy_id="x")
+        m.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_register_sends_no_mask(self):
+        """The mask is update-only; register still means 'this is the whole definition'."""
+        server = _make_server()
+        with patch.object(client, "manage_strategy", AsyncMock(return_value={})) as m:
+            await _tool_fn(server, "manage_strategy")(
+                operation="register",
+                strategy_id="x",
+                display_name="X",
+                entry_rule="{}",
+            )
+        assert m.await_args.kwargs["update_mask"] is None
+
+    @pytest.mark.asyncio
+    async def test_multi_field_update_masks_exactly_those_fields(self):
+        server = _make_server()
+        with patch.object(client, "manage_strategy", AsyncMock(return_value={})) as m:
+            await _tool_fn(server, "manage_strategy")(
+                operation="update", strategy_id="x", display_name="New", entry_rule="{}"
+            )
+        assert sorted(m.await_args.kwargs["update_mask"]) == ["display_name", "entry_rule"]
+
+
+class TestGetStrategyTool:
+    """feature 070 FR-3 — the 14th tool, a thin read over the already-shipped client wrapper."""
+
+    @pytest.mark.asyncio
+    async def test_returns_the_definition(self):
+        server = _make_server()
+        stored = {"strategy_id": "x", "entry_rule": "{}", "components": []}
+        with patch.object(client, "get_strategy", AsyncMock(return_value=stored)) as m:
+            result = await _tool_fn(server, "get_strategy")(strategy_id="x")
+        assert result == stored
+        m.assert_awaited_once_with(strategy_id="x")
+
+    @pytest.mark.asyncio
+    async def test_not_found_is_a_clear_message(self):
+        import grpc  # noqa: PLC0415
+
+        server = _make_server()
+        err = _rpc_error(grpc.StatusCode.NOT_FOUND, "nope")
+        with patch.object(client, "get_strategy", AsyncMock(side_effect=err)):
+            with pytest.raises(RuntimeError, match="strategy not found"):
+                await _tool_fn(server, "get_strategy")(strategy_id="x")

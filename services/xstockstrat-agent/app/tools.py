@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Thirteen tools:
+Fourteen tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -9,7 +9,8 @@ Thirteen tools:
   emit_alert           — emits an alert via gRPC EmitAlert
   run_backtest         — triggers a backtest via gRPC RunBacktest
   screen_symbols       — scans a symbol universe via gRPC ScreenSymbols (read-only)
-  manage_strategy     — registers/updates/deactivates stored strategies in analysis
+  manage_strategy     — registers/updates/deactivates stored strategies (update = partial merge)
+  get_strategy        — reads a stored strategy's full definition (read-only)
   manage_formula      — registers/updates/deletes custom formulas in indicators
   manage_signal_source — registers/updates/deactivates signal sources in ingest
   set_strategy_live   — enables/disables live alert evaluation for a strategy
@@ -290,12 +291,13 @@ def register_tools(server: FastMCP) -> None:
     async def manage_strategy(
         operation: str,
         strategy_id: str,
-        display_name: str = "",
+        display_name: str | None = None,
         components: list[dict] | None = None,
-        entry_rule: str = "",
-        exit_rule: str = "",
+        entry_rule: str | None = None,
+        exit_rule: str | None = None,
         signal_params: dict | None = None,
         cooldown_days: int | None = None,
+        clear_fields: list[str] | None = None,
     ) -> dict:
         """Register/update/deactivate a stored strategy in xstockstrat-analysis.
         operation: 'register' | 'update' | 'deactivate'.
@@ -334,22 +336,61 @@ def register_tools(server: FastMCP) -> None:
             (pass this dict JSON-encoded, e.g. json.dumps(...), as the entry_rule string.)
         signal_params: optional signal-weighting params.
         cooldown_days: optional per-symbol re-entry cooldown in calendar days — omit → platform
-            default (31); 0 → no cooldown; negative → rejected (INVALID_ARGUMENT)."""
-        definition: dict = {
-            "strategy_id": strategy_id,
+            default (31); 0 → no cooldown; negative → rejected (INVALID_ARGUMENT).
+        clear_fields: optional list of field names to ERASE, e.g. ['exit_rule']. Use this to
+            blank a rule or to revert cooldown_days to the platform default — passing a field
+            with no value cannot express "erase" on its own.
+
+        UPDATE IS A PARTIAL MERGE (feature 070). On operation='update' only the fields you
+        actually pass are changed; everything else is preserved server-side. So updating one
+        parameter is safe:
+            manage_strategy(operation='update', strategy_id='x', cooldown_days=45)
+        leaves components, entry_rule, exit_rule and display_name untouched. Previously this
+        wiped them. Call get_strategy first if you want to see the current definition.
+
+        Note: changing any scoring-relevant field (components, rules, cooldown_days,
+        signal_params) changes the strategy's definition fingerprint, so its derived grade is
+        cleared until a fresh backtest supplies new evidence. A rename does not."""
+        # feature 070: send ONLY what the caller supplied. The previous version defaulted these
+        # to ""/[] and shipped them unconditionally, so `manage_strategy(operation="update",
+        # strategy_id=..., cooldown_days=45)` transmitted explicit-empty components and rules and
+        # a blanked display_name — which is what wiped stored strategies. Generalizes the
+        # `is not None` treatment `cooldown_days` already had to every optional field.
+        definition: dict = {"strategy_id": strategy_id}
+        supplied = {
             "display_name": display_name,
-            "components": components or [],
+            "components": components,
             "entry_rule": entry_rule,
             "exit_rule": exit_rule,
+            "signal_params": signal_params,
+            "cooldown_days": cooldown_days,
         }
-        if signal_params:
-            definition["signal_params"] = signal_params
-        # An `is not None` check (not the truthy `if signal_params:` pattern) — an explicit 0
-        # (no-cooldown) must not be dropped, only an omitted arg.
-        if cooldown_days is not None:
-            definition["cooldown_days"] = cooldown_days
+        mask = [name for name, value in supplied.items() if value is not None]
+        for name in mask:
+            definition[name] = supplied[name]
+
+        # `clear_fields` names paths to erase. They join the mask but carry no value, which the
+        # server reads as an explicit clear (AIP-161). This is the only way to blank a rule or
+        # revert cooldown_days to the platform default.
+        for name in clear_fields or []:
+            if name not in mask:
+                mask.append(name)
+
+        update_mask = None
+        if operation == "update":
+            if not mask:
+                raise ValueError(
+                    "manage_strategy(operation='update') needs at least one field to change. "
+                    "Pass the fields you want to update, or use clear_fields=[...] to erase one. "
+                    "Sending nothing would be a no-op; sending everything empty would wipe the "
+                    "strategy."
+                )
+            update_mask = mask
+
         try:
-            return await client.manage_strategy(operation=operation, definition=definition)
+            return await client.manage_strategy(
+                operation=operation, definition=definition, update_mask=update_mask
+            )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="strategy not found")) from e
 
@@ -519,6 +560,21 @@ def register_tools(server: FastMCP) -> None:
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="backfill job not found")) from e
+
+    @server.tool()
+    async def get_strategy(strategy_id: str) -> dict:
+        """Fetch a stored strategy's full definition from xstockstrat-analysis (read-only).
+        strategy_id: the strategy identifier, e.g. 'range_mean_reversion_v3'.
+        Returns the complete stored definition — display_name, every component with its
+        formula_id and params, entry_rule/exit_rule, signal_params, cooldown_days, and the
+        active/live_enabled flags.
+        Use this before editing a strategy to see what is actually stored, and after editing to
+        verify the change landed. Keys are snake_case, matching manage_strategy's input, so a
+        fetch → edit → resend round-trip works directly."""
+        try:
+            return await client.get_strategy(strategy_id=strategy_id)
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="strategy not found")) from e
 
 
 async def _get_source(source_slug: str) -> dict:

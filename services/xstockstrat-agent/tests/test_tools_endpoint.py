@@ -29,6 +29,7 @@ def test_list_tools_returns_all_registered_tools():
         "run_backtest",
         "screen_symbols",
         "manage_strategy",
+        "get_strategy",
         "manage_formula",
         "manage_signal_source",
         "set_strategy_live",
