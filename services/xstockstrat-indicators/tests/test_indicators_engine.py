@@ -4,8 +4,11 @@ These tests are pure-Python, numpy/pandas only — no gRPC or network calls.
 Run with: pytest tests/
 """
 
+import inspect
+
 import pytest
 
+from app.services import indicators_engine
 from app.services.indicators_engine import compute
 
 # ---------------------------------------------------------------------------
@@ -150,3 +153,57 @@ class TestUnknownIndicator:
     def test_raises_value_error(self):
         with pytest.raises(ValueError, match="Unknown indicator"):
             compute("UNKNOWN_INDICATOR", [1.0, 2.0], {})
+
+
+class TestIndicatorDefaultsPinning:
+    """Pins the built-in default periods that xstockstrat-analysis duplicates.
+
+    `app/services/evaluator.py` in xstockstrat-analysis forwards only `dict(comp.params)`, so an
+    omitted `period` silently resolves to the default below — and `INDICATOR_REGISTRY[...]
+    ["required"]` is never enforced (its only consumer is `ListIndicators`). Feature 071's
+    pre-window warm-up sizing therefore has to mirror these numbers.
+
+    If you change a default here, update the mirror in
+    `services/xstockstrat-analysis/app/services/warmup.py` in the SAME PR, or windowed backtests
+    will size their history prefix from a stale period.
+    """
+
+    CONSUMER = (
+        "services/xstockstrat-analysis/app/services/warmup.py "
+        "(feature 071 pre-window warm-up sizing)"
+    )
+
+    @pytest.mark.parametrize(
+        ("indicator", "param", "expected"),
+        [
+            ("SMA", "period", 14),
+            ("EMA", "period", 14),
+            ("RSI", "period", 14),
+            ("ATR", "period", 14),
+            ("STOCH", "period", 14),
+            ("BB", "period", 20),
+            ("MACD", "fast", 12),
+            ("MACD", "slow", 26),
+            ("MACD", "signal", 9),
+        ],
+    )
+    def test_default_period_is_pinned(self, indicator, param, expected):
+        fn = getattr(indicators_engine, f"_{indicator.lower()}")
+        src = inspect.getsource(fn)
+        assert f'params.get("{param}", {expected})' in src, (
+            f"{indicator} default for '{param}' is no longer {expected}. "
+            f"Update the mirrored default in {self.CONSUMER}."
+        )
+
+    def test_iir_indicators_still_emit_no_none_head(self):
+        """EMA/MACD/VWAP return a finite float at index 0 (no NaN warm-up head), which is why
+        warm-up for them must be DECLARED rather than observed. If this ever changes, the
+        observed-warm-up path in xstockstrat-analysis becomes viable again — revisit
+        `services/xstockstrat-analysis/app/services/warmup.py`."""
+        arr = [float(i) for i in range(1, 40)]
+        for indicator in ("EMA", "MACD", "VWAP"):
+            points = compute(indicator, arr, {})
+            assert points[0]["value"] is not None, (
+                f"{indicator} now emits a None head; the declared-warm-up rationale in "
+                f"{self.CONSUMER} needs revisiting."
+            )
