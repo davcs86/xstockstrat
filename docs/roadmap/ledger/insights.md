@@ -175,3 +175,43 @@ reusing.
   rather than by a per-call-site comment, made backtest/live parity (FR-4) directly unit-testable and
   killed the class of "two enforcement paths drift apart" bugs (cf. fails 056). Feed both call sites the
   **same** time source (bar time), never one wall-clock + one bar-time.
+
+### 2026-07-26 — 071-backtest-time-window — design
+- **Pattern**: A "warm-up is verified at runtime, so the constant is safe" defense must be checked
+  against **each indicator's actual output contract**, not the warm-up helper's signature. Here
+  `_first_resolved_index` infers warm-up from a `None` head, but `ewm(adjust=False)` (EMA/MACD) and
+  `cumsum/arange` (VWAP) emit a finite float at index 0 — so the observed warm-up is `0` and any
+  `p >= w` guard is *inert precisely for the path-dependent indicators a history prefix affects most*.
+  Corollary: for an IIR indicator, `period` is a convention, not a bound (`e^-2 ≈ 13.5%` seed weight
+  remains at `period`); use a convergence multiple when "already warm" is a requirement.
+- **Evidence**: `services/xstockstrat-indicators/app/services/indicators_engine.py:48-51,62-84,110-118`
+  vs `services/xstockstrat-analysis/app/handlers/servicer.py:1582-1588`; feature 071 design.md
+  § Rejected Alternatives; adversary round-1 F-07 finding.
+- **Rule it implies**: reinforces **P-03** — before relying on a runtime guard, prove it can actually
+  fire for every input class it claims to cover; a guard that cannot fail is not a guard.
+
+### 2026-07-26 — 071-backtest-time-window — design
+- **Pattern**: Rendering an existing proto enum value or UI affordance **unreachable** is the mirror of
+  ledger fail 067 and is strictly more dangerous: appending an enum value breaks `tsc` against an
+  exhaustive `Record<Enum,…>`, but making one unreachable is compile-clean and silently leaves dead,
+  now-misleading UI copy. Check reachability of what you are about to orphan, not just compilation of
+  what you are adding.
+- **Evidence**: forcing `warmup_bars = 0` would have orphaned `ACTION_LABEL[BarAction.WARMUP]` and
+  `NO_TRADE_MESSAGE[NoTradeReason.ENTIRE_RANGE_WARMUP]`
+  (`services/xstockstrat-ui/src/components/insights/BacktestDiagnostics.tsx:9-27,137,153`); feature 071
+  design.md § Rejected Alternatives.
+- **Rule it implies**: extends **C-10(a/d)** — enum/affordance *reachability* is part of integration
+  completeness; pair a change that can orphan a branch with a test that still exercises it.
+
+### 2026-07-26 — 071-backtest-time-window — design
+- **Pattern**: A silent pre-existing truncation makes "no behavior change" claims false in the
+  *opposite* direction from the one you expect. Analysis never paginated `GetBars`, so marketdata's
+  default `pageSize := 500` with `ORDER BY time ASC LIMIT` already truncated every ~504-trading-day
+  max-range backtest. Adding correct pagination is therefore itself a behavior change
+  (`trading_days` 499 → ~503) that shifts feature-065 evidence weights — the fix and the regression
+  arrive together.
+- **Evidence**: `services/xstockstrat-marketdata/internal/service/marketdata_service.go:124`,
+  `internal/repository/marketdata_repo.go:88-90`; `services/xstockstrat-analysis/app/handlers/servicer.py:357`;
+  feature 071 recon.md Risk 1 + design.md § 4.
+- **Rule it implies**: when adding pagination to an unpaginated caller, measure the *current* silent
+  cap first and state the delta — "correctness fix" and "no behavior change" are rarely both true.

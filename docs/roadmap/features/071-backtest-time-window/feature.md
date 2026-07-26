@@ -1,6 +1,6 @@
 # Feature: backtest-time-window
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `design-approved`
 **Development Branch**: `feature/backtest-time-window` (see context.md — implemented on the
 harness-assigned `claude/features-070-071-rnbkqo` branch this session)
 **Created**: 2026-07-26
@@ -15,12 +15,15 @@ harness-assigned `claude/features-070-071-rnbkqo` branch this session)
 | 2026-07-26 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-07-26 | `draft` → (fail) | /sdd-review | FAIL — premise contradicted by code: `RunBacktestRequest.range` already ships end-to-end incl. UI; proposed proto fields would duplicate it |
 | 2026-07-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved after re-scope (no proto change; agent plumbing + pre-window warm-up). 7 warnings addressed |
+| 2026-07-26 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, quick+1 Floor round) and approved; recon.md + design.md written. R1 BLOCKED on F-07; resolved by deriving the prefix from declared params |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon Dossier](recon.md) — grounded codebase map, patterns to reuse, 8 risks
+- [Design](design.md) — chosen approach, rejected alternatives, open risks
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec backtest-time-window`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -54,5 +57,4 @@ _Proto Reviewer row removed at review: this feature makes no proto change (see p
 
 ## Next Action
 
-`/sdd-design backtest-time-window` — recon dossier + design debate; must resolve OQ-1…OQ-4
-(warm-up shortfall reporting, warm-up lookback source, feature-065 evidence cells, live-loop scope)
+`/sdd-spec backtest-time-window` — generate implementation spec from the approved design
