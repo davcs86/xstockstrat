@@ -1,6 +1,6 @@
 # Feature: strategy-partial-update
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `design-approved`
 **Development Branch**: `feature/strategy-partial-update` (see context.md — implemented on the
 harness-assigned `claude/features-070-071-rnbkqo` branch this session)
 **Created**: 2026-07-26
@@ -16,12 +16,15 @@ harness-assigned `claude/features-070-071-rnbkqo` branch this session)
 | 2026-07-26 | `draft` → (fail) | /sdd-review | FAIL r1 — FR-2/FR-3 + AC-2/AC-3 described already-shipped behavior (`GetStrategy` exists; orphan-ref check exists) |
 | 2026-07-26 | `draft` → (fail) | /sdd-review | FAIL r2 — two C-10 blockers: FR-4 listed 3 of 5 tool-inventory surfaces; `manage_strategy` tool's default-fabrication (`tools.py:338-344`) was unscoped despite being a co-cause |
 | 2026-07-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved r3 (4 warnings, all advisory). OQ-1/OQ-2 deferred to /sdd-design |
+| 2026-07-26 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round + adversary, verdict NEEDS WORK, all objections resolved) and approved; recon.md + design.md written. OQ-1 → FieldMask; OQ-2 → evidence wipe accepted |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon Dossier](recon.md) — grounded codebase map, patterns to reuse, risks
+- [Design](design.md) — chosen approach, rejected alternatives, open risks
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec strategy-partial-update`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -56,7 +59,4 @@ if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design strategy-partial-update` — recon dossier + design debate; must close OQ-1 (merge
-mechanism: `FieldMask` vs `patch` op — proto3 no-presence on `components`/`entry_rule`/`exit_rule` is
-the deciding factor) and OQ-2 (feature-065 evidence wipe), plus FR-2(b)'s "explicitly requested"
-erasure mechanism, which falls out of OQ-1
+`/sdd-spec strategy-partial-update` — generate implementation spec from the approved design

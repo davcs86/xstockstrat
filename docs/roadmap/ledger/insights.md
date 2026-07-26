@@ -215,3 +215,30 @@ reusing.
   feature 071 recon.md Risk 1 + design.md § 4.
 - **Rule it implies**: when adding pagination to an unpaginated caller, measure the *current* silent
   cap first and state the delta — "correctness fix" and "no behavior change" are rarely both true.
+
+### 2026-07-26 — 070-strategy-partial-update — design
+- **Pattern**: Before adding a value to a proto enum, grep the **TypeScript BFF** for an exhaustive
+  allow-list over it, not just exhaustive `Record<Enum,…>` render maps. `insightsBff.ts:46-49` gates
+  admin scope with `op === REGISTER || op === UPDATE || op === DEACTIVATE`; a new
+  `STRATEGY_OPERATION_PATCH = 4` would fall through as *non-mutating* and **skip `requireAdminScope`**,
+  silently collapsing defense-in-depth to the backend's own check. A render-map miss is a compile
+  error (067); an **authorization** allow-list miss compiles cleanly and is a security regression.
+- **Evidence**: `services/xstockstrat-ui/src/lib/insightsBff.ts:46-49` vs
+  `services/xstockstrat-analysis/app/handlers/servicer.py:1352`; feature 070 design.md
+  § Rejected Alternatives (the decisive argument for FieldMask over a PATCH op).
+- **Rule it implies**: extends **C-10(a/d)** — enumerate *authorization* switches over an enum, not
+  only display switches; the failure mode is silent and security-relevant.
+
+### 2026-07-26 — 070-strategy-partial-update — design
+- **Pattern**: A partial-merge built on `MessageToDict` needs **one uniform rule**, never
+  "scalars from the proto object, messages from the dict." `MessageToDict` omits default-valued
+  no-presence fields, so a masked `components: []` never reaches the dict and a deliberate clear
+  silently no-ops, while reading a masked-unset `Struct` off the proto persists `{}` where the key was
+  previously absent — changing the JSONB key set and therefore any content fingerprint. The correct
+  shape is AIP-161: `base[p] = full[p]` if present else `base.pop(p, None)`.
+  `always_print_fields_with_no_presence=True` is **not** a fix — it targets only no-presence fields and
+  injects `params: {}` / `active: false` churn.
+- **Evidence**: `services/xstockstrat-analysis/app/handlers/servicer.py:1373-1376,1787-1790`;
+  `packages/proto/analysis/v1/analysis.proto:230,236-238,245`; feature 070 design.md § 1.
+- **Rule it implies**: reinforces **P-03** — verify the serializer's omission contract before designing
+  merge semantics on top of it; presence rules differ per field kind and a two-rule merge will diverge.
