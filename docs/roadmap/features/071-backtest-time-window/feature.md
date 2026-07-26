@@ -25,10 +25,14 @@
 
 ## Summary
 
-Let `run_backtest` accept an explicit `start`/`end` window (with enough pre-window history to warm up
-indicators), instead of only a fixed rolling window ending "today." Unblocks temporal
-out-of-sample / walk-forward validation and makes backtest results deterministic across calendar
-days.
+Let the `run_backtest` **MCP tool** accept an explicit `start`/`end` window, and make the engine load
+enough pre-window history to warm up indicators before `start`. Unblocks temporal out-of-sample /
+walk-forward validation and makes backtest results deterministic across calendar days.
+
+> **Scope corrected at review (2026-07-26).** `RunBacktestRequest.range` already exists
+> (`analysis.proto:34`), is honored by the servicer (`servicer.py:273-297`), and is already sent by
+> the UI form (`strategies/[id]/page.tsx:91`). **No proto change is required.** The real work is
+> (1) plumbing the window through the agent tool/client, and (2) pre-window indicator warm-up.
 
 ## Reviewers
 
@@ -40,8 +44,10 @@ if the registry changes.)_
 |---|---|
 | `xstockstrat-analysis` (service owner) | Backtest reproducibility, no look-ahead bias; window + indicator warm-up correctness (pre-window history must not leak future data) |
 | `xstockstrat-agent` (service owner) | `run_backtest` MCP tool parameter/docstring accuracy, `docs/runbooks/mcp-tools.md` parity |
-| `xstockstrat-ui` (service owner) | Backtest form / `BacktestDiagnostics` correctness if a window is exposed in the UI, Connect-RPC call safety |
-| Proto Reviewer | Field-number uniqueness, backward compatibility (additive `start`/`end` on `RunBacktest` request — no field removal or type change) |
+| `xstockstrat-ui` (service owner) | Backtest form / `BacktestDiagnostics` correctness — the window is already exposed, and the warm-up change alters existing UI-triggered results (FR-6 agent↔UI parity) |
+
+_Proto Reviewer row removed at review: this feature makes no proto change (see product-spec
+§Proto Contract Changes)._
 
 ## Next Action
 
