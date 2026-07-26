@@ -84,9 +84,9 @@ class TestBuiltinLookback:
 
     def test_defaults_match_the_indicator_engine(self):
         """Omitted params must resolve to the engine's defaults, not to zero."""
-        assert warmup.builtin_lookback_bars("SMA", {}) == 14      # period=14
-        assert warmup.builtin_lookback_bars("BB", {}) == 20       # period=20
-        assert warmup.builtin_lookback_bars("RSI", {}) == 15      # period=14
+        assert warmup.builtin_lookback_bars("SMA", {}) == 14  # period=14
+        assert warmup.builtin_lookback_bars("BB", {}) == 20  # period=20
+        assert warmup.builtin_lookback_bars("RSI", {}) == 15  # period=14
         assert warmup.builtin_lookback_bars("MACD", {}) == 3 * (26 + 9) + 1
 
     def test_period_is_truncated_not_rounded(self):
@@ -255,9 +255,7 @@ class TestFetchBarsPaged:
     async def test_exceeding_the_page_cap_raises_rather_than_truncating(self):
         """Returning what it has would silently drop the newest bars — exactly the bug this
         helper fixes — and would do so as a function of a config value (F-07)."""
-        pages = [
-            _page([_bar(i)], token=f"t{i}") for i in range(1, _MAX_BAR_PAGES + 3)
-        ]
+        pages = [_page([_bar(i)], token=f"t{i}") for i in range(1, _MAX_BAR_PAGES + 3)]
         svc = _svc_with_pages(pages)
         with pytest.raises(_BarFetchError, match="refusing to return a truncated series"):
             await svc._fetch_bars_paged("AAPL", common_pb2.TimeRange(), [])

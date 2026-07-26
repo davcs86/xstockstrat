@@ -579,9 +579,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             page = list(resp.bars)
 
             fresh = [
-                b
-                for b in page
-                if last_seen is None or (b.time.seconds, b.time.nanos) > last_seen
+                b for b in page if last_seen is None or (b.time.seconds, b.time.nanos) > last_seen
             ]
             if not fresh:
                 # Either genuine EOF, or a server that re-served an already-consumed page.

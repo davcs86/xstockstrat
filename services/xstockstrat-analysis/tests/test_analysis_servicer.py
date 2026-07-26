@@ -97,7 +97,6 @@ def _derivation_svc(cells, definition_json=None, strategy_id="s1"):
 # ---------------------------------------------------------------------------
 
 
-
 # feature 071: GetBars is paged now, so a fake response must carry a page whose token says
 # "no more pages" — an auto-created MagicMock token would read as "another page exists".
 _EOF_PAGE = SimpleNamespace(next_page_token="")
