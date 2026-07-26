@@ -70,6 +70,23 @@ class _InsufficientData(Exception):
         self.bars_need = bars_need
 
 
+# feature 071: marketdata's GetBars defaults to a 500-bar page and orders ASC, so an
+# unpaginated request silently drops the NEWEST bars once a range exceeds that. A 730-day
+# range is already ~504 trading days, so the default path has been quietly truncated all
+# along; pre-window warm-up would make it worse. `_fetch_bars_paged` below pages properly.
+_BAR_PAGE_SIZE = 1000
+
+# Backstop against a non-advancing cursor. 32 pages x 1000 bars ~= 128 years of daily data,
+# unreachable by legitimate data under the max_range_days cap. Exhausting it RAISES rather
+# than returning what it has: silently truncating here would reintroduce the very bug this
+# helper exists to fix, and would do so as a function of a config value.
+_MAX_BAR_PAGES = 32
+
+
+class _BarFetchError(Exception):
+    """Raised when bar pagination cannot complete safely (non-advancing cursor, page cap)."""
+
+
 class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
     def __init__(
         self,
@@ -526,6 +543,62 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         return result
 
+    async def _fetch_bars_paged(self, symbol, range_msg, propagation_meta):
+        """Fetch every bar in ``range_msg``, following marketdata's pagination (feature 071).
+
+        Both engine paths previously issued a single un-paged ``GetBars``, which marketdata
+        serves with ``pageSize := 500`` and ``ORDER BY time ASC LIMIT`` — so any range wider
+        than 500 bars silently lost its **newest** bars.
+
+        Safety properties (a partial series must never be returned silently):
+        - **Strict cursor monotonicity.** Each page must contribute at least one bar strictly
+          newer than the last one seen. marketdata falls back to ``cursor = start`` on an
+          unparseable page token, re-serving the identical page with the identical token; this
+          turns that infinite loop into a loud failure.
+        - **Page cap.** ``_MAX_BAR_PAGES`` bounds the loop. Exhausting it raises.
+
+        A full page with an empty ``next_page_token`` is genuine EOF, not a lost tail:
+        marketdata queries ``LIMIT pageSize+1`` and only sets a token when it saw the extra
+        row, so it cannot both fill a page and forget the cursor.
+        """
+        bars: list = []
+        page_token = ""
+        last_seen = None
+
+        for _ in range(_MAX_BAR_PAGES):
+            resp = await self._marketdata.GetBars(
+                marketdata_pb2.GetBarsRequest(
+                    symbol=symbol,
+                    timeframe="1d",  # canonical: matches the backfill path's stored "1d" bars
+                    timeframe_enum=common_pb2.Timeframe.TIMEFRAME_1DAY,
+                    range=range_msg,
+                    page=common_pb2.PageRequest(page_size=_BAR_PAGE_SIZE, page_token=page_token),
+                ),
+                metadata=propagation_meta,
+            )
+            page = list(resp.bars)
+
+            fresh = [
+                b for b in page if last_seen is None or (b.time.seconds, b.time.nanos) > last_seen
+            ]
+            if not fresh:
+                # Either genuine EOF, or a server that re-served an already-consumed page.
+                # Both are terminal; neither should loop.
+                return bars
+
+            bars.extend(fresh)
+            newest = fresh[-1].time
+            last_seen = (newest.seconds, newest.nanos)
+
+            page_token = resp.page.next_page_token
+            if not page_token:
+                return bars
+
+        raise _BarFetchError(
+            f"{symbol}: bar pagination exceeded {_MAX_BAR_PAGES} pages "
+            f"({len(bars)} bars so far) — refusing to return a truncated series"
+        )
+
     async def _backtest_symbol(
         self,
         symbol,
@@ -547,17 +620,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         Returns (trades, final_equity, daily_equity, diagnostics) — feature 064.
         """
 
-        # 1. Fetch OHLCV bars from marketdata
-        bars_resp = await self._marketdata.GetBars(
-            marketdata_pb2.GetBarsRequest(
-                symbol=symbol,
-                timeframe="1d",  # canonical: matches the backfill path's stored "1d" bars
-                timeframe_enum=common_pb2.Timeframe.TIMEFRAME_1DAY,
-                range=range_msg,
-            ),
-            metadata=propagation_meta,
-        )
-        bars = list(bars_resp.bars)
+        # 1. Fetch OHLCV bars from marketdata (feature 071: paged — see _fetch_bars_paged)
+        bars = await self._fetch_bars_paged(symbol, range_msg, propagation_meta)
         if len(bars) < slow_period + 2:
             log.warning(
                 "symbol %s has insufficient bars (%d < %d)", symbol, len(bars), slow_period + 2
@@ -799,16 +863,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         Drives entry/exit from StrategyEvaluator decisions (backtest/live parity).
         Returns (trades, final_equity, daily_equity, diagnostics) — feature 064.
         """
-        bars_resp = await self._marketdata.GetBars(
-            marketdata_pb2.GetBarsRequest(
-                symbol=symbol,
-                timeframe="1d",  # canonical: matches the backfill path's stored "1d" bars
-                timeframe_enum=common_pb2.Timeframe.TIMEFRAME_1DAY,
-                range=range_msg,
-            ),
-            metadata=propagation_meta,
-        )
-        bars = list(bars_resp.bars)
+        # feature 071: paged — see _fetch_bars_paged
+        bars = await self._fetch_bars_paged(symbol, range_msg, propagation_meta)
         if len(bars) < 2:
             log.warning("symbol %s has insufficient bars (%d)", symbol, len(bars))
             raise _InsufficientData(symbol, len(bars), 2)
