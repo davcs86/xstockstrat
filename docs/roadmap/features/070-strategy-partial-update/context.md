@@ -180,3 +180,46 @@ objections were resolved in the design rather than waived. Recorded per P-04 so 
 Steps 3–6: agent client (presence-honest build, drop `active`, attach mask), agent tool (`None`
 defaults, mask from supplied kwargs, `clear_fields`, empty-mask `ValueError`, new `get_strategy`
 tool), the **six** doc/inventory surfaces, and UI e2e + `integration-test.sh` §7b.
+
+## Session 2026-07-26 — implementation (steps 3–6, sequential mode)
+
+- **Step 3 — agent client.** `update_mask` accepted and attached; `active` dropped (it is
+  column-authoritative, overlaid at read and never written from the definition, so sending it only
+  polluted `definition_json`); `get_strategy` switched to snake_case so fetch → edit → resend into
+  `manage_strategy` round-trips. Safe: the new tool is its only caller.
+- **Step 4 — agent tool.** Optional params default to `None`; only supplied fields are sent; the
+  mask is derived from what was supplied. An `update` with nothing to change raises **before any
+  RPC**, so the MCP path can never emit a maskless full-replace by accident. New `clear_fields`
+  parameter makes erasure expressible. New 14th tool `get_strategy`.
+- **Step 5 — six doc surfaces**, per feature 066's ledger lesson. A repo-wide grep for "thirteen"
+  outside feature docs is now empty. The sixth (the one 066 recorded as always-missed) is the
+  **operational** runbook `indicator-builder.md`, which tells an operator to use `manage_strategy`.
+- **Step 6 — UI + integration test.**
+
+### Verified: the UI needs NO production change
+
+The erasure guard now fires on maskless UPDATE, so the real question was whether the StrategyWizard
+can submit a blank rule. Checked directly: `StrategyWizard.tsx:127-134` `canAdvance` requires
+`components.length >= 1` at step 2 and `entryRule.trim() !== '' && exitRule.trim() !== ''` at step 3,
+so submission is structurally unreachable with an empty component list or a blank rule. The guard
+cannot be tripped from the UI. This retires the design's main compatibility risk.
+
+### integration-test.sh §7b — case added, staleness recorded
+
+Added the AC-1 end-to-end case (partial update via `update_mask`, asserting components survive) —
+**and recorded at the section header that the script is stale**: it is wired into no CI workflow and
+posts to Connect-HTTP paths removed with the 80xx servers. The case is therefore written but
+unexecuted. Recorded rather than silently relied upon (P-03); AC-1's real coverage today is the
+layered tool + client-wire + servicer tests.
+
+### Test-fake bug fixed (third of the session)
+
+`test_grpc_error_reraised_as_clear_message` called `update` with no fields to exercise gRPC error
+mapping; that now hits the empty-mask guard first. Supplied a field so it reaches the RPC — the
+test's intent was error mapping, not the guard.
+
+### Remaining (optional coverage, not correctness)
+
+`e2e/mock-backend.ts` `manageStrategy` merely echoes `req.definition` and models no merge, so no
+UI-side partial-update assertion is possible until it changes; and its `getStrategy` inline literal
+is catalogued as not-yet-centralized (`e2e/fixtures/INVENTORY.md:49`, C-12).
