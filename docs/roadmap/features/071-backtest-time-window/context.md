@@ -137,3 +137,29 @@ preference, and the Floor breach was independently re-verified before clearance.
 P-04 so the unapproved gate is auditable.
 
 - Status: `spec-ready` → `design-approved`.
+
+## Session 2026-07-26 — implementation (steps 1–2 of 8)
+
+- **Step 1 DONE** (`a1cf158`) — `app/services/warmup.py`: declared pre-window sizing.
+  33 unit tests + 10 pinning tests in `xstockstrat-indicators` whose failure messages name
+  `warmup.py` as the consumer to update.
+- **Step 2 DONE** (`a8cf5cf`) — `_fetch_bars_paged` replaces the un-paged `GetBars` in **both**
+  engine paths. Monotonic-cursor guard + page cap that **raises** instead of truncating.
+  8 pagination tests. Suite 318 green, ruff clean.
+  - Deviation from the design's stated plan: the design said the empty-token probe was dropped;
+    confirmed correct in implementation — no probe was written.
+  - Test fakes had to be corrected: `SimpleNamespace(bars=…)` lacked `page` entirely, and
+    `MagicMock()`-based fakes auto-create a **truthy** `page.next_page_token`, which reads as
+    "another page exists". Both now model EOF via a shared `_EOF_PAGE` sentinel. This was a fake
+    modelling bug, not a production-code accommodation — no `getattr`/`isinstance` softening was
+    added to `_fetch_bars_paged`.
+- **Steps 3–8 NOT started**: `trade_start_idx` plumbing (with the byte-identical gate at `k = 0`),
+  prefix wiring, agent `start`/`end` surface, parity/determinism tests, docs, UI e2e.
+
+### Environment note
+
+`buf` 1.72.0 provisions fine from GitHub releases, but full codegen also needs the Go plugins,
+the node plugins from `packages/proto/gen/ts` devDependencies, and `grpcio-tools`, then a
+byte-identical reproduction check against the committed stubs (ledger insight 2026-07-09) before
+any `.proto` edit. Not attempted this session. **071 needs no proto change, so it is unblocked;
+070 is blocked on this.**
