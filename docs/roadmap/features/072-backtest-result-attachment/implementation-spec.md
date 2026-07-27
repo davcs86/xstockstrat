@@ -248,13 +248,23 @@ to get a behavioral red, per `.claude/skills/sdd-execute/reference/tdd-gate.md`)
 **Instructions**:
 
 Create `services/xstockstrat-agent/tests/test_backtest_view.py`. Build a module-level
-`_full_result(symbols=1, bars=50)` factory returning a realistic `client.run_backtest`-shaped dict
-(parameterized — tests 4 and 5 vary bar count and symbol count; mirrors Step 4's `_result(symbols, bars)`) — the fixture must
-be **non-echoing** (ledger insights 2026-07-27): every per-bar field carries a value that appears
-**nowhere** in the FR-2 summary key set, so a test cannot pass by reading the wrong half.
-Concretely, give bars a distinctive sentinel such as `"close": 111.111` and
-`"indicators": {"sentinel_only_in_attachment": 42.0}`, and give the summary-level metrics different
-values.
+`_full_result(symbols=1, bars=50)` factory returning a realistic `client.run_backtest`-shaped dict.
+Parameterized because tests 4 and 5 vary bar count and symbol count; mirrors Step 4's
+`_result(symbols, bars)`. Four properties the factory **must** have:
+
+- **Non-echoing** (ledger insights 2026-07-27): every per-bar field carries a value appearing
+  **nowhere** in the FR-2 summary key set, so a test cannot pass by reading the wrong half. Give bars
+  a distinctive sentinel — `"close": 111.111`, `"indicators": {"sentinel_only_in_attachment": 42.0}`
+  — and give the summary-level metrics different values.
+- **`coverage_gaps` is exactly ONE entry, fixed, independent of `symbols`.** Test 1 and test 6 both
+  need a gap present, but gaps are per-symbol on OK runs too (`servicer.py:477`), so a factory that
+  scaled them with `symbols` would make test 5's marginal-cost assertion breach its slope and go red
+  for the wrong reason. One gap keeps it in the cancelling fixed part. Its `bars_have`/`bars_need`
+  are the **strings** `"120"`/`"504"` (`int64`, `analysis.proto:55-56`) — that is test 6's target.
+- **`profit_factor` is a finite float** (`1.8`). Never `"Infinity"` — the producer clamps
+  (`servicer.py:2202-2208`) and no `BacktestResult` double is reachable as non-finite.
+- **`volume` is the string `"51234567"`** and `bar_index` an `int` — the attachment-side half of the
+  same int64 contract, asserted in test 9.
 
 Cover:
 
