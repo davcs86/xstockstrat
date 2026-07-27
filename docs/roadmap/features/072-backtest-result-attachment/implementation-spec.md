@@ -85,7 +85,8 @@ gap affects features 070 and 071.)_
   `backtest_id`(1), `strategy_id`(2), `total_return`(3), `annualized_return`(4), `sharpe_ratio`(5),
   `max_drawdown`(6), `win_rate`(7), `total_trades`(8), `profit_factor`(9), `completed_at`(10),
   `trades`(11), `status`(12), `coverage_gaps`(13), `diagnostics`(14), `initial_capital`(15).
-- `SymbolDiagnostics` fields, `packages/proto/analysis/v1/analysis.proto:139-144`:
+- `SymbolDiagnostics` fields, `packages/proto/analysis/v1/analysis.proto:140-146`
+  (note `warmup_bars = 5` is at `:145` — inside the message, and `_SYMBOL_KEYS` depends on it):
   `symbol`(1), `bars`(2), `no_trade_reason`(3), `bars_total`(4), `warmup_bars`(5) — the `bars` array
   is what the summary drops.
 - SDK types confirmed importable from the resolved SDK (`mcp == 1.27.1`, `uv.lock:439-440`), executed
@@ -119,7 +120,7 @@ Create `services/xstockstrat-agent/app/backtest_view.py` as a **pure** module (n
    - `_HEAD_KEYS = ("backtest_id", "strategy_id", "status", "completed_at")`
    - `_METRIC_KEYS = ("total_return", "annualized_return", "sharpe_ratio", "max_drawdown",
      "win_rate", "total_trades", "profit_factor", "initial_capital")` — the FR-2 headline set,
-     matching `analysis.proto:67-79,82`
+     matching `analysis.proto:68-74` (the eight metric fields) plus `initial_capital` at `:83`
    - `_SYMBOL_KEYS = ("symbol", "no_trade_reason", "bars_total", "warmup_bars")` — FR-2's per-symbol
      0-trade diagnosis set, `bars` deliberately excluded
 
@@ -224,7 +225,8 @@ to get a behavioral red, per `.claude/skills/sdd-execute/reference/tdd-gate.md`)
 **Instructions**:
 
 Create `services/xstockstrat-agent/tests/test_backtest_view.py`. Build a module-level
-`_full_result()` factory returning a realistic `client.run_backtest`-shaped dict — the fixture must
+`_full_result(symbols=1, bars=50)` factory returning a realistic `client.run_backtest`-shaped dict
+(parameterized — tests 4 and 5 vary bar count and symbol count; mirrors Step 4's `_result(symbols, bars)`) — the fixture must
 be **non-echoing** (ledger insights 2026-07-27): every per-bar field carries a value that appears
 **nowhere** in the FR-2 summary key set, so a test cannot pass by reading the wrong half.
 Concretely, give bars a distinctive sentinel such as `"close": 111.111` and
@@ -242,8 +244,16 @@ Cover:
    `no_trade_reason`, `bars_total`, `warmup_bars` are present and `"bars" not in entry` (AC-3, the
    feature-064 regression guard).
 4. `test_summary_is_independent_of_window_length` — build the same result at 50 bars/symbol and at
-   5,000 bars/symbol; `json.dumps(summarize(...))` is **byte-identical** for both. This is the
-   reworded AC-1's first half.
+   5,000 bars/symbol. **Not byte-identical**: `_SYMBOL_KEYS` retains `bars_total`, which tracks bar
+   count by definition, so demanding byte-identity could only be satisfied by pinning `bars_total`
+   equal across the two fixtures — the inert-fixture trap this step's own non-echoing rule warns
+   against (ledger insights 2026-07-27). Assert instead, all three:
+   (a) the two summaries are equal after popping `bars_total` from every `diagnostics` entry;
+   (b) `bars_total` actually differs (50 vs 5000) — so the fixture is proven live, not inert;
+   (c) `abs(len(json.dumps(a)) - len(json.dumps(b))) < 16` — digit-width growth only, nothing
+   that scales with bar count.
+   This is the reworded AC-1's first half ("independent of window length", `design.md` § 7) —
+   size-independence, not byte-equality.
 5. `test_summary_grows_linearly_in_symbol_count` — 1 symbol vs 10 symbols: the serialized summary
    grows, but stays under a small absolute bound (assert `< 8_000` bytes for 10 symbols) while the
    full payload for the same input is orders of magnitude larger. AC-1's second half; asserted
@@ -491,14 +501,28 @@ no regression of the feature-064 / feature-071 guards. _(Inferred — see the re
    - `test_inline_summary_has_no_per_bar_detail` — `result[0]` is a `TextContent`;
      `"sentinel_only_in_attachment" not in result[0].text`; the parsed summary has no `"trades"` key
      and each `diagnostics` entry has no `"bars"` key (**AC-1**).
-   - `test_inline_summary_is_independent_of_window_length` — same symbols, 50 bars vs 5,000 bars →
-     `result[0].text` is **byte-identical** (**AC-1**, reworded per `design.md` § 7).
+   - `test_inline_summary_is_independent_of_window_length` — same symbols, 50 bars vs 5,000 bars.
+     Same three-part assertion as Step 2 test 4, and for the same reason: `bars_total` legitimately
+     differs, so byte-equality of `result[0].text` is unsatisfiable without an inert fixture. Assert
+     equality-modulo-`bars_total`, that `bars_total` did change, and that the length delta is
+     `< 16` bytes (**AC-1**, reworded per `design.md` § 7).
    - `test_inline_summary_is_linear_in_symbol_count` — 1 symbol vs 10 symbols: `len(result[0].text)`
      grows but stays under a small absolute bound; asserted across **two** symbol counts, not one
      (`design.md` § Open Risks).
    - `test_attachment_round_trips_to_the_complete_result` — `result[1]` is the `EmbeddedResource`;
      `json.loads(result[1].resource.text) == <the exact dict the mock returned>` (**AC-2**, FR-3);
      and the sentinel **is** present in `result[1].resource.text`.
+   - `test_the_published_tool_returns_two_content_blocks` — **the only test that crosses the
+     `structured_output=False` seam.** Every other test here calls `_tool_fn(...)`, which returns the
+     raw undecorated function (`tests/test_tools.py:21-22`), so the return value never passes through
+     `FuncMetadata.convert_result` → `_convert_to_content` — the exact machinery Step 3 calls
+     load-bearing. Without this, the decorator could be wrong (or the annotation dropped) and every
+     other assertion would still pass. Drive the registered tool instead:
+     `await server.call_tool("run_backtest", {"strategy_id": "sma", "symbols": ["AAPL"]})`, and assert
+     the client-visible content is `[TextContent, EmbeddedResource]` in that order. Additionally assert
+     via `await server.list_tools()` that the published `run_backtest` carries **no** `outputSchema` —
+     that is the observable proof `structured_output=False` took effect, and it fails loudly if a
+     future SDK bump changes the passthrough.
    - `test_zero_trade_run_is_diagnosable_from_the_summary_alone` — a result whose symbols have
      `total_trades: 0`, `no_trade_reason: "NO_TRADE_REASON_ENTRY_NEVER_TRUE"`, `bars_total`,
      `warmup_bars`: all three per-symbol fields plus `total_trades: 0` are present in the parsed
@@ -603,7 +627,9 @@ All must pass; the last must report total coverage ≥ 40% (CI parity —
 **Verification**:
 
 ```bash
-grep -n "fourteen" docs/runbooks/mcp-tools.md docs/runbooks/CLAUDE.md services/xstockstrat-agent/CLAUDE.md services/xstockstrat-agent/app/tools.py
+# -i is required: app/tools.py:4 reads "Fourteen tools:" with a capital F, so a case-sensitive
+# grep returns 4 and this AC-6 gate fails spuriously on every run.
+grep -in "fourteen" docs/runbooks/mcp-tools.md docs/runbooks/CLAUDE.md services/xstockstrat-agent/CLAUDE.md services/xstockstrat-agent/app/tools.py
 grep -n "bt-abc123" docs/runbooks/mcp-tools.md
 grep -rn "xstockstrat:///backtest" docs/runbooks/mcp-tools.md services/xstockstrat-agent/app/tools.py
 sed -n '241,300p' docs/runbooks/mcp-tools.md

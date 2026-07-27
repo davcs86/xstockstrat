@@ -261,3 +261,57 @@ Run against the installed SDK and generated stubs rather than reasoned about:
 - [x] Non-echoing fixtures + two symbol counts → Steps 2 (tests 4, 5, 8) and 4.
 - [x] `profit_factor` as the string `"Infinity"` → Steps 2 (test 6) and 4.
 - [x] AC-1 rewording + stale citations applied to `product-spec.md`.
+
+## Session 2026-07-27 — sdd-review impl-spec (advisory)
+
+**PASS WITH WARNINGS** — 0 blockers, 5 warnings, 7 notes, **no Floor breach**. Overlap scan
+returned **CLEAN** (no config / proto / migration / file collision; 072 declares none of the first
+three, and 070+071 are merged so their edits are trunk reality rather than pending diffs).
+
+Four warnings were **fixed in the spec before execute**, deliberately — **F-09** freezes step bodies
+once execution starts, so these would otherwise have become Deviation Log churn:
+
+1. **The byte-identity assertion was unsatisfiable** (Steps 2 and 4). `_SYMBOL_KEYS` retains
+   `bars_total`, which tracks bar count by definition, so a 50-bar and a 5,000-bar summary can never
+   be byte-identical — the only way to make it pass would be pinning `bars_total` equal across the
+   two fixtures, which is exactly the inert-fixture trap the same step warns about. It was also an
+   over-extension of the approved design, which says *independent of window length*, not
+   *byte-identical*. Replaced with a three-part assertion: equal after popping `bars_total`;
+   `bars_total` **did** change (proving the fixture is live); serialized length delta `< 16` bytes.
+2. **Nothing crossed the `structured_output=False` seam** (Step 4). Every test called `_tool_fn`,
+   which returns the raw undecorated function, so the return value never reached
+   `FuncMetadata.convert_result` → `_convert_to_content` — the machinery Step 3 calls load-bearing.
+   The decorator could have been wrong and every assertion would still have passed. Added a
+   `server.call_tool(...)` round-trip plus a `list_tools()` assertion that the published tool carries
+   no `outputSchema`.
+3. **`grep -n "fourteen"` is case-sensitive** and `app/tools.py:4` reads "**F**ourteen tools:", so the
+   AC-6 gate returned 4 matches against a stated expectation of 5 — a spurious failure on every run.
+   Verified by running it. Now `grep -in`.
+4. **Two proto citations did not resolve** — the metric fields are `analysis.proto:68-74` plus
+   `initial_capital` at `:83` (not `:67-79,82`), and `SymbolDiagnostics` is `:140-146` with
+   `warmup_bars` at `:145`, outside the cited `:139-144` even though `_SYMBOL_KEYS` depends on it.
+
+Also fixed: `_full_result()` was specified no-arg but tests 4 and 5 need it parameterized by bar and
+symbol count (Step 4's `_result(symbols, bars)` already had it right).
+
+**Not a defect, but load-bearing for dispatch:** Step 3's verification cannot pass standalone —
+`test_run_backtest_calls_grpc` (`tests/test_tools.py:271`) asserts `result["backtest_id"]` on the
+**tool's** return and goes red the moment Step 3 returns content blocks. Steps 3 and 4 must be
+dispatched to `/sdd-execute` as **one unit** or the run trips F-05.
+
+The reviewer independently re-verified the whole `structured_output=False` chain against the
+installed `mcp == 1.27.1` — `FastMCP.tool` signature, `func_metadata.py:264-265/521-522/530-536/539`,
+and the `convert_result` path — and confirmed the design's core mechanism is sound. It also confirmed
+the spec's `uv lock --check` doc-drift finding is real (zero occurrences anywhere under
+`.github/workflows/`), which means the spec **supersedes** `design.md:99`'s claim that it gates CI.
+
+Separately repaired from the overlap scan (committed alongside): `merge-order.md`'s note said
+"072 must invert that exact assertion" about the feature-064 guard — now false, and it would have
+misdirected execution — and 070's lifecycle still read `in-progress` after its own merge.
+
+### Open Threads (added)
+
+- [ ] Root `CLAUDE.md` claims `uv lock --check` gates CI; it does not. Out of 072's scope — worth a
+  separate docs fix.
+- [ ] `docs/runbooks/reviewer-registry.md` still has no `xstockstrat-agent` row (shared gap with 070
+  and 071), so this feature's reviewer focus stays inferred rather than registry-sourced.
