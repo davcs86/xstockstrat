@@ -111,11 +111,22 @@ Create `services/xstockstrat-agent/app/backtest_view.py` as a **pure** module (n
    re-serializes the proto, it projects the dict `client.run_backtest` already returns, so FR-3
    fidelity holds by construction.
 
+   Imports (ruff `I` order): `import json`; `from typing import Any`;
+   `from urllib.parse import quote`; `from mcp.types import Annotations, EmbeddedResource,
+   TextResourceContents`. **No `gen.*` import** — the module is contractually pure (AGENT-2,
+   agent `docs/context-constitution.md:16`); the descriptor-parity test (Step 2 test 8) imports the
+   proto in the *test* module instead.
+
 2. Constants (no config keys — these are presentation constants, not `WatchConfig` values; **F-07**
    is honored because nothing here is operationally tunable):
    - `_ATTACHMENT_MIME = "application/json"`
    - `_URI_TEMPLATE = "xstockstrat:///backtest/{backtest_id}/result.json"`
    - `_ATTACHMENT_PRIORITY = 0.1`
+   - `_INTENTIONALLY_DROPPED = frozenset({"trades"})` — the one `BacktestResult` field `summarize`
+     drops on purpose. It exists so Step 2 test 8 can assert
+     `kept | dropped == fields_by_name` rather than a bare equality that is red by construction.
+     Verified today: the union is exactly the 15 `BacktestResult` fields, and
+     `_SYMBOL_KEYS | {"bars"}` is exactly the 5 `SymbolDiagnostics` fields.
    - `_HEAD_KEYS = ("backtest_id", "strategy_id", "status", "completed_at")`
    - `_METRIC_KEYS = ("total_return", "annualized_return", "sharpe_ratio", "max_drawdown",
      "win_rate", "total_trades", "profit_factor", "initial_capital")` — the FR-2 headline set,
@@ -177,7 +188,6 @@ Create `services/xstockstrat-agent/app/backtest_view.py` as a **pure** module (n
 
 **Placement note (recorded, not silent — P-03):** `design.md` § 3 names `app/backtest_view.py` as the
 home of `summarize` and shows the `EmbeddedResource` construction (§ 2) without naming its module.
-`build_blocks` additionally imports `from urllib.parse import quote` (see the URI note above).
 `build_blocks`/`attachment_refs` are placed in the same module so `tools.py` stays a thin call site
 and the whole split is unit-testable without a `FastMCP` server. This is a within-design placement
 decision, logged in `context.md`.
@@ -302,7 +312,7 @@ Cover:
        == set(analysis_pb2.SymbolDiagnostics.DESCRIPTOR.fields_by_name)
    ```
 
-   with `_INTENTIONALLY_DROPPED = {"trades"}` in `backtest_view.py`. Note the union **must** include
+   using the `_INTENTIONALLY_DROPPED` constant declared in Step 1. Note the union **must** include
    the dropped set — asserting bare equality against `fields_by_name` is immediately red, because
    `trades` is dropped on purpose. The proto import stays in the **test** module and inside the
    function body: `backtest_view.py` is contractually pure with no `gen.*` import
