@@ -316,6 +316,22 @@ export interface StrategyDefinition {
 export interface ManageStrategyRequest {
     operation: StrategyOperation;
     definition?: StrategyDefinition | undefined;
+    /**
+     * Feature 070 — partial update. Applies to STRATEGY_OPERATION_UPDATE only; ignored for
+     * REGISTER/DEACTIVATE.
+     *
+     *   present  → MERGE: only the listed top-level StrategyDefinition paths are taken from
+     *              `definition`; every other stored field is preserved. A masked path whose value
+     *              is absent from the request CLEARS that field (AIP-161 semantics) — that is the
+     *              only way to express "erase this", since proto3 gives `components`/`entry_rule`/
+     *              `exit_rule` no field presence.
+     *   absent   → FULL REPLACE: byte-for-byte the pre-070 behavior, so existing clients (the
+     *              StrategyWizard, which always sends a complete definition) are unaffected.
+     *
+     * Allowed paths: display_name, components, entry_rule, exit_rule, signal_params, cooldown_days.
+     * strategy_id/active/live_enabled are column-authoritative and rejected with INVALID_ARGUMENT.
+     */
+    updateMask?: string[] | undefined;
 }
 export interface GetStrategyRequest {
     strategyId: string;

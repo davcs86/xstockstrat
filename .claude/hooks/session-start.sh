@@ -32,7 +32,7 @@ SKILLS_DIR="${CLAUDE_PROJECT_DIR:-$(git -C "$(dirname "$0")" rev-parse --show-to
 [ -d "$SKILLS_DIR" ] || exit 0
 
 MAX_DESC=55 # max chars for description column
-MAX_INV=40 # max chars for invocation column
+MAX_INV=40  # max chars for invocation column
 
 # Collect rows as parallel arrays
 invocations=()

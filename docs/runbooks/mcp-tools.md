@@ -1,6 +1,6 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the thirteen tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the fourteen tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 ---
@@ -26,7 +26,7 @@ directly on port 9000.
 
 **Direct SSE (local):** `http://localhost:9000/sse`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same thirteen tools' `name`,
+**Tool catalog (UI display).** `GET /api/tools` returns the same fourteen tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
 capabilities (the same data documented below), never user data or credentials. It powers the
 `xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
@@ -309,6 +309,20 @@ Scans an explicit universe of symbols via `xstockstrat-analysis` `ScreenSymbols`
 
 Registers, updates, or deactivates a stored strategy definition in `xstockstrat-analysis`.
 
+> **`update` is a PARTIAL MERGE (feature 070).** Only the fields you actually pass are changed;
+> everything else is preserved server-side. Tuning one parameter is therefore safe:
+>
+> ```python
+> manage_strategy(operation="update", strategy_id="range_mr_v3", cooldown_days=45)
+> ```
+>
+> leaves `components`, `entry_rule`, `exit_rule` and `display_name` untouched. **Before feature 070
+> this wiped them**, because the tool defaulted the omitted fields to `""`/`[]` and sent them.
+>
+> Use [`get_strategy`](#get_strategy) to read the current definition first, and `clear_fields` to
+> erase something deliberately — a field you simply don't pass is *preserved*, not cleared, so
+> erasure has to be explicit.
+
 **Parameters**
 
 | Parameter | Type | Required | Description |
@@ -321,6 +335,7 @@ Registers, updates, or deactivates a stored strategy definition in `xstockstrat-
 | `exit_rule` | `string` | No | JSON-encoded condition tree |
 | `signal_params` | `object` | No | Optional signal-weighting params |
 | `cooldown_days` | `int` | No | Per-symbol re-entry cooldown in calendar days. Omit → platform default (31); `0` → no cooldown; negative rejected |
+| `clear_fields` | `string[]` | No | Field names to **erase** on `update`, e.g. `["exit_rule"]`. The only way to blank a rule or revert `cooldown_days` to the platform default |
 
 **Return**
 
@@ -334,7 +349,55 @@ Registers, updates, or deactivates a stored strategy definition in `xstockstrat-
 |---|---|
 | Invalid definition (unknown indicator, bad rule JSON, undefined ref_name) | `invalid argument` (INVALID_ARGUMENT) |
 | Negative `cooldown_days` | `invalid argument` (INVALID_ARGUMENT) |
+| `update` with no fields and no `clear_fields` | `ValueError` raised client-side, before any RPC |
+| An `update` that would empty `components` or blank a rule without naming it for erasure | `invalid argument` (INVALID_ARGUMENT) — the server refuses; the message names `update_mask` as the escape hatch |
 | `update`/`deactivate` on unknown strategy | `strategy not found` (NOT_FOUND) |
+
+**Effect on the derived grade.** Changing a scoring-relevant field (`components`, rules,
+`cooldown_days`, `signal_params`) changes the strategy's definition fingerprint, so its derived
+grade is cleared until a fresh backtest supplies new evidence. A rename does **not** — the
+fingerprint excludes `display_name`.
+
+---
+
+### `get_strategy`
+
+Reads a stored strategy's full definition from `xstockstrat-analysis`. Read-only; not admin-scoped
+(matching the `GetStrategy` RPC, which the non-admin strategy detail page also uses).
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `strategy_id` | `string` | Yes | The strategy identifier, e.g. `"range_mean_reversion_v3"` |
+
+**Return**
+
+Snake_case keys, matching `manage_strategy`'s input, so a fetch → edit → resend round-trip works
+directly:
+
+```json
+{
+  "strategy_id": "range_mean_reversion_v3",
+  "display_name": "Range MR v3",
+  "components": [
+    {"ref_name": "z", "kind": "COMPONENT_KIND_CUSTOM_FORMULA", "formula_id": "f-abc", "params": {"period": 20.0}}
+  ],
+  "entry_rule": "{\"fn\": \"<\", \"lhs\": \"z\", \"rhs\": -1.0}",
+  "exit_rule": "{\"fn\": \">\", \"lhs\": \"z\", \"rhs\": 1.0}",
+  "active": true,
+  "live_enabled": false
+}
+```
+
+`cooldown_days` is omitted when unset (platform default applies) and present when explicitly set —
+including an explicit `0`, which means "no cooldown".
+
+**Errors**
+
+| Condition | Error |
+|---|---|
+| Unknown strategy | `strategy not found` (NOT_FOUND) |
 
 ---
 
