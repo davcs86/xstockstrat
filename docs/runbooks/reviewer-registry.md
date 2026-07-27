@@ -21,6 +21,7 @@ list — this drives AI review focus, not notifications.
 | `xstockstrat-notify` | Stream delivery guarantees, backpressure handling, alert deduplication |
 | `xstockstrat-config` | Config key naming (`<service>.<category>.<key>`), environment/trading_mode scoping, WatchConfig stream stability |
 | `xstockstrat-ui` | Trading UI correctness, analytics display accuracy, config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values rendered in UI, no direct DB access (except audit log) |
+| `xstockstrat-agent` | MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity; tool-count statements kept in sync across all six inventory surfaces; OAuth 2.1 edge-auth correctness and statelessness (no in-memory store — `instance_count > 1` must stay safe); admin `x-access-scope` forwarded only by the management tools; no secret values in tool output or the unauthenticated `GET /api/tools` catalog |
 | `packages/proto` | Field number uniqueness, backward compatibility (no field removal or type change without deprecation), naming conventions |
 
 ---

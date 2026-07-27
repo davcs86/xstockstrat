@@ -1,7 +1,9 @@
 # Design: backtest-result-attachment
 
 **Created**: 2026-07-27
-**Rounds**: 1 (quick; termination: approved with open risks accepted)
+**Rounds**: 3 (round 1 quick; rounds 2–3 full proposer+adversary, 2026-07-27 — gzip swap and
+content-trimming both proposed and **rejected**, chosen approach unchanged in all three; corrections
+adopted each round)
 **Approved by**: user @ 2026-07-27
 **Grounded in**: recon.md
 
@@ -79,11 +81,28 @@ the user detail exists (FR-5a).
 Must be **total over partial dicts** — `tests/test_tools.py:288,303` mock `client.run_backtest` with
 `{"backtest_id": "bt-2"}` only, so `.get(...)` throughout or the feature-071 window tests break.
 
-**Non-finite representation is documented, not incidental.** `MessageToDict` maps int64 to a JSON
-**string** and non-finite doubles to `'NaN'` / `'Infinity'` / `'-Infinity'` — executed and confirmed:
-`volume` → `'51234567'`, `vwap` → `'NaN'`, `profit_factor` → `'Infinity'`, while `bar_index` stays an
-`int`. `profit_factor` is `+Inf` whenever there are zero losing trades, so the inline summary
-legitimately carries the **string** `"Infinity"`. AC-3/AC-4 assertions must expect that.
+**The serializer's string mapping is documented, not incidental.** `MessageToDict` maps int64 to a
+JSON **string** and non-finite doubles to `'NaN'` / `'Infinity'` / `'-Infinity'` — executed and
+confirmed. That is the contract that killed CSV.
+
+> **Round 3 correction — the original text here asserted a producer fact that is false.** It claimed
+> `profit_factor` is `+Inf` on zero-losing-trade runs and that the summary "legitimately carries the
+> string `Infinity`". The producer clamps: `(gross_profit / gross_loss) if gross_loss > 0 else
+> (1.0 if gross_profit == 0 else 999.0)` (`servicer.py:2202-2208`), the `<2`-equity-point path
+> returns `1.0` (`:2176-2183`), and a green test has pinned `999.0` all along
+> (`services/xstockstrat-analysis/tests/test_analysis_helpers.py:77-82`). Extending the check:
+> **no `double` in `BacktestResult` is reachable as non-finite** — `initial_equity > 0`
+> (`servicer.py:321`), returns are `np.isfinite`-filtered (`:2187`), `std_r` floored at `1e-9`
+> (`:2195`), and `cummax ≥ initial_equity > 0`.
+>
+> The *serializer* fact stands and still decides the format. Its **reachable** instances are:
+> in the summary, `CoverageGap.bars_have`/`bars_need` (`int64`, `analysis.proto:55-56`) → strings
+> `"120"`/`"504"`; in the attachment, `volume` → `'51234567'` while `bar_index` stays an `int`.
+> `total_trades` is `int32` → a JSON number and cannot demonstrate the mapping.
+>
+> This is a producer-vs-serializer confusion: executing `MessageToDict` on a hand-built proto proves
+> what the serializer does with `inf`, not that anything ever produces `inf`. Same shape as
+> fails.md 2026-07-21, one layer up.
 
 ### 4. Degradation (FR-5)
 
@@ -96,7 +115,8 @@ legitimately carries the **string** `"Infinity"`. AC-3/AC-4 assertions must expe
 ### 5. Dependency pin
 
 `pyproject.toml:6` `mcp>=1.0.0` → `mcp>=1.27.1`; `uv lock` re-run and `uv.lock` committed in the same
-PR (root CLAUDE.md § Python uv lock rule; `uv lock --check` gates CI).
+PR (root CLAUDE.md § Python uv lock rule; the `python-lint` job runs `uv lock --check` per service —
+that gate did not exist when this design was written and was added 2026-07-27).
 
 **Stated honestly:** this is *not* because a type requires it. `EmbeddedResource` and
 `TextResourceContents` long predate the floor. The pin exists because `>=1.0.0` unbounded is a latent
@@ -122,8 +142,11 @@ naming one we guessed.
 FR-2 (per-symbol inline fields) and AC-1 ("bounded regardless of … symbol count") are strictly
 incompatible. FR-2 wins — it is what protects the feature-064 0-trade diagnosis. **AC-1 is reworded
 to "independent of window length; linear in symbol count."** The summary is O(symbols), not
-O(symbols × bars): ~2 KB at 5 symbols, ~19 KB at 50, against a payload that today grows without bound
-in *both* dimensions.
+O(symbols × bars): **measured 1.0 KB at 5 symbols (~200 B/symbol), so ~10 KB at 50** — against a
+payload that today grows without bound in *both* dimensions.
+
+> Round 1 estimated ~2 KB / ~19 KB here without measuring. Corrected 2026-07-27 (round 2). The
+> conclusion is unchanged and the amendment stands; the numbers were ~2× pessimistic.
 
 ## Rejected Alternatives
 
@@ -149,10 +172,25 @@ in *both* dimensions.
 - **`BlobResourceContents` (base64)** — rejected. It encodes binary-vs-text, not audience;
   `Annotations.audience`/`priority` (`types.py:761-764`) is the actual audience signal and is set.
   Base64 costs +33% for nothing and tokenizes near-worst-case.
-- **gzip blob (~53 KB, ~10× better)** — rejected for v1 and recorded as the **designated escalation**.
-  It is the only variant that survives the unverified inlining risk, but it is opaque, and hedging
-  against a behavior nobody in this repo has observed is optimization past the stated problem
-  (CLAUDE.md § How to Act #2). Additive later — no rewrite needed.
+- **gzip blob (measured 103 KB, 13.7× — not the ~53 KB round 1 estimated)** — rejected for v1 and
+  recorded as the **designated escalation**. Re-argued in full at round 2 (2026-07-27) and rejected
+  again, on stronger grounds than round 1's:
+  - **It inverts this feature's own failure-asymmetry rule** (`insights.md` 2026-07-27), the rule
+    used to reject `ResourceLink` one day earlier. A truncated gzip stream has no trailer and no
+    CRC, and a host that drops an unknown mime yields nothing — so the worst case stops being
+    "merely verbose" and becomes **unrecoverable**, which is precisely what disqualified the link.
+    Compact JSON truncates to a readable head.
+  - **The measured numbers weaken the case.** The summary is 1.0 KB, so in both branches where the
+    feature works — connector honors the attachment, or drops it — the encoding is irrelevant.
+    gzip matters only in the unobserved inline branch, at ~6–7× on tokens (not the ~9× claimed on
+    the 53 KB figure): "context blown" becomes "a fifth of the window burned with undecodable
+    base64."
+  - **It needs two unobserved behaviors to pay off** (the connector inlines **and** offers a
+    download affordance the user can `gunzip`), where round 1 needs one to fail.
+  - `mtime=0` is required for timestamp-freedom but does **not** give cross-environment byte
+    reproducibility — it routes to `zlib.compress(..., wbits=31)` (`/usr/lib/python3.12/gzip.py:609-612`),
+    so output depends on the linked zlib. Any future golden-blob assertion would be flaky.
+  Still additive later — no rewrite needed.
 - **Protobuf-binary blob (~460 KB)** — smallest faithful option, rejected because it is readable only
   via this platform's generated stubs, defeating "open the detail when I actually need it."
 - **Returning `CallToolResult`** — see § 1: buys an unvalidated `structuredContent` at the cost of a
@@ -165,10 +203,26 @@ in *both* dimensions.
 - [ ] **The client may inline the attachment anyway** (or drop it silently). Neither
   `audience=["user"]` nor any MCP mechanism — including `ResourceLink` — *guarantees* context
   exclusion; no in-repo evidence of Claude.ai connector rendering behavior exists, and this design
-  does not verify it. Accepted with eyes open: even fully inlined it is ~880 KB compact vs ~1.4 MB
-  pretty-printed today (`func_metadata.py:539` uses `indent=2`), with the summary first. **Observable
-  that would disconfirm it:** a real connector run whose context still balloons. **Escalation:** gzip
-  blob, additive. — revisit after the first real-world run.
+  does not verify it. Accepted with eyes open: even fully inlined it is a measured 827 KB compact vs
+  1410 KB pretty-printed today (`func_metadata.py:539` uses `indent=2`), with the summary first.
+  **Observable that would disconfirm it:** a real connector run whose context still balloons.
+  **Escalation (trigger sharpened at round 2):** gzip blob — but only once **both** are observed,
+  because gzip helps in neither of the other branches and costs readability in both: (a) the
+  connector inlines the attachment, **and** (b) it offers a download affordance the user can
+  `gunzip`. If (a) holds but (b) does not, gzip makes the artifact unreachable rather than large,
+  and trimming the attachment's *content* (e.g. dropping pure warm-up/HOLD bars — round 2's
+  untested fourth option) should be priced first. — revisit after the first real-world run.
+> **Measured 2026-07-27** (realistic 5 symbols × 504 bars, 2 indicators/bar, all 15
+> `BarDiagnostic` fields populated — replaces the round-1 estimates, which were ~2× off):
+>
+> | Variant | Measured | vs today |
+> |---|---|---|
+> | Today — pretty JSON (`indent=2`, `func_metadata.py:539`) | 1410 KB | — |
+> | Compact JSON — **this design's attachment** | 827 KB | 1.71× |
+> | protobuf + base64 | 433 KB | 3.26× |
+> | gzip + base64 | 103 KB | 13.7× |
+> | **FR-2 summary alone** | **1.0 KB** | **1366×** |
+
 - [ ] **`app/backtest_view.py` must tolerate partial dicts** or the feature-071 window tests
   (`test_tools.py:288,303`) break. — target: step 1, with a paired test.
 - [ ] **Non-echoing fixtures required** (insights 2026-07-27, recon.md § Risks). AC-2's fixture must

@@ -1,6 +1,6 @@
 # Feature: strategy-partial-update
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/strategy-partial-update` (see context.md — implemented on the
 harness-assigned `claude/features-070-071-rnbkqo` branch this session)
 **Created**: 2026-07-26
@@ -18,6 +18,7 @@ harness-assigned `claude/features-070-071-rnbkqo` branch this session)
 | 2026-07-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved r3 (4 warnings, all advisory). OQ-1/OQ-2 deferred to /sdd-design |
 | 2026-07-26 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round + adversary, verdict NEEDS WORK, all objections resolved) and approved; recon.md + design.md written. OQ-1 → FieldMask; OQ-2 → evidence wipe accepted |
 | 2026-07-26 | `design-approved` → `in-progress` | implementation | Steps 1-6 of 6 implemented (proto+codegen, servicer merge, agent client, agent tool + 14th tool, six doc surfaces, integration-test case) |
+| 2026-07-27 | `in-progress` → `code-completed` | implementation | Merged to `main-dev` via PR #791; CI green. Status had lagged behind the merge |
 
 ---
 
@@ -60,6 +61,9 @@ if the registry changes.)_
 
 ## Next Action
 
-Verify in CI, then open the integration PR. Remaining optional coverage: UI e2e merge-modelling in
-`e2e/mock-backend.ts` + C-12 fixture centralization of the inline `getStrategy` literal
-(`e2e/fixtures/INVENTORY.md:49`). No UI **production** change is required — verified.
+Merged to `main-dev` (PR #791). Awaiting promotion to `main` — `/promote` will carry it, and CI
+flips the status to `launched` automatically.
+
+Optional, never blocking: UI e2e merge-modelling in `e2e/mock-backend.ts`, and C-12 fixture
+centralization of the inline `getStrategy` literal (`e2e/fixtures/INVENTORY.md:49`). No UI
+**production** change is required — verified.

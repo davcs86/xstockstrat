@@ -311,3 +311,31 @@ reusing.
 - **Rule it implies**: before designing a reference/pointer to data another feature persists
   best-effort, check whether the referrer can *detect* a failed persist. If it cannot, prefer
   carrying the value over referencing it.
+
+### 2026-07-27 — 072-backtest-result-attachment — design round 2
+- **Pattern**: A second grilling round on an **already-approved, already-specced** design is worth
+  running when the first round closed on estimates. Round 2 here left the chosen approach untouched
+  but still paid for itself: measuring the payload (5 symbols × 504 bars) showed the inline summary
+  is **1.0 KB**, not the ~2 KB assumed, and gzip is **103 KB**, not the ~53 KB assumed — a 2× error
+  that an approved acceptance criterion was resting on. It also caught an AC-1 test bound
+  (`< 8_000` bytes) loose enough to tolerate a ~4× regression, making the guard decorative. Crucially
+  it was still *cheap* to act on: **F-09 freezes step bodies only once `/sdd-execute` dispatches**, so
+  check `**Status**: pending` on every step before concluding a correction is too late.
+- **Evidence**: `docs/roadmap/features/072-backtest-result-attachment/{design.md,product-spec.md,implementation-spec.md}`;
+  feature 072 context.md § round 2.
+- **Rule it implies**: extends **C-01** — a number that reaches an acceptance criterion must be
+  measured, not estimated. If a design closes with figures nobody ran, a follow-up round that only
+  measures them is a good trade even when the decision does not change.
+
+### 2026-07-27 — 072-backtest-result-attachment — design round 2
+- **Pattern**: When a feature writes a decision rule into the ledger, later rounds of that **same
+  feature** must be checked against it. Round 2 proposed swapping the attachment to gzip, which would
+  have inverted the failure-asymmetry rule this feature had recorded one day earlier and used to
+  reject `ResourceLink`: a truncated gzip stream has no trailer and no CRC, so host truncation or an
+  unknown-mime drop is total loss — exactly the "unrecoverable worst case" that disqualified the link,
+  whereas compact JSON truncates to a readable head. Citing a rule against one option while ignoring
+  it for another is the failure mode to watch for.
+- **Evidence**: `insights.md` 2026-07-27 (072 design, failure asymmetry) vs the round-2 gzip proposal;
+  feature 072 design.md § Rejected Alternatives.
+- **Rule it implies**: reinforces **P-03** — a self-authored ledger rule binds the feature that wrote
+  it. Re-read your own entries before adopting a change that trades the same axis.
