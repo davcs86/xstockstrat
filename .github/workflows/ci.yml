@@ -502,7 +502,7 @@ jobs:
         run: pnpm exec playwright install-deps chromium
 
       - name: run e2e tests
-        run: pnpm test:e2e -- --shard=${{ matrix.shard }}/2
+        run: pnpm test:e2e --shard=${{ matrix.shard }}/2
         env:
           CI: true
           E2E_PREBUILT: '1'
