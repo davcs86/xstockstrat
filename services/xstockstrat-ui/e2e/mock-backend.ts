@@ -48,6 +48,9 @@ let configUiServer: http2.Http2Server | null = null;
 function stopServer(srv: http2.Http2Server | null): Promise<void> {
   return new Promise((resolve, reject) => {
     if (!srv) return resolve();
+    // Force-close persistent h2 connections (Next.js BFF keeps them alive)
+    // so close() resolves immediately instead of waiting for drain.
+    srv.closeAllConnections();
     srv.close((err) => (err ? reject(err) : resolve()));
   });
 }
