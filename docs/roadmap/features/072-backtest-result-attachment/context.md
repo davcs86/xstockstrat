@@ -633,3 +633,30 @@ stubs that the service's own config never lints.
   cannot override. Resolution: step 3's commit carries **only** that single one-line test adaptation
   — the minimum required to be green — and step 4's commit adds the nine new tests. Still one commit
   per step; every commit green.
+
+### Step 5 — docs: the split return shape on the remaining surfaces [done]
+- `docs/runbooks/mcp-tools.md` Return block replaced. It was **already wrong on trunk** — it claimed
+  `{ "backtest_id": ... }`, which feature 064 superseded — so this repairs pre-existing drift as well
+  as documenting 072.
+- The example uses `profit_factor: 1.8`, never `"Infinity"`; the int64-as-string contract is
+  illustrated with `"bars_have": "120"` in the summary and noted for `volume` in the attachment
+  paragraph — the reachable instances, per the round-3 correction.
+- Agent `CLAUDE.md` `run_backtest` row extended by one line. No resources section added (FR-6a is
+  discharged by *not* creating the surface). Parameters block, evaluation-window section and Errors
+  table untouched — feature 071 owns those.
+- AC-6 verified: five "fourteen" statements still present (`grep -in`, which the spec notes is
+  required because `tools.py:4` capitalizes it), zero `bt-abc123`.
+- TDD: N/A (docs).
+- Files modified: `docs/runbooks/mcp-tools.md`, `services/xstockstrat-agent/CLAUDE.md`
+- Deviations: none.
+
+## Session 2026-07-27 — sdd-execute complete
+
+**Steps this session**: 1, 2, 3, 4, 5
+**Progress**: 5 done / 5 total
+**Stopped at**: all complete — lifecycle `code-completed`
+**Next**: integration PR → `main-dev`
+
+Both red-green cycles recorded by execution, not assertion: steps 1+2 (11 failed → 12 passed) and
+steps 3+4 (10 failed → 52 in-file / 109 overall). Final: **109 passed, coverage 69.16%**, ruff clean,
+`uv lock --check` in sync, markdownlint and context-map clean.

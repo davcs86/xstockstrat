@@ -1,6 +1,6 @@
 # Implementation Spec: backtest-result-attachment
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-07-27
 **Feature**: `docs/roadmap/features/072-backtest-result-attachment/feature.md`
 **Total Steps**: 5
@@ -697,7 +697,7 @@ All must pass; the last must report total coverage ≥ 40% (CI parity —
 
 ### Step 5 — docs: document the split return shape on the remaining consumer surfaces
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`, `services/xstockstrat-agent/`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify
