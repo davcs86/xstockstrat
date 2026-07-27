@@ -6,10 +6,12 @@ populating _backtests/_strategies directly, same pattern as ingest.
 """
 
 import asyncio
+import inspect
 import json
 import math
+from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import grpc
 import pytest
@@ -21,6 +23,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import AnalysisServicer, _InsufficientData
+from app.services import warmup as warmup_sizing
 
 
 def make_servicer() -> AnalysisServicer:
@@ -2764,3 +2767,372 @@ class TestTradeStartIndex:
         # The actionable backfill span is the PREFIX, not the caller's window.
         assert ei.value.gap_range is not None
         assert ei.value.gap_range.end.seconds == self.WINDOW_START
+
+
+# ---------------------------------------------------------------------------
+# feature 071 step 6 — parity & determinism
+# ---------------------------------------------------------------------------
+
+_DAY = 86_400
+_W_START = 1_600_000_000  # a fixed, explicit window start used across this section
+_W_END = _W_START + 30 * _DAY
+
+
+def _windowed_req(definition, *, start=_W_START, end=_W_END, symbols=("AAPL",)):
+    req = analysis_pb2.RunBacktestRequest(
+        strategy_id="s1", symbols=list(symbols), initial_capital=100_000.0
+    )
+    req.inline_definition.CopyFrom(definition)
+    req.range.start.seconds = start
+    req.range.end.seconds = end
+    return req
+
+
+def _sma_def(period=3, ref="fast"):
+    return analysis_pb2.StrategyDefinition(
+        components=[
+            analysis_pb2.StrategyComponent(
+                ref_name=ref,
+                kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                indicator="SMA",
+                params={"period": float(period)},
+            )
+        ],
+        entry_rule=json.dumps({"fn": ">", "lhs": ref, "rhs": 0}),
+        exit_rule=json.dumps({"fn": "<", "lhs": ref, "rhs": 0}),
+    )
+
+
+def _series_bars(n_prefix, n_window, base=100.0):
+    """n_prefix bars before _W_START then n_window from _W_START, 1 day apart.
+
+    The close is a pure function of the bar's date, so lengthening the prefix prepends
+    earlier bars without altering any bar the two fixtures share. Deriving it from the list
+    index instead would make a longer prefix silently restate the whole series, and a test
+    comparing two prefix lengths would be comparing two different price histories.
+    """
+    return [_bar(_W_START + off * _DAY, base + off) for off in range(-n_prefix, n_window)]
+
+
+def _canonical(result):
+    """Serialize a BacktestResult with its two inherently per-run fields cleared.
+
+    `backtest_id` is a fresh uuid and `completed_at` is a wall-clock stamp — both differ on
+    every run by construction, so leaving them in would make any byte-identity assertion
+    vacuously false and tempt a weaker field-by-field comparison instead.
+    """
+    copy = analysis_pb2.BacktestResult()
+    copy.CopyFrom(result)
+    copy.backtest_id = ""
+    copy.ClearField("completed_at")
+    return copy.SerializeToString(deterministic=True)
+
+
+def _wire_evaluated(svc, bars, *, capture=None):
+    """Wire a servicer whose evaluator sees a real, length-n series per component.
+
+    ComputeIndicator is mocked but *length-faithful*: it returns one point per input value,
+    so the evaluator's tail-alignment is exercised and `capture` records exactly how many
+    bars each component was computed over — which is the observable the anchor/cost tests
+    are actually about.
+    """
+    svc._ledger = MagicMock()
+    svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+    svc._backtest_run_symbols_repo = AsyncMock()
+    svc._marketdata = MagicMock()
+    svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars))
+    svc._indicators = MagicMock()
+
+    async def _compute(req, **kw):
+        if capture is not None:
+            capture.append((req.indicator, len(req.values)))
+        # Monotone ramp so decisions are deterministic and non-trivial.
+        return _points([float(i) for i in range(len(req.values))])
+
+    svc._indicators.ComputeIndicator = AsyncMock(side_effect=_compute)
+    return svc
+
+
+class TestWindowDeterminism:
+    """FR-4 — a run over an explicit window must not depend on the calendar day."""
+
+    @staticmethod
+    def _freeze(seconds):
+        """Freeze the servicer's only wall-clock read (`Timestamp.GetCurrentTime`)."""
+
+        def _set(self):
+            self.seconds = seconds
+            self.nanos = 0
+
+        return patch.object(Timestamp, "GetCurrentTime", _set)
+
+    @pytest.mark.asyncio
+    async def test_explicit_window_is_identical_across_calendar_days(self):
+        bars = _series_bars(6, 12)
+
+        async def _run(now_seconds):
+            svc = _wire_evaluated(make_servicer(), bars)
+            with self._freeze(now_seconds):
+                return await svc.RunBacktest(_windowed_req(_sma_def()), context=MagicMock())
+
+        # "today" a full year apart
+        day_one = await _run(_W_END + _DAY)
+        day_later = await _run(_W_END + 365 * _DAY)
+        assert _canonical(day_one) == _canonical(day_later)
+
+    @pytest.mark.asyncio
+    async def test_the_frozen_clock_test_has_teeth(self):
+        """Guards the test above: without an explicit window the clock DOES move the result,
+        so equality there is evidence of the window, not of an inert clock patch."""
+        captured = []
+
+        async def _effective_window(now_seconds):
+            svc = _wire_evaluated(make_servicer(), _series_bars(0, 12))
+            req = analysis_pb2.RunBacktestRequest(
+                strategy_id="s1", symbols=["AAPL"], initial_capital=100_000.0
+            )
+            req.inline_definition.CopyFrom(_sma_def())
+            req.range.CopyFrom(common_pb2.TimeRange())  # no bounds → rolling default
+            with self._freeze(now_seconds):
+                await svc.RunBacktest(req, context=MagicMock())
+            captured.append((req.range.start.seconds, req.range.end.seconds))
+
+        await _effective_window(_W_END + _DAY)
+        await _effective_window(_W_END + 365 * _DAY)
+        assert captured[0] != captured[1]
+
+    @pytest.mark.asyncio
+    async def test_no_trade_opens_before_the_requested_start(self):
+        """FR-3 at the RPC level: the prefix seeds indicators only."""
+        svc = _wire_evaluated(make_servicer(), _series_bars(6, 12))
+        result = await svc.RunBacktest(_windowed_req(_sma_def()), context=MagicMock())
+        assert result.trades  # the assertion below is vacuous on an empty list
+        assert all(t.entry_time.seconds >= _W_START for t in result.trades)
+        assert all(b.timestamp.seconds >= _W_START for b in result.diagnostics[0].bars)
+
+
+class TestPrefixSizingIsNotSemantic:
+    """The bars→calendar-days conversion may only over-fetch, never change a result."""
+
+    @pytest.mark.asyncio
+    async def test_doubling_the_calendar_factor_is_byte_identical(self):
+        """`prefix_calendar_days` widens the *fetch*; the engine then keeps exactly the
+        required bars. Doubling its slack must therefore change nothing observable — that is
+        what licenses the conversion to be approximate (F-07: no hidden tuned constant)."""
+        bars = _series_bars(30, 12)  # generous history so a wider fetch is satisfiable
+
+        async def _run():
+            svc = _wire_evaluated(make_servicer(), bars)
+            return await svc.RunBacktest(_windowed_req(_sma_def()), context=MagicMock())
+
+        baseline = await _run()
+        with patch.object(
+            warmup_sizing, "_CALENDAR_SLACK_DAYS", warmup_sizing._CALENDAR_SLACK_DAYS * 2
+        ):
+            doubled = await _run()
+        assert _canonical(baseline) == _canonical(doubled)
+
+    @pytest.mark.asyncio
+    async def test_surplus_history_beyond_the_prefix_is_ignored(self):
+        """Same claim from the other side: more available history than the prefix needs must
+        not shift the anchor. Otherwise a symbol's result would depend on how far back
+        marketdata happens to hold data."""
+
+        async def _run(n_prefix):
+            svc = _wire_evaluated(make_servicer(), _series_bars(n_prefix, 12))
+            return await svc.RunBacktest(_windowed_req(_sma_def()), context=MagicMock())
+
+        assert _canonical(await _run(6)) == _canonical(await _run(40))
+
+
+class TestVwapAnchorMovesWithPrefix:
+    """Documented behavior change — VWAP is an expanding average anchored at index 0.
+
+    Its own lookback is 0, but the prefix is the max over *all* referenced components, so a
+    strategy mixing VWAP with a long SMA gets a prefix anyway and every in-window VWAP value
+    shifts: the anchor moves from the requested start to the prefix start. Deterministic
+    (FR-4 still holds), but different from an unprefixed run.
+    """
+
+    def _def(self):
+        return analysis_pb2.StrategyDefinition(
+            components=[
+                analysis_pb2.StrategyComponent(
+                    ref_name="vw",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="VWAP",
+                ),
+                analysis_pb2.StrategyComponent(
+                    ref_name="slow",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="SMA",
+                    params={"period": 50.0},
+                ),
+            ],
+            entry_rule=json.dumps(
+                {"op": "AND", "conditions": [{"fn": ">", "lhs": "vw", "rhs": "slow"}]}
+            ),
+        )
+
+    def test_vwap_alone_asks_for_no_prefix(self):
+        vwap_only = analysis_pb2.StrategyDefinition(
+            components=[
+                analysis_pb2.StrategyComponent(
+                    ref_name="vw",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="VWAP",
+                )
+            ],
+            entry_rule=json.dumps({"fn": ">", "lhs": "vw", "rhs": 0}),
+        )
+        assert warmup_sizing.required_prefix_bars(vwap_only) == 0
+
+    def test_a_long_sibling_drags_vwap_into_a_prefix(self):
+        # SMA(50) is first valid at index 49 and usable at 50 (crossover reads i-1).
+        assert warmup_sizing.required_prefix_bars(self._def()) == 50
+
+    @pytest.mark.asyncio
+    async def test_vwap_is_computed_over_the_prefixed_series(self):
+        """The anchor shift, pinned at its cause: VWAP receives prefix+window closes, so its
+        cumulative mean starts 50 bars earlier than the caller's window."""
+        capture = []
+        svc = _wire_evaluated(make_servicer(), _series_bars(50, 12), capture=capture)
+        await svc.RunBacktest(_windowed_req(self._def()), context=MagicMock())
+        by_indicator = dict(capture)
+        assert by_indicator["VWAP"] == 62  # 50 prefix + 12 window, not 12
+        assert by_indicator["SMA"] == 62
+
+
+class TestBacktestLiveParityUnchanged:
+    """FR-7 / OQ-4 — 071 is a backtest-path change; the live loop is deliberately untouched.
+
+    The real parity invariant is the evaluator contract — *same bar series ⇒ same decisions*.
+    That still holds exactly. What now differs between the two callers is the series each one
+    supplies, and that difference must stay visible rather than be quietly assumed away.
+    """
+
+    def test_the_live_loop_still_uses_its_own_fixed_lookback(self):
+        """If someone later wires the prefix into the live loop, this fails and the FR-7
+        divergence documented in the service CLAUDE.md has to be revisited."""
+        from app.engine import live_loop
+
+        assert live_loop._LOOKBACK_DAYS == 365
+        source = Path(live_loop.__file__).read_text()
+        assert "warmup" not in source, (
+            "live_loop now references the warm-up prefix — FR-7's documented divergence "
+            "(design.md § OQ-4) is stale and the parity note must be updated"
+        )
+
+    def test_the_evaluator_contract_takes_no_window_argument(self):
+        """The prefix lives entirely in the servicer's fetch. The evaluator receives a plain
+        bar list, so it cannot behave differently for a backtest than for the live loop."""
+        from app.services.evaluator import StrategyEvaluator
+
+        params = inspect.signature(StrategyEvaluator.evaluate).parameters
+        assert "range" not in params
+        assert "trade_start_idx" not in params
+        assert "warmup_prefix" not in params
+
+
+class TestPrefixFormulaCost:
+    """The prefix is paid for in bars sent to ExecuteFormula — measured, not assumed."""
+
+    def _def(self):
+        return analysis_pb2.StrategyDefinition(
+            components=[
+                analysis_pb2.StrategyComponent(
+                    ref_name="ff",
+                    kind=analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
+                    formula_id="f-1",
+                )
+            ],
+            entry_rule=json.dumps({"fn": ">", "lhs": "ff", "rhs": 0}),
+        )
+
+    @pytest.mark.asyncio
+    async def _run(self, declared_warmup, n_prefix, n_window):
+        from google.protobuf.struct_pb2 import Struct
+
+        bars = _series_bars(n_prefix, n_window)
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._backtest_run_symbols_repo = AsyncMock()
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars))
+        svc._indicators = MagicMock()
+        sizes = []
+
+        async def _execute(req, **kw):
+            # The evaluator passes the close series in input_data (evaluator.py:193-194).
+            n = len(req.input_data["close"])
+            sizes.append(n)
+            out = Struct()
+            out.update({"value": [1.0] * n})
+            return SimpleNamespace(success=True, output=out, error="")
+
+        svc._indicators.ExecuteFormula = AsyncMock(side_effect=_execute)
+        svc._indicators.GetFormula = AsyncMock(
+            return_value=indicators_pb2.FormulaDefinition(
+                formula_id="f-1", warmup_period=declared_warmup
+            )
+        )
+        await svc.RunBacktest(_windowed_req(self._def()), context=MagicMock())
+        return sizes
+
+    @pytest.mark.asyncio
+    async def test_a_declared_warmup_costs_exactly_its_prefix(self):
+        """A formula declaring warmup_period=W is evaluated over W+1 extra bars (the +1 is the
+        crossover lookback), so the cost of the prefix is bounded by the declaration — not by
+        an open-ended "fetch more to be safe"."""
+        sizes = await self._run(declared_warmup=10, n_prefix=20, n_window=12)
+        assert sizes == [11 + 12]
+
+    @pytest.mark.asyncio
+    async def test_a_zero_warmup_formula_costs_nothing_extra(self):
+        """A formula that declares no warm-up must not be silently charged a prefix.
+
+        n_prefix=0 because the GetBars mock ignores `range`: with no prefix requested the
+        fetch is unfiltered, so any pre-window bars in the fixture would reach the engine and
+        make this measure the fixture instead of the code.
+        """
+        sizes = await self._run(declared_warmup=0, n_prefix=0, n_window=12)
+        assert sizes == [12]
+
+    @pytest.mark.asyncio
+    async def test_every_symbol_pays_the_same_prefix(self):
+        """Regression: the declared warm-ups must be resolved BEFORE the symbol loop.
+
+        `required_prefix_bars` reads the formula cache at the top of each symbol's run while
+        `_compute_evaluated_warmup` fills it at the bottom, so a lazily-filled cache gave
+        symbol 1 no prefix and symbols 2+ the full one — a result that depends on symbol order.
+        """
+        from google.protobuf.struct_pb2 import Struct
+
+        bars = _series_bars(20, 12)
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._backtest_run_symbols_repo = AsyncMock()
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars))
+        svc._indicators = MagicMock()
+        sizes = []
+
+        async def _execute(req, **kw):
+            n = len(req.input_data["close"])
+            sizes.append(n)
+            out = Struct()
+            out.update({"value": [1.0] * n})
+            return SimpleNamespace(success=True, output=out, error="")
+
+        svc._indicators.ExecuteFormula = AsyncMock(side_effect=_execute)
+        svc._indicators.GetFormula = AsyncMock(
+            return_value=indicators_pb2.FormulaDefinition(formula_id="f-1", warmup_period=10)
+        )
+        await svc.RunBacktest(
+            _windowed_req(self._def(), symbols=("AAPL", "MSFT")), context=MagicMock()
+        )
+        assert sizes == [23, 23]
+        # ...and the declaration is fetched once for the whole run, not once per symbol.
+        assert svc._indicators.GetFormula.await_count == 1

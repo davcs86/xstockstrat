@@ -330,6 +330,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         symbol_cells: list[dict] = []
         # feature 064: declared formula warm-ups fetched once per run, reused across symbols.
         formula_warmup_cache: dict[str, int] = {}
+        # feature 071: and resolved BEFORE the loop, so symbol 1 sizes its prefix from the same
+        # cache symbol N does (see _prefetch_formula_warmups).
+        if active_definition is not None and start_set:
+            await self._prefetch_formula_warmups(
+                active_definition, formula_warmup_cache, propagation_meta
+            )
 
         for symbol in request.symbols:
             try:
@@ -1107,20 +1113,50 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if comp is None:
                 continue
             if comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA:
-                fid = comp.formula_id
-                if fid not in formula_warmup_cache:
-                    try:
-                        formula = await self._indicators.GetFormula(
-                            indicators_pb2.GetFormulaRequest(formula_id=fid),
-                            metadata=propagation_meta,
-                        )
-                        formula_warmup_cache[fid] = int(getattr(formula, "warmup_period", 0) or 0)
-                    except grpc.RpcError:
-                        formula_warmup_cache[fid] = 0
-                warmup = max(warmup, formula_warmup_cache[fid])
+                declared = await self._declared_formula_warmup(
+                    comp.formula_id, formula_warmup_cache, propagation_meta
+                )
+                warmup = max(warmup, declared)
             else:
                 warmup = max(warmup, _first_resolved_index(component_series.get(ref, []), n))
         return warmup
+
+    async def _declared_formula_warmup(self, formula_id, cache, propagation_meta) -> int:
+        """Declared `warmup_period` for one formula, memoized in `cache` for the whole run.
+
+        An unreachable formula caches 0 rather than raising: a missing declaration must not
+        fail a backtest, and the 0 is cached so one dead formula can't re-issue the failing
+        RPC once per symbol.
+        """
+        if formula_id not in cache:
+            try:
+                formula = await self._indicators.GetFormula(
+                    indicators_pb2.GetFormulaRequest(formula_id=formula_id),
+                    metadata=propagation_meta,
+                )
+                cache[formula_id] = int(getattr(formula, "warmup_period", 0) or 0)
+            except grpc.RpcError:
+                cache[formula_id] = 0
+        return cache[formula_id]
+
+    async def _prefetch_formula_warmups(self, definition, cache, propagation_meta) -> None:
+        """Fill `cache` for every referenced custom formula BEFORE the symbol loop (feature 071).
+
+        Ordering matters: `warmup.required_prefix_bars` is pure and reads this cache at the
+        *top* of each symbol's run, while `_compute_evaluated_warmup` fills it at the *bottom*.
+        Without a prefetch the first symbol of a formula-using strategy would size its prefix
+        from an empty cache — no prefix, short-warmed — while every later symbol got the full
+        one. That makes a run's result depend on symbol order, breaking both FR-4 determinism
+        and the per-symbol comparability the feature-065 evidence cells assume.
+        """
+        entry_rule = json.loads(definition.entry_rule) if definition.entry_rule else None
+        exit_rule = json.loads(definition.exit_rule) if definition.exit_rule else None
+        refs = referenced_refs(entry_rule) | referenced_refs(exit_rule)
+        ref_to_comp = {c.ref_name: c for c in definition.components}
+        for ref in refs:
+            comp = ref_to_comp.get(ref)
+            if comp is not None and comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA:
+                await self._declared_formula_warmup(comp.formula_id, cache, propagation_meta)
 
     async def ScoreStrategy(self, request, context):
         """Manually recompute a strategy's headline grade from its evidence cells (feature 065).
