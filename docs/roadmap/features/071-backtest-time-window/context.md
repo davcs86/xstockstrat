@@ -322,3 +322,28 @@ row was narrowed to say so, rather than left claiming more than moved.
 **OQ-1 remains a product decision** (see the previous session's entry): fail-loud vs. short-warm
 with a non-fatal `CoverageGap`. Unchanged by steps 5–8 — the agent surface simply makes it reachable
 from a second caller.
+
+---
+
+## OQ-1 resolved — 2026-07-27 (user decision)
+
+**Keep fail-loud, as built.** When history cannot satisfy `start − warmup`, the run reports
+`BACKTEST_STATUS_INSUFFICIENT_DATA` with a `CoverageGap` spanning the **pre-window** span. The
+designed AC-4a behavior stands; the rejected alternative (short-warm + non-fatal `CoverageGap`) stays
+rejected.
+
+This was raised as a product decision rather than resolved in implementation because the practical
+blast radius is wider than the design's Open Risks quantified — the UI always sends an explicit
+range (`strategies/[id]/page.tsx:91`, defaulting to `2024-01-01`/`2024-12-31`), so a backtest whose
+start predates a symbol's stored history now fails where it previously ran short-warmed. The user
+accepted that cost.
+
+**What makes it recoverable rather than a dead end:** the gap the run reports is the actionable one.
+`_InsufficientData.gap_range` carries `start − warmup … start`, not the caller's window, and the UI's
+backfill action already fills `gap.gap` — verified, and now pinned by
+`e2e/insights/backtest-coverage.spec.ts` ("backfill action fills the pre-window warm-up gap"). So the
+failure names the exact span to backfill and offers a one-click remedy. The agent path says the same
+thing in prose: the `run_backtest` docstring names `trigger_backfill` as the remedy.
+
+No code change follows from this decision — the implementation already matches it. 071 moves to
+`code-completed`.

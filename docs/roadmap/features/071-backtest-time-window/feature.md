@@ -1,6 +1,6 @@
 # Feature: backtest-time-window
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/backtest-time-window` (see context.md — implemented on the
 harness-assigned `claude/features-070-071-rnbkqo` branch this session)
 **Created**: 2026-07-26
@@ -16,7 +16,8 @@ harness-assigned `claude/features-070-071-rnbkqo` branch this session)
 | 2026-07-26 | `draft` → (fail) | /sdd-review | FAIL — premise contradicted by code: `RunBacktestRequest.range` already ships end-to-end incl. UI; proposed proto fields would duplicate it |
 | 2026-07-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved after re-scope (no proto change; agent plumbing + pre-window warm-up). 7 warnings addressed |
 | 2026-07-26 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, quick+1 Floor round) and approved; recon.md + design.md written. R1 BLOCKED on F-07; resolved by deriving the prefix from declared params |
-| 2026-07-27 | `design-approved` → `in-progress` | implementation | Steps 1–8 of 8 implemented (warm-up sizing, paged GetBars, `trade_start_idx`, prefix wiring, agent `start`/`end`, parity/determinism suite, docs, UI e2e + C-12 fixture). **OQ-1 fail-loud vs. short-warm remains an open product decision** — see context.md |
+| 2026-07-27 | `design-approved` → `in-progress` | implementation | Steps 1–8 of 8 implemented (warm-up sizing, paged GetBars, `trade_start_idx`, prefix wiring, agent `start`/`end`, parity/determinism suite, docs, UI e2e + C-12 fixture) |
+| 2026-07-27 | `in-progress` → `code-completed` | implementation | OQ-1 resolved by user: **keep fail-loud** (AC-4a as designed). No code change followed. CI green on PR #792 — all 28 checks incl. Frontend E2E |
 
 ---
 
@@ -58,12 +59,9 @@ _Proto Reviewer row removed at review: this feature makes no proto change (see p
 
 ## Next Action
 
-**Resolve OQ-1 before this ships.** Implementation of all 8 designed steps is complete and verified,
-but the designed fail-loud shortfall behavior has a wider blast radius than the design quantified:
-the UI always sends an explicit range, so a backtest whose start predates the symbol's stored
-history now reports `INSUFFICIENT_DATA` where it previously ran short-warmed. The rejected
-alternative — run short-warmed and emit a **non-fatal** `CoverageGap` — may be the better trade.
-Reversing a recorded design decision is a product call; see context.md § "Behavior change that
-needs a product decision".
+Merge PR #792 into `main-dev` (all 28 CI checks green, including Frontend E2E). OQ-1 is resolved —
+fail-loud stands, and the implementation already matches it.
 
-Then verify in CI and open the integration PR.
+Then `/sdd-sync` the spec files, and note for **072**: its recorded "contradictory test" overlap with
+071 is resolved rather than merely sequenced — 072's design keeps `client.run_backtest` intact and
+splits in `tools.py`, so it no longer needs to invert `tests/test_tools.py:535-577`.
