@@ -160,7 +160,7 @@ covered by the Playwright e2e suite below.
 `e2e/helpers/`). Run `pnpm test:e2e` (or `pnpm test:e2e:ui`).
 
 **CI runs chromium only** — Firefox is excluded in CI (the suite tests BFF RPC call chains and
-React UI logic, not browser-specific rendering). CI is sharded across 4 parallel runners with a
+React UI logic, not browser-specific rendering). CI is sharded across 2 parallel runners with a
 shared pre-built Next.js bundle (`E2E_PREBUILT`). Locally, Firefox is included when available.
 
 **Browser resolution.** `@playwright/test` is pinned to an **exact** version (no `^`) so the

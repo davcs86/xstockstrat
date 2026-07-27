@@ -452,13 +452,13 @@ jobs:
           retention-days: 1
 
   frontend-e2e:
-    name: Frontend E2E (shard ${{ matrix.shard }}/4)
+    name: Frontend E2E (shard ${{ matrix.shard }}/2)
     needs: frontend-e2e-build
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2]
     defaults:
       run:
         working-directory: services/xstockstrat-ui
@@ -502,7 +502,7 @@ jobs:
         run: pnpm exec playwright install-deps chromium
 
       - name: run e2e tests
-        run: pnpm test:e2e --shard=${{ matrix.shard }}/4
+        run: pnpm test:e2e --shard=${{ matrix.shard }}/2
         env:
           CI: true
           E2E_PREBUILT: '1'

@@ -107,7 +107,7 @@ export default defineConfig({
   maxFailures: isCI ? 10 : 0,
   timeout: isCI ? 30_000 : 10_000,
   expect: { timeout: isCI ? 15_000 : 5_000 },
-  reporter: isCI ? [['github'], ['html', { open: 'never' }]] : 'html',
+  reporter: isCI ? [['github'], ['list'], ['html', { open: 'never' }]] : 'html',
   globalSetup: './e2e/global-setup.ts',
   globalTeardown: './e2e/global-teardown.ts',
   use: {
