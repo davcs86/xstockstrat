@@ -524,3 +524,31 @@ Fixed:
 a rationale: the schema is absent for a bare `-> list` regardless. Step 3's round-3 note is
 authoritative; the design paragraph is left in place (it records what was believed at approval) with
 this entry as the correction.
+
+### Third impl-spec review — 0 failures, 3 warnings (all fixed)
+
+Run to verify the correction pass rather than assume it. Result: **0 blockers, 0 Floor risks, 0 step
+failures, 3 warnings** — down from the second review's 1 failure / 9 warnings. Corrections 2–7 all
+verified clean against the codebase, including test 8's union arithmetic (15/15, 5/5), the seam
+test's `FastMCP.call_tool` evidence, the ruff `I` import order, and every corrected citation.
+
+**The one substantive item was the same defect for the third time.** Step 4's fixture correction
+changed the *value* (`"Infinity"` → `1.8`) but left the clause saying the fixture "is shared with
+`test_zero_trade_run_is_diagnosable_from_the_summary_alone`, which asserts `1.0`" — so as written the
+fixture and the assertion collide, and the only consistent reading (the 0-trade test *overrides*) was
+never stated. Fixed by making the override explicit and giving Step 4's factory the same four-property
+list Step 2's now has, so the two steps state the same contract instead of one inheriting it silently.
+
+Also fixed: Step 4's factory omitted the fixed-single-gap property its own `9 * 250` slope depends on
+(asymmetry introduced by the previous pass, which added it to Step 2 only); an orphaned "That ordering
+assertion is the live half" fragment left stranded by the inserted evidence blockquote; and a
+clarifying clause that the two linearity tests measure different serializations (compact vs
+`indent=2`) under the same bounds — both hold, but "same instrument" was exact only for the assertion
+form.
+
+**The recurring lesson, now three times over:** correcting an assertion is not correcting the fixture
+that feeds it, and correcting one step is not correcting its mirror in another. Each pass fixed what
+the review named and left the adjacent thing that depended on it. The findings shrank monotonically
+(architectural → fixture/instrument → instruction placement → cross-step consistency), which is the
+expected shape, but the pattern is worth naming: on a spec with paired steps, grep the *other* step
+for the same construct before declaring a correction complete.

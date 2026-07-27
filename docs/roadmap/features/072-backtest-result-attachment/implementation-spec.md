@@ -552,7 +552,7 @@ no regression of the feature-064 / feature-071 guards. _(Registry gap closed 202
     iff `summarize` is total over partial dicts (Step 1).
   - `test_start_and_end_are_exposed_on_the_tool_schema` (`:312-323`) — asserts `inputSchema`;
     `structured_output=False` affects only the *output* schema, so this is unaffected.
-  - `test_run_backtest_projects_full_result_with_diagnostics` (`:534-577`) — exercises
+  - `test_run_backtest_projects_full_result_with_diagnostics` (`:535-577`) — exercises
     **`client.run_backtest`**, not the tool, and `client.py` is untouched. Its `:573-577`
     assertions on `out["diagnostics"][0]["bars"][0]["action"]` stay as-is. **Do not invert it.**
     (`merge-order.md:71-75` recorded this as the sharpest 070/071↔072 conflict; keeping the split in
@@ -580,14 +580,28 @@ no regression of the feature-064 / feature-071 guards. _(Registry gap closed 202
 
 3. Add a new `class TestRunBacktestAttachment:` immediately after `TestRunBacktestWindow`
    (i.e. after `:323`, before the `# ── screen_symbols (feature 061) ──` banner at `:326`), with a
-   module-level or class-level `_result(symbols, bars)` factory that builds a realistic
-   `client.run_backtest`-shaped dict. **Non-echoing**: per-bar rows must carry a sentinel
-   (`"indicators": {"sentinel_only_in_attachment": 1.0}`) that appears nowhere in the FR-2 summary
-   key set, and `volume` as a **string** (`"51234567"`) plus a `coverage_gaps` entry whose
-   `bars_have` is the **string** `"120"`, so the `MessageToDict` int64 contract is exercised rather
-   than assumed. Set `profit_factor` to a realistic finite float (`1.8`) — **never `"Infinity"`**,
-   which the producer cannot emit (`servicer.py:2202-2208`); this fixture is shared with
-   `test_zero_trade_run_is_diagnosable_from_the_summary_alone`, which asserts `1.0`.
+   module-level or class-level `_result(symbols, bars, **overrides)` factory that builds a realistic
+   `client.run_backtest`-shaped dict. **It must accept per-test overrides** — the 0-trade test needs a
+   variant, see below. Same four properties as Step 2's `_full_result`, restated here so this step
+   stands alone:
+
+   - **Non-echoing** (ledger insights 2026-07-27): per-bar rows carry a sentinel
+     (`"indicators": {"sentinel_only_in_attachment": 1.0}`) appearing nowhere in the FR-2 summary key
+     set, so a test cannot pass by reading the wrong half.
+   - **`coverage_gaps` is exactly ONE entry, fixed, independent of `symbols`** — the linearity test
+     below asserts a `9 * 250` slope, and gaps are per-symbol on OK runs (`servicer.py:477`), so a
+     factory that scaled them would breach that slope and go red for the wrong reason. Its
+     `bars_have` is the **string** `"120"` (`int64`, `analysis.proto:55-56`).
+   - **`profit_factor` is the finite float `1.8`** — never `"Infinity"`, which the producer cannot
+     emit (`servicer.py:2202-2208`).
+   - **`volume` is the string `"51234567"`**, `bar_index` an `int`.
+
+   **The 0-trade test overrides, it does not share the base values.**
+   `test_zero_trade_run_is_diagnosable_from_the_summary_alone` calls
+   `_result(..., profit_factor=1.0, total_trades=0)` and adds `no_trade_reason` per symbol — `1.0` is
+   what a real 0-trade run emits (`gross_profit == gross_loss == 0`, `servicer.py:2202-2208`), and it
+   necessarily differs from the base fixture's `1.8`. Stated explicitly because leaving it implicit
+   reads as a collision between the fixture and the assertion.
 
    Tests (each patches `client.run_backtest` with `AsyncMock(return_value=_result(...))` and calls
    `await _tool_fn(server, "run_backtest")(strategy_id="sma", symbols=[...])`):
@@ -605,6 +619,10 @@ no regression of the feature-064 / feature-071 guards. _(Registry gap closed 202
      instrument that was rejected): assert the marginal cost
      `len(r10[0].text) - len(r1[0].text) < 9 * 250`, plus a loose `len(r10[0].text) < 8_000`
      catch-all. Asserted across **two** symbol counts, not one (`design.md` § Open Risks).
+     Note the two tests measure **different serializations** under the same bounds: Step 2 measures
+     `json.dumps(summary)` (compact), this one measures `result[0].text`, which Step 3 builds with
+     `indent=2`. Pretty-printing inflates a 10-symbol summary to roughly 2.3 KB — both bounds still
+     hold comfortably, and the shared *form* is the point.
    - `test_attachment_round_trips_to_the_complete_result` — `result[1]` is the `EmbeddedResource`;
      `json.loads(result[1].resource.text) == <the exact dict the mock returned>` (**AC-2**, FR-3);
      and the sentinel **is** present in `result[1].resource.text`.
@@ -620,7 +638,8 @@ no regression of the feature-064 / feature-071 guards. _(Registry gap closed 202
 
      Drive the registered tool instead:
      `await server.call_tool("run_backtest", {"strategy_id": "sma", "symbols": ["AAPL"]})`, and assert
-     the client-visible content is `[TextContent, EmbeddedResource]` in that order.
+     the client-visible content is `[TextContent, EmbeddedResource]` in that order. **That ordering
+     assertion is the live half** — it fails on unmodified `main-dev`, where the tool returns a dict.
 
      > **Evidence for the call shape (added at re-review):** `FastMCP.call_tool`
      > (`.venv/.../mcp/server/fastmcp/server.py:343-346`) returns a **bare `Sequence[ContentBlock]`,
@@ -628,9 +647,6 @@ no regression of the feature-064 / feature-071 guards. _(Registry gap closed 202
      > `func_metadata.py:122-123` because `output_schema is None`. Do not try to unpack a tuple.
      > `get_context()` (`server.py:332-341`) swallows the `LookupError`, so the call works outside a
      > request context — no fixture needed.
-
-      **That ordering
-     assertion is the live half** — it fails on unmodified `main-dev`, where the tool returns a dict.
 
      > **Do NOT assert `outputSchema` is absent** (round 3 correction). It is absent on `main-dev`
      > today and absent with `structured_output=False` deleted, so the assertion cannot fail for the
