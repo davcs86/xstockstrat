@@ -1,6 +1,6 @@
 # Feature: backtest-time-window
 
-**Lifecycle Status**: `design-approved`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/backtest-time-window` (see context.md — implemented on the
 harness-assigned `claude/features-070-071-rnbkqo` branch this session)
 **Created**: 2026-07-26
@@ -16,6 +16,8 @@ harness-assigned `claude/features-070-071-rnbkqo` branch this session)
 | 2026-07-26 | `draft` → (fail) | /sdd-review | FAIL — premise contradicted by code: `RunBacktestRequest.range` already ships end-to-end incl. UI; proposed proto fields would duplicate it |
 | 2026-07-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved after re-scope (no proto change; agent plumbing + pre-window warm-up). 7 warnings addressed |
 | 2026-07-26 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, quick+1 Floor round) and approved; recon.md + design.md written. R1 BLOCKED on F-07; resolved by deriving the prefix from declared params |
+| 2026-07-27 | `design-approved` → `in-progress` | implementation | Steps 1–8 of 8 implemented (warm-up sizing, paged GetBars, `trade_start_idx`, prefix wiring, agent `start`/`end`, parity/determinism suite, docs, UI e2e + C-12 fixture) |
+| 2026-07-27 | `in-progress` → `code-completed` | implementation | OQ-1 resolved by user: **keep fail-loud** (AC-4a as designed). No code change followed. CI green on PR #792 — all 28 checks incl. Frontend E2E |
 
 ---
 
@@ -57,4 +59,9 @@ _Proto Reviewer row removed at review: this feature makes no proto change (see p
 
 ## Next Action
 
-`/sdd-spec backtest-time-window` — generate implementation spec from the approved design
+Merge PR #792 into `main-dev` (all 28 CI checks green, including Frontend E2E). OQ-1 is resolved —
+fail-loud stands, and the implementation already matches it.
+
+Then `/sdd-sync` the spec files, and note for **072**: its recorded "contradictory test" overlap with
+071 is resolved rather than merely sequenced — 072's design keeps `client.run_backtest` intact and
+splits in `tools.py`, so it no longer needs to invert `tests/test_tools.py:535-577`.

@@ -37,7 +37,7 @@ from app.repositories.backtest_run_symbols import BacktestRunSymbolsRepository
 from app.repositories.backtest_runs import BacktestRunsRepository
 from app.repositories.strategies import StrategiesRepository
 from app.repositories.strategy_scores import StrategyScoresRepository
-from app.services import scoring
+from app.services import scoring, warmup
 from app.services.cooldown import effective_cooldown_days, is_cooldown_active
 from app.services.evaluator import (
     FormulaExecutionError,
@@ -63,11 +63,15 @@ class _InsufficientData(Exception):
     fabricating a flat-equity "success" (feature 053, FR-2 / AC-2).
     """
 
-    def __init__(self, symbol: str, bars_have: int, bars_need: int):
+    def __init__(self, symbol: str, bars_have: int, bars_need: int, gap_range=None):
         super().__init__(f"{symbol}: have {bars_have} bars, need {bars_need}")
         self.symbol = symbol
         self.bars_have = bars_have
         self.bars_need = bars_need
+        # feature 071: for a pre-window warm-up shortfall the actionable backfill span is the
+        # PREFIX (start - warmup … start), not the caller's window — the window itself may be
+        # fully covered. None → the caller's requested range, as before.
+        self.gap_range = gap_range
 
 
 # feature 071: marketdata's GetBars defaults to a 500-bar page and orders ASC, so an
@@ -326,6 +330,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         symbol_cells: list[dict] = []
         # feature 064: declared formula warm-ups fetched once per run, reused across symbols.
         formula_warmup_cache: dict[str, int] = {}
+        # feature 071: and resolved BEFORE the loop, so symbol 1 sizes its prefix from the same
+        # cache symbol N does (see _prefetch_formula_warmups).
+        if active_definition is not None and start_set:
+            await self._prefetch_formula_warmups(
+                active_definition, formula_warmup_cache, propagation_meta
+            )
 
         for symbol in request.symbols:
             try:
@@ -339,6 +349,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         slippage=slippage,
                         propagation_meta=propagation_meta,
                         formula_warmup_cache=formula_warmup_cache,
+                        # feature 071 / FR-2: prefix ONLY when the caller supplied an explicit
+                        # start. `start_set` is snapshotted before the defaulting block above
+                        # mutates request.range in place and destroys the distinction.
+                        warmup_prefix=start_set,
                     )
                 else:
                     trades, equity, daily_eq, sym_diag = await self._backtest_symbol(
@@ -355,6 +369,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         slippage=slippage,
                         source_weights=source_weights,
                         propagation_meta=propagation_meta,
+                        warmup_prefix=start_set,
                     )
                 # feature 065: buffer one evidence cell for this symbol before merging into the
                 # aggregate curve. daily_eq[0] is the symbol's own (compounded) starting equity,
@@ -392,7 +407,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         requested_range=request.range,
                         bars_have=ins.bars_have,
                         bars_need=ins.bars_need,
-                        gap=request.range,
+                        # feature 071: for a warm-up shortfall the actionable backfill span is
+                        # the prefix, not the caller's window (which may be fully covered).
+                        gap=ins.gap_range if ins.gap_range is not None else request.range,
                     )
                 )
                 continue
@@ -599,6 +616,46 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             f"({len(bars)} bars so far) — refusing to return a truncated series"
         )
 
+    async def _resolve_prefixed_bars(self, symbol, range_msg, required_prefix, propagation_meta):
+        """Fetch bars with `required_prefix` bars of pre-window history (feature 071).
+
+        Returns ``(bars, trade_start_idx)`` where ``bars[trade_start_idx]`` is the first bar
+        inside the caller's window. Indicators are computed over the whole list so they are
+        already warm at that bar; the engine simulates only from ``trade_start_idx`` onward, so
+        no trade can open before `start` and the prefix is pure seeding.
+
+        The fetched prefix is truncated to **exactly** `required_prefix` bars. That is what makes
+        `prefix_calendar_days`' bars→days conversion sizing-only: an over-estimate is discarded
+        deterministically here, and an under-estimate raises below. The conversion can therefore
+        never quietly change a result — only over-fetch or report.
+        """
+        if required_prefix <= 0:
+            return await self._fetch_bars_paged(symbol, range_msg, propagation_meta), 0
+
+        prefix_days = warmup.prefix_calendar_days(required_prefix)
+        prefixed = common_pb2.TimeRange()
+        prefixed.CopyFrom(range_msg)
+        prefixed.start.seconds = max(0, range_msg.start.seconds - prefix_days * 86_400)
+        prefixed.start.nanos = 0
+
+        bars = await self._fetch_bars_paged(symbol, prefixed, propagation_meta)
+
+        window_start = range_msg.start.seconds
+        available = 0
+        for bar in bars:
+            if bar.time.seconds >= window_start:
+                break
+            available += 1
+
+        if available < required_prefix:
+            gap = common_pb2.TimeRange()
+            gap.start.CopyFrom(prefixed.start)
+            gap.end.CopyFrom(range_msg.start)
+            raise _InsufficientData(symbol, available, required_prefix, gap_range=gap)
+
+        # Discard the surplus so the anchor is a deterministic function of (definition, start).
+        return bars[available - required_prefix :], required_prefix
+
     async def _backtest_symbol(
         self,
         symbol,
@@ -614,14 +671,22 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         slippage,
         source_weights,
         propagation_meta=(),
+        *,
+        warmup_prefix: bool = False,
     ):
         """Run SMA crossover backtest for a single symbol.
 
         Returns (trades, final_equity, daily_equity, diagnostics) — feature 064.
         """
 
-        # 1. Fetch OHLCV bars from marketdata (feature 071: paged — see _fetch_bars_paged)
-        bars = await self._fetch_bars_paged(symbol, range_msg, propagation_meta)
+        # 1. Fetch OHLCV bars (feature 071: paged, plus a pre-window prefix when the caller
+        # supplied an explicit start). The legacy engine's binding lookback is slow_period.
+        required_prefix = (
+            warmup.builtin_lookback_bars("SMA", {"period": slow_period}) if warmup_prefix else 0
+        )
+        bars, trade_start_idx = await self._resolve_prefixed_bars(
+            symbol, range_msg, required_prefix, propagation_meta
+        )
         if len(bars) < slow_period + 2:
             log.warning(
                 "symbol %s has insufficient bars (%d < %d)", symbol, len(bars), slow_period + 2
@@ -691,11 +756,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         # feature 064: warm-up = first bar where BOTH SMAs are resolved (observed Option-C).
         warmup_bars = max(min(fast_values, default=n - 1), min(slow_values, default=n - 1))
+        # feature 071: warmup_bars indexes the fetched series, which may carry a pre-window
+        # prefix. Report it relative to the first in-window bar — a fully-warmed prefixed run
+        # legitimately reports 0. On an unprefixed run (k == 0) this is a no-op.
+        warmup_bars = max(0, warmup_bars - trade_start_idx)
 
         # feature 064: one diagnostic row per bar, iterated independently of the trade loop
         # (which starts at index 1) so bar 0 is captured. Present-only indicators map.
         diags = []
-        for i in range(n):
+        for i in range(trade_start_idx, n):
             indicators = {}
             if i in fast_values:
                 indicators["sma_fast"] = fast_values[i]
@@ -704,7 +773,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             diags.append(
                 _build_bar_diagnostic(
                     symbol=symbol,
-                    bar_index=i,
+                    bar_index=i - trade_start_idx,
                     bar=bars[i],
                     indicators=indicators,
                     signal_score=0.0,
@@ -720,11 +789,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         position = 0.0  # shares held
         entry_price = 0.0
         entry_time = None
-        daily_equity = [equity]
+        # feature 071: daily_equity[j] pairs with diags[j]. On an unprefixed run (k == 0) index 0
+        # is the seed point at bar 0, which is never simulated. With a pre-window prefix the first
+        # simulated bar IS bar k, so there is no separate seed row — otherwise the two lists would
+        # differ in length by one and every per-bar equity stamp would shift.
+        daily_equity = [equity] if trade_start_idx == 0 else []
         buy_threshold = scoring.buy_threshold(min_conviction)
         sell_threshold = scoring.sell_threshold()
 
-        for i in range(1, n):
+        for i in range(max(1, trade_start_idx), n):
             bar = bars[i]
             price = bar.close
 
@@ -763,8 +836,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 technical_weight,
                 signals_present=bool(signals_map),
             )
-            diags[i].signal_score = signal_score
-            diags[i].conviction = combined
+            diags[i - trade_start_idx].signal_score = signal_score
+            diags[i - trade_start_idx].conviction = combined
             bar_action = (
                 analysis_pb2.BAR_ACTION_HOLD_LONG
                 if position > 0.0
@@ -813,7 +886,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 entry_time = None
                 bar_action = analysis_pb2.BAR_ACTION_EXIT_LONG
 
-            diags[i].action = bar_action
+            diags[i - trade_start_idx].action = bar_action
             portfolio_value = equity + position * price
             daily_equity.append(portfolio_value)
 
@@ -857,14 +930,22 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         slippage,
         propagation_meta=(),
         formula_warmup_cache=None,
+        *,
+        warmup_prefix: bool = False,
     ):
         """Run a stored/inline StrategyDefinition for one symbol via the shared evaluator.
 
         Drives entry/exit from StrategyEvaluator decisions (backtest/live parity).
         Returns (trades, final_equity, daily_equity, diagnostics) — feature 064.
         """
-        # feature 071: paged — see _fetch_bars_paged
-        bars = await self._fetch_bars_paged(symbol, range_msg, propagation_meta)
+        # feature 071: paged, plus a pre-window prefix when the caller supplied an explicit
+        # start. Declared (never observed) — see app/services/warmup.py.
+        required_prefix = (
+            warmup.required_prefix_bars(definition, formula_warmup_cache) if warmup_prefix else 0
+        )
+        bars, trade_start_idx = await self._resolve_prefixed_bars(
+            symbol, range_msg, required_prefix, propagation_meta
+        )
         if len(bars) < 2:
             log.warning("symbol %s has insufficient bars (%d)", symbol, len(bars))
             raise _InsufficientData(symbol, len(bars), 2)
@@ -874,15 +955,19 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         decisions, component_series = await evaluator.evaluate_with_series(definition, bars, None)
 
         n = len(bars)
-        warmup_bars = await self._compute_evaluated_warmup(
+        warmup_bars_full = await self._compute_evaluated_warmup(
             definition, component_series, n, formula_warmup_cache, propagation_meta
         )
+        # feature 071: that index is into the fetched series, which may carry a pre-window
+        # prefix. Report it relative to the first in-window bar — a fully-warmed prefixed run
+        # legitimately reports 0. On an unprefixed run (k == 0) this is a no-op.
+        warmup_bars = max(0, warmup_bars_full - trade_start_idx)
 
         # feature 064: per-bar diagnostics (independent of the trade loop → bar 0 captured).
         # Present-only indicators map, dropping the redundant "<ref>.value" alias (the bare
         # ref_name already carries the primary series).
         diags = []
-        for i in range(n):
+        for i in range(trade_start_idx, n):
             indicators = {
                 key: series[i]
                 for key, series in component_series.items()
@@ -891,7 +976,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             diags.append(
                 _build_bar_diagnostic(
                     symbol=symbol,
-                    bar_index=i,
+                    bar_index=i - trade_start_idx,
                     bar=bars[i],
                     indicators=indicators,
                     signal_score=0.0,  # evaluator path carries no newsletter signals (FR-4a)
@@ -906,7 +991,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         position = 0.0
         entry_price = 0.0
         entry_time = None
-        daily_equity = [equity]
+        # feature 071: daily_equity[j] pairs with diags[j]. On an unprefixed run (k == 0) index 0
+        # is the seed point at bar 0, which is never simulated. With a pre-window prefix the first
+        # simulated bar IS bar k, so there is no separate seed row — otherwise the two lists would
+        # differ in length by one and every per-bar equity stamp would shift.
+        daily_equity = [equity] if trade_start_idx == 0 else []
 
         # Re-entry cooldown (feature 069). Ephemeral per-RunBacktest state (FR-7): last_exit_time is
         # a plain local, never read from or written to analysis.strategy_cooldowns, so two runs of
@@ -917,7 +1006,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         )
         last_exit_time = None
 
-        for i in range(1, n):
+        for i in range(max(1, trade_start_idx), n):
             bar = bars[i]
             price = bar.close
             decision = decisions[i]
@@ -970,7 +1059,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 last_exit_time = bar.time.ToDatetime(tzinfo=UTC)  # feature 069: cooldown clock
                 bar_action = analysis_pb2.BAR_ACTION_EXIT_LONG
 
-            diags[i].action = bar_action
+            diags[i - trade_start_idx].action = bar_action
             daily_equity.append(equity + position * price)
 
         # Close any open position at the last bar price
@@ -1024,20 +1113,50 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if comp is None:
                 continue
             if comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA:
-                fid = comp.formula_id
-                if fid not in formula_warmup_cache:
-                    try:
-                        formula = await self._indicators.GetFormula(
-                            indicators_pb2.GetFormulaRequest(formula_id=fid),
-                            metadata=propagation_meta,
-                        )
-                        formula_warmup_cache[fid] = int(getattr(formula, "warmup_period", 0) or 0)
-                    except grpc.RpcError:
-                        formula_warmup_cache[fid] = 0
-                warmup = max(warmup, formula_warmup_cache[fid])
+                declared = await self._declared_formula_warmup(
+                    comp.formula_id, formula_warmup_cache, propagation_meta
+                )
+                warmup = max(warmup, declared)
             else:
                 warmup = max(warmup, _first_resolved_index(component_series.get(ref, []), n))
         return warmup
+
+    async def _declared_formula_warmup(self, formula_id, cache, propagation_meta) -> int:
+        """Declared `warmup_period` for one formula, memoized in `cache` for the whole run.
+
+        An unreachable formula caches 0 rather than raising: a missing declaration must not
+        fail a backtest, and the 0 is cached so one dead formula can't re-issue the failing
+        RPC once per symbol.
+        """
+        if formula_id not in cache:
+            try:
+                formula = await self._indicators.GetFormula(
+                    indicators_pb2.GetFormulaRequest(formula_id=formula_id),
+                    metadata=propagation_meta,
+                )
+                cache[formula_id] = int(getattr(formula, "warmup_period", 0) or 0)
+            except grpc.RpcError:
+                cache[formula_id] = 0
+        return cache[formula_id]
+
+    async def _prefetch_formula_warmups(self, definition, cache, propagation_meta) -> None:
+        """Fill `cache` for every referenced custom formula BEFORE the symbol loop (feature 071).
+
+        Ordering matters: `warmup.required_prefix_bars` is pure and reads this cache at the
+        *top* of each symbol's run, while `_compute_evaluated_warmup` fills it at the *bottom*.
+        Without a prefetch the first symbol of a formula-using strategy would size its prefix
+        from an empty cache — no prefix, short-warmed — while every later symbol got the full
+        one. That makes a run's result depend on symbol order, breaking both FR-4 determinism
+        and the per-symbol comparability the feature-065 evidence cells assume.
+        """
+        entry_rule = json.loads(definition.entry_rule) if definition.entry_rule else None
+        exit_rule = json.loads(definition.exit_rule) if definition.exit_rule else None
+        refs = referenced_refs(entry_rule) | referenced_refs(exit_rule)
+        ref_to_comp = {c.ref_name: c for c in definition.components}
+        for ref in refs:
+            comp = ref_to_comp.get(ref)
+            if comp is not None and comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA:
+                await self._declared_formula_warmup(comp.formula_id, cache, propagation_meta)
 
     async def ScoreStrategy(self, request, context):
         """Manually recompute a strategy's headline grade from its evidence cells (feature 065).
@@ -1734,6 +1853,15 @@ def _finalize_symbol_diagnostics(symbol, diags, warmup_bars, trades, daily_equit
     so it cannot carry the value (context.md, sdd-spec session).
     """
     n = len(diags)
+    # feature 071: the two lists must stay 1:1 — `diags[j].equity = daily_equity[j]` below is
+    # positional. The two engine paths build them differently (the legacy loop has two
+    # continue-with-append branches, the evaluator appends unconditionally), which is exactly the
+    # shape of ledger fail 056 "fixed one path, forgot the second". Assert it in the shared pass
+    # so a drift in either path fails loudly instead of silently shifting every equity stamp.
+    assert n == len(daily_equity), (
+        f"diags/daily_equity length mismatch for {symbol}: {n} vs {len(daily_equity)} — "
+        f"the per-bar equity stamps would be misaligned"
+    )
     for i in range(min(n, len(daily_equity))):
         diags[i].equity = daily_equity[i]
     for i in range(n):

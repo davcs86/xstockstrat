@@ -144,25 +144,54 @@ async def run_backtest(
     strategy_id: str,
     symbols: list[str],
     initial_capital: float = 100000.0,
+    start: str | None = None,
+    end: str | None = None,
 ) -> dict[str, Any]:
-    """Trigger a backtest via gRPC RunBacktest."""
+    """Trigger a backtest via gRPC RunBacktest.
+
+    ``start``/``end`` are ISO date/datetime strings bounding the **evaluation window**
+    (feature 071). Both omitted reproduces the pre-071 rolling default: the servicer treats
+    an unset bound (``seconds == 0``) as open and defaults ``end`` → now, ``start`` →
+    ``end − analysis.backtest.max_range_days``. Supplying both makes a run reproducible
+    across calendar days (FR-4) and equal to the UI's result for the same window (FR-6) —
+    the UI sends the identical `range` field. Warm-up bars are fetched from *before*
+    ``start`` by the server, so the requested window is evaluated fully warm and no trade
+    opens before ``start``.
+    """
     from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
+    from gen.common.v1 import common_pb2  # noqa: PLC0415
+
+    start_ts = _iso_to_timestamp(start) if start else None
+    end_ts = _iso_to_timestamp(end) if end else None
+    if (
+        start_ts is not None
+        and end_ts is not None
+        and (start_ts.seconds, start_ts.nanos) > (end_ts.seconds, end_ts.nanos)
+    ):
+        raise ValueError("start must not be after end")
+
+    req = analysis_pb2.RunBacktestRequest(
+        strategy_id=strategy_id,
+        # feature 065: run the strategy's REGISTERED definition (strategy_id_ref ==
+        # strategy_id) so agent-triggered runs earn fingerprinted evidence toward the
+        # derived headline grade. An unregistered id now returns NOT_FOUND instead of
+        # silently running a legacy SMA backtest (design.md § Callers; C-10(b) parity).
+        strategy_id_ref=strategy_id,
+        symbols=list(symbols),
+        initial_capital=initial_capital,
+    )
+    if start_ts is not None or end_ts is not None:
+        tr = common_pb2.TimeRange()
+        if start_ts is not None:
+            tr.start.CopyFrom(start_ts)
+        if end_ts is not None:
+            tr.end.CopyFrom(end_ts)
+        # One-sided ranges are safe: the servicer defaults each unset bound independently.
+        req.range.CopyFrom(tr)
 
     async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
-        resp = await stub.RunBacktest(
-            analysis_pb2.RunBacktestRequest(
-                strategy_id=strategy_id,
-                # feature 065: run the strategy's REGISTERED definition (strategy_id_ref ==
-                # strategy_id) so agent-triggered runs earn fingerprinted evidence toward the
-                # derived headline grade. An unregistered id now returns NOT_FOUND instead of
-                # silently running a legacy SMA backtest (design.md § Callers; C-10(b) parity).
-                strategy_id_ref=strategy_id,
-                symbols=list(symbols),
-                initial_capital=initial_capital,
-            ),
-            metadata=_metadata(),
-        )
+        resp = await stub.RunBacktest(req, metadata=_metadata())
     # feature 064: return the full BacktestResult (including the per-bar `diagnostics`) so the
     # agent can reason over the day-by-day OHLCV/indicator/decision data and suggest strategy or
     # indicator changes. `preserving_proto_field_name` keeps the snake_case keys existing consumers

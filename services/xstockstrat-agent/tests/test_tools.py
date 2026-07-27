@@ -273,7 +273,54 @@ async def test_run_backtest_calls_grpc():
             strategy_id="sma_crossover",
             symbols=["NVDA", "AAPL"],
             initial_capital=50000.0,
+            # feature 071: omitted window forwards as None/None, so the servicer applies its
+            # rolling default — the pre-071 behavior (FR-2).
+            start=None,
+            end=None,
         )
+
+
+class TestRunBacktestWindow:
+    """feature 071 — the tool's optional start/end evaluation window."""
+
+    @pytest.mark.asyncio
+    async def test_window_is_forwarded_to_the_client(self):
+        mock_backtest = AsyncMock(return_value={"backtest_id": "bt-2"})
+        with patch.object(client, "run_backtest", mock_backtest):
+            server = _make_server()
+            await _tool_fn(server, "run_backtest")(
+                strategy_id="sma",
+                symbols=["NVDA"],
+                start="2024-01-01",
+                end="2024-06-30",
+            )
+        assert mock_backtest.call_args.kwargs["start"] == "2024-01-01"
+        assert mock_backtest.call_args.kwargs["end"] == "2024-06-30"
+
+    @pytest.mark.asyncio
+    async def test_one_sided_window_forwards_only_the_supplied_bound(self):
+        """Either bound may be given alone — the other stays None so the servicer defaults it."""
+        mock_backtest = AsyncMock(return_value={"backtest_id": "bt-3"})
+        with patch.object(client, "run_backtest", mock_backtest):
+            server = _make_server()
+            await _tool_fn(server, "run_backtest")(
+                strategy_id="sma", symbols=["NVDA"], start="2024-01-01"
+            )
+        assert mock_backtest.call_args.kwargs["start"] == "2024-01-01"
+        assert mock_backtest.call_args.kwargs["end"] is None
+
+    @pytest.mark.asyncio
+    async def test_start_and_end_are_exposed_on_the_tool_schema(self):
+        """The MCP schema is the agent's only discovery surface — an un-advertised parameter is
+        an un-usable one, so the window must appear in the published inputSchema."""
+        server = _make_server()
+        tools = await server.list_tools()
+        schema = next(t for t in tools if t.name == "run_backtest").inputSchema
+        assert "start" in schema["properties"]
+        assert "end" in schema["properties"]
+        # optional — an agent that omits them still gets the rolling default
+        assert "start" not in schema.get("required", [])
+        assert "end" not in schema.get("required", [])
 
 
 # ── screen_symbols (feature 061) ──────────────────────────────────────────
@@ -562,6 +609,93 @@ async def test_run_backtest_sends_strategy_id_ref_for_registered_definition():
     sent = stub.RunBacktest.call_args.args[0]
     assert sent.strategy_id == "sma"
     assert sent.strategy_id_ref == "sma"
+
+
+class TestRunBacktestRangeOnTheWire:
+    """feature 071 — what the client actually puts on the RunBacktestRequest.
+
+    Asserted at the stub-capture level: the tool-layer tests above mock client.run_backtest
+    wholesale, so no request proto is ever built there.
+    """
+
+    @staticmethod
+    def _capture():
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc
+
+        class _Chan:
+            async def __aenter__(self):
+                return MagicMock()
+
+            async def __aexit__(self, *a):
+                return False
+
+        stub = MagicMock()
+        stub.RunBacktest = AsyncMock(
+            return_value=analysis_pb2.BacktestResult(backtest_id="bt-1", strategy_id="sma")
+        )
+        return stub, (
+            patch.object(client.grpc.aio, "insecure_channel", return_value=_Chan()),
+            patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=stub),
+        )
+
+    @pytest.mark.asyncio
+    async def test_no_window_leaves_range_unset(self):
+        """FR-2: omitting the window must be byte-identical to the pre-071 request, so the
+        servicer's rolling default applies. An all-zero `range` would be indistinguishable
+        from unset on the wire, but leaving the field unset keeps HasField honest."""
+        stub, (p1, p2) = self._capture()
+        with p1, p2:
+            await client.run_backtest(strategy_id="sma", symbols=["AAPL"])
+        assert not stub.RunBacktest.call_args.args[0].HasField("range")
+
+    @pytest.mark.asyncio
+    async def test_both_bounds_are_sent_as_a_timerange(self):
+        stub, (p1, p2) = self._capture()
+        with p1, p2:
+            await client.run_backtest(
+                strategy_id="sma", symbols=["AAPL"], start="2024-01-01", end="2024-06-30"
+            )
+        sent = stub.RunBacktest.call_args.args[0]
+        assert sent.HasField("range")
+        assert sent.range.start.ToDatetime().isoformat() == "2024-01-01T00:00:00"
+        assert sent.range.end.ToDatetime().isoformat() == "2024-06-30T00:00:00"
+
+    @pytest.mark.asyncio
+    async def test_one_sided_range_leaves_the_other_bound_open(self):
+        """The servicer reads an unset bound (seconds == 0) as open and defaults it
+        independently, so a one-sided range must not fabricate the missing side."""
+        stub, (p1, p2) = self._capture()
+        with p1, p2:
+            await client.run_backtest(strategy_id="sma", symbols=["AAPL"], start="2024-01-01")
+        sent = stub.RunBacktest.call_args.args[0]
+        assert sent.HasField("range")
+        assert sent.range.start.seconds > 0
+        assert sent.range.end.seconds == 0
+
+    @pytest.mark.asyncio
+    async def test_zulu_and_naive_datetimes_both_resolve_to_utc(self):
+        """A 'Z' suffix and a bare datetime must land on the same instant — otherwise the same
+        window expressed two ways would produce two different (non-comparable) runs."""
+        stub, (p1, p2) = self._capture()
+        with p1, p2:
+            await client.run_backtest(
+                strategy_id="sma", symbols=["AAPL"], start="2024-01-01T00:00:00Z"
+            )
+            zulu = stub.RunBacktest.call_args.args[0].range.start.seconds
+            await client.run_backtest(strategy_id="sma", symbols=["AAPL"], start="2024-01-01")
+            naive = stub.RunBacktest.call_args.args[0].range.start.seconds
+        assert zulu == naive
+
+    @pytest.mark.asyncio
+    async def test_inverted_window_is_rejected_before_the_rpc(self):
+        """Caught client-side: the servicer would otherwise default nothing and run an empty
+        window, reporting a confusing INSUFFICIENT_DATA instead of naming the real mistake."""
+        stub, (p1, p2) = self._capture()
+        with p1, p2, pytest.raises(ValueError, match="start must not be after end"):
+            await client.run_backtest(
+                strategy_id="sma", symbols=["AAPL"], start="2024-06-30", end="2024-01-01"
+            )
+        stub.RunBacktest.assert_not_called()
 
 
 # ── backfill tools (feature 066) ───────────────────────────────────────────

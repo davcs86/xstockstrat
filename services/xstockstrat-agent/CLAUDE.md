@@ -33,7 +33,7 @@ reference):
 | `extract_website_content` | Fetch text from a registered website source |
 | `ingest_signal` | Ingest a trading signal (auto-alerts above conviction threshold) |
 | `emit_alert` | Emit an alert via xstockstrat-notify |
-| `run_backtest` | Trigger a backtest via xstockstrat-analysis |
+| `run_backtest` | Trigger a backtest via xstockstrat-analysis (optional `start`/`end` evaluation window — feature 071) |
 | `screen_symbols` | Scan a symbol universe via xstockstrat-analysis and return ranked candidates (read-only) |
 | `manage_strategy` | Register/update/deactivate stored strategies (`update` is a **partial merge** — feature 070) |
 | `get_strategy` | Read a stored strategy's full definition (read-only, feature 070) |

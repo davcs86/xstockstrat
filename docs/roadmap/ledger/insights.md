@@ -242,3 +242,72 @@ reusing.
   `packages/proto/analysis/v1/analysis.proto:230,236-238,245`; feature 070 design.md § 1.
 - **Rule it implies**: reinforces **P-03** — verify the serializer's omission contract before designing
   merge semantics on top of it; presence rules differ per field kind and a two-rule merge will diverge.
+
+### 2026-07-27 — 071-backtest-time-window — execute
+- **Pattern**: When a value is **read at the top** of a per-item loop but **written at the bottom**,
+  memoizing it in a shared cache silently makes item 1 behave differently from items 2+.
+  `warmup.required_prefix_bars` reads the declared-formula-warm-up cache before fetching bars, while
+  `_compute_evaluated_warmup` fills it after computing series — so the first symbol of a
+  formula-using strategy sized its prefix from an empty cache (no prefix, short-warmed) and every
+  later symbol got the full one. The result then depends on symbol *order*, which no single-symbol
+  test can see. `required_prefix_bars`' own docstring already stated the contract ("must be
+  pre-populated by the caller"); nothing enforced it.
+- **Evidence**: `services/xstockstrat-analysis/app/handlers/servicer.py` `_prefetch_formula_warmups`
+  / `_declared_formula_warmup`; test
+  `TestPrefixFormulaCost::test_every_symbol_pays_the_same_prefix`; feature 071 context.md § step 6.
+- **Rule it implies**: reinforces **C-08** — a lazily-filled cache read earlier in the same iteration
+  than it is written needs a **multi-item** test asserting item 1 and item N behave identically. A
+  docstring stating "caller must pre-populate" is a claim, not a guarantee.
+
+### 2026-07-27 — 071-backtest-time-window — execute
+- **Pattern**: A determinism assertion over a protobuf message must **clear the fields that differ
+  per run by construction** (`backtest_id` uuid, `completed_at` stamp) rather than fall back to a
+  field-by-field comparison. Left in, byte-identity is vacuously false and the natural next move —
+  comparing a hand-picked subset of metrics — is exactly the weaker check that lets a real drift
+  through. Likewise, a frozen-clock test needs a paired **teeth test** showing the unfrozen path
+  genuinely moves; otherwise an inert patch reads as a passing determinism proof.
+- **Evidence**: `services/xstockstrat-analysis/tests/test_analysis_servicer.py` `_canonical`,
+  `TestWindowDeterminism::test_the_frozen_clock_test_has_teeth`.
+- **Rule it implies**: extends **P-06** — when a test asserts "X does not change Y", add the
+  companion assertion that something *does* change Y, so a no-op harness can't masquerade as a pass.
+
+### 2026-07-27 — 071-backtest-time-window — execute
+- **Pattern**: A mock that **echoes a request field back** as its response cannot distinguish a
+  correct consumer from an incorrect one. `mock-backend.ts` returned `req.range` as both
+  `requestedRange` and `gap`, so an e2e asserting the backfill action's range would pass whichever
+  field the UI read. Only once 071 made the two genuinely differ (the gap is the *pre-window* span)
+  did the assertion acquire meaning.
+- **Evidence**: `services/xstockstrat-ui/e2e/fixtures/backtests.ts` `prefixGapRange`;
+  `e2e/insights/backtest-coverage.spec.ts` "backfill action fills the pre-window warm-up gap".
+- **Rule it implies**: reinforces **C-12** — a fixture whose fields are all equal to each other (or
+  to the request) tests nothing about which field a consumer picked; make the distinguishing fields
+  distinguishable.
+
+### 2026-07-27 — 072-backtest-result-attachment — design
+- **Pattern**: When designing an attachment/export format, the fidelity question is decided by the
+  **producer's** JSON contract, not by the format's expressiveness. `MessageToDict` maps int64 to a
+  JSON **string** and non-finite doubles to `'NaN'`/`'Infinity'` — executed, not inferred:
+  `bar_index` → `7` (`int`) but `volume` → `'51234567'` (`str`), `vwap` → `'NaN'`,
+  `profit_factor` → `'Infinity'`. Any flat/untyped format (CSV) therefore cannot round-trip, because
+  two numeric-looking columns must reconstruct to different Python types and `csv.DictReader` returns
+  only `str`; `json_format` also refuses to parse `'nan'` back. The safe shape is to attach the
+  producer's own dict verbatim, so fidelity holds *by construction* rather than via a hand-written
+  reassembler wearing a fidelity label.
+- **Evidence**: `packages/proto/analysis/v1/analysis.proto:121,127`; `json_format.py:315-324`,
+  `:1045-1046`; feature 072 design.md § Rejected Alternatives.
+- **Rule it implies**: extends the 2026-07-21 **P-03** entry from decode to **encode** — verify the
+  serializer's contract in *both* directions before designing a format on top of it.
+
+### 2026-07-27 — 072-backtest-result-attachment — design
+- **Pattern**: Choose between two mechanisms by **failure asymmetry**, not by best-case efficiency.
+  `ResourceLink` defers bytes (better best case) but its worst case is *unrecoverable*: the agent is
+  stateless (no in-memory store, `instance_count > 1` safe), so a dangling link means the data is
+  gone and the user re-runs the work. `EmbeddedResource`'s worst case is merely verbose. Decisive
+  detail: the producer **cannot know at emit time whether the link would resolve** — feature 068's
+  detail write is best-effort and nothing in `BacktestResult` reports whether the row landed, so the
+  link is a promise with no means to check it.
+- **Evidence**: `services/xstockstrat-analysis/app/handlers/servicer.py:527-528,1398-1399,1403,1412-1413,1513-1515`;
+  `services/xstockstrat-agent/CLAUDE.md` § OAuth (FR-B13); feature 072 recon.md § Risks 1-7.
+- **Rule it implies**: before designing a reference/pointer to data another feature persists
+  best-effort, check whether the referrer can *detect* a failed persist. If it cannot, prefer
+  carrying the value over referencing it.

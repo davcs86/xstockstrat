@@ -242,6 +242,8 @@ def register_tools(server: FastMCP) -> None:
         strategy_id: str,
         symbols: list[str],
         initial_capital: float = 100000.0,
+        start: str | None = None,
+        end: str | None = None,
     ) -> dict:
         """Trigger a backtest via xstockstrat-analysis.
         strategy_id: identifies the strategy (e.g. 'sma_crossover'). Must be a REGISTERED strategy
@@ -250,6 +252,16 @@ def register_tools(server: FastMCP) -> None:
           SMA-crossback path is no longer reachable from the agent).
         symbols: list of ticker symbols e.g. ['NVDA', 'AAPL'].
         initial_capital: starting capital in USD (default 100000).
+        start / end: optional ISO date or datetime bounds ('2024-01-01', '2024-06-30T00:00:00Z')
+          for the evaluation window. Supply BOTH to get a reproducible result — a run over an
+          explicit window returns the same numbers on any calendar day, so it is comparable across
+          strategies and across days. Omitting them keeps the rolling default (a window ending
+          today), whose results drift day to day. Either bound may be given alone; the other stays
+          at its default. Indicators are warmed on bars fetched from before `start`, so the whole
+          window is evaluated fully warm and no trade opens before `start`. If the stored history
+          does not reach back far enough to warm the indicators, the run reports
+          BACKTEST_STATUS_INSUFFICIENT_DATA with `coverage_gaps` — use trigger_backfill to fill
+          them, then re-run.
         Returns the full backtest result including per-symbol `diagnostics`: a day-by-day list of
         bars (OHLCV, computed indicator values, warm-up flag, entry/exit/conviction decision) and a
         `no_trade_reason` per symbol — use these to explain why a strategy produced 0 trades and to
@@ -258,6 +270,8 @@ def register_tools(server: FastMCP) -> None:
             strategy_id=strategy_id,
             symbols=symbols,
             initial_capital=initial_capital,
+            start=start,
+            end=end,
         )
 
     @server.tool()

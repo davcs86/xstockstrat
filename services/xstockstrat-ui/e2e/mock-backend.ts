@@ -35,6 +35,7 @@ import {
   STRATEGY_SCORES,
   STRATEGY_DEF_LIVE,
   STRATEGY_DEFINITIONS,
+  insufficientDataResult,
 } from './fixtures';
 
 export const TRADER_MOCK_PORT = 9091;
@@ -523,23 +524,9 @@ export async function startMockBackend(): Promise<void> {
               ],
             };
           }
-          return {
-            backtestId: 'bt-e2e-1',
-            strategyId: req.strategyId,
-            status: 2, // BACKTEST_STATUS_INSUFFICIENT_DATA
-            totalTrades: 0,
-            trades: [],
-            coverageGaps: [
-              {
-                symbol: req.symbols[0] ?? 'AAPL',
-                timeframe: 4, // TIMEFRAME_1DAY
-                requestedRange: req.range,
-                barsHave: BigInt(3),
-                barsNeed: BigInt(52),
-                gap: req.range,
-              },
-            ],
-          };
+          // feature 071: the gap a windowed run reports is the PRE-window warm-up span, not
+          // the requested window — so this honors req.range rather than echoing it back.
+          return insufficientDataResult(req.strategyId, req.symbols, req.range);
         },
         async getStrategyReport(req) {
           // feature 065: a strategy whose grade was cleared (never earned / definition changed)
