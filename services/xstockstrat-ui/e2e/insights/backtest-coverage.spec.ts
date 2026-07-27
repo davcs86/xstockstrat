@@ -2,6 +2,22 @@ import { test, expect } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
 
 /**
+ * Epoch millis from a `google.protobuf.Timestamp` as it appears **on the wire**.
+ *
+ * In TypeScript the message is `{seconds: bigint, nanos: number}` (UI `CLAUDE.md` § Constitution),
+ * but Connect's JSON codec renders it as an RFC3339 string — so `postData()` carries
+ * `"2024-01-01T00:00:00Z"`, and reading `.seconds` off it yields `undefined`. Both shapes are
+ * accepted here so the helper reports a real mismatch rather than silently coercing to 0.
+ */
+function tsMillis(v: unknown): number {
+  if (typeof v === 'string') return Date.parse(v);
+  if (v && typeof v === 'object' && 'seconds' in v) {
+    return Number((v as { seconds: string | number }).seconds) * 1000;
+  }
+  return NaN;
+}
+
+/**
  * E2E for feature 053 (backfill-backtest-coverage), AC-4.
  *
  * The insights mock backend returns a BACKTEST_STATUS_INSUFFICIENT_DATA result with a
@@ -44,10 +60,10 @@ test.describe('Backtest data coverage', () => {
       (r) => r.url().includes('/RunBacktest') && r.method() === 'POST',
     );
     await page.getByRole('button', { name: 'Run Backtest' }).click();
-    const requestedStart = Number(
-      JSON.parse((await backtestReq).postData() ?? '{}').range?.start?.seconds ?? 0,
+    const requestedStart = tsMillis(
+      JSON.parse((await backtestReq).postData() ?? '{}').range?.start,
     );
-    expect(requestedStart).toBeGreaterThan(0); // the form always sends an explicit window
+    expect(requestedStart).not.toBeNaN(); // the form always sends an explicit window
 
     await expect(page.getByTestId('insufficient-data')).toBeVisible({ timeout: 10000 });
 
@@ -58,8 +74,8 @@ test.describe('Backtest data coverage', () => {
     const range = JSON.parse((await backfillReq).postData() ?? '{}').range ?? {};
 
     // The backfilled span ends where the requested window begins and reaches back before it.
-    expect(Number(range.end?.seconds)).toBe(requestedStart);
-    expect(Number(range.start?.seconds)).toBeLessThan(requestedStart);
+    expect(tsMillis(range.end)).toBe(requestedStart);
+    expect(tsMillis(range.start)).toBeLessThan(requestedStart);
   });
 
   // feature 064 — an OK backtest renders the day-by-day debug diagnostics table + no-trade reason.
