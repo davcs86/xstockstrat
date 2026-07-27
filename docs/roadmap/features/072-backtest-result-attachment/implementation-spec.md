@@ -58,7 +58,7 @@ product spec's (stale) citations.
 
 ### Step 1 — service: add `app/backtest_view.py` (summary projection + attachment block)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/backtest_view.py` — create
@@ -213,7 +213,7 @@ no-content-no-attachment rule before any test is written.
 
 ### Step 2 — test: unit tests for `app/backtest_view.py`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_backtest_view.py` — create

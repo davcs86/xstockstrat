@@ -1,6 +1,6 @@
 # Feature: backtest-result-attachment
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/backtest-result-attachment`
 **Created**: 2026-07-26
 **Last Updated**: 2026-07-27
@@ -18,6 +18,8 @@
 
 | 2026-07-27 | `implementation-ready` (unchanged) | /sdd-design r2 | Second grilling round on the approved design: gzip'd `BlobResourceContents` swap **proposed and rejected** (it inverts this feature's own failure-asymmetry rule; measured 103 KB not the 53 KB assumed; needs two unobserved behaviors to pay off). Chosen approach unchanged. Three corrections adopted — measured sizes replace estimates, AC-1 test bound `8_000` → `3_000`, `mtime=0` reproducibility limit recorded |
 | 2026-07-27 | `implementation-ready` (unchanged) | /sdd-design r3 | Third round: content-trimming measured and **rejected** (a 0-trade run keeps 0/2520 bars). Design unchanged again. Seven corrections — `profit_factor: "Infinity"` is unreachable (producer clamps); `structured_output=False` is a no-op for bare `list` so its guard test was inert; AC-1 bound re-aimed at marginal cost (gaps are not INSUFFICIENT-only); descriptor-parity guard; fixed `attachments_error` string; `quote()` the id; stale CI note. New `fails.md` entry rather than rewriting append-only ledger |
+| 2026-07-27 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done — `app/backtest_view.py` (summary projection + attachment block) |
+| 2026-07-27 | `implementation-ready` → `in-progress` | /sdd-execute | Execution started on `feature/backtest-result-attachment` (fresh branch off `main-dev` @ `1d54d0b`). Steps 1–2 done: `app/backtest_view.py` + 12 unit tests, red-before-green recorded |
 ---
 
 ## Artifacts

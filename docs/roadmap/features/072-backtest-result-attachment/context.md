@@ -552,3 +552,56 @@ the review named and left the adjacent thing that depended on it. The findings s
 (architectural → fixture/instrument → instruction placement → cross-step consistency), which is the
 expected shape, but the pattern is worth naming: on a spec with paired steps, grep the *other* step
 for the same construct before declaring a correction complete.
+
+## Session 2026-07-27 — sdd-execute (sequential)
+
+Fresh branch `feature/backtest-result-attachment` off `main-dev` at `1d54d0b` (PR #795 merged), per
+user instruction. Shape also per user instruction: **one commit per step on one branch, one
+integration PR** — not the skill's default stacked per-step PRs.
+
+**F-05 note (Floor, non-overridable):** Step 3 breaks `test_run_backtest_calls_grpc`, which Step 4
+adapts. "Never commit before the step's verification passes" outranks a commit-shape preference, so
+Step 3's commit carries that single one-line test adaptation — the minimum to be green — and Step 4's
+commit adds its new tests. Five commits, one per step, each green.
+
+### Step 1 — service: add `app/backtest_view.py` [done]
+- Created the pure module: `summarize` (FR-2 projection), `build_blocks` (FR-3 attachment),
+  `attachment_refs` (FR-5 degradation aid), plus the presentation constants and
+  `_INTENTIONALLY_DROPPED`.
+- Verification passed exactly as specified: `summarize({'backtest_id': 'bt-2'})` → `{'backtest_id':
+  'bt-2'}` and `build_blocks(...)` → `[]`, proving partial-dict totality and the
+  no-content-no-attachment rule before any test exists.
+- Files modified: `services/xstockstrat-agent/app/backtest_view.py`
+- Deviations: none. (Six ruff E501s on my own prose were fixed in-step — in scope per the
+  "make the step's own code pass its lint verification" carve-out.)
+- TDD: red half is Step 2 (the paired test step), per the spec's Step Dependencies.
+
+## Session 2026-07-27 — sdd-execute (steps 1-5)
+
+Branch: `feature/backtest-result-attachment`, cut fresh off `origin/main-dev` @ `1d54d0b` (PR #795's
+merge). One commit per step, single integration PR at the end — the user's shape, which replaces the
+skill's default stacked per-step PRs.
+
+### Step 1 — service: add `app/backtest_view.py` [done]
+- `summarize` / `build_blocks` / `attachment_refs` plus the constants, exactly as specified. Pure: no
+  gRPC, no I/O, no `gen.*` import (AGENT-2).
+- Verification: `ruff check` + `ruff format --check` clean; smoke check confirms both invariants —
+  `summarize({"backtest_id": "bt-2"})` returns itself unchanged (totality) and `build_blocks` on the
+  same input returns `[]` (the no-content rule).
+- Files modified: `services/xstockstrat-agent/app/backtest_view.py`
+- Deviations: none.
+
+### Step 2 — test: `tests/test_backtest_view.py` [done]
+- All 12 specified tests.
+- **TDD red-green recorded** (steps 1+2 are one cycle, per § Step Dependencies): with the three
+  function bodies stubbed to `NotImplementedError`, **11 failed / 1 passed**; with the implementation
+  restored, **12 passed**. The single test green in the red run is
+  `test_summary_key_set_covers_every_proto_field`, which reads only module constants — a static
+  descriptor guard, correctly independent of the function bodies.
+- Full suite: **100 passed**, coverage **68.62%** against the 40 threshold.
+- Files modified: `services/xstockstrat-agent/tests/test_backtest_view.py`
+- Deviations: none.
+
+**Note for the remaining steps:** run `ruff check .` **inside** `services/xstockstrat-agent/`. From
+the repo root it sweeps `packages/proto/gen/python/` and reports 63 pre-existing errors in generated
+stubs that the service's own config never lints.
