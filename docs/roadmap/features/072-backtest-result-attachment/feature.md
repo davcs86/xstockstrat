@@ -1,6 +1,6 @@
 # Feature: backtest-result-attachment
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `design-approved`
 **Development Branch**: `feature/backtest-result-attachment`
 **Created**: 2026-07-26
 **Last Updated**: 2026-07-26
@@ -13,12 +13,15 @@
 |---|---|---|---|
 | 2026-07-26 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-07-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS with 4 warnings, all addressed). No blockers, no Floor breach |
+| 2026-07-27 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick; adversary verdict NEEDS WORK, no Floor breach, all objections resolved) and approved; recon.md + design.md written. OQ-1 → EmbeddedResource; OQ-2 → single compact-JSON TextResourceContents (CSV rejected on verified fidelity failure); OQ-3 → moot (no resource registered); OQ-4 → `mcp>=1.27.1` |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon Dossier](recon.md) — grounded codebase map, patterns to reuse, 10 risks
+- [Design](design.md) — chosen approach, rejected alternatives, open risks
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec backtest-result-attachment`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -50,6 +53,13 @@ No Proto Reviewer row: this feature makes no proto change. No DBA row: no migrat
 
 ## Next Action
 
-`/sdd-design backtest-result-attachment` — recon dossier + design debate. Must close OQ-1
-(`EmbeddedResource` vs `ResourceLink` — load-bearing; the feature-068 reuse has four verified gaps),
-OQ-2 (format), OQ-3 (resource-read auth), OQ-4 (MCP SDK floor if ResourceLink wins)
+`/sdd-spec backtest-result-attachment` — generate implementation spec from the approved design.
+
+Carry forward: **AC-1 is reworded** by design § 7 ("independent of window length; linear in symbol
+count") because FR-2 and the original AC-1 are strictly incompatible — apply that amendment to
+product-spec.md. Also fix the product spec's stale line citations (`servicer.py:507-511`/`:1295-1296`,
+`test_tools.py:485-527`); recon.md has the correct ones.
+
+**Merge order:** 072 rebases onto `{070+071}` (PR #792) — see merge-order.md. 072 no longer edits
+`tests/test_tools.py:535-577`, since the split lives in `tools.py` and `client.run_backtest` is
+untouched, so the "contradictory test" overlap recorded there is resolved rather than merely sequenced.

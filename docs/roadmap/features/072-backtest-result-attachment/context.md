@@ -124,3 +124,69 @@ escalation above.
 `docs/runbooks/mcp-tools.md:253-257` is **already stale on trunk** — it documents the return as
 `{ "backtest_id": "bt-abc123" }`, superseded by feature 064. FR-6's rewrite repairs that drift; the
 impl spec should say so, so the diff is not mistaken for scope creep.
+
+## Session 2026-07-27 — sdd-design
+
+- **Phase 0 Recon**: wrote `recon.md` (service: `xstockstrat-agent`; `xstockstrat-analysis` surveyed
+  read-only as the OQ-1 link target). Key reuse patterns: the feature-064 `MessageToDict` flag pair
+  (`client.py:200-204`) as the summary's *source* so it cannot drift; the existing raw-ASGI auth gate,
+  which already covers a resource read.
+- **Phase 1 Grilling**: 1 round (quick). Adversary verdict **NEEDS WORK**, **no Floor breach**; all
+  objections resolved before approval.
+- **Chosen approach**: `@server.tool(structured_output=False)` returning
+  `[TextContent(summary), EmbeddedResource(compact-JSON TextResourceContents)]`; split in `tools.py`
+  only, `client.run_backtest` untouched.
+- **Rejected**: `ResourceLink` (failure asymmetry — unrecoverable vs merely verbose); CSV (fidelity
+  failure, verified by execution); base64/Blob (+33% for a non-reason); gzip (recorded as the
+  designated escalation); `CallToolResult` (unvalidated `structuredContent` for a harder SDK floor).
+- **Constitution rules touched**: F-04, F-07, F-11, C-01, C-05, C-08, C-10, C-11, C-12(n/a), P-03,
+  P-05, P-06. Floor breaches: **none**.
+- Status: `spec-ready` → `design-approved`.
+
+### Decisions
+
+- **OQ-1 → `EmbeddedResource`.** Decisive argument is failure asymmetry under statelessness, not
+  size: the agent has no in-memory store, so a dangling `ResourceLink` loses the bytes permanently and
+  the user re-runs the backtest. And the agent **cannot know at emit time whether a link would
+  resolve** — nothing in `BacktestResult` reports whether feature-068's best-effort detail row landed.
+- **OQ-2 → one compact-JSON `TextResourceContents`** (user-selected). The blob literally *is*
+  `client.run_backtest`'s dict, so FR-3 fidelity holds by construction rather than by a reassembler.
+- **OQ-3 → moot.** This design registers no MCP resource. (Had it needed one, recon verified the
+  `aud`-JWT gate at `main.py:105-114` already applies at `:148-150`, before the transport branch, so
+  `resources/read` was gated identically anyway.)
+- **OQ-4 → pin `mcp>=1.27.1`**, honestly labelled: not because a type requires it, but because
+  `>=1.0.0` unbounded is a latent hazard and 1.27.1 is the only version whose content-block behavior
+  was verified in-tree.
+- **AC-1 reworded** (user-selected): "independent of window length; linear in symbol count." FR-2 and
+  the original AC-1 are strictly incompatible; FR-2 wins because it protects the feature-064 0-trade
+  diagnosis.
+
+### Verified by execution (not inferred)
+
+Run against the installed SDK and generated stubs rather than reasoned about:
+
+- `structured_output=False` → `FuncMetadata(arg_model=arguments_model)` (`func_metadata.py:264-265`);
+  `ContentBlock` passes through verbatim (`:521-522`) and lists flatten (`:530-536`). So no
+  `CallToolResult` is needed.
+- `AnyUrl` accepts `xstockstrat:///backtest/<id>/result.json` — the proposer's flagged unverified
+  assumption resolves in its favor; no `file:///` fallback.
+- `func_metadata.py:539` uses `indent=2`, so today's payload really is pretty-printed — the
+  "even the worst case beats trunk" argument rests on a real ~1.6× from whitespace alone.
+- **`MessageToDict` type mapping — this is what killed CSV:** `bar_index` → `7` (`int`),
+  `volume` → `'51234567'` (`str`, int64→JSON string), `vwap` → `'NaN'` (`str`),
+  `profit_factor` → `'Infinity'` (`str`). `csv.DictReader` returns everything as `str`, and
+  `json_format` rejects `'nan'` on parse. A CSV "round-trip" would have been a hand-written
+  type-reconstruction table wearing a fidelity label.
+
+### Open Threads
+
+- [ ] **Connector may inline the attachment anyway** — the one premise the OQ-1 decision rests on
+  that cannot be verified in-repo. Accepted; disconfirming observable = a real connector run whose
+  context still balloons; escalation = gzip blob, additive. → revisit after first real-world run.
+- [ ] `backtest_view.summarize` must be total over partial dicts, or `test_tools.py:288,303` break.
+  → step 1.
+- [ ] Non-echoing fixtures: AC-2's must carry per-bar content present **only** in the attachment;
+  AC-1 must assert across **two** symbol counts. → steps 1 and 3.
+- [ ] Apply the AC-1 rewording and fix stale line citations in `product-spec.md`. → /sdd-spec.
+- [ ] `profit_factor` is the **string** `"Infinity"` on zero losing trades — AC-3/AC-4 assertions must
+  expect that. → step 1.
