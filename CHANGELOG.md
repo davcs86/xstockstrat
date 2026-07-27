@@ -13,6 +13,22 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ---
 
+## 2026-07-27
+
+### Features
+- phase7-observability: Completes the pending Phase 7 implementation roadmap item: activates the OTel SDK already stubbed in every service, routes telemetry to Grafana Cloud via the OTLP collector, and delivers service health, latency, and signal pipeline throughput dashboards — providing operational visibility before live capital is at risk.
+- strategy-partial-update: Make `manage_strategy` "update" apply a **partial merge** instead of a destructive full-replace, so
+- backtest-time-window: Let the `run_backtest` **MCP tool** accept an explicit `start`/`end` window, and make the engine load
+- backtest-result-attachment: Make the `run_backtest` MCP tool return a **compact inline summary plus an attached file** carrying
+
+### Proto Changes
+- analysis/v1/analysis.proto
+
+### Summary
+7 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-07-24
 
 ### Features
