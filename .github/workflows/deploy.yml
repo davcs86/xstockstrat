@@ -83,6 +83,7 @@ jobs:
         run: doctl apps update ${{ secrets.DO_APP_ID }} --spec /tmp/app_spec_substituted.yaml --update-sources
 
       - name: Assign app to DO project
+        continue-on-error: true
         env:
           DO_PROJECT_ID: ${{ secrets.DO_PROJECT_ID }}
         run: |
