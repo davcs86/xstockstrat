@@ -448,6 +448,7 @@ jobs:
         with:
           name: e2e-nextjs-build
           path: services/xstockstrat-ui/.next
+          include-hidden-files: true
           retention-days: 1
 
   frontend-e2e:
