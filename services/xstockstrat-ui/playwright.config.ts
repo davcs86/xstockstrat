@@ -117,7 +117,12 @@ export default defineConfig({
   },
   projects: [
     {
+      name: 'setup',
+      testMatch: /warmup\.setup\.ts/,
+    },
+    {
       name: 'chromium',
+      dependencies: ['setup'],
       use: {
         ...devices['Desktop Chrome'],
         // Use a pre-installed Chromium when present (managed sandboxes). Must go under
@@ -129,6 +134,7 @@ export default defineConfig({
       ? [
           {
             name: 'firefox',
+            dependencies: ['setup'],
             use: {
               ...devices['Desktop Firefox'],
               ...(firefoxExecutable
