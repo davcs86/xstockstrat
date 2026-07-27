@@ -417,8 +417,8 @@ jobs:
         working-directory: services/${{ matrix.service }}
         run: pnpm run lint
 
-  frontend-e2e:
-    name: Frontend E2E (${{ matrix.service }})
+  frontend-e2e-build:
+    name: Frontend E2E Build
     needs: changes
     if: >-
       contains(fromJson(needs.changes.outputs.matched), 'xstockstrat-ui') ||
@@ -426,14 +426,9 @@ jobs:
       contains(fromJson(needs.changes.outputs.matched), 'node-shared') ||
       contains(fromJson(needs.changes.outputs.matched), 'ci')
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - service: xstockstrat-ui
     defaults:
       run:
-        working-directory: services/${{ matrix.service }}
+        working-directory: services/xstockstrat-ui
     steps:
       - uses: actions/checkout@v6
 
@@ -450,6 +445,52 @@ jobs:
       - name: install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: build next.js for e2e
+        run: pnpm build
+        env:
+          NEXT_DISABLE_STANDALONE: '1'
+
+      - name: upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-nextjs-build
+          path: services/xstockstrat-ui/.next
+          include-hidden-files: true
+          retention-days: 1
+
+  frontend-e2e:
+    name: Frontend E2E (shard ${{ matrix.shard }}/2)
+    needs: frontend-e2e-build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    defaults:
+      run:
+        working-directory: services/xstockstrat-ui
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: download e2e build
+        uses: actions/download-artifact@v4
+        with:
+          name: e2e-nextjs-build
+          path: services/xstockstrat-ui/.next
+
       - name: get playwright version
         id: pw-version
         run: echo "version=$(pnpm list @playwright/test --json | jq -r '.[0].devDependencies["@playwright/test"].version')" >> "$GITHUB_OUTPUT"
@@ -462,22 +503,23 @@ jobs:
 
       - name: install playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install chromium firefox
+        run: pnpm exec playwright install chromium
 
       - name: install playwright system dependencies
-        run: pnpm exec playwright install-deps chromium firefox
+        run: pnpm exec playwright install-deps chromium
 
       - name: run e2e tests
-        run: pnpm test:e2e
+        run: pnpm test:e2e --shard=${{ matrix.shard }}/2
         env:
           CI: true
+          E2E_PREBUILT: '1'
 
       - name: upload playwright report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-${{ matrix.service }}
-          path: services/${{ matrix.service }}/playwright-report/
+          name: playwright-report-shard-${{ matrix.shard }}
+          path: services/xstockstrat-ui/playwright-report/
           retention-days: 7
 
   node-test:

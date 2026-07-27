@@ -16,7 +16,8 @@ CI runs on every PR targeting `main-dev` or `main` (`.github/workflows/ci.yml`).
 | `python-test` (×4) | `pytest --cov` | 40% (indicators: 50%) |
 | `node-lint` (×7) | `pnpm run lint` (all Node + Next.js services) | — |
 | `node-test` (×4) | `pnpm run test:coverage` (Node.js services only) | 40% |
-| `frontend-e2e` (×3) | Playwright on trader, insights, config-ui | — |
+| `frontend-e2e-build` | Next.js production build for E2E (shared by shards) | — |
+| `frontend-e2e` (×2 shards) | Playwright E2E, chromium only, sharded across 2 runners | — |
 
 ## Local guard rails (not CI jobs)
 
