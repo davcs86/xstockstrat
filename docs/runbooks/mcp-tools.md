@@ -249,6 +249,30 @@ Triggers a backtest via `xstockstrat-analysis`. `strategy_id` must be a **regist
 | `strategy_id` | `string` | Yes | Strategy identifier, e.g. `"sma_crossover"` |
 | `symbols` | `string[]` | Yes | Ticker symbols to backtest, e.g. `["NVDA", "AAPL"]` |
 | `initial_capital` | `float` | No | Starting capital in USD (default `100000.0`) |
+| `start` | `string` | No | ISO date/datetime lower bound of the evaluation window (feature 071), e.g. `"2024-01-01"` or `"2024-01-01T00:00:00Z"` |
+| `end` | `string` | No | ISO date/datetime upper bound of the evaluation window |
+
+**The evaluation window (feature 071)**
+
+Supply **both** `start` and `end` to get a reproducible run: the same strategy, symbols, and
+window return the same numbers on any calendar day, so results are comparable across strategies
+and across days. Omit them and the analysis service applies its rolling default — a window ending
+"now", bounded by `analysis.backtest.max_range_days` — whose results drift as the calendar moves.
+Either bound may be given alone; the other keeps its default.
+
+`start`/`end` bound the **evaluation** window, not the fetch. Analysis reaches back *before*
+`start` for as many bars as the strategy's indicators declare they need, so the whole requested
+window is evaluated fully warm and no trade opens before `start`. Two consequences worth knowing:
+
+- If stored history does not reach back far enough to warm the indicators, the run returns
+  `BACKTEST_STATUS_INSUFFICIENT_DATA` with `coverage_gaps` covering the **pre-window** span —
+  not the window you asked for. Fill it with `trigger_backfill`, then re-run.
+- A strategy that references `VWAP` alongside a longer indicator will see its VWAP values shift
+  versus an unwindowed run: VWAP is an expanding average anchored at the first fetched bar, so
+  the prefix moves its anchor. Deterministic, but not equal to the rolling-default run.
+
+Both bounds set with a span over `analysis.backtest.max_range_days` (default 730) is rejected with
+`INVALID_ARGUMENT` rather than silently clamped. A `start` after `end` is rejected client-side.
 
 **Return**
 
@@ -261,6 +285,9 @@ Triggers a backtest via `xstockstrat-analysis`. `strategy_id` must be a **regist
 | Condition | Error |
 |---|---|
 | Unknown `strategy_id` | `HTTP 400` from analysis |
+| `start` after `end` | `ValueError` raised by the client before any RPC |
+| Window span over `analysis.backtest.max_range_days` | `INVALID_ARGUMENT` from analysis |
+| History too short to warm indicators before `start` | `BACKTEST_STATUS_INSUFFICIENT_DATA` result with `coverage_gaps` (not an RPC error) |
 | Analysis service unreachable | `httpx` connection error propagated |
 
 ---
