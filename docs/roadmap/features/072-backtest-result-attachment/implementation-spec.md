@@ -65,10 +65,9 @@ pure in-process presentation logic.)
 
 **Reviewers**: `xstockstrat-agent` (service owner) — `run_backtest` return-shape correctness, MCP
 attachment semantics, no fidelity loss vs the inline payload.
-_(Registry gap: `docs/runbooks/reviewer-registry.md:9-24` Service Owners table has **no
-`xstockstrat-agent` row** — it covers eleven services plus `packages/proto`. The focus phrase above
-is inherited from `feature.md` § Reviewers, which states it is inferred, not registry-sourced. Same
-gap affects features 070 and 071.)_
+_(Registry gap **closed 2026-07-27**: `docs/runbooks/reviewer-registry.md` now carries an
+`xstockstrat-agent` row, so this focus is registry-sourced rather than inferred. It had been the
+one service missing from the Service Owners table; features 070 and 071 shared the gap.)_
 
 **Codebase Evidence**:
 - **No existing helper to reuse** — `recon.md` § Patterns to REUSE: a grep for
@@ -199,7 +198,7 @@ no-content-no-attachment rule before any test is written.
 - `services/xstockstrat-agent/tests/test_backtest_view.py` — create
 
 **Reviewers**: `xstockstrat-agent` (service owner) — no fidelity loss vs the inline payload,
-FR-2 field retention, partial-dict totality. _(Inferred — see the registry gap noted in Step 1.)_
+FR-2 field retention, partial-dict totality. _(Registry gap closed 2026-07-27 — `reviewer-registry.md` now carries an `xstockstrat-agent` row.)_
 
 **Codebase Evidence**:
 - Test layout confirmed: `services/xstockstrat-agent/tests/` contains `__init__.py`, `conftest.py`,
@@ -301,7 +300,7 @@ All three must pass; the last must report total coverage ≥ 40% (CI parity —
 (No new env var or port — no `docker-compose.yml` / `.do/app.dev.yaml` / `.do/app.yaml` edit.)
 
 **Reviewers**: `xstockstrat-agent` (service owner) — `run_backtest` return-shape correctness, MCP
-attachment semantics, degradation behavior. _(Inferred — see the registry gap noted in Step 1.)_
+attachment semantics, degradation behavior. _(Registry gap closed 2026-07-27 — `reviewer-registry.md` now carries an `xstockstrat-agent` row.)_
 
 **Codebase Evidence**:
 - Current tool, read on the post-070/071 tree: `services/xstockstrat-agent/app/tools.py:240`
@@ -443,7 +442,7 @@ same branch — see § Step Dependencies.
 - `services/xstockstrat-agent/tests/test_tools.py` — modify
 
 **Reviewers**: `xstockstrat-agent` (service owner) — return-shape correctness, AC-1..AC-4 coverage,
-no regression of the feature-064 / feature-071 guards. _(Inferred — see the registry gap in Step 1.)_
+no regression of the feature-064 / feature-071 guards. _(Registry gap closed 2026-07-27 — `reviewer-registry.md` now carries an `xstockstrat-agent` row.)_
 
 **Codebase Evidence**:
 - Test helpers to reuse, `services/xstockstrat-agent/tests/test_tools.py:15-22`:

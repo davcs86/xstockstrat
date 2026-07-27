@@ -122,7 +122,7 @@ Next.js   → xstockstrat-ui
 | Playwright | — | E2E tests for all three Next.js frontends |
 | Vitest | ^3 | Unit (logic) tests for `xstockstrat-ui` — node-environment `src/**/*.test.ts`, coverage scoped to `src/lib/**` (feature 065); complements Playwright e2e |
 
-**Python uv lock rule**: After any change to a Python service's `pyproject.toml` (adding, removing, or updating a dependency), run `uv lock` inside that service directory and commit the updated `uv.lock` in the same PR. Never leave `uv.lock` out of sync with `pyproject.toml` — `uv lock --check` enforces this in CI.
+**Python uv lock rule**: After any change to a Python service's `pyproject.toml` (adding, removing, or updating a dependency), run `uv lock` inside that service directory and commit the updated `uv.lock` in the same PR. Never leave `uv.lock` out of sync with `pyproject.toml` — the `python-lint` job runs `uv lock --check` per service. (That gate was added 2026-07-27; before then this sentence claimed an enforcement that did not exist, and a stale lock surfaced only at Docker build time, where `uv sync --frozen` fails the image instead of the PR.)
 
 **Important Go build note**: CI runs all Go jobs with `GOWORK=off`. When running Go commands locally for a single service (e.g., `go test`, `go mod download`), set `GOWORK=off` or `cd services/<service>` and rely on the local `go.mod`.
 

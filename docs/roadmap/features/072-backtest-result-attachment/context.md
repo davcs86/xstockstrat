@@ -315,3 +315,22 @@ misdirected execution — and 070's lifecycle still read `in-progress` after its
   separate docs fix.
 - [ ] `docs/runbooks/reviewer-registry.md` still has no `xstockstrat-agent` row (shared gap with 070
   and 071), so this feature's reviewer focus stays inferred rather than registry-sourced.
+
+### Open Threads — both closed 2026-07-27
+
+- [x] **`uv lock --check` now actually gates CI.** Root `CLAUDE.md` § Python uv lock rule claimed it
+  did; no workflow referenced `uv` at all. Rather than weaken the doc to match reality, the gate was
+  added — `python-lint` installs `uv` alongside `ruff` and runs `uv lock --check` per service. Safe
+  to add today because all four Python services' locks were verified in sync first
+  (`indicators`/`ingest`/`analysis`/`agent`). Without it a stale lock surfaced only at Docker build
+  time, where `uv sync --frozen` (`services/xstockstrat-agent/Dockerfile:6`) fails the image build
+  instead of the PR. The root CLAUDE.md sentence now describes the real gate and dates it.
+  Also corrected `docs/patterns/ci-overview.md`: `python-lint`/`python-test` read `×3` but the matrix
+  has covered four services since feature 065 added the agent.
+- [x] **`reviewer-registry.md` now has an `xstockstrat-agent` row.** It was the one service missing
+  from the Service Owners table, which is why 070, 071 and 072 all carried an "inferred, not
+  registry-sourced" caveat. Focus: MCP tool-contract stability + `mcp-tools.md` parity; the six
+  tool-count surfaces; OAuth statelessness (`instance_count > 1` must stay safe); admin
+  `x-access-scope` forwarded only by the management tools; no secrets in tool output or the
+  unauthenticated `GET /api/tools` catalog. The caveats in 072's `feature.md`, `product-spec.md` and
+  all four `implementation-spec.md` sites are updated to say the gap is closed.

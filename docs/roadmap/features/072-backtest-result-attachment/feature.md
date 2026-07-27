@@ -47,9 +47,10 @@ deduplicated across all 5 implementation steps; re-run /sdd-spec if the registry
 | `xstockstrat-agent` (service owner) | `run_backtest` return-shape correctness, MCP attachment semantics, no fidelity loss vs the inline payload, FR-2 field retention, partial-dict totality, degradation behavior | 1, 2, 3, 4 |
 | _none_ | Step category `docs` → no reviewer (`docs/runbooks/reviewer-registry.md:43-51`) | 5 |
 
-> **Registry gap:** `docs/runbooks/reviewer-registry.md` has no `xstockstrat-agent` row in its
-> Service Owners table, so the focus above is **inferred**, not registry-sourced. Same gap affects
-> features 070 and 071 — see product-spec § Open Questions.
+> **Registry gap — CLOSED 2026-07-27.** `docs/runbooks/reviewer-registry.md` previously had no
+> `xstockstrat-agent` row, so the focus above was inferred. A row now exists (MCP tool-contract
+> stability + `mcp-tools.md` parity, the six tool-count surfaces, OAuth statelessness, admin-scope
+> forwarding, no secrets in tool output or `/api/tools`). Features 070 and 071 shared this gap.
 
 No Proto Reviewer row: this feature makes no proto change. No DBA row: no migration.
 

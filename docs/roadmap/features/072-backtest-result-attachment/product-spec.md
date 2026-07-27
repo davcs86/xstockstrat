@@ -265,7 +265,7 @@ _Not open questions — resolved facts the design must respect._
   (`test_run_backtest_projects_full_result_with_diagnostics`) asserts the full result *is* projected
   inline — 072 must invert that exact assertion while 071 extends the same file. That is a
   contradictory test, not an adjacent edit.
-- **Reviewer-registry gap (docs follow-up, not blocking).**
+- **Reviewer-registry gap — CLOSED 2026-07-27** (an `xstockstrat-agent` row now exists; the text below records the state at spec time).
   `docs/runbooks/reviewer-registry.md` has **no `xstockstrat-agent` row** in its Service Owners table
   (it covers eleven services), so this feature's reviewer focus is inferred rather than
   registry-sourced. Features 070 and 071 share the gap. Worth a one-line registry addition in a
