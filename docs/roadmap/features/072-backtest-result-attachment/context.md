@@ -190,3 +190,74 @@ Run against the installed SDK and generated stubs rather than reasoned about:
 - [ ] Apply the AC-1 rewording and fix stale line citations in `product-spec.md`. → /sdd-spec.
 - [ ] `profit_factor` is the **string** `"Infinity"` on zero losing trades — AC-3/AC-4 assertions must
   expect that. → step 1.
+
+## Session 2026-07-27 — sdd-spec
+
+- Generated `implementation-spec.md` with **5 steps**. Status: `design-approved` →
+  `implementation-ready`. Two `service`+`test` pairs (C-08) plus one `docs` step; no proto, no
+  migration, no config key, no `xstockstrat-analysis` change.
+- Step map: **1** `app/backtest_view.py` (new pure module: `summarize` / `build_blocks` /
+  `attachment_refs`) → **2** `tests/test_backtest_view.py` → **3** `tools.py` `run_backtest`
+  returns `[TextContent(summary), *blocks]` under `structured_output=False` + docstring rewrite +
+  `mcp>=1.27.1` pin → **4** `tests/test_tools.py` tool-layer tests → **5** docs
+  (`mcp-tools.md` Return block + agent `CLAUDE.md` row).
+
+### Key codebase findings (all read on the post-070/071 tree, branch `claude/features-070-071-rnbkqo`)
+
+- `run_backtest` tool is at `app/tools.py:240-275` (decorator `:240`, signature `:241-247`,
+  docstring `:248-268` with the Returns paragraph at `:265-268`, body `:269-275`) — **not** the
+  `:239-260` the product spec cited. `client.run_backtest` is `app/client.py:143-204`, projection
+  at `:200-204`; it is **untouched** by this feature.
+- **The SDK claims in design.md were re-verified by execution**, not carried over on trust
+  (`services/xstockstrat-agent/.venv`, `mcp == 1.27.1`):
+  `inspect.signature(FastMCP.tool)` → `[... 'meta', 'structured_output']`;
+  `func_metadata.py:264` `if structured_output is False: return FuncMetadata(arg_model=…)`;
+  `:521` `ContentBlock` passthrough; `:530` list flatten; `:539` `indent=2` (today's payload really
+  is pretty-printed); `types.py:761-763` `Annotations.audience/priority`, `:871`
+  `TextResourceContents`, `:1177` `EmbeddedResource`; and
+  `AnyUrl('xstockstrat:///backtest/bt-1/result.json')` is accepted.
+- **A second contradictory test exists that recon did not name**: `test_run_backtest_calls_grpc`
+  (`tests/test_tools.py:260-280`) asserts `result["backtest_id"] == "bt-1"` at `:271` on the **tool's**
+  return. Step 3 makes that a list of content blocks, so it goes red. Recon flagged only
+  `test_run_backtest_projects_full_result_with_diagnostics` (`:534-577`), which is a *client*-level
+  test and is genuinely preserved. Consequence recorded in § Step Dependencies: **Steps 3 and 4 must
+  land in one step branch/PR**, or Step 3 commits red (F-05).
+- Count statements verified in place and untouched by this feature (AC-6): `mcp-tools.md:3`, `:29`,
+  `app/tools.py:4`, agent `CLAUDE.md:26`, `docs/runbooks/CLAUDE.md:17` — all read "fourteen" after
+  feature 070; plus the name-set assertion at `tests/test_tools_endpoint.py:23-38`.
+- `docs/runbooks/mcp-tools.md` §`run_backtest`: Parameters block `:245-253` (feature 071 owns it),
+  evaluation-window section `:255-275`, **Return block `:277-281`** (the stale
+  `{ "backtest_id": "bt-abc123" }`, superseded by feature 064), Errors from `:283`.
+- CI parity for the agent: `.github/workflows/ci.yml:336-338` — `coverage_threshold: 40`,
+  `cov_source: app`; lint is `ruff check .` + `ruff format --check .` (`:307-310`).
+- `reviewer-registry.md:9-24` still has **no `xstockstrat-agent` row** — the Reviewers snapshot in
+  `feature.md` is inferred and labelled as such.
+
+### Decisions
+
+- **`build_blocks` / `attachment_refs` live in `app/backtest_view.py`, not `tools.py`.** design.md
+  § 3 names that module only for `summarize` and shows the `EmbeddedResource` construction (§ 2)
+  without naming a home. Placing all three together keeps `tools.py` a thin call site and makes the
+  whole split unit-testable without a `FastMCP` server. Recorded here rather than left silent (P-03);
+  it is a placement detail inside the approved design, not a change to it.
+- **`summarize` runs outside the degradation `try/except`.** design.md § 4 degrades only on
+  *attachment construction* failure; a projection bug is a real failure and must surface.
+- **The attach/no-attach rule is content-based, not status-based** — truthy `trades` or any symbol
+  with truthy `bars`. AC-4's `INSUFFICIENT_DATA` case then falls out of the general rule instead of
+  needing a `status` branch.
+- **The `mcp>=1.27.1` pin is folded into Step 3** rather than given its own step, so it does not
+  drag a spurious C-08 test pairing; `uv lock` + committed `uv.lock` are in the same step's Files.
+
+### Open Threads
+
+- [ ] **Doc drift found, not fixed (out of scope).** Root `CLAUDE.md` § Python uv lock rule claims
+  `uv lock --check` gates CI. It does not: the `python-test` job installs with
+  `pip install -e ".[dev]"` (`.github/workflows/ci.yml:352-353`) and no `uv lock --check` step exists
+  anywhere in the workflow. Step 3's `uv lock --check` is therefore a **local** gate only. Worth a
+  separate CI change; noted in the step body so `/sdd-execute` does not mistake it for a CI guarantee.
+- [ ] **Connector may inline the attachment anyway** — unchanged from design; accepted, escalation is
+  a gzip blob (additive). Revisit after the first real-world run.
+- [x] `backtest_view.summarize` totality over partial dicts → Step 1 instructions + Step 2 test 7.
+- [x] Non-echoing fixtures + two symbol counts → Steps 2 (tests 4, 5, 8) and 4.
+- [x] `profit_factor` as the string `"Infinity"` → Steps 2 (test 6) and 4.
+- [x] AC-1 rewording + stale citations applied to `product-spec.md`.
