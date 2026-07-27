@@ -144,25 +144,54 @@ async def run_backtest(
     strategy_id: str,
     symbols: list[str],
     initial_capital: float = 100000.0,
+    start: str | None = None,
+    end: str | None = None,
 ) -> dict[str, Any]:
-    """Trigger a backtest via gRPC RunBacktest."""
+    """Trigger a backtest via gRPC RunBacktest.
+
+    ``start``/``end`` are ISO date/datetime strings bounding the **evaluation window**
+    (feature 071). Both omitted reproduces the pre-071 rolling default: the servicer treats
+    an unset bound (``seconds == 0``) as open and defaults ``end`` → now, ``start`` →
+    ``end − analysis.backtest.max_range_days``. Supplying both makes a run reproducible
+    across calendar days (FR-4) and equal to the UI's result for the same window (FR-6) —
+    the UI sends the identical `range` field. Warm-up bars are fetched from *before*
+    ``start`` by the server, so the requested window is evaluated fully warm and no trade
+    opens before ``start``.
+    """
     from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
+    from gen.common.v1 import common_pb2  # noqa: PLC0415
+
+    start_ts = _iso_to_timestamp(start) if start else None
+    end_ts = _iso_to_timestamp(end) if end else None
+    if (
+        start_ts is not None
+        and end_ts is not None
+        and (start_ts.seconds, start_ts.nanos) > (end_ts.seconds, end_ts.nanos)
+    ):
+        raise ValueError("start must not be after end")
+
+    req = analysis_pb2.RunBacktestRequest(
+        strategy_id=strategy_id,
+        # feature 065: run the strategy's REGISTERED definition (strategy_id_ref ==
+        # strategy_id) so agent-triggered runs earn fingerprinted evidence toward the
+        # derived headline grade. An unregistered id now returns NOT_FOUND instead of
+        # silently running a legacy SMA backtest (design.md § Callers; C-10(b) parity).
+        strategy_id_ref=strategy_id,
+        symbols=list(symbols),
+        initial_capital=initial_capital,
+    )
+    if start_ts is not None or end_ts is not None:
+        tr = common_pb2.TimeRange()
+        if start_ts is not None:
+            tr.start.CopyFrom(start_ts)
+        if end_ts is not None:
+            tr.end.CopyFrom(end_ts)
+        # One-sided ranges are safe: the servicer defaults each unset bound independently.
+        req.range.CopyFrom(tr)
 
     async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
-        resp = await stub.RunBacktest(
-            analysis_pb2.RunBacktestRequest(
-                strategy_id=strategy_id,
-                # feature 065: run the strategy's REGISTERED definition (strategy_id_ref ==
-                # strategy_id) so agent-triggered runs earn fingerprinted evidence toward the
-                # derived headline grade. An unregistered id now returns NOT_FOUND instead of
-                # silently running a legacy SMA backtest (design.md § Callers; C-10(b) parity).
-                strategy_id_ref=strategy_id,
-                symbols=list(symbols),
-                initial_capital=initial_capital,
-            ),
-            metadata=_metadata(),
-        )
+        resp = await stub.RunBacktest(req, metadata=_metadata())
     # feature 064: return the full BacktestResult (including the per-bar `diagnostics`) so the
     # agent can reason over the day-by-day OHLCV/indicator/decision data and suggest strategy or
     # indicator changes. `preserving_proto_field_name` keeps the snake_case keys existing consumers
@@ -248,8 +277,15 @@ async def screen_symbols(
 async def manage_strategy(
     operation: str,
     definition: dict[str, Any],
+    update_mask: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Register/update/deactivate a stored strategy via gRPC ManageStrategy (admin-scoped)."""
+    """Register/update/deactivate a stored strategy via gRPC ManageStrategy (admin-scoped).
+
+    ``update_mask`` (feature 070) applies to ``update`` only: the listed top-level paths are the
+    *only* ones taken from ``definition``; everything else is preserved server-side. A path in the
+    mask whose key is absent from ``definition`` is an explicit clear. Omitting the mask entirely
+    means full replace — the pre-070 behavior.
+    """
     from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
     from google.protobuf.struct_pb2 import Struct  # noqa: PLC0415
 
@@ -286,7 +322,9 @@ async def manage_strategy(
         components=components,
         entry_rule=definition.get("entry_rule", ""),
         exit_rule=definition.get("exit_rule", ""),
-        active=definition.get("active", True),
+        # feature 070: `active` is deliberately NOT sent. It is column-authoritative — the server
+        # overlays it at read time and never writes it from the definition — so including it only
+        # injected an unrequested key into the stored definition_json.
         # protobuf treats field=None as omitted for an optional field, so an absent key stays unset
         # and an explicit 0 sets presence (feature 069 — no post-construction assignment needed).
         cooldown_days=definition.get("cooldown_days"),
@@ -297,19 +335,30 @@ async def manage_strategy(
         sp.update(signal_params)
         pb_def.signal_params.CopyFrom(sp)
 
+    req = analysis_pb2.ManageStrategyRequest(operation=op_map[operation], definition=pb_def)
+    if update_mask is not None:
+        req.update_mask.paths.extend(update_mask)
+
     # Analysis does a role check on the propagated x-access-scope (admin bit).
     meta = _admin_metadata()
     async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
-        resp = await stub.ManageStrategy(
-            analysis_pb2.ManageStrategyRequest(operation=op_map[operation], definition=pb_def),
-            metadata=meta,
-        )
+        resp = await stub.ManageStrategy(req, metadata=meta)
     return MessageToDict(resp)
 
 
 async def get_strategy(strategy_id: str) -> dict[str, Any]:
-    """Fetch a stored strategy definition via gRPC GetStrategy."""
+    """Fetch a stored strategy definition via gRPC GetStrategy.
+
+    Returns **snake_case** keys (feature 070). The consumer is the `get_strategy` MCP tool, whose
+    purpose is fetch → edit → resend into `manage_strategy`, and that input is snake_case
+    (`ref_name`, `entry_rule`). Matches the projection used by `run_backtest` and
+    `trigger_backfill`. Safe to change: the tool is this wrapper's only caller.
+
+    `always_print_fields_with_no_presence` applies only to fields *without* presence, so
+    `optional int32 cooldown_days` stays absent when unset — a fetch→edit→resend round-trip
+    cannot fabricate an explicit 0 (the inverse of the feature-069 trap).
+    """
     from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
 
     async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
@@ -318,7 +367,9 @@ async def get_strategy(strategy_id: str) -> dict[str, Any]:
             analysis_pb2.GetStrategyRequest(strategy_id=strategy_id),
             metadata=_metadata(),
         )
-    return MessageToDict(resp)
+    return MessageToDict(
+        resp, preserving_proto_field_name=True, always_print_fields_with_no_presence=True
+    )
 
 
 async def list_strategy_definitions(include_inactive: bool = False) -> list[dict[str, Any]]:

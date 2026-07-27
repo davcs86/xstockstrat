@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Thirteen tools:
+Fourteen tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -9,7 +9,8 @@ Thirteen tools:
   emit_alert           — emits an alert via gRPC EmitAlert
   run_backtest         — triggers a backtest via gRPC RunBacktest
   screen_symbols       — scans a symbol universe via gRPC ScreenSymbols (read-only)
-  manage_strategy     — registers/updates/deactivates stored strategies in analysis
+  manage_strategy     — registers/updates/deactivates stored strategies (update = partial merge)
+  get_strategy        — reads a stored strategy's full definition (read-only)
   manage_formula      — registers/updates/deletes custom formulas in indicators
   manage_signal_source — registers/updates/deactivates signal sources in ingest
   set_strategy_live   — enables/disables live alert evaluation for a strategy
@@ -18,12 +19,14 @@ Thirteen tools:
 """
 
 import base64
+import json
 import logging
 
 import grpc
 from mcp.server import FastMCP
+from mcp.types import TextContent
 
-from app import client
+from app import backtest_view, client
 
 _ALERT_THRESHOLD_DEFAULT = 0.6
 _ALERT_THRESHOLD_CONFIG_KEY = "signal.alert_threshold"
@@ -236,12 +239,17 @@ def register_tools(server: FastMCP) -> None:
             target_user_id=target_user_id,
         )
 
-    @server.tool()
+    # structured_output=False is forward-protection, not load-bearing today: for a bare `-> list`
+    # FastMCP builds no output schema either way. It becomes load-bearing only if the annotation is
+    # ever parameterized (`list[ContentBlock]`), which would build one by default.
+    @server.tool(structured_output=False)
     async def run_backtest(
         strategy_id: str,
         symbols: list[str],
         initial_capital: float = 100000.0,
-    ) -> dict:
+        start: str | None = None,
+        end: str | None = None,
+    ) -> list:
         """Trigger a backtest via xstockstrat-analysis.
         strategy_id: identifies the strategy (e.g. 'sma_crossover'). Must be a REGISTERED strategy
           definition — the run executes that definition and earns evidence toward its derived
@@ -249,15 +257,49 @@ def register_tools(server: FastMCP) -> None:
           SMA-crossback path is no longer reachable from the agent).
         symbols: list of ticker symbols e.g. ['NVDA', 'AAPL'].
         initial_capital: starting capital in USD (default 100000).
-        Returns the full backtest result including per-symbol `diagnostics`: a day-by-day list of
-        bars (OHLCV, computed indicator values, warm-up flag, entry/exit/conviction decision) and a
-        `no_trade_reason` per symbol — use these to explain why a strategy produced 0 trades and to
-        suggest changes to the strategy or its indicators."""
-        return await client.run_backtest(
+        start / end: optional ISO date or datetime bounds ('2024-01-01', '2024-06-30T00:00:00Z')
+          for the evaluation window. Supply BOTH to get a reproducible result — a run over an
+          explicit window returns the same numbers on any calendar day, so it is comparable across
+          strategies and across days. Omitting them keeps the rolling default (a window ending
+          today), whose results drift day to day. Either bound may be given alone; the other stays
+          at its default. Indicators are warmed on bars fetched from before `start`, so the whole
+          window is evaluated fully warm and no trade opens before `start`. If the stored history
+          does not reach back far enough to warm the indicators, the run reports
+          BACKTEST_STATUS_INSUFFICIENT_DATA with `coverage_gaps` — use trigger_backfill to fill
+          them, then re-run.
+        Returns TWO parts. First, a compact JSON summary as a text block: `backtest_id`, `status`,
+        the headline metrics, any `coverage_gaps`, and per symbol its `no_trade_reason`,
+        `bars_total` and `warmup_bars` — enough to explain why a strategy produced 0 trades and
+        suggest changes **without opening the attachment**. Second, an attached
+        `application/json` resource carrying the COMPLETE result: the full per-bar `diagnostics`
+        (OHLCV, computed indicator values, warm-up flag, entry/exit/conviction decision) and the
+        full `trades` list. Open it when you need bar-level detail.
+        A run with no diagnostics and no trades (e.g. BACKTEST_STATUS_INSUFFICIENT_DATA) has NO
+        attachment — the summary with `coverage_gaps` is the whole result.
+        `summary["attachments"]` names each attached resource's `uri` and `mime_type`, so you can
+        tell the user detail exists even if your client shows no attachment affordance."""
+        result = await client.run_backtest(
             strategy_id=strategy_id,
             symbols=symbols,
             initial_capital=initial_capital,
+            start=start,
+            end=end,
         )
+        # summarize() is deliberately OUTSIDE the try: a projection bug is a real failure. Only
+        # attachment construction degrades.
+        summary = backtest_view.summarize(result)
+        blocks: list = []
+        try:
+            blocks = backtest_view.build_blocks(result)
+            summary["attachments"] = backtest_view.attachment_refs(blocks)
+        except Exception as e:  # presentation-only failure must not fail a successful backtest
+            # Fixed string, never str(e): a pydantic ValidationError repr can embed the offending
+            # input — i.e. the whole payload this feature exists to keep out of the inline block.
+            log.warning("Backtest attachment construction failed (result unaffected): %s", e)
+            blocks = []
+            summary["attachments"] = []
+            summary["attachments_error"] = "attachment could not be built; see server logs"
+        return [TextContent(type="text", text=json.dumps(summary, indent=2)), *blocks]
 
     @server.tool()
     async def screen_symbols(
@@ -290,12 +332,13 @@ def register_tools(server: FastMCP) -> None:
     async def manage_strategy(
         operation: str,
         strategy_id: str,
-        display_name: str = "",
+        display_name: str | None = None,
         components: list[dict] | None = None,
-        entry_rule: str = "",
-        exit_rule: str = "",
+        entry_rule: str | None = None,
+        exit_rule: str | None = None,
         signal_params: dict | None = None,
         cooldown_days: int | None = None,
+        clear_fields: list[str] | None = None,
     ) -> dict:
         """Register/update/deactivate a stored strategy in xstockstrat-analysis.
         operation: 'register' | 'update' | 'deactivate'.
@@ -334,22 +377,61 @@ def register_tools(server: FastMCP) -> None:
             (pass this dict JSON-encoded, e.g. json.dumps(...), as the entry_rule string.)
         signal_params: optional signal-weighting params.
         cooldown_days: optional per-symbol re-entry cooldown in calendar days — omit → platform
-            default (31); 0 → no cooldown; negative → rejected (INVALID_ARGUMENT)."""
-        definition: dict = {
-            "strategy_id": strategy_id,
+            default (31); 0 → no cooldown; negative → rejected (INVALID_ARGUMENT).
+        clear_fields: optional list of field names to ERASE, e.g. ['exit_rule']. Use this to
+            blank a rule or to revert cooldown_days to the platform default — passing a field
+            with no value cannot express "erase" on its own.
+
+        UPDATE IS A PARTIAL MERGE (feature 070). On operation='update' only the fields you
+        actually pass are changed; everything else is preserved server-side. So updating one
+        parameter is safe:
+            manage_strategy(operation='update', strategy_id='x', cooldown_days=45)
+        leaves components, entry_rule, exit_rule and display_name untouched. Previously this
+        wiped them. Call get_strategy first if you want to see the current definition.
+
+        Note: changing any scoring-relevant field (components, rules, cooldown_days,
+        signal_params) changes the strategy's definition fingerprint, so its derived grade is
+        cleared until a fresh backtest supplies new evidence. A rename does not."""
+        # feature 070: send ONLY what the caller supplied. The previous version defaulted these
+        # to ""/[] and shipped them unconditionally, so `manage_strategy(operation="update",
+        # strategy_id=..., cooldown_days=45)` transmitted explicit-empty components and rules and
+        # a blanked display_name — which is what wiped stored strategies. Generalizes the
+        # `is not None` treatment `cooldown_days` already had to every optional field.
+        definition: dict = {"strategy_id": strategy_id}
+        supplied = {
             "display_name": display_name,
-            "components": components or [],
+            "components": components,
             "entry_rule": entry_rule,
             "exit_rule": exit_rule,
+            "signal_params": signal_params,
+            "cooldown_days": cooldown_days,
         }
-        if signal_params:
-            definition["signal_params"] = signal_params
-        # An `is not None` check (not the truthy `if signal_params:` pattern) — an explicit 0
-        # (no-cooldown) must not be dropped, only an omitted arg.
-        if cooldown_days is not None:
-            definition["cooldown_days"] = cooldown_days
+        mask = [name for name, value in supplied.items() if value is not None]
+        for name in mask:
+            definition[name] = supplied[name]
+
+        # `clear_fields` names paths to erase. They join the mask but carry no value, which the
+        # server reads as an explicit clear (AIP-161). This is the only way to blank a rule or
+        # revert cooldown_days to the platform default.
+        for name in clear_fields or []:
+            if name not in mask:
+                mask.append(name)
+
+        update_mask = None
+        if operation == "update":
+            if not mask:
+                raise ValueError(
+                    "manage_strategy(operation='update') needs at least one field to change. "
+                    "Pass the fields you want to update, or use clear_fields=[...] to erase one. "
+                    "Sending nothing would be a no-op; sending everything empty would wipe the "
+                    "strategy."
+                )
+            update_mask = mask
+
         try:
-            return await client.manage_strategy(operation=operation, definition=definition)
+            return await client.manage_strategy(
+                operation=operation, definition=definition, update_mask=update_mask
+            )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="strategy not found")) from e
 
@@ -519,6 +601,21 @@ def register_tools(server: FastMCP) -> None:
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="backfill job not found")) from e
+
+    @server.tool()
+    async def get_strategy(strategy_id: str) -> dict:
+        """Fetch a stored strategy's full definition from xstockstrat-analysis (read-only).
+        strategy_id: the strategy identifier, e.g. 'range_mean_reversion_v3'.
+        Returns the complete stored definition — display_name, every component with its
+        formula_id and params, entry_rule/exit_rule, signal_params, cooldown_days, and the
+        active/live_enabled flags.
+        Use this before editing a strategy to see what is actually stored, and after editing to
+        verify the change landed. Keys are snake_case, matching manage_strategy's input, so a
+        fetch → edit → resend round-trip works directly."""
+        try:
+            return await client.get_strategy(strategy_id=strategy_id)
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="strategy not found")) from e
 
 
 async def _get_source(source_slug: str) -> dict:

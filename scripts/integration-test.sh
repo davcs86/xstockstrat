@@ -335,6 +335,13 @@ section_7_backtest() {
 
 # Feature 047-strategy-engine: stored composable strategy → backtest via strategy_id_ref,
 # plus a legacy strategy_params backtest (FR-8 backward compatibility, AC-3).
+#
+# ⚠ STALE — this script is not wired into any CI workflow (grep: zero `integration-test` hits
+# under .github/workflows/), and it posts to Connect-HTTP paths
+# (${ANALYSIS_URL}/xstockstrat.analysis.v1.AnalysisService/...) that were REMOVED when the
+# backend 80xx HTTP servers were deleted. The feature-070 case added below is therefore written
+# but unexecuted; it will only run once this harness is repaired or replaced. Recorded rather
+# than silently relied upon (feature 070 design.md § Open Risks, Constitution P-03).
 section_7b_strategy_engine() {
   sep
   log "SECTION 7b — Analysis: strategy-engine (stored strategy + backtest parity)"
@@ -358,6 +365,17 @@ section_7b_strategy_engine() {
         \"exit_rule\": \"{\\\"fn\\\":\\\"crosses_below\\\",\\\"lhs\\\":\\\"sma_fast\\\",\\\"rhs\\\":\\\"sma_slow\\\"}\",
         \"active\": true
       }
+    }"
+
+  # a2. feature 070 — partial update. Change ONLY cooldown_days via update_mask and assert the
+  # components survive. Pre-070 this request wiped them: the agent tool fabricated empty
+  # components/rules and the server full-replaced with them. AC-1's end-to-end case.
+  check "ManageStrategy partial update preserves components" "sma_fast" \
+    post "${ANALYSIS_URL}/xstockstrat.analysis.v1.AnalysisService/ManageStrategy" \
+    "{
+      \"operation\": \"STRATEGY_OPERATION_UPDATE\",
+      \"update_mask\": { \"paths\": [\"cooldown_days\"] },
+      \"definition\": { \"strategy_id\": \"${sid}\", \"cooldown_days\": 45 }
     }"
 
   # b. Fetch it back and assert the strategy_id round-trips.

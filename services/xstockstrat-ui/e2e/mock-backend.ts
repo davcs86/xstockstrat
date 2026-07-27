@@ -35,6 +35,7 @@ import {
   STRATEGY_SCORES,
   STRATEGY_DEF_LIVE,
   STRATEGY_DEFINITIONS,
+  insufficientDataResult,
 } from './fixtures';
 
 export const TRADER_MOCK_PORT = 9091;
@@ -45,9 +46,25 @@ let traderServer: http2.Http2Server | null = null;
 let insightsServer: http2.Http2Server | null = null;
 let configUiServer: http2.Http2Server | null = null;
 
+const activeSessions = new Set<http2.Http2Session>();
+
+function trackSessions(srv: http2.Http2Server): void {
+  srv.on('session', (session) => {
+    activeSessions.add(session);
+    session.on('close', () => activeSessions.delete(session));
+  });
+}
+
 function stopServer(srv: http2.Http2Server | null): Promise<void> {
   return new Promise((resolve, reject) => {
     if (!srv) return resolve();
+    // Destroy persistent h2 sessions (Next.js BFF keeps them alive)
+    // so close() resolves immediately instead of waiting for drain.
+    for (const session of activeSessions) {
+      if (session.socket && !session.socket.destroyed) {
+        session.destroy();
+      }
+    }
     srv.close((err) => (err ? reject(err) : resolve()));
   });
 }
@@ -333,6 +350,7 @@ export async function startMockBackend(): Promise<void> {
 
   await new Promise<void>((resolve, reject) => {
     traderServer = http2.createServer(traderHandler);
+    trackSessions(traderServer);
     traderServer.on('error', reject);
     traderServer.listen(TRADER_MOCK_PORT, '127.0.0.1', () => resolve());
   });
@@ -523,23 +541,9 @@ export async function startMockBackend(): Promise<void> {
               ],
             };
           }
-          return {
-            backtestId: 'bt-e2e-1',
-            strategyId: req.strategyId,
-            status: 2, // BACKTEST_STATUS_INSUFFICIENT_DATA
-            totalTrades: 0,
-            trades: [],
-            coverageGaps: [
-              {
-                symbol: req.symbols[0] ?? 'AAPL',
-                timeframe: 4, // TIMEFRAME_1DAY
-                requestedRange: req.range,
-                barsHave: BigInt(3),
-                barsNeed: BigInt(52),
-                gap: req.range,
-              },
-            ],
-          };
+          // feature 071: the gap a windowed run reports is the PRE-window warm-up span, not
+          // the requested window — so this honors req.range rather than echoing it back.
+          return insufficientDataResult(req.strategyId, req.symbols, req.range);
         },
         async getStrategyReport(req) {
           // feature 065: a strategy whose grade was cleared (never earned / definition changed)
@@ -693,6 +697,7 @@ export async function startMockBackend(): Promise<void> {
 
   await new Promise<void>((resolve, reject) => {
     insightsServer = http2.createServer(insightsHandler);
+    trackSessions(insightsServer);
     insightsServer.on('error', reject);
     insightsServer.listen(INSIGHTS_MOCK_PORT, '127.0.0.1', () => resolve());
   });
@@ -795,6 +800,7 @@ export async function startMockBackend(): Promise<void> {
 
   await new Promise<void>((resolve, reject) => {
     configUiServer = http2.createServer(configUiHandler);
+    trackSessions(configUiServer);
     configUiServer.on('error', reject);
     configUiServer.listen(CONFIG_UI_MOCK_PORT, '127.0.0.1', () => resolve());
   });
@@ -812,4 +818,5 @@ export async function stopMockBackend(): Promise<void> {
       configUiServer = null;
     }),
   ]);
+  activeSessions.clear();
 }

@@ -175,3 +175,180 @@ reusing.
   rather than by a per-call-site comment, made backtest/live parity (FR-4) directly unit-testable and
   killed the class of "two enforcement paths drift apart" bugs (cf. fails 056). Feed both call sites the
   **same** time source (bar time), never one wall-clock + one bar-time.
+
+### 2026-07-26 — 071-backtest-time-window — design
+- **Pattern**: A "warm-up is verified at runtime, so the constant is safe" defense must be checked
+  against **each indicator's actual output contract**, not the warm-up helper's signature. Here
+  `_first_resolved_index` infers warm-up from a `None` head, but `ewm(adjust=False)` (EMA/MACD) and
+  `cumsum/arange` (VWAP) emit a finite float at index 0 — so the observed warm-up is `0` and any
+  `p >= w` guard is *inert precisely for the path-dependent indicators a history prefix affects most*.
+  Corollary: for an IIR indicator, `period` is a convention, not a bound (`e^-2 ≈ 13.5%` seed weight
+  remains at `period`); use a convergence multiple when "already warm" is a requirement.
+- **Evidence**: `services/xstockstrat-indicators/app/services/indicators_engine.py:48-51,62-84,110-118`
+  vs `services/xstockstrat-analysis/app/handlers/servicer.py:1582-1588`; feature 071 design.md
+  § Rejected Alternatives; adversary round-1 F-07 finding.
+- **Rule it implies**: reinforces **P-03** — before relying on a runtime guard, prove it can actually
+  fire for every input class it claims to cover; a guard that cannot fail is not a guard.
+
+### 2026-07-26 — 071-backtest-time-window — design
+- **Pattern**: Rendering an existing proto enum value or UI affordance **unreachable** is the mirror of
+  ledger fail 067 and is strictly more dangerous: appending an enum value breaks `tsc` against an
+  exhaustive `Record<Enum,…>`, but making one unreachable is compile-clean and silently leaves dead,
+  now-misleading UI copy. Check reachability of what you are about to orphan, not just compilation of
+  what you are adding.
+- **Evidence**: forcing `warmup_bars = 0` would have orphaned `ACTION_LABEL[BarAction.WARMUP]` and
+  `NO_TRADE_MESSAGE[NoTradeReason.ENTIRE_RANGE_WARMUP]`
+  (`services/xstockstrat-ui/src/components/insights/BacktestDiagnostics.tsx:9-27,137,153`); feature 071
+  design.md § Rejected Alternatives.
+- **Rule it implies**: extends **C-10(a/d)** — enum/affordance *reachability* is part of integration
+  completeness; pair a change that can orphan a branch with a test that still exercises it.
+
+### 2026-07-26 — 071-backtest-time-window — design
+- **Pattern**: A silent pre-existing truncation makes "no behavior change" claims false in the
+  *opposite* direction from the one you expect. Analysis never paginated `GetBars`, so marketdata's
+  default `pageSize := 500` with `ORDER BY time ASC LIMIT` already truncated every ~504-trading-day
+  max-range backtest. Adding correct pagination is therefore itself a behavior change
+  (`trading_days` 499 → ~503) that shifts feature-065 evidence weights — the fix and the regression
+  arrive together.
+- **Evidence**: `services/xstockstrat-marketdata/internal/service/marketdata_service.go:124`,
+  `internal/repository/marketdata_repo.go:88-90`; `services/xstockstrat-analysis/app/handlers/servicer.py:357`;
+  feature 071 recon.md Risk 1 + design.md § 4.
+- **Rule it implies**: when adding pagination to an unpaginated caller, measure the *current* silent
+  cap first and state the delta — "correctness fix" and "no behavior change" are rarely both true.
+
+### 2026-07-26 — 070-strategy-partial-update — design
+- **Pattern**: Before adding a value to a proto enum, grep the **TypeScript BFF** for an exhaustive
+  allow-list over it, not just exhaustive `Record<Enum,…>` render maps. `insightsBff.ts:46-49` gates
+  admin scope with `op === REGISTER || op === UPDATE || op === DEACTIVATE`; a new
+  `STRATEGY_OPERATION_PATCH = 4` would fall through as *non-mutating* and **skip `requireAdminScope`**,
+  silently collapsing defense-in-depth to the backend's own check. A render-map miss is a compile
+  error (067); an **authorization** allow-list miss compiles cleanly and is a security regression.
+- **Evidence**: `services/xstockstrat-ui/src/lib/insightsBff.ts:46-49` vs
+  `services/xstockstrat-analysis/app/handlers/servicer.py:1352`; feature 070 design.md
+  § Rejected Alternatives (the decisive argument for FieldMask over a PATCH op).
+- **Rule it implies**: extends **C-10(a/d)** — enumerate *authorization* switches over an enum, not
+  only display switches; the failure mode is silent and security-relevant.
+
+### 2026-07-26 — 070-strategy-partial-update — design
+- **Pattern**: A partial-merge built on `MessageToDict` needs **one uniform rule**, never
+  "scalars from the proto object, messages from the dict." `MessageToDict` omits default-valued
+  no-presence fields, so a masked `components: []` never reaches the dict and a deliberate clear
+  silently no-ops, while reading a masked-unset `Struct` off the proto persists `{}` where the key was
+  previously absent — changing the JSONB key set and therefore any content fingerprint. The correct
+  shape is AIP-161: `base[p] = full[p]` if present else `base.pop(p, None)`.
+  `always_print_fields_with_no_presence=True` is **not** a fix — it targets only no-presence fields and
+  injects `params: {}` / `active: false` churn.
+- **Evidence**: `services/xstockstrat-analysis/app/handlers/servicer.py:1373-1376,1787-1790`;
+  `packages/proto/analysis/v1/analysis.proto:230,236-238,245`; feature 070 design.md § 1.
+- **Rule it implies**: reinforces **P-03** — verify the serializer's omission contract before designing
+  merge semantics on top of it; presence rules differ per field kind and a two-rule merge will diverge.
+
+### 2026-07-27 — 071-backtest-time-window — execute
+- **Pattern**: When a value is **read at the top** of a per-item loop but **written at the bottom**,
+  memoizing it in a shared cache silently makes item 1 behave differently from items 2+.
+  `warmup.required_prefix_bars` reads the declared-formula-warm-up cache before fetching bars, while
+  `_compute_evaluated_warmup` fills it after computing series — so the first symbol of a
+  formula-using strategy sized its prefix from an empty cache (no prefix, short-warmed) and every
+  later symbol got the full one. The result then depends on symbol *order*, which no single-symbol
+  test can see. `required_prefix_bars`' own docstring already stated the contract ("must be
+  pre-populated by the caller"); nothing enforced it.
+- **Evidence**: `services/xstockstrat-analysis/app/handlers/servicer.py` `_prefetch_formula_warmups`
+  / `_declared_formula_warmup`; test
+  `TestPrefixFormulaCost::test_every_symbol_pays_the_same_prefix`; feature 071 context.md § step 6.
+- **Rule it implies**: reinforces **C-08** — a lazily-filled cache read earlier in the same iteration
+  than it is written needs a **multi-item** test asserting item 1 and item N behave identically. A
+  docstring stating "caller must pre-populate" is a claim, not a guarantee.
+
+### 2026-07-27 — 071-backtest-time-window — execute
+- **Pattern**: A determinism assertion over a protobuf message must **clear the fields that differ
+  per run by construction** (`backtest_id` uuid, `completed_at` stamp) rather than fall back to a
+  field-by-field comparison. Left in, byte-identity is vacuously false and the natural next move —
+  comparing a hand-picked subset of metrics — is exactly the weaker check that lets a real drift
+  through. Likewise, a frozen-clock test needs a paired **teeth test** showing the unfrozen path
+  genuinely moves; otherwise an inert patch reads as a passing determinism proof.
+- **Evidence**: `services/xstockstrat-analysis/tests/test_analysis_servicer.py` `_canonical`,
+  `TestWindowDeterminism::test_the_frozen_clock_test_has_teeth`.
+- **Rule it implies**: extends **P-06** — when a test asserts "X does not change Y", add the
+  companion assertion that something *does* change Y, so a no-op harness can't masquerade as a pass.
+
+### 2026-07-27 — 071-backtest-time-window — execute
+- **Pattern**: A mock that **echoes a request field back** as its response cannot distinguish a
+  correct consumer from an incorrect one. `mock-backend.ts` returned `req.range` as both
+  `requestedRange` and `gap`, so an e2e asserting the backfill action's range would pass whichever
+  field the UI read. Only once 071 made the two genuinely differ (the gap is the *pre-window* span)
+  did the assertion acquire meaning.
+- **Evidence**: `services/xstockstrat-ui/e2e/fixtures/backtests.ts` `prefixGapRange`;
+  `e2e/insights/backtest-coverage.spec.ts` "backfill action fills the pre-window warm-up gap".
+- **Rule it implies**: reinforces **C-12** — a fixture whose fields are all equal to each other (or
+  to the request) tests nothing about which field a consumer picked; make the distinguishing fields
+  distinguishable.
+
+### 2026-07-27 — 072-backtest-result-attachment — design
+- **Pattern**: When designing an attachment/export format, the fidelity question is decided by the
+  **producer's** JSON contract, not by the format's expressiveness. `MessageToDict` maps int64 to a
+  JSON **string** and non-finite doubles to `'NaN'`/`'Infinity'` — executed, not inferred:
+  `bar_index` → `7` (`int`) but `volume` → `'51234567'` (`str`), `vwap` → `'NaN'`,
+  `profit_factor` → `'Infinity'`. Any flat/untyped format (CSV) therefore cannot round-trip, because
+  two numeric-looking columns must reconstruct to different Python types and `csv.DictReader` returns
+  only `str`; `json_format` also refuses to parse `'nan'` back. The safe shape is to attach the
+  producer's own dict verbatim, so fidelity holds *by construction* rather than via a hand-written
+  reassembler wearing a fidelity label.
+- **Evidence**: `packages/proto/analysis/v1/analysis.proto:121,127`; `json_format.py:315-324`,
+  `:1045-1046`; feature 072 design.md § Rejected Alternatives.
+- **Rule it implies**: extends the 2026-07-21 **P-03** entry from decode to **encode** — verify the
+  serializer's contract in *both* directions before designing a format on top of it.
+
+### 2026-07-27 — 072-backtest-result-attachment — design
+- **Pattern**: Choose between two mechanisms by **failure asymmetry**, not by best-case efficiency.
+  `ResourceLink` defers bytes (better best case) but its worst case is *unrecoverable*: the agent is
+  stateless (no in-memory store, `instance_count > 1` safe), so a dangling link means the data is
+  gone and the user re-runs the work. `EmbeddedResource`'s worst case is merely verbose. Decisive
+  detail: the producer **cannot know at emit time whether the link would resolve** — feature 068's
+  detail write is best-effort and nothing in `BacktestResult` reports whether the row landed, so the
+  link is a promise with no means to check it.
+- **Evidence**: `services/xstockstrat-analysis/app/handlers/servicer.py:527-528,1398-1399,1403,1412-1413,1513-1515`;
+  `services/xstockstrat-agent/CLAUDE.md` § OAuth (FR-B13); feature 072 recon.md § Risks 1-7.
+- **Rule it implies**: before designing a reference/pointer to data another feature persists
+  best-effort, check whether the referrer can *detect* a failed persist. If it cannot, prefer
+  carrying the value over referencing it.
+
+### 2026-07-27 — 072-backtest-result-attachment — design round 2
+- **Pattern**: A second grilling round on an **already-approved, already-specced** design is worth
+  running when the first round closed on estimates. Round 2 here left the chosen approach untouched
+  but still paid for itself: measuring the payload (5 symbols × 504 bars) showed the inline summary
+  is **1.0 KB**, not the ~2 KB assumed, and gzip is **103 KB**, not the ~53 KB assumed — a 2× error
+  that an approved acceptance criterion was resting on. It also caught an AC-1 test bound
+  (`< 8_000` bytes) loose enough to tolerate a ~4× regression, making the guard decorative. Crucially
+  it was still *cheap* to act on: **F-09 freezes step bodies only once `/sdd-execute` dispatches**, so
+  check `**Status**: pending` on every step before concluding a correction is too late.
+- **Evidence**: `docs/roadmap/features/072-backtest-result-attachment/{design.md,product-spec.md,implementation-spec.md}`;
+  feature 072 context.md § round 2.
+- **Rule it implies**: extends **C-01** — a number that reaches an acceptance criterion must be
+  measured, not estimated. If a design closes with figures nobody ran, a follow-up round that only
+  measures them is a good trade even when the decision does not change.
+
+### 2026-07-27 — 072-backtest-result-attachment — design round 2
+- **Pattern**: When a feature writes a decision rule into the ledger, later rounds of that **same
+  feature** must be checked against it. Round 2 proposed swapping the attachment to gzip, which would
+  have inverted the failure-asymmetry rule this feature had recorded one day earlier and used to
+  reject `ResourceLink`: a truncated gzip stream has no trailer and no CRC, so host truncation or an
+  unknown-mime drop is total loss — exactly the "unrecoverable worst case" that disqualified the link,
+  whereas compact JSON truncates to a readable head. Citing a rule against one option while ignoring
+  it for another is the failure mode to watch for.
+- **Evidence**: `insights.md` 2026-07-27 (072 design, failure asymmetry) vs the round-2 gzip proposal;
+  feature 072 design.md § Rejected Alternatives.
+- **Rule it implies**: reinforces **P-03** — a self-authored ledger rule binds the feature that wrote
+  it. Re-read your own entries before adopting a change that trades the same axis.
+
+### 2026-07-27 — 072-backtest-result-attachment — execute
+- **Pattern**: When a step's verification cannot pass standalone because a *later* step adapts the
+  test it breaks, the F-05-clean split is to carry **only the minimum adaptation** in the breaking
+  step's commit, not to merge the two steps or to commit red. 072's step 3 changed
+  `run_backtest`'s return shape, which reddens one assertion in a test step 4 owns; step 3's commit
+  carried that single line and step 4's added the nine new tests. One commit per step, every commit
+  green, and the pairing stays visible in history instead of being collapsed.
+- **Evidence**: feature 072 `implementation-spec.md` § Step Dependencies; commits
+  `feat(072): step 3` / `test(072): step 4`.
+- **Rule it implies**: refines **F-05** — "commit only when green" does not force merging a
+  red-green pair into one commit; it forces the *green-making minimum* to travel with the change
+  that broke it.

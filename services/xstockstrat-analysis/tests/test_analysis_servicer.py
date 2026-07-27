@@ -6,9 +6,12 @@ populating _backtests/_strategies directly, same pattern as ingest.
 """
 
 import asyncio
+import inspect
 import json
 import math
-from unittest.mock import AsyncMock, MagicMock
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import grpc
 import pytest
@@ -19,7 +22,8 @@ from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.config.watcher import ConfigWatcher
-from app.handlers.servicer import AnalysisServicer
+from app.handlers.servicer import AnalysisServicer, _InsufficientData
+from app.services import warmup as warmup_sizing
 
 
 def make_servicer() -> AnalysisServicer:
@@ -94,6 +98,11 @@ def _derivation_svc(cells, definition_json=None, strategy_id="s1"):
 # ---------------------------------------------------------------------------
 # ScoreStrategy
 # ---------------------------------------------------------------------------
+
+
+# feature 071: GetBars is paged now, so a fake response must carry a page whose token says
+# "no more pages" — an auto-created MagicMock token would read as "another page exists".
+_EOF_PAGE = SimpleNamespace(next_page_token="")
 
 
 class TestScoreFromMetrics:
@@ -178,6 +187,7 @@ class TestRunBacktest:
         # Only 3 bars — far below the default slow_period(50)+2.
         bars_resp = MagicMock()
         bars_resp.bars = [MagicMock(), MagicMock(), MagicMock()]
+        bars_resp.page.next_page_token = ""
         svc._marketdata = MagicMock()
         svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
 
@@ -199,6 +209,7 @@ class TestRunBacktest:
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         bars_resp = MagicMock()
         bars_resp.bars = [MagicMock(), MagicMock()]  # insufficient → short-circuits after GetBars
+        bars_resp.page.next_page_token = ""
         svc._marketdata = MagicMock()
         svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
 
@@ -325,6 +336,7 @@ class TestRunBacktestPersistence:
         svc._backtest_runs_repo = AsyncMock()
         bars_resp = MagicMock()
         bars_resp.bars = [MagicMock(), MagicMock(), MagicMock()]  # too few → INSUFFICIENT_DATA
+        bars_resp.page.next_page_token = ""
         svc._marketdata = MagicMock()
         svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
 
@@ -607,8 +619,7 @@ class TestManageStrategy:
     async def test_update_path(self):
         svc = make_servicer()
         definition = _valid_definition(display_name="Renamed")
-        svc._strategies_repo = AsyncMock()
-        svc._strategies_repo.update = AsyncMock(return_value=_row_for(definition))
+        _stub_update_repo(svc, _row_for(definition))
         req = analysis_pb2.ManageStrategyRequest(
             operation=analysis_pb2.STRATEGY_OPERATION_UPDATE, definition=definition
         )
@@ -788,7 +799,7 @@ class TestScreenSymbols:
 
         from gen.marketdata.v1 import marketdata_pb2
 
-        return SimpleNamespace(bars=[marketdata_pb2.Bar(close=c) for c in closes])
+        return SimpleNamespace(page=_EOF_PAGE, bars=[marketdata_pb2.Bar(close=c) for c in closes])
 
     @staticmethod
     def _formula_resp(value):
@@ -1006,7 +1017,7 @@ class TestBacktestDiagnostics:
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         svc._marketdata = MagicMock()
-        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=bars))
+        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars))
         svc._indicators = MagicMock()
         svc._indicators.ComputeIndicator = AsyncMock(
             side_effect=[_points(fast_series), _points(slow_series)]
@@ -1105,7 +1116,9 @@ class TestBacktestDiagnostics:
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         svc._marketdata = MagicMock()
         svc._marketdata.GetBars = AsyncMock(
-            return_value=SimpleNamespace(bars=[_bar(1, 10), _bar(2, 11), _bar(3, 12)])
+            return_value=SimpleNamespace(
+                page=_EOF_PAGE, bars=[_bar(1, 10), _bar(2, 11), _bar(3, 12)]
+            )
         )
         result = await svc.RunBacktest(self._legacy_req(), context=MagicMock())
         assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
@@ -1138,7 +1151,7 @@ class TestBacktestDiagnostics:
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         svc._marketdata = MagicMock()
-        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=bars))
+        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars))
         svc._indicators = MagicMock()
         svc._indicators.ComputeIndicator = AsyncMock(
             return_value=SimpleNamespace(
@@ -1178,7 +1191,7 @@ class TestBacktestDiagnostics:
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         svc._marketdata = MagicMock()
-        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=bars))
+        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars))
         svc._indicators = MagicMock()
         # A legitimate all-warm-up series: success=True with a full-length null "value".
         out = Struct()
@@ -1225,7 +1238,7 @@ class TestFormulaErrorSurfacing:
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         svc._marketdata = MagicMock()
-        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=bars))
+        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars))
         svc._indicators = MagicMock()
         svc._indicators.ExecuteFormula = AsyncMock(side_effect=execute_side_effect)
         svc._indicators.GetFormula = AsyncMock(
@@ -1314,9 +1327,13 @@ class TestBacktestRangeCap:
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         svc._marketdata = MagicMock()
-        # enough bars so the legacy path runs (>= slow_period(3)+2); values irrelevant here
+        # Enough bars so the legacy path runs (>= slow_period(3)+2); values irrelevant here.
+        # feature 071: they straddle DAY (the explicit start these tests use) so an
+        # explicit-start run has the pre-window history the warm-up prefix now requires.
         svc._marketdata.GetBars = AsyncMock(
-            return_value=SimpleNamespace(bars=[_bar(1000 + i, 10) for i in range(6)])
+            return_value=SimpleNamespace(
+                page=_EOF_PAGE, bars=[_bar(i * 86_400, 10) for i in range(8)]
+            )
         )
         svc._indicators = MagicMock()
         svc._indicators.ComputeIndicator = AsyncMock(
@@ -1349,7 +1366,8 @@ class TestBacktestRangeCap:
     @pytest.mark.asyncio
     async def test_at_cap_range_runs(self):
         svc = self._svc()
-        req = self._req(1, 700 * 86_400)  # 700 days < 730 cap
+        # Start at day 4 so 4 pre-window bars exist — slow_period(3) needs 3 (feature 071).
+        req = self._req(4 * 86_400, 4 * 86_400 + 700 * 86_400)  # 700-day span < 730 cap
         result = await svc.RunBacktest(req, MagicMock())
         assert result.status == analysis_pb2.BACKTEST_STATUS_OK
 
@@ -1602,6 +1620,7 @@ class TestRunBacktestCells:
         self._wire(svc)
         bars_resp = MagicMock()
         bars_resp.bars = [MagicMock(), MagicMock(), MagicMock()]  # too few → INSUFFICIENT
+        bars_resp.page.next_page_token = ""
         svc._marketdata = MagicMock()
         svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
 
@@ -1704,23 +1723,76 @@ class TestAggregateCells:
 # ---------------------------------------------------------------------------
 
 
-def _update_req(strategy_id="s1", entry_rule="y"):
+def _rule(rhs=1):
+    """A valid entry-rule tree referencing component 'a'. Vary `rhs` to change the fingerprint."""
+    return json.dumps({"fn": ">", "lhs": "a", "rhs": rhs})
+
+
+def _update_req(strategy_id="s1", rhs=1, mask_paths=None):
+    """A REAL ManageStrategyRequest — not a MagicMock.
+
+    feature 070 reads `request.HasField("update_mask")`, and a MagicMock returns a truthy
+    sentinel for that, which would silently drive every test down the partial-merge path.
+    The rule must also be valid JSON now: the UPDATE branch validates the merged definition
+    directly (with pre-fetched formula outputs) instead of via the stubbable
+    `_validate_definition_proto`.
+    """
     definition = analysis_pb2.StrategyDefinition(
-        strategy_id=strategy_id, display_name="S1", entry_rule=entry_rule
+        strategy_id=strategy_id,
+        display_name="S1",
+        components=[
+            analysis_pb2.StrategyComponent(
+                ref_name="a",
+                kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                indicator="SMA",
+                params={"period": 10.0},
+            )
+        ],
+        entry_rule=_rule(rhs),
     )
-    req = MagicMock()
-    req.definition = definition
-    req.operation = analysis_pb2.STRATEGY_OPERATION_UPDATE
+    req = analysis_pb2.ManageStrategyRequest(
+        operation=analysis_pb2.STRATEGY_OPERATION_UPDATE, definition=definition
+    )
+    if mask_paths is not None:
+        req.update_mask.paths.extend(mask_paths)
     return req
 
 
-def _updated_row(strategy_id="s1", entry_rule="y"):
+def _stub_update_repo(svc, current_row):
+    """Wire a strategies repo for the feature-070 merge path.
+
+    `update_locked` genuinely invokes the apply_fn against `current_row`, so tests exercise the
+    real merge / erasure-guard / validation logic instead of mocking past it.
+    """
+    repo = AsyncMock()
+    repo.get_by_id = AsyncMock(return_value=current_row)
+
+    async def _locked(strategy_id, apply_fn):
+        name, new_json = await apply_fn(current_row)
+        return {**current_row, "display_name": name, "definition_json": new_json}
+
+    repo.update_locked = AsyncMock(side_effect=_locked)
+    svc._strategies_repo = repo
+    return repo
+
+
+def _updated_row(strategy_id="s1", rhs=1):
     return {
         "strategy_id": strategy_id,
         "display_name": "S1",
         "active": True,
         "live_enabled": False,
-        "definition_json": {"entry_rule": entry_rule},
+        "definition_json": {
+            "components": [
+                {
+                    "ref_name": "a",
+                    "kind": "COMPONENT_KIND_BUILTIN_INDICATOR",
+                    "indicator": "SMA",
+                    "params": {"period": 10.0},
+                }
+            ],
+            "entry_rule": _rule(rhs),
+        },
     }
 
 
@@ -1758,9 +1830,8 @@ class TestHeadlineTriggers:
         svc._strategies["s1"] = analysis_pb2.StrategyScore(
             strategy_id="s1", overall_score=0.9, rating="A"
         )
-        svc._strategies_repo.update = AsyncMock(return_value=_updated_row())
+        _stub_update_repo(svc, _updated_row())
         svc._scores_repo.delete = AsyncMock(side_effect=Exception("db down"))
-        svc._validate_definition_proto = AsyncMock()
         svc._has_admin_scope = lambda ctx: True
 
         await svc.ManageStrategy(_update_req(), context=MagicMock())
@@ -1772,8 +1843,7 @@ class TestHeadlineTriggers:
     async def test_update_recompute_no_deadlock(self):
         # UPDATE holds the lock then calls the inner (non-reentrant) recompute — must not deadlock.
         svc = _derivation_svc([_eligible_cell(symbol=s, days=600) for s in ("A", "B", "C", "D")])
-        svc._strategies_repo.update = AsyncMock(return_value=_updated_row())
-        svc._validate_definition_proto = AsyncMock()
+        _stub_update_repo(svc, _updated_row())
         svc._has_admin_scope = lambda ctx: True
 
         await asyncio.wait_for(svc.ManageStrategy(_update_req(), context=MagicMock()), timeout=2.0)
@@ -2066,6 +2136,7 @@ class TestBacktestDetailPersistence:
         svc._backtest_details_repo = AsyncMock()
         bars_resp = MagicMock()
         bars_resp.bars = [MagicMock(), MagicMock(), MagicMock()]  # too few bars
+        bars_resp.page.next_page_token = ""
         svc._marketdata = MagicMock()
         svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
 
@@ -2214,7 +2285,7 @@ async def _run_evaluated(svc, definition, decisions, n_bars):
 
     bars = [_cooldown_bar(100.0, i) for i in range(n_bars)]
     svc._marketdata = MagicMock()
-    svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=bars))
+    svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars))
     svc._compute_evaluated_warmup = AsyncMock(return_value=0)
     fake_eval = MagicMock()
     fake_eval.evaluate_with_series = AsyncMock(return_value=(decisions, {}))
@@ -2328,3 +2399,740 @@ class TestBacktestCooldown:
         )
         result = await svc.ManageStrategy(req, context=_admin_ctx())
         assert result.strategy_id == "sma_x"
+
+
+# ---------------------------------------------------------------------------
+# feature 070 — partial strategy update (update_mask)
+# ---------------------------------------------------------------------------
+
+
+def _stored_row(strategy_id="s1", cooldown=None):
+    """A fully-populated stored strategy — the thing the incident wiped."""
+    definition = analysis_pb2.StrategyDefinition(
+        strategy_id=strategy_id,
+        display_name="Range MR v3",
+        components=[
+            analysis_pb2.StrategyComponent(
+                ref_name="z",
+                kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                indicator="SMA",
+                params={"period": 20.0},
+            )
+        ],
+        entry_rule=json.dumps({"fn": "<", "lhs": "z", "rhs": -1.0}),
+        exit_rule=json.dumps({"fn": ">", "lhs": "z", "rhs": 1.0}),
+    )
+    if cooldown is not None:
+        definition.cooldown_days = cooldown
+    return {
+        "strategy_id": strategy_id,
+        "display_name": definition.display_name,
+        "active": True,
+        "live_enabled": False,
+        "definition_json": json_format.MessageToDict(definition, preserving_proto_field_name=True),
+    }
+
+
+def _masked_req(strategy_id="s1", paths=(), **fields):
+    definition = analysis_pb2.StrategyDefinition(strategy_id=strategy_id, **fields)
+    req = analysis_pb2.ManageStrategyRequest(
+        operation=analysis_pb2.STRATEGY_OPERATION_UPDATE, definition=definition
+    )
+    req.update_mask.paths.extend(paths)
+    return req
+
+
+class TestPartialStrategyUpdate:
+    """The reported incident: `manage_strategy update` with only cooldown_days wiped the
+    strategy's components and rules. These pin the server half of the fix."""
+
+    @pytest.mark.asyncio
+    async def test_cooldown_only_update_preserves_components_and_rules(self):
+        """AC-1 at the servicer layer — the exact shape that caused the incident."""
+        svc = make_servicer()
+        stored = _stored_row()
+        repo = _stub_update_repo(svc, stored)
+
+        req = _masked_req(paths=["cooldown_days"], cooldown_days=45)
+        result = await svc.ManageStrategy(req, context=_admin_ctx())
+
+        assert result.cooldown_days == 45
+        # The whole point: nothing else moved.
+        assert [c.ref_name for c in result.components] == ["z"]
+        assert result.components[0].indicator == "SMA"
+        assert json.loads(result.entry_rule) == {"fn": "<", "lhs": "z", "rhs": -1.0}
+        assert json.loads(result.exit_rule) == {"fn": ">", "lhs": "z", "rhs": 1.0}
+        assert result.display_name == "Range MR v3"  # not blanked
+        repo.update_locked.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_masked_rename_applies_without_touching_the_definition(self):
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row())
+
+        req = _masked_req(paths=["display_name"], display_name="Renamed")
+        result = await svc.ManageStrategy(req, context=_admin_ctx())
+
+        assert result.display_name == "Renamed"
+        assert [c.ref_name for c in result.components] == ["z"]
+
+    @pytest.mark.asyncio
+    async def test_masked_but_absent_path_clears_the_field(self):
+        """AIP-161: a masked path with no value in the request is an explicit erase. This is
+        the only way to express 'clear', since proto3 gives these fields no presence."""
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row())
+
+        req = _masked_req(paths=["exit_rule"])  # exit_rule deliberately not supplied
+        result = await svc.ManageStrategy(req, context=_admin_ctx())
+
+        assert result.exit_rule == ""
+        assert json.loads(result.entry_rule)["lhs"] == "z"  # untouched
+
+    @pytest.mark.asyncio
+    async def test_cooldown_days_can_be_cleared_back_to_platform_default(self):
+        """The inverse of the feature-069 explicit-presence trap: an explicit 0 must be
+        settable AND revertible to unset. Masking without supplying does the revert."""
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row(cooldown=0))
+
+        result = await svc.ManageStrategy(
+            _masked_req(paths=["cooldown_days"]), context=_admin_ctx()
+        )
+        assert not result.HasField("cooldown_days")
+
+    @pytest.mark.asyncio
+    async def test_maskless_update_is_still_a_full_replace(self):
+        """FR-5 / AC-6 regression guard: absent mask keeps pre-070 semantics, so the
+        StrategyWizard (which always sends a complete definition) needs no change."""
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row())
+        replacement = _valid_definition(display_name="Wholly New")
+        # Carry an exit_rule: the stored strategy has one, and the erasure guard applies to
+        # maskless UPDATE too (see test_maskless_replace_cannot_silently_drop_a_rule).
+        replacement.exit_rule = json.dumps({"fn": ">", "lhs": "fast", "rhs": 200})
+
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_UPDATE, definition=replacement
+        )
+        result = await svc.ManageStrategy(req, context=_admin_ctx())
+
+        assert result.display_name == "Wholly New"
+        assert [c.ref_name for c in result.components] == ["fast"]  # old 'z' gone
+        assert json.loads(result.exit_rule)["rhs"] == 200
+
+    @pytest.mark.asyncio
+    async def test_maskless_replace_cannot_silently_drop_a_rule(self):
+        """A deliberate, documented narrowing of the pre-070 contract.
+
+        A maskless full replace that omits a rule the stored strategy HAS is now rejected —
+        the guard cannot tell that apart from the incident. The StrategyWizard never trips it
+        (its step gates require non-blank rules before submit), but a raw grpcurl/ops caller
+        that legitimately wants to drop a rule must now say so via update_mask."""
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row())
+        replacement = _valid_definition(display_name="No Exit")  # no exit_rule
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_UPDATE, definition=replacement
+        )
+        ctx = _abort_ctx()
+        svc._has_admin_scope = lambda c: True
+
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(req, context=ctx)
+
+        code, msg = ctx.abort.await_args.args
+        assert code == grpc.StatusCode.INVALID_ARGUMENT
+        assert "refusing to blank 'exit_rule'" in msg
+
+    @pytest.mark.asyncio
+    async def test_maskless_wipe_is_rejected_even_from_an_unpatched_client(self):
+        """FR-2b, fail-closed. This is the incident replayed byte-for-byte: an empty
+        definition carrying only cooldown_days, no mask. The server alone must stop it."""
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row())
+        bare = analysis_pb2.StrategyDefinition(strategy_id="s1")
+        bare.cooldown_days = 45
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_UPDATE, definition=bare
+        )
+        ctx = _abort_ctx()
+        svc._has_admin_scope = lambda c: True
+
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(req, context=ctx)
+
+        code, msg = ctx.abort.await_args.args
+        assert code == grpc.StatusCode.INVALID_ARGUMENT
+        assert "refusing to clear 'components'" in msg
+        assert "update_mask" in msg  # names the escape hatch
+
+    @pytest.mark.asyncio
+    async def test_explicitly_masked_erasure_is_allowed(self):
+        """The guard must not block a deliberate clear — only an accidental one."""
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row())
+
+        req = _masked_req(paths=["components", "entry_rule", "exit_rule"])
+        result = await svc.ManageStrategy(req, context=_admin_ctx())
+
+        assert list(result.components) == []
+        assert result.entry_rule == ""
+
+    @pytest.mark.asyncio
+    async def test_merged_result_is_validated_not_just_the_request(self):
+        """FR-2a: swapping components out from under a stored rule must be caught. The
+        request alone looks fine — only the MERGED definition is orphaned."""
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row())
+        ctx = _abort_ctx()
+        svc._has_admin_scope = lambda c: True
+
+        # Replace 'z' with 'q'; the stored entry_rule still references 'z'.
+        req = _masked_req(
+            paths=["components"],
+            components=[
+                analysis_pb2.StrategyComponent(
+                    ref_name="q",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="SMA",
+                    params={"period": 5.0},
+                )
+            ],
+        )
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(req, context=ctx)
+
+        code, msg = ctx.abort.await_args.args
+        assert code == grpc.StatusCode.INVALID_ARGUMENT
+        assert "not defined as a component ref_name" in msg
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("path", ["strategy_id", "active", "live_enabled"])
+    async def test_column_authoritative_paths_are_rejected(self, path):
+        """Masking these would write a value the next read silently discards."""
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row())
+        ctx = _abort_ctx()
+        svc._has_admin_scope = lambda c: True
+
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(_masked_req(paths=[path]), context=ctx)
+
+        code, msg = ctx.abort.await_args.args
+        assert code == grpc.StatusCode.INVALID_ARGUMENT
+        assert "column-authoritative" in msg
+
+    @pytest.mark.asyncio
+    async def test_unknown_mask_path_is_rejected(self):
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row())
+        ctx = _abort_ctx()
+        svc._has_admin_scope = lambda c: True
+
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(_masked_req(paths=["nope"]), context=ctx)
+
+        assert "unknown update_mask path" in ctx.abort.await_args.args[1]
+
+    @pytest.mark.asyncio
+    async def test_missing_strategy_is_not_found_before_any_write(self):
+        svc = make_servicer()
+        repo = AsyncMock()
+        repo.get_by_id = AsyncMock(return_value=None)
+        svc._strategies_repo = repo
+        ctx = _abort_ctx()
+        svc._has_admin_scope = lambda c: True
+
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(_masked_req(paths=["display_name"]), context=ctx)
+
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.NOT_FOUND
+        repo.update_locked.assert_not_awaited()  # no write attempted
+
+
+# ---------------------------------------------------------------------------
+# feature 071 step 3 — trade_start_idx plumbing
+# ---------------------------------------------------------------------------
+
+
+class TestTradeStartIndex:
+    """feature 071 — the pre-window prefix seeds indicators without becoming tradeable.
+
+    `trade_start_idx` is DERIVED inside the engine by `_resolve_prefixed_bars`, so these drive
+    the real path: bars that predate `range_msg.start` are the prefix, and `warmup_prefix=True`
+    (set when the caller supplied an explicit start) turns the mechanism on.
+
+    The invariant under test is `len(daily_equity) == len(diags)`, which
+    `_finalize_symbol_diagnostics` stamps positionally and now asserts.
+    """
+
+    WINDOW_START = 1_000_000
+
+    def _svc(self, bars, fast_series, slow_series):
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars))
+        svc._indicators = MagicMock()
+        svc._indicators.ComputeIndicator = AsyncMock(
+            side_effect=[_points(fast_series), _points(slow_series)]
+        )
+        return svc
+
+    def _bars(self, n_prefix, n_window):
+        """n_prefix bars before WINDOW_START, then n_window at/after it (1 day apart)."""
+        day = 86_400
+        out = []
+        for i in range(n_prefix):
+            out.append(_bar(self.WINDOW_START - (n_prefix - i) * day, 10 + i))
+        for i in range(n_window):
+            out.append(_bar(self.WINDOW_START + i * day, 20 + i))
+        return out
+
+    async def _run(self, n_prefix, n_window, *, warmup_prefix=True, slow=3):
+        bars = self._bars(n_prefix, n_window)
+        total = len(bars)
+        svc = self._svc(bars, [9] * (total - 1), [11] * (total - 2))
+        rng = common_pb2.TimeRange()
+        rng.start.seconds = self.WINDOW_START
+        rng.end.seconds = self.WINDOW_START + 10 * 86_400
+        return await svc._backtest_symbol(
+            "AAPL",
+            rng,
+            fast_period=2,
+            slow_period=slow,
+            signal_sources=[],
+            signal_weight=0.0,
+            technical_weight=1.0,
+            min_conviction=0.0,
+            initial_equity=100_000.0,
+            commission=0.0,
+            slippage=0.0,
+            source_weights={},
+            warmup_prefix=warmup_prefix,
+        )
+
+    @pytest.mark.asyncio
+    async def test_without_prefix_every_bar_is_in_scope(self):
+        """warmup_prefix=False is the default/rolling path — unchanged pre-071 behavior."""
+        _, _, daily_equity, sd = await self._run(0, 8, warmup_prefix=False)
+        assert sd.bars_total == 8
+        assert len(daily_equity) == len(sd.bars) == 8
+        assert [b.bar_index for b in sd.bars][:3] == [0, 1, 2]
+
+    @pytest.mark.asyncio
+    async def test_prefix_bars_are_excluded_and_indices_renumbered(self):
+        """slow_period=3 → 3 prefix bars required and consumed; only the window is reported."""
+        _, _, daily_equity, sd = await self._run(3, 6)
+        assert sd.bars_total == 6
+        assert [b.bar_index for b in sd.bars] == list(range(6))
+        assert len(daily_equity) == len(sd.bars)
+
+    @pytest.mark.asyncio
+    async def test_first_in_window_bar_keeps_its_real_timestamp(self):
+        """Renumbering bar_index must not renumber time — the prefix is dropped, not shifted."""
+        _, _, _, sd = await self._run(3, 6)
+        assert sd.bars[0].bar_index == 0
+        assert sd.bars[0].timestamp.seconds == self.WINDOW_START
+
+    @pytest.mark.asyncio
+    async def test_nothing_before_the_window_is_traded_or_reported(self):
+        """FR-3: the prefix seeds indicators; it must never produce a trade or a diag row."""
+        trades, _, _, sd = await self._run(3, 6)
+        for t in trades:
+            assert t.entry_time.seconds >= self.WINDOW_START
+        for bar in sd.bars:
+            assert bar.timestamp.seconds >= self.WINDOW_START
+
+    @pytest.mark.asyncio
+    async def test_surplus_prefix_is_discarded_deterministically(self):
+        """Over-fetching is harmless: the engine keeps exactly the required prefix, which is
+        what makes the bars→calendar-days conversion sizing-only rather than semantic."""
+        _, _, _, sd_exact = await self._run(3, 6)
+        _, _, _, sd_surplus = await self._run(9, 6)  # far more prefix than needed
+        assert sd_exact.bars_total == sd_surplus.bars_total == 6
+        assert [b.timestamp.seconds for b in sd_exact.bars] == [
+            b.timestamp.seconds for b in sd_surplus.bars
+        ]
+
+    @pytest.mark.asyncio
+    async def test_insufficient_prefix_reports_a_shortfall(self):
+        """AC-4a / OQ-1: a clear error beats silently running short-warmed."""
+        with pytest.raises(_InsufficientData) as ei:
+            await self._run(1, 6)  # needs 3 prefix bars, only 1 available
+        assert ei.value.bars_have == 1
+        assert ei.value.bars_need == 3
+        # The actionable backfill span is the PREFIX, not the caller's window.
+        assert ei.value.gap_range is not None
+        assert ei.value.gap_range.end.seconds == self.WINDOW_START
+
+
+# ---------------------------------------------------------------------------
+# feature 071 step 6 — parity & determinism
+# ---------------------------------------------------------------------------
+
+_DAY = 86_400
+_W_START = 1_600_000_000  # a fixed, explicit window start used across this section
+_W_END = _W_START + 30 * _DAY
+
+
+def _windowed_req(definition, *, start=_W_START, end=_W_END, symbols=("AAPL",)):
+    req = analysis_pb2.RunBacktestRequest(
+        strategy_id="s1", symbols=list(symbols), initial_capital=100_000.0
+    )
+    req.inline_definition.CopyFrom(definition)
+    req.range.start.seconds = start
+    req.range.end.seconds = end
+    return req
+
+
+def _sma_def(period=3, ref="fast"):
+    return analysis_pb2.StrategyDefinition(
+        components=[
+            analysis_pb2.StrategyComponent(
+                ref_name=ref,
+                kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                indicator="SMA",
+                params={"period": float(period)},
+            )
+        ],
+        entry_rule=json.dumps({"fn": ">", "lhs": ref, "rhs": 0}),
+        exit_rule=json.dumps({"fn": "<", "lhs": ref, "rhs": 0}),
+    )
+
+
+def _series_bars(n_prefix, n_window, base=100.0):
+    """n_prefix bars before _W_START then n_window from _W_START, 1 day apart.
+
+    The close is a pure function of the bar's date, so lengthening the prefix prepends
+    earlier bars without altering any bar the two fixtures share. Deriving it from the list
+    index instead would make a longer prefix silently restate the whole series, and a test
+    comparing two prefix lengths would be comparing two different price histories.
+    """
+    return [_bar(_W_START + off * _DAY, base + off) for off in range(-n_prefix, n_window)]
+
+
+def _canonical(result):
+    """Serialize a BacktestResult with its two inherently per-run fields cleared.
+
+    `backtest_id` is a fresh uuid and `completed_at` is a wall-clock stamp — both differ on
+    every run by construction, so leaving them in would make any byte-identity assertion
+    vacuously false and tempt a weaker field-by-field comparison instead.
+    """
+    copy = analysis_pb2.BacktestResult()
+    copy.CopyFrom(result)
+    copy.backtest_id = ""
+    copy.ClearField("completed_at")
+    return copy.SerializeToString(deterministic=True)
+
+
+def _wire_evaluated(svc, bars, *, capture=None):
+    """Wire a servicer whose evaluator sees a real, length-n series per component.
+
+    ComputeIndicator is mocked but *length-faithful*: it returns one point per input value,
+    so the evaluator's tail-alignment is exercised and `capture` records exactly how many
+    bars each component was computed over — which is the observable the anchor/cost tests
+    are actually about.
+    """
+    svc._ledger = MagicMock()
+    svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+    svc._backtest_run_symbols_repo = AsyncMock()
+    svc._marketdata = MagicMock()
+    svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars))
+    svc._indicators = MagicMock()
+
+    async def _compute(req, **kw):
+        if capture is not None:
+            capture.append((req.indicator, len(req.values)))
+        # Monotone ramp so decisions are deterministic and non-trivial.
+        return _points([float(i) for i in range(len(req.values))])
+
+    svc._indicators.ComputeIndicator = AsyncMock(side_effect=_compute)
+    return svc
+
+
+class TestWindowDeterminism:
+    """FR-4 — a run over an explicit window must not depend on the calendar day."""
+
+    @staticmethod
+    def _freeze(seconds):
+        """Freeze the servicer's only wall-clock read (`Timestamp.GetCurrentTime`)."""
+
+        def _set(self):
+            self.seconds = seconds
+            self.nanos = 0
+
+        return patch.object(Timestamp, "GetCurrentTime", _set)
+
+    @pytest.mark.asyncio
+    async def test_explicit_window_is_identical_across_calendar_days(self):
+        bars = _series_bars(6, 12)
+
+        async def _run(now_seconds):
+            svc = _wire_evaluated(make_servicer(), bars)
+            with self._freeze(now_seconds):
+                return await svc.RunBacktest(_windowed_req(_sma_def()), context=MagicMock())
+
+        # "today" a full year apart
+        day_one = await _run(_W_END + _DAY)
+        day_later = await _run(_W_END + 365 * _DAY)
+        assert _canonical(day_one) == _canonical(day_later)
+
+    @pytest.mark.asyncio
+    async def test_the_frozen_clock_test_has_teeth(self):
+        """Guards the test above: without an explicit window the clock DOES move the result,
+        so equality there is evidence of the window, not of an inert clock patch."""
+        captured = []
+
+        async def _effective_window(now_seconds):
+            svc = _wire_evaluated(make_servicer(), _series_bars(0, 12))
+            req = analysis_pb2.RunBacktestRequest(
+                strategy_id="s1", symbols=["AAPL"], initial_capital=100_000.0
+            )
+            req.inline_definition.CopyFrom(_sma_def())
+            req.range.CopyFrom(common_pb2.TimeRange())  # no bounds → rolling default
+            with self._freeze(now_seconds):
+                await svc.RunBacktest(req, context=MagicMock())
+            captured.append((req.range.start.seconds, req.range.end.seconds))
+
+        await _effective_window(_W_END + _DAY)
+        await _effective_window(_W_END + 365 * _DAY)
+        assert captured[0] != captured[1]
+
+    @pytest.mark.asyncio
+    async def test_no_trade_opens_before_the_requested_start(self):
+        """FR-3 at the RPC level: the prefix seeds indicators only."""
+        svc = _wire_evaluated(make_servicer(), _series_bars(6, 12))
+        result = await svc.RunBacktest(_windowed_req(_sma_def()), context=MagicMock())
+        assert result.trades  # the assertion below is vacuous on an empty list
+        assert all(t.entry_time.seconds >= _W_START for t in result.trades)
+        assert all(b.timestamp.seconds >= _W_START for b in result.diagnostics[0].bars)
+
+
+class TestPrefixSizingIsNotSemantic:
+    """The bars→calendar-days conversion may only over-fetch, never change a result."""
+
+    @pytest.mark.asyncio
+    async def test_doubling_the_calendar_factor_is_byte_identical(self):
+        """`prefix_calendar_days` widens the *fetch*; the engine then keeps exactly the
+        required bars. Doubling its slack must therefore change nothing observable — that is
+        what licenses the conversion to be approximate (F-07: no hidden tuned constant)."""
+        bars = _series_bars(30, 12)  # generous history so a wider fetch is satisfiable
+
+        async def _run():
+            svc = _wire_evaluated(make_servicer(), bars)
+            return await svc.RunBacktest(_windowed_req(_sma_def()), context=MagicMock())
+
+        baseline = await _run()
+        with patch.object(
+            warmup_sizing, "_CALENDAR_SLACK_DAYS", warmup_sizing._CALENDAR_SLACK_DAYS * 2
+        ):
+            doubled = await _run()
+        assert _canonical(baseline) == _canonical(doubled)
+
+    @pytest.mark.asyncio
+    async def test_surplus_history_beyond_the_prefix_is_ignored(self):
+        """Same claim from the other side: more available history than the prefix needs must
+        not shift the anchor. Otherwise a symbol's result would depend on how far back
+        marketdata happens to hold data."""
+
+        async def _run(n_prefix):
+            svc = _wire_evaluated(make_servicer(), _series_bars(n_prefix, 12))
+            return await svc.RunBacktest(_windowed_req(_sma_def()), context=MagicMock())
+
+        assert _canonical(await _run(6)) == _canonical(await _run(40))
+
+
+class TestVwapAnchorMovesWithPrefix:
+    """Documented behavior change — VWAP is an expanding average anchored at index 0.
+
+    Its own lookback is 0, but the prefix is the max over *all* referenced components, so a
+    strategy mixing VWAP with a long SMA gets a prefix anyway and every in-window VWAP value
+    shifts: the anchor moves from the requested start to the prefix start. Deterministic
+    (FR-4 still holds), but different from an unprefixed run.
+    """
+
+    def _def(self):
+        return analysis_pb2.StrategyDefinition(
+            components=[
+                analysis_pb2.StrategyComponent(
+                    ref_name="vw",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="VWAP",
+                ),
+                analysis_pb2.StrategyComponent(
+                    ref_name="slow",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="SMA",
+                    params={"period": 50.0},
+                ),
+            ],
+            entry_rule=json.dumps(
+                {"op": "AND", "conditions": [{"fn": ">", "lhs": "vw", "rhs": "slow"}]}
+            ),
+        )
+
+    def test_vwap_alone_asks_for_no_prefix(self):
+        vwap_only = analysis_pb2.StrategyDefinition(
+            components=[
+                analysis_pb2.StrategyComponent(
+                    ref_name="vw",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="VWAP",
+                )
+            ],
+            entry_rule=json.dumps({"fn": ">", "lhs": "vw", "rhs": 0}),
+        )
+        assert warmup_sizing.required_prefix_bars(vwap_only) == 0
+
+    def test_a_long_sibling_drags_vwap_into_a_prefix(self):
+        # SMA(50) is first valid at index 49 and usable at 50 (crossover reads i-1).
+        assert warmup_sizing.required_prefix_bars(self._def()) == 50
+
+    @pytest.mark.asyncio
+    async def test_vwap_is_computed_over_the_prefixed_series(self):
+        """The anchor shift, pinned at its cause: VWAP receives prefix+window closes, so its
+        cumulative mean starts 50 bars earlier than the caller's window."""
+        capture = []
+        svc = _wire_evaluated(make_servicer(), _series_bars(50, 12), capture=capture)
+        await svc.RunBacktest(_windowed_req(self._def()), context=MagicMock())
+        by_indicator = dict(capture)
+        assert by_indicator["VWAP"] == 62  # 50 prefix + 12 window, not 12
+        assert by_indicator["SMA"] == 62
+
+
+class TestBacktestLiveParityUnchanged:
+    """FR-7 / OQ-4 — 071 is a backtest-path change; the live loop is deliberately untouched.
+
+    The real parity invariant is the evaluator contract — *same bar series ⇒ same decisions*.
+    That still holds exactly. What now differs between the two callers is the series each one
+    supplies, and that difference must stay visible rather than be quietly assumed away.
+    """
+
+    def test_the_live_loop_still_uses_its_own_fixed_lookback(self):
+        """If someone later wires the prefix into the live loop, this fails and the FR-7
+        divergence documented in the service CLAUDE.md has to be revisited."""
+        from app.engine import live_loop
+
+        assert live_loop._LOOKBACK_DAYS == 365
+        source = Path(live_loop.__file__).read_text()
+        assert "warmup" not in source, (
+            "live_loop now references the warm-up prefix — FR-7's documented divergence "
+            "(design.md § OQ-4) is stale and the parity note must be updated"
+        )
+
+    def test_the_evaluator_contract_takes_no_window_argument(self):
+        """The prefix lives entirely in the servicer's fetch. The evaluator receives a plain
+        bar list, so it cannot behave differently for a backtest than for the live loop."""
+        from app.services.evaluator import StrategyEvaluator
+
+        params = inspect.signature(StrategyEvaluator.evaluate).parameters
+        assert "range" not in params
+        assert "trade_start_idx" not in params
+        assert "warmup_prefix" not in params
+
+
+class TestPrefixFormulaCost:
+    """The prefix is paid for in bars sent to ExecuteFormula — measured, not assumed."""
+
+    def _def(self):
+        return analysis_pb2.StrategyDefinition(
+            components=[
+                analysis_pb2.StrategyComponent(
+                    ref_name="ff",
+                    kind=analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
+                    formula_id="f-1",
+                )
+            ],
+            entry_rule=json.dumps({"fn": ">", "lhs": "ff", "rhs": 0}),
+        )
+
+    @pytest.mark.asyncio
+    async def _run(self, declared_warmup, n_prefix, n_window):
+        from google.protobuf.struct_pb2 import Struct
+
+        bars = _series_bars(n_prefix, n_window)
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._backtest_run_symbols_repo = AsyncMock()
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars))
+        svc._indicators = MagicMock()
+        sizes = []
+
+        async def _execute(req, **kw):
+            # The evaluator passes the close series in input_data (evaluator.py:193-194).
+            n = len(req.input_data["close"])
+            sizes.append(n)
+            out = Struct()
+            out.update({"value": [1.0] * n})
+            return SimpleNamespace(success=True, output=out, error="")
+
+        svc._indicators.ExecuteFormula = AsyncMock(side_effect=_execute)
+        svc._indicators.GetFormula = AsyncMock(
+            return_value=indicators_pb2.FormulaDefinition(
+                formula_id="f-1", warmup_period=declared_warmup
+            )
+        )
+        await svc.RunBacktest(_windowed_req(self._def()), context=MagicMock())
+        return sizes
+
+    @pytest.mark.asyncio
+    async def test_a_declared_warmup_costs_exactly_its_prefix(self):
+        """A formula declaring warmup_period=W is evaluated over W+1 extra bars (the +1 is the
+        crossover lookback), so the cost of the prefix is bounded by the declaration — not by
+        an open-ended "fetch more to be safe"."""
+        sizes = await self._run(declared_warmup=10, n_prefix=20, n_window=12)
+        assert sizes == [11 + 12]
+
+    @pytest.mark.asyncio
+    async def test_a_zero_warmup_formula_costs_nothing_extra(self):
+        """A formula that declares no warm-up must not be silently charged a prefix.
+
+        n_prefix=0 because the GetBars mock ignores `range`: with no prefix requested the
+        fetch is unfiltered, so any pre-window bars in the fixture would reach the engine and
+        make this measure the fixture instead of the code.
+        """
+        sizes = await self._run(declared_warmup=0, n_prefix=0, n_window=12)
+        assert sizes == [12]
+
+    @pytest.mark.asyncio
+    async def test_every_symbol_pays_the_same_prefix(self):
+        """Regression: the declared warm-ups must be resolved BEFORE the symbol loop.
+
+        `required_prefix_bars` reads the formula cache at the top of each symbol's run while
+        `_compute_evaluated_warmup` fills it at the bottom, so a lazily-filled cache gave
+        symbol 1 no prefix and symbols 2+ the full one — a result that depends on symbol order.
+        """
+        from google.protobuf.struct_pb2 import Struct
+
+        bars = _series_bars(20, 12)
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._backtest_run_symbols_repo = AsyncMock()
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars))
+        svc._indicators = MagicMock()
+        sizes = []
+
+        async def _execute(req, **kw):
+            n = len(req.input_data["close"])
+            sizes.append(n)
+            out = Struct()
+            out.update({"value": [1.0] * n})
+            return SimpleNamespace(success=True, output=out, error="")
+
+        svc._indicators.ExecuteFormula = AsyncMock(side_effect=_execute)
+        svc._indicators.GetFormula = AsyncMock(
+            return_value=indicators_pb2.FormulaDefinition(formula_id="f-1", warmup_period=10)
+        )
+        await svc.RunBacktest(
+            _windowed_req(self._def(), symbols=("AAPL", "MSFT")), context=MagicMock()
+        )
+        assert sizes == [23, 23]
+        # ...and the declaration is fetched once for the whole run, not once per symbol.
+        assert svc._indicators.GetFormula.await_count == 1

@@ -58,9 +58,20 @@ const chromiumExecutable =
   (overridePath && existsSync(overridePath) ? overridePath : undefined) ??
   preinstalledBrowser('chromium');
 
+if (browsersPath && !chromiumExecutable) {
+  console.warn(
+    `[playwright.config] PLAYWRIGHT_BROWSERS_PATH="${browsersPath}" is set but no ` +
+      `launchable Chromium was found. Set PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH to the ` +
+      `chrome binary path, or ensure the directory contains a chromium-<rev>/chrome-linux/chrome ` +
+      `or a "chromium" symlink.`,
+  );
+}
+
 const firefoxExecutable = preinstalledBrowser('firefox');
 // Include Firefox unless PLAYWRIGHT_BROWSERS_PATH is set but ships no Firefox build.
-const includeFirefox = !browsersPath || firefoxExecutable !== undefined;
+// CI runs chromium only — the suite tests BFF RPC call chains and React UI logic,
+// not browser-specific CSS/rendering, so Firefox doubles test count for no signal.
+const includeFirefox = isCI ? false : !browsersPath || firefoxExecutable !== undefined;
 
 /**
  * Playwright configuration for xstockstrat-ui (port 3000).
@@ -80,9 +91,8 @@ const includeFirefox = !browsersPath || firefoxExecutable !== undefined;
  *     can serve it (`next start` is unsupported with output:'standalone', which
  *     production/Docker keeps — see next.config.js / Dockerfile).
  *   - CI `timeout`/`expect.timeout` are still widened as a safety margin.
- *   - `maxFailures: 0` so a single flaky test never aborts the whole suite
- *     ("N did not run"); flakes are absorbed by `retries` instead. (The old
- *     `maxFailures: 1` failed the entire job on one cold-start timeout.)
+ *   - `maxFailures: 10` so a fundamentally broken suite aborts early, but
+ *     isolated flakes (absorbed by `retries`) never abort the whole run.
  *   - Locally we keep `pnpm dev` (with reuseExistingServer) for fast iteration.
  *
  * Run:  pnpm test:e2e
@@ -92,11 +102,12 @@ export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
   forbidOnly: isCI,
-  retries: isCI ? 2 : 0,
-  maxFailures: 0,
+  workers: isCI ? 2 : undefined,
+  retries: isCI ? 1 : 0,
+  maxFailures: isCI ? 10 : 0,
   timeout: isCI ? 30_000 : 10_000,
   expect: { timeout: isCI ? 15_000 : 5_000 },
-  reporter: isCI ? [['github'], ['html', { open: 'never' }]] : 'html',
+  reporter: isCI ? [['github'], ['list'], ['html', { open: 'never' }]] : 'html',
   globalSetup: './e2e/global-setup.ts',
   globalTeardown: './e2e/global-teardown.ts',
   use: {
@@ -106,7 +117,12 @@ export default defineConfig({
   },
   projects: [
     {
+      name: 'setup',
+      testMatch: /warmup\.setup\.ts/,
+    },
+    {
       name: 'chromium',
+      dependencies: ['setup'],
       use: {
         ...devices['Desktop Chrome'],
         // Use a pre-installed Chromium when present (managed sandboxes). Must go under
@@ -118,6 +134,7 @@ export default defineConfig({
       ? [
           {
             name: 'firefox',
+            dependencies: ['setup'],
             use: {
               ...devices['Desktop Firefox'],
               ...(firefoxExecutable
@@ -129,11 +146,16 @@ export default defineConfig({
       : []),
   ],
   webServer: {
-    command: isCI ? 'pnpm build && pnpm start' : 'pnpm dev',
+    command: isCI
+      ? process.env.E2E_PREBUILT
+        ? 'pnpm start'
+        : 'pnpm build && pnpm start'
+      : 'pnpm dev',
     url: 'http://localhost:3000/insights/api/health',
     reuseExistingServer: !isCI,
-    // CI runs a full `next build` first — give it ample headroom (default 60s).
-    timeout: isCI ? 240_000 : 60_000,
+    // Without E2E_PREBUILT, CI runs `pnpm build && pnpm start` — 240s for the build.
+    // With E2E_PREBUILT the build is already done; 60s is enough for `next start`.
+    timeout: isCI ? (process.env.E2E_PREBUILT ? 60_000 : 240_000) : 60_000,
     env: {
       // Trader-segment backends (full TradingService/PortfolioService/
       // MarketDataService/NotifyService) live on the 9091 mock. The 9092 mock

@@ -27,6 +27,7 @@ import {
   timeframeToNumber,
   TimeRange,
 } from "../../common/v1/common";
+import { FieldMask } from "../../google/protobuf/field_mask";
 import { Struct } from "../../google/protobuf/struct";
 import { Timestamp } from "../../google/protobuf/timestamp";
 
@@ -787,7 +788,25 @@ export interface StrategyDefinition {
 
 export interface ManageStrategyRequest {
   operation: StrategyOperation;
-  definition?: StrategyDefinition | undefined;
+  definition?:
+    | StrategyDefinition
+    | undefined;
+  /**
+   * Feature 070 — partial update. Applies to STRATEGY_OPERATION_UPDATE only; ignored for
+   * REGISTER/DEACTIVATE.
+   *
+   *   present  → MERGE: only the listed top-level StrategyDefinition paths are taken from
+   *              `definition`; every other stored field is preserved. A masked path whose value
+   *              is absent from the request CLEARS that field (AIP-161 semantics) — that is the
+   *              only way to express "erase this", since proto3 gives `components`/`entry_rule`/
+   *              `exit_rule` no field presence.
+   *   absent   → FULL REPLACE: byte-for-byte the pre-070 behavior, so existing clients (the
+   *              StrategyWizard, which always sends a complete definition) are unaffected.
+   *
+   * Allowed paths: display_name, components, entry_rule, exit_rule, signal_params, cooldown_days.
+   * strategy_id/active/live_enabled are column-authoritative and rejected with INVALID_ARGUMENT.
+   */
+  updateMask?: string[] | undefined;
 }
 
 export interface GetStrategyRequest {
@@ -4096,7 +4115,7 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
 };
 
 function createBaseManageStrategyRequest(): ManageStrategyRequest {
-  return { operation: StrategyOperation.STRATEGY_OPERATION_UNSPECIFIED, definition: undefined };
+  return { operation: StrategyOperation.STRATEGY_OPERATION_UNSPECIFIED, definition: undefined, updateMask: undefined };
 }
 
 export const ManageStrategyRequest: MessageFns<ManageStrategyRequest> = {
@@ -4106,6 +4125,9 @@ export const ManageStrategyRequest: MessageFns<ManageStrategyRequest> = {
     }
     if (message.definition !== undefined) {
       StrategyDefinition.encode(message.definition, writer.uint32(18).fork()).join();
+    }
+    if (message.updateMask !== undefined) {
+      FieldMask.encode(FieldMask.wrap(message.updateMask), writer.uint32(26).fork()).join();
     }
     return writer;
   },
@@ -4133,6 +4155,14 @@ export const ManageStrategyRequest: MessageFns<ManageStrategyRequest> = {
           message.definition = StrategyDefinition.decode(reader, reader.uint32());
           continue;
         }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.updateMask = FieldMask.unwrap(FieldMask.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -4148,6 +4178,11 @@ export const ManageStrategyRequest: MessageFns<ManageStrategyRequest> = {
         ? strategyOperationFromJSON(object.operation)
         : StrategyOperation.STRATEGY_OPERATION_UNSPECIFIED,
       definition: isSet(object.definition) ? StrategyDefinition.fromJSON(object.definition) : undefined,
+      updateMask: isSet(object.updateMask)
+        ? FieldMask.unwrap(FieldMask.fromJSON(object.updateMask))
+        : isSet(object.update_mask)
+        ? FieldMask.unwrap(FieldMask.fromJSON(object.update_mask))
+        : undefined,
     };
   },
 
@@ -4158,6 +4193,9 @@ export const ManageStrategyRequest: MessageFns<ManageStrategyRequest> = {
     }
     if (message.definition !== undefined) {
       obj.definition = StrategyDefinition.toJSON(message.definition);
+    }
+    if (message.updateMask !== undefined) {
+      obj.updateMask = FieldMask.toJSON(FieldMask.wrap(message.updateMask));
     }
     return obj;
   },
@@ -4171,6 +4209,7 @@ export const ManageStrategyRequest: MessageFns<ManageStrategyRequest> = {
     message.definition = (object.definition !== undefined && object.definition !== null)
       ? StrategyDefinition.fromPartial(object.definition)
       : undefined;
+    message.updateMask = object.updateMask ?? undefined;
     return message;
   },
 };

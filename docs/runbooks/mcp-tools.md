@@ -1,6 +1,6 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the thirteen tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the fourteen tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 ---
@@ -26,7 +26,7 @@ directly on port 9000.
 
 **Direct SSE (local):** `http://localhost:9000/sse`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same thirteen tools' `name`,
+**Tool catalog (UI display).** `GET /api/tools` returns the same fourteen tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
 capabilities (the same data documented below), never user data or credentials. It powers the
 `xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
@@ -249,18 +249,101 @@ Triggers a backtest via `xstockstrat-analysis`. `strategy_id` must be a **regist
 | `strategy_id` | `string` | Yes | Strategy identifier, e.g. `"sma_crossover"` |
 | `symbols` | `string[]` | Yes | Ticker symbols to backtest, e.g. `["NVDA", "AAPL"]` |
 | `initial_capital` | `float` | No | Starting capital in USD (default `100000.0`) |
+| `start` | `string` | No | ISO date/datetime lower bound of the evaluation window (feature 071), e.g. `"2024-01-01"` or `"2024-01-01T00:00:00Z"` |
+| `end` | `string` | No | ISO date/datetime upper bound of the evaluation window |
+
+**The evaluation window (feature 071)**
+
+Supply **both** `start` and `end` to get a reproducible run: the same strategy, symbols, and
+window return the same numbers on any calendar day, so results are comparable across strategies
+and across days. Omit them and the analysis service applies its rolling default — a window ending
+"now", bounded by `analysis.backtest.max_range_days` — whose results drift as the calendar moves.
+Either bound may be given alone; the other keeps its default.
+
+`start`/`end` bound the **evaluation** window, not the fetch. Analysis reaches back *before*
+`start` for as many bars as the strategy's indicators declare they need, so the whole requested
+window is evaluated fully warm and no trade opens before `start`. Two consequences worth knowing:
+
+- If stored history does not reach back far enough to warm the indicators, the run returns
+  `BACKTEST_STATUS_INSUFFICIENT_DATA` with `coverage_gaps` covering the **pre-window** span —
+  not the window you asked for. Fill it with `trigger_backfill`, then re-run.
+- A strategy that references `VWAP` alongside a longer indicator will see its VWAP values shift
+  versus an unwindowed run: VWAP is an expanding average anchored at the first fetched bar, so
+  the prefix moves its anchor. Deterministic, but not equal to the rolling-default run.
+
+Both bounds set with a span over `analysis.backtest.max_range_days` (default 730) is rejected with
+`INVALID_ARGUMENT` rather than silently clamped. A `start` after `end` is rejected client-side.
 
 **Return**
 
+Two parts, as MCP **content blocks** (feature 072) — not a single JSON object:
+
+1. A **text block** carrying a compact JSON summary. This is what the model reads.
+2. When there is detail to attach, one **embedded `application/json` resource** carrying the
+   **complete** `BacktestResult`, at
+   `xstockstrat:///backtest/<backtest_id>/result.json`.
+
+The summary:
+
 ```json
-{ "backtest_id": "bt-abc123" }
+{
+  "backtest_id": "bt-9f2c1a",
+  "strategy_id": "sma_crossover",
+  "status": "BACKTEST_STATUS_OK",
+  "completed_at": "2026-07-27T14:03:11Z",
+  "total_return": 0.152,
+  "annualized_return": 0.221,
+  "sharpe_ratio": 1.24,
+  "max_drawdown": 0.081,
+  "win_rate": 0.55,
+  "total_trades": 42,
+  "profit_factor": 1.8,
+  "initial_capital": 100000.0,
+  "coverage_gaps": [
+    { "symbol": "AAPL", "timeframe": "TIMEFRAME_1DAY", "bars_have": "120", "bars_need": "504" }
+  ],
+  "diagnostics": [
+    {
+      "symbol": "AAPL",
+      "no_trade_reason": "NO_TRADE_REASON_ENTRY_NEVER_TRUE",
+      "bars_total": 504,
+      "warmup_bars": 50
+    }
+  ],
+  "attachments": [
+    { "uri": "xstockstrat:///backtest/bt-9f2c1a/result.json", "mime_type": "application/json" }
+  ]
+}
 ```
+
+Note `"bars_have": "120"` — 64-bit integers render as JSON **strings**, 32-bit ones as numbers
+(`total_trades` above). Do not assume a numeric-looking field is a number.
+
+**What stays inline vs. what moves.** The summary keeps everything needed to diagnose the common
+failure — the headline metrics, any `coverage_gaps`, and per symbol its `no_trade_reason`,
+`bars_total` and `warmup_bars` — so a 0-trade run is explainable **without opening the attachment**.
+What moves to the attachment is the bulk: the full per-bar `diagnostics` (OHLCV, computed indicator
+values, warm-up flag, per-bar decision) and the full `trades` list. The same int64-as-string rule
+applies there, e.g. `volume`.
+
+**No-attachment case.** A run with no diagnostics and no trades — typically
+`BACKTEST_STATUS_INSUFFICIENT_DATA` — returns the summary block only, with `"attachments": []`. Its
+`coverage_gaps` are inline, so the summary is the whole result. The rule is about content, not
+status: any run with nothing to attach behaves this way.
+
+**Degradation.** Whether an attachment is surfaced is client-dependent and outside this platform's
+control, so the summary always stands on its own, and `attachments` names what exists (uri +
+mime type) even if your client renders no download affordance. If attachment construction fails the
+tool still **succeeds** — the backtest ran — and the summary gains an `attachments_error` string.
 
 **Errors**
 
 | Condition | Error |
 |---|---|
 | Unknown `strategy_id` | `HTTP 400` from analysis |
+| `start` after `end` | `ValueError` raised by the client before any RPC |
+| Window span over `analysis.backtest.max_range_days` | `INVALID_ARGUMENT` from analysis |
+| History too short to warm indicators before `start` | `BACKTEST_STATUS_INSUFFICIENT_DATA` result with `coverage_gaps` (not an RPC error) |
 | Analysis service unreachable | `httpx` connection error propagated |
 
 ---
@@ -309,6 +392,20 @@ Scans an explicit universe of symbols via `xstockstrat-analysis` `ScreenSymbols`
 
 Registers, updates, or deactivates a stored strategy definition in `xstockstrat-analysis`.
 
+> **`update` is a PARTIAL MERGE (feature 070).** Only the fields you actually pass are changed;
+> everything else is preserved server-side. Tuning one parameter is therefore safe:
+>
+> ```python
+> manage_strategy(operation="update", strategy_id="range_mr_v3", cooldown_days=45)
+> ```
+>
+> leaves `components`, `entry_rule`, `exit_rule` and `display_name` untouched. **Before feature 070
+> this wiped them**, because the tool defaulted the omitted fields to `""`/`[]` and sent them.
+>
+> Use [`get_strategy`](#get_strategy) to read the current definition first, and `clear_fields` to
+> erase something deliberately — a field you simply don't pass is *preserved*, not cleared, so
+> erasure has to be explicit.
+
 **Parameters**
 
 | Parameter | Type | Required | Description |
@@ -321,6 +418,7 @@ Registers, updates, or deactivates a stored strategy definition in `xstockstrat-
 | `exit_rule` | `string` | No | JSON-encoded condition tree |
 | `signal_params` | `object` | No | Optional signal-weighting params |
 | `cooldown_days` | `int` | No | Per-symbol re-entry cooldown in calendar days. Omit → platform default (31); `0` → no cooldown; negative rejected |
+| `clear_fields` | `string[]` | No | Field names to **erase** on `update`, e.g. `["exit_rule"]`. The only way to blank a rule or revert `cooldown_days` to the platform default |
 
 **Return**
 
@@ -334,7 +432,55 @@ Registers, updates, or deactivates a stored strategy definition in `xstockstrat-
 |---|---|
 | Invalid definition (unknown indicator, bad rule JSON, undefined ref_name) | `invalid argument` (INVALID_ARGUMENT) |
 | Negative `cooldown_days` | `invalid argument` (INVALID_ARGUMENT) |
+| `update` with no fields and no `clear_fields` | `ValueError` raised client-side, before any RPC |
+| An `update` that would empty `components` or blank a rule without naming it for erasure | `invalid argument` (INVALID_ARGUMENT) — the server refuses; the message names `update_mask` as the escape hatch |
 | `update`/`deactivate` on unknown strategy | `strategy not found` (NOT_FOUND) |
+
+**Effect on the derived grade.** Changing a scoring-relevant field (`components`, rules,
+`cooldown_days`, `signal_params`) changes the strategy's definition fingerprint, so its derived
+grade is cleared until a fresh backtest supplies new evidence. A rename does **not** — the
+fingerprint excludes `display_name`.
+
+---
+
+### `get_strategy`
+
+Reads a stored strategy's full definition from `xstockstrat-analysis`. Read-only; not admin-scoped
+(matching the `GetStrategy` RPC, which the non-admin strategy detail page also uses).
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `strategy_id` | `string` | Yes | The strategy identifier, e.g. `"range_mean_reversion_v3"` |
+
+**Return**
+
+Snake_case keys, matching `manage_strategy`'s input, so a fetch → edit → resend round-trip works
+directly:
+
+```json
+{
+  "strategy_id": "range_mean_reversion_v3",
+  "display_name": "Range MR v3",
+  "components": [
+    {"ref_name": "z", "kind": "COMPONENT_KIND_CUSTOM_FORMULA", "formula_id": "f-abc", "params": {"period": 20.0}}
+  ],
+  "entry_rule": "{\"fn\": \"<\", \"lhs\": \"z\", \"rhs\": -1.0}",
+  "exit_rule": "{\"fn\": \">\", \"lhs\": \"z\", \"rhs\": 1.0}",
+  "active": true,
+  "live_enabled": false
+}
+```
+
+`cooldown_days` is omitted when unset (platform default applies) and present when explicitly set —
+including an explicit `0`, which means "no cooldown".
+
+**Errors**
+
+| Condition | Error |
+|---|---|
+| Unknown strategy | `strategy not found` (NOT_FOUND) |
 
 ---
 

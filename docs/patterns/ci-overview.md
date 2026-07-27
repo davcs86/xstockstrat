@@ -12,11 +12,12 @@ CI runs on every PR targeting `main-dev` or `main` (`.github/workflows/ci.yml`).
 | `buf-push-dev` | Publishes to BSR as draft on push to `main-dev` | — |
 | `go-lint` (×3) | `golangci-lint` per Go service | — |
 | `go-test` (×3) | `go test -race` + coverage (excludes cmd/handler/repository/telemetry/service packages) | 40% |
-| `python-lint` (×3) | `ruff check` + `ruff format --check` | — |
-| `python-test` (×3) | `pytest --cov` | 40% (indicators: 50%) |
+| `python-lint` (×4) | `ruff check` + `ruff format --check` + `uv lock --check` (lock/pyproject sync, added 2026-07-27) | — |
+| `python-test` (×4) | `pytest --cov` | 40% (indicators: 50%) |
 | `node-lint` (×7) | `pnpm run lint` (all Node + Next.js services) | — |
 | `node-test` (×4) | `pnpm run test:coverage` (Node.js services only) | 40% |
-| `frontend-e2e` (×3) | Playwright on trader, insights, config-ui | — |
+| `frontend-e2e-build` | Next.js production build for E2E (shared by shards) | — |
+| `frontend-e2e` (×2 shards) | Playwright E2E, chromium only, sharded across 2 runners | — |
 
 ## Local guard rails (not CI jobs)
 

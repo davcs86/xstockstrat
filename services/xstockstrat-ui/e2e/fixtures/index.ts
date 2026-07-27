@@ -18,3 +18,4 @@ export * from './accounts';
 export * from './portfolios';
 export * from './strategies';
 export * from './formulas';
+export * from './backtests';
