@@ -371,7 +371,7 @@ All three must pass; the last must report total coverage ≥ 40% (CI parity —
 
 ### Step 3 — service: `run_backtest` returns a summary + attachment; raise the `mcp` floor
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -528,7 +528,7 @@ same branch — see § Step Dependencies.
 
 ### Step 4 — test: tool-layer tests for the split return
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify

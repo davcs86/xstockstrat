@@ -1,6 +1,7 @@
 """Tests for app/tools.py — MCP tool definitions."""
 
 import base64
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -268,7 +269,9 @@ async def test_run_backtest_calls_grpc():
             symbols=["NVDA", "AAPL"],
             initial_capital=50000.0,
         )
-        assert result["backtest_id"] == "bt-1"
+        # feature 072: the tool now returns content blocks, not a dict — the summary is block 0.
+        summary = json.loads(result[0].text)
+        assert summary["backtest_id"] == "bt-1"
         mock_backtest.assert_called_once_with(
             strategy_id="sma_crossover",
             symbols=["NVDA", "AAPL"],
