@@ -152,7 +152,13 @@ Create `services/xstockstrat-agent/app/backtest_view.py` as a **pure** module (n
          type="resource",
          annotations=Annotations(audience=["user"], priority=_ATTACHMENT_PRIORITY),
          resource=TextResourceContents(
-             uri=_URI_TEMPLATE.format(backtest_id=result.get("backtest_id") or "unknown"),
+             uri=_URI_TEMPLATE.format(
+                 # quote() is byte-identical for a uuid today (servicer.py:200), but `AnyUrl`
+                 # silently NORMALISES a path — executed: `bt/../../etc/passwd` becomes
+                 # `xstockstrat:///etc/passwd/result.json`, losing `backtest` entirely. Harmless
+                 # while nothing dereferences the URI; pre-hardens the recorded escalation.
+                 backtest_id=quote(result.get("backtest_id") or "unknown", safe="")
+             ),
              mimeType=_ATTACHMENT_MIME,
              text=json.dumps(result, separators=(",", ":")),
          ),
@@ -171,6 +177,7 @@ Create `services/xstockstrat-agent/app/backtest_view.py` as a **pure** module (n
 
 **Placement note (recorded, not silent — P-03):** `design.md` § 3 names `app/backtest_view.py` as the
 home of `summarize` and shows the `EmbeddedResource` construction (§ 2) without naming its module.
+`build_blocks` additionally imports `from urllib.parse import quote` (see the URI note above).
 `build_blocks`/`attachment_refs` are placed in the same module so `tools.py` stays a thin call site
 and the whole split is unit-testable without a `FastMCP` server. This is a within-design placement
 decision, logged in `context.md`.
@@ -253,32 +260,69 @@ Cover:
    that scales with bar count.
    This is the reworded AC-1's first half ("independent of window length", `design.md` § 7) —
    size-independence, not byte-equality.
-5. `test_summary_grows_linearly_in_symbol_count` — 1 symbol vs 10 symbols: the serialized summary
-   grows, but stays under a small absolute bound (assert `< 3_000` bytes for 10 symbols) while the
-   full payload for the same input is orders of magnitude larger. AC-1's second half; asserted
-   across **two** symbol counts, per `design.md` § Open Risks.
+5. `test_summary_grows_linearly_in_symbol_count` — 1 symbol vs 10 symbols. Assert **two** things,
+   each testing one property:
+   (a) **marginal cost** — `len(dumps(s10)) - len(dumps(s1)) < 9 * 250`. This directly encodes the
+   reworded AC-1 ("linear in symbol count") and is immune to fixture composition: the head, the uuid,
+   the enum-name lengths and any `coverage_gaps` all cancel in the difference.
+   (b) a **loose** absolute catch-all — `len(dumps(s10)) < 8_000` — to catch a blow-up in the fixed
+   part that a difference cannot see.
+   Asserted across **two** symbol counts, per `design.md` § Open Risks.
 
-   > Bound tightened from `8_000` to `3_000` at round 2 (2026-07-27). Measured: ~1.0 KB at 5 symbols
-   > (~200 B/symbol), so ~2.0–2.2 KB at 10. The original bound tolerated a ~4× regression — e.g.
-   > accidentally retaining a per-bar field — without failing, which would have made the AC-1 guard
-   > decorative.
-6. `test_summary_passes_non_finite_strings_through` — `profit_factor: "Infinity"` stays the string
-   `"Infinity"`, not `math.inf` and not `None`.
+   > **Round 2 tightened this to a `3_000` absolute bound; round 3 replaced the instrument.** The
+   > ~200 B/symbol measurement came from an **OK** run with no `coverage_gaps` — but gaps are *not*
+   > INSUFFICIENT-only. `servicer.py:477` extends them outside the status branch, and the comment at
+   > `:468` says so outright ("A partial multi-symbol backtest stays OK but still carries the
+   > per-symbol gaps"); the proto comment at `analysis.proto:78` claiming otherwise is **drift**. A
+   > 10-symbol OK run carrying 10 gaps (~150 B each, executed) would breach `3_000` and go red for
+   > the wrong reason. Round 2 tightened the right idea onto the wrong quantity: the criterion is
+   > *linearity*, so assert the slope, not the intercept.
+6. `test_summary_preserves_the_serializer_string_mapping` — the **reachable** instance of the
+   contract that decided the format: a result whose `coverage_gaps[0]` has `bars_have`/`bars_need`
+   set keeps them as the **strings** `"120"`/`"504"` in the summary (they are `int64`,
+   `analysis.proto:55-56`; executed). Assert also that `total_trades` stays an `int` — an `int32`
+   maps to a JSON number, so the two must not be conflated.
+
+   > Retargeted at round 3. This test previously asserted `profit_factor: "Infinity"`, which the
+   > producer cannot emit (`servicer.py:2202-2208`).
+
 7. `test_summarize_tolerates_a_partial_dict` — `summarize({"backtest_id": "bt-2"})` returns
    `{"backtest_id": "bt-2"}` and raises nothing (protects `test_tools.py:288,303`).
-8. `test_attachment_round_trips_to_the_complete_result` —
+8. `test_summary_key_set_covers_every_proto_field` — a **C-10 guard against silent field loss.**
+   `summarize` is an allowlist over `BacktestResult`, which is contractually additive-only
+   (`analysis.proto:61-64`) and has already gained fields 13/14/15 from features 053/064/068. A
+   field 16 would be dropped silently — and on an `INSUFFICIENT_DATA` run, where `build_blocks`
+   returns `[]`, it would never reach the caller at all. Assert, for **both** messages:
+
+   ```python
+   from gen.analysis.v1 import analysis_pb2   # in-function, per AGENT-2
+   assert set(_HEAD_KEYS) | set(_METRIC_KEYS) | {"coverage_gaps", "diagnostics"} | _INTENTIONALLY_DROPPED \
+       == set(analysis_pb2.BacktestResult.DESCRIPTOR.fields_by_name)
+   assert set(_SYMBOL_KEYS) | {"bars"} \
+       == set(analysis_pb2.SymbolDiagnostics.DESCRIPTOR.fields_by_name)
+   ```
+
+   with `_INTENTIONALLY_DROPPED = {"trades"}` in `backtest_view.py`. Note the union **must** include
+   the dropped set — asserting bare equality against `fields_by_name` is immediately red, because
+   `trades` is dropped on purpose. The proto import stays in the **test** module and inside the
+   function body: `backtest_view.py` is contractually pure with no `gen.*` import
+   (agent `docs/context-constitution.md:16`, AGENT-2). CI routes this correctly — `ci.yml:39-41`
+   defines the `proto` filter and the agent's `python-test` runs when it matches, so a proto-only PR
+   adding field 16 turns this red on the PR that causes it.
+
+9. `test_attachment_round_trips_to_the_complete_result` —
    `json.loads(build_blocks(full)[0].resource.text) == full` (AC-2, FR-3), and assert the sentinel
    `"sentinel_only_in_attachment"` **is** in the attachment text while being absent from
    `json.dumps(summarize(full))`.
-9. `test_attachment_block_shape` — one block; `block.type == "resource"`;
+10. `test_attachment_block_shape` — one block; `block.type == "resource"`;
    `block.resource.mimeType == "application/json"`; `str(block.resource.uri)` starts with
    `"xstockstrat:///backtest/"` and contains the `backtest_id`;
    `block.annotations.audience == ["user"]` and `block.annotations.priority == 0.1`.
-10. `test_no_attachment_when_there_is_no_detail` — an `INSUFFICIENT_DATA`-shaped result
+11. `test_no_attachment_when_there_is_no_detail` — an `INSUFFICIENT_DATA`-shaped result
     (`status: "BACKTEST_STATUS_INSUFFICIENT_DATA"`, populated `coverage_gaps`, `trades: []`,
     `diagnostics: []`) yields `build_blocks(...) == []` while `summarize(...)` still carries
     `coverage_gaps` (AC-4).
-11. `test_attachment_refs_describe_each_block` — `attachment_refs` returns one `{"uri", "mime_type"}`
+12. `test_attachment_refs_describe_each_block` — `attachment_refs` returns one `{"uri", "mime_type"}`
     entry per block and `[]` for `[]`.
 
 **Verification**:
@@ -352,9 +396,16 @@ apply this step).
    `from app import client` at `:27` (or extend it to `from app import backtest_view, client`).
 
 2. **Decorator** — change `@server.tool()` at `app/tools.py:240` to
-   `@server.tool(structured_output=False)`. This is load-bearing: without it FastMCP builds an output
-   schema from the return annotation and validates against it. Do **not** return a `CallToolResult` —
-   explicitly rejected in `design.md` § 1.
+   `@server.tool(structured_output=False)`.
+
+   > **Honest justification (round 3 correction).** This is **not** load-bearing for a *bare*
+   > `-> list`. Executed against the resolved SDK: `func_metadata(f)` yields `output_schema is None`
+   > for `-> list` **and** for today's `-> dict`, with or without the argument — `_try_create_model_and_schema`
+   > falls to Case 4, `get_type_hints(list)` is empty, and it returns `(None, None, False)`
+   > (`func_metadata.py:396-401,433`). The argument becomes load-bearing only if the annotation is
+   > ever **parameterized** — `-> list[ContentBlock]` is a `GenericAlias` and *does* build a schema
+   > by default (verified: `list[str]` → schema present by default, absent with the argument).
+   > Keep it as forward-protection and state that reason; do not claim it changes behavior today.
 
 3. **Return annotation** — change `-> dict:` at `app/tools.py:247` to `-> list:`.
 
@@ -373,10 +424,13 @@ apply this step).
        blocks = backtest_view.build_blocks(result)
        summary["attachments"] = backtest_view.attachment_refs(blocks)
    except Exception as e:  # presentation-only failure must not fail a successful backtest
+       # Fixed user-facing string, never str(e): a pydantic ValidationError repr can embed the
+       # offending input — i.e. the ~827 KB `text` this feature exists to keep out of the inline
+       # block. Full detail goes to the log, which is also the only place it is useful.
        log.warning("Backtest attachment construction failed (result unaffected): %s", e)
        blocks = []
        summary["attachments"] = []
-       summary["attachments_error"] = str(e)
+       summary["attachments_error"] = "attachment could not be built; see server logs"
    return [TextContent(type="text", text=json.dumps(summary, indent=2)), *blocks]
    ```
    Keep the `client.run_backtest(...)` kwargs **exactly** as they are today (`:270-275`) — feature
@@ -431,11 +485,12 @@ cd services/xstockstrat-agent && uv run pytest tests/ -q
 The full-suite run is green only once Step 4's adaptation of `test_run_backtest_calls_grpc` is in the
 same branch — see § Step Dependencies.
 
-> **Doc-drift note (P-03, surfaced not papered over):** root `CLAUDE.md` § Python uv lock rule states
-> `uv lock --check` enforces lock freshness in CI. It does not for this service — the `python-test`
-> job installs with `pip install -e ".[dev]"` (`.github/workflows/ci.yml:352-353`) and no
-> `uv lock --check` step exists anywhere in `.github/workflows/ci.yml`. The command above is
-> therefore a **local** gate only. Not fixed here (out of scope); worth a separate CI change.
+> **Doc-drift note — RESOLVED 2026-07-27.** This spec originally recorded that root `CLAUDE.md`'s
+> claim of a CI `uv lock --check` gate was false (no workflow referenced `uv` at all). The gate was
+> subsequently **added**: `python-lint` installs `uv` and runs `uv lock --check` per service, and its
+> matrix includes `xstockstrat-agent`. The command above is therefore a real CI gate, not a local
+> one. Left in the record because the note itself went stale — a spec assertion about CI must be
+> re-checked at execute time, not trusted from write time.
 
 ---
 
@@ -523,14 +578,27 @@ no regression of the feature-064 / feature-071 guards. _(Registry gap closed 202
      load-bearing. Without this, the decorator could be wrong (or the annotation dropped) and every
      other assertion would still pass. Drive the registered tool instead:
      `await server.call_tool("run_backtest", {"strategy_id": "sma", "symbols": ["AAPL"]})`, and assert
-     the client-visible content is `[TextContent, EmbeddedResource]` in that order. Additionally assert
-     via `await server.list_tools()` that the published `run_backtest` carries **no** `outputSchema` —
-     that is the observable proof `structured_output=False` took effect, and it fails loudly if a
-     future SDK bump changes the passthrough.
+     the client-visible content is `[TextContent, EmbeddedResource]` in that order. **That ordering
+     assertion is the live half** — it fails on unmodified `main-dev`, where the tool returns a dict.
+
+     > **Do NOT assert `outputSchema` is absent** (round 3 correction). It is absent on `main-dev`
+     > today and absent with `structured_output=False` deleted, so the assertion cannot fail for the
+     > reason it claims — the inert-guard trap of `insights.md` 2026-07-27. Verified by execution.
    - `test_zero_trade_run_is_diagnosable_from_the_summary_alone` — a result whose symbols have
      `total_trades: 0`, `no_trade_reason: "NO_TRADE_REASON_ENTRY_NEVER_TRUE"`, `bars_total`,
      `warmup_bars`: all three per-symbol fields plus `total_trades: 0` are present in the parsed
-     summary, and `profit_factor` is the **string** `"Infinity"` (**AC-3** regression guard, FR-2).
+     summary, and `profit_factor` is **`1.0`** — the value a real 0-trade run emits
+     (`servicer.py:2202-2208`: `gross_loss == 0` and `gross_profit == 0` → `1.0`), **not** the string
+     `"Infinity"` (**AC-3** regression guard, FR-2).
+
+     > **Round 3 correction.** The design claimed `profit_factor` legitimately arrives as
+     > `"Infinity"`. It cannot: the producer clamps to `1.0` / `999.0` and never divides by zero, and
+     > a green test has pinned `999.0` all along (`services/xstockstrat-analysis/tests/test_analysis_helpers.py:77-82`).
+     > In fact **no `double` in `BacktestResult` is reachable as non-finite**. The serializer fact is
+     > still true and still what killed CSV — but its reachable *in-summary* instance is
+     > `CoverageGap.bars_have`/`bars_need`, which are `int64` (`analysis.proto:55-56`) and arrive as
+     > the **strings** `"120"`/`"504"` (executed). `total_trades` is `int32` → a JSON number, so it
+     > cannot demonstrate the mapping.
    - `test_insufficient_data_run_has_coverage_gaps_inline_and_no_attachment` — a result with
      `status: "BACKTEST_STATUS_INSUFFICIENT_DATA"`, populated `coverage_gaps`, empty `trades` and
      empty `diagnostics`: `len(result) == 1`, the parsed summary carries `coverage_gaps`, and
@@ -610,9 +678,13 @@ All must pass; the last must report total coverage ≥ 40% (CI parity —
      the **complete** `BacktestResult`.
    - Show a realistic trimmed summary JSON example including `backtest_id`, `status`, the headline
      metrics, a `diagnostics` array of `{symbol, no_trade_reason, bars_total, warmup_bars}`, and the
-     `attachments` array of `{uri, mime_type}`. Use `"profit_factor": "Infinity"` in the example
-     with a one-line note that `MessageToDict` renders non-finite doubles and int64s as **strings**
-     — this is the exact contract that decided the format (ledger insights 2026-07-27).
+     `attachments` array of `{uri, mime_type}`. Give `profit_factor` a **realistic ratio** (e.g.
+     `1.8`) — do **not** publish `"Infinity"`, which the engine cannot emit (`servicer.py:2202-2208`;
+     round 3 correction). Illustrate the serializer's string contract with a `coverage_gaps` entry
+     showing `"bars_have": "120"` — `int64` renders as a **string** — and put the equivalent note
+     about the attachment (where `volume` is likewise a string) in the attachment paragraph, not the
+     summary one. If the engine's `999.0` no-losing-trades sentinel is mentioned at all, label it as
+     a sentinel rather than a ratio; fixing that sentinel is `xstockstrat-analysis` scope, not 072's.
    - State the attachment URI form: `xstockstrat:///backtest/<backtest_id>/result.json`.
    - State what moves to the attachment: full per-bar `diagnostics` and the full `trades` list.
    - State the no-attachment case: a run with no diagnostics and no trades (typically

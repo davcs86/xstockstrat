@@ -416,3 +416,72 @@ doubles the block count and re-imports the CSV two-block objection), `ResourceLi
 (AC-1 forbids it). The adversary's claim that the *original* AC-1 was "unsatisfiable" was itself an
 overreach — it is unsatisfiable only jointly with FR-2's chosen row shape, which is what the approved
 amendment already says — so the amendment was left alone rather than re-argued.
+
+## Session 2026-07-27 — sdd-design round 3 (full proposer + adversary)
+
+Third round. **Chosen approach unchanged for the third time** — zero architectural problems found.
+The value was entirely in defects, including two that three rounds and a formal impl-spec review had
+all missed.
+
+### Content-trimming (round 2's untested fourth option) — measured, and dead
+
+5 symbols × 504 bars: full 800 KB; drop warm-up bars only → 731 KB (**1.10×**, negligible); drop
+HOLD_FLAT → 130 KB (6.2×); drop warm-up+HOLD → 60 KB (13.3×). But **a 0-trade run keeps 0 of 2520
+bars** — every bar is warm-up or HOLD — so the attachment empties to 0.8 KB in exactly the case
+feature 064 exists to diagnose. The only variants that save anything delete the payload when it
+matters most. The encoding/payload axis is now exhausted.
+
+### Corrections applied
+
+1. **`profit_factor: "Infinity"` is unreachable** — the design asserted a *producer* fact it never
+   checked. The producer clamps (`servicer.py:2202-2208`), and no `double` in `BacktestResult` is
+   reachable as non-finite. Step 5 would have published the false contract to `mcp-tools.md`. The
+   serializer fact survives; its reachable in-summary instance is `CoverageGap.bars_have`/`bars_need`
+   (`int64` → strings `"120"`/`"504"`, executed). `total_trades` is `int32` → a number, so the
+   proposer's own replacement example was also unreachable. Test 6 retargeted; AC-3 fixture now uses
+   the real value `1.0`.
+2. **`structured_output=False` is a no-op for a bare `-> list`, and the test I added to prove it was
+   inert.** Executed: `output_schema is None` for `-> list` *and* today's `-> dict`, with or without
+   the argument. So the `outputSchema`-absent assertion — which I added at the impl-spec review
+   *specifically to fix an inert guard* — passes on `main-dev` and passes with the argument deleted.
+   The `[TextContent, EmbeddedResource]` ordering half is live and stays. The decorator is kept as
+   **forward-protection**: a parameterized `list[ContentBlock]` *does* build a schema by default
+   (verified with `list[str]`), and the spec now states that reason instead of a false one.
+3. **The AC-1 bound was tightened onto the wrong quantity at round 2.** My ~200 B/symbol figure came
+   from an OK run with no `coverage_gaps` — but gaps are **not** INSUFFICIENT-only: `servicer.py:477`
+   extends them outside the status branch and `:468` says so outright; the proto comment at
+   `analysis.proto:78` is drift. A 10-symbol OK run with 10 gaps (~150 B each, executed) would breach
+   `3_000` and go red for the wrong reason. Replaced with the right instrument: assert the **marginal
+   cost** (`len(s10) - len(s1) < 9 × 250`), which encodes "linear in symbol count" and is immune to
+   fixture composition, plus a loose 8 KB catch-all for the fixed part.
+4. **Descriptor-parity guard added** (C-10). `summarize` is an allowlist over an additive-only message
+   that has already gained fields 13/14/15. Asserted as `kept | dropped == fields_by_name` — bare
+   equality is immediately red because `trades` is dropped deliberately — and over **both**
+   `BacktestResult` and `SymbolDiagnostics`. Proto import stays in the test, in-function, per AGENT-2.
+5. **`attachments_error` is now a fixed user-facing string**, not `str(e)`: a pydantic error repr can
+   embed the ~827 KB payload this feature exists to keep out of the inline block. Detail goes to the
+   log. Chosen over truncation because it kills the leak class outright and keeps internal exception
+   text off a user surface — affordable precisely because the `except` is near-unreachable (executed:
+   every pathological `backtest_id` still constructs a valid URI).
+6. **`quote()` on the `backtest_id`** — free hardening. Byte-identical for a uuid today, but `AnyUrl`
+   silently normalises a path: `bt/../../etc/passwd` → `xstockstrat:///etc/passwd/result.json`,
+   losing `backtest` entirely (executed). Harmless while nothing dereferences the URI; pre-hardens the
+   recorded escalation rather than leaving a comment a future feature must remember to act on.
+7. **The spec's own doc-drift note went stale.** It recorded that no CI `uv lock --check` gate
+   existed — true when written, false once I added the gate hours later. Marked resolved, with the
+   lesson kept: a spec assertion about CI must be re-checked at execute time.
+
+### Governance catch
+
+I was about to correct the two wrong ledger entries in place. The ledger is **append-only**
+(`fails.md:16`, `ledger/CLAUDE.md:12`). Recorded instead as a new `fails.md` entry that names what it
+supersedes and preserves the true half.
+
+### Not adopted
+
+`999.0` is a sentinel wearing a metric's type (it means "profit with zero losses", not a 999× ratio)
+and is persisted and surfaced to the UI. Real, but `xstockstrat-analysis` backtest math — explicitly
+out of 072's scope. 072's only obligation is not to publish it unlabeled, which correction 1 handles.
+Also declined: adding the requested `range` to the summary (`BacktestResult` carries no window field,
+so it would print `null` in exactly the rolling-default case), and blocking the ship on connector
+measurement (unobservable in-repo; the risk is recorded with a named observable and user-approved).

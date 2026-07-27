@@ -17,6 +17,7 @@
 | 2026-07-27 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps (2 service+test pairs + 1 docs). Product-spec AC-1 rewording and stale line citations applied |
 
 | 2026-07-27 | `implementation-ready` (unchanged) | /sdd-design r2 | Second grilling round on the approved design: gzip'd `BlobResourceContents` swap **proposed and rejected** (it inverts this feature's own failure-asymmetry rule; measured 103 KB not the 53 KB assumed; needs two unobserved behaviors to pay off). Chosen approach unchanged. Three corrections adopted — measured sizes replace estimates, AC-1 test bound `8_000` → `3_000`, `mtime=0` reproducibility limit recorded |
+| 2026-07-27 | `implementation-ready` (unchanged) | /sdd-design r3 | Third round: content-trimming measured and **rejected** (a 0-trade run keeps 0/2520 bars). Design unchanged again. Seven corrections — `profit_factor: "Infinity"` is unreachable (producer clamps); `structured_output=False` is a no-op for bare `list` so its guard test was inert; AC-1 bound re-aimed at marginal cost (gaps are not INSUFFICIENT-only); descriptor-parity guard; fixed `attachments_error` string; `quote()` the id; stale CI note. New `fails.md` entry rather than rewriting append-only ledger |
 ---
 
 ## Artifacts

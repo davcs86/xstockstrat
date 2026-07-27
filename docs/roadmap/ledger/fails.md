@@ -56,3 +56,28 @@ ambiguity is logged here).
 - **Mistake**: The design specified "normalize `NaN`/`Inf`→`None` and pass an all-`NaN` `len==n` series through as legitimate warm-up." But `google.protobuf.json_format.MessageToDict` (protobuf 6.33.x — the canonical decode used by BOTH `screener.py:261` and the new `evaluator.py` fix) **raises `ValueError` on a `NaN`/`Inf` number_value** ("Fail to serialize NaN for Value.number_value"), so a `NaN` in the response `Struct` can never round-trip; normalization can't run after it. Only surfaced when the paired unit test fed a `NaN` through a real `Struct` and the decode threw. The realistic, JSON-serializable warm-up representation is a `null` (Python `None`) element, which decodes cleanly.
 - **Evidence**: `services/xstockstrat-analysis/app/services/evaluator.py` `_compute_component` (`try: MessageToDict(...) except ValueError → raise FormulaExecutionError`); tests `test_nan_output_raises` / `test_all_null_len_n_passes_through_as_warmup`; feature 067 implementation-spec.md Deviation D-1.
 - **Rule it implies**: **P-03** — when a design says "decode a protobuf `Struct` and normalize non-finite values," verify the *decoder's* contract first: `MessageToDict`/`json_format` reject `NaN`/`Inf` outright. Model warm-up/absent values as `null`, and treat a genuinely non-finite series as out-of-contract (surface it, don't assume post-decode normalization can catch it).
+
+### 2026-07-27 — 072-backtest-result-attachment — assumption
+- **Mistake**: Recorded, in two places, that `BacktestResult.profit_factor` "is legitimately `inf` on
+  no-loss runs" — and designed on it. It cannot be. The producer clamps:
+  `(gross_profit / gross_loss) if gross_loss > 0 else (1.0 if gross_profit == 0 else 999.0)`, and the
+  `<2`-equity-point path returns `1.0`. A green test has pinned `999.0` the whole time. Extending the
+  check, **no `double` in `BacktestResult` is reachable as non-finite**. The belief entered via
+  feature 068 and was inherited by 072 three rounds later, where it nearly shipped a false
+  `"profit_factor": "Infinity"` contract onto `docs/runbooks/mcp-tools.md` — a shared consumer
+  surface (the C-10 shape, in documentation form). The **true half survives**: `MessageToDict` really
+  does map non-finite doubles to `'NaN'`/`'Infinity'` and int64 to a **string**, and that is still
+  what rejected CSV as an attachment format — but the reachable instances are
+  `CoverageGap.bars_have`/`bars_need` (`int64`, in the summary) and `volume` (in the attachment),
+  never `profit_factor`.
+- **Evidence**: `services/xstockstrat-analysis/app/handlers/servicer.py:2202-2208`, `:2176-2183`,
+  `:321`, `:2187`, `:2195`; `services/xstockstrat-analysis/tests/test_analysis_helpers.py:77-82`;
+  `packages/proto/analysis/v1/analysis.proto:55-56,73`. **Supersedes the producer claim in**
+  `insights.md` 2026-07-21 (feature 068, "`profit_factor` is legitimately `inf` on no-loss runs") and
+  the `profit_factor → 'Infinity'` example in `insights.md` 2026-07-27 (072 design). Those entries
+  stay as written — the ledger is append-only — and their other content remains valid.
+- **Rule it implies**: extends **P-03** — *a serializer-contract demonstration is not a
+  producer-contract claim*. Executing `MessageToDict` on a hand-built proto proves what the
+  serializer does with a value; it proves nothing about whether anything ever produces that value.
+  Before writing "field X is legitimately Y" into cross-feature memory, grep the producer's
+  assignment — the ledger is append-only, so a wrong entry is load-bearing forever.

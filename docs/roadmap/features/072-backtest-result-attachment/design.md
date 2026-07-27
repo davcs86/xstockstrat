@@ -1,8 +1,9 @@
 # Design: backtest-result-attachment
 
 **Created**: 2026-07-27
-**Rounds**: 2 (round 1 quick; round 2 full proposer+adversary, 2026-07-27 — gzip swap proposed and
-**rejected**, chosen approach unchanged, three corrections adopted)
+**Rounds**: 3 (round 1 quick; rounds 2–3 full proposer+adversary, 2026-07-27 — gzip swap and
+content-trimming both proposed and **rejected**, chosen approach unchanged in all three; corrections
+adopted each round)
 **Approved by**: user @ 2026-07-27
 **Grounded in**: recon.md
 
@@ -80,11 +81,28 @@ the user detail exists (FR-5a).
 Must be **total over partial dicts** — `tests/test_tools.py:288,303` mock `client.run_backtest` with
 `{"backtest_id": "bt-2"}` only, so `.get(...)` throughout or the feature-071 window tests break.
 
-**Non-finite representation is documented, not incidental.** `MessageToDict` maps int64 to a JSON
-**string** and non-finite doubles to `'NaN'` / `'Infinity'` / `'-Infinity'` — executed and confirmed:
-`volume` → `'51234567'`, `vwap` → `'NaN'`, `profit_factor` → `'Infinity'`, while `bar_index` stays an
-`int`. `profit_factor` is `+Inf` whenever there are zero losing trades, so the inline summary
-legitimately carries the **string** `"Infinity"`. AC-3/AC-4 assertions must expect that.
+**The serializer's string mapping is documented, not incidental.** `MessageToDict` maps int64 to a
+JSON **string** and non-finite doubles to `'NaN'` / `'Infinity'` / `'-Infinity'` — executed and
+confirmed. That is the contract that killed CSV.
+
+> **Round 3 correction — the original text here asserted a producer fact that is false.** It claimed
+> `profit_factor` is `+Inf` on zero-losing-trade runs and that the summary "legitimately carries the
+> string `Infinity`". The producer clamps: `(gross_profit / gross_loss) if gross_loss > 0 else
+> (1.0 if gross_profit == 0 else 999.0)` (`servicer.py:2202-2208`), the `<2`-equity-point path
+> returns `1.0` (`:2176-2183`), and a green test has pinned `999.0` all along
+> (`services/xstockstrat-analysis/tests/test_analysis_helpers.py:77-82`). Extending the check:
+> **no `double` in `BacktestResult` is reachable as non-finite** — `initial_equity > 0`
+> (`servicer.py:321`), returns are `np.isfinite`-filtered (`:2187`), `std_r` floored at `1e-9`
+> (`:2195`), and `cummax ≥ initial_equity > 0`.
+>
+> The *serializer* fact stands and still decides the format. Its **reachable** instances are:
+> in the summary, `CoverageGap.bars_have`/`bars_need` (`int64`, `analysis.proto:55-56`) → strings
+> `"120"`/`"504"`; in the attachment, `volume` → `'51234567'` while `bar_index` stays an `int`.
+> `total_trades` is `int32` → a JSON number and cannot demonstrate the mapping.
+>
+> This is a producer-vs-serializer confusion: executing `MessageToDict` on a hand-built proto proves
+> what the serializer does with `inf`, not that anything ever produces `inf`. Same shape as
+> fails.md 2026-07-21, one layer up.
 
 ### 4. Degradation (FR-5)
 
