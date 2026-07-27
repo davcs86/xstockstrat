@@ -1,6 +1,7 @@
 """Tests for app/tools.py — MCP tool definitions."""
 
 import base64
+import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -268,7 +269,9 @@ async def test_run_backtest_calls_grpc():
             symbols=["NVDA", "AAPL"],
             initial_capital=50000.0,
         )
-        assert result["backtest_id"] == "bt-1"
+        # feature 072: the tool now returns content blocks, not a dict — the summary is block 0.
+        summary = json.loads(result[0].text)
+        assert summary["backtest_id"] == "bt-1"
         mock_backtest.assert_called_once_with(
             strategy_id="sma_crossover",
             symbols=["NVDA", "AAPL"],
@@ -321,6 +324,180 @@ class TestRunBacktestWindow:
         # optional — an agent that omits them still gets the rolling default
         assert "start" not in schema.get("required", [])
         assert "end" not in schema.get("required", [])
+
+
+class TestRunBacktestAttachment:
+    """feature 072 — the tool returns a compact summary block plus one attachment.
+
+    The fixture is deliberately **non-echoing**: per-bar rows carry a sentinel that appears nowhere
+    in the FR-2 summary key set, so a test cannot pass by reading the wrong half of the split.
+    """
+
+    SENTINEL = "sentinel_only_in_attachment"
+
+    @staticmethod
+    def _result(symbols: int = 1, bars: int = 50, **overrides) -> dict:
+        """A realistic `client.run_backtest` dict.
+
+        `coverage_gaps` is exactly ONE entry regardless of `symbols`: gaps are per-symbol on OK runs
+        too, so a factory that scaled them would push the linearity test past its slope and go red
+        for the wrong reason. `profit_factor` is finite (1.8) — the producer clamps and never emits
+        `Infinity`. `volume` is a string int64 while `bar_index` stays an int.
+        """
+        result = {
+            "backtest_id": "bt-abc123",
+            "strategy_id": "sma",
+            "status": "BACKTEST_STATUS_OK",
+            "total_return": 0.15,
+            "total_trades": 42,
+            "profit_factor": 1.8,
+            "initial_capital": 100000.0,
+            "trades": [{"symbol": "AAPL", "pnl": 680.0}],
+            "coverage_gaps": [{"symbol": "AAPL", "bars_have": "120", "bars_need": "504"}],
+            "diagnostics": [
+                {
+                    "symbol": f"SYM{s}",
+                    "bars_total": bars,
+                    "warmup_bars": 20,
+                    "no_trade_reason": "NO_TRADE_REASON_ENTRY_NEVER_TRUE",
+                    "bars": [
+                        {
+                            "symbol": f"SYM{s}",
+                            "bar_index": i,
+                            "volume": "51234567",
+                            "indicators": {TestRunBacktestAttachment.SENTINEL: 1.0},
+                        }
+                        for i in range(bars)
+                    ],
+                }
+                for s in range(symbols)
+            ],
+        }
+        result.update(overrides)
+        return result
+
+    @staticmethod
+    async def _call(result: dict):
+        with patch.object(client, "run_backtest", AsyncMock(return_value=result)):
+            server = _make_server()
+            return await _tool_fn(server, "run_backtest")(strategy_id="sma", symbols=["AAPL"])
+
+    @pytest.mark.asyncio
+    async def test_inline_summary_has_no_per_bar_detail(self):
+        """AC-1 — the bounded half."""
+        out = await self._call(self._result(symbols=2))
+        assert out[0].type == "text"
+        assert self.SENTINEL not in out[0].text
+        summary = json.loads(out[0].text)
+        assert "trades" not in summary
+        for entry in summary["diagnostics"]:
+            assert "bars" not in entry
+
+    @pytest.mark.asyncio
+    async def test_inline_summary_is_independent_of_window_length(self):
+        """AC-1 — NOT byte-identity: `bars_total` tracks bar count, so demanding equality could
+        only be met by pinning it, which is an inert fixture."""
+        a = json.loads((await self._call(self._result(bars=50)))[0].text)
+        b = json.loads((await self._call(self._result(bars=5000)))[0].text)
+        a_totals = [d.pop("bars_total") for d in a["diagnostics"]]
+        b_totals = [d.pop("bars_total") for d in b["diagnostics"]]
+        assert a == b
+        assert a_totals == [50] and b_totals == [5000]
+        assert abs(len(json.dumps(a)) - len(json.dumps(b))) < 16
+
+    @pytest.mark.asyncio
+    async def test_inline_summary_is_linear_in_symbol_count(self):
+        """AC-1 — same instrument as the backtest_view test: assert the slope, not the intercept.
+
+        Note this measures `result[0].text`, which the tool builds with `indent=2`, where the
+        sibling measures compact `json.dumps`. Both bounds hold; the shared form is the point.
+        """
+        r1 = (await self._call(self._result(symbols=1)))[0].text
+        r10 = (await self._call(self._result(symbols=10)))[0].text
+        assert len(r10) - len(r1) < 9 * 250
+        assert len(r10) < 8_000
+
+    @pytest.mark.asyncio
+    async def test_attachment_round_trips_to_the_complete_result(self):
+        """AC-2 / FR-3 — the attachment IS the result the client returned."""
+        result = self._result(symbols=2)
+        out = await self._call(result)
+        assert json.loads(out[1].resource.text) == result
+        assert self.SENTINEL in out[1].resource.text
+
+    @pytest.mark.asyncio
+    async def test_the_published_tool_returns_two_content_blocks(self):
+        """The only test that crosses the wire: every other test here calls the raw undecorated
+        function via `_tool_fn`, so the return never passes through `convert_result`.
+
+        This guards the **return shape**, not the decorator — `structured_output=False` is a no-op
+        for a bare `-> list`. The ordering assertion is the live half: it fails on `main-dev`, where
+        the tool returns a dict.
+        """
+        from mcp.types import EmbeddedResource, TextContent
+
+        with patch.object(client, "run_backtest", AsyncMock(return_value=self._result())):
+            server = _make_server()
+            args = {"strategy_id": "sma", "symbols": ["A"]}
+            content = await server.call_tool("run_backtest", args)
+        assert isinstance(content[0], TextContent)
+        assert isinstance(content[1], EmbeddedResource)
+
+    @pytest.mark.asyncio
+    async def test_zero_trade_run_is_diagnosable_from_the_summary_alone(self):
+        """AC-3 — the feature-064 promise, kept from the inline half alone.
+
+        Overrides the base fixture: a real 0-trade run emits `profit_factor: 1.0` (both gross sums
+        are 0), not the base 1.8 and never the string "Infinity", which the producer cannot emit.
+        """
+        out = await self._call(self._result(profit_factor=1.0, total_trades=0))
+        summary = json.loads(out[0].text)
+        assert summary["total_trades"] == 0
+        assert summary["profit_factor"] == 1.0
+        for entry in summary["diagnostics"]:
+            assert entry["no_trade_reason"] == "NO_TRADE_REASON_ENTRY_NEVER_TRUE"
+            assert "bars_total" in entry and "warmup_bars" in entry
+
+    @pytest.mark.asyncio
+    async def test_insufficient_data_run_has_coverage_gaps_inline_and_no_attachment(self):
+        """AC-4 — the case with no attachment at all, so the inline path is the only path."""
+        out = await self._call(
+            self._result(
+                status="BACKTEST_STATUS_INSUFFICIENT_DATA",
+                trades=[],
+                diagnostics=[],
+            )
+        )
+        assert len(out) == 1
+        summary = json.loads(out[0].text)
+        assert summary["coverage_gaps"][0]["bars_have"] == "120"
+        assert summary["attachments"] == []
+
+    @pytest.mark.asyncio
+    async def test_attachment_failure_degrades_to_summary_only(self):
+        """FR-5 — a presentation failure must not fail a backtest that succeeded."""
+        from app import tools as tools_mod
+
+        with patch.object(
+            tools_mod.backtest_view, "build_blocks", side_effect=RuntimeError("boom")
+        ):
+            out = await self._call(self._result())
+        assert len(out) == 1
+        summary = json.loads(out[0].text)
+        assert summary["backtest_id"] == "bt-abc123"
+        assert summary["attachments"] == []
+        assert "attachments_error" in summary
+        # Never str(e): a pydantic repr can embed the whole payload this feature keeps out.
+        assert "boom" not in summary["attachments_error"]
+
+    @pytest.mark.asyncio
+    async def test_summary_advertises_its_attachments(self):
+        """FR-5 — a client that renders no attachment affordance still learns detail exists."""
+        out = await self._call(self._result())
+        refs = json.loads(out[0].text)["attachments"]
+        assert len(refs) == 1
+        assert refs[0]["mime_type"] == "application/json"
+        assert "bt-abc123" in refs[0]["uri"]
 
 
 # ── screen_symbols (feature 061) ──────────────────────────────────────────

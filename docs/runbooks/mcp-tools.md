@@ -276,9 +276,65 @@ Both bounds set with a span over `analysis.backtest.max_range_days` (default 730
 
 **Return**
 
+Two parts, as MCP **content blocks** (feature 072) — not a single JSON object:
+
+1. A **text block** carrying a compact JSON summary. This is what the model reads.
+2. When there is detail to attach, one **embedded `application/json` resource** carrying the
+   **complete** `BacktestResult`, at
+   `xstockstrat:///backtest/<backtest_id>/result.json`.
+
+The summary:
+
 ```json
-{ "backtest_id": "bt-abc123" }
+{
+  "backtest_id": "bt-9f2c1a",
+  "strategy_id": "sma_crossover",
+  "status": "BACKTEST_STATUS_OK",
+  "completed_at": "2026-07-27T14:03:11Z",
+  "total_return": 0.152,
+  "annualized_return": 0.221,
+  "sharpe_ratio": 1.24,
+  "max_drawdown": 0.081,
+  "win_rate": 0.55,
+  "total_trades": 42,
+  "profit_factor": 1.8,
+  "initial_capital": 100000.0,
+  "coverage_gaps": [
+    { "symbol": "AAPL", "timeframe": "TIMEFRAME_1DAY", "bars_have": "120", "bars_need": "504" }
+  ],
+  "diagnostics": [
+    {
+      "symbol": "AAPL",
+      "no_trade_reason": "NO_TRADE_REASON_ENTRY_NEVER_TRUE",
+      "bars_total": 504,
+      "warmup_bars": 50
+    }
+  ],
+  "attachments": [
+    { "uri": "xstockstrat:///backtest/bt-9f2c1a/result.json", "mime_type": "application/json" }
+  ]
+}
 ```
+
+Note `"bars_have": "120"` — 64-bit integers render as JSON **strings**, 32-bit ones as numbers
+(`total_trades` above). Do not assume a numeric-looking field is a number.
+
+**What stays inline vs. what moves.** The summary keeps everything needed to diagnose the common
+failure — the headline metrics, any `coverage_gaps`, and per symbol its `no_trade_reason`,
+`bars_total` and `warmup_bars` — so a 0-trade run is explainable **without opening the attachment**.
+What moves to the attachment is the bulk: the full per-bar `diagnostics` (OHLCV, computed indicator
+values, warm-up flag, per-bar decision) and the full `trades` list. The same int64-as-string rule
+applies there, e.g. `volume`.
+
+**No-attachment case.** A run with no diagnostics and no trades — typically
+`BACKTEST_STATUS_INSUFFICIENT_DATA` — returns the summary block only, with `"attachments": []`. Its
+`coverage_gaps` are inline, so the summary is the whole result. The rule is about content, not
+status: any run with nothing to attach behaves this way.
+
+**Degradation.** Whether an attachment is surfaced is client-dependent and outside this platform's
+control, so the summary always stands on its own, and `attachments` names what exists (uri +
+mime type) even if your client renders no download affordance. If attachment construction fails the
+tool still **succeeds** — the backtest ran — and the summary gains an `attachments_error` string.
 
 **Errors**
 

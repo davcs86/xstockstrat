@@ -1,6 +1,6 @@
 # Feature: backtest-result-attachment
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/backtest-result-attachment`
 **Created**: 2026-07-26
 **Last Updated**: 2026-07-27
@@ -18,6 +18,9 @@
 
 | 2026-07-27 | `implementation-ready` (unchanged) | /sdd-design r2 | Second grilling round on the approved design: gzip'd `BlobResourceContents` swap **proposed and rejected** (it inverts this feature's own failure-asymmetry rule; measured 103 KB not the 53 KB assumed; needs two unobserved behaviors to pay off). Chosen approach unchanged. Three corrections adopted — measured sizes replace estimates, AC-1 test bound `8_000` → `3_000`, `mtime=0` reproducibility limit recorded |
 | 2026-07-27 | `implementation-ready` (unchanged) | /sdd-design r3 | Third round: content-trimming measured and **rejected** (a 0-trade run keeps 0/2520 bars). Design unchanged again. Seven corrections — `profit_factor: "Infinity"` is unreachable (producer clamps); `structured_output=False` is a no-op for bare `list` so its guard test was inert; AC-1 bound re-aimed at marginal cost (gaps are not INSUFFICIENT-only); descriptor-parity guard; fixed `attachments_error` string; `quote()` the id; stale CI note. New `fails.md` entry rather than rewriting append-only ledger |
+| 2026-07-27 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done — `app/backtest_view.py` (summary projection + attachment block) |
+| 2026-07-27 | `implementation-ready` → `in-progress` | /sdd-execute | Execution started on `feature/backtest-result-attachment` (fresh branch off `main-dev` @ `1d54d0b`). Steps 1–2 done: `app/backtest_view.py` + 12 unit tests, red-before-green recorded |
+| 2026-07-27 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done, one commit each, both red-green cycles recorded. 109 tests pass, coverage 69.16% |
 ---
 
 ## Artifacts
@@ -58,22 +61,12 @@ No Proto Reviewer row: this feature makes no proto change. No DBA row: no migrat
 
 ## Next Action
 
-`/sdd-review backtest-result-attachment impl-spec` — validate the implementation spec, then
-`/sdd-execute backtest-result-attachment`.
+Integration PR `feature/backtest-result-attachment` → `main-dev`. No merge-order entry applies:
+`merge-order.md` has no 072 row, and the forward-looking escalation was discharged at design time
+(it was conditional on a `ResourceLink` resolution forcing an `xstockstrat-analysis` edit; the design
+chose `EmbeddedResource`).
 
-Carry-forward items from design **now discharged**: AC-1 has been reworded in `product-spec.md`
-(design § 7 — "independent of window length; linear in symbol count"), and the stale line citations
-(`servicer.py:507-511`/`:1295-1296`, `test_tools.py:485-527`, and eight more) are corrected there
-with a recorded correction block. `implementation-spec.md` cites only lines verified on the
-post-070/071 tree.
-
-Still open (accepted, not blocking): a client may inline the `EmbeddedResource` anyway — revisit
-after the first real-world connector run; escalation is a gzip blob, additive.
-
-**Merge order:** 072 rebases onto `{070+071}` (PR #792) — see merge-order.md. 072 no longer edits
-`tests/test_tools.py:534-577`, since the split lives in `tools.py` and `client.run_backtest` is
-untouched, so the "contradictory test" overlap recorded there is resolved rather than merely sequenced.
-Confirmed at `/sdd-spec`: the forward-looking `merge-order.md:84-88` escalation (a `ResourceLink`
-forcing an `xstockstrat-analysis` `servicer.py` edit inside 071's `RunBacktest` span) **does not
-fire** — the design chose `EmbeddedResource` and touches no analysis code, so this stays rebase-only
-and needs no hard ordering row.
+**Carried forward, unresolved by design:** a client may inline the `EmbeddedResource` into model
+context anyway. Recorded with a named disconfirming observable — a real connector run whose context
+still balloons — and an additive escalation (gzip blob), gated on observing **both** that the
+connector inlines **and** that a `gunzip`-able download affordance exists.

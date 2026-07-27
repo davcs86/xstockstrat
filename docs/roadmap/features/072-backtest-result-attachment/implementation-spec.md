@@ -1,6 +1,6 @@
 # Implementation Spec: backtest-result-attachment
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-07-27
 **Feature**: `docs/roadmap/features/072-backtest-result-attachment/feature.md`
 **Total Steps**: 5
@@ -58,7 +58,7 @@ product spec's (stale) citations.
 
 ### Step 1 — service: add `app/backtest_view.py` (summary projection + attachment block)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/backtest_view.py` — create
@@ -213,7 +213,7 @@ no-content-no-attachment rule before any test is written.
 
 ### Step 2 — test: unit tests for `app/backtest_view.py`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_backtest_view.py` — create
@@ -371,7 +371,7 @@ All three must pass; the last must report total coverage ≥ 40% (CI parity —
 
 ### Step 3 — service: `run_backtest` returns a summary + attachment; raise the `mcp` floor
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -528,7 +528,7 @@ same branch — see § Step Dependencies.
 
 ### Step 4 — test: tool-layer tests for the split return
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify
@@ -697,7 +697,7 @@ All must pass; the last must report total coverage ≥ 40% (CI parity —
 
 ### Step 5 — docs: document the split return shape on the remaining consumer surfaces
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`, `services/xstockstrat-agent/`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify

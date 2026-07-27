@@ -339,3 +339,16 @@ reusing.
   feature 072 design.md § Rejected Alternatives.
 - **Rule it implies**: reinforces **P-03** — a self-authored ledger rule binds the feature that wrote
   it. Re-read your own entries before adopting a change that trades the same axis.
+
+### 2026-07-27 — 072-backtest-result-attachment — execute
+- **Pattern**: When a step's verification cannot pass standalone because a *later* step adapts the
+  test it breaks, the F-05-clean split is to carry **only the minimum adaptation** in the breaking
+  step's commit, not to merge the two steps or to commit red. 072's step 3 changed
+  `run_backtest`'s return shape, which reddens one assertion in a test step 4 owns; step 3's commit
+  carried that single line and step 4's added the nine new tests. One commit per step, every commit
+  green, and the pairing stays visible in history instead of being collapsed.
+- **Evidence**: feature 072 `implementation-spec.md` § Step Dependencies; commits
+  `feat(072): step 3` / `test(072): step 4`.
+- **Rule it implies**: refines **F-05** — "commit only when green" does not force merging a
+  red-green pair into one commit; it forces the *green-making minimum* to travel with the change
+  that broke it.

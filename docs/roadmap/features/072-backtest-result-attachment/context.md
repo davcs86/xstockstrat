@@ -552,3 +552,111 @@ the review named and left the adjacent thing that depended on it. The findings s
 (architectural → fixture/instrument → instruction placement → cross-step consistency), which is the
 expected shape, but the pattern is worth naming: on a spec with paired steps, grep the *other* step
 for the same construct before declaring a correction complete.
+
+## Session 2026-07-27 — sdd-execute (sequential)
+
+Fresh branch `feature/backtest-result-attachment` off `main-dev` at `1d54d0b` (PR #795 merged), per
+user instruction. Shape also per user instruction: **one commit per step on one branch, one
+integration PR** — not the skill's default stacked per-step PRs.
+
+**F-05 note (Floor, non-overridable):** Step 3 breaks `test_run_backtest_calls_grpc`, which Step 4
+adapts. "Never commit before the step's verification passes" outranks a commit-shape preference, so
+Step 3's commit carries that single one-line test adaptation — the minimum to be green — and Step 4's
+commit adds its new tests. Five commits, one per step, each green.
+
+### Step 1 — service: add `app/backtest_view.py` [done]
+- Created the pure module: `summarize` (FR-2 projection), `build_blocks` (FR-3 attachment),
+  `attachment_refs` (FR-5 degradation aid), plus the presentation constants and
+  `_INTENTIONALLY_DROPPED`.
+- Verification passed exactly as specified: `summarize({'backtest_id': 'bt-2'})` → `{'backtest_id':
+  'bt-2'}` and `build_blocks(...)` → `[]`, proving partial-dict totality and the
+  no-content-no-attachment rule before any test exists.
+- Files modified: `services/xstockstrat-agent/app/backtest_view.py`
+- Deviations: none. (Six ruff E501s on my own prose were fixed in-step — in scope per the
+  "make the step's own code pass its lint verification" carve-out.)
+- TDD: red half is Step 2 (the paired test step), per the spec's Step Dependencies.
+
+## Session 2026-07-27 — sdd-execute (steps 1-5)
+
+Branch: `feature/backtest-result-attachment`, cut fresh off `origin/main-dev` @ `1d54d0b` (PR #795's
+merge). One commit per step, single integration PR at the end — the user's shape, which replaces the
+skill's default stacked per-step PRs.
+
+### Step 1 — service: add `app/backtest_view.py` [done]
+- `summarize` / `build_blocks` / `attachment_refs` plus the constants, exactly as specified. Pure: no
+  gRPC, no I/O, no `gen.*` import (AGENT-2).
+- Verification: `ruff check` + `ruff format --check` clean; smoke check confirms both invariants —
+  `summarize({"backtest_id": "bt-2"})` returns itself unchanged (totality) and `build_blocks` on the
+  same input returns `[]` (the no-content rule).
+- Files modified: `services/xstockstrat-agent/app/backtest_view.py`
+- Deviations: none.
+
+### Step 2 — test: `tests/test_backtest_view.py` [done]
+- All 12 specified tests.
+- **TDD red-green recorded** (steps 1+2 are one cycle, per § Step Dependencies): with the three
+  function bodies stubbed to `NotImplementedError`, **11 failed / 1 passed**; with the implementation
+  restored, **12 passed**. The single test green in the red run is
+  `test_summary_key_set_covers_every_proto_field`, which reads only module constants — a static
+  descriptor guard, correctly independent of the function bodies.
+- Full suite: **100 passed**, coverage **68.62%** against the 40 threshold.
+- Files modified: `services/xstockstrat-agent/tests/test_backtest_view.py`
+- Deviations: none.
+
+**Note for the remaining steps:** run `ruff check .` **inside** `services/xstockstrat-agent/`. From
+the repo root it sweeps `packages/proto/gen/python/` and reports 63 pre-existing errors in generated
+stubs that the service's own config never lints.
+
+### Step 3 — service: `run_backtest` returns content blocks [done]
+- `@server.tool(structured_output=False)`, `-> list`, body returns
+  `[TextContent(summary), *blocks]`. `summarize` sits **outside** the `try` — a projection bug is a
+  real failure; only attachment construction degrades. `attachments_error` is a fixed string, never
+  `str(e)`.
+- Docstring *Returns* paragraph rewritten (FR-6, and the third consumer surface: `GET /api/tools`
+  republishes it to the UI `/accounts/mcp-tools` page). Parameter prose left untouched — feature 071
+  owns it. Module docstring untouched: still "Fourteen tools" (AC-6).
+- `pyproject.toml` `mcp>=1.0.0` → `>=1.27.1`; `uv lock` re-run, `uv.lock` committed.
+- Files modified: `app/tools.py`, `pyproject.toml`, `uv.lock`
+- Deviations: none.
+
+### Step 4 — test: tool-layer tests for the split return [done]
+- `TestRunBacktestAttachment` (9 tests) + the one-line adaptation of `test_run_backtest_calls_grpc`.
+- **TDD red-green recorded** (steps 3+4 are one cycle): tests authored first → **10 failed / 42
+  passed**; step 3 applied → **52 passed** in the file, **109 passed** overall, coverage **69.16%**.
+- The feature-064/071 guards were re-run explicitly and all 10 pass:
+  `test_run_backtest_projects_full_result_with_diagnostics` (client-level — **not** inverted, which
+  is what resolves the 070/071↔072 conflict `merge-order.md` had flagged as sharpest),
+  `TestRunBacktestWindow`, `TestRunBacktestRangeOnTheWire`, `..._sends_strategy_id_ref...`.
+- Files modified: `tests/test_tools.py`
+- Deviations: **one, and it is the F-05 resolution the user was told about up front.** The user asked
+  for one commit per step. Step 3 alone leaves `test_run_backtest_calls_grpc` red, and F-05 ("never
+  commit before the step's verification passes") is a Floor rule that a commit-shaping preference
+  cannot override. Resolution: step 3's commit carries **only** that single one-line test adaptation
+  — the minimum required to be green — and step 4's commit adds the nine new tests. Still one commit
+  per step; every commit green.
+
+### Step 5 — docs: the split return shape on the remaining surfaces [done]
+- `docs/runbooks/mcp-tools.md` Return block replaced. It was **already wrong on trunk** — it claimed
+  `{ "backtest_id": ... }`, which feature 064 superseded — so this repairs pre-existing drift as well
+  as documenting 072.
+- The example uses `profit_factor: 1.8`, never `"Infinity"`; the int64-as-string contract is
+  illustrated with `"bars_have": "120"` in the summary and noted for `volume` in the attachment
+  paragraph — the reachable instances, per the round-3 correction.
+- Agent `CLAUDE.md` `run_backtest` row extended by one line. No resources section added (FR-6a is
+  discharged by *not* creating the surface). Parameters block, evaluation-window section and Errors
+  table untouched — feature 071 owns those.
+- AC-6 verified: five "fourteen" statements still present (`grep -in`, which the spec notes is
+  required because `tools.py:4` capitalizes it), zero `bt-abc123`.
+- TDD: N/A (docs).
+- Files modified: `docs/runbooks/mcp-tools.md`, `services/xstockstrat-agent/CLAUDE.md`
+- Deviations: none.
+
+## Session 2026-07-27 — sdd-execute complete
+
+**Steps this session**: 1, 2, 3, 4, 5
+**Progress**: 5 done / 5 total
+**Stopped at**: all complete — lifecycle `code-completed`
+**Next**: integration PR → `main-dev`
+
+Both red-green cycles recorded by execution, not assertion: steps 1+2 (11 failed → 12 passed) and
+steps 3+4 (10 failed → 52 in-file / 109 overall). Final: **109 passed, coverage 69.16%**, ruff clean,
+`uv lock --check` in sync, markdownlint and context-map clean.
