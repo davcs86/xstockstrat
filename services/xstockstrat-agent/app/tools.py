@@ -19,12 +19,14 @@ Fourteen tools:
 """
 
 import base64
+import json
 import logging
 
 import grpc
 from mcp.server import FastMCP
+from mcp.types import TextContent
 
-from app import client
+from app import backtest_view, client
 
 _ALERT_THRESHOLD_DEFAULT = 0.6
 _ALERT_THRESHOLD_CONFIG_KEY = "signal.alert_threshold"
@@ -237,12 +239,17 @@ def register_tools(server: FastMCP) -> None:
             target_user_id=target_user_id,
         )
 
-    @server.tool()
+    # structured_output=False is forward-protection, not load-bearing today: for a bare `-> list`
+    # FastMCP builds no output schema either way. It becomes load-bearing only if the annotation is
+    # ever parameterized (`list[ContentBlock]`), which would build one by default.
+    @server.tool(structured_output=False)
     async def run_backtest(
         strategy_id: str,
         symbols: list[str],
         initial_capital: float = 100000.0,
-    ) -> dict:
+        start: str | None = None,
+        end: str | None = None,
+    ) -> list:
         """Trigger a backtest via xstockstrat-analysis.
         strategy_id: identifies the strategy (e.g. 'sma_crossover'). Must be a REGISTERED strategy
           definition — the run executes that definition and earns evidence toward its derived
@@ -250,15 +257,49 @@ def register_tools(server: FastMCP) -> None:
           SMA-crossback path is no longer reachable from the agent).
         symbols: list of ticker symbols e.g. ['NVDA', 'AAPL'].
         initial_capital: starting capital in USD (default 100000).
-        Returns the full backtest result including per-symbol `diagnostics`: a day-by-day list of
-        bars (OHLCV, computed indicator values, warm-up flag, entry/exit/conviction decision) and a
-        `no_trade_reason` per symbol — use these to explain why a strategy produced 0 trades and to
-        suggest changes to the strategy or its indicators."""
-        return await client.run_backtest(
+        start / end: optional ISO date or datetime bounds ('2024-01-01', '2024-06-30T00:00:00Z')
+          for the evaluation window. Supply BOTH to get a reproducible result — a run over an
+          explicit window returns the same numbers on any calendar day, so it is comparable across
+          strategies and across days. Omitting them keeps the rolling default (a window ending
+          today), whose results drift day to day. Either bound may be given alone; the other stays
+          at its default. Indicators are warmed on bars fetched from before `start`, so the whole
+          window is evaluated fully warm and no trade opens before `start`. If the stored history
+          does not reach back far enough to warm the indicators, the run reports
+          BACKTEST_STATUS_INSUFFICIENT_DATA with `coverage_gaps` — use trigger_backfill to fill
+          them, then re-run.
+        Returns TWO parts. First, a compact JSON summary as a text block: `backtest_id`, `status`,
+        the headline metrics, any `coverage_gaps`, and per symbol its `no_trade_reason`,
+        `bars_total` and `warmup_bars` — enough to explain why a strategy produced 0 trades and
+        suggest changes **without opening the attachment**. Second, an attached
+        `application/json` resource carrying the COMPLETE result: the full per-bar `diagnostics`
+        (OHLCV, computed indicator values, warm-up flag, entry/exit/conviction decision) and the
+        full `trades` list. Open it when you need bar-level detail.
+        A run with no diagnostics and no trades (e.g. BACKTEST_STATUS_INSUFFICIENT_DATA) has NO
+        attachment — the summary with `coverage_gaps` is the whole result.
+        `summary["attachments"]` names each attached resource's `uri` and `mime_type`, so you can
+        tell the user detail exists even if your client shows no attachment affordance."""
+        result = await client.run_backtest(
             strategy_id=strategy_id,
             symbols=symbols,
             initial_capital=initial_capital,
+            start=start,
+            end=end,
         )
+        # summarize() is deliberately OUTSIDE the try: a projection bug is a real failure. Only
+        # attachment construction degrades.
+        summary = backtest_view.summarize(result)
+        blocks: list = []
+        try:
+            blocks = backtest_view.build_blocks(result)
+            summary["attachments"] = backtest_view.attachment_refs(blocks)
+        except Exception as e:  # presentation-only failure must not fail a successful backtest
+            # Fixed string, never str(e): a pydantic ValidationError repr can embed the offending
+            # input — i.e. the whole payload this feature exists to keep out of the inline block.
+            log.warning("Backtest attachment construction failed (result unaffected): %s", e)
+            blocks = []
+            summary["attachments"] = []
+            summary["attachments_error"] = "attachment could not be built; see server logs"
+        return [TextContent(type="text", text=json.dumps(summary, indent=2)), *blocks]
 
     @server.tool()
     async def screen_symbols(

@@ -16,6 +16,7 @@ skill).
 | Strategy scores | `STRATEGY_SCORE_{HIGH,MID,LOW}`, `STRATEGY_SCORES` | `e2e/fixtures/strategies.ts` | `xstockstrat.analysis.v1.StrategyScore` | `e2e/mock-backend.ts` (`listStrategies`), `e2e/insights/dashboard.spec.ts` |
 | Strategy definitions | `STRATEGY_DEF_LIVE`, `STRATEGY_DEF_INACTIVE`, `STRATEGY_DEFINITIONS` | `e2e/fixtures/strategies.ts` | `xstockstrat.analysis.v1.StrategyDefinition` | `e2e/mock-backend.ts` (`listStrategyDefinitions`, `setStrategyLive`), `e2e/trader/live-strategies.spec.ts` (asserts `strat-live-001`) |
 | Custom formulas | `FORMULA_RSI`, `FORMULA_MACD`, `FORMULAS` | `e2e/fixtures/formulas.ts` | `xstockstrat.indicators.v1.FormulaDefinition` (list row) | `e2e/insights/formulas.spec.ts`, `e2e/insights/strategy-authoring.spec.ts` |
+| Backtest coverage gaps | `insufficientDataResult`, `prefixGapRange`, `BACKTEST_GAP_{SYMBOL,BARS_HAVE,BARS_NEED}`, `BACKTEST_PREFIX_DAYS` | `e2e/fixtures/backtests.ts` | `xstockstrat.analysis.v1.CoverageGap` / `BacktestResult` | `e2e/mock-backend.ts` (`runBacktest` default branch), `e2e/insights/backtest-coverage.spec.ts` |
 
 ## Recurring sentinel ids (stay inline, but are reserved)
 
@@ -44,7 +45,7 @@ a fixture module and register it above (never copy-paste it into a second site).
 | Ledger events | `e2e/mock-backend.ts` (`queryEvents`) |
 | Alerts (stream + list) | `e2e/mock-backend.ts` (`streamAlerts`, `listAlerts`) |
 | OHLCV bars / assets | `e2e/mock-backend.ts` (`getBars`, `listAssets`) |
-| Backtest results / diagnostics / coverage gaps | `e2e/mock-backend.ts` (`runBacktest`, `listBacktests`) |
+| Backtest diagnostics + run history | `e2e/mock-backend.ts` (`runBacktest` sentinel branches, `listBacktests`) — the coverage-gap half was centralized by feature 071; the `strat-diag-001` / `strat-formula-error-001` diagnostics and the run-history rows are still inline |
 | Screener results | `e2e/mock-backend.ts` (`screenSymbols`) |
 | Editable strategy components (`getStrategy`) | `e2e/mock-backend.ts` |
 | Config keys | `e2e/mock-backend.ts` (`listKeys`) |

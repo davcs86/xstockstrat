@@ -163,3 +163,187 @@ the node plugins from `packages/proto/gen/ts` devDependencies, and `grpcio-tools
 byte-identical reproduction check against the committed stubs (ledger insight 2026-07-09) before
 any `.proto` edit. Not attempted this session. **071 needs no proto change, so it is unblocked;
 070 is blocked on this.**
+
+## Session 2026-07-26 — implementation (step 3)
+
+- **Step 3 DONE.** `trade_start_idx` threaded through both engine paths, landed at `k = 0`
+  everywhere. **Gate met: 332 → 338 tests, all pre-existing ones unchanged** — the restructure is a
+  verified no-op on the default path before any prefix code exists.
+
+### The seed-row arithmetic — the design's own version was off by one
+
+The design said "loop from `max(1, trade_start_idx)`" and "`diags` slices to `[k:]`,
+`bars_total = n - k`", with `len(daily_equity) == len(diags)`. Those three cannot all hold:
+
+- `k = 0`: seed + `range(1, n)` → `n` equity points, `diags[0:]` → `n`. ✓
+- `k = 1`: seed + `range(1, n)` → `n` equity points, `diags[1:]` → `n-1`. ✗
+
+The seed row exists because bar 0 is never simulated on an unprefixed run. With a prefix, the
+first simulated bar **is** bar `k`, so there is no separate seed. Implemented as
+`daily_equity = [equity] if trade_start_idx == 0 else []`, which satisfies both:
+`k = 0` → `n`/`n`; `k > 0` → `n-k`/`n-k`. Documented inline at both call sites.
+
+### The 1:1 invariant is now asserted, not assumed
+
+`_finalize_symbol_diagnostics` stamps `diags[j].equity = daily_equity[j]` **positionally**, and
+that alignment was previously implicit. Added an assertion in the shared finalize pass — shared
+because the two paths build the lists differently (the legacy loop has two `continue`-with-append
+branches, the evaluator appends unconditionally), which is precisely the ledger-056
+"fixed one path, forgot the second" shape.
+
+### k > 0 verified now, not deferred
+
+Rather than land the plumbing untested and discover the off-by-one in step 4, `TestTradeStartIndex`
+exercises `k ∈ {1, 3, 5}` directly against `_backtest_symbol`: `bars_total == n - k`, `bar_index`
+renumbered from 0, `len(daily_equity) == len(diags)`, the first in-window bar keeping its **real**
+timestamp (renumbering the index must not shift time), and no trade or diagnostic row before the
+window.
+
+### Remaining for 071
+
+Steps 4–8: wire the prefix end-to-end (`start_set` → `warmup_prefix` → `required_prefix_bars` →
+prefixed fetch → truncate to exactly `P` → `trade_start_idx` → `to_reported_warmup` → shortfall
+`CoverageGap`), agent `start`/`end` surface, parity/determinism tests, docs, UI e2e.
+
+## Session 2026-07-26 — implementation (step 4)
+
+- **Step 4 DONE.** Prefix wired end-to-end: `start_set` → `warmup_prefix` → `required_prefix_bars`
+  → prefixed fetch → truncate to exactly `P` → derived `trade_start_idx` → window-relative
+  `warmup_bars` → shortfall `CoverageGap`. 338 tests, ruff clean.
+- Shared `_resolve_prefixed_bars` serves both engine paths, so the prefix logic exists once.
+- `trade_start_idx` is now **derived**, so step 3's parameter was removed rather than left as a
+  dead knob the production path always overwrites. The step-3 tests were reworked to drive the
+  real path (bars straddling `range_msg.start` + `warmup_prefix=True`) instead of injecting `k`.
+- `_InsufficientData` gained `gap_range`: for a warm-up shortfall the actionable backfill span is
+  the **prefix** (`start − warmup … start`), not the caller's window, which may be fully covered.
+
+### ⚠ Behavior change that needs a product decision
+
+**Any caller supplying an explicit `start` now needs pre-window history or the run reports
+`INSUFFICIENT_DATA`.** This is the designed OQ-1 resolution ("prefer a clear error over silent
+short data", AC-4a) and it is working as specified — but the practical blast radius is larger than
+the design's Open Risks quantified:
+
+- **The UI always sends an explicit range** (`strategies/[id]/page.tsx:91`, defaulting to
+  `2024-01-01`/`2024-12-31`). Every UI backtest whose start predates the symbol's stored history
+  now fails instead of running short-warmed.
+- It surfaced immediately in `TestBacktestRangeCap::test_at_cap_range_runs`, whose fixture bars all
+  post-dated the requested start. Fixture corrected to straddle the boundary — the test's intent
+  was the range cap, not coverage — but that it broke at all is the signal.
+
+The adversary's **alternative E (short-warm-and-report:** run with whatever prefix exists, emit a
+**non-fatal** `CoverageGap`, keep the run OK) was rejected at design time in favour of failing
+loudly. Given the UI impact, that trade-off is worth revisiting before this ships. Flagged to the
+user rather than silently switched — the design decision is recorded and reversing it is a product
+call, not an implementation one.
+
+### Remaining for 071
+
+Steps 5–8: agent `start`/`end` surface, parity/determinism tests (FR-4/6/7), docs, UI e2e.
+
+---
+
+## Session — 2026-07-27 (steps 5–8)
+
+### Step 5 — agent surface
+
+`client.run_backtest` and the `run_backtest` MCP tool take optional ISO `start`/`end`, mapped onto
+the **same** `RunBacktestRequest.range` the UI already sends. FR-6 parity is therefore structural,
+not a behavior two call sites have to keep in step: there is one field and one server path.
+
+- Omitting both leaves `range` **unset** rather than sending an all-zero message, so the servicer's
+  rolling default applies and FR-2 holds exactly.
+- One-sided ranges are forwarded as-is — the servicer defaults each unset bound independently, so
+  fabricating the missing side would silently narrow the window.
+- An inverted window is rejected client-side. Left to the server it would run an empty window and
+  report `INSUFFICIENT_DATA`, naming the symptom rather than the mistake.
+- The tool docstring leads with the reproducibility payoff, not the mechanics: the decision an agent
+  actually faces is *whether* to pass a window, and it needs to know that omitting it makes results
+  drift day to day. It also names `trigger_backfill` as the remedy for the new `INSUFFICIENT_DATA`.
+
+### Step 6 — parity/determinism, and a bug the tests found
+
+**Deviation (P-03): a real defect fixed outside the designed step list.** The formula-cost test
+showed `required_prefix_bars` reading the declared-warm-up cache at the **top** of each symbol's
+run while `_compute_evaluated_warmup` only fills it at the **bottom**. For a formula-using strategy
+that meant symbol 1 sized its prefix from an empty cache (no prefix, short-warmed) while symbols 2+
+got the full one — a result that depends on symbol order, breaking FR-4 determinism and the
+per-symbol comparability the feature-065 evidence cells assume. `_prefetch_formula_warmups` now
+resolves them before the loop, honoring the contract `required_prefix_bars`' own docstring already
+stated ("must be pre-populated by the caller"). A shared `_declared_formula_warmup` keeps the two
+call sites from drifting.
+
+Tests added: FR-4 frozen clock (plus a *teeth* test proving the clock patch isn't inert — without a
+window the effective range genuinely moves); FR-3 no-trade-before-start at the RPC level; prefix
+sizing insensitivity from both sides (doubling the calendar slack, and extra available history);
+the VWAP anchor shift pinned at its cause (VWAP receives prefix+window closes); the FR-7 live-loop
+divergence (`_LOOKBACK_DAYS == 365`, `live_loop.py` free of any `warmup` reference, and the
+evaluator signature carrying no window argument — so it fails loudly if someone later wires the
+prefix into the live path); and formula prefix cost measured, including the one-GetFormula-per-run
+guarantee.
+
+Two **fixtures** were wrong rather than the code: `_series_bars` derived each close from the list
+index, so lengthening the prefix silently restated the whole series and the surplus-history test
+was comparing two different price histories; and the zero-warm-up cost test fed pre-window bars to
+a path that requests no prefix, where the range-ignoring `GetBars` mock lets them through. Both now
+measure the code instead of themselves.
+
+Byte-identity assertions clear `backtest_id` and `completed_at` — both differ per run by
+construction, so leaving them in would make the assertion vacuously false and invite a weaker
+field-by-field comparison.
+
+The `warmup` module is imported aliased in the test file: a pre-existing test uses `warmup` as a
+loop variable, and renaming that is not this feature's business.
+
+### Step 7 — docs
+
+`mcp-tools.md` documents the parameters plus the two consequences an agent cannot infer from the
+signature (pre-window `coverage_gaps` → `trigger_backfill`; the VWAP anchor shift). The analysis
+`CLAUDE.md` gains the warm-up prefix section: declared-not-observed and why observing is provably
+wrong, the sizing-only conversion, the fatal shortfall, the formula prefetch, the `GetBars`
+pagination fix and its `trading_days` shift, and the FR-7 divergence with a pointer to its test.
+
+### Step 8 — UI
+
+**No UI production change is required — verified.** `strategies/[id]/page.tsx:312` already backfills
+`gap.gap`, not `gap.requestedRange`, which is the correct span now that the two differ.
+
+`e2e/mock-backend.ts` previously echoed `req.range` back as both `requestedRange` and `gap`, so it
+could not distinguish a correct consumer from an incorrect one. It now returns a **disjoint
+pre-window gap** via the new `e2e/fixtures/backtests.ts` (C-12), and an e2e test asserts the
+backfill span ends where the requested window begins and reaches back before it.
+
+C-12: the coverage-gap half of the "Backtest results / diagnostics / coverage gaps" inventory row is
+now centralized and catalogued; the diagnostics sentinels and run-history rows stay inline and the
+row was narrowed to say so, rather than left claiming more than moved.
+
+### Still open
+
+**OQ-1 remains a product decision** (see the previous session's entry): fail-loud vs. short-warm
+with a non-fatal `CoverageGap`. Unchanged by steps 5–8 — the agent surface simply makes it reachable
+from a second caller.
+
+---
+
+## OQ-1 resolved — 2026-07-27 (user decision)
+
+**Keep fail-loud, as built.** When history cannot satisfy `start − warmup`, the run reports
+`BACKTEST_STATUS_INSUFFICIENT_DATA` with a `CoverageGap` spanning the **pre-window** span. The
+designed AC-4a behavior stands; the rejected alternative (short-warm + non-fatal `CoverageGap`) stays
+rejected.
+
+This was raised as a product decision rather than resolved in implementation because the practical
+blast radius is wider than the design's Open Risks quantified — the UI always sends an explicit
+range (`strategies/[id]/page.tsx:91`, defaulting to `2024-01-01`/`2024-12-31`), so a backtest whose
+start predates a symbol's stored history now fails where it previously ran short-warmed. The user
+accepted that cost.
+
+**What makes it recoverable rather than a dead end:** the gap the run reports is the actionable one.
+`_InsufficientData.gap_range` carries `start − warmup … start`, not the caller's window, and the UI's
+backfill action already fills `gap.gap` — verified, and now pinned by
+`e2e/insights/backtest-coverage.spec.ts` ("backfill action fills the pre-window warm-up gap"). So the
+failure names the exact span to backfill and offers a one-click remedy. The agent path says the same
+thing in prose: the `run_backtest` docstring names `trigger_backfill` as the remedy.
+
+No code change follows from this decision — the implementation already matches it. 071 moves to
+`code-completed`.

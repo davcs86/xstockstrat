@@ -300,14 +300,21 @@ jobs:
           cache: 'pip'
           cache-dependency-path: services/${{ matrix.service }}/pyproject.toml
 
-      - name: install ruff
-        run: pip install ruff
+      - name: install ruff and uv
+        run: pip install ruff uv
 
       - name: ruff check
         run: ruff check .
 
       - name: ruff format check
         run: ruff format --check .
+
+      # Root CLAUDE.md § Python uv lock rule says this is enforced in CI. Until now it was not —
+      # no workflow referenced uv at all — so a pyproject.toml change could land with a stale
+      # uv.lock and only surface at Docker build time, where `uv sync --frozen` (e.g.
+      # services/xstockstrat-agent/Dockerfile:6) fails the image build instead of the PR.
+      - name: uv.lock is in sync with pyproject.toml
+        run: uv lock --check
 
   python-test:
     name: Python test and coverage (${{ matrix.service }})

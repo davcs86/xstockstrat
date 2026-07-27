@@ -30,10 +30,27 @@ enormous share of the agent's context for data that is mostly only needed on dem
   (`services/xstockstrat-agent/app/main.py:50-103` — `build_sse_app` opens at `:50`, SSE at `:75`,
   `StreamableHTTPSessionManager` at `:103`).
 - **An existing test pins today's behavior**: `test_run_backtest_projects_full_result_with_diagnostics`
-  (`services/xstockstrat-agent/tests/test_tools.py:485-527`) asserts the full result *is* projected
+  (`services/xstockstrat-agent/tests/test_tools.py:534-577`) asserts the full result *is* projected
   inline with `diagnostics` present. This feature must invert that assertion, or preserve it by
   keeping `client.run_backtest` intact and splitting in `tools.py`. Either way it is directly in the
-  blast radius.
+  blast radius. **Resolved at design:** the split lives in `tools.py` and `client.run_backtest` is
+  untouched, so this test is **preserved**, not inverted (design.md § Chosen Approach).
+
+> **Line-citation correction (applied at `/sdd-spec`, per design.md § Open Risks).** Several
+> citations in this spec were captured before feature 071 restructured the surrounding code and no
+> longer resolve. The correct lines, verified on the post-070/071 tree, are:
+> `tests/test_tools.py:534-577` (not `:485-527`); `xstockstrat-analysis` `app/handlers/servicer.py:527-528`
+> (the `BACKTEST_STATUS_OK` gate, not `:507-511`), `:1398-1399` (no-op without a repo, not
+> `:1281-1282`), `:1403` (retention read, not `:1286`), `:1412-1413` (swallowed write, not
+> `:1295-1296`), `:1498-1523` (`GetBacktest` handler, not `:1275-1292`);
+> `packages/proto/analysis/v1/analysis.proto:19-22` (`GetBacktest` RPC + its NOT_FOUND contract, not
+> `:18-20`/`:21`), `:65-84` (`BacktestResult`, not `:64-83`), `:61-64` (the persisted-verbatim
+> warning, not `:60-63`); `services/xstockstrat-agent/app/tools.py:240-275` (the tool, not
+> `:239-260`) with the Returns paragraph at `:265-268` (not `:252-255`);
+> `app/client.py:143-204` with the projection at `:200-204` (not `:166-175`);
+> `docs/runbooks/mcp-tools.md:277-281` (the Return block, not `:253-257`) and `:245-253` (feature
+> 071's Parameters block, not `:245-251`); `tests/test_tools_endpoint.py:23-38` (not `:23-37`).
+> `recon.md` carries the correct set; `implementation-spec.md` cites only verified lines.
 
 ## User Story
 
@@ -90,6 +107,16 @@ execute time. (`services/xstockstrat-agent/CLAUDE.md:36`, the `run_backtest` too
 describes only what the tool does and needs no edit for a return-shape change — stated so the
 omission is deliberate.)
 
+> **Resolved at design (design.md § 6).** OQ-1 landed on `EmbeddedResource`, which registers **no**
+> MCP resource — so FR-6a is discharged by *not creating* the surface: `docs/runbooks/mcp-tools.md`
+> stays a tools-only reference and the agent `CLAUDE.md` gains no resources section. The design does,
+> however, elect to append one clause to the `CLAUDE.md:36` tool-table row noting the new return
+> shape (superseding the "needs no edit" note above), and identifies a **third** consumer surface the
+> spec did not list: the tool docstring is republished verbatim by `GET /api/tools`
+> (`app/main.py:77-96`, registered `:180`) and rendered on the `xstockstrat-ui` `/accounts/mcp-tools`
+> page. No UI fixture pins that text (zero `run_backtest` matches under `services/xstockstrat-ui`),
+> so the rewrite changes the rendered page without breaking anything.
+
 ## Out of Scope
 
 - Any change to backtest math, scoring, fills, or sizing — this is purely a **return
@@ -143,8 +170,19 @@ they exist to prove this feature does not break what already works. Tagged indiv
 `/sdd-execute`'s red-before-green gate (P-06) does not chase a red test that cannot exist.
 
 1. A multi-symbol `run_backtest` call returns an inline payload that does **not** contain per-bar
-   `diagnostics` or the full `trades` list, and is a small bounded size regardless of window length or
-   symbol count.
+   `diagnostics` or the full `trades` list, and whose size is **independent of window length and
+   linear in symbol count**.
+
+   > **Amendment (recorded at `/sdd-design`, applied at `/sdd-spec`; approved by the user
+   > 2026-07-27 — design.md § 7).** As originally written this criterion said "a small bounded size
+   > regardless of window length **or symbol count**", which is strictly incompatible with FR-2:
+   > FR-2 requires a per-symbol `no_trade_reason`/`bars_total`/`warmup_bars` row, so the summary is
+   > necessarily O(symbols). FR-2 wins, because it is what protects the feature-064 0-trade
+   > diagnosis. The summary is O(symbols), not O(symbols x bars) — **measured 1.0 KB at 5 symbols
+   > (~200 B/symbol), so ~10 KB at 50** — against a payload that today grows without bound in *both*
+   > dimensions. Tests must assert boundedness across **two** symbol counts, not one.
+   > (The ~2 KB / ~19 KB figures originally recorded here were estimates; corrected against a
+   > measured 5x504 result at round 2, 2026-07-27. The amendment itself is unchanged.)
 2. The same call returns an attachment whose content round-trips to the **complete** `BacktestResult`,
    byte-for-byte equivalent in information to today's inline payload (FR-3).
 3. *(Regression guard — passes today.)* A 0-trade run can still be diagnosed from the inline summary
@@ -229,7 +267,7 @@ _Not open questions — resolved facts the design must respect._
   (`test_run_backtest_projects_full_result_with_diagnostics`) asserts the full result *is* projected
   inline — 072 must invert that exact assertion while 071 extends the same file. That is a
   contradictory test, not an adjacent edit.
-- **Reviewer-registry gap (docs follow-up, not blocking).**
+- **Reviewer-registry gap — CLOSED 2026-07-27** (an `xstockstrat-agent` row now exists; the text below records the state at spec time).
   `docs/runbooks/reviewer-registry.md` has **no `xstockstrat-agent` row** in its Service Owners table
   (it covers eleven services), so this feature's reviewer focus is inferred rather than
   registry-sourced. Features 070 and 071 share the gap. Worth a one-line registry addition in a
