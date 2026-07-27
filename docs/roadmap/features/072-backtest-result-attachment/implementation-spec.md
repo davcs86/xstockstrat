@@ -45,9 +45,12 @@ product spec's (stale) citations.
   `{"backtest_id": "bt-3"}`) break → covered by Step 2.
 - **Non-echoing fixtures** (insights 2026-07-27): AC-2's fixture must carry per-bar content that
   appears **only** in the attachment; AC-1 must assert across **two** symbol counts → Steps 2 and 4.
-- `profit_factor` is the **string** `"Infinity"` on zero losing trades and `volume` is a **string**
-  int64 (`MessageToDict` contract, verified — insights 2026-07-27) → assertions must expect that,
-  Steps 2 and 4.
+- `MessageToDict` renders **int64 as a JSON string**; assertions and fixtures must expect that,
+  Steps 2 and 4. Reachable instances: in the **summary**, `CoverageGap.bars_have`/`bars_need`
+  (`analysis.proto:55-56`) → `"120"`/`"504"`; in the **attachment**, `volume` → `"51234567"` while
+  `bar_index` stays an `int`. **`profit_factor` is NOT one of them** — round 3 established the
+  producer clamps to `1.0`/`999.0` (`servicer.py:2202-2208`) and no `double` in `BacktestResult` is
+  reachable as non-finite, so `"Infinity"` must appear in no fixture and no assertion.
 - Accepted, not mitigated: a client may inline the `EmbeddedResource` anyway. Escalation (gzip blob)
   is additive and explicitly out of scope for v1.
 
@@ -130,7 +133,7 @@ Create `services/xstockstrat-agent/app/backtest_view.py` as a **pure** module (n
    - `_HEAD_KEYS = ("backtest_id", "strategy_id", "status", "completed_at")`
    - `_METRIC_KEYS = ("total_return", "annualized_return", "sharpe_ratio", "max_drawdown",
      "win_rate", "total_trades", "profit_factor", "initial_capital")` — the FR-2 headline set,
-     matching `analysis.proto:68-74` (the eight metric fields) plus `initial_capital` at `:83`
+     matching `analysis.proto:68-74` (seven of the eight) plus `initial_capital` at `:83`
    - `_SYMBOL_KEYS = ("symbol", "no_trade_reason", "bars_total", "warmup_bars")` — FR-2's per-symbol
      0-trade diagnosis set, `bars` deliberately excluded
 
@@ -146,8 +149,9 @@ Create `services/xstockstrat-agent/app/backtest_view.py` as a **pure** module (n
      `summary["diagnostics"] = [{k: d[k] for k in _SYMBOL_KEYS if k in d} for d in result["diagnostics"] or []]`
      — same key name as feature 064 so existing readers keep their path, with the `bars` array
      dropped. This is what makes the summary O(symbols) rather than O(symbols x bars).
-   - Do **not** coerce or normalize any value. `profit_factor` legitimately arrives as the string
-     `"Infinity"` and `volume` as a string int64 — pass them through untouched.
+   - Do **not** coerce or normalize any value. `CoverageGap.bars_have`/`bars_need` arrive as string
+     int64s (`"120"`/`"504"`) and pass through untouched. (`profit_factor` arrives as a plain finite
+     float — the producer clamps it; see the round-3 correction under Step 2 test 6.)
    - Do **not** add `attachments` here; Step 3 sets it (see `attachment_refs` below), so a caller
      that wants the projection alone gets exactly that.
 
@@ -223,12 +227,15 @@ FR-2 field retention, partial-dict totality. _(Registry gap closed 2026-07-27 �
   **no `test_backtest_view.py`**.
 - pytest config: `services/xstockstrat-agent/pyproject.toml:29-31` — `testpaths = ["tests"]`,
   `asyncio_mode = "auto"`. These are sync tests, so no `@pytest.mark.asyncio` is needed.
-- Coverage threshold **40** with `--cov=app`, confirmed at `.github/workflows/ci.yml:336-338`
+- Coverage threshold **40** with `--cov=app`, confirmed at `.github/workflows/ci.yml:343-345`
   (`service: xstockstrat-agent`, `coverage_threshold: 40`, `cov_source: app`) and
   `services/xstockstrat-agent/CLAUDE.md` § Running Tests.
 - `MessageToDict` type mapping that these assertions must expect (executed at design time, recorded
   in `docs/roadmap/ledger/insights.md` 2026-07-27 — 072 entry): `bar_index` → `7` (`int`),
-  `volume` → `'51234567'` (`str`), `vwap` → `'NaN'` (`str`), `profit_factor` → `'Infinity'` (`str`).
+  `volume` → `'51234567'` (`str`), `bars_have` → `'120'` (`str`, the in-summary instance).
+  The serializer also maps non-finite doubles to `'NaN'`/`'Infinity'`, but **no `BacktestResult`
+  double is reachable as non-finite** (round 3) — that half is a serializer fact only, and no
+  fixture or assertion here may rely on it.
 - Partial-dict callers that must not break:
   `services/xstockstrat-agent/tests/test_tools.py:288` (`{"backtest_id": "bt-2"}`) and `:303`
   (`{"backtest_id": "bt-3"}`) — feature-071 window tests.
@@ -273,8 +280,13 @@ Cover:
 5. `test_summary_grows_linearly_in_symbol_count` — 1 symbol vs 10 symbols. Assert **two** things,
    each testing one property:
    (a) **marginal cost** — `len(dumps(s10)) - len(dumps(s1)) < 9 * 250`. This directly encodes the
-   reworded AC-1 ("linear in symbol count") and is immune to fixture composition: the head, the uuid,
-   the enum-name lengths and any `coverage_gaps` all cancel in the difference.
+   reworded AC-1 ("linear in symbol count") and is immune to the **fixed** part of the fixture: the
+   head, the uuid and the metric block all cancel in the difference.
+   **`coverage_gaps` do NOT cancel if the factory scales them with `symbols`** — they are per-symbol
+   on OK runs too (`servicer.py:477`). So the factory must emit a **fixed single gap** independent of
+   `symbols`; state that in `_full_result`. (Keep one gap rather than none: test 1 and test 6 both
+   need `coverage_gaps` present. If a future fixture does scale them, raise the slope to `9 * 450` —
+   a full `CoverageGap` serializes to ~200-280 B.)
    (b) a **loose** absolute catch-all — `len(dumps(s10)) < 8_000` — to catch a blow-up in the fixed
    part that a difference cannot see.
    Asserted across **two** symbol counts, per `design.md` § Open Risks.
@@ -343,7 +355,7 @@ cd services/xstockstrat-agent && uv run pytest tests/test_backtest_view.py -q
 cd services/xstockstrat-agent && uv run pytest --cov=app --cov-report=term-missing --cov-fail-under=40
 ```
 All three must pass; the last must report total coverage ≥ 40% (CI parity —
-`.github/workflows/ci.yml:336-338,353-358`).
+`.github/workflows/ci.yml:343-345,361-364`).
 
 ---
 
@@ -561,8 +573,11 @@ no regression of the feature-064 / feature-071 guards. _(Registry gap closed 202
    module-level or class-level `_result(symbols, bars)` factory that builds a realistic
    `client.run_backtest`-shaped dict. **Non-echoing**: per-bar rows must carry a sentinel
    (`"indicators": {"sentinel_only_in_attachment": 1.0}`) that appears nowhere in the FR-2 summary
-   key set, and `volume` as a **string** (`"51234567"`) and `profit_factor` as `"Infinity"` so the
-   `MessageToDict` type contract is exercised rather than assumed.
+   key set, and `volume` as a **string** (`"51234567"`) plus a `coverage_gaps` entry whose
+   `bars_have` is the **string** `"120"`, so the `MessageToDict` int64 contract is exercised rather
+   than assumed. Set `profit_factor` to a realistic finite float (`1.8`) — **never `"Infinity"`**,
+   which the producer cannot emit (`servicer.py:2202-2208`); this fixture is shared with
+   `test_zero_trade_run_is_diagnosable_from_the_summary_alone`, which asserts `1.0`.
 
    Tests (each patches `client.run_backtest` with `AsyncMock(return_value=_result(...))` and calls
    `await _tool_fn(server, "run_backtest")(strategy_id="sma", symbols=[...])`):
@@ -575,20 +590,36 @@ no regression of the feature-064 / feature-071 guards. _(Registry gap closed 202
      differs, so byte-equality of `result[0].text` is unsatisfiable without an inert fixture. Assert
      equality-modulo-`bars_total`, that `bars_total` did change, and that the length delta is
      `< 16` bytes (**AC-1**, reworded per `design.md` § 7).
-   - `test_inline_summary_is_linear_in_symbol_count` — 1 symbol vs 10 symbols: `len(result[0].text)`
-     grows but stays under a small absolute bound; asserted across **two** symbol counts, not one
-     (`design.md` § Open Risks).
+   - `test_inline_summary_is_linear_in_symbol_count` — 1 symbol vs 10 symbols. **Same instrument as
+     Step 2 test 5** (round 3 replaced the absolute bound there; this sibling must not keep the
+     instrument that was rejected): assert the marginal cost
+     `len(r10[0].text) - len(r1[0].text) < 9 * 250`, plus a loose `len(r10[0].text) < 8_000`
+     catch-all. Asserted across **two** symbol counts, not one (`design.md` § Open Risks).
    - `test_attachment_round_trips_to_the_complete_result` — `result[1]` is the `EmbeddedResource`;
      `json.loads(result[1].resource.text) == <the exact dict the mock returned>` (**AC-2**, FR-3);
      and the sentinel **is** present in `result[1].resource.text`.
    - `test_the_published_tool_returns_two_content_blocks` — **the only test that crosses the
      `structured_output=False` seam.** Every other test here calls `_tool_fn(...)`, which returns the
      raw undecorated function (`tests/test_tools.py:21-22`), so the return value never passes through
-     `FuncMetadata.convert_result` → `_convert_to_content` — the exact machinery Step 3 calls
-     load-bearing. Without this, the decorator could be wrong (or the annotation dropped) and every
-     other assertion would still pass. Drive the registered tool instead:
+     `FuncMetadata.convert_result` → `_convert_to_content`. Without this, the **return shape** could
+     be wrong at the wire and every other assertion would still pass.
+
+     > It does **not** guard the decorator — round 3 established `structured_output=False` is a no-op
+     > for a bare `-> list`, so deleting it changes nothing this test can see. The only guard on the
+     > decorator is the `grep -n 'structured_output=False'` in Step 3's verification.
+
+     Drive the registered tool instead:
      `await server.call_tool("run_backtest", {"strategy_id": "sma", "symbols": ["AAPL"]})`, and assert
-     the client-visible content is `[TextContent, EmbeddedResource]` in that order. **That ordering
+     the client-visible content is `[TextContent, EmbeddedResource]` in that order.
+
+     > **Evidence for the call shape (added at re-review):** `FastMCP.call_tool`
+     > (`.venv/.../mcp/server/fastmcp/server.py:343-346`) returns a **bare `Sequence[ContentBlock]`,
+     > not a `(content, structured)` tuple** — `convert_result` short-circuits at
+     > `func_metadata.py:122-123` because `output_schema is None`. Do not try to unpack a tuple.
+     > `get_context()` (`server.py:332-341`) swallows the `LookupError`, so the call works outside a
+     > request context — no fixture needed.
+
+      **That ordering
      assertion is the live half** — it fails on unmodified `main-dev`, where the tool returns a dict.
 
      > **Do NOT assert `outputSchema` is absent** (round 3 correction). It is absent on `main-dev`
@@ -632,7 +663,7 @@ cd services/xstockstrat-agent && uv run pytest tests/test_tools.py tests/test_to
 cd services/xstockstrat-agent && uv run pytest --cov=app --cov-report=term-missing --cov-fail-under=40
 ```
 All must pass; the last must report total coverage ≥ 40% (CI parity —
-`.github/workflows/ci.yml:336-338,353-358`). Confirm in the middle run that
+`.github/workflows/ci.yml:343-345,361-364`). Confirm in the middle run that
 `test_run_backtest_projects_full_result_with_diagnostics` and all of `TestRunBacktestWindow`,
 `TestRunBacktestRangeOnTheWire` are **still passing** — they are the feature-064/071 guards.
 
@@ -646,7 +677,7 @@ All must pass; the last must report total coverage ≥ 40% (CI parity —
 - `docs/runbooks/mcp-tools.md` — modify
 - `services/xstockstrat-agent/CLAUDE.md` — modify
 
-**Reviewers**: none (per `docs/runbooks/reviewer-registry.md:43-51`, step category `docs` → None).
+**Reviewers**: none (per `docs/runbooks/reviewer-registry.md:44-52`, step category `docs` → None).
 
 **Codebase Evidence**:
 - The stale Return block: `docs/runbooks/mcp-tools.md:277-281` —

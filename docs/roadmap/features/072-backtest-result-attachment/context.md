@@ -485,3 +485,42 @@ out of 072's scope. 072's only obligation is not to publish it unlabeled, which 
 Also declined: adding the requested `range` to the summary (`BacktestResult` carries no window field,
 so it would print `null` in exactly the rolling-default case), and blocking the ship on connector
 measurement (unobservable in-repo; the risk is recorded with a named observable and user-approved).
+
+### Re-review after round 3 (advisory) — PASS WITH WARNINGS, 1 step failure, 0 blockers
+
+Requested because round 3 invalidated things the first review had passed, including a test it asked
+me to add. It confirmed the round-3 edits are substantively right — test 6's retarget, test 8's
+arithmetic (counted by hand: 15/15 and 5/5), the decorator's honest justification, and Step 5's
+`"Infinity"` removal all verify — but caught that **the edit pass was incomplete**. That is the
+lesson worth keeping: correcting an assertion is not correcting the *fixture* that feeds it.
+
+Fixed:
+
+1. **Step 4's shared `_result()` factory still built `profit_factor: "Infinity"`** while the same
+   step's assertion forbade it — an executor following the instructions would have constructed the
+   unreachable value into the fixture three other tests consume. Now `1.8`, with the int64 contract
+   exercised via `volume` and a `coverage_gaps.bars_have` of `"120"` instead.
+2. **Three more surviving `"Infinity"` statements** — the carried-forward risk header, Step 1's
+   "do not coerce" instruction, and Step 2's evidence block — all rewritten to the reachable
+   instances. Every remaining mention in the document is now a prohibition or a correction.
+3. **"`coverage_gaps` all cancel in the difference" was false** under the step's own premise: gaps
+   are per-symbol on OK runs too, so if the factory scales them the marginal-cost test breaches its
+   slope and goes red for the wrong reason — the exact failure round 3 set out to remove. The factory
+   must now emit a fixed single gap, with the alternative slope (`9 × 450`) recorded.
+4. **Step 4's linearity test was never re-instrumented** — it still used the absolute bound round 3
+   rejected in Step 2, and named no number at all. Now mirrors Step 2 test 5.
+5. **The seam test's rationale overclaimed** — after the decorator correction it cannot detect a
+   missing `structured_output=False`; it detects a wrong return shape. Reworded, and the real guard
+   (Step 3's `grep`) named.
+6. **Citation drift**: the agent's CI matrix entry is `ci.yml:343-345` (not `:336-338`) and the
+   pytest step `:361-364`; `reviewer-registry.md`'s `docs`→None row is `:52`; `_METRIC_KEYS` is seven
+   fields at `:68-74` plus `initial_capital` at `:83`, not eight.
+7. **Added missing evidence**: `FastMCP.call_tool` returns a bare `Sequence[ContentBlock]`, not a
+   tuple, and `get_context()` tolerates no active request — without this an executor would try to
+   unpack the seam test's result.
+
+**Superseded, logged per P-03:** `design.md:29-31` still states that `structured_output=False`
+"short-circuits metadata construction — so there is no output schema". True in effect, misleading as
+a rationale: the schema is absent for a bare `-> list` regardless. Step 3's round-3 note is
+authoritative; the design paragraph is left in place (it records what was believed at approval) with
+this entry as the correction.
