@@ -21,6 +21,15 @@ context you load per task.
 > restate a fact the agent can read from the code?* If it's a fact already in the repo, leave it out.
 <!-- context-forge:behavioral-contract:end -->
 
+## Teardown — Audit the Context You Touched Before You Finish
+
+If your session changed any context file (a `CLAUDE.md`, a constitution or findings doc) or a doc
+listed in `.agents/context-forge.json` → `scrubberExtraTargets` (e.g. `README.md`) — **or changed
+behavior those files describe** — then run `/context-scrubber scan`, scoped to what you touched, as
+the last step before pushing, and fix the grounded findings it reports. Drift ships in the docs
+humans read first, so it must be caught before the PR, not after. If the context-forge plugin is
+not available in the session, say so in the PR body rather than skipping silently.
+
 # xstockstrat — Root CLAUDE.md
 
 ## Project Overview
@@ -109,7 +118,7 @@ to the frontends, nginx, and the agent.
 | golang-migrate | latest | DB migrations; installed by `scripts/bootstrap.sh` |
 | golangci-lint | v2.5.0 | Go lint; run via `golangci-lint-action@v6` |
 | ruff | latest | Python lint + format |
-| Playwright | — | E2E tests for all three Next.js frontends |
+| Playwright | — | E2E tests for the consolidated `xstockstrat-ui` (all three segments) |
 | Vitest | ^3 | Unit (logic) tests for `xstockstrat-ui` — node-environment `src/**/*.test.ts`, coverage scoped to `src/lib/**` (feature 065); complements Playwright e2e |
 
 **Python uv lock rule**: After any change to a Python service's `pyproject.toml` (adding, removing, or updating a dependency), run `uv lock` inside that service directory and commit the updated `uv.lock` in the same PR. Never leave `uv.lock` out of sync with `pyproject.toml` — the `python-lint` job runs `uv lock --check` per service. (That gate was added 2026-07-27; before then this sentence claimed an enforcement that did not exist, and a stale lock surfaced only at Docker build time, where `uv sync --frozen` fails the image instead of the PR.)

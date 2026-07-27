@@ -1,6 +1,6 @@
 # xstockstrat
 
-**Cross Stock Strategies** — an end-to-end stock strategy platform: real-time market data ingestion, indicator computation, backtesting, paper/live order execution, and three Next.js operator UIs, wired together by 10 gRPC microservices and a config service that streams live configuration to everything else.
+**Cross Stock Strategies** — an end-to-end stock strategy platform: real-time market data ingestion, indicator computation, backtesting, paper/live order execution, and a consolidated Next.js operator UI (trader, insights, and config segments), wired together by 10 gRPC microservices and a config service that streams live configuration to everything else.
 
 > **Built with AI agents, end to end.** Every feature in this repo — from the proto contracts to the Next.js dashboards to the CI/CD pipelines — was specified, implemented, reviewed, and shipped through an agentic Spec-Driven Development (SDD) loop running on [Claude Code](https://claude.com/claude-code). See [§ Agentic Development](#agentic-development) below for what that actually means in practice.
 
@@ -23,22 +23,21 @@
 
 ## Service Registry
 
+Backend services are **gRPC-only** — the frontends and the MCP agent call them over gRPC and re-expose HTTP to browsers/external clients themselves.
+
 | Service | Language | gRPC | HTTP |
 |---|---|---|---|
-| xstockstrat-trading | Go | 50051 | 8051 |
-| xstockstrat-portfolio | Go | 50052 | 8052 |
-| xstockstrat-marketdata | Go | 50053 | 8053 |
-| xstockstrat-indicators | Python | 50054 | 8054 |
-| xstockstrat-ingest | Python | 50055 | 8055 |
-| xstockstrat-analysis | Python | 50056 | 8056 |
-| xstockstrat-ledger | Node.js | 50057 | 8057 |
-| xstockstrat-identity | Node.js | 50058 | 8058 |
-| xstockstrat-notify | Node.js | 50059 | 8059 |
-| xstockstrat-config | Node.js | 50060 | 8060 |
-| xstockstrat-trader | Next.js | — | 3000 |
-| xstockstrat-insights | Next.js | — | 3001 |
-| xstockstrat-config-ui | Next.js | — | 3002 |
-| xstockstrat-nginx | Nginx | — | 80 |
+| xstockstrat-trading | Go | 50051 | — |
+| xstockstrat-portfolio | Go | 50052 | — |
+| xstockstrat-marketdata | Go | 50053 | — |
+| xstockstrat-indicators | Python | 50054 | — |
+| xstockstrat-ingest | Python | 50055 | — |
+| xstockstrat-analysis | Python | 50056 | — |
+| xstockstrat-ledger | Node.js | 50057 | — |
+| xstockstrat-identity | Node.js | 50058 | — |
+| xstockstrat-notify | Node.js | 50059 | — |
+| xstockstrat-config | Node.js | 50060 | — |
+| xstockstrat-ui | Next.js | — | 3000 |
 | xstockstrat-agent | Python (MCP) | — | 9000 |
 
 Full details (roles, dependencies, config keys) → [`CLAUDE.md`](CLAUDE.md).
@@ -49,8 +48,9 @@ Full details (roles, dependencies, config keys) → [`CLAUDE.md`](CLAUDE.md).
 
 ```bash
 cp .env.example .env          # fill in ALPACA_API_KEY, ALPACA_API_SECRET, JWT_SECRET
-./scripts/bootstrap.sh        # verify Docker, generate proto stubs
-docker compose up -d          # start TimescaleDB, run migrations, start all services
+./scripts/localenv-setup.sh   # build the proto-gen container, generate stubs (no host toolchains needed)
+./scripts/bootstrap.sh        # install deps, start TimescaleDB, run migrations
+docker compose up -d          # start all services
 ```
 
 See [`docs/setup/getting-started.md`](docs/setup/getting-started.md) for prerequisites, environment file setup, and verification steps.
@@ -65,9 +65,10 @@ This repository was built almost entirely through **agent-assisted Spec-Driven D
 
 1. **A human writes a one-line user story.** Something like *"add IBKR account support"* or *"remove the n8n webhook layer"*.
 2. **The agent expands the story into a product spec** (`/sdd-story`) — affected services, governance gates, reviewers, acceptance criteria. A second agent reviews it (`/sdd-review product-spec`) before it can advance.
-3. **The agent searches the codebase for evidence** (`/sdd-spec`) and writes a numbered implementation spec where every step cites real file paths and symbol names found via grep. No invented references.
-4. **The agent executes one step at a time** (`/sdd-execute`), opening a per-step PR into the feature branch. Each step requires explicit human confirmation before any write.
-5. **Status updates are mechanical, not discretionary** — CI flips a feature from `code-completed` to `launched` automatically when its commit lands on `main`.
+3. **The design is debated before it is planned** (`/sdd-design`) — a recon pass grounds the feature in the real codebase, then a mediated proposer-vs-adversary debate (the two never see each other's raw output) attacks the approach until it survives, producing an evidence-cited `design.md`.
+4. **The agent searches the codebase for evidence** (`/sdd-spec`) and writes a numbered implementation spec where every step cites real file paths and symbol names found via grep. No invented references.
+5. **The agent executes one step at a time** (`/sdd-execute`), opening a per-step PR into the feature branch. Each step requires explicit human confirmation before any write.
+6. **Status updates are mechanical, not discretionary** — CI flips a feature from `code-completed` to `launched` automatically when its commit lands on `main`.
 
 The artifacts of this loop are checked in: every active and shipped feature has a `feature.md` (lifecycle status), `product-spec.md` (requirements), `implementation-spec.md` (evidence-cited steps), and `context.md` (append-only session log). Browse [`docs/roadmap/features/`](docs/roadmap/features/) for examples — feature `001-add-ikbr-account-support` and `004-make-repo-public-secure` are both fully launched and show the full lifecycle from story through promotion to production.
 
@@ -79,7 +80,7 @@ The artifacts of this loop are checked in: every active and shipped feature has 
 
 ### What's checked in
 
-- **SDD skills** — `.claude/skills/sdd-story`, `sdd-spec`, `sdd-execute`, `sdd-review`, `sdd-status`, `sdd-sync`, `sdd-triage`, `promote`. These are reusable across any spine-pattern repo.
+- **SDD skills** — `.claude/skills/sdd-story`, `sdd-design`, `sdd-spec`, `sdd-execute`, `sdd-review`, `sdd-status`, `sdd-sync`, `sdd-triage`, `promote`. These are reusable across any spine-pattern repo.
 - **Setup skills** — `.claude/skills/digitalocean-setup`, `onboard`, `proofread-claude-md`. First-time configuration and ongoing hygiene.
 - **Runbooks** — [`docs/runbooks/feature-workflow.md`](docs/runbooks/feature-workflow.md), [`docs/runbooks/bug-triage.md`](docs/runbooks/bug-triage.md), [`docs/runbooks/approval-flow.md`](docs/runbooks/approval-flow.md). These describe the manual paths for anything the agent can't or shouldn't do alone.
 - **CLAUDE.md files at every level** — [root](CLAUDE.md), [`docs/`](docs/CLAUDE.md), [`docs/patterns/`](docs/patterns/CLAUDE.md), and per-service. These are agent-readable context that scales with the repo.
