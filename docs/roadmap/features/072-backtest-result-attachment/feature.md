@@ -16,6 +16,7 @@
 | 2026-07-27 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick; adversary verdict NEEDS WORK, no Floor breach, all objections resolved) and approved; recon.md + design.md written. OQ-1 → EmbeddedResource; OQ-2 → single compact-JSON TextResourceContents (CSV rejected on verified fidelity failure); OQ-3 → moot (no resource registered); OQ-4 → `mcp>=1.27.1` |
 | 2026-07-27 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps (2 service+test pairs + 1 docs). Product-spec AC-1 rewording and stale line citations applied |
 
+| 2026-07-27 | `implementation-ready` (unchanged) | /sdd-design r2 | Second grilling round on the approved design: gzip'd `BlobResourceContents` swap **proposed and rejected** (it inverts this feature's own failure-asymmetry rule; measured 103 KB not the 53 KB assumed; needs two unobserved behaviors to pay off). Chosen approach unchanged. Three corrections adopted — measured sizes replace estimates, AC-1 test bound `8_000` → `3_000`, `mtime=0` reproducibility limit recorded |
 ---
 
 ## Artifacts

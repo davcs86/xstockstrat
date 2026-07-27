@@ -334,3 +334,85 @@ misdirected execution — and 070's lifecycle still read `in-progress` after its
   `x-access-scope` forwarded only by the management tools; no secrets in tool output or the
   unauthenticated `GET /api/tools` catalog. The caveats in 072's `feature.md`, `product-spec.md` and
   all four `implementation-spec.md` sites are updated to say the gap is closed.
+
+## Session 2026-07-27 — sdd-design round 2 (full proposer + adversary)
+
+A second grilling round on an already-approved, already-specced design. **Outcome: the chosen
+approach is unchanged.** The round earned its cost anyway — it produced measured numbers where round
+1 had estimates, and three real corrections.
+
+### Proposed and rejected: swap the attachment to gzip'd `BlobResourceContents`
+
+The proposer defended round 1's structure and changed exactly one component — gzip'd compact JSON in
+a `BlobResourceContents` instead of raw compact JSON in a `TextResourceContents` — arguing round 1
+rejected gzip on the wrong axis (it measured bytes but rejected on tokens).
+
+**Rejected, on three grounds:**
+
+1. **It inverts this feature's own decision rule, written one day earlier.** `insights.md`
+   2026-07-27 (072 design): *"Choose between two mechanisms by failure asymmetry… `EmbeddedResource`'s
+   worst case is merely verbose."* That is the rule that killed `ResourceLink`. Under gzip the worst
+   case stops being verbose and becomes **unrecoverable**: a truncated gzip stream has no trailer and
+   no CRC, and a host that drops an unknown mime yields nothing — whereas compact JSON truncates to a
+   readable head. Adopting gzip would mean citing a rule against one option and ignoring it for
+   another.
+2. **The measurements weaken the case rather than strengthen it.** The summary is **1.0 KB**, so in
+   both branches where the feature works — the connector honors the attachment, or drops it — the
+   encoding is irrelevant. gzip matters only in the unobserved inline branch, and there the real
+   ratio is ~6–7× on tokens, not the ~9× claimed (the proposal carried round 1's ~53 KB estimate
+   forward; measured is **103 KB**). "Context blown" becomes "a fifth of the window burned with
+   undecodable base64."
+3. **It needs two unobserved behaviors to pay off** — the connector must inline **and** offer a
+   download affordance the user can `gunzip` — where round 1 needs one to fail. That is a worse bet.
+
+Also: "surgical amendment, Step 3 unchanged" was **false**, verified against the spec text. Step 3's
+docstring instruction names `application/json`, Step 1 explicitly says *"Do not import `base64`"*,
+and `attachment_refs`' declared return type `list[dict[str, str]]` breaks with an int `bytes`. Five
+step bodies change, and two Codebase Evidence blocks would acquire unexecuted citations.
+
+**F-09 was checked, not assumed:** all five step bodies still read `**Status**: pending`, so the spec
+was editable and the corrections below are spec edits rather than Deviation Log entries. One dispatch
+of `/sdd-execute` would have changed that.
+
+### Measured, replacing round 1's estimates
+
+Realistic 5 symbols × 504 bars, 2 indicators/bar, all 15 `BarDiagnostic` fields populated:
+
+| Variant | Measured | vs today |
+|---|---|---|
+| Today — pretty JSON (`indent=2`) | 1410 KB | — |
+| Compact JSON — **chosen** | 827 KB | 1.71× |
+| protobuf + base64 | 433 KB | 3.26× |
+| gzip + base64 | 103 KB | 13.7× |
+| **FR-2 summary alone** | **1.0 KB** | **1366×** |
+
+### Three corrections adopted (user-approved)
+
+1. **Unmeasured numbers corrected.** `design.md` § 7 and `product-spec.md`'s AC-1 amendment cited
+   ~2 KB at 5 symbols / ~19 KB at 50. Measured: **1.0 KB / ~10 KB**. The amendment itself stands —
+   it was right — but an approved acceptance criterion had been resting on a 2×-wrong estimate.
+2. **AC-1 test bound tightened**, `8_000` → `3_000` bytes for 10 symbols. At ~200 B/symbol the
+   original bound tolerated a ~4× regression (e.g. accidentally retaining a per-bar field) without
+   failing, which would have made the AC-1 guard decorative.
+3. **`mtime=0` limit recorded.** My own earlier verification was incomplete: I showed same-process
+   reproducibility, but `mtime=0` routes to `zlib.compress(..., wbits=31)`
+   (`/usr/lib/python3.12/gzip.py:609-612`) — a different code path whose output depends on the linked
+   zlib, so it gives timestamp-freedom, **not** cross-environment byte reproducibility. Recorded in
+   `design.md` § Rejected Alternatives so no future test asserts golden blob bytes.
+
+### Escalation trigger sharpened
+
+gzip remains the designated escalation, but it now requires observing **both** (a) the connector
+inlines the attachment **and** (b) a download affordance exists that the user can `gunzip`. If (a)
+holds and (b) does not, gzip makes the artifact unreachable rather than merely large — and trimming
+the attachment's *content* (dropping pure warm-up/HOLD bars, round 2's untested fourth option) should
+be priced first.
+
+### Rejected without re-litigation
+
+Tiering (MCP has no inline-A-defer-B mechanism; `Annotations.audience` is the only hint, so tiering
+doubles the block count and re-imports the CSV two-block objection), `ResourceLink` alongside the blob
+(bytes remain inlinable → zero risk reduction, full link-branch cost), and moving `trades` inline
+(AC-1 forbids it). The adversary's claim that the *original* AC-1 was "unsatisfiable" was itself an
+overreach — it is unsatisfiable only jointly with FR-2's chosen row shape, which is what the approved
+amendment already says — so the amendment was left alone rather than re-argued.

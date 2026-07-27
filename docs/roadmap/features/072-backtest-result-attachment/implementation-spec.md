@@ -254,9 +254,14 @@ Cover:
    This is the reworded AC-1's first half ("independent of window length", `design.md` § 7) —
    size-independence, not byte-equality.
 5. `test_summary_grows_linearly_in_symbol_count` — 1 symbol vs 10 symbols: the serialized summary
-   grows, but stays under a small absolute bound (assert `< 8_000` bytes for 10 symbols) while the
+   grows, but stays under a small absolute bound (assert `< 3_000` bytes for 10 symbols) while the
    full payload for the same input is orders of magnitude larger. AC-1's second half; asserted
    across **two** symbol counts, per `design.md` § Open Risks.
+
+   > Bound tightened from `8_000` to `3_000` at round 2 (2026-07-27). Measured: ~1.0 KB at 5 symbols
+   > (~200 B/symbol), so ~2.0–2.2 KB at 10. The original bound tolerated a ~4× regression — e.g.
+   > accidentally retaining a per-bar field — without failing, which would have made the AC-1 guard
+   > decorative.
 6. `test_summary_passes_non_finite_strings_through` — `profit_factor: "Infinity"` stays the string
    `"Infinity"`, not `math.inf` and not `None`.
 7. `test_summarize_tolerates_a_partial_dict` — `summarize({"backtest_id": "bt-2"})` returns

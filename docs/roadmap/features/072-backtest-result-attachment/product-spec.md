@@ -178,9 +178,11 @@ they exist to prove this feature does not break what already works. Tagged indiv
    > regardless of window length **or symbol count**", which is strictly incompatible with FR-2:
    > FR-2 requires a per-symbol `no_trade_reason`/`bars_total`/`warmup_bars` row, so the summary is
    > necessarily O(symbols). FR-2 wins, because it is what protects the feature-064 0-trade
-   > diagnosis. The summary is O(symbols), not O(symbols x bars) — ~2 KB at 5 symbols, ~19 KB at 50,
-   > against a payload that today grows without bound in *both* dimensions. Tests must assert
-   > boundedness across **two** symbol counts, not one.
+   > diagnosis. The summary is O(symbols), not O(symbols x bars) — **measured 1.0 KB at 5 symbols
+   > (~200 B/symbol), so ~10 KB at 50** — against a payload that today grows without bound in *both*
+   > dimensions. Tests must assert boundedness across **two** symbol counts, not one.
+   > (The ~2 KB / ~19 KB figures originally recorded here were estimates; corrected against a
+   > measured 5x504 result at round 2, 2026-07-27. The amendment itself is unchanged.)
 2. The same call returns an attachment whose content round-trips to the **complete** `BacktestResult`,
    byte-for-byte equivalent in information to today's inline payload (FR-3).
 3. *(Regression guard — passes today.)* A 0-trade run can still be diagnosed from the inline summary
