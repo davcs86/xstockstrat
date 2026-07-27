@@ -29,6 +29,39 @@ test.describe('Backtest data coverage', () => {
     });
   });
 
+  // feature 071 — a windowed run's shortfall is in the PRE-window warm-up span, so the
+  // backfill action must fill `gap` (earlier than the requested start), not `requestedRange`.
+  // The two are equal on an unwindowed run, which is exactly why echoing the request back
+  // would have looked correct until now; the mock now returns a disjoint pre-window gap.
+  test('backfill action fills the pre-window warm-up gap, not the requested window', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/insights/strategies/strat-high-001');
+
+    // Capture the window the browser asks for, then the range it offers to backfill.
+    const backtestReq = page.waitForRequest(
+      (r) => r.url().includes('/RunBacktest') && r.method() === 'POST',
+    );
+    await page.getByRole('button', { name: 'Run Backtest' }).click();
+    const requestedStart = Number(
+      JSON.parse((await backtestReq).postData() ?? '{}').range?.start?.seconds ?? 0,
+    );
+    expect(requestedStart).toBeGreaterThan(0); // the form always sends an explicit window
+
+    await expect(page.getByTestId('insufficient-data')).toBeVisible({ timeout: 10000 });
+
+    const backfillReq = page.waitForRequest(
+      (r) => r.url().includes('/TriggerBackfill') && r.method() === 'POST',
+    );
+    await page.getByTestId('backfill-action').click();
+    const range = JSON.parse((await backfillReq).postData() ?? '{}').range ?? {};
+
+    // The backfilled span ends where the requested window begins and reaches back before it.
+    expect(Number(range.end?.seconds)).toBe(requestedStart);
+    expect(Number(range.start?.seconds)).toBeLessThan(requestedStart);
+  });
+
   // feature 064 — an OK backtest renders the day-by-day debug diagnostics table + no-trade reason.
   test('OK backtest renders day-by-day debug diagnostics', async ({ page }) => {
     await addAuthCookie(page);

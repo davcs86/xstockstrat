@@ -240,3 +240,85 @@ call, not an implementation one.
 ### Remaining for 071
 
 Steps 5–8: agent `start`/`end` surface, parity/determinism tests (FR-4/6/7), docs, UI e2e.
+
+---
+
+## Session — 2026-07-27 (steps 5–8)
+
+### Step 5 — agent surface
+
+`client.run_backtest` and the `run_backtest` MCP tool take optional ISO `start`/`end`, mapped onto
+the **same** `RunBacktestRequest.range` the UI already sends. FR-6 parity is therefore structural,
+not a behavior two call sites have to keep in step: there is one field and one server path.
+
+- Omitting both leaves `range` **unset** rather than sending an all-zero message, so the servicer's
+  rolling default applies and FR-2 holds exactly.
+- One-sided ranges are forwarded as-is — the servicer defaults each unset bound independently, so
+  fabricating the missing side would silently narrow the window.
+- An inverted window is rejected client-side. Left to the server it would run an empty window and
+  report `INSUFFICIENT_DATA`, naming the symptom rather than the mistake.
+- The tool docstring leads with the reproducibility payoff, not the mechanics: the decision an agent
+  actually faces is *whether* to pass a window, and it needs to know that omitting it makes results
+  drift day to day. It also names `trigger_backfill` as the remedy for the new `INSUFFICIENT_DATA`.
+
+### Step 6 — parity/determinism, and a bug the tests found
+
+**Deviation (P-03): a real defect fixed outside the designed step list.** The formula-cost test
+showed `required_prefix_bars` reading the declared-warm-up cache at the **top** of each symbol's
+run while `_compute_evaluated_warmup` only fills it at the **bottom**. For a formula-using strategy
+that meant symbol 1 sized its prefix from an empty cache (no prefix, short-warmed) while symbols 2+
+got the full one — a result that depends on symbol order, breaking FR-4 determinism and the
+per-symbol comparability the feature-065 evidence cells assume. `_prefetch_formula_warmups` now
+resolves them before the loop, honoring the contract `required_prefix_bars`' own docstring already
+stated ("must be pre-populated by the caller"). A shared `_declared_formula_warmup` keeps the two
+call sites from drifting.
+
+Tests added: FR-4 frozen clock (plus a *teeth* test proving the clock patch isn't inert — without a
+window the effective range genuinely moves); FR-3 no-trade-before-start at the RPC level; prefix
+sizing insensitivity from both sides (doubling the calendar slack, and extra available history);
+the VWAP anchor shift pinned at its cause (VWAP receives prefix+window closes); the FR-7 live-loop
+divergence (`_LOOKBACK_DAYS == 365`, `live_loop.py` free of any `warmup` reference, and the
+evaluator signature carrying no window argument — so it fails loudly if someone later wires the
+prefix into the live path); and formula prefix cost measured, including the one-GetFormula-per-run
+guarantee.
+
+Two **fixtures** were wrong rather than the code: `_series_bars` derived each close from the list
+index, so lengthening the prefix silently restated the whole series and the surplus-history test
+was comparing two different price histories; and the zero-warm-up cost test fed pre-window bars to
+a path that requests no prefix, where the range-ignoring `GetBars` mock lets them through. Both now
+measure the code instead of themselves.
+
+Byte-identity assertions clear `backtest_id` and `completed_at` — both differ per run by
+construction, so leaving them in would make the assertion vacuously false and invite a weaker
+field-by-field comparison.
+
+The `warmup` module is imported aliased in the test file: a pre-existing test uses `warmup` as a
+loop variable, and renaming that is not this feature's business.
+
+### Step 7 — docs
+
+`mcp-tools.md` documents the parameters plus the two consequences an agent cannot infer from the
+signature (pre-window `coverage_gaps` → `trigger_backfill`; the VWAP anchor shift). The analysis
+`CLAUDE.md` gains the warm-up prefix section: declared-not-observed and why observing is provably
+wrong, the sizing-only conversion, the fatal shortfall, the formula prefetch, the `GetBars`
+pagination fix and its `trading_days` shift, and the FR-7 divergence with a pointer to its test.
+
+### Step 8 — UI
+
+**No UI production change is required — verified.** `strategies/[id]/page.tsx:312` already backfills
+`gap.gap`, not `gap.requestedRange`, which is the correct span now that the two differ.
+
+`e2e/mock-backend.ts` previously echoed `req.range` back as both `requestedRange` and `gap`, so it
+could not distinguish a correct consumer from an incorrect one. It now returns a **disjoint
+pre-window gap** via the new `e2e/fixtures/backtests.ts` (C-12), and an e2e test asserts the
+backfill span ends where the requested window begins and reaches back before it.
+
+C-12: the coverage-gap half of the "Backtest results / diagnostics / coverage gaps" inventory row is
+now centralized and catalogued; the diagnostics sentinels and run-history rows stay inline and the
+row was narrowed to say so, rather than left claiming more than moved.
+
+### Still open
+
+**OQ-1 remains a product decision** (see the previous session's entry): fail-loud vs. short-warm
+with a non-fatal `CoverageGap`. Unchanged by steps 5–8 — the agent surface simply makes it reachable
+from a second caller.
