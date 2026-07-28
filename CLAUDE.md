@@ -87,7 +87,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 
 Backend services are **gRPC-only** (the HTTP/Connect-RPC ports were removed once all
 callers — frontends and the MCP agent — moved to gRPC). The HTTP Port column applies only
-to the frontends, nginx, and the agent.
+to the frontends and the agent.
 
 | Service | Language | Role | gRPC Port | HTTP Port |
 |---|---|---|---|---|

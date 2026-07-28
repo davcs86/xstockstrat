@@ -1,6 +1,6 @@
 # xstockstrat
 
-**Cross Stock Strategies** — an end-to-end stock strategy platform: real-time market data ingestion, indicator computation, backtesting, paper/live order execution, and a consolidated Next.js operator UI (trader, insights, and config segments), wired together by 10 gRPC microservices and a config service that streams live configuration to everything else.
+**Cross Stock Strategies** — an end-to-end stock strategy platform: real-time market data ingestion, indicator computation, backtesting, paper/live order execution, and a consolidated Next.js operator UI (trader, insights, and config segments), wired together by 10 gRPC microservices — one of which streams live configuration to all the others.
 
 > **Built with AI agents, end to end.** Every feature in this repo — from the proto contracts to the Next.js dashboards to the CI/CD pipelines — was specified, implemented, reviewed, and shipped through an agentic Spec-Driven Development (SDD) loop running on [Claude Code](https://claude.com/claude-code). See [§ Agentic Development](#agentic-development) below for what that actually means in practice.
 
