@@ -44,6 +44,24 @@ Per-strategy re-entry cooldown so a rule-based strategy's `entry_rule` can't imm
 |---|---|---|---|
 | `analysis.strategy.default_cooldown_days` | int | `31` | Per-strategy default re-entry cooldown in calendar days when `StrategyDefinition.cooldown_days` is unset; `31` sits outside the IRS 30-day-each-side wash-sale window. `get_int` zero-trap: a platform-wide value of `0` reads back as the default `31` — a per-strategy explicit-`0` (no cooldown) is unaffected because it travels via proto explicit presence, not this config read. |
 
+### feature 068 — backtest results visualization (`xstockstrat-analysis`)
+
+Every OK `RunBacktest` persists its full serialized result (`analysis.backtest_details`, migration `008`) so past runs stay visualizable via the `GetBacktest` RPC; eviction keeps the newest N detailed runs per strategy (summary rows in `backtest_runs` are never trimmed).
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.backtest.detail_retention_per_strategy` | int | `20` | Max persisted detailed runs per strategy; count-based eviction at insert, clamped ≥1. `get_int` zero-trap: `0` reads as the default. |
+
+### feature 065 — cross-stock score derivation (`xstockstrat-analysis`)
+
+The headline strategy grade is derived from per-symbol (symbol × window) evidence cells (`analysis.backtest_run_symbols`, migration `007`) via trading-day evidence weighting + empirical-Bayes shrinkage toward a neutral 0.5 prior — so high grades are earnable only through breadth + duration across stocks, and a throwaway single-symbol run can never overwrite a well-evidenced grade. (Design-level narrative: `services/xstockstrat-analysis/docs/scoring.md`; binding invariants ANALYSIS-2/3.)
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.scoring.shrinkage_days` | int | `250` | Empirical-Bayes shrinkage pseudo-count `k` (trading days) toward the 0.5 prior; perfect evidence earns an A once total evidence `W ≥ 1.5·k`. `get_int` zero-trap: `0` reads as the default. |
+| `analysis.scoring.min_evidence_symbols` | int | `3` | Below this many distinct evidence symbols the grade is flagged `provisional`. |
+| `analysis.scoring.min_evidence_days` | int | `500` | Below this many total evidence trading-days the grade is flagged `provisional`. |
+
 ### feature 064 — backtest debug diagnostics (`xstockstrat-analysis`)
 
 | Key | Type | Default | Description |
