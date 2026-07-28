@@ -22,6 +22,37 @@ fails. Re-run `/context-scrubber` to re-audit; run `/context-constitution` to ad
 > contradicted-by-code rows in place; those trims are **not** repeated here — those rows are reported and
 > deferred instead.)
 
+## Resolution status — full context-forge sequence ran 2026-07-28
+
+This report was produced first (scan); then the sequence continued **constitution-refresh → re-audit →
+apply**. What each row's category got:
+
+- **Stale citations (8) → RE-GROUNDED.** All eight `path:line` drifts fixed in the constitution/findings
+  files (analysis `servicer.py` after features 069–072; marketdata `handler.go`→`marketdata_handler.go`;
+  trading TRADING-1 Example; UI `src/browserClients`→`src/lib/browserClients`; ingest `watcher.py`; agent).
+- **Contradicted by code (24) → RESOLVED (nuanced, user-approved).** Unambiguous factual errors corrected
+  in place (Go 1.22→1.25, Node 20→22, nginx-removed, config DELTA = full namespace, ledger immutability =
+  triggers, indicators pool sizing, identity `jwt.secret` = env var, the four `pnpm run migrate` doc-lies).
+  Clearly-fictional cruft removed (fictional ledger/notify deps + their env vars/events, the nine dead
+  `ingest.signals.*`, dead `platform.ledger_endpoint` rows, `ingest.data.normalized`, `trading.maintenance_mode`).
+  Plausibly-intended-but-unbuilt specs **preserved and reworded** "documented, not yet implemented" so no
+  spec is buried (`trading.risk.daily_loss_limit`, `portfolio.risk.max_drawdown_pct`, `order.approved`,
+  marketdata retention/compression/`ohlcv_1h`, ledger retention/compression/notify toggle, notify limits,
+  indicators `sandbox.max_concurrent`).
+- **Restated / Cross-file duplication / Bloat → PARTIALLY APPLIED.** Clean subtractions taken: root Language
+  Map (restates Service Registry), three per-service `uv lock` lines (restate the root rule), otel PLAT-3
+  gotcha collapsed to a pointer (CF-N3), root all-DONE roadmap table trimmed to prose (bloat). The
+  service-specific Node "gRPC-only/80xx-removed" prose, "Running Locally" blocks, ports/env tables were
+  **kept** (they carry local detail beyond the root restatement) and are left as reported.
+- **Should be just-in-time (8) → DEFERRED.** A `move` needs the destination doc to already hold the content
+  (apply never writes the destination — CF-N9/apply-protocol), so these await a follow-up that creates the
+  on-demand homes (feature `design.md`, runbooks, `config-governance.md` registered-keys log).
+- **Brittle (5) → DEFERRED.** Rewriting a block to a heuristic is an authored change, not a subtraction;
+  left for a deliberate follow-up.
+
+The category tables below are the **original audit** (line numbers as first scanned); use them as the triage
+record. The live files now reflect the resolutions above.
+
 ## Summary
 
 Savings are **measured** — lines and characters counted directly from the flagged ranges, not estimated.

@@ -127,6 +127,6 @@ Generate: `openssl rand -hex 32`
 
 ```bash
 pnpm install
-pnpm run migrate
+# schema: run ../../scripts/db-migrate.sh from repo root (golang-migrate, not node-pg-migrate)
 pnpm run dev
 ```

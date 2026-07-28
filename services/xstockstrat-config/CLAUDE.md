@@ -88,6 +88,6 @@ TRADING_MODE=paper   # paper | live — default scope for this instance
 
 ```bash
 pnpm install
-pnpm run migrate
+# schema: run ../../scripts/db-migrate.sh from repo root (golang-migrate, not node-pg-migrate)
 pnpm run dev
 ```

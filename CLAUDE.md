@@ -384,22 +384,7 @@ To enforce this, disable squash and rebase merging on the `main` branch:
 
 ## Implementation Roadmap Status
 
-Active phases and their current status. See `docs/roadmap/implementation-roadmap.md` for full specs and verification checkpoints.
-
-| Phase | Description | Status |
-|---|---|---|
-| Phase 0 | Foundation: proto gen, bootstrap, DB, Docker Compose | **DONE** |
-| Phase 1 | Core infrastructure: config, ledger, identity, notify | **DONE** |
-| Phase 2 | Data layer: marketdata, portfolio | **DONE** |
-| Phase 3 | Processing: indicators, ingest, analysis | **DONE** |
-| Phase 4 | Trading core | **DONE** |
-| Phase 5 | UI layer: trader, insights, config-ui → consolidated as `xstockstrat-ui` (feature 045) | **DONE** |
-| Phase 6 | Integration & webhook wiring | **DONE** |
-| Phase 7 | Observability: OTel + Grafana Cloud | **DONE** |
-
-This table is a coarse phase map only; all phases are now **DONE**. Per-feature lifecycle status is authoritative in the feature directories (see § Feature Roadmap) — do not track individual feature status here.
-
-Deviation notes exist only for phases 3–7 (`docs/roadmap/phase[3-7]-deviations.md`). Phases 0–2 predate the deviation-doc convention and have none — their absence is expected, not a missing file.
+Phases 0–7 are all **DONE** — see `docs/roadmap/implementation-roadmap.md` for full specs and verification checkpoints. This is a coarse phase map only; per-feature lifecycle status is authoritative in the feature directories (§ Feature Roadmap), not here. Deviation notes exist only for phases 3–7 (`docs/roadmap/phase[3-7]-deviations.md`); phases 0–2 predate that convention and have none.
 
 ---
 
