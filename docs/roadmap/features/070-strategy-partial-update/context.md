@@ -223,3 +223,10 @@ test's intent was error mapping, not the guard.
 `e2e/mock-backend.ts` `manageStrategy` merely echoes `req.definition` and models no merge, so no
 UI-side partial-update assertion is possible until it changes; and its `getStrategy` inline literal
 is catalogued as not-yet-centralized (`e2e/fixtures/INVENTORY.md:49`, C-12).
+
+## Session 2026-07-28 (CI: feature status automation)
+
+- Promotion PR #797 merged to main
+- Feature promoted and committed: 67bf345b917b05b869fc67cacff5d74365ba86b8
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-07-28

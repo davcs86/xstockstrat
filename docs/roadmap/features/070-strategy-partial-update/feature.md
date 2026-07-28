@@ -1,6 +1,8 @@
 # Feature: strategy-partial-update
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 67bf345b917b05b869fc67cacff5d74365ba86b8
+**Launched date**: 2026-07-28
 **Development Branch**: `feature/strategy-partial-update` (see context.md — implemented on the
 harness-assigned `claude/features-070-071-rnbkqo` branch this session)
 **Created**: 2026-07-26
@@ -20,6 +22,7 @@ harness-assigned `claude/features-070-071-rnbkqo` branch this session)
 | 2026-07-26 | `design-approved` → `in-progress` | implementation | Steps 1-6 of 6 implemented (proto+codegen, servicer merge, agent client, agent tool + 14th tool, six doc surfaces, integration-test case) |
 | 2026-07-27 | `in-progress` → `code-completed` | implementation | Merged to `main-dev` via PR #791; CI green. Status had lagged behind the merge |
 
+| 2026-07-28 | `code-completed` → `launched` | CI workflow | Promoted via PR #797; committed 67bf345b917b05b869fc67cacff5d74365ba86b8 |
 ---
 
 ## Artifacts

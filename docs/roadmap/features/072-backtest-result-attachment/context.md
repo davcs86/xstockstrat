@@ -660,3 +660,10 @@ stubs that the service's own config never lints.
 Both red-green cycles recorded by execution, not assertion: steps 1+2 (11 failed → 12 passed) and
 steps 3+4 (10 failed → 52 in-file / 109 overall). Final: **109 passed, coverage 69.16%**, ruff clean,
 `uv lock --check` in sync, markdownlint and context-map clean.
+
+## Session 2026-07-28 (CI: feature status automation)
+
+- Promotion PR #797 merged to main
+- Feature promoted and committed: 67bf345b917b05b869fc67cacff5d74365ba86b8
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-07-28

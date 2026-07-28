@@ -347,3 +347,10 @@ thing in prose: the `run_backtest` docstring names `trigger_backfill` as the rem
 
 No code change follows from this decision — the implementation already matches it. 071 moves to
 `code-completed`.
+
+## Session 2026-07-28 (CI: feature status automation)
+
+- Promotion PR #797 merged to main
+- Feature promoted and committed: 67bf345b917b05b869fc67cacff5d74365ba86b8
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-07-28

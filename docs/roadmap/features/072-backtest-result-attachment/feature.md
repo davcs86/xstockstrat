@@ -1,6 +1,8 @@
 # Feature: backtest-result-attachment
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 67bf345b917b05b869fc67cacff5d74365ba86b8
+**Launched date**: 2026-07-28
 **Development Branch**: `feature/backtest-result-attachment`
 **Created**: 2026-07-26
 **Last Updated**: 2026-07-27
@@ -21,6 +23,7 @@
 | 2026-07-27 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done — `app/backtest_view.py` (summary projection + attachment block) |
 | 2026-07-27 | `implementation-ready` → `in-progress` | /sdd-execute | Execution started on `feature/backtest-result-attachment` (fresh branch off `main-dev` @ `1d54d0b`). Steps 1–2 done: `app/backtest_view.py` + 12 unit tests, red-before-green recorded |
 | 2026-07-27 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done, one commit each, both red-green cycles recorded. 109 tests pass, coverage 69.16% |
+| 2026-07-28 | `code-completed` → `launched` | CI workflow | Promoted via PR #797; committed 67bf345b917b05b869fc67cacff5d74365ba86b8 |
 ---
 
 ## Artifacts
