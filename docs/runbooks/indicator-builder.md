@@ -284,6 +284,13 @@ Example `StrategyDefinition` (two components + an entry rule):
 ```
 
 Register a strategy via the `manage_strategy` MCP tool (admin-scoped) or the `ManageStrategy` gRPC RPC
+
+> **Editing an existing strategy (feature 070).** `manage_strategy(operation='update')` is a
+> **partial merge**: only the fields you pass change, everything else is preserved. Tuning one
+> parameter no longer requires re-sending the whole definition (and no longer wipes it if you
+> forget). Use `get_strategy` to read the current definition first, and `clear_fields=[...]` to
+> erase a rule deliberately. Note that changing a scoring-relevant field clears the strategy's
+> derived grade until a fresh backtest supplies new evidence; a rename does not.
 on `xstockstrat-analysis`. The shared evaluator lives at
 `services/xstockstrat-analysis/app/services/evaluator.py` and is reused by both `RunBacktest`
 (feature 047) and the live strategy→alert runtime (feature 048), guaranteeing backtest/live parity.

@@ -34,6 +34,7 @@ exports.screenResultStatusToNumber = screenResultStatusToNumber;
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
 const common_1 = require("../../common/v1/common");
+const field_mask_1 = require("../../google/protobuf/field_mask");
 const struct_1 = require("../../google/protobuf/struct");
 const timestamp_1 = require("../../google/protobuf/timestamp");
 exports.protobufPackage = "xstockstrat.analysis.v1";
@@ -3486,7 +3487,7 @@ exports.StrategyDefinition = {
     },
 };
 function createBaseManageStrategyRequest() {
-    return { operation: StrategyOperation.STRATEGY_OPERATION_UNSPECIFIED, definition: undefined };
+    return { operation: StrategyOperation.STRATEGY_OPERATION_UNSPECIFIED, definition: undefined, updateMask: undefined };
 }
 exports.ManageStrategyRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -3495,6 +3496,9 @@ exports.ManageStrategyRequest = {
         }
         if (message.definition !== undefined) {
             exports.StrategyDefinition.encode(message.definition, writer.uint32(18).fork()).join();
+        }
+        if (message.updateMask !== undefined) {
+            field_mask_1.FieldMask.encode(field_mask_1.FieldMask.wrap(message.updateMask), writer.uint32(26).fork()).join();
         }
         return writer;
     },
@@ -3519,6 +3523,13 @@ exports.ManageStrategyRequest = {
                     message.definition = exports.StrategyDefinition.decode(reader, reader.uint32());
                     continue;
                 }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.updateMask = field_mask_1.FieldMask.unwrap(field_mask_1.FieldMask.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -3533,6 +3544,11 @@ exports.ManageStrategyRequest = {
                 ? strategyOperationFromJSON(object.operation)
                 : StrategyOperation.STRATEGY_OPERATION_UNSPECIFIED,
             definition: isSet(object.definition) ? exports.StrategyDefinition.fromJSON(object.definition) : undefined,
+            updateMask: isSet(object.updateMask)
+                ? field_mask_1.FieldMask.unwrap(field_mask_1.FieldMask.fromJSON(object.updateMask))
+                : isSet(object.update_mask)
+                    ? field_mask_1.FieldMask.unwrap(field_mask_1.FieldMask.fromJSON(object.update_mask))
+                    : undefined,
         };
     },
     toJSON(message) {
@@ -3542,6 +3558,9 @@ exports.ManageStrategyRequest = {
         }
         if (message.definition !== undefined) {
             obj.definition = exports.StrategyDefinition.toJSON(message.definition);
+        }
+        if (message.updateMask !== undefined) {
+            obj.updateMask = field_mask_1.FieldMask.toJSON(field_mask_1.FieldMask.wrap(message.updateMask));
         }
         return obj;
     },
@@ -3554,6 +3573,7 @@ exports.ManageStrategyRequest = {
         message.definition = (object.definition !== undefined && object.definition !== null)
             ? exports.StrategyDefinition.fromPartial(object.definition)
             : undefined;
+        message.updateMask = object.updateMask ?? undefined;
         return message;
     },
 };

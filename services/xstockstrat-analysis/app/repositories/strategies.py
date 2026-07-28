@@ -67,6 +67,45 @@ class StrategiesRepository:
         )
         return _to_dict(row)
 
+    async def update_locked(self, strategy_id: str, apply_fn) -> dict | None:
+        """Read-modify-write the definition under ``SELECT … FOR UPDATE`` (feature 070).
+
+        The partial-merge path has to read the stored definition, merge the caller's masked
+        fields into it, and write the result — three statements where the pre-070 full replace
+        was one. Without a lock that is a lost-update window: a concurrent UI edit and agent
+        tune would each merge onto the same base and the later write would silently discard the
+        earlier one. ``_lock_for`` cannot help — it is documented single-process protection only.
+
+        ``apply_fn(current_row) -> (display_name, definition_json)`` runs **inside** the
+        transaction with the row locked. It must not perform I/O of its own: callers pre-fetch
+        anything they need (e.g. formula outputs) before calling. Raising from ``apply_fn``
+        rolls the transaction back and leaves the row untouched.
+
+        Returns the updated row, or ``None`` if the strategy does not exist.
+        """
+        async with self._db.acquire() as conn, conn.transaction():
+            row = await conn.fetchrow(
+                "SELECT * FROM analysis.strategies WHERE strategy_id = $1 FOR UPDATE",
+                strategy_id,
+            )
+            if row is None:
+                return None
+
+            display_name, definition_json = await apply_fn(_to_dict(row))
+
+            updated = await conn.fetchrow(
+                """
+                UPDATE analysis.strategies
+                   SET display_name = $2, definition_json = $3::jsonb, updated_at = NOW()
+                 WHERE strategy_id = $1
+                RETURNING *
+                """,
+                strategy_id,
+                display_name,
+                json.dumps(dict(definition_json) if definition_json else {}),
+            )
+            return _to_dict(updated)
+
     async def set_live_enabled(self, strategy_id: str, live_enabled: bool) -> dict | None:
         row = await self._db.fetchrow(
             """
