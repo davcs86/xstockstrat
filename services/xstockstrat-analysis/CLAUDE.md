@@ -62,7 +62,7 @@ New dependency edges: **analysis → ingest write** (`IngestSignal` / `ManageSig
 
 ### Cross-Stock Score Derivation (feature 065) & Pre-Window Warm-Up Prefix (feature 071)
 
-Design-level detail — fingerprint eligibility, empirical-Bayes aggregation with worked calibration anchors, recompute triggers, warm-up prefix sizing, and the FR/OQ caveats — lives on-demand in **`docs/scoring.md`** and **`docs/warmup.md`**. The **binding** invariants are **ANALYSIS-2** (evidence-weighted EB grade) and **ANALYSIS-3** (definition-fingerprint eligibility) in `docs/context-constitution.md`.
+Design-level detail — fingerprint eligibility, empirical-Bayes aggregation with worked calibration anchors, recompute triggers, warm-up prefix sizing, and the FR/OQ caveats — lives on-demand in this service's `docs/` folder (**`scoring.md`**, **`warmup.md`**). The **binding** invariants are **ANALYSIS-2** (evidence-weighted EB grade) and **ANALYSIS-3** (definition-fingerprint eligibility) in `docs/context-constitution.md`.
 
 ## Language
 

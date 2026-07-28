@@ -180,4 +180,4 @@ go run ./cmd/server
 
 ## Known Limitations
 
-**IBKR Hedged Mode is not supported** — the integration assumes netting mode. The P&L cost-basis caveat for interleaved fills and the steps to add support are in **`docs/ibkr.md`**.
+**IBKR Hedged Mode is not supported** — the integration assumes netting mode. The P&L cost-basis caveat for interleaved fills and the steps to add support are in this service's `docs/` folder (**`ibkr.md`**).

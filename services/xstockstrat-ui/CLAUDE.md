@@ -163,7 +163,7 @@ covered by the Playwright e2e suite below.
 React UI logic, not browser-specific rendering). CI is sharded across 2 parallel runners with a
 shared pre-built Next.js bundle (`E2E_PREBUILT`). Locally, Firefox is included when available.
 
-E2E harness internals — SSR pre-warming (`e2e/warmup.setup.ts` `ROUTES`), the serial-`describe` page-reuse optimization, and Playwright browser resolution (`launchOptions.executablePath`, Firefox drop, exact-version pin) — live on-demand in **`docs/e2e-testing.md`**.
+E2E harness internals — SSR pre-warming (`e2e/warmup.setup.ts` `ROUTES`), the serial-`describe` page-reuse optimization, and Playwright browser resolution (`launchOptions.executablePath`, Firefox drop, exact-version pin) — live on-demand in this service's `docs/` folder (**`e2e-testing.md`**).
 
 ## Running Locally
 
