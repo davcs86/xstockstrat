@@ -96,17 +96,6 @@ to the frontends, nginx, and the agent.
 
 ---
 
-## Language Map
-
-```text
-Go        → xstockstrat-trading, xstockstrat-portfolio, xstockstrat-marketdata
-Python    → xstockstrat-indicators, xstockstrat-ingest, xstockstrat-analysis, xstockstrat-agent
-Node.js   → xstockstrat-ledger, xstockstrat-identity, xstockstrat-notify, xstockstrat-config
-Next.js   → xstockstrat-ui
-```
-
----
-
 ## Language Versions & Tooling
 
 | Language / Tool | Version | Notes |
@@ -363,7 +352,7 @@ xstockstrat-analysis → xstockstrat-ingest (QuerySignals for signal-weighted ba
 
 ## Header Propagation Convention
 
-Every backend service **must** propagate `x-user-id`, `x-access-scope`, and `x-trace-id` from inbound requests to all outbound gRPC calls. Nginx strips them from external requests so they are trusted as platform-internal values.
+Every backend service **that makes outbound per-request gRPC calls** must propagate `x-user-id`, `x-access-scope`, and `x-trace-id` from the inbound request to those calls. The external edge injects/strips them after auth (the `xstockstrat-ui` middleware — the nginx proxy that formerly did this was removed by feature 045), so platform-internal values are trusted. The Node leaf services (ledger, identity, notify, config) currently make no outbound per-request calls, so their `src/middleware/propagation.ts` is presently unused (see `docs/context-constitution-findings.md`).
 
 **Language-specific patterns (Go interceptor, Python per-method, Node.js AsyncLocalStorage), code snippets, and reference implementations** → read `docs/patterns/header-propagation.md`.
 
@@ -395,22 +384,7 @@ To enforce this, disable squash and rebase merging on the `main` branch:
 
 ## Implementation Roadmap Status
 
-Active phases and their current status. See `docs/roadmap/implementation-roadmap.md` for full specs and verification checkpoints.
-
-| Phase | Description | Status |
-|---|---|---|
-| Phase 0 | Foundation: proto gen, bootstrap, DB, Docker Compose | **DONE** |
-| Phase 1 | Core infrastructure: config, ledger, identity, notify | **DONE** |
-| Phase 2 | Data layer: marketdata, portfolio | **DONE** |
-| Phase 3 | Processing: indicators, ingest, analysis | **DONE** |
-| Phase 4 | Trading core | **DONE** |
-| Phase 5 | UI layer: trader, insights, config-ui → consolidated as `xstockstrat-ui` (feature 045) | **DONE** |
-| Phase 6 | Integration & webhook wiring | **DONE** |
-| Phase 7 | Observability: OTel + Grafana Cloud | **DONE** |
-
-This table is a coarse phase map only; all phases are now **DONE**. Per-feature lifecycle status is authoritative in the feature directories (see § Feature Roadmap) — do not track individual feature status here.
-
-Deviation notes exist only for phases 3–7 (`docs/roadmap/phase[3-7]-deviations.md`). Phases 0–2 predate the deviation-doc convention and have none — their absence is expected, not a missing file.
+Phases 0–7 are all **DONE** — see `docs/roadmap/implementation-roadmap.md` for full specs and verification checkpoints. This is a coarse phase map only; per-feature lifecycle status is authoritative in the feature directories (§ Feature Roadmap), not here. Deviation notes exist only for phases 3–7 (`docs/roadmap/phase[3-7]-deviations.md`); phases 0–2 predate that convention and have none.
 
 ---
 

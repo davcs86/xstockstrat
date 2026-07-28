@@ -3,7 +3,7 @@ name = "xstockstrat-agent"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-  "mcp>=1.27.1",
+  "mcp>=1.27.1,<2",
   "httpx>=0.27.0",
   "anyio>=4.4.0",
   "starlette>=0.37.0",

@@ -20,7 +20,7 @@ Go gRPC service that is the **sole integration point for Alpaca's market data AP
 
 ## Language
 
-Go 1.22
+Go 1.25
 
 ## Docker Build Pattern
 
@@ -69,16 +69,15 @@ Namespace: `marketdata`
 | `marketdata.fmp.daily_request_cap` | int | `250` | Max FMP requests per UTC day (free Basic plan budget). At cap, stale rows are served (`stale=true`) or `ResourceExhausted` is returned; an 80%-of-cap crossing emits one WARNING alert/day. |
 | `marketdata.fmp.base_url` | string | `https://financialmodelingprep.com` | FMP API base URL; endpoint paths (`/stable/quote`, `/stable/ratios-ttm`, `/stable/profile`) are built under it. |
 | `marketdata.fmp.metrics` | string | `core,extended` | Metric tiers to fetch. `core` (batchable quote, 1 call/scan chunk); `extended` adds per-symbol ratios-ttm + profile. |
-| `marketdata.retention.quotes_days` | int | `90` | Quote data retention |
-| `marketdata.retention.ohlcv_years` | int | `5` | OHLCV data retention |
-| `platform.ledger_endpoint` | string | — | xstockstrat-ledger address |
+| `marketdata.retention.quotes_days` | int | `90` | **Documented, not yet implemented** — intended quote retention; no retention job reads this key yet |
+| `marketdata.retention.ohlcv_years` | int | `5` | **Documented, not yet implemented** — intended OHLCV retention; no retention job reads this key yet |
 
 ## Database
 
 - Schema: `marketdata`
-- Hypertable `marketdata.ohlcv`: partition by `time`, chunk = 1 day, compress after 7 days
-- Hypertable `marketdata.quotes`: partition by `time`, chunk = 1 hour, compress after 24 hours
-- Continuous aggregate: `marketdata.ohlcv_1h` (auto-computed 1-hour OHLCV from 15-min bars)
+- Hypertable `marketdata.ohlcv`: partition by `time`, chunk = 1 day (compression policy planned, not yet applied by any migration)
+- Hypertable `marketdata.quotes`: partition by `time`, chunk = 1 hour (compression policy planned, not yet applied by any migration)
+- _Planned, not yet implemented:_ continuous aggregate `marketdata.ohlcv_1h` (no migration creates it today)
 - Migration tool: `golang-migrate`
 
 ## FMP Fundamentals Integration (feature 059)

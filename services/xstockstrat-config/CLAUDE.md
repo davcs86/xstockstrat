@@ -10,7 +10,7 @@ Node.js gRPC service that is the **central configuration authority** for the ent
 
 ## Language
 
-Node.js 20 + TypeScript
+Node.js 22 + TypeScript
 
 ## Docker Build Pattern
 
@@ -48,12 +48,12 @@ Service startup
   └── ConfigWatcher.WaitForSnapshot()
         └── gRPC WatchConfig(namespace="<service>") → streams ConfigSnapshot
               ├── First message: update_type=SNAPSHOT (full config dump)
-              └── Subsequent messages: update_type=DELTA (changed keys only)
+              └── Subsequent messages: update_type=DELTA (carries the FULL namespace — `changedKeys=Object.keys(values)` — a wholesale replace, not just changed keys)
 
 Config change (via SetConfig RPC)
   └── INSERT/UPDATE config.config_values
         └── audit trigger fires → config.config_audit row written
-        └── pg_notify('config_changed', {namespace, key})
+        └── pg_notify('config_changed', {namespace, key, environment, trading_mode})
               └── ConfigServiceImpl receives LISTEN notification
                     └── Reloads namespace from DB
                           └── Broadcasts DELTA to all WatchConfig subscribers
@@ -88,6 +88,6 @@ TRADING_MODE=paper   # paper | live — default scope for this instance
 
 ```bash
 pnpm install
-pnpm run migrate
+# schema: run ../../scripts/db-migrate.sh from repo root (golang-migrate, not node-pg-migrate)
 pnpm run dev
 ```

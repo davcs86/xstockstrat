@@ -46,7 +46,6 @@ on `RefreshOAuthToken` revokes the presented token and inserts a new one). TTLs 
 | Dependency | Type | Reason |
 |---|---|---|
 | xstockstrat-config | gRPC WatchConfig | Live config (JWT secrets, token TTLs) |
-| xstockstrat-ledger | gRPC write | Auth event audit trail |
 | PostgreSQL | DB (schema: `identity`) | Users, sessions, OAuth clients + auth codes |
 
 ## Database / Migrations
@@ -77,7 +76,8 @@ Namespace: `identity`
 |---|---|---|---|
 | `identity.jwt.access_ttl_seconds` | int | `900` | Access token TTL (15 min) |
 | `identity.jwt.refresh_ttl_seconds` | int | `2592000` | Refresh token TTL (30 days) |
-| `identity.jwt.secret` | string (secret) | — | JWT signing key (resolved from secret store) |
+
+> The JWT signing key is **not** a config key — it is read from the `JWT_SECRET` env var (`src/grpc/identityServiceImpl.ts:30-31`, throws if unset), not served by xstockstrat-config.
 
 ## Webhooks
 
@@ -90,7 +90,6 @@ Source: hardcoded in docker-compose `environment:` unless noted. `APPLICATION_EN
 ```text
 GRPC_PORT=50058
 CONFIG_ENDPOINT=xstockstrat-config:50060
-LEDGER_ENDPOINT=xstockstrat-ledger:50057
 DATABASE_URL=postgres://xstockstrat:${POSTGRES_PASSWORD}@timescaledb:5432/xstockstrat?sslmode=disable  # constructed by docker-compose from POSTGRES_PASSWORD in .env
 JWT_SECRET=<secret>                    # .env — generate: openssl rand -hex 32
 APPLICATION_ENV=development            # .env.local
@@ -128,6 +127,6 @@ Generate: `openssl rand -hex 32`
 
 ```bash
 pnpm install
-pnpm run migrate
+# schema: run ../../scripts/db-migrate.sh from repo root (golang-migrate, not node-pg-migrate)
 pnpm run dev
 ```
