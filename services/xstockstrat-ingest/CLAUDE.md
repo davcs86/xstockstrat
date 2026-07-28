@@ -102,8 +102,6 @@ uv run pytest         # run all tests
 uv run pytest --cov=app --cov-fail-under=40  # with coverage
 ```
 
-After any change to `pyproject.toml`, run `uv lock` and commit the updated `uv.lock`.
-
 ## Environment Variables
 
 ```text

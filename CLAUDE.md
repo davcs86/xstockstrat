@@ -96,17 +96,6 @@ to the frontends, nginx, and the agent.
 
 ---
 
-## Language Map
-
-```text
-Go        → xstockstrat-trading, xstockstrat-portfolio, xstockstrat-marketdata
-Python    → xstockstrat-indicators, xstockstrat-ingest, xstockstrat-analysis, xstockstrat-agent
-Node.js   → xstockstrat-ledger, xstockstrat-identity, xstockstrat-notify, xstockstrat-config
-Next.js   → xstockstrat-ui
-```
-
----
-
 ## Language Versions & Tooling
 
 | Language / Tool | Version | Notes |

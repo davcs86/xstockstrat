@@ -161,8 +161,6 @@ uv run pytest         # run all tests
 uv run pytest --cov=app --cov-fail-under=50  # with coverage
 ```
 
-After any change to `pyproject.toml`, run `uv lock` and commit the updated `uv.lock`.
-
 ## Running Locally
 
 ```bash
