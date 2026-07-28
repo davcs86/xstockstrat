@@ -22,7 +22,7 @@ Go gRPC service responsible for order execution and trade lifecycle management. 
 
 ## Language
 
-Go 1.22
+Go 1.25
 
 ## Docker Build Pattern
 
@@ -59,10 +59,8 @@ All config values are served by **xstockstrat-config** namespace `trading`.
 | `trading.order.max_retries` | int | `3` | Max broker submission retries |
 | `trading.order.retry_delay_ms` | int | `500` | Delay between retries |
 | `trading.risk.max_position_pct` | float | `0.05` | Max 5% of portfolio in single position |
-| `trading.risk.daily_loss_limit` | float | `0.02` | Halt trading if day loss exceeds 2% |
-| `trading.maintenance_mode` | bool | `false` | If true, reject all new orders |
-| `platform.ledger_endpoint` | string | — | xstockstrat-ledger address |
-| `platform.maintenance_mode` | bool | `false` | Platform-wide halt |
+| `trading.risk.daily_loss_limit` | float | `0.02` | **Documented, not yet implemented** — intended daily-loss halt; no code reads this key yet (see `docs/context-constitution-findings.md`). |
+| `platform.maintenance_mode` | bool | `false` | Platform-wide halt (the real halt key; there is no `trading.maintenance_mode`) |
 | `trading.broker.paper` | bool | `true` | Route orders to paper API when true; live API when false. Also the source of truth for the mode new broker accounts are registered in. |
 | `trading.broker.timeout_ms` | int | `5000` | Alpaca broker HTTP call timeout. Read at account-client construction and applied as the broker HTTP client's `Timeout`. |
 | `trading.credential_health.interval_ms` | int | `300000` | Interval for the background poller that re-validates each broker account's API secrets. Read live on every cycle; set to `0` (or negative) to disable/pause the poller without a restart. |
@@ -100,7 +98,7 @@ Orders requiring approval (above configured thresholds) are placed in `ORDER_STA
 | `order.replaced` | `order:{order_id}` | Working order modified via `ReplaceOrder` (qty/price/TIF) |
 | `order.rejected` | `order:{order_id}` | Broker rejected order |
 | `order.approval_requested` | `approval:{order_id}` | Approval required |
-| `order.approved` | `approval:{order_id}` | Manual approval granted |
+| `order.approved` | `approval:{order_id}` | **Documented, not yet implemented** — intended manual-approval grant event; no emit site / Approve RPC exists yet |
 | `order.broker_submitted` | `order:{order_id}` | Order accepted by Alpaca broker |
 | `order.broker_rejected` | `order:{order_id}` | Alpaca broker rejected the order |
 | `account.positions.synced` | `account:{account_id}` | Periodic broker position snapshot (poller); carries `user_id` + `account_id`, each position's broker mark-to-market valuation (`current_price`/`market_value`/`unrealized_pl`/`unrealized_plpc`), and its intraday/today's P&L (`day_pnl`/`day_pnl_pct`, from Alpaca `unrealized_intraday_pl`/`unrealized_intraday_plpc`) |

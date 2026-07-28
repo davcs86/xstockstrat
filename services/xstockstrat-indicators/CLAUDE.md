@@ -34,8 +34,6 @@ HTTP/Connect-RPC server on `8054` was removed.
 | Dependency | Type | Reason |
 |---|---|---|
 | xstockstrat-config | gRPC WatchConfig | **Sandbox limits sourced from config** |
-| xstockstrat-ledger | gRPC write | Emit formula execution events |
-| xstockstrat-notify | gRPC write | Alert on sandbox limit breaches |
 | TimescaleDB | asyncpg pool | Persist formula definitions to `indicators.formulas` |
 
 ## Database
@@ -52,7 +50,7 @@ HTTP/Connect-RPC server on `8054` was removed.
 - Migrations: `migrations/001_formulas.*` (table); `migrations/002_formula_parameters.*` (adds the
   `parameters` JSONB column); `migrations/003_formula_outputs.*` (adds the `outputs` JSONB column);
   `migrations/004_formula_warmup.*` (adds the `warmup_period` INTEGER column)
-- Pool: `asyncpg.create_pool(DATABASE_URL, min_size=2, max_size=10)` created in `app/main.py`
+- Pool: `asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=int(os.environ.get("DB_POOL_MAX", "2")))` created in `app/main.py:49-50` (max 2 keeps the 20-connection budget)
 
 ## Config Keys Consumed
 
@@ -63,7 +61,7 @@ Namespace: `indicators`
 | `indicators.sandbox.timeout_ms` | int | `5000` | Max formula execution time in ms |
 | `indicators.sandbox.memory_bytes` | int | `134217728` | Max memory (128 MiB) per formula |
 | `indicators.sandbox.allowed_imports` | string | `numpy,pandas,math,statistics` | Comma-separated allowed Python imports |
-| `indicators.sandbox.max_concurrent` | int | `4` | Max concurrent sandbox executions |
+| `indicators.sandbox.max_concurrent` | int | `4` | **Documented, not yet enforced** — intended concurrency cap; no `Semaphore`/limit reads it |
 
 ## Seeded Formulas
 
@@ -132,22 +130,11 @@ reference a formula series as `<ref_name>.<series>` and lets the sandbox enforce
 
 _No webhooks. Call the gRPC RPCs on port 50054 directly._
 
-## Ledger Events Emitted
-
-| Event Type | Trigger |
-|---|---|
-| `indicators.formula.executed` | Sandbox execution completes |
-| `indicators.sandbox.timeout` | Formula timed out |
-| `indicators.sandbox.memory_exceeded` | Formula exceeded memory cap |
-| `indicators.formula.registered` | New formula registered |
-
 ## Environment Variables
 
 ```text
 GRPC_PORT=50054
 CONFIG_ENDPOINT=xstockstrat-config:50060
-LEDGER_ENDPOINT=xstockstrat-ledger:50057
-NOTIFY_ENDPOINT=xstockstrat-notify:50059
 DATABASE_URL=postgres://xstockstrat:devpassword@timescaledb:5432/xstockstrat?sslmode=disable
 APPLICATION_ENV=development         # development | production
 TRADING_MODE=paper                     # paper | live
