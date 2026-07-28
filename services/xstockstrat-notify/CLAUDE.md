@@ -10,7 +10,7 @@ Node.js gRPC service providing **server-streaming alert delivery**. Services emi
 
 ## Language
 
-Node.js 20 + TypeScript
+Node.js 22 + TypeScript
 
 ## Docker Build Pattern
 
@@ -40,7 +40,6 @@ Connect router and `src/webhooks/` handlers) was removed.
 | Dependency | Type | Reason |
 |---|---|---|
 | xstockstrat-config | gRPC WatchConfig | Live config at startup |
-| xstockstrat-ledger | gRPC write | Emit alert lifecycle events |
 | PostgreSQL | DB (schema: `notify`) | Persist alert history |
 
 ## Config Keys Consumed
@@ -49,16 +48,15 @@ Namespace: `notify`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `notify.stream.max_subscribers` | int | `1000` | Max concurrent StreamAlerts connections |
-| `notify.alert.retention_days` | int | `30` | Alert history retention |
-| `notify.alert.max_body_bytes` | int | `4096` | Max alert body size |
+| `notify.stream.max_subscribers` | int | `1000` | **Documented, not yet enforced** — intended connection cap; no code reads it |
+| `notify.alert.retention_days` | int | `30` | **Documented, not yet implemented** — intended history retention; no retention job reads it |
+| `notify.alert.max_body_bytes` | int | `4096` | **Documented, not yet enforced** — intended body-size check; no code reads it |
 
 ## Environment Variables
 
 ```text
 GRPC_PORT=50059
 CONFIG_ENDPOINT=xstockstrat-config:50060
-LEDGER_ENDPOINT=xstockstrat-ledger:50057
 DATABASE_URL=postgres://xstockstrat:${POSTGRES_PASSWORD}@timescaledb:5432/xstockstrat?sslmode=disable  # constructed by docker-compose from POSTGRES_PASSWORD in .env
 APPLICATION_ENV=development         # development | production
 TRADING_MODE=paper                     # paper | live
@@ -68,6 +66,6 @@ TRADING_MODE=paper                     # paper | live
 
 ```bash
 pnpm install
-pnpm run migrate
+# schema: run ../../scripts/db-migrate.sh from repo root (golang-migrate, not node-pg-migrate)
 pnpm run dev
 ```

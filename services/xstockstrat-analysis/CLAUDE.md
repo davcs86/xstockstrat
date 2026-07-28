@@ -60,113 +60,9 @@ A second asyncio background loop (`app/engine/fundsignal_loop.py`) runs a daily 
 
 New dependency edges: **analysis → ingest write** (`IngestSignal` / `ManageSignalSource`, gRPC not DB) and **analysis → portfolio read** (watchlist universe; requires `PORTFOLIO_ENDPOINT`). The loop reuses the existing asyncpg pool (no new pool — budget stays 2).
 
-### Cross-Stock Score Derivation (feature 065)
+### Cross-Stock Score Derivation (feature 065) & Pre-Window Warm-Up Prefix (feature 071)
 
-The headline `StrategyScore` (served by `ListStrategies`/`GetStrategyReport`, materialized in
-`strategy_scores`) is **derived from per-symbol evidence, not the last run**. The unit of evidence is
-the **(symbol × window) cell** (`analysis.backtest_run_symbols`, migration `007`): every OK
-`RunBacktest` buffers one cell per traded symbol (per-symbol Sharpe/drawdown/win-rate over that symbol's
-own equity curve, plus `trading_days`, `total_trades`, the run's range, and a **definition
-fingerprint**).
-
-- **Fingerprint eligibility.** A cell is stamped with `_definition_fingerprint(definition_json)` — a
-  sha256 over the DB `strategies` row's `definition_json` **excluding** `display_name`/`active`/
-  `live_enabled` — only when the run executed the strategy's **own registered definition**
-  (`strategy_id == strategy_id_ref`). Inline runs, the legacy-SMA fallback, id-mismatches, and
-  unregistered ids leave the fingerprint `NULL` and never contribute to a headline. **Always hash a
-  DB-returned `definition_json`, never a request proto dict** (column-authoritative fields are overlaid
-  at read time — a request dict would not canonicalize identically). The fingerprint is sensitive to the
-  exact `entry_rule`/`exit_rule` string encoding.
-- **Traded-first dedup.** `fetch_eligible` returns one cell per symbol for a `(strategy, fingerprint)`
-  via `DISTINCT ON (symbol) … ORDER BY (total_trades > 0) DESC, trading_days DESC, completed_at DESC` —
-  traded evidence wins over a zero-trade cell, then most trading days, then newest. **Zero-trade cells
-  ARE counted as evidence** (≈0.30 F-ish score); traded-first dedup ensures non-participation can never
-  shadow real traded evidence, but a symbol with only zero-trade cells still contributes one. (Visible
-  behavior shift vs. the old last-run headline.)
-- **Aggregation.** `_aggregate_cells` weights each cell by `trading_days` and applies empirical-Bayes
-  shrinkage toward a neutral 0.5 prior: `overall = (Σ wᵢ·sᵢ + 0.5·k) / (Σ wᵢ + k)`, `k =
-  analysis.scoring.shrinkage_days`. Components are shrunk identically (weighted mean renormalized
-  `wᵢ/Σw`, then the same shrinkage), non-finite components dropped. `Σw == 0` → no grade (never an
-  equal-weighted fallback). **OQ-1 calibration anchors**: perfect evidence earns an A once total
-  evidence `W ≥ 1.5·k` (`W = 375, k = 250 → 0.8`); a single 60-day perfect cell shrinks to
-  `(60 + 125)/310 ≈ 0.597` (a provisional C). The grade is `provisional` below
-  `min_evidence_symbols` (3) or `min_evidence_days` (500).
-- **Recompute triggers (OQ-4 — in-request only; no background recompute).** The headline is recomputed,
-  best-effort, after an OK `RunBacktest` (before the completion emit) and after a `ManageStrategy`
-  UPDATE (which first **unconditionally clears** the in-memory grade — a definition change usually
-  changes the fingerprint, so old evidence no longer applies; usually cleared until a fresh backtest).
-  `ScoreStrategy` is the **manual refresh** (e.g. after a scoring-config change): it recomputes from
-  cells and, on zero eligible evidence, clears the stale grade (in-memory pop + non-best-effort DB
-  delete) then returns `NOT_FOUND "no eligible evidence — run a backtest"`; unregistered →
-  `NOT_FOUND`; store/cells error → `UNAVAILABLE`. **`ScoreStrategyRequest.range` is ignored** (the
-  evidence base is the whole eligible cell set, not a window).
-- **Rename / revert semantics (FR-3).** Because the fingerprint excludes `display_name`/`active`/
-  `live_enabled`, a **rename or live-toggle does not reset** evidence; reverting a definition to a prior
-  content **resurrects** that content's evidence base (evidence describes definition content, not a
-  timeline).
-- **`analysis.strategy.scored` ledger event** stays **`ScoreStrategy`-only** (documented asymmetry — the
-  RunBacktest/UPDATE recompute paths do not emit it).
-- **Caveats.** `backtest_run_symbols` has **no retention/pruning** yet (evidence accumulates). The
-  per-strategy `asyncio.Lock` serializing recompute is **single-process protection only** (no
-  cross-instance guard). **OQ-6**: correlated symbols can inflate apparent breadth (accepted for v1;
-  sector-capped weights via feature-059 fundamentals is the designated follow-up). **FR-9**: on first
-  post-deploy recompute a legacy broad grade can **drop sharply** (cells-only evidence) — documented,
-  not a regression.
-
-As of Phase 3, RunBacktest executes a real SMA crossover engine (no more synthetic stubs) that:
-
-1. Fetches OHLCV bars via `MarketDataService.GetBars`
-2. Computes fast/slow SMAs via `IndicatorsService.ComputeIndicator`
-3. Optionally calls `IngestService.QuerySignals` for newsletter signal weighting
-4. Simulates trades bar-by-bar and computes Sharpe, drawdown, win rate, profit factor
-
-### Pre-Window Warm-Up Prefix (feature 071)
-
-When a `RunBacktest` request carries an **explicit `range.start`**, the engine fetches bars from
-*before* that start so indicators are already warm at the first in-window bar, instead of burning
-the caller's window on warm-up. The prefix length is **declared, never observed** — computed by
-`app/services/warmup.py` from each referenced component's parameters. Observing it would be
-provably wrong: `_ema`, `_macd` and `_vwap` emit no `None` head (`indicators_engine.py:48-51,62-84,110-118`),
-so an observed warm-up is always `0` for exactly the path-dependent indicators a prefix matters
-most for. EMA/MACD use a `3×` convergence multiple because `ewm(adjust=False)` is IIR — at `period`
-bars the seed still carries ~13.5% of the weight.
-
-- **Only on an explicit start.** `warmup_prefix=start_set` is snapshotted *before* the
-  `max_range_days` defaulting block mutates `request.range` in place. A rolling-default run
-  (no `start`) is byte-for-byte the pre-071 behavior.
-- **Sizing-only conversion.** `prefix_calendar_days` converts bars→calendar days approximately;
-  the engine then keeps **exactly** the required prefix (surplus discarded, deficit reported), so
-  the conversion can only over-fetch or report — never quietly change a result.
-- **Shortfall is fatal to the run** (OQ-1): too little history reports
-  `BACKTEST_STATUS_INSUFFICIENT_DATA` with a `CoverageGap` spanning the **pre-window** range, not
-  the requested window. No new `NoTradeReason` value.
-- **VWAP anchor moves.** `_vwap` is an expanding average anchored at index 0, so its own lookback
-  is `0` — but the prefix is the max over *all* referenced components. A strategy mixing VWAP with
-  e.g. `SMA(50)` gets `P = 50` and every in-window VWAP value shifts. Deterministic, but different
-  from an unprefixed run. Pinned by `TestVwapAnchorMovesWithPrefix`.
-- **Formula warm-ups are prefetched before the symbol loop** (`_prefetch_formula_warmups`).
-  `required_prefix_bars` reads the cache at the top of each symbol's run while
-  `_compute_evaluated_warmup` fills it at the bottom, so a lazily-filled cache would give symbol 1
-  no prefix and symbols 2+ the full one — making a result depend on symbol order.
-- **`GetBars` is paged** (`_fetch_bars_paged`, `_MAX_BAR_PAGES = 32`). Analysis previously did not
-  paginate while marketdata caps a page at 500 bars ASC, so **max-range backtests were silently
-  dropping their newest bars**; correcting this shifts `trading_days` on long runs (≈0.8%).
-  Exhausting the page cap **raises** rather than returning a truncated series.
-- **Backtest/live divergence (FR-7).** This is a *backtest-path* change; `live_loop.py` keeps its
-  own 365-calendar-day window and no shortfall detection. The evaluator contract is unchanged —
-  *same bar series ⇒ same decisions* still holds exactly — but the series each caller supplies now
-  differs more than before for FIR indicators (and less, for EMA/MACD, thanks to the `3×`
-  multiple). Pinned by `TestBacktestLiveParityUnchanged`; revisit this note before wiring the
-  prefix into the live loop.
-- Existing feature-065 evidence cells are **not invalidated** (OQ-3); they remain valid for the
-  window they recorded, and the `trading_days` shift is immaterial against `k = 250` shrinkage.
-
-**Data-coverage awareness** (feature 053): when a symbol has too few bars, `RunBacktest` no longer
-fabricates a flat-equity "success". It returns a structured result with
-`status = BACKTEST_STATUS_INSUFFICIENT_DATA` and per-symbol `coverage_gaps` (symbol, bars_have,
-bars_need, the range to backfill) so the caller can surface a gap message and trigger a backfill.
-`GetBars` is queried with the canonical `"1d"` timeframe (+ `timeframe_enum`), fixing the prior
-`"1Day"` vs `"1d"` mismatch that made backfilled bars invisible to backtests.
+Design-level detail — fingerprint eligibility, empirical-Bayes aggregation with worked calibration anchors, recompute triggers, warm-up prefix sizing, and the FR/OQ caveats — lives on-demand in this service's `docs/` folder (**`scoring.md`**, **`warmup.md`**). The **binding** invariants are **ANALYSIS-2** (evidence-weighted EB grade) and **ANALYSIS-3** (definition-fingerprint eligibility) in `docs/context-constitution.md`.
 
 ## Language
 
@@ -298,8 +194,6 @@ uv sync --extra dev   # install deps (including dev) from uv.lock
 uv run pytest         # run all tests
 uv run pytest --cov=app --cov-fail-under=40  # with coverage
 ```
-
-After any change to `pyproject.toml`, run `uv lock` and commit the updated `uv.lock`.
 
 ## Environment Variables
 

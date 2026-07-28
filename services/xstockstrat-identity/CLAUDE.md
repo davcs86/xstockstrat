@@ -46,7 +46,6 @@ on `RefreshOAuthToken` revokes the presented token and inserts a new one). TTLs 
 | Dependency | Type | Reason |
 |---|---|---|
 | xstockstrat-config | gRPC WatchConfig | Live config (JWT secrets, token TTLs) |
-| xstockstrat-ledger | gRPC write | Auth event audit trail |
 | PostgreSQL | DB (schema: `identity`) | Users, sessions, OAuth clients + auth codes |
 
 ## Database / Migrations
@@ -77,7 +76,8 @@ Namespace: `identity`
 |---|---|---|---|
 | `identity.jwt.access_ttl_seconds` | int | `900` | Access token TTL (15 min) |
 | `identity.jwt.refresh_ttl_seconds` | int | `2592000` | Refresh token TTL (30 days) |
-| `identity.jwt.secret` | string (secret) | — | JWT signing key (resolved from secret store) |
+
+> The JWT signing key is **not** a config key — it is read from the `JWT_SECRET` env var (`src/grpc/identityServiceImpl.ts:30-31`, throws if unset), not served by xstockstrat-config.
 
 ## Webhooks
 
@@ -90,44 +90,20 @@ Source: hardcoded in docker-compose `environment:` unless noted. `APPLICATION_EN
 ```text
 GRPC_PORT=50058
 CONFIG_ENDPOINT=xstockstrat-config:50060
-LEDGER_ENDPOINT=xstockstrat-ledger:50057
 DATABASE_URL=postgres://xstockstrat:${POSTGRES_PASSWORD}@timescaledb:5432/xstockstrat?sslmode=disable  # constructed by docker-compose from POSTGRES_PASSWORD in .env
 JWT_SECRET=<secret>                    # .env — generate: openssl rand -hex 32
 APPLICATION_ENV=development            # .env.local
 TRADING_MODE=paper                     # paper | live
 ```
 
-## User Management
+## Operations
 
-`scripts/manage-users.sh` (repo root) creates and resets passwords for identity service users. It uses `bcrypt` from the identity service's `node_modules` and requires `psql`.
-
-```bash
-# From repo root (local dev):
-./scripts/manage-users.sh create-user admin@example.com admin,trader
-./scripts/manage-users.sh reset-password admin@example.com
-
-# Inside a running container (docker exec):
-docker exec -it xstockstrat-identity \
-  DATABASE_URL=<url> /app/scripts/manage-users.sh create-user admin@example.com admin
-```
-
-The script is copied into the Docker image at `/app/scripts/manage-users.sh` by the `Dockerfile` runner stage. When run inside the container it auto-detects the container layout (`node_modules` at `/app` instead of the local service directory).
-
-## JWT_SECRET
-
-`JWT_SECRET` must be set identically in the identity service and all three frontends (trader, insights, config-ui). It is injected at deploy time from GitHub Actions secrets:
-
-| Secret | Used by |
-|---|---|
-| `DEV_JWT_SECRET` | `deploy-dev.yml` → `.do/app.dev.yaml` |
-| `PROD_JWT_SECRET` | `deploy-prod.yml` → `.do/app.yaml` |
-
-Generate: `openssl rand -hex 32`
+User management (`scripts/manage-users.sh` create-user / reset-password, incl. `docker exec`) and the deploy-time `JWT_SECRET` wiring (`DEV_JWT_SECRET`/`PROD_JWT_SECRET` → `.do/app*.yaml`) live on-demand in this service's `docs/` folder (**`operations.md`**).
 
 ## Running Locally
 
 ```bash
 pnpm install
-pnpm run migrate
+# schema: run ../../scripts/db-migrate.sh from repo root (golang-migrate, not node-pg-migrate)
 pnpm run dev
 ```

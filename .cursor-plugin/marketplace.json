@@ -1,0 +1,34 @@
+{
+  "name": "davcs86-xstockstrat",
+  "owner": {
+    "name": "David Castillo",
+    "email": "davcs86@gmail.com"
+  },
+  "metadata": {
+    "description": "Agent plugins bundled with xstockstrat (Cursor catalog)"
+  },
+  "version": "1.0.0",
+  "plugins": [
+    {
+      "name": "strat-lab",
+      "displayName": "Strat Lab",
+      "source": "./plugins/strat-lab",
+      "description": "A backtesting workbench for this repository's xstockstrat MCP server: ensures data coverage (backfill), runs strategy backtests, survives the >token-limit diagnostics payload by saving-and-parsing, aggregates an independent-per-symbol basket, and verifies results against a pre-change oracle before trusting them.",
+      "author": {
+        "name": "David Castillo",
+        "email": "davcs86@gmail.com"
+      },
+      "license": "MIT",
+      "keywords": [
+        "backtest",
+        "trading",
+        "strategy",
+        "xstockstrat",
+        "mcp",
+        "quant",
+        "backfill",
+        "analysis"
+      ]
+    }
+  ]
+}
