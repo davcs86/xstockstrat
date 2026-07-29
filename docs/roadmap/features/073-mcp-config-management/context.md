@@ -104,3 +104,80 @@ Verified directly this session, ahead of the design phase:
   `services/xstockstrat-agent/CLAUDE.md` and twice in `docs/runbooks/mcp-tools.md`.
 - `app/auth.py` `validate_bearer_jwt` returns a bare `bool` and discards `claims.roles` entirely —
   FR-5 genuinely requires reshaping that function's return, not just reading an existing value.
+
+## Session 2026-07-29 — /sdd-review product-spec: **FAIL** (4 blockers)
+
+Status stays `draft` — the gate did not pass, so no lifecycle flip (per the skill's FAIL path).
+
+The FR-7 "verify, don't reimplement" rewrite was checked statement-by-statement against this branch
+and is **accurate**. FR-5's AGENT-4 deviation is coherently scoped. Tool count 14→17 verified. The
+failures are elsewhere, and two of them are **live pre-existing defects in `xstockstrat-config`**
+that I confirmed directly in the code this session:
+
+### Blocker 1 — FR-1's secret redaction cannot fire (would ship a secret leak)
+
+`ConfigValue` has an `is_secret` field (`packages/proto/config/v1/config.proto:56`, documented
+"true = value is redacted"), but **nothing ever populates it on the read path**:
+`buildConfigValue` (`configServiceImpl.ts:344-352`) returns only the oneof scalar, and
+`toProtoSnapPayload` (`:47-55`) rebuilds each value as the scalar alone. So `GetConfig` and
+`WatchConfig` return `is_secret == false` for **every** key, including
+`secret.marketdata.fmp.api_key`. FR-1 keys redaction on exactly that field, so a literal
+implementation would **echo the secret** — and AC-6's test would pass while leaking. `ListKeys` is
+the only path that returns `is_secret` truthfully (`:312,324`), which is why `/config-ui` reads it
+from there.
+
+### Blocker 2 — `SetConfig`'s value round-trip is broken, so "config: no change required" is false
+
+`setConfig` stores `JSON.stringify(value)` — the **whole `ConfigValue` message** — into `value_data`
+(`configServiceImpl.ts:295`), while every read parses `value_data` as a **bare scalar**
+(`:344-352`), and the seed migrations store bare scalars. So `set_config(key, "abc")` lands
+`{"stringVal":"abc"}` and reads back as that literal string. Compounding it, `inferValueType`
+(`:354-360`) tests snake_case (`v.string_val`) against a ts-proto **camelCase** request, so every
+int/float/bool write is recorded as `value_type='string'`.
+
+**This is not specific to 073** — it affects every `SetConfig` writer, including the config-ui
+editor today. Seeded keys read correctly only because migrations wrote bare scalars; any key
+*written through the RPC* is corrupted. Feature 074's authz test sends `{stringVal:'debug'}` and
+asserts only the authz outcome, so it does not guard this.
+
+### Blocker 3 — plaintext-secret governance conflict is framed away, not resolved
+
+AC-4 requires writing a real FMP key into `config.config_values`. Four places state secrets are
+**never** stored as plaintext and that `value_data` holds a `secret://` reference:
+`services/xstockstrat-config/CLAUDE.md` (Critical Invariants + Config Governance),
+`docs/patterns/config-governance.md:109`, `services/xstockstrat-marketdata/CLAUDE.md:67`,
+`.gitleaks.toml:9`. The spec's "Known trap" says the resolver doesn't exist (true — marketdata
+consumes the value literally) and instructs reviewers not to treat this as a secrets feature. That
+frames the conflict away. It must be decided, and if plaintext wins, those four docs must be
+amended **in the same feature**.
+
+### Blocker 4 — the FR-B13 open question is transport-dependent and understated
+
+Roles *are* available on the wire (`identity.proto:41-44` `TokenClaims.roles`); `validate_bearer_jwt`
+receives them and discards all but the audience check (`app/auth.py:40-43`). But availability **at
+the tool call** differs by transport:
+- **Streamable HTTP** (`/`) — the POST carrying the tool call passes `_authorized(scope)`
+  (`app/main.py:148-159`), so a per-request contextvar is safe under FR-B13.
+- **Legacy HTTP+SSE** (`/messages`) — explicitly **not** auth-gated (`app/main.py:144-146`, comment
+  at `:133`: "auth rides the established stream session"). There is no bearer token on the request
+  that invokes the tool, so forwarding real roles there needs an SSE-session→claims map — exactly
+  the in-memory store FR-B13 forbids.
+
+So FR-5 is either transport-scoped or an FR-B13 breach. The spec must decide, and must name the
+plumbing mechanism from the ASGI layer into a `@server.tool()` body (none exists today).
+
+### Advisory findings also recorded
+
+- `feature.md` still asserts `SetConfig` "currently has none"/"since none exists today"/"adds the
+  first real authz gate" in three places — stale post-074, and it feeds the Reviewers snapshot that
+  `/sdd-spec` freezes.
+- Audit rows are written on **UPDATE only** (`migrations/001_config_tables.up.sql:40-42`), so a
+  brand-new key's INSERT is unaudited — undercutting FR-3's attribution rationale and AC-8.
+- FR-6: resolve "five/six"; `docs/runbooks/mcp-tools.md` has **two** count statements (`:3` and
+  `:29`), and only **13** tool sections — `set_strategy_live` has none despite the header claiming
+  fourteen. AC-5's "consistent" is unmeetable until that is addressed or explicitly excluded.
+- FR-1/FR-2 don't state the read tools keep `_metadata()` (no admin scope) per AGENT-3.
+- FR-5's "reuse `rolesToAccessScope`" crosses TS→Python; it is a **port**, and `ADMIN_SCOPE = 0x04`
+  is canon (mirrored server-side at `services/xstockstrat-config/src/grpc/authz.ts`).
+- `environment`/`trading_mode` tool params default to `dev`/`all`, so an operator omitting them
+  silently writes a dev row; and `trading_mode` may be a no-op given the logged snake/camel collapse.
