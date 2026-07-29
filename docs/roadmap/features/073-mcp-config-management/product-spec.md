@@ -29,6 +29,12 @@ namespace (+ optional environment/trading_mode), return the current `ConfigSnaps
 value where `is_secret == true` MUST be redacted in the tool's output — never echo an actual
 secret value back to the caller.
 
+> **Dependency, now satisfied.** This predicate was un-implementable when first written: nothing
+> populated `ConfigValue.is_secret` on the read path, so `GetConfig` reported `is_secret == false`
+> for every key and a literal implementation would have echoed secrets. Fixed by feature **075**
+> (`fix-config-value-roundtrip`). Verify the field is populated; do not re-derive the predicate from
+> the `secret.*` key prefix.
+
 FR-2. A read-only `list_config_keys` tool wraps `ConfigService.ListKeys`: given a namespace,
 return each key's `ConfigKeyMeta` (key, description, default_value, is_secret, consuming_service,
 environment, trading_mode, validation). `ListKeys` already returns metadata only (no value), so no
@@ -123,8 +129,10 @@ add the MCP-tool path alongside the existing gRPC/Connect-RPC procedure).
   the real caller's JWT-derived role/scope through `validate_bearer_jwt` and forwarding it, instead
   of the shared hardcoded-admin helper (FR-5).
 - `xstockstrat-config` — **no change required.** Recon originally escalated this to a two-service
-  feature, but feature 074 has since shipped the `ADMIN`-scope gate on `SetConfig` (FR-7). This
-  feature only consumes it.
+  feature. Three prerequisites have since shipped separately and this feature only consumes them:
+  the `ADMIN`-scope gate on `SetConfig` (feature **074**), and `is_secret` propagation plus the
+  `value_data` round-trip fix (feature **075**). Without 075 both FR-1's redaction and FR-3's typed
+  writes were un-implementable.
 
 ## Proto Contract Changes
 

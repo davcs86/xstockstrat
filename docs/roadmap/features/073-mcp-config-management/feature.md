@@ -29,9 +29,9 @@ Add MCP tools to `xstockstrat-agent` that read and write `xstockstrat-config` va
 (`get_config`, `list_config_keys`, `set_config`), so an operator can inspect and roll out config
 changes — including flipping feature flags and setting `secret.*`-prefixed values — from an agent
 session instead of a raw gRPC client against port 50060. `set_config` authorizes by the real
-calling user's role rather than a hardcoded admin override, which in turn requires
-`xstockstrat-config`'s `SetConfig` RPC to gain its first-ever authorization check (it currently has
-none) — escalating this from an agent-only change to a two-service one.
+calling user's role rather than a hardcoded admin override. The `SetConfig` authorization check
+this depends on **already exists** — shipped by feature 074 (`fix-config-write-authz`) — so this
+feature consumes it rather than adding it (see product-spec FR-7).
 
 ## Reviewers
 
@@ -42,9 +42,19 @@ re-run /sdd-spec if the registry changes.)_
 | Role | Review Focus |
 |---|---|
 | `xstockstrat-agent` (service owner) | MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity; tool-count statements kept in sync across all inventory surfaces; no secret values in tool output or the unauthenticated `GET /api/tools` catalog |
-| `xstockstrat-config` (service owner) | Config key naming, environment/trading_mode scoping, WatchConfig stream stability — plus the new `SetConfig` authorization check (FR-7), since none exists today |
-| Security | No secrets in config service state, secret keys use `secret.*` prefix, JWT claims minimal, API key scoping correct — required, not advisory, given FR-7 adds the first real authz gate to `SetConfig` |
+| `xstockstrat-config` (service owner) | Config key naming, environment/trading_mode scoping, WatchConfig stream stability. The `SetConfig` authz check (074) and the `is_secret`/value round-trip fixes (075) already landed — this feature only consumes them |
+| Security | **Required, not advisory.** No secrets in config service state, secret keys use `secret.*` prefix, JWT claims minimal, API key scoping correct. Two live questions for this reviewer: whether `set_config` may write a real plaintext secret (contradicts four documented invariants), and whether forwarding the real caller's role is implementable on the unauthenticated legacy SSE tool-call path without breaching FR-B13 |
 
 ## Next Action
 
-`/sdd-review mcp-config-management product-spec` — AI review of product spec before running /sdd-spec
+**BLOCKED — `/sdd-review` returned FAIL (2026-07-29).** Two of the four blockers are now resolved
+by feature 075 (the `is_secret` read-path gap and the `SetConfig` value round-trip). The remaining
+two need a product decision from the user before this feature can pass its gate:
+
+1. **May `set_config` write a real plaintext secret?** AC-4 requires it, which contradicts four
+   documented invariants stating secrets are never stored as plaintext.
+2. **Which transports must `set_config` support?** FR-5's real-caller-role forwarding is
+   implementable on Streamable HTTP but not on the legacy SSE `/messages` path, which carries no
+   bearer token on the tool call — forwarding there would need the in-memory store FR-B13 forbids.
+
+Once decided: fix the spec, re-run `/sdd-review mcp-config-management product-spec`.
