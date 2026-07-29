@@ -1,6 +1,6 @@
 ---
 name: sdd-story
-description: Phase 1 of SDD — generate a product spec from a user story. Usage: /sdd-story <feature-slug> [story text]. Creates docs/roadmap/features/NNN-<slug>/feature.md and product-spec.md. Reads docs/runbooks/feature-workflow.md to populate governance fields.
+description: Phase 1 of SDD — turn a user story into a feature's first artifacts. Usage — /sdd-story <feature-slug> [story text]. Allocates the next NNN, creates the feature directory with feature.md, product-spec.md, and context.md, and fills governance fields (reviewers, proto/config/DB gates, known traps) from docs/runbooks/feature-workflow.md, docs/runbooks/reviewer-registry.md, and the ledger. Use this at the very start of ANY new capability — a new UI page or route, endpoint, RPC, service behavior, agent tool, or config surface — including when the request arrives as a bare "implement X, commit and push", as a GitHub issue, or as a session instruction, because the root CLAUDE.md makes this the mandatory entry point before any code is written. Also triggers on "new feature", "I want it to…", "add support for…", "can we make it also…", "write a spec for…". Confirmed bug fixes go to sdd-triage instead.
 argument-hint: <feature-slug> [story text]
 allowed-tools: Read Write Bash(ls *) Bash(mkdir *) Bash(find *) Bash(printf *)
 effort: medium

@@ -1,6 +1,6 @@
 ---
 name: sdd-spec
-description: Phase 2 of SDD — generate an implementation spec by searching the codebase. Usage: /sdd-spec <feature-slug>. Reads product-spec.md, searches affected services for real file paths and symbol names, writes implementation-spec.md. No invented references — every step cites evidence found by grep.
+description: Phase 2 of SDD — turn an approved, designed feature into a concrete numbered implementation spec by searching the codebase. Usage — /sdd-spec <feature-slug>. Consumes product-spec.md plus recon.md and design.md, searches every affected service for real file paths and symbol names, and writes implementation-spec.md where every step cites grep-found evidence — no invented paths, functions, or line numbers. Advances design-approved → implementation-ready. Use this whenever the user asks for an implementation plan, a step-by-step breakdown, how to sequence or split up the work, "what files do I need to change" for a feature, or to re-spec a feature whose design or scope changed.
 argument-hint: <feature-slug>
 allowed-tools: Read Write Bash(ls *) Bash(find *) Bash(grep *) Bash(cat *) Task
 effort: high

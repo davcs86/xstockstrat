@@ -1,6 +1,6 @@
 ---
 name: proofread-claude-md
-description: Advisory content review of CLAUDE.md files — checks for stale references, contradictions with root CLAUDE.md, and missing critical info. Runs within the current session at no extra API cost.
+description: Advisory read-only content review of CLAUDE.md files — flags stale file/service references, contradictions with the root CLAUDE.md (service registry, ports, language and tool versions, config governance, branch strategy), and missing critical info. Reports findings; never edits. Usage — /proofread-claude-md [file...]. Use this whenever the user asks to audit, proofread, sanity-check, or verify that CLAUDE.md / agent instructions / project memory are still accurate — and proactively after renaming a service, changing a port, bumping a language or tool version, or moving docs, since those are exactly what silently goes stale. To author a new CLAUDE.md from scratch, use /init instead.
 argument-hint: [file...]
 allowed-tools: Read Bash(find *)
 effort: low

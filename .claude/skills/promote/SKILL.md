@@ -1,6 +1,6 @@
 ---
 name: promote
-description: Create a production PR from main-dev to main with auto-generated changelog. Runs buf breaking against main to verify production safety. Usage: /promote
+description: Create the production promotion PR from main-dev to main. Usage — /promote. Detects whether the GitHub Action already opened one, validates branch state, runs buf breaking against main to prove proto compatibility, generates the dated CHANGELOG.md entry (features, bug fixes, proto changes, DB migrations), and serves as the manual fallback for flipping code-completed features to launched. Use this whenever the user asks to promote, release, ship, cut a production deploy, push main-dev to main, write release notes or a changelog entry, or check whether promoting would break proto consumers — even phrased as "let's go live" or "is main-dev safe to ship". Feature branch → main-dev PRs are not promotions; those belong to sdd-execute.
 argument-hint: (no arguments)
 allowed-tools: Read Write Edit Bash(git fetch *) Bash(git log *) Bash(git diff *) Bash(git show *) Bash(git ls-remote *) Bash(git status *) Bash(git add *) Bash(git commit *) Bash(git push *) Bash(git checkout *) Bash(buf *) Bash(find *) Bash(grep *) Bash(gh pr list *) Bash(gh run list *) Bash(gh workflow run *)
 effort: medium

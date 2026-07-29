@@ -1,6 +1,6 @@
 ---
 name: sdd-sync
-description: Sync SDD spec files between feature branches and main-dev via 3-way merge. Usage: /sdd-sync [feature-slug]. Auto-merges non-conflicting diffs in both directions, opens a PR targeting main-dev for the merged result, and offers to delete branches for launched features.
+description: Sync the six per-feature SDD spec files between feature branches and main-dev via 3-way merge. Usage — /sdd-sync [feature-slug]. Auto-merges non-conflicting diffs in both directions (feature branches gain SDD progress; main-dev gains state flips like launched), stops only on real conflicts, opens a docs-only PR targeting main-dev, and offers to delete branches for launched features. Use this whenever feature.md, product-spec.md, implementation-spec.md, recon/design/context files look stale or divergent between a branch and main-dev, after a promotion flipped features to launched, or when the user asks to reconcile, sync, or tidy up SDD docs and leftover merged feature branches. Never touches service code.
 argument-hint: [feature-slug]
 allowed-tools: Read Write AskUserQuestion Bash(ls *) Bash(find *) Bash(mkdir *) Bash(git *) Bash(gh pr *) Bash(diff *) Bash(grep *) mcp__github__list_branches
 effort: low

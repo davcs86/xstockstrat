@@ -1,6 +1,6 @@
 ---
 name: onboard
-description: Interactive new-dev setup — prereqs, env file, proto gen, bootstrap, health checks.
+description: Interactive local-development setup for xstockstrat — prerequisite check, .env creation, Docker-based proto codegen, bootstrap (deps + TimescaleDB + migrations), docker compose up with per-service health checks, and the local test/lint commands for each language. Usage — /onboard. Use this whenever someone is starting on this repo for the first time or on a new machine, or says the local stack won't come up, containers are unhealthy, proto stubs are missing from packages/proto/gen, .env is absent, bootstrap or migrations failed, or asks "how do I run this locally" / "how do I run the tests". Cloud and production setup belongs to digitalocean-setup instead.
 argument-hint: (no arguments)
 allowed-tools: Read Bash(ls *) Bash(find *) Bash(cat *) Bash(docker *) Bash(openssl *) Bash(command -v *) Bash(./scripts/check-prereqs.sh) Bash(./scripts/setup-env.sh) Bash(./scripts/localenv-setup.sh) Bash(./scripts/bootstrap.sh) Bash(docker compose *)
 effort: medium
