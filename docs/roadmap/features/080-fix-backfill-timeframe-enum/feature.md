@@ -36,12 +36,18 @@ migrate" — so the read path fills the field being deleted and leaves its repla
 latent today (consumers still read the string) and becomes data loss the moment the deprecated field
 is dropped.
 
+Scope widened 2026-07-29 by user decision: `xstockstrat-marketdata`'s `Bar` has the identical
+producer-side gap at all four construction sites, on a hotter read path (charts, indicators,
+backtests). Fixed here rather than deferred, so the defect family is closed in one pass.
+
 ## Reviewers
 
 | Role | Review Focus |
 |---|---|
 | `xstockstrat-ingest` (service owner) | Backfill job read path, enum/string parity |
+| `xstockstrat-marketdata` (service owner) | `Bar` producer sites (DB read, Alpaca REST, live stream); the `TIMEFRAME_1MIN` labelling call for streamed bars (product-spec FR-6) |
 
 ## Next Action
 
-`/sdd-triage` (if a GitHub issue is opened) or `/sdd-review fix-backfill-timeframe-enum product-spec`
+`/sdd-review fix-backfill-timeframe-enum product-spec` (in progress — first pass FAILed on FR-4 and
+the open questions; spec revised and scope widened, re-review pending)
