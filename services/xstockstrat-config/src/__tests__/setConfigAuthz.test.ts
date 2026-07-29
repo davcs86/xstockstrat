@@ -22,7 +22,13 @@ import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import * as grpc from '@grpc/grpc-js';
 
-import { ADMIN_SCOPE, hasAdminAccessScope, userIdFrom } from '../grpc/authz';
+import {
+  ADMIN_SCOPE,
+  HEADER_ACCESS_SCOPE,
+  HEADER_USER_ID,
+  hasAdminAccessScope,
+  userIdFrom,
+} from '../grpc/authz';
 import { ConfigServiceImpl } from '../grpc/configServiceImpl';
 import { createConfigServiceDefinition } from '../grpc/serviceDefinition';
 
@@ -41,27 +47,27 @@ function md(pairs: Record<string, string>): grpc.Metadata {
 
 describe('hasAdminAccessScope', () => {
   it('accepts the exact admin bit', () => {
-    assert.equal(hasAdminAccessScope(md({ 'x-access-scope': '4' })), true);
+    assert.equal(hasAdminAccessScope(md({ [HEADER_ACCESS_SCOPE]: '4' })), true);
   });
 
   it('accepts a scope that merely contains the admin bit (bitmask, not equality)', () => {
-    assert.equal(hasAdminAccessScope(md({ 'x-access-scope': '7' })), true);
-    assert.equal(ADMIN_SCOPE, 0x04);
+    assert.equal(hasAdminAccessScope(md({ [HEADER_ACCESS_SCOPE]: '7' })), true);
+    assert.equal(ADMIN_SCOPE, 4);
   });
 
   it('denies a scope without the admin bit', () => {
-    assert.equal(hasAdminAccessScope(md({ 'x-access-scope': '3' })), false);
-    assert.equal(hasAdminAccessScope(md({ 'x-access-scope': '0' })), false);
+    assert.equal(hasAdminAccessScope(md({ [HEADER_ACCESS_SCOPE]: '3' })), false);
+    assert.equal(hasAdminAccessScope(md({ [HEADER_ACCESS_SCOPE]: '0' })), false);
   });
 
   it('fails closed on an absent header, absent metadata, and garbage', () => {
     assert.equal(hasAdminAccessScope(md({})), false);
     assert.equal(hasAdminAccessScope(undefined), false);
-    assert.equal(hasAdminAccessScope(md({ 'x-access-scope': 'abc' })), false);
+    assert.equal(hasAdminAccessScope(md({ [HEADER_ACCESS_SCOPE]: 'abc' })), false);
   });
 
   it('reads the propagated caller id, defaulting to empty', () => {
-    assert.equal(userIdFrom(md({ 'x-user-id': 'u-1' })), 'u-1');
+    assert.equal(userIdFrom(md({ [HEADER_USER_ID]: 'u-1' })), 'u-1');
     assert.equal(userIdFrom(md({})), '');
     assert.equal(userIdFrom(undefined), '');
   });
@@ -132,7 +138,7 @@ describe('SetConfig authorization over a real gRPC connection', () => {
 
   it('denies a non-admin scope, and writes nothing', async () => {
     queries = [];
-    const { err } = await setConfig(md({ 'x-access-scope': '3' }));
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '3' }));
     assert.ok(err);
     assert.equal(err.code, grpc.status.PERMISSION_DENIED);
     assert.equal(queries.length, 0);
@@ -140,7 +146,7 @@ describe('SetConfig authorization over a real gRPC connection', () => {
 
   it('allows an admin caller and performs the write', async () => {
     queries = [];
-    const { err } = await setConfig(md({ 'x-access-scope': '7' }));
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '7' }));
     assert.equal(err, null, 'admin write must succeed');
     assert.ok(queries.length >= 1, 'the INSERT must run for an authorized caller');
     // params[4] is `updated_by` in the INSERT's parameter list.
@@ -149,7 +155,7 @@ describe('SetConfig authorization over a real gRPC connection', () => {
 
   it('falls back to the propagated x-user-id when no author is supplied', async () => {
     queries = [];
-    const { err } = await setConfig(md({ 'x-access-scope': '4', 'x-user-id': 'u-42' }), {
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '4', [HEADER_USER_ID]: 'u-42' }), {
       author: '',
     });
     assert.equal(err, null);
@@ -158,7 +164,7 @@ describe('SetConfig authorization over a real gRPC connection', () => {
 
   it('refuses an unattributable write (no author, no x-user-id)', async () => {
     queries = [];
-    const { err } = await setConfig(md({ 'x-access-scope': '4' }), { author: '' });
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '4' }), { author: '' });
     assert.ok(err);
     assert.equal(err.code, grpc.status.INVALID_ARGUMENT);
     assert.equal(queries.length, 0, 'an anonymous write must not reach config_audit');

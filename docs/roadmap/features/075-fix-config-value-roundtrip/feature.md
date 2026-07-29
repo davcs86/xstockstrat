@@ -1,7 +1,7 @@
 # Feature: fix-config-value-roundtrip
 
 **Type**: bug
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/fix-config-value-roundtrip` (this run: implemented on the
 harness-designated branch `claude/runs-073-074-sdd-6wtwal` → `main-dev`)
 **GitHub Issue**: n/a — GitHub Issues are disabled on `davcs86/xstockstrat`; captured directly from
@@ -17,6 +17,7 @@ code recon, same adaptation as features 067 and 074
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-07-29 | `bug-reported` → `draft` | /sdd-triage | Two defects surfaced by `/sdd-review` of feature 073 and confirmed directly in code; split out rather than bundled, following the 073→074 precedent. |
+| 2026-07-29 | `draft` → `code-completed` | direct fix | Both defects fixed with a real-wire test suite; red-before-green proven (6 fail → 26/26). Backfill of already-corrupted rows (AC-5) outstanding. |
 
 ---
 
@@ -50,4 +51,6 @@ Two related defects in `xstockstrat-config`, both blocking feature 073:
 
 ## Next Action
 
-`/sdd-review fix-config-value-roundtrip product-spec`
+Merge with PR #805. **Outstanding:** size and repair already-corrupted rows —
+`SELECT key, value_data FROM config.config_values WHERE value_data LIKE '{%Val%}'` per environment.
+The fix stops new corruption but does not repair existing rows.
