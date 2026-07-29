@@ -183,12 +183,28 @@ is the platform's only checked-in client configuration, so it *is* the client-co
 4. `MCP_TRANSPORT=sse` still starts a working server (serving Streamable HTTP only) and logs a
    deprecation warning; `MCP_TRANSPORT=http` starts the same server without the warning; an
    unrecognized value falls through to `stdio` exactly as it does today (FR-2).
-5. **Mechanically checkable, and the operative gate for FR-4:** re-running FR-4's grep
-   (`grep -rniE '\bSSE\b|/sse|/messages|build_sse_app|_run_sse|MCP_SSE_PORT|SseServerTransport'`,
-   excluding `node_modules`, `.venv`, `packages/proto/gen`, `.git`, `services/xstockstrat-ui/.next`)
-   returns **no hit outside the declared "Deliberately NOT changed" list**. A surviving hit is a
-   failure whether or not FR-4 enumerated it — that is the point of making this the gate rather than
-   the enumeration.
+5. **The operative gate for FR-4, in two tiers.** *(Restated during `/sdd-design` — the single-tier
+   version this spec previously carried was **unsatisfiable**: FR-1a's own branch must contain the
+   literals `/sse` and `/messages`, and FR-2's fallback must contain `MCP_SSE_PORT`, all in
+   `app/main.py`, which is not on the "Deliberately NOT changed" list. The gate would have failed on a
+   correct implementation. See `design.md` §4.)*
+
+   All greps exclude `node_modules`, `.venv`, `packages/proto/gen`, `.git`,
+   `services/xstockstrat-ui/.next`, and the *Deliberately NOT changed* list.
+
+   - **Tier 1 — hard zero, fully mechanical.**
+     `grep -rniE 'build_sse_app|_run_sse|SseServerTransport|mcp\.server\.sse|handle_post_message'`
+     returns **no hit**, additionally excluding `docs/roadmap/features/**` (the SDD pipeline's own
+     artifacts, including this feature's, legitimately name these symbols). These symbols cease to
+     exist, so there is no legitimate survivor. This is the check that catches a missed rename.
+   - **Tier 2 — enumerated at LINE granularity, not file granularity.** Re-run FR-4's full grep
+     (`\bSSE\b|/sse|/messages|MCP_SSE_PORT`); **every surviving hit is listed in the PR body with a
+     one-line justification**. A hit in a file that is neither on the *Deliberately NOT changed* list
+     nor in FR-4's enumeration is a failure. Line granularity is load-bearing: `app/main.py`
+     legitimately survives via the FR-1a branch and the FR-2 fallback, and allow-listing the whole
+     file would exempt `app/main.py:125-128` — the stale SSE rationale inside `_authorized`, which
+     **survives** the route deletion and is exactly what recon flagged as Risk 3. (That line is also
+     pinned by name in FR-3, so it does not depend on this gate alone.)
 6. Feature 073's `set_config` tests still pass unchanged, proving the guard is intact as defence in
    depth (FR-3).
 7. `claude_mcp_config.json` contains no `/sse` URL, and its remote block's `url` is the bare

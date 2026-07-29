@@ -98,3 +98,91 @@ commits are its own. No merge-order row is needed. Its file-level inventory was 
   `docs/runbooks/mcp-tools.md`.
 - Root `CLAUDE.md` teardown rule applies — `/context-scrubber scan` before the PR, since three
   governed context files change.
+
+## Session 2026-07-29 — /sdd-design (quick)
+
+**Status `spec-ready` → `design-approved`.** Phase 0 recon + 1 mandated grilling round. No Floor
+breach. Adversary returned NEEDS WORK with 10 objections: 8 adopted, 1 adopted with a different
+remedy, 1 rejected with reasons. Nothing deferred.
+
+### Phase 0 — Recon
+
+Two findings changed the work:
+
+- **`MCP_HTTP_PORT` is absent from all three deployment files.** The spec had described it as a
+  rename throughout; it is an **addition**.
+- **Every `os.environ` read in `app/` is module-level, bound at import** (`main.py:26-27`). So
+  `monkeypatch.setenv` cannot reach the constants, and **neither AC-4 nor AC-9 was testable** as the
+  code stood. This was the only genuine design fork and it went to the grilling round.
+
+De-risked: `oauth_metadata.py`'s `/sse` is **docstring-only** — both discovery payloads carry
+`AGENT_PUBLIC_URL`, so the RFC 8414/9728 contract does not change. And no module in `app/` imports
+`app.main`, so dropping `mcp.server.sse` has zero blast radius outside `main.py` + its two test
+modules.
+
+### Decisions
+
+- **Call-time resolvers** `resolve_transport()` / `resolve_http_port()` replace the two module
+  constants. Rejected `importlib.reload` (re-registers all 17 tools per test and rebinds the
+  `app.client` constants `conftest.py:44-47` patches, silently defeating the autouse fixture) and
+  `monkeypatch.setattr(main, "MCP_TRANSPORT", …)` (leaves the alias logic in unreachable `__main__`).
+- **`main()` extracted from `if __name__ == "__main__":`** so the *dispatch* is tested, not just the
+  resolver's return value. This was the debate's most valuable output — see the Corrections below.
+- **404 branch** replaces the `/messages` branch in place (already pre-auth), exact-match on the two
+  normalized paths via a named `REMOVED_TRANSPORT_PATHS` tuple, `text/plain`, body naming
+  `AGENT_PUBLIC_URL`. Exact match not prefix: `Mount("/")` is a root catch-all and `startswith` would
+  permanently reserve `/sse*` from the Streamable HTTP fall-through.
+- **Unrecognized-value warning added** to `resolve_transport()`. Behavior unchanged (AC-4 mandates
+  fallthrough to stdio) but `.do/app.yaml` has **no `health_check` block** and compose has only a
+  TCP-9000 probe, so `MCP_TRANSPORT=htp` today yields a container that is up, serving nothing, with no
+  diagnostic. Narrows the latent defect at `context-constitution-findings.md:18`.
+- **Two red-green cycles, each committing green** — not four alternating steps, which would have
+  opened two step PRs with red CI (**F-05**).
+- **Empty-string port behavior changes deliberately**: `MCP_SSE_PORT=""` currently raises `ValueError`
+  at import; the `or`-chain treats it as absent and yields 9000. Declared and pinned by a test.
+
+### Corrections to earlier artifacts (both caught by the debate, both mine)
+
+1. **AC-5 was unsatisfiable.** The pass-3 review fix made it a mechanical grep gate — "no hit outside
+   the *Deliberately NOT changed* list" — but FR-1a's own branch must contain `/sse` and `/messages`,
+   and FR-2's fallback must contain `MCP_SSE_PORT`, all in `app/main.py`. **The gate I wrote to be
+   objective would have failed on a correct implementation.** Restated in `product-spec.md` as two
+   tiers: tier 1 a hard mechanical zero for the symbol set, tier 2 enumerated at **line** granularity.
+   Line granularity is load-bearing — the adversary's decisive point was that allow-listing
+   `app/main.py` wholesale would exempt `main.py:125-128`, the stale SSE rationale inside
+   `_authorized` that *survives* the route deletion (recon Risk 3). Verified live by grep.
+   Both proposed replacements were rejected after I ran them: "hard zero repo-wide" fails on
+   `docs/roadmap/features/**` (the pipeline's own artifacts), and the marker-token filter
+   (`grep -viE 'deprecat|removed|legacy|404'`) produces false negatives on legitimate survivors that
+   carry no marker word on their own line.
+2. **`tests/test_config_tools.py:167` pins the error string.** It asserts
+   `pytest.raises(RuntimeError, match="Streamable HTTP")`. FR-3 rewrites exactly that string
+   (`app/tools.py:748`) and AC-6 forbids changing the test body — so the rewrite **must retain the
+   literal substring `Streamable HTTP`**. Neither the product spec nor recon caught this.
+
+### Rejected from the proposal
+
+- **Live-socket smoke check** (`MCP_TRANSPORT=sse uv run python -m app.main`, grep stdout, kill) as a
+  step verification. It is a demonstration, not evidence — it proves the binary started once on one
+  machine, ships nothing, never runs again, and cannot catch the regression it was proposed to
+  prevent. Also unfit mechanically: binds a real port, depends on kill timing, and CI runs pytest
+  only. Replaced by the `main()` dispatch test, which asserts the same thing in the shipping suite on
+  every run. Direct `fails.md` 2026-07-27 hit.
+- **Categorizing the ingest/analysis edits as `docs`** to detach C-08. They modify
+  `app/handlers/servicer.py` — service source. Step stays `service` with a declared characterization
+  green (`tdd-gate.md:41-44`). `claude_mcp_config.json` stays `service` per recon and FR-6, not
+  `config`.
+
+### Open Threads
+
+- `if __name__ == "__main__": main()` remains untested — one call, no logic. Accepted. → cycle A.
+- Unrecognized-value fallthrough stays a latent defect, now warned rather than fixed (AC-4 mandates
+  today's behavior). `context-constitution-findings.md:18` stays open **by design**, and needs a
+  *semantic* rewrite — this design deletes the constant it points at — not the line renumber recon
+  Risk 6 described. → docs step.
+- Coverage after deleting two tests is **measured, not predicted**: every code-bearing step's
+  verification is the CI command with `--cov-fail-under=40`. → cycles A and B.
+- AC-5 tier 2 requires judgment; tier 1 is fully mechanical and `main.py:125-128` is pinned by name in
+  FR-3. → docs step.
+- Operator action after deploy: a connector saved with a `/sse` URL 404s until trimmed to the bare
+  `AGENT_PUBLIC_URL`. → PR body + `docs/runbooks/mcp-tools.md`.
