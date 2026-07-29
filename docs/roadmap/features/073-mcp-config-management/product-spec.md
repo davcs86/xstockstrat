@@ -18,7 +18,7 @@ by hand. This gap was hit directly while trying to enable the fundamentals data 
 ## User Story
 
 As a platform operator, I want MCP tools exposed by `xstockstrat-agent` that can read config
-values/metadata and write config values (including `secret.*`-prefixed ones) in
+values/metadata and write **non-secret** config values in
 `xstockstrat-config`, so that I can roll out config changes — flag flips, threshold updates, and
 secret values — directly from an agent session, without needing a raw gRPC client.
 
@@ -32,8 +32,10 @@ secret value back to the caller.
 > **Dependency, now satisfied.** This predicate was un-implementable when first written: nothing
 > populated `ConfigValue.is_secret` on the read path, so `GetConfig` reported `is_secret == false`
 > for every key and a literal implementation would have echoed secrets. Fixed by feature **075**
-> (`fix-config-value-roundtrip`). Verify the field is populated; do not re-derive the predicate from
-> the `secret.*` key prefix.
+> (`fix-config-value-roundtrip`). Verify the field is populated; do not re-derive **this
+> redaction** predicate from the `secret.*` key prefix — a flagged-but-unprefixed key must still be
+> redacted. (This instruction is scoped to FR-1's *read* redaction. FR-3's *write* rejection
+> deliberately checks the prefix **as well as** the flag — see FR-3.)
 >
 > **Metadata:** `get_config` uses the plain `_metadata()` helper (`x-mcp-secret` only) — **not**
 > `_admin_metadata()`. Per invariant **AGENT-3**, sending admin scope on a read path is the wrong
@@ -49,8 +51,23 @@ FR-3. A `set_config` tool wraps `ConfigService.SetConfig`: given namespace, key,
 (string/int/float/bool/json — matching the `ConfigValue` oneof), environment, trading_mode,
 `author`, and `reason`, applies the change. `author` and `reason` are **required** parameters (not
 optional) so every agent-driven change is attributable in `config.config_audit`, consistent with
-the existing rollout convention (`docs/runbooks/config-rollout.md` Step 2). **`set_config` MUST reject any key whose `is_secret` is
-true** (decided 2026-07-29 — superseding the 2026-07-28 "no denylist" decision). Credentials are
+the existing rollout convention (`docs/runbooks/config-rollout.md` Step 2). **`set_config` MUST reject a secret key** (decided 2026-07-29 — superseding the 2026-07-28
+"no denylist" decision). The predicate is deliberately **two-pronged**, because neither prong alone
+is sufficient:
+
+- **(a) the `is_secret` flag**, read from `list_config_keys` (`ConfigKeyMeta.is_secret`). This
+  catches an existing key that is flagged but not prefixed. It became usable only with feature
+  **077** — before that, `ListKeys` dropped the field on the wire and always reported `false`, so a
+  flag-only guard would have been silently dead.
+- **(b) the `secret.` key-name prefix**, checked *before* any RPC. This is the only prong that works
+  for a **key that does not yet exist**: `set_config` creates keys (`INSERT … ON CONFLICT DO UPDATE`),
+  `SetConfigRequest` carries no `is_secret` field, and the column defaults `FALSE` — so without a
+  prefix check, `set_config(namespace='marketdata', key='secret.foo.bar', value=<credential>)` would
+  create an unflagged row holding a plaintext credential streamed to every `WatchConfig` subscriber.
+  The prefix is the platform's own convention for sensitive keys (**C-05**).
+
+A key matching **either** prong is rejected with an error naming the key and pointing at the
+`type: SECRET` env-var mechanism — never echoing a value. Credentials are
 delivered as DigitalOcean App Platform `type: SECRET` environment variables — the mechanism used by
 the Alpaca keys, `JWT_SECRET`, `MCP_AGENT_SECRET` and the IBKR broker-account encryption key — never
 as config values, which are stored in plaintext and streamed to every `WatchConfig` subscriber.
@@ -130,10 +147,10 @@ Two consequences of 074 that this feature must honor:
   explicit `author`. FR-3 already makes `author` a required tool parameter, so this is satisfied by
   construction — but it is now load-bearing, not merely a convention.
 
-FR-6. **Five** discovery surfaces are updated in the same feature — the count is settled here
-because the ledger says five (`docs/roadmap/ledger/insights.md`, the 2026-07-20 `trigger_backfill`
-entry) while `docs/runbooks/reviewer-registry.md` says "all six inventory surfaces". Enumerated, so
-neither number has to be interpreted:
+FR-6. **Six** discovery surfaces are updated, plus one new one. The ledger's "five"
+(`docs/roadmap/ledger/insights.md`, 2026-07-20 `trigger_backfill`) and the registry's "six"
+(`docs/runbooks/reviewer-registry.md`) differ because the registry counts `mcp-tools.md`'s two
+count statements separately *and* includes the test file. Enumerated so nothing is dropped:
 
 1. `services/xstockstrat-agent/app/tools.py` — module-docstring tool count + enumeration
 2. `services/xstockstrat-agent/CLAUDE.md` — tool table and its count sentence
@@ -141,8 +158,13 @@ neither number has to be interpreted:
    `GET /api/tools` catalog paragraph — an earlier draft named only the header) plus a new per-tool
    section for each of the three tools
 4. `docs/runbooks/CLAUDE.md` — index line
-5. `docs/runbooks/config-rollout.md` — the task-oriented operational runbook these tools implement;
-   add the MCP-tool path alongside the existing gRPC procedure
+5. `services/xstockstrat-agent/tests/test_tools_endpoint.py` — the tool-name-set assertion. This is
+   the sixth surface in the reviewer registry's count and it **will go red** when three tools are
+   added, so it is a required edit, not merely a "test shape" to imitate.
+
+Plus one surface the registry does not list, because it is new rather than a count:
+`docs/runbooks/config-rollout.md` — the task-oriented operational runbook these tools implement; add
+the MCP-tool path alongside the existing gRPC procedure.
 
 Verified count: `app/tools.py` currently registers **14** tools, and "fourteen" appears in surfaces
 1-4. Adding three makes **17**.
@@ -184,11 +206,23 @@ Verified count: `app/tools.py` currently registers **14** tools, and "fourteen" 
    reads `call.request.trading_mode` (snake_case) against a ts-proto camelCase request, a logged
    defect (`services/xstockstrat-config/docs/context-constitution-findings.md`) that collapses
    scoping to the `all` bucket. Do not promise per-mode scoping this feature cannot deliver.
-2. **New keys are not audited.** The `config.config_audit` trigger fires `BEFORE UPDATE` only
+2. **`json`-typed values do not round-trip.** `set_config` accepts the `ConfigValue` oneof's
+   `json_val`, and the write path stores it, but `buildConfigValue` has no `'json'` case — the value
+   reads back as `string_val` holding JSON text. Either restrict `set_config` to the four scalar
+   types, or accept `json` knowing reads return a string. Decide in design; do not advertise a
+   `json` type the read path cannot honor.
+3. **`namespace` and `key` compose inconsistently in the existing data.**
+   `001_config_tables.up.sql` seeds `namespace='platform', key='maintenance_mode'`, while
+   `007_marketdata_fmp.up.sql` seeds `namespace='marketdata', key='marketdata.fmp.enabled'` — the
+   key repeating the namespace. The tools take both as separate parameters, so design must pin which
+   form the caller supplies, and the acceptance tests must use the form that actually matches each
+   seeded row.
+4. **New keys are not audited.** The `config.config_audit` trigger fires `BEFORE UPDATE` only
    (`migrations/001_config_tables.up.sql`), so a brand-new key's `INSERT` writes no audit row. FR-3's
    attribution rationale and AC-4 therefore hold for **pre-existing** keys; creating a new key via
-   `set_config` is silently unaudited. Surface this in the tool description rather than implying
-   every agent write is auditable.
+   `set_config` is silently unaudited. The trigger *also* skips a value-unchanged rewrite
+   (`IF OLD.value_data IS DISTINCT FROM NEW.value_data`), so a no-op write is likewise unaudited.
+   Surface both in the tool description rather than implying every agent write is auditable.
 
 ## Affected Services
 
@@ -235,6 +269,17 @@ deliberate deviation from invariant **AGENT-4** — the design phase MUST includ
 prefix, JWT claims minimal, API key scoping correct"). Not optional, and not weakened by the
 `is_secret` rejection: the blast radius of a non-secret write still includes halting all trading.
 
+## Paper/Live Safety
+
+**Paper-safe and fully exercisable in dev + docker-compose.** The feature writes no orders and
+touches no broker. Its risk is indirect: `set_config` can write `platform.maintenance_mode` and the
+`trading.approval.*` thresholds, so a careless write halts trading or widens the approval gate —
+which is why the ADMIN gate (FR-7) and the mandatory Security review exist. Two scoping caveats
+carry real live-mode risk and MUST be stated in the tool description: an omitted `environment`
+silently writes a **dev** row (so a production rollout that appears to succeed may have changed
+nothing), and `trading_mode` may be a no-op (Known Constraint 1). Production writes therefore
+require an explicit `environment=production`.
+
 ## Acceptance Criteria
 
 1. `get_config(namespace, environment?, trading_mode?)` returns current values for a namespace;
@@ -266,8 +311,15 @@ prefix, JWT claims minimal, API key scoping correct"). Not optional, and not wea
     transport" error and performs **no** write — proving FR-5's transport scoping is enforced rather
     than silently degrading to hardcoded admin scope. `get_config`/`list_config_keys` still work on
     that transport.
-11. `set_config`'s tool description states the `environment`/`trading_mode` defaults and that
-    creating a *new* key is unaudited (Known Constraints 1 and 2).
+11. **All three** tools' descriptions state the `environment`/`trading_mode` defaults and that
+    `trading_mode` may be a no-op (Known Constraint 1 — the collapse affects the **read** path too,
+    so `get_config`/`list_config_keys` must carry the caveat as well, not just `set_config`).
+    `set_config`'s description additionally states that creating a *new* key, and rewriting a key
+    to its existing value, are both unaudited (Known Constraint 4).
+12. AC-4's and AC-6's rejection paths are exercised against a **seeded or mocked** `is_secret=true`
+    key. No such row exists in the live schema — migration `009` removed the last one and
+    `set_config` cannot create one (FR-3 prong (b)) — so the test must supply its own fixture rather
+    than assume production data.
 
 ## Open Questions
 
