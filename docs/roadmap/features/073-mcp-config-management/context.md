@@ -181,3 +181,55 @@ plumbing mechanism from the ASGI layer into a `@server.tool()` body (none exists
   is canon (mirrored server-side at `services/xstockstrat-config/src/grpc/authz.ts`).
 - `environment`/`trading_mode` tool params default to `dev`/`all`, so an operator omitting them
   silently writes a dev row; and `trading_mode` may be a no-op given the logged snake/camel collapse.
+
+## Session 2026-07-29 — user decisions on the two review blockers
+
+### Transport (blocker 4) — DECIDED: Streamable HTTP only, deny on SSE
+
+`set_config` is available only over the Streamable HTTP transport, where the tool-call POST is
+auth-gated (`app/main.py` `_authorized(scope)`) so the caller's claims are on the same request and a
+per-request contextvar is safe. On the legacy HTTP+SSE `/messages` path it returns a clear
+"unsupported transport" error. This honors FR-B13 (no in-memory store, `instance_count > 1` safe)
+with no new state. FR-5's real-role forwarding is therefore scoped to Streamable HTTP.
+
+### Secrets (blocker 3) — DECIDED: allow plaintext ONLY IF no existing secret mechanism exists.
+### Verified answer: **a mechanism DOES exist — so plaintext in config is NOT approved.**
+
+The user's condition was explicit, so it was checked exhaustively rather than assumed:
+
+1. **No `secret://` resolver exists anywhere.** A repo-wide grep over `services/`, `packages/`,
+   `scripts/` (excluding generated code) returns exactly one hit — a test fixture written by this
+   session. Nothing resolves the reference format the docs describe.
+2. **The consuming service reads the value literally.**
+   `services/xstockstrat-marketdata/cmd/server/main.go:114` —
+   `APIKey: cfgWatcher.GetString("secret.marketdata.fmp.api_key", "")` — passed straight into
+   `fmp.NewClient`. A `secret://…` string would be sent to FMP as the API key.
+3. **But the platform DOES have a working secret mechanism: DigitalOcean App Platform
+   `type: SECRET` environment variables** (encrypted at rest by DO), read via `getEnv(...)`, with
+   `${VAR}` from `.env` locally in docker-compose. There are **10** such vars in each of
+   `.do/app.yaml` and `.do/app.dev.yaml`, covering **every** real credential on the platform:
+   `ALPACA_API_KEY`, `ALPACA_API_SECRET`, `BROKER_ACCOUNTS_ENCRYPTION_KEY`, `JWT_SECRET`,
+   `MCP_AGENT_SECRET`, `OTEL_EXPORTER_OTLP_HEADERS`.
+   Example: `services/xstockstrat-marketdata/internal/config/config.go:41-42` reads the Alpaca
+   credentials via `getEnv`, **not** via the config service.
+4. **The FMP key is the sole exception.** It is the only credential routed through
+   `xstockstrat-config`, and `secret.marketdata.fmp.api_key`
+   (`migrations/007_marketdata_fmp.up.sql:30-35`) is the only `is_secret = TRUE` row in the entire
+   config store. `FMP_API_KEY` appears in no app spec, no docker-compose block, and no `.env`
+   example. Feature 059 departed from the established pattern; the "secret reference — resolved at
+   deploy, never plaintext" comment in that migration describes a resolver that was never built.
+
+**Conclusion:** the precondition for allowing plaintext fails. `set_config` must **not** write real
+secret values into `config.config_values`, and the four governance docs stay as written — they are
+accurate about the platform's actual secret mechanism, they were just never applied to the FMP key.
+
+**Consequence for 073:** `set_config` rejects `is_secret` keys. The feature covers flag flips and
+threshold updates (`marketdata.fmp.enabled`, `analysis.fundsignal.enabled`, `platform.*`,
+`trading.approval.*`). `get_config`'s redaction (FR-1) still matters — `is_secret` rows exist and
+must never be echoed — and is now implementable thanks to feature 075.
+
+**Consequence for the original motivation (staging the FMP key):** it is solved by routing the key
+through the same mechanism as every other credential, not by this feature — add `FMP_API_KEY` as a
+`type: SECRET` env var in both app specs plus a docker-compose/.env entry, and have marketdata read
+it via `getEnv` with the config key retained only as the enable/disable toggle. That is a small,
+separate change to feature 059's wiring and should be its own bug/feature, not bundled into 073.
