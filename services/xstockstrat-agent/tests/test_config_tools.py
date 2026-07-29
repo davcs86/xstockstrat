@@ -96,9 +96,10 @@ class TestSetConfigGuards:
     @pytest.mark.asyncio
     async def test_rejects_a_secret_prefixed_key_before_any_rpc(self):
         server = _make_server()
-        with patch.object(client, "set_config", AsyncMock()) as write, patch.object(
-            client, "list_config_keys", AsyncMock()
-        ) as listing:
+        with (
+            patch.object(client, "set_config", AsyncMock()) as write,
+            patch.object(client, "list_config_keys", AsyncMock()) as listing,
+        ):
             with pytest.raises(RuntimeError, match="secret keys are not settable"):
                 await _tool_fn(server, "set_config")(
                     ctx=_ctx(ADMIN),
@@ -116,9 +117,10 @@ class TestSetConfigGuards:
     async def test_rejects_a_flagged_key_that_is_not_prefixed(self):
         server = _make_server()
         listing = {"keys": [{"key": "marketdata.vendor.token", "is_secret": True}]}
-        with patch.object(
-            client, "list_config_keys", AsyncMock(return_value=listing)
-        ), patch.object(client, "set_config", AsyncMock()) as write:
+        with (
+            patch.object(client, "list_config_keys", AsyncMock(return_value=listing)),
+            patch.object(client, "set_config", AsyncMock()) as write,
+        ):
             with pytest.raises(RuntimeError, match="flagged is_secret"):
                 await _tool_fn(server, "set_config")(
                     ctx=_ctx(ADMIN),
@@ -138,9 +140,10 @@ class TestSetConfigGuards:
 
         server = _make_server()
         err = grpc.aio.AioRpcError(grpc.StatusCode.UNAVAILABLE, None, None, details="down")
-        with patch.object(
-            client, "list_config_keys", AsyncMock(side_effect=err)
-        ), patch.object(client, "set_config", AsyncMock()) as write:
+        with (
+            patch.object(client, "list_config_keys", AsyncMock(side_effect=err)),
+            patch.object(client, "set_config", AsyncMock()) as write,
+        ):
             with pytest.raises(RuntimeError, match="cannot verify"):
                 await _tool_fn(server, "set_config")(
                     ctx=_ctx(ADMIN),
@@ -157,8 +160,10 @@ class TestSetConfigGuards:
     async def test_refuses_without_verified_claims_ie_on_sse(self):
         """The SSE POST /messages never passes _authorized, so no claims are on the scope."""
         server = _make_server()
-        with patch.object(client, "list_config_keys", AsyncMock(return_value={"keys": []})), \
-             patch.object(client, "set_config", AsyncMock()) as write:
+        with (
+            patch.object(client, "list_config_keys", AsyncMock(return_value={"keys": []})),
+            patch.object(client, "set_config", AsyncMock()) as write,
+        ):
             with pytest.raises(RuntimeError, match="Streamable HTTP"):
                 await _tool_fn(server, "set_config")(
                     ctx=_ctx(None),
@@ -176,11 +181,12 @@ class TestSetConfigForwardsRealScope:
     @pytest.mark.asyncio
     async def test_forwards_the_admin_scope_derived_from_roles(self):
         server = _make_server()
-        with patch.object(
-            client, "list_config_keys", AsyncMock(return_value={"keys": []})
-        ), patch.object(
-            client, "set_config", AsyncMock(return_value={"version": "1", "updated_at": "t"})
-        ) as write:
+        with (
+            patch.object(client, "list_config_keys", AsyncMock(return_value={"keys": []})),
+            patch.object(
+                client, "set_config", AsyncMock(return_value={"version": "1", "updated_at": "t"})
+            ) as write,
+        ):
             await _tool_fn(server, "set_config")(
                 ctx=_ctx(ADMIN),
                 namespace="marketdata",
@@ -197,11 +203,12 @@ class TestSetConfigForwardsRealScope:
         """The tool does not pre-judge: it forwards the real scope and lets the server's gate
         return PERMISSION_DENIED. Proves authorization is not silently escalated."""
         server = _make_server()
-        with patch.object(
-            client, "list_config_keys", AsyncMock(return_value={"keys": []})
-        ), patch.object(
-            client, "set_config", AsyncMock(return_value={"version": "1", "updated_at": "t"})
-        ) as write:
+        with (
+            patch.object(client, "list_config_keys", AsyncMock(return_value={"keys": []})),
+            patch.object(
+                client, "set_config", AsyncMock(return_value={"version": "1", "updated_at": "t"})
+            ) as write,
+        ):
             await _tool_fn(server, "set_config")(
                 ctx=_ctx(TRADER),
                 namespace="marketdata",

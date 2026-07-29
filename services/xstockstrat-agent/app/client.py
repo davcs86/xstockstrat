@@ -865,9 +865,7 @@ async def get_config(namespace: str, environment: str, trading_mode: str) -> dic
     async with grpc.aio.insecure_channel(CONFIG_ENDPOINT) as channel:
         stub = config_pb2_grpc.ConfigServiceStub(channel)
         resp = await stub.GetConfig(
-            config_pb2.GetConfigRequest(
-                namespace=namespace, environment=env, trading_mode=mode
-            ),
+            config_pb2.GetConfigRequest(namespace=namespace, environment=env, trading_mode=mode),
             metadata=_metadata(),
         )
         values = {}
@@ -895,9 +893,7 @@ async def list_config_keys(namespace: str, environment: str, trading_mode: str) 
     async with grpc.aio.insecure_channel(CONFIG_ENDPOINT) as channel:
         stub = config_pb2_grpc.ConfigServiceStub(channel)
         resp = await stub.ListKeys(
-            config_pb2.ListKeysRequest(
-                namespace=namespace, environment=env, trading_mode=mode
-            ),
+            config_pb2.ListKeysRequest(namespace=namespace, environment=env, trading_mode=mode),
             metadata=_metadata(),
         )
         return {

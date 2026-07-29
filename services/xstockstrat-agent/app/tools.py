@@ -657,9 +657,7 @@ def register_tools(server: FastMCP) -> None:
         return env, mode
 
     @server.tool()
-    async def get_config(
-        namespace: str, environment: str = "", trading_mode: str = ""
-    ) -> dict:
+    async def get_config(namespace: str, environment: str = "", trading_mode: str = "") -> dict:
         """Read the current config values for a namespace from xstockstrat-config (read-only).
         namespace: config namespace, e.g. 'marketdata', 'analysis', 'trading', 'platform'.
         environment: 'dev' or 'production'. Omit to use this agent deployment's own environment.
