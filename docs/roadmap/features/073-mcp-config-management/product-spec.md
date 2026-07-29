@@ -19,8 +19,9 @@ by hand. This gap was hit directly while trying to enable the fundamentals data 
 
 As a platform operator, I want MCP tools exposed by `xstockstrat-agent` that can read config
 values/metadata and write **non-secret** config values in
-`xstockstrat-config`, so that I can roll out config changes — flag flips, threshold updates, and
-secret values — directly from an agent session, without needing a raw gRPC client.
+`xstockstrat-config`, so that I can roll out config changes — flag flips and threshold updates —
+directly from an agent session, without needing a raw gRPC client. Credentials are explicitly **not**
+in scope: they are delivered as `type: SECRET` environment variables (see FR-3).
 
 ## Functional Requirements
 
@@ -58,7 +59,13 @@ is sufficient:
 - **(a) the `is_secret` flag**, read from `list_config_keys` (`ConfigKeyMeta.is_secret`). This
   catches an existing key that is flagged but not prefixed. It became usable only with feature
   **077** — before that, `ListKeys` dropped the field on the wire and always reported `false`, so a
-  flag-only guard would have been silently dead.
+  flag-only guard would have been silently dead. **The lookup MUST use the same `environment` and
+  `trading_mode` as the pending write.** `ListKeys` is scope-filtered
+  (`WHERE namespace = $1 AND environment = $2 AND (trading_mode = $3 OR trading_mode = 'all')`), so a
+  lookup issued with the default `dev`/`all` scope cannot see a key flagged only in
+  `production`/`live` — and prong (b) does not backstop that case, since it fires on the name alone.
+  Compounded by Known Constraint 1's `trading_mode` collapse, so design must confirm the scope
+  actually threads through rather than assuming it does.
 - **(b) the `secret.` key-name prefix**, checked *before* any RPC. This is the only prong that works
   for a **key that does not yet exist**: `set_config` creates keys (`INSERT … ON CONFLICT DO UPDATE`),
   `SetConfigRequest` carries no `is_secret` field, and the column defaults `FALSE` — so without a
