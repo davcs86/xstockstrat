@@ -24,7 +24,7 @@ also recorded at the root.
 
 | Issue | Impact | Evidence |
 |---|---|---|
-| **`ConfigWatcher` carries indicators identity**: module docstring "Config watcher for xstockstrat-**indicators**" and `client_id=f"indicators-{id(self)}"` | ingest registers with the config service under an "indicators-…" client id (copy-paste) | `app/config/watcher.py:38` |
+| **`ConfigWatcher` carries indicators identity**: module docstring "Config watcher for xstockstrat-**indicators**" and `client_id=f"indicators-{id(self)}"` | ingest registers with the config service under an "indicators-…" client id (copy-paste) | `app/config/watcher.py:36` |
 
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

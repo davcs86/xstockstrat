@@ -1,6 +1,6 @@
 ---
 name: sdd-review
-description: AI review gate for SDD product specs and implementation specs. Usage: /sdd-review <feature-slug> [product-spec|impl-spec]. product-spec gates draft→spec-ready. impl-spec is advisory (no lifecycle change).
+description: AI review gate for SDD product specs and implementation specs. Usage — /sdd-review <feature-slug> [product-spec|impl-spec]. Applies structured criteria via the spec-reviewer subagent and scans every other feature directory for collisions (config keys, proto field numbers, migration NNN prefixes, shared service dirs) via feature-overlap; product-spec gates draft → spec-ready, impl-spec is advisory. Use this whenever the user asks whether a spec is ready, complete, or approvable, to review / critique / find gaps in a product or implementation spec, to check acceptance criteria and governance gates, or to see whether a feature conflicts or overlaps with other in-flight work. This reviews specs, not code — pull-request and working-diff review belongs to /review or /code-review.
 argument-hint: <feature-slug> [product-spec|impl-spec]
 allowed-tools: Read Write Edit Bash(find *) Bash(grep *) Bash(git fetch *) Bash(git show *) Bash(git ls-remote *) Task
 effort: medium

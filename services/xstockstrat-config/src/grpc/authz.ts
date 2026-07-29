@@ -1,0 +1,63 @@
+/**
+ * Authorization helpers for the config gRPC service.
+ *
+ * Platform model (docs/patterns/header-propagation.md § "Authorization model"):
+ * entry points authenticate and set `x-access-scope` from verified claims; internal
+ * services role-check only — they do not re-validate a credential. Admin-gated RPCs
+ * check the ADMIN bit and abort PERMISSION_DENIED ("admin scope required").
+ *
+ * This is the first role check in a Node backend service on the platform; the Python
+ * reference is `_has_admin_scope` in the ingest/analysis/indicators servicers. The
+ * metadata accessor deliberately matches the published Node shape in
+ * docs/patterns/header-propagation.md so the other Node services copy one convention.
+ *
+ * NOTE: this module intentionally does NOT revive `src/middleware/propagation.ts`.
+ * That file is an unused HTTP-era AsyncLocalStorage store duplicated across all four
+ * Node services; config makes no outbound per-request calls, so it needs the role
+ * check, not the propagation store.
+ */
+import { Metadata, status } from '@grpc/grpc-js';
+
+/** Bitmask for the ADMIN role on the propagated `x-access-scope` header. */
+export const ADMIN_SCOPE = 0x04;
+
+export const HEADER_ACCESS_SCOPE = 'x-access-scope';
+export const HEADER_USER_ID = 'x-user-id';
+
+/** Read a single metadata value, or '' when absent. */
+function first(md: Metadata | undefined, key: string): string {
+  if (!md) return '';
+  return (md.get(key)[0] as string) ?? '';
+}
+
+/**
+ * True when the propagated access scope carries the ADMIN bit.
+ * Absent metadata, an absent header, and an unparseable value all resolve to scope 0
+ * (denied) — the check fails closed on the value of the header.
+ */
+export function hasAdminAccessScope(md?: Metadata): boolean {
+  const parsed = Number.parseInt(first(md, HEADER_ACCESS_SCOPE) || '0', 10);
+  if (Number.isNaN(parsed)) return false;
+  return Boolean(parsed & ADMIN_SCOPE);
+}
+
+/** The propagated caller id, or '' when absent. */
+export function userIdFrom(md?: Metadata): string {
+  return first(md, HEADER_USER_ID);
+}
+
+/** Denial for a caller lacking the ADMIN bit. Message matches the platform convention. */
+export const ADMIN_SCOPE_ERROR = {
+  code: status.PERMISSION_DENIED,
+  message: 'admin scope required',
+};
+
+/**
+ * Denial when a write carries no attributable author at all — neither an explicit
+ * `author` field nor a propagated `x-user-id`. Mirrors the indicators servicer, where
+ * `request.author` wins and the propagated id is the fallback.
+ */
+export const MISSING_AUTHOR_ERROR = {
+  code: status.INVALID_ARGUMENT,
+  message: 'author required: set request.author or propagate x-user-id',
+};

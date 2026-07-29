@@ -1,6 +1,6 @@
 ---
 name: sdd-status
-description: Show feature implementation status for all or a specific feature. Usage: /sdd-status [feature-slug]. Lists lifecycle status, step completion, last session, and next action. Read-only — makes no changes.
+description: Read-only status report for SDD features. Usage — /sdd-status [feature-slug]. With no slug it tabulates every feature's lifecycle status, step completion, severity, and last session; with a slug it adds design artifacts, per-step detail, context.md decisions, merge-order blockers, and the exact recommended next command. Use this whenever the user asks what is in flight, where a feature stands, how much is left, what to work on next, whether something is done, blocked, or safe to merge, or wants to catch up at the start of a session. Makes no changes — safe to run anytime, and worth running before touching any in-progress feature.
 argument-hint: [feature-slug]
 allowed-tools: Read Bash(ls *) Bash(find *) Bash(grep *) Bash(git fetch *) Bash(git show *) Bash(git ls-remote *)
 effort: low

@@ -121,8 +121,9 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         """Role check on the propagated x-access-scope ADMIN bit (0x04).
 
         Internal services trust the access scope set by the entry points (UI BFF via JWT,
-        MCP agent via its SSE auth layer) and do a role check at most — they do not
-        re-authenticate. Mirrors the analysis servicer's gate (feature 049 Part A).
+        MCP agent via its OAuth 2.1 Streamable HTTP auth layer) and do a role check at
+        most — they do not re-authenticate. Mirrors the analysis servicer's gate
+        (feature 049 Part A).
         """
         metadata = dict(context.invocation_metadata())
         try:

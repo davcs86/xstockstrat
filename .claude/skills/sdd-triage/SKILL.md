@@ -1,6 +1,6 @@
 ---
 name: sdd-triage
-description: Triage a bug report and route it to the correct fix track. Usage: /sdd-triage <issue-number> [backmerge]. Reads the GitHub issue, classifies severity, and routes to Track A (hotfix), Track B (config-only), or Track C (SDD path). Sub-command 'backmerge' completes the post-hotfix back-merge into main-dev.
+description: Triage a bug report and route it to the correct fix track. Usage — /sdd-triage <issue-number> [backmerge]. Reads the GitHub issue, classifies severity (SEV-1…SEV-4) and whether the fix is config-only, then routes to Track A (hotfix branch off main), Track B (a config-key change through the config service), or Track C (the SDD path, creating the feature directory with a bug Type); the `backmerge` sub-command completes the post-hotfix merge into main-dev, updates hotfix-log.md, and closes the issue. Use this whenever the user reports a bug or regression, points at an issue number, says production or dev is broken or misbehaving, asks how urgent something is or whether it needs a hotfix, or asks to back-merge a hotfix. Bug fixes enter the workflow here, not through sdd-story.
 argument-hint: <issue-number> [backmerge]
 allowed-tools: Read Write Edit Bash(gh *) Bash(git *) Bash(mkdir *) Bash(find *) Bash(grep *) Bash(date *)
 effort: medium

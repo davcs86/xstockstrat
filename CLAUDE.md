@@ -21,6 +21,15 @@ context you load per task.
 > restate a fact the agent can read from the code?* If it's a fact already in the repo, leave it out.
 <!-- context-forge:behavioral-contract:end -->
 
+## Teardown — Audit the Context You Touched Before You Finish
+
+If your session changed any context file (a `CLAUDE.md`, a constitution or findings doc) or a doc
+listed in `.agents/context-forge.json` → `scrubberExtraTargets` (e.g. `README.md`) — **or changed
+behavior those files describe** — then run `/context-scrubber scan`, scoped to what you touched, as
+the last step before pushing, and fix the grounded findings it reports. Drift ships in the docs
+humans read first, so it must be caught before the PR, not after. If the context-forge plugin is
+not available in the session, say so in the PR body rather than skipping silently.
+
 # xstockstrat — Root CLAUDE.md
 
 ## Project Overview
@@ -70,6 +79,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 | SDD binding rules — Constitution constraint IDs (`C-*`/`P-*`/`F-*`) cited by review/design/execute | `docs/sdd/constitution.md` |
 | Codebase/runtime invariants (`PLAT-*`/`<MODULE>-*`) — non-obvious patterns, cross-module contracts, and scars an agent would otherwise miss; plus the defects/doc-drift log | `docs/context-constitution.md`, `docs/context-constitution-findings.md` (per-module: `services/*/docs/`, `packages/*/docs/`) |
 | Cross-feature SDD memory — insights (patterns that worked) and fails (mistakes that recurred) | `docs/roadmap/ledger/insights.md`, `docs/roadmap/ledger/fails.md` |
+| Changing `run_backtest`, `manage_strategy`, `trigger_backfill`/`get_backfill_status` or `set_strategy_live` — this repo ships the `strat-lab` plugin (`plugins/strat-lab/`) whose `backtest` skill encodes these APIs' current quirks, and a change to them must update the skill in the **same** PR | `docs/patterns/strat-lab-plugin.md` |
 
 ---
 
@@ -77,7 +87,7 @@ This file covers always-needed platform conventions. For larger reference sectio
 
 Backend services are **gRPC-only** (the HTTP/Connect-RPC ports were removed once all
 callers — frontends and the MCP agent — moved to gRPC). The HTTP Port column applies only
-to the frontends, nginx, and the agent.
+to the frontends and the agent.
 
 | Service | Language | Role | gRPC Port | HTTP Port |
 |---|---|---|---|---|
@@ -92,18 +102,7 @@ to the frontends, nginx, and the agent.
 | xstockstrat-notify | Node.js | gRPC streaming alert delivery | 50059 | — |
 | xstockstrat-config | Node.js | Live config WatchConfig stream | 50060 | — |
 | xstockstrat-ui | Next.js | Consolidated UI: trader dashboard, insights analytics, config management | — | 3000 |
-| xstockstrat-agent | Python | MCP server — AI agent tools for signal ingestion, alerting, backtesting | — | 9000 (SSE) |
-
----
-
-## Language Map
-
-```text
-Go        → xstockstrat-trading, xstockstrat-portfolio, xstockstrat-marketdata
-Python    → xstockstrat-indicators, xstockstrat-ingest, xstockstrat-analysis, xstockstrat-agent
-Node.js   → xstockstrat-ledger, xstockstrat-identity, xstockstrat-notify, xstockstrat-config
-Next.js   → xstockstrat-ui
-```
+| xstockstrat-agent | Python | MCP server — AI agent tools for signal ingestion, alerting, backtesting | — | 9000 (Streamable HTTP) |
 
 ---
 
@@ -119,7 +118,7 @@ Next.js   → xstockstrat-ui
 | golang-migrate | latest | DB migrations; installed by `scripts/bootstrap.sh` |
 | golangci-lint | v2.5.0 | Go lint; run via `golangci-lint-action@v6` |
 | ruff | latest | Python lint + format |
-| Playwright | — | E2E tests for all three Next.js frontends |
+| Playwright | — | E2E tests for the consolidated `xstockstrat-ui` (all three segments) |
 | Vitest | ^3 | Unit (logic) tests for `xstockstrat-ui` — node-environment `src/**/*.test.ts`, coverage scoped to `src/lib/**` (feature 065); complements Playwright e2e |
 
 **Python uv lock rule**: After any change to a Python service's `pyproject.toml` (adding, removing, or updating a dependency), run `uv lock` inside that service directory and commit the updated `uv.lock` in the same PR. Never leave `uv.lock` out of sync with `pyproject.toml` — the `python-lint` job runs `uv lock --check` per service. (That gate was added 2026-07-27; before then this sentence claimed an enforcement that did not exist, and a stale lock surfaced only at Docker build time, where `uv sync --frozen` fails the image instead of the PR.)
@@ -175,22 +174,7 @@ Config served by `xstockstrat-config` via `WatchConfig` RPC (gRPC 50060). Key ru
 
 **Full rules, global key table, and the per-feature registered-keys log** → `docs/patterns/config-governance.md`.
 
-Recently added keys (feature 065 — cross-stock score derivation, owned by `xstockstrat-analysis`). The headline strategy grade is derived from per-symbol (symbol × window) evidence cells (`analysis.backtest_run_symbols`, migration `007`) via trading-day evidence weighting + empirical-Bayes shrinkage toward a neutral 0.5 prior — so high grades are earnable only through breadth + duration across stocks, and a throwaway single-symbol run can never overwrite a well-evidenced grade:
-
-| Key | Type | Default | Description |
-|---|---|---|---|
-| `analysis.scoring.shrinkage_days` | int | `250` | Empirical-Bayes shrinkage pseudo-count `k` (trading days) toward the 0.5 prior; perfect evidence earns an A once total evidence `W ≥ 1.5·k`. `get_int` zero-trap: `0` reads as the default. |
-| `analysis.scoring.min_evidence_symbols` | int | `3` | Below this many distinct evidence symbols the grade is flagged `provisional`. |
-| `analysis.scoring.min_evidence_days` | int | `500` | Below this many total evidence trading-days the grade is flagged `provisional`. |
-
-Recently added keys (feature 068 — backtest results visualization, owned by `xstockstrat-analysis`).
-Every OK `RunBacktest` persists its full serialized result (`analysis.backtest_details`, migration
-`008`) so past runs stay visualizable via the `GetBacktest` RPC; eviction keeps the newest N detailed
-runs per strategy (summary rows in `backtest_runs` are never trimmed):
-
-| Key | Type | Default | Description |
-|---|---|---|---|
-| `analysis.backtest.detail_retention_per_strategy` | int | `20` | Max persisted detailed runs per strategy; count-based eviction at insert, clamped ≥1. `get_int` zero-trap: `0` reads as the default. |
+Per-feature registered keys (065 cross-stock scoring, 068 backtest visualization, and every later feature) live in the **Per-Feature Registered Keys** log in `docs/patterns/config-governance.md` — retrieved on demand, not restated here.
 
 ---
 
@@ -363,7 +347,7 @@ xstockstrat-analysis → xstockstrat-ingest (QuerySignals for signal-weighted ba
 
 ## Header Propagation Convention
 
-Every backend service **must** propagate `x-user-id`, `x-access-scope`, and `x-trace-id` from inbound requests to all outbound gRPC calls. Nginx strips them from external requests so they are trusted as platform-internal values.
+Every backend service **that makes outbound per-request gRPC calls** must propagate `x-user-id`, `x-access-scope`, and `x-trace-id` from the inbound request to those calls. The external edge injects/strips them after auth (the `xstockstrat-ui` middleware — the nginx proxy that formerly did this was removed by feature 045), so platform-internal values are trusted. The Node leaf services (ledger, identity, notify, config) currently make no outbound per-request calls, so their `src/middleware/propagation.ts` is presently unused (see `docs/context-constitution-findings.md`).
 
 **Language-specific patterns (Go interceptor, Python per-method, Node.js AsyncLocalStorage), code snippets, and reference implementations** → read `docs/patterns/header-propagation.md`.
 
@@ -395,22 +379,7 @@ To enforce this, disable squash and rebase merging on the `main` branch:
 
 ## Implementation Roadmap Status
 
-Active phases and their current status. See `docs/roadmap/implementation-roadmap.md` for full specs and verification checkpoints.
-
-| Phase | Description | Status |
-|---|---|---|
-| Phase 0 | Foundation: proto gen, bootstrap, DB, Docker Compose | **DONE** |
-| Phase 1 | Core infrastructure: config, ledger, identity, notify | **DONE** |
-| Phase 2 | Data layer: marketdata, portfolio | **DONE** |
-| Phase 3 | Processing: indicators, ingest, analysis | **DONE** |
-| Phase 4 | Trading core | **DONE** |
-| Phase 5 | UI layer: trader, insights, config-ui → consolidated as `xstockstrat-ui` (feature 045) | **DONE** |
-| Phase 6 | Integration & webhook wiring | **DONE** |
-| Phase 7 | Observability: OTel + Grafana Cloud | **DONE** |
-
-This table is a coarse phase map only; all phases are now **DONE**. Per-feature lifecycle status is authoritative in the feature directories (see § Feature Roadmap) — do not track individual feature status here.
-
-Deviation notes exist only for phases 3–7 (`docs/roadmap/phase[3-7]-deviations.md`). Phases 0–2 predate the deviation-doc convention and have none — their absence is expected, not a missing file.
+Phases 0–7 are all **DONE** — see `docs/roadmap/implementation-roadmap.md` for full specs and verification checkpoints. This is a coarse phase map only; per-feature lifecycle status is authoritative in the feature directories (§ Feature Roadmap), not here. Deviation notes exist only for phases 3–7 (`docs/roadmap/phase[3-7]-deviations.md`); phases 0–2 predate that convention and have none.
 
 ---
 

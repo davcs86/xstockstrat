@@ -1,6 +1,6 @@
 ---
 name: sdd-design
-description: Phase 1.75 of SDD — ground a debated design before implementation planning. Usage: /sdd-design <feature-slug> [quick]. Phase 0 (Recon) produces a saved recon.md dossier; Phase 1 (Grilling) runs a proposer-vs-adversary design debate (full: 2–5 rounds; `quick`: a single mandated round for small/bug fixes) and writes design.md. Advances spec-ready → design-approved. Reads the Constitution and the Ledger; sdd-spec then consumes recon.md + design.md.
+description: Phase 1.75 of SDD — ground a debated design before implementation planning. Usage — /sdd-design <feature-slug> [quick]. Phase 0 (Recon) writes a grounded codebase dossier recon.md; Phase 1 (Grilling) runs a proposer-vs-adversary debate (full mode runs 2–5 rounds; `quick` mode runs one mandated round for small changes and bug fixes) and writes design.md, advancing spec-ready → design-approved against the Constitution and Ledger. Use this whenever a feature has a product spec and someone asks how to build it, which approach or architecture to take, to weigh tradeoffs between options, to stress-test / poke holes in / red-team a plan, or to explore how the existing code works before changing it. Mandatory together with sdd-story before any new capability is coded — see the SDD entry point in the root CLAUDE.md.
 argument-hint: <feature-slug> [quick]
 allowed-tools: Read Write Edit AskUserQuestion Task Bash(ls *) Bash(find *) Bash(grep *) Bash(git fetch *) Bash(git show *) Bash(git ls-remote *)
 effort: high

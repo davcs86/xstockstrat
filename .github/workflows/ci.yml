@@ -355,12 +355,18 @@ jobs:
           cache: 'pip'
           cache-dependency-path: services/${{ matrix.service }}/pyproject.toml
 
-      - name: install dependencies
-        run: pip install -e ".[dev]"
+      - name: install uv
+        run: pip install uv
+
+      # Install from uv.lock (not a floating `pip install -e`) so the test env
+      # matches the locked deps — the same lock Docker builds with. Prevents an
+      # unpinned transitive (e.g. mcp 2.0) from silently drifting into CI.
+      - name: install dependencies (locked)
+        run: uv sync --frozen --extra dev
 
       - name: pytest with coverage
         run: |
-          pytest --cov=${{ matrix.cov_source }} \
+          uv run --no-sync pytest --cov=${{ matrix.cov_source }} \
                  --cov-report=xml:coverage.xml \
                  --cov-report=term-missing \
                  --cov-fail-under=${{ matrix.coverage_threshold }}

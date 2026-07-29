@@ -111,7 +111,10 @@ func main() {
 	if cfgWatcher.GetBool("marketdata.fmp.enabled", false) {
 		fundamentalsSrc = fmp.NewClient(fmp.ClientConfig{
 			BaseURL: cfgWatcher.GetString("marketdata.fmp.base_url", "https://financialmodelingprep.com"),
-			APIKey:  cfgWatcher.GetString("secret.marketdata.fmp.api_key", ""),
+			// Credential comes from the FMP_API_KEY secret env var, not from config —
+			// see internal/config/config.go and feature 076. The config service still
+			// owns the non-secret knobs (enabled/base_url/metrics) below.
+			APIKey:  cfg.FMPAPIKey,
 			Metrics: strings.Split(cfgWatcher.GetString("marketdata.fmp.metrics", "core,extended"), ","),
 		})
 		slog.Info("FMP fundamentals source enabled")

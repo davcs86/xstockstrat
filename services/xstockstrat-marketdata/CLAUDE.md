@@ -20,7 +20,7 @@ Go gRPC service that is the **sole integration point for Alpaca's market data AP
 
 ## Language
 
-Go 1.22
+Go 1.25
 
 ## Docker Build Pattern
 
@@ -64,21 +64,19 @@ Namespace: `marketdata`
 | `marketdata.backfill.rate_limit_rps` | int | `200` | Max outbound Alpaca REST calls per second. Read at startup into a token-bucket limiter the client waits on before every REST call; `0` disables rate limiting. |
 | `marketdata.backfill.max_delete_days` | int | `0` | Max date-range span (days) a single scoped backfill delete may cover; `0` = no window cap. A whole-symbol delete (no range) is exempt and double-confirmed in the UI (feature 057, FR-5). |
 | `marketdata.fmp.enabled` | bool | `false` | Master gate for the FMP fundamentals source (feature 059). Off by default; establishes the `marketdata.<source>.enabled` convention. When false, `GetFundamentals(Multi)` returns `FailedPrecondition` and no FMP client is built. |
-| `secret.marketdata.fmp.api_key` | string (secret) | — | FMP API key. First seeded secret key (`is_secret=TRUE`); the seeded value is a `secret://` reference resolved at deploy, never plaintext. |
 | `marketdata.fmp.cache_ttl_hours` | int | `24` | Hours a cached fundamentals row stays fresh before a re-fetch is attempted. |
 | `marketdata.fmp.daily_request_cap` | int | `250` | Max FMP requests per UTC day (free Basic plan budget). At cap, stale rows are served (`stale=true`) or `ResourceExhausted` is returned; an 80%-of-cap crossing emits one WARNING alert/day. |
 | `marketdata.fmp.base_url` | string | `https://financialmodelingprep.com` | FMP API base URL; endpoint paths (`/stable/quote`, `/stable/ratios-ttm`, `/stable/profile`) are built under it. |
 | `marketdata.fmp.metrics` | string | `core,extended` | Metric tiers to fetch. `core` (batchable quote, 1 call/scan chunk); `extended` adds per-symbol ratios-ttm + profile. |
-| `marketdata.retention.quotes_days` | int | `90` | Quote data retention |
-| `marketdata.retention.ohlcv_years` | int | `5` | OHLCV data retention |
-| `platform.ledger_endpoint` | string | — | xstockstrat-ledger address |
+| `marketdata.retention.quotes_days` | int | `90` | **Documented, not yet implemented** — intended quote retention; no retention job reads this key yet |
+| `marketdata.retention.ohlcv_years` | int | `5` | **Documented, not yet implemented** — intended OHLCV retention; no retention job reads this key yet |
 
 ## Database
 
 - Schema: `marketdata`
-- Hypertable `marketdata.ohlcv`: partition by `time`, chunk = 1 day, compress after 7 days
-- Hypertable `marketdata.quotes`: partition by `time`, chunk = 1 hour, compress after 24 hours
-- Continuous aggregate: `marketdata.ohlcv_1h` (auto-computed 1-hour OHLCV from 15-min bars)
+- Hypertable `marketdata.ohlcv`: partition by `time`, chunk = 1 day (compression policy planned, not yet applied by any migration)
+- Hypertable `marketdata.quotes`: partition by `time`, chunk = 1 hour (compression policy planned, not yet applied by any migration)
+- _Planned, not yet implemented:_ continuous aggregate `marketdata.ohlcv_1h` (no migration creates it today)
 - Migration tool: `golang-migrate`
 
 ## FMP Fundamentals Integration (feature 059)
@@ -92,7 +90,11 @@ deliberately **NOT** registered in the OHLCV `source.Registry` — the Alpaca/OH
 `cache_ttl_hours` → no FMP call; miss/stale → quota-guarded fetch; at cap → serve stale (`stale=true`)
 or `ResourceExhausted`; `enabled=false` → `FailedPrecondition` with no external call. Core metrics
 come from one batchable `quote` call per scan chunk; extended ratios add per-symbol `ratios-ttm` +
-`profile`. The API key is read from `secret.marketdata.fmp.api_key` and never logged.
+`profile`. The API key comes from the **`FMP_API_KEY` env var** (`type: SECRET` in both DO app
+specs, `${FMP_API_KEY:-}` in docker-compose) and is never logged. It is deliberately **not** a config
+key: config values are stored in plaintext and streamed to every `WatchConfig` subscriber, so
+credentials use the same secret-env-var mechanism as the Alpaca keys (feature 076). The non-secret
+FMP knobs (`enabled`, `base_url`, `metrics`, caps) remain config keys.
 
 ## Alpaca Integration
 

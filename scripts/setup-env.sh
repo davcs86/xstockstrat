@@ -196,7 +196,7 @@ section "MCP Agent Secret (xstockstrat-agent)"
 
 info "Shared secret sent as x-mcp-secret header on all downstream HTTP calls from"
 info "xstockstrat-agent to xstockstrat-ingest, xstockstrat-notify, and xstockstrat-analysis."
-info "Leave empty to disable header enforcement (SSE API-key auth is still active)."
+info "Leave empty to disable header enforcement (OAuth 2.1 edge auth is unaffected)."
 info ""
 
 if [ "$USE_DEFAULTS" = true ]; then

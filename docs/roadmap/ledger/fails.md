@@ -81,3 +81,47 @@ ambiguity is logged here).
   serializer does with a value; it proves nothing about whether anything ever produces that value.
   Before writing "field X is legitimately Y" into cross-feature memory, grep the producer's
   assignment — the ledger is append-only, so a wrong entry is load-bearing forever.
+
+### 2026-07-29 — 074-fix-config-write-authz — assumption
+- **Mistake**: A test suite that reports `pass` while executing **zero assertions** was trusted as
+  coverage. `xstockstrat-config`'s two unit files each wrap their import in
+  `try { await import('../x.js') } catch {}` and then early-`return` from every case when the import
+  failed — a *passing* skip. `pnpm test` printed "7 tests, 7 pass, 0 skipped" while asserting
+  nothing. Three independent blockers all landed in that silent catch: a `.js` specifier for a `.ts`
+  source (`ERR_MODULE_NOT_FOUND`), a TS **parameter property** (`constructor(private readonly pool)`)
+  that `--experimental-strip-types` cannot compile (`ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX`), and
+  extensionless relative imports once Node reparses the file as ESM. Run against compiled output the
+  real state appeared: 1 of 2 cases **fails** (stale numeric-enum expectation vs `stringEnums=true`)
+  and the other file **hangs** (its case constructs a live `ConfigWatcher` that dials and retries).
+  Recurrence shape: same family as 2026-07-27 (072) — a demonstration was accepted as evidence
+  without checking that the thing under test was ever actually reached.
+- **Evidence**: `services/xstockstrat-config/src/__tests__/configServiceImpl.test.ts:15-22,36,66`;
+  `configWatcher.test.ts:24-31`; `services/xstockstrat-config/src/grpc/configServiceImpl.ts:94`;
+  `package.json:12-13`; verified by execution in feature 074's `/sdd-design` session (see that
+  feature's `context.md` § VERIFIED DEFECT).
+- **Rule it implies**: a graceful-skip guard must never be silent — assert the import succeeded, or
+  let it throw. More generally: before citing a suite as coverage for a security-bearing change,
+  confirm the cases *execute* (non-zero assertion count / deliberately break one and watch it go
+  red), don't just confirm the runner exits 0. Candidate promotion: extend **C-08** so a paired test
+  step must demonstrate a red before its green (**P-06**) *in the suite it will actually ship in*.
+
+### 2026-07-29 — 079-remove-mcp-sse-transport — assumption
+- **Mistake**: A **removal** feature's verification gates were written as substring greps ("no hit for
+  `/sse`"), and three separate times the gate failed on *correct* output, because the vocabulary being
+  removed legitimately survives in the prose that documents the removal. (1) AC-5 as first written
+  demanded zero `/sse|/messages|MCP_SSE_PORT` outside a NOT-changed list — but the 404 branch must name
+  the removed paths and the deprecated-env fallback must name the old var. (2) A proposed
+  marker-token fix (pipe survivors through `grep -viE 'deprecat|removed|legacy|404'`) false-negatives
+  on legitimate survivors carrying no marker word on their own line, and pressures the author to
+  contort code to satisfy a grep. (3) At execute time, Step 5's `! grep -n "sse" claude_mcp_config.json`
+  failed on the **operator migration note**, which must name `/sse` to tell an operator which saved
+  connector URL to change. Each was caught only by *running* the gate.
+- **Evidence**: feature 079 `product-spec.md` AC-5 (restated two tiers), `design.md` §4,
+  `implementation-spec.md` Deviation D-2; the line a file-granularity allow-list would have exempted
+  was `services/xstockstrat-agent/app/main.py:125-128`.
+- **Rule it implies**: for a removal feature, gate on **symbols that cease to exist**
+  (`build_sse_app|SseServerTransport|handle_post_message` → hard zero, no legitimate survivor
+  possible) and on **structured fields** (no server block's `url` contains `/sse`), never on
+  vocabulary that documentation must keep using. And run any grep-based acceptance gate against the
+  intended post-change tree before adopting it — an unexecuted gate is a claim, not a check. Same
+  family as the 2026-07-27 and 2026-07-29 entries, moved from test evidence to gate design.

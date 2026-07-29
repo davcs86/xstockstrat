@@ -124,6 +124,19 @@ post_raw() {
     -d "$2"
 }
 
+# post_raw_admin <url> <json_body> — post_raw plus the platform propagation headers
+# required by admin-gated RPCs (x-access-scope ADMIN bit = 4). Added by feature 074,
+# which put an ADMIN-scope gate on ConfigService.SetConfig.
+# shellcheck disable=SC2317
+post_raw_admin() {
+  curl -s -X POST "$1" \
+    -H "Content-Type: application/json" \
+    -H "x-user-id: integration-test" \
+    -H "x-access-scope: 4" \
+    ${TOKEN:+-H "Authorization: Bearer ${TOKEN}"} \
+    -d "$2"
+}
+
 # get <url> — GET with optional auth
 # shellcheck disable=SC2317
 get() {
@@ -490,8 +503,17 @@ section_13_maintenance_mode() {
   sep
   log "SECTION 13 — Maintenance mode propagation"
 
+  # NOTE (feature 074): SetConfig now requires the ADMIN bit on x-access-scope and an
+  # attributable author, so the two calls below pass -H 'x-access-scope: 4' and
+  # -H 'x-user-id: integration-test'. Carry both into the pending grpcurl conversion.
+  #
+  # STALE (pre-existing, not introduced by 074): CONFIG_URL still targets :8060, a
+  # Connect-RPC HTTP port removed platform-wide, and this script is wired into no CI
+  # workflow (see the PENDING UPDATE banner at the top of the file). These SetConfig
+  # calls therefore do not currently execute at all. The case is written, not relied
+  # upon as coverage — same treatment as feature 070.
   log "  Setting platform.maintenance_mode = true..."
-  post_raw \
+  post_raw_admin \
     "${CONFIG_URL}/xstockstrat.config.v1.ConfigService/SetConfig" \
     '{"key":"platform.maintenance_mode","value":{"bool_val":true},"environment":"DEV","trading_mode":"ALL"}' \
     >/dev/null 2>&1 || true
@@ -510,6 +532,11 @@ section_13_maintenance_mode() {
       \"trading_mode\": \"${TRADING_MODE}\"
     }")
 
+  # CAUTION: this pattern matches ANY error string, not just a maintenance rejection.
+  # If the SetConfig above silently no-ops (see the STALE note at the top of this
+  # section), PlaceOrder fails for an unrelated reason and this still reports success.
+  # Left as-is deliberately: tightening it would flip a section red for a pre-existing
+  # reason unrelated to authorization. Recorded in feature 074's design.md.
   if echo "$order_resp" | grep -qiE "maintenance|unavailable|rejected|error|code.*13|UNAVAILABLE"; then
     ok "Maintenance mode — PlaceOrder correctly rejected"
   else
@@ -518,7 +545,7 @@ section_13_maintenance_mode() {
   fi
 
   log "  Resetting platform.maintenance_mode = false..."
-  post_raw \
+  post_raw_admin \
     "${CONFIG_URL}/xstockstrat.config.v1.ConfigService/SetConfig" \
     '{"key":"platform.maintenance_mode","value":{"bool_val":false},"environment":"DEV","trading_mode":"ALL"}' \
     >/dev/null 2>&1 || true

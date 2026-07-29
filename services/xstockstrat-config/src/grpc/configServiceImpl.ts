@@ -1,5 +1,11 @@
 import { Pool } from 'pg';
 import { getLogger } from '../services/logger';
+import {
+  ADMIN_SCOPE_ERROR,
+  MISSING_AUTHOR_ERROR,
+  hasAdminAccessScope,
+  userIdFrom,
+} from './authz';
 import { ConfigUpdateType, ValueType } from '@xstockstrat/proto/config/v1/config';
 import { Environment, TradingMode } from '@xstockstrat/proto/common/v1/common';
 
@@ -38,14 +44,17 @@ function toProtoSnapPayload(snap: any, overrideUpdateType?: ConfigUpdateType): a
   );
 
   // Convert snake_case ConfigValue fields to the camelCase fields ts-proto encodes.
+  // isSecret is carried through deliberately: it is how a consumer knows a value must not be
+  // displayed. It used to be dropped here, so every key looked non-secret on the wire (feature 075).
   const values: Record<string, any> = {};
   for (const [k, v] of Object.entries(snap.values ?? {})) {
     const cv = v as any;
-    if (cv.string_val !== undefined) values[k] = { stringVal: cv.string_val };
-    else if (cv.int_val !== undefined) values[k] = { intVal: cv.int_val };
-    else if (cv.float_val !== undefined) values[k] = { floatVal: cv.float_val };
-    else if (cv.bool_val !== undefined) values[k] = { boolVal: cv.bool_val };
-    else values[k] = cv;
+    const isSecret = (cv.is_secret ?? cv.isSecret) === true;
+    if (cv.string_val !== undefined) values[k] = { stringVal: cv.string_val, isSecret };
+    else if (cv.int_val !== undefined) values[k] = { intVal: cv.int_val, isSecret };
+    else if (cv.float_val !== undefined) values[k] = { floatVal: cv.float_val, isSecret };
+    else if (cv.bool_val !== undefined) values[k] = { boolVal: cv.bool_val, isSecret };
+    else values[k] = { ...cv, isSecret };
   }
 
   return {
@@ -59,11 +68,37 @@ function toProtoSnapPayload(snap: any, overrideUpdateType?: ConfigUpdateType): a
   };
 }
 
-function resolveEnv(v: number | undefined): EnvStr {
+/**
+ * Resolve the request's environment/trading-mode scope.
+ *
+ * These accept BOTH shapes on purpose (feature 078). ts-proto is generated with
+ * `stringEnums=true` (packages/proto/buf.gen.yaml), so a decoded request carries the string
+ * constant ('ENVIRONMENT_PRODUCTION'), not the wire number — and it carries `tradingMode`,
+ * not `trading_mode`. The previous implementation looked up a numeric map with a string key
+ * and read a snake_case field that never existed on the decoded message, so BOTH dimensions
+ * silently collapsed to their zero-values: every request resolved to ('dev', 'all').
+ *
+ * That made every production config row unreachable over the RPC and gave every WatchConfig
+ * subscriber dev config regardless of what it asked for.
+ */
+function resolveEnv(v: number | string | undefined): EnvStr {
+  if (typeof v === 'string') {
+    return v === 'ENVIRONMENT_PRODUCTION' ? 'production' : 'dev';
+  }
   return ENV_MAP[v ?? 0] ?? 'dev';
 }
-function resolveMode(v: number | undefined): ModeStr {
+function resolveMode(v: number | string | undefined): ModeStr {
+  if (typeof v === 'string') {
+    if (v === 'TRADING_MODE_LIVE') return 'live';
+    if (v === 'TRADING_MODE_PAPER') return 'paper';
+    return 'all';
+  }
   return MODE_MAP[v ?? 0] ?? 'all';
+}
+
+/** The trading-mode field as ts-proto delivers it (camelCase), falling back to the legacy name. */
+function requestMode(req: any): number | string | undefined {
+  return req?.tradingMode ?? req?.trading_mode;
 }
 
 // Snapshot cache key: "namespace:env:mode"
@@ -191,7 +226,7 @@ export class ConfigServiceImpl {
   watchConfig(call: any) {
     const req = call.request;
     const env = resolveEnv(req.environment);
-    const mode = resolveMode(req.trading_mode);
+    const mode = resolveMode(requestMode(req));
     const subId = `${req.namespace}:${env}:${mode}:${req.client_id}:${Date.now()}`;
 
     log.info('New WatchConfig subscriber', { namespace: req.namespace, clientId: req.client_id, env, mode });
@@ -231,7 +266,7 @@ export class ConfigServiceImpl {
 
   async getConfig(call: any, callback: any) {
     const env = resolveEnv(call.request.environment);
-    const mode = resolveMode(call.request.trading_mode);
+    const mode = resolveMode(requestMode(call.request));
     const snap = this.snapshots.get(snapKey(call.request.namespace, env, mode));
     if (!snap) {
       callback(null, toProtoSnapPayload({
@@ -249,9 +284,34 @@ export class ConfigServiceImpl {
   }
 
   async setConfig(call: any, callback: any) {
-    const { namespace, key, value, author, reason } = call.request;
+    // Admin gate FIRST — before any destructure or DB work — so a denied call reaches
+    // neither the INSERT below nor the pg_notify broadcast that follows it.
+    // Reads (GetConfig/ListKeys/WatchConfig) are deliberately NOT gated: every service
+    // boots over an unauthenticated WatchConfig whose first message is a full namespace
+    // snapshot, so gating GetConfig without WatchConfig would be incoherent and gating
+    // WatchConfig would break platform startup. See feature 074 design.md.
+    if (!hasAdminAccessScope(call.metadata)) {
+      log.warn('SetConfig denied — caller lacks admin scope', {
+        namespace: call.request?.namespace,
+        key: call.request?.key,
+      });
+      callback(ADMIN_SCOPE_ERROR);
+      return;
+    }
+
+    const { namespace, key, value, reason } = call.request;
     const env = resolveEnv(call.request.environment);
-    const mode = resolveMode(call.request.trading_mode);
+    const mode = resolveMode(requestMode(call.request));
+
+    // Attribution: an explicit author wins, else the propagated caller id. Matches the
+    // indicators servicer (request.author wins, x-user-id is the fallback). Refuse an
+    // unattributable write rather than landing a blank `updated_by` in config_audit.
+    const author = call.request.author || userIdFrom(call.metadata);
+    if (!author) {
+      callback(MISSING_AUTHOR_ERROR);
+      return;
+    }
+
     try {
       await this.pool.query(
         `INSERT INTO config.config_values (namespace, key, value_type, value_data, updated_by, update_reason, environment, trading_mode)
@@ -261,7 +321,7 @@ export class ConfigServiceImpl {
                updated_by = EXCLUDED.updated_by,
                update_reason = EXCLUDED.update_reason,
                updated_at = NOW()`,
-        [namespace, key, inferValueType(value), JSON.stringify(value), author, reason, env, mode]
+        [namespace, key, inferValueType(value), extractValueData(value), author, reason, env, mode]
       );
       await this.pool.query(`SELECT pg_notify('config_changed', $1)`, [
         JSON.stringify({ namespace, key, environment: env, trading_mode: mode }),
@@ -275,7 +335,7 @@ export class ConfigServiceImpl {
 
   async listKeys(call: any, callback: any) {
     const env = resolveEnv(call.request.environment);
-    const mode = resolveMode(call.request.trading_mode);
+    const mode = resolveMode(requestMode(call.request));
     try {
       const result = await this.pool.query(
         `SELECT key, description, default_value, is_secret, consuming_service, environment, trading_mode
@@ -286,19 +346,32 @@ export class ConfigServiceImpl {
       callback(null, {
         keys: result.rows.map((r) => {
           const weightBounds = WEIGHT_KEY_REGISTRY[r.key];
+          // ts-proto encodes camelCase field names and (buf.gen.yaml stringEnums=true)
+          // string enum constants. Emitting snake_case/numeric here meant ConfigKeyMeta.encode()
+          // read undefined for every one of these and wrote proto defaults, so the client saw
+          // isSecret=false, empty defaultValue/consumingService and UNRECOGNIZED enums on every
+          // key. Same defect toProtoSnapPayload fixes for ConfigSnapshot (feature 077).
           return {
             key: r.key,
             description: r.description ?? '',
-            default_value: r.default_value ?? '',
-            is_secret: r.is_secret,
-            consuming_service: r.consuming_service ?? '',
-            environment: r.environment === 'production' ? 2 : 1,
-            trading_mode: r.trading_mode === 'live' ? 2 : r.trading_mode === 'paper' ? 1 : 0,
+            defaultValue: r.default_value ?? '',
+            isSecret: r.is_secret === true,
+            consumingService: r.consuming_service ?? '',
+            environment:
+              r.environment === 'production'
+                ? Environment.ENVIRONMENT_PRODUCTION
+                : Environment.ENVIRONMENT_DEV,
+            tradingMode:
+              r.trading_mode === 'live'
+                ? TradingMode.TRADING_MODE_LIVE
+                : r.trading_mode === 'paper'
+                  ? TradingMode.TRADING_MODE_PAPER
+                  : TradingMode.TRADING_MODE_UNSPECIFIED,
             validation: weightBounds
               ? {
-                  value_type: ValueType.VALUE_TYPE_FLOAT_MAP,
-                  min_value: weightBounds.minValue,
-                  max_value: weightBounds.maxValue,
+                  valueType: ValueType.VALUE_TYPE_FLOAT_MAP,
+                  minValue: weightBounds.minValue,
+                  maxValue: weightBounds.maxValue,
                 }
               : undefined,
           };
@@ -311,19 +384,50 @@ export class ConfigServiceImpl {
 }
 
 function buildConfigValue(row: any): any {
+  // is_secret must ride along: ConfigValue.is_secret is the field consumers use to decide
+  // whether a value may be displayed. It was previously dropped here, so GetConfig and
+  // WatchConfig reported is_secret=false for every key including secret.* ones (feature 075).
+  const secret = row.is_secret === true;
   switch (row.value_type) {
-    case 'string':  return { string_val: row.value_data };
-    case 'int':     return { int_val: parseInt(row.value_data, 10) };
-    case 'float':   return { float_val: parseFloat(row.value_data) };
-    case 'bool':    return { bool_val: row.value_data === 'true' };
-    default:        return { string_val: row.value_data };
+    case 'int':     return { int_val: parseInt(row.value_data, 10), is_secret: secret };
+    case 'float':   return { float_val: parseFloat(row.value_data), is_secret: secret };
+    case 'bool':    return { bool_val: row.value_data === 'true', is_secret: secret };
+    case 'string':
+    default:        return { string_val: row.value_data, is_secret: secret };
   }
 }
 
+/**
+ * Classify an inbound ConfigValue. ts-proto delivers camelCase fields over the wire
+ * (stringVal/intVal/...), while the DB and the seed migrations use snake_case; accept both
+ * so a write is typed correctly whichever shape the caller used. Previously this tested only
+ * snake_case against a camelCase request, so every write was recorded as 'string' (feature 075).
+ */
 function inferValueType(v: any): string {
-  if (v.string_val !== undefined) return 'string';
-  if (v.int_val !== undefined) return 'int';
-  if (v.float_val !== undefined) return 'float';
-  if (v.bool_val !== undefined) return 'bool';
+  if (v == null) return 'string';
+  if (v.string_val !== undefined || v.stringVal !== undefined) return 'string';
+  if (v.int_val !== undefined || v.intVal !== undefined) return 'int';
+  if (v.float_val !== undefined || v.floatVal !== undefined) return 'float';
+  if (v.bool_val !== undefined || v.boolVal !== undefined) return 'bool';
+  if (v.json_val !== undefined || v.jsonVal !== undefined) return 'json';
   return 'string';
+}
+
+/**
+ * Extract the bare scalar a ConfigValue carries, for storage in config_values.value_data.
+ * The column holds bare scalars (that is what the seed migrations write and what
+ * buildConfigValue parses back). Previously setConfig stored JSON.stringify(value) -- the whole
+ * message -- so a write of "abc" round-tripped as the literal {"stringVal":"abc"} (feature 075).
+ */
+function extractValueData(v: any): string {
+  if (v == null) return '';
+  const scalar =
+    v.string_val ?? v.stringVal ??
+    v.int_val ?? v.intVal ??
+    v.float_val ?? v.floatVal ??
+    v.bool_val ?? v.boolVal;
+  if (scalar !== undefined && scalar !== null) return String(scalar);
+  const json = v.json_val ?? v.jsonVal;
+  if (json !== undefined && json !== null) return JSON.stringify(json);
+  return '';
 }

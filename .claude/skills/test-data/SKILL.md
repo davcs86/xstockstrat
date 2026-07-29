@@ -1,6 +1,6 @@
 ---
 name: test-data
-description: Maintain the frontend test-data inventory — add or update canonical mocked/dummy fixtures, keep e2e/fixtures/INVENTORY.md in sync, and audit specs for inline duplicates. Usage — /test-data audit | add <domain> | update <fixture-symbol>.
+description: Steward the centralized frontend test-data inventory for services/xstockstrat-ui (Playwright e2e + vitest). Usage — /test-data audit | add <domain> | update <fixture-symbol>. `audit` finds inline mock data in specs that should be canonical fixtures, `add` creates a new fixture and catalogs it, `update` changes an existing fixture and fixes every consumer — always keeping e2e/fixtures/INVENTORY.md in sync (Constitution C-12, docs/patterns/test-data-inventory.md). Use this whenever anyone writes, copies, or edits mocked API responses, stubbed payloads, seed rows, or hardcoded sample objects in UI tests, or asks where a fixture lives, why test data is duplicated, or to rename or reshape one. Frontend only — backend Go/Python/Node test data is out of scope, and it never edits src/ runtime code.
 argument-hint: [audit | add <domain> | update <fixture-symbol>]
 effort: low
 ---

@@ -1,6 +1,6 @@
 ---
 name: digitalocean-setup
-description: Interactive DigitalOcean App Platform first-time setup — doctl auth, managed DB, dev/prod apps, secrets, GitHub Actions wiring, and deployment verification.
+description: Interactive first-time DigitalOcean App Platform setup for xstockstrat — doctl install/auth, managed PostgreSQL cluster, dev + prod apps, public GHCR packages, app secret env vars, GitHub Actions deploy secrets, and first-deployment verification. Usage — /digitalocean-setup [step-number 1–9 or 4.5]. Use this whenever the user mentions DigitalOcean, doctl, App Platform, creating or attaching a managed database, private/403 GHCR container images, DIGITALOCEAN_ACCESS_TOKEN or app-level secrets — and also when they just say "get this hosted", "stand up prod", "set up the cloud environment", or "why did the first deploy never come up" without naming the provider. Not for routine releases (use promote) or local dev setup (use onboard).
 argument-hint: [step-number 1–9 or 4.5 for GHCR packages]
 allowed-tools: Read Edit Bash(doctl *) Bash(gh *) Bash(openssl *) Bash(git *) Bash(sed *) Bash(grep *) Bash(awk *) Bash(cat *) Bash(bash *) Bash(command -v *) Bash(python3 *) Bash(./scripts/do-setup-check.sh) Bash(uname *) Bash(brew *) Bash(snap *) Bash(apt-get *) Bash(apt *) Bash(curl *) Bash(tar *) Bash(chmod *) Bash(sudo apt*) Bash(sudo snap*) Bash(sudo chmod*) Bash(sudo dd*) Bash(sudo tee*) Bash(sudo apt-get*) Bash(which *)
 effort: medium

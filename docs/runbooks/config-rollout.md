@@ -73,6 +73,13 @@ grpcurl -plaintext \
 ## Step 2 — Apply a Single Key Change
 
 ### Via gRPC (SetConfig)
+
+> **`SetConfig` is admin-gated.** It rejects the call with `PERMISSION_DENIED`
+> ("admin scope required") unless the request carries the ADMIN bit on `x-access-scope`
+> (`0x04` → `"4"`), per `docs/patterns/header-propagation.md`. It also requires an
+> attributable author: either an explicit `author` field (as below) or a propagated
+> `x-user-id`. A call with neither is rejected `INVALID_ARGUMENT`.
+
 ```python
 import grpc
 from gen.config.v1 import config_pb2, config_pb2_grpc
@@ -80,18 +87,51 @@ from gen.config.v1 import config_pb2, config_pb2_grpc
 channel = grpc.insecure_channel('xstockstrat-config:50060')
 stub = config_pb2_grpc.ConfigServiceStub(channel)
 
-resp = stub.SetConfig(config_pb2.SetConfigRequest(
-    namespace="trading",
-    key="approval.require_above_notional",
-    value=config_pb2.ConfigValue(float_val=100000.0),
-    author="platform-team",
-    reason="Increase approval threshold for Q3 — TICKET-1234",
-))
+resp = stub.SetConfig(
+    config_pb2.SetConfigRequest(
+        namespace="trading",
+        key="approval.require_above_notional",
+        value=config_pb2.ConfigValue(float_val=100000.0),
+        author="platform-team",
+        reason="Increase approval threshold for Q3 — TICKET-1234",
+    ),
+    metadata=(
+        ("x-access-scope", "4"),      # ADMIN bit — required, else PERMISSION_DENIED
+        ("x-user-id", "platform-team"),
+    ),
+)
 print(f"Updated. Version: {resp.version}")
 ```
 
-### Via Connect-RPC
+Reads (`GetConfig`, `ListKeys`, `WatchConfig`) are **not** gated — every service boots by
+subscribing to `WatchConfig` unauthenticated, so gating them would break platform startup.
+
+### Via the MCP agent (feature 073)
+
+If you are working from an agent session, the three MCP tools wrap these RPCs — no raw gRPC client
+needed:
+
+```text
+list_config_keys(namespace="trading")            # discover keys, see which are secret
+get_config(namespace="trading")                  # current values (secrets redacted)
+set_config(namespace="trading", key="trading.approval.require_above_notional",
+           value_type="float", value="100000.0",
+           author="platform-team", reason="Q3 threshold — TICKET-1234")
+```
+
+`environment`/`trading_mode` default to the **agent deployment's own** `APPLICATION_ENV` /
+`TRADING_MODE`; pass them explicitly to target another scope. `set_config` authorizes on your real
+role (admin required), refuses `is_secret` keys, and works only over the Streamable HTTP transport.
+Full parameter and error tables: `docs/runbooks/mcp-tools.md`.
+
+### Via Connect-RPC — **REMOVED, do not use**
+
+> The Connect-RPC HTTP server on port `8060` was deleted when the backends became
+> gRPC-only; this example cannot work. Use the gRPC form above (or `grpcurl` with the
+> same metadata). Kept only so the removal is discoverable.
+
 ```bash
+# STALE — port 8060 no longer exists.
 curl -X POST http://xstockstrat-config:8060/xstockstrat.config.v1.ConfigService/SetConfig \
   -H 'Content-Type: application/json' \
   -d '{
