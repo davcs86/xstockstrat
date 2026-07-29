@@ -81,6 +81,18 @@ FR-2. `timeframe` (the deprecated string) keeps being populated exactly as today
 (including non-canonical values — FR-1 normalizes only what feeds the enum). This fix is additive;
 removing the string is a separate, coordinated change once consumers migrate.
 
+**FR-2a — the one carve-out to FR-2/FR-7's byte-for-byte rule** (added at the round-2 design gate,
+user sign-off recorded in `context.md`; **C-11** override mechanism). Canonicalization *before*
+production is permitted where the value also feeds the enum, at exactly two sites:
+  - `analysis/app/engine/live_loop.py:126` — `"1Day"` → `"1d"` (FR-9). Its two migrated siblings
+    already send canonical `"1d"`; leaving the third on the Alpaca spelling preserves the very
+    `1Day`-vs-`1d` divergence `internal/timeframe` exists to kill (**MARKETDATA-1**).
+  - `marketdata`'s `bar_ingest_timeframe` path (FR-10) — a resolvable alias now reaches
+    `Bar.Timeframe` canonicalized rather than verbatim.
+  Everywhere else the deprecated string is reproduced unchanged. The rule protects *response* fields
+  consumers read; it is not a licence to keep writing a non-canonical value that the receiver would
+  have to re-canonicalize anyway.
+
 FR-3. An unmappable or empty stored string yields `TIMEFRAME_UNSPECIFIED` rather than raising —
 `.get(…, 0)` on the map lookup, matching how `servicer.py:257` already handles it.
 
@@ -149,12 +161,56 @@ alongside the existing `timeframe` on their `getBars` calls. Both pass `src/lib/
 string→enum map belongs in `chart.ts` next to `TIMEFRAMES`, which is already the declared single
 source of truth for this vocabulary (`chart.ts:1-3`, DRY guard rail). Do **not** add a second map in
 either component. Note the name clash: `chart.ts`'s `Timeframe` is a string union while
-`@xstockstrat/proto/common/v1/common_pb`'s `Timeframe` is the enum — import one under an alias, as
-`insights/backfills/page.tsx:18` already does for the enum.
+`@xstockstrat/proto/common/v1/common_pb`'s `Timeframe` is the enum — alias the **proto** one
+(`Timeframe as PbTimeframe`); the local union is exported and imported by both senders, so renaming
+it ripples. The aliasing precedent is `src/hooks/useOrders.ts:3` (`TradingMode as PbTradingMode`) —
+**not** `insights/backfills/page.tsx:18`, which is a bare import (corrected at the design gate;
+`recon.md` Risk 6).
 
 Without this, dropping `GetBarsRequest.timeframe` makes `timeframe.Resolve(UNSPECIFIED, "")` error
 (`internal/timeframe/timeframe.go:85`) and both charts go blank — the same scheduled failure as the
 rest of this feature, on the request side.
+
+FR-12. `e2e/mock-backend.ts:305-335`'s `getBars` handler is a sixth `Bar` producer, and it emits a
+shape the real service **cannot** produce: `timeframe: '1Day'` (the real read path resolves to
+canonical `'1d'` before querying, `marketdata_service.go:120`) and no `timeframeEnum`. Both mock bars
+become `timeframe: '1d', timeframeEnum: TIMEFRAME_1DAY`, and `e2e/fixtures/INVENTORY.md:47` records
+the shape. Leaving it would contradict this spec's own § Secondary finding — a fixture built against
+the shape the handler expects rather than the shape the real source emits is the reason the family
+survived review — and after this feature the drift widens, since real responses carry the enum and
+the mock never would.
+
+### xstockstrat-analysis — the producer the first design round found
+
+Not in the original spec. Surfaced by the round-1 design adversary and folded in by user decision.
+
+FR-9. `analysis/app/engine/live_loop.py:126` sends `GetBarsRequest(symbol=…, timeframe="1Day")` — the
+deprecated string only, in the **non-canonical** spelling — while its two siblings *in the same
+service* already send canonical `"1d"` **plus** the enum (`app/handlers/servicer.py:590-591`,
+`app/services/screener.py:169-170`). It is live-wired (`app/main.py:98,116`), so when the string is
+dropped the **live evaluation loop stops evaluating** — a materially worse outcome than a blank
+chart. It gains `timeframe="1d", timeframe_enum=TIMEFRAME_1DAY` (see FR-2a for the string change).
+
+This is the literal `fails.md` 2026-07-01 / **C-10(b)** shape — one path migrated, the sibling left
+behind — inside a feature whose entire premise is closing that shape.
+
+### marketdata — the two raw readers the second round found
+
+FR-10. `ingestRecentBars` (`marketdata_service.go:514`) reads `marketdata.stream.bar_ingest_timeframe`
+as a **raw string** and passes it to `GetBarsMulti` (`:523`) / `GetBars` (`:538`), whose bars are then
+**persisted** (`:528`, `:546`). An out-of-vocabulary value therefore writes rows that re-emit the
+defective pair on every later read, forever. Route it through `timeframe.Resolve`. On an unresolvable
+value, fall back to the declared `"15m"` default and `slog.Warn` once per cycle — **user decision at
+the round-2 gate**; see § Accepted Risks. Hoist a `defaultBarIngestTimeframe` const (the literal
+currently appears three times in that function).
+
+FR-11. `BackfillBars` reads `req.Timeframe` raw at three sites — `marketdata_service.go:590` (ledger
+event), `:602` (`src.GetBars`, the value that lands in `ohlcv.timeframe` via `InsertBars:611`), and
+`:633` (`estimateExpectedBars`) — each with a `//nolint:staticcheck // SA1019` acknowledging the
+deprecated read, and **never** calls `Resolve`. Two consequences: when the string is dropped it calls
+Alpaca with an empty timeframe and 400s every symbol; and today a caller sending `"1Day"` writes rows
+`GetBars` can never find — a live **MARKETDATA-1** violation reachable through a public RPC. It gains
+`timeframe.Resolve(req.GetTimeframeEnum(), req.Timeframe)`, used at all three sites.
 
 ## Out of Scope
 
@@ -163,13 +219,16 @@ rest of this feature, on the request side.
 - The `BackfillBarsRequest` write path — already correct.
 - Any UI **read** path. The UI displays the deprecated string today and keeps working either way;
   only the two `getBars` *senders* change (FR-8).
-- The **consuming** side of every request message. `TriggerBackfillRequest` (`ingest.proto:64`),
-  `StreamBarsRequest` (`marketdata.proto:73`), `GetBarsRequest` (`:86`) and `BackfillBarsRequest`
-  (`:104`) all carry the same deprecated pair, but their *readers* are already correct — ingest via
-  `_canonical_timeframe` (`servicer.py:47`) and marketdata via `timeframe.Resolve`
-  (`marketdata_service.go:120`), both of which prefer the enum. Their *senders* are in scope wherever
-  they populate only the string: the agent (`client.py:752`) and the backfills page
-  (`backfills/page.tsx:112`) were already correct; the two chart senders were not, hence FR-8.
+- The **consuming** side of a request message **where the reader already resolves the enum**. That is
+  `TriggerBackfillRequest` (`ingest.proto:64`) via `_canonical_timeframe` (`servicer.py:47`), and
+  `GetBarsRequest` (`marketdata.proto:86`) via `timeframe.Resolve` (`marketdata_service.go:120`).
+  > **Corrected at the round-2 design gate.** This section previously claimed marketdata's request
+  > readers were correct *as a class*, citing only `:120`. That was false: `BackfillBars` reads its
+  > string raw at three sites and never resolves (now FR-11), and `ingestRecentBars` reads a config
+  > string raw (now FR-10). Both are in scope. Asserting a sweep was complete without re-greping is
+  > the `fails.md` 2026-07-27 (072) shape, and it is what let the round-1 and round-2 producers hide.
+- `StreamBarsRequest` (`marketdata.proto:73`) — no sender exists to fix. `StreamBars` has no callers
+  (`013-phase-2-data-layer/context.md:27`, `014-trader-chart-panel/context.md:13`).
 
 ## Affected Services
 
@@ -178,8 +237,19 @@ rest of this feature, on the request side.
   `internal/alpaca/client.go`, `internal/alpaca/stream.go`, their tests. No `migrations/` change:
   `Bar.timeframe_enum` is derived from the already-stored canonical string, exactly as in ingest.
 - `xstockstrat-ui` (Next.js/TS) — `src/lib/chart.ts` (the map), `src/components/trader/ChartPanel.tsx`
-  and `src/app/insights/market/[symbol]/page.tsx` (the two senders), plus the Vitest unit test.
-  `src/lib/**` is inside the Vitest coverage scope, so the map is unit-testable without Playwright.
+  and `src/app/insights/market/[symbol]/page.tsx` (the two senders), `e2e/mock-backend.ts` +
+  `e2e/fixtures/INVENTORY.md` (FR-12), plus the Vitest unit test. `src/lib/**` is inside the Vitest
+  coverage scope, so the map is unit-testable without Playwright.
+- `xstockstrat-analysis` (Python) — `app/engine/live_loop.py`, `tests/test_live_loop.py` (FR-9).
+
+**Docs in scope** (behavior these files describe changes, so they ship in the same PR — root
+`CLAUDE.md` § Teardown): `services/xstockstrat-marketdata/CLAUDE.md:17` (its "the enum values remain
+in the proto for wire compatibility but are **unused**" clause becomes false once FR-6 makes
+`TIMEFRAME_1MIN` a live label) and `:61` (the `bar_ingest_timeframe` row, whose behavior FR-10
+changes); `internal/timeframe/timeframe.go:10-13`; and in
+`services/xstockstrat-marketdata/docs/context-constitution.md` both **MARKETDATA-2** (streamed bars
+now carry an enum — and still must not be persisted) and **MARKETDATA-1**, whose evidence cites
+`write-back :203`, the exact line the shared Alpaca builder replaces. Two citations also line-shift.
 
 ## Proto Contract Changes
 
@@ -210,16 +280,53 @@ rest of this feature, on the request side.
 4. The fixture in `tests/test_ingest_servicer.py` matches the real `backfill_jobs` row shape — no key
    the database cannot produce.
 5. Red-before-green recorded in both services: each new assertion fails against the current tree.
-6. Every `Bar` returned by `GetBars` (DB path) and by the Alpaca fetch paths carries a
-   `TimeframeEnum` matching its `Timeframe` string, asserted **paired** — same rule as AC-2, so the
-   Go suite cannot go green on the string alone.
+6. Every `Bar` produced **from a resolvable timeframe** — by `GetBars` (DB path) and by both Alpaca
+   fetch paths — carries a `TimeframeEnum` matching its `Timeframe` string, asserted **paired** with a
+   **hardcoded** expected enum (same rule as AC-2). The expectation must not be computed by calling
+   the same mapper the implementation calls, or the assertion proves nothing and can never go red —
+   the `fails.md` 2026-07-29 (074) shape. Two residuals are accepted and recorded in `design.md`:
+   an unresolvable request alias (e.g. `"10Min"`) falls through to `canonicalTf = legacyTf`
+   (`marketdata_service.go:116-122`) and yields `UNSPECIFIED`; and legacy `ohlcv` rows already stored
+   under a non-canonical label scan back with `UNSPECIFIED`. Both are the correct encoding of
+   "outside the supported vocabulary", not new defects.
 7. A streamed bar carries `TIMEFRAME_1MIN` with `Timeframe == "1m"` (FR-6), and
    `timeframe.FromString("1m")` still returns `TIMEFRAME_UNSPECIFIED` — i.e. the request-resolution
    refusal is provably untouched by the labelling change.
 8. Both `getBars` senders include `timeframeEnum` matching the `timeframe` string they already send
    (`'15Min'` → `TIMEFRAME_15MIN`, `'1Hour'` → `TIMEFRAME_1HOUR`, `'1Day'` → `TIMEFRAME_1DAY`), the
    mapping lives only in `src/lib/chart.ts`, and a Vitest case asserts it covers every member of the
-   `Timeframe` union — so adding a fourth interval later cannot silently skip the enum.
+   `Timeframe` union — so adding a fourth interval later cannot silently skip the enum. Typing the map
+   as `Record<Timeframe, PbTimeframe>` is the primary guarantee (a new union member fails `tsc`); the
+   Vitest case is the backstop.
+9. `live_loop.py`'s `GetBars` request carries `timeframe="1d"` **and** `timeframe_enum=TIMEFRAME_1DAY`,
+   asserted on the captured request — matching how `test_analysis_servicer.py:219-220` already pins
+   its two migrated siblings.
+10. `resolveIngestTimeframe` maps `""` → `"15m"`, a resolvable alias → its canonical form, and an
+    unresolvable value → the `"15m"` default with a `slog.Warn`, each asserted directly.
+11. `BackfillBars` resolves its timeframe once and uses the canonical value at all three sites; a
+    request carrying only `timeframe_enum` (no string) succeeds — the condition that is broken today
+    and is the whole point of the migration.
+12. The e2e mock's bars carry `timeframe: '1d'` + `timeframeEnum`, matching what the real service
+    emits, and `INVENTORY.md` records it.
+
+## Accepted Risks
+
+**FR-10's `"15m"` fallback can cause a write, not merely label one.** Everywhere else this feature is
+additive — it changes how data is *described*. The fallback is the exception: an operator who set
+`bar_ingest_timeframe` to an out-of-vocabulary value would find ingestion resumed at 15m, writing rows
+they did not ask for. Weighed and accepted at the round-2 gate (user decision) against the alternatives
+of passing the raw value through or skipping the cycle; the reasoning is that this is the platform's
+only continuous OHLCV feed and a misconfiguration should degrade to a working default rather than to
+silence. Mitigations: the documented pause sentinel is `bar_ingest_interval_ms <= 0`
+(**MARKETDATA-5**, `marketdata_service.go:484`), *not* a bogus timeframe, so the misuse this could
+disturb is not a supported one; the key is seeded in **no** migration (all 10 config migrations
+checked), so every environment provisioned from this repo runs the `"15m"` default already and is
+unaffected; and each fallback cycle emits a `slog.Warn`.
+
+**Rows already written under the old behavior are not migrated or cleaned up.** A prior
+misconfiguration that persisted `"1Hour"`- or `"1m"`-labelled rows leaves them in place, invisible to
+`GetBars` and scanning back with `UNSPECIFIED`. The remedy is a scoped `DeleteBars`; explicitly not in
+this feature.
 
 ## Open Questions
 
