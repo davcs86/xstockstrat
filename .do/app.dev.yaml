@@ -130,6 +130,10 @@ services:
         scope: RUN_TIME
         value: YOUR_DEV_ALPACA_API_SECRET
         type: SECRET
+      - key: FMP_API_KEY
+        scope: RUN_TIME
+        value: YOUR_DEV_FMP_API_KEY
+        type: SECRET
       - key: DB_POOL_MAX
         value: "2"
       - key: SERVICE_NAME

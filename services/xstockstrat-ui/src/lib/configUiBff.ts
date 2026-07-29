@@ -5,6 +5,7 @@ import {
   createBffRouter,
   createDispatch,
   requireSession,
+  requireAdminScope,
   backendHeaders,
   forward,
 } from '@/lib/bffShared';
@@ -15,6 +16,11 @@ router.service(ConfigService, {
   listKeys: forward((req, opts) => configClient.listKeys(req, opts)),
   async setConfig(req, ctx) {
     const claims = await requireSession(ctx);
+    // Config writes are admin-only — enforced here as defense in depth. The backend
+    // ConfigService.SetConfig also checks the propagated x-access-scope ADMIN bit
+    // (feature 074); neither gate is load-bearing alone. Keeps an explicit body rather
+    // than forwardAdmin because the author is injected from the verified session below.
+    requireAdminScope(claims);
     return configClient.setConfig(
       { ...req, author: claims.user_id },
       { headers: backendHeaders(claims, ctx) },

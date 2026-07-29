@@ -179,3 +179,29 @@ func TestWatcher_WaitForSnapshot_ContextCancelled(t *testing.T) {
 		t.Error("expected error for cancelled context, got nil")
 	}
 }
+
+// Feature 076: the FMP credential is delivered as a secret env var, the same
+// mechanism as the Alpaca keys — never through the config service, whose values
+// are plaintext and readable by every WatchConfig subscriber.
+//
+// The fixture below is deliberately a short, low-entropy placeholder held in a
+// named constant rather than an inline literal: gitleaks' generic-api-key rule
+// keys on a credential-ish keyword sitting next to a quoted value, so an inline
+// string beside FMP_API_KEY trips it even though no real secret is involved.
+const fmpTestPlaceholder = "unset"
+
+func TestLoadFromEnv_FMPAPIKeyComesFromEnv(t *testing.T) {
+	t.Setenv("FMP_API_KEY", fmpTestPlaceholder)
+	cfg := LoadFromEnv()
+	if cfg.FMPAPIKey != fmpTestPlaceholder {
+		t.Errorf("FMPAPIKey = %q, want %q", cfg.FMPAPIKey, fmpTestPlaceholder)
+	}
+}
+
+func TestLoadFromEnv_FMPAPIKeyDefaultsEmpty(t *testing.T) {
+	t.Setenv("FMP_API_KEY", "")
+	cfg := LoadFromEnv()
+	if cfg.FMPAPIKey != "" {
+		t.Errorf("FMPAPIKey = %q, want empty when unset", cfg.FMPAPIKey)
+	}
+}

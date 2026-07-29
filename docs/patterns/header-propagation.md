@@ -23,9 +23,12 @@ re-authenticate — at most they perform a **role check** on the propagated `x-a
   admin role at the agent entry (`client.validate_admin`) before forwarding `x-access-scope`.
 - **Internal services role-check only.** Admin-gated RPCs check the ADMIN bit on the propagated scope:
   `int(x-access-scope) & 0x04`. They abort `PERMISSION_DENIED` ("admin scope required") rather than
-  calling identity to re-validate a credential. Reference helper: `_has_admin_scope` in
+  calling identity to re-validate a credential. Reference helpers: `_has_admin_scope` in
   `xstockstrat-analysis`, `xstockstrat-ingest`, and `xstockstrat-indicators` servicers (feature 049
-  unified these onto the single model).
+  unified these onto the single model), and `hasAdminAccessScope` in `xstockstrat-config`'s
+  `src/grpc/authz.ts` — the **Node** reference implementation, added by feature 074 to gate
+  `SetConfig`. A Node service needing the scope should import `authz.ts`'s shape rather than
+  re-deriving it.
 
 ### Documented exception: indicators formula author-ownership
 
@@ -33,8 +36,13 @@ re-authenticate — at most they perform a **role check** on the propagated `x-a
 **author-ownership** check (`row.author == request.user_id`) as its primary authorization model — a
 deliberate, documented exception to the pure role-check model. Feature 049 added an **admin-scope
 override** (`x-access-scope & 0x04`) so platform admins can manage any formula, and closed the
-`RegisterFormula` gap (the author now defaults to the propagated `x-user-id`, required — no silent
-`"dev-user"` default).
+`RegisterFormula` gap — no silent `"dev-user"` default. Note the actual precedence, which an earlier
+version of this line stated backwards: an explicit `request.author` **wins**, the propagated
+`x-user-id` is the **fallback**, and the call is rejected only when both are empty
+(`services/xstockstrat-indicators/app/handlers/servicer.py`). `xstockstrat-config`'s `SetConfig`
+follows the same precedence (feature 074). This is a *presence* guarantee — no anonymous writes —
+not an authenticity guarantee: a caller that can assert `x-access-scope` can equally assert
+`x-user-id`.
 
 ## Go services
 

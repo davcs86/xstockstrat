@@ -22,20 +22,26 @@ import assert from 'node:assert/strict';
 let ConfigWatcher: typeof import('../services/configWatcher').ConfigWatcher;
 
 before(async () => {
-  try {
-    const mod = await import('../services/configWatcher.js');
-    ConfigWatcher = mod.ConfigWatcher;
-  } catch {
-    // Proto package unavailable in test environment — tests will be skipped.
-  }
+  const mod = await import('../services/configWatcher.js');
+  ConfigWatcher = mod.ConfigWatcher;
+});
+
+// The constructor dials a real gRPC channel and retries forever, which hangs the
+// runner. These cases only exercise getter logic against an injected snapshot, so
+// build the instance without running the constructor.
+function makeWatcher(): any {
+  return Object.create(ConfigWatcher.prototype);
+}
+
+describe('test harness', () => {
+  it('imports the watcher under test', () => {
+    assert.ok(ConfigWatcher, 'ConfigWatcher must import — never skip silently');
+  });
 });
 
 describe('ConfigWatcher getters', () => {
   it('returns default when snapshot is null', () => {
-    if (!ConfigWatcher) return; // skip if import failed
-
-    // Instantiate with a deliberately unreachable endpoint.
-    const w = new ConfigWatcher('localhost:1', 'test');
+    const w = makeWatcher();
     (w as any).snapshot = null;
 
     assert.strictEqual(w.getString('any.key', 'myDefault'), 'myDefault');
@@ -45,9 +51,7 @@ describe('ConfigWatcher getters', () => {
   });
 
   it('returns string value from snapshot', () => {
-    if (!ConfigWatcher) return;
-
-    const w = new ConfigWatcher('localhost:1', 'test');
+    const w = makeWatcher();
     (w as any).snapshot = {
       namespace: 'test',
       version: '1',
@@ -63,9 +67,7 @@ describe('ConfigWatcher getters', () => {
   });
 
   it('returns bool value from snapshot', () => {
-    if (!ConfigWatcher) return;
-
-    const w = new ConfigWatcher('localhost:1', 'test');
+    const w = makeWatcher();
     (w as any).snapshot = {
       namespace: 'test',
       version: '1',
@@ -81,9 +83,7 @@ describe('ConfigWatcher getters', () => {
   });
 
   it('returns int value from snapshot', () => {
-    if (!ConfigWatcher) return;
-
-    const w = new ConfigWatcher('localhost:1', 'test');
+    const w = makeWatcher();
     (w as any).snapshot = {
       namespace: 'test',
       version: '1',
@@ -99,9 +99,7 @@ describe('ConfigWatcher getters', () => {
   });
 
   it('returns float value from snapshot', () => {
-    if (!ConfigWatcher) return;
-
-    const w = new ConfigWatcher('localhost:1', 'test');
+    const w = makeWatcher();
     (w as any).snapshot = {
       namespace: 'test',
       version: '1',

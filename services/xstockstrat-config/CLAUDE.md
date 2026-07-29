@@ -33,7 +33,8 @@ startup; the Docker healthcheck probes `50060` directly.
 2. **All other services must call WatchConfig at startup** and block until they receive the initial SNAPSHOT before accepting traffic. They must pass `environment` and `trading_mode` in the request.
 3. **Config values are scoped** by `environment` (`dev`/`production`) and `trading_mode` (`paper`/`live`/`all`). Rows with `trading_mode='all'` apply to both paper and live.
 4. **Config changes trigger pg_notify** → reloads namespace in memory → broadcasts DELTA to all active WatchConfig subscribers (same env/mode scope).
-5. **Secrets** use `is_secret = true`. The value_data for secrets is a secret reference key (e.g. `secret://vault/alpaca-key`), not the actual value.
+5. **`SetConfig` is admin-gated; reads are not.** `SetConfig` rejects `PERMISSION_DENIED` ("admin scope required") unless the propagated `x-access-scope` carries the ADMIN bit (`0x04`), and rejects `INVALID_ARGUMENT` when a write has neither an explicit `author` nor a propagated `x-user-id`. Gate + helpers: `src/grpc/authz.ts` (feature 074 — the platform's first Node-side role check). `GetConfig`/`ListKeys`/`WatchConfig` are deliberately **open**: every service boots by subscribing to `WatchConfig` unauthenticated, and its first message is a full namespace snapshot, so gating reads would break platform startup without hiding anything `WatchConfig` doesn't already serve.
+6. **Secrets** use `is_secret = true`. The value_data for secrets is a secret reference key (e.g. `secret://vault/alpaca-key`), not the actual value.
 
 ## Dependencies
 
@@ -65,7 +66,7 @@ See `migrations/001_config_tables.up.sql` for the canonical seed list and full p
 
 ## Webhooks
 
-_No webhooks. Mutate config via the `SetConfig` gRPC RPC on port 50060._
+_No webhooks. Mutate config via the `SetConfig` gRPC RPC on port 50060 — which requires the ADMIN scope bit and an attributable author (see Critical Invariants #5)._
 
 ## Config Governance
 
