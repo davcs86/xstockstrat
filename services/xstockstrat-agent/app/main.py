@@ -17,6 +17,7 @@ import os
 from mcp.server import FastMCP
 from mcp.server.stdio import stdio_server
 
+from app.scopes import MCP_CLAIMS_SCOPE_KEY
 from app.tools import register_tools
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -61,7 +62,7 @@ def build_sse_app():
     from starlette.responses import JSONResponse, Response
     from starlette.routing import Mount, Route
 
-    from app.auth import validate_bearer_jwt
+    from app.auth import validate_bearer_claims
     from app.oauth_metadata import (
         authorization_server_metadata,
         protected_resource_metadata,
@@ -111,7 +112,25 @@ def build_sse_app():
         headers = dict(scope.get("headers", []))
         auth_header = headers.get(b"authorization", b"").decode("utf-8", errors="ignore")
         token = auth_header[len("Bearer ") :] if auth_header.startswith("Bearer ") else ""
-        return bool(token and await validate_bearer_jwt(token))
+        if not token:
+            return False
+        claims = await validate_bearer_claims(token)
+        if claims is None:
+            return False
+        # Hand the verified claims down to the tool layer on this request's ASGI scope.
+        # handle_mcp forwards this same dict to the Streamable HTTP session manager, which
+        # builds its Starlette Request from it, so a tool can read the caller's real roles via
+        # ctx.request_context.request.scope (feature 073 FR-5).
+        #
+        # This is also what makes set_config's transport rule correct BY CONSTRUCTION rather than
+        # by sniffing: the legacy SSE POST /messages returns before this function is ever called,
+        # so mcp_claims can never be present on an SSE request. Checking for a Starlette Request
+        # or an Authorization header would NOT work -- both transports have both.
+        #
+        # Nothing is stored beyond the request: the dict dies with the scope, so the agent stays
+        # stateless and instance_count > 1 remains safe (FR-B13).
+        scope.setdefault("state", {})[MCP_CLAIMS_SCOPE_KEY] = claims
+        return True
 
     async def _send_unauthorized(scope, receive, send) -> None:
         # 401 with a WWW-Authenticate discovery pointer so the client starts OAuth (FR-B0).

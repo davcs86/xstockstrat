@@ -35,6 +35,9 @@ def test_list_tools_returns_all_registered_tools():
         "set_strategy_live",
         "trigger_backfill",
         "get_backfill_status",
+        "get_config",
+        "list_config_keys",
+        "set_config",
     }
 
 

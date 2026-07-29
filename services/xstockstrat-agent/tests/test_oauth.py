@@ -66,7 +66,10 @@ def test_sse_accepts_valid_credential_reaching_transport():
         raise _Sentinel()
 
     with (
-        patch("app.auth.validate_bearer_jwt", AsyncMock(return_value=True)),
+        patch(
+            "app.auth.validate_bearer_claims",
+            AsyncMock(return_value={"user_id": "u-1", "roles": ["admin"], "aud": "x"}),
+        ),
         patch("mcp.server.sse.SseServerTransport.connect_sse", _boom),
     ):
         app = _app()
@@ -96,7 +99,10 @@ def test_streamable_root_accepts_valid_credential_reaching_transport():
         raise _Sentinel()
 
     with (
-        patch("app.auth.validate_bearer_jwt", AsyncMock(return_value=True)),
+        patch(
+            "app.auth.validate_bearer_claims",
+            AsyncMock(return_value={"user_id": "u-1", "roles": ["admin"], "aud": "x"}),
+        ),
         patch(
             "mcp.server.streamable_http_manager.StreamableHTTPSessionManager.handle_request",
             _boom,
