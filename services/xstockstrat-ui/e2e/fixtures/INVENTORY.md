@@ -2,7 +2,7 @@
 
 The catalog of centralized mocked/dummy domain data for frontend tests (Playwright e2e +
 vitest unit). System rules live in `docs/patterns/test-data-inventory.md`; this file is the
-**live catalog** — keep it in the same commit as any fixture change (use the `/test-data`
+**live catalog** — keep it in the same commit as any fixture change (use the `/sdd-qa`
 skill).
 
 ## Canonical fixtures

@@ -34,6 +34,11 @@ test mocks.
   mocked domain objects from the test-data inventory (`services/xstockstrat-ui/e2e/fixtures/`,
   auth helpers from `e2e/helpers/auth.ts`) instead of inline literals; a new domain object gets a
   fixture module + `INVENTORY.md` catalog row in the same step
-  (`docs/patterns/test-data-inventory.md`; `/test-data` skill).
+  (`docs/patterns/test-data-inventory.md`; `/sdd-qa` skill).
+- **Test data elsewhere (C-13)**: the same rule in any language, materialized lazily. A domain
+  literal may stay inline while it has exactly **one** consumer; the **second** consumer moves it to
+  the service's canonical home — Python `tests/conftest.py`, Go `internal/testdata/`, Node
+  `src/__tests__/fixtures/` — in the same step. Do not create a home before a second consumer
+  exists; most services should create none.
 
 > Sequential-mode verification fallbacks live in `reference/sequential-mode.md`.

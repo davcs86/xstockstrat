@@ -37,7 +37,13 @@ h. Deployment-file env-var audit. Record current wiring and detect missing entri
 ## Frontend survey (only if `xstockstrat-ui` is in Affected Services)
 
 Frontend test steps must reuse the test-data inventory (`docs/patterns/test-data-inventory.md`,
-Constitution **C-12**) instead of declaring inline mock literals:
+Constitution **C-12**) instead of declaring inline mock literals.
+
+**For a non-frontend service, Constitution C-13 applies instead** and the check is different: it is
+not "does an inventory exist" but "would this step create a **second** consumer of the same domain
+literal?" One consumer is compliant inline. Two forces the literal into that service's canonical home
+(Python `tests/conftest.py`, Go `internal/testdata/`, Node `src/__tests__/fixtures/`). Do not survey
+for a home that does not exist — most services have none, and none should be created speculatively.
 
 i. Read `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`. For each domain entity the
    feature's UI touches (accounts, portfolios, strategies, formulas, user identity, …),
