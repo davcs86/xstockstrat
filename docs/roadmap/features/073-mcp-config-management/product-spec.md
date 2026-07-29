@@ -206,13 +206,24 @@ Verified count: `app/tools.py` currently registers **14** tools, and "fourteen" 
 
 ## Known Constraints (carried into design, not fixed here)
 
-1. **`environment` / `trading_mode` default silently to `dev` / `all`.** The proto zero-values
-   resolve that way server-side, so an operator who omits them writes a **dev** row and never
-   touches production. `set_config`'s tool description MUST state this, and a production write MUST
-   require an explicit `environment`. Additionally, `trading_mode` may be a **no-op**: the server
-   reads `call.request.trading_mode` (snake_case) against a ts-proto camelCase request, a logged
-   defect (`services/xstockstrat-config/docs/context-constitution-findings.md`) that collapses
-   scoping to the `all` bucket. Do not promise per-mode scoping this feature cannot deliver.
+1. **`environment` / `trading_mode` MUST default to the agent's own env vars, not to the proto
+   zero-values.** Confirmed with the user 2026-07-29: the scope selector is a **deployment property
+   carried in env vars** (`APPLICATION_ENV` / `TRADING_MODE`, in docker-compose's shared
+   `common-env` anchor at `:15-17`), never a config value — while config *values* are partitioned
+   per environment. Every service already follows this: e.g.
+   `services/xstockstrat-config/src/services/configWatcher.ts:37-45` reads those env vars and sends
+   them on `WatchConfig`.
+
+   So all three tools resolve their scope as: **explicit parameter → the agent's `APPLICATION_ENV` /
+   `TRADING_MODE` → hard failure**, never a silent `dev`/`all`. Letting the proto zero-value decide
+   would mean an operator who omits the parameter writes a **dev** row from a production agent.
+   State the effective default in each tool's description so the LLM can see which scope it is
+   about to touch.
+
+   The related server-side collapse (`trading_mode` read snake_case, `environment` looked up in a
+   numeric map against a string enum) is fixed by feature **078** — before it, *both* dimensions
+   were ignored on every RPC and production config was unreachable. 073 depends on 078; without it,
+   a scope parameter is decorative.
 2. **`json`-typed values do not round-trip.** `set_config` accepts the `ConfigValue` oneof's
    `json_val`, and the write path stores it, but `buildConfigValue` has no `'json'` case — the value
    reads back as `string_val` holding JSON text. Either restrict `set_config` to the four scalar

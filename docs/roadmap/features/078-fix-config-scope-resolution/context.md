@@ -50,3 +50,34 @@ Production has been reading **dev** config for as long as this bug has existed. 
 service will start reading its actual `production` rows. Anywhere the two have drifted, behavior
 changes at deploy time. Diff `config.config_values` between `environment='dev'` and `'production'`
 before rolling out — this is a config change disguised as a bug fix.
+
+## Session 2026-07-29 (later) — architecture confirmed by the user
+
+User clarified: **`environment` and `trading_mode` stay env vars, not config values — but config
+values are partitioned per environment.** That is exactly the model this fix restores, and the code
+already implements the client half of it:
+
+- `docker-compose.yml:15-17` — `APPLICATION_ENV` / `TRADING_MODE` live in the shared `common-env`
+  anchor, so **every** service (agent included) carries its own deployment scope.
+- `services/xstockstrat-config/src/services/configWatcher.ts:37-45` — the watcher reads those env
+  vars, converts them to proto enums, and sends them on the `WatchConfig` request as
+  `environment` / `tradingMode`. The Python and Go watchers do the same.
+- `config.config_values` is keyed `(namespace, key, environment, trading_mode)` — the per-environment
+  partition.
+
+So the scope selector was never a config value and must not become one. **The client half was
+always correct; the server half was misreading it.** A service deployed with
+`APPLICATION_ENV=production` sent `ENVIRONMENT_PRODUCTION` and the server answered with the `dev`
+bucket. This fix makes the env-var-derived scope actually take effect — it does not introduce a new
+mechanism, it makes the existing one work.
+
+**Confirms the fix direction; no change to the fix.** Recorded because a future reader might
+otherwise "simplify" by moving scope into config, which would invert the intended architecture.
+
+### Consequence for feature 073
+
+Since every service — including `xstockstrat-agent` — already knows its own scope from env vars,
+073's tools must **default** `environment`/`trading_mode` to the agent's `APPLICATION_ENV` /
+`TRADING_MODE` rather than letting the proto zero-values decide. Without that, an operator who omits
+the parameter writes a `dev` row from a production agent (product-spec Known Constraint 1). Folded
+into 073's spec.
