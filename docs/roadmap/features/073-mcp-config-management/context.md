@@ -368,3 +368,10 @@ the public `inputSchema`; and the C-10 surface list extended to invariant **AGEN
   injection is proven) and mocks the ctx thereafter. The claim that Streamable HTTP actually
   delivers a request whose scope carries `mcp_claims` is verified by reading the SDK, not by
   executing it — the residual gap, stated rather than papered over. The dev smoke test closes it.
+
+## Session 2026-07-29 (CI: feature status automation)
+
+- Promotion PR #812 merged to main
+- Feature promoted and committed: 0eae638104744992c61c8a1ac4bd8cbaac10862b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-07-29

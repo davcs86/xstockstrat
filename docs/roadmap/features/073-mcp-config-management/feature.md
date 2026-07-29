@@ -1,6 +1,8 @@
 # Feature: mcp-config-management
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 0eae638104744992c61c8a1ac4bd8cbaac10862b
+**Launched date**: 2026-07-29
 **Development Branch**: `feature/mcp-config-management`
 **Created**: 2026-07-28
 **Last Updated**: 2026-07-28
@@ -16,6 +18,7 @@
 | 2026-07-29 | `spec-ready` → `design-approved` | /sdd-design | 1 round (quick). 14 adversary objections; the transport gate was redesigned after the adversary showed the obvious check accepts SSE on both transports. No Floor breach. |
 | 2026-07-29 | `design-approved` → `code-completed` | /sdd-execute | Three tools + claims plumbing + scope port implemented; 124/124 agent tests pass, ruff clean, context-map OK. |
 
+| 2026-07-29 | `code-completed` → `launched` | CI workflow | Promoted via PR #812; committed 0eae638104744992c61c8a1ac4bd8cbaac10862b |
 ---
 
 ## Artifacts

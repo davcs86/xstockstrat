@@ -1,7 +1,9 @@
 # Feature: fix-config-value-roundtrip
 
 **Type**: bug
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 0eae638104744992c61c8a1ac4bd8cbaac10862b
+**Launched date**: 2026-07-29
 **Development Branch**: `feature/fix-config-value-roundtrip` (this run: implemented on the
 harness-designated branch `claude/runs-073-074-sdd-6wtwal` → `main-dev`)
 **GitHub Issue**: n/a — GitHub Issues are disabled on `davcs86/xstockstrat`; captured directly from
@@ -19,6 +21,7 @@ code recon, same adaptation as features 067 and 074
 | 2026-07-29 | `bug-reported` → `draft` | /sdd-triage | Two defects surfaced by `/sdd-review` of feature 073 and confirmed directly in code; split out rather than bundled, following the 073→074 precedent. |
 | 2026-07-29 | `draft` → `code-completed` | direct fix | Both defects fixed with a real-wire test suite; red-before-green proven (6 fail → 26/26). Backfill of already-corrupted rows (AC-5) outstanding. |
 
+| 2026-07-29 | `code-completed` → `launched` | CI workflow | Promoted via PR #812; committed 0eae638104744992c61c8a1ac4bd8cbaac10862b |
 ---
 
 ## Artifacts

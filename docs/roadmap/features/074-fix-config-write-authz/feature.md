@@ -1,7 +1,9 @@
 # Feature: fix-config-write-authz
 
 **Type**: bug
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 0eae638104744992c61c8a1ac4bd8cbaac10862b
+**Launched date**: 2026-07-29
 **Development Branch**: `feature/fix-config-write-authz` (this run: implemented on the
 harness-designated branch `claude/runs-073-074-sdd-6wtwal` → `main-dev`; see context.md § Deviations)
 **GitHub Issue**: n/a — GitHub Issues are disabled on `davcs86/xstockstrat` (`POST /issues` → `410
@@ -23,6 +25,7 @@ context.md § Deviations)
 | 2026-07-29 | `design-approved` → `implementation-ready` | /sdd-spec | implementation-spec.md written — 7 steps. |
 | 2026-07-29 | `implementation-ready` → `code-completed` | /sdd-execute | All 7 steps complete. Red-before-green proven at both layers. AC #4/#5 (dev smoke) outstanding — no dev access from this session. |
 
+| 2026-07-29 | `code-completed` → `launched` | CI workflow | Promoted via PR #812; committed 0eae638104744992c61c8a1ac4bd8cbaac10862b |
 ---
 
 ## Artifacts

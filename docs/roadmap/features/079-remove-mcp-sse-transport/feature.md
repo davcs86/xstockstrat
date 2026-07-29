@@ -1,6 +1,8 @@
 # Feature: remove-mcp-sse-transport
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 0eae638104744992c61c8a1ac4bd8cbaac10862b
+**Launched date**: 2026-07-29
 **Development Branch**: `feature/remove-mcp-sse-transport`
 **Created**: 2026-07-29
 **Last Updated**: 2026-07-29
@@ -17,6 +19,7 @@
 | 2026-07-29 | `implementation-ready` → `code-completed` | /sdd-execute | All 8 steps done in one PR. Agent 137 pass / 68% cov, ingest 134, analysis 351; ruff + uv lock clean in all three. AC-5 tier 1 = 0 rows (from a 14-row baseline); tier 2 fully enumerated. 3 deviations logged. |
 | 2026-07-29 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps (2 red-green cycles + client config + deployment + comment-only servicers + docs/AC-5 sweep). |
 
+| 2026-07-29 | `code-completed` → `launched` | CI workflow | Promoted via PR #812; committed 0eae638104744992c61c8a1ac4bd8cbaac10862b |
 ---
 
 ## Artifacts

@@ -298,3 +298,10 @@ one PR rather than 8 stacked step PRs, matching how 073–078 shipped in this se
   session. Stated in the PR body rather than skipped silently, per the root `CLAUDE.md` teardown rule.
 - **`context-constitution-findings.md:18` stays open by design** — the unrecognized-value fallthrough
   is narrowed by the new warning, not closed; AC-4 mandates the fallthrough itself.
+
+## Session 2026-07-29 (CI: feature status automation)
+
+- Promotion PR #812 merged to main
+- Feature promoted and committed: 0eae638104744992c61c8a1ac4bd8cbaac10862b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-07-29

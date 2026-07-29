@@ -53,3 +53,10 @@ repo — it needs a look at real dev/prod data. The fix stops new corruption; it
 existing rows. **This is the outstanding item on this feature**, recorded rather than silently
 skipped: a `SELECT key, value_data FROM config.config_values WHERE value_data LIKE '{%Val%}'` on
 each environment will size it.
+
+## Session 2026-07-29 (CI: feature status automation)
+
+- Promotion PR #812 merged to main
+- Feature promoted and committed: 0eae638104744992c61c8a1ac4bd8cbaac10862b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-07-29

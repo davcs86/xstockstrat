@@ -243,3 +243,10 @@ in-repo evidence is strong but it is not the dev smoke test the ACs ask for.
 - `integration-test.sh`'s over-broad assertion and stale `CONFIG_URL` — commented, not fixed.
 - Non-admin config-ui users still see a live Edit/Save affordance (now logged in the UI findings doc).
 - Dead `propagation.ts` survives in all 4 Node services, deliberately.
+
+## Session 2026-07-29 (CI: feature status automation)
+
+- Promotion PR #812 merged to main
+- Feature promoted and committed: 0eae638104744992c61c8a1ac4bd8cbaac10862b
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-07-29
