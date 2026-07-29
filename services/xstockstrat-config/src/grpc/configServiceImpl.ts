@@ -320,19 +320,32 @@ export class ConfigServiceImpl {
       callback(null, {
         keys: result.rows.map((r) => {
           const weightBounds = WEIGHT_KEY_REGISTRY[r.key];
+          // ts-proto encodes camelCase field names and (buf.gen.yaml stringEnums=true)
+          // string enum constants. Emitting snake_case/numeric here meant ConfigKeyMeta.encode()
+          // read undefined for every one of these and wrote proto defaults, so the client saw
+          // isSecret=false, empty defaultValue/consumingService and UNRECOGNIZED enums on every
+          // key. Same defect toProtoSnapPayload fixes for ConfigSnapshot (feature 077).
           return {
             key: r.key,
             description: r.description ?? '',
-            default_value: r.default_value ?? '',
-            is_secret: r.is_secret,
-            consuming_service: r.consuming_service ?? '',
-            environment: r.environment === 'production' ? 2 : 1,
-            trading_mode: r.trading_mode === 'live' ? 2 : r.trading_mode === 'paper' ? 1 : 0,
+            defaultValue: r.default_value ?? '',
+            isSecret: r.is_secret === true,
+            consumingService: r.consuming_service ?? '',
+            environment:
+              r.environment === 'production'
+                ? Environment.ENVIRONMENT_PRODUCTION
+                : Environment.ENVIRONMENT_DEV,
+            tradingMode:
+              r.trading_mode === 'live'
+                ? TradingMode.TRADING_MODE_LIVE
+                : r.trading_mode === 'paper'
+                  ? TradingMode.TRADING_MODE_PAPER
+                  : TradingMode.TRADING_MODE_UNSPECIFIED,
             validation: weightBounds
               ? {
-                  value_type: ValueType.VALUE_TYPE_FLOAT_MAP,
-                  min_value: weightBounds.minValue,
-                  max_value: weightBounds.maxValue,
+                  valueType: ValueType.VALUE_TYPE_FLOAT_MAP,
+                  minValue: weightBounds.minValue,
+                  maxValue: weightBounds.maxValue,
                 }
               : undefined,
           };
