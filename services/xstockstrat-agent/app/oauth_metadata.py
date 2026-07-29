@@ -17,7 +17,7 @@ AGENT_PUBLIC_URL = os.environ.get("AGENT_PUBLIC_URL", "http://localhost:9000")
 
 
 async def protected_resource_metadata(request):
-    """RFC 9728 — the protected resource (the agent /sse endpoint) and its auth server."""
+    """RFC 9728 — the protected resource (the agent's MCP endpoint) and its auth server."""
     return JSONResponse(
         {
             "resource": AGENT_PUBLIC_URL,

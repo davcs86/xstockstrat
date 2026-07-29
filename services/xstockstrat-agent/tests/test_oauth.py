@@ -1,8 +1,8 @@
 """Tests for the agent OAuth 2.1 HTTP facade (feature 049 Part B).
 
-Exercises the discovery metadata, /sse 401+WWW-Authenticate, DCR, authorize validation, and the
-token endpoint via Starlette's TestClient against build_sse_app(). All identity gRPC calls are
-mocked at the app.client / app.auth boundary.
+Exercises the discovery metadata, the removed-transport 404s, the surviving Streamable HTTP
+401+WWW-Authenticate, DCR, authorize validation, and the token endpoint via Starlette's TestClient
+against build_http_app(). All identity gRPC calls are mocked at the app.client / app.auth boundary.
 """
 
 from unittest.mock import AsyncMock, patch
@@ -14,9 +14,9 @@ from app import client
 
 
 def _app():
-    from app.main import build_sse_app  # noqa: PLC0415
+    from app.main import build_http_app  # noqa: PLC0415
 
-    return build_sse_app()
+    return build_http_app()
 
 
 # ── discovery metadata (AC-B1) ──────────────────────────────────────────────
@@ -42,40 +42,50 @@ def test_authorization_server_metadata():
     assert body["token_endpoint"].endswith("/oauth/token")
 
 
-# ── /sse auth boundary (AC-B0, AC-B4, AC-B7) ────────────────────────────────
+# ── removed HTTP+SSE transport boundary (feature 079, AC-1/AC-3) ────────────
+#
+# The legacy transport's two paths must 404 before the auth gate. Asserting the status code
+# alone would be weak -- a misconfigured app also 404s. Each case therefore also asserts the
+# body names the replacement URL, and the unauthenticated case asserts the ABSENCE of the
+# www-authenticate header: a fall-through to _authorized would carry it, so its absence is what
+# proves the 404 branch exists and precedes the gate.
 
 
-def test_sse_unauthenticated_401_with_www_authenticate():
+def test_sse_path_404_names_replacement_url():
+    import app.main as main_mod
+
     with TestClient(_app()) as tc:
         r = tc.get("/sse")
-    assert r.status_code == 401
-    assert "resource_metadata=" in r.headers.get("www-authenticate", "")
+    assert r.status_code == 404
+    assert main_mod.AGENT_PUBLIC_URL in r.text
+    assert "removed" in r.text
+    assert "www-authenticate" not in r.headers
 
 
-def test_sse_accepts_valid_credential_reaching_transport():
-    """A credential that passes the auth gate proceeds to the SSE transport.
+def test_messages_path_404_even_with_credential():
+    """404 with a Bearer header and no claims mock — proving the branch precedes the gate.
 
-    We patch the auth validators to accept and the SSE transport to raise a sentinel, then assert
-    the request reaches the transport (i.e. it was NOT rejected at the 401 gate).
+    If the 404 sat *after* _authorized, an unmocked validator would reject this request with a
+    401 instead. Together with the case above this is AC-1's "with or without an Authorization
+    header", and with AC-3 it shows no tools/call can reach a tool through a removed path.
     """
+    import app.main as main_mod
 
-    class _Sentinel(Exception):
-        pass
+    with TestClient(_app()) as tc:
+        r = tc.post("/messages", headers={"Authorization": "Bearer good.jwt"})
+    assert r.status_code == 404
+    assert main_mod.AGENT_PUBLIC_URL in r.text
+    assert r.headers["content-type"].startswith("text/plain")
 
-    def _boom(*_a, **_k):
-        raise _Sentinel()
 
-    with (
-        patch(
-            "app.auth.validate_bearer_claims",
-            AsyncMock(return_value={"user_id": "u-1", "roles": ["admin"], "aud": "x"}),
-        ),
-        patch("mcp.server.sse.SseServerTransport.connect_sse", _boom),
-    ):
-        app = _app()
-        with pytest.raises(_Sentinel):
-            with TestClient(app) as tc:
-                tc.get("/sse", headers={"Authorization": "Bearer good.jwt"})
+def test_messages_trailing_slash_and_query_404():
+    """Pins the rstrip("/") normalization and that the query string is not part of scope path."""
+    import app.main as main_mod
+
+    with TestClient(_app()) as tc:
+        r = tc.post("/messages/?session_id=abc")
+    assert r.status_code == 404
+    assert main_mod.AGENT_PUBLIC_URL in r.text
 
 
 # ── Streamable HTTP transport at root (Claude.ai remote connector) ──────────

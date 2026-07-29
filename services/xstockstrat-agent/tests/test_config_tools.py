@@ -6,7 +6,7 @@ Three things these must actually prove, because each was a live design trap:
      carry the `secret.` prefix.
   2. set_config's transport rule is enforced by the ABSENCE of verified claims on the ASGI
      scope, not by inspecting the request. Both transports hand a tool a Starlette Request with
-     an Authorization header, so any check based on those would accept SSE.
+     an Authorization header, so neither could tell them apart. SSE was removed by 079.
   3. set_config forwards the caller's REAL derived scope, not _admin_metadata()'s hardcoded
      tuple — and the other management tools keep using the hardcoded one.
 """
@@ -157,8 +157,12 @@ class TestSetConfigGuards:
         write.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_refuses_without_verified_claims_ie_on_sse(self):
-        """The SSE POST /messages never passes _authorized, so no claims are on the scope."""
+    async def test_refuses_without_verified_claims(self):
+        """No verified claims on the scope means the caller's role cannot be established.
+
+        Feature 079 removed the legacy SSE POST /messages channel that used to reach a tool
+        without passing _authorized, so this guard is now defence in depth rather than the
+        live gate. The assertion is unchanged -- the guard must still hold."""
         server = _make_server()
         with (
             patch.object(client, "list_config_keys", AsyncMock(return_value={"keys": []})),

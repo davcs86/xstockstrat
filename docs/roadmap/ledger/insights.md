@@ -352,3 +352,43 @@ reusing.
 - **Rule it implies**: refines **F-05** — "commit only when green" does not force merging a
   red-green pair into one commit; it forces the *green-making minimum* to travel with the change
   that broke it.
+
+### 2026-07-29 — 079-remove-mcp-sse-transport — design
+- **Pattern**: A grep-based acceptance criterion written to be "mechanical and objective" can be
+  **unsatisfiable by the correct implementation**, and the failure is invisible until someone tries to
+  run it. Here AC-5 demanded zero repo hits for `/sse|/messages|MCP_SSE_PORT` outside a NOT-changed
+  list — but the feature's own 404 branch must name the removed paths, and its own deprecated-env
+  fallback must name the old var. Three candidate replacements each failed a different way when
+  actually executed: "hard zero repo-wide" fails on `docs/roadmap/features/**` (the SDD pipeline's own
+  artifacts name the symbols being removed); a **marker-token filter** (pipe survivors through
+  `grep -viE 'deprecat|removed|legacy|404'`) produces false negatives on legitimate survivors carrying
+  no marker word on their own line, and pressures the author to contort code to satisfy a grep; and a
+  **file-granularity allow-list** is worst of all — allow-listing the one file that legitimately
+  survives also exempts the stale comment inside it that the gate existed to catch. What works: two
+  tiers — a hard mechanical zero for **symbols that cease to exist** (no legitimate survivor is
+  possible, so it catches missed renames), plus a **line-granularity** enumeration for the rest, with
+  each survivor justified. Anything that must not hide gets pinned **by name** in a requirement rather
+  than left to the gate.
+- **Evidence**: feature 079 `product-spec.md` AC-5 (restated), `design.md` §4; the exempted line was
+  `services/xstockstrat-agent/app/main.py:125-128` (SSE rationale inside `_authorized`, which survives
+  the route deletion — recon Risk 3).
+- **Rule it implies**: before writing a grep as an acceptance gate, **run it against the intended
+  post-change tree**. A gate that has never been executed is a claim, not a check — the same shape as
+  the 2026-07-27/2026-07-29 `fails.md` entries, moved from test evidence to gate design. Prefer
+  zero-hit gates on symbols that will not exist over substring gates on vocabulary that legitimately
+  survives.
+
+### 2026-07-29 — 079-remove-mcp-sse-transport — design
+- **Pattern**: Extracting `main()` out of `if __name__ == "__main__":` is what makes an
+  entrypoint-dispatch requirement testable at all. The proposed plan tested `resolve_transport()`'s
+  **return value** and called that coverage of "MCP_TRANSPORT=sse still starts a working server" — but
+  the string→server dispatch lived in the `__main__` block, which pytest never reaches, so six green
+  tests would have proven nothing about the acceptance criterion they were written for. A three-line
+  extraction (`def main(): ...` + `if __name__ == "__main__": main()`) leaves `python -m app.main`
+  unchanged and lets a test monkeypatch `asyncio.run`/the runners and assert **which** was selected.
+- **Evidence**: feature 079 `design.md` §2; `services/xstockstrat-agent/app/main.py:216-227`;
+  `services/xstockstrat-agent/Dockerfile:21` (`CMD ["python","-m","app.main"]`).
+- **Rule it implies**: when an acceptance criterion is about *what the process does at startup*, check
+  where that decision physically lives before writing its test. Logic in `__main__` is unreachable
+  from the suite; a one-shot manual run against a real socket is a demonstration, not a regression
+  guard (see `fails.md` 2026-07-27). Extract the dispatch instead.

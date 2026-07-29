@@ -10,21 +10,29 @@ Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 | Mode | When to use | Config |
 |---|---|---|
 | `stdio` | Claude Desktop (local) — process started directly by the client | `MCP_TRANSPORT=stdio` (default) |
-| `sse` | Remote access via HTTP — Claude.ai, production deployments | `MCP_TRANSPORT=sse`, `MCP_SSE_PORT=9000` |
+| `http` | Remote access — Claude.ai, production deployments | `MCP_TRANSPORT=http`, `MCP_HTTP_PORT=9000` |
 
-**SSE endpoints.** nginx was removed by feature 045; in the DO App Platform the agent is served under
+> **⚠ Operator action after the feature-079 deploy.** The legacy HTTP+SSE transport is **gone**. If a
+> saved connector's URL ends in `/sse`, it now returns **404** — edit that connector's URL down to the
+> bare `AGENT_PUBLIC_URL` (no path suffix). That is the whole fix: a one-line client change, with **no
+> re-authorization needed**. Nothing in `docker-compose.yml` or `.do/app*.yaml` has to change for the
+> agent to keep serving MCP — `MCP_TRANSPORT=sse` is still accepted as a deprecated alias that logs a
+> warning and starts the same server, and `MCP_SSE_PORT` still works as a deprecated fallback for
+> `MCP_HTTP_PORT`. The shipped specs were moved to the new names anyway.
+
+**Endpoints.** nginx was removed by feature 045; in the DO App Platform the agent is served under
 the `/agent` route prefix (`AGENT_PUBLIC_URL = ${APP_URL}/agent`, OQ-E), and locally it is exposed
 directly on port 9000.
 
 | Path (relative to `AGENT_PUBLIC_URL`) | Purpose |
 |---|---|
-| `GET /sse` | SSE connection entry point |
-| `POST /messages` | MCP message channel |
+| `/` (GET/POST) | **Streamable HTTP** MCP endpoint — the connector URL itself |
+| `GET /sse`, `POST /messages` | **Removed** (feature 079) — return `404 text/plain` naming the replacement URL, *before* the auth gate, so a stale client gets an immediate answer instead of a pointless OAuth round-trip |
 | `GET /.well-known/oauth-protected-resource` | RFC 9728 discovery |
 | `GET /.well-known/oauth-authorization-server` | RFC 8414 discovery |
 | `POST /oauth/register`, `GET /oauth/authorize`, `GET /oauth/callback`, `POST /oauth/token` | OAuth 2.1 endpoints |
 
-**Direct SSE (local):** `http://localhost:9000/sse`
+**Direct (local):** `http://localhost:9000`
 
 **Tool catalog (UI display).** `GET /api/tools` returns the same seventeen tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
@@ -39,15 +47,17 @@ can see what the agent can do without connecting a client first.
 ### stdio
 No authentication required — the process is launched by the MCP client with the correct environment.
 
-### SSE — OAuth 2.1 (recommended, feature 049 Part B)
+### Streamable HTTP — OAuth 2.1 (recommended, feature 049 Part B)
 The **recommended** production method for Claude.ai. The agent is the OAuth 2.1 Resource Server +
 Authorization-Server HTTP facade; `xstockstrat-identity` is the durable client/code store + token mint.
 The end-to-end connect flow:
 
 1. **Discovery** — the client `GET`s `/.well-known/oauth-protected-resource` (RFC 9728) and
-   `/.well-known/oauth-authorization-server` (RFC 8414); an unauthenticated `GET /sse` returns
-   `401` with `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"`,
-   which triggers discovery.
+   `/.well-known/oauth-authorization-server` (RFC 8414); an unauthenticated request to the **root**
+   MCP endpoint returns `401` with
+   `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"`, which
+   triggers discovery. (`GET /sse` returns **404**, not 401 — it is a removed path, not an
+   unauthenticated one, and it never reaches the auth gate.)
 2. **DCR** — `POST /oauth/register` (RFC 7591) registers a public client (https-only redirect URIs);
    returns a `client_id`, no secret.
 3. **Authorize** — `GET /oauth/authorize` with `response_type=code`, `code_challenge_method=S256`
@@ -58,7 +68,7 @@ The end-to-end connect flow:
    (identity `ValidateToken`) and mints a single-use auth code.
 5. **Token** — `POST /oauth/token` (`authorization_code` then `refresh_token`) returns an
    **audience-bound JWT** (`aud` = the agent resource URI) plus a rotating refresh token. The JWT is
-   presented as `Authorization: Bearer <jwt>` on `/sse`; the agent rejects tokens whose `aud` does
+   presented as `Authorization: Bearer <jwt>` on the root MCP endpoint; the agent rejects tokens whose `aud` does
    not match.
 
 ### x-mcp-secret (downstream enforcement)
@@ -679,8 +689,9 @@ RPC — the only thing that can stop a *new* secret key being created) and by th
 read from `ListKeys`. Credentials are delivered as `type: SECRET` environment variables. If the
 flag lookup fails, the write is refused rather than allowed through.
 
-**Transport.** Only available over Streamable HTTP, the only transport whose tool-call request is
-authenticated. Over the legacy SSE transport it returns an "unsupported transport" error.
+**Transport.** Requires Streamable HTTP — since feature 079 the only remote transport the agent
+serves. The tool still refuses when no verified caller claims are on the request; that check is now
+defence in depth rather than the live transport guard.
 
 **Three behaviors worth knowing before you rely on a write:**
 
