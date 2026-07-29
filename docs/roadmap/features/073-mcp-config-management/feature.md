@@ -1,6 +1,6 @@
 # Feature: mcp-config-management
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/mcp-config-management`
 **Created**: 2026-07-28
 **Last Updated**: 2026-07-28
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-07-28 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-07-29 | `draft` → `spec-ready` | /sdd-review | PASS WITH WARNINGS on the third pass. Passes 1-2 FAILED; their four blockers were resolved by features 074/075/076/077 plus two user decisions (set_config rejects is_secret keys; Streamable HTTP only). |
 
 ---
 
@@ -47,15 +48,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-**BLOCKED — `/sdd-review` returned FAIL (2026-07-29).** Two of the four blockers are now resolved
-by feature 075 (the `is_secret` read-path gap and the `SetConfig` value round-trip). The remaining
-two need a product decision from the user before this feature can pass its gate:
-
-1. **Secrets — DECIDED 2026-07-29:** `set_config` rejects `is_secret` keys. Credentials use the
-   existing `type: SECRET` env-var mechanism (Alpaca/IBKR/JWT/MCP-agent); the FMP key moved there in
-   feature **076**.
-2. **Transport — DECIDED 2026-07-29:** Streamable HTTP only; `set_config` returns an explicit
-   "unsupported transport" error on the legacy SSE path, so FR-B13 is never breached.
-
-Both are folded into product-spec.md. Next: re-run
-`/sdd-review mcp-config-management product-spec`, then `/sdd-design`.
+`/sdd-design mcp-config-management` — recon + design debate.

@@ -253,3 +253,38 @@ trustworthy thanks to 075), `list_config_keys`, and `set_config` for non-secret 
 (flag flips such as `marketdata.fmp.enabled` / `analysis.fundsignal.enabled`, plus thresholds).
 The staging gap that motivated 073 is closed by 076 for the credential half and by `set_config` for
 the toggle half.
+
+## Session 2026-07-29 — /sdd-review pass 3: **PASS WITH WARNINGS** → `spec-ready`
+
+Third pass. Passes 1 and 2 both FAILED; all four blockers across them are now resolved:
+
+| Blocker | Resolution |
+|---|---|
+| FR-1's `is_secret` redaction predicate could never fire | Feature **075** — `buildConfigValue`/`toProtoSnapPayload` now carry `is_secret` |
+| `SetConfig` value round-trip broken → "config: no change required" false | Feature **075** — bare scalars + camelCase-aware `inferValueType` |
+| Plaintext-secret governance conflict | **User decision** — `set_config` rejects `is_secret` keys; credential moved to `FMP_API_KEY` (feature **076**) |
+| FR-B13 / transport | **User decision** — Streamable HTTP only; explicit error on legacy SSE |
+| *(pass 2, new)* `ListKeys` dropped all metadata on the wire | Feature **077** — this branch |
+| *(pass 2, new)* `is_secret` predicate undefined for new keys | FR-3 now two-pronged: flag **and** `secret.` name prefix checked pre-RPC |
+
+The reviewer confirmed 077's fix is real and that its test drives a genuine gRPC socket, so FR-3
+prong (a) is now backed by real data rather than a field that was always `false`.
+
+### Two warnings fixed in this session
+
+1. **User Story still promised secret values.** Pass 2 reported this closed; it was not — I had
+   edited the capability clause ("write **non-secret** config values") and left the benefit clause
+   enumerating "flag flips, threshold updates, **and secret values**". Corrected. Recording the miss
+   because it is the second time a partially-applied edit read as complete.
+2. **FR-3 prong (a) did not pin its lookup scope.** `ListKeys` is filtered by
+   `environment`/`trading_mode`, so a lookup at the default `dev`/`all` scope cannot see a key
+   flagged only in `production`/`live`, and prong (b) does not backstop it (it matches on name).
+   FR-3 now requires the prong-(a) lookup to use the *same* scope as the pending write, and flags
+   that Known Constraint 1's `trading_mode` collapse may prevent that threading through — design
+   must confirm rather than assume.
+
+### Remaining advisory (not blocking, carried to design)
+
+- FR-6 appears after FR-7 in document order; its header says "Six surfaces" over a five-item list
+  reconciled in prose (`mcp-tools.md` counted twice). Cosmetic.
+- FR-5's `app/auth.py:28-46` citation is one line short of the function's actual extent.

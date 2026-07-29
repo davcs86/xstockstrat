@@ -63,9 +63,9 @@ describe('ConfigServiceImpl.listKeys — validation field', () => {
     assert.ok(k.validation, 'validation field must be present');
     // packages/proto/buf.gen.yaml sets stringEnums=true, so ts-proto emits the enum's
     // string constant rather than its wire number.
-    assert.strictEqual(k.validation.value_type, 'VALUE_TYPE_FLOAT_MAP');
-    assert.ok(Math.abs(k.validation.min_value - 0.0) < 1e-6);
-    assert.ok(Math.abs(k.validation.max_value - 1.0) < 1e-6);
+    assert.strictEqual(k.validation.valueType, 'VALUE_TYPE_FLOAT_MAP');
+    assert.ok(Math.abs(k.validation.minValue - 0.0) < 1e-6);
+    assert.ok(Math.abs(k.validation.maxValue - 1.0) < 1e-6);
   });
 
   it('omits validation for non-weight keys', async () => {
