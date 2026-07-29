@@ -1,6 +1,6 @@
 # Feature: remove-mcp-sse-transport
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/remove-mcp-sse-transport`
 **Created**: 2026-07-29
 **Last Updated**: 2026-07-29
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-07-29 | `idea` → `draft` | /sdd-story | Backlogged while implementing feature 073, which had to work around the SSE transport's unauthenticated tool-call channel. |
+| 2026-07-29 | `draft` → `spec-ready` | /sdd-review | Product spec approved on pass 3 (0 warnings outstanding; 4 advisory warnings closed in-place). Passes 1–2 failed on FR-2 ambiguity and an unverified exhaustiveness claim in FR-4. |
 
 ---
 
@@ -43,4 +44,4 @@ reason, and any future tool that needs the caller's identity will hit the same w
 
 ## Next Action
 
-`/sdd-review remove-mcp-sse-transport product-spec`
+`/sdd-design remove-mcp-sse-transport quick`

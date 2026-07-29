@@ -78,6 +78,9 @@ FR-3. Feature 073's `set_config` transport guard becomes redundant at runtime bu
 transport was removed rather than that it is unsupported, everywhere that carries the rationale:
 `app/tools.py:748` (the error string), `app/tools.py:47-51` (`_claims_from_context`'s docstring),
 `app/tools.py:731` (the tool docstring), `app/scopes.py:17` (the `MCP_CLAIMS_SCOPE_KEY` comment),
+**`app/main.py:125-128`** (the "correct BY CONSTRUCTION rather than by sniffing" comment inside
+`_authorized` — note this one **survives** FR-1's route deletion, because `_authorized` itself
+survives, so it is easy to miss),
 `services/xstockstrat-agent/CLAUDE.md` § Management-tool authorization, and
 `docs/runbooks/mcp-tools.md:683` (the `set_config` § Transport paragraph).
 
@@ -108,7 +111,9 @@ confirms only the two env keys.)
 
 *Docs:* root `CLAUDE.md:105` (Service Registry, "9000 (SSE)"); agent `CLAUDE.md:11,15,65,77,83,94,97`
 and the env block `:118-119` — note `:83` ("registered in `app/main.py` `build_sse_app`") is made
-stale by FR-2's own rename; `services/xstockstrat-agent/docs/context-constitution.md:4,16,30`;
+stale by FR-2's own rename; `services/xstockstrat-agent/docs/context-constitution.md:4,16` plus `:30` (Pointers,
+"dual-transport `handle_mcp`" — **added by inspection, not a grep hit**, since it states the stale
+claim without using any of the grep's terms; do not remove it as unsupported);
 `services/xstockstrat-agent/docs/context-constitution-findings.md:18`;
 `docs/runbooks/mcp-tools.md:13,15,21-22,27,42,48,61` — `:48` claims an unauthenticated `GET /sse`
 returns 401, which FR-1a changes to 404; `docs/launch-pdfs/product-features.md:177`;
@@ -169,15 +174,21 @@ is the platform's only checked-in client configuration, so it *is* the client-co
 ## Acceptance Criteria
 
 1. `POST /messages` and `GET /sse` return **404**, with or without an `Authorization` header, and the
-   body names the replacement URL. No `SseServerTransport` import or `sse.py` reference remains in
-   the codebase. (Achieved by FR-1a's explicit pre-auth branch — deletion alone yields 401/400
-   instead, which is why FR-1a exists.)
+   body names the replacement URL. No `SseServerTransport` import or `mcp.server.sse` reference
+   remains in `app/` or `tests/` (the module lives in the vendored `mcp` package; today it is
+   imported at `app/main.py:59` and patched at `tests/test_oauth.py:73`). (Achieved by FR-1a's
+   explicit pre-auth branch — deletion alone yields 401/400 instead, which is why FR-1a exists.)
 2. A tool call over Streamable HTTP still works end to end, authenticated by `_authorized`.
 3. There is no code path by which a `tools/call` reaches a tool without passing `_authorized`.
 4. `MCP_TRANSPORT=sse` still starts a working server (serving Streamable HTTP only) and logs a
    deprecation warning; `MCP_TRANSPORT=http` starts the same server without the warning; an
    unrecognized value falls through to `stdio` exactly as it does today (FR-2).
-5. All transport-mode documentation describes exactly one remote transport.
+5. **Mechanically checkable, and the operative gate for FR-4:** re-running FR-4's grep
+   (`grep -rniE '\bSSE\b|/sse|/messages|build_sse_app|_run_sse|MCP_SSE_PORT|SseServerTransport'`,
+   excluding `node_modules`, `.venv`, `packages/proto/gen`, `.git`, `services/xstockstrat-ui/.next`)
+   returns **no hit outside the declared "Deliberately NOT changed" list**. A surviving hit is a
+   failure whether or not FR-4 enumerated it — that is the point of making this the gate rather than
+   the enumeration.
 6. Feature 073's `set_config` tests still pass unchanged, proving the guard is intact as defence in
    depth (FR-3).
 7. `claude_mcp_config.json` contains no `/sse` URL, and its remote block's `url` is the bare
