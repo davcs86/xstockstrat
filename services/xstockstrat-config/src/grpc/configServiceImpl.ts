@@ -1,5 +1,11 @@
 import { Pool } from 'pg';
 import { getLogger } from '../services/logger';
+import {
+  ADMIN_SCOPE_ERROR,
+  MISSING_AUTHOR_ERROR,
+  hasAdminAccessScope,
+  userIdFrom,
+} from './authz';
 import { ConfigUpdateType, ValueType } from '@xstockstrat/proto/config/v1/config';
 import { Environment, TradingMode } from '@xstockstrat/proto/common/v1/common';
 
@@ -249,9 +255,34 @@ export class ConfigServiceImpl {
   }
 
   async setConfig(call: any, callback: any) {
-    const { namespace, key, value, author, reason } = call.request;
+    // Admin gate FIRST — before any destructure or DB work — so a denied call reaches
+    // neither the INSERT below nor the pg_notify broadcast that follows it.
+    // Reads (GetConfig/ListKeys/WatchConfig) are deliberately NOT gated: every service
+    // boots over an unauthenticated WatchConfig whose first message is a full namespace
+    // snapshot, so gating GetConfig without WatchConfig would be incoherent and gating
+    // WatchConfig would break platform startup. See feature 074 design.md.
+    if (!hasAdminAccessScope(call.metadata)) {
+      log.warn('SetConfig denied — caller lacks admin scope', {
+        namespace: call.request?.namespace,
+        key: call.request?.key,
+      });
+      callback(ADMIN_SCOPE_ERROR);
+      return;
+    }
+
+    const { namespace, key, value, reason } = call.request;
     const env = resolveEnv(call.request.environment);
     const mode = resolveMode(call.request.trading_mode);
+
+    // Attribution: an explicit author wins, else the propagated caller id. Matches the
+    // indicators servicer (request.author wins, x-user-id is the fallback). Refuse an
+    // unattributable write rather than landing a blank `updated_by` in config_audit.
+    const author = call.request.author || userIdFrom(call.metadata);
+    if (!author) {
+      callback(MISSING_AUTHOR_ERROR);
+      return;
+    }
+
     try {
       await this.pool.query(
         `INSERT INTO config.config_values (namespace, key, value_type, value_data, updated_by, update_reason, environment, trading_mode)

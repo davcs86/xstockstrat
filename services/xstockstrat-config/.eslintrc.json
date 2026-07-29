@@ -9,6 +9,29 @@
   "env": { "node": true, "es2022": true },
   "rules": {
     "@typescript-eslint/no-explicit-any": "warn",
-    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }]
-  }
+    "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "Literal[value='x-access-scope']",
+        "message": "DRY guard rail: import HEADER_ACCESS_SCOPE from './authz' (or use hasAdminAccessScope) instead of inlining the 'x-access-scope' header literal."
+      },
+      {
+        "selector": "Literal[value='x-user-id']",
+        "message": "DRY guard rail: import HEADER_USER_ID from './authz' (or use userIdFrom) instead of inlining the 'x-user-id' header literal."
+      },
+      {
+        "selector": "Literal[raw='0x04']",
+        "message": "DRY guard rail: import ADMIN_SCOPE from './authz' (or use hasAdminAccessScope) instead of inlining the 0x04 admin-scope bit."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["src/grpc/authz.ts", "src/middleware/propagation.ts"],
+      "rules": {
+        "no-restricted-syntax": "off"
+      }
+    }
+  ]
 }
