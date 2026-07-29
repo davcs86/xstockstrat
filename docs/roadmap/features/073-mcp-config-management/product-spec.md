@@ -71,16 +71,26 @@ pattern (`services/xstockstrat-ui/src/lib/bffShared.ts:41-46`) — reuse that ma
 re-deriving it. This change must not alter behavior for the other, unrelated management tools
 still using `_admin_metadata()`.
 
-FR-7. **New, surfaced by recon (not originally scoped):** `xstockstrat-config`'s `SetConfig` RPC
-performs **no authorization check today** — `services/xstockstrat-config/src/grpc/configServiceImpl.ts:251-310`
-reads no metadata/headers at all, so anyone reaching gRPC port 50060 can already call it
-unauthenticated. FR-5's real-role forwarding is meaningless unless something on the receiving end
-checks it, so this feature must add a role check to `SetConfig`: reject unless the forwarded
-`x-access-scope` carries the `ADMIN` bit (`0x04`), the platform's existing bitmask convention
-(`docs/patterns/header-propagation.md:24-26`) — "any role" per FR-5/FR-3 means "any role the
-platform's own scope model grants config-write to," not "unconditionally." `GetConfig`/`ListKeys`
-may remain open to any authenticated caller (matching their current unauthenticated state and the
-other read-only MCP tools) — confirm this explicitly in design rather than defaulting it.
+FR-7. **Already implemented by feature 074 (`fix-config-write-authz`) — verify, do NOT
+reimplement.** When this was written, `xstockstrat-config`'s `SetConfig` had no authorization check
+at all, so FR-5's real-role forwarding would have been meaningless. Feature 074 has since shipped
+that gate: `SetConfig` rejects `PERMISSION_DENIED` ("admin scope required") unless the propagated
+`x-access-scope` carries the ADMIN bit (`0x04`), implemented in
+`services/xstockstrat-config/src/grpc/authz.ts` and called as the first statement of `setConfig`.
+This feature's job is therefore only to **forward a real scope and assert the gate fires** (see
+Acceptance Criteria 7-8) — it must not add a second check.
+
+Two consequences of 074 that this feature must honor:
+- **`GetConfig`/`ListKeys`/`WatchConfig` are deliberately open**, and 074 settled *why* on the code
+  rather than on this feature's assumption: every service boots by subscribing to `WatchConfig`
+  unauthenticated, and that stream's first message is a full namespace snapshot — a superset of
+  `GetConfig`. Gating reads is therefore incoherent without gating `WatchConfig`, which would break
+  platform startup. `get_config`/`list_config_keys` inherit no new constraint.
+- **`SetConfig` now also requires an attributable author** — `request.author` wins, the propagated
+  `x-user-id` is the fallback, and a call with neither is rejected `INVALID_ARGUMENT`. Since the
+  agent does not forward `x-user-id` (invariant **AGENT-4**), `set_config` MUST always send an
+  explicit `author`. FR-3 already makes `author` a required tool parameter, so this is satisfied by
+  construction — but it is now load-bearing, not merely a convention.
 
 FR-6. All five/six MCP-tool discovery surfaces are updated in the same feature (per the ledger
 pattern below): `app/tools.py` docstring + tool count/enumeration, `services/xstockstrat-agent/CLAUDE.md`
@@ -112,8 +122,9 @@ add the MCP-tool path alongside the existing gRPC/Connect-RPC procedure).
   existing `ConfigService` RPCs via `app/client.py`; `set_config` additionally requires retaining
   the real caller's JWT-derived role/scope through `validate_bearer_jwt` and forwarding it, instead
   of the shared hardcoded-admin helper (FR-5).
-- `xstockstrat-config` — **service change, not read-only** (escalated by recon 2026-07-28): add an
-  `ADMIN`-scope authorization check to `SetConfig`, which has none today (FR-7).
+- `xstockstrat-config` — **no change required.** Recon originally escalated this to a two-service
+  feature, but feature 074 has since shipped the `ADMIN`-scope gate on `SetConfig` (FR-7). This
+  feature only consumes it.
 
 ## Proto Contract Changes
 
@@ -134,15 +145,15 @@ add the MCP-tool path alongside the existing gRPC/Connect-RPC procedure).
 
 Branch to create: `feature/mcp-config-management` (branch from `main-dev`)
 Approval gates required (per docs/runbooks/feature-workflow.md):
-- [x] Service owner approval from **both** affected services — `xstockstrat-agent` (new tools) and
-  `xstockstrat-config` (new authorization check on `SetConfig`, FR-7) — non-breaking, no
-  proto/schema change
+- [x] Service owner approval from `xstockstrat-agent` (new tools) — non-breaking, no proto/schema
+  change. `xstockstrat-config` is no longer modified by this feature (see FR-7), so its owner's
+  approval is not gated on this PR.
 - [ ] 2 service owners + platform lead (breaking proto change) — N/A
 - [ ] DBA review + service owner (schema migration) — N/A
 
-Given `set_config` can write `secret.*` keys, allows any namespace/key with no denylist, and this
-feature adds the *first* authorization check `xstockstrat-config` has ever had on `SetConfig`, the
-design phase MUST include a Security review (reviewer-registry.md Security role: "no secrets in
+Given `set_config` can write `secret.*` keys, allows any namespace/key with no denylist, and is the
+first caller to forward a **real per-user scope** instead of the hardcoded admin tuple (a narrow,
+deliberate deviation from invariant AGENT-4), the design phase MUST include a Security review (reviewer-registry.md Security role: "no secrets in
 config service state, secret keys use `secret.*` prefix, JWT claims minimal, API key scoping
 correct") — not optional here, unlike the original draft's "weigh a Security review" framing.
 
@@ -178,25 +189,18 @@ correct") — not optional here, unlike the original draft's "weigh a Security r
 
 - [x] ~~Should `set_config` restrict which namespaces/keys an agent session can write~~ — resolved
   2026-07-28: no denylist; gated by the caller's real role instead (FR-3/FR-5/FR-7).
-- [ ] Should `get_config`/`list_config_keys` require any scope narrower than the existing
-  read-only tools (e.g. `screen_symbols`, `get_backfill_status`), given they can reveal which
-  namespaces/keys exist (metadata only, not secret values) across the whole platform? Recon found
-  `GetConfig`/`ListKeys` are also currently unauthenticated at the RPC level — still open whether
-  to leave them that way (FR-7) or gate them too.
+- [x] ~~Should `get_config`/`list_config_keys` require a narrower scope~~ — resolved by feature
+  074: reads stay open **by construction**, not by preference (unauthenticated `WatchConfig` at
+  startup makes gating `GetConfig` alone incoherent). See FR-7.
 - [ ] **New, from recon 2026-07-28**: does retaining per-request JWT claims in `app/auth.py`
   `validate_bearer_jwt` (currently a pure boolean check) risk the agent's stateless/no-in-memory-store
   invariant (**FR-B13**, `services/xstockstrat-agent/CLAUDE.md` § OAuth, `instance_count > 1` must
   stay safe)? Recon suggests no — claims would be scoped to the single request, never persisted
   across requests/connections — but design phase must confirm before implementing FR-5.
-- [ ] **Live, pre-existing gap found during recon — NOT this feature's to fix by default**:
-  `services/xstockstrat-ui/src/lib/configUiBff.ts:14-22`'s `setConfig` handler calls the same
-  unauthenticated `SetConfig` RPC via `requireSession` only (no `requireAdminScope`) — meaning
-  today, **any authenticated UI user of any role can already write arbitrary config, including
-  flipping `platform.maintenance_mode`**, with zero backend check. FR-7 (adding the ADMIN-scope
-  gate to `SetConfig` itself) will incidentally close this too, since the UI's BFF calls the same
-  RPC — but this is a live security exposure independent of whether feature 073 ever ships. Flag to
-  the user for `docs/runbooks/bug-triage.md` consideration separately; do not silently bundle the
-  UI-side fix into this feature's scope without an explicit decision.
+- [x] ~~Live, pre-existing UI-side gap (`configUiBff.ts` `setConfig` used `requireSession` only)~~ —
+  split out and fixed as feature **074** (`fix-config-write-authz`, SEV-1), which added
+  `requireAdminScope` at the BFF *and* the ADMIN-bit gate at the RPC. Not bundled into this
+  feature, as intended.
 - [ ] **Known trap** (see Out of Scope): confirm during design that no reviewer or later feature
   mistakes this for adding real secret-store security — it is a management-interface feature over
   an existing plaintext-config mechanism, not a secrets-hardening feature.

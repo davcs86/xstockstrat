@@ -68,3 +68,39 @@ product-spec.md FR-5/FR-7:
   include `xstockstrat-config`, Feature Workflow Notes now requires both service owners + a
   mandatory Security review, Acceptance Criteria 7-9 added, Open Questions updated) and
   `feature.md` (Reviewers table: added `xstockstrat-config` owner, Security marked required).
+
+## Session 2026-07-29 — cross-feature reconciliation with 074
+
+Feature **074** (`fix-config-write-authz`) was designed and implemented first in this session (see
+that feature's `context.md`), which discharges this feature's FR-7. Rewrote FR-7 from "this feature
+must add the ADMIN check" to "already implemented by 074 — verify, do NOT reimplement", closing the
+one real collision the `/sdd-review` overlap scan found. Also updated, for the same reason:
+
+- **Affected Services** — `xstockstrat-config` is no longer modified by this feature; it is now a
+  pure consumer. This feature is agent-only again.
+- **Feature Workflow Notes** — the config service owner's approval is no longer gated on this PR.
+  The Security review stays **required**, but the reason changed: it is no longer "this adds the
+  first authz check", it is "this is the first caller to forward a real per-user scope instead of
+  the hardcoded admin tuple".
+- **Open Question (reads)** — resolved. 074 settled it on the code rather than on this feature's
+  assumption: every service boots over an **unauthenticated `WatchConfig`** whose first message is a
+  full namespace snapshot — a superset of `GetConfig` — so gating reads is incoherent without
+  gating `WatchConfig`, which would break platform startup. `get_config`/`list_config_keys`
+  therefore inherit no new constraint.
+- **Open Question (UI-side gap)** — resolved. The `configUiBff.ts` `requireSession`-only hole was
+  split out as SEV-1 bug 074 and fixed there, exactly as this file said it should be (not silently
+  bundled).
+
+**New constraint 074 imposes on this feature:** `SetConfig` now also rejects `INVALID_ARGUMENT`
+when a write carries neither an explicit `author` nor a propagated `x-user-id`. Because the agent
+does not forward `x-user-id` (invariant **AGENT-4**), `set_config` MUST always send an explicit
+`author`. FR-3 already makes `author` a required tool parameter, so this holds by construction — but
+it is now load-bearing rather than a convention, and any future "make author optional" change would
+break the tool.
+
+Verified directly this session, ahead of the design phase:
+- `services/xstockstrat-agent/app/tools.py` registers exactly **14** `@server.tool` functions, so
+  FR-6's "fourteen → seventeen" count is accurate, and the "fourteen" string appears in
+  `services/xstockstrat-agent/CLAUDE.md` and twice in `docs/runbooks/mcp-tools.md`.
+- `app/auth.py` `validate_bearer_jwt` returns a bare `bool` and discards `claims.roles` entirely —
+  FR-5 genuinely requires reshaping that function's return, not just reading an existing value.
