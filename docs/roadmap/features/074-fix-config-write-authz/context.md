@@ -114,3 +114,71 @@ This run was invoked with a harness-designated branch (`claude/runs-073-074-sdd-
 (`feature/fix-config-write-authz` + per-step `feature-steps/*` PRs) is therefore not used for this
 run; 074 and 073 land as one PR on the designated branch. Severity classification (SEV-1) and the
 already-recorded main-dev routing decision are unchanged.
+
+## Session 2026-07-29 — /sdd-design (Phase 0 + Phase 1 rounds 1-2)
+
+### VERIFIED DEFECT — `xstockstrat-config`'s unit test suite executes nothing
+
+Surfaced by the design-adversary (objection O2), then confirmed by direct execution in this session
+with dependencies installed. This is not a hypothesis; each step below was run.
+
+`pnpm --filter xstockstrat-config test` reports **"7 tests, 7 pass, 0 skipped"** while executing
+**zero assertions**. Both test files guard their import with `if (!X) return;` (a *passing* early
+return), and both imports fail:
+
+- `src/__tests__/configServiceImpl.test.ts:17` imports `'../grpc/configServiceImpl.js'` →
+  `ERR_MODULE_NOT_FOUND` (no such file; the source is `.ts`).
+- Changing the specifier to `.ts` does **not** help: →
+  `ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX: TypeScript parameter property is not supported in strip-only
+  mode`, caused by `configServiceImpl.ts:94` `constructor(private readonly pool: Pool) {}`.
+- Removing the parameter property surfaces a **third** blocker: Node reparses these files as ESM
+  ("module syntax detected"), and the module graph uses extensionless relative imports
+  (`import { getLogger } from '../services/logger'`) → `ERR_MODULE_NOT_FOUND`.
+- `src/__tests__/configWatcher.test.ts:26` has the identical `.js`-specifier + skip-guard shape.
+
+Executed against **compiled** output (`npx tsc` → `dist/`), where imports resolve, the truth appears:
+
+- `node --test dist/__tests__/configServiceImpl.test.js` → **1 of 2 tests FAILS**:
+  `assert.strictEqual(k.validation.value_type, 1)` gets `'VALUE_TYPE_FLOAT_MAP'`. The *test* is
+  stale — `packages/proto/buf.gen.yaml` sets `stringEnums=true`, so the value is a string, not `1`.
+  The impl is fine.
+- `node --test dist/__tests__/configWatcher.test.js` → **HANGS** (killed at 45s, exit 143). Its
+  first case constructs `new ConfigWatcher('localhost:1', 'test')`, whose constructor dials a real
+  gRPC channel and retries forever.
+
+**Why this blocks 074 specifically:** C-08 requires a paired test for the new security gate. Written
+in the existing house style, that test would silently skip and report PASS — shipping a SEV-1
+authorization gate whose test proves nothing. That is exactly the failure mode `fails.md`
+(2026-07-27, feature 072) was written to stop: a consumer-contract demonstration offered as
+producer-contract evidence.
+
+### Design debate — round 1
+
+Proposer: gate in a new `src/grpc/authz.ts`, called inline at the top of `setConfig`; named
+`status.PERMISSION_DENIED`; reads left open; BFF `requireAdminScope`; delete dead `propagation.ts`.
+Adversary verdict **NEEDS WORK** — no Floor breach, 11 objections. Strongest: (O1) the proposed
+"real `grpc.Metadata` in a hand-built `call`" mitigation proves the consumer contract, not the
+producer contract — direct `fails.md` hit; (O3) `author` stays caller-controlled, so the fix turns a
+forgeable audit trail into an *authorized-looking* forgeable one; (O4) deleting `propagation.ts` is
+1-of-4 creep that makes two findings rows half-true.
+
+### Design debate — round 2 (three corrections that changed the answer)
+
+1. **The feature-049 "author" precedent as documented is drift.** `header-propagation.md:36-37`
+   says the author is "required, defaults to propagated `x-user-id`". The code says the opposite
+   ordering: `services/xstockstrat-indicators/app/handlers/servicer.py:207-220` is
+   `if request.author: author = request.author` — the request field **wins**, `x-user-id` is the
+   fallback, abort only if both are empty. So the platform precedent is a *presence* guarantee, not
+   an *authenticity* one. Requiring `x-user-id` would exceed precedent, not match it.
+2. **Requiring `x-user-id` would break AGENT-4 and pre-break feature 073.**
+   `services/xstockstrat-agent/app/client.py:24-32` forwards only `x-mcp-secret` + a hardcoded
+   scope and deliberately does **not** send `x-user-id` (codified as invariant AGENT-4).
+3. **`docs/runbooks/config-rollout.md:87` already sends `author="platform-team"`** — the objection
+   assumed it did not, so the author change costs zero incremental file edits.
+
+Verified independently this session: `manageSignalSource` is already gated at
+`services/xstockstrat-ingest/app/handlers/servicer.py:859-861`; both in-network self-elevators are
+real (`agent/app/client.py:32` hardcodes scope `7`, `analysis/.../fundsignal_loop.py:345` injects
+`4`); prod exposure is bounded (`.do/app.yaml` uses `internal_ports` with no route for config)
+while `docker-compose.yml` does publish `50060:50060` locally; `xstockstrat-config/.eslintrc.json`
+has no `no-restricted-syntax` rules while the UI's bans both `x-access-scope` and `0x04`.
