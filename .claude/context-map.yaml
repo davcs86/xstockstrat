@@ -34,6 +34,18 @@ agents:
     path: .claude/agents/dry-reviewer.md
     returns: "semantic DRY findings (repeated constants/literals/types/helpers) with canonical homes"
     used_by: [pre-pr-review]
+  - name: design-proposer
+    path: .claude/agents/design-proposer.md
+    returns: "ONE concrete architecture with path:line evidence and explicit assumptions"
+    used_by: [sdd-design]
+  - name: design-adversary
+    path: .claude/agents/design-adversary.md
+    returns: "structured objections citing C-*/P-*/F-* IDs, plus rejected-alternative trade-offs"
+    used_by: [sdd-design]
+  - name: qa-tester
+    path: .claude/agents/qa-tester.md
+    returns: "test plan (layer/file/RED assertion/command) + test inventory + SEV-tagged defect digest"
+    used_by: [sdd-qa, sdd-execute]
 
 # --- Skills: lean SKILL.md routers + on-demand reference/ files ---
 skills:
@@ -55,12 +67,25 @@ skills:
       - .claude/skills/sdd-execute/reference/sequential-mode.md
       - .claude/skills/sdd-execute/reference/deviation-handling.md
       - .claude/skills/sdd-execute/reference/repo-conventions.md
+      - .claude/skills/sdd-execute/reference/tdd-gate.md
     templates:
       - .claude/skills/sdd-execute/templates/step-pr-body.md
       - .claude/skills/sdd-execute/templates/integration-pr-body.md
       - .claude/skills/sdd-execute/templates/branch-sync.md
   - name: test-data
     router: .claude/skills/test-data/SKILL.md
+  - name: sdd-qa
+    router: .claude/skills/sdd-qa/SKILL.md
+    reference:
+      # agent-owned — read by qa-tester, never by the router
+      - .claude/skills/sdd-qa/reference/test-design.md
+      - .claude/skills/sdd-qa/reference/lang-go.md
+      - .claude/skills/sdd-qa/reference/lang-python.md
+      - .claude/skills/sdd-qa/reference/lang-node.md
+      - .claude/skills/sdd-qa/reference/lang-frontend.md
+      # skill-owned
+      - .claude/skills/sdd-qa/reference/fixtures.md
+      - .claude/skills/sdd-qa/reference/defect-filing.md
 
 # --- Structured memory ---
 memory:

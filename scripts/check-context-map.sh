@@ -28,11 +28,14 @@ trap 'rm -f "$REFS" "$SRCS"' EXIT
 # (1) Concrete paths declared in the context map.
 grep -oE '(\.claude|docs|scripts)/[A-Za-z0-9._/<>-]+\.(md|ya?ml|sh)' "$MAP" >>"$REFS"
 
-# (2) doc/skill references embedded in CLAUDE.md files and skill routers.
+# (2) doc/skill references embedded in CLAUDE.md files, skill routers, and
+#     agent definitions. Agents point at skill reference/ files just as routers
+#     do, so leaving them unscanned let those pointers rot silently.
 {
   find . -name CLAUDE.md -not -path '*/node_modules/*'
   find .claude/skills -name SKILL.md
   find .claude/skills -path '*/reference/*.md'
+  find .claude/agents -name '*.md'
 } >>"$SRCS"
 
 while IFS= read -r f; do
