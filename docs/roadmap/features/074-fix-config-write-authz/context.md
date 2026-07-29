@@ -182,3 +182,64 @@ real (`agent/app/client.py:32` hardcodes scope `7`, `analysis/.../fundsignal_loo
 `4`); prod exposure is bounded (`.do/app.yaml` uses `internal_ports` with no route for config)
 while `docker-compose.yml` does publish `50060:50060` locally; `xstockstrat-config/.eslintrc.json`
 has no `no-restricted-syntax` rules while the UI's bans both `x-access-scope` and `0x04`.
+
+## Session 2026-07-29 — /sdd-spec + /sdd-execute (all 7 steps)
+
+Design approved (2 rounds, no Floor breach) → implementation-spec.md (7 steps) → executed.
+
+### What shipped
+
+- `services/xstockstrat-config/src/grpc/authz.ts` (new) — `ADMIN_SCOPE`, header constants,
+  `hasAdminAccessScope`, `userIdFrom`, and the two denial errors. Named `hasAdminAccessScope` to
+  avoid colliding with the UI's `hasAdminScope(roles)`.
+- `setConfig` gate as the **first statement**, so a denied call reaches neither the INSERT nor
+  `pg_notify`. `author` resolves `request.author` → `x-user-id` → `INVALID_ARGUMENT`.
+- BFF `requireAdminScope` in `configUiBff.ts`; two e2e cases moved to `addAdminCookie`, one
+  non-admin denial case added.
+- eslint DRY rails mirrored into `xstockstrat-config` (it had none).
+- Runbook, service CLAUDE.md, `header-propagation.md`, and both findings docs updated.
+
+### Verification actually run (not asserted)
+
+| Gate | Result |
+|---|---|
+| config unit suite | 20/20 pass, terminates cleanly (was: 7 "passing" while executing nothing) |
+| config red-before-green | 4 failures with the gate reverted → 20/20 with it |
+| config coverage | 51.7% lines vs 40 threshold; `authz.ts` 100% |
+| config lint / tsc | 0 errors (30 pre-existing `any` warnings) |
+| ui lint / tsc | clean |
+| config-ui e2e | 11/11 pass |
+| ui red-before-green | denial case fails with the BFF gate reverted → 11/11 with it |
+| `bash -n scripts/integration-test.sh` | OK |
+
+**The loopback suite retired the design's biggest risk.** It dials a real `grpc.Server` over a real
+socket with real `Metadata`, so its passing is direct evidence that grpc-js delivers `Metadata` at
+`call.metadata` — the assumption whose failure would have denied *every* admin write. That is now
+verified, not assumed.
+
+### Deviations (full detail in implementation-spec.md § Deviation Log)
+
+1. Step 1 needed all three blockers fixed, not one — resolved by running tests against compiled
+   output rather than churning the service source.
+2. The new eslint rails flagged the dead `propagation.ts`; it is exempted (not deleted, not edited)
+   to keep the pending 4-service cleanup a single change.
+3. Playwright's pinned browser was missing from the image and `global-setup.ts` ignores the
+   executable-path override — installed the pinned build; no repo change.
+4. Step 6 added a `post_raw_admin` helper rather than duplicating the curl invocation twice.
+
+### OUTSTANDING — AC #4 and AC #5 are not satisfied
+
+Both need a live dev `xstockstrat-config:50060`, which this session cannot reach. Before this is
+marked `launched`, someone must run the amended `config-rollout.md` Step 2 snippet against dev with
+admin metadata, confirm a non-admin call is rejected, and paste the returned `version` here. The
+in-repo evidence is strong but it is not the dev smoke test the ACs ask for.
+
+### Open threads carried forward (from design.md § Open Risks)
+
+- In-network self-elevation is **not** closed and stays owned by
+  `docs/context-constitution-findings.md:37` — closing this bug does not answer it.
+- `author` is a presence guarantee, not an authenticity one.
+- `e2e/mock-backend.ts` models no backend admin gate (now logged in the UI findings doc).
+- `integration-test.sh`'s over-broad assertion and stale `CONFIG_URL` — commented, not fixed.
+- Non-admin config-ui users still see a live Edit/Save affordance (now logged in the UI findings doc).
+- Dead `propagation.ts` survives in all 4 Node services, deliberately.

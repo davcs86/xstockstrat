@@ -1,7 +1,7 @@
 # Feature: fix-config-write-authz
 
 **Type**: bug
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/fix-config-write-authz` (this run: implemented on the
 harness-designated branch `claude/runs-073-074-sdd-6wtwal` → `main-dev`; see context.md § Deviations)
 **GitHub Issue**: n/a — GitHub Issues are disabled on `davcs86/xstockstrat` (`POST /issues` → `410
@@ -21,6 +21,7 @@ context.md § Deviations)
 | 2026-07-29 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings, 0 blockers). Overlap: file-level collision with 073 FR-7 only — resolved by editing 073's FR-7 to "verify, don't reimplement". |
 | 2026-07-29 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. No Floor breach. Surfaced a verified defect: config's unit runner executes zero assertions — runner repair folded in (C-08). |
 | 2026-07-29 | `design-approved` → `implementation-ready` | /sdd-spec | implementation-spec.md written — 7 steps. |
+| 2026-07-29 | `implementation-ready` → `code-completed` | /sdd-execute | All 7 steps complete. Red-before-green proven at both layers. AC #4/#5 (dev smoke) outstanding — no dev access from this session. |
 
 ---
 
@@ -52,4 +53,7 @@ or bypassing the order-approval flow (raising `trading.approval.*` thresholds).
 
 ## Next Action
 
-`/sdd-execute fix-config-write-authz` — execute the 7 implementation steps.
+Open the integration PR to `main-dev`. **Before marking launched**, run the outstanding
+dev smoke test (AC #4/#5): execute the amended `docs/runbooks/config-rollout.md` Step 2 snippet
+against dev `xstockstrat-config:50060` with admin metadata, confirm it succeeds, confirm a
+non-admin call is rejected `PERMISSION_DENIED`, and paste the returned `version` into `context.md`.

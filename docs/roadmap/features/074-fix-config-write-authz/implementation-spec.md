@@ -1,6 +1,6 @@
 # Implementation Spec: fix-config-write-authz
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-07-29
 **Feature**: `docs/roadmap/features/074-fix-config-write-authz/feature.md`
 **Total Steps**: 7
@@ -29,7 +29,7 @@ remaining shared surfaces (integration script, docs) that C-10 requires.
 
 ### Step 1 — test: repair the `xstockstrat-config` unit-test runner
 
-**Status**: `pending`
+**Status**: `complete`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/package.json` — modify (`test`, `test:coverage` scripts)
@@ -79,7 +79,7 @@ cd services/xstockstrat-config && pnpm test 2>&1 | tail -20
 
 ### Step 2 — service: ADMIN-scope gate on `SetConfig`
 
-**Status**: `pending`
+**Status**: `complete`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/authz.ts` — create
@@ -130,7 +130,7 @@ cd services/xstockstrat-config && pnpm lint && pnpm build
 
 ### Step 3 — test: `SetConfig` authz, incl. real-wire loopback proof
 
-**Status**: `pending`
+**Status**: `complete`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigAuthz.test.ts` — create
@@ -176,7 +176,7 @@ cd services/xstockstrat-config && pnpm lint && pnpm test:coverage 2>&1 | tail -2
 
 ### Step 4 — service: admin gate on the config-ui BFF `setConfig` handler
 
-**Status**: `pending`
+**Status**: `complete`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/configUiBff.ts` — modify
@@ -208,7 +208,7 @@ cd services/xstockstrat-ui && pnpm lint && pnpm build
 
 ### Step 5 — test: config-ui e2e admin/non-admin pair
 
-**Status**: `pending`
+**Status**: `complete`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/config-ui/api-smoke.spec.ts` — modify
@@ -240,7 +240,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/config-ui/api-smoke.
 
 ### Step 6 — test: integration script section 13
 
-**Status**: `pending`
+**Status**: `complete`
 **Service**: repo scripts
 **Files**:
 - `scripts/integration-test.sh` — modify
@@ -275,7 +275,7 @@ bash -n scripts/integration-test.sh   # syntax only; the script cannot be execut
 
 ### Step 7 — docs: runbook, service CLAUDE.md, pattern doc, findings
 
-**Status**: `pending`
+**Status**: `complete`
 **Service**: docs
 **Files**:
 - `docs/runbooks/config-rollout.md` — modify
@@ -322,4 +322,29 @@ grep -rn "admin scope required" services/xstockstrat-config/CLAUDE.md
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+**Step 1 — expanded beyond the written instructions (recorded, not silent).** The spec anticipated
+a `.js`→`.ts` specifier fix as a possibility. In fact three blockers stacked, and all three had to
+go: the specifier, the parameter property at `configServiceImpl.ts:94`, and extensionless relative
+imports once Node reparses as ESM. Rather than churn the service source, the test scripts now run
+against compiled output (`tsc && node --test dist/__tests__/*.test.js`) — which resolves all three
+at once and leaves `configServiceImpl.ts`'s constructor untouched. `configWatcher.test.ts` also
+needed the `Object.create(prototype)` change or the suite hangs forever.
+
+**Step 2 — eslint override widened to include `src/middleware/propagation.ts`.** The new DRY rails
+immediately flagged the dead file, which the design deliberately does not delete (1-of-4 rule). The
+file is exempted rather than edited, so the pending 4-service deletion stays a single change.
+Recorded in the service's findings doc.
+
+**Step 5 — environment friction, resolved.** Playwright's pinned browser build was absent from the
+image (`chromium_headless_shell-1217`); `global-setup.ts`'s bare `chromium.launch()` ignores the
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` override, so the pinned build was installed. E2E then ran
+with `CI=true E2E_PREBUILT=1` against a prebuilt bundle. No repo change was needed.
+
+**Step 6 — added a `post_raw_admin` helper.** The spec said "add headers to the two SetConfig
+calls"; the two call sites use the shared `post_raw`, so adding headers inline would have meant
+duplicating the curl invocation twice. A single helper next to `post_raw` keeps it DRY.
+
+**AC #4 / AC #5 — NOT executed.** Both require a dev-environment smoke test against a live
+`xstockstrat-config:50060`, which this session has no access to. The runbook example is corrected
+and the gate is proven by the in-process loopback suite, but the "reproduce Step 2 end-to-end on
+dev" criterion is **outstanding** and must be run before this is considered launched.
