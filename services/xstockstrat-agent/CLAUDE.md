@@ -8,14 +8,18 @@
 
 Python MCP (Model Context Protocol) server exposing AI-agent tools for signal ingestion,
 alerting, backtesting, strategy/formula/source management, and live-strategy control
-(`MCP_TRANSPORT=sse`, port 9000). It serves **two MCP transports** from a single root ASGI
-dispatcher (`app/main.py` `handle_mcp`): the modern **Streamable HTTP** transport (MCP
-2025-03-26) at the agent root `/` — which is what the **Claude.ai remote connector** speaks
-against the connector URL (`AGENT_PUBLIC_URL`, `${APP_URL}/agent`, stripped to `/` by DO
-ingress) — plus the **legacy HTTP+SSE** transport at `/sse` + `/messages` for Claude Desktop.
+(`MCP_TRANSPORT=http`, port 9000). It serves **one remote MCP transport** from a root ASGI
+dispatcher (`app/main.py` `handle_mcp`): **Streamable HTTP** (MCP 2025-03-26) at the agent root
+`/` — which is what the **Claude.ai remote connector** speaks against the connector URL
+(`AGENT_PUBLIC_URL`, `${APP_URL}/agent`, stripped to `/` by DO ingress). The legacy HTTP+SSE
+transport at `/sse` + `/messages` was **removed by feature 079**; those paths now return 404
+naming the replacement URL. `MCP_TRANSPORT=sse` remains accepted as a deprecated alias for
+`http` (it logs a warning and starts the same server), as does `MCP_SSE_PORT` for
+`MCP_HTTP_PORT`. `MCP_TRANSPORT=stdio` is unaffected and stays for local use.
 All outbound gRPC calls to platform services carry `x-mcp-secret` when `MCP_AGENT_SECRET` is
 set; the management tools forward a hardcoded admin `x-access-scope` so the backends' role checks
-pass.
+pass — with one exception, `set_config`, which forwards the real caller's derived scope
+(feature 073; see § Management-tool authorization).
 
 ## Language
 
@@ -23,7 +27,7 @@ Python 3.12 (asyncio, grpc.aio, FastMCP)
 
 ## MCP Tools
 
-The agent registers fourteen tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
+The agent registers seventeen tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
 reference):
 
 | Tool | Purpose |
@@ -42,6 +46,9 @@ reference):
 | `set_strategy_live` | Enable/disable continuous live evaluation + alerting for a strategy (feature 048) |
 | `trigger_backfill` | Trigger an OHLCV history backfill via xstockstrat-ingest (admin-scoped write, feature 066) |
 | `get_backfill_status` | Check one backfill job or list recent jobs (read-only, feature 066) |
+| `get_config` | Read a namespace's current config values, secret values redacted (read-only, feature 073) |
+| `list_config_keys` | List a namespace's registered config keys, metadata only (read-only, feature 073) |
+| `set_config` | Write one non-secret config value (admin-scoped write, feature 073) |
 
 ### Management-tool authorization
 
@@ -51,15 +58,33 @@ Internal services (e.g. `xstockstrat-analysis` `SetStrategyLive`) only perform a
 propagated `x-access-scope`; `manage_formula` additionally relies on the indicators backend's
 author-ownership check. The MCP endpoint itself is gated by OAuth 2.1 (see below).
 
+**`set_config` is the documented exception (feature 073).** It forwards the **real calling user's**
+scope, derived from their identity roles by `app/scopes.py` `roles_to_access_scope` (a port of the
+UI's `rolesToAccessScope`), so a non-admin operator is rejected `PERMISSION_DENIED` by
+`xstockstrat-config`'s gate rather than silently succeeding under a service-wide admin override.
+The claims come from `app/main.py` `_authorized`, which publishes them on the request's ASGI scope
+under `MCP_CLAIMS_SCOPE_KEY`; the tool reads them via its injected `ctx: Context`.
+
+That plumbing is why `set_config` refuses when no verified claims are present. Feature 079
+**removed** the legacy SSE transport whose `POST /messages` returned before `_authorized` ran, so
+every tool call now passes the gate and the check is **defence in depth** rather than the live
+transport guard. It must keep its current shape: back when both transports existed, a check based
+on the request object would *not* have told them apart — both handed a tool a Starlette `Request`
+carrying an `Authorization` header, so only the absence of verified claims distinguished them.
+
+`set_config` also refuses any `is_secret` key (checked by name prefix *and* by the flag from
+`ListKeys`): credentials are delivered as `type: SECRET` environment variables, never as config
+values.
+
 ### OAuth 2.1 edge auth (feature 049 Part B)
 
-The agent is the OAuth 2.1 **Resource Server + Authorization-Server HTTP facade** for its MCP SSE
+The agent is the OAuth 2.1 **Resource Server + Authorization-Server HTTP facade** for its MCP
 endpoint, and is **stateless**: all durable OAuth state (clients, auth codes, refresh tokens) lives
 in `xstockstrat-identity` and is reached over gRPC (`app/client.py`). The only cross-request linkage
 is the HMAC-signed `txn` blob carried in URLs (`app/oauth_server.py`, signed with `MCP_AGENT_SECRET`),
 so there is **no in-memory store** and `instance_count > 1` is safe (FR-B13).
 
-Routes (registered in `app/main.py` `build_sse_app`):
+Routes (registered in `app/main.py` `build_http_app`):
 
 | Route | Purpose |
 |---|---|
@@ -70,10 +95,10 @@ Routes (registered in `app/main.py` `build_sse_app`):
 | `GET /oauth/callback` | Derives user from the same-origin `access_token` cookie; mints the code |
 | `POST /oauth/token` | `authorization_code` + `refresh_token` grants (tokens in JSON body only) |
 | `/` (GET/POST) | **Streamable HTTP** MCP endpoint (Claude.ai remote connector) |
-| `/sse` + `/messages` | Legacy HTTP+SSE MCP endpoint (Claude Desktop) |
+| `/sse` + `/messages` | **Removed** (feature 079) — return `404 text/plain` naming the replacement URL, *before* the auth gate |
 | `GET /api/tools` | Tool catalog (name/description/inputSchema) — **unauthenticated**, capability metadata only; powers the `xstockstrat-ui` `/accounts/mcp-tools` page |
 
-Both MCP endpoints (root Streamable HTTP and `/sse`) require an **`aud`-bound JWT** (`aud` ==
+The MCP endpoint (root Streamable HTTP) requires an **`aud`-bound JWT** (`aud` ==
 `AGENT_PUBLIC_URL`); unauthenticated requests get `401` with a
 `WWW-Authenticate: Bearer resource_metadata=…` discovery pointer. Note the **RFC 8414/9728 path
 insertion** quirk: because `AGENT_PUBLIC_URL` has a path (`/agent`), spec-compliant clients fetch
@@ -94,8 +119,8 @@ Namespace: `agent` (resolved via one-shot `GetConfig` → `client.get_config_val
 ## Environment Variables
 
 ```text
-MCP_TRANSPORT=sse
-MCP_SSE_PORT=9000
+MCP_TRANSPORT=http   # `sse` still accepted as a deprecated alias
+MCP_HTTP_PORT=9000   # `MCP_SSE_PORT` still accepted as a deprecated fallback
 MCP_AGENT_SECRET=<shared secret>
 INGEST_ENDPOINT=xstockstrat-ingest:50055
 NOTIFY_ENDPOINT=xstockstrat-notify:50059

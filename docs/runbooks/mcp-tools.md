@@ -1,6 +1,6 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the fourteen tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the seventeen tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 ---
@@ -10,23 +10,31 @@ Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 | Mode | When to use | Config |
 |---|---|---|
 | `stdio` | Claude Desktop (local) — process started directly by the client | `MCP_TRANSPORT=stdio` (default) |
-| `sse` | Remote access via HTTP — Claude.ai, production deployments | `MCP_TRANSPORT=sse`, `MCP_SSE_PORT=9000` |
+| `http` | Remote access — Claude.ai, production deployments | `MCP_TRANSPORT=http`, `MCP_HTTP_PORT=9000` |
 
-**SSE endpoints.** nginx was removed by feature 045; in the DO App Platform the agent is served under
+> **⚠ Operator action after the feature-079 deploy.** The legacy HTTP+SSE transport is **gone**. If a
+> saved connector's URL ends in `/sse`, it now returns **404** — edit that connector's URL down to the
+> bare `AGENT_PUBLIC_URL` (no path suffix). That is the whole fix: a one-line client change, with **no
+> re-authorization needed**. Nothing in `docker-compose.yml` or `.do/app*.yaml` has to change for the
+> agent to keep serving MCP — `MCP_TRANSPORT=sse` is still accepted as a deprecated alias that logs a
+> warning and starts the same server, and `MCP_SSE_PORT` still works as a deprecated fallback for
+> `MCP_HTTP_PORT`. The shipped specs were moved to the new names anyway.
+
+**Endpoints.** nginx was removed by feature 045; in the DO App Platform the agent is served under
 the `/agent` route prefix (`AGENT_PUBLIC_URL = ${APP_URL}/agent`, OQ-E), and locally it is exposed
 directly on port 9000.
 
 | Path (relative to `AGENT_PUBLIC_URL`) | Purpose |
 |---|---|
-| `GET /sse` | SSE connection entry point |
-| `POST /messages` | MCP message channel |
+| `/` (GET/POST) | **Streamable HTTP** MCP endpoint — the connector URL itself |
+| `GET /sse`, `POST /messages` | **Removed** (feature 079) — return `404 text/plain` naming the replacement URL, *before* the auth gate, so a stale client gets an immediate answer instead of a pointless OAuth round-trip |
 | `GET /.well-known/oauth-protected-resource` | RFC 9728 discovery |
 | `GET /.well-known/oauth-authorization-server` | RFC 8414 discovery |
 | `POST /oauth/register`, `GET /oauth/authorize`, `GET /oauth/callback`, `POST /oauth/token` | OAuth 2.1 endpoints |
 
-**Direct SSE (local):** `http://localhost:9000/sse`
+**Direct (local):** `http://localhost:9000`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same fourteen tools' `name`,
+**Tool catalog (UI display).** `GET /api/tools` returns the same seventeen tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
 capabilities (the same data documented below), never user data or credentials. It powers the
 `xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
@@ -39,15 +47,17 @@ can see what the agent can do without connecting a client first.
 ### stdio
 No authentication required — the process is launched by the MCP client with the correct environment.
 
-### SSE — OAuth 2.1 (recommended, feature 049 Part B)
+### Streamable HTTP — OAuth 2.1 (recommended, feature 049 Part B)
 The **recommended** production method for Claude.ai. The agent is the OAuth 2.1 Resource Server +
 Authorization-Server HTTP facade; `xstockstrat-identity` is the durable client/code store + token mint.
 The end-to-end connect flow:
 
 1. **Discovery** — the client `GET`s `/.well-known/oauth-protected-resource` (RFC 9728) and
-   `/.well-known/oauth-authorization-server` (RFC 8414); an unauthenticated `GET /sse` returns
-   `401` with `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"`,
-   which triggers discovery.
+   `/.well-known/oauth-authorization-server` (RFC 8414); an unauthenticated request to the **root**
+   MCP endpoint returns `401` with
+   `WWW-Authenticate: Bearer resource_metadata="…/.well-known/oauth-protected-resource"`, which
+   triggers discovery. (`GET /sse` returns **404**, not 401 — it is a removed path, not an
+   unauthenticated one, and it never reaches the auth gate.)
 2. **DCR** — `POST /oauth/register` (RFC 7591) registers a public client (https-only redirect URIs);
    returns a `client_id`, no secret.
 3. **Authorize** — `GET /oauth/authorize` with `response_type=code`, `code_challenge_method=S256`
@@ -58,7 +68,7 @@ The end-to-end connect flow:
    (identity `ValidateToken`) and mints a single-use auth code.
 5. **Token** — `POST /oauth/token` (`authorization_code` then `refresh_token`) returns an
    **audience-bound JWT** (`aud` = the agent resource URI) plus a rotating refresh token. The JWT is
-   presented as `Authorization: Bearer <jwt>` on `/sse`; the agent rejects tokens whose `aud` does
+   presented as `Authorization: Bearer <jwt>` on the root MCP endpoint; the agent rejects tokens whose `aud` does
    not match.
 
 ### x-mcp-secret (downstream enforcement)
@@ -610,6 +620,88 @@ or, in list mode:
 |---|---|
 | Unknown `job_id` | `backfill job not found` (NOT_FOUND) |
 | Unknown `status_filter` | tool `ValueError` enumerating accepted values |
+
+---
+
+### `get_config`
+
+Read a namespace's current config values from `xstockstrat-config`. **Read-only.**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `namespace` | string | yes | `marketdata`, `analysis`, `trading`, `platform`, … |
+| `environment` | string | no | `dev` or `production`. Omit to use the agent deployment's own `APPLICATION_ENV` |
+| `trading_mode` | string | no | `paper`, `live` or `all`. Omit to use the agent's own `TRADING_MODE` |
+
+Returns `{namespace, version, environment, trading_mode, values}`, each value being
+`{value, value_type, is_secret}`.
+
+**Any value flagged `is_secret` is returned as `"[redacted]"`.** Redaction keys on the flag, not on
+the key name, so a flagged-but-unprefixed key is still redacted. Secret values are never returned by
+this tool.
+
+**Errors:** `NOT_FOUND` → "namespace not found".
+
+---
+
+### `list_config_keys`
+
+List the config keys registered for a namespace, **metadata only — no values**. Read-only, so
+nothing here can leak a secret.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `namespace` | string | yes | As above |
+| `environment` | string | no | Defaults to the agent's `APPLICATION_ENV` |
+| `trading_mode` | string | no | Defaults to the agent's `TRADING_MODE` |
+
+Returns `{namespace, environment, trading_mode, keys[]}`; each key carries `key`, `description`,
+`default_value`, `is_secret`, `consuming_service`.
+
+Use it to discover what exists — and which keys are secret — before calling `set_config`.
+
+---
+
+### `set_config`
+
+Write **one non-secret** config value. **Admin-scoped write. Streamable HTTP transport only.**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `namespace` | string | yes | e.g. `marketdata` |
+| `key` | string | yes | e.g. `marketdata.fmp.enabled` |
+| `value_type` | enum | yes | `string` \| `int` \| `float` \| `bool` |
+| `value` | string | yes | Converted according to `value_type` |
+| `author` | string | yes | Recorded in `config.config_audit` |
+| `reason` | string | yes | Recorded alongside `author` |
+| `environment` | string | no | Defaults to the agent's `APPLICATION_ENV` |
+| `trading_mode` | string | no | Defaults to the agent's `TRADING_MODE` |
+
+Returns `{version, updated_at}` — **never the value**.
+
+**Authorization uses your real role, not a service-wide admin override.** Unlike every other
+management tool, `set_config` forwards the calling user's derived `x-access-scope`, so
+`xstockstrat-config` rejects a non-admin caller with `PERMISSION_DENIED` ("admin scope required").
+This is the documented exception to invariant **AGENT-4**.
+
+**Secret keys cannot be written.** Rejected both by the `secret.` name prefix (checked before any
+RPC — the only thing that can stop a *new* secret key being created) and by the `is_secret` flag
+read from `ListKeys`. Credentials are delivered as `type: SECRET` environment variables. If the
+flag lookup fails, the write is refused rather than allowed through.
+
+**Transport.** Requires Streamable HTTP — since feature 079 the only remote transport the agent
+serves. The tool still refuses when no verified caller claims are on the request; that check is now
+defence in depth rather than the live transport guard.
+
+**Three behaviors worth knowing before you rely on a write:**
+
+- `value_type` is honored only when **creating** a key. `SetConfig`'s `ON CONFLICT … DO UPDATE`
+  does not update the type column, so for an existing key the stored type wins.
+- Pass JSON-valued config as a `string` — that is byte-identical to what the server stores.
+- **Creating a new key writes no audit row**, and neither does rewriting a key to its existing
+  value: the `config.config_audit` trigger fires `BEFORE UPDATE` and only on a value change.
+
+**Errors:** `PERMISSION_DENIED` → "admin scope required"; `INVALID_ARGUMENT` → missing author.
 
 ---
 

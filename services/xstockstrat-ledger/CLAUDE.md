@@ -6,11 +6,11 @@
 
 ## Role
 
-Node.js gRPC service implementing an **append-only event store**. Every service in the platform writes domain events here. Events are **immutable** — no UPDATE or DELETE is permitted at the database level (enforced via PostgreSQL rules). Supports live streaming via pg LISTEN/NOTIFY.
+Node.js gRPC service implementing an **append-only event store**. Every service in the platform writes domain events here. Events are **immutable** — no UPDATE or DELETE is permitted at the database level (enforced via PostgreSQL **triggers**, `deny_mutation`; rules aren't supported on hypertables). Supports live streaming via pg LISTEN/NOTIFY.
 
 ## Language
 
-Node.js 20 + TypeScript
+Node.js 22 + TypeScript
 
 ## Docker Build Pattern
 
@@ -29,7 +29,7 @@ was removed.
 
 ## Critical Invariants
 
-1. **Events are immutable.** The database enforces `NO UPDATE`, `NO DELETE` rules on `ledger.events`.
+1. **Events are immutable.** The database enforces `NO UPDATE`, `NO DELETE` via `deny_mutation` **triggers** on `ledger.events` (`migrations/001_ledger_events_hypertable.up.sql:47,54,58`).
 2. **All services write here.** The ledger is the system's audit trail and event replay source.
 3. **stream_key** is the logical partition for event replay (`order:{id}`, `portfolio:{user_id}`, etc.)
 4. **sequence** is globally monotonic — never gaps, never decreasing.
@@ -65,10 +65,9 @@ Namespace: `ledger`
 
 | Key | Type | Default | Description |
 |---|---|---|---|
-| `ledger.stream.notify_enabled` | bool | `true` | Enable pg NOTIFY for live streaming |
-| `ledger.retention.years` | int | `2` | Event retention period |
-| `ledger.compression.after_days` | int | `3` | Compress chunks after N days |
-| `platform.ledger_endpoint` | string | — | Own endpoint (for health checks) |
+| `ledger.stream.notify_enabled` | bool | `true` | **Documented, not yet enforced** — intended pg-NOTIFY toggle; no code reads it (NOTIFY is always on) |
+| `ledger.retention.years` | int | `2` | **Documented, not yet implemented** — intended event retention; no retention job reads it |
+| `ledger.compression.after_days` | int | `3` | **Documented, not yet implemented** — intended chunk compression; no policy reads it |
 
 ## Idempotent Append
 
@@ -123,6 +122,6 @@ TRADING_MODE=paper                     # paper | live
 
 ```bash
 pnpm install
-pnpm run migrate
+# schema: run ../../scripts/db-migrate.sh from repo root (golang-migrate, not node-pg-migrate)
 pnpm run dev
 ```

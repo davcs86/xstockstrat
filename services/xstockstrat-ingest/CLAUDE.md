@@ -65,23 +65,12 @@ Namespace: `ingest`
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `ingest.backfill.max_concurrent_jobs` | int | `3` | Max parallel backfill jobs |
-| `ingest.backfill.default_timeframe` | string | `1d` | Default bar timeframe |
+| `ingest.backfill.default_timeframe` | string | `1d` | **Documented, not yet wired** — the servicer hardcodes `"1d"` rather than reading this key |
 | `ingest.backfill.retry_on_failure` | bool | `true` | Auto-retry failed jobs |
 | `ingest.backfill.max_retry_attempts` | int | `3` | Max retry attempts for transient backfill failures |
 | `ingest.backfill.chunk_max_bars` | int | `200000` | Max estimated bars per backfill chunk (planner cap, feature 054) |
 | `ingest.backfill.chunk_window_days` | int | `90` | Time-window size (days) the chunk planner splits a range into |
 | `ingest.backfill.max_concurrent_chunks` | int | `3` | Max chunks of one job fetched in parallel |
-| `ingest.signals.unusual_whales.enabled` | bool | `false` | Enable Unusual Whales signal ingestion |
-| `ingest.signals.unusual_whales.default_window_days` | int | `5` | Default validity window |
-| `ingest.signals.unusual_whales.default_conviction` | float | `0.5` | Default conviction if not provided |
-| `ingest.signals.marketwatch.enabled` | bool | `false` | Enable MarketWatch signal ingestion |
-| `ingest.signals.marketwatch.default_window_days` | int | `5` | Default validity window |
-| `ingest.signals.marketwatch.default_conviction` | float | `0.5` | Default conviction if not provided |
-| `ingest.signals.dividendology.enabled` | bool | `false` | Enable Dividendology signal ingestion |
-| `ingest.signals.pure_power_picks.enabled` | bool | `false` | Enable Pure Power Picks signal ingestion |
-| `ingest.signals.simply_wall_st.enabled` | bool | `false` | Enable Simply Wall St signal ingestion |
-| `ingest.signals.dedup_window_hours` | int | `24` | Skip re-ingesting same symbol+source+direction within this window |
-| `platform.ledger_endpoint` | string | — | Ledger address |
 
 ## Ledger Events Emitted
 
@@ -91,7 +80,6 @@ Namespace: `ingest`
 | `ingest.backfill.running` | Job started |
 | `ingest.backfill.completed` | Job done |
 | `ingest.backfill.failed` | Job error |
-| `ingest.data.normalized` | Raw data normalised |
 | `ingest.signal.ingested` | Newsletter signal persisted |
 
 ## Running Tests
@@ -101,8 +89,6 @@ uv sync --extra dev   # install deps (including dev) from uv.lock
 uv run pytest         # run all tests
 uv run pytest --cov=app --cov-fail-under=40  # with coverage
 ```
-
-After any change to `pyproject.toml`, run `uv lock` and commit the updated `uv.lock`.
 
 ## Environment Variables
 

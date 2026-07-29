@@ -12,13 +12,18 @@ import assert from 'node:assert/strict';
 
 let ConfigServiceImpl: typeof import('../grpc/configServiceImpl').ConfigServiceImpl;
 
+// The import is deliberately NOT wrapped in try/catch. A previous version swallowed
+// the failure and every case early-returned, so the suite reported "pass" while
+// asserting nothing (feature 074). A broken stub environment must fail loudly.
 before(async () => {
-  try {
-    const mod = await import('../grpc/configServiceImpl.js');
-    ConfigServiceImpl = mod.ConfigServiceImpl;
-  } catch {
-    // Proto package unavailable in test environment — tests will be skipped.
-  }
+  const mod = await import('../grpc/configServiceImpl.js');
+  ConfigServiceImpl = mod.ConfigServiceImpl;
+});
+
+describe('test harness', () => {
+  it('imports the implementation under test', () => {
+    assert.ok(ConfigServiceImpl, 'ConfigServiceImpl must import — never skip silently');
+  });
 });
 
 describe('ConfigServiceImpl.listKeys — validation field', () => {
@@ -33,7 +38,6 @@ describe('ConfigServiceImpl.listKeys — validation field', () => {
   }
 
   it('populates validation for analysis.signals.source_weights', async () => {
-    if (!ConfigServiceImpl) return;
     const pool = makePool([
       {
         key: 'analysis.signals.source_weights',
@@ -57,13 +61,14 @@ describe('ConfigServiceImpl.listKeys — validation field', () => {
     assert.strictEqual(result.keys.length, 1);
     const k = result.keys[0];
     assert.ok(k.validation, 'validation field must be present');
-    assert.strictEqual(k.validation.value_type, 1, 'VALUE_TYPE_FLOAT_MAP = 1');
-    assert.ok(Math.abs(k.validation.min_value - 0.0) < 1e-6);
-    assert.ok(Math.abs(k.validation.max_value - 1.0) < 1e-6);
+    // packages/proto/buf.gen.yaml sets stringEnums=true, so ts-proto emits the enum's
+    // string constant rather than its wire number.
+    assert.strictEqual(k.validation.valueType, 'VALUE_TYPE_FLOAT_MAP');
+    assert.ok(Math.abs(k.validation.minValue - 0.0) < 1e-6);
+    assert.ok(Math.abs(k.validation.maxValue - 1.0) < 1e-6);
   });
 
   it('omits validation for non-weight keys', async () => {
-    if (!ConfigServiceImpl) return;
     const pool = makePool([
       {
         key: 'platform.log_level',

@@ -17,13 +17,10 @@
         "MCP_AGENT_SECRET": "<your-mcp-agent-secret-from-.env>"
       }
     },
-    "xstockstrat-sse-oauth": {
-      "_mode": "SSE remote MCP with OAuth 2.1 (RECOMMENDED for Claude.ai). The client discovers the auth server via /.well-known, performs RFC 7591 DCR + PKCE login, and connects with an aud-bound JWT. No api_key needed.",
-      "url": "<AGENT_PUBLIC_URL>/sse"
-    },
-    "xstockstrat-sse-apikey-deprecated": {
-      "_mode": "DEPRECATED Desktop-only fallback -- API key in ?api_key= query parameter. OAuth 2.1 forbids credentials in query strings; prefer xstockstrat-sse-oauth. Kept only for clients that cannot perform the OAuth flow.",
-      "url": "<AGENT_PUBLIC_URL>/sse?api_key=<your-api-key>"
+    "xstockstrat-http-oauth": {
+      "_mode": "Streamable HTTP remote MCP with OAuth 2.1 (RECOMMENDED for Claude.ai). The url is the agent's public base URL itself, with NO path suffix -- the client POSTs/GETs it directly. It discovers the auth server via /.well-known, performs RFC 7591 DCR + PKCE login, and connects with an aud-bound JWT. No api_key needed.",
+      "_migration": "Feature 079 removed the legacy HTTP+SSE transport. If a saved connector's url still ends in /sse it now returns 404 -- trim it to the bare base URL below. No re-authorization is needed.",
+      "url": "<AGENT_PUBLIC_URL>"
     }
   }
 }

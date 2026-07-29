@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { addAuthCookie } from '../helpers/auth';
+import { addAuthCookie, addAdminCookie } from '../helpers/auth';
 
 /**
  * BFF smoke tests for the Connect-RPC gateway in xstockstrat-config-ui.
@@ -30,7 +30,7 @@ async function callBff(
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const responseBody = await res.json() as Record<string, unknown>;
+      const responseBody = (await res.json()) as Record<string, unknown>;
       return { status: res.status, body: responseBody };
     },
     { url, body },
@@ -52,7 +52,11 @@ test.describe('GET /api/config — namespace config table data contract', () => 
   test('returns { keys: [] } wrapper matching the ListKeysResponse interface', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto('/auth/login');
-    const { status, body } = await callBff(page, CONFIG_BFF, { namespace: 'platform', environment: 1, tradingMode: 0 });
+    const { status, body } = await callBff(page, CONFIG_BFF, {
+      namespace: 'platform',
+      environment: 1,
+      tradingMode: 0,
+    });
     expect(status).toBe(200);
     expect(body).toHaveProperty('keys');
     expect(Array.isArray(body.keys)).toBe(true);
@@ -61,14 +65,18 @@ test.describe('GET /api/config — namespace config table data contract', () => 
   test('each key has all ConfigKey interface fields', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto('/auth/login');
-    const { body } = await callBff(page, CONFIG_BFF, { namespace: 'platform', environment: 1, tradingMode: 0 });
+    const { body } = await callBff(page, CONFIG_BFF, {
+      namespace: 'platform',
+      environment: 1,
+      tradingMode: 0,
+    });
     const keys = body.keys as Array<Record<string, unknown>>;
 
     expect(keys.length).toBeGreaterThan(0);
     for (const k of keys) {
-      expect(k).toHaveProperty('key');           // row key + displayed in Key column
-      expect(k).toHaveProperty('defaultValue');  // displayed in Value column
-      expect(k).toHaveProperty('description');   // Description column
+      expect(k).toHaveProperty('key'); // row key + displayed in Key column
+      expect(k).toHaveProperty('defaultValue'); // displayed in Value column
+      expect(k).toHaveProperty('description'); // Description column
       // isSecret is a proto3 bool — false (zero value) is omitted from JSON;
       // absent means false, which is the correct semantic for the component
       expect(typeof k.isSecret === 'boolean' || k.isSecret === undefined).toBe(true);
@@ -78,7 +86,11 @@ test.describe('GET /api/config — namespace config table data contract', () => 
   test('non-secret key: defaultValue is a readable string (not [secret])', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto('/auth/login');
-    const { body } = await callBff(page, CONFIG_BFF, { namespace: 'platform', environment: 1, tradingMode: 0 });
+    const { body } = await callBff(page, CONFIG_BFF, {
+      namespace: 'platform',
+      environment: 1,
+      tradingMode: 0,
+    });
     const keys = body.keys as Array<Record<string, unknown>>;
 
     const nonSecret = keys.find((k) => !k.isSecret);
@@ -90,7 +102,11 @@ test.describe('GET /api/config — namespace config table data contract', () => 
   test('secret key: isSecret is true and value is masked', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto('/auth/login');
-    const { body } = await callBff(page, CONFIG_BFF, { namespace: 'platform', environment: 1, tradingMode: 0 });
+    const { body } = await callBff(page, CONFIG_BFF, {
+      namespace: 'platform',
+      environment: 1,
+      tradingMode: 0,
+    });
     const keys = body.keys as Array<Record<string, unknown>>;
 
     const secretKey = keys.find((k) => k.isSecret);
@@ -106,7 +122,11 @@ test.describe('GET /api/config — namespace config table data contract', () => 
   test('env and mode params are forwarded to ListKeys as proto enums', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto('/auth/login');
-    const { status, body } = await callBff(page, CONFIG_BFF, { namespace: 'platform', environment: 2, tradingMode: 2 });
+    const { status, body } = await callBff(page, CONFIG_BFF, {
+      namespace: 'platform',
+      environment: 2,
+      tradingMode: 2,
+    });
     expect(status).toBe(200);
     expect(body).toHaveProperty('keys');
   });
@@ -118,7 +138,8 @@ test.describe('POST /api/config — inline edit save flow', () => {
    * Verifies the BFF accepts the payload and returns a success response.
    */
   test('accepts a valid SetConfig payload and returns 200', async ({ page }) => {
-    await addAuthCookie(page);
+    // Admin cookie: config writes require the ADMIN scope bit (feature 074).
+    await addAdminCookie(page);
     await page.goto('/auth/login');
     const { status } = await callBff(page, SET_CONFIG_BFF, {
       namespace: 'platform',
@@ -132,7 +153,7 @@ test.describe('POST /api/config — inline edit save flow', () => {
   });
 
   test('SetConfig does not return an error field on success', async ({ page }) => {
-    await addAuthCookie(page);
+    await addAdminCookie(page);
     await page.goto('/auth/login');
     const { status, body } = await callBff(page, SET_CONFIG_BFF, {
       namespace: 'platform',
@@ -145,13 +166,37 @@ test.describe('POST /api/config — inline edit save flow', () => {
     expect(status).toBe(200);
     expect(body).not.toHaveProperty('error');
   });
+
+  test('SetConfig is denied for a non-admin session', async ({ page }) => {
+    // A signed-in viewer/trader must not be able to write config — this is the
+    // SEV-1 the feature closes (any authenticated user could previously set
+    // platform.maintenance_mode or the trading.approval.* thresholds).
+    await addAuthCookie(page);
+    await page.goto('/auth/login');
+    const { status, body } = await callBff(page, SET_CONFIG_BFF, {
+      namespace: 'platform',
+      key: 'platform.maintenance_mode',
+      value: { value: { case: 'boolVal', value: true } },
+      reason: 'should be rejected',
+      environment: 1,
+      tradingMode: 0,
+    });
+    expect(status).not.toBe(200);
+    expect(JSON.stringify(body).toLowerCase()).toContain('permission');
+  });
 });
 
 test.describe('validation field in ListKeysResponse', () => {
-  test('weight key has validation.valueType=VALUE_TYPE_FLOAT_MAP and correct bounds', async ({ page }) => {
+  test('weight key has validation.valueType=VALUE_TYPE_FLOAT_MAP and correct bounds', async ({
+    page,
+  }) => {
     await addAuthCookie(page);
     await page.goto('/auth/login');
-    const { status, body } = await callBff(page, CONFIG_BFF, { namespace: 'analysis', environment: 1, tradingMode: 0 });
+    const { status, body } = await callBff(page, CONFIG_BFF, {
+      namespace: 'analysis',
+      environment: 1,
+      tradingMode: 0,
+    });
     expect(status).toBe(200);
     const keys = body.keys as Array<Record<string, unknown>>;
     const weightKey = keys.find((k) => k.key === 'analysis.signals.source_weights');
@@ -170,7 +215,11 @@ test.describe('validation field in ListKeysResponse', () => {
   test('non-weight key has no validation field', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto('/auth/login');
-    const { status, body } = await callBff(page, CONFIG_BFF, { namespace: 'platform', environment: 1, tradingMode: 0 });
+    const { status, body } = await callBff(page, CONFIG_BFF, {
+      namespace: 'platform',
+      environment: 1,
+      tradingMode: 0,
+    });
     expect(status).toBe(200);
     const keys = body.keys as Array<Record<string, unknown>>;
     const logLevel = keys.find((k) => k.key === 'platform.log_level');

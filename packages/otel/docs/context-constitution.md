@@ -18,7 +18,7 @@ production pushes OTLP straight to Grafana Cloud). Does not restate documented/C
 
 ## Gotchas & scars
 
-- **The port-by-runtime OTLP split is REAL, confirmed on both ends** — the collector exposes grpc `:4317` and http `:4318`; Node/Next use 4318, Go/Python use 4317 (12/12). Documented only in the collector-config header comment; `observability.md` contradicts it (see root findings). This is stated as root **PLAT-3**. Evidence: `otel-collector-config.yaml:31,33,6-8`.
+- **The port-by-runtime OTLP split** (Node/Next → `:4318`, Go/Python → `:4317`) is **root PLAT-3** — see the root constitution; not restated here (CF-N3).
 
 ## Pointers (already documented or CI-enforced — not restated here)
 
