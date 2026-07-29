@@ -233,3 +233,23 @@ through the same mechanism as every other credential, not by this feature — ad
 `type: SECRET` env var in both app specs plus a docker-compose/.env entry, and have marketdata read
 it via `getEnv` with the config key retained only as the enable/disable toggle. That is a small,
 separate change to feature 059's wiring and should be its own bug/feature, not bundled into 073.
+
+### Correction — the secrets decision, as actually given by the user
+
+The prior entry recorded the verification correctly but framed the outcome as my inference. The
+user's actual answer was explicit: **"no, use the same existing mechanism used for ibkr and alpaca
+keys."**
+
+So the decision is settled, not deduced:
+- `set_config` **rejects `is_secret` keys**. No plaintext credential ever goes into
+  `config.config_values` through an MCP tool.
+- The four governance docs stay as written — they describe the platform's real mechanism.
+- The FMP key moves to `FMP_API_KEY`, a `type: SECRET` env var, matching Alpaca (plain env var) and
+  IBKR (env-var master key encrypting the stored blob). Implemented as **feature 076**
+  (`fmp-key-to-secret-env`), which also removes the seeded config row via migration `009`.
+
+073's remaining scope is therefore: `get_config` (with redaction — still worth keeping, and now
+trustworthy thanks to 075), `list_config_keys`, and `set_config` for non-secret keys only
+(flag flips such as `marketdata.fmp.enabled` / `analysis.fundsignal.enabled`, plus thresholds).
+The staging gap that motivated 073 is closed by 076 for the credential half and by `set_config` for
+the toggle half.

@@ -106,7 +106,7 @@ Establishes the `marketdata.<source>.enabled` convention (a source is off until 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `marketdata.fmp.enabled` | bool | `false` | Master gate for the FMP fundamentals source; off by default |
-| `secret.marketdata.fmp.api_key` | string (secret) | — | FMP API key; first seeded secret (`is_secret=TRUE`), value is a `secret://` reference, never plaintext |
+| ~~`secret.marketdata.fmp.api_key`~~ | — | — | **Removed by feature 076** (migration `009`). The FMP credential is now the `FMP_API_KEY` secret env var, matching Alpaca/JWT/MCP-agent. Credentials do not belong in config: values are plaintext and stream to every `WatchConfig` subscriber. No `secret://` resolver was ever built |
 | `marketdata.fmp.cache_ttl_hours` | int | `24` | Hours a cached fundamentals row stays fresh before re-fetch |
 | `marketdata.fmp.daily_request_cap` | int | `250` | Max FMP requests per UTC day (free Basic budget) |
 | `marketdata.fmp.base_url` | string | `https://financialmodelingprep.com` | FMP API base URL |

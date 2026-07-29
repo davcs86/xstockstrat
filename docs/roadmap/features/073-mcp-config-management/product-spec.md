@@ -44,11 +44,15 @@ FR-3. A `set_config` tool wraps `ConfigService.SetConfig`: given namespace, key,
 (string/int/float/bool/json — matching the `ConfigValue` oneof), environment, trading_mode,
 `author`, and `reason`, applies the change. `author` and `reason` are **required** parameters (not
 optional) so every agent-driven change is attributable in `config.config_audit`, consistent with
-the existing rollout convention (`docs/runbooks/config-rollout.md` Step 2). There is **no
-namespace/key denylist** — any key, including `secret.*` ones, is writable through this tool
-(decided 2026-07-28; see context.md), gated only by the caller's real authorization (FR-5/FR-7).
-`set_config` being usable against `secret.*`-prefixed keys is the capability gap the feature exists
-to close.
+the existing rollout convention (`docs/runbooks/config-rollout.md` Step 2). **`set_config` MUST reject any key whose `is_secret` is
+true** (decided 2026-07-29 — superseding the 2026-07-28 "no denylist" decision). Credentials are
+delivered as DigitalOcean App Platform `type: SECRET` environment variables — the mechanism used by
+the Alpaca keys, `JWT_SECRET`, `MCP_AGENT_SECRET` and the IBKR broker-account encryption key — never
+as config values, which are stored in plaintext and streamed to every `WatchConfig` subscriber.
+Aside from that rejection there is no namespace/key denylist: any non-secret key in any namespace is
+writable, gated only by the caller's real authorization (FR-5/FR-7). The FMP credential that
+motivated this feature moved to `FMP_API_KEY` in feature **076**; `set_config` covers the
+accompanying toggles (`marketdata.fmp.enabled`, `analysis.fundsignal.enabled`).
 
 FR-4. `set_config`'s tool response MUST NOT echo back the value that was just written when the
 target key `is_secret == true` — return only `{version, updated_at}` (matching
@@ -174,9 +178,10 @@ correct") — not optional here, unlike the original draft's "weigh a Security r
 3. `set_config(namespace, key, value, environment?, trading_mode?, author, reason)` applies the
    change via `SetConfig` and returns `{version, updated_at}` — never the value, when the target
    key is secret.
-4. `set_config` successfully sets a `secret.*`-prefixed key's value (verified against the
-   `marketdata.fmp.api_key` gap that motivated this feature) and the write appears in
-   `config.config_audit` with the supplied `author`/`reason`.
+4. `set_config` **rejects** a key whose `is_secret` is true, with a message pointing the caller at
+   the secret-env-var mechanism; and successfully sets a non-secret key (e.g.
+   `marketdata.fmp.enabled`), whose write appears in `config.config_audit` with the supplied
+   `author`/`reason`.
 5. All discovery surfaces listed in FR-6 are updated and consistent (tool count, names) — same
    test shape as the feature-066 `trigger_backfill` precedent
    (`services/xstockstrat-agent/tests/test_tools_endpoint.py` name-set test).
@@ -186,9 +191,9 @@ correct") — not optional here, unlike the original draft's "weigh a Security r
 7. `set_config`, called by a session whose real role lacks the `ADMIN` bit, is rejected
    (`PERMISSION_DENIED`) by `xstockstrat-config`'s new FR-7 check — proves the forwarded-real-scope
    path (FR-5) is actually enforced, not just threaded through and ignored.
-8. `set_config`, called by a session whose real role has the `ADMIN` bit, can write to any
-   namespace/key with no denylist (including `platform.maintenance_mode` and `secret.*` keys) —
-   proves FR-3's "no restriction, gated only by real authorization" decision.
+8. `set_config`, called by a session whose real role has the `ADMIN` bit, can write any
+   **non-secret** key in any namespace (including `platform.maintenance_mode`) — proving there is no
+   namespace denylist beyond the `is_secret` rejection in AC-4.
 9. The other MCP management tools (`manage_strategy`, `manage_formula`, `manage_signal_source`,
    `set_strategy_live`, `trigger_backfill`) are unaffected — still use `_admin_metadata()` — proving
    FR-5's deviation from AGENT-4 is scoped to `set_config` only.

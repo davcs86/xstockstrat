@@ -51,10 +51,11 @@ re-run /sdd-spec if the registry changes.)_
 by feature 075 (the `is_secret` read-path gap and the `SetConfig` value round-trip). The remaining
 two need a product decision from the user before this feature can pass its gate:
 
-1. **May `set_config` write a real plaintext secret?** AC-4 requires it, which contradicts four
-   documented invariants stating secrets are never stored as plaintext.
-2. **Which transports must `set_config` support?** FR-5's real-caller-role forwarding is
-   implementable on Streamable HTTP but not on the legacy SSE `/messages` path, which carries no
-   bearer token on the tool call — forwarding there would need the in-memory store FR-B13 forbids.
+1. **Secrets — DECIDED 2026-07-29:** `set_config` rejects `is_secret` keys. Credentials use the
+   existing `type: SECRET` env-var mechanism (Alpaca/IBKR/JWT/MCP-agent); the FMP key moved there in
+   feature **076**.
+2. **Transport — DECIDED 2026-07-29:** Streamable HTTP only; `set_config` returns an explicit
+   "unsupported transport" error on the legacy SSE path, so FR-B13 is never breached.
 
-Once decided: fix the spec, re-run `/sdd-review mcp-config-management product-spec`.
+Both are folded into product-spec.md. Next: re-run
+`/sdd-review mcp-config-management product-spec`, then `/sdd-design`.

@@ -26,6 +26,7 @@ type Config struct {
 	AlpacaAPISecret string
 	AlpacaBaseURL   string
 	AlpacaDataURL   string
+	FMPAPIKey       string
 	ApplicationEnv  string
 	TradingMode     string
 }
@@ -42,6 +43,11 @@ func LoadFromEnv() *Config {
 		AlpacaAPISecret: getEnv("ALPACA_API_SECRET", ""),
 		AlpacaBaseURL:   getEnv("ALPACA_BASE_URL", "https://paper-api.alpaca.markets"),
 		AlpacaDataURL:   getEnv("ALPACA_DATA_URL", "https://data.alpaca.markets"),
+		// Vendor credential — delivered as a DO App Platform `type: SECRET` env var, the
+		// same mechanism as the Alpaca keys above. Deliberately NOT read from the config
+		// service: config values are stored in plaintext and readable by any WatchConfig
+		// subscriber (feature 076).
+		FMPAPIKey:       getEnv("FMP_API_KEY", ""),
 		ApplicationEnv:  getEnv("APPLICATION_ENV", "development"),
 		TradingMode:     getEnv("TRADING_MODE", "paper"),
 	}
