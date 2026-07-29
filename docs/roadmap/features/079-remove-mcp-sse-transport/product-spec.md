@@ -60,6 +60,12 @@ FR-5. Confirm and record which MCP clients the platform actually uses. The agent
 the legacy transport as being "for Claude Desktop" — if any supported client still requires SSE,
 that is a blocking finding for this feature, not a detail to discover during execution.
 
+FR-6. **`services/xstockstrat-agent/claude_mcp_config.json` is the operator-facing client config and
+is part of the change, not documentation.** Its two remote blocks both point at
+`<AGENT_PUBLIC_URL>/sse` — the exact URL this feature deletes. Both must be replaced by a single
+Streamable HTTP block whose `url` is the bare `<AGENT_PUBLIC_URL>`. See the FR-5 finding: this file
+is the platform's only checked-in client configuration, so it *is* the client-compatibility surface.
+
 ## Out of Scope
 
 - The `stdio` transport.
@@ -68,7 +74,7 @@ that is a blocking finding for this feature, not a detail to discover during exe
 
 ## Affected Services
 
-- `xstockstrat-agent` — `app/main.py`, its tests, and the doc surfaces above.
+- `xstockstrat-agent` — `app/main.py`, `claude_mcp_config.json`, its tests, and the doc surfaces above.
 
 ## Proto Contract Changes
 
@@ -91,14 +97,43 @@ that is a blocking finding for this feature, not a detail to discover during exe
 5. All transport-mode documentation describes exactly one remote transport.
 6. Feature 073's `set_config` tests still pass unchanged, proving the guard is intact as defence in
    depth (FR-3).
+7. `claude_mcp_config.json` contains no `/sse` URL, and its remote block's `url` is the bare
+   `<AGENT_PUBLIC_URL>` — the same URL the Claude.ai remote connector already uses (FR-6).
+8. No deployment spec (`.do/app.yaml`, `.do/app.dev.yaml`, `docker-compose.yml`) needs a value change
+   for the agent to keep serving MCP — proving finding 2 of the FR-5 investigation.
 
 ## Open Questions
 
-- [ ] **Blocking (FR-5):** does any MCP client in actual use still require the SSE transport? Claude
-  Desktop supports Streamable HTTP in current versions, but this must be confirmed against the
-  versions this platform's operators run before the routes are deleted.
-- [ ] Should removal be staged — log a deprecation warning on `/sse` for one release, then delete —
-  or is a single change acceptable given the agent's small, known client set?
+- [x] **Blocking (FR-5) — RESOLVED, cleared to proceed.** Investigated 2026-07-29. Findings:
+  1. **No client is pinned to SSE by anything in this repo except one config file.** The platform's
+     only checked-in client configuration is
+     `services/xstockstrat-agent/claude_mcp_config.json`, which offers three blocks: `stdio`
+     (unaffected — out of scope), `xstockstrat-sse-oauth` → `<AGENT_PUBLIC_URL>/sse`, and
+     `xstockstrat-sse-apikey-deprecated` → `<AGENT_PUBLIC_URL>/sse?api_key=…`. The last is already
+     marked DEPRECATED in-file, and its `?api_key=` query-string credential is forbidden by the
+     OAuth 2.1 posture feature 049 Part B established. Both remote blocks are replaced by FR-6.
+  2. **`MCP_TRANSPORT=sse` is a misnomer, and that de-risks the change substantially.**
+     `.do/app.yaml:275`, `.do/app.dev.yaml:275` and `docker-compose.yml:520` all deploy
+     `MCP_TRANSPORT=sse`, but `app/main.py:224` routes that value to `_run_sse()` → `build_sse_app()`,
+     which serves **both** transports — `/sse` + `/messages` *and* the Streamable HTTP fall-through
+     at `/` (`main.py:178`). The env value selects "run the HTTP server", not "SSE only". Removing
+     the SSE routes therefore requires **no deployment-config change** in any environment; the same
+     `MCP_TRANSPORT=sse` value keeps serving the surviving transport (FR-2 renames it for honesty,
+     keeping the old value accepted).
+  3. **The Claude.ai remote connector — the production client — already speaks Streamable HTTP**
+     against the connector URL, which is `AGENT_PUBLIC_URL` itself, not `/sse`
+     (`app/main.py:99-103`, agent `CLAUDE.md` § Role). It is unaffected.
+  4. **Residual operator action, not a blocker.** If a connector was configured by pasting the
+     `xstockstrat-sse-oauth` block, its saved URL ends in `/sse` and will 404 after deploy. The fix
+     is to edit that connector's URL down to the bare `AGENT_PUBLIC_URL` — a one-line change in the
+     client, with no re-authorization needed. This must be called out in the PR body and in
+     `docs/runbooks/mcp-tools.md`, and is the reason FR-6 exists.
+- [x] **Staging — RESOLVED: single change, no deprecation release.** A staged rollout buys warning
+  time for clients the operator does not control. Here the client set is one operator's own
+  connectors (finding 1), the surviving transport is *already being served* on the same port and
+  process (finding 2), and the SSE path is the unauthenticated one — leaving it up for one more
+  release keeps the hole open for exactly as long as the deprecation window. Ship it in one change
+  and carry the client-side URL edit as a release note.
 
 ## Feature Workflow Notes
 
