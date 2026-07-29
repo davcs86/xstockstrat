@@ -217,8 +217,13 @@ Alpaca with an empty timeframe and 400s every symbol; and today a caller sending
 - Removing the deprecated `timeframe` string from the proto (breaking; needs the full
   `docs/runbooks/proto-versioning.md` flow).
 - The `BackfillBarsRequest` write path — already correct.
-- Any UI **read** path. The UI displays the deprecated string today and keeps working either way;
-  only the two `getBars` *senders* change (FR-8).
+- Any UI **read** path — because there are none. Corrected at the round-3 design gate: this section
+  previously claimed "the UI displays the deprecated string today and keeps working either way",
+  which is false. No UI component renders `BackfillJob.timeframe` or `Bar.timeframe` (zero hits for
+  `.timeframe` in `backfills/page.tsx`, none anywhere in `src/`); `mapBars` (`chart.ts:36`) reads only
+  `time`/`open`/`high`/`low`/`close`/`volume` (`chart.ts:26-33`). Only *senders* change (FR-8, FR-12).
+  The distinction matters: "the UI keeps working either way" implied a consumer that would migrate
+  later, and there is nothing to migrate.
 - The **consuming** side of a request message **where the reader already resolves the enum**. That is
   `TriggerBackfillRequest` (`ingest.proto:64`) via `_canonical_timeframe` (`servicer.py:47`), and
   `GetBarsRequest` (`marketdata.proto:86`) via `timeframe.Resolve` (`marketdata_service.go:120`).
