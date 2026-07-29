@@ -68,11 +68,37 @@ function toProtoSnapPayload(snap: any, overrideUpdateType?: ConfigUpdateType): a
   };
 }
 
-function resolveEnv(v: number | undefined): EnvStr {
+/**
+ * Resolve the request's environment/trading-mode scope.
+ *
+ * These accept BOTH shapes on purpose (feature 078). ts-proto is generated with
+ * `stringEnums=true` (packages/proto/buf.gen.yaml), so a decoded request carries the string
+ * constant ('ENVIRONMENT_PRODUCTION'), not the wire number — and it carries `tradingMode`,
+ * not `trading_mode`. The previous implementation looked up a numeric map with a string key
+ * and read a snake_case field that never existed on the decoded message, so BOTH dimensions
+ * silently collapsed to their zero-values: every request resolved to ('dev', 'all').
+ *
+ * That made every production config row unreachable over the RPC and gave every WatchConfig
+ * subscriber dev config regardless of what it asked for.
+ */
+function resolveEnv(v: number | string | undefined): EnvStr {
+  if (typeof v === 'string') {
+    return v === 'ENVIRONMENT_PRODUCTION' ? 'production' : 'dev';
+  }
   return ENV_MAP[v ?? 0] ?? 'dev';
 }
-function resolveMode(v: number | undefined): ModeStr {
+function resolveMode(v: number | string | undefined): ModeStr {
+  if (typeof v === 'string') {
+    if (v === 'TRADING_MODE_LIVE') return 'live';
+    if (v === 'TRADING_MODE_PAPER') return 'paper';
+    return 'all';
+  }
   return MODE_MAP[v ?? 0] ?? 'all';
+}
+
+/** The trading-mode field as ts-proto delivers it (camelCase), falling back to the legacy name. */
+function requestMode(req: any): number | string | undefined {
+  return req?.tradingMode ?? req?.trading_mode;
 }
 
 // Snapshot cache key: "namespace:env:mode"
@@ -200,7 +226,7 @@ export class ConfigServiceImpl {
   watchConfig(call: any) {
     const req = call.request;
     const env = resolveEnv(req.environment);
-    const mode = resolveMode(req.trading_mode);
+    const mode = resolveMode(requestMode(req));
     const subId = `${req.namespace}:${env}:${mode}:${req.client_id}:${Date.now()}`;
 
     log.info('New WatchConfig subscriber', { namespace: req.namespace, clientId: req.client_id, env, mode });
@@ -240,7 +266,7 @@ export class ConfigServiceImpl {
 
   async getConfig(call: any, callback: any) {
     const env = resolveEnv(call.request.environment);
-    const mode = resolveMode(call.request.trading_mode);
+    const mode = resolveMode(requestMode(call.request));
     const snap = this.snapshots.get(snapKey(call.request.namespace, env, mode));
     if (!snap) {
       callback(null, toProtoSnapPayload({
@@ -275,7 +301,7 @@ export class ConfigServiceImpl {
 
     const { namespace, key, value, reason } = call.request;
     const env = resolveEnv(call.request.environment);
-    const mode = resolveMode(call.request.trading_mode);
+    const mode = resolveMode(requestMode(call.request));
 
     // Attribution: an explicit author wins, else the propagated caller id. Matches the
     // indicators servicer (request.author wins, x-user-id is the fallback). Refuse an
@@ -309,7 +335,7 @@ export class ConfigServiceImpl {
 
   async listKeys(call: any, callback: any) {
     const env = resolveEnv(call.request.environment);
-    const mode = resolveMode(call.request.trading_mode);
+    const mode = resolveMode(requestMode(call.request));
     try {
       const result = await this.pool.query(
         `SELECT key, description, default_value, is_secret, consuming_service, environment, trading_mode
