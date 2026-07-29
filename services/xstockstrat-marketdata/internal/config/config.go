@@ -47,9 +47,9 @@ func LoadFromEnv() *Config {
 		// same mechanism as the Alpaca keys above. Deliberately NOT read from the config
 		// service: config values are stored in plaintext and readable by any WatchConfig
 		// subscriber (feature 076).
-		FMPAPIKey:       getEnv("FMP_API_KEY", ""),
-		ApplicationEnv:  getEnv("APPLICATION_ENV", "development"),
-		TradingMode:     getEnv("TRADING_MODE", "paper"),
+		FMPAPIKey:      getEnv("FMP_API_KEY", ""),
+		ApplicationEnv: getEnv("APPLICATION_ENV", "development"),
+		TradingMode:    getEnv("TRADING_MODE", "paper"),
 	}
 }
 
