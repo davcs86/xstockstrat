@@ -1,6 +1,6 @@
 # Feature: mcp-config-management
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `design-approved`
 **Development Branch**: `feature/mcp-config-management`
 **Created**: 2026-07-28
 **Last Updated**: 2026-07-28
@@ -13,12 +13,15 @@
 |---|---|---|---|
 | 2026-07-28 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-07-29 | `draft` → `spec-ready` | /sdd-review | PASS WITH WARNINGS on the third pass. Passes 1-2 FAILED; their four blockers were resolved by features 074/075/076/077 plus two user decisions (set_config rejects is_secret keys; Streamable HTTP only). |
+| 2026-07-29 | `spec-ready` → `design-approved` | /sdd-design | 1 round (quick). 14 adversary objections; the transport gate was redesigned after the adversary showed the obvious check accepts SSE on both transports. No Floor breach. |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon](recon.md) — grounded dossier (Phase 0)
+- [Design](design.md) — chosen approach, rejected alternatives, open risks (Phase 1)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec mcp-config-management`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -48,4 +51,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design mcp-config-management` — recon + design debate.
+`/sdd-spec mcp-config-management` — generate the implementation spec.

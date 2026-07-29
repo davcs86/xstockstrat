@@ -288,3 +288,31 @@ prong (a) is now backed by real data rather than a field that was always `false`
 - FR-6 appears after FR-7 in document order; its header says "Six surfaces" over a five-item list
   reconciled in prose (`mcp-tools.md` counted twice). Cosmetic.
 - FR-5's `app/auth.py:28-46` citation is one line short of the function's actual extent.
+
+## Session 2026-07-29 — /sdd-design: `spec-ready` → `design-approved`
+
+Phase 0 recon written (see recon.md, incl. the premise correction). Phase 1 ran one adversarial
+round (`quick`) producing 14 objections. No Floor breach. The three that changed the design:
+
+1. **The transport gate as I proposed it was wrong, not just weak.** I would have checked
+   "`ctx.request_context.request` is a Starlette `Request` carrying an acceptable Authorization
+   header". Both transports build a `Request` (`sse.py:203`, `streamable_http.py:380`) and a
+   spec-conformant client attaches the header to `POST /messages` too — so `set_config` would have
+   **succeeded over SSE**, and AC-10 would have passed only because the test omitted the header.
+   Replaced with the adversary's alternative: `_authorized` stores claims on the ASGI scope, and
+   `/messages` returns before `_authorized` ever runs — so the gate is correct *by construction*.
+2. **The claims plumbing I proposed would have broken `tests/test_auth.py` and the 401 path.**
+   Delegating `validate_bearer_jwt` to `client.validate_token` moves stub construction into
+   `app.client`, so the patches at `test_auth.py:25,28,40,43` intercept nothing; and
+   `client.validate_token` raises where `app/auth.py:44-49` never does, turning an expired token
+   into a 500 that bypasses the `WWW-Authenticate` discovery response. The scope approach avoids
+   both and needs no second Identity round-trip.
+3. **`value_type` is a no-op for existing keys.** `ON CONFLICT … DO UPDATE SET` does not update
+   `value_type`, so the caller's choice is honored only when creating a key. Must be in the
+   docstring or it becomes an "I set int and got a string back" bug report.
+
+Also folded in: fail-closed on the `ListKeys` pre-check; `ListKeys` over `GetConfig` (the latter
+serves a `pg_notify`-refreshed cache and can report a stale flag); `x-user-id` dropped as dead
+metadata since `request.author` wins server-side; `value_type` as a `Literal` so the enum reaches
+the public `inputSchema`; and the C-10 surface list extended to invariant **AGENT-3** and the agent
+`CLAUDE.md` management-tool-authorization paragraph, which the FR-6 list had missed.
