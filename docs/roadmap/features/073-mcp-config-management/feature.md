@@ -1,6 +1,6 @@
 # Feature: mcp-config-management
 
-**Lifecycle Status**: `design-approved`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/mcp-config-management`
 **Created**: 2026-07-28
 **Last Updated**: 2026-07-28
@@ -14,6 +14,7 @@
 | 2026-07-28 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-07-29 | `draft` → `spec-ready` | /sdd-review | PASS WITH WARNINGS on the third pass. Passes 1-2 FAILED; their four blockers were resolved by features 074/075/076/077 plus two user decisions (set_config rejects is_secret keys; Streamable HTTP only). |
 | 2026-07-29 | `spec-ready` → `design-approved` | /sdd-design | 1 round (quick). 14 adversary objections; the transport gate was redesigned after the adversary showed the obvious check accepts SSE on both transports. No Floor breach. |
+| 2026-07-29 | `design-approved` → `code-completed` | /sdd-execute | Three tools + claims plumbing + scope port implemented; 124/124 agent tests pass, ruff clean, context-map OK. |
 
 ---
 
@@ -51,4 +52,7 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec mcp-config-management` — generate the implementation spec.
+Open the integration PR to `main-dev`. **Outstanding before `launched`:** a dev smoke test —
+call `set_config` from a real agent session over Streamable HTTP as an admin (expect success) and
+as a non-admin (expect `PERMISSION_DENIED`), and confirm `get_config` redacts a seeded
+`is_secret` key.

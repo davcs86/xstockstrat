@@ -316,3 +316,55 @@ serves a `pg_notify`-refreshed cache and can report a stale flag); `x-user-id` d
 metadata since `request.author` wins server-side; `value_type` as a `Literal` so the enum reaches
 the public `inputSchema`; and the C-10 surface list extended to invariant **AGENT-3** and the agent
 `CLAUDE.md` management-tool-authorization paragraph, which the FR-6 list had missed.
+
+## Session 2026-07-29 — /sdd-execute: implemented
+
+### What shipped
+
+- `app/auth.py` — `validate_bearer_claims(token) -> dict | None`, **alongside** the untouched
+  `validate_bearer_jwt`. Kept separate deliberately: that function's tests patch `app.auth`'s stub,
+  and its never-raises contract is what keeps an expired token a 401 with the `WWW-Authenticate`
+  discovery pointer rather than a 500.
+- `app/main.py` — `_authorized` now resolves claims and publishes them on the request's ASGI scope
+  under `MCP_CLAIMS_SCOPE_KEY`. Nothing is stored beyond the request (FR-B13 intact).
+- `app/scopes.py` — `roles_to_access_scope`, a port of the UI's `rolesToAccessScope`, with the two
+  "admin" numbers (15 here, 7 in `_admin_metadata()`) explained so neither looks like a bug.
+- `app/client.py` — `get_config` / `list_config_keys` / `set_config` wrappers. `set_config`
+  forwards `("x-access-scope", <caller's scope>)` instead of `_admin_metadata()`'s hardcoded tuple.
+- `app/tools.py` — the three tools; `set_config` takes `ctx: Context`, rejects `secret.`-prefixed
+  keys before any RPC, requires claims, checks the `is_secret` flag at the write's own scope
+  (failing closed), then forwards the derived scope.
+- Docs: tool counts on all four surfaces, three new `mcp-tools.md` sections, the MCP path in
+  `config-rollout.md`, and **both prose surfaces the FR-6 list had missed** — invariant AGENT-3 and
+  the agent `CLAUDE.md` § Management-tool authorization paragraph, each of which asserted something
+  this feature falsifies.
+
+### Verification
+
+| Gate | Result |
+|---|---|
+| `uv run pytest` | **124/124** |
+| `uv run ruff check app/ tests/` | clean |
+| `scripts/check-context-map.sh` | OK |
+| coverage | 67% total (threshold 40); `scopes.py` 100%, `tools.py` 84% |
+| SDK wiring | `set_config.context_kwarg == 'ctx'` asserted — proves `find_context_parameter` ran |
+| tool count | 17 registered, matching every doc surface |
+
+### Deviations
+
+1. **`tests/test_oauth.py` needed updating** — two transport-acceptance cases patched
+   `app.auth.validate_bearer_jwt`, which `_authorized` no longer calls. This is precisely the
+   breakage the adversary predicted for `test_auth.py`; I avoided it there and hit it next door.
+   Repointed at `validate_bearer_claims`; they still test what they tested.
+2. **`app/scopes.py` also owns `MCP_CLAIMS_SCOPE_KEY`** rather than `main.py`, so `tools.py` and
+   `main.py` share the seam without importing each other.
+
+### Open risks carried from design.md
+
+- Prong (a)'s blind spot: a key flagged `is_secret` only in a *different* scope is invisible to the
+  lookup; the name prefix backstops only prefixed keys. Narrowed by feature 078, not eliminated.
+- TOCTOU between the `ListKeys` check and the `SetConfig` write — accepted, one-RPC window.
+- **No test drives a real MCP transport.** The suite asserts `context_kwarg == 'ctx'` (so the SDK
+  injection is proven) and mocks the ctx thereafter. The claim that Streamable HTTP actually
+  delivers a request whose scope carries `mcp_claims` is verified by reading the SDK, not by
+  executing it — the residual gap, stated rather than papered over. The dev smoke test closes it.

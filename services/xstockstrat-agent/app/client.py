@@ -830,3 +830,137 @@ async def get_backfill_status(
         ],
         "next_page_token": resp.page.next_page_token,
     }
+
+
+# ── xstockstrat-config: read/write config (feature 073) ──────────────────────────────────────
+#
+# These deliberately do NOT reuse get_config_value() above, which hardcodes namespace="agent",
+# forwards no metadata, and swallows every exception. Errors here must reach the tool layer so
+# AGENT-5's mapping can turn them into a useful message -- PERMISSION_DENIED in particular.
+
+
+def _config_scope(environment: str, trading_mode: str) -> tuple:
+    """Translate the caller's scope strings into the proto enums ConfigService expects."""
+    from gen.common.v1 import common_pb2  # noqa: PLC0415
+
+    env = (
+        common_pb2.ENVIRONMENT_PRODUCTION
+        if environment == "production"
+        else common_pb2.ENVIRONMENT_DEV
+    )
+    if trading_mode == "live":
+        mode = common_pb2.TRADING_MODE_LIVE
+    elif trading_mode == "paper":
+        mode = common_pb2.TRADING_MODE_PAPER
+    else:
+        mode = common_pb2.TRADING_MODE_UNSPECIFIED
+    return env, mode
+
+
+async def get_config(namespace: str, environment: str, trading_mode: str) -> dict:
+    """One-shot ConfigService.GetConfig. Read path — no admin scope (AGENT-3)."""
+    from gen.config.v1 import config_pb2, config_pb2_grpc  # noqa: PLC0415
+
+    env, mode = _config_scope(environment, trading_mode)
+    async with grpc.aio.insecure_channel(CONFIG_ENDPOINT) as channel:
+        stub = config_pb2_grpc.ConfigServiceStub(channel)
+        resp = await stub.GetConfig(
+            config_pb2.GetConfigRequest(
+                namespace=namespace, environment=env, trading_mode=mode
+            ),
+            metadata=_metadata(),
+        )
+        values = {}
+        for key, cv in resp.values.items():
+            which = cv.WhichOneof("value")
+            values[key] = {
+                "value": getattr(cv, which) if which else None,
+                "value_type": (which or "").removesuffix("_val") or "string",
+                "is_secret": cv.is_secret,
+            }
+        return {
+            "namespace": resp.namespace,
+            "version": resp.version,
+            "environment": environment,
+            "trading_mode": trading_mode,
+            "values": values,
+        }
+
+
+async def list_config_keys(namespace: str, environment: str, trading_mode: str) -> dict:
+    """ConfigService.ListKeys — metadata only, never values. Read path, no admin scope."""
+    from gen.config.v1 import config_pb2, config_pb2_grpc  # noqa: PLC0415
+
+    env, mode = _config_scope(environment, trading_mode)
+    async with grpc.aio.insecure_channel(CONFIG_ENDPOINT) as channel:
+        stub = config_pb2_grpc.ConfigServiceStub(channel)
+        resp = await stub.ListKeys(
+            config_pb2.ListKeysRequest(
+                namespace=namespace, environment=env, trading_mode=mode
+            ),
+            metadata=_metadata(),
+        )
+        return {
+            "namespace": namespace,
+            "environment": environment,
+            "trading_mode": trading_mode,
+            "keys": [
+                {
+                    "key": k.key,
+                    "description": k.description,
+                    "default_value": k.default_value,
+                    "is_secret": k.is_secret,
+                    "consuming_service": k.consuming_service,
+                }
+                for k in resp.keys
+            ],
+        }
+
+
+async def set_config(
+    namespace: str,
+    key: str,
+    value_type: str,
+    value: str,
+    environment: str,
+    trading_mode: str,
+    author: str,
+    reason: str,
+    access_scope: int,
+) -> dict:
+    """ConfigService.SetConfig, forwarding the REAL caller's access scope.
+
+    This is the one management call that does not use _admin_metadata()'s hardcoded tuple -- a
+    deliberate, tool-scoped deviation from invariant AGENT-4 (feature 073 FR-5). The server-side
+    ADMIN-bit gate (feature 074) is what enforces it, so a non-admin caller gets PERMISSION_DENIED
+    here rather than a silent success.
+    """
+    from gen.config.v1 import config_pb2, config_pb2_grpc  # noqa: PLC0415
+
+    env, mode = _config_scope(environment, trading_mode)
+    cv = config_pb2.ConfigValue()
+    if value_type == "int":
+        cv.int_val = int(value)
+    elif value_type == "float":
+        cv.float_val = float(value)
+    elif value_type == "bool":
+        cv.bool_val = value.strip().lower() in ("true", "1", "yes")
+    else:
+        cv.string_val = value
+
+    async with grpc.aio.insecure_channel(CONFIG_ENDPOINT) as channel:
+        stub = config_pb2_grpc.ConfigServiceStub(channel)
+        resp = await stub.SetConfig(
+            config_pb2.SetConfigRequest(
+                namespace=namespace,
+                key=key,
+                value=cv,
+                author=author,
+                reason=reason,
+                environment=env,
+                trading_mode=mode,
+            ),
+            # NOT _admin_metadata(): the caller's real scope, so the server's gate decides.
+            metadata=[*_metadata(), ("x-access-scope", str(access_scope))],
+        )
+        return {"version": resp.version, "updated_at": resp.updated_at.ToDatetime().isoformat()}

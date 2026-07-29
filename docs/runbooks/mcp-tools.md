@@ -1,6 +1,6 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the fourteen tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the seventeen tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 ---
@@ -26,7 +26,7 @@ directly on port 9000.
 
 **Direct SSE (local):** `http://localhost:9000/sse`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same fourteen tools' `name`,
+**Tool catalog (UI display).** `GET /api/tools` returns the same seventeen tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
 capabilities (the same data documented below), never user data or credentials. It powers the
 `xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
@@ -610,6 +610,87 @@ or, in list mode:
 |---|---|
 | Unknown `job_id` | `backfill job not found` (NOT_FOUND) |
 | Unknown `status_filter` | tool `ValueError` enumerating accepted values |
+
+---
+
+### `get_config`
+
+Read a namespace's current config values from `xstockstrat-config`. **Read-only.**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `namespace` | string | yes | `marketdata`, `analysis`, `trading`, `platform`, … |
+| `environment` | string | no | `dev` or `production`. Omit to use the agent deployment's own `APPLICATION_ENV` |
+| `trading_mode` | string | no | `paper`, `live` or `all`. Omit to use the agent's own `TRADING_MODE` |
+
+Returns `{namespace, version, environment, trading_mode, values}`, each value being
+`{value, value_type, is_secret}`.
+
+**Any value flagged `is_secret` is returned as `"[redacted]"`.** Redaction keys on the flag, not on
+the key name, so a flagged-but-unprefixed key is still redacted. Secret values are never returned by
+this tool.
+
+**Errors:** `NOT_FOUND` → "namespace not found".
+
+---
+
+### `list_config_keys`
+
+List the config keys registered for a namespace, **metadata only — no values**. Read-only, so
+nothing here can leak a secret.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `namespace` | string | yes | As above |
+| `environment` | string | no | Defaults to the agent's `APPLICATION_ENV` |
+| `trading_mode` | string | no | Defaults to the agent's `TRADING_MODE` |
+
+Returns `{namespace, environment, trading_mode, keys[]}`; each key carries `key`, `description`,
+`default_value`, `is_secret`, `consuming_service`.
+
+Use it to discover what exists — and which keys are secret — before calling `set_config`.
+
+---
+
+### `set_config`
+
+Write **one non-secret** config value. **Admin-scoped write. Streamable HTTP transport only.**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `namespace` | string | yes | e.g. `marketdata` |
+| `key` | string | yes | e.g. `marketdata.fmp.enabled` |
+| `value_type` | enum | yes | `string` \| `int` \| `float` \| `bool` |
+| `value` | string | yes | Converted according to `value_type` |
+| `author` | string | yes | Recorded in `config.config_audit` |
+| `reason` | string | yes | Recorded alongside `author` |
+| `environment` | string | no | Defaults to the agent's `APPLICATION_ENV` |
+| `trading_mode` | string | no | Defaults to the agent's `TRADING_MODE` |
+
+Returns `{version, updated_at}` — **never the value**.
+
+**Authorization uses your real role, not a service-wide admin override.** Unlike every other
+management tool, `set_config` forwards the calling user's derived `x-access-scope`, so
+`xstockstrat-config` rejects a non-admin caller with `PERMISSION_DENIED` ("admin scope required").
+This is the documented exception to invariant **AGENT-4**.
+
+**Secret keys cannot be written.** Rejected both by the `secret.` name prefix (checked before any
+RPC — the only thing that can stop a *new* secret key being created) and by the `is_secret` flag
+read from `ListKeys`. Credentials are delivered as `type: SECRET` environment variables. If the
+flag lookup fails, the write is refused rather than allowed through.
+
+**Transport.** Only available over Streamable HTTP, the only transport whose tool-call request is
+authenticated. Over the legacy SSE transport it returns an "unsupported transport" error.
+
+**Three behaviors worth knowing before you rely on a write:**
+
+- `value_type` is honored only when **creating** a key. `SetConfig`'s `ON CONFLICT … DO UPDATE`
+  does not update the type column, so for an existing key the stored type wins.
+- Pass JSON-valued config as a `string` — that is byte-identical to what the server stores.
+- **Creating a new key writes no audit row**, and neither does rewriting a key to its existing
+  value: the `config.config_audit` trigger fires `BEFORE UPDATE` and only on a value change.
+
+**Errors:** `PERMISSION_DENIED` → "admin scope required"; `INVALID_ARGUMENT` → missing author.
 
 ---
 

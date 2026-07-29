@@ -47,3 +47,42 @@ async def validate_bearer_jwt(token: str) -> bool:
     except Exception as e:
         log.error("Unexpected error validating JWT: %s", e)
         return False
+
+
+async def validate_bearer_claims(token: str) -> dict | None:
+    """Validate the token and return the caller's claims, or None.
+
+    Same contract as ``validate_bearer_jwt`` — audience-bound, never raises — but it returns the
+    claims instead of discarding them, so a tool can authorize on the *real* caller's roles
+    (feature 073 FR-5) rather than the hardcoded admin tuple every other management tool forwards.
+
+    Deliberately duplicates the ValidateToken call rather than having ``validate_bearer_jwt``
+    delegate here: that function's tests patch ``app.auth``'s stub directly, and its
+    never-raises contract is what keeps an expired token a 401 (with the WWW-Authenticate
+    discovery pointer) instead of a 500.
+
+    Returns a dict with user_id / email / roles / aud, or None when the token is missing,
+    invalid, or bound to a different audience.
+    """
+    if not token:
+        return None
+    try:
+        async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+            stub = identity_pb2_grpc.IdentityServiceStub(channel)
+            claims = await stub.ValidateToken(
+                identity_pb2.ValidateTokenRequest(token=token), metadata=_metadata()
+            )
+            if claims.aud != AGENT_PUBLIC_URL:
+                return None
+            return {
+                "user_id": claims.user_id,
+                "email": claims.email,
+                "roles": list(claims.roles),
+                "aud": claims.aud,
+            }
+    except grpc.aio.AioRpcError as e:
+        log.info("JWT claims validation failed: %s", e.details())
+        return None
+    except Exception as e:
+        log.error("Unexpected error validating JWT claims: %s", e)
+        return None

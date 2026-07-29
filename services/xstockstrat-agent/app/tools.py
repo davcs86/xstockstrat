@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Fourteen tools:
+Seventeen tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -16,22 +16,47 @@ Fourteen tools:
   set_strategy_live   — enables/disables live alert evaluation for a strategy
   trigger_backfill    — triggers an OHLCV history backfill via gRPC TriggerBackfill (admin-scoped)
   get_backfill_status — checks a backfill job / lists recent jobs (read-only)
+  get_config          — reads a namespace's current config values, secrets redacted (read-only)
+  list_config_keys    — lists a namespace's registered config keys, metadata only (read-only)
+  set_config          — writes one non-secret config value (admin-scoped, Streamable HTTP only)
 """
 
 import base64
 import json
 import logging
+import os
+from typing import Literal
 
 import grpc
 from mcp.server import FastMCP
+from mcp.server.fastmcp import Context
 from mcp.types import TextContent
 
 from app import backtest_view, client
+from app.scopes import MCP_CLAIMS_SCOPE_KEY, roles_to_access_scope
 
 _ALERT_THRESHOLD_DEFAULT = 0.6
 _ALERT_THRESHOLD_CONFIG_KEY = "signal.alert_threshold"
 
 log = logging.getLogger(__name__)
+
+
+def _claims_from_context(ctx: Context) -> dict | None:
+    """The verified caller claims app/main.py's `_authorized` put on this request's ASGI scope.
+
+    Returns None whenever they are absent — which is precisely the case on the legacy SSE
+    transport, whose `POST /messages` returns before `_authorized` ever runs. That is why the
+    transport rule is enforced by their absence rather than by inspecting the request: BOTH
+    transports hand the tool a Starlette Request carrying an Authorization header, so any check
+    based on those would accept SSE.
+    """
+    try:
+        request = ctx.request_context.request
+    except (ValueError, AttributeError):
+        return None
+    scope = getattr(request, "scope", None) or {}
+    claims = (scope.get("state") or {}).get(MCP_CLAIMS_SCOPE_KEY)
+    return claims if isinstance(claims, dict) else None
 
 
 def _grpc_error_message(exc: grpc.aio.AioRpcError, not_found: str = "not found") -> str:
@@ -616,6 +641,151 @@ def register_tools(server: FastMCP) -> None:
             return await client.get_strategy(strategy_id=strategy_id)
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="strategy not found")) from e
+
+    # ── xstockstrat-config tools (feature 073) ───────────────────────────────────────────────
+    #
+    # Scope resolution for all three: explicit parameter -> this agent deployment's
+    # APPLICATION_ENV / TRADING_MODE -> those env vars' own defaults. Never the proto zero-value:
+    # environment/trading_mode are deployment properties carried in env vars (confirmed with the
+    # user), so a production agent must not silently write a dev row when the caller omits them.
+
+    def _resolve_scope(environment: str, trading_mode: str) -> tuple[str, str]:
+        env = environment or os.environ.get("APPLICATION_ENV", "development")
+        env = "production" if env == "production" else "dev"
+        mode = trading_mode or os.environ.get("TRADING_MODE", "paper")
+        mode = mode if mode in ("paper", "live", "all") else "all"
+        return env, mode
+
+    @server.tool()
+    async def get_config(
+        namespace: str, environment: str = "", trading_mode: str = ""
+    ) -> dict:
+        """Read the current config values for a namespace from xstockstrat-config (read-only).
+        namespace: config namespace, e.g. 'marketdata', 'analysis', 'trading', 'platform'.
+        environment: 'dev' or 'production'. Omit to use this agent deployment's own environment.
+        trading_mode: 'paper', 'live' or 'all'. Omit to use this agent's own trading mode.
+        Returns {namespace, version, environment, trading_mode, values} where each value is
+        {value, value_type, is_secret}.
+        Any key flagged is_secret has its value replaced with '[redacted]' — secret values are
+        never returned by this tool. Note trading-mode scoping applies only to keys stored with a
+        specific mode; keys stored as 'all' are returned for every mode."""
+        env, mode = _resolve_scope(environment, trading_mode)
+        try:
+            result = await client.get_config(
+                namespace=namespace, environment=env, trading_mode=mode
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="namespace not found")) from e
+        # Redact on the is_secret flag, not on the key name: a flagged key need not be prefixed.
+        for entry in result.get("values", {}).values():
+            if entry.get("is_secret"):
+                entry["value"] = "[redacted]"
+        return result
+
+    @server.tool()
+    async def list_config_keys(
+        namespace: str, environment: str = "", trading_mode: str = ""
+    ) -> dict:
+        """List the config keys registered for a namespace, with metadata only (read-only).
+        namespace: config namespace, e.g. 'marketdata', 'analysis', 'trading', 'platform'.
+        environment: 'dev' or 'production'. Omit to use this agent deployment's own environment.
+        trading_mode: 'paper', 'live' or 'all'. Omit to use this agent's own trading mode.
+        Returns {namespace, environment, trading_mode, keys[]} where each key carries key,
+        description, default_value, is_secret and consuming_service.
+        No values are returned by this RPC at all, so nothing here can leak a secret. Use it to
+        discover what exists and which keys are secret before calling set_config."""
+        env, mode = _resolve_scope(environment, trading_mode)
+        try:
+            return await client.list_config_keys(
+                namespace=namespace, environment=env, trading_mode=mode
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="namespace not found")) from e
+
+    @server.tool()
+    async def set_config(
+        ctx: Context,
+        namespace: str,
+        key: str,
+        value_type: Literal["string", "int", "float", "bool"],
+        value: str,
+        author: str,
+        reason: str,
+        environment: str = "",
+        trading_mode: str = "",
+    ) -> dict:
+        """Write one non-secret config value in xstockstrat-config (admin-scoped write).
+        namespace: config namespace, e.g. 'marketdata'.
+        key: the config key, e.g. 'marketdata.fmp.enabled'.
+        value_type: one of string, int, float, bool. Pass JSON-valued config as a 'string' —
+          that is byte-identical to what the server stores. NOTE value_type is only honored when
+          CREATING a new key; for an existing key the stored type wins and this is ignored.
+        value: the new value, as a string; it is converted according to value_type.
+        author: who is making the change — required, and recorded in config.config_audit.
+        reason: why — required, and recorded alongside author.
+        environment: 'dev' or 'production'. Omit to use this agent deployment's own environment.
+        trading_mode: 'paper', 'live' or 'all'. Omit to use this agent's own trading mode.
+        Returns {version, updated_at}. Never echoes the value back.
+
+        Authorization uses YOUR role, not a service-wide admin override: the write is rejected
+        with 'admin scope required' unless your session has the admin role. Secret keys cannot be
+        written here at all — credentials are delivered as type: SECRET environment variables.
+        Only available over the Streamable HTTP transport, because that is the only one whose
+        tool-call request is authenticated. Creating a NEW key writes no audit row (the audit
+        trigger fires on update only), and neither does rewriting a key to its existing value."""
+        # Prong (b) first: a name check is the ONLY thing that can stop a brand-new secret key.
+        # SetConfigRequest carries no is_secret field and the column defaults FALSE, so without
+        # this a caller could create an unflagged row holding a plaintext credential.
+        if key.startswith("secret."):
+            raise RuntimeError(
+                f"refusing to write '{key}': secret keys are not settable through MCP. "
+                "Credentials are delivered as type: SECRET environment variables "
+                "(see docs/patterns/config-governance.md)."
+            )
+
+        claims = _claims_from_context(ctx)
+        if claims is None:
+            raise RuntimeError(
+                "set_config is only available over the Streamable HTTP transport, where the "
+                "tool call itself is authenticated. The legacy SSE transport does not "
+                "authenticate individual tool calls, so the caller's role cannot be established."
+            )
+
+        env, mode = _resolve_scope(environment, trading_mode)
+
+        # Prong (a): the is_secret flag, looked up at the SAME scope as the pending write.
+        # Fails CLOSED -- if the lookup errors we refuse, otherwise the guard is decorative.
+        try:
+            listing = await client.list_config_keys(
+                namespace=namespace, environment=env, trading_mode=mode
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(
+                f"cannot verify whether '{key}' is a secret key, refusing the write: "
+                f"{_grpc_error_message(e)}"
+            ) from e
+        for meta in listing.get("keys", []):
+            if meta.get("key") == key and meta.get("is_secret"):
+                raise RuntimeError(
+                    f"refusing to write '{key}': it is flagged is_secret. Credentials are "
+                    "delivered as type: SECRET environment variables."
+                )
+
+        access_scope = roles_to_access_scope(claims.get("roles"))
+        try:
+            return await client.set_config(
+                namespace=namespace,
+                key=key,
+                value_type=value_type,
+                value=value,
+                environment=env,
+                trading_mode=mode,
+                author=author,
+                reason=reason,
+                access_scope=access_scope,
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="config key not found")) from e
 
 
 async def _get_source(source_slug: str) -> dict:

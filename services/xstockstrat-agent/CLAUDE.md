@@ -15,7 +15,8 @@ against the connector URL (`AGENT_PUBLIC_URL`, `${APP_URL}/agent`, stripped to `
 ingress) — plus the **legacy HTTP+SSE** transport at `/sse` + `/messages` for Claude Desktop.
 All outbound gRPC calls to platform services carry `x-mcp-secret` when `MCP_AGENT_SECRET` is
 set; the management tools forward a hardcoded admin `x-access-scope` so the backends' role checks
-pass.
+pass — with one exception, `set_config`, which forwards the real caller's derived scope
+(feature 073; see § Management-tool authorization).
 
 ## Language
 
@@ -23,7 +24,7 @@ Python 3.12 (asyncio, grpc.aio, FastMCP)
 
 ## MCP Tools
 
-The agent registers fourteen tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
+The agent registers seventeen tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
 reference):
 
 | Tool | Purpose |
@@ -42,6 +43,9 @@ reference):
 | `set_strategy_live` | Enable/disable continuous live evaluation + alerting for a strategy (feature 048) |
 | `trigger_backfill` | Trigger an OHLCV history backfill via xstockstrat-ingest (admin-scoped write, feature 066) |
 | `get_backfill_status` | Check one backfill job or list recent jobs (read-only, feature 066) |
+| `get_config` | Read a namespace's current config values, secret values redacted (read-only, feature 073) |
+| `list_config_keys` | List a namespace's registered config keys, metadata only (read-only, feature 073) |
+| `set_config` | Write one non-secret config value (admin-scoped, **Streamable HTTP only**, feature 073) |
 
 ### Management-tool authorization
 
@@ -50,6 +54,23 @@ The management tools (`manage_strategy`, `manage_formula`, `manage_signal_source
 Internal services (e.g. `xstockstrat-analysis` `SetStrategyLive`) only perform a role check on the
 propagated `x-access-scope`; `manage_formula` additionally relies on the indicators backend's
 author-ownership check. The MCP endpoint itself is gated by OAuth 2.1 (see below).
+
+**`set_config` is the documented exception (feature 073).** It forwards the **real calling user's**
+scope, derived from their identity roles by `app/scopes.py` `roles_to_access_scope` (a port of the
+UI's `rolesToAccessScope`), so a non-admin operator is rejected `PERMISSION_DENIED` by
+`xstockstrat-config`'s gate rather than silently succeeding under a service-wide admin override.
+The claims come from `app/main.py` `_authorized`, which publishes them on the request's ASGI scope
+under `MCP_CLAIMS_SCOPE_KEY`; the tool reads them via its injected `ctx: Context`.
+
+That plumbing is also why `set_config` is **Streamable HTTP only**: the legacy SSE `POST /messages`
+returns before `_authorized` runs, so no verified claims exist for it and the tool refuses. Note a
+transport check based on the request object would *not* work — both transports hand a tool a
+Starlette `Request` carrying an `Authorization` header, so only the absence of verified claims
+distinguishes them.
+
+`set_config` also refuses any `is_secret` key (checked by name prefix *and* by the flag from
+`ListKeys`): credentials are delivered as `type: SECRET` environment variables, never as config
+values.
 
 ### OAuth 2.1 edge auth (feature 049 Part B)
 
