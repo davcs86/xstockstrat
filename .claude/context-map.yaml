@@ -72,8 +72,6 @@ skills:
       - .claude/skills/sdd-execute/templates/step-pr-body.md
       - .claude/skills/sdd-execute/templates/integration-pr-body.md
       - .claude/skills/sdd-execute/templates/branch-sync.md
-  - name: test-data
-    router: .claude/skills/test-data/SKILL.md
   - name: sdd-qa
     router: .claude/skills/sdd-qa/SKILL.md
     reference:
@@ -116,8 +114,10 @@ routing:
     path: docs/patterns/ci-overview.md
   - task: "DRY guard rail (no repeated constants/literals/types/helpers)"
     path: docs/patterns/dry-guard-rail.md
-  - task: "Frontend test mocks / dummy data (test-data inventory, C-12)"
+  - task: "Test mocks / dummy data — canonical fixture homes, any language (C-12 frontend, C-13 all)"
     path: docs/patterns/test-data-inventory.md
+  - task: "QA — design/run tests, coverage gaps, flake detection, defect capture"
+    path: .claude/skills/sdd-qa/SKILL.md
   - task: "Proto / buf changes"
     path: docs/runbooks/proto-versioning.md
   - task: "Feature workflow (branch, PR, promote)"
