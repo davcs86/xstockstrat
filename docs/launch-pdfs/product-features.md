@@ -174,7 +174,7 @@ Sensitive values use the `secret.*` prefix and are never logged or shipped to te
 
 ## Section 7 — The MCP Agent
 
-`xstockstrat-agent` (port 9000, SSE transport) is a Model Context Protocol server. External AI agents — Claude Desktop, custom Claude API integrations, anything that speaks MCP — connect to it to interact with the platform.
+`xstockstrat-agent` (port 9000, Streamable HTTP transport) is a Model Context Protocol server. External AI agents — Claude Desktop, custom Claude API integrations, anything that speaks MCP — connect to it to interact with the platform.
 
 Exposed tools:
 - **Ingest signals** — submit a newsletter or alert payload, the agent normalizes and forwards to `xstockstrat-ingest`

@@ -186,3 +186,115 @@ modules.
   FR-3. → docs step.
 - Operator action after deploy: a connector saved with a `/sse` URL 404s until trimmed to the bare
   `AGENT_PUBLIC_URL`. → PR body + `docs/runbooks/mcp-tools.md`.
+
+## Session 2026-07-29 — /sdd-spec
+
+**Status `design-approved` → `implementation-ready`.** Generated `implementation-spec.md` with
+**8 steps**, following `design.md` §5's ordering exactly. No design decision was reopened.
+
+Step map: 1 [service] + 2 [test] = Cycle A (call-time resolvers + extracted `main()`);
+3 [service] + 4 [test] = Cycle B (SSE deletion, FR-1a 404 branch, factory renames, rationale
+rewrites); 5 [service] `claude_mcp_config.json`; 6 [config] the three deployment specs;
+7 [service] ingest/analysis comment-only; 8 [docs] the FR-4 sweep + AC-5 two-tier reconciliation.
+
+### Key codebase findings (all re-verified this session, not inherited)
+
+- **FR-4's grep list reconciles exactly**, with one addition. Re-running FR-4's grep over
+  `git ls-files` (excluding `packages/proto/gen/` and `docs/roadmap/features/`) reproduces every line
+  the product spec enumerates — `.do/app.{yaml,dev.yaml}:276,277`, `docker-compose.yml:520-521`, root
+  `CLAUDE.md:105`, agent `CLAUDE.md:11,15,65,77,83,94,97,118-119`, `mcp-tools.md:13,15,21,22,27,42,48,61,683`,
+  `header-propagation.md:13,21`, `product-features.md:177`, `setup-env.sh:199`,
+  `context-constitution.md:4,16`, `context-constitution-findings.md:18`, both `servicer.py` lines, and
+  every agent `app/`+`tests/` hit. **New survivor not on any list:**
+  `docs/roadmap/ledger/insights.md:356,359,373,381,384` — this feature's own two design-phase ledger
+  entries, written after the spec's 2026-07-29 grep. `docs/roadmap/ledger/` is append-only by
+  convention (`ledger/CLAUDE.md`), so they are legitimate survivors; recorded in Step 8's tier-2
+  justification list rather than edited.
+- **AC-5 tier-1 baseline is 14 rows**, all inside files Steps 3 and 8 change: agent `CLAUDE.md:83`;
+  `app/main.py:51,59,76,164,206,209,225`; `tests/test_oauth.py:4,17,19,73`;
+  `tests/test_tools_endpoint.py:12,14`. Verified by execution. `CHANGELOG.md` carries **no** tier-1
+  hit, so it needs no exclusion in the tier-1 command — only tier 2 needs it.
+- **`app/tools.py:21` is a false positive for FR-3.** Recon listed it among the code surfaces to
+  edit; the line actually reads "set_config — writes one non-secret config value (admin-scoped,
+  Streamable HTTP only)" and carries no SSE claim. It is still true post-change and is left alone —
+  it is not a grep hit under FR-4's pattern either.
+- **The `claude_mcp_config.json` file is read by nothing.** `git ls-files | xargs grep -ln
+  claude_mcp_config` returns only `docs/runbooks/mcp-tools.md:3` and SDD artifacts. That is what makes
+  Step 5's `TDD: N/A` honest and lets its C-08 pairing ride on Step 4's suite run rather than
+  inventing a test with nothing to assert.
+- **`tests/` has no transport/env module today** (`conftest.py`, `test_auth.py`,
+  `test_backtest_view.py`, `test_client.py`, `test_config_tools.py`, `test_oauth.py`, `test_tools.py`,
+  `test_tools_endpoint.py`), so Step 2's `test_transport_config.py` is a create-from-scratch with no
+  existing pattern to copy — recorded as such in its Codebase Evidence.
+
+### Spec-authoring decisions
+
+- **Step 3 carries the minimum test adaptation it breaks** (the `_app()` rename in both modules, the
+  deletion of `test_sse_accepts_valid_credential_reaching_transport`, and the 401→404 rewrite), with
+  everything else in those files deferred to Step 4. This is the ledger `insights.md` 2026-07-27 (072)
+  shape and is what keeps every commit green under **F-05** without collapsing the red-green pair.
+- **Step 2's red is protected from becoming an import error.** The step instructs
+  `import app.main as main_mod` with attribute access *inside* test bodies — a module-level
+  `from app.main import resolve_transport` would break collection of the whole file and fail
+  `tdd-gate.md:22-25`. This is the mechanical detail that makes `design.md` §5's "behavioral red"
+  claim actually hold.
+- `resolve_transport`'s deprecation warning is asserted against logger name `app.main`
+  (`app/main.py:24` → `log = logging.getLogger(__name__)`), and every "unset" case uses
+  `monkeypatch.delenv(..., raising=False)` because `tests/conftest.py:31-37` is **autouse** and
+  already sets `MCP_TRANSPORT=stdio`.
+
+## Session 2026-07-29 — /sdd-execute (all 8 steps, single PR)
+
+**Status `implementation-ready` → `code-completed`.** Executed on `claude/feature-079-remove-sse` as
+one PR rather than 8 stacked step PRs, matching how 073–078 shipped in this session.
+
+### TDD gate
+
+- **Cycle A red** (captured before any edit): `tests/test_transport_config.py` — 12 failures, each
+  failing *inside its own body* on `AttributeError: module 'app.main' has no attribute …`. Collection
+  succeeded, which is the point: the file imports the module and reads attributes inside test bodies,
+  so the red is "behavior missing" per `tdd-gate.md:22-25` rather than a file-level ImportError.
+- **Cycle A/B green**: 27 passed across `test_transport_config.py` + `test_oauth.py`.
+- **Full agent suite**: 137 passed, coverage **68.21%** (baseline was 124 passed). The
+  `--cov-fail-under=40` gate was *measured*, not predicted — two SSE cases were deleted and coverage
+  still rose, because the deleted code went with them.
+- **Step 7 characterization green**: ingest 134, analysis 351 — both unchanged from before the edit,
+  which is what "red N/A — no behavior change" has to mean.
+
+### AC-5 result
+
+- **Tier 1: 0 rows**, down from the 14-row baseline. Fully mechanical, no judgment.
+- **Tier 2: every survivor enumerated and legitimate** — the trader-alert SSE (a different SSE, on
+  the NOT-changed list), `FR-1a`'s `REMOVED_TRANSPORT_PATHS`, FR-2's deprecated alias/fallback
+  handling, the operator migration note, and the tests that assert the 404. Zero unexpected hits.
+
+### Deviations (full detail in the spec's Deviation Log)
+
+- **D-1** — Steps 1 and 3's runner rename landed together; single-PR execution makes the intermediate
+  `_run_sse` state unreviewable, and the end state is identical.
+- **D-2** — Step 5's verification (`! grep -n "sse" claude_mcp_config.json`) was **too strict and
+  failed on correct output**: the operator migration note must name `/sse` to tell an operator what to
+  change. Replaced with the real invariant — no server block's `url` may contain `/sse`. This is the
+  *same shape* as the AC-5 defect the design phase caught: a substring gate over vocabulary that
+  legitimately survives. Third instance this feature; see the ledger.
+- **D-3** — two docstring reflows in Step 7, because the replacement phrase overflowed ruff's
+  100-char limit. No wording changed beyond the named phrase.
+
+### Verified end state
+
+- `app/main.py`: SSE import, `SseServerTransport` construction and both branches deleted;
+  `REMOVED_TRANSPORT_PATHS` + `_send_transport_removed` return 404 `text/plain` **before**
+  `_authorized`; `resolve_transport()` / `resolve_http_port()` replace the import-time constants;
+  `main()` extracted so the startup dispatch is under test.
+- Deployment: all three specs on `MCP_TRANSPORT: http` + `MCP_HTTP_PORT`; all three YAMLs parse.
+- `claude_mcp_config.json`: two `/sse` blocks → one Streamable HTTP block at the bare
+  `<AGENT_PUBLIC_URL>`, plus a `_migration` note.
+
+### Open Threads
+
+- **Operator action after deploy** (unchanged): a connector saved with a `/sse` URL returns 404 until
+  trimmed to the bare `AGENT_PUBLIC_URL`. In the PR body and `docs/runbooks/mcp-tools.md`.
+- **`/context-scrubber scan` was not run** — the context-forge plugin is not available in this
+  session. Stated in the PR body rather than skipped silently, per the root `CLAUDE.md` teardown rule.
+- **`context-constitution-findings.md:18` stays open by design** — the unrecognized-value fallthrough
+  is narrowed by the new warning, not closed; AC-4 mandates the fallthrough itself.

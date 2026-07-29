@@ -10,7 +10,8 @@ Every service that receives **inbound** gRPC calls **must** extract and forward 
 
 The platform entry points strip these headers from **inbound external requests** and re-set them from
 authenticated context, so internal services can trust them as platform-generated values. (nginx was
-removed by feature 045; the entry points are now the `xstockstrat-ui` BFF and the MCP agent SSE layer.)
+removed by feature 045; the entry points are now the `xstockstrat-ui` BFF and the MCP agent's
+Streamable HTTP auth layer.)
 
 ## Authorization model: entry authenticates, internal services role-check
 
@@ -18,7 +19,7 @@ Authentication/authorization happens **once, at the entry point**; internal back
 re-authenticate — at most they perform a **role check** on the propagated `x-access-scope`:
 
 - **Entry points authenticate.** The `xstockstrat-ui` BFF validates the JWT and sets
-  `x-user-id` / `x-access-scope` from the verified claims. The **MCP agent** SSE layer authenticates the
+  `x-user-id` / `x-access-scope` from the verified claims. The **MCP agent**'s Streamable HTTP layer authenticates the
   caller (OAuth 2.1 audience-bound JWT or a legacy API key) and, for admin-scoped tools, validates the
   admin role at the agent entry (`client.validate_admin`) before forwarding `x-access-scope`.
 - **Internal services role-check only.** Admin-gated RPCs check the ADMIN bit on the propagated scope:

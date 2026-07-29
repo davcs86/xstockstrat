@@ -18,7 +18,7 @@ Seventeen tools:
   get_backfill_status — checks a backfill job / lists recent jobs (read-only)
   get_config          — reads a namespace's current config values, secrets redacted (read-only)
   list_config_keys    — lists a namespace's registered config keys, metadata only (read-only)
-  set_config          — writes one non-secret config value (admin-scoped, Streamable HTTP only)
+  set_config          — writes one non-secret config value (admin-scoped write)
 """
 
 import base64
@@ -44,11 +44,11 @@ log = logging.getLogger(__name__)
 def _claims_from_context(ctx: Context) -> dict | None:
     """The verified caller claims app/main.py's `_authorized` put on this request's ASGI scope.
 
-    Returns None whenever they are absent — which is precisely the case on the legacy SSE
-    transport, whose `POST /messages` returns before `_authorized` ever runs. That is why the
-    transport rule is enforced by their absence rather than by inspecting the request: BOTH
-    transports hand the tool a Starlette Request carrying an Authorization header, so any check
-    based on those would accept SSE.
+    Returns None whenever they are absent. Feature 079 removed the legacy SSE transport, whose
+    `POST /messages` returned before `_authorized` ever ran, so on the surviving Streamable HTTP
+    transport the claims are always present and this check is defence in depth. Keep it shaped
+    this way: back when both transports existed, a check for a Starlette Request or an
+    Authorization header would NOT have told them apart -- both carried both.
     """
     try:
         request = ctx.request_context.request
@@ -728,8 +728,8 @@ def register_tools(server: FastMCP) -> None:
         Authorization uses YOUR role, not a service-wide admin override: the write is rejected
         with 'admin scope required' unless your session has the admin role. Secret keys cannot be
         written here at all — credentials are delivered as type: SECRET environment variables.
-        Only available over the Streamable HTTP transport, because that is the only one whose
-        tool-call request is authenticated. Creating a NEW key writes no audit row (the audit
+        Requires the Streamable HTTP transport, the only remote transport the agent serves since
+        feature 079 removed the legacy SSE one. Creating a NEW key writes no audit row (the audit
         trigger fires on update only), and neither does rewriting a key to its existing value."""
         # Prong (b) first: a name check is the ONLY thing that can stop a brand-new secret key.
         # SetConfigRequest carries no is_secret field and the column defaults FALSE, so without
@@ -744,9 +744,10 @@ def register_tools(server: FastMCP) -> None:
         claims = _claims_from_context(ctx)
         if claims is None:
             raise RuntimeError(
-                "set_config is only available over the Streamable HTTP transport, where the "
-                "tool call itself is authenticated. The legacy SSE transport does not "
-                "authenticate individual tool calls, so the caller's role cannot be established."
+                "set_config requires the Streamable HTTP transport, where the tool call itself "
+                "is authenticated. No verified caller claims are present on this request, so the "
+                "caller's role cannot be established. (The legacy SSE transport, which never "
+                "authenticated individual tool calls, was removed by feature 079.)"
             )
 
         env, mode = _resolve_scope(environment, trading_mode)

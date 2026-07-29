@@ -148,8 +148,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         """Role check on the propagated x-access-scope ADMIN bit (0x04).
 
         Internal services trust the access scope set by the entry points (UI BFF via JWT,
-        MCP agent via its SSE auth layer) and do a role check at most — they do not
-        re-authenticate. Shared by ManageStrategy and (feature 048) SetStrategyLive.
+        MCP agent via its OAuth 2.1 Streamable HTTP auth layer) and do a role check at
+        most — they do not re-authenticate. Shared by ManageStrategy and (feature 048)
+        SetStrategyLive.
         """
         metadata = dict(context.invocation_metadata())
         try:

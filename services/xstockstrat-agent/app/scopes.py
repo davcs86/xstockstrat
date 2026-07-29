@@ -13,8 +13,8 @@ Note there are two "admin" numbers in this codebase and they are both correct:
 
 #: ASGI ``scope["state"]`` key under which app/main.py's `_authorized` publishes the verified
 #: caller claims for the current request, and from which app/tools.py reads them. Defined here so
-#: neither module has to import the other. Present ONLY on transports whose tool-call request
-#: passes `_authorized` -- i.e. Streamable HTTP, never the legacy SSE `POST /messages`.
+#: neither module has to import the other. Present on every tool-call request, since feature
+#: 079 removed the legacy SSE transport whose `POST /messages` bypassed `_authorized`.
 MCP_CLAIMS_SCOPE_KEY = "mcp_claims"
 
 _READ = 0x01

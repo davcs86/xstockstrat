@@ -1,5 +1,5 @@
 """
-SSE/Streamable-HTTP endpoint authentication for xstockstrat-agent.
+Streamable HTTP endpoint authentication for xstockstrat-agent.
 
 Validates OAuth 2.1 audience-bound access JWTs against xstockstrat-identity's ValidateToken
 gRPC RPC. Returns True only if the token is valid and its `aud` matches this agent's public URL.

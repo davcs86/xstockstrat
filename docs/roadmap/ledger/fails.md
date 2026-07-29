@@ -104,3 +104,24 @@ ambiguity is logged here).
   confirm the cases *execute* (non-zero assertion count / deliberately break one and watch it go
   red), don't just confirm the runner exits 0. Candidate promotion: extend **C-08** so a paired test
   step must demonstrate a red before its green (**P-06**) *in the suite it will actually ship in*.
+
+### 2026-07-29 — 079-remove-mcp-sse-transport — assumption
+- **Mistake**: A **removal** feature's verification gates were written as substring greps ("no hit for
+  `/sse`"), and three separate times the gate failed on *correct* output, because the vocabulary being
+  removed legitimately survives in the prose that documents the removal. (1) AC-5 as first written
+  demanded zero `/sse|/messages|MCP_SSE_PORT` outside a NOT-changed list — but the 404 branch must name
+  the removed paths and the deprecated-env fallback must name the old var. (2) A proposed
+  marker-token fix (pipe survivors through `grep -viE 'deprecat|removed|legacy|404'`) false-negatives
+  on legitimate survivors carrying no marker word on their own line, and pressures the author to
+  contort code to satisfy a grep. (3) At execute time, Step 5's `! grep -n "sse" claude_mcp_config.json`
+  failed on the **operator migration note**, which must name `/sse` to tell an operator which saved
+  connector URL to change. Each was caught only by *running* the gate.
+- **Evidence**: feature 079 `product-spec.md` AC-5 (restated two tiers), `design.md` §4,
+  `implementation-spec.md` Deviation D-2; the line a file-granularity allow-list would have exempted
+  was `services/xstockstrat-agent/app/main.py:125-128`.
+- **Rule it implies**: for a removal feature, gate on **symbols that cease to exist**
+  (`build_sse_app|SseServerTransport|handle_post_message` → hard zero, no legitimate survivor
+  possible) and on **structured fields** (no server block's `url` contains `/sse`), never on
+  vocabulary that documentation must keep using. And run any grep-based acceptance gate against the
+  intended post-change tree before adopting it — an unexecuted gate is a claim, not a check. Same
+  family as the 2026-07-27 and 2026-07-29 entries, moved from test evidence to gate design.

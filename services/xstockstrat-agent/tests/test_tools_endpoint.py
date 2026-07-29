@@ -1,6 +1,6 @@
 """Tests for the GET /api/tools catalog endpoint (MCP tools UI display feature).
 
-Unlike /sse and the Streamable HTTP root, this endpoint is unauthenticated — it only ever
+Unlike the Streamable HTTP MCP root, this endpoint is unauthenticated — it only ever
 returns tool name/description/inputSchema, the same data already published in
 docs/runbooks/mcp-tools.md, never user data or credentials.
 """
@@ -9,9 +9,9 @@ from starlette.testclient import TestClient
 
 
 def _app():
-    from app.main import build_sse_app  # noqa: PLC0415
+    from app.main import build_http_app  # noqa: PLC0415
 
-    return build_sse_app()
+    return build_http_app()
 
 
 def test_list_tools_returns_all_registered_tools():
@@ -56,7 +56,7 @@ def test_list_tools_entries_have_description_and_input_schema():
 
 
 def test_list_tools_does_not_require_auth():
-    """No Authorization header — unlike /sse, this never 401s."""
+    """No Authorization header — unlike the MCP root, this never 401s."""
     with TestClient(_app()) as tc:
         r = tc.get("/api/tools")
     assert r.status_code == 200

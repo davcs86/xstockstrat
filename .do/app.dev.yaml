@@ -273,8 +273,8 @@ services:
       - key: WAIT_FOR
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060 ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
       - key: MCP_TRANSPORT
-        value: sse
-      - key: MCP_SSE_PORT
+        value: http
+      - key: MCP_HTTP_PORT
         value: "9000"
       - key: MCP_AGENT_SECRET
         scope: RUN_TIME
