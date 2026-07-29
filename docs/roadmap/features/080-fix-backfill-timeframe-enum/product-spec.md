@@ -9,10 +9,11 @@
 ## Problem Statement
 
 Every `BackfillJob` returned by `xstockstrat-ingest` carries a populated **deprecated** field and an
-empty replacement field. The same is true of every `Bar` returned by `xstockstrat-marketdata` —
-found while sweeping for other instances, and folded into this feature (see § marketdata below).
-The slug still says "backfill" because that is where the defect was first observed; the scope is
-**every producer of a deprecated-string/enum pair**.
+empty replacement field. The same is true of every `Bar` returned by `xstockstrat-marketdata`, and of
+the two `getBars` calls the UI charts send — both found while sweeping for other instances, and
+folded into this feature by user decision (see § marketdata and § xstockstrat-ui below). The slug
+still says "backfill" because that is where the defect was first observed; the scope is **every
+producer of a deprecated-string/enum pair**, whether it produces a response or a request.
 
 Observed live against the staging MCP server on 2026-07-29 (`get_backfill_status`, three jobs, all
 identical in shape):
@@ -84,9 +85,12 @@ FR-3. An unmappable or empty stored string yields `TIMEFRAME_UNSPECIFIED` rather
 `.get(…, 0)` on the map lookup, matching how `servicer.py:257` already handles it.
 
 FR-4. **Derive the enum; add no column.** Resolves Open Question 1 (evidence below):
-  - `servicer.py:407`'s `enum = row.get("timeframe_enum") or 0` is **deleted**, along with the
-    `_ENUM_TO_STR` branch it feeds. `_resume_job` derives its timeframe from the stored string via
-    the same alias normalization FR-1 uses.
+  - The dead read at `servicer.py:407` (`enum = row.get("timeframe_enum") or 0`) is **deleted**,
+    together with the `_ENUM_TO_STR` lookup at `servicer.py:408-410` that consumes it. To be
+    explicit: the **`_ENUM_TO_STR` map itself (`servicer.py:36`) stays** — `_canonical_timeframe`
+    reads it on the write path (`servicer.py:50-51`), which FR-2 and § Out of Scope forbid changing.
+    Only that one branch inside `_resume_job` goes. `_resume_job` then derives its timeframe from the
+    stored string via the same alias normalization FR-1 uses.
   - `tests/test_ingest_servicer.py:506`'s `job_row["timeframe_enum"] = 4` is **removed**; the fixture
     drives the real row shape (`timeframe` only). That the resume test still passes is the evidence
     the deleted branch was dead.
@@ -114,25 +118,58 @@ sub-15m intervals were removed so callers *requesting* them get an error). Routi
 through `FromString` would therefore be a no-op dressed as a fix. A streamed bar genuinely *is* a
 1-minute bar, and `TIMEFRAME_1MIN = 1 [deprecated = true]` (`common.proto:82`) still exists precisely
 so already-produced data can be described (**PROTO-2**, deprecate-don't-delete). Set it explicitly
-and comment why. *This is the one judgement call in the feature — flagged for the `/sdd-design`
-adversarial round.*
+and comment why. `common.proto:74-76` states the retention rationale in as many words — 1MIN/5MIN are
+"no longer **ingested** or selectable — but retained (not deleted) so the change stays wire- and
+source-compatible" — and streamed bars are precisely *not ingested* (`stream.go:23-27`: forwarded to
+live subscribers, never persisted). Labelling a live-only bar `1MIN` is within that member's
+documented reason for existing.
+
+**Blast radius: zero.** `StreamBars` has no callers — a zero-caller grep across trading / analysis /
+indicators is recorded in `docs/roadmap/features/013-phase-2-data-layer/context.md:27`, and
+`014-trader-chart-panel/context.md:13` records the chart deliberately polling `GetBars` instead. No
+consumer can observe the `UNSPECIFIED → 1MIN` transition today.
+
+*Rejected alternative* (recorded for `design.md`): leave `TimeframeEnum` unset on the stream site and
+document that streamed bars have no representable canonical timeframe. Rejected because it preserves
+exactly the populated-string/empty-enum shape this feature exists to eliminate. *This remains the one
+judgement call in the feature — flagged for the `/sdd-design` adversarial round.*
 
 FR-7. The deprecated `Timeframe` string keeps its current value at every site (`"1m"` on the stream
 path included) — same additive rule as FR-2. `timeframe.FromString` is not modified: its refusal of
 `"1m"` is load-bearing for request resolution.
+
+### xstockstrat-ui — the request side of the same family
+
+Also folded in by user decision (2026-07-29). A request message has a *producing* side too, and two
+live chart call sites populate only the deprecated string:
+
+FR-8. `ChartPanel.tsx:56-60` and `insights/market/[symbol]/page.tsx:32` send `timeframeEnum`
+alongside the existing `timeframe` on their `getBars` calls. Both pass `src/lib/chart.ts`'s
+`Timeframe` union (`'15Min' | '1Hour' | '1Day'` — the Alpaca alias spellings, `chart.ts:9`), so the
+string→enum map belongs in `chart.ts` next to `TIMEFRAMES`, which is already the declared single
+source of truth for this vocabulary (`chart.ts:1-3`, DRY guard rail). Do **not** add a second map in
+either component. Note the name clash: `chart.ts`'s `Timeframe` is a string union while
+`@xstockstrat/proto/common/v1/common_pb`'s `Timeframe` is the enum — import one under an alias, as
+`insights/backfills/page.tsx:18` already does for the enum.
+
+Without this, dropping `GetBarsRequest.timeframe` makes `timeframe.Resolve(UNSPECIFIED, "")` error
+(`internal/timeframe/timeframe.go:85`) and both charts go blank — the same scheduled failure as the
+rest of this feature, on the request side.
 
 ## Out of Scope
 
 - Removing the deprecated `timeframe` string from the proto (breaking; needs the full
   `docs/runbooks/proto-versioning.md` flow).
 - The `BackfillBarsRequest` write path — already correct.
-- Any UI change. The UI reads the string today and keeps working either way.
-- Any **request**-message timeframe handling in either service. `TriggerBackfillRequest`
-  (`ingest.proto:64`), `StreamBarsRequest` (`marketdata.proto:73`), `GetBarsRequest` (`:86`) and
-  `BackfillBarsRequest` (`:104`) all carry the same deprecated pair, but they are *consumed* — ingest
-  via `_canonical_timeframe` (`servicer.py:47`) and marketdata via `timeframe.Resolve`
-  (`marketdata_service.go:120`), both of which already prefer the enum. The defect exists only where
-  a service is the **producer**.
+- Any UI **read** path. The UI displays the deprecated string today and keeps working either way;
+  only the two `getBars` *senders* change (FR-8).
+- The **consuming** side of every request message. `TriggerBackfillRequest` (`ingest.proto:64`),
+  `StreamBarsRequest` (`marketdata.proto:73`), `GetBarsRequest` (`:86`) and `BackfillBarsRequest`
+  (`:104`) all carry the same deprecated pair, but their *readers* are already correct — ingest via
+  `_canonical_timeframe` (`servicer.py:47`) and marketdata via `timeframe.Resolve`
+  (`marketdata_service.go:120`), both of which prefer the enum. Their *senders* are in scope wherever
+  they populate only the string: the agent (`client.py:752`) and the backfills page
+  (`backfills/page.tsx:112`) were already correct; the two chart senders were not, hence FR-8.
 
 ## Affected Services
 
@@ -140,6 +177,9 @@ path included) — same additive rule as FR-2. `timeframe.FromString` is not mod
 - `xstockstrat-marketdata` (Go) — `internal/repository/marketdata_repo.go`,
   `internal/alpaca/client.go`, `internal/alpaca/stream.go`, their tests. No `migrations/` change:
   `Bar.timeframe_enum` is derived from the already-stored canonical string, exactly as in ingest.
+- `xstockstrat-ui` (Next.js/TS) — `src/lib/chart.ts` (the map), `src/components/trader/ChartPanel.tsx`
+  and `src/app/insights/market/[symbol]/page.tsx` (the two senders), plus the Vitest unit test.
+  `src/lib/**` is inside the Vitest coverage scope, so the map is unit-testable without Playwright.
 
 ## Proto Contract Changes
 
@@ -176,11 +216,16 @@ path included) — same additive rule as FR-2. `timeframe.FromString` is not mod
 7. A streamed bar carries `TIMEFRAME_1MIN` with `Timeframe == "1m"` (FR-6), and
    `timeframe.FromString("1m")` still returns `TIMEFRAME_UNSPECIFIED` — i.e. the request-resolution
    refusal is provably untouched by the labelling change.
+8. Both `getBars` senders include `timeframeEnum` matching the `timeframe` string they already send
+   (`'15Min'` → `TIMEFRAME_15MIN`, `'1Hour'` → `TIMEFRAME_1HOUR`, `'1Day'` → `TIMEFRAME_1DAY`), the
+   mapping lives only in `src/lib/chart.ts`, and a Vitest case asserts it covers every member of the
+   `Timeframe` union — so adding a fourth interval later cannot silently skip the enum.
 
 ## Open Questions
 
-Both closed at the `/sdd-review product-spec` gate (2026-07-29); the reasoning is repeated in
-`context.md` so a later reader does not have to reconstruct it.
+Both closed at the `/sdd-review product-spec` gate (2026-07-29). The reasoning — and the user's
+scope-widening sign-off — is recorded in `context.md` § Session 2026-07-29 (sdd-review), so a later
+reader does not have to reconstruct it.
 
 - [x] **FR-4: derive, do not store.** Closed. `_canonical_timeframe` (`servicer.py:47`) already
   canonicalizes on the write path — it prefers the request's enum and stores `15m`/`1h`/`1d` — so the
@@ -193,9 +238,10 @@ Both closed at the `/sdd-review product-spec` gate (2026-07-29); the reasoning i
   `grep 'deprecated = true' packages/proto/ingest/v1/ingest.proto` returns exactly two hits: `:30`
   (`BackfillJob` — this bug) and `:64` (`TriggerBackfillRequest`). The latter is a **request** message
   that ingest *consumes* via `_canonical_timeframe`, which already prefers the enum — the write path
-  the spec declares correct. The gap only exists where ingest is the *producer*, so this stays one fix
-  for one message. The sweep did surface the same defect one service over, in `marketdata`'s `Bar` —
-  see § Out of Scope for why it is deferred rather than folded in.
+  the spec declares correct. The gap only exists where ingest is the *producer*, so within ingest this
+  stays one fix for one message. The sweep did surface the same defect one service over, in
+  `marketdata`'s `Bar` — **folded into this feature** by user decision rather than deferred; see
+  § marketdata (FR-5–FR-7) and AC-6/AC-7.
 
 ## Feature Workflow Notes
 
