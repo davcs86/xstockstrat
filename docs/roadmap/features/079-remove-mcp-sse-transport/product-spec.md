@@ -44,17 +44,55 @@ FR-1. Remove the `/sse` and `POST /messages` routes and the `SseServerTransport`
 `app/main.py`. Streamable HTTP (`/`) remains the only remote transport; `stdio` (`MCP_TRANSPORT=stdio`)
 is unaffected and stays for local use.
 
-FR-2. `MCP_TRANSPORT=sse`, if it is a supported value today, either maps to the Streamable HTTP
-server or fails fast with a clear message — it must not silently start a server with no working
-transport.
+FR-1a. `GET /sse` and `POST /messages` must return **404 with an explanatory body**, from an
+explicit branch in `handle_mcp` placed *before* the `_authorized` gate. Deleting the two branches is
+not sufficient on its own: `Mount("/", app=handle_mcp)` (`app/main.py:201`) is a root catch-all, so a
+stale client would instead fall through to `session_manager.handle_request` and get an opaque
+Streamable-HTTP protocol error (400/406) — or, unauthenticated, a `401` that starts a pointless
+OAuth flow. The 404 sits before the auth gate deliberately: a client with a saved `/sse` URL gets an
+immediate, unambiguous answer naming the URL to switch to, and the removal is public information
+that leaks nothing. AC-3 is unaffected — a 404 never reaches a tool.
+
+FR-2. **`MCP_TRANSPORT` gains the canonical value `http`; `sse` keeps working as a deprecated alias
+that logs a warning and starts the same server.** This is the single decided behavior — the
+"fail fast" alternative is explicitly rejected, because all three deployment targets ship
+`MCP_TRANSPORT=sse` today (`.do/app.yaml:275-276`, `.do/app.dev.yaml:275-276`,
+`docker-compose.yml:520`) and failing on it would break local, DO dev and DO prod at once. The three
+deployment files are updated to `http` in this same change for honesty, but the alias means a
+half-deployed or un-updated environment keeps serving MCP — which is what AC-8 asserts.
+
+The same rename-with-fallback applies to the port var: **`MCP_HTTP_PORT`, falling back to
+`MCP_SSE_PORT`**, and to the two internal factory names `build_sse_app` → `build_http_app` and
+`_run_sse` → `_run_http`. All of these name a transport that will no longer exist; leaving them is
+the "the name lies" defect this feature exists to remove, and each carries a compatibility fallback
+so nothing breaks mid-deploy. `MCP_TRANSPORT=stdio` is untouched.
 
 FR-3. Feature 073's `set_config` transport guard becomes redundant at runtime but **is not deleted**
-— it is defence in depth and its test documents the reasoning. Update its error message and the
-`AGENT-4` note to say SSE no longer exists rather than that it is unsupported.
+— it is defence in depth and its test documents the reasoning. Update its wording to say the SSE
+transport was removed rather than that it is unsupported, at all four places that carry the
+rationale:
+`app/tools.py:747-748` (the error string), `app/tools.py:44-51` (`_claims_from_context`'s docstring)
+and `:731` (the tool docstring); `services/xstockstrat-agent/CLAUDE.md` § Management-tool
+authorization; `docs/runbooks/mcp-tools.md:657,682-683` (the `set_config` § Transport paragraph).
+**Not AGENT-4** — `services/xstockstrat-agent/docs/context-constitution.md:18` is entirely about
+outbound header forwarding and carries no transport claim, so it needs no edit here; the earlier
+draft of this requirement named the wrong artifact.
 
-FR-4. Update the discovery/documentation surfaces that describe two transports:
-`services/xstockstrat-agent/CLAUDE.md` (§ Role, § OAuth), `docs/runbooks/mcp-tools.md`
-(§ Transport Modes), and any `.do/app*.yaml` or `docker-compose.yml` comment naming `/sse`.
+FR-4. Update every surface that describes two transports. The list is exhaustive as written:
+- `services/xstockstrat-agent/CLAUDE.md` — § Role (`:11-15`), § OAuth route table (`:93-97`).
+- `docs/runbooks/mcp-tools.md` — § Transport Modes (`:8-27`), including the operator release note
+  from FR-5 finding 4.
+- `services/xstockstrat-agent/docs/context-constitution.md` — header `:4` ("HTTP :9000 SSE"),
+  AGENT-2's evidence `:16` ("(SSE path only)"), Pointers `:30` ("dual-transport `handle_mcp`").
+- `services/xstockstrat-agent/docs/context-constitution-findings.md:18` — the `MCP_TRANSPORT`
+  default finding, which FR-2 makes stale.
+- `docs/launch-pdfs/product-features.md:177` — "port 9000, SSE transport".
+- `app/main.py:4-11` — the module docstring, which documents `sse` as the remote transport.
+- `.do/app.yaml`, `.do/app.dev.yaml`, `docker-compose.yml` — the `MCP_TRANSPORT` / port values per
+  FR-2. (No `/sse` *comment* exists in any of them; a grep confirms only the two env keys.)
+
+Because this touches governed context files, the root `CLAUDE.md` teardown rule applies: run
+`/context-scrubber scan` scoped to the changed docs before opening the PR.
 
 FR-5. Confirm and record which MCP clients the platform actually uses. The agent `CLAUDE.md` cites
 the legacy transport as being "for Claude Desktop" — if any supported client still requires SSE,
@@ -90,17 +128,24 @@ is the platform's only checked-in client configuration, so it *is* the client-co
 
 ## Acceptance Criteria
 
-1. `POST /messages` and `GET /sse` return 404; no `SseServerTransport` remains in the codebase.
+1. `POST /messages` and `GET /sse` return **404**, with or without an `Authorization` header, and the
+   body names the replacement URL. No `SseServerTransport` import or `sse.py` reference remains in
+   the codebase. (Achieved by FR-1a's explicit pre-auth branch — deletion alone yields 401/400
+   instead, which is why FR-1a exists.)
 2. A tool call over Streamable HTTP still works end to end, authenticated by `_authorized`.
 3. There is no code path by which a `tools/call` reaches a tool without passing `_authorized`.
-4. `MCP_TRANSPORT=sse` does not start a broken server (FR-2).
+4. `MCP_TRANSPORT=sse` still starts a working server (serving Streamable HTTP only) and logs a
+   deprecation warning; `MCP_TRANSPORT=http` starts the same server without the warning; an
+   unrecognized value falls through to `stdio` exactly as it does today (FR-2).
 5. All transport-mode documentation describes exactly one remote transport.
 6. Feature 073's `set_config` tests still pass unchanged, proving the guard is intact as defence in
    depth (FR-3).
 7. `claude_mcp_config.json` contains no `/sse` URL, and its remote block's `url` is the bare
    `<AGENT_PUBLIC_URL>` — the same URL the Claude.ai remote connector already uses (FR-6).
-8. No deployment spec (`.do/app.yaml`, `.do/app.dev.yaml`, `docker-compose.yml`) needs a value change
-   for the agent to keep serving MCP — proving finding 2 of the FR-5 investigation.
+8. No deployment spec (`.do/app.yaml`, `.do/app.dev.yaml`, `docker-compose.yml`) *needs* a value
+   change for the agent to keep serving MCP — proving finding 2 of the FR-5 investigation. They are
+   updated to `MCP_TRANSPORT=http` / `MCP_HTTP_PORT` anyway for honesty, and the FR-2 aliases are
+   what make the un-updated case still work. Test by asserting the alias path, not by reading YAML.
 
 ## Open Questions
 
