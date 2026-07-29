@@ -13,6 +13,23 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ---
 
+## 2026-07-29
+
+### Features
+- phase7-observability: Completes the pending Phase 7 implementation roadmap item: activates the OTel SDK already stubbed in every service, routes telemetry to Grafana Cloud via the OTLP collector, and delivers service health, latency, and signal pipeline throughput dashboards — providing operational visibility before live capital is at risk.
+- mcp-config-management: Add MCP tools to `xstockstrat-agent` that read and write `xstockstrat-config` values
+- fix-config-write-authz: `xstockstrat-config`'s `SetConfig` RPC performs no authorization check at all, and
+- fix-config-value-roundtrip: Two related defects in `xstockstrat-config`, both blocking feature 073:
+- fmp-key-to-secret-env: Feature 059 routed the FMP API key through `xstockstrat-config` as
+- fix-listkeys-wire-encoding: `ConfigService.ListKeys` built its response with **snake_case** field names and **numeric** enums,
+- fix-config-scope-resolution: `ConfigService` resolved **every** request to the `('dev', 'all')` scope, whatever the caller asked
+- remove-mcp-sse-transport: Retire the legacy HTTP+SSE MCP transport (`/sse` + `POST /messages`) from `xstockstrat-agent`,
+
+### Summary
+10 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-07-27
 
 ### Features
