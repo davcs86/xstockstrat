@@ -1,6 +1,6 @@
 # Feature: qa-capability
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `design-approved`
 **Development Branch**: `feature/qa-capability`
 **Created**: 2026-07-29
 **Last Updated**: 2026-07-29
@@ -12,12 +12,15 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-07-29 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-07-29 | `draft` → `design-approved` | /sdd-design | Design debated (1 round, quick). Adversary returned BLOCKED on an F-04 breach (`gh issue create` — Issues disabled on this repo); resolved by re-scoping to `docs/reports/` + `/sdd-triage --from-report`. recon.md + design.md written |
 
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
+- [Product Spec](product-spec.md) — requirements and governance (revised post-design)
+- [Recon](recon.md) — grounded codebase dossier
+- [Design](design.md) — chosen approach, rejected alternatives, Floor breach and resolution
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec qa-capability`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -25,23 +28,26 @@
 
 ## Summary
 
-Upgrade the frontend-only `/test-data` fixture steward into a monorepo-wide QA capability: a
-read-only `qa-tester` subagent that designs tests, assesses coverage gaps, and spots defects, plus a
-write-capable `/qa` skill that writes tests, runs suites, detects flakes, and files defects as GitHub
-issues for `/sdd-triage`. Absorbs `/test-data` and widens Constitution **C-12** to every language.
+Replace the frontend-only `/test-data` fixture steward with a monorepo-wide QA capability: a
+read-only `qa-tester` subagent that designs tests, inventories coverage, and reports defects, plus a
+write-capable `sdd-qa` skill that writes tests, runs suites, detects flakes, and records defects to
+`docs/reports/` for `/sdd-triage --from-report`. Appends Constitution **C-13** (language-agnostic
+test data, canonical home named per language) and narrows **C-12** to a pointer.
 
 ## Reviewers
 
 _(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
-change types. Override as needed for this feature. Snapshot finalized at /sdd-spec time —
-re-run /sdd-spec if the registry changes.)_
+change types. Snapshot finalized at /sdd-spec time — re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
-| Platform Lead | Constitution amendment (**C-12** widened scope) and the **P-01** boundary between the advisory `qa-tester` subagent and the write-capable `/qa` skill |
-| `xstockstrat-ui` service owner | The two `services/xstockstrat-ui/**` edits — `playwright.config.ts` reporter addition and the `e2e/fixtures/` catalog/comment updates. No runtime (`src/`) code is touched. |
-| _(none — `docs` category)_ | Per the registry's Step Category matrix, `docs` steps require no reviewer. The bulk of this feature is `.claude/` tooling and `docs/` governance. |
+| Platform Lead | Appending Constitution **C-13** and narrowing **C-12**; the **P-01** boundary between the advisory `qa-tester` subagent and the write-capable `sdd-qa` skill; the boot interlock keeping `sdd-qa` out of a live `/sdd-execute` step's `**Files**` (**F-08**, **F-10**) |
+
+**No service-owner gate.** The design dropped the `playwright.config.ts` edit in favour of
+per-invocation CLI flags, so the only `services/**` touches are two comment lines in
+`services/xstockstrat-ui/e2e/fixtures/` repointing `/test-data` → `sdd-qa`. Per the registry's Step
+Category matrix, `docs` steps require no reviewer.
 
 ## Next Action
 
-`/sdd-review qa-capability product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec qa-capability` — generate the implementation spec from the approved design
