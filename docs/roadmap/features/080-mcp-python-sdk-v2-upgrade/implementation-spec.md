@@ -1,6 +1,6 @@
 # Implementation Spec: mcp-python-sdk-v2-upgrade
 
-**Status**: `pending`
+**Status**: `code-completed`
 **Created**: 2026-07-30
 **Feature**: `docs/roadmap/features/080-mcp-python-sdk-v2-upgrade/feature.md`
 **Total Steps**: 5
@@ -93,7 +93,7 @@ the one-parameter fix.
 
 ### Step 1 — service: bump the `mcp` dependency to `>=2.0.0,<3` and regenerate `uv.lock`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/pyproject.toml` — modify
@@ -161,7 +161,7 @@ present, and `uv.lock`'s `mcp` entry shows `version = "2.0.0"`.
 
 ### Step 2 — service: migrate `app/main.py`, `app/tools.py`, and `app/backtest_view.py` to the v2 API surface
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/main.py` — modify
@@ -375,7 +375,7 @@ Step 3 lands (see `## Step Dependencies`); do not attempt a full-suite run here.
 
 ### Step 3 — test: rewrite the three existing test files against the v2 API
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify
@@ -494,7 +494,7 @@ Step 2/3 TDD cycle in the PR body and `context.md`, per `tdd-gate.md`.
 
 ### Step 4 — test: new regression coverage for real claims flowing through the real Streamable HTTP transport
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_streamable_http_auth.py` — create
@@ -676,7 +676,7 @@ Expect: the new test passes, full suite still green at ≥40%, ruff clean.
 
 ### Step 5 — docs: update the two stale FastMCP references and record the four no-op confirmations
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`, `services/xstockstrat-agent/`
 **Files**:
 - `services/xstockstrat-agent/CLAUDE.md` — modify
@@ -752,4 +752,10 @@ zero — every non-ledger, non-SDD-artifact `FastMCP` reference is gone).
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Step 5 — third stale `FastMCP` reference found, not in the spec's Codebase Evidence
+
+Step 5's Codebase Evidence grep (`git ls-files | grep -vE '^(packages/proto/gen/|docs/roadmap/features/)' | xargs grep -niE 'FastMCP|mcp\.server\.fastmcp|mcp>=1\.27'`) found only two doc surfaces (`services/xstockstrat-agent/CLAUDE.md:26`, `services/xstockstrat-agent/docs/context-constitution.md:4`). Re-running the identical command during execution (after Steps 1-4 landed) surfaced a third: `tests/test_backtest_view.py:3`'s module docstring ("Pure projection tests: no gRPC, no FastMCP server."), predating this migration. Fixed in the same commit as Step 5's two spec'd edits, since it is the same class of stale-vocabulary cleanup the step already covers, not a new decision requiring its own step. No Constitution rule violated; recorded per **P-03** (no silent deviation).
+
+### Branch handling — session-level override of the standard SDD branch model
+
+This session's harness assignment fixed the working branch to `claude/mcp-2-upgrade-e3v1uy` (branched from and PR'd into `main-dev`), overriding the default `/sdd-execute` model of `feature/mcp-python-sdk-v2-upgrade` + per-step `feature-steps/*` sub-branches with individual step PRs. All 5 steps were implemented as separate commits directly on the harness branch instead, each independently verified per its own Verification block before committing (**F-05** honored — no commit before a step's verification passed). One integration PR opens from this branch to `main-dev` covering all 5 steps, rather than 5 step PRs into a feature-integration branch. Recorded here since it departs from `docs/runbooks/feature-workflow.md`'s documented per-step PR workflow, per explicit session-level branch instructions that took precedence.

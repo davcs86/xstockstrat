@@ -150,3 +150,55 @@ explicitly not a "small change or bug fix" that `quick` mode is meant for.
 
 **Next**: `/sdd-review mcp-python-sdk-v2-upgrade impl-spec` — validate the implementation spec,
 then `/sdd-execute mcp-python-sdk-v2-upgrade`.
+
+## Session 2026-07-30T19:00:00Z — implementation (branch-adapted execute)
+
+- **Branch handling deviation**: this session's harness assignment fixed the working branch to
+  `claude/mcp-2-upgrade-e3v1uy` (branched from and PR'd into `main-dev` per explicit session
+  instructions), overriding `/sdd-execute`'s default `feature/<slug>` + per-step
+  `feature-steps/*` sub-branch model with individual step PRs. Implemented all 5 steps as separate
+  commits directly on the harness branch instead — each independently verified per its own
+  Verification block before committing (**F-05** honored). One integration PR will cover all 5
+  steps rather than 5 step PRs into a feature-integration branch. Recorded in
+  `implementation-spec.md`'s Deviation Log too.
+- Executed all 5 steps in order, without a separate `/sdd-review impl-spec` pass first (the spec
+  was written this same continuous session with live-verified evidence; re-reviewing it before
+  executing would have been redundant given the standing task instruction to implement, commit,
+  and push).
+- **Step 1**: bumped `mcp` to `>=2.0.0,<3`, ran `uv lock` for real (not a scratch copy) —
+  reproduced the exact dependency delta predicted in the spec (`httpx-sse`/`pydantic-settings`
+  removed; `httpx2`/`mcp-types`/`truststore`/`httpcore2` added; `httpx>=0.27.0` itself untouched).
+  `uv lock --check` passes.
+- **Step 2**: migrated `app/main.py`, `app/tools.py`, `app/backtest_view.py` exactly per the
+  spec's instructions (`FastMCP`→`MCPServer`, `Context` import move, `_run_stdio()` simplified to
+  `run_stdio_async()`, the `streamable_http_app()` + `session_manager` property fix with
+  `transport_security` explicitly disabled, the two field renames). Ruff clean; the targeted grep
+  checks all passed as predicted.
+- **Step 3**: rewrote `test_tools.py`, `test_config_tools.py`, `test_backtest_view.py` per spec
+  (rename, `get_tool()` swap, the `CallToolResult.content` fix, field renames). Full suite green:
+  **137 passed**, 68% coverage (CI threshold 40%), ruff clean — first point the suite could even
+  collect.
+- **Step 4**: created `tests/test_streamable_http_auth.py` verbatim per the spec's live-verified
+  recipe. Ran the mandatory TDD teeth-proof: commented out `_authorized`'s
+  `scope.setdefault("state", {})[MCP_CLAIMS_SCOPE_KEY] = claims` line in `app/main.py`, confirmed
+  the new test fails (`isError: true`, `assert True is False` — SSE-JSON-decoded from the real
+  response), restored the line, confirmed `git diff` on `app/main.py` was empty (clean restore)
+  and the test passes again. **138 passed** overall, 68% coverage, ruff clean.
+- **Step 5**: updated the two spec'd doc references (`services/xstockstrat-agent/CLAUDE.md:26`,
+  `docs/context-constitution.md:4`). **Deviation**: re-running the spec's own repo-wide grep
+  during execution surfaced a *third* stale `FastMCP` reference the spec's Codebase Evidence
+  missed — `tests/test_backtest_view.py:3`'s module docstring. Fixed in the same commit (same
+  class of cleanup, not a new decision) and logged in `implementation-spec.md`'s Deviation Log
+  per **P-03**. Repo-wide grep (excluding `packages/proto/gen/`, `docs/roadmap/features/`,
+  `docs/roadmap/ledger/`) confirmed **zero** remaining `FastMCP` references afterward. Stated the
+  four no-op confirmations (FR-6 OAuth, FR-4 httpx2, `strat-lab-plugin.md`, `mcp-tools.md`)
+  explicitly rather than skipping silently.
+- **Teardown**: the root `CLAUDE.md` Teardown rule requires `/context-scrubber scan` since
+  `services/xstockstrat-agent/CLAUDE.md` and `docs/context-constitution.md` changed. The
+  context-forge plugin/skill is **not available** in this session (`ToolSearch` found no match) —
+  noted here and will be noted in the PR body, per that rule's own fallback instruction, rather
+  than skipped silently.
+- Final state: all 5 implementation-spec steps `done`, full suite **138 passed**, 68% coverage,
+  ruff clean, zero stray `FastMCP` references. Status: `implementation-ready` → `code-completed`.
+
+**Next**: open the integration PR from `claude/mcp-2-upgrade-e3v1uy` to `main-dev`.
