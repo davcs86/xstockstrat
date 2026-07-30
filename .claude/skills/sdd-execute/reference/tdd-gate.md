@@ -19,6 +19,16 @@ in this order, regardless of which step number you are technically executing:
 
 1. **Write/confirm the failing test first.** Author (or confirm already-authored) the paired test so
    it asserts the *new* behavior — not a tautology.
+
+   **If the step is a `service` step mislabeled `TDD: N/A`** — the one hole named above, where no
+   paired test and no RED assertion were specced — spawn the **`qa-tester`** subagent (read-only,
+   advisory — **P-01**) with the step's `**Instructions**`, `**Files**`, `**Codebase Evidence**`, and
+   the service's language. Use its `## Test plan` to pick the file and the RED assertion; **you**
+   remain the writer. Record the agent-supplied assertion as a deviation
+   (`reference/deviation-handling.md`) — a step that specced no test is a spec defect, and papering
+   over it silently would hide that (**P-03**). Do **not** spawn it for a correctly-specced step:
+   the step's own test and `**Verification**` already dictate the cycle, and a Task round-trip in
+   the tightest loop of every code-bearing step is pure cost.
 2. **Run it — capture RED.** Execute the test against the pre-implementation tree. It **must fail**,
    and fail for the right reason (the behavior is missing, not a typo/import error). Capture the exact
    failing output. If it passes here, the test does not actually cover the new behavior — fix the test
@@ -44,3 +54,12 @@ in this order, regardless of which step number you are technically executing:
   must be stated explicitly — never skip the gate silently (**P-03**).
 - A genuine inability to satisfy red→green within the step's scope is a deviation: follow
   `reference/deviation-handling.md` (and log a `fails.md` ledger entry if it reveals a recurring trap).
+- **When `qa-tester` was consulted**, its plan advises — it never expands the step. The confirmed
+  Phase-2 change and the step's `**Files**` list still bound what you stage (**F-08**).
+- **Its `## Defects found` section is out of scope for this step.** A pre-existing defect it surfaces
+  does not get fixed here. Note it in `context.md` and hand it to `/sdd-qa defect` once the step
+  lands; a recurring one is a `fails.md` candidate.
+- **A green suite is not automatically coverage.** A suite that exits 0 while executing zero
+  assertions proves nothing — see `docs/roadmap/ledger/fails.md` (2026-07-29, feature 074), where a
+  `try { await import(…) } catch {}` guard printed "7 tests, 7 pass" while hiding three real
+  blockers. Before accepting a green, confirm the cases actually executed.

@@ -24,6 +24,8 @@ so the orchestrator's window holds conclusions, not raw file dumps. The fleet:
 | `service-briefing` | Distill a service's `CLAUDE.md` + relevant patterns | Compact service briefing | `/sdd-spec`, `/sdd-execute` when entering an unfamiliar service |
 | `design-proposer` | Propose ONE concrete architecture grounded in `recon.md` | Structured proposal (decisions + reuses + assumptions) | `/sdd-design` Phase 1 (grilling) |
 | `design-adversary` | Attack a proposed design; cite Constitution IDs it would violate | Structured objections + rejected-alternative trade-offs | `/sdd-design` Phase 1 (grilling) |
+| `dry-reviewer` | Find semantic DRY violations a token scanner misses (renamed-but-equivalent helpers, parallel type shapes, cross-language repetition) | Compact findings report with a suggested canonical home | Pre-PR review (advisory) |
+| `qa-tester` | Design a test plan (layer, file, RED assertion, exact command), inventory what is tested, spot side defects | Test plan + inventory table + SEV-tagged defect digest | `/sdd-qa` `design`/`gaps`, `/sdd-execute` TDD gate |
 
 **When to delegate:** the work reads many files or runs many greps, *and* the orchestrator only
 needs the conclusion. **When not to:** a single-file read, or work that must interleave with
