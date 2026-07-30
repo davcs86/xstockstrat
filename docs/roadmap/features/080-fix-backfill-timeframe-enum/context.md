@@ -731,4 +731,24 @@ moved to `:29,260`.
   `docs/context-constitution-findings.md` (all under `services/xstockstrat-marketdata/`)
 - Deviations: none beyond the MARKETDATA-2 shift correction, recorded above.
 
+### Step 4 — test
+
+**Lint fix during verification**: `golangci-lint` flagged `stream_test.go`'s `t.Errorf` line for
+re-reading the deprecated `bar.Timeframe` field without its own `//nolint:staticcheck` (only the
+`if` condition line carried one). Fixed by capturing `bar.Timeframe` into a local `gotTF` once
+(single nolint-annotated read), reused in both the condition and the error message, rather than
+adding a second `//nolint` comment.
+
+**Verification, full suite green after Step 3's implementation**:
+- Targeted suite (`internal/alpaca`, `internal/timeframe`, `internal/service`) → all PASS, `-race`
+- Coverage, exact CI `COVERPKGS` filter (`ci.yml:241` excludes `cmd/handler/repository/telemetry/service`):
+  `go tool cover -func=coverage.out | grep "^total:"` → **58.7%**, well above the 40% gate. Confirms
+  the step's own note that `internal/service`/`internal/repository` earn zero coverage credit under
+  that filter — the threshold is carried entirely by `internal/alpaca` + `internal/timeframe`
+
+- Files modified (Step 4): `internal/alpaca/client_test.go`, `internal/alpaca/stream_test.go` (new),
+  `internal/timeframe/timeframe_test.go`, `internal/service/marketdata_service_test.go` (all under
+  `services/xstockstrat-marketdata/`)
+- Deviations: none beyond the lint fix, recorded above.
+
 **Next**: Step 6 (analysis service), Step 7 (analysis test), Step 8 (ui), then the integration PR.

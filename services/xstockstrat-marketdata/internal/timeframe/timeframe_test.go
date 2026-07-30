@@ -20,6 +20,10 @@ func TestFromString(t *testing.T) {
 		{"1h", commonv1.Timeframe_TIMEFRAME_1HOUR},
 		{"1Hour", commonv1.Timeframe_TIMEFRAME_1HOUR},
 		// Sub-15m intervals were removed from the product — no longer resolvable.
+		// Load-bearing for feature 080 FR-6/AC-7: streamed bars now WRITE TIMEFRAME_1MIN
+		// explicitly (internal/alpaca/stream.go dispatch) without going through FromString —
+		// this case is the standing proof that the request-resolution refusal of "1m" stays
+		// untouched by that labelling change. Do not delete as redundant.
 		{"1m", commonv1.Timeframe_TIMEFRAME_UNSPECIFIED},
 		{"5m", commonv1.Timeframe_TIMEFRAME_UNSPECIFIED},
 		{"weekly", commonv1.Timeframe_TIMEFRAME_UNSPECIFIED},

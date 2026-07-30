@@ -535,7 +535,7 @@ body rather than skipping silently. Finally run the Step 4 suite — it must go 
 
 ### Step 4 — test: marketdata — paired enum assertions on the REST paths, a new in-package stream test, and the FR-10 resolver cases
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/alpaca/client_test.go` — modify
