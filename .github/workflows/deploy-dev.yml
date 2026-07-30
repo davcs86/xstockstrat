@@ -50,6 +50,7 @@ jobs:
       JWT_SECRET: ${{ secrets.DEV_JWT_SECRET }}
       ALPACA_API_KEY: ${{ secrets.DEV_ALPACA_API_KEY }}
       ALPACA_API_SECRET: ${{ secrets.DEV_ALPACA_API_SECRET }}
+      FMP_API_KEY: ${{ secrets.DEV_FMP_API_KEY }}
     with:
       app_spec: .do/app.dev.yaml
       image_tag: ${{ needs.prepare.outputs.short_sha }}
