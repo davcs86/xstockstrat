@@ -115,4 +115,4 @@ def attachment_refs(blocks: list[EmbeddedResource]) -> list[dict[str, str]]:
     A client that renders no attachment affordance still shows the user that detail exists, and
     under what URI.
     """
-    return [{"uri": str(b.resource.uri), "mime_type": b.resource.mimeType} for b in blocks]
+    return [{"uri": str(b.resource.uri), "mime_type": b.resource.mime_type} for b in blocks]
