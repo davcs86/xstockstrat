@@ -1,5 +1,17 @@
 {
   "enabledMcpjsonServers": ["digitalocean-apps", "digitalocean-databases"],
+  "extraKnownMarketplaces": {
+    "agent-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "davcs86/agent-plugins"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "context-forge@agent-plugins": true,
+    "design-buddy@agent-plugins": true
+  },
   "hooks": {
     "SessionStart": [
       {
