@@ -209,12 +209,91 @@ completed adversarial round.
 
 ## Open Threads (carried from design.md § Open Risks)
 
-- FR-10's `"15m"` fallback is the one place this feature can **cause** a write → marketdata service step.
-- FR-11's raw fallback preserves an unresolvable value reaching Alpaca → marketdata service step.
+- FR-10's `"15m"` fallback is the one place this feature can **cause** a write → **step 3**.
+- FR-11's raw fallback preserves an unresolvable value reaching Alpaca → **step 3**.
 - `marketdata_handler.go:258` stays a raw reader, excluded on **reachability** not correctness — it
   becomes live the moment anyone writes a `StreamBars` caller → recorded, not fixed.
-- FR-14's PK-collision handling is deliberately left to the implementation step → migration step.
+- ~~FR-14's PK-collision handling is deliberately left to the implementation step~~ — **closed
+  2026-07-30 at `/sdd-spec`**: delete-the-alias-duplicate (the canonical twin is the row `QueryBars`
+  could always read and the ingester keeps fresh); see § Decisions below → **step 5**.
 - Go coverage excludes `service|repository|handler|cmd`, so FR-10/FR-11 earn no coverage credit → their
-  tests are for correctness, not the gate.
+  tests are for correctness, not the gate; the threshold is carried by `internal/alpaca` +
+  `internal/timeframe` → **step 4**.
 - Out-of-repo producers cannot be swept; the staging MCP client that surfaced this bug is one.
-- `/context-scrubber scan` is owed before the PR, scoped to the touched context files.
+- `/context-scrubber scan` is owed before the PR, scoped to the touched context files → wired into
+  **step 3**'s Verification (it is the step that edits `services/xstockstrat-marketdata/CLAUDE.md` and
+  that service's `docs/context-constitution.md`).
+- **New (step 4):** `internal/alpaca` has no in-package test file today, so AC-7 needs a new
+  `package alpaca` `stream_test.go`. If `streamManager`/`fanoutBar` cannot be driven from an
+  in-package test without restructuring `stream.go`, **block and escalate** (P-03) rather than adding a
+  production seam for the test.
+
+---
+
+## Decisions
+
+Durable rulings that outlive the session that made them. Newest last.
+
+- **FR-14 collision handling — delete the alias duplicate** (`/sdd-spec`, 2026-07-30; closes
+  `design.md` Open Risk 5). `marketdata.ohlcv`'s PK is `(symbol, timeframe, time)`
+  (`migrations/001_marketdata_hypertables.up.sql`), so a bare `'1Day'`→`'1d'` UPDATE collides when both
+  spellings exist for one `(symbol, time)`. The canonical row wins: it is the row `QueryBars` has
+  always been able to read (`marketdata_repo.go:88` filters `WHERE timeframe=$2` on the canonical
+  string) and the one the always-on ingester keeps fresh; the alias row is data no reader could ever
+  see. Skip-if-canonical-exists was rejected because it leaves `'1Day'` in
+  `SELECT DISTINCT timeframe`, failing AC-15.
+- **The FR-14 migration carries a remediation log** (`marketdata.ohlcv_remediation_003`), so its
+  `.down.sql` is a faithful reverse rather than the no-op design forbade. Without the log a merged
+  `'1d'` row is indistinguishable from one that was always canonical. The log also makes the AC-15
+  residual counts auditable after the fact.
+- **`timeframe` is not the hypertable partitioning column** (`time` is), so rewriting it never
+  relocates a row across chunks — the hypertable constraint design flagged is satisfied by an ordinary
+  UPDATE.
+- **Step count is 8, not design's advisory 7.** Design step 6 bundled the analysis service change with
+  its test; **C-08** requires a separate paired `test` step, so it splits into steps 6 and 7. The `ui`
+  step stays single (C-08 scopes pairing to non-frontend services).
+
+---
+
+## Session 2026-07-30 — sdd-spec
+
+- Generated `implementation-spec.md` with **8 steps**. Status: `design-approved` → `implementation-ready`.
+  `recon.md` § Codebase Map was reused as grounded evidence; every citation it carried was re-verified
+  against the tree (no code has landed since — `main-dev` tip `699323f` is docs-only), and the gaps
+  recon did not cover (Alpaca JSON types, the `ohlcv` PK/hypertable shape, `db-migrate.sh`'s command
+  set, CI matrix line numbers) were discovered fresh.
+- **Two product-spec claims were false and are corrected in the impl spec rather than inherited
+  (P-03; the exact `fails.md` 2026-07-29/080 shape — an absence/count claim nobody re-greped):**
+  1. FR-10 says the `"15m"` literal "currently appears three times in that function". It appears
+     **once**, `internal/service/marketdata_service.go:514`. `grep -n '"15m"' …` returns `:113` (a
+     comment inside `GetBars`), `:514`, and `:661` (inside `estimateExpectedBars`). The
+     `defaultBarIngestTimeframe` hoist is still required, but because *two* sites will need it after
+     the change — not because three exist now.
+  2. `design.md` § 2 prescribes the `tfpkg` import alias service-wide. It is needed in
+     **`internal/repository` and `internal/alpaca` only**: `internal/service` already imports the
+     package plainly as `timeframe` (`marketdata_service.go:26`) and calls it at `:120`; its two
+     `timeframe`-parameter functions (`:642`, `:711`) never call the package, so nothing there changes.
+- Key codebase findings:
+  - **Last migration numbers**: marketdata `migrations/` ends at `002_fundamentals`, so FR-14 is
+    `003_*` (**C-07**, **F-01** clean). ingest ends at `007_signal_source_type_mediated` and gains
+    nothing (FR-4 derives the enum).
+  - **`marketdata.ohlcv` PK is `(symbol, timeframe, time)`** and `timeframe` is *not* the partitioning
+    column — this is what makes the FR-14 collision real and the UPDATE chunk-safe at the same time.
+  - **`scripts/db-migrate.sh` supports only `up | version | force`** (`:64-93`) — no `down`. The
+    down-migration round trip in step 5 therefore invokes `migrate` directly with
+    `x-migrations-table=marketdata_schema_migrations`.
+  - **`TimeframeEnum` appears exactly once in marketdata's non-generated Go** today
+    (`marketdata_service.go:120`, request side) and in **zero** Go tests — the concrete AC-5
+    red-before-green evidence.
+  - **`internal/alpaca/client_test.go` has no `"1Day"` input row** in
+    `TestGetBars_TranslatesCanonicalTimeframe` (`:325-333`); AC-6 adds one plus a `wantEnum` column.
+  - **The two ingest `_job_row` fixtures are jscpd-exempt** (`.jscpd.json` ignores `**/tests/**` and
+    `**/test_*.py`), so the `tests/_helpers.py` move is justified by AC-4 — one fixture matching the
+    real row shape so the two read-path suites cannot drift — not by the DRY pre-commit hook.
+  - **`e2e/mock-backend.ts:621` / `e2e/fixtures/backtests.ts:60`'s `timeframe: 4`** is
+    `CoverageGap.timeframe`, declared `xstockstrat.common.v1.Timeframe timeframe = 2`
+    (`packages/proto/analysis/v1/analysis.proto:53`) — already the enum, no deprecated sibling, out of
+    the family. Recorded so a later sweep does not re-open it.
+  - **The `strat-lab` plugin obligation is confirmed a no-op**: `grep -rn "timeframe"
+    plugins/strat-lab/skills/backtest/reference/backfill.md` returns zero hits, matching design's
+    § Guard rails assessment.
