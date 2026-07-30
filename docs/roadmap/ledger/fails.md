@@ -156,6 +156,7 @@ ambiguity is logged here).
   verify the **writer** guarantees that state — deriving from a column nothing canonicalizes is how
   this defect existed in the first place.
 
+
 ### 2026-07-29 — 081-qa-capability — assumption
 - **Mistake**: A capability was asserted from **advertised metadata** rather than from the producer's
   behavior, and a feature was designed on top of it. The GitHub API reports `has_issues: true` for
@@ -193,3 +194,29 @@ ambiguity is logged here).
   More generally: any "next free identifier" computed from local state is wrong in a repo with
   concurrent branches; derive it from the union of every ref. Applies equally to migration `NNN`
   prefixes and proto field numbers.
+### 2026-07-30 — 080-fix-backfill-timeframe-enum — assumption
+- **Mistake**: The **absence-claim** trap recorded in the entry above recurred **twice more** inside the
+  same feature, at the `/sdd-spec` and `/sdd-review impl-spec` gates — which is the evidence that one
+  ledger entry did not fix it. (1) The impl spec justified leaving AC-8's sender half untested with
+  *"`e2e/mock-backend.ts:306`'s `getBars(...)` handler takes no request argument, so no Playwright test
+  can assert the new outbound field."* True of the handler **as written**, but the handler was that very
+  step's own file to change, Connect handlers do receive the request, and `chart-panel.spec.ts:110-151`
+  already drives the real component against the mock. An observation about the current state had been
+  promoted to a constraint on the design, and it would have shipped the feature's own regression class
+  untested on the only user-facing surface — `tsc` cannot catch a missing optional field on a
+  protobuf-es message-init object. (2) Product-spec FR-10 asserted the `"15m"` literal *"currently
+  appears three times in that function"*; it appears **once** (`marketdata_service.go:514`) — the other
+  two hits are a comment (`:113`) and a different function (`:661`). A **count** claim is an absence
+  claim in disguise ("and nowhere else"). Both were caught only because a later gate re-ran the greps.
+- **Evidence**: feature 080 `implementation-spec.md` step 8 (the struck-through recon-Risk-11 claim and
+  instructions 5b/5c), step 3's corrected `"15m"` justification; `context.md` § Session 2026-07-30 —
+  sdd-review impl-spec (B3, and the corrected-claims table). Round-1 impl-spec review: 4 blockers, 12
+  warnings.
+- **Rule it implies**: promote the earlier entry's advice into a **mechanical gate**, because advice
+  alone demonstrably did not hold. At every review gate, extract every sentence containing *only /
+  already / never / no … can / cannot / appears N times / not affected*, and for each either (a) paste
+  the command that establishes it, or (b) rewrite it as a statement about the present tree ("the handler
+  does not take a request **today**") rather than a constraint on the design. Two specific tells worth
+  their own reflex: a **count** ("three times") is an absence claim — run the grep; and *"no test can
+  assert X"* is almost never true when the file in question is already in the step's own `**Files**`
+  section — check that list before believing it.
