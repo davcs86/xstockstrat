@@ -1,6 +1,6 @@
 # Feature: mcp-python-sdk-v2-upgrade
 
-**Lifecycle Status**: `design-approved`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/mcp-python-sdk-v2-upgrade`
 **Created**: 2026-07-30
 **Last Updated**: 2026-07-30
@@ -13,6 +13,7 @@
 |---|---|---|---|
 | 2026-07-30 | `idea` → `draft` | /sdd-story | Product spec generated. User confirmed full v2.0.0 migration (not a protocol-date-only bump) after reviewing the SDK's migration guide summary. |
 | 2026-07-30 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. Recon included live verification against the real installed `mcp==2.0.0` package (not just migration-guide prose). |
+| 2026-07-30 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps. Fresh live re-verification against `mcp==2.0.0` during this session found and corrected two factual errors in `design.md` (`server.get_tool()` does not exist; `MCPServer.call_tool()`'s return shape changed to `CallToolResult`) and one previously-uncaught production risk (`Server.streamable_http_app()` auto-enables a localhost-only DNS-rebinding Host-header check that would 421 every real request unless `transport_security` is passed explicitly). |
 
 ---
 
@@ -21,7 +22,7 @@
 - [Product Spec](product-spec.md) — requirements and governance
 - [Recon](recon.md) — grounded codebase dossier, live-verified against the real `mcp==2.0.0` package
 - [Design](design.md) — debated, approved architecture (2 rounds)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec mcp-python-sdk-v2-upgrade`_
+- [Implementation Spec](implementation-spec.md) — 5 steps, generated 2026-07-30
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -44,4 +45,4 @@ server-initiated back-channel (sampling/elicitation/roots deprecated).
 
 ## Next Action
 
-`/sdd-spec mcp-python-sdk-v2-upgrade` — generate implementation spec from the approved design
+`/sdd-review mcp-python-sdk-v2-upgrade impl-spec` — validate implementation spec, then `/sdd-execute mcp-python-sdk-v2-upgrade`

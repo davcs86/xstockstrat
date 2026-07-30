@@ -89,3 +89,64 @@ explicitly not a "small change or bug fix" that `quick` mode is meant for.
 
 **Next**: `/sdd-spec mcp-python-sdk-v2-upgrade` — generate the numbered implementation spec from
 `recon.md` + `design.md`.
+
+## Session 2026-07-30T18:00:00Z — sdd-spec
+
+- Read `recon.md` + `design.md` (both present, status `design-approved`) and treated them as
+  authoritative per the skill's Step 1.5. Read `CLAUDE.md`, `docs/sdd/constitution.md`,
+  `docs/roadmap/ledger/{insights,fails}.md`, `docs/runbooks/reviewer-registry.md`. No phase
+  deviation doc applies (`xstockstrat-agent` is not in the phase3-6 service lists). No
+  proto/config/DB changes, so `approval-flow.md`/`config-rollout.md`/`proto-versioning.md` were
+  not read (per the skill's guard conditions).
+- Grounded every step against the real repo via `Read`/`Grep` (exact `path:line` citations for
+  `app/main.py`, `app/tools.py`, `app/backtest_view.py`, `app/oauth_server.py`,
+  `app/oauth_metadata.py`, `pyproject.toml`, `uv.lock`, all six test files, `docs/runbooks/
+  mcp-tools.md`, `docs/patterns/strat-lab-plugin.md`, `.github/workflows/ci.yml`, and both agent
+  `docs/context-constitution*.md` files).
+- **Re-ran recon/design's live-verification method myself** (a fresh scratch venv,
+  `pip install mcp==2.0.0`; deleted after use) rather than trusting their conclusions
+  second-hand, per Constitution C-01/P-03. This surfaced three concrete findings beyond what
+  `recon.md`/`design.md` had already verified:
+  1. **`design.md`'s `server.get_tool(name)` does not exist.** `MCPServer` has no `get_tool`
+     attribute (`AttributeError: 'MCPServer' object has no attribute 'get_tool'`). The method
+     lives on `server._tool_manager.get_tool(name)` instead — confirmed live to return the same
+     `Tool` object with `.fn`/`.context_kwarg`/`.parameters` intact. Corrected in Step 3.
+  2. **`server.call_tool()`'s return shape changed, uncovered by either prior artifact.**
+     `mcp==1.27.1`'s `FastMCP.call_tool()` returns a plain subscriptable
+     `tuple[list[ContentBlock], dict]`; `mcp==2.0.0`'s `MCPServer.call_tool()` returns a
+     `CallToolResult` object whose content lives at `.content`. `tests/test_tools.py:442-444`'s
+     `content[0]`/`content[1]` indexing would raise `TypeError` post-migration. Fixed in Step 3.
+  3. **A previously-unidentified production regression risk**: `Server.streamable_http_app()`
+     auto-enables a DNS-rebinding-protection Host/Origin check restricted to
+     `127.0.0.1`/`localhost`/`::1` whenever its `host` param is left at the default — exactly how
+     `design.md`'s verified-minimal-fix calls it. Reproduced live: a request with `Host:
+     testserver` got `421` until `transport_security=TransportSecuritySettings(
+     enable_dns_rebinding_protection=False)` was passed explicitly. Today's code never goes
+     through this path (`StreamableHTTPSessionManager(app=server._mcp_server)` direct
+     construction bypasses it), so in production — where the real `Host` header is the DO app's
+     public domain, never `127.0.0.1` — this migration's own "verified minimal diff" would have
+     silently 421'd every real Streamable HTTP request. Added the one-line fix to Step 2 with a
+     verified live repro (full JSON-RPC handshake: `initialize` → `notifications/initialized` →
+     `tools/call`, SSE-framed responses, succeeding end-to-end once the fix is applied).
+  These three are documented inline in `implementation-spec.md`'s Execution Summary and the
+  relevant steps' Codebase Evidence, not silently folded in as if `design.md` had always been
+  correct. Candidate for a `fails.md`/`insights.md` entry at `/sdd-execute` integration — noting
+  here so a future session doesn't lose it: *"a design's own live-verification pass can still miss
+  API surface it didn't specifically exercise (a return-type check, a default-parameter side
+  effect); the spec-writing pass should re-run the same live-verification method against the
+  specific call shapes the implementation will actually use, not just accept the design's
+  conclusions."*
+- Wrote `implementation-spec.md` with 5 steps: (1) dependency bump, (2) all production-code edits
+  (`app/main.py` + `app/tools.py` + `app/backtest_view.py`, combined because they are
+  import-coupled and cannot be verified independently — same reasoning as feature 079's
+  Deviation D-1), (3) the three existing test files' rewrite (green for steps 1-2's red), (4) new
+  automated regression coverage for `_claims_from_context` under the real transport
+  (`design.md` step 7 / Open Risk 1, now closed with a live-verified JSON-RPC handshake recipe),
+  (5) the docs sweep — only two files actually say "FastMCP"
+  (`services/xstockstrat-agent/CLAUDE.md:26`, `docs/context-constitution.md:4`); confirmed via
+  grep that `docs/runbooks/mcp-tools.md`, root `CLAUDE.md`, `context-constitution-findings.md`,
+  and `docs/patterns/strat-lab-plugin.md` need no changes.
+- Status: `design-approved` → `implementation-ready`.
+
+**Next**: `/sdd-review mcp-python-sdk-v2-upgrade impl-spec` — validate the implementation spec,
+then `/sdd-execute mcp-python-sdk-v2-upgrade`.
