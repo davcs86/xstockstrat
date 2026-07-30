@@ -12,6 +12,7 @@ from gen.ingest.v1 import ingest_pb2
 
 from app.handlers.servicer import IngestServicer
 from app.repositories import backfill_jobs
+from tests._helpers import job_row as _job_row
 
 _REPO = "app.repositories.backfill_jobs"
 
@@ -28,28 +29,6 @@ def _make_servicer(db=None) -> IngestServicer:
     svc._ledger = MagicMock()
     svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
     return svc
-
-
-def _job_row(job_id: str, status: int, **over) -> dict:
-    row = {
-        "job_id": job_id,
-        "symbols": ["AAPL"],
-        "timeframe": "1d",
-        "range_start": None,
-        "range_end": None,
-        "status": status,
-        "bars_processed": 0,
-        "bars_total": 0,
-        "chunks_total": 0,
-        "chunks_completed": 0,
-        "failed_symbols": [],
-        "error": "",
-        "started_at": None,
-        "completed_at": None,
-        "created_at": None,
-    }
-    row.update(over)
-    return row
 
 
 def _ctx(access_scope: str = "4"):
@@ -80,6 +59,9 @@ async def test_cancel_running_job_transitions_to_canceled():
     ):
         result = await svc.CancelBackfill(ingest_pb2.CancelBackfillRequest(job_id="j1"), _ctx("4"))
     assert result.status == ingest_pb2.BACKFILL_STATUS_CANCELED
+    # AC-1: CancelBackfill is the third job_row_to_proto read path, so parity is asserted here
+    # too rather than only on the shared mapper. Hardcoded expectation (fixture stores "1d").
+    assert result.timeframe_enum == 4
     assert "j1" in svc._canceled_jobs  # registered so the runner stops scheduling chunks
     assert upd.await_args.kwargs["status"] == ingest_pb2.BACKFILL_STATUS_CANCELED
 

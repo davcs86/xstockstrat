@@ -17,10 +17,12 @@ from gen.common.v1 import common_pb2
 from gen.config.v1 import config_pb2
 from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # noqa: F401 (imported via conftest path)
 from gen.notify.v1 import notify_pb2
+from google.protobuf.json_format import MessageToDict
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.config.watcher import ConfigWatcher
-from app.handlers.servicer import IngestServicer
+from app.handlers.servicer import IngestServicer, job_row_to_proto
+from tests._helpers import job_row as _job_row
 
 
 def make_servicer(
@@ -63,35 +65,40 @@ def make_servicer(
 _REPO = "app.repositories.backfill_jobs"
 
 
-def _job_row(job_id: str, status: int, **over) -> dict:
-    """A backfill_jobs row dict as asyncpg would return it."""
-    row = {
-        "job_id": job_id,
-        "symbols": ["AAPL"],
-        "timeframe": "1d",
-        "range_start": None,
-        "range_end": None,
-        "status": status,
-        "bars_processed": 0,
-        "bars_total": 0,
-        "chunks_total": 0,
-        "chunks_completed": 0,
-        "failed_symbols": [],
-        "error": "",
-        "started_at": None,
-        "completed_at": None,
-        "created_at": None,
-    }
-    row.update(over)
-    return row
-
-
 def _mk_backfill_resp(bars_written: int, failed_symbols: list[str], expected_bars: int = 0):
     resp = MagicMock()
     resp.bars_written = bars_written
     resp.failed_symbols = failed_symbols
     resp.expected_bars = expected_bars
     return resp
+
+
+class TestJobRowTimeframeEnum:
+    """AC-2 / AC-3 — the read path must populate BOTH representations.
+
+    Expected enums are HARDCODED. Computing them from `_STR_TO_ENUM` would assert
+    the mapper against itself and could never go red (fails.md 2026-07-29/074).
+    """
+
+    @pytest.mark.parametrize(("stored", "want_enum"), [("15m", 5), ("1h", 3), ("1d", 4)])
+    def test_supported_timeframes_pair_string_and_enum(self, stored, want_enum):
+        row = _job_row("j", ingest_pb2.BACKFILL_STATUS_COMPLETED, timeframe=stored)
+        job = job_row_to_proto(row)
+        assert job.timeframe == stored
+        assert job.timeframe_enum == want_enum
+
+    def test_legacy_alias_row_resolves_but_string_is_untouched(self):
+        row = _job_row("j", ingest_pb2.BACKFILL_STATUS_COMPLETED, timeframe="1Day")
+        job = job_row_to_proto(row)
+        assert job.timeframe == "1Day"  # FR-2: echoed unchanged
+        assert job.timeframe_enum == 4
+
+    @pytest.mark.parametrize("stored", ["", "10Min"])
+    def test_unmappable_yields_unspecified_without_raising(self, stored):
+        row = _job_row("j", ingest_pb2.BACKFILL_STATUS_COMPLETED, timeframe=stored)
+        job = job_row_to_proto(row)
+        assert job.timeframe == stored
+        assert job.timeframe_enum == 0
 
 
 class TestListBackfillJobs:
@@ -108,6 +115,7 @@ class TestListBackfillJobs:
             )
             resp = await svc.ListBackfillJobs(req, context=MagicMock())
         assert len(resp.jobs) == 2
+        assert [j.timeframe_enum for j in resp.jobs] == [4, 4]  # AC-1
         # UNSPECIFIED filter → status_filter=None passed to the repo
         assert m.call_args.kwargs["status_filter"] is None
 
@@ -143,6 +151,7 @@ class TestGetBackfillStatus:
             result = await svc.GetBackfillStatus(req, context=MagicMock())
         assert result.job_id == "job-abc"
         assert result.status == ingest_pb2.BACKFILL_STATUS_RUNNING
+        assert result.timeframe_enum == 4  # AC-1: parity proven per RPC, not only on the mapper
 
     @pytest.mark.asyncio
     async def test_aborts_when_not_found(self):
@@ -268,6 +277,34 @@ class TestTriggerBackfill:
         # ...and the queued lifecycle event was emitted.
         event_types = [c.args[0].event_type for c in svc._ledger.AppendEvent.call_args_list]
         assert "ingest.backfill.queued" in event_types
+
+    @pytest.mark.asyncio
+    async def test_enum_only_request_persists_canonical_string(self):
+        """AC-13/AC-14 — the shape the UI actually sends: enum set, string empty.
+
+        Asserted on the value handed to `insert_job`, never on a hand-built row —
+        hand-built rows are what let this defect hide (fails.md 2026-07-30/080).
+        """
+        svc = make_servicer(db=MagicMock())
+        req = MagicMock()
+        req.symbols = ["AAPL"]
+        req.timeframe = ""
+        req.timeframe_enum = 5  # TIMEFRAME_15MIN, as backfills/page.tsx:112 sends
+        req.range = common_pb2.TimeRange()
+
+        with (
+            patch("asyncio.create_task"),
+            patch(f"{_REPO}.insert_job", AsyncMock()) as insert,
+        ):
+            await svc.TriggerBackfill(req, context=MagicMock())
+
+        assert insert.await_args.kwargs["timeframe"] == "15m"
+        queued = [
+            c.args[0]
+            for c in svc._ledger.AppendEvent.call_args_list
+            if c.args[0].event_type == "ingest.backfill.queued"
+        ]
+        assert MessageToDict(queued[0].payload)["timeframe"] == "15m"
 
     @pytest.mark.asyncio
     async def test_aborts_when_no_db(self):
@@ -503,7 +540,6 @@ class TestRunBackfill:
         svc._marketdata = MagicMock()
         svc._marketdata.BackfillBars = AsyncMock(return_value=_mk_backfill_resp(7, []))
         job_row = _job_row("resume-1", ingest_pb2.BACKFILL_STATUS_RUNNING)
-        job_row["timeframe_enum"] = 4  # TIMEFRAME_1DAY
 
         with (
             patch(f"{_REPO}.get_job", AsyncMock(return_value=job_row)),

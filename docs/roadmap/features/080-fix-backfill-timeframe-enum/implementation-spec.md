@@ -181,7 +181,7 @@ after being red before this step.
 
 ### Step 2 — test: ingest — paired string+enum assertions on all three read paths, plus the write-path and ledger criteria
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/_helpers.py` — create

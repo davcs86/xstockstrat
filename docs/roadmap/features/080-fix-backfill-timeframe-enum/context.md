@@ -531,3 +531,29 @@ not exist and the harness authorizes only `claude/*` branches, so at the user's 
 implementation runs as **one commit per step on `claude/impl-080-timeframe-enum`**, with a single PR to
 `main-dev`. Consequence to keep in view: step 5's DBA gate no longer gets its own PR, so it must be
 called out explicitly in the integration PR body.
+
+### Step 2 — test: ingest — paired assertions on all three read paths, plus the write-path and ledger criteria [done]
+
+- `tests/_helpers.py` created with `job_row` only. The two servicer factories were deliberately **not**
+  moved — `make_servicer` and `_make_servicer` differ in name, signature and body and are not
+  duplicates (round-1 review finding; `design.md` § Rejected Alternatives).
+- `test_ingest_servicer.py`: local `_job_row` deleted and imported from the shared helper; the
+  impossible `job_row["timeframe_enum"] = 4` fixture key **deleted** (AC-4). That
+  `test_resume_job_redrives_incomplete_chunks` still passes is the evidence the FR-4 branch was dead.
+- New `TestJobRowTimeframeEnum` (AC-2/AC-3): the three supported timeframes, the `1Day` legacy alias
+  (enum resolves, string echoed unchanged per FR-2), and `""`/`"10Min"` → `UNSPECIFIED` without
+  raising. Every expectation **hardcoded** — never `_STR_TO_ENUM[...]`, which would assert the mapper
+  against itself.
+- Per-RPC parity (AC-1) on all three read paths: `GetBackfillStatus`, `ListBackfillJobs`, and
+  `CancelBackfill` (the last in `test_cancel_backfill.py`, where that RPC is already driven).
+- AC-13/AC-14: `test_enum_only_request_persists_canonical_string` drives the shape the UI actually
+  sends (enum set, string empty) and asserts on the value handed to `insert_job` **and** on the
+  `MessageToDict`-decoded ledger `Struct` — never on a hand-built row.
+- Ordering note (P-06): these tests were authored *before* step 1's implementation, because the TDD
+  gate runs the service+test pair as one red-green cycle regardless of step numbering. They are
+  committed here as step 2 so each commit stages only its own `**Files**` (**F-08**).
+- green: `141 passed`, ruff clean, coverage **75%** (threshold 40).
+- Files modified: `services/xstockstrat-ingest/tests/_helpers.py` (new),
+  `services/xstockstrat-ingest/tests/test_ingest_servicer.py`,
+  `services/xstockstrat-ingest/tests/test_cancel_backfill.py`
+- Deviations: none.
