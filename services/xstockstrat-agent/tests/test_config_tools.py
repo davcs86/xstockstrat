@@ -15,21 +15,21 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from mcp.server import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from app import client
 from app.scopes import MCP_CLAIMS_SCOPE_KEY, roles_to_access_scope
 from app.tools import register_tools
 
 
-def _make_server() -> FastMCP:
-    server = FastMCP("test-agent")
+def _make_server() -> MCPServer:
+    server = MCPServer("test-agent")
     register_tools(server)
     return server
 
 
-def _tool_fn(server: FastMCP, name: str):
-    return server._tool_manager._tools[name].fn
+def _tool_fn(server: MCPServer, name: str):
+    return server._tool_manager.get_tool(name).fn
 
 
 def _ctx(claims: dict | None, *, with_request: bool = True):
@@ -253,9 +253,9 @@ class TestSdkWiring:
         """Proves find_context_parameter wired ctx — without this the tool would receive a
         plain string and the transport guard would never see claims."""
         server = _make_server()
-        assert server._tool_manager._tools["set_config"].context_kwarg == "ctx"
+        assert server._tool_manager.get_tool("set_config").context_kwarg == "ctx"
         # ...and that ctx is NOT exposed in the public inputSchema served by GET /api/tools
-        props = server._tool_manager._tools["set_config"].parameters["properties"]
+        props = server._tool_manager.get_tool("set_config").parameters["properties"]
         assert "ctx" not in props
         assert props["value_type"]["enum"] == ["string", "int", "float", "bool"]
 

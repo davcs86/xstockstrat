@@ -191,7 +191,7 @@ def test_attachment_block_shape():
     block = build_blocks(_full_result())[0]
     assert len(build_blocks(_full_result())) == 1
     assert block.type == "resource"
-    assert block.resource.mimeType == "application/json"
+    assert block.resource.mime_type == "application/json"
     assert str(block.resource.uri).startswith("xstockstrat:///backtest/")
     assert "bt-abc123" in str(block.resource.uri)
     assert block.annotations.audience == ["user"]
