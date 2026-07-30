@@ -23,7 +23,7 @@ pass — with one exception, `set_config`, which forwards the real caller's deri
 
 ## Language
 
-Python 3.12 (asyncio, grpc.aio, FastMCP)
+Python 3.12 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
 
 ## MCP Tools
 

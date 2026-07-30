@@ -1,6 +1,6 @@
 """Unit tests for `app.backtest_view` — the feature-072 presentation split.
 
-Pure projection tests: no gRPC, no FastMCP server. The tool-layer wiring is covered in
+Pure projection tests: no gRPC, no MCPServer. The tool-layer wiring is covered in
 `test_tools.py`.
 """
 
