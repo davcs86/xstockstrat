@@ -9,7 +9,9 @@
 
 ## Problem Statement
 
-**Observed:** In `xstockstrat-staging`, `marketdata.fmp.enabled` was flipped from `false` to `true`
+**Observed:** In `xstockstrat-staging` (the `main-dev`/dev DO app — the platform has no separate
+"staging" deploy tier; see root `CLAUDE.md` § CI/CD), `marketdata.fmp.enabled` was flipped from
+`false` to `true`
 live via the `set_config` MCP tool (feature 073), and a real `FMP_API_KEY` secret was already
 present on the deployed `xstockstrat-marketdata` service (feature 076). Despite both prerequisites
 being satisfied, `screen_symbols`'s `SCREEN_KIND_FUNDAMENTAL` criteria for AAPL/MSFT continued to

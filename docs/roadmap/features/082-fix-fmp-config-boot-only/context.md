@@ -49,3 +49,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `DEV_FMP_API_KEY`/`PROD_FMP_API_KEY` to be added as real GitHub Actions secrets beforehand (see
   that PR's notes) — otherwise the deploy would overwrite the already-live real FMP key with an
   empty string.
+
+## Session 2026-07-30 (/sdd-review product-spec)
+
+- Product spec approved. Status: draft → spec-ready.
+- Verdict: PASS WITH WARNINGS (spec-reviewer) + CLEAN (feature-overlap, no shared config
+  key/proto field/migration NNN collision with any in-flight feature; 076/080 share
+  `xstockstrat-marketdata` but touch disjoint lines, already landed).
+- Warnings: 1 — "xstockstrat-staging" read as a third deploy tier by a reader relying only on
+  product-spec.md (context.md already clarified dev=staging, but the spec itself didn't). Fixed
+  in the same session: product-spec.md Problem Statement now states explicitly this is the
+  `main-dev`/dev DO app, no separate staging tier (root CLAUDE.md § CI/CD has only main-dev/main).
+- Overlap findings: none blocking.
