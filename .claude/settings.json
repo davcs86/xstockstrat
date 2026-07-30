@@ -1,5 +1,8 @@
 {
   "enabledMcpjsonServers": ["digitalocean-apps", "digitalocean-databases"],
+  "enabledPlugins": {
+    "davcs86/agent-plugins": true
+  },
   "hooks": {
     "SessionStart": [
       {
