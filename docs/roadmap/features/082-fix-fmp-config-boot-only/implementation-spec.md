@@ -1,9 +1,9 @@
 # Implementation Spec: fix-fmp-config-boot-only
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-07-30
 **Feature**: `docs/roadmap/features/082-fix-fmp-config-boot-only/feature.md`
-**Total Steps**: 4
+**Total Steps**: 3
 **Feature Branch**: `feature/fix-fmp-config-boot-only`
 
 ---
@@ -164,7 +164,7 @@ stale-comment grep also returns **zero** hits (both occurrences updated per inst
 
 ### Step 2 — test: xstockstrat-marketdata: canary + live-toggle-no-restart proof
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/cmd/server/main_test.go` — modify
@@ -296,7 +296,7 @@ cd services/xstockstrat-marketdata && GOWORK=off go test ./... -race -count=1
 
 ### Step 3 — docs: correct both doc surfaces describing the FMP boot-time gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/CLAUDE.md` — modify
@@ -353,4 +353,30 @@ is unavailable in the session, say so in the PR body rather than skipping silent
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Step 3 — line-citation shift (`marketdata_service.go:960` → `:966`)
+- **What the spec said**: Step 1's Instructions cited `fundamentalsEnabled()`'s guard condition at
+  `marketdata_service.go:960`; Step 3's CLAUDE.md/context-constitution.md edits were planned to cite
+  that same line.
+- **What actually happened**: Step 1 added 5 comment lines above `fundamentalsEnabled()` (the
+  expanded doc comment explaining the now-defensive nil-guard), shifting the guard condition itself
+  to line 966. Both Step 3 doc edits cite `:966` (the current, correct line) instead of `:960`.
+- **Disposition**: trivial, in-scope correction — the cited symbol (`fundamentalsEnabled()`'s guard
+  condition) is unchanged; only its line number moved due to Step 1's own comment addition. No
+  Deviation-Log-worthy risk; recorded per P-03 for traceability.
+
+### Step 3 — header metadata correction (`**Total Steps**`)
+- **What the spec said**: header field `**Total Steps**: 4`.
+- **What actually happened**: only 3 step sections exist in this document (service, test, docs) —
+  confirmed against `design.md`'s Recommended Scope, which always described exactly 3 steps. This
+  was a miscount from `/sdd-spec`, not a dropped 4th step (no other artifact — recon.md, design.md,
+  context.md — references a 4th step at any point).
+- **Disposition**: corrected the header field to `3`. This is document metadata, not a step body
+  field (Instructions/Codebase Evidence/Verification/Files/Reviewers), so it is not F-09-protected.
+
+### Step 3 — context-forge plugin unavailable
+- Root `CLAUDE.md` § Teardown requires `/context-scrubber scan` (scoped to `xstockstrat-marketdata`)
+  as the last step before pushing this step's PR, since it changes a service `CLAUDE.md` and a
+  `docs/context-constitution.md`. The context-forge plugin providing that skill is **not available**
+  in this session (confirmed via ToolSearch — no match). Per the step's own Verification instruction
+  ("If the context-forge plugin is not available in the session, say so in the PR body rather than
+  skipping silently"), this is disclosed in the Step 3 PR body rather than silently skipped.

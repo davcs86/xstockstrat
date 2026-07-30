@@ -169,3 +169,72 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `services/xstockstrat-marketdata/cmd/server/main.go`,
   `services/xstockstrat-marketdata/internal/service/marketdata_service.go`.
 - Deviations: none.
+
+### Step 2 — test: canary + live-toggle-no-restart proof [done]
+- Phase 1 discovery: all 10 cited symbols/lines re-confirmed exact via codebase-discovery agent
+  against the post-Step-1 tree; no drift (Step 1 only touched comments in a file Step 2 doesn't
+  edit for logic).
+- TDD (red→green), per design.md's composed-proof argument:
+  - `TestNewFundamentalsSource_AlwaysNonNil`: its genuine red→green already happened during Step
+    1's TDD gate (compile error `undefined: newFundamentalsSource` → PASS after Step 1 landed).
+    This step commits the real, permanent copy of that test into `main_test.go` — re-ran here for
+    confirmation: PASS.
+  - `TestGetFundamentals_LiveToggle_NoRestart`: **red N/A** — `fundamentalsEnabled()`'s live gate
+    was already correct before this feature (recon.md/design.md both establish this); this test
+    characterizes existing-correct behavior rather than a behavior this feature changed. Per
+    `reference/tdd-gate.md`'s explicit escape clause ("note red N/A — no behavior change;
+    characterization test added... still capture the green run"). Green: PASS.
+  - `TestGetFundamentals_NilSourceFailedPrecondition`: comment updated only, test body unchanged —
+    TDD N/A (no behavior change), still green: PASS.
+- Verification: all three targeted tests pass (`-race`); `golangci-lint run` 0 issues; full suite
+  `go test ./... -race -count=1` green across every package, no regressions.
+- Files modified: `services/xstockstrat-marketdata/cmd/server/main_test.go`,
+  `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`.
+- Deviations: none.
+
+### Step 3 — docs: correct both doc surfaces describing the FMP boot-time gate [done]
+- Phase 1 discovery: both cited lines (`CLAUDE.md:66`, `context-constitution.md:46`) confirmed
+  exact via inline grep.
+- TDD: N/A (docs-only, no behavioral test applies).
+- Corrected `xstockstrat-marketdata/CLAUDE.md`'s `marketdata.fmp.enabled` row (removed "no FMP
+  client is built," added the live-per-RPC/no-restart framing) and `docs/context-constitution.md:46`'s
+  invariant row (citation moved from `cmd/server/main.go:110`, which stopped gating anything after
+  Step 1, to `internal/service/marketdata_service.go:966`, the real live gate).
+- Deviations (see Deviation Log in implementation-spec.md for full detail): (1) line citation
+  shifted 960→966 because Step 1's own comment addition moved the guard condition down 5 lines —
+  trivial, same symbol; (2) corrected the spec header's `**Total Steps**` from a miscounted `4` to
+  the actual `3` (document metadata, not a step body field, so not F-09-protected); (3) the
+  context-forge plugin (which provides `/context-scrubber scan`) is unavailable in this session
+  (confirmed via ToolSearch) — disclosed in the Step 3 PR body per the step's own instruction,
+  rather than silently skipped.
+- Verification: both grep checks pass (exactly one hit each for the new text); "no FMP client is
+  built" and the stale nil-comment both return zero hits.
+- Files modified: `services/xstockstrat-marketdata/CLAUDE.md`,
+  `services/xstockstrat-marketdata/docs/context-constitution.md`.
+- All 3 steps now done. Feature lifecycle: in-progress → code-completed.
+
+## Session 2026-07-30 (/promote — backfill missing steps)
+
+- **Real defect found during `/promote`**: GitHub only auto-retargets a stacked PR's base when
+  that base branch is *deleted*. Since `feature-steps/fix-fmp-config-boot-only-step-1` and `-step-2`
+  were never deleted after their PRs merged, the retarget never fired: PR #821 (Step 2 tests)
+  squash-merged into the **step-1 branch**, not into `feature/fix-fmp-config-boot-only`; PR #822
+  (Step 3 docs) squash-merged into the **step-2 branch**. Only PR #820 (Step 1) ever reached the
+  dev branch, and that's all the integration PR (#823) carried into `main-dev` — despite all four
+  PRs reporting "merged" and the feature already being marked `code-completed`.
+- Net effect before this fix: `main-dev` had the functional boot-fix (Step 1) but was missing the
+  regression tests (canary + live-toggle) and the doc corrections (`CLAUDE.md`,
+  `context-constitution.md` still described the old boot-gated behavior) — a real gap that would
+  have shipped untested, doc-stale code to production had `/promote` continued without catching it.
+- Caught by `/promote`'s own P1 state validation (comparing `main-dev`'s actual file content against
+  what the feature's own tracking docs claimed) before the production PR was opened — not by CI,
+  which never ran / never reported on any of the four PRs in this sandboxed environment.
+- Fix: opened a follow-up PR (`fix/082-backfill-missing-steps` → `main-dev`) checking out the
+  correct final state of all 7 affected files from the locally-verified, fully-stacked commit chain
+  (`main_test.go`, `marketdata_service_test.go`, `CLAUDE.md`, `docs/context-constitution.md`, plus
+  this feature's own `feature.md`/`implementation-spec.md`/`context.md`) directly onto a branch from
+  current `main-dev`. Re-ran the full verification suite (`go build`, `go test ./... -race`,
+  `golangci-lint run`) against the backfilled state — all green.
+- This is a candidate `fails.md`/Constitution entry: sequential-mode's step-PR stacking pattern
+  needs an explicit branch-deletion step (or an explicit post-merge retarget verification) rather
+  than assuming GitHub's auto-retarget fires on its own.
