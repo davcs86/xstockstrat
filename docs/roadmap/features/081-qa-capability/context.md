@@ -2,7 +2,8 @@
 
 **Feature**: `docs/roadmap/features/081-qa-capability/feature.md`
 **Product Spec**: `docs/roadmap/features/081-qa-capability/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/081-qa-capability/implementation-spec.md`
+**Implementation Spec**: _not generated — implemented directly as 3 atomic commits per the approved
+plan; see § pipeline deviation below. Do not run `/sdd-spec` for this feature._
 
 ---
 
@@ -54,23 +55,41 @@
       already resolve.
 - [x] ~~Confirm no gate repeats the 079 mistake~~ — **resolved**: two gates, both on symbols that
       cease to exist (dead path + dead invocation form). The path gate alone left 9 live pointers.
-- [ ] **The boot interlock (FR-9) is the load-bearing safety mechanism and is untested until AC-11
-      runs.** Until then "never bypass the TDD gate" is prose. Target: verification step.
-- [ ] **C-13's enforceability depends on all four duplicated sites landing together** —
-      `step-constraints.md:30`'s Verification column is a literal TypeScript grep and needs
-      per-language equivalents, or C-13 binds Go/Python while `/sdd-review` has nothing to check.
-      Target: commit 2.
+- [x] ~~C-13's enforceability depends on all four sites landing together~~ — **resolved in commit 2**:
+      `constitution.md`, `step-constraints.md`, `discovery-checklist.md`, and `repo-conventions.md`
+      all carry C-13, each with a per-language verification grep.
+- [x] ~~Merge-order: land #810 first~~ — **resolved**: #810 merged (`36d605d`); branch rebased, two
+      anticipated conflicts resolved (kept the delete; spliced the `sdd-triage` description).
+- [~] **The boot interlock (FR-9) is the load-bearing safety mechanism.** Its *pattern* is verified —
+      matches a real `feature.md` flipped to `in-progress`, ignores `design-approved`, and `**Files**:`
+      confirmed as the real spec header. But it has never actually **refused a write**, because no
+      feature was `in-progress` during testing. First real use is the true test.
+- [ ] `sdd-qa flake` end-to-end and the 12-service `gaps` sweep were never executed — flake needs a
+      built Next.js app plus browsers, the sweep is 12 agent spawns. Marked unchecked in PR #811.
 - [ ] `docs/patterns/ci-overview.md:18` is stale (`node-test` ×4; `ci.yml:541-553` runs 5).
       `sdd-qa gaps` sources from `ci.yml` to avoid the drift, but the doc stays wrong. Follow-up.
 - [ ] `/sdd-triage` T-2's substring severity match stays fragile for the *issue* path if Issues are
-      re-enabled. The `--from-report` path avoids it. Not hardened by this feature.
-- [ ] Merge-order: PR #810 edits `test-data/SKILL.md`, which this feature deletes. Land #810 first,
-      then rebase. **Not** recorded in `merge-order.md` — that table tracks hard constraints keyed by
-      feature slug, and #810 is a `claude/*` branch with a trivially-resolved delete/modify conflict.
+      re-enabled. The `--from-report` path avoids it by controlling the format. Not hardened here.
+- [ ] `.github/ISSUE_TEMPLATE/bug-report.yml`'s stale service list (three dead UI entries, no
+      `xstockstrat-agent`) was **not** fixed — it became dead config once Issues were confirmed
+      disabled, so it dropped out of scope. Still a trap if Issues are ever re-enabled.
 
 ## Files Modified
 
-_(none yet — artifacts only)_
+**Created** — `.claude/agents/qa-tester.md`; `.claude/skills/sdd-qa/SKILL.md` + its 7 `reference/`
+files; `docs/roadmap/features/081-qa-capability/{feature,product-spec,recon,design,context}.md`.
+
+**Deleted** — `.claude/skills/test-data/` (absorbed into `sdd-qa`).
+
+**Modified** — `docs/sdd/constitution.md` (C-13 appended, C-12 narrowed);
+`scripts/check-context-map.sh` (`SRCS` now scans `.claude/agents`); `.claude/context-map.yaml` and
+`docs/patterns/context-engineering.md` (both registries, plus 3 backfilled agents);
+`.claude/skills/sdd-triage/SKILL.md` (`--from-report`, hardened T-2/T-3);
+`.claude/skills/sdd-execute/reference/{tdd-gate,repo-conventions}.md`;
+`.claude/skills/sdd-spec/reference/{step-constraints,discovery-checklist}.md`;
+`docs/patterns/test-data-inventory.md`; `CLAUDE.md`, `docs/CLAUDE.md`, `docs/patterns/CLAUDE.md`;
+`services/xstockstrat-ui/e2e/fixtures/{INVENTORY.md,index.ts}` (two comment lines only — no runtime
+code, and no `playwright.config.ts` edit, since `flake` passes CLI flags instead).
 
 ---
 
@@ -201,3 +220,44 @@ of that exact line, correcting it cost nothing. Now `SEV-1…SEV-3`.
 - `grep -c SEV-4` on `sdd-triage/SKILL.md` → 0.
 - Session-start hook lists `/sdd-qa` and `/sdd-triage` with the `--from-report` hint; no `/test-data`.
 - `markdownlint-cli2` clean across 23 `CLAUDE.md` files.
+
+---
+
+## Session 2026-07-29 — lifecycle correction + pipeline deviation record
+
+Status `design-approved` → `code-completed`. The prior value understated reality: the feature was
+fully built, verified, and pushed, but `/sdd-status` reported it as awaiting a spec and `/promote`
+(which collects features at `code-completed` for the CHANGELOG) would have omitted it from the next
+release notes.
+
+### Pipeline deviation — `/sdd-spec` and `/sdd-execute` were bypassed
+
+**What was skipped.** No `implementation-spec.md` was generated and `/sdd-execute` never ran. The
+user-approved plan specified implementation as three atomic commits directly.
+
+**Why it is recorded rather than silent** (**P-03**): the two skills provide real guarantees, and
+skipping them means saying what replaced each.
+
+| Guarantee `/sdd-execute` provides | What stood in for it here |
+|---|---|
+| Per-step discovery before writes | `/sdd-design` Phase 0 recon, written to `recon.md` with `path:line` evidence |
+| Phase-2 user confirmation per step | One up-front plan approval covering all three commits |
+| Per-step verification command | `scripts/check-context-map.sh` run at **every commit**, not just the tip; both removal gates run against the post-change tree |
+| Red-before-green TDD gate (**P-06**) | N/A — this feature ships no executable logic. It is `.claude/` tooling, `docs/` governance, and two comment lines. The gate's own applicability rule skips `docs`-category work. |
+| Step-level acceptance | The 13 acceptance criteria in `product-spec.md`, each verified by execution and recorded in the PR |
+
+**What this deviation cost.** The artifact trail has no numbered-step record, so a future reader
+cannot diff intended steps against delivered ones. The commit series and this log are the substitute.
+**C-11 was still honored** — its minimum is `/sdd-story` → `/sdd-design quick` → the ledger touch,
+and `/sdd-spec`/`/sdd-execute` are not part of that minimum.
+
+### C-11 ledger obligation — closed this session
+
+C-11 requires the design-phase ledger touch to *write* when a trap surfaced, not only read. The read
+happened and changed the plan materially (079 rewrote the removal gate; 074 supplied the silent-skip
+rule), but nothing had been written back. Two entries added to `docs/roadmap/ledger/fails.md`:
+the metadata-vs-measurement capability assumption, and `/sdd-story`'s local-tree-only feature
+numbering. Both were previously recorded only here, where the next feature would not see them.
+
+No `insights.md` entry: the patterns this feature leaned on are already in `fails.md` from 079 and
+074. It reused them rather than discovering them, and re-recording would dilute the ledger.

@@ -22,6 +22,7 @@ ambiguity is logged here).
 ## Schema
 
 ```markdown
+
 ### <ISO date> — <feature-slug> — <category>
 - **Mistake**: <what went wrong and how it recurred>
 - **Evidence**: <path:line or PR/step/deviation ref>
@@ -154,3 +155,41 @@ ambiguity is logged here).
   name the grep that establishes it. And when a spec proposes to *derive* a value from stored state,
   verify the **writer** guarantees that state — deriving from a column nothing canonicalizes is how
   this defect existed in the first place.
+
+### 2026-07-29 — 081-qa-capability — assumption
+- **Mistake**: A capability was asserted from **advertised metadata** rather than from the producer's
+  behavior, and a feature was designed on top of it. The GitHub API reports `has_issues: true` for
+  `davcs86/xstockstrat`, so Issues were reported as enabled and `/sdd-qa defect` was designed around
+  `gh issue create`. The measured behavior is `POST /issues` → `410 Issues has been disabled` — a
+  fact already recorded in six prior features and in `docs/CLAUDE.md`. The product spec's premise
+  ("nothing owns defect filing") was also wrong: `docs/reports/` + evidence-direct `/sdd-triage` is
+  the documented owner. Caught only by the `/sdd-design` adversary, which returned **BLOCKED** on an
+  **F-04** breach; the first `recon.md` draft had compounded it by checking `command -v gh` and
+  framing the gap as sandbox tooling. **Third recurrence of this family** — 2026-07-27 (072,
+  serializer contract) and 2026-07-29 (074, a suite that never executed) are the prior two.
+- **Evidence**: `docs/roadmap/features/067-fix-custom-formula-allnone/context.md:20`;
+  `074-fix-config-write-authz/feature.md:7`; same in `075`–`078`; `docs/CLAUDE.md:15`.
+  Resolution in `081-qa-capability/design.md` § Floor breach.
+- **Rule it implies**: **exercise the producer, not its advertised state.** A capability flag,
+  a config value, a docs claim, or an API's own metadata is a *claim*; the endpoint's response is
+  the *contract*. Before designing on a capability, run it once — or cite a recorded run. Promotion
+  candidate: this is the third instance of "a demonstration is not a producer contract" and is a
+  strong candidate for a binding **P-\*** rule rather than a third ledger entry.
+
+### 2026-07-29 — 081-qa-capability — assumption
+- **Mistake**: Feature number allocated by scanning only the **local working tree**, which collided
+  with a number already taken on unmerged branches. `/sdd-story` Step 3 computes `max(NNN)+1` from
+  `find docs/roadmap/features -maxdepth 1 -type d`, so it saw `079` as the max and allocated `080` —
+  while `080-fix-backfill-timeframe-enum` was already live on `claude/backlog-080-backfill-timeframe-enum`
+  and `claude/triage-fix-080-8k1q4h`. The skill's own guard (`if [ -d ... ]`) only re-checks the local
+  tree, so it cannot catch this. Caught by the user, not by the tooling. This is the documented cause
+  of the historical `020`/`052` duplicates, and the skill will repeat it on every feature created
+  while another is unmerged.
+- **Evidence**: `.claude/skills/sdd-story/SKILL.md` Step 3; directory renamed
+  `080-qa-capability` → `081-qa-capability`; collision recorded in
+  `081-qa-capability/context.md` § Feature numbering.
+- **Rule it implies**: the numbering scan must cover **all remote branches**, not the checkout —
+  `for b in $(git ls-remote --heads origin ...); do git ls-tree --name-only "origin/$b" docs/roadmap/features/ ...`.
+  More generally: any "next free identifier" computed from local state is wrong in a repo with
+  concurrent branches; derive it from the union of every ref. Applies equally to migration `NNN`
+  prefixes and proto field numbers.
