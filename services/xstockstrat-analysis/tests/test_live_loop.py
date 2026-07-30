@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from gen.analysis.v1 import analysis_pb2
+from gen.common.v1 import common_pb2
 from gen.marketdata.v1 import marketdata_pb2
 
 import app.engine.live_loop as live_loop_module
@@ -83,6 +84,20 @@ class TestLiveEvaluationLoopStateTracking:
         defn = analysis_pb2.StrategyDefinition(strategy_id="s1")
         await loop._eval_pair(defn, "AAPL", throttle=0)
         loop._notify.EmitAlert.assert_not_called()
+
+
+class TestLiveEvaluationLoopRequestShape:
+    @pytest.mark.asyncio
+    async def test_getbars_sends_canonical_string_and_enum(self):
+        loop = _make_loop()
+        loop._evaluator.evaluate = AsyncMock(return_value=[_decision(False, False)])
+        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", display_name="S1")
+
+        await loop._eval_pair(defn, "AAPL", throttle=0)
+
+        called_req = loop._marketdata.GetBars.await_args.args[0]
+        assert called_req.timeframe == "1d"
+        assert called_req.timeframe_enum == common_pb2.Timeframe.TIMEFRAME_1DAY
 
 
 class TestLiveEvaluationLoopThrottle:

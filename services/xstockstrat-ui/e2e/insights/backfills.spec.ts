@@ -24,6 +24,7 @@ function runningJob(over: Record<string, unknown> = {}) {
     chunksTotal: 5,
     failedSymbols: [],
     error: '',
+    timeframe: '1d',
     timeframeEnum: 'TIMEFRAME_1DAY',
     ...over,
   };

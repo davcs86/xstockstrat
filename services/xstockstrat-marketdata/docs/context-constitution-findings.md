@@ -17,7 +17,7 @@ governance. Repo-wide defects (Go 1.22 doc-lie, `getEnvBool` dead) live in the r
 | What | Why it looks dead | Evidence |
 |---|---|---|
 | `marketdata.retention.quotes_days` / `retention.ohlcv_years` config keys | read by no code | `CLAUDE.md:68-69` (grep zero) |
-| `AlpacaAsset` struct "kept for backward compatibility" | zero references in-repo | `internal/alpaca/client.go:423` |
+| `AlpacaAsset` struct "kept for backward compatibility" | zero references in-repo | `internal/alpaca/client.go:426` |
 
 ## Open questions (unresolved *why* — needs a maintainer)
 

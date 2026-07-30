@@ -11,11 +11,11 @@ gRPC 50055). Does not restate documented/CI-enforced rules (see `## Pointers`).
 
 | ID | Rule | Why | Evidence | Example (canonical `path:line`) |
 |---|---|---|---|---|
-| **INGEST-1** | **Repositories are proto-free; the servicer maps rows ↔ protos and passes enum *ints* (not proto objects) into repos.** A repo function must not `import ingest_pb2`. | The deliberate proto isolation is what makes repos unit-testable without gen stubs; the servicer owns all proto↔row conversion. | `app/repositories/backfill_jobs.py:36-49`, `backfill_chunks.py:18-22`; mapper `servicer.py:70` | `app/repositories/backfill_chunks.py:18-22` |
-| **INGEST-2** | **Dynamic SQL builds a parameterized WHERE/SET by tracking an incrementing placeholder index; column names are allow-listed (`_UPDATABLE_COLUMNS`), never interpolated from input.** | f-stringing a user value is injection; adding an updatable column without extending the allow-list is silently rejected with `ValueError`. | `app/repositories/backfill_jobs.py:52-70,95-108`; `servicer.py:725-788` | `app/repositories/backfill_jobs.py:52-70` |
-| **INGEST-3** | **`page_token` is a raw integer offset, not an opaque cursor.** | Treating it as a base64/opaque token breaks pagination continuity. | `servicer.py:768,525`; `list_jobs(offset=)` | `app/handlers/servicer.py:768` |
-| **INGEST-4** | **`0.0`/`0` mean "unset" for `conviction` on both write and read** — write stores `None` when `conviction <= 0`; read returns `0.0` when NULL. Consumers must read `0.0` as *unknown confidence*, not zero. | The proto documents the sentinel; treating 0.0 as a real confidence misweights signals. | `servicer.py:656,800`; proto `ingest.proto:109` | `app/handlers/servicer.py:656` |
-| **INGEST-5** | **`QuerySignals` producer semantics** (consumed by indicators + analysis): results are `ORDER BY ingested_at DESC` (arrival order, and `ingested_at` is **not** returned); the active/expiry filter is **opt-in** (no `active_window` → all signals returned regardless of `valid_until`, despite the "Query active signals" docstring); `symbol` is upper-cased on write and query. | Consumers that assume expiry is always applied, or that sort by validity, get wrong results. | `servicer.py:718-822,668,736`; proto `ingest.proto:120-131` | `app/handlers/servicer.py:718-822` |
+| **INGEST-1** | **Repositories are proto-free; the servicer maps rows ↔ protos and passes enum *ints* (not proto objects) into repos.** A repo function must not `import ingest_pb2`. | The deliberate proto isolation is what makes repos unit-testable without gen stubs; the servicer owns all proto↔row conversion. | `app/repositories/backfill_jobs.py:36-49`, `backfill_chunks.py:18-22`; mapper `servicer.py:81` | `app/repositories/backfill_chunks.py:18-22` |
+| **INGEST-2** | **Dynamic SQL builds a parameterized WHERE/SET by tracking an incrementing placeholder index; column names are allow-listed (`_UPDATABLE_COLUMNS`), never interpolated from input.** | f-stringing a user value is injection; adding an updatable column without extending the allow-list is silently rejected with `ValueError`. | `app/repositories/backfill_jobs.py:52-70,95-108`; `servicer.py:749-788` | `app/repositories/backfill_jobs.py:52-70` |
+| **INGEST-3** | **`page_token` is a raw integer offset, not an opaque cursor.** | Treating it as a base64/opaque token breaks pagination continuity. | `servicer.py:793,550`; `list_jobs(offset=)` | `app/handlers/servicer.py:793` |
+| **INGEST-4** | **`0.0`/`0` mean "unset" for `conviction` on both write and read** — write stores `None` when `conviction <= 0`; read returns `0.0` when NULL. Consumers must read `0.0` as *unknown confidence*, not zero. | The proto documents the sentinel; treating 0.0 as a real confidence misweights signals. | `servicer.py:681,825`; proto `ingest.proto:109` | `app/handlers/servicer.py:681` |
+| **INGEST-5** | **`QuerySignals` producer semantics** (consumed by indicators + analysis): results are `ORDER BY ingested_at DESC` (arrival order, and `ingested_at` is **not** returned); the active/expiry filter is **opt-in** (no `active_window` → all signals returned regardless of `valid_until`, despite the "Query active signals" docstring); `symbol` is upper-cased on write and query. | Consumers that assume expiry is always applied, or that sort by validity, get wrong results. | `servicer.py:743-847,693,761`; proto `ingest.proto:120-131` | `app/handlers/servicer.py:743-847` |
 
 ## Gotchas & scars
 
@@ -26,10 +26,10 @@ gRPC 50055). Does not restate documented/CI-enforced rules (see `## Pointers`).
 
 | What | Where |
 |---|---|
-| Header propagation via `_propagation_meta(context)` | `servicer.py:134-140`; `docs/patterns/header-propagation.md` (root PLAT-4) |
+| Header propagation via `_propagation_meta(context)` | `servicer.py:151-157`; `docs/patterns/header-propagation.md` (root PLAT-4) |
 | asyncpg pool cap 2 / `DB_POOL_MAX` | `app/main.py:55-60`; root pool budget |
 | WatchConfig subscribe + `wait_for_snapshot(90s)` before serving | `app/main.py:45-46`, `app/config/watcher.py:51` |
-| Admin scope bit `0x04` check | `servicer.py:119` (root PLAT-5) |
+| Admin scope bit `0x04` check | `servicer.py:135` (root PLAT-5) |
 
 ---
 _Forged by [context-forge](https://github.com/davcs86/agent-plugins). It captures the

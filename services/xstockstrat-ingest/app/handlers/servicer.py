@@ -44,6 +44,17 @@ _TF_ALIASES = {
 }
 
 
+def _row_timeframe(stored: str) -> str:
+    """Normalize a stored backfill_jobs.timeframe to its canonical spelling.
+
+    The column is TEXT NOT NULL DEFAULT '' with no CHECK constraint
+    (migrations/003_backfill_jobs.up.sql), so a legacy row may hold an alias
+    ("1Day"). Alias-hop first so the read path resolves exactly what the resume
+    path already resolves (feature 080 FR-1).
+    """
+    return _TF_ALIASES.get(stored, stored)
+
+
 def _canonical_timeframe(request) -> str:
     """Resolve a request's timeframe to the canonical DB string (enum preferred, else string)."""
     enum = getattr(request, "timeframe_enum", 0)
@@ -73,6 +84,10 @@ def job_row_to_proto(row: dict) -> ingest_pb2.BackfillJob:
         job_id=str(row["job_id"]),
         symbols=list(row["symbols"] or []),
         timeframe=row["timeframe"] or "",
+        # The deprecated string is scheduled for removal, so populate its replacement too
+        # (feature 080 FR-1). Unknown/empty degrades to TIMEFRAME_UNSPECIFIED rather than
+        # raising, matching the .get(…, 0) idiom already used for chunk dispatch.
+        timeframe_enum=_STR_TO_ENUM.get(_row_timeframe(row["timeframe"] or ""), 0),
         status=row["status"],
         bars_processed=row["bars_processed"] or 0,
         bars_total=row["bars_total"] or 0,
@@ -146,11 +161,18 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             return
         job_id = str(uuid.uuid4())
         propagation_meta = self._propagation_meta(context)
+        # Canonicalize BEFORE persisting (feature 080 FR-13). _canonical_timeframe prefers the
+        # request's enum, so an enum-only caller — which is what the UI sends
+        # (insights/backfills/page.tsx passes timeframeEnum with no string) — no longer stores ''.
+        # Previously this wrote request.timeframe raw and only canonicalized later, inside
+        # _execute_backfill, so every UI-created row held '' and both the derived enum and the
+        # resume path were wrong (a 15m job resumed as 1d).
+        canonical_tf = _canonical_timeframe(request)
         await backfill_jobs.insert_job(
             self._db,
             job_id=job_id,
             symbols=list(request.symbols),
-            timeframe=request.timeframe,
+            timeframe=canonical_tf,
             range_start=_ts_to_dt(request.range.start),
             range_end=_ts_to_dt(request.range.end),
             status=ingest_pb2.BACKFILL_STATUS_QUEUED,
@@ -158,7 +180,9 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         await self._emit_backfill_event(
             "ingest.backfill.queued",
             job_id,
-            {"symbols": list(request.symbols), "timeframe": request.timeframe},
+            # Untyped Struct payload — append-only in the ledger, and no lint or type check
+            # covers it, so it must carry the canonical value too.
+            {"symbols": list(request.symbols), "timeframe": canonical_tf},
             propagation_meta,
         )
         asyncio.create_task(self._run_backfill(job_id, request, propagation_meta))
@@ -404,10 +428,10 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         row = await backfill_jobs.get_job(self._db, job_id)
         if row is None:
             return
-        enum = row.get("timeframe_enum") or 0
-        timeframe = _ENUM_TO_STR.get(enum) or _TF_ALIASES.get(
-            row.get("timeframe") or "", row.get("timeframe") or "1d"
-        )
+        # backfill_jobs has no timeframe_enum column, so the stored string is the only source
+        # (feature 080 FR-4 — the former row.get("timeframe_enum") read was permanently None).
+        # _ENUM_TO_STR itself stays: _canonical_timeframe reads it on the write path.
+        timeframe = _row_timeframe(row.get("timeframe") or "") or "1d"
         # Re-fetch is idempotent (marketdata upsert), so resume always uses overwrite=False.
         from types import SimpleNamespace
 

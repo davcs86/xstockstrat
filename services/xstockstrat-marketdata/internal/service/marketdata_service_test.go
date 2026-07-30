@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -10,6 +11,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
+	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
+	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
 	"github.com/xstockstrat/marketdata/internal/source"
 )
@@ -378,5 +381,124 @@ func TestGetFundamentals_NilSourceFailedPrecondition(t *testing.T) {
 	_, err := svc.GetFundamentals(context.Background(), "AAPL")
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("expected FailedPrecondition for nil source, got %v", err)
+	}
+}
+
+// ── BackfillBars (feature 080 AC-11) ─────────────────────────────────────────
+
+// fakeLedger overrides only AppendEvent; emitEvent (marketdata_service.go:774) calls it
+// unconditionally before BackfillBars ever resolves the source.
+type fakeLedger struct {
+	ledgerv1.LedgerServiceClient
+}
+
+func (*fakeLedger) AppendEvent(context.Context, *ledgerv1.AppendEventRequest, ...grpc.CallOption) (*ledgerv1.AppendEventResponse, error) {
+	return &ledgerv1.AppendEventResponse{}, nil
+}
+
+// fakeBackfillSource implements source.DataSourceClient and records the timeframe string
+// BackfillBars hands to GetBars. Returns zero bars so InsertBars — nil s.repo in this test —
+// is never reached. The other four methods are unused by BackfillBars.
+type fakeBackfillSource struct {
+	gotTimeframe string
+}
+
+func (f *fakeBackfillSource) GetBars(_ context.Context, _ string, timeframe string, _ time.Time, _ time.Time) ([]*marketdatav1.Bar, error) {
+	f.gotTimeframe = timeframe
+	return nil, nil
+}
+func (*fakeBackfillSource) GetLatestQuote(context.Context, string) (*marketdatav1.Quote, error) {
+	return nil, nil
+}
+func (*fakeBackfillSource) ListAssets(context.Context, string) ([]*commonv1.Asset, error) {
+	return nil, nil
+}
+func (*fakeBackfillSource) StreamBars(context.Context, []string, string) (<-chan *marketdatav1.Bar, error) {
+	return nil, nil
+}
+func (*fakeBackfillSource) StreamQuotes(context.Context, []string) (<-chan *marketdatav1.Quote, error) {
+	return nil, nil
+}
+
+// TestBackfillBars_EnumOnlyRequestResolves is the missing AC-11 verification: "a request
+// carrying only timeframe_enum (no string) succeeds — the condition that is broken today
+// and is the whole point of the migration." Red against the pre-Step-3 tree: BackfillBars
+// passes req.Timeframe raw, so the fake records "".
+func TestBackfillBars_EnumOnlyRequestResolves(t *testing.T) {
+	reg := source.NewRegistry()
+	fake := &fakeBackfillSource{}
+	reg.Register("alpaca", fake)
+
+	svc := &MarketDataService{registry: reg, ledger: &fakeLedger{}}
+
+	req := &marketdatav1.BackfillBarsRequest{
+		Symbols:       []string{"AAPL"},
+		TimeframeEnum: commonv1.Timeframe_TIMEFRAME_1DAY,
+		// Timeframe (deprecated string) deliberately left unset — this is the shape an
+		// enum-only caller sends.
+	}
+	if _, err := svc.BackfillBars(context.Background(), req); err != nil {
+		t.Fatalf("BackfillBars failed: %v", err)
+	}
+	if fake.gotTimeframe != "1d" {
+		t.Errorf("expected GetBars to receive canonical timeframe %q, got %q", "1d", fake.gotTimeframe)
+	}
+}
+
+// countingWarnHandler counts slog.LevelWarn records. slog.SetDefault is process-global, so
+// this test (and its subtests) must not call t.Parallel() — see resolveIngestTimeframe's
+// doc comment and feature 080 implementation-spec.md Step 4 instruction 5.
+type countingWarnHandler struct {
+	count *int
+}
+
+func (h *countingWarnHandler) Enabled(context.Context, slog.Level) bool { return true }
+func (h *countingWarnHandler) Handle(_ context.Context, r slog.Record) error {
+	if r.Level == slog.LevelWarn {
+		*h.count++
+	}
+	return nil
+}
+func (h *countingWarnHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h *countingWarnHandler) WithGroup(string) slog.Handler      { return h }
+
+// TestResolveIngestTimeframe covers AC-10's three cases directly, with the paired
+// "something does change" WARN assertion (insights.md 2026-07-27, teeth test).
+func TestResolveIngestTimeframe(t *testing.T) {
+	cases := []struct {
+		name     string
+		raw      string
+		want     string
+		wantWarn bool
+	}{
+		{"empty falls back to default", "", "15m", false},
+		{"canonical 1d passes through", "1d", "1d", false},
+		{"canonical 1h passes through", "1h", "1h", false},
+		{"canonical 15m passes through", "15m", "15m", false},
+		{"alias 1Day resolves", "1Day", "1d", false},
+		{"alias 1Hour resolves", "1Hour", "1h", false},
+		{"alias 15Min resolves", "15Min", "15m", false},
+		{"unresolvable falls back and warns", "10Min", "15m", true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			warnCount := 0
+			prev := slog.Default()
+			slog.SetDefault(slog.New(&countingWarnHandler{count: &warnCount}))
+			t.Cleanup(func() { slog.SetDefault(prev) })
+
+			got := resolveIngestTimeframe(tc.raw)
+			if got != tc.want {
+				t.Errorf("resolveIngestTimeframe(%q) = %q, want %q", tc.raw, got, tc.want)
+			}
+			wantCount := 0
+			if tc.wantWarn {
+				wantCount = 1
+			}
+			if warnCount != wantCount {
+				t.Errorf("resolveIngestTimeframe(%q): expected %d WARN record(s), got %d", tc.raw, wantCount, warnCount)
+			}
+		})
 	}
 }

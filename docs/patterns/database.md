@@ -13,6 +13,10 @@
 | xstockstrat-portfolio | portfolio | snapshots | time (1 day chunks) |
 | xstockstrat-ingest | ingest | newsletter_signals | ingested_at (7 day chunks) |
 
+This map is hypertables only; each service's `CLAUDE.md` § Database is authoritative for plain
+tables (e.g. `marketdata.ohlcv_remediation_003`, a one-shot audit table added by feature 080's
+`003_canonicalize_ohlcv_timeframe` migration — see `services/xstockstrat-marketdata/CLAUDE.md`).
+
 ## Migration tooling
 
 Orchestrated by `scripts/db-migrate.sh` using **golang-migrate**. State is tracked in a `schema_migrations` table inside each service's schema so re-runs only apply new files.

@@ -14,15 +14,17 @@ test.describe('Connect BFF — MarketDataService/GetBars data contract', () => {
     await page.goto('/auth/login');
 
     const result = await page.evaluate(async () => {
-      const res = await fetch(
-        '/trader/api/xstockstrat.marketdata.v1.MarketDataService/GetBars',
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ symbol: 'AAPL', timeframe: '1Day', limit: 100 }),
-        },
-      );
-      return { status: res.status, body: await res.json() as Record<string, unknown> };
+      const res = await fetch('/trader/api/xstockstrat.marketdata.v1.MarketDataService/GetBars', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          symbol: 'AAPL',
+          timeframe: '1Day',
+          timeframeEnum: 'TIMEFRAME_1DAY',
+          limit: 100,
+        }),
+      });
+      return { status: res.status, body: (await res.json()) as Record<string, unknown> };
     });
 
     expect(result.status).toBe(200);
@@ -46,14 +48,16 @@ test.describe('Connect BFF — MarketDataService/GetBars data contract', () => {
     // Either way the response body must not contain bar data.
     await page.goto('/auth/login');
     const result = await page.evaluate(async () => {
-      const res = await fetch(
-        '/trader/api/xstockstrat.marketdata.v1.MarketDataService/GetBars',
-        {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ symbol: 'AAPL', timeframe: '1Day', limit: 100 }),
-        },
-      );
+      const res = await fetch('/trader/api/xstockstrat.marketdata.v1.MarketDataService/GetBars', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          symbol: 'AAPL',
+          timeframe: '1Day',
+          timeframeEnum: 'TIMEFRAME_1DAY',
+          limit: 100,
+        }),
+      });
       const text = await res.text();
       return { hasValidData: text.includes('"bars"') };
     });
@@ -75,11 +79,15 @@ test.describe('Connect BFF — MarketDataService/ListAssets data contract', () =
           body: '{}',
         },
       );
-      return { status: res.status, body: await res.json() as Record<string, unknown> };
+      return { status: res.status, body: (await res.json()) as Record<string, unknown> };
     });
 
     expect(result.status).toBe(200);
-    const assets = result.body.assets as Array<{ symbol: string; exchange: string; assetClass: string }>;
+    const assets = result.body.assets as Array<{
+      symbol: string;
+      exchange: string;
+      assetClass: string;
+    }>;
     expect(Array.isArray(assets)).toBe(true);
     expect(assets.length).toBeGreaterThan(0);
     for (const asset of assets) {
@@ -124,7 +132,9 @@ test.describe('ChartPanel component — trading dashboard', () => {
     // no backend support and are intentionally not offered.
     const labels = ['15m', '1h', '1d'];
     for (const label of labels) {
-      await expect(page.getByRole('button', { name: label, exact: true })).toBeVisible({ timeout: 10000 });
+      await expect(page.getByRole('button', { name: label, exact: true })).toBeVisible({
+        timeout: 10000,
+      });
     }
     for (const label of ['10m', '30m', '1w', '1mo']) {
       await expect(page.getByRole('button', { name: label, exact: true })).toHaveCount(0);
@@ -147,5 +157,48 @@ test.describe('ChartPanel component — trading dashboard', () => {
     // lightweight-charts renders into a div container; match partial style to be layout-agnostic.
     const chartDiv = page.locator('div[style*="320"]');
     await expect(chartDiv).toBeVisible({ timeout: 10000 });
+  });
+
+  test('sends timeframeEnum on the outbound GetBars request (AC-8)', async ({ page }) => {
+    // Intercept in-process (the mock backend runs in Playwright's globalSetup, a different
+    // process, so it cannot record what the component sends). Proves the CLIENT populates
+    // timeframeEnum, not just that chart.ts's map is correct (that's chart.test.ts's job).
+    // Registered after the initial mount's own fetch (untouched, uses the real mock) — the
+    // 1h timeframe button click below triggers a fresh GetBars this route can observe,
+    // avoiding the timing uncertainty of racing a full page reload against a multi-request
+    // client-side data-fetch cascade.
+    let capturedBody: Record<string, unknown> | undefined;
+    await page.route('**/xstockstrat.marketdata.v1.MarketDataService/GetBars', async (route) => {
+      capturedBody = route.request().postDataJSON() as Record<string, unknown>;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          bars: [
+            {
+              symbol: 'AAPL',
+              open: 188.0,
+              high: 190.5,
+              low: 187.2,
+              close: 189.8,
+              volume: '45000000',
+              vwap: 189.1,
+              tradeCount: 120000,
+              timeframe: '1h',
+              timeframeEnum: 'TIMEFRAME_1HOUR',
+              source: 'alpaca',
+            },
+          ],
+        }),
+      });
+    });
+
+    await page.getByRole('button', { name: '1h', exact: true }).click();
+
+    // 1h is the timeframe clicked above — hardcoded, not derived from TIMEFRAME_ENUM, so this
+    // can never assert the map against itself (feature 080 AC-8).
+    await expect
+      .poll(() => capturedBody?.timeframeEnum, { timeout: 10000 })
+      .toBe('TIMEFRAME_1HOUR');
   });
 });

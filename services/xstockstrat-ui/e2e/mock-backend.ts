@@ -20,6 +20,7 @@ import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
 import { IngestService } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { LedgerService } from '@xstockstrat/proto/ledger/v1/ledger_pb';
 import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_pb';
+import { Timeframe } from '@xstockstrat/proto/common/v1/common_pb';
 import { NotifyService, type Alert } from '@xstockstrat/proto/notify/v1/notify_pb';
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
@@ -315,7 +316,8 @@ export async function startMockBackend(): Promise<void> {
                 volume: BigInt(45000000),
                 vwap: 189.1,
                 tradeCount: 120000,
-                timeframe: '1Day',
+                timeframe: '1d',
+                timeframeEnum: Timeframe.TIMEFRAME_1DAY,
                 source: 'alpaca',
               },
               {
@@ -327,7 +329,8 @@ export async function startMockBackend(): Promise<void> {
                 volume: BigInt(38000000),
                 vwap: 190.5,
                 tradeCount: 98000,
-                timeframe: '1Day',
+                timeframe: '1d',
+                timeframeEnum: Timeframe.TIMEFRAME_1DAY,
                 source: 'alpaca',
               },
             ],
