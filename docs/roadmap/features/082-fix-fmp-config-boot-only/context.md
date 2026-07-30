@@ -91,3 +91,32 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   changes; (2) no test covers `main.go:123`'s wiring into `NewMarketDataService` end-to-end
   (requires real gRPC dials) — accepted as out of scope, named explicitly.
 - Status: spec-ready → design-approved.
+
+## Session 2026-07-30 (/sdd-spec)
+
+- Generated implementation-spec.md with 4 steps. Status → implementation-ready.
+- Key codebase findings (all re-confirmed by direct Read against recon.md, no drift found):
+  - `main.go:104-123` boot-only gate confirmed byte-for-byte as recon described; extraction target
+    is the `if cfgWatcher.GetBool("marketdata.fmp.enabled", false) { fundamentalsSrc =
+    fmp.NewClient(...) }` block, replaced by an unconditional `newFundamentalsSource(cfgWatcher,
+    cfg.FMPAPIKey)` call placed next to `looksLikePlaceholderCred` (`main.go:173-184`), matching
+    that function's existing extracted-boot-helper pattern.
+  - `fundamentalsEnabled()` (`marketdata_service.go:957-964`) is genuinely unchanged in logic — the
+    step only rewords its doc comment to mark the `s.fundamentals == nil` half as defensive-only.
+  - Zero-value `*config.Watcher{}` safety for the canary test re-verified directly against
+    `internal/config/config.go:56-68,100-153`: `GetString`/`GetBool` touch only `w.mu` (safe
+    zero-value `sync.RWMutex`) and `w.snapshot` (nil-map read → `ok=false`); `w.ready`/`w.once` are
+    untouched — matches design.md's Open Risk note, not contradicted.
+  - `docs/context-constitution.md`'s citation to update is exactly line 46 (confirmed via grep):
+    `"FMP gated by marketdata.fmp.enabled... | cmd/server/main.go:110, internal/source/source.go:57
+    |"` — `internal/source/source.go:57` (the `FundamentalsSource` interface) is untouched by this
+    fix and stays in the citation; only the `cmd/server/main.go:110` half is replaced with
+    `internal/service/marketdata_service.go:960`.
+  - Both `cmd/` and `internal/service/` are excluded from the Go `COVERPKGS` coverage measurement
+    (`.claude/skills/sdd-spec/reference/spec-template.md` coverage table) — the test step notes no
+    coverage-percentage threshold applies; test-pass verification is the gate instead.
+  - Reviewers table finalized to the two step categories that actually exist in this spec
+    (`service`/`test` → xstockstrat-marketdata owner, `docs` → none); the design-phase
+    `xstockstrat-analysis` awareness note (screener's silent-degrade behavior, out of scope) was
+    preserved as a non-step "Awareness note" in `feature.md` rather than dropped, since it isn't
+    tied to any step in this spec but is still institutionally useful.
