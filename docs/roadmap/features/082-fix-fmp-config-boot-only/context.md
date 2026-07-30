@@ -61,3 +61,33 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   in the same session: product-spec.md Problem Statement now states explicitly this is the
   `main-dev`/dev DO app, no separate staging tier (root CLAUDE.md § CI/CD has only main-dev/main).
 - Overlap findings: none blocking.
+
+## Session 2026-07-30 (/sdd-design)
+
+- Phase 0 Recon: wrote recon.md (service: xstockstrat-marketdata). Key finding: `config.Watcher`
+  has no push/callback mechanism (poll-only getters) — this settled the "poll vs callback" design
+  question flagged at triage in favor of poll-on-every-call, matching the existing pattern already
+  used by `fundamentalsEnabled()`. FMP client confirmed stateless/cheap (safe to always-construct).
+- Phase 1 Grilling: 2 rounds (quick mode mandated 1; user asked for a second). Round 1's adversary
+  caught that the originally proposed test bypassed `main.go` entirely (would pass whether or not
+  the fix was applied — C-08/P-06 gap, matching this feature's own recon-cited fails.md traps).
+  Round 2 made the design concrete (extracted `newFundamentalsSource` function in main.go) but its
+  adversary caught the same class of gap recurring in the concrete test plan (the live-toggle test
+  still didn't connect to the real extracted function) plus a doc-drift miss
+  (`docs/context-constitution.md:46` citing the line that stops gating anything post-fix).
+- Chosen approach: always-construct-at-boot via an extracted, unconditionally-called
+  `newFundamentalsSource` function; `fundamentalsEnabled()`'s live per-RPC gate unchanged; test
+  proof composed from three parts (non-nil canary + one-line passthrough at
+  `marketdata_service.go:101`, verified by inspection + live-toggle test proving the gate given a
+  non-nil source) rather than a single network-dependent integration test. Both `CLAUDE.md` and
+  `docs/context-constitution.md` corrected in the same PR.
+- Rejected: lazy-construct-on-first-live-flip (needless concurrency guard); plain always-construct
+  with no extraction (untestable at the actual bug site); threading the real `fmp.Client` into the
+  live-toggle test (would make a unit test hit real FMP HTTP).
+- Constitution rules touched: C-08, P-06, C-05, F-07, C-10, P-03. Floor breaches: none across
+  either round.
+- Open risks carried forward to /sdd-spec: (1) zero-value `*config.Watcher{}` test trick relies on
+  an unwritten "safe zero value" contract — mitigate with a citing comment, watch if `Watcher`
+  changes; (2) no test covers `main.go:123`'s wiring into `NewMarketDataService` end-to-end
+  (requires real gRPC dials) — accepted as out of scope, named explicitly.
+- Status: spec-ready → design-approved.
