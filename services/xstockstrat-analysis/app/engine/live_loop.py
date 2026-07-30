@@ -123,7 +123,10 @@ class LiveEvaluationLoop:
     async def _eval_pair(self, definition, symbol, throttle):
         bars_resp = await self._marketdata.GetBars(
             marketdata_pb2.GetBarsRequest(
-                symbol=symbol, timeframe="1Day", range=self._recent_range()
+                symbol=symbol,
+                timeframe="1d",
+                timeframe_enum=common_pb2.Timeframe.TIMEFRAME_1DAY,
+                range=self._recent_range(),
             )
         )
         bars = list(bars_resp.bars)

@@ -914,7 +914,7 @@ docker compose start xstockstrat-marketdata   # undo PRE-FLIGHT 2
 
 ### Step 6 — service: analysis — the live evaluation loop sends the canonical string plus the enum
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/live_loop.py` — modify

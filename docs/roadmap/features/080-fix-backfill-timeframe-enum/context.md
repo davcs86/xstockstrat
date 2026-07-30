@@ -751,4 +751,23 @@ adding a second `//nolint` comment.
   `services/xstockstrat-marketdata/`)
 - Deviations: none beyond the lint fix, recorded above.
 
-**Next**: Step 6 (analysis service), Step 7 (analysis test), Step 8 (ui), then the integration PR.
+## Session — Steps 6 & 7 (analysis live loop)
+
+TDD pairing again spans the numbering: Step 7's test was written first and captured RED against
+the pre-Step-6 tree, then Step 6's one-site fix turned it GREEN. Committed separately (F-08).
+
+### Step 6 — service
+
+`live_loop.py:124-129`'s `GetBarsRequest` changed from `timeframe="1Day"` (the deprecated string,
+in the non-canonical Alpaca spelling, no enum) to `timeframe="1d", timeframe_enum=
+common_pb2.Timeframe.TIMEFRAME_1DAY` — matching the two already-migrated sibling call sites
+(`servicer.py:590-591`, `screener.py:169-170`) exactly. `common_pb2` was already imported
+(`:22`, used by `_recent_range`). No other line in `_eval_pair` touched.
+
+**Verification**: `ruff check .` / `ruff format --check .` clean. Descriptive grep confirms all
+three analysis `GetBarsRequest(` producers now agree on `timeframe="1d"` +
+`timeframe_enum=common_pb2.Timeframe.TIMEFRAME_1DAY`.
+
+- Files modified (Step 6): `app/engine/live_loop.py`
+
+**Next**: Step 8 (ui), then the integration PR.
