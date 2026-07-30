@@ -63,8 +63,17 @@ Six code slices plus one data migration. Every claim below cites `recon.md` or a
   (**empirically verified required** — I ran the repo's golangci-lint against a probe) + a comment
   restating MARKETDATA-2.
 - Import the package as **`tfpkg`**, not a param rename: `timeframe` is already a parameter at
-  `client.go:161,268`, `marketdata_repo.go:73,143,166,187` and in the `source.Source` interface
-  (`internal/source/source.go:15,18,27`) — recon Risk 1.
+  `client.go:161,268`, `marketdata_repo.go:73,143,166,187` and in the source interfaces
+  (`internal/source/source.go:15,18` on **`DataSourceClient`**, `:27` on **`MultiSymbolSource`**) —
+  recon Risk 1.
+  > **Corrected at the second `/sdd-review impl-spec` round.** This line previously said "the
+  > `source.Source` interface". **There is no `source.Source`** — a repo-wide grep returns only this
+  > feature's own artifacts. `recon.md:91` was right (it cited `source.go:15,18,27` without naming an
+  > interface); the phantom name was introduced *here*, in the design, and then propagated into
+  > `implementation-spec.md` instruction 4b as a symbol a test was told to implement — where **F-04**
+  > would have blocked the step at discovery. Provenance worth keeping: an invented name in a design
+  > artifact is inherited as fact by every downstream artifact, and the line numbers being correct is
+  > what made it look verified.
 - **FR-11** `BackfillBars`: resolve once, use the canonical value at `:590`, `:602`, `:633`.
   Resolve-with-raw-fallback, never error — byte-identical to how `GetBars` already handles it
   (`marketdata_service.go:118-122`).
