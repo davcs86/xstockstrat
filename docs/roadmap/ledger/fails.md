@@ -220,3 +220,27 @@ ambiguity is logged here).
   their own reflex: a **count** ("three times") is an absence claim — run the grep; and *"no test can
   assert X"* is almost never true when the file in question is already in the step's own `**Files**`
   section — check that list before believing it.
+
+### 2026-07-30 — 082-fix-fmp-config-boot-only — assumption
+- **Mistake**: A harness-assigned session branch (`claude/082-design-implement-7638at`) and the
+  feature's actual SDD `**Development Branch**` (`feature/fix-fmp-config-boot-only`, created earlier
+  by `/sdd-triage`) silently diverged. All of `/sdd-review product-spec`, `/sdd-design`, `/sdd-spec`,
+  and its own review round landed on the harness branch instead of the SDD dev branch, because that
+  was the branch already checked out and the skills never re-verify `**Development Branch**` matches
+  `git branch --show-current` before writing. `/sdd-execute`'s own Step B3 boot sequence caught it
+  only when `git show origin/feature/fix-fmp-config-boot-only:.../implementation-spec.md` failed with
+  "path exists on disk, but not in" that branch — the file simply didn't exist there. The two
+  branches' feature-dir content was byte-identical at the fork point (main-dev had squash-merged the
+  same triage commit under a different hash), which made the fix a clean non-destructive merge, but a
+  less fortunate case (genuine divergent edits on both sides) would have forced a real conflict
+  resolution mid-execution.
+- **Evidence**: `docs/roadmap/features/082-fix-fmp-config-boot-only/context.md` § Session
+  2026-07-30 (/sdd-execute sequential) — the branch-topology-fix note; the `git show` failure that
+  surfaced it; PRs #820/#821.
+- **Rule it implies**: extends **P-03** — a skill that writes to a feature directory should verify
+  early (ideally at its own boot sequence) that the currently-checked-out branch and the feature's
+  `**Development Branch**` are the same lineage, not just that both exist. `/sdd-design`'s and
+  `/sdd-spec`'s boot sequences currently only read `feature.md`'s `**Lifecycle Status**`; they should
+  also warn (not silently proceed) when `git branch --show-current` isn't `**Development Branch**`
+  and isn't a normal ancestor/descendant of it — catching this at Phase-0 recon time instead of at
+  `/sdd-execute`'s Step B3, several skill-invocations later.

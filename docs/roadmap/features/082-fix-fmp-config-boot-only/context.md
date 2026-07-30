@@ -191,3 +191,24 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `services/xstockstrat-marketdata/cmd/server/main_test.go`,
   `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`.
 - Deviations: none.
+
+### Step 3 — docs: correct both doc surfaces describing the FMP boot-time gate [done]
+- Phase 1 discovery: both cited lines (`CLAUDE.md:66`, `context-constitution.md:46`) confirmed
+  exact via inline grep.
+- TDD: N/A (docs-only, no behavioral test applies).
+- Corrected `xstockstrat-marketdata/CLAUDE.md`'s `marketdata.fmp.enabled` row (removed "no FMP
+  client is built," added the live-per-RPC/no-restart framing) and `docs/context-constitution.md:46`'s
+  invariant row (citation moved from `cmd/server/main.go:110`, which stopped gating anything after
+  Step 1, to `internal/service/marketdata_service.go:966`, the real live gate).
+- Deviations (see Deviation Log in implementation-spec.md for full detail): (1) line citation
+  shifted 960→966 because Step 1's own comment addition moved the guard condition down 5 lines —
+  trivial, same symbol; (2) corrected the spec header's `**Total Steps**` from a miscounted `4` to
+  the actual `3` (document metadata, not a step body field, so not F-09-protected); (3) the
+  context-forge plugin (which provides `/context-scrubber scan`) is unavailable in this session
+  (confirmed via ToolSearch) — disclosed in the Step 3 PR body per the step's own instruction,
+  rather than silently skipped.
+- Verification: both grep checks pass (exactly one hit each for the new text); "no FMP client is
+  built" and the stale nil-comment both return zero hits.
+- Files modified: `services/xstockstrat-marketdata/CLAUDE.md`,
+  `services/xstockstrat-marketdata/docs/context-constitution.md`.
+- All 3 steps now done. Feature lifecycle: in-progress → code-completed.

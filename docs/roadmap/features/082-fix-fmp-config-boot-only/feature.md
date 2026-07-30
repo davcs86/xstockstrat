@@ -1,7 +1,7 @@
 # Feature: fix-fmp-config-boot-only
 
 **Type**: bug
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/fix-fmp-config-boot-only`
 **GitHub Issue**: n/a — GitHub Issues are disabled on `davcs86/xstockstrat` (`POST /issues` → `410
 Issues has been disabled`); bug captured directly via `/sdd-triage` (Track C, adapted — same
@@ -22,6 +22,7 @@ precedent as features 067/074)
 | 2026-07-30 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 4 steps. |
 | 2026-07-30 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (sequential mode) — extracted `newFundamentalsSource`, always constructed at boot. |
 | 2026-07-30 | `in-progress` (unchanged) | /sdd-execute | Step 2 done (sequential mode) — canary + live-toggle-no-restart tests, nil-source test comment updated. |
+| 2026-07-30 | `in-progress` → `code-completed` | /sdd-execute | Step 3 done (sequential mode) — corrected both doc surfaces (CLAUDE.md + context-constitution.md). All 3 steps done. |
 
 ---
 
