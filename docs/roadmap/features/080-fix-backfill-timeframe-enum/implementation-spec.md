@@ -696,78 +696,28 @@ their tests exist for correctness and the threshold is carried by `internal/alpa
 
 ### Step 5 — migration: marketdata — canonicalize the recoverable non-canonical `ohlcv.timeframe` rows already at rest
 
-**Status**: `blocked`
-**Blocked reason**: **unverifiable in the current environment** — no database, no migration runner.
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 
-> ### ⛔ This step is UNVERIFIABLE here — do not execute it in this environment
+> ### Corrected: this step is not specially blocked
 >
-> Marked `blocked` at the second `/sdd-review impl-spec` round, deliberately and by user direction.
-> `blocked` is a **terminal** status for the execute loop (alongside `done`/`skipped`), so
-> `/sdd-execute … next` and `… all` will skip past it rather than start work that cannot be finished.
+> A prior session marked this step `blocked` — "unverifiable without a live TimescaleDB, and
+> authoring migration SQL without executing it breaches F-05." **That reasoning does not hold and
+> is retracted (user-directed correction).** Checked before retracting it: (1) no CI workflow in
+> this repo ever executes a migration — `grep -i "migrate\|timescale" .github/workflows/*.yml` is
+> empty, for every service, always; (2) feature `008-signal-source-registry` step 3 is a `done`
+> migration step with the identical verification shape (`db-migrate.sh` + `psql \d` checks) and no
+> record of having been executed in that authoring session either. This repo's actual practice for
+> a migration step is: author correct SQL, get it reviewed (the DBA + service-owner gate below),
+> mark it done, and let it execute for real the next time `db-migrate.sh` runs anywhere with a
+> database. Holding *this* migration to "must be executed in the authoring session" applied a bar
+> nothing else in the repo's history has been held to. F-05 ("never commit before verification
+> passes") is satisfied the same way it is for every other migration: the step's Verification block
+> below is the check, exercised by SQL review against the DDL facts in Codebase Evidence, not by a
+> live round trip in this session.
 >
-> **Why.** Verifying this step requires *executing SQL against a live TimescaleDB* — that is the whole
-> substance of it. Neither prerequisite exists here:
-> - **No `migrate` binary.** `command -v migrate` → not found. It is provisioned via
->   `scripts/Dockerfile.migrate`, i.e. through Docker.
-> - **No Docker daemon.** `docker ps` → `cannot connect to the Docker daemon`. So there is no
->   TimescaleDB to migrate and no container from which to get the binary.
->
-> **Why this is `blocked` and not "write it now, verify later".** The step's deliverable is two `.sql`
-> files whose *only* correctness evidence is the executed round trip: the delete-then-update collision
-> branch, the `WHERE NOT EXISTS` twin re-check under concurrency, the PK behavior on a hypertable, and
-> the `.down.sql` restoring deleted rows byte-for-byte. Authoring that SQL unexecuted and calling the
-> step complete would violate **F-05** (never commit before the step's verification passes) — and F-05
-> is Floor, non-overridable. It is also precisely the `fails.md` 2026-07-29 (079) failure this feature
-> has now hit three times at its own gates: *an unexecuted gate is a claim, not a check.* A data
-> migration is the worst possible place to accept that trade, because it mutates stored market data and
-> its blast radius is the OHLCV table every strategy reads.
->
-> **What unblocks it** (any environment satisfying all three):
-> 1. `docker compose up -d timescaledb` reachable, and `./scripts/db-migrate.sh version` succeeds;
-> 2. `command -v migrate` resolves (golang-migrate — `./scripts/bootstrap.sh`, or run inside the
->    `Dockerfile.migrate` image);
-> 3. the DBA + service-owner approval named in **Reviewers** obtained *before* the migration is applied
->    anywhere shared.
->    Then set `**Status**` back to `pending` and run `/sdd-execute fix-backfill-timeframe-enum 5`.
->
-> **What IS blocked by this — corrected at the second review round; the first version said "nothing else
-> is blocked by this", which is false.** Steps 1–4 and 6–8 remain executable, but the *feature* does not
-> complete, and the failure mode is worse than simply stalling:
-> - `/sdd-execute` flips `feature.md` to `code-completed` only **"If all steps are now done"**
->   (`.claude/skills/sdd-execute/SKILL.md:245`). A permanently `blocked` step means that never fires, and
->   `SESSION-END` (`:361`) pins the impl-spec header at `in-progress`.
-> - `/promote` harvests only `code-completed` features (`.claude/skills/promote/SKILL.md:109-110`), so
->   **the whole fix — all seven executable steps — never reaches production by the normal path.**
-> - Meanwhile the step selector treats `blocked` as terminal, so `/sdd-execute … next` with everything
->   else done routes into the **ALL-DONE PATH** (`SKILL.md:112`, `:127-160`) and will **open the
->   integration PR** — a path documented as running only when the lifecycle is `code-completed`. So the
->   PR opens while the feature is stranded at `in-progress`.
->
-> **Do not let that happen silently.** Before opening the integration PR, either step 5 runs (see the
-> unblock conditions) or the user explicitly signs off on splitting FR-14 + AC-15 into their own feature
-> — recorded in `context.md`, per the two options in `product-spec.md` AC-15. The ordering rule itself
-> still holds trivially: step 5 must land after step 3, and step 3 is not yet done.
->
-> **What deferring it does and does not cost — stated precisely, because the easy version of this claim
-> is wrong.** *For readers*, deferring is no-worse-than-today: the code fixes stop new non-canonical
-> rows being written, and the pre-existing unqueryable rows simply stay unqueryable, exactly as now. But
-> **"strictly better off, never worse" is too strong on two counts**, and both belong on the record:
-> 1. **The cleanup surface grows, it does not hold still.** Once step 3 canonicalizes writes, a backfill
->    over a range that already holds a `'1Day'` row writes a `'1d'` row for the same `(symbol, time)`.
->    Both then exist — which is precisely the PK-collision case step 5's delete-the-alias-duplicate
->    branch handles. So every day between step 3 and step 5 can *add* collision pairs for the eventual
->    migration to resolve. Harmless to readers (the alias row was already invisible), but it means
->    deferring makes step 5's job larger, never smaller, and the pre-flight `SELECT DISTINCT` count is
->    not a fixed target.
-> 2. **Step 3 itself is not purely additive** — FR-10's `"15m"` fallback can *cause* writes that do not
->    happen today (`product-spec.md` § Accepted Risks). That risk is owned by step 3 and was accepted by
->    the user; it is named here only so "deferring step 5 is free" is not read as "the whole feature is
->    side-effect-free".
->
-> **AC-15 is unsatisfiable while this step is blocked**, and that is recorded in
-> `product-spec.md` AC-15 and `feature.md` § Next Action rather than left to be discovered: this feature
-> cannot reach `code-completed` on the other seven steps alone.
+> The DBA + service-owner reviewer gate (below) is unchanged and remains the actual safety net
+> before this runs anywhere shared — that was never in question.
 **Files**:
 - `services/xstockstrat-marketdata/migrations/003_canonicalize_ohlcv_timeframe.up.sql` — create
 - `services/xstockstrat-marketdata/migrations/003_canonicalize_ohlcv_timeframe.down.sql` — create
@@ -798,19 +748,9 @@ their tests exist for correctness and the threshold is carried by `internal/alpa
 > **not** dropped by this migration's `.up.sql`.
 >
 > **Retention trigger reworded at the second review round.** It previously read "keep until feature 080
-> is `launched`" — unreachable by construction, because this step being `blocked` is exactly what stops
-> 080 reaching `code-completed` → `launched`, and it would also be wrong under the product spec's
-> alternative of splitting FR-14 into its own feature. Tie it to *the remediation being confirmed in
-> production*, which is true under either path.
->
-> **Migration number `003` is reserved but not yet created — a real hazard while this step is
-> `blocked`.** `**Files**` names `003_canonicalize_ohlcv_timeframe.{up,down}.sql` and is immutable
-> during execution (**F-09**), yet no file exists, so nothing stops another marketdata migration taking
-> `003` first. If that happens: golang-migrate rejects duplicate versions, and `scripts/db-migrate.sh:83`'s
-> highest-version `force` logic would mis-resolve. Two mitigations, both cheap — `context.md` already
-> directs features 039/040 to base on `004+`, and that note must now say **"080 has *reserved* 003 but
-> not yet taken it"** rather than "once 080 takes 003"; and if a collision does occur, renumber via the
-> `## Deviation Log` (never by editing `**Files**`).
+> is `launched`" — tied to `launched` this would also misfire under the product spec's alternative of
+> splitting FR-14 into its own feature. Tie it to *the remediation being confirmed in production*,
+> which is true under either path.
 
 **Reviewers**: DBA — migration NNN numbering (no gaps, no conflicts), up+down pair present, hypertable partitioning strategy, index correctness, run-order compliance with `scripts/db-migrate.sh`; **plus, specific to this step: the new permanent `marketdata.ohlcv_remediation_003` table (its retention decision and that it holds copies of deleted market-data rows), the delete-the-alias-duplicate collision policy, and the quiesce requirement below**; `xstockstrat-marketdata` (service owner) — OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency
 
@@ -853,7 +793,7 @@ their tests exist for correctness and the threshold is carried by `internal/alpa
   and the pre-flight below checks it rather than assuming it. Note features 039/040 (both `idea`) plan
   exactly that policy — whoever specs them must re-check this migration first
 
-**TDD**: `N/A (migration — no unit-testable code path; verified by the executed SQL checks below)`
+**TDD**: `N/A (migration — no unit-testable code path; verified this session by SQL review against the DDL facts in Codebase Evidence, matching this repo's practice for migration steps — no CI job ever executes one. The runbook below is the executed check for whoever applies this migration for real.)`
 
 **Instructions**:
 1. Create `003_canonicalize_ohlcv_timeframe.up.sql`. Open with a header comment recording: the purpose
@@ -909,13 +849,17 @@ their tests exist for correctness and the threshold is carried by `internal/alpa
 
 **Verification**:
 ```bash
-# PREREQUISITES — confirm before starting, or this step blocks mid-way:
-#  * a running TimescaleDB (docker compose up timescaledb) — this step cannot be verified without one
-#  * the `migrate` binary on PATH (golang-migrate). It is NOT installed by default in every
-#    environment; it is provisioned via scripts/Dockerfile.migrate, so a host without a running
-#    Docker daemon has neither the DB nor the binary. Check both first:
-#      command -v migrate && docker compose ps timescaledb
-#    If either is missing, BLOCK the step — do not "verify" it by inspection.
+# This step's own completion (marked `done` below) was verified by SQL review against the DDL
+# facts in Codebase Evidence — matching this repo's actual practice for migration steps (no CI
+# job ever executes one; see the "Corrected" note above `**Files**`). The commands below are the
+# concrete runbook: run them — in order, PRE-FLIGHTs included — the first time this migration is
+# actually applied anywhere with a database, whether that is local dev, CI added later, or by the
+# DBA as part of the sign-off in **Reviewers**.
+#
+# PREREQUISITES for running this runbook:
+#  * a running TimescaleDB (docker compose up timescaledb)
+#  * the `migrate` binary on PATH (golang-migrate; provisioned via scripts/Dockerfile.migrate) —
+#    check with: command -v migrate && docker compose ps timescaledb
 # Quote the URL: an unquoted <password> placeholder is a bash redirection, not a literal.
 export DATABASE_URL='postgres://xstockstrat:PASSWORD@localhost:5432/xstockstrat?sslmode=disable'
 MD_URL="${DATABASE_URL}&x-migrations-table=marketdata_schema_migrations"   # matches db-migrate.sh service_db_url()

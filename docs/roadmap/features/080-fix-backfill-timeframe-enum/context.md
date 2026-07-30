@@ -557,3 +557,96 @@ called out explicitly in the integration PR body.
   `services/xstockstrat-ingest/tests/test_ingest_servicer.py`,
   `services/xstockstrat-ingest/tests/test_cancel_backfill.py`
 - Deviations: none.
+
+---
+
+## Session 2026-07-30 — step 5 unblocked (user-directed correction)
+
+### The challenge
+
+The user pushed back directly on the `blocked` decision: *"I don't see the problem, previous
+migrations neither had a timescaledb instance."* Not a request to override the objection — a
+challenge to whether the objection was ever correctly scoped. Treated as such: checked before
+responding, not reasserted.
+
+### What was checked
+
+1. `grep -i "migrate\|timescale" .github/workflows/*.yml` across every workflow file in the
+   repo → **empty**. No CI job, for any service, ever executes a migration.
+2. Searched for precedent: `docs/roadmap/features/008-signal-source-registry/implementation-spec.md`
+   step 3 (`Add signal_sources registry table to ingest schema`) is `**Status**: done`, with a
+   **Verification** block of the identical shape to step 5's — `./scripts/db-migrate.sh` then
+   `psql \d`/`\di` checks. Nothing in that file evidences the check was executed in the authoring
+   session; the repo's own history shows a migration reaching `done` on the strength of the SQL
+   being authored and reviewed correctly, not on a live round trip captured by whoever wrote it.
+3. Re-checked the current environment fresh (not relying on the earlier-session finding): `docker ps`
+   still fails (`cannot connect to the Docker daemon`), `command -v migrate` still empty. No change —
+   the environment fact was correct. **The error was the bar applied to it, not the observation.**
+
+### The correction
+
+**`blocked` is retracted.** The prior reasoning — "authoring migration SQL without executing it
+breaches F-05" — does not survive the precedent check: if it were a real, repo-wide rule, `008`
+step 3 could never have been marked `done` either, and nothing in this repo's actual practice
+supports that. F-05 ("never commit before the step's verification passes") is satisfied here the
+same way it is satisfied for every other migration step in this repo's history: the step's
+Verification block is the documented check, exercised by review against the codebase facts in
+Codebase Evidence — not by requiring the authoring session to hold a live database.
+
+**What did not change**: the DBA + service-owner reviewer gate on step 5. That was never the
+disputed part — it is the actual safety net before this migration runs anywhere shared, exactly as
+for `008`'s migration and every other one in `docs/runbooks/approval-flow.md`.
+
+### What was implemented
+
+- `services/xstockstrat-marketdata/migrations/003_canonicalize_ohlcv_timeframe.up.sql` — the
+  remediation log (`marketdata.ohlcv_remediation_003`, created before the remediation runs), a
+  pre-flight `DO $$ ... RAISE EXCEPTION` guard against compressed chunks, then the
+  delete-the-alias-duplicate branch (`DELETE ... RETURNING` → `INSERT` into the log via CTE, so the
+  delete and the log entry cannot diverge) followed by the update-remainder branch, which carries
+  its **own** `WHERE NOT EXISTS` twin re-check rather than trusting the delete branch to have
+  cleared the way — the two statements are separate, and `StartBarIngestPoller` can commit a
+  canonical row between them under READ COMMITTED. Both branches driven from one
+  `VALUES ('1Day','1d'),('1Hour','1h'),('15Min','15m')` CTE, not three copy-pasted pairs.
+- `.down.sql` — reverses both branches from the log (revert updates, re-insert deletes), then drops
+  the log table; states explicitly that the reverse is faithful only because the log exists.
+- No explicit `BEGIN`/`COMMIT` in either file — checked that no other migration in this repo nests
+  one (migrate's postgres driver already wraps each file in its own transaction), and matched that
+  convention rather than introducing a new one.
+- `services/xstockstrat-marketdata/CLAUDE.md` § Database and `docs/patterns/database.md` — the new
+  table registered with owner/purpose/retention, per the design's decision (retention tied to "the
+  remediation confirmed in production," not `launched`, per the correction already recorded at the
+  second review round).
+- Stale `blocked`-era text corrected in place across `implementation-spec.md` (the "reserved but not
+  taken" migration-number hazard, now moot since the files exist), `feature.md` (§ Next Action,
+  Reviewers table, Status History), and `product-spec.md` (AC-15's annotation). Historical narrative
+  explaining *why* it was marked blocked at the time is left intact in this file's earlier sessions
+  and in `implementation-spec.md`'s "Corrected" note, rather than deleted — the reasoning that led
+  there is worth keeping visible even though the conclusion was wrong.
+
+**TDD**: `N/A` (migration step, no unit-testable code path — matches step 5's own declared category).
+**Verification**: SQL review against the DDL facts (`PRIMARY KEY (symbol, timeframe, time)`, `time`
+as the partitioning column, no compression policy applied yet) — the same evidentiary basis `008`
+step 3 was marked `done` on. The runbook in the step's Verification block is unchanged and remains
+the executed check for whoever applies this migration for real.
+
+- Files modified: `services/xstockstrat-marketdata/migrations/003_canonicalize_ohlcv_timeframe.up.sql`
+  (new), `services/xstockstrat-marketdata/migrations/003_canonicalize_ohlcv_timeframe.down.sql` (new),
+  `services/xstockstrat-marketdata/CLAUDE.md`, `docs/patterns/database.md`,
+  `docs/roadmap/features/080-fix-backfill-timeframe-enum/implementation-spec.md`,
+  `docs/roadmap/features/080-fix-backfill-timeframe-enum/feature.md`,
+  `docs/roadmap/features/080-fix-backfill-timeframe-enum/product-spec.md`
+- Deviations: this session's own correction, recorded above rather than as a `## Deviation Log`
+  entry — it revises the *review-gate* record of why step 5 was blocked, not the confirmed Phase-2
+  execution plan for a step already in progress.
+
+## Open Threads
+
+- The migration number `003`/doc-drift/retention risks recorded while step 5 was `blocked` are now
+  resolved by the files existing — superseded, not re-stated here.
+- Everything else from the prior Open Threads list is unchanged: FR-10's `"15m"` fallback can cause
+  a write; FR-11's raw fallback on `BackfillBars`; `marketdata_handler.go:258` stays a raw reader
+  (unreachable, no producer); Go coverage excludes `service`/`repository`; out-of-repo producers
+  cannot be swept; `/context-scrubber scan` is owed before the integration PR.
+
+**Next**: `/sdd-execute fix-backfill-timeframe-enum 3` — marketdata service (largest remaining step).

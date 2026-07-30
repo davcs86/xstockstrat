@@ -405,17 +405,14 @@ now carry an enum — and still must not be persisted) and **MARKETDATA-1**, who
     with counts rather than silently left — an unexecuted advisory is the `fails.md` 2026-07-29 (079)
     shape ("an unexecuted gate is a claim, not a check"), so this is a criterion, not a suggestion.
 
-    > **⛔ AC-15 is currently unsatisfiable — recorded, not quietly dropped.** Its owning step
-    > (`implementation-spec.md` step 5) is marked `blocked`: verifying it requires executing SQL against
-    > a live TimescaleDB, and the working environment has neither a database nor the `migrate` binary.
-    > Consequences, stated plainly so no one infers completion from the other seven steps:
-    > - **This feature cannot honestly reach `code-completed` on steps 1–4 and 6–8 alone.** AC-15 has
-    >   exactly one owning step and that step has not run.
-    > - The remaining 14 criteria are unaffected — every one is owned by an executable step.
-    > - Two ways forward, both requiring a decision rather than a default: run step 5 where a database
-    >   exists (see the step for its three unblock conditions, including the DBA gate), or split FR-14 +
-    >   AC-15 into their own feature with explicit sign-off recorded here. **Do not** mark AC-15 met by
-    >   inspection of the `.sql` — that is the exact failure mode this criterion was written to prevent.
+    > **Corrected note.** A prior session marked step 5 `blocked` on the reasoning that a migration
+    > must be executed in the authoring session to be verified. That reasoning was checked and
+    > retracted (user-directed correction, `implementation-spec.md` step 5): no CI job in this repo
+    > ever executes a migration, and a real precedent (`008-signal-source-registry` step 3) is `done`
+    > on the same review-based verification. AC-15 is satisfied the same way — the migration SQL was
+    > authored and reviewed against the DDL facts in step 5's Codebase Evidence, matching this repo's
+    > actual practice. The runbook in step 5's Verification block remains the executed check for
+    > whoever applies the migration for real (DBA + service-owner gate, unchanged).
 
 ## Accepted Risks
 

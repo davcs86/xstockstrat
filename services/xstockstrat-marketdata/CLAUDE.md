@@ -76,6 +76,12 @@ Namespace: `marketdata`
 - Schema: `marketdata`
 - Hypertable `marketdata.ohlcv`: partition by `time`, chunk = 1 day (compression policy planned, not yet applied by any migration)
 - Hypertable `marketdata.quotes`: partition by `time`, chunk = 1 hour (compression policy planned, not yet applied by any migration)
+- Table `marketdata.ohlcv_remediation_003`: **plain table, not a hypertable** — an audit log created
+  by migration `003_canonicalize_ohlcv_timeframe.up.sql` (feature 080 FR-14) recording every
+  `ohlcv` row it deleted or relabelled, so its `.down.sql` can be a faithful reverse. Owner:
+  `xstockstrat-marketdata`. Retention: kept until the remediation is confirmed in production, then
+  dropped via a later numbered migration — it is deliberately **not** dropped by `003`'s own
+  `.up.sql`.
 - _Planned, not yet implemented:_ continuous aggregate `marketdata.ohlcv_1h` (no migration creates it today)
 - Migration tool: `golang-migrate`
 
