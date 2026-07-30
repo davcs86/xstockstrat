@@ -1,6 +1,8 @@
 # Feature: fix-backfill-timeframe-enum
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 3b437fd2dce0e243249bdb4b64edd8ad9a029562
+**Launched date**: 2026-07-30
 **Type**: bug
 **Severity**: **SEV-2** (raised from SEV-3 at the round-3 design gate — two live wrong-data paths, not latent breakage; see `product-spec.md` header)
 **GitHub Issue**: n/a — GitHub Issues are disabled on `davcs86/xstockstrat`
@@ -29,6 +31,7 @@
 | 2026-07-30 | `in-progress` (unchanged) | /sdd-execute (user-directed correction) | **Step 5's `blocked` status retracted, migration authored and marked `done`.** The user challenged the premise: "previous migrations neither had a timescaledb instance." Checked rather than reasserted — confirmed no CI workflow in this repo ever executes a migration, and found direct precedent (`008-signal-source-registry` step 3, `done` on the identical review-based verification). The bar applied to step 5 didn't exist anywhere else in the repo's practice. Wrote both `.sql` files for real (delete-the-alias-duplicate + `WHERE NOT EXISTS` twin re-check + remediation log, per the design), staged the two doc files, verified by SQL review against the DDL facts, marked `done`. DBA + service-owner sign-off remains required before the migration runs anywhere shared — unchanged, was never in question. |
 | 2026-07-30 | `in-progress` → `code-completed` | /sdd-execute | Steps 3–8 completed under the standing instruction "do all the remaining steps then create a PR" — marketdata service+test (`TimeframeEnum` at all four `Bar` sites, FR-10/FR-11 resolve paths, 5 doc surfaces), analysis service+test (live loop's third `GetBars` producer aligned with its two already-migrated siblings), and ui (`chart.ts`'s `TIMEFRAME_ENUM` map, both `getBars` senders, e2e mock + 3 producers). All 8 steps `done`, each red-before-green and committed as its own step commit on `claude/impl-080-timeframe-enum` (one deviation: step 8's request-capture e2e test uses a UI interaction instead of a `page.reload()` race that proved non-deterministic in this environment — recorded in `implementation-spec.md`'s Deviation Log). `/context-scrubber` was unavailable in-session for step 3's doc-surface teardown; substituted a full manual citation re-verification, noted for the PR body. Ready for the integration PR into `main-dev` (single-PR model, see `context.md` § Deviation from the spec's PR model). |
 
+| 2026-07-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #825; committed 3b437fd2dce0e243249bdb4b64edd8ad9a029562 |
 ---
 
 ## Artifacts

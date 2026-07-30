@@ -833,3 +833,10 @@ re-running — asserted `undefined`, then restored and re-verified GREEN). No ch
 
 **Next**: all 8 steps done — open the integration PR from `claude/impl-080-timeframe-enum` into
 `main-dev`.
+
+## Session 2026-07-30 (CI: feature status automation)
+
+- Promotion PR #825 merged to main
+- Feature promoted and committed: 3b437fd2dce0e243249bdb4b64edd8ad9a029562
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-07-30

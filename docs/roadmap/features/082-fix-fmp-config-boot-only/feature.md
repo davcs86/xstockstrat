@@ -1,7 +1,9 @@
 # Feature: fix-fmp-config-boot-only
 
 **Type**: bug
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 3b437fd2dce0e243249bdb4b64edd8ad9a029562
+**Launched date**: 2026-07-30
 **Development Branch**: `feature/fix-fmp-config-boot-only`
 **GitHub Issue**: n/a — GitHub Issues are disabled on `davcs86/xstockstrat` (`POST /issues` → `410
 Issues has been disabled`); bug captured directly via `/sdd-triage` (Track C, adapted — same
@@ -24,6 +26,7 @@ precedent as features 067/074)
 | 2026-07-30 | `in-progress` (unchanged) | /sdd-execute | Step 2 done (sequential mode) — canary + live-toggle-no-restart tests, nil-source test comment updated. |
 | 2026-07-30 | `in-progress` → `code-completed` | /sdd-execute | Step 3 done (sequential mode) — corrected both doc surfaces (CLAUDE.md + context-constitution.md). All 3 steps done. |
 
+| 2026-07-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #825; committed 3b437fd2dce0e243249bdb4b64edd8ad9a029562 |
 ---
 
 ## Artifacts

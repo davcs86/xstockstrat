@@ -1,6 +1,8 @@
 # Feature: qa-capability
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 3b437fd2dce0e243249bdb4b64edd8ad9a029562
+**Launched date**: 2026-07-30
 **Development Branch**: `feature/qa-capability`
 **Created**: 2026-07-29
 **Last Updated**: 2026-07-29
@@ -15,6 +17,7 @@
 | 2026-07-29 | `draft` → `design-approved` | /sdd-design | Design debated (1 round, quick). Adversary returned BLOCKED on an F-04 breach (`gh issue create` — Issues disabled on this repo); resolved by re-scoping to `docs/reports/` + `/sdd-triage --from-report`. recon.md + design.md written |
 | 2026-07-29 | `design-approved` → `code-completed` | direct implementation | Implemented as 3 atomic commits per the user-approved plan, **bypassing `/sdd-spec` and `/sdd-execute`** — see context.md § pipeline deviation. All 13 acceptance criteria in product-spec.md verified; PR #811 open against `main-dev`, rebased past #810 |
 
+| 2026-07-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #825; committed 3b437fd2dce0e243249bdb4b64edd8ad9a029562 |
 ---
 
 ## Artifacts

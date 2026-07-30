@@ -238,3 +238,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - This is a candidate `fails.md`/Constitution entry: sequential-mode's step-PR stacking pattern
   needs an explicit branch-deletion step (or an explicit post-merge retarget verification) rather
   than assuming GitHub's auto-retarget fires on its own.
+
+## Session 2026-07-30 (CI: feature status automation)
+
+- Promotion PR #825 merged to main
+- Feature promoted and committed: 3b437fd2dce0e243249bdb4b64edd8ad9a029562
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-07-30

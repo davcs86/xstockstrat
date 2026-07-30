@@ -261,3 +261,10 @@ numbering. Both were previously recorded only here, where the next feature would
 
 No `insights.md` entry: the patterns this feature leaned on are already in `fails.md` from 079 and
 074. It reused them rather than discovering them, and re-recording would dilute the ledger.
+
+## Session 2026-07-30 (CI: feature status automation)
+
+- Promotion PR #825 merged to main
+- Feature promoted and committed: 3b437fd2dce0e243249bdb4b64edd8ad9a029562
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-07-30
