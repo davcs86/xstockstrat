@@ -306,6 +306,18 @@ Add four GitHub Actions secrets (see Step 9):
 
 The deploy workflows substitute them into the app spec at deploy time via the `YOUR_DEV_ALPACA_API_KEY` / `YOUR_DEV_ALPACA_API_SECRET` (dev) and `YOUR_PROD_ALPACA_API_KEY` / `YOUR_PROD_ALPACA_API_SECRET` (prod) placeholders.
 
+### FMP fundamentals credential
+Set on: `xstockstrat-marketdata`
+
+Optional — the FMP fundamentals pipeline is off by default (`marketdata.fmp.enabled=false`), so
+this can be left unset until you're ready to enable it. Sign up for FMP's free "Personal Use"
+Basic plan at financialmodelingprep.com.
+
+Add `DEV_FMP_API_KEY` and `PROD_FMP_API_KEY` as GitHub Actions secrets (see Step 9) — they
+substitute into the `YOUR_DEV_FMP_API_KEY` / `YOUR_PROD_FMP_API_KEY` placeholders. Unlike Alpaca,
+there's no required-guard: an empty key deploys fine as long as `marketdata.fmp.enabled` stays
+`false`.
+
 ### JWT secret
 Set on: `xstockstrat-identity`
 
@@ -415,6 +427,8 @@ The CI/CD workflows need the following repository secrets. Go to:
 | `DEV_ALPACA_API_SECRET` | Alpaca **paper** API secret (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
 | `PROD_ALPACA_API_KEY` | Alpaca **live** API key (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
 | `PROD_ALPACA_API_SECRET` | Alpaca **live** API secret (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
+| `DEV_FMP_API_KEY` | FMP API key for staging, optional (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
+| `PROD_FMP_API_KEY` | FMP API key for production, optional (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
 
 `GITHUB_TOKEN` is automatically provided by GitHub Actions for GHCR pushes — no setup needed.
 
