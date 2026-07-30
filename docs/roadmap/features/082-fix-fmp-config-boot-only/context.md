@@ -169,3 +169,25 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Files modified: `services/xstockstrat-marketdata/cmd/server/main.go`,
   `services/xstockstrat-marketdata/internal/service/marketdata_service.go`.
 - Deviations: none.
+
+### Step 2 — test: canary + live-toggle-no-restart proof [done]
+- Phase 1 discovery: all 10 cited symbols/lines re-confirmed exact via codebase-discovery agent
+  against the post-Step-1 tree; no drift (Step 1 only touched comments in a file Step 2 doesn't
+  edit for logic).
+- TDD (red→green), per design.md's composed-proof argument:
+  - `TestNewFundamentalsSource_AlwaysNonNil`: its genuine red→green already happened during Step
+    1's TDD gate (compile error `undefined: newFundamentalsSource` → PASS after Step 1 landed).
+    This step commits the real, permanent copy of that test into `main_test.go` — re-ran here for
+    confirmation: PASS.
+  - `TestGetFundamentals_LiveToggle_NoRestart`: **red N/A** — `fundamentalsEnabled()`'s live gate
+    was already correct before this feature (recon.md/design.md both establish this); this test
+    characterizes existing-correct behavior rather than a behavior this feature changed. Per
+    `reference/tdd-gate.md`'s explicit escape clause ("note red N/A — no behavior change;
+    characterization test added... still capture the green run"). Green: PASS.
+  - `TestGetFundamentals_NilSourceFailedPrecondition`: comment updated only, test body unchanged —
+    TDD N/A (no behavior change), still green: PASS.
+- Verification: all three targeted tests pass (`-race`); `golangci-lint run` 0 issues; full suite
+  `go test ./... -race -count=1` green across every package, no regressions.
+- Files modified: `services/xstockstrat-marketdata/cmd/server/main_test.go`,
+  `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`.
+- Deviations: none.

@@ -21,6 +21,7 @@ precedent as features 067/074)
 | 2026-07-30 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, quick) and approved; recon.md + design.md written. Always-construct-at-boot + extracted testable function, composed test proof (canary + passthrough + live-toggle test), both doc surfaces corrected. |
 | 2026-07-30 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 4 steps. |
 | 2026-07-30 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (sequential mode) — extracted `newFundamentalsSource`, always constructed at boot. |
+| 2026-07-30 | `in-progress` (unchanged) | /sdd-execute | Step 2 done (sequential mode) — canary + live-toggle-no-restart tests, nil-source test comment updated. |
 
 ---
 

@@ -164,7 +164,7 @@ stale-comment grep also returns **zero** hits (both occurrences updated per inst
 
 ### Step 2 — test: xstockstrat-marketdata: canary + live-toggle-no-restart proof
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/cmd/server/main_test.go` — modify
