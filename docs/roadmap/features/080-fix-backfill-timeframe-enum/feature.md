@@ -1,6 +1,6 @@
 # Feature: fix-backfill-timeframe-enum
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Type**: bug
 **Severity**: **SEV-2** (raised from SEV-3 at the round-3 design gate — two live wrong-data paths, not latent breakage; see `product-spec.md` header)
 **GitHub Issue**: n/a — GitHub Issues are disabled on `davcs86/xstockstrat`
@@ -27,6 +27,7 @@
 | 2026-07-30 | `implementation-ready` (unchanged) | /sdd-review impl-spec ×2 | Reviewed twice, **treated as blocking by user direction** (Mode B is advisory by default, and does not move the lifecycle). Round 1: FAIL — 4 blockers, 12 warnings; all fixed. Round 2: FAIL — 4 blockers, and it caught that **two of round 1's own fixes were not executable** (`source.Source` does not exist; the Playwright request-capture could not work across the globalSetup/worker process boundary). Both replaced with verified mechanisms. **Step 5 marked `blocked`** — unverifiable without a database; consequence recorded: the feature cannot reach `code-completed`, so `/promote` will not harvest it, while the execute loop's ALL-DONE path would still open the integration PR. |
 | 2026-07-30 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps. Design's advisory 7-step split expanded to 8: its step 6 bundled the analysis service change with its test, which **C-08** requires as a separate paired `test` step. Two product-spec claims corrected against grep before use (**P-03**): FR-10's `"15m"`-appears-three-times count (it appears **once**, `marketdata_service.go:514`) and the `tfpkg` alias scope (`internal/service` already imports the package plainly at `:26` and needs no alias). FR-14's collision handling resolved to delete-the-alias-duplicate, and the migration gains a remediation log so its `.down.sql` is a faithful reverse rather than a no-op. |
 | 2026-07-30 | `in-progress` (unchanged) | /sdd-execute (user-directed correction) | **Step 5's `blocked` status retracted, migration authored and marked `done`.** The user challenged the premise: "previous migrations neither had a timescaledb instance." Checked rather than reasserted — confirmed no CI workflow in this repo ever executes a migration, and found direct precedent (`008-signal-source-registry` step 3, `done` on the identical review-based verification). The bar applied to step 5 didn't exist anywhere else in the repo's practice. Wrote both `.sql` files for real (delete-the-alias-duplicate + `WHERE NOT EXISTS` twin re-check + remediation log, per the design), staged the two doc files, verified by SQL review against the DDL facts, marked `done`. DBA + service-owner sign-off remains required before the migration runs anywhere shared — unchanged, was never in question. |
+| 2026-07-30 | `in-progress` → `code-completed` | /sdd-execute | Steps 3–8 completed under the standing instruction "do all the remaining steps then create a PR" — marketdata service+test (`TimeframeEnum` at all four `Bar` sites, FR-10/FR-11 resolve paths, 5 doc surfaces), analysis service+test (live loop's third `GetBars` producer aligned with its two already-migrated siblings), and ui (`chart.ts`'s `TIMEFRAME_ENUM` map, both `getBars` senders, e2e mock + 3 producers). All 8 steps `done`, each red-before-green and committed as its own step commit on `claude/impl-080-timeframe-enum` (one deviation: step 8's request-capture e2e test uses a UI interaction instead of a `page.reload()` race that proved non-deterministic in this environment — recorded in `implementation-spec.md`'s Deviation Log). `/context-scrubber` was unavailable in-session for step 3's doc-surface teardown; substituted a full manual citation re-verification, noted for the PR body. Ready for the integration PR into `main-dev` (single-PR model, see `context.md` § Deviation from the spec's PR model). |
 
 ---
 
@@ -85,6 +86,10 @@ No `proto` step exists (both fields already ship), so the Proto Reviewer gate is
 > needs the **DBA + service-owner** sign-off in **Reviewers** before it runs anywhere shared, which
 > was always the actual gate. See step 5's "Corrected" note for the full record.
 
-`/sdd-execute fix-backfill-timeframe-enum` — continue at step 3 (marketdata service). `/sdd-review …
-impl-spec` has run **twice** (both FAIL, all findings fixed); a third round is available but the last
-one's findings were about executability of specific instructions rather than structure.
+All 8 steps are `done`. Open the integration PR from `claude/impl-080-timeframe-enum` into `main-dev`
+(single-PR model — see `context.md` § Deviation from the spec's PR model), calling out in the PR body:
+step 5's migration still needs **DBA + service-owner** sign-off before it runs anywhere shared (it was
+never executed in this session — verified by SQL review only, per the corrected step-5 bar); and
+`/context-scrubber` was unavailable in-session for step 3's doc-surface teardown, substituted with a
+full manual citation re-verification. `/sdd-review … impl-spec` ran **twice** pre-implementation (both
+FAIL, all findings fixed).
