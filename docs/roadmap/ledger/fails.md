@@ -125,3 +125,32 @@ ambiguity is logged here).
   vocabulary that documentation must keep using. And run any grep-based acceptance gate against the
   intended post-change tree before adopting it — an unexecuted gate is a claim, not a check. Same
   family as the 2026-07-27 and 2026-07-29 entries, moved from test evidence to gate design.
+
+### 2026-07-29 — 080-fix-backfill-timeframe-enum — assumption
+- **Mistake**: A **false premise stated as settled fact in a product spec** steered three consecutive
+  adversarial design rounds away from the feature's own central defect. The spec asserted "The write
+  path already migrated correctly … Only the **read** path was left behind," citing the two producers
+  that *were* correct. In fact `TriggerBackfill` persists `request.timeframe` **raw**
+  (`servicer.py:153`) and `_canonical_timeframe` is not reached until `:284`, inside `_run_backfill`;
+  since the UI sends `timeframeEnum` with no string (`backfills/page.tsx:112`), **every UI-created row
+  already held `timeframe=''`**. The headline fix (derive the enum from that column) would therefore
+  have returned `UNSPECIFIED` for the feature's own primary caller, and `_resume_job` was already
+  mapping `''` → the `"1d"` default, so a UI-created 15m job silently re-fetched at daily. Rounds 1–3
+  each re-derived scope *from* the false sentence and each found a different peripheral site instead.
+  The originating evidence looked consistent with the false premise: the staging payload showed
+  `timeframe: "1d"` because those were **agent**-created jobs (the agent sends both fields) — a
+  UI-created job would have shown `""`. Recurrence: same family as 2026-07-27 (072) "asserting a claim
+  without greping the producer", but escalated — here the unverified claim was *load-bearing for the
+  design*, not merely decorative.
+- **Evidence**: `services/xstockstrat-ingest/app/handlers/servicer.py:153,161,284`;
+  `services/xstockstrat-ui/src/app/insights/backfills/page.tsx:112`; feature 080 `design.md` § Why this
+  took four rounds; `context.md` § The decisive finding (round 3). Severity was raised SEV-3 → SEV-2 as
+  a direct result.
+- **Rule it implies**: extends **C-01**/**P-03** — a spec sentence that *narrows scope* ("only X is
+  affected", "the other path is already correct", "already migrated") is a **claim about absence** and
+  must be grep-verified at the gate exactly like a `path:line` citation. Absence claims are the ones a
+  reviewer cannot spot-check by reading the cited line, because the evidence for them is everywhere the
+  spec does not point. Practical test: for every "only" / "already correct" / "not affected" in a spec,
+  name the grep that establishes it. And when a spec proposes to *derive* a value from stored state,
+  verify the **writer** guarantees that state — deriving from a column nothing canonicalizes is how
+  this defect existed in the first place.
