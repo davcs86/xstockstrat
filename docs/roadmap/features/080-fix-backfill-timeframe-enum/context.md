@@ -382,9 +382,109 @@ verification is therefore unrunnable as things stand. Written into the step as a
   `marketdata/CLAUDE.md`, so Step 3's `:17`/`:61` citations are correct **relative to `main-dev` only`**
   — never re-target this feature at `main`.
 - Features 039 / 040 (TimescaleDB compression / retention, both `idea`) must spec against marketdata
-  migration `004+` once 080 takes `003`, and must re-check FR-14's compression precondition.
+  migration `004+`. **Wording corrected at the second review round:** 080 has *reserved* `003` in an
+  immutable `**Files**` list but has **not taken it** — step 5 is `blocked` and creates no file. So `003`
+  is squattable until step 5 runs; if another marketdata migration lands there first, step 5 renumbers via
+  its `## Deviation Log` (never by editing `**Files**`, **F-09**). They must also re-check FR-14's
+  compression precondition, since their whole purpose is adding the policy that would break it.
 - Feature 017 (`idea`) plans a `session`/`extended_hours` field on `GetBarsRequest` and will land in
   `barFromAlpaca` / `TIMEFRAME_ENUM` territory — whoever specs it should read 080 first.
 
 **Next**: `/sdd-execute fix-backfill-timeframe-enum` (step 1). Status unchanged at
 `implementation-ready` — Mode B does not move the lifecycle.
+
+---
+
+## Session 2026-07-30 — sdd-review impl-spec, ROUND 2 (blocking; step 5 marked unverifiable)
+
+Second round at the user's request, with the explicit instruction to mark step 5 unverifiable. Verdict:
+**FAIL — 4 blockers, 8 warnings, 6 notes.** Status stays `implementation-ready` (Mode B never moves the
+lifecycle). All findings fixed.
+
+### The round's real value: two of round 1's own fixes were not executable
+
+This is why a second round was worth running — the blockers were not new territory, they were **my
+round-1 fixes failing on their own terms**:
+
+1. **B4's fix cited a symbol that does not exist.** Instruction 4b named `source.Source`; a repo-wide
+   grep returns only 080's own artifacts. The interface is **`source.DataSourceClient`**
+   (`internal/source/source.go:14`). Phase-1 discovery would have blocked the step (**F-04**, Floor). The
+   fix also claimed "testable in the existing harness", which was false: the existing fakes cover the
+   *fundamentals* path only, and `BackfillBars` additionally needs a `source.NewRegistry()` +
+   `Register("alpaca", fake)` (`source.go:68,74`), a fake `ledgerv1.LedgerServiceClient` (`emitEvent`
+   dereferences `s.ledger` at `:780` and runs at `:588`, *before* the source is resolved — and `ledgerv1`
+   is not imported by the test file), and a zero-bar return so nil `s.repo.InsertBars` (`:611`) is never
+   reached. All three now stated.
+2. **B3's fix could not work across a process boundary.** It said to record the inbound request onto a
+   module-level array in `e2e/mock-backend.ts`. But the mock starts in Playwright's **globalSetup**
+   (`playwright.config.ts:111` → `global-setup.ts:24`), a different process from the workers
+   (`:103 fullyParallel`, `:105 workers: 2`), and no spec imports that module — a worker would read its
+   own empty array. Replaced with per-test **`page.route()`** interception, the idiom already used in
+   `e2e/insights/backfills.spec.ts:12-14,32` — a spec this step already edits. Had this shipped, AC-8's
+   sender half would have gone unverified for the *second* consecutive round.
+
+**The lesson, and it is uncomfortable:** a fix authored at a review gate is *itself* unreviewed. Both
+failures were the absence-claim shape again — "the harness suffices", "a module-level array the spec can
+read" — asserted without running anything. Recorded in `fails.md` (2026-07-30) as a third recurrence, now
+proposing a mechanical extraction at each gate rather than more advice.
+
+### Blocker 3 — Step 1's F-08 staging was still incomplete
+
+Round 1 staged the ingest *findings* file and the root `docs/context-constitution.md`. It missed
+**`services/xstockstrat-ingest/docs/context-constitution.md`**, the largest offender: `:14` cites
+`servicer.py:70` (the mapper this step edits), plus `:15,:16,:17,:18,:29,:32` citing
+`:725-788, 768, 525, 656, 800, 718-822, 668, 736, 134-140, 119` — all past the insertion point. Round 1
+reasoned only about that file's `:23` (`servicer.py:32-35`, which correctly does not move) and concluded
+the file was safe. Now staged, with the scrubber scope widened to all three files. (Round 1's note also
+miscounted — it said "three context files cite those exact lines" when only two cite the lines it named.)
+
+### Blocker 4 — the `blocked` marking was mechanically right but its consequences were misstated
+
+Verified correct: `blocked` **is** terminal for the step selector (`sdd-execute/SKILL.md:112`), and the
+**F-05** reasoning holds — the step's only correctness evidence is an executed SQL round trip.
+
+Wrong, and now fixed: the claim "**nothing else is blocked by this**". A permanently `blocked` step means
+`/sdd-execute` never flips `feature.md` to `code-completed` (`SKILL.md:245`), `SESSION-END` pins the
+impl-spec header at `in-progress` (`:361`), and **`/promote` harvests only `code-completed` features**
+(`promote/SKILL.md:109-110`) — so *all seven executable steps* would sit unshipped in `main-dev`. Worse,
+the selector still routes into the **ALL-DONE PATH** (`:127-160`) and **opens the integration PR** while
+the feature is stranded. Now stated in the step, in `feature.md` § Next Action, and in a Status History
+row, with the two ways forward named (run step 5 where a DB exists, or split FR-14 + AC-15 out with
+sign-off). AC-15's orphaning was already recorded honestly in `product-spec.md` — the reviewer confirmed
+that, and that the other 14 criteria each have an executable owning step.
+
+### My own "strictly better off, never worse" claim — attacked and narrowed
+
+It holds **for the data** (verified: `QueryBars` filters on the canonical string, so alias rows were
+already unreachable; `TimeframeEnum` was 0 on every row before this feature, so nothing regresses). It
+does **not** hold outside the data, on three counts now recorded: the promotion strand above; the `003`
+number reservation, which another migration can squat while step 5 is blocked; and my own earlier
+observation that step 3 canonicalizing writes *grows* the collision set step 5 must resolve.
+
+### Warnings fixed (8 of 8)
+
+Step 1's `timeframe_enum` grep expectation omitted the pre-existing `servicer.py:458` (same class as
+round 1's W4 — a gate that reads as a failure on correct code). Step 3 instructed an **F-09** breach
+("add … to this step's `**Files**` *if* the scan reports a finding") on a shift that is certain, not
+conditional — `findings.md` is now listed unconditionally. Four citation drifts corrected
+(`vitest.config.ts` `all: false` at `:23` and thresholds `:24-28`; marketdata `CLAUDE.md:77-78` for
+compression; `_bar_at` at `:27`; `pyproject.toml:30-31`). The `database.md` staging premise was overstated
+— that file is a *hypertable* map with three plain tables already absent, so the F-08 rationale now rests
+on the marketdata `CLAUDE.md`. Step 4's `slog.SetDefault` flagged as process-global (no `t.Parallel()`).
+Step 5's retention trigger rekeyed off `launched` (unreachable while it blocks) onto "confirmed in
+production". Step 6's verification grep relabelled descriptive, not a gate — it cannot fail if
+`live_loop.py:126` is left unchanged; Step 7's captured-request assertion is the real check.
+
+### Independently re-confirmed by the reviewer
+
+Family completeness (**C-10**) re-verified from the proto side: the deprecated-timeframe-string family is
+exactly `marketdata.proto:55,73,86,104` + `ingest.proto:30,64`, all addressed except `StreamBarsRequest`
+(correctly excluded — no producer). It also chased three further `timeframe="1d"` producers this feature
+never mentions (`analysis/app/handlers/servicer.py:706,716`, `screener.py:270`) and confirmed all three
+are `ComputeIndicatorRequest.timeframe` — a plain non-deprecated string with no enum sibling, genuinely
+out of family. Round-1's fixes were each verified real rather than cosmetic (the `export GOWORK=off`, the
+subshelled `cd`s, the `req\.(Msg\.)?Timeframe` gate, the 5-hit arithmetic, the removed inert test, the
+`stream.go:259` non-shift, the seam citations).
+
+**Next**: `/sdd-execute fix-backfill-timeframe-enum` from step 1. Step 5 stays `blocked` until an
+environment with a database is available.

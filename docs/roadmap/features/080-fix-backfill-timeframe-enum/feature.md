@@ -23,6 +23,7 @@
 | 2026-07-29 | `idea` → `draft` | manual backlog | Observed live on the staging MCP server while verifying feature 073's deploy: every `get_backfill_status` job returns `timeframe: "1d"` alongside `timeframe_enum: "TIMEFRAME_UNSPECIFIED"`. Confirmed in source, not just in the response. |
 | 2026-07-29 | `draft` → `spec-ready` | /sdd-review | Product spec approved (4 warnings, all addressed before the gate write; 0 overlap findings). First pass FAILed on FR-4 being non-testable and unchecked open questions; both resolved. Scope widened twice by user decision — `marketdata`'s `Bar` and the two UI `getBars` senders — so 080 now closes the whole deprecated-string/enum family across three services. |
 | 2026-07-29 | `spec-ready` → `design-approved` | /sdd-design | Design debated (**4 rounds, full** — began as `quick`, upgraded by user decision after round 1) and approved; `recon.md` + `design.md` written. No Floor breach in any round. Every round found a producer or reader the previous one had asserted did not exist; round 3 found that the ingest **write** path persists `timeframe` raw, so FR-1 would have returned `UNSPECIFIED` for its own primary caller → **severity raised to SEV-2**, FR-13 added. Round 4 bounded the family (readers sweep, no new instance). Scope now 4 services + 1 data migration. |
+| 2026-07-30 | `implementation-ready` (unchanged) | /sdd-review impl-spec ×2 | Reviewed twice, **treated as blocking by user direction** (Mode B is advisory by default, and does not move the lifecycle). Round 1: FAIL — 4 blockers, 12 warnings; all fixed. Round 2: FAIL — 4 blockers, and it caught that **two of round 1's own fixes were not executable** (`source.Source` does not exist; the Playwright request-capture could not work across the globalSetup/worker process boundary). Both replaced with verified mechanisms. **Step 5 marked `blocked`** — unverifiable without a database; consequence recorded: the feature cannot reach `code-completed`, so `/promote` will not harvest it, while the execute loop's ALL-DONE path would still open the integration PR. |
 | 2026-07-30 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps. Design's advisory 7-step split expanded to 8: its step 6 bundled the analysis service change with its test, which **C-08** requires as a separate paired `test` step. Two product-spec claims corrected against grep before use (**P-03**): FR-10's `"15m"`-appears-three-times count (it appears **once**, `marketdata_service.go:514`) and the `tfpkg` alias scope (`internal/service` already imports the package plainly at `:26` and needs no alias). FR-14's collision handling resolved to delete-the-alias-duplicate, and the migration gains a remediation log so its `.down.sql` is a faithful reverse rather than a no-op. |
 
 ---
@@ -34,7 +35,8 @@
 - [Design](design.md) — the 4-round debate: chosen approach, the readers-sweep completeness proof,
   rejected alternatives, 7 open risks, Constitution rules touched
 - [Context Log](context.md) — session history and every user ruling
-- [Implementation Spec](implementation-spec.md) — 8 numbered steps across 4 services + 1 data migration
+- [Implementation Spec](implementation-spec.md) — 8 numbered steps across 4 services + 1 data migration.
+  **7 executable; step 5 (the FR-14 migration) is `blocked` — unverifiable without a database.**
 
 ---
 
@@ -65,8 +67,8 @@ Canonical snapshot written by `/sdd-spec` from `docs/runbooks/reviewer-registry.
 | Role | Review Focus | Steps |
 |---|---|---|
 | `xstockstrat-ingest` (service owner) | Signal normalization correctness, idempotent ingestion, newsletter source schema stability; specifically the backfill job read path and enum/string parity | 1, 2 |
-| `xstockstrat-marketdata` (service owner) | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency; specifically the four `Bar` producer sites and the `TIMEFRAME_1MIN` labelling call for streamed bars (product-spec FR-6) | 3, 4, 5 |
-| DBA | Migration NNN numbering (no gaps, no conflicts), up+down pair present, hypertable partitioning strategy, index correctness, run-order compliance with `scripts/db-migrate.sh` | 5 |
+| `xstockstrat-marketdata` (service owner) | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency; specifically the four `Bar` producer sites and the `TIMEFRAME_1MIN` labelling call for streamed bars (product-spec FR-6) | 3, 4, 5 (**5 `blocked`**) |
+| DBA | Migration NNN numbering (no gaps, no conflicts), up+down pair present, hypertable partitioning strategy, index correctness, run-order compliance with `scripts/db-migrate.sh`; plus the new permanent `marketdata.ohlcv_remediation_003` table (retention; it holds copies of deleted market-data rows), the delete-the-alias-duplicate collision policy, and the quiesce + compression pre-flights | 5 — **`blocked`, see below** |
 | `xstockstrat-analysis` (service owner) | Backtest reproducibility, strategy scoring determinism, no look-ahead bias | 6, 7 |
 | `xstockstrat-ui` (service owner) | Trading UI correctness, analytics display accuracy, Connect-RPC call safety; specifically the two `getBars` senders and DRY — the string→enum map must live only in `src/lib/chart.ts` | 8 |
 
@@ -83,7 +85,12 @@ No `proto` step exists (both fields already ship), so the Proto Reviewer gate is
 > environment with a database, or the FR-14 scope is formally split out with the user's sign-off.
 > See the step for what unblocks it.
 
-`/sdd-review fix-backfill-timeframe-enum impl-spec` — validate the implementation spec, then
-`/sdd-execute fix-backfill-timeframe-enum`. Ordering constraint to preserve: step 5 (the FR-14 data
-migration, **DBA + service-owner** gate) must land **after** step 3, so no backfill or ingest cycle
-running between them can reintroduce a row the migration just fixed.
+`/sdd-execute fix-backfill-timeframe-enum` — start at step 1. `/sdd-review … impl-spec` has now run
+**twice** (both FAIL, all findings fixed); a third round is available but the last one's findings were
+about executability of specific instructions rather than structure.
+
+**Before the integration PR is opened, resolve step 5 one way or the other.** The execute loop's
+ALL-DONE path will open that PR once the other seven steps are `done` — but with step 5 `blocked` the
+feature stays at `in-progress`, so `/promote` will never pick it up and the whole fix would sit unshipped
+in `main-dev`. Either run step 5 where a database exists (DBA + service-owner gate), or split FR-14 +
+AC-15 into their own feature with sign-off recorded in `context.md`.
