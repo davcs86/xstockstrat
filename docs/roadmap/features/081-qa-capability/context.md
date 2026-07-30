@@ -166,3 +166,38 @@ Resolved, not waived: `sdd-qa defect` writes `docs/reports/<date>-<slug>-defect.
 -intake section corrected, registry drift and ordering constraint added), `feature.md` (status,
 reviewer table — the service-owner gate disappeared), `design.md` (new). The five `reference/`
 files written earlier moved `.claude/skills/qa/` → `.claude/skills/sdd-qa/`.
+
+---
+
+## Session 2026-07-29 — rebase onto main-dev (post-#810)
+
+PR #810 merged (`36d605d`), plus a promotion to `main` (#812). Rebased `feature/qa-capability` onto
+`main-dev` — the merge-order dependency recorded above, arriving as predicted.
+
+Simulated first with `git merge-tree --write-tree` before touching the worktree: two conflicts, both
+anticipated, no third surprise.
+
+- **`.claude/skills/test-data/SKILL.md`** — modify/delete. Kept the delete. #810 improved the
+  description of the skill this feature retires; `sdd-qa`'s description supersedes it.
+- **`.claude/skills/sdd-triage/SKILL.md`** — content conflict on the description line. **Spliced
+  rather than picked**: both sides were wanted. #810 widened the trigger surface; this branch added
+  the `--from-report` entry and the disabled-Issues fact. Kept this branch's `argument-hint`, since
+  #810's still read `<issue-number> [backmerge]` and no longer described the arguments.
+
+### Defect corrected during the resolution
+
+#810's description said `classifies severity (SEV-1…SEV-4)`. **SEV-4 does not exist** —
+`.github/ISSUE_TEMPLATE/bug-report.yml` defines SEV-1/2/3 and T-2 maps 1/2/3 only. `grep -rn "SEV-4"`
+outside `docs/roadmap/features/` returned nothing but that description line itself. The error was
+introduced during the skill-description audit and shipped in #810; since the rebase forced a rewrite
+of that exact line, correcting it cost nothing. Now `SEV-1…SEV-3`.
+
+### Verification re-run (a rebase rewrites every SHA — prior evidence does not carry over)
+
+- `check-context-map.sh` → `OK` at all five rebased commits, not just the tip.
+- Both removal gates on the post-rebase tree: dead path 0, dead invocation 0, dir + map entry absent.
+- **Strict YAML now 21/21** across every `SKILL.md` and `.claude/agents/*.md`. It was 12/21 before —
+  #810's colon-space fixes are in the base now, so that pre-existing failure is resolved.
+- `grep -c SEV-4` on `sdd-triage/SKILL.md` → 0.
+- Session-start hook lists `/sdd-qa` and `/sdd-triage` with the `--from-report` hint; no `/test-data`.
+- `markdownlint-cli2` clean across 23 `CLAUDE.md` files.
