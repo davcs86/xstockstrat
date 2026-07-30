@@ -413,3 +413,24 @@ reusing.
 - **Rule it implies**: reinforces **C-10(b)** — "every read path" includes readers reached through a
   local variable and values copied into untyped payloads. A type-name grep alone systematically
   under-reports, and it under-reports in the direction that looks complete.
+
+### 2026-07-30 — 082-fix-fmp-config-boot-only — design
+- **Pattern**: When the true regression test would require an expensive or fragile dependency (here:
+  routing a live-toggle test through the real `fmp.Client` would mean an outbound HTTP call to
+  FMP's actual API), don't add the fragile end-to-end test — **compose the proof from narrower unit
+  facts plus one written, inspectable argument**. This feature proved "the boot-time fix + the
+  live-gate behavior together satisfy the acceptance criteria" via three pieces: (1) a canary test
+  that the extracted constructor always returns non-nil, (2) a one-line, branch-free passthrough
+  assignment verified correct by inspection (`s.fundamentals = fundamentals`), and (3) an existing-
+  pattern toggle test proving the live gate is correct given a non-nil source. The design-adversary
+  caught two rounds in a row that a single "linking" test either didn't touch the actual bug site or
+  would have required real network calls — the fix was to name the composition explicitly in
+  `design.md`, not to force a fragile integration test into existence.
+- **Evidence**: `docs/roadmap/features/082-fix-fmp-config-boot-only/design.md` § Chosen Approach
+  point 5, § Rejected Alternatives ("thread the real fmp.Client..."); 2-round design debate,
+  round-1 and round-2 adversary objections (`context.md` § sdd-design session).
+- **Rule it implies**: extends **P-06** — when the fully-faithful regression test is disproportionate
+  (network calls, real dials), decompose the claim into unit-testable facts plus a named,
+  inspectable invariant (a one-line passthrough, an unconditional call site) rather than skipping
+  coverage or forcing a fragile end-to-end test. State the composition explicitly so a reviewer can
+  audit the chain, not just the individual tests.
