@@ -3,7 +3,7 @@
 **Status**: `pending`
 **Created**: 2026-07-30
 **Feature**: `docs/roadmap/features/080-fix-backfill-timeframe-enum/feature.md`
-**Total Steps**: 8
+**Total Steps**: 8 (7 executable here — **step 5 is `blocked`: unverifiable without a database, see that step**)
 **Feature Branch**: `feature/fix-backfill-timeframe-enum`
 
 ---
@@ -49,6 +49,7 @@ be grep-verified):**
 
 ## Step Dependencies
 
+- **Step 5 is `blocked` (unverifiable in this environment)** — see the step for why and what unblocks it. It is terminal for the execute loop, so `next`/`all` skip it; steps 1–4 and 6–8 are unaffected.
 - **Step 5 requires Step 3**: the FR-10/FR-11 fixes must be deployed before the data remediation runs,
   or an in-flight backfill or ingest cycle can write a fresh non-canonical row after the migration
   cleans the table (`design.md` § Step Boundaries, last paragraph).
@@ -652,8 +653,64 @@ their tests exist for correctness and the threshold is carried by `internal/alpa
 
 ### Step 5 — migration: marketdata — canonicalize the recoverable non-canonical `ohlcv.timeframe` rows already at rest
 
-**Status**: `pending`
+**Status**: `blocked`
+**Blocked reason**: **unverifiable in the current environment** — no database, no migration runner.
 **Service**: `xstockstrat-marketdata`
+
+> ### ⛔ This step is UNVERIFIABLE here — do not execute it in this environment
+>
+> Marked `blocked` at the second `/sdd-review impl-spec` round, deliberately and by user direction.
+> `blocked` is a **terminal** status for the execute loop (alongside `done`/`skipped`), so
+> `/sdd-execute … next` and `… all` will skip past it rather than start work that cannot be finished.
+>
+> **Why.** Verifying this step requires *executing SQL against a live TimescaleDB* — that is the whole
+> substance of it. Neither prerequisite exists here:
+> - **No `migrate` binary.** `command -v migrate` → not found. It is provisioned via
+>   `scripts/Dockerfile.migrate`, i.e. through Docker.
+> - **No Docker daemon.** `docker ps` → `cannot connect to the Docker daemon`. So there is no
+>   TimescaleDB to migrate and no container from which to get the binary.
+>
+> **Why this is `blocked` and not "write it now, verify later".** The step's deliverable is two `.sql`
+> files whose *only* correctness evidence is the executed round trip: the delete-then-update collision
+> branch, the `WHERE NOT EXISTS` twin re-check under concurrency, the PK behavior on a hypertable, and
+> the `.down.sql` restoring deleted rows byte-for-byte. Authoring that SQL unexecuted and calling the
+> step complete would violate **F-05** (never commit before the step's verification passes) — and F-05
+> is Floor, non-overridable. It is also precisely the `fails.md` 2026-07-29 (079) failure this feature
+> has now hit three times at its own gates: *an unexecuted gate is a claim, not a check.* A data
+> migration is the worst possible place to accept that trade, because it mutates stored market data and
+> its blast radius is the OHLCV table every strategy reads.
+>
+> **What unblocks it** (any environment satisfying all three):
+> 1. `docker compose up -d timescaledb` reachable, and `./scripts/db-migrate.sh version` succeeds;
+> 2. `command -v migrate` resolves (golang-migrate — `./scripts/bootstrap.sh`, or run inside the
+>    `Dockerfile.migrate` image);
+> 3. the DBA + service-owner approval named in **Reviewers** obtained *before* the migration is applied
+>    anywhere shared.
+>    Then set `**Status**` back to `pending` and run `/sdd-execute fix-backfill-timeframe-enum 5`.
+>
+> **Nothing else is blocked by this.** Steps 1–4 and 6–8 are independent (`design.md` § Step
+> Boundaries) and remain executable here. The one ordering rule still holds and now holds trivially:
+> step 5 must land **after** step 3, and step 3 is not yet done.
+>
+> **What deferring it does and does not cost — stated precisely, because the easy version of this claim
+> is wrong.** *For readers*, deferring is no-worse-than-today: the code fixes stop new non-canonical
+> rows being written, and the pre-existing unqueryable rows simply stay unqueryable, exactly as now. But
+> **"strictly better off, never worse" is too strong on two counts**, and both belong on the record:
+> 1. **The cleanup surface grows, it does not hold still.** Once step 3 canonicalizes writes, a backfill
+>    over a range that already holds a `'1Day'` row writes a `'1d'` row for the same `(symbol, time)`.
+>    Both then exist — which is precisely the PK-collision case step 5's delete-the-alias-duplicate
+>    branch handles. So every day between step 3 and step 5 can *add* collision pairs for the eventual
+>    migration to resolve. Harmless to readers (the alias row was already invisible), but it means
+>    deferring makes step 5's job larger, never smaller, and the pre-flight `SELECT DISTINCT` count is
+>    not a fixed target.
+> 2. **Step 3 itself is not purely additive** — FR-10's `"15m"` fallback can *cause* writes that do not
+>    happen today (`product-spec.md` § Accepted Risks). That risk is owned by step 3 and was accepted by
+>    the user; it is named here only so "deferring step 5 is free" is not read as "the whole feature is
+>    side-effect-free".
+>
+> **AC-15 is unsatisfiable while this step is blocked**, and that is recorded in
+> `product-spec.md` AC-15 and `feature.md` § Next Action rather than left to be discovered: this feature
+> cannot reach `code-completed` on the other seven steps alone.
 **Files**:
 - `services/xstockstrat-marketdata/migrations/003_canonicalize_ohlcv_timeframe.up.sql` — create
 - `services/xstockstrat-marketdata/migrations/003_canonicalize_ohlcv_timeframe.down.sql` — create

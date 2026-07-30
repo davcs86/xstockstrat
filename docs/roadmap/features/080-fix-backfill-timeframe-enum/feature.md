@@ -74,6 +74,15 @@ No `proto` step exists (both fields already ship), so the Proto Reviewer gate is
 
 ## Next Action
 
+> **Step 5 (the FR-14 data migration) is `blocked`: unverifiable without a database.** This environment
+> has no Docker daemon and no `migrate` binary, and the step's only correctness evidence is an executed
+> SQL round trip — authoring the `.sql` unexecuted and marking it done would breach **F-05** (Floor).
+> Steps 1–4 and 6–8 are unaffected and executable. **Consequence to carry: AC-15 (the post-migration
+> `SELECT DISTINCT timeframe` state) cannot be satisfied until step 5 runs**, so this feature cannot
+> reach `code-completed` on the strength of the other seven steps alone — either step 5 runs in an
+> environment with a database, or the FR-14 scope is formally split out with the user's sign-off.
+> See the step for what unblocks it.
+
 `/sdd-review fix-backfill-timeframe-enum impl-spec` — validate the implementation spec, then
 `/sdd-execute fix-backfill-timeframe-enum`. Ordering constraint to preserve: step 5 (the FR-14 data
 migration, **DBA + service-owner** gate) must land **after** step 3, so no backfill or ingest cycle
