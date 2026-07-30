@@ -17,6 +17,7 @@ import (
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
+	tfpkg "github.com/xstockstrat/marketdata/internal/timeframe"
 )
 
 // maxBarsLimit is the largest page size Alpaca's bars endpoint accepts (spec maximum).
@@ -139,6 +140,19 @@ type alpacaBarsResponse struct {
 	NextPageToken string      `json:"next_page_token"`
 }
 
+// barFromAlpaca maps one decoded Alpaca bar to a proto Bar. Shared by the single- and
+// multi-symbol REST paths so the deprecated string and its timeframe_enum replacement
+// are set in exactly one place (feature 080).
+func barFromAlpaca(symbol string, b alpacaBar, t time.Time, timeframe string) *marketdatav1.Bar {
+	return &marketdatav1.Bar{
+		Symbol: symbol, Time: timestamppb.New(t),
+		Open: b.O, High: b.H, Low: b.L, Close: b.C,
+		Volume: b.V, Vwap: b.VW, TradeCount: b.N,
+		Timeframe: timeframe, Source: "alpaca",
+		TimeframeEnum: tfpkg.FromString(timeframe),
+	}
+}
+
 // adjustmentParam returns the configured corporate-action adjustment, defaulting to
 // "all" so splits/dividends do not distort historical bars even if a Client is
 // constructed without NewClient.
@@ -196,12 +210,7 @@ func (c *Client) GetBars(ctx context.Context, symbol, timeframe string, start, e
 			if err != nil {
 				continue
 			}
-			allBars = append(allBars, &marketdatav1.Bar{
-				Symbol: symbol, Time: timestamppb.New(t),
-				Open: b.O, High: b.H, Low: b.L, Close: b.C,
-				Volume: b.V, Vwap: b.VW, TradeCount: b.N,
-				Timeframe: timeframe, Source: "alpaca",
-			})
+			allBars = append(allBars, barFromAlpaca(symbol, b, t, timeframe))
 		}
 		if result.NextPageToken == "" {
 			break
@@ -302,12 +311,7 @@ func (c *Client) GetBarsMulti(ctx context.Context, symbols []string, timeframe s
 				if err != nil {
 					continue
 				}
-				out[sym] = append(out[sym], &marketdatav1.Bar{
-					Symbol: sym, Time: timestamppb.New(t),
-					Open: b.O, High: b.H, Low: b.L, Close: b.C,
-					Volume: b.V, Vwap: b.VW, TradeCount: b.N,
-					Timeframe: timeframe, Source: "alpaca",
-				})
+				out[sym] = append(out[sym], barFromAlpaca(sym, b, t, timeframe))
 			}
 		}
 		if result.NextPageToken == "" {

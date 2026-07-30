@@ -286,7 +286,7 @@ claimed the whole set goes red, and two cases do not):
 
 ### Step 3 — service: marketdata — `TimeframeEnum` at all four `Bar` sites, resolve every raw reader, and the five doc surfaces
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go` — modify

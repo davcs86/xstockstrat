@@ -10,7 +10,9 @@
 // 15 minutes is the smallest supported interval — the free Alpaca data plan serves
 // 15-minute-delayed data and the platform is not a real-time trader. The deprecated
 // TIMEFRAME_1MIN/5MIN enum values and their "1m"/"5m" string spellings are no longer
-// resolvable; callers sending them get an unresolvable-timeframe error.
+// resolvable; callers sending them get an unresolvable-timeframe error. TIMEFRAME_1MIN is
+// still set directly by the Alpaca WS stream path (bypassing this package) to describe
+// already-produced 1-minute bars that are never persisted.
 package timeframe
 
 import (

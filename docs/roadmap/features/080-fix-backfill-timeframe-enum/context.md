@@ -650,3 +650,85 @@ the executed check for whoever applies this migration for real.
   cannot be swept; `/context-scrubber scan` is owed before the integration PR.
 
 **Next**: `/sdd-execute fix-backfill-timeframe-enum 3` — marketdata service (largest remaining step).
+
+## Session — Steps 3 & 4 (marketdata service + test)
+
+Executed under the standing instruction "do all the remaining steps then create a PR" (no
+per-step confirmation stop). TDD pairing per the skill: Step 4's tests were written and captured
+RED against the pre-Step-3 tree, Step 3's implementation was then written to turn them GREEN, and
+the two steps are committed separately (F-08 — each commit stages only its own step's `**Files**`).
+
+**Phase 1 discovery**: every citation in both steps' Codebase Evidence re-verified against the live
+tree before editing (four `Bar` sites, `internal/timeframe` line numbers, identifier shadowing at
+`client.go:161,268` / `marketdata_repo.go:73`, the `commonv1` import gap in `stream.go`, FR-11's
+three raw-string sites in `BackfillBars`, FR-10's `ingestRecentBars:514`) — all matched exactly as
+recorded, no drift found.
+
+**RED (Step 4, pre-Step-3 tree)**: every new `TimeframeEnum` assertion in `client_test.go` failed
+(field unset, defaulting to `TIMEFRAME_UNSPECIFIED`); `TestDispatchBarCarries1MinEnum` and
+`TestResolveIngestTimeframe` failed to compile (`streamManager`/`streamSubscriber` fields and
+`resolveIngestTimeframe` did not exist yet); `TestBackfillBars_EnumOnlyRequestResolves` failed with
+the fake source recording `""` instead of `"1d"` — the exact bug FR-11 fixes.
+
+### Step 3 — service (this commit)
+
+**GREEN implementation**: `barFromAlpaca` shared builder in `client.go` (collapses the two
+REST literal sites per ledger insight 2026-07-09); one field added to `marketdata_repo.go`'s
+`QueryBars` literal; explicit `TIMEFRAME_1MIN` write in `stream.go`'s `dispatch` (label only —
+MARKETDATA-2's no-persist rule is untouched); `BackfillBars`'s three raw `req.Timeframe` reads
+replaced by one `timeframe.Resolve` call (`legacyTf`/`canonicalTf`, same raw-fallback shape as
+`GetBars`); `resolveIngestTimeframe`/`defaultBarIngestTimeframe` added and wired into
+`ingestRecentBars` (FR-10 — the one place this feature can *cause* a write, per design Open Risk 1,
+accepted risk).
+
+**Verification**:
+- `golangci-lint run --modules-download-mode=mod` → 0 issues
+- `go build ./...`, `gofmt -l .` → clean
+- `grep -rn "TimeframeEnum" ... | grep -v /gen/ | grep -v _test.go` → exactly 5 hits, matching the
+  step's corrected count (repo, client.go's one shared-builder hit, stream.go, and marketdata_service.go's
+  two sites — the pre-existing `GetBars:120` plus the new `BackfillBars` resolve call)
+- `grep -nE "req\.(Msg\.)?Timeframe" internal/handler/marketdata_handler.go` → `:42` and `:258`,
+  both unchanged (dead Connect handler and the live gRPC reader, per design Open Risk 3)
+
+**Doc surfaces (instruction 6)** — all five, plus the "not exhaustive" follow-on citations, updated
+and every line reference re-resolved against the post-edit files (not assumed by a fixed delta —
+verified per-file via `git diff` + direct read, since the shift is non-uniform: two separate
+insertion points per file compound differently depending on whether a citation falls before or
+after each):
+- `CLAUDE.md:17` — `TIMEFRAME_1MIN` is no longer described as "unused"; it is the explicit label on
+  live-streamed, never-persisted bars.
+- `CLAUDE.md:61` (`bar_ingest_timeframe` row) — now documents canonicalization + WARN fallback + the
+  `bar_ingest_interval_ms<=0` pause sentinel.
+- `internal/timeframe/timeframe.go:10-13` package doc — added the WS-stream-sets-1MIN-directly note.
+- `docs/context-constitution.md` — **MARKETDATA-1** repointed to the shared builder
+  (`client.go:143-154`, write-back `:151`) and the shifted `timeframe.go:78` / `marketdata_repo.go:89,149`
+  citations; **MARKETDATA-2** repointed to `stream.go:29,260` (enum label `:268`) and
+  `marketdata_service.go:744-773`, with a note that the enum is a label, not a storability signal;
+  **MARKETDATA-4** shifted to `client.go:86-95,73`; **MARKETDATA-6** shifted to
+  `marketdata_repo.go:168` (gate `marketdata_service.go:293` unchanged — no edits fall before it);
+  **MARKETDATA-N1** shifted to `stream.go:294,308` and `marketdata_service.go:767,797`; the two
+  candidate rows shifted to `stream.go:23` and `marketdata_repo.go:259,272`.
+- `docs/context-constitution-findings.md:20` — `client.go:423` → `client.go:426` (the `AlpacaAsset`
+  dead-code finding, shifted by the import + `barFromAlpaca` insertion above it).
+
+**Correction worth recording**: the spec's instruction 6 sub-bullet for MARKETDATA-2 asserted
+"`:259` does not move" because the enum field is appended *after* the existing `Timeframe:` field.
+That reasoning ignored the `commonv1` import also added by the same instruction, which shifts every
+line below it by one. Caught by re-resolving against the post-edit file rather than trusting the
+claimed delta (per the instruction's own closing directive) — both `stream.go:28,259` had in fact
+moved to `:29,260`.
+
+- `/context-scrubber scan` **could not be run** — the skill is not available in this session
+  (`Skill({skill: "context-scrubber"})` → "Unknown skill"). Substituted a full manual re-verification
+  of every citation in both context files against the live tree (see above), which is the concrete
+  drift `/context-scrubber` would have flagged. Noted in the PR body per root `CLAUDE.md` § Teardown
+  ("if the context-forge plugin is not available in the session, say so in the PR body rather than
+  skipping silently").
+
+- Files modified (Step 3): `internal/repository/marketdata_repo.go`, `internal/alpaca/client.go`,
+  `internal/alpaca/stream.go`, `internal/service/marketdata_service.go`,
+  `internal/timeframe/timeframe.go`, `CLAUDE.md`, `docs/context-constitution.md`,
+  `docs/context-constitution-findings.md` (all under `services/xstockstrat-marketdata/`)
+- Deviations: none beyond the MARKETDATA-2 shift correction, recorded above.
+
+**Next**: Step 6 (analysis service), Step 7 (analysis test), Step 8 (ui), then the integration PR.

@@ -13,6 +13,7 @@ import (
 
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	"github.com/xstockstrat/marketdata/internal/source"
+	tfpkg "github.com/xstockstrat/marketdata/internal/timeframe"
 )
 
 // MarketDataRepo handles TimescaleDB reads and writes for OHLCV bars and quotes.
@@ -110,17 +111,18 @@ func (r *MarketDataRepo) QueryBars(ctx context.Context, symbol, timeframe string
 			return nil, "", fmt.Errorf("scan bar: %w", err)
 		}
 		bars = append(bars, &marketdatav1.Bar{
-			Time:       timestamppb.New(t),
-			Symbol:     sym,
-			Timeframe:  tf,
-			Open:       open,
-			High:       high,
-			Low:        low,
-			Close:      close,
-			Volume:     volume,
-			Vwap:       vwap,
-			TradeCount: tradeCount,
-			Source:     source,
+			Time:          timestamppb.New(t),
+			Symbol:        sym,
+			Timeframe:     tf,
+			Open:          open,
+			High:          high,
+			Low:           low,
+			Close:         close,
+			Volume:        volume,
+			Vwap:          vwap,
+			TradeCount:    tradeCount,
+			Source:        source,
+			TimeframeEnum: tfpkg.FromString(tf),
 		})
 	}
 	if rows.Err() != nil {
