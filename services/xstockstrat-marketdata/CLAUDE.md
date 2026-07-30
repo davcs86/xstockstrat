@@ -82,7 +82,7 @@ Namespace: `marketdata`
   `xstockstrat-marketdata`. Retention: kept until the remediation is confirmed in production, then
   dropped via a later numbered migration — it is deliberately **not** dropped by `003`'s own
   `.up.sql`.
-- _Planned, not yet implemented:_ continuous aggregate `marketdata.ohlcv_1h` (no migration creates it today)
+- **Planned, not yet implemented:** continuous aggregate `marketdata.ohlcv_1h` (no migration creates it today)
 - Migration tool: `golang-migrate`
 
 ## FMP Fundamentals Integration (feature 059)
