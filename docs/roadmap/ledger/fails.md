@@ -220,3 +220,54 @@ ambiguity is logged here).
   their own reflex: a **count** ("three times") is an absence claim — run the grep; and *"no test can
   assert X"* is almost never true when the file in question is already in the step's own `**Files**`
   section — check that list before believing it.
+
+### 2026-07-30 — 082-fix-fmp-config-boot-only — assumption
+- **Mistake**: A harness-assigned session branch (`claude/082-design-implement-7638at`) and the
+  feature's actual SDD `**Development Branch**` (`feature/fix-fmp-config-boot-only`, created earlier
+  by `/sdd-triage`) silently diverged. All of `/sdd-review product-spec`, `/sdd-design`, `/sdd-spec`,
+  and its own review round landed on the harness branch instead of the SDD dev branch, because that
+  was the branch already checked out and the skills never re-verify `**Development Branch**` matches
+  `git branch --show-current` before writing. `/sdd-execute`'s own Step B3 boot sequence caught it
+  only when `git show origin/feature/fix-fmp-config-boot-only:.../implementation-spec.md` failed with
+  "path exists on disk, but not in" that branch — the file simply didn't exist there. The two
+  branches' feature-dir content was byte-identical at the fork point (main-dev had squash-merged the
+  same triage commit under a different hash), which made the fix a clean non-destructive merge, but a
+  less fortunate case (genuine divergent edits on both sides) would have forced a real conflict
+  resolution mid-execution.
+- **Evidence**: `docs/roadmap/features/082-fix-fmp-config-boot-only/context.md` § Session
+  2026-07-30 (/sdd-execute sequential) — the branch-topology-fix note; the `git show` failure that
+  surfaced it; PRs #820/#821.
+- **Rule it implies**: extends **P-03** — a skill that writes to a feature directory should verify
+  early (ideally at its own boot sequence) that the currently-checked-out branch and the feature's
+  `**Development Branch**` are the same lineage, not just that both exist. `/sdd-design`'s and
+  `/sdd-spec`'s boot sequences currently only read `feature.md`'s `**Lifecycle Status**`; they should
+  also warn (not silently proceed) when `git branch --show-current` isn't `**Development Branch**`
+  and isn't a normal ancestor/descendant of it — catching this at Phase-0 recon time instead of at
+  `/sdd-execute`'s Step B3, several skill-invocations later.
+
+### 2026-07-30 — 082-fix-fmp-config-boot-only — assumption
+- **Mistake**: Sequential-mode's stacked-step-PR pattern assumes "GitHub auto-retargets a stacked PR
+  to `<dev-branch>` once its base merges" (`reference/sequential-mode.md` §5.5/§5.6) — but GitHub only
+  performs that auto-retarget when the **base branch is deleted** after merge. Step branches
+  (`feature-steps/<slug>-step-N`) were never deleted post-merge in this run, so the retarget never
+  fired: PR #821 (Step 2, base=`step-1`) squash-merged **into the `step-1` branch**, not into
+  `feature/fix-fmp-config-boot-only`; PR #822 (Step 3, base=`step-2`) squash-merged **into the
+  `step-2` branch**. Only PR #820 (Step 1, base=`<dev-branch>` from the start) ever reached the dev
+  branch. All four PRs (#820/#821/#822/#823) reported "merged" via webhook, the feature was marked
+  `code-completed`, and the integration PR (#823, `<dev-branch>`→`main-dev`) merged successfully —
+  yet `main-dev` ended up with only Step 1's code, missing the paired regression tests (Step 2) and
+  doc corrections (Step 3) entirely, undetected until `/promote`'s own state validation compared
+  `main-dev`'s actual file content against the feature's tracking docs.
+- **Evidence**: `docs/roadmap/features/082-fix-fmp-config-boot-only/context.md` § Session 2026-07-30
+  (/promote — backfill missing steps); `git ls-remote` showing `feature-steps/…-step-1` and `-step-2`
+  still present on origin post-merge, each carrying a squash commit for the *next* step instead of
+  being deleted; PR #823's actual diff (9 files) vs. the expected ~13 (missing `main_test.go`,
+  `marketdata_service_test.go`, `CLAUDE.md`, `docs/context-constitution.md`).
+- **Rule it implies**: extends **P-03** — sequential mode's step-PR flow (§5.6) must not rely on an
+  auto-retarget assumption it cannot verify. After each step PR is reported merged, verify the retarget
+  actually happened — `git ls-remote --heads origin feature-steps/<slug>-step-<N>` should return
+  **nothing** (branch deleted) before treating the next step's base as `<dev-branch>`; if the branch
+  still exists, either delete it explicitly or re-point the next step PR's base via the API before
+  merging it. More generally: before opening a **production promotion** PR, diff the feature's actual
+  landed file content against what its own `implementation-spec.md`/`context.md` claim is done — a
+  lifecycle status of `code-completed` is a claim, not a verified fact about what's on the trunk.

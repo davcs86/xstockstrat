@@ -43,7 +43,7 @@ Does not restate documented/CI-enforced rules (see `## Pointers`).
 | pgxpool cap=2 / `DB_POOL_MAX` | `internal/repository/pool.go:15,23`; root pool budget |
 | Header propagation interceptor | `internal/middleware/propagation.go` (root PLAT-4) |
 | Config Watcher 90s snapshot gate + reconnect | `internal/config/config.go:82-91,149-160` |
-| FMP gated by `marketdata.fmp.enabled`, held off the OHLCV `Registry` (FR-2) | `cmd/server/main.go:110`, `internal/source/source.go:57` |
+| FMP gated live per-RPC by `marketdata.fmp.enabled` (re-read on every call, no restart needed since feature 082), held off the OHLCV `Registry` (FR-2) | `internal/service/marketdata_service.go:966`, `internal/source/source.go:57` |
 
 ---
 _Forged by [context-forge](https://github.com/davcs86/agent-plugins). It captures the

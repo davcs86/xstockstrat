@@ -338,6 +338,42 @@ func TestGetFundamentals_DisabledFailedPrecondition(t *testing.T) {
 	}
 }
 
+// TestGetFundamentals_LiveToggle_NoRestart proves the acceptance criteria (feature 082):
+// flipping marketdata.fmp.enabled live, on the SAME svc/cfg object — no restart — takes
+// effect on the very next call, in both directions.
+func TestGetFundamentals_LiveToggle_NoRestart(t *testing.T) {
+	repo := newFakeFundRepo()
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	cfg := &fakeCfg{bools: map[string]bool{"marketdata.fmp.enabled": false}}
+	svc := newFundSvc(cfg, repo, src, &fakeNotify{})
+
+	// starts disabled: FailedPrecondition, zero FMP calls
+	if _, err := svc.GetFundamentals(context.Background(), "AAPL"); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("expected FailedPrecondition while disabled, got %v", err)
+	}
+	if src.calls != 0 {
+		t.Fatalf("disabled must not call FMP, got %d", src.calls)
+	}
+
+	// flip live, same cfg/svc, no restart: next call attempts a fetch
+	cfg.bools["marketdata.fmp.enabled"] = true
+	if _, err := svc.GetFundamentals(context.Background(), "AAPL"); err != nil {
+		t.Fatalf("expected live-enabled fetch to succeed, got %v", err)
+	}
+	if src.calls != 1 {
+		t.Fatalf("expected exactly 1 FMP call after live-enable, got %d", src.calls)
+	}
+
+	// flip back, same cfg/svc, no restart: short-circuits again, no further call
+	cfg.bools["marketdata.fmp.enabled"] = false
+	if _, err := svc.GetFundamentals(context.Background(), "AAPL"); connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("expected FailedPrecondition after live-disable, got %v", err)
+	}
+	if src.calls != 1 {
+		t.Fatalf("disabled again must not call FMP, got %d", src.calls)
+	}
+}
+
 // Acceptance #5: miss + under cap fetches and upserts.
 func TestGetFundamentals_MissFetchesAndUpserts(t *testing.T) {
 	repo := newFakeFundRepo()
@@ -375,7 +411,10 @@ func TestGetFundamentals_QuotaWarningEmittedOnce(t *testing.T) {
 	}
 }
 
-// FR-6: enabled but nil source (not built) → FailedPrecondition, no panic.
+// FR-6 / feature-082: enabled but nil source — defensive-only guard. Since feature 082,
+// fundamentalsSrc is always non-nil via newFundamentalsSource (cmd/server/main.go), so
+// this path is unreachable through the current sole construction call site; kept as a
+// guard against a future direct NewMarketDataService caller passing a nil source.
 func TestGetFundamentals_NilSourceFailedPrecondition(t *testing.T) {
 	svc := newFundSvc(enabledCfg(), newFakeFundRepo(), nil, &fakeNotify{})
 	_, err := svc.GetFundamentals(context.Background(), "AAPL")
