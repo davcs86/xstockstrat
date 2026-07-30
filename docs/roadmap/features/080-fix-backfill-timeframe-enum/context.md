@@ -488,3 +488,46 @@ subshelled `cd`s, the `req\.(Msg\.)?Timeframe` gate, the 5-hit arithmetic, the r
 
 **Next**: `/sdd-execute fix-backfill-timeframe-enum` from step 1. Step 5 stays `blocked` until an
 environment with a database is available.
+
+---
+
+## Session 2026-07-30 — sdd-execute
+
+### Step 1 — service: ingest — canonicalize the write path and derive `timeframe_enum` on read [done]
+
+- **FR-13 (the defect)**: `TriggerBackfill` now computes `canonical_tf = _canonical_timeframe(request)`
+  once and passes it to both `insert_job` and the `ingest.backfill.queued` ledger `Struct`. Previously
+  it persisted `request.timeframe` raw and only canonicalized at `_execute_backfill`, so every
+  UI-created row held `''`.
+- **FR-1**: new `_row_timeframe` helper placed *after* the map block (so the `servicer.py:32-35`
+  doc citation still lands on the maps); `job_row_to_proto` gains
+  `timeframe_enum=_STR_TO_ENUM.get(_row_timeframe(...), 0)` beside the untouched string. Fixes all
+  three read paths structurally.
+- **FR-4**: the `row.get("timeframe_enum")` read and its `_ENUM_TO_STR` chain are gone. The **map
+  stays** — `_canonical_timeframe` reads it on the write path.
+- **red → green** (P-06): red = 7 failures against the pre-change tree — the three supported-timeframe
+  pairs and the `1Day` alias all on `timeframe_enum == 0`, both per-RPC parity assertions, and
+  **`assert '' == '15m'`** on the enum-only `TriggerBackfill` (the write-path defect, caught exactly as
+  the spec predicted). green = `141 passed`, `ruff check`/`format` clean, coverage **75%** (threshold
+  40). The 7 new cases were confirmed to *execute* (`7 passed, 60 deselected`), not silently skip —
+  the `fails.md` 074 lesson.
+- As specced, two of the five parametrized mapper cases (`""`, `"10Min"` → `UNSPECIFIED`) were green
+  before the change. They are degradation coverage, not red-before-green evidence.
+- Files modified: `services/xstockstrat-ingest/app/handlers/servicer.py`,
+  `services/xstockstrat-ingest/docs/context-constitution.md`,
+  `services/xstockstrat-ingest/docs/context-constitution-findings.md`, `docs/context-constitution.md`
+- **Line-shift repairs (F-08)**: 12 citations across the three context files re-resolved by grepping
+  the post-edit file, never by assuming a delta. Verified landings: `servicer.py:64` (the `"1d"`
+  fallback, was `:53`), `:81` (the mapper, was `:70`), `:135` (`_has_admin_scope`, was `:119` — cited by
+  root **PLAT-5** *and* the module's own `:32`), `:151-157` (`_propagation_meta`, was `:134-140`),
+  `:793,550` (page_token), `:681,825` (conviction), `:743-847,693,761` (QuerySignals). `:32-35` (the map
+  block) confirmed **unchanged**, which is why the helper went below it.
+- Deviations: none.
+
+### Deviation from the spec's PR model (user decision)
+
+The spec assumes per-step branches PR'ing into `feature/fix-backfill-timeframe-enum`. That branch does
+not exist and the harness authorizes only `claude/*` branches, so at the user's direction the
+implementation runs as **one commit per step on `claude/impl-080-timeframe-enum`**, with a single PR to
+`main-dev`. Consequence to keep in view: step 5's DBA gate no longer gets its own PR, so it must be
+called out explicitly in the integration PR body.

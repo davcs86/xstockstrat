@@ -1,6 +1,6 @@
 # Implementation Spec: fix-backfill-timeframe-enum
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-07-30
 **Feature**: `docs/roadmap/features/080-fix-backfill-timeframe-enum/feature.md`
 **Total Steps**: 8 (7 executable here — **step 5 is `blocked`: unverifiable without a database, see that step**)
@@ -67,7 +67,7 @@ be grep-verified):**
 
 ### Step 1 — service: ingest — canonicalize the backfill write path and derive `timeframe_enum` on read
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
