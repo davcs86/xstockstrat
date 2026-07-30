@@ -3,6 +3,20 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-07-30
+
+### Features
+- qa-capability: Replace the frontend-only `/test-data` fixture steward with a monorepo-wide QA capability: a read-only `qa-tester` subagent that designs tests, inventories coverage, and reports defects, plus a write-capable `sdd-qa` skill that writes tests, runs suites, detects flakes, and records defects to `docs/reports/` for `/sdd-triage --from-report`. (`code-completed`)
+
+### Bug Fixes
+- fix-backfill-timeframe-enum [SEV-2]: `ingest`'s `job_row_to_proto` populates only the deprecated `timeframe` string on every `BackfillJob` it returns and never sets `timeframe_enum`, so `GetBackfillStatus` and `ListBackfillJobs` always report `TIMEFRAME_UNSPECIFIED`. (`code-completed`)
+- fix-fmp-config-boot-only [SEV-2]: `xstockstrat-marketdata` builds its FMP fundamentals client once at process boot, reading `marketdata.fmp.enabled` off a one-shot config fetch rather than the live `WatchConfig` stream every other config-driven behavior on the platform uses. (`code-completed`)
+
+### Summary
+8 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-05-21
 
 ### Features
