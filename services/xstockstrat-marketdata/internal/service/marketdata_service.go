@@ -46,7 +46,8 @@ type MarketDataService struct {
 	warmSymbols map[string]struct{}
 
 	// fundamentals is the FMP source (feature 059), held separately from the OHLCV
-	// registry (FR-2). nil when marketdata.fmp.enabled is false at startup.
+	// registry (FR-2). Always non-nil since feature 082 — marketdata.fmp.enabled gates
+	// use (fundamentalsEnabled()), not construction.
 	fundamentals source.FundamentalsSource
 	// fundCfg / fundRepo are the config + repo surfaces the fundamentals RPCs use,
 	// behind interfaces so the cache/quota/gate logic is unit-testable with stubs.
@@ -72,7 +73,8 @@ type fundamentalsRepo interface {
 }
 
 // NewMarketDataService creates the service and dials ledger + notify. fundamentals is
-// the FMP source (feature 059) or nil when marketdata.fmp.enabled is false.
+// the FMP source (feature 059), always non-nil via the sole boot-time construction
+// path since feature 082 (cmd/server/main.go's newFundamentalsSource).
 func NewMarketDataService(
 	registry *source.Registry,
 	repo *repository.MarketDataRepo,
@@ -955,7 +957,11 @@ func (s *MarketDataService) resolveFundamentals(ctx context.Context, symbol stri
 }
 
 // fundamentalsEnabled returns FailedPrecondition when FMP is disabled (or unbuilt),
-// making NO external call (FR-6).
+// making NO external call (FR-6). Since feature 082, s.fundamentals is always non-nil
+// via the sole construction path (cmd/server/main.go's newFundamentalsSource) — the
+// "|| s.fundamentals == nil" half of this guard is defensive-only and not reachable
+// through that path today; kept in case a future caller constructs the service directly
+// with a nil source.
 func (s *MarketDataService) fundamentalsEnabled() error {
 	if !s.fundCfg.GetBool("marketdata.fmp.enabled", false) || s.fundamentals == nil {
 		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("fmp fundamentals source disabled"))

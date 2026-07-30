@@ -1,6 +1,6 @@
 # Implementation Spec: fix-fmp-config-boot-only
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-07-30
 **Feature**: `docs/roadmap/features/082-fix-fmp-config-boot-only/feature.md`
 **Total Steps**: 4
@@ -37,7 +37,7 @@ match shipped behavior in the same PR (Constitution **C-10**).
 
 ### Step 1 — service: xstockstrat-marketdata: always construct the FMP fundamentals client at boot
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/cmd/server/main.go` — modify

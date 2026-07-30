@@ -1,7 +1,7 @@
 # Feature: fix-fmp-config-boot-only
 
 **Type**: bug
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/fix-fmp-config-boot-only`
 **GitHub Issue**: n/a — GitHub Issues are disabled on `davcs86/xstockstrat` (`POST /issues` → `410
 Issues has been disabled`); bug captured directly via `/sdd-triage` (Track C, adapted — same
@@ -20,6 +20,7 @@ precedent as features 067/074)
 | 2026-07-30 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS — 1 warning: clarified "xstockstrat-staging" = main-dev/dev DO app, no separate staging tier; fixed in product-spec.md). Overlap scan: clean. |
 | 2026-07-30 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, quick) and approved; recon.md + design.md written. Always-construct-at-boot + extracted testable function, composed test proof (canary + passthrough + live-toggle test), both doc surfaces corrected. |
 | 2026-07-30 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 4 steps. |
+| 2026-07-30 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (sequential mode) — extracted `newFundamentalsSource`, always constructed at boot. |
 
 ---
 
