@@ -70,6 +70,15 @@ be grep-verified):**
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
+- `services/xstockstrat-ingest/docs/context-constitution-findings.md` — modify (line-shift repair; `:13` cites `servicer.py:53`)
+- `docs/context-constitution.md` — modify (line-shift repair; **PLAT-5** at `:30` cites ingest `servicer.py:119`)
+
+> **Why the two doc files are staged here (F-08).** Inserting `_row_timeframe` after `:44` shifts
+> `_canonical_timeframe` off `:47`, its `"1d"` literal off `:53`, and `_has_admin_scope` off `:119`.
+> Three context files cite those exact lines. Leaving them unstaged forces a choice between doc drift
+> (root `CLAUDE.md` § Teardown) and staging outside this step's `**Files**` — and **F-08 is
+> non-overridable**, so the files belong in the step that shifts them. Added at the
+> `/sdd-review impl-spec` gate.
 
 **Reviewers**: `xstockstrat-ingest` (service owner) — signal normalization correctness, idempotent ingestion, newsletter source schema stability; specifically the backfill job read path and enum/string parity
 
@@ -136,12 +145,19 @@ be grep-verified):**
 
 **Verification**:
 ```bash
-cd services/xstockstrat-ingest && ruff check . && ruff format --check .
+# NOTE: run from the REPO ROOT. Do not `cd` — every path below is repo-relative.
+(cd services/xstockstrat-ingest && ruff check . && ruff format --check .)
+SVC=services/xstockstrat-ingest/app/handlers/servicer.py
 # the dead read is gone and no new map was introduced:
-grep -n 'timeframe_enum' services/xstockstrat-ingest/app/handlers/servicer.py   # expect the mapper assignment + _canonical_timeframe's getattr only, NOT row.get("timeframe_enum")
-grep -c '_STR_TO_ENUM = \|_ENUM_TO_STR = \|_TF_ALIASES = ' services/xstockstrat-ingest/app/handlers/servicer.py  # expect 3
+grep -n 'timeframe_enum' "$SVC"   # expect the mapper assignment + _canonical_timeframe's getattr only, NOT row.get("timeframe_enum")
+grep -c '_STR_TO_ENUM = \|_ENUM_TO_STR = \|_TF_ALIASES = ' "$SVC"  # expect 3
 # the doc citation still lands on the maps:
-sed -n '32,35p' services/xstockstrat-ingest/app/handlers/servicer.py
+sed -n '32,35p' "$SVC"
+# --- line-shift repairs this step owns (F-08; see the note under Files) ---
+# Re-resolve each citation against the POST-EDIT file and update the doc if it moved:
+grep -n '_canonical_timeframe\|"1d"' "$SVC" | head -4        # findings.md:13 cites the "1d" literal (was :53)
+grep -n '_has_admin_scope' "$SVC"                            # docs/context-constitution.md:30 (PLAT-5) cites :119
+/context-scrubber scan   # scoped to the two context files above; fix every grounded finding
 ```
 Then run the Step 2 suite (`cd services/xstockstrat-ingest && uv run pytest`) — it must go green here
 after being red before this step.
@@ -187,11 +203,11 @@ after being red before this step.
 
 **Instructions**:
 1. Create `services/xstockstrat-ingest/tests/_helpers.py` containing one function, `job_row`, whose
-   body is the current `test_ingest_servicer.py:66-88` `_job_row` verbatim (the 15-key dict + `**over`
+   body is the current `test_ingest_servicer.py:66-86` `_job_row` verbatim (the 15-key dict + `**over`
    update). Move **only** `job_row` — do not move `make_servicer` / `_make_servicer`: the two servicer
    factories differ in name, signature and body and are not duplicates
    (`design.md` § Rejected Alternatives).
-2. In `test_ingest_servicer.py`: delete `_job_row` (`:66-88`), add
+2. In `test_ingest_servicer.py`: delete `_job_row` (`:66-86`), add
    `from tests._helpers import job_row as _job_row` to the import block, and **delete line `:506`**
    (`job_row["timeframe_enum"] = 4`) so the resume fixture drives the real row shape (AC-4). That
    `test_resume_job_redrives_incomplete_chunks` (`:500`) still passes is the evidence the FR-4 branch
@@ -228,6 +244,8 @@ after being red before this step.
    already used at `:269-270`) and assert
    `MessageToDict(call.args[0].payload)["timeframe"] == "15m"` for the same enum-only request. This is
    the untyped `Struct` surface no lint or type check covers.
+   Import it explicitly — `from google.protobuf.json_format import MessageToDict` — the test file does
+   not have it today (flagged at the review gate: the instruction relied on a name no step introduced).
 
 **Verification**:
 ```bash
@@ -235,9 +253,19 @@ cd services/xstockstrat-ingest && ruff check . && ruff format --check . \
   && uv run pytest --cov=app --cov-fail-under=40
 ```
 Confirm coverage ≥ 40% (CI `python-test` matrix, `.github/workflows/ci.yml:337-339`,
-`cov_source: app`). Red-before-green: run this suite against the pre-Step-1 tree and record the
-failing output — the new `timeframe_enum` assertions must fail (today `TimeframeEnum` is never set and
-`row.get("timeframe_enum")` is read from a column that does not exist).
+`cov_source: app`).
+
+**Red-before-green — per assertion, not blanket** (corrected at the review gate; the previous wording
+claimed the whole set goes red, and two cases do not):
+- **Genuinely red** against the pre-Step-1 tree: the `"15m"`/`"1h"`/`"1d"`/`"1Day"` → `5`/`3`/`4`/`4`
+  mappings; all three read-path `timeframe_enum == 4` assertions (`GetBackfillStatus`,
+  `ListBackfillJobs`, `CancelBackfill`); AC-13's `insert.await_args.kwargs["timeframe"] == "15m"`
+  (today it is `""`); and AC-14's ledger-payload assertion.
+- **Already green** before the change, and that is fine — they are degradation coverage, not
+  regression evidence: `timeframe=""` → `UNSPECIFIED` and `timeframe="10Min"` → `UNSPECIFIED`. Both
+  pass on today's tree because the field defaults to the zero value. Record them as such in the step's
+  `context.md` entry; do not cite them as red-before-green proof (**P-06** wants at least one assertion
+  that provably fails first, and the list above supplies plenty).
 
 ---
 
@@ -324,8 +352,11 @@ failing output — the new `timeframe_enum` assertions must fail (today `Timefra
   - `internal/timeframe/timeframe.go:10-13` — the package doc's 1MIN/5MIN paragraph
   - `docs/context-constitution.md:14` **MARKETDATA-1** — evidence cites `write-back :203`, the exact
     line the shared builder replaces
-  - `docs/context-constitution.md:15` **MARKETDATA-2** — evidence cites `stream.go:28,259`; `:259`
-    line-shifts, and streamed bars now carry an enum while still not being persisted (recon Risk 8)
+  - `docs/context-constitution.md:15` **MARKETDATA-2** — evidence cites `stream.go:28,259`. Both line
+    numbers **stay valid**: instruction 3 adds the enum *after* the existing `Timeframe:` field, so
+    `:259` does not move (corrected at the review gate — this previously claimed a shift). The edit
+    needed here is **semantic, not numeric**: state that streamed bars now carry `TIMEFRAME_1MIN` and
+    still must not be persisted — the enum is a label, not a storability signal (recon Risk 8)
   - Adjacent invariant not to disturb: **MARKETDATA-5** (`docs/context-constitution.md:18`) — the
     documented pause sentinel is `bar_ingest_interval_ms <= 0` (`marketdata_service.go:484`), *not* a
     bogus timeframe. This is the mitigation the FR-10 accepted risk rests on
@@ -440,16 +471,40 @@ failing output — the new `timeframe_enum` assertions must fail (today `Timefra
      and state that streamed bars now carry `TIMEFRAME_1MIN` **and still must not be persisted**; the
      enum is a label, not a storability signal (recon Risk 8).
 
+   > **This list is NOT exhaustive — treat `/context-scrubber scan` as the authority, not this
+   > enumeration** (corrected at the review gate; the list previously read as complete). Adding the
+   > import + `barFromAlpaca` to `internal/alpaca/client.go` and the package-doc edit to
+   > `internal/timeframe/timeframe.go` shifts further citations in the same two context files:
+   > **MARKETDATA-1**'s `client.go:111` (wire map) and `timeframe.go:76` (which appears **twice** — the
+   > Evidence *and* Example columns); **MARKETDATA-4**'s `client.go:85-94,72`; **MARKETDATA-N1**'s
+   > `stream.go:285` and `marketdata_service.go:734,764`; and the candidate-rule rows citing
+   > `marketdata_repo.go:257,270` and `stream.go:22`. Also add
+   > `services/xstockstrat-marketdata/docs/context-constitution-findings.md` to this step's `**Files**`
+   > if the scan reports a finding there — `:20` cites `internal/alpaca/client.go:423`, which the import
+   > and new builder shift by roughly a dozen lines (**F-08**: it must be staged by the step that moves
+   > it). Re-resolve every citation against the post-edit file rather than adjusting by an assumed delta.
+
 **Verification**:
 ```bash
-cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
-cd services/xstockstrat-marketdata && GOWORK=off go build ./...
-# all four Bar sites now set the enum (expect 4 hits in non-gen source, plus the request-side :120):
-grep -rn "TimeframeEnum" services/xstockstrat-marketdata --include=*.go | grep -v /gen/ | grep -v _test.go
+# GOWORK must be exported (see Step 4's note) and the greps run from the REPO ROOT.
+(cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod)
+(cd services/xstockstrat-marketdata && GOWORK=off go build ./...)
+MD=services/xstockstrat-marketdata
+# Enum-setting sites. EXPECT 5 hits, not 4 — corrected at the review gate:
+#   - internal/repository/marketdata_repo.go   (DB read path)
+#   - internal/alpaca/client.go                (ONE hit: barFromAlpaca serves both REST sites)
+#   - internal/alpaca/stream.go                (the 1MIN label)
+#   - internal/service/marketdata_service.go   (:120 GetBars request-side, pre-existing)
+#   - internal/service/marketdata_service.go   (NEW: req.GetTimeframeEnum() in BackfillBars, instr. 4)
+# The old "4 hits (one per Bar site) plus :120" arithmetic contradicted instruction 1, which
+# deliberately collapses the two Alpaca literals into one shared builder.
+grep -rn "TimeframeEnum" "$MD" --include=*.go | grep -v /gen/ | grep -v _test.go
 # BackfillBars no longer reads the raw string at the three former sites:
-sed -n '585,640p' services/xstockstrat-marketdata/internal/service/marketdata_service.go
-# the excluded readers are untouched:
-grep -n "req.Timeframe" services/xstockstrat-marketdata/internal/handler/marketdata_handler.go  # expect :42 and :258 unchanged
+sed -n '585,640p' "$MD/internal/service/marketdata_service.go"
+# The deliberately-excluded StreamBars readers are untouched. NOTE the two differ in form —
+# :42 is `req.Msg.Timeframe` (Connect, dead code) and :258 is `req.Timeframe` (gRPC, live), so a
+# bare `req.Timeframe` grep returns :258 ONLY and reads as a failure. Match both:
+grep -nE "req\.(Msg\.)?Timeframe" "$MD/internal/handler/marketdata_handler.go"   # expect exactly :42 and :258, both unchanged
 ```
 Then, per root `CLAUDE.md` § Teardown, run `/context-scrubber scan` scoped to
 `services/xstockstrat-marketdata/CLAUDE.md` and
@@ -466,7 +521,7 @@ body rather than skipping silently. Finally run the Step 4 suite — it must go 
 **Files**:
 - `services/xstockstrat-marketdata/internal/alpaca/client_test.go` — modify
 - `services/xstockstrat-marketdata/internal/alpaca/stream_test.go` — create
-- `services/xstockstrat-marketdata/internal/timeframe/timeframe_test.go` — modify
+- `services/xstockstrat-marketdata/internal/timeframe/timeframe_test.go` — modify (comment only — see instruction 4)
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify
 
 **Reviewers**: `xstockstrat-marketdata` (service owner) — OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency
@@ -477,7 +532,7 @@ body rather than skipping silently. Finally run the Step 4 suite — it must go 
   `internal/alpaca/` (`ls internal/alpaca/` → `client.go`, `client_test.go`, `stream.go`), so AC-7
   needs a new `package alpaca` file
 - Extension point for AC-6: `client_test.go:320` `TestGetBars_TranslatesCanonicalTimeframe`, table at
-  `:325-333` (`{"15m","15Min"}, {"1h","1Hour"}, {"1d","1Day"}, {"15Min","15Min"}, {"1Hour","1Hour"}` —
+  `:325-334` (`{"15m","15Min"}, {"1h","1Hour"}, {"1d","1Day"}, {"15Min","15Min"}, {"1Hour","1Hour"}` —
   note **no `1Day` input row today**), stored-bar assertion at `:359` already carrying
   `//nolint:staticcheck // SA1019`
 - `client_test.go:448` `TestGetBarsMulti_Success` exists and calls `GetBarsMulti(..., "1Day", ...)` at
@@ -495,15 +550,23 @@ body rather than skipping silently. Finally run the Step 4 suite — it must go 
   are for correctness, not the gate
 - `TimeframeEnum` appears in **zero** Go tests repo-wide today (recon Risk 7) — the AC-5
   red-before-green evidence for this service
+- **The stream-test seam, now cited (C-01 — it was asserted without evidence before the review gate):**
+  `streamManager` / `streamSubscriber` are declared at `internal/alpaca/stream.go:58-76` and
+  `streamMessage`'s bar fields at `:34-52`; `fanoutBar` is at `:278-290`. A test can populate
+  `m.subs` **directly**, bypassing `add()`'s `go m.run()`, so `dispatch` is reachable with no
+  websocket, no goroutine, and **no production seam added** — which means the P-03 escalation hedge in
+  instruction 3 should not need to fire. It stays in place as a genuine stop, not a formality
+- `internal/service/marketdata_service_test.go` already builds a `MarketDataService` with fakes
+  (`TestGetFundamentals_*`, `:269-376`) — the harness AC-11's new test reuses (instruction 4b)
 
 **TDD**: `red-green required`
 
 **Instructions**:
 1. `client_test.go` — add a third field `wantEnum commonv1.Timeframe` to
-   `TestGetBars_TranslatesCanonicalTimeframe`'s case struct (`:325-333`), add a `{"1Day", "1Day", …}`
+   `TestGetBars_TranslatesCanonicalTimeframe`'s case struct (`:325-334`), add a `{"1Day", "1Day", …}`
    input row, and fill every row with a **hardcoded** expected enum
    (`15m`/`15Min` → `Timeframe_TIMEFRAME_15MIN`, `1h`/`1Hour` → `…_1HOUR`,
-   `1d`/`1Day` → `…_1DAY`). Extend the assertion at `:358-361` to check `bars[0].TimeframeEnum` paired
+   `1d`/`1Day` → `…_1DAY`). Extend the assertion at `:359-361` to check `bars[0].TimeframeEnum` paired
    with the existing `bars[0].Timeframe` check. Import
    `commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"` if absent.
    **Do not** compute the expectation by calling `timeframe.FromString` — the expectation must not come
@@ -522,11 +585,30 @@ body rather than skipping silently. Finally run the Step 4 suite — it must go 
    build the smallest subscriber that receives the bar; if no in-package constructor makes this
    reachable without restructuring `stream.go`, **block the step and escalate** (P-03) rather than
    changing production code to create a seam.
-4. `internal/timeframe/timeframe_test.go` — add `TestFromStringTotality`: assert that every member of
-   the supported vocabulary maps as expected and that `FromString("1m")` **still** returns
-   `Timeframe_TIMEFRAME_UNSPECIFIED` (AC-7's second half — proving the request-resolution refusal is
-   provably untouched by FR-6's labelling change). Keep the `//nolint` style of `:67-68`. This test also
-   carries the coverage credit for the step (design Open Risk 6).
+4. `internal/timeframe/timeframe_test.go` — **do not add a new `TestFromStringTotality`.** Corrected at
+   the review gate: `TestFromString` (`:10-33`) already asserts all six spellings **and**
+   `FromString("1m") == UNSPECIFIED` at `:23`, and this step changes only `timeframe.go`'s *package
+   doc*, so a new totality test could never go red — an inert test that reads as a pass is exactly the
+   shape `fails.md` 2026-07-29 (074) condemns. AC-7's second half is **already satisfied** by `:23`;
+   cite that line in the step's `context.md` entry as the standing guard rather than duplicating it.
+   (Also correct the earlier claim that this test "carries the coverage credit for the step" — it does
+   not; `FromString` is already fully covered, and the credit comes from `internal/alpaca`.) The only
+   edit this file may need is a comment at `:23` noting that the assertion is now load-bearing for
+   FR-6/AC-7, so a future cleanup does not delete it as redundant.
+4b. `internal/service/marketdata_service_test.go` — add **`TestBackfillBars_EnumOnlyRequestResolves`**,
+   the missing AC-11 verification (added at the review gate; **no step covered it**). AC-11 is *"a
+   request carrying only `timeframe_enum` (no string) succeeds — the condition that is broken today and
+   is the whole point of the migration"*, so shipping it unverified would leave the feature's headline
+   claim untested. It is testable in the existing harness: this file is `package service` and already
+   builds a `MarketDataService` with fakes (`TestGetFundamentals_*`, `:269-376`). Register a fake
+   `source.Source` that **records the timeframe string it is handed**, call `BackfillBars` with
+   `&marketdatav1.BackfillBarsRequest{Symbols: []string{"AAPL"}, TimeframeEnum: commonv1.Timeframe_TIMEFRAME_1DAY}`
+   and **no** `Timeframe`, and assert the recorded value is `"1d"` — not `""`. Red-before-green is
+   genuine: against the pre-Step-3 tree the fake records `""`, because `BackfillBars` passes
+   `req.Timeframe` raw (`marketdata_service.go:602`). That `""` is precisely the bug — it is what makes
+   Alpaca 400 and what persists unqueryable rows — so this assertion is the one that proves the fix.
+   Coverage exclusion of `internal/service` (`ci.yml:241`) is an argument about credit, not about
+   whether the criterion is checked.
 5. `internal/service/marketdata_service_test.go` — add `TestResolveIngestTimeframe` covering AC-10's
    three cases directly: `""` → `"15m"`; each resolvable alias (`"1Day"`, `"1Hour"`, `"15Min"`, and the
    canonical spellings) → its canonical form; an unresolvable value (`"10Min"`) → `"15m"`. Assert the
@@ -538,19 +620,33 @@ body rather than skipping silently. Finally run the Step 4 suite — it must go 
 
 **Verification**:
 ```bash
-cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
-cd services/xstockstrat-marketdata && GOWORK=off \
-  COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//') \
-  && go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}" \
-  && go tool cover -func=coverage.out | grep "^total:"
+# GOWORK must be EXPORTED, not written as a bare assignment before an unrelated command — a
+# `GOWORK=off VAR=$(...) && go test ...` chain sets two unexported shell vars and `go test` never
+# sees GOWORK (corrected at the review gate; root CLAUDE.md § Language Versions requires GOWORK=off).
+cd services/xstockstrat-marketdata
+export GOWORK=off
+golangci-lint run --modules-download-mode=mod
+COVERPKGS=$(go list ./... | grep -Ev '/(cmd|handler|repository|telemetry|service)(/|$)' | tr '\n' ',' | sed 's/,$//')
+go test ./... -race -count=1 -coverprofile=coverage.out -covermode=atomic -coverpkg="${COVERPKGS}"
+go tool cover -func=coverage.out | grep "^total:"
 ```
 Confirm ≥ 40% (CI `go-test` matrix, `.github/workflows/ci.yml:199-200`). **Note in the step's
 context.md entry**: the FR-10/FR-11 changes live in `internal/service` and the DB-site one-liner in
 `internal/repository`, both excluded from `COVERPKGS` (`ci.yml:241`) — they earn no coverage credit;
-their tests exist for correctness and the threshold is carried by `internal/alpaca` +
-`internal/timeframe`. Red-before-green: run this command against the pre-Step-3 tree — every new
-`TimeframeEnum` assertion and `TestResolveIngestTimeframe` must fail (or fail to compile, since
-`resolveIngestTimeframe` does not yet exist).
+their tests exist for correctness and the threshold is carried by `internal/alpaca`.
+
+**Red-before-green**, per assertion (do not claim it blanket-fails):
+- Genuinely red against the pre-Step-3 tree: every new `TimeframeEnum` assertion in `client_test.go`
+  (the field is unset today), `TestDispatchBarCarries1MinEnum`, `TestResolveIngestTimeframe` (fails to
+  compile — `resolveIngestTimeframe` does not exist yet), and `TestBackfillBars_EnumOnlyRequestResolves`
+  (records `""`).
+- **AC-6 residual, recorded rather than silently narrowed (P-03).** AC-6 names the DB read path, but no
+  assertion covers it: `internal/repository/marketdata_repo_test.go` is `package repository` with only
+  `TestBuildDeleteBarsQuery` and no DB harness, and `design.md:145` deliberately rejected the
+  `barRow.toBar()` seam as overbuild. So the repository one-liner
+  (`TimeframeEnum: tfpkg.FromString(tf)`) ships covered by *inspection plus* `FromString`'s own tests,
+  not by an assertion on the assignment. That trade-off is design-approved; it is written here so the
+  gap is visible in the step that owns it rather than inferred from the design.
 
 ---
 
@@ -561,8 +657,28 @@ their tests exist for correctness and the threshold is carried by `internal/alpa
 **Files**:
 - `services/xstockstrat-marketdata/migrations/003_canonicalize_ohlcv_timeframe.up.sql` — create
 - `services/xstockstrat-marketdata/migrations/003_canonicalize_ohlcv_timeframe.down.sql` — create
+- `services/xstockstrat-marketdata/CLAUDE.md` — modify (§ Database: register the new table + its lifetime)
+- `docs/patterns/database.md` — modify (the platform schema map gains the new table)
 
-**Reviewers**: DBA — migration NNN numbering (no gaps, no conflicts), up+down pair present, hypertable partitioning strategy, index correctness, run-order compliance with `scripts/db-migrate.sh`; `xstockstrat-marketdata` (service owner) — OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency
+> **Why the two doc files are staged here (F-08).** This step calls itself "a data remediation with no
+> schema change to `ohlcv`" — true of `ohlcv`, but the `.up.sql` **creates a permanent new table**,
+> `marketdata.ohlcv_remediation_003`, which only `.down.sql` drops. The marketdata `CLAUDE.md`
+> § Database enumerates this schema's tables and `docs/patterns/database.md:9` is the platform schema
+> map; a new durable table that appears in neither is undocumented schema. Added at the
+> `/sdd-review impl-spec` gate, together with the retention decision below.
+
+> **Retention and ownership of the log table — decide it here, do not leave it implicit.** The table
+> holds verbatim copies of deleted market-data rows, so it is not free-floating scratch. It must
+> survive the up migration (that is what makes `.down.sql` a faithful reverse rather than the no-op
+> `design.md` forbade), so it cannot be `TEMP` or transaction-scoped. Record in both the `.up.sql`
+> header and the marketdata `CLAUDE.md` § Database entry: **owner** = `xstockstrat-marketdata`;
+> **purpose** = one-shot feature-080 FR-14 remediation audit + down-migration source; **expected size**
+> = one row per remediated row (bounded by the alias rows that existed at migration time — expected
+> zero-to-few, since `SELECT DISTINCT timeframe` is the pre-flight check); **retention** = keep until
+> feature 080 is `launched` and the remediation is confirmed in production, then drop via a later
+> numbered migration. It is deliberately **not** dropped by this migration's `.up.sql`.
+
+**Reviewers**: DBA — migration NNN numbering (no gaps, no conflicts), up+down pair present, hypertable partitioning strategy, index correctness, run-order compliance with `scripts/db-migrate.sh`; **plus, specific to this step: the new permanent `marketdata.ohlcv_remediation_003` table (its retention decision and that it holds copies of deleted market-data rows), the delete-the-alias-duplicate collision policy, and the quiesce requirement below**; `xstockstrat-marketdata` (service owner) — OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency
 
 **Codebase Evidence**:
 - Confirmed via `ls services/xstockstrat-marketdata/migrations/`: `000_schema`, `001_marketdata_hypertables`,
@@ -581,12 +697,27 @@ their tests exist for correctness and the threshold is carried by `internal/alpa
   never moves a row between chunks
 - Runner: `scripts/db-migrate.sh` (golang-migrate v4.17.1), `migrate_service "xstockstrat-marketdata" "marketdata"`
   at `:130`; migration state is tracked per service in a `<schema>_schema_migrations` table in
-  `public` (built by `service_db_url()` at `:35-48` as `x-migrations-table=marketdata_schema_migrations`).
+  `public` (built by `service_db_url()` at `:34-47` as `x-migrations-table=marketdata_schema_migrations`).
   **The script supports only `up | version | force`** (`:64-93`, error text at `:92`) — there is no
   `down` sub-command, so the down-migration round trip must be driven by invoking `migrate` directly
   with the same `x-migrations-table` parameter
 - `docs/patterns/database.md` and `docs/runbooks/approval-flow.md`: a DB migration needs DBA +
   service-owner approval — this one mutates stored market data
+- **Concurrency precondition (added at the review gate).** `StartBarIngestPoller`
+  (`marketdata_service.go:470`) upserts canonical rows roughly every 60s while the stack is up, so the
+  table is **not quiescent** during a normal migration run. Two consequences the SQL must handle:
+  (a) the twin-existence check in instruction 3a and the `UPDATE` in 3b are separate statements, so a
+  canonical row committed between them re-introduces the very PK violation the delete-the-alias-duplicate
+  policy exists to avoid — 3b must therefore carry its **own** `WHERE NOT EXISTS` twin re-check rather
+  than relying on 3a having cleared the way; (b) the round-trip verification must scope its snapshots to
+  the seeded test symbol, because whole-table counts drift under the poller
+- **Compression precondition (added at the review gate).** `UPDATE`/`DELETE` against a **compressed**
+  TimescaleDB chunk fails outright. This repo has compression **planned but not applied**
+  (`services/xstockstrat-marketdata/docs/context-constitution-findings.md:11`,
+  `services/xstockstrat-marketdata/CLAUDE.md:75-76`), so the migration is safe as things stand — but a
+  database with a hand-added compression policy would fail at deploy. The `.up.sql` header must say so,
+  and the pre-flight below checks it rather than assuming it. Note features 039/040 (both `idea`) plan
+  exactly that policy — whoever specs them must re-check this migration first
 
 **TDD**: `N/A (migration — no unit-testable code path; verified by the executed SQL checks below)`
 
@@ -624,7 +755,12 @@ their tests exist for correctness and the threshold is carried by `internal/alpa
       `INSERT INTO marketdata.ohlcv_remediation_003 …` so the log and the delete cannot diverge.
    b. `UPDATE` the remaining alias rows to their canonical spelling, logging `op='update'` with
       `old_timeframe`/`new_timeframe` (value columns left NULL — the row itself is unchanged) via the
-      same `UPDATE … RETURNING` + CTE shape.
+      same `UPDATE … RETURNING` + CTE shape. **This `UPDATE` must carry its own `WHERE NOT EXISTS`
+      twin re-check** — do not rely on step (a) having cleared the way. (a) and (b) are separate
+      statements, and the bar-ingest poller can commit a canonical row between them; without the
+      re-check that row causes exactly the PK violation the delete-the-alias-duplicate policy exists to
+      prevent. The pre-flight quiesce makes this unlikely, not impossible, and a migration must not
+      depend on an operator remembering a manual step.
    Drive both from a single alias→canonical mapping expressed once in the file (e.g. a
    `VALUES ('1Day','1d'),('1Hour','1h'),('15Min','15m')` CTE joined on `timeframe`), not three
    copy-pasted statement pairs.
@@ -639,9 +775,23 @@ their tests exist for correctness and the threshold is carried by `internal/alpa
 
 **Verification**:
 ```bash
-export DATABASE_URL=postgres://xstockstrat:<password>@localhost:5432/xstockstrat?sslmode=disable
+# PREREQUISITES — confirm before starting, or this step blocks mid-way:
+#  * a running TimescaleDB (docker compose up timescaledb) — this step cannot be verified without one
+#  * the `migrate` binary on PATH (golang-migrate). It is NOT installed by default in every
+#    environment; it is provisioned via scripts/Dockerfile.migrate, so a host without a running
+#    Docker daemon has neither the DB nor the binary. Check both first:
+#      command -v migrate && docker compose ps timescaledb
+#    If either is missing, BLOCK the step — do not "verify" it by inspection.
+# Quote the URL: an unquoted <password> placeholder is a bash redirection, not a literal.
+export DATABASE_URL='postgres://xstockstrat:PASSWORD@localhost:5432/xstockstrat?sslmode=disable'
 MD_URL="${DATABASE_URL}&x-migrations-table=marketdata_schema_migrations"   # matches db-migrate.sh service_db_url()
 MD_DIR=services/xstockstrat-marketdata/migrations
+
+# PRE-FLIGHT 1 — no compressed chunks on ohlcv, or the UPDATE/DELETE will fail (see Evidence):
+psql "$DATABASE_URL" -c "SELECT count(*) AS compressed_chunks FROM timescaledb_information.chunks WHERE hypertable_name='ohlcv' AND is_compressed;"
+#   must be 0. If not, stop and escalate — do not decompress as a side effect of this migration.
+# PRE-FLIGHT 2 — quiesce the writer, so the twin-check/UPDATE race cannot fire mid-migration:
+docker compose stop xstockstrat-marketdata   # or confirm the bar-ingest poller is otherwise idle
 
 # 0. SEED both remediation branches, so neither goes unexercised on a fresh DB. A migration
 #    whose remediation branch never ran is a claim, not a check (fails.md 2026-07-29 / 079).
@@ -654,7 +804,8 @@ INSERT INTO marketdata.ohlcv (time,symbol,timeframe,open,high,low,close,volume,s
   ('2024-01-05T00:00:00Z','ZZTEST','',    5,5,5,5,5,'seed')    -- out of remediation scope
 ON CONFLICT DO NOTHING;
 SQL
-psql "$DATABASE_URL" -t -c "SELECT timeframe, count(*) FROM marketdata.ohlcv GROUP BY 1 ORDER BY 1;" > /tmp/080-before.txt
+# Snapshot scoped to the seed symbol — a whole-table count drifts under the bar-ingest poller (W9):
+psql "$DATABASE_URL" -t -c "SELECT timeframe, count(*) FROM marketdata.ohlcv WHERE symbol='ZZTEST' GROUP BY 1 ORDER BY 1;" > /tmp/080-before.txt
 
 # 1. apply
 ./scripts/db-migrate.sh
@@ -671,13 +822,14 @@ psql "$DATABASE_URL" -c "SELECT op, count(*) FROM marketdata.ohlcv_remediation_0
 
 # 4. the .down.sql is a real reverse, not a no-op — prove the round trip:
 migrate -path "$MD_DIR" -database "$MD_URL" down 1
-psql "$DATABASE_URL" -t -c "SELECT timeframe, count(*) FROM marketdata.ohlcv GROUP BY 1 ORDER BY 1;" > /tmp/080-reverted.txt
+psql "$DATABASE_URL" -t -c "SELECT timeframe, count(*) FROM marketdata.ohlcv WHERE symbol='ZZTEST' GROUP BY 1 ORDER BY 1;" > /tmp/080-reverted.txt
 diff /tmp/080-before.txt /tmp/080-reverted.txt   # must be empty: deletes restored, labels reverted
 psql "$DATABASE_URL" -c "\dt marketdata.ohlcv_remediation_003"   # must be gone
 
-# 5. re-apply and clean up the seed
+# 5. re-apply, clean up the seed, restart the writer
 ./scripts/db-migrate.sh
 psql "$DATABASE_URL" -c "DELETE FROM marketdata.ohlcv WHERE symbol='ZZTEST'; DELETE FROM marketdata.ohlcv_remediation_003 WHERE symbol='ZZTEST';"
+docker compose start xstockstrat-marketdata   # undo PRE-FLIGHT 2
 ```
 
 ---
@@ -748,7 +900,7 @@ Then run the Step 7 suite — it must go green here.
 **Codebase Evidence**:
 - Confirmed via `grep -n "GetBars\|def test_\|class Test" services/xstockstrat-analysis/tests/test_live_loop.py`:
   `:16` imports `marketdata_pb2`; the harness stubs `loop._marketdata.GetBars = AsyncMock(...)` at
-  `:47,82,199,207,223,240,255,275`; `_bar_at` builds a real `marketdata_pb2.Bar` at `:28-29`;
+  `:47,82,199,207,223,240,255,275`; `_bar_at` builds a real `marketdata_pb2.Bar` at `:29-30`;
   `:59` `class TestLiveEvaluationLoopStateTracking`, `:61` `test_entry_exit_edge_triggered`. **No test
   asserts anything about the outbound request** today — the AC-5 red-before-green evidence for this
   service
@@ -764,8 +916,9 @@ Then run the Step 7 suite — it must go green here.
 
 **Instructions**:
 Add a test (e.g. `TestLiveEvaluationLoopRequestShape.test_getbars_sends_canonical_string_and_enum`)
-that drives one `_eval_pair` iteration through the existing harness — reuse the fixture shape at
-`:40-57` and `_bar_at` at `:28` — then asserts on the **captured request**, exactly as
+that drives one `_eval_pair` iteration through the existing harness — reuse `_make_loop` (`:34-52`) and
+`_decision` (`:55-56`), and `_bar_at` (`:28`, which builds the `Bar` at `:29-30`) — then asserts on the
+**captured request**, exactly as
 `test_analysis_servicer.py:218-220` does:
 ```python
 called_req = loop._marketdata.GetBars.await_args.args[0]
@@ -824,8 +977,23 @@ and the `timeframe_enum` assertion on the current unset zero value.
   type position and `:76` in type **and** value position (`useState<Timeframe>(Timeframe.TIMEFRAME_1DAY)`)
 - Vitest: `vitest.config.ts` — `environment: 'node'` (`:9`), `include: ['src/**/*.test.ts']` (`:10`),
   coverage `include: ['src/lib/**']` (`:15`), `all: false` (`:25`), thresholds 40 (`:26-29`).
-  `src/lib/chart.ts` is in scope. Precedent for a unit test importing generated proto types under
-  vitest: `src/lib/equityCurve.test.ts`; simplest pure-logic shape: `src/lib/protoTime.test.ts`
+  `src/lib/chart.ts` is in scope.
+- **Two vitest risks, corrected at the review gate — neither was stated before:**
+  1. **The "existing precedent" for importing generated proto types under vitest does not hold for a
+     *value* import.** `equityCurve.test.ts:2` is `import type` (fully erased at compile time);
+     `protoTime.test.ts` and `scoreDisplay.test.ts` import nothing from `@xstockstrat/proto`. This step
+     adds the repo's **first runtime import** of a generated enum into a module vitest must resolve,
+     under `environment: 'node'` with no `resolve.alias` in `vitest.config.ts`. If resolution fails,
+     `pnpm run test:coverage` breaks for reasons unrelated to this change. **Verify the import resolves
+     before writing the rest of the step** (a one-line `chart.test.ts` that just reads
+     `TIMEFRAME_ENUM['1Day']`); if it does not, fix resolution (or import the numeric enum value) as
+     part of this step rather than treating a red suite as a mystery.
+  2. **Coverage-threshold risk.** With `all: false`, adding `chart.test.ts` pulls `chart.ts` into the
+     *counted* set — including `mapBars` (`:36-47`) and its two inner arrow functions, which no
+     instruction exercises. The `functions: 40` threshold (`:26-29`) is computed over the counted set,
+     so importing `chart.ts` without touching `mapBars` can *lower* the measured percentage. Add a
+     minimal `mapBars` case to `chart.test.ts` (one raw bar in, one `Bar` out, plus the ascending-sort
+     behavior) — cheap, and it keeps the threshold from failing for an unrelated reason.
 - e2e producers (FR-12):
   - `e2e/mock-backend.ts:305-335` `getBars` handler — two bars, each `timeframe: '1Day'`
     (`:318`, `:330`) and **no** `timeframeEnum`. `'1Day'` is a shape the real service cannot emit: it
@@ -843,12 +1011,19 @@ and the `timeframe_enum` assertion on the current unset zero value.
   already the enum with no deprecated string sibling
 - **C-12**: `design.md` § Constitution Rules Touched records the assessment — **no new fixture module
   is forced**. The mock bars are an existing inline literal in one handler and `runningJob()` an
-  existing single-site factory; `INVENTORY.md`'s "migrate opportunistically" policy (`:38-40`) is
+  existing single-site factory; `INVENTORY.md`'s "migrate opportunistically" policy (`:36-38`) is
   advisory, not mandatory, and this feature adds no second consumer. `INVENTORY.md` records the shape
   change only. `chart-panel.spec.ts`'s bodies are request payloads, not domain fixtures
-- **e2e cannot observe FR-8** (recon Risk 11): `e2e/mock-backend.ts:306`'s `getBars(...)` handler takes
-  no request argument, so no Playwright test can assert the new outbound field. AC-8 is a vitest-level
-  guarantee
+- ~~**e2e cannot observe FR-8** (recon Risk 11): `e2e/mock-backend.ts:306`'s `getBars(...)` handler
+  takes no request argument, so no Playwright test can assert the new outbound field. AC-8 is a
+  vitest-level guarantee~~ — **FALSE, corrected at the `/sdd-review impl-spec` gate.** The handler's
+  signature is *this step's own to change* (`e2e/mock-backend.ts` is already in `**Files**`), Connect
+  handlers do receive the request, and `e2e/trader/chart-panel.spec.ts:110-151` already drives the real
+  `ChartPanel` component against the mock. Recon Risk 11 was a statement about the mock **as it stands**,
+  not a constraint — inheriting it as a constraint would have shipped AC-8's sender half with **no test
+  that can go red**, since `pnpm run build` cannot catch a missing optional field on a protobuf-es
+  message-init object (it type-checks fine). That is precisely the regression class this feature exists
+  to close, on the one surface a user actually sees. See instruction 5b
 
 **TDD**: `red-green required`
 
@@ -882,12 +1057,33 @@ and the `timeframe_enum` assertion on the current unset zero value.
    - **totality backstop**: `Object.keys(TIMEFRAME_ENUM)` equals `TIMEFRAMES.map(t => t.value)`, so
      adding a fourth interval to `TIMEFRAMES` without extending the map fails the test even if `tsc`
      is not run. The mapped type is the primary guarantee; this is the backstop (AC-8)
-   Follow `src/lib/equityCurve.test.ts` for the "unit test importing generated proto types under
-   vitest" shape.
+   - **plus a minimal `mapBars` case** (one raw bar in → one `Bar` out, and the ascending-time sort) —
+     required, not optional: importing `chart.ts` into the counted coverage set without exercising
+     `mapBars` can fail the `functions: 40` threshold for a reason unrelated to this change (see the
+     coverage-threshold risk in Codebase Evidence).
+   Note `equityCurve.test.ts` is **not** a precedent for the runtime proto import (it uses `import
+   type`); see risk 1 in Codebase Evidence. `protoTime.test.ts` is the right shape for the pure-logic
+   assertions.
 5. `e2e/mock-backend.ts` — in the `getBars` handler, change both bars (`:318`, `:330`) to
    `timeframe: '1d'` and add `timeframeEnum: Timeframe.TIMEFRAME_1DAY` (import the enum from
    `@xstockstrat/proto/common/v1/common_pb` in whatever style the file already uses for proto enums),
    so the mock emits the shape the real service actually produces (FR-12, AC-12).
+5b. **`e2e/mock-backend.ts` — capture the inbound request so AC-8's sender half is actually verifiable.**
+   Added at the review gate; without it **nothing** asserts that the two senders pass `timeframeEnum`,
+   and `tsc` cannot catch its absence (omitting an optional field from a protobuf-es message-init object
+   type-checks fine). Change the handler signature from `async getBars()` to `async getBars(req)` and
+   record what arrived — e.g. push `{ timeframe: req.timeframe, timeframeEnum: req.timeframeEnum }` onto
+   a module-level array the spec can read, following whatever request-capture idiom the file already
+   uses for other handlers (if none exists, a small exported `recordedRequests` array is fine; keep it
+   reset per test via the existing mock setup path). Do not change any response shape here beyond
+   instruction 5.
+5c. **`e2e/trader/chart-panel.spec.ts` — assert the captured request.** In the existing spec that drives
+   the real `ChartPanel` component against the mock (`:110-151`, *"renders chart container after data
+   loads"*), assert that the recorded `getBars` request carries `timeframeEnum` matching the selected
+   interval — hardcoded (`TIMEFRAME_1DAY` for the `'1Day'` default), not derived from `TIMEFRAME_ENUM`,
+   or the assertion asserts the map against itself. This is the only check in the feature that proves the
+   **component** sends the field; `chart.test.ts` only proves the map is correct. Red-before-green is
+   genuine: against the pre-implementation tree the recorded request has no `timeframeEnum`.
 6. `e2e/trader/chart-panel.spec.ts` — in both hand-rolled bodies (`:22`, `:54`) add
    `timeframeEnum: 'TIMEFRAME_1DAY'` alongside the existing `timeframe: '1Day'` (protobuf-es JSON
    accepts the enum's name as a string). Leave the existing property assertions intact; if the mock's
@@ -902,9 +1098,11 @@ and the `timeframe_enum` assertion on the current unset zero value.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-ui && pnpm run lint && pnpm run build   # build is the tsc gate for Record<Timeframe, PbTimeframe>
-cd services/xstockstrat-ui && pnpm run test:coverage            # vitest, scoped src/lib threshold 40 (vitest.config.ts:26-29)
-cd services/xstockstrat-ui && pnpm test:e2e -- e2e/trader/chart-panel.spec.ts e2e/insights/backfills.spec.ts
+# Run the pnpm commands from the service dir, but the greps from the REPO ROOT — the original
+# block cd'd and then used repo-relative paths, so every command after the first cd failed.
+(cd services/xstockstrat-ui && pnpm run lint && pnpm run build)   # build is the tsc gate for Record<Timeframe, PbTimeframe>
+(cd services/xstockstrat-ui && pnpm run test:coverage)            # vitest, scoped src/lib threshold 40 (vitest.config.ts:26-29)
+(cd services/xstockstrat-ui && pnpm test:e2e -- e2e/trader/chart-panel.spec.ts e2e/insights/backfills.spec.ts)
 # the map lives in exactly one place:
 grep -rn "TIMEFRAME_15MIN\|TIMEFRAME_1HOUR" services/xstockstrat-ui/src --include=*.ts --include=*.tsx | grep -v /lib/chart
 # Gate executed against the current tree: it returns exactly backfills/page.tsx:22 and :23

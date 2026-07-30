@@ -4,7 +4,13 @@
 **Type**: bug
 **Severity**: **SEV-2** (raised from SEV-3 at the round-3 design gate — two live wrong-data paths, not latent breakage; see `product-spec.md` header)
 **GitHub Issue**: n/a — GitHub Issues are disabled on `davcs86/xstockstrat`
-**Development Branch**: `feature/fix-backfill-timeframe-enum` (this run: `claude/triage-fix-080-8k1q4h`)
+**Development Branch**: `feature/fix-backfill-timeframe-enum`
+
+> Every step PR targets **`feature/fix-backfill-timeframe-enum`** (**F-03** — never `main-dev`, never a
+> `claude/*` branch). The SDD *artifacts* for this feature were authored on the harness branch
+> `claude/triage-fix-080-8k1q4h` and merged to `main-dev` directly (docs only, no service code); that
+> branch is **not** a step-PR target. Disambiguated at the `/sdd-review impl-spec` gate — the previous
+> inline parenthetical read as if it were an alternative development branch.
 **Created**: 2026-07-29
 **Last Updated**: 2026-07-30
 

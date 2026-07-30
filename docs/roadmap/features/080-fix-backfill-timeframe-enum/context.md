@@ -297,3 +297,94 @@ Durable rulings that outlive the session that made them. Newest last.
   - **The `strat-lab` plugin obligation is confirmed a no-op**: `grep -rn "timeframe"
     plugins/strat-lab/skills/backtest/reference/backfill.md` returns zero hits, matching design's
     § Guard rails assessment.
+
+---
+
+## Session 2026-07-30 — sdd-review impl-spec (treated as BLOCKING by user direction)
+
+Mode B is advisory by default. The user directed that this review be treated as **blocking**, so every
+blocker *and* every substantive warning was fixed before proceeding — no "proceed anyway".
+
+**Verdict**: FAIL — **4 blockers, 12 warnings, 7 notes**. Overlap scan: **CLEAN** (no collisions;
+marketdata migration `003` uncontested and genuinely next; zero file-path collisions across all 20
+files — every hit outside 080 belongs to an already-merged feature). Grounding was otherwise strong:
+the reviewer re-verified essentially every `path:line` across all 8 steps and found **no invented
+symbol or path** (**C-01**/**F-04** clean), and confirmed both corrections the spec had made to
+inherited false claims.
+
+### The four blockers, all fixed
+
+| # | Blocker | Fix |
+|---|---|---|
+| **B1** | **F-08 Floor risk.** Step 1 inserts a helper after `servicer.py:44`, shifting `_canonical_timeframe` off `:47`, its `"1d"` literal off `:53`, and `_has_admin_scope` off `:119` — three context files cite those exact lines and **none was staged**. At execute time that forces either doc drift or staging outside the step's `**Files**`, and F-08 is non-overridable | Added `services/xstockstrat-ingest/docs/context-constitution-findings.md` and `docs/context-constitution.md` to Step 1's Files, with re-resolve commands and a `/context-scrubber scan` in its Verification. Same shape flagged for Step 3 (`marketdata/docs/context-constitution-findings.md:20` cites `client.go:423`) |
+| **B2** | **F-08 / undocumented schema.** Step 5 called itself "no schema change to `ohlcv`" — true of `ohlcv`, but its `.up.sql` **creates a permanent table** (`marketdata.ohlcv_remediation_003`) that only `.down.sql` drops, documented nowhere, holding verbatim copies of deleted market-data rows with no stated owner or retention | Staged `marketdata/CLAUDE.md` + `docs/patterns/database.md`; wrote an explicit owner / purpose / expected-size / retention decision (drop via a later numbered migration once 080 is `launched`); added the table and the collision policy to the DBA reviewer's named focus |
+| **B3** | **AC-8's sender half was unverifiable, and the stated reason was false.** The spec claimed no Playwright test could assert the outbound field because the mock `getBars` handler takes no request argument — but that handler is *this step's own to change*, Connect handlers do receive the request, and `chart-panel.spec.ts:110-151` already drives the real `ChartPanel` against the mock. `tsc` cannot catch a missing optional field on a protobuf-es init object, so the regression class this feature exists to close would have shipped untested on the one surface users see | Added instructions 5b/5c: capture the inbound request in the mock, assert `timeframeEnum` in `chart-panel.spec.ts` with a **hardcoded** expectation (not derived from `TIMEFRAME_ENUM`, or it asserts the map against itself). Struck the false justification in place rather than deleting it, so the reasoning error stays visible |
+| **B4** | **AC-11 had no verification in any step.** The product spec calls it *"the whole point of the migration"* — an enum-only `BackfillBars` request succeeding. Step 3 implemented it; no step tested it | Added `TestBackfillBars_EnumOnlyRequestResolves` (Step 4, instruction 4b) using the existing `package service` fake harness: a fake `source.Source` records the timeframe handed to `GetBars` and asserts `"1d"`, not `""`. Red-before-green is genuine — the pre-fix tree records `""`, which *is* the bug |
+
+### Warnings fixed (12 of 12)
+
+- **W1** `GOWORK=off` was written as a bare assignment before an unrelated command, so `go test` never
+  saw it — the Go suite would have run against the root `go.work`, contrary to CI and root `CLAUDE.md`.
+  Now `export`ed.
+- **W2** Verification blocks in Steps 1/3/8 `cd`'d into the service then used repo-relative paths;
+  every command after the first `cd` would have failed. Now subshelled or root-relative.
+- **W3** `grep -n "req.Timeframe" marketdata_handler.go # expect :42 and :258` — `:42` is
+  `req.Msg.Timeframe`, so the gate returned `:258` only and read as a failure. Now `grep -nE "req\.(Msg\.)?Timeframe"`.
+- **W4** "expect 4 hits plus `:120`" contradicted instruction 1 (two Alpaca literals collapse into one
+  builder) and ignored instruction 4's new `req.GetTimeframeEnum()`. Corrected to **5**, enumerated.
+- **W5** `TestFromStringTotality` was inert — `TestFromString:10-33` already asserts all six spellings
+  **and** `FromString("1m") == UNSPECIFIED` at `:23`, and this step touches only the package doc, so it
+  could never go red. **Removed**; AC-7's second half is already satisfied by `:23`, now cited as the
+  standing guard. Its false "carries the coverage credit" claim also struck.
+- **W6** AC-6's DB-path clause has no assertion (the `barRow.toBar()` seam was rejected in design as
+  overbuild). Recorded as an explicit residual in the step that owns it rather than left inferable.
+- **W7** The "existing precedent" for a proto import under vitest doesn't hold — `equityCurve.test.ts`
+  uses `import type` (erased). Step 8 adds the repo's **first runtime** import of a generated enum into
+  a vitest-resolved module. Now verified first, as its own sub-step.
+- **W8** With `all: false`, adding `chart.test.ts` pulls `chart.ts` into the counted set including
+  `mapBars`, which no instruction exercised — could fail `functions: 40` for an unrelated reason. A
+  minimal `mapBars` case is now **required**.
+- **W9** Step 5's round-trip diffed whole-table counts while the bar-ingest poller writes every ~60s.
+  Snapshots now scoped to the seed symbol; added a quiesce pre-flight **and** an independent
+  `WHERE NOT EXISTS` twin re-check on the `UPDATE`, so the race cannot fire even if an operator skips
+  the manual step.
+- **W10** `UPDATE`/`DELETE` on a **compressed** chunk fails outright. Compression is planned-not-applied
+  here, which makes it safe — but that was never stated. Now a pre-flight query, not an assumption.
+- **W11** Step 3's doc enumeration read as exhaustive and was not (MARKETDATA-1's `client.go:111` and
+  `timeframe.go:76` ×2, MARKETDATA-4, MARKETDATA-N1, two candidate rules). Now explicitly
+  non-exhaustive with `/context-scrubber scan` named as the authority.
+- **W12** Step 2's P-06 claim was blanket ("the new assertions must fail") but 2 of 5 parametrized cases
+  (`""` and `"10Min"` → `UNSPECIFIED`) already pass. Now split per assertion: which go red, and which
+  are degradation coverage rather than regression evidence.
+
+### Notes fixed
+
+Eight citation drifts corrected (`:66-88`→`:66-86`, `:325-333`→`:325-334`, `:358-361`→`:359-361`,
+`:35-48`→`:34-47`, `:28-29`→`:29-30`, the `:40-57` span split into `_make_loop`/`_decision`,
+`:38-40`→`:36-38`). **N2**: the claim that `stream.go:259` line-shifts was wrong — the enum goes after
+the existing field, so it does not move; the edit needed there is semantic. **N3**: the stream-test seam
+is now cited (`stream.go:34-52,58-76,278-290`) instead of asserted. **N4**: `feature.md`'s
+`**Development Branch**` parenthetical was an **F-03** footgun — a step PR must target
+`feature/fix-backfill-timeframe-enum`, never the harness branch; disambiguated. **N5**: the unquoted
+`<password>` placeholder was a bash redirection, not a literal.
+
+### Environment finding — Step 5 cannot be verified here
+
+`migrate` is not on the host (it is provisioned via `scripts/Dockerfile.migrate`) and the **Docker
+daemon is not running**, so this environment has neither the binary nor a TimescaleDB. Step 5's
+verification is therefore unrunnable as things stand. Written into the step as a hard prerequisite that
+**blocks** rather than something to "verify by inspection" — an unexecuted migration check is exactly the
+`fails.md` 2026-07-29 (079) shape.
+
+### Overlap notes worth carrying forward
+
+- 076 (`code-completed`, on `main-dev` but **not** promoted to `main`) already edited
+  `marketdata/CLAUDE.md`, so Step 3's `:17`/`:61` citations are correct **relative to `main-dev` only`**
+  — never re-target this feature at `main`.
+- Features 039 / 040 (TimescaleDB compression / retention, both `idea`) must spec against marketdata
+  migration `004+` once 080 takes `003`, and must re-check FR-14's compression precondition.
+- Feature 017 (`idea`) plans a `session`/`extended_hours` field on `GetBarsRequest` and will land in
+  `barFromAlpaca` / `TIMEFRAME_ENUM` territory — whoever specs it should read 080 first.
+
+**Next**: `/sdd-execute fix-backfill-timeframe-enum` (step 1). Status unchanged at
+`implementation-ready` — Mode B does not move the lifecycle.
