@@ -106,3 +106,115 @@ resume path but `UNSPECIFIED` on the read path, a narrower copy of the bug being
 
 - **Overlap findings**: none reported.
 - **Next**: `/sdd-design fix-backfill-timeframe-enum quick`.
+
+---
+
+## Session 2026-07-29 — sdd-design (4 rounds, full)
+
+- **Phase 0 Recon**: wrote `recon.md` — 3 services surveyed by parallel `codebase-discovery` passes
+  (ingest, marketdata, ui; analysis was not yet in scope). Key reuse patterns: `_STR_TO_ENUM` +
+  `_TF_ALIASES` in ingest, `internal/timeframe.FromString`/`Resolve` in marketdata, `src/lib/chart.ts`
+  as the UI's declared DRY home. 12 risks recorded.
+- **Phase 1 Grilling**: started `quick`; **upgraded to full after round 1 by user decision**
+  ("it's no longer a quick design"). Ran 4 rounds. Status: `spec-ready` → `design-approved`.
+- **Floor breaches**: none in any round (`F-01`, `F-06`, `F-07` explicitly cleared).
+
+### Why it ran to 4 rounds
+
+Every round found a producer or reader the previous round had asserted did not exist:
+
+| Round | Found |
+|---|---|
+| 1 | `analysis/app/engine/live_loop.py:126` — live-wired producer, in a service the spec never named |
+| 2 | `BackfillBars` (3 raw reads), `ingestRecentBars` (raw config string, persisted), `e2e/mock-backend.ts` |
+| 3 | `e2e/trader/chart-panel.spec.ts:22,54`; **and the ingest write path persisting `timeframe` raw** |
+| 4 | Nothing new — the readers sweep finally **bounded** the family |
+
+### The decisive finding (round 3)
+
+The spec asserted *"the write path already migrated correctly; only the read path was left behind."*
+**False.** `TriggerBackfill` persists `request.timeframe` raw (`servicer.py:153`); `_canonical_timeframe`
+is first reached at `:284`, inside `_run_backfill`. The UI sends `timeframeEnum` with no string
+(`backfills/page.tsx:112`), so **every UI-created row already holds `timeframe=''`** — and FR-1, which
+derives the enum from that column, would have returned `UNSPECIFIED` for the feature's own primary
+caller. Two live wrong-data consequences: a resumed 15m job re-fetches at 1d (`_resume_job` maps `''`
+→ the `"1d"` default), and the append-only ledger payload records `""` forever.
+
+**The lesson, recorded because it generalizes:** a false premise stated as settled fact in a spec is
+load-bearing. It did not merely omit a site — it actively steered three rounds of adversarial review
+away from it. The original staging observation (`timeframe: "1d"`) *looked* consistent with the false
+premise because those were **agent**-created jobs (the agent sends both fields); a UI-created job would
+have shown `timeframe: ""` and exposed it immediately.
+
+### User rulings (in order)
+
+| # | Round | Ruling |
+|---|---|---|
+| 1 | pre-design | FR-4: derive the enum, delete the dead read — no column |
+| 2 | pre-design | Fold in `marketdata`'s `Bar` rather than defer it |
+| 3 | pre-design | Fold in the two UI `getBars` senders |
+| 4 | R1 | **FR-6 stands** — streamed bars labelled `TIMEFRAME_1MIN` (my recommendation to leave them `UNSPECIFIED` was overruled) |
+| 5 | R1 | Fold in the `analysis` `live_loop.py` producer |
+| 6 | R1 | Route `bar_ingest_timeframe` through `Resolve` — accepted the behavior change |
+| 7 | R1 | Upgrade the debate from `quick` to full |
+| 8 | R2 | Unresolvable config → fall back to `"15m"` + WARN (my recommendation of pass-through-raw was overruled) |
+| 9 | R2 | Fold in `BackfillBars`'s three raw reads |
+| 10 | R2 | Fix the e2e mock's impossible `Bar` shape |
+| 11 | R2 | Run round 3 |
+| 12 | R3 | **Fold in the write-path fix** (FR-13) |
+| 13 | R3 | **Raise severity SEV-3 → SEV-2** |
+| 14 | R3 | **Add the FR-14 remediation migration** for recoverable alias rows |
+| 15 | R3 | Run round 4 |
+
+Ruling 4 and ruling 6 interact favorably: routing config through `Resolve` means `"1m"` can no longer
+enter via config, so the REST/DB path can never produce a `"1m"` bar — which removes the stream/REST
+enum divergence that was the strongest argument *against* ruling 4.
+
+### Constitution overrides recorded (C-11 mechanism)
+
+**FR-2a** — a carve-out to FR-2/FR-7's byte-for-byte rule, permitting canonicalization *before*
+production at exactly three sites (`live_loop.py:126`, the `bar_ingest_timeframe` path, and FR-13's
+`servicer.py:153`). Signed off by the user at the round-2 and round-3 gates. Everywhere else the
+deprecated string is reproduced unchanged.
+
+### Four false claims corrected rather than inherited (P-03)
+
+1. "The write path already migrated correctly" — false (above).
+2. "The UI displays the deprecated string today" — false; **no** UI code renders it (zero hits).
+3. "marketdata's request readers are already correct" — false for `BackfillBars` and `ingestRecentBars`.
+4. Open Question 1's rejection rationale, "a column would create two values that can disagree" — they
+   **already** disagreed (`''` stored vs. canonical resolved at `:284`). The decision still stands, but
+   only *because* FR-13 makes the string reliable. Without FR-13, "derive" was the wrong call.
+
+### Verified by execution rather than assumed
+
+- `TIMEFRAME_1MIN` **does** trip `SA1019` — ran the repo's golangci-lint against a probe file. FR-6
+  therefore requires a `//nolint`, and it is the tree's first deprecated-value *write* (every existing
+  suppression is a read).
+- `Record<Timeframe, PbTimeframe>` type-checks — `backfills/page.tsx:76` already uses `Timeframe` in
+  type *and* value position.
+- `marketdata.stream.bar_ingest_timeframe` is seeded in **no** config migration (all 10 checked), so
+  every repo-provisioned environment runs the `"15m"` default and ruling 8 has no operator impact
+  unless someone set it at runtime.
+- `marketdata_service.go:288,330` reads `req.Timeframe` with **no** `//nolint` because
+  `resolveDeletePlan`'s signature is `tf commonv1.Timeframe` — already the enum, **not** in the family.
+
+### Deviation — round 4 ran without subagents
+
+Round 4's proposer/adversary pair could not start: the session's subagent limit was reached. Rather
+than stall the phase, the orchestrator performed round 4's primary deliverable — the exhaustive
+**readers sweep** — directly by grep. Results are in `design.md`. Rounds 1–3 ran the full
+proposer → adversary → synthesis protocol. Recorded so a later reader does not mistake round 4 for a
+completed adversarial round.
+
+## Open Threads (carried from design.md § Open Risks)
+
+- FR-10's `"15m"` fallback is the one place this feature can **cause** a write → marketdata service step.
+- FR-11's raw fallback preserves an unresolvable value reaching Alpaca → marketdata service step.
+- `marketdata_handler.go:258` stays a raw reader, excluded on **reachability** not correctness — it
+  becomes live the moment anyone writes a `StreamBars` caller → recorded, not fixed.
+- FR-14's PK-collision handling is deliberately left to the implementation step → migration step.
+- Go coverage excludes `service|repository|handler|cmd`, so FR-10/FR-11 earn no coverage credit → their
+  tests are for correctness, not the gate.
+- Out-of-repo producers cannot be swept; the staging MCP client that surfaced this bug is one.
+- `/context-scrubber scan` is owed before the PR, scoped to the touched context files.

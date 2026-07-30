@@ -392,3 +392,24 @@ reusing.
   where that decision physically lives before writing its test. Logic in `__main__` is unreachable
   from the suite; a one-shot manual run against a real socket is a demonstration, not a regression
   guard (see `fails.md` 2026-07-27). Extract the dispatch instead.
+
+### 2026-07-29 — 080-fix-backfill-timeframe-enum — reuse
+- **Pattern**: To prove a deprecated-field migration is *complete*, sweep **producers and readers as
+  two separate passes**, and add a third pass for **untyped surfaces**. The producer pass (grep the
+  message type name per language) is the one everybody runs; it found 5 of 7 sites. The reader pass
+  (grep the *field accessor* — `\.Timeframe\b` / `\.timeframe\b` — not the type) is what surfaced the
+  decisive defect, because a reader binds the field to a local at a distance from any type name. The
+  untyped pass (ledger `Struct` / `map[string]interface{}` / log + OTel attributes / hand-rolled JSON)
+  catches sites where **no generated field and no deprecation lint signal exist at all** — two were
+  found this way and would have persisted `""` into an append-only store forever. Bonus heuristic that
+  paid off: in a tree that annotates deprecated reads with `//nolint:staticcheck // SA1019`, a hit
+  **without** the nolint is a signal to check the field's type rather than assume scope — that is how
+  `marketdata_service.go:288,330` was correctly excluded (already `commonv1.Timeframe`).
+- **Evidence**: feature 080 `design.md` § Readers sweep (the full classified table, with the
+  re-runnable grep method); the sites it found that three producer-oriented rounds missed —
+  `services/xstockstrat-ingest/app/handlers/servicer.py:153,161`,
+  `services/xstockstrat-marketdata/internal/handler/marketdata_handler.go:258`,
+  `internal/service/marketdata_service.go:588-591`.
+- **Rule it implies**: reinforces **C-10(b)** — "every read path" includes readers reached through a
+  local variable and values copied into untyped payloads. A type-name grep alone systematically
+  under-reports, and it under-reports in the direction that looks complete.
