@@ -2,7 +2,7 @@
 
 The catalog of centralized mocked/dummy domain data for frontend tests (Playwright e2e +
 vitest unit). System rules live in `docs/patterns/test-data-inventory.md`; this file is the
-**live catalog** — keep it in the same commit as any fixture change (use the `/test-data`
+**live catalog** — keep it in the same commit as any fixture change (use the `/sdd-qa`
 skill).
 
 ## Canonical fixtures
@@ -44,13 +44,13 @@ a fixture module and register it above (never copy-paste it into a second site).
 | Positions (`listPositions`) | `e2e/mock-backend.ts` |
 | Ledger events | `e2e/mock-backend.ts` (`queryEvents`) |
 | Alerts (stream + list) | `e2e/mock-backend.ts` (`streamAlerts`, `listAlerts`) |
-| OHLCV bars / assets | `e2e/mock-backend.ts` (`getBars`, `listAssets`) |
+| OHLCV bars / assets | `e2e/mock-backend.ts` (`getBars`, `listAssets`) — bars carry the canonical `timeframe: '1d'` **plus** `timeframeEnum` (feature 080) |
 | Backtest diagnostics + run history | `e2e/mock-backend.ts` (`runBacktest` sentinel branches, `listBacktests`) — the coverage-gap half was centralized by feature 071; the `strat-diag-001` / `strat-formula-error-001` diagnostics and the run-history rows are still inline |
 | Screener results | `e2e/mock-backend.ts` (`screenSymbols`) |
 | Editable strategy components (`getStrategy`) | `e2e/mock-backend.ts` |
 | Config keys | `e2e/mock-backend.ts` (`listKeys`) |
 | Signal sources | `e2e/mock-backend.ts` (`listSignalSources`, `manageSignalSource`) |
 | OAuth authorized apps | `e2e/mock-backend.ts` (`listAuthorizedApps`) |
-| Backfill jobs | `e2e/insights/backfills.spec.ts` (`runningJob()` factory) |
+| Backfill jobs | `e2e/insights/backfills.spec.ts` (`runningJob()` factory) — carries **both** `timeframe: '1d'` and `timeframeEnum: 'TIMEFRAME_1DAY'` (feature 080) |
 | Watchlists (stateful mock) | `e2e/insights/watchlists.spec.ts` (`mockWatchlists`) |
 | MCP tool list | `e2e/accounts/mcp-tools.spec.ts` (`SAMPLE_TOOLS`) |

@@ -46,7 +46,8 @@ type MarketDataService struct {
 	warmSymbols map[string]struct{}
 
 	// fundamentals is the FMP source (feature 059), held separately from the OHLCV
-	// registry (FR-2). nil when marketdata.fmp.enabled is false at startup.
+	// registry (FR-2). Always non-nil since feature 082 — marketdata.fmp.enabled gates
+	// use (fundamentalsEnabled()), not construction.
 	fundamentals source.FundamentalsSource
 	// fundCfg / fundRepo are the config + repo surfaces the fundamentals RPCs use,
 	// behind interfaces so the cache/quota/gate logic is unit-testable with stubs.
@@ -72,7 +73,8 @@ type fundamentalsRepo interface {
 }
 
 // NewMarketDataService creates the service and dials ledger + notify. fundamentals is
-// the FMP source (feature 059) or nil when marketdata.fmp.enabled is false.
+// the FMP source (feature 059), always non-nil via the sole boot-time construction
+// path since feature 082 (cmd/server/main.go's newFundamentalsSource).
 func NewMarketDataService(
 	registry *source.Registry,
 	repo *repository.MarketDataRepo,
@@ -493,6 +495,28 @@ func (s *MarketDataService) StartBarIngestPoller(ctx context.Context) {
 	}
 }
 
+// defaultBarIngestTimeframe is the declared default of
+// marketdata.stream.bar_ingest_timeframe (see the service CLAUDE.md config table).
+const defaultBarIngestTimeframe = "15m"
+
+// resolveIngestTimeframe canonicalizes the configured bar-ingest timeframe. Bars fetched
+// with this value are PERSISTED (InsertBars), so an out-of-vocabulary config value would
+// write rows that no GetBars query can ever match (MARKETDATA-1). Empty means "not
+// configured" and falls back silently; a non-empty unresolvable value falls back and WARNs
+// once per cycle. The documented way to pause ingestion is
+// bar_ingest_interval_ms <= 0 (MARKETDATA-5), never a bogus timeframe.
+func resolveIngestTimeframe(raw string) string {
+	if raw == "" {
+		return defaultBarIngestTimeframe
+	}
+	if c, err := timeframe.Resolve(commonv1.Timeframe_TIMEFRAME_UNSPECIFIED, raw); err == nil {
+		return c
+	}
+	slog.Warn("bar ingest: unresolvable bar_ingest_timeframe, using default",
+		"configured", raw, "default", defaultBarIngestTimeframe)
+	return defaultBarIngestTimeframe
+}
+
 // ingestRecentBars fetches the recent bar window for every warm symbol and upserts it.
 // The lookback (marketdata.stream.bar_ingest_lookback_ms, default 15m) is re-fetched each
 // cycle; overlap is harmless because InsertBars upserts, and a window wider than the poll
@@ -511,7 +535,7 @@ func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	tf := s.cfg.GetString("marketdata.stream.bar_ingest_timeframe", "15m")
+	tf := resolveIngestTimeframe(s.cfg.GetString("marketdata.stream.bar_ingest_timeframe", defaultBarIngestTimeframe))
 	lookbackMs := s.cfg.GetInt("marketdata.stream.bar_ingest_lookback_ms", 900000)
 	if lookbackMs <= 0 {
 		lookbackMs = 900000
@@ -585,9 +609,20 @@ func (s *MarketDataService) BackfillBars(ctx context.Context, req *marketdatav1.
 	// applied inside the Alpaca client (configured at startup); pagination is handled
 	// transparently by GetBars/GetBarsMulti, so no batching is needed here.
 
+	// Resolve once, same raw-fallback shape as GetBars (feature 080 FR-11). Previously
+	// every site below read req.Timeframe raw and never called Resolve, so an enum-only
+	// caller (Timeframe unset) reached Alpaca with "" and persisted rows GetBars could
+	// never find again. Kept as a fallback rather than an error for consistency with
+	// GetBars (design Open Risk 2).
+	legacyTf := req.Timeframe //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
+	canonicalTf := legacyTf
+	if c, rErr := timeframe.Resolve(req.GetTimeframeEnum(), legacyTf); rErr == nil {
+		canonicalTf = c
+	}
+
 	s.emitEvent(ctx, "marketdata.backfill.started", "marketdata:backfill", map[string]interface{}{
 		"symbols":   req.Symbols,
-		"timeframe": req.Timeframe, //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
+		"timeframe": canonicalTf,
 	})
 
 	var totalWritten int64
@@ -599,7 +634,7 @@ func (s *MarketDataService) BackfillBars(ctx context.Context, req *marketdatav1.
 	}
 
 	for _, sym := range req.Symbols {
-		bars, err := src.GetBars(ctx, sym, req.Timeframe, start, end) //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
+		bars, err := src.GetBars(ctx, sym, canonicalTf, start, end)
 		if err != nil {
 			slog.Error("backfill failed", "symbol", sym, "error", err)
 			failedSymbols = append(failedSymbols, sym)
@@ -630,7 +665,7 @@ func (s *MarketDataService) BackfillBars(ctx context.Context, req *marketdatav1.
 	return &marketdatav1.BackfillBarsResponse{
 		BarsWritten:   totalWritten,
 		FailedSymbols: failedSymbols,
-		ExpectedBars:  estimateExpectedBars(req.Symbols, req.Timeframe, start, end), //nolint:staticcheck // SA1019: string timeframe read during one-release deprecation window (053)
+		ExpectedBars:  estimateExpectedBars(req.Symbols, canonicalTf, start, end),
 	}, nil
 }
 
@@ -922,7 +957,11 @@ func (s *MarketDataService) resolveFundamentals(ctx context.Context, symbol stri
 }
 
 // fundamentalsEnabled returns FailedPrecondition when FMP is disabled (or unbuilt),
-// making NO external call (FR-6).
+// making NO external call (FR-6). Since feature 082, s.fundamentals is always non-nil
+// via the sole construction path (cmd/server/main.go's newFundamentalsSource) — the
+// "|| s.fundamentals == nil" half of this guard is defensive-only and not reachable
+// through that path today; kept in case a future caller constructs the service directly
+// with a nil source.
 func (s *MarketDataService) fundamentalsEnabled() error {
 	if !s.fundCfg.GetBool("marketdata.fmp.enabled", false) || s.fundamentals == nil {
 		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("fmp fundamentals source disabled"))

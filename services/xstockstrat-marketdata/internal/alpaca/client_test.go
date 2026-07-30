@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	"github.com/xstockstrat/marketdata/internal/alpaca"
 )
 
@@ -323,14 +324,16 @@ func TestGetBars_TranslatesCanonicalTimeframe(t *testing.T) {
 	// they must be translated to 1Min/5Min/1Hour/1Day on the outbound request, while
 	// the stored bar keeps the canonical form callers query against.
 	cases := []struct {
-		in   string
-		want string
+		in       string
+		want     string
+		wantEnum commonv1.Timeframe
 	}{
-		{"15m", "15Min"},
-		{"1h", "1Hour"},
-		{"1d", "1Day"},
-		{"15Min", "15Min"}, // already-Alpaca form passes through
-		{"1Hour", "1Hour"}, // already-Alpaca form passes through
+		{"15m", "15Min", commonv1.Timeframe_TIMEFRAME_15MIN},
+		{"1h", "1Hour", commonv1.Timeframe_TIMEFRAME_1HOUR},
+		{"1d", "1Day", commonv1.Timeframe_TIMEFRAME_1DAY},
+		{"15Min", "15Min", commonv1.Timeframe_TIMEFRAME_15MIN}, // already-Alpaca form passes through
+		{"1Hour", "1Hour", commonv1.Timeframe_TIMEFRAME_1HOUR}, // already-Alpaca form passes through
+		{"1Day", "1Day", commonv1.Timeframe_TIMEFRAME_1DAY},    // feature 080: no 1Day input row existed before
 	}
 	for _, tc := range cases {
 		t.Run(tc.in, func(t *testing.T) {
@@ -358,6 +361,11 @@ func TestGetBars_TranslatesCanonicalTimeframe(t *testing.T) {
 			// Stored bars keep the caller's (canonical) timeframe, not the Alpaca spelling.
 			if len(bars) != 1 || bars[0].Timeframe != tc.in { //nolint:staticcheck // SA1019: asserting the deprecated string timeframe field is preserved on the stored bar
 				t.Errorf("timeframe %q: expected stored bar timeframe=%q, got %+v", tc.in, tc.in, bars)
+			}
+			// feature 080 AC-6: the replacement field is paired with the deprecated string,
+			// not derived by calling the mapper under test — a hardcoded expectation.
+			if len(bars) == 1 && bars[0].TimeframeEnum != tc.wantEnum {
+				t.Errorf("timeframe %q: expected TimeframeEnum=%v, got %v", tc.in, tc.wantEnum, bars[0].TimeframeEnum)
 			}
 		})
 	}
@@ -475,6 +483,10 @@ func TestGetBarsMulti_Success(t *testing.T) {
 	}
 	if gotSymbols != "AAPL,MSFT" {
 		t.Errorf("expected symbols=AAPL,MSFT, got %q", gotSymbols)
+	}
+	// feature 080 AC-6: GetBarsMulti is a direct assertion, not "the shared helper covers it".
+	if len(out["AAPL"]) != 1 || out["AAPL"][0].Timeframe != "1Day" || out["AAPL"][0].TimeframeEnum != commonv1.Timeframe_TIMEFRAME_1DAY { //nolint:staticcheck // SA1019: asserting the deprecated string timeframe field is preserved on the stored bar
+		t.Errorf("expected AAPL bar timeframe=1Day/TIMEFRAME_1DAY, got %+v", out["AAPL"])
 	}
 	if len(out["AAPL"]) != 1 || out["AAPL"][0].Close != 102.0 {
 		t.Errorf("unexpected AAPL bars: %+v", out["AAPL"])

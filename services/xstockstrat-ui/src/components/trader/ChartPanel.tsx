@@ -6,7 +6,7 @@ import { ConnectError } from '@connectrpc/connect';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Combobox, type ComboboxOption } from '../ui/combobox';
-import { type Timeframe, TIMEFRAMES, mapBars } from '@/lib/chart';
+import { type Timeframe, TIMEFRAMES, TIMEFRAME_ENUM, mapBars } from '@/lib/chart';
 import { useCandlestickChart } from '@/hooks/useCandlestickChart';
 
 type BarCount = 50 | 100 | 200;
@@ -56,6 +56,7 @@ export function ChartPanel() {
       const res = await marketDataClient.getBars({
         symbol: sym,
         timeframe: tf,
+        timeframeEnum: TIMEFRAME_ENUM[tf],
         page: { pageSize: count },
       });
       seriesRef.current.setData(mapBars(res.bars));

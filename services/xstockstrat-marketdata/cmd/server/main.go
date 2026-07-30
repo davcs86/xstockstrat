@@ -104,21 +104,10 @@ func main() {
 	reg := source.NewRegistry()
 	reg.Register("alpaca", alpacaClient)
 
-	// FMP fundamentals source (feature 059) — built only when enabled. It is held as a
-	// dedicated service field, NOT registered in the OHLCV registry above (FR-2). When
-	// disabled the service gets nil and GetFundamentals returns FailedPrecondition.
-	var fundamentalsSrc source.FundamentalsSource
-	if cfgWatcher.GetBool("marketdata.fmp.enabled", false) {
-		fundamentalsSrc = fmp.NewClient(fmp.ClientConfig{
-			BaseURL: cfgWatcher.GetString("marketdata.fmp.base_url", "https://financialmodelingprep.com"),
-			// Credential comes from the FMP_API_KEY secret env var, not from config —
-			// see internal/config/config.go and feature 076. The config service still
-			// owns the non-secret knobs (enabled/base_url/metrics) below.
-			APIKey:  cfg.FMPAPIKey,
-			Metrics: strings.Split(cfgWatcher.GetString("marketdata.fmp.metrics", "core,extended"), ","),
-		})
-		slog.Info("FMP fundamentals source enabled")
-	}
+	// FMP fundamentals source (feature 059) — always constructed; per-RPC enablement is
+	// enforced live by fundamentalsEnabled() (marketdata_service.go:960), not at boot
+	// (feature 082 fix — see CLAUDE.md marketdata.fmp.enabled).
+	fundamentalsSrc := newFundamentalsSource(cfgWatcher, cfg.FMPAPIKey)
 
 	svc, err := service.NewMarketDataService(reg, repo, cfgWatcher, cfg.LedgerEndpoint, cfg.NotifyEndpoint, fundamentalsSrc)
 	if err != nil {
@@ -181,4 +170,20 @@ func looksLikePlaceholderCred(v string) bool {
 	}
 	upper := strings.ToUpper(v)
 	return strings.HasPrefix(upper, "YOUR_") || strings.Contains(upper, "PLACEHOLDER")
+}
+
+// newFundamentalsSource constructs the FMP fundamentals client (feature 059). It is
+// always built, unconditionally — marketdata.fmp.enabled is a live per-RPC gate read
+// fresh on every call by fundamentalsEnabled() (internal/service/marketdata_service.go:960),
+// not a boot-time construction gate (feature 082 fix). apiKey is the FMP_API_KEY secret
+// env var, never a config value (see internal/config/config.go).
+func newFundamentalsSource(cfgWatcher *config.Watcher, apiKey string) source.FundamentalsSource {
+	baseURL := cfgWatcher.GetString("marketdata.fmp.base_url", "https://financialmodelingprep.com")
+	metrics := strings.Split(cfgWatcher.GetString("marketdata.fmp.metrics", "core,extended"), ",")
+	slog.Info("FMP fundamentals client constructed", "base_url", baseURL, "metrics", metrics)
+	return fmp.NewClient(fmp.ClientConfig{
+		BaseURL: baseURL,
+		APIKey:  apiKey,
+		Metrics: metrics,
+	})
 }

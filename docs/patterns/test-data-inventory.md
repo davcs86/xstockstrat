@@ -1,8 +1,9 @@
-# Test-Data Inventory — centralized mocked/dummy data for frontend tests
+# Test-Data Inventory — centralized mocked/dummy data for tests
 
-Frontend tests (Playwright e2e + vitest unit in `services/xstockstrat-ui`) draw their
-mocked/dummy domain objects from a single **inventory** instead of re-declaring inline
-literals per spec. This is the test-data sibling of the DRY guard rail
+Tests draw their mocked/dummy domain objects from a canonical **fixture home** instead of
+re-declaring inline literals per file. Constitution **C-13** states this for every language;
+**C-12** is the `xstockstrat-ui` instance of it, and the frontend inventory (Playwright e2e +
+vitest unit) is the only home fully materialized today. This is the test-data sibling of the DRY guard rail
 (`docs/patterns/dry-guard-rail.md`): one canonical fixture per domain entity, with a live
 catalog and an AI skill to maintain it.
 
@@ -20,7 +21,7 @@ tests assert against shapes the real proto never produces.
 |---|---|---|
 | **Fixture modules** | `services/xstockstrat-ui/e2e/fixtures/*.ts` (barrel: `index.ts`) | Canonical domain objects (accounts, portfolios, strategies, formulas, test user) in Connect-JSON camelCase proto shape — usable both as mock gRPC handler returns (`e2e/mock-backend.ts`) and as `page.route()` fulfill bodies |
 | **Catalog** | `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` | The live index: fixture → module → proto shape source → consumers, plus reserved sentinel ids and the "not yet centralized" ledger |
-| **Steward skill** | `/test-data` (`.claude/skills/test-data/SKILL.md`) | Adds/updates fixtures, keeps the catalog in sync, audits specs for inline duplicates |
+| **Steward skill** | `/sdd-qa` (`.claude/skills/sdd-qa/SKILL.md`, procedure in `reference/fixtures.md`) | Designs and runs tests; adds/updates fixtures, keeps the catalog in sync, audits for inline duplicates |
 
 Canonical helper home for **auth**: `e2e/helpers/auth.ts` (`TEST_JWT_SECRET`, `signTestJwt`,
 `addAuthCookie`, `addAdminCookie`, `addCookieWithRoles`). Specs never re-implement JWT
@@ -43,7 +44,7 @@ signing or re-declare the secret.
    **sentinel ids** that `mock-backend.ts` pattern-matches on are reserved in the catalog.
 5. **Catalog stays in the same commit.** Any fixture add/change updates
    `INVENTORY.md` (fixture table, consumers column, sentinel table) in the same commit —
-   the `/test-data` skill does this for you.
+   the `/sdd-qa` skill does this for you.
 6. **Vitest unit tests use the same inventory.** The unit layer (`src/**/*.test.ts`)
    imports from `e2e/fixtures` when it needs domain objects; if the unit layer ever grows
    heavy fixture use, promoting the directory to a layer-neutral home is a documented
@@ -66,14 +67,26 @@ signing or re-declare the secret.
 
 ## Exemptions
 
-- Backend test data (Go/Python/Node service tests) is out of scope — each backend service
-  owns its own test fixtures. This inventory is frontend-only.
+- **Backend test data is in scope under C-13, but materializes lazily.** A domain literal in a
+  Go/Python/Node test may stay inline while it has exactly **one** consumer; the **second**
+  consumer moves it to that service's canonical home. No service is required to create a fixture
+  module, a catalog, or an `INVENTORY.md` until a second consumer exists. With identity at one test
+  file, notify at one, and config/ledger at two, the expected near-term outcome is that **no new
+  home is created at all** — the rule exists so the second copy is never written, not so four
+  inventories appear.
+
+  | Language | Canonical home | Status today |
+  |---|---|---|
+  | Next.js | `e2e/fixtures/*.ts` + `INVENTORY.md`; auth `e2e/helpers/auth.ts` | Materialized |
+  | Python | `tests/conftest.py` | Exists in all four services |
+  | Go | `internal/testdata/` | Not materialized — on second consumer only |
+  | Node | `src/__tests__/fixtures/` | Not materialized — on second consumer only |
 - `scripts/integration-test.sh` posts live smoke data against real services — not mocks,
   not in scope.
 - jscpd already ignores test/fixture files (`.jscpd.json`), so the inventory does not
   interact with DRY Layer A; it is enforced by review + the SDD hooks above, like Layer C.
 
-## Adding a fixture (manual steps; `/test-data add <domain>` automates this)
+## Adding a fixture (manual steps; `/sdd-qa add <domain>` automates this)
 
 1. Find the proto message (`packages/proto/<service>/v1/*.proto`) and copy the
    camelCase field names.

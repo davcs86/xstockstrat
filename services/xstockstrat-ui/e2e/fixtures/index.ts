@@ -8,7 +8,7 @@
  *  - Field names/values follow the Connect-JSON camelCase proto shape, so a
  *    fixture works both as a gRPC handler response init and a page.route body.
  *  - Every module is catalogued in e2e/fixtures/INVENTORY.md; update the
- *    catalog in the same commit as any fixture change (`/test-data` skill).
+ *    catalog in the same commit as any fixture change (`/sdd-qa` skill).
  *  - Scenario-specific one-off literals (sentinel ids, error-path payloads)
  *    may stay inline in their spec — list recurring sentinels in INVENTORY.md.
  */

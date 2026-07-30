@@ -22,6 +22,7 @@ ambiguity is logged here).
 ## Schema
 
 ```markdown
+
 ### <ISO date> — <feature-slug> — <category>
 - **Mistake**: <what went wrong and how it recurred>
 - **Evidence**: <path:line or PR/step/deviation ref>
@@ -125,3 +126,148 @@ ambiguity is logged here).
   vocabulary that documentation must keep using. And run any grep-based acceptance gate against the
   intended post-change tree before adopting it — an unexecuted gate is a claim, not a check. Same
   family as the 2026-07-27 and 2026-07-29 entries, moved from test evidence to gate design.
+
+### 2026-07-29 — 080-fix-backfill-timeframe-enum — assumption
+- **Mistake**: A **false premise stated as settled fact in a product spec** steered three consecutive
+  adversarial design rounds away from the feature's own central defect. The spec asserted "The write
+  path already migrated correctly … Only the **read** path was left behind," citing the two producers
+  that *were* correct. In fact `TriggerBackfill` persists `request.timeframe` **raw**
+  (`servicer.py:153`) and `_canonical_timeframe` is not reached until `:284`, inside `_run_backfill`;
+  since the UI sends `timeframeEnum` with no string (`backfills/page.tsx:112`), **every UI-created row
+  already held `timeframe=''`**. The headline fix (derive the enum from that column) would therefore
+  have returned `UNSPECIFIED` for the feature's own primary caller, and `_resume_job` was already
+  mapping `''` → the `"1d"` default, so a UI-created 15m job silently re-fetched at daily. Rounds 1–3
+  each re-derived scope *from* the false sentence and each found a different peripheral site instead.
+  The originating evidence looked consistent with the false premise: the staging payload showed
+  `timeframe: "1d"` because those were **agent**-created jobs (the agent sends both fields) — a
+  UI-created job would have shown `""`. Recurrence: same family as 2026-07-27 (072) "asserting a claim
+  without greping the producer", but escalated — here the unverified claim was *load-bearing for the
+  design*, not merely decorative.
+- **Evidence**: `services/xstockstrat-ingest/app/handlers/servicer.py:153,161,284`;
+  `services/xstockstrat-ui/src/app/insights/backfills/page.tsx:112`; feature 080 `design.md` § Why this
+  took four rounds; `context.md` § The decisive finding (round 3). Severity was raised SEV-3 → SEV-2 as
+  a direct result.
+- **Rule it implies**: extends **C-01**/**P-03** — a spec sentence that *narrows scope* ("only X is
+  affected", "the other path is already correct", "already migrated") is a **claim about absence** and
+  must be grep-verified at the gate exactly like a `path:line` citation. Absence claims are the ones a
+  reviewer cannot spot-check by reading the cited line, because the evidence for them is everywhere the
+  spec does not point. Practical test: for every "only" / "already correct" / "not affected" in a spec,
+  name the grep that establishes it. And when a spec proposes to *derive* a value from stored state,
+  verify the **writer** guarantees that state — deriving from a column nothing canonicalizes is how
+  this defect existed in the first place.
+
+
+### 2026-07-29 — 081-qa-capability — assumption
+- **Mistake**: A capability was asserted from **advertised metadata** rather than from the producer's
+  behavior, and a feature was designed on top of it. The GitHub API reports `has_issues: true` for
+  `davcs86/xstockstrat`, so Issues were reported as enabled and `/sdd-qa defect` was designed around
+  `gh issue create`. The measured behavior is `POST /issues` → `410 Issues has been disabled` — a
+  fact already recorded in six prior features and in `docs/CLAUDE.md`. The product spec's premise
+  ("nothing owns defect filing") was also wrong: `docs/reports/` + evidence-direct `/sdd-triage` is
+  the documented owner. Caught only by the `/sdd-design` adversary, which returned **BLOCKED** on an
+  **F-04** breach; the first `recon.md` draft had compounded it by checking `command -v gh` and
+  framing the gap as sandbox tooling. **Third recurrence of this family** — 2026-07-27 (072,
+  serializer contract) and 2026-07-29 (074, a suite that never executed) are the prior two.
+- **Evidence**: `docs/roadmap/features/067-fix-custom-formula-allnone/context.md:20`;
+  `074-fix-config-write-authz/feature.md:7`; same in `075`–`078`; `docs/CLAUDE.md:15`.
+  Resolution in `081-qa-capability/design.md` § Floor breach.
+- **Rule it implies**: **exercise the producer, not its advertised state.** A capability flag,
+  a config value, a docs claim, or an API's own metadata is a *claim*; the endpoint's response is
+  the *contract*. Before designing on a capability, run it once — or cite a recorded run. Promotion
+  candidate: this is the third instance of "a demonstration is not a producer contract" and is a
+  strong candidate for a binding **P-\*** rule rather than a third ledger entry.
+
+### 2026-07-29 — 081-qa-capability — assumption
+- **Mistake**: Feature number allocated by scanning only the **local working tree**, which collided
+  with a number already taken on unmerged branches. `/sdd-story` Step 3 computes `max(NNN)+1` from
+  `find docs/roadmap/features -maxdepth 1 -type d`, so it saw `079` as the max and allocated `080` —
+  while `080-fix-backfill-timeframe-enum` was already live on `claude/backlog-080-backfill-timeframe-enum`
+  and `claude/triage-fix-080-8k1q4h`. The skill's own guard (`if [ -d ... ]`) only re-checks the local
+  tree, so it cannot catch this. Caught by the user, not by the tooling. This is the documented cause
+  of the historical `020`/`052` duplicates, and the skill will repeat it on every feature created
+  while another is unmerged.
+- **Evidence**: `.claude/skills/sdd-story/SKILL.md` Step 3; directory renamed
+  `080-qa-capability` → `081-qa-capability`; collision recorded in
+  `081-qa-capability/context.md` § Feature numbering.
+- **Rule it implies**: the numbering scan must cover **all remote branches**, not the checkout —
+  `for b in $(git ls-remote --heads origin ...); do git ls-tree --name-only "origin/$b" docs/roadmap/features/ ...`.
+  More generally: any "next free identifier" computed from local state is wrong in a repo with
+  concurrent branches; derive it from the union of every ref. Applies equally to migration `NNN`
+  prefixes and proto field numbers.
+### 2026-07-30 — 080-fix-backfill-timeframe-enum — assumption
+- **Mistake**: The **absence-claim** trap recorded in the entry above recurred **twice more** inside the
+  same feature, at the `/sdd-spec` and `/sdd-review impl-spec` gates — which is the evidence that one
+  ledger entry did not fix it. (1) The impl spec justified leaving AC-8's sender half untested with
+  *"`e2e/mock-backend.ts:306`'s `getBars(...)` handler takes no request argument, so no Playwright test
+  can assert the new outbound field."* True of the handler **as written**, but the handler was that very
+  step's own file to change, Connect handlers do receive the request, and `chart-panel.spec.ts:110-151`
+  already drives the real component against the mock. An observation about the current state had been
+  promoted to a constraint on the design, and it would have shipped the feature's own regression class
+  untested on the only user-facing surface — `tsc` cannot catch a missing optional field on a
+  protobuf-es message-init object. (2) Product-spec FR-10 asserted the `"15m"` literal *"currently
+  appears three times in that function"*; it appears **once** (`marketdata_service.go:514`) — the other
+  two hits are a comment (`:113`) and a different function (`:661`). A **count** claim is an absence
+  claim in disguise ("and nowhere else"). Both were caught only because a later gate re-ran the greps.
+- **Evidence**: feature 080 `implementation-spec.md` step 8 (the struck-through recon-Risk-11 claim and
+  instructions 5b/5c), step 3's corrected `"15m"` justification; `context.md` § Session 2026-07-30 —
+  sdd-review impl-spec (B3, and the corrected-claims table). Round-1 impl-spec review: 4 blockers, 12
+  warnings.
+- **Rule it implies**: promote the earlier entry's advice into a **mechanical gate**, because advice
+  alone demonstrably did not hold. At every review gate, extract every sentence containing *only /
+  already / never / no … can / cannot / appears N times / not affected*, and for each either (a) paste
+  the command that establishes it, or (b) rewrite it as a statement about the present tree ("the handler
+  does not take a request **today**") rather than a constraint on the design. Two specific tells worth
+  their own reflex: a **count** ("three times") is an absence claim — run the grep; and *"no test can
+  assert X"* is almost never true when the file in question is already in the step's own `**Files**`
+  section — check that list before believing it.
+
+### 2026-07-30 — 082-fix-fmp-config-boot-only — assumption
+- **Mistake**: A harness-assigned session branch (`claude/082-design-implement-7638at`) and the
+  feature's actual SDD `**Development Branch**` (`feature/fix-fmp-config-boot-only`, created earlier
+  by `/sdd-triage`) silently diverged. All of `/sdd-review product-spec`, `/sdd-design`, `/sdd-spec`,
+  and its own review round landed on the harness branch instead of the SDD dev branch, because that
+  was the branch already checked out and the skills never re-verify `**Development Branch**` matches
+  `git branch --show-current` before writing. `/sdd-execute`'s own Step B3 boot sequence caught it
+  only when `git show origin/feature/fix-fmp-config-boot-only:.../implementation-spec.md` failed with
+  "path exists on disk, but not in" that branch — the file simply didn't exist there. The two
+  branches' feature-dir content was byte-identical at the fork point (main-dev had squash-merged the
+  same triage commit under a different hash), which made the fix a clean non-destructive merge, but a
+  less fortunate case (genuine divergent edits on both sides) would have forced a real conflict
+  resolution mid-execution.
+- **Evidence**: `docs/roadmap/features/082-fix-fmp-config-boot-only/context.md` § Session
+  2026-07-30 (/sdd-execute sequential) — the branch-topology-fix note; the `git show` failure that
+  surfaced it; PRs #820/#821.
+- **Rule it implies**: extends **P-03** — a skill that writes to a feature directory should verify
+  early (ideally at its own boot sequence) that the currently-checked-out branch and the feature's
+  `**Development Branch**` are the same lineage, not just that both exist. `/sdd-design`'s and
+  `/sdd-spec`'s boot sequences currently only read `feature.md`'s `**Lifecycle Status**`; they should
+  also warn (not silently proceed) when `git branch --show-current` isn't `**Development Branch**`
+  and isn't a normal ancestor/descendant of it — catching this at Phase-0 recon time instead of at
+  `/sdd-execute`'s Step B3, several skill-invocations later.
+
+### 2026-07-30 — 082-fix-fmp-config-boot-only — assumption
+- **Mistake**: Sequential-mode's stacked-step-PR pattern assumes "GitHub auto-retargets a stacked PR
+  to `<dev-branch>` once its base merges" (`reference/sequential-mode.md` §5.5/§5.6) — but GitHub only
+  performs that auto-retarget when the **base branch is deleted** after merge. Step branches
+  (`feature-steps/<slug>-step-N`) were never deleted post-merge in this run, so the retarget never
+  fired: PR #821 (Step 2, base=`step-1`) squash-merged **into the `step-1` branch**, not into
+  `feature/fix-fmp-config-boot-only`; PR #822 (Step 3, base=`step-2`) squash-merged **into the
+  `step-2` branch**. Only PR #820 (Step 1, base=`<dev-branch>` from the start) ever reached the dev
+  branch. All four PRs (#820/#821/#822/#823) reported "merged" via webhook, the feature was marked
+  `code-completed`, and the integration PR (#823, `<dev-branch>`→`main-dev`) merged successfully —
+  yet `main-dev` ended up with only Step 1's code, missing the paired regression tests (Step 2) and
+  doc corrections (Step 3) entirely, undetected until `/promote`'s own state validation compared
+  `main-dev`'s actual file content against the feature's tracking docs.
+- **Evidence**: `docs/roadmap/features/082-fix-fmp-config-boot-only/context.md` § Session 2026-07-30
+  (/promote — backfill missing steps); `git ls-remote` showing `feature-steps/…-step-1` and `-step-2`
+  still present on origin post-merge, each carrying a squash commit for the *next* step instead of
+  being deleted; PR #823's actual diff (9 files) vs. the expected ~13 (missing `main_test.go`,
+  `marketdata_service_test.go`, `CLAUDE.md`, `docs/context-constitution.md`).
+- **Rule it implies**: extends **P-03** — sequential mode's step-PR flow (§5.6) must not rely on an
+  auto-retarget assumption it cannot verify. After each step PR is reported merged, verify the retarget
+  actually happened — `git ls-remote --heads origin feature-steps/<slug>-step-<N>` should return
+  **nothing** (branch deleted) before treating the next step's base as `<dev-branch>`; if the branch
+  still exists, either delete it explicitly or re-point the next step PR's base via the API before
+  merging it. More generally: before opening a **production promotion** PR, diff the feature's actual
+  landed file content against what its own `implementation-spec.md`/`context.md` claim is done — a
+  lifecycle status of `code-completed` is a claim, not a verified fact about what's on the trunk.

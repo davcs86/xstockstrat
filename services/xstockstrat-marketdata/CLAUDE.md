@@ -14,7 +14,7 @@ Go gRPC service that is the **sole integration point for Alpaca's market data AP
 - Triggering historical backfills (initiated by xstockstrat-ingest)
 - Reporting stored OHLCV coverage via the `GetDataCoverage` RPC (earliest/latest/count + gaps for a symbol+timeframe), consumed by the analysis backtest path and the insights "backfill this range" action (feature 053)
 
-**Timeframe vocabulary** (feature 053): bar intervals are stored as the canonical strings `15m`/`1h`/`1d` in `marketdata.ohlcv.timeframe`. The shared `common.v1.Timeframe` enum is the preferred field (`timeframe_enum`) on the request messages; the legacy string `timeframe` fields are deprecated for one release. `internal/timeframe` normalizes all known aliases (e.g. `"1Day"` → `"1d"`) so callers that historically disagreed now hit the same stored bars. **15 minutes is the smallest supported interval** — the free Alpaca data plan serves 15-minute-delayed data and the platform is not a real-time trader. `TIMEFRAME_1MIN`/`TIMEFRAME_5MIN` (and the `1m`/`5m` strings) are deprecated and no longer resolvable; the enum values remain in the proto for wire compatibility but are unused.
+**Timeframe vocabulary** (feature 053): bar intervals are stored as the canonical strings `15m`/`1h`/`1d` in `marketdata.ohlcv.timeframe`. The shared `common.v1.Timeframe` enum is the preferred field (`timeframe_enum`) on the request messages; the legacy string `timeframe` fields are deprecated for one release. `internal/timeframe` normalizes all known aliases (e.g. `"1Day"` → `"1d"`) so callers that historically disagreed now hit the same stored bars. **15 minutes is the smallest supported interval** — the free Alpaca data plan serves 15-minute-delayed data and the platform is not a real-time trader. `TIMEFRAME_1MIN`/`TIMEFRAME_5MIN` (and the `1m`/`5m` strings) are deprecated and no longer resolvable for *requests* — but `TIMEFRAME_1MIN` is not unused: it is the explicit `timeframe_enum` label the Alpaca WS stream path sets on live-streamed (never-persisted) 1-minute bars, describing already-produced data without making sub-15m intervals requestable again (feature 080).
 
 **API boundary**: This service owns Alpaca's **market data APIs** (`data.alpaca.markets` — bars, quotes, streaming). No other service may call these. `xstockstrat-trading` separately owns Alpaca's **broker/order APIs** (`paper-api.alpaca.markets` / `api.alpaca.markets` — order submission and cancellation). Both services use the same `ALPACA_API_KEY` / `ALPACA_API_SECRET` credentials.
 
@@ -58,12 +58,12 @@ Namespace: `marketdata`
 | `marketdata.stream.max_reconnects` | int | `10` | Max reconnect attempts before alert |
 | `marketdata.stream.warm_interval_ms` | int | `30000` | Interval for the warm-quote poller that refreshes the latest quote of every queried symbol into the DB cache. Read live each cycle; `0`/negative pauses it. |
 | `marketdata.stream.bar_ingest_interval_ms` | int | `60000` | Interval for the always-on bar ingester that upserts recent bars for every queried symbol into `marketdata.ohlcv`. Read live each cycle; `0`/negative pauses it. |
-| `marketdata.stream.bar_ingest_timeframe` | string | `15m` | Bar timeframe the always-on ingester fetches each cycle. 15m is the smallest supported interval. |
+| `marketdata.stream.bar_ingest_timeframe` | string | `15m` | Bar timeframe the always-on ingester fetches each cycle. 15m is the smallest supported interval. Canonicalized through `internal/timeframe` before use; an unresolvable value falls back to `15m` with a WARN each cycle. To pause ingestion, use `bar_ingest_interval_ms <= 0` — never a bogus timeframe value. |
 | `marketdata.stream.bar_ingest_lookback_ms` | int | `900000` | Lookback window the always-on ingester re-fetches each cycle (default 15m); overlap is harmless because inserts upsert, and a window wider than the interval lets the feed self-heal after a pause/restart. |
 | `marketdata.backfill.batch_size` | int | `1000` | Bars per Alpaca API request (`limit=`). Read at startup and clamped to Alpaca's spec maximum of 10000; pagination is handled transparently by the client. |
 | `marketdata.backfill.rate_limit_rps` | int | `200` | Max outbound Alpaca REST calls per second. Read at startup into a token-bucket limiter the client waits on before every REST call; `0` disables rate limiting. |
 | `marketdata.backfill.max_delete_days` | int | `0` | Max date-range span (days) a single scoped backfill delete may cover; `0` = no window cap. A whole-symbol delete (no range) is exempt and double-confirmed in the UI (feature 057, FR-5). |
-| `marketdata.fmp.enabled` | bool | `false` | Master gate for the FMP fundamentals source (feature 059). Off by default; establishes the `marketdata.<source>.enabled` convention. When false, `GetFundamentals(Multi)` returns `FailedPrecondition` and no FMP client is built. |
+| `marketdata.fmp.enabled` | bool | `false` | Master gate for the FMP fundamentals source (feature 059). Off by default; establishes the `marketdata.<source>.enabled` convention. Read live on every `GetFundamentals`/`GetFundamentalsMulti` call (`fundamentalsEnabled()`, `internal/service/marketdata_service.go:966`) — flipping it takes effect on the very next call, no service restart required (feature 082). The FMP client itself is always constructed at boot (`cmd/server/main.go`'s `newFundamentalsSource`); this flag gates *use*, not construction. |
 | `marketdata.fmp.cache_ttl_hours` | int | `24` | Hours a cached fundamentals row stays fresh before a re-fetch is attempted. |
 | `marketdata.fmp.daily_request_cap` | int | `250` | Max FMP requests per UTC day (free Basic plan budget). At cap, stale rows are served (`stale=true`) or `ResourceExhausted` is returned; an 80%-of-cap crossing emits one WARNING alert/day. |
 | `marketdata.fmp.base_url` | string | `https://financialmodelingprep.com` | FMP API base URL; endpoint paths (`/stable/quote`, `/stable/ratios-ttm`, `/stable/profile`) are built under it. |
@@ -76,7 +76,13 @@ Namespace: `marketdata`
 - Schema: `marketdata`
 - Hypertable `marketdata.ohlcv`: partition by `time`, chunk = 1 day (compression policy planned, not yet applied by any migration)
 - Hypertable `marketdata.quotes`: partition by `time`, chunk = 1 hour (compression policy planned, not yet applied by any migration)
-- _Planned, not yet implemented:_ continuous aggregate `marketdata.ohlcv_1h` (no migration creates it today)
+- Table `marketdata.ohlcv_remediation_003`: **plain table, not a hypertable** — an audit log created
+  by migration `003_canonicalize_ohlcv_timeframe.up.sql` (feature 080 FR-14) recording every
+  `ohlcv` row it deleted or relabelled, so its `.down.sql` can be a faithful reverse. Owner:
+  `xstockstrat-marketdata`. Retention: kept until the remediation is confirmed in production, then
+  dropped via a later numbered migration — it is deliberately **not** dropped by `003`'s own
+  `.up.sql`.
+- **Planned, not yet implemented:** continuous aggregate `marketdata.ohlcv_1h` (no migration creates it today)
 - Migration tool: `golang-migrate`
 
 ## FMP Fundamentals Integration (feature 059)

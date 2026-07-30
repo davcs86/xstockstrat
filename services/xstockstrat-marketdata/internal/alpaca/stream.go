@@ -11,6 +11,7 @@ import (
 	"github.com/coder/websocket"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 )
 
@@ -257,6 +258,14 @@ func (m *streamManager) dispatch(msg *streamMessage) {
 			Open: msg.O, High: msg.H, Low: msg.L, Close: msg.C,
 			Volume: msg.V, Vwap: msg.VW, TradeCount: msg.N,
 			Timeframe: streamBarTimeframe, Source: "alpaca",
+			// A streamed bar genuinely IS a 1-minute bar. timeframe.FromString("1m") returns
+			// UNSPECIFIED by design (sub-15m intervals were removed so callers *requesting*
+			// them error), so route nothing through it here — label explicitly.
+			// common.proto:74-76 retains TIMEFRAME_1MIN precisely so already-produced,
+			// non-ingested data stays describable. This changes the LABEL only: streamed
+			// bars are still never persisted (MARKETDATA-2) — the enum does not make them
+			// storable.
+			TimeframeEnum: commonv1.Timeframe_TIMEFRAME_1MIN, //nolint:staticcheck // SA1019: deliberate write of the retained deprecated member — see comment above (feature 080 FR-6)
 		}
 		m.fanoutBar(bar)
 	case "q":

@@ -12,7 +12,7 @@ Operational runbooks, one-time setup guides, implementation roadmap, and reusabl
 | [`runbooks/`](runbooks/CLAUDE.md) | Operational procedures for day-to-day platform tasks | Adding a data source, rolling out a config change, backfilling data, building an indicator, managing proto versions |
 | [`setup/`](setup/CLAUDE.md) | One-time setup guides for external services | First-time Alpaca, DigitalOcean, Grafana Cloud, or n8n setup |
 | [`roadmap/`](roadmap/CLAUDE.md) | Implementation roadmap and per-phase deviation notes | Understanding what was built, why a decision was made, or what's left to implement |
-| `reports/` | Dated point-in-time reports (registered-asset catalogs, validation findings, bug write-ups while GitHub issues are disabled) | Reviewing what was registered/found on a given date |
+| `reports/` | Dated point-in-time reports — registered-asset catalogs, validation findings, and defect write-ups. GitHub Issues are disabled on this repo (`POST /issues` → `410`), so this is where a defect is recorded before `/sdd-triage --from-report` routes it | Reviewing what was registered or found on a given date; recording a new defect |
 
 ---
 
@@ -31,7 +31,7 @@ Operational runbooks, one-time setup guides, implementation roadmap, and reusabl
 | Add Polygon, Tiingo, or a newsletter signal source | `runbooks/add-data-source.md` |
 | Backfill historical OHLCV bars | `runbooks/historical-backfill.md` |
 | Build and register a custom indicator formula | `runbooks/indicator-builder.md` |
-| Add mocked/dummy data to a frontend test (fixtures, catalog, `/test-data` skill) | `patterns/test-data-inventory.md` |
+| Add mocked/dummy data to a test (fixtures, catalog, `/sdd-qa` skill) | `patterns/test-data-inventory.md` |
 | Manage a v1→v2 proto migration | `runbooks/proto-versioning.md` |
 | Start a new feature branch or deploy to production | `runbooks/feature-workflow.md` |
 | Seed golang-migrate state on an existing database | `runbooks/db-seed-migration-state.md` |
