@@ -972,7 +972,7 @@ Then run the Step 7 suite — it must go green here.
 
 ### Step 7 — test: analysis — pin the live loop's `GetBars` request to the canonical string + enum
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_live_loop.py` — modify

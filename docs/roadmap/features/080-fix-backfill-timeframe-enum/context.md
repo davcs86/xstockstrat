@@ -770,4 +770,25 @@ three analysis `GetBarsRequest(` producers now agree on `timeframe="1d"` +
 
 - Files modified (Step 6): `app/engine/live_loop.py`
 
+### Step 7 — test
+
+Added `TestLiveEvaluationLoopRequestShape.test_getbars_sends_canonical_string_and_enum` to
+`tests/test_live_loop.py`, mirroring `test_analysis_servicer.py:218-220`'s captured-request
+pattern: drives one `_eval_pair` iteration through the existing `_make_loop`/`_decision` harness,
+then asserts on `loop._marketdata.GetBars.await_args.args[0]`. The enum is hardcoded
+(`common_pb2.Timeframe.TIMEFRAME_1DAY`), not derived from the code under test (AC-9,
+`fails.md` 2026-07-29/074). `common_pb2` was not previously imported in this test file — added.
+
+**RED (pre-Step-6 tree)**: `assert called_req.timeframe == "1d"` failed —
+`AssertionError: assert '1Day' == '1d'` — the exact defect FR-2a-corrected Step 6 fixes.
+
+**GREEN**: full `tests/test_live_loop.py` (14 tests) passes after Step 6's one-line-shape change.
+
+**Verification**: `uv sync --extra dev` (proto stubs need `google.protobuf` on the path — first
+run in this session hit `ModuleNotFoundError: No module named 'google'` before syncing).
+`uv run pytest --cov=app --cov-fail-under=40` → **352 passed**, **81.65%** coverage (gate 40%).
+
+- Files modified (Step 7): `tests/test_live_loop.py`
+- Deviations: none.
+
 **Next**: Step 8 (ui), then the integration PR.
