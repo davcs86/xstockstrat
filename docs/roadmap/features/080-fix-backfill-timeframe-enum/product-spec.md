@@ -405,6 +405,18 @@ now carry an enum — and still must not be persisted) and **MARKETDATA-1**, who
     with counts rather than silently left — an unexecuted advisory is the `fails.md` 2026-07-29 (079)
     shape ("an unexecuted gate is a claim, not a check"), so this is a criterion, not a suggestion.
 
+    > **⛔ AC-15 is currently unsatisfiable — recorded, not quietly dropped.** Its owning step
+    > (`implementation-spec.md` step 5) is marked `blocked`: verifying it requires executing SQL against
+    > a live TimescaleDB, and the working environment has neither a database nor the `migrate` binary.
+    > Consequences, stated plainly so no one infers completion from the other seven steps:
+    > - **This feature cannot honestly reach `code-completed` on steps 1–4 and 6–8 alone.** AC-15 has
+    >   exactly one owning step and that step has not run.
+    > - The remaining 14 criteria are unaffected — every one is owned by an executable step.
+    > - Two ways forward, both requiring a decision rather than a default: run step 5 where a database
+    >   exists (see the step for its three unblock conditions, including the DBA gate), or split FR-14 +
+    >   AC-15 into their own feature with explicit sign-off recorded here. **Do not** mark AC-15 met by
+    >   inspection of the `.sql` — that is the exact failure mode this criterion was written to prevent.
+
 ## Accepted Risks
 
 **FR-10's `"15m"` fallback can cause a write, not merely label one.** Everywhere else this feature is
