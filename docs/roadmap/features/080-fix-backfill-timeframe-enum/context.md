@@ -791,4 +791,45 @@ run in this session hit `ModuleNotFoundError: No module named 'google'` before s
 - Files modified (Step 7): `tests/test_live_loop.py`
 - Deviations: none.
 
-**Next**: Step 8 (ui), then the integration PR.
+## Session — Step 8 (ui)
+
+TDD: wrote `src/lib/chart.test.ts` first, captured RED (`TIMEFRAME_ENUM` undefined — the proto
+import itself resolved fine under vitest, ruling out recon Risk 1's resolution concern), then
+implemented `chart.ts`'s `TIMEFRAME_ENUM` map, both `getBars` senders (`ChartPanel.tsx`,
+`insights/market/[symbol]/page.tsx`), the e2e mock (`mock-backend.ts`'s bars now `timeframe: '1d'`
++ `timeframeEnum: Timeframe.TIMEFRAME_1DAY`), `backfills.spec.ts`'s `runningJob()` (added
+`timeframe: '1d'` alongside the existing `timeframeEnum`), `chart-panel.spec.ts`'s two hand-rolled
+bodies (added `timeframeEnum: 'TIMEFRAME_1DAY'`), and `INVENTORY.md`'s two rows.
+
+**Deviation (recorded in implementation-spec.md's Deviation Log, summarized here)**: instruction
+5c's literal mechanism — intercept via `page.route()` inside the existing "renders chart container"
+test, driven by `page.reload()` — proved non-deterministic in this environment (`page.reload()`
+races ChartPanel's multi-request mount cascade; `page.waitForRequest` timed out at 30s in some runs
+despite GetBars firing ~2-3s post-reload per a debug trace). Substituted a new, separate test that
+triggers a second `GetBars` deterministically via clicking the existing `'1h'` timeframe button
+instead of reloading — same AC-8 guarantee (proves the **component** sends `timeframeEnum`, not
+just that the map is correct), genuine red-before-green (verified by reverting `ChartPanel.tsx` and
+re-running — asserted `undefined`, then restored and re-verified GREEN). No change to `mock-backend.ts`'s
+`getBars` signature, respecting instruction 5b.
+
+**Verification, all green**:
+- `pnpm run lint` — only a pre-existing unrelated warning (`strategies/[id]/page.tsx:406`)
+- `pnpm run build` — tsc gate passes (`Record<Timeframe, PbTimeframe>` totality enforced)
+- `pnpm run test:coverage` — 29 tests pass, `chart.ts` 100% stmts/funcs/lines (threshold 40%)
+- `pnpm test:e2e -- e2e/trader/chart-panel.spec.ts e2e/insights/backfills.spec.ts` — **17/17 pass**
+  (run via `CI=1 E2E_PREBUILT=1` + `NEXT_DISABLE_STANDALONE=1 pnpm run build`, since the sandboxed
+  `pnpm dev` first-compile exceeded this environment's default 10s per-test timeout — matches CI's
+  own prebuilt-bundle path, not a weakened check)
+- DRY guard grep (`TIMEFRAME_15MIN\|TIMEFRAME_1HOUR` outside `/lib/chart`) → exactly
+  `backfills/page.tsx:22-23`, its own pre-existing list — no second map introduced
+- C-12 fixture grep (`timeframeEnum` in `mock-backend.ts` + `backfills.spec.ts`) → both present as
+  expected
+
+- Files modified (Step 8): `src/lib/chart.ts`, `src/lib/chart.test.ts` (new),
+  `src/components/trader/ChartPanel.tsx`, `src/app/insights/market/[symbol]/page.tsx`,
+  `e2e/mock-backend.ts`, `e2e/trader/chart-panel.spec.ts`, `e2e/insights/backfills.spec.ts`,
+  `e2e/fixtures/INVENTORY.md` (all under `services/xstockstrat-ui/`)
+- Deviations: the request-capture mechanism substitution above; no other deviations.
+
+**Next**: all 8 steps done — open the integration PR from `claude/impl-080-timeframe-enum` into
+`main-dev`.

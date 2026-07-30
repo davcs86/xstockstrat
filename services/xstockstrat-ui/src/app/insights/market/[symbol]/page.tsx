@@ -8,7 +8,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ConnectError } from '@connectrpc/connect';
 import { marketDataClient } from '@/lib/browserClients/marketDataClient';
-import { type Timeframe, TIMEFRAMES, type Bar, mapBars } from '@/lib/chart';
+import { type Timeframe, TIMEFRAMES, TIMEFRAME_ENUM, type Bar, mapBars } from '@/lib/chart';
 import { useCandlestickChart } from '@/hooks/useCandlestickChart';
 
 export default function MarketSymbolPage() {
@@ -29,7 +29,12 @@ export default function MarketSymbolPage() {
     setLoading(true);
     setError(null);
     marketDataClient
-      .getBars({ symbol, timeframe, page: { pageSize: 300 } })
+      .getBars({
+        symbol,
+        timeframe,
+        timeframeEnum: TIMEFRAME_ENUM[timeframe],
+        page: { pageSize: 300 },
+      })
       .then((res) => {
         if (cancelled) return;
         const sorted = mapBars(res.bars);

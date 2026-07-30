@@ -1023,7 +1023,7 @@ and the `timeframe_enum` assertion on the current unset zero value.
 
 ### Step 8 — service: ui — the `chart.ts` string→enum map, both `getBars` senders, and the three e2e producers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/chart.ts` — modify
@@ -1210,4 +1210,26 @@ must fail (`TIMEFRAME_ENUM` does not exist).
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Step 8 — request-capture mechanism (instruction 5c)
+
+The instruction called for adding the `page.route()` interception + assertion directly into the
+existing `chart-panel.spec.ts:146` test *"renders chart container after data loads"*, driven by a
+`page.reload()`. In practice `page.reload()` raced against ChartPanel's multi-request client-side
+fetch cascade (ListAssets → symbol state update → GetBars, itself queued behind several unrelated
+BFF calls the trader dashboard fires on mount) — non-deterministically, the intercepting route
+sometimes never observed a request at all (`page.waitForRequest` timed out at 30s) despite GetBars
+genuinely firing ~2-3s after reload per a debug trace. Root cause not fully isolated (possibly
+Next.js prod-bundle reload timing interacting with route re-attachment), but empirically unreliable
+across repeated runs.
+
+**Deviation, not a spec change**: implemented as a separate, new test —
+`'sends timeframeEnum on the outbound GetBars request (AC-8)'` — that registers the route once
+(after the initial mount's own untouched fetch), then clicks the existing `'1h'` timeframe button
+(already exercised by the sibling test at `:131`) to deterministically trigger a *second* `GetBars`
+call the just-registered route observes, asserted via `expect.poll` on a captured-body variable
+(hardcoded `'TIMEFRAME_1HOUR'`, matching AC-8's never-derive-from-the-map rule). The original
+`'renders chart container after data loads'` test is unchanged. This still satisfies 5c's actual
+requirement — proving the **component**, not just `chart.ts`'s map, sends `timeframeEnum` — with a
+genuine red-before-green (verified by reverting `ChartPanel.tsx`'s `timeframeEnum` line and
+re-running: `expect.poll` correctly timed out on `undefined`). Instruction 5b's constraint (nothing
+changes in `mock-backend.ts`'s `getBars` signature for request capture) is respected.
