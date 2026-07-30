@@ -1,8 +1,24 @@
 # Product Spec: fix-backfill-timeframe-enum
 
 **Created**: 2026-07-29
-**Last Updated**: 2026-07-29 (scope widened to `marketdata`'s `Bar` by user decision)
-**Type**: bug · **Severity**: SEV-3 (latent; no current user-visible breakage)
+**Last Updated**: 2026-07-29 (design rounds 1–4: scope widened four times, severity raised)
+**Type**: bug · **Severity**: **SEV-2** — wrong behavior with potential financial impact in a future
+trade cycle, trading not currently impaired (`docs/runbooks/bug-triage.md` § Severity Definitions)
+
+> **Severity raised SEV-3 → SEV-2 at the round-3 design gate (user decision).** Filed as SEV-3
+> "latent; no current user-visible breakage" — that framing was wrong, and the design rounds proved
+> it. Two wrong-**data** paths are live today, not scheduled:
+> 1. Every UI-created backfill job persists `timeframe=''` (FR-13), so `_resume_job` resolves it to
+>    the `"1d"` default — a UI-created **15-minute** job, resumed after a restart, silently re-fetches
+>    at **daily**.
+> 2. An enum-only `BackfillBars` caller — the forward-compatible direction this feature pushes callers
+>    toward — persists bars under `timeframe=''` (FR-11), permanently unqueryable, because
+>    `InsertBars` stores the string verbatim (`marketdata_repo.go:59`) and `QueryBars` matches
+>    `WHERE timeframe=$2` (`:88`).
+>
+> Wrongly-labelled or wrong-interval OHLCV feeds indicators, cross-stock scoring, and backtests, so
+> the financial-impact-in-a-future-cycle bar is met. Still **Track C**, still no hotfix: nothing in the
+> order-execution path is affected and no live trading is impaired.
 
 ---
 
@@ -31,16 +47,29 @@ Confirmed in source rather than inferred from the response:
   `timeframe=row["timeframe"] or ""` and **never assigns `timeframe_enum`**, so it serializes as the
   zero value on every read.
 
-**Why this matters despite being invisible today.** The proto's own migration note says the string
-field is scheduled for removal. The read path populates *only* the field being deleted. On the day
-`timeframe` is dropped, every consumer of `GetBackfillStatus` / `ListBackfillJobs` loses the timeframe
-entirely — with no failing test to catch it, because nothing asserts the enum on the read path.
+**Why this matters.** The proto's own migration note says the string field is scheduled for removal.
+The read path populates *only* the field being deleted. On the day `timeframe` is dropped, every
+consumer of `GetBackfillStatus` / `ListBackfillJobs` loses the timeframe entirely — with no failing
+test to catch it, because nothing asserts the enum on the read path.
 
-The write path already migrated correctly: the UI sends `timeframeEnum`
-(`services/xstockstrat-ui/src/app/insights/backfills/page.tsx:112`), the agent sends
-`timeframe_enum` (`services/xstockstrat-agent/app/client.py:752`), and ingest's own chunk dispatch
-sets it (`servicer.py:257,458`). Only the **read** path was left behind — the same
-"shipped the producer, forgot the other path" shape as ledger `fails.md` 2026-07-01 (C-10(b)).
+> **This paragraph originally read "Why this matters despite being invisible today," and the next one
+> claimed "The write path already migrated correctly … Only the read path was left behind." Both were
+> false, and the false half is what hid FR-13 for three design rounds.** The write path did *not*
+> migrate: `TriggerBackfill` persists `request.timeframe` **raw** at `servicer.py:153`, and
+> `_canonical_timeframe` is not reached until `:284` — inside `_run_backfill`, after the row exists.
+> Since the UI sends `timeframeEnum` with **no** string (`backfills/page.tsx:112`), every UI-created
+> row already holds `timeframe=''`. So FR-1, which derives the enum from that column, would have
+> returned `UNSPECIFIED` for the feature's own primary caller — the headline fix not fixing the
+> headline case. See FR-13.
+>
+> What *is* true: the agent sends both (`agent/app/client.py:751-752`), and ingest's chunk dispatch
+> sets the enum (`servicer.py:257,458`). The staging observation that opened this bug showed
+> `timeframe: "1d"` precisely because those were **agent**-created jobs; UI-created jobs would have
+> shown `timeframe: ""`.
+
+Asserting the sibling path was fine without re-greping it is ledger `fails.md` 2026-07-27 (072); the
+resulting one-path-fixed-sibling-forgotten shape is 2026-07-01 (**C-10(b)**) — recurring here a fourth
+time, inside the feature whose stated premise is closing exactly that shape.
 
 ## Secondary finding — the reason this survived review
 
@@ -93,8 +122,25 @@ production is permitted where the value also feeds the enum, at exactly two site
   consumers read; it is not a licence to keep writing a non-canonical value that the receiver would
   have to re-canonicalize anyway.
 
-FR-3. An unmappable or empty stored string yields `TIMEFRAME_UNSPECIFIED` rather than raising —
-`.get(…, 0)` on the map lookup, matching how `servicer.py:257` already handles it.
+FR-3. An unmappable **legacy** stored string yields `TIMEFRAME_UNSPECIFIED` rather than raising —
+`.get(…, 0)` on the map lookup, matching how `servicer.py:257` already handles it. Narrowed to
+*legacy* rows at the round-3 gate: as originally written ("an unmappable or empty stored string
+yields `UNSPECIFIED`") this criterion **blessed the defect**, since `''` is exactly what the primary
+caller persists today. FR-13 makes empty unreachable for newly-created rows, so FR-3 governs only
+rows written before this feature.
+
+FR-13. **The ingest write path canonicalizes before persisting.** `TriggerBackfill` currently stores
+`timeframe=request.timeframe` raw (`servicer.py:153`) and emits the same raw value into the ledger
+payload (`:161`); `_canonical_timeframe` is not reached until `:284`. Both become
+`_canonical_timeframe(request)`, which prefers the enum and yields `15m`/`1h`/`1d`. This is not
+optional polish — **FR-1 does not work without it**, because the UI sends enum-only and every
+UI-created row therefore holds `''` (see § Problem Statement). Invokes the FR-2a carve-out.
+
+Two further consequences of this fix, both closing live wrong-data behavior:
+  - `_resume_job` stops resolving `''` → `"1d"`, so a resumed 15m job no longer re-fetches at daily.
+  - The ledger's append-only `ingest.backfill.queued` payload stops recording `""` forever. That
+    payload is an **untyped `Struct`** — no generated field, no `SA1019` signal, invisible to a
+    type-name grep, which is why it took four rounds to surface.
 
 FR-4. **Derive the enum; add no column.** Resolves Open Question 1 (evidence below):
   - The dead read at `servicer.py:407` (`enum = row.get("timeframe_enum") or 0`) is **deleted**,
@@ -204,6 +250,30 @@ value, fall back to the declared `"15m"` default and `slog.Warn` once per cycle 
 the round-2 gate**; see § Accepted Risks. Hoist a `defaultBarIngestTimeframe` const (the literal
 currently appears three times in that function).
 
+FR-14. **Remediate the recoverable rows already at rest.** Every fix above is forward-looking; the
+rows previously written under a non-canonical label stay invisible to `QueryBars` forever. A
+forward-only marketdata migration (next free number — its `migrations/` ends at `002_fundamentals`,
+so `003_*`, **C-07**) canonicalizes the three recoverable spellings in `marketdata.ohlcv`:
+`'1Day'`→`'1d'`, `'1Hour'`→`'1h'`, `'15Min'`→`'15m'`. Added at the round-3 gate by user decision —
+refusing it while the feature's whole premise is closing this exact divergence would be inconsistent.
+
+Design constraints the implementation must resolve, not assume:
+  - `ohlcv` is a **TimescaleDB hypertable**, so the `.up.sql` must be written with that in mind
+    rather than as a naive whole-table `UPDATE`.
+  - A **primary-key/unique collision is possible**: if both a `'1Day'` and a `'1d'` row exist for the
+    same `(symbol, time)`, a bare `UPDATE` violates the constraint. The migration must resolve
+    duplicates deliberately (skip-if-canonical-exists, or delete-then-update) — decide and state which.
+  - A real `.down.sql` is required (never a no-op) — though note the reverse is **not** faithful:
+    once merged, a `'1d'` row is indistinguishable from one that was always canonical, so the down
+    migration cannot restore the original spelling. State that limitation in the file.
+  - **F-01**: `002_fundamentals` and every earlier migration are applied and must not be edited.
+  - Approval: DBA + service owner (`docs/runbooks/approval-flow.md`) — it mutates stored market data.
+
+Out of remediation scope: `timeframe=''` rows (intent is unrecoverable — the interval was never
+stored) and any `'1m'` rows (a **MARKETDATA-2** anomaly, since streamed bars are never persisted;
+worth counting, not rewriting). The migration must therefore not claim to leave the table fully
+canonical — only that no *recoverable* row remains non-canonical.
+
 FR-11. `BackfillBars` reads `req.Timeframe` raw at three sites — `marketdata_service.go:590` (ledger
 event), `:602` (`src.GetBars`, the value that lands in `ohlcv.timeframe` via `InsertBars:611`), and
 `:633` (`estimateExpectedBars`) — each with a `//nolint:staticcheck // SA1019` acknowledging the
@@ -239,8 +309,12 @@ Alpaca with an empty timeframe and 400s every symbol; and today a caller sending
 
 - `xstockstrat-ingest` (Python) — `app/handlers/servicer.py`, its tests. No `migrations/` change (FR-4).
 - `xstockstrat-marketdata` (Go) — `internal/repository/marketdata_repo.go`,
-  `internal/alpaca/client.go`, `internal/alpaca/stream.go`, their tests. No `migrations/` change:
-  `Bar.timeframe_enum` is derived from the already-stored canonical string, exactly as in ingest.
+  `internal/alpaca/client.go`, `internal/alpaca/stream.go`, **`internal/service/marketdata_service.go`**
+  (FR-10, FR-11), **`internal/handler/marketdata_handler.go`** (the live `StreamBars` raw reader at
+  `:258`), **`migrations/003_*`** (FR-14), their tests, plus the doc surfaces below.
+  > The first three files were the whole list until round 2. `internal/service` and `internal/handler`
+  > were added at the round-2/3 gates. Listed explicitly because a `/sdd-spec` **Files** section
+  > derived from a stale list would under-stage the step and trip **F-08** at execute time.
 - `xstockstrat-ui` (Next.js/TS) — `src/lib/chart.ts` (the map), `src/components/trader/ChartPanel.tsx`
   and `src/app/insights/market/[symbol]/page.tsx` (the two senders), `e2e/mock-backend.ts` +
   `e2e/fixtures/INVENTORY.md` (FR-12), plus the Vitest unit test. `src/lib/**` is inside the Vitest
@@ -266,9 +340,12 @@ now carry an enum — and still must not be persisted) and **MARKETDATA-1**, who
 
 ## Database Changes
 
-- [x] **None.** FR-4 derives the enum from the stored string, so no column and no migration. The
-  `migrations/` directory is untouched — `003_backfill_jobs.up.sql` is applied and must never be
-  edited (**F-01**).
+- [x] **One migration, in `marketdata` only — a data remediation, no schema change** (FR-14, added at
+  the round-3 gate): `services/xstockstrat-marketdata/migrations/003_*.{up,down}.sql`, canonicalizing
+  the recoverable non-canonical `marketdata.ohlcv.timeframe` values. Requires DBA + service-owner
+  approval. No applied migration is edited (**F-01**).
+- [x] **No `ingest` migration and no new column.** FR-4/FR-13 derive the enum from a string the write
+  path now guarantees is canonical, so `ingest.backfill_jobs` is unchanged.
 
 ## Acceptance Criteria
 
@@ -312,7 +389,21 @@ now carry an enum — and still must not be persisted) and **MARKETDATA-1**, who
     request carrying only `timeframe_enum` (no string) succeeds — the condition that is broken today
     and is the whole point of the migration.
 12. The e2e mock's bars carry `timeframe: '1d'` + `timeframeEnum`, matching what the real service
-    emits, and `INVENTORY.md` records it.
+    emits, and `INVENTORY.md` records it. The same applies to the **`BackfillJob`** mock:
+    `e2e/insights/backfills.spec.ts:16-30`'s `runningJob()` supplies `timeframeEnum` with **no**
+    `timeframe`, which after FR-1 is a shape the service can no longer produce — the inverse of the
+    `Bar` mock's error. Both mocks match the real emitted shape, or the exemption is stated.
+13. **A `TriggerBackfill` carrying only `timeframe_enum` persists the canonical string** and reads
+    back with the matching enum — the ingest twin of AC-11, and the criterion that would have caught
+    FR-13. Asserted on the value passed to `insert_job`, not on a hand-built row: the whole failure
+    was that hand-built `1d`/`1h`/`15m` fixtures pass while the real caller's shape (`''`) is never
+    exercised (`fails.md` 2026-07-29 / 074).
+14. The `ingest.backfill.queued` ledger payload carries the canonical timeframe, asserted on the
+    emitted `Struct` — the untyped surface no lint or type check covers.
+15. After FR-14's migration, `SELECT DISTINCT timeframe FROM marketdata.ohlcv` returns no *recoverable*
+    non-canonical value (`'1Day'`/`'1Hour'`/`'15Min'`). Any surviving `''` or `'1m'` rows are reported
+    with counts rather than silently left — an unexecuted advisory is the `fails.md` 2026-07-29 (079)
+    shape ("an unexecuted gate is a claim, not a check"), so this is a criterion, not a suggestion.
 
 ## Accepted Risks
 
@@ -339,13 +430,24 @@ Both closed at the `/sdd-review product-spec` gate (2026-07-29). The reasoning �
 scope-widening sign-off — is recorded in `context.md` § Session 2026-07-29 (sdd-review), so a later
 reader does not have to reconstruct it.
 
-- [x] **FR-4: derive, do not store.** Closed. `_canonical_timeframe` (`servicer.py:47`) already
-  canonicalizes on the write path — it prefers the request's enum and stores `15m`/`1h`/`1d` — so the
-  enum is a pure function of a column that already exists. A `timeframe_enum` column would duplicate
-  state, need migration `008_*`, and create two values that can disagree. Nothing in the product needs
-  a timeframe the string map cannot express (`_STR_TO_ENUM` covers every supported interval; sub-15m
-  was deliberately removed, `common.proto:82-83`). Revisit only if a stored timeframe ever needs to
-  outlive the string vocabulary.
+- [x] **FR-4: derive, do not store.** Closed — but on **corrected reasoning**, recorded because the
+  original rationale was falsified mid-design and a later reader must not rebuild on it.
+  > *Originally closed with*: "`_canonical_timeframe` already canonicalizes on the write path … so the
+  > enum is a pure function of a column that already exists. A column would duplicate state and create
+  > two values that can disagree."
+  > **The first clause was false and the second was already true.** `_canonical_timeframe` is *not*
+  > applied on the persist path (`servicer.py:153` stores the raw request string; `:284` canonicalizes
+  > later, for execution only), so the stored string and the executed timeframe **already disagree** —
+  > `''` on disk versus a resolved canonical value in flight. The anti-duplication argument was
+  > therefore an argument against a state of affairs that existed.
+
+  The decision still stands, for a stronger reason: FR-13 makes the write path canonicalize, which
+  makes the string a *reliable* source and the enum genuinely derivable — one line rather than a
+  column, a migration, and dual-write discipline. Nothing in the product needs a timeframe the string
+  map cannot express (`_STR_TO_ENUM` covers every supported interval; sub-15m was deliberately
+  removed, `common.proto:82-83`). Revisit only if a stored timeframe must outlive the string
+  vocabulary. **Without FR-13, "derive" would have been the wrong call** — deriving from a column
+  nothing guarantees is how FR-1 came to return `UNSPECIFIED` for its primary caller.
 - [x] **No second read-path instance inside this service.** Closed.
   `grep 'deprecated = true' packages/proto/ingest/v1/ingest.proto` returns exactly two hits: `:30`
   (`BackfillJob` — this bug) and `:64` (`TriggerBackfillRequest`). The latter is a **request** message
@@ -358,5 +460,11 @@ reader does not have to reconstruct it.
 ## Feature Workflow Notes
 
 Branch: `feature/fix-backfill-timeframe-enum` from `main-dev`.
-Confirmed bug → routes via `docs/runbooks/bug-triage.md` Track C. SEV-3: latent, no user-visible
-breakage today, so it does not warrant a hotfix.
+Confirmed bug → routes via `docs/runbooks/bug-triage.md` **Track C**. **SEV-2** (raised from SEV-3 at
+the round-3 gate — see the severity note in the header). Track C remains correct despite the raise:
+Track A is for SEV-1 or bugs confirmed in `main` with live-trading risk, and nothing here touches the
+order path. It rides the next `/promote` cycle rather than a hotfix.
+
+**Approvals this feature now needs** (grown with scope — `docs/runbooks/approval-flow.md`):
+one service owner per touched service (ingest, marketdata, analysis, ui) **plus DBA + service owner
+for the FR-14 migration**, since it mutates stored market data. No proto change, so no proto gate.
