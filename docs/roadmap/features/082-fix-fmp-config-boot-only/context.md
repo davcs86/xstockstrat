@@ -138,3 +138,34 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Third warning (Step 2 verification has no literal numeric coverage threshold) left as-is — the
   cited `COVERPKGS` exclusion is a substantive justification, not a real gap.
 - Next: `/sdd-execute fix-fmp-config-boot-only`.
+
+## Session 2026-07-30 (/sdd-execute sequential)
+
+- Branch-topology fix before execution began: the feature's actual `**Development Branch**`
+  (`feature/fix-fmp-config-boot-only`, created by `/sdd-triage`) only carried the original triage
+  commit — none of this session's product-spec review, recon, design, or impl-spec work, which had
+  all landed on the harness-assigned `claude/082-design-implement-7638at` instead. Confirmed the two
+  branches' feature-dir content was byte-identical at the point they diverged (a squash-merge gave
+  the triage commit two different hashes on `main-dev` vs. the feature branch); resolved with a
+  non-destructive merge (conflicts on `context.md`/`feature.md`/`product-spec.md`, resolved by
+  keeping the fully-progressed HEAD side) then fast-forwarded `feature/fix-fmp-config-boot-only` to
+  match — no history rewritten, no force-push.
+
+### Step 1 — service: always construct the FMP fundamentals client at boot [done]
+- Phase 1 discovery: all 7 cited symbols/lines re-confirmed exact via codebase-discovery agent, no
+  drift from implementation-spec.md.
+- TDD (red→green): temporarily added `TestNewFundamentalsSource_AlwaysNonNil` to `main_test.go` to
+  capture RED — `cmd/server/main_test.go:41:10: undefined: newFundamentalsSource` (compile error,
+  correct reason). Implemented Step 1 (extracted `newFundamentalsSource` in `main.go`, replaced the
+  boot-time `if` gate with an unconditional call; updated the 3 doc comments in
+  `marketdata_service.go` — the two stale ones caught by `/sdd-review impl-spec` plus
+  `fundamentalsEnabled()`'s). Re-ran the same test — GREEN (PASS). Then discarded the temporary test
+  file edit (`git checkout --`) since `main_test.go` is Step 2's file, not Step 1's (F-08) — the
+  real canary test lands for real in Step 2's own commit.
+- Verification: `go build ./...` OK; `golangci-lint run` 0 issues; `GetBool("marketdata.fmp.enabled"...)`
+  grep in `main.go` → zero hits; stale-comment grep → zero hits; full
+  `grep -rn "marketdata.fmp.enabled"` confirms the only remaining `.go` gate is
+  `marketdata_service.go:966` (`fundamentalsEnabled()`), as designed.
+- Files modified: `services/xstockstrat-marketdata/cmd/server/main.go`,
+  `services/xstockstrat-marketdata/internal/service/marketdata_service.go`.
+- Deviations: none.
