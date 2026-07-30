@@ -129,17 +129,36 @@ look-ahead/hot-path regression"
    func (s *MarketDataService) fundamentalsEnabled() error {
    ```
    The `if` condition on line 960 itself is unchanged, byte-for-byte.
+4. In the same file, this feature's own doc-consistency purpose extends to two more comments in
+   this already-touched file that describe the now-obsolete boot-gated semantics (caught by
+   `/sdd-review impl-spec` — same file, same step, cheap to fix alongside):
+   - Line 48–49 (the `fundamentals` field doc comment):
+     ```go
+     // fundamentals is the FMP source (feature 059), held separately from the OHLCV
+     // registry (FR-2). Always non-nil since feature 082 — marketdata.fmp.enabled gates
+     // use (fundamentalsEnabled()), not construction.
+     fundamentals source.FundamentalsSource
+     ```
+   - Line 74–75 (the `NewMarketDataService` doc comment):
+     ```go
+     // NewMarketDataService creates the service and dials ledger + notify. fundamentals is
+     // the FMP source (feature 059), always non-nil via the sole boot-time construction
+     // path since feature 082 (cmd/server/main.go's newFundamentalsSource).
+     func NewMarketDataService(
+     ```
 
 **Verification**:
 ```bash
 cd services/xstockstrat-marketdata && GOWORK=off go build ./...
 cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-download-mode=mod
 grep -n "GetBool(\"marketdata.fmp.enabled\"" services/xstockstrat-marketdata/cmd/server/main.go
+grep -n "nil when marketdata.fmp.enabled is false" services/xstockstrat-marketdata/internal/service/marketdata_service.go
 ```
 Confirm: the build succeeds; lint passes; the `GetBool("marketdata.fmp.enabled"...)` grep now
 returns **zero** hits in `main.go` (the only remaining hit for that key in the whole service is
 `internal/service/marketdata_service.go:960`, `fundamentalsEnabled()` — confirm with
-`grep -rn "marketdata.fmp.enabled" services/xstockstrat-marketdata --include="*.go"`).
+`grep -rn "marketdata.fmp.enabled" services/xstockstrat-marketdata --include="*.go"`); the
+stale-comment grep also returns **zero** hits (both occurrences updated per instruction 4).
 
 ---
 
@@ -178,8 +197,9 @@ Step 1's change)
 - Per this feature's own ledger entry (`insights.md` 2026-07-30 — 082, design): the acceptance
   criteria are proven by composing three narrower facts rather than one network-dependent
   integration test — this step is that composition (canary + toggle test); the third leg (the
-  one-line passthrough `s.fundamentals = fundamentals` at `marketdata_service.go:101`) is verified
-  by inspection, already re-confirmed in Step 1's Codebase Evidence, and needs no test of its own.
+  one-line, branch-free struct-literal field `fundamentals: fundamentals,` inside
+  `&MarketDataService{...}` at `marketdata_service.go:101`) is verified by inspection, already
+  re-confirmed in Step 1's Codebase Evidence, and needs no test of its own.
 
 **TDD**: `red-green required`
 

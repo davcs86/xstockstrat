@@ -120,3 +120,21 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     `xstockstrat-analysis` awareness note (screener's silent-degrade behavior, out of scope) was
     preserved as a non-step "Awareness note" in `feature.md` rather than dropped, since it isn't
     tied to any step in this spec but is still institutionally useful.
+
+## Session 2026-07-30 (/sdd-review impl-spec)
+
+- Advisory review (Mode B, never blocks): criteria PASS WITH WARNINGS (0 blockers, 3 warnings),
+  overlap CLEAN (no other feature at implementation-ready/in-progress; 076/080 already merged to
+  trunk, confirmed not an open collision).
+- Warnings fixed in the same session (spec edited before /sdd-execute dispatch, per F-09 — step
+  bodies are only frozen once execution starts):
+  1. Step 1 extended with instruction 4 — two more stale comments in
+     `marketdata_service.go:49,75` (both claim `fundamentals` is nil when the flag is false)
+     updated alongside the already-planned `fundamentalsEnabled()` comment change, since the file
+     was already in Step 1's `**Files**` list. Added a matching grep to Step 1's Verification.
+  2. Step 2's Codebase Evidence corrected: `marketdata_service.go:101` is a struct-literal field
+     (`fundamentals: fundamentals,`) not an assignment statement — line/semantics were already
+     correct, only the quoted syntax was off.
+- Third warning (Step 2 verification has no literal numeric coverage threshold) left as-is — the
+  cited `COVERPKGS` exclusion is a substantive justification, not a real gap.
+- Next: `/sdd-execute fix-fmp-config-boot-only`.
