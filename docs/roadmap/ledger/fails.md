@@ -271,3 +271,31 @@ ambiguity is logged here).
   merging it. More generally: before opening a **production promotion** PR, diff the feature's actual
   landed file content against what its own `implementation-spec.md`/`context.md` claim is done — a
   lifecycle status of `code-completed` is a claim, not a verified fact about what's on the trunk.
+
+### 2026-07-31 — 083-droplet-compose-deploy — scope-creep
+- **Mistake**: A product spec explicitly scoped as "platform/infrastructure change... no gRPC
+  contract, business logic, or service `CLAUDE.md` changes are anticipated" drifted, across three
+  individually-justified `/sdd-design` rounds, into touching core service startup code in 8 of the
+  platform's 12 services. Round 1's rejected blue/green design would have kept App Platform's
+  implicit downtime mitigation; dropping it for single-stack rolling restart (forced by an **F-06**
+  DB-pool Floor breach) silently removed that mitigation for 10 internal services with no
+  replacement named. Round 3 surfaced the gap and the user approved adding gRPC client
+  retry-on-`UNAVAILABLE` — reasonable on its own, but it meant editing Go dial sites, Python channel
+  construction, and Node's transport layer across trading/portfolio/marketdata/indicators/ingest/
+  analysis/agent/ui. Round 5 added a second amendment (a `VALIDATION_MODE` env flag gating
+  always-on background loops in trading/analysis/marketdata for a migration-coexistence period) —
+  also reasonable standalone, but a second business-logic-adjacent change layered on the first. Each
+  decision was surfaced to the user and explicitly approved (Constitution **C-11**'s sign-off
+  requirement was honored at every gate — this is not a case of an unrecorded silent expansion), but
+  the *product-spec.md itself* was never amended in step; `design.md` became the only place carrying
+  the current, accurate scope, while the spec continued to assert "infra-only" throughout the debate.
+- **Evidence**: `docs/roadmap/features/083-droplet-compose-deploy/product-spec.md:84-91`
+  ("Affected Services" — "No gRPC contract, business logic... changes are anticipated") vs.
+  `design.md` §8-9 (the two recorded scope amendments); `context.md` § Session 2026-07-31 — sdd-design
+  (round-by-round narrative); 5-round design debate transcript.
+- **Rule it implies**: when `/sdd-design` records a **C-11** scope amendment via user sign-off, the
+  amendment is not "done" until `product-spec.md` itself gains the corresponding new FR(s) — a
+  design document that silently becomes more authoritative than the product spec it was supposed to
+  implement is a structural drift risk, even when every individual expansion was explicitly
+  approved. Candidate promotion: extend **C-11**'s recording requirement so a sign-off event is
+  incomplete until the spec file itself is updated, not just `context.md` and `design.md`.

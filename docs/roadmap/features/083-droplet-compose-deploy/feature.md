@@ -1,6 +1,6 @@
 # Feature: droplet-compose-deploy
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `design-approved`
 **Development Branch**: `feature/droplet-compose-deploy`
 **Created**: 2026-07-31
 **Last Updated**: 2026-07-31
@@ -13,12 +13,15 @@
 |---|---|---|---|
 | 2026-07-31 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-07-31 | `draft` → `spec-ready` | /sdd-review | Product spec approved (5 warnings, 2 factually corrected) |
+| 2026-07-31 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved at hard cap; recon.md + design.md written. Two scope amendments recorded (gRPC retry, migration/coexistence phase) — product-spec.md needs new FRs before /sdd-spec |
 
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
+- [Product Spec](product-spec.md) — requirements and governance _(needs new FRs for the two recorded scope amendments before /sdd-spec — see design.md Open Risks)_
+- [Recon](recon.md) — grounded codebase dossier (Phase 0)
+- [Design](design.md) — debated, approved architecture (Phase 1, 5 rounds)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec droplet-compose-deploy`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -44,4 +47,6 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design droplet-compose-deploy` — full mode recommended (not `quick`), given the cross-cutting infra scope
+Update `product-spec.md` with the two scope-amendment FRs recorded in `design.md` (gRPC retry,
+migration/coexistence phase), then run `/sdd-spec droplet-compose-deploy` to generate the
+implementation spec from the approved design.

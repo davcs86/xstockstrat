@@ -61,7 +61,40 @@ to the previous known-good GHCR SHA and re-running the blue/green swap — as th
 equivalent of App Platform's one-command deployment-history rollback.
 
 FR-8. `docs/setup/digitalocean.md`, `docs/patterns/ci-overview.md`, and root `CLAUDE.md` are
-updated to describe the new dev/staging deployment topology once implemented.
+updated to describe the new dev/staging deployment topology once implemented. (Per `/sdd-design`,
+the actual surface is larger — also `docs/patterns/observability.md`, `docs/setup/alpaca.md`,
+`docs/patterns/frontend-auth.md`, `docs/runbooks/mcp-tools.md`, `docs/CLAUDE.md`/`docs/setup/
+CLAUDE.md` index lines, and `docs/context-constitution.md`'s PLAT-N3 check — see `design.md` § 10.
+Highest priority: `docs/patterns/config-startup.md` and `docs/patterns/docker-build.md` both assert
+"DO App Platform has no `depends_on`," which becomes literally false once dev runs on a droplet
+with real Compose `depends_on`.)
+
+**FR-9** (scope amendment, recorded via `/sdd-design` rounds 3-4, user sign-off per Constitution
+C-11 — see `context.md` § sdd-design). Dropping blue/green (FR-2, forced by an F-06 DB-pool Floor
+breach) removes any downtime mitigation for the 10 services Caddy doesn't front. Minimal client-side
+gRPC retry-on-`UNAVAILABLE` is added across `xstockstrat-trading`, `-portfolio`, `-marketdata`
+(Go: `grpc.WithDefaultServiceConfig` alongside existing `clientKeepAlive`), `-indicators`, `-ingest`,
+`-analysis`, `-agent` (Python: retry options at channel-creation sites), and `-ui` (Node: a
+**separate** `makeRetryTransport()` factory used by 9 of the 10 backend clients — `tradingClient`
+keeps the original, non-retrying `makeTransport()`). `TradingService.PlaceOrder`/`ReplaceOrder`/
+`CancelOrder` are excluded from retry everywhere: `ClientOrderID` is minted fresh server-side per
+call, so retrying after an already-executed request would double-order. Full mechanics, the
+per-language edit sites, and the exclusion's structural (not filter-dependent) enforcement in Node
+are in `design.md` § 8.
+
+**FR-10** (scope amendment, recorded via `/sdd-design` round 5, user sign-off per Constitution
+C-11). DO App Platform's dev app stays live in parallel with the droplet for an explicit
+validation/coexistence period — not an instant cutover. A `VALIDATION_MODE` env flag (default
+false) gates `xstockstrat-trading`'s three background pollers and `xstockstrat-analysis`'s two
+background loops at their launch sites (their existing per-poller interval configs don't actually
+pause execution), plus `xstockstrat-marketdata`'s two background pollers via the existing
+`interval_ms<=0` config gate, plus a skip of `xstockstrat-ingest`'s boot-time job-reconciliation
+call — all four confirmed to have always-on write paths against the shared dev DB with no
+cross-instance deduplication, which would otherwise double-fire ledger events/alerts if both
+environments ran live simultaneously. Cutover pauses DO App Platform first (bounded blackout),
+then flips the flag and redeploys — never the reverse, to avoid a window where both are live at
+once. Full cutover criteria, sequencing, CI/CD wiring, and the decommissioning step are in
+`design.md` § 9.
 
 ## Out of Scope
 
@@ -81,14 +114,23 @@ updated to describe the new dev/staging deployment topology once implemented.
 
 ## Affected Services
 
-This is a platform/infrastructure change, not a service business-logic change:
+Root-level orchestration is unchanged in kind from the original framing — `docker-compose.yml`,
+`.github/workflows/deploy-dev.yml`, `docs/setup/digitalocean.md`, `docs/patterns/ci-overview.md`,
+root `CLAUDE.md`. **FR-9 and FR-10 (recorded scope amendments) do touch service code** — this is no
+longer purely infra-only:
 
-- **Root-level orchestration** — `docker-compose.yml`, `.github/workflows/deploy-dev.yml`,
-  `docs/setup/digitalocean.md`, `docs/patterns/ci-overview.md`, root `CLAUDE.md`.
-- All 12 `xstockstrat-<service>` services (per the Service Registry) deploy **unchanged** —
-  only how they're hosted changes. No gRPC contract, business logic, or service `CLAUDE.md`
-  changes are anticipated unless the secrets-provisioning design (FR-5) requires a service to read
-  a secret differently, which would be a scoped follow-up decided at `/sdd-design`.
+- **Deploy-topology only (no code change)**: `xstockstrat-portfolio`, `-identity`, `-notify`,
+  `-config`, `-ui` (beyond FR-9's Node transport-factory addition), `-agent` (beyond FR-9's Python
+  channel-options addition), `-ledger`.
+- **FR-9 (gRPC retry)**: `-trading`, `-portfolio`, `-marketdata` (Go dial-site edits),
+  `-indicators`, `-ingest`, `-analysis`, `-agent` (Python channel-option edits), `-ui` (Node
+  transport-factory split).
+- **FR-10 (migration/coexistence)**: `-trading`, `-analysis` (new `VALIDATION_MODE`-gated launch
+  sites), `-marketdata` (config-gated pause, no code change), `-ingest` (`VALIDATION_MODE`-gated
+  skip of boot-time reconciliation).
+- Per `docs/runbooks/reviewer-registry.md`'s Service Owners table, each service in the FR-9/FR-10
+  lists needs its owner's review — this is a real governance footprint beyond the original
+  infra-only framing, not a formality.
 
 ## Proto Contract Changes
 
@@ -136,23 +178,27 @@ Approval gates required (per `docs/runbooks/feature-workflow.md` and `docs/runbo
 8. `docs/setup/digitalocean.md`, `docs/patterns/ci-overview.md`, and root `CLAUDE.md` reflect the
    new dev deployment topology (checked by `/context-scrubber scan` per this repo's teardown
    convention before the final PR).
+9. (FR-10) Log/process inspection confirms zero fill-poller/position-sync/live-loop/marketdata-
+   poller cycles ran on the droplet while `VALIDATION_MODE=true` during the coexistence soak,
+   verified only within the ordered, isolated cutover window (never as a standalone check while
+   both environments hold live shared-DB access — see `design.md` § 9).
 
 ## Open Questions
 
-- [ ] Exact secrets-provisioning mechanism for the droplet (restricted-permission `.env` file vs.
-      a secrets manager) — resolve in `/sdd-design`.
-- [ ] Droplet sizing (vCPU/RAM) sufficient to run all 12 services + Caddy + `otel-collector`
-      concurrently without resource starvation — needs a resource budget analogous to root
-      `CLAUDE.md`'s DB connection-pool budget table.
-- [ ] Whether the Go services in `docker-compose.yml` (distroless images, no shell — currently no
-      healthcheck) need a healthcheck added so Caddy's blue/green swap can gate on their readiness,
-      or whether readiness is inferred another way.
-- [ ] Concrete downtime-budget number for AC-2 — not specified by the requester; pin a number at
-      `/sdd-design`.
-- [ ] **Known trap check**: no `docs/roadmap/ledger/fails.md` or `insights.md` entry was found
-      specifically about CI/CD or deploy-topology changes. The closest applicable pattern is the
-      recurring **C-10** "a shared surface must be updated everywhere" family — this feature
-      touches multiple documentation surfaces (`docs/setup/digitalocean.md`,
-      `docs/patterns/ci-overview.md`, root `CLAUDE.md`, and possibly `docs/patterns/observability.md`
-      for the `otel-collector` dev-vs-prod split) that must all move together. `/sdd-design` should
-      enumerate them explicitly rather than relying on this spec's list being exhaustive.
+All items below were resolved during `/sdd-design`'s 5-round debate — see `design.md` for the
+full reasoning and `context.md` for the round-by-round narrative. Remaining unresolved items are
+tracked as `design.md` § Open Risks, not here.
+
+- [x] Secrets-provisioning mechanism: restricted-permission (`chmod 600`) `.env` file, CI-populated
+      over SSH — `design.md` § 6.
+- [x] Droplet sizing: `s-4vcpu-8gb` (RAM estimated ~5.3-5.8Gi steady-state; CPU explicitly left
+      unbudgeted as an open risk for load-testing) — `design.md` § Open Risks.
+- [x] Go-service healthchecks: a new TCP-dial binary baked into the 3 distroless Dockerfiles;
+      `xstockstrat-ui` reuses the existing `nc -z` pattern — `design.md` § 4.
+- [x] AC-2 downtime-budget number: Caddy `lb_try_duration 10s` on the two public paths; internal
+      services get FR-9's retry mechanism instead, tracked as a separate qualitative criterion, not
+      folded into AC-2's measured number — `design.md` § 1, § 8.
+- [x] Known-trap check: no direct `fails.md` entry existed for CI/CD/deploy-topology changes at
+      story time. This feature's own design debate produced two new `fails.md` entries instead — a
+      `scope-creep` entry (first instance of that category) recording how FR-9/FR-10 drifted from
+      the original infra-only framing despite every individual step being explicitly approved.
