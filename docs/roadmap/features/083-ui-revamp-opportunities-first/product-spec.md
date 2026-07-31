@@ -156,6 +156,17 @@ filled, avg, **status** tag, origin strategy-or-Manual, time, action View/Edit/W
 traced back to the signal that produced it. Header: "Back to queue", "New order". Order editor: side,
 type, qty, limit/stop, order preview. (Derived from `OrderFilters.tsx`, `OrderBook.tsx`.)
 
+FR-20. **Order-execution behavior unchanged (paper-safe re-presentation).** The Signal-detail order
+ticket (FR-6), the Orders table (FR-15), and the order editor are a **re-presentation** of the
+existing `OrderForm.tsx` / `OrderBook.tsx` surfaces — execution semantics are out of scope and must
+not change. Specifically: (a) the confirmation surfaces behave **identically under `TRADING_MODE=paper`
+and `live`** (paper-safe; dev is paper-only per the feature-workflow invariant) and carry the PAPER/LIVE
+mode tag from FR-1; (b) **all existing `OrderType` values** (MARKET, LIMIT, STOP, STOP_LIMIT,
+TRAILING_STOP) continue to render and submit as they do today — no order type is dropped or added; and
+(c) both `ORDER_STATUS_PARTIALLY_FILLED` and `ORDER_STATUS_FILLED` render (partial-fill rows show
+`filled < qty`), and streamed fill handling (FR-18) is unaffected. _(Addresses review warnings C-3 /
+C-4 / C-5: this feature restyles, it does not alter trade execution or fill handling.)_
+
 ### Mobile & behavior
 
 FR-16. **Mobile companion (1:1 parity).** One phone frame per desktop screen (11 total) in a
@@ -261,7 +272,11 @@ tab group at a time) rather than one monolithic PR. `/sdd-design` should recomme
    delete panel enforces the typed-symbol and "DELETE ALL" confirmations, and job cards poll every 4s
    until terminal.
 8. Portfolio is a read-only broker mirror — figures come from the broker-authoritative source, the
-   footer states "xstockstrat never writes to the ledger," and balances reflect the 10s poll.
+   footer states "xstockstrat never writes to the ledger," and balances reflect the 10s poll. A
+   **cross-read-path parity test** asserts that any position valuation shown on both Portfolio
+   (Mkt value / Unrealized) and Exposure (Risk at stop / weight) resolves to the *same*
+   broker-authoritative source for the same symbol — closing the `ListPositions ↔ ListPortfolios`
+   divergence seam from ledger `fails.md` 2026-07-01 056 / Constitution C-10(b).
 9. Loading, empty, and error states are implemented for every data screen (skeletons, empty copy,
    per-card error notices).
 10. The mobile companion renders 1:1 with every desktop screen via the shared section renderer, with a

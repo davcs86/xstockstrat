@@ -72,3 +72,28 @@
 - `/sdd-review ui-revamp-opportunities-first product-spec` (product-spec gate), then
   `/sdd-design ui-revamp-opportunities-first` (recon should diff Nocturne vs the existing theme, map
   each screen's fields to a real data source, place the `accounts` segment, and propose the slicing).
+
+## Session 2026-07-31 — sdd-review product-spec
+
+- **Product spec approved. Status: draft → spec-ready.**
+- **Criteria verdict (spec-reviewer): PASS WITH WARNINGS** — no blockers, no Floor (`F-*`) breaches.
+  Every code-checkable claim verified against the tree: the single affected service matches the
+  Registry; the handoff-named components/hooks/routes, `useIsAdmin` (`useLiveStrategies.ts:42`),
+  `PLATFORM_SUBNAV`, the `design-handoff/` bundle, and the `BarAction`/`NoTradeReason`/
+  `BACKTEST_STATUS_INSUFFICIENT_DATA=2` proto enums (`packages/proto/analysis/v1/analysis.proto:45,100,110`,
+  each with `_UNSPECIFIED=0`) all exist; the proposed `ui.chrome.*` keys follow the naming rule.
+- **Overlap verdict (feature-overlap): CLEAN** — no config-key, proto-field, migration-`NNN`, or
+  source-file collision. Four live concurrent features (all `code-completed`: 033, 076, 077, 078)
+  use disjoint namespaces; 077 names `xstockstrat-ui` but makes no edit. 083 will heavily rewrite
+  launched UI files (055/056/057/060/068 …) but those are on trunk → rebase-against-trunk work, not
+  cross-feature collisions. No `merge-order.md` entry required.
+- **Warnings resolved in-spec before advancing:**
+  - C-3 (paper-safety) / C-4 (order-type coverage) / C-5 (partial-vs-full fills) → added **FR-20**
+    stating order execution is an unchanged, paper-safe re-presentation of `OrderForm`/`OrderBook`.
+  - C-10(b) (broker-value parity) → extended **AC-8** with an explicit cross-read-path parity test
+    between Portfolio (Mkt value / Unrealized) and Exposure (Risk at stop / weight).
+- **Warning accepted (deferred):** criterion 9 — six unchecked Open Questions (scope split,
+  config-vs-env, route/URL compatibility, Copilot data source, Nocturne-vs-theme, `accounts`
+  placement). All are genuine design-phase decisions correctly routed to `/sdd-design` (honoring
+  `P-03`, not breaching it); routing accepted at the gate rather than guessing answers now.
+- **Next:** `/sdd-design ui-revamp-opportunities-first`.

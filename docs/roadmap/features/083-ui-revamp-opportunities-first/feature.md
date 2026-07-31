@@ -1,6 +1,6 @@
 # Feature: ui-revamp-opportunities-first
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/ui-revamp-opportunities-first`
 **Created**: 2026-07-31
 **Last Updated**: 2026-07-31
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-07-31 | `idea` → `draft` | /sdd-story | Product spec generated from Nocturne design handoff (12-screen UI revamp) |
+| 2026-07-31 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS with 5 advisory warnings; overlap CLEAN). Warnings C-3/C-4/C-5/C-10(b) folded into FR-20 + AC-8; six design-phase Open Questions accepted for routing to /sdd-design |
 
 ---
 
@@ -49,4 +50,4 @@ roles then._
 
 ## Next Action
 
-`/sdd-review ui-revamp-opportunities-first product-spec` — AI review of product spec before running `/sdd-design`
+`/sdd-design ui-revamp-opportunities-first` — recon (diff Nocturne vs the existing theme, map each screen's fields to a real data source, place the orphaned `accounts` segment) + adversarial design debate, and propose a per-tab slicing of this large revamp
