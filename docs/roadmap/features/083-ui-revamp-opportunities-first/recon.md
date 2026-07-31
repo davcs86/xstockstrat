@@ -167,3 +167,91 @@ its differentiating framing are backend gaps the product spec scoped OUT.** A de
   083 shell.
 - **Slice 083 itself** into stacked PRs (product-spec's own recommendation): shell/nav/theme first, then
   one tab-group per `/sdd-spec` + `/sdd-execute`.
+
+---
+
+## Phase 0b — Producer-service recon (backend now in-scope per user override 2026-07-31)
+
+The user directed **all backend gaps ship inside 083, sequenced backend→frontend** (context.md § DECISION).
+Producer services are therefore in scope. Digests below (evidence-cited); each backend subsystem is
+greenfield unless noted.
+
+**`xstockstrat-ingest`** (Python, 50055) — servicer `app/handlers/servicer.py:113` (9 RPCs). `QuerySignals`
+(`:743`) orders **only** `ORDER BY ingested_at DESC` (`:807`) — **no ranking/dedup/aggregation exists**.
+`ExternalSignal` (`ingest.proto:105-115`) in TimescaleDB hypertable `ingest.newsletter_signals`
+(`migrations/001`). `SignalSource` (`ingest.proto:135-143`) + table `ingest.signal_sources` (`migrations/002`)
+have **no health/freshness/last-seen/last-error field** — only `created_at`. Highest migration **007 → new 008**.
+Config `app/config/watcher.py:15`; header-propagation `servicer.py:150-156` (C-03 ok); pool max 2 (`main.py:58`).
+→ Opportunity-queue RPC + source-health tracking are **greenfield** (new proto messages/enum, migration 008, ranking logic).
+
+**`xstockstrat-analysis`** (Python, 50056) — servicer `app/handlers/servicer.py:94` (2219 lines, 13 RPCs).
+Shared evaluator `app/services/evaluator.py:81`: `_eval_condition:415` returns a **bare `bool`** (no per-leaf
+value/threshold/pass), and `BarDecision` conviction is a **trivial `1.0 if entry else 0.0`** (`evaluator.py:165`)
+— so both the queue "conviction %" and Signal-detail strength bars need a **real conviction/strength model,
+not an existing field**. `live_loop.py:37` emits alerts only — **no queryable readiness RPC**. No
+`expectancy`/`signals-30d`/`taken`/`queue-share` anywhere (grep 0 hits). `ScreenSymbols` (`:1727`) returns
+blended `criterion_scores`, **not raw PE/RSI/ATR columns** (`screener.py:32` whitelist has PE, not RSI/ATR/rev-growth).
+Highest migration **009 → new 010**. `indicators` (`indicators_engine.py`) has SMA/EMA/RSI/MACD/BB/ATR/VWAP/STOCH
+but **ATR/VWAP are close-only approximations** (`:103,112`) — accuracy caveat for screener columns; highest
+migration **004 → new 005**. Pool max 2 each. Live-loop outbound calls carry **no propagation** — any new
+request-scoped readiness RPC must add the C-03 tuple (`servicer.py:222` pattern).
+→ Live condition/readiness eval, per-strategy analytics, conviction model, screener enrichment are **greenfield**.
+
+**`xstockstrat-portfolio`** (Go, 50052) — service `internal/service/portfolio_service.go:36`, repo
+`internal/repository/portfolio_repo.go:19`. **C-10(b) parity seam is HEALED**: `ListPositions` and
+`ListPortfolios` both read broker columns via shared `positionColumns`/`scanPositionRow` (`portfolio_repo.go:225,114-118`),
+falling back to marketdata mid-quotes only when `current_price<=0` (`portfolio_service.go:259-263`). (`GetPnL`/
+`broadcastSnapshot` still recompute separately — not the seam.) `Position` (`portfolio.proto:43-63`) has **no
+stop/exit-rule/factor/flag**. **Portfolio does NOT dial trading** (`portfolio_service.go:69-88` dials ledger/
+marketdata/notify only) — so "risk at stop"/"stop distance" need either a **new portfolio→trading dependency**
+(edge that does not exist) or the stop pushed via a **ledger event**. **No factor/sector/exposure model anywhere**
+(grep 0 hits) — greenfield. Highest migration **007 → new 008**. Config `internal/config/config.go:60`;
+Go propagation interceptor `internal/middleware/propagation.go:27` (C-03 ok); pool max 2 (`pool.go:15`).
+→ Risk/factor engine is **greenfield + adds an inter-service edge or a ledger-event channel**.
+
+**`xstockstrat-agent`** (Python MCP host, 9000) — `app/main.py`, tools `app/tools.py:88` (17 tools).
+**No database, no `migrations/`, no connection pool, no LLM client, no `packages/proto/agent/`, no
+conversation/thread persistence** — the agent is explicitly stateless. Inbound auth = **OAuth 2.1 aud-bound
+JWT** validated via identity `ValidateToken` (`app/main.py:137-166`, `app/auth.py:52`); the **only
+browser-reachable authenticated invocation path is the MCP Streamable-HTTP JSON-RPC endpoint** at `/`
+(`main.py:244`) — `GET /api/tools` is an unauthenticated catalog only. UI reaches it today solely via the
+catalog proxy `accounts/api/mcp-tools/route.ts:23`.
+→ Copilot needs THREE greenfield capabilities: (1) an **authenticated MCP-invocation client** in the UI
+(obtain an aud-bound JWT, speak MCP JSON-RPC), (2) **LLM generation** for "Read of the queue" (new Anthropic
+dependency — none today), (3) **thread persistence** (agent has no DB).
+
+### Floor / cross-module constraints the backend work triggers
+
+- **F-06 (Floor, non-overridable) — DB pool budget is AT 20.** Adding a **new agent DB pool** for Copilot
+  thread persistence would exceed the 20-connection cap. Resolution options the design MUST pick: persist
+  threads in an **existing** service's DB (e.g. ledger/identity) rather than a new agent pool, store via the
+  **ledger append-only event store** (no new pool), keep threads **client-side/browser-only** (no server
+  persistence), or **reallocate** the budget table (reduce another service's max). "Proceed anyway" cannot
+  waive F-06.
+- **C-04 / C-10(a/d)** — new enums (action tag ENTER/ADD/TRIM/EXIT, source-health status, position flag) need
+  `_UNSPECIFIED=0` and ship their **exhaustive TS `Record<Enum,…>` maps in the same PR** (the
+  `BacktestDiagnostics.tsx:9,18` trap, fails.md 2026-07-21) — `tsc`/`pnpm build` fails otherwise.
+- **C-03** — every new request-scoped backend RPC propagates `x-user-id`/`x-access-scope`/`x-trace-id`.
+- **Cross-service ownership of the queue** — the action tag (ENTER vs ADD vs TRIM/EXIT) requires a
+  **held-position cross-ref** (portfolio) joined with **signals** (ingest) and **conviction/readiness**
+  (analysis). Which service owns the aggregating `ListOpportunities` RPC — ingest, analysis, or a new
+  aggregation point — is the central backend design decision (each choice adds an inter-service edge).
+- **Proto governance** — new RPCs/messages/enums are additive (non-breaking) but still gate on
+  `buf lint`/`buf breaking` (C-09) + `./scripts/buf-gen.sh` freshness; reviewers now include Proto owners +
+  each producer-service owner + DBA (migrations 008 ingest / 010 analysis / 005 indicators / 008 portfolio +
+  Copilot-thread store) + config team (any new `<service>.<category>.<key>`).
+
+### Backend ordering (dependency-first; input to grilling / /sdd-spec)
+
+1. **Proto** — all new messages/RPCs/enums across ingest/analysis/portfolio (+ Copilot store owner) in one
+   proto pass → `buf-gen` → codegen (insights.md 2026-07-09 stacked proto→codegen→DB→service→UI pattern).
+2. **analysis live-eval + conviction model** (evaluator extension → readiness RPC) — feeds queue conviction,
+   Signal-detail conditions, Watchlist readiness. Prereq for a meaningful queue.
+3. **ingest opportunity-queue RPC** (ranking/dedup over signals × positions × readiness) + **source-health**
+   (migration 008). Depends on 2 + portfolio positions.
+4. **portfolio risk/factor engine** (migration 008 + stop linkage via new edge or ledger event + factor model)
+   — feeds Exposure.
+5. **analysis per-strategy analytics + screener enrichment** (migration 010, indicators 005).
+6. **Copilot** (agent LLM + auth-invocation client + thread store per the F-06-safe choice).
+7. **Frontend** — Nocturne shell/theme/nav (+ C-10(a) nav test, accounts surface pinned) → per-tab screens
+   consuming the now-real RPCs → mobile companion → non-happy states, each screen landing with real data.

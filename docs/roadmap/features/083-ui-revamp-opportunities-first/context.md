@@ -97,3 +97,45 @@
   placement). All are genuine design-phase decisions correctly routed to `/sdd-design` (honoring
   `P-03`, not breaching it); routing accepted at the gate rather than guessing answers now.
 - **Next:** `/sdd-design ui-revamp-opportunities-first`.
+
+## Session 2026-07-31 — sdd-design (Phase 0 recon + Round 1)
+
+- **Phase 0 recon** (`recon.md` written): four `codebase-discovery` passes over `xstockstrat-ui`
+  (shell/theme/routing, Decide/Discover data, Engine data, Book/Copilot/tests). Decisive finding —
+  the ranked **Opportunities queue** and the differentiating framing (risk-based Exposure, readiness
+  Watchlists, live condition evaluation, factor model, signal-source health, per-strategy analytics,
+  Copilot invocation+persistence) are **backend GAPs** no current RPC returns; Backtest / Backfills /
+  Portfolio / Orders are fully served, others partially. Every gap grep-verified against the producer
+  (guards absence-claim traps 080/081). Theme = two-file token remap (app already dark-only).
+- **Round 1 grilling.** Proposer: "shell + served-data + thin client-ranked queue over `QuerySignals`."
+  Adversary: **NEEDS WORK, no Floor breach.** Verified `ingest.QuerySignals` is **unrouted end-to-end**
+  (`insightsBff.ts:63-78` registers 5 IngestService methods, `querySignals` absent; no browser client;
+  no mock handler) — the "served RPC" claim was advertised-proto, not exercised (trap 081). Client-side
+  ranking + `direction→ENTER/ADD/TRIM/EXIT` action tags rejected: `direction` can't express TRIM/EXIT,
+  so an invented action verb on an order-opening row is a correctness/safety issue, not cosmetics.
+  F-07 ruled **not** breached for env-overridable chrome defaults (conditional on env-override, not a
+  bare literal). accounts placement + AC-1 nav test surface + FR-20 per-surface parity flagged.
+
+### DECISION — user scope override (recorded per C-11 / How-to-Act #1)
+
+- **User directive (2026-07-31):** *"do all within 083, execute them in the right order — no phased
+  migration."* The backend gaps are **no longer deferred to separate features** — the ranked
+  Opportunity-queue RPC(s), live condition/readiness evaluation, position risk/factor engine,
+  signal-source health, per-strategy analytics, screener enrichment, and the Copilot MCP-invocation +
+  thread persistence are all **in scope for 083**, sequenced **backend → codegen/migration/config →
+  frontend** so each screen ships with real data (no shell-now/data-later).
+- **Governance consequence (must reconcile, surfaced to user, not papered over):** this overrides the
+  product spec's `## Out of Scope` ("new backend RPCs … a separate feature"), `## Proto Contract
+  Changes` ("No proto changes"), `## Database Changes` ("No schema changes"), and the `xstockstrat-ui`-
+  only Reviewers snapshot. Now active: **breaking/additive proto gate** (2 owners + platform lead),
+  **config-key gate** (config team) if any `<service>.<category>.<key>` added, **DB migration gate**
+  (DBA + service owner) for Copilot-thread persistence, and expanded reviewers (ingest / analysis /
+  portfolio / agent owners). **Follow-up:** refresh `product-spec.md` (scope/gates/reviewers) and
+  re-run `/sdd-review product-spec` before `/sdd-execute` — captured as an Open Thread on `design.md`.
+
+### Open Threads (carry to design.md / sdd-spec)
+
+- [ ] Refresh product-spec.md scope + governance gates + Reviewers to match the in-scope backend work;
+      re-review. (Before `/sdd-execute`.)
+- [ ] Producer-service recon (ingest / analysis / portfolio / agent / indicators) to ground the
+      backend ordering — running now in Phase 0b.
