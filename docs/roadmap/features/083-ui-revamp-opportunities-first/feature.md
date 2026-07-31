@@ -14,6 +14,7 @@
 | 2026-07-31 | `idea` → `draft` | /sdd-story | Product spec generated from Nocturne design handoff (12-screen UI revamp) |
 | 2026-07-31 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS with 5 advisory warnings; overlap CLEAN). Warnings C-3/C-4/C-5/C-10(b) folded into FR-20 + AC-8; six design-phase Open Questions accepted for routing to /sdd-design |
 | 2026-07-31 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md (+ Phase 0b producer recon) + design.md written. **User override:** all backend work in-scope for 083 (backend→frontend order, no phased split). No Floor breach (F-06 held via ledger-backed Copilot threads). Six Open Questions resolved. **Gate before /sdd-spec:** product-spec refresh + re-review (backend now in-scope) |
+| 2026-07-31 | `design-approved` (unchanged) | /sdd-review | Refreshed multi-service product spec re-reviewed: **PASS WITH WARNINGS** (0 blockers, no Floor breach — F-06/F-07 held; 3 advisory warnings deferred to /sdd-spec). Overlap **CLEAN**. Copilot descoped to shallow beta. Lifecycle unchanged (re-validation, not a re-gate). |
 
 ---
 

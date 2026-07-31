@@ -216,3 +216,26 @@
   at /sdd-spec).
 - **Next:** re-run `/sdd-review ui-revamp-opportunities-first product-spec` on the refreshed spec, then
   `/sdd-spec`.
+
+## Session 2026-07-31 — sdd-review product-spec (re-validation of refreshed spec)
+
+- **Verdict: PASS WITH WARNINGS** (0 blockers, no Floor breach). Lifecycle **unchanged** (already
+  `design-approved` — this is a re-validation of the scope-expanded spec, not a `draft→spec-ready` gate).
+- **spec-reviewer:** every code-checkable claim verified against the tree — service names vs Registry, the
+  four new enums all new types with `_UNSPECIFIED=0` (C-04), `analysis.proto:340`/`portfolio.proto:43`/
+  `trading.proto:47` anchors, ingest migration 008 correct next number, `factor_map` key format, and the
+  tenancy claim (`portfolio.proto:105-114` `ListPositions(user_id)` returns all held positions). **F-06 HELD**
+  (ledger append-store, no new pool — `ledger.proto:14-15,27-45`); **F-07 HELD** conditionally (env-overridable
+  chrome defaults, not bare literals — enforce at execute). Spec consistent with design.md.
+- **Advisory warnings (→ /sdd-spec):** (1) C-07 — make the `.up.sql`+`.down.sql` pairing explicit for
+  migration 008; (2) C-1 trading-domain — enumerate FR-19 chrome env-default per-deployment values +
+  note the compose/dev/prod file updates; (3) F-07 watch — keep chrome defaults env-overridable at
+  implementation (no bare literals).
+- **feature-overlap: CLEAN** — no config-key / proto-field / migration / shared-source collision with any
+  in-flight feature. Two notes carried forward: pin the **conditional analysis** expectancy migration at
+  **010** (trunk has analysis 008/009) — done in product-spec DB section; and a **feature-number
+  duplication** — `083-droplet-compose-deploy` also occupies `083` (spec-ready, disjoint files → no merge
+  conflict, but one dir should be renumbered per the numbering rule). **Flagged to user as a follow-up;
+  not acted on unilaterally.**
+- **Next:** `/sdd-spec ui-revamp-opportunities-first` (backend→frontend ordering; step PRs target the
+  feature branch directly, not base-chained; reconcile branch lineage per fails 082).
