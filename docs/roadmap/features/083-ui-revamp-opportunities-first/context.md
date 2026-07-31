@@ -240,3 +240,40 @@
   number.
 - **Next:** `/sdd-spec ui-revamp-opportunities-first` (backend→frontend ordering; step PRs target the
   feature branch directly, not base-chained; reconcile branch lineage per fails 082).
+
+## Session 2026-07-31 — sdd-spec
+
+- Generated implementation-spec.md with 31 steps. Status `design-approved` → `implementation-ready`.
+  Ordering backend→frontend per design.md § Ordering; step PRs target the feature branch directly
+  (NOT base-chained — fails.md 082).
+- Consumed recon.md + design.md as authoritative inputs; reused recon's grounded `path:line` Codebase
+  Map directly and did targeted inline discovery only for the design's open `/sdd-spec` decisions.
+- Key codebase findings (grep-resolved the design Open Risks):
+  - **Factor grouping REQUIRES `portfolio.exposure.factor_map`** — marketdata exposes no `sector`:
+    `Fundamentals` proto is fields 1–17 with no sector, and screener `_FUNDAMENTAL_FIELDS`
+    (`screener.py:32`) has none either. Design's "reuse marketdata sector" path is unavailable →
+    config key is the actual path (Step 13, C-05-governed). Resolves "Factor source unverified".
+  - **Expectancy is derivable — no analysis migration:** `analysis.backtest_runs` (migration 006)
+    stores `win_rate` + `profit_factor`; expectancy = closed form from those two columns. Resolves
+    "Expectancy source" toward no new schema. **Analysis migration 010 is NOT needed.**
+  - **Portfolio resting-stops held in-memory — no portfolio migration:** portfolio consumes ledger
+    events via `ConsumeOrderFills/PositionSyncs/BalanceSyncs` (`cmd/server/main.go:63-65`); extend
+    `ConsumeOrderFills` + boot-replay (matches existing position-state-from-events pattern). Resolves
+    "Portfolio stop-state storage". **Only ingest migration 008 is needed** (last is 007).
+  - **New `analysis→trading` edge is real:** `TRADING_ENDPOINT` is ABSENT from the analysis block in
+    `docker-compose.yml` and both `.do` specs (the `@427` hit belongs to the `xstockstrat-ui` block);
+    Step 15 adds it in all three. `Order.strategy_id = 15` / `ListOrders` confirmed in trading.proto.
+  - **Proto field-number floors** (all additive): analysis `ScreenResult` 1–6 → new 7+;
+    portfolio `Position` 1–13 → risk fields 14+; ingest `SignalSource` 1–7 → health 8+. Four new enums,
+    each `_UNSPECIFIED=0`; four exhaustive TS `Record<Enum,…>` maps authored in the same codegen PR
+    (Step 2, C-10(a/d) trap).
+  - **Traced evaluator is feasible:** `evaluate_with_series` (`evaluator.py:118`) + `_eval_condition`
+    (`:415`, bare bool, fns >/</>=/<=/crosses_above/crosses_below) → additive sibling
+    `evaluate_conditions_traced` emits per-leaf lhs_value/threshold/state/distance; conviction stays a
+    deterministic ordinal (passing/total), never a probability. Hot path (`:165` frozen conviction)
+    untouched.
+  - **Copilot shallow beta** uses the ledger append-store (`ledger.proto:14,33,37,45`), append-only,
+    no edit/delete UX — no new pool/DB/LLM (F-06 held). Ledger unchanged.
+  - **strat-lab plugin NOT affected** — 083 changes none of run_backtest/manage_strategy/
+    trigger_backfill/get_backfill_status/set_strategy_live; noted in Step 31 for the PR body.
+- Reviewers snapshot finalized (config team added because factor_map is used; ledger/trading FYI).
