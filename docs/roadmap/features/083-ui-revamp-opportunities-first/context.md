@@ -139,3 +139,62 @@
       re-review. (Before `/sdd-execute`.)
 - [ ] Producer-service recon (ingest / analysis / portfolio / agent / indicators) to ground the
       backend ordering — running now in Phase 0b.
+
+### Round 2 — full-scope backend design (proposer vs adversary)
+
+- **Proposer:** analysis-owns-the-queue spine (zero new edges — analysis already reads ingest signals +
+  portfolio positions + owns the evaluator); Copilot threads → ledger append-events (no new pool);
+  client-side "read of queue" (no LLM); portfolio risk via new edges; per-strategy analytics + screener
+  enrichment; 8-step backend→frontend ordering.
+- **Adversary: NEEDS WORK, no Floor breach.** F-06 adjudicated **HELD** — verified `ledger.proto:14-15,33-61`
+  supports `stream_key` + `Struct payload` + `idempotency_key` append/replay; ledger append-only fits a
+  chat thread iff the UX never edits/deletes (bound as a product constraint). Objections resolved into the
+  design: (1) conviction/readiness formula was undefined for a number that ranks an order queue → **bound
+  to a deterministic ordinal** (passing-leaf ratio + normalized distance), not an invented %; (2) TRIM-vs-EXIT
+  "conviction cut" is a fabricated trade-action boundary → **collapsed to a single `REDUCE` tag**; (3) the
+  MCP-invocation "BFF mints an aud-bound JWT" is under-scoped — a UI-session token is UI-aud, agent needs
+  `aud==AGENT_PUBLIC_URL` via the full OAuth flow → **bound to UI-BFF-as-OAuth-client (top open risk, read-only
+  fallback)**; (4) `portfolio→trading` would create a trading↔portfolio gRPC cycle → **stop learned via a
+  ledger order-event instead** (portfolio already consumes ledger); (5) the proposer's own "need a global
+  positions RPC" worry is **overstated** — `ListPositions(user_id)` with unset `account_id` + `TradingMode
+  UNSPECIFIED` already returns all held positions (`portfolio.proto:105-114`), so **no new RPC**; (6) the
+  8-stacked-PR topology is the fails-082 silent-drop shape → **step PRs target the feature branch directly,
+  not base-chained**. The 2026-07-21 exhaustive-map tsc-break does **not** fire (new enum types, not appended
+  values), but the maps + nav test + AC-8 parity + C-12 fixtures must still be authored in-PR.
+
+### Decisions (design-approved)
+
+- **Chosen approach:** one feature, five additive backend subsystems on an analysis-owns-the-queue spine,
+  then a Nocturne UI consuming each screen's now-real RPC; backend→frontend order; no new DB pool (F-06 held);
+  no new synchronous inter-service cycle. Full detail in `design.md`.
+- **Action tag** = `ENTER/ADD/REDUCE` (no synthesized EXIT-vs-TRIM). **Conviction** = deterministic ordinal,
+  not a probability. **Copilot** = ledger-thread persistence + client-side summary + OAuth-client MCP
+  invocation (read-only fallback). **Stop-distance** via ledger event (no portfolio→trading cycle). **Factor**
+  from marketdata `sector` (config-map fallback). **Chrome** = env defaults + ChromeContext (**C-05 deviation
+  recorded** — no config-service keys; not an F-07 breach since defaults are env-overridable).
+- **Design gate:** presented twice via AskUserQuestion; user interrupted both without selecting, having already
+  given the explicit substantive directive ("do all within 083 … right order … no phased migration") and a
+  "continue" instruction. Proceeded to finalize the design with the recommended resolutions per that directive,
+  subject to user redirection. Rounds: 2 (full). Status: spec-ready → design-approved.
+
+### Open Threads (carry to /sdd-spec — full list in design.md § Open Risks)
+
+- [ ] **Before Step 1:** refresh product-spec.md scope/gates/Reviewers (backend in-scope) + re-run
+      `/sdd-review product-spec`.
+- [ ] **Top design risk:** Copilot MCP-invocation auth (UI-BFF-as-OAuth-client vs identity mint-RPC vs
+      read-only fallback) — resolve at Step 7 /sdd-spec.
+- [ ] Pin the conviction/readiness formula with a unit test (Step 2); verify factor `sector` (Step 5);
+      verify expectancy source / possible analysis schema add (Step 6); portfolio stop-state storage (Step 5);
+      ledger query-conn capacity note (Step 7); branch-lineage reconcile (fails 082).
+
+## Session 2026-07-31 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-ui + Phase 0b producers ingest/analysis/portfolio/agent/
+  indicators; key reuse patterns: analysis-owns-queue zero-new-edges, ledger append-store for Copilot threads,
+  additive-evaluator-sibling for readiness).
+- Phase 1 Grilling: 2 rounds (full). Chosen approach: five additive backend subsystems (analysis-owns-queue)
+  + Nocturne UI, backend→frontend. Rejected: ingest-owned queue, new agent DB (F-06), LLM copilot,
+  portfolio→trading edge, global-positions RPC, TRIM/EXIT split, base-chained step PRs.
+- Constitution rules touched: F-06 (held), F-07 (held), C-04, C-05 (deviation), C-03, C-09, C-10(a/b/d),
+  C-08/P-06, C-11, C-12/C-13. Floor breaches: none.
+- Status: spec-ready → design-approved.

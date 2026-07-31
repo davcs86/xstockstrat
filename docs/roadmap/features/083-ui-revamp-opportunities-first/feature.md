@@ -1,6 +1,6 @@
 # Feature: ui-revamp-opportunities-first
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `design-approved`
 **Development Branch**: `feature/ui-revamp-opportunities-first`
 **Created**: 2026-07-31
 **Last Updated**: 2026-07-31
@@ -13,12 +13,15 @@
 |---|---|---|---|
 | 2026-07-31 | `idea` → `draft` | /sdd-story | Product spec generated from Nocturne design handoff (12-screen UI revamp) |
 | 2026-07-31 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS with 5 advisory warnings; overlap CLEAN). Warnings C-3/C-4/C-5/C-10(b) folded into FR-20 + AC-8; six design-phase Open Questions accepted for routing to /sdd-design |
+| 2026-07-31 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md (+ Phase 0b producer recon) + design.md written. **User override:** all backend work in-scope for 083 (backend→frontend order, no phased split). No Floor breach (F-06 held via ledger-backed Copilot threads). Six Open Questions resolved. **Gate before /sdd-spec:** product-spec refresh + re-review (backend now in-scope) |
 
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
+- [Product Spec](product-spec.md) — requirements and governance _(stale re backend scope — refresh + re-review before /sdd-execute; see design.md Open Risks)_
+- [Recon](recon.md) — grounded codebase dossier (UI + Phase 0b producer services)
+- [Design](design.md) — debated, approved architecture (analysis-owns-queue spine; backend→frontend ordering)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec ui-revamp-opportunities-first`_
 - [Context Log](context.md) — session history, decisions, deviations
 - [Design Handoff](design-handoff/) — Nocturne design reference: `README.md` (token + screen grammar spec), `source-map.md` (screen → repo-module map), `xstockstrat UI.dc.html` (interactive prototype), `screenshots/01–12` (per-screen captures)
@@ -50,4 +53,7 @@ roles then._
 
 ## Next Action
 
-`/sdd-design ui-revamp-opportunities-first` — recon (diff Nocturne vs the existing theme, map each screen's fields to a real data source, place the orphaned `accounts` segment) + adversarial design debate, and propose a per-tab slicing of this large revamp
+**First:** refresh `product-spec.md` (scope / proto / DB / config / Reviewers now that backend is in-scope
+per the user override) and re-run `/sdd-review ui-revamp-opportunities-first product-spec`.
+**Then:** `/sdd-spec ui-revamp-opportunities-first` — generate the implementation spec from the approved
+design (backend→frontend ordering; step PRs target the feature branch directly, not base-chained).
