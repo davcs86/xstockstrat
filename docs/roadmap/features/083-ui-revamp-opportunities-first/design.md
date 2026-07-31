@@ -63,13 +63,17 @@ cycle.**
    - **"Read of the queue" + concentration flag = client-side templated summaries** over the already-
      fetched `ListOpportunities` + position weights. **No Anthropic/LLM client, agent stays stateless** —
      the recon confirmed the agent has none and adding one is out of proportion.
-   - **Authenticated MCP tool invocation** reuses the agent's existing **OAuth 2.1** surface
-     (`oauth_server.py:122-237`): the UI BFF acts as a registered OAuth client, obtaining a per-session
-     **agent-aud** token (`aud == AGENT_PUBLIC_URL`, `auth.py:43`) via the existing DCR→authorize→token
-     flow, then speaks MCP JSON-RPC to the agent `/` endpoint (`main.py:244`), **confirm-gated** per FR-4
-     ("read-only unless you confirm"). This is the design's **highest open risk** (see Open Risks) — a UI
-     session token is UI-aud, not agent-aud, so the mint path is a real OAuth sub-surface, not "a BFF
-     route", and needs approval-flow sign-off for the new client registration.
+   - **Copilot ships as a SHALLOW BETA in 083 (user decision 2026-07-31).** In scope: the rail chrome
+     (toggle, layout, suggestion chips, "MCP · N tools · read-only unless you confirm" footer), the
+     **client-side** "Read of the queue" + concentration-flag cards, and the **ledger-persisted thread**
+     of the user's own prompts/notes (append-only). The input is present but does **not** perform a live
+     authenticated MCP tool call — it is labelled beta/read-only. **Deferred to a separate feature:** the
+     **authenticated MCP tool-invocation path** (UI-BFF-as-OAuth-client obtaining a per-session
+     **agent-aud** token via the agent's existing OAuth 2.1 flow, `oauth_server.py:122-237`,
+     `auth.py:43`, then MCP JSON-RPC to `main.py:244`) **and** any **LLM generation** of the summary.
+     This deliberately removes the design's former top open risk (the aud-bound-token mint surface +
+     approval-flow sign-off) from 083's critical path while still shipping a usable Copilot surface that
+     the full feature later upgrades in place.
 
 4. **Position risk / factor engine — `xstockstrat-portfolio`, no synchronous cycle.** New `Position`
    risk fields + `PositionRiskFlag{UNSPECIFIED, ADD_SIGNAL, REDUCE_SIGNAL, STOP_NEAR}`, plus a risk
@@ -144,7 +148,8 @@ cycle.**
 4. ingest source-health (migration 008).
 5. portfolio risk/factor (ledger-event stop ingestion + marketdata sector).
 6. analysis analytics + screener enrichment (`analysis→trading` edge).
-7. Copilot (ledger-thread events + OAuth-client MCP BFF + client-side summary).
+7. Copilot **shallow beta** (ledger-thread events + client-side summary; **no** OAuth-client MCP BFF —
+   live tool invocation + LLM deferred to a separate feature).
 8. Frontend: Nocturne shell/theme/nav + C-10(a) test + `accounts` surface **first**; then per-tab
    screens consuming #2–7; then mobile; then residual non-happy states. Each screen ships with real data.
 
@@ -182,12 +187,11 @@ cycle.**
       then re-run `/sdd-review product-spec`. New active gates: proto (2 owners + platform lead),
       DBA (ingest 008 + any portfolio/analytics migration), config team (`factor_map` if used), expanded
       reviewers (ingest/analysis/portfolio/agent/trading owners). — before Step 1.
-- [ ] **Copilot MCP-invocation auth is the top design risk.** The UI-BFF-as-OAuth-client mint path
-      (agent-aud token via the existing OAuth 2.1 flow) is a real security sub-surface, not "a BFF route",
-      and needs approval-flow sign-off for the new client registration. Confirm feasibility (reuse of
-      `accounts/oauth-login` vs a new identity mint-RPC) at Step 7 `/sdd-spec`; if infeasible in scope,
-      Copilot ships read-only (client-side summary + ledger thread, no live tool call) as the documented
-      fallback. — Step 7.
+- [x] **Copilot MCP-invocation auth — RESOLVED by descope (user decision 2026-07-31).** The
+      agent-aud-token/OAuth-client mint surface and any LLM generation are **deferred to a separate
+      feature**; 083 ships the **shallow beta** (client-side summary + ledger thread + no live tool call),
+      so this is no longer on 083's critical path. The separate Copilot feature owns the authenticated
+      invocation design.
 - [ ] **Conviction/readiness formula** — the passing-leaf-ratio + normalized-distance definition must be
       pinned with a unit test at spec time (C-01); confirm the traced evaluator can emit `lhs_value`/
       `threshold` for every supported leaf `fn` (`crosses_above/below`, comparators). — Step 2.

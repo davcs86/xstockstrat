@@ -74,10 +74,16 @@ files — there is no separate token module). Numbers, tickers, IDs, thresholds,
 in the mono stack with `tabular-nums`. Phosphor icons replace the prototype's hand-drawn inline SVG
 stand-ins.
 
-FR-4. **Copilot rail (MCP-backed).** An optional `310px` right rail, toggled from the top bar (button
-shows an accent-filled active state when open), containing a "Read of the queue" summary, a
-concentration-flag card with actions, an "asked earlier" thread, and a sticky input with suggestion
-chips and an "MCP · N tools · read-only unless you confirm" note. Default off.
+FR-4. **Copilot rail (MCP-backed) — SHALLOW BETA in 083.** An optional `310px` right rail, toggled from
+the top bar (button shows an accent-filled active state when open), containing a "Read of the queue"
+summary, a concentration-flag card with actions, an "asked earlier" thread, and a sticky input with
+suggestion chips and an "MCP · N tools · read-only unless you confirm" note. Default off.
+**Scope for 083 (design decision 2026-07-31):** the "Read of the queue" + concentration-flag cards are
+**computed client-side** from the loaded queue + position weights (no LLM), and the thread persists via
+the **ledger append-store** (`copilot:{user_id}:{thread_id}` streams, append-only). The input renders in
+a **beta/read-only** state — it does **not** perform a live authenticated MCP tool call in 083.
+**Deferred to a separate feature:** the authenticated MCP tool-invocation path (UI-as-OAuth-client →
+agent-aud token → MCP JSON-RPC) and any LLM generation of the summary (see Out of Scope + design.md § 3).
 
 ### Screens (Decide / Discover / Engine / Book)
 
@@ -189,67 +195,108 @@ hardcoded — consistent with the platform's config-governance rules.
 
 ## Out of Scope
 
-- **No changes to backend trade execution, P&L computation, or the ledger.** The broker remains the
-  system of record; this feature is a presentation-layer re-frame that consumes existing RPCs.
-- **New backend RPCs / proto messages** to feed a screen that has no existing data source. If
-  `/sdd-design` finds a screen needs data no current RPC returns (e.g. a persisted Copilot thread, or
-  a "readiness" computation not currently served), that backend work is a **separate feature** — this
-  one is scoped to the UI. The design phase decides the split.
-- **The MCP agent's tool contract.** The Copilot rail *consumes* the existing MCP surface; it does not
-  add or change agent tools. Any new tool is a separate `xstockstrat-agent` feature.
-- **Live Alpaca/IBKR ledger writes** — explicitly excluded (Portfolio is read-only).
+> **Scope override (user directive 2026-07-31, recorded in context.md § DECISION):** the original spec
+> scoped this **UI-only** and deferred every backend gap to separate features. The user directed that
+> **all backend gaps ship inside 083, sequenced backend→frontend, with no phased split.** The bullets
+> below are updated accordingly; the enumerated backend subsystems and their ordering live in `design.md`.
+
+- **No changes to backend trade execution, P&L computation, or the broker ledger of record.** The broker
+  (Alpaca/IBKR) remains the system of record for positions and P&L; the app never writes to the broker
+  ledger. (This is unchanged — the in-scope backend work below is *analytics/read* surfaces, not trade
+  execution.)
+- **IN SCOPE (per the override):** the backend RPCs/messages/enums + migrations that feed the revamped
+  screens — the ranked Opportunity-queue RPC, live condition/readiness evaluation, position risk/factor
+  fields, signal-source health, per-strategy analytics, and screener enrichment. Enumerated in
+  `design.md` (five additive subsystems on an `analysis`-owns-the-queue spine; no new DB pool — F-06 held).
+- **DEFERRED to a separate future feature — full Copilot.** 083 ships the Copilot **shallow beta** (FR-4:
+  client-side summary + ledger-persisted thread, no live tool call). The **authenticated MCP
+  tool-invocation path** (UI-as-OAuth-client → agent-aud token → MCP JSON-RPC) and any **LLM generation**
+  are a separate `xstockstrat-agent` + UI feature (run `/sdd-story` to open it). 083 adds **no new agent
+  tool** and **no agent DB**.
+- **Live Alpaca/IBKR ledger writes** — explicitly excluded (Portfolio is read-only broker mirror).
 - **Shipping the prototype HTML** — it is a reference only.
-- Authentication / authorization changes beyond reusing the existing JWT middleware and `useIsAdmin()`
-  gate.
+- **No new auth/authz beyond** the existing JWT middleware + `useIsAdmin()` gate and standard
+  header-propagation (C-03) on the new RPCs. (The Copilot OAuth-client token surface is part of the
+  deferred full-Copilot feature, not 083.)
 
 ## Affected Services
 
-Exact service names from CLAUDE.md Service Registry:
+Exact service names from CLAUDE.md Service Registry. **Expanded from UI-only to multi-service by the
+scope override** (backend gaps now in-scope):
 
-- `xstockstrat-ui` (Next.js) — **the entire change.** All 12 screens, the shell, the Copilot rail, the
-  CRUD editors, and the mobile companion are rebuilt/re-framed here using the existing
-  `components/ui/*` primitives, TanStack Query hooks, and Connect-RPC BFF clients.
+- `xstockstrat-ui` (Next.js) — the full UI revamp: all 12 screens, the shell, the Copilot **shallow-beta**
+  rail, the CRUD editors, and the mobile companion, using existing `components/ui/*` primitives, TanStack
+  Query hooks, and Connect-RPC BFF clients; plus new BFF routes/browser clients for the new backend RPCs.
+- `xstockstrat-analysis` (Python) — new `ListOpportunities`, `EvaluateReadiness`, `GetStrategyAnalytics`
+  RPCs; `ScreenResult` enrichment; additive evaluator sibling for the traced readiness/conviction. Owns
+  the opportunity-queue aggregation (already dials ingest/portfolio/indicators — zero new edges for the
+  queue); new **non-cyclic** `analysis→trading` edge for "taken".
+- `xstockstrat-ingest` (Python) — signal-source **health** fields/enum + **migration 008** on
+  `signal_sources`; the queue reads its existing `QuerySignals`.
+- `xstockstrat-portfolio` (Go) — `Position` **risk/factor** fields + `PositionRiskFlag` enum + factor
+  grouping (marketdata `sector`); resting-stop learned via a **ledger order-event** (no `portfolio→trading`
+  cycle).
+- `xstockstrat-ledger` (Node) — **no code change**; used as the append-store for Copilot threads
+  (`AppendEvent`/`QueryEvents`, existing RPCs — no new pool, F-06 held).
+- Proto package `packages/proto/{analysis,portfolio,ingest}/v1` — one additive, non-breaking proto pass
+  (new messages/RPCs + four enums, each `_UNSPECIFIED=0`) + `buf-gen` codegen.
 
-No other service is modified by the in-scope work. The UI continues to reach backend services
-(trading, portfolio, marketdata, analysis, indicators, ingest, config, notify) over the existing
-gRPC/Connect BFF; the Copilot rail reaches the existing `xstockstrat-agent` MCP surface. Should the
-design phase surface a required backend data gap, that becomes its own feature (see Out of Scope).
+Not modified in 083: `xstockstrat-agent` (no new tool; full Copilot deferred), `trading` (read-only
+consumer via `ListOrders` / order-events; no change), `marketdata`, `indicators` (existing
+`ComputeIndicator` reused — note the close-only ATR/VWAP approximation caveat), `config`, `notify`,
+`identity`.
 
 ## Proto Contract Changes
 
-- [x] No proto changes required (in-scope UI-only work).
+- [x] **Proto changes REQUIRED** (scope override — backend in-scope). One **additive, non-breaking** pass:
+  - `analysis`: `ListOpportunities`+`Opportunity`+`OpportunityActionTag{UNSPECIFIED,ENTER,ADD,REDUCE}`;
+    `EvaluateReadiness`+`SymbolReadiness`+`ConditionEval`+`ConditionState{UNSPECIFIED,PASS,SOFT,FAIL}`;
+    `GetStrategyAnalytics`+`StrategyAnalytics`; new `ScreenResult` fields (raw pe/rsi/atr/rev_growth/held).
+  - `portfolio`: `Position` risk fields + `PositionRiskFlag{UNSPECIFIED,ADD_SIGNAL,REDUCE_SIGNAL,STOP_NEAR}`.
+  - `ingest`: `SignalSource` health fields + `SourceHealthStatus{UNSPECIFIED,LIVE,STALE,DOWN}`.
+  - Each enum has `_UNSPECIFIED=0` (C-04). Gate: `buf lint` + `buf breaking` + `./scripts/buf-gen.sh`
+    freshness (C-09). Approval: **2 proto owners + platform lead** (see workflow gates below).
 
-> Caveat for `/sdd-design`: if a screen provably needs data no existing RPC returns, the proto/backend
-> work is split into a separate feature. If any proto **enum** is ever touched as part of that split,
-> note ledger `fails.md` 2026-07-21 (fix-custom-formula-allnone / C-10(a/d)): the `xstockstrat-ui`
-> `BacktestDiagnostics.tsx` maps `NoTradeReason` / `BarAction` with an **exhaustive** `Record<Enum,…>`,
-> so a new enum value hard-couples to a UI map edit in the same PR or `pnpm build` fails.
+> Enum-map caveat (ledger `fails.md` 2026-07-21 / C-10(a/d)): the four enums above are **new types**, so no
+> existing `BacktestDiagnostics.tsx` exhaustive `Record<Enum,…>` breaks `tsc`. But each new enum MUST ship
+> its own exhaustive TS `Record<Enum,…>` render map (+ a `default` case for any string-`direction` map) in
+> the **same PR** that introduces it — authored, not appended.
 
 ## Config Key Changes
 
-- [ ] No new config keys **required**, but FR-19 proposes three app-level chrome props
-  (`density`, `showCopilot`, `accountMode`). If these are served via `xstockstrat-config` rather than
-  build-time/env defaults, they must follow `<service>.<category>.<key>` naming
-  (e.g. `ui.chrome.density`, `ui.chrome.show_copilot`, `ui.chrome.account_mode`), be documented in the
-  service `CLAUDE.md`, and be added to the Per-Feature Registered Keys log. **Decision deferred to
-  `/sdd-design`** — the handoff calls them "app-level config," which could be satisfied by env
-  defaults without touching the config service.
+- [x] **FR-19 chrome props resolved (design decision):** `density`, `showCopilot`, `accountMode` are served
+  via **env-overridable defaults + a `ChromeContext`** (reusing `AccountContext` for `accountMode`), **not**
+  `xstockstrat-config` keys. This records a **C-05 deviation** (env defaults over config-service keys for
+  three presentation toggles; rationale in context.md) — **not** an F-07 breach, conditional on the defaults
+  being env-overridable, not bare source literals.
+- [ ] **Conditional new key:** `portfolio.exposure.factor_map` (JSON) — only if marketdata fundamentals does
+  **not** expose `sector` for factor grouping (verify at `/sdd-spec`, design.md Open Risk). If added: follows
+  `<service>.<category>.<key>` naming, documented in `services/xstockstrat-portfolio/CLAUDE.md` + the
+  Per-Feature Registered Keys log, config-team review.
 
 ## Database Changes
 
-- [x] No schema changes.
+- [x] **Schema change REQUIRED** (scope override): `xstockstrat-ingest` **migration 008** on
+  `ingest.signal_sources` (source-health columns: freshness / last-seen / last-error / status). DBA +
+  ingest-owner review.
+- [ ] **Conditional:** `xstockstrat-portfolio` stop-state storage (a column for ledger-derived resting
+  stops) and/or an `xstockstrat-analysis` expectancy column — **only if** compute-on-read/`backtest_runs`
+  proves insufficient at `/sdd-spec` (design.md Open Risks). No Copilot migration (ledger append-store).
 
 ## Feature Workflow Notes
 
 Branch to create: `feature/ui-revamp-opportunities-first` (branch from `main-dev`)
-Approval gates required (per docs/runbooks/feature-workflow.md):
-- [x] 1 service owner approval — `xstockstrat-ui` owner (UI-only change)
-- [ ] 2 service owners + platform lead (breaking proto change) — N/A unless design splits out backend work
-- [ ] DBA review + service owner (schema migration) — N/A
+Approval gates required (per docs/runbooks/feature-workflow.md) — **expanded by the scope override:**
+- [x] Service-owner approvals — `xstockstrat-ui`, `xstockstrat-analysis`, `xstockstrat-ingest`,
+  `xstockstrat-portfolio` owners (+ `xstockstrat-ledger` owner FYI for the Copilot append-store usage,
+  `trading` owner FYI for the `ListOrders`/order-event read).
+- [x] **2 proto owners + platform lead** — the additive proto pass (analysis/portfolio/ingest).
+- [x] **DBA review + service owner** — ingest migration 008 (+ any conditional portfolio/analysis column).
+- [ ] Config team — only if `portfolio.exposure.factor_map` is added.
 
-Given the size (12 screens + shell + Copilot + mobile + editors), this feature is a strong candidate
-to be **decomposed into multiple `/sdd-spec` + `/sdd-execute` slices** (e.g. shell/nav first, then one
-tab group at a time) rather than one monolithic PR. `/sdd-design` should recommend the slicing.
+Given the size (12 screens + shell + Copilot beta + mobile + editors **+ five backend subsystems**), the
+feature is executed as **ordered per-`/sdd-spec` + `/sdd-execute` slices, backend→frontend** (design.md
+§ Ordering). **Step PRs target the feature branch directly, not base-chained** (ledger fails.md 082).
 
 ## Acceptance Criteria
 
@@ -285,39 +332,25 @@ tab group at a time) rather than one monolithic PR. `/sdd-design` should recomme
     e2e suite (including the new nav-reachability + per-screen tests); coverage ≥ the `xstockstrat-ui`
     threshold.
 
-## Open Questions
+## Open Questions — RESOLVED by `/sdd-design` (2026-07-31); detail in `design.md`
 
-- [ ] **Scope split.** Should the whole revamp land as one feature, or should the backend-data gaps
-  (Copilot thread persistence, watchlist "readiness" scoring, per-signal thesis text, "queue would
-  use $X" deployable math, factor-exposure "after" math) each become their own feature? Several
-  screens show data the current RPCs may not return. `/sdd-design` must map each screen's fields to a
-  real data source and flag every gap. **(Known trap — ledger `fails.md` 2026-07-01 060 / 2026-07-30
-  080: an "already served" assumption must be grep-verified against the producer, not assumed.)**
-- [ ] **Config vs env for chrome props** (FR-19 / Config Key Changes) — config-service keys or
-  build-time defaults?
-- [ ] **Existing routes / URL compatibility.** Do the current `/trader`, `/insights`, `/config-ui`
-  path prefixes stay (with the new shell layered over them), or does the revamp introduce new routes?
-  Bookmarks, the DO App Platform route rules (`/agent` → agent, `/` → ui), and the auth middleware
-  matcher all key off the current paths — the design must decide whether to preserve or migrate them.
-- [ ] **Copilot data source.** Is the "Read of the queue" / concentration-flag content computed
-  client-side from the queue, or does it require a backend/agent call? Determines whether the rail is
-  pure presentation or needs a new surface (→ possible separate feature).
-- [ ] **"Nocturne" tokens vs existing theme.** The current `xstockstrat-ui` is already **dark-only**
-  (the `:root` tokens in `src/app/globals.css` are dark — `--background: 222 47% 4%`; there is no
-  light theme, no `.dark` variant, and no theme toggle) and `tailwind.config.js` already defines
-  custom `buy` / `sell` / `paper` colors — so Nocturne's gain / loss / paper roles have existing homes
-  to map onto rather than a from-scratch token layer. `/sdd-design` recon should diff the Nocturne
-  values (`#161826` bg, `#9184d9` accent, `#4cc79c` / `#e0787a` / `#c9b47e`) against these existing
-  `globals.css` `:root` vars + `tailwind.config.js` and decide reconcile-vs-restyle. Note: tokens live
-  **inline** (no separate design-token module), so a token change touches those two files.
-- [ ] **The existing `accounts` segment.** The current app has a **fourth** segment beyond the
-  handoff's Decide/Discover/Engine/Book model — `accounts/` (`authorized-apps`, `mcp-tools`, plus
-  OAuth login), reachable from `PLATFORM_NAV`/`PLATFORM_SUBNAV`. The handoff does not place these
-  screens. `/sdd-design` must decide where authorized-apps / mcp-tools / account management live in the
-  new four-tab shell (a fifth section? folded under Book or a settings surface?) so they don't become
-  unreachable — the exact C-10(a) failure mode from the ledger.
-- [ ] **Signal sources & watchlist backing.** The handoff derives Signal sources from "config-ui
-  concepts" and Watchlists from "screener + watchlist concepts." Discovery confirms
-  `useInsightsSignalSources.ts` and `useWatchlists.ts` (full CRUD) already exist — `/sdd-design` should
-  confirm these hooks return the fields the new screens show (readiness state, blocking condition,
-  health checks) versus needing new ones.
+- [x] **Scope split.** RESOLVED by user override: **no split — all backend gaps ship in 083**, ordered
+  backend→frontend. recon.md mapped every screen field to a producer and grep-verified each gap (guards
+  fails.md 080/081). Full Copilot invocation is the one carve-out → a separate future feature.
+- [x] **Config vs env for chrome props.** RESOLVED: **env-overridable defaults + `ChromeContext`** (C-05
+  deviation recorded; not an F-07 breach). See Config Key Changes.
+- [x] **Routes / URL compatibility.** RESOLVED: **keep** the `/trader|/insights|/config-ui|/accounts`
+  prefixes; the four-tab nav is a presentation grouping, breadcrumb driven by the grouping; new Decide
+  routes under `/insights`. No middleware-matcher / DO-route / bookmark churn.
+- [x] **Copilot data source.** RESOLVED: **client-side** summary/concentration-flag (no LLM) + **ledger**
+  thread persistence (no new pool). Live authenticated MCP tool invocation is **deferred** (shallow beta
+  in 083 — FR-4).
+- [x] **Nocturne tokens vs existing theme.** RESOLVED: **two-file token remap** of `globals.css:6-27` +
+  `tailwind.config.js:40-42` (app already dark-only); add mono `fontFamily` + `tabular-nums`; additive
+  Phosphor, per-screen lucide retirement.
+- [x] **The `accounts` segment.** RESOLVED: hosted on a pinned **top-bar account/settings surface** that the
+  **C-10(a) nav-reachability test walks** (asserts `authorized-apps`/`mcp-tools` reachable from the rendered
+  shell — guards fails.md 060).
+- [x] **Signal sources & watchlist backing.** RESOLVED: recon confirmed the existing hooks do **not** return
+  readiness/blocking-condition/health — those are backend GAPs now filled by `EvaluateReadiness` (readiness)
+  and ingest source-health (migration 008), consumed by the new screens.

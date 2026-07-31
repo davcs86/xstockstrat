@@ -45,11 +45,17 @@ re-run /sdd-spec if the registry changes.)_
 | Role | Review Focus |
 |---|---|
 | `xstockstrat-ui` (service owner) | Trading UI correctness, analytics display accuracy, config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values rendered in UI, no direct DB access (except audit log) |
+| `xstockstrat-analysis` (service owner) | Opportunity-queue aggregation correctness, traced readiness/conviction eval, per-strategy analytics, screener enrichment; hot backtest path frozen |
+| `xstockstrat-ingest` (service owner) | Signal-source health tracking + migration 008 |
+| `xstockstrat-portfolio` (service owner) | Position risk/factor fields, ledger-event stop ingestion (no trading cycle), C-10(b) valuation parity |
+| Proto owners ×2 + platform lead | Additive proto pass (analysis/portfolio/ingest); `buf breaking` clean; enum `_UNSPECIFIED=0` |
+| DBA | ingest migration 008 (+ any conditional portfolio/analysis column) |
+| `xstockstrat-ledger` / `trading` owners (FYI) | Copilot append-store usage; `ListOrders`/order-event read |
 
-_No proto, migration, config-key, or new-service change is anticipated (see product spec). If
-`/sdd-design` / `/sdd-spec` surface a backend gap (a missing RPC to feed a screen, a Copilot/MCP
-surface, or a `chrome` config key), add the corresponding service owner + Proto/Config/DBA reviewer
-roles then._
+_Reviewers expanded from UI-only by the scope override (backend now in-scope). **Snapshot is
+provisional** — finalized at `/sdd-spec` time against `docs/runbooks/reviewer-registry.md`; config team
+added only if `portfolio.exposure.factor_map` is used. Full Copilot (MCP invocation + LLM) is a separate
+future feature._
 
 ## Next Action
 

@@ -198,3 +198,21 @@
 - Constitution rules touched: F-06 (held), F-07 (held), C-04, C-05 (deviation), C-03, C-09, C-10(a/b/d),
   C-08/P-06, C-11, C-12/C-13. Floor breaches: none.
 - Status: spec-ready → design-approved.
+
+## Session 2026-07-31 — Copilot descope + product-spec refresh
+
+- **User decision:** Copilot ships as a **shallow beta** in 083 (rail chrome + client-side "read of the
+  queue"/concentration flag + ledger-persisted append-only thread, input in beta/read-only state — no live
+  MCP tool call); **full functionality** (authenticated MCP tool invocation via UI-as-OAuth-client →
+  agent-aud token, + any LLM generation) is a **separate future feature**. This retires the design's former
+  top open risk (the aud-bound-token mint surface) from 083's critical path. Bound into design.md § 3,
+  Open Risks (resolved), Ordering step 7; FR-4 + Out-of-Scope in product-spec.md.
+- **Product-spec refresh (user-requested):** reconciled the spec to the in-scope backend —
+  FR-4 (Copilot beta), Out of Scope (backend in-scope + full-Copilot deferred), Affected Services (added
+  analysis/ingest/portfolio + ledger/trading FYI + proto pass), Proto Contract Changes (additive pass + 4
+  enums), Config Key Changes (env-default chrome / C-05 deviation; conditional factor_map), Database Changes
+  (ingest migration 008 + conditionals), approval gates (proto owners + DBA + expanded service owners), and
+  marked all six Open Questions **RESOLVED**. feature.md Reviewers snapshot expanded (provisional; finalized
+  at /sdd-spec).
+- **Next:** re-run `/sdd-review ui-revamp-opportunities-first product-spec` on the refreshed spec, then
+  `/sdd-spec`.
