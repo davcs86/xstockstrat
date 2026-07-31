@@ -1,8 +1,12 @@
 # Context: droplet-compose-deploy
 
-**Feature**: `docs/roadmap/features/083-droplet-compose-deploy/feature.md`
-**Product Spec**: `docs/roadmap/features/083-droplet-compose-deploy/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/083-droplet-compose-deploy/implementation-spec.md`
+**Feature**: `docs/roadmap/features/084-droplet-compose-deploy/feature.md`
+**Product Spec**: `docs/roadmap/features/084-droplet-compose-deploy/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/084-droplet-compose-deploy/implementation-spec.md`
+
+> **Renumbered 083 → 084 on 2026-07-31** — `083` collided with `083-ui-revamp-opportunities-first`
+> (both allocated the same number while unmerged; the numbering scan missed it — ledger `fails.md`
+> 2026-07-29 081). Renumbered per the user's decision; branch name is slug-only so unaffected.
 
 ---
 
@@ -47,10 +51,10 @@
     an explicit item for `/sdd-design` to close, not assumed resolved by this spec.
 - Overlap pass (`feature-overlap`): **CLEAN**. No FAIL-level collision (config key / proto field /
   migration number) with any in-flight feature. `docker-compose.yml` and `.do/app.dev.yaml` touches
-  from features 033 (observability) and 076 (FMP secret env) are already merged to trunk — 083
+  from features 033 (observability) and 076 (FMP secret env) are already merged to trunk — 084
   builds on top of them, not racing them. One design tension flagged for `/sdd-design` (not a
   merge-order collision): feature 033 wires per-service OTel env vars into `.do/app.dev.yaml`,
-  which 083 retires as the dev deploy target — dev-side OTel env provisioning needs to move to the
+  which 084 retires as the dev deploy target — dev-side OTel env provisioning needs to move to the
   droplet's `docker-compose.yml`/secrets mechanism.
 - Outcome: **PASS**. Status: `draft` → `spec-ready`.
 - Next step: `/sdd-design droplet-compose-deploy` (full mode).

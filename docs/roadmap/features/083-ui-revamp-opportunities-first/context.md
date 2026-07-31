@@ -234,8 +234,9 @@
 - **feature-overlap: CLEAN** — no config-key / proto-field / migration / shared-source collision with any
   in-flight feature. Two notes carried forward: pin the **conditional analysis** expectancy migration at
   **010** (trunk has analysis 008/009) — done in product-spec DB section; and a **feature-number
-  duplication** — `083-droplet-compose-deploy` also occupies `083` (spec-ready, disjoint files → no merge
-  conflict, but one dir should be renumbered per the numbering rule). **Flagged to user as a follow-up;
-  not acted on unilaterally.**
+  duplication** — `083-droplet-compose-deploy` also occupied `083` (spec-ready, disjoint files → no merge
+  conflict). **RESOLVED 2026-07-31 (user decision):** renumbered `083-droplet-compose-deploy` → `084`
+  (next free NNN across local + remote refs); its branch is slug-only so unaffected. This 083 keeps its
+  number.
 - **Next:** `/sdd-spec ui-revamp-opportunities-first` (backend→frontend ordering; step PRs target the
   feature branch directly, not base-chained; reconcile branch lineage per fails 082).
