@@ -280,8 +280,10 @@ consumer via `ListOrders` / order-events; no change), `marketdata`, `indicators`
   `ingest.signal_sources` (source-health columns: freshness / last-seen / last-error / status). DBA +
   ingest-owner review.
 - [ ] **Conditional:** `xstockstrat-portfolio` stop-state storage (a column for ledger-derived resting
-  stops) and/or an `xstockstrat-analysis` expectancy column — **only if** compute-on-read/`backtest_runs`
-  proves insufficient at `/sdd-spec` (design.md Open Risks). No Copilot migration (ledger append-store).
+  stops → next portfolio number **008**) and/or an `xstockstrat-analysis` expectancy column (next analysis
+  number **010** — trunk already has analysis 008/009; do NOT reuse 008) — **only if** compute-on-read/
+  `backtest_runs` proves insufficient at `/sdd-spec` (design.md Open Risks). No Copilot migration (ledger
+  append-store).
 
 ## Feature Workflow Notes
 
