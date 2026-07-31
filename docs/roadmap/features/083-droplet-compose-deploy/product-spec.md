@@ -22,7 +22,7 @@ single-point-of-failure risk that isn't consciously accepted.
 
 ## Functional Requirements
 
-FR-1. The dev/staging environment's 13 application services (per root `CLAUDE.md` Service
+FR-1. The dev/staging environment's 12 application services (per root `CLAUDE.md` Service
 Registry) run on a single DO Droplet via `docker-compose.yml`, pulling the same pre-built GHCR
 images the current dev pipeline already produces (`docker-build.yml`) — no new build mechanism.
 
@@ -42,10 +42,13 @@ self-hosted Postgres/TimescaleDB container is introduced, and the existing 20-co
 budget (root `CLAUDE.md` § Connection Pool Budget) is unaffected by this migration.
 
 FR-5. Secrets currently marked `type: SECRET` in `.do/app.dev.yaml` (`JWT_SECRET`,
-`ALPACA_API_KEY`/`ALPACA_SECRET`, `BROKER_ACCOUNTS_ENCRYPTION_KEY`, `MCP_AGENT_SECRET`, OTel
+`ALPACA_API_KEY`/`ALPACA_API_SECRET`, `BROKER_ACCOUNTS_ENCRYPTION_KEY`, `MCP_AGENT_SECRET`, OTel
 headers, etc.) are provisioned on the droplet through a mechanism that keeps them out of git and
 out of any built image layer. The exact mechanism (restricted-permission `.env` file vs. a
-secrets manager) is an explicit open question for `/sdd-design`, not decided here.
+secrets manager) is an explicit open question for `/sdd-design`, not decided here. This is
+provider-agnostic: it changes only how broker credentials reach the runtime, not order-execution
+or broker-integration business logic — it applies uniformly to any broker account type
+`BROKER_ACCOUNTS_ENCRYPTION_KEY` protects, not only Alpaca.
 
 FR-6. `.github/workflows/deploy-dev.yml` is reworked to deploy to the droplet (SSH- or
 DO-API-driven) instead of `doctl apps update $DO_DEV_APP_ID --spec .do/app.dev.yaml`, and includes
@@ -82,7 +85,7 @@ This is a platform/infrastructure change, not a service business-logic change:
 
 - **Root-level orchestration** — `docker-compose.yml`, `.github/workflows/deploy-dev.yml`,
   `docs/setup/digitalocean.md`, `docs/patterns/ci-overview.md`, root `CLAUDE.md`.
-- All 13 `xstockstrat-<service>` services (per the Service Registry) deploy **unchanged** —
+- All 12 `xstockstrat-<service>` services (per the Service Registry) deploy **unchanged** —
   only how they're hosted changes. No gRPC contract, business logic, or service `CLAUDE.md`
   changes are anticipated unless the secrets-provisioning design (FR-5) requires a service to read
   a secret differently, which would be a scoped follow-up decided at `/sdd-design`.
@@ -111,7 +114,7 @@ Approval gates required (per `docs/runbooks/feature-workflow.md` and `docs/runbo
 
 ## Acceptance Criteria
 
-1. All 13 services from the Service Registry run on the droplet via `docker-compose.yml` and pass
+1. All 12 services from the Service Registry run on the droplet via `docker-compose.yml` and pass
    their existing healthchecks (or an added equivalent for the Go services, which currently have
    none — see Open Questions).
 2. A deploy to dev (triggered by a push to `main-dev`) completes with **measured** downtime on the
@@ -138,7 +141,7 @@ Approval gates required (per `docs/runbooks/feature-workflow.md` and `docs/runbo
 
 - [ ] Exact secrets-provisioning mechanism for the droplet (restricted-permission `.env` file vs.
       a secrets manager) — resolve in `/sdd-design`.
-- [ ] Droplet sizing (vCPU/RAM) sufficient to run all 13 services + Caddy + `otel-collector`
+- [ ] Droplet sizing (vCPU/RAM) sufficient to run all 12 services + Caddy + `otel-collector`
       concurrently without resource starvation — needs a resource budget analogous to root
       `CLAUDE.md`'s DB connection-pool budget table.
 - [ ] Whether the Go services in `docker-compose.yml` (distroless images, no shell — currently no
