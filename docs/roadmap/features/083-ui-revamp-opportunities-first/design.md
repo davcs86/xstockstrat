@@ -83,8 +83,10 @@ cycle.**
    state (3 consumers, `main.go:64-66`); it extends that to learn resting stops from trading's order
    events. Stop-distance `= (current_price − stop) / current_price` off portfolio's existing
    broker-authoritative `current_price` (C-10(b) seam confirmed healed, `portfolio_repo.go:225`).
-   **Factor grouping** reuses the existing `portfolio→marketdata` edge (fundamentals `sector`), with a
-   `portfolio.exposure.factor_map` config-key fallback if `sector` is absent.
+   **Factor grouping** uses a config-defined `portfolio.exposure.factor_map` (symbol→factor) read via
+   `WatchConfig` — **not** marketdata `sector`: `/sdd-spec` confirmed the marketdata `Fundamentals` proto
+   has **no `sector` field** (and `screener.py:32` `_FUNDAMENTAL_FIELDS` has none either), so the config
+   map is the **required** mechanism, not a fallback (config-team review; C-05).
 
 5. **Per-strategy analytics + screener enrichment — `xstockstrat-analysis`.** New
    `analysis.GetStrategyAnalytics`: expectancy/hit-rate/max-DD from persisted `analysis.backtest_runs`
@@ -111,7 +113,7 @@ cycle.**
 - **Migrations:** ingest **008** (source-health) confirmed. Portfolio stop-tracking storage vs in-memory
   and any analytics/expectancy column are **/sdd-spec decisions** (see Open Risks — not asserted as
   "ingest 008 only").
-- **Config:** `portfolio.exposure.factor_map` (only if `sector` unavailable); FR-19 chrome via
+- **Config:** `portfolio.exposure.factor_map` (**required** — marketdata has no `sector`, confirmed at /sdd-spec); FR-19 chrome via
   env-overridable defaults + `ChromeContext` (reuse `AccountContext` for `accountMode`) — **records a
   C-05 deviation**, no config-service keys, no F-07 breach (defaults are env-overridable, not bare literals).
 - **New edges:** `analysis→trading` (`ListOrders`, non-cyclic), UI→agent (OAuth-gated MCP). **No
@@ -146,7 +148,8 @@ cycle.**
 2. analysis readiness/conviction (traced evaluator + `EvaluateReadiness`).
 3. analysis `ListOpportunities` (joins #2 + positions + signals).
 4. ingest source-health (migration 008).
-5. portfolio risk/factor (ledger-event stop ingestion + marketdata sector).
+5. portfolio risk/factor (ledger-event stop ingestion, **in-memory** stops via `ConsumeOrderFills` replay
+   — no portfolio migration; `portfolio.exposure.factor_map` config for grouping).
 6. analysis analytics + screener enrichment (`analysis→trading` edge).
 7. Copilot **shallow beta** (ledger-thread events + client-side summary; **no** OAuth-client MCP BFF —
    live tool invocation + LLM deferred to a separate feature).
@@ -182,11 +185,10 @@ cycle.**
 
 ## Open Risks
 
-- [ ] **Governance reconciliation (mandatory before `/sdd-execute`).** Refresh `product-spec.md`
-      §Out-of-Scope / §Proto / §Database / §Config / Reviewers to match the now-in-scope backend work,
-      then re-run `/sdd-review product-spec`. New active gates: proto (2 owners + platform lead),
-      DBA (ingest 008 + any portfolio/analytics migration), config team (`factor_map` if used), expanded
-      reviewers (ingest/analysis/portfolio/agent/trading owners). — before Step 1.
+- [x] **Governance reconciliation — DONE (2026-07-31).** `product-spec.md` refreshed (scope / proto /
+      DB / config / gates) and re-run through `/sdd-review product-spec` (PASS WITH WARNINGS, overlap
+      CLEAN); reviewers snapshot expanded (proto owners + platform lead + DBA + config team + producer
+      owners) and finalized by `/sdd-spec`.
 - [x] **Copilot MCP-invocation auth — RESOLVED by descope (user decision 2026-07-31).** The
       agent-aud-token/OAuth-client mint surface and any LLM generation are **deferred to a separate
       feature**; 083 ships the **shallow beta** (client-side summary + ledger thread + no live tool call),
@@ -195,18 +197,19 @@ cycle.**
 - [ ] **Conviction/readiness formula** — the passing-leaf-ratio + normalized-distance definition must be
       pinned with a unit test at spec time (C-01); confirm the traced evaluator can emit `lhs_value`/
       `threshold` for every supported leaf `fn` (`crosses_above/below`, comparators). — Step 2.
-- [ ] **Factor source unverified** — confirm marketdata fundamentals exposes `sector`; else the
-      `portfolio.exposure.factor_map` config key path. — Step 5.
-- [ ] **Expectancy source** — confirm expectancy is computable from `backtest_runs` summary metrics; if it
-      needs per-trade data (not persisted), a small analysis schema add is required (then not "ingest 008
-      only"). — Step 6.
-- [ ] **Portfolio stop-state storage** — persisted column vs in-memory for ledger-derived resting stops
-      (may add a portfolio migration). — Step 5.
+- [x] **Factor source — RESOLVED at /sdd-spec.** marketdata `Fundamentals` has **no `sector`** field, so
+      grouping uses the **required** `portfolio.exposure.factor_map` config key (not a fallback). Config
+      team added to reviewers. — Step 13.
+- [x] **Expectancy source — RESOLVED at /sdd-spec.** Derivable from `backtest_runs` (migration 006)
+      `win_rate`+`profit_factor` → **no analysis migration** (010 not needed). — Step 16.
+- [x] **Portfolio stop-state — RESOLVED at /sdd-spec.** Held **in-memory** by extending `ConsumeOrderFills`
+      + boot-replay (matches the existing position-state-from-events pattern) → **no portfolio migration;
+      only ingest 008 required**. — Step 12.
 - [ ] **Ledger query-conn capacity** — Copilot read/write shares ledger's single query connection
       (`DB_POOL_MAX=1` + 1 LISTEN/NOTIFY); note load, no pool raise. — Step 7.
 - [ ] **Branch lineage** — session on `claude/ui-revamp-opportunities-lwrinp` vs `feature.md`
-      `**Development Branch**` `feature/ui-revamp-opportunities-first`; `/sdd-spec`/`/sdd-execute` reconcile
-      (fails 082). — before Step 1.
+      `**Development Branch**` `feature/ui-revamp-opportunities-first`; `/sdd-execute` reconciles before the
+      first write (fails 082). — before Step 1. _(Still open — `/sdd-execute` acts on it.)_
 
 ## Constitution Rules Touched
 
