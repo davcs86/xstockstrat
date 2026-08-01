@@ -516,3 +516,15 @@ and **E (per-screen fidelity)** (skipping A sidebar, C mobile-companion page, D 
   them is a backend-extension follow-up (new `Opportunity` fields + a marketdata quote/bars read).
 - Mobile keeps the SectionRenderer 1:1 (Step 28). e2e updated (cards not table); full suite green
   (175 passed, 1 pre-existing chart-panel flake).
+
+### Handoff-fidelity pass — E: Exposure (Book) risk reframe
+
+- **Header reframed** "Positions" → **"Exposure"** with the risk description + a "N exit flags in
+  queue →" button (count of REDUCE_SIGNAL/STOP_NEAR positions, links to Opportunities).
+- **4-stat risk row added** (all from real Position risk fields): Total risk at stops (Σ riskAtStop),
+  Largest factor (weight-share by factor + tickers), Positions past target (Open R ≥ 2), Stops
+  within 2% (stopDistancePct ≤ 0.02).
+- **Risk columns added**: Weight (share of loaded gross MV), **Open R** (unrealizedPnl / riskAtStop),
+  Risk at stop ($), Exit rule — alongside the Factor/Stop-dist/Flag from Step 25. The existing P&L
+  columns, filters, pagination, and fill-lineage detail sheet are kept (no regression).
+- e2e extended (Exposure header + stat row + Open R/Risk-at-stop); full suite green (176 passed).

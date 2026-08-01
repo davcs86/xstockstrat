@@ -21,6 +21,7 @@ import { SectionRenderer } from '@/components/mobile/SectionRenderer';
 import type { Section } from '@/components/mobile/sections';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { StatTile } from '@/components/shared/StatTile';
 
 type SortKey = 'conviction' | 'expiry';
 const NINETY_MIN_MS = 90 * 60 * 1000;
@@ -41,38 +42,6 @@ function msUntil(validUntil: { seconds: bigint } | undefined): number | null {
 function compactUsd(n: number): string {
   if (n >= 1000) return `$${Math.round(n / 1000)}k`;
   return `$${Math.round(n)}`;
-}
-
-function StatTile({
-  label,
-  value,
-  sub,
-  tone,
-}: {
-  label: string;
-  value: string | number;
-  sub?: string;
-  tone?: 'accent' | 'gain' | 'loss' | 'paper';
-}) {
-  return (
-    <div className="border-r border-border px-4 py-3 last:border-r-0">
-      <div className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-        {label}
-      </div>
-      <div
-        className={cn(
-          'mt-1 font-mono text-2xl font-semibold tabular-nums',
-          tone === 'accent' && 'text-primary',
-          tone === 'gain' && 'text-buy',
-          tone === 'loss' && 'text-destructive',
-          tone === 'paper' && 'text-yellow-400',
-        )}
-      >
-        {value}
-      </div>
-      {sub && <div className="mt-0.5 text-xs text-muted-foreground">{sub}</div>}
-    </div>
-  );
 }
 
 /**
