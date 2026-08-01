@@ -496,3 +496,23 @@ session — flagged in the PR body per the root CLAUDE.md Teardown rule.
   directly — no base-chained per-step branches. strat-lab plugin unaffected (083 changes none of
   its tracked RPCs). Feature is code-complete; full e2e (174) + unit coverage (99% on exercised
   `src/lib`) green.
+
+### Session (2026-08-01) — Handoff-fidelity pass (user-requested): B Opportunities cards
+
+User reviewed the deployed app vs `design-handoff/` and asked to close **B (Opportunities cards)**
+and **E (per-screen fidelity)** (skipping A sidebar, C mobile-companion page, D copilot polish).
+
+- **Opportunities queue rebuilt table → conviction cards** matching the handoff card grammar: a
+  left edge/conviction number (+ N/M conditions), ticker + action tag + source chip + strategy,
+  thesis, expiry, and **Review & add / Snooze** buttons. Snooze is a real client-side dismiss.
+- **5-stat row reframed to the handoff**: Actionable now (of N evaluated · conv ≥ X) · Expiring
+  <90m (+tickers) · Exit/trim flags (+tickers) · Fresh entries · **Deployable** (real broker
+  buying power via `insightsPortfolioClient.listPortfolios`, best-effort → "—" on error).
+- **Controls added**: Any-action filter + sort (Conviction / Soonest expiry) alongside the source
+  chips + min-conviction slider.
+- **No-fabrication constraint honored**: the handoff card also shows live price/change %, a
+  sparkline, per-condition value chips (`close > sma_20 +1.4%`), and R:R + share sizing — **none
+  of which `ListOpportunities` returns**. These are intentionally omitted (not faked); surfacing
+  them is a backend-extension follow-up (new `Opportunity` fields + a marketdata quote/bars read).
+- Mobile keeps the SectionRenderer 1:1 (Step 28). e2e updated (cards not table); full suite green
+  (175 passed, 1 pre-existing chart-panel flake).

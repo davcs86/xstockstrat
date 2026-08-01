@@ -40,8 +40,8 @@ test.describe('Non-happy states — Opportunities', () => {
     });
     await page.goto('/insights/opportunities');
     await expect(page.getByTestId('opportunities-loading-desktop')).toBeVisible({ timeout: 5000 });
-    // Skeleton is replaced by the table once data resolves.
-    await expect(page.getByRole('table')).toBeVisible({ timeout: 10000 });
+    // Skeleton is replaced by the conviction cards once data resolves.
+    await expect(page.getByTestId('opportunity-card').first()).toBeVisible({ timeout: 10000 });
     await expect(page.getByTestId('opportunities-loading-desktop')).toBeHidden();
   });
 
