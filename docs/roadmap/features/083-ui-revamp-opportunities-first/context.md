@@ -582,3 +582,12 @@ User flagged the deployed Strategies + Watchlists as still low-fidelity:
   leaf), sorted by conviction — all from the EvaluateReadiness `conditions`. Live price/change
   columns remain omitted (no per-symbol quote in the readiness payload).
 - Full suite 180 passed; specs updated for both rebuilds.
+
+### Handoff-fidelity — Screener mobile responsiveness fix
+
+- The Screener results table was a **raw `<table>`** (not the shared `<Table>` component, which
+  wraps in `overflow-auto`), so its 10 columns overflowed the phone frame horizontally and clipped
+  the Status column. Wrapped it in `overflow-x-auto` + `min-w-[640px]` so the wide table scrolls
+  inside its own container and the page body never scrolls horizontally. Added a phone-viewport
+  e2e guard asserting `scrollWidth <= clientWidth`. (The strategy-detail Past-Runs raw table was
+  already `overflow-x-auto`-wrapped by feature 068 — no change.)
