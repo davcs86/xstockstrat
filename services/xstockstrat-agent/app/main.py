@@ -20,8 +20,7 @@ import asyncio
 import logging
 import os
 
-from mcp.server import FastMCP
-from mcp.server.stdio import stdio_server
+from mcp.server.mcpserver import MCPServer
 
 from app.scopes import MCP_CLAIMS_SCOPE_KEY
 from app.tools import register_tools
@@ -66,8 +65,8 @@ UI_BASE_URL = os.environ.get("UI_BASE_URL", "http://localhost:3000")
 AGENT_PUBLIC_URL = os.environ.get("AGENT_PUBLIC_URL", "http://localhost:9000")
 
 
-def create_server() -> FastMCP:
-    server = FastMCP("xstockstrat-agent")
+def create_server() -> MCPServer:
+    server = MCPServer("xstockstrat-agent")
     register_tools(server)
     return server
 
@@ -75,10 +74,7 @@ def create_server() -> FastMCP:
 async def _run_stdio() -> None:
     server = create_server()
     log.info("xstockstrat-agent starting (transport=stdio)")
-    async with stdio_server() as (read_stream, write_stream):
-        await server._mcp_server.run(
-            read_stream, write_stream, server._mcp_server.create_initialization_options()
-        )
+    await server.run_stdio_async()
 
 
 def build_http_app():
@@ -89,7 +85,7 @@ def build_http_app():
     """
     from contextlib import asynccontextmanager
 
-    from mcp.server.streamable_http_manager import StreamableHTTPSessionManager
+    from mcp.server.transport_security import TransportSecuritySettings
     from starlette.applications import Starlette
     from starlette.responses import JSONResponse, Response
     from starlette.routing import Mount, Route
@@ -120,7 +116,7 @@ def build_http_app():
                     {
                         "name": t.name,
                         "description": t.description or "",
-                        "inputSchema": t.inputSchema,
+                        "inputSchema": t.input_schema,
                     }
                     for t in tools
                 ]
@@ -132,7 +128,20 @@ def build_http_app():
     # POST <url> for client→server JSON-RPC and GET <url> for the server→client stream. The
     # connector URL is AGENT_PUBLIC_URL (`${APP_URL}/agent`), which DO ingress strips to `/`, so
     # the Streamable HTTP transport is served at the agent root (see handle_mcp).
-    session_manager = StreamableHTTPSessionManager(app=server._mcp_server)
+    #
+    # Prime the SDK's internal session manager once. The returned Starlette app itself is
+    # discarded -- the existing custom `handle_mcp` dispatch below is preserved unchanged.
+    # transport_security is explicitly disabled here: Server.streamable_http_app() auto-enables
+    # DNS-rebinding Host/Origin checks restricted to 127.0.0.1/localhost/::1 whenever `host` is
+    # left at its default, which would reject every real (non-localhost) production request with
+    # 421. Today's code never went through this path, so this restores that "no host
+    # restriction" behavior -- the actual access control is _authorized's aud-bound JWT check
+    # below, which already runs before this session manager ever sees the request.
+    server.streamable_http_app(
+        streamable_http_path="/",
+        transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
+    )
+    session_manager = server.session_manager
 
     async def _authorized(scope) -> bool:
         """OAuth 2.1 gate for the Streamable HTTP transport.

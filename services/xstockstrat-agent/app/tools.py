@@ -28,8 +28,7 @@ import os
 from typing import Literal
 
 import grpc
-from mcp.server import FastMCP
-from mcp.server.fastmcp import Context
+from mcp.server.mcpserver import Context, MCPServer
 from mcp.types import TextContent
 
 from app import backtest_view, client
@@ -85,7 +84,7 @@ _EXTRACTOR_TOOL_MAP: dict[str, str | None] = {
 }
 
 
-def register_tools(server: FastMCP) -> None:
+def register_tools(server: MCPServer) -> None:
 
     @server.tool()
     async def list_signal_sources(
@@ -265,7 +264,7 @@ def register_tools(server: FastMCP) -> None:
         )
 
     # structured_output=False is forward-protection, not load-bearing today: for a bare `-> list`
-    # FastMCP builds no output schema either way. It becomes load-bearing only if the annotation is
+    # the SDK builds no output schema either way. It becomes load-bearing only if the annotation is
     # ever parameterized (`list[ContentBlock]`), which would build one by default.
     @server.tool(structured_output=False)
     async def run_backtest(
