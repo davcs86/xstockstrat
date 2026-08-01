@@ -25,7 +25,9 @@ import {
 import { useSignalSources } from '@/app/config-ui/hooks/useSignalSources';
 import { useManageSignalSource } from '@/app/config-ui/hooks/useSignalSourceMutations';
 import type { SignalSource } from '@xstockstrat/proto/ingest/v1/ingest_pb';
+import { SourceHealthStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { SOURCE_HEALTH, EnumBadge } from '@/lib/opportunityShared';
+import { StatTile } from '@/components/shared/StatTile';
 
 const SOURCE_TYPES = [
   'simple_email',
@@ -232,12 +234,47 @@ export default function SourcesPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold">Signal Sources</h1>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-lg font-semibold">Signal Sources</h1>
+          <p className="text-sm text-muted-foreground">
+            Inputs the strategies evaluate against, and whether they are fresh enough to trust.
+          </p>
+        </div>
         <Button size="sm" onClick={openNew}>
           Register New Source
         </Button>
       </div>
+
+      {/* Health stat row (feature 083) — from ListSignalSources health/signals_fed. */}
+      {sources.length > 0 &&
+        (() => {
+          const live = sources.filter((s) => s.health === SourceHealthStatus.LIVE).length;
+          const attention = sources.filter(
+            (s) => s.health === SourceHealthStatus.STALE || s.health === SourceHealthStatus.DOWN,
+          );
+          const activeCount = sources.filter((s) => s.active).length;
+          const fed = sources.reduce((sum, s) => sum + Number(s.signalsFed ?? 0), 0);
+          return (
+            <div className="grid grid-cols-2 overflow-hidden rounded-md border border-border sm:grid-cols-5">
+              <StatTile
+                label="Sources live"
+                value={live}
+                tone="gain"
+                sub={`of ${sources.length} configured`}
+              />
+              <StatTile
+                label="Needs attention"
+                value={attention.length}
+                tone={attention.length > 0 ? 'loss' : undefined}
+                sub={attention[0]?.slug}
+              />
+              <StatTile label="Configured" value={sources.length} sub="registered" />
+              <StatTile label="Signals fed" value={fed} tone="accent" sub="lifetime" />
+              <StatTile label="Active feeds" value={activeCount} sub="evaluating" />
+            </div>
+          );
+        })()}
 
       <Card>
         <CardContent className="p-0">
