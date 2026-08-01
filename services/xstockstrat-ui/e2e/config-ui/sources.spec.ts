@@ -151,6 +151,15 @@ test.describe('/sources page — UI contract', () => {
     await expect(page.getByText('example_simple_email')).toBeVisible({ timeout: 8000 });
   });
 
+  test('renders source health + fed count (feature 083)', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto(SOURCES_PAGE);
+    await expect(page.getByText('example_simple_email')).toBeVisible({ timeout: 8000 });
+    // health LIVE → "Live" badge; signals_fed 128.
+    await expect(page.getByText('Live', { exact: true })).toBeVisible();
+    await expect(page.getByText('128', { exact: true })).toBeVisible();
+  });
+
   test('page does not render credentials_ref as a visible text value', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto(SOURCES_PAGE);

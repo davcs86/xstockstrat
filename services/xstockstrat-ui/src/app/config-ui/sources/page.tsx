@@ -8,23 +8,39 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
-  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
 } from '@/components/ui/table';
 import {
-  Select, SelectTrigger, SelectValue, SelectContent, SelectItem,
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
 } from '@/components/ui/select';
 import { useSignalSources } from '@/app/config-ui/hooks/useSignalSources';
 import { useManageSignalSource } from '@/app/config-ui/hooks/useSignalSourceMutations';
 import type { SignalSource } from '@xstockstrat/proto/ingest/v1/ingest_pb';
+import { SOURCE_HEALTH, EnumBadge } from '@/lib/opportunityShared';
 
 const SOURCE_TYPES = [
-  'simple_email', 'email_attachment', 'linked_email',
-  'simple_website', 'authenticated_website',
-  'mediated_simple_email', 'mediated_email_attachment', 'mediated_linked_email',
-  'mediated_simple_website', 'mediated_authenticated_website',
+  'simple_email',
+  'email_attachment',
+  'linked_email',
+  'simple_website',
+  'authenticated_website',
+  'mediated_simple_email',
+  'mediated_email_attachment',
+  'mediated_linked_email',
+  'mediated_simple_website',
+  'mediated_authenticated_website',
 ] as const;
 
-type SourceType = typeof SOURCE_TYPES[number];
+type SourceType = (typeof SOURCE_TYPES)[number];
 
 interface FormState {
   slug: string;
@@ -57,13 +73,23 @@ const EMPTY_FORM: FormState = {
 };
 
 function isEmailType(t: SourceType) {
-  return ['simple_email', 'email_attachment', 'linked_email',
-    'mediated_simple_email', 'mediated_email_attachment', 'mediated_linked_email'].includes(t);
+  return [
+    'simple_email',
+    'email_attachment',
+    'linked_email',
+    'mediated_simple_email',
+    'mediated_email_attachment',
+    'mediated_linked_email',
+  ].includes(t);
 }
 
 function isWebsiteType(t: SourceType) {
-  return ['simple_website', 'authenticated_website',
-    'mediated_simple_website', 'mediated_authenticated_website'].includes(t);
+  return [
+    'simple_website',
+    'authenticated_website',
+    'mediated_simple_website',
+    'mediated_authenticated_website',
+  ].includes(t);
 }
 
 function isAttachmentType(t: SourceType) {
@@ -83,7 +109,10 @@ function isMediatedType(t: SourceType) {
 }
 
 function splitPatterns(s: string): string[] {
-  return s.split(',').map((x) => x.trim()).filter(Boolean);
+  return s
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
 }
 
 function errMessage(err: unknown): string {
@@ -205,7 +234,9 @@ export default function SourcesPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold">Signal Sources</h1>
-        <Button size="sm" onClick={openNew}>Register New Source</Button>
+        <Button size="sm" onClick={openNew}>
+          Register New Source
+        </Button>
       </div>
 
       <Card>
@@ -217,6 +248,9 @@ export default function SourcesPage() {
                 <TableHead>Display Name</TableHead>
                 <TableHead>Source Type</TableHead>
                 <TableHead>Active</TableHead>
+                {/* feature 083 — source health + lifetime fed count. */}
+                <TableHead>Health</TableHead>
+                <TableHead>Fed</TableHead>
                 <TableHead>Weight</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
@@ -224,7 +258,7 @@ export default function SourcesPage() {
             <TableBody>
               {sources.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-6">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground py-6">
                     No sources registered yet.
                   </TableCell>
                 </TableRow>
@@ -246,6 +280,12 @@ export default function SourcesPage() {
                       {src.active ? 'Active' : 'Inactive'}
                     </Badge>
                   </TableCell>
+                  <TableCell title={src.lastError || undefined}>
+                    <EnumBadge render={SOURCE_HEALTH[src.health]} />
+                  </TableCell>
+                  <TableCell className="font-mono tabular-nums">
+                    {src.signalsFed ? src.signalsFed.toString() : '—'}
+                  </TableCell>
                   <TableCell>{weights[src.slug] ?? 1.0}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
@@ -257,11 +297,7 @@ export default function SourcesPage() {
                       >
                         {src.active ? 'Disable' : 'Enable'}
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => openEdit(src)}
-                      >
+                      <Button size="sm" variant="ghost" onClick={() => openEdit(src)}>
                         Edit
                       </Button>
                     </div>
@@ -307,10 +343,14 @@ export default function SourcesPage() {
                   value={form.sourceType}
                   onValueChange={(v) => setField('sourceType', v as SourceType)}
                 >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {SOURCE_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                      <SelectItem key={t} value={t}>
+                        {t}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -330,7 +370,9 @@ export default function SourcesPage() {
             {isEmailType(form.sourceType) && (
               <>
                 <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Sender Patterns (comma-separated)</label>
+                  <label className="text-xs text-muted-foreground">
+                    Sender Patterns (comma-separated)
+                  </label>
                   <Input
                     placeholder="*@unusualwhales.com, noreply@*"
                     value={form.senderPatterns}
@@ -338,7 +380,9 @@ export default function SourcesPage() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs text-muted-foreground">Subject Patterns (comma-separated)</label>
+                  <label className="text-xs text-muted-foreground">
+                    Subject Patterns (comma-separated)
+                  </label>
                   <Input
                     placeholder="Daily Flow, *Alert*"
                     value={form.subjectPatterns}
@@ -347,7 +391,9 @@ export default function SourcesPage() {
                 </div>
                 {isAttachmentType(form.sourceType) && (
                   <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">Attachment MIME Types (comma-separated)</label>
+                    <label className="text-xs text-muted-foreground">
+                      Attachment MIME Types (comma-separated)
+                    </label>
                     <Input
                       placeholder="application/pdf, text/csv"
                       value={form.attachmentMimeTypes}
@@ -357,7 +403,9 @@ export default function SourcesPage() {
                 )}
                 {isLinkedEmailType(form.sourceType) && (
                   <div className="space-y-1">
-                    <label className="text-xs text-muted-foreground">URL Patterns (comma-separated)</label>
+                    <label className="text-xs text-muted-foreground">
+                      URL Patterns (comma-separated)
+                    </label>
                     <Input
                       placeholder="https://unusualwhales.com/*, https://example.com/signals/*"
                       value={form.urlPatterns}
@@ -391,7 +439,9 @@ export default function SourcesPage() {
                     <label className="text-xs text-muted-foreground">
                       Credentials Ref (secret.* key name)
                       {form.active && editingSlug !== '__new__' && (
-                        <Badge variant="info" className="ml-2">configured</Badge>
+                        <Badge variant="info" className="ml-2">
+                          configured
+                        </Badge>
                       )}
                     </label>
                     <Input
@@ -412,12 +462,12 @@ export default function SourcesPage() {
                 onChange={(e) => setField('active', e.target.checked)}
                 className="h-4 w-4"
               />
-              <label htmlFor="active-toggle" className="text-sm">Active</label>
+              <label htmlFor="active-toggle" className="text-sm">
+                Active
+              </label>
             </div>
 
-            {saveError && (
-              <p className="text-xs text-destructive">{saveError}</p>
-            )}
+            {saveError && <p className="text-xs text-destructive">{saveError}</p>}
 
             <div className="flex items-center gap-2 pt-1">
               <Button size="sm" onClick={handleSave} disabled={saving}>

@@ -481,6 +481,18 @@ export async function startMockBackend(): Promise<void> {
         async evaluateReadiness(req) {
           return { readiness: (req.symbols.length ? req.symbols : ['AAPL']).map(symbolReadiness) };
         },
+        // feature 083 — per-strategy analytics for the Engine → Strategies detail.
+        async getStrategyAnalytics(req) {
+          return {
+            strategyId: req.strategyId,
+            expectancy: 0.35,
+            blendedHitRate: 0.62,
+            maxDrawdown: 0.14,
+            signals30d: 42,
+            taken: 9,
+            queueShare: 0.2,
+          };
+        },
         async scoreStrategy() {
           return { overallScore: 0.5, rating: 'C' };
         },
@@ -789,13 +801,17 @@ export async function startMockBackend(): Promise<void> {
                 slug: 'example_simple_email',
                 displayName: 'Example Simple Email',
                 sourceType: 'simple_email',
-                extractorModule: 'app.extractors.example_simple_email',
                 active: true,
                 hasCredentials: true,
                 configJson: {
                   sender_patterns: ['noreply@example.com'],
                   subject_patterns: ['Signal:'],
                 },
+                extractorModule: 'app.extractors.example_simple_email',
+                // feature 083 source-health fields.
+                health: 1, // SOURCE_HEALTH_STATUS_LIVE
+                signalsFed: BigInt(128),
+                lastError: '',
               },
             ],
           };

@@ -27,3 +27,14 @@ export function useReadiness(strategyId: string, symbols: string[]) {
     enabled: Boolean(strategyId) && symbols.length > 0,
   });
 }
+
+type StrategyAnalyticsResult = Awaited<ReturnType<typeof analysisClient.getStrategyAnalytics>>;
+
+/** Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share). */
+export function useStrategyAnalytics(strategyId?: string) {
+  return useQuery<StrategyAnalyticsResult, Error>({
+    queryKey: ['strategy-analytics', strategyId],
+    queryFn: () => analysisClient.getStrategyAnalytics({ strategyId: strategyId! }),
+    enabled: Boolean(strategyId),
+  });
+}
