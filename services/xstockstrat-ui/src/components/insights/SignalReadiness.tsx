@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/select';
 import { CONDITION_STATE, EnumBadge } from '@/lib/opportunityShared';
 import { useStrategyDefinitions } from '@/hooks/useStrategyDefinitions';
-import { useReadiness } from '@/hooks/useOpportunities';
+import { useReadiness, useStrategyAnalytics } from '@/hooks/useOpportunities';
 
 /**
  * Signal-detail readiness (feature 083, FR-6). EvaluateReadiness is strategy-scoped, so the
@@ -29,6 +29,8 @@ export function SignalReadiness({ symbol }: { symbol: string }) {
 
   const { data, isLoading, error } = useReadiness(strategyId, symbol ? [symbol] : []);
   const readiness = data?.readiness?.[0];
+  // Strategy track record (feature 083 — the handoff's Signal-detail track-record block).
+  const { data: analytics } = useStrategyAnalytics(strategyId || undefined);
 
   return (
     <Card>
@@ -99,7 +101,42 @@ export function SignalReadiness({ symbol }: { symbol: string }) {
             </ul>
           </div>
         )}
+
+        {strategyId && analytics && (
+          <div className="mt-4 border-t border-border pt-3" data-testid="strategy-track-record">
+            <p className="mb-2 font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
+              Strategy track record
+            </p>
+            <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm sm:grid-cols-4">
+              <Metric label="Signals 30d" value={String(analytics.signals30d)} />
+              <Metric label="Taken" value={String(analytics.taken)} />
+              <Metric label="Hit rate" value={`${(analytics.blendedHitRate * 100).toFixed(0)}%`} />
+              <Metric
+                label="Expectancy"
+                value={analytics.expectancy.toFixed(2)}
+                valueClass={analytics.expectancy >= 0 ? 'text-buy' : 'text-destructive'}
+              />
+            </dl>
+          </div>
+        )}
       </CardContent>
     </Card>
+  );
+}
+
+function Metric({
+  label,
+  value,
+  valueClass,
+}: {
+  label: string;
+  value: string;
+  valueClass?: string;
+}) {
+  return (
+    <div className="flex flex-col">
+      <dt className="text-[11px] text-muted-foreground">{label}</dt>
+      <dd className={`font-mono tabular-nums ${valueClass ?? ''}`}>{value}</dd>
+    </div>
   );
 }
