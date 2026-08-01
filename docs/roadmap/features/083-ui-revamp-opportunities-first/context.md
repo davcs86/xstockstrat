@@ -97,3 +97,201 @@
   placement). All are genuine design-phase decisions correctly routed to `/sdd-design` (honoring
   `P-03`, not breaching it); routing accepted at the gate rather than guessing answers now.
 - **Next:** `/sdd-design ui-revamp-opportunities-first`.
+
+## Session 2026-07-31 — sdd-design (Phase 0 recon + Round 1)
+
+- **Phase 0 recon** (`recon.md` written): four `codebase-discovery` passes over `xstockstrat-ui`
+  (shell/theme/routing, Decide/Discover data, Engine data, Book/Copilot/tests). Decisive finding —
+  the ranked **Opportunities queue** and the differentiating framing (risk-based Exposure, readiness
+  Watchlists, live condition evaluation, factor model, signal-source health, per-strategy analytics,
+  Copilot invocation+persistence) are **backend GAPs** no current RPC returns; Backtest / Backfills /
+  Portfolio / Orders are fully served, others partially. Every gap grep-verified against the producer
+  (guards absence-claim traps 080/081). Theme = two-file token remap (app already dark-only).
+- **Round 1 grilling.** Proposer: "shell + served-data + thin client-ranked queue over `QuerySignals`."
+  Adversary: **NEEDS WORK, no Floor breach.** Verified `ingest.QuerySignals` is **unrouted end-to-end**
+  (`insightsBff.ts:63-78` registers 5 IngestService methods, `querySignals` absent; no browser client;
+  no mock handler) — the "served RPC" claim was advertised-proto, not exercised (trap 081). Client-side
+  ranking + `direction→ENTER/ADD/TRIM/EXIT` action tags rejected: `direction` can't express TRIM/EXIT,
+  so an invented action verb on an order-opening row is a correctness/safety issue, not cosmetics.
+  F-07 ruled **not** breached for env-overridable chrome defaults (conditional on env-override, not a
+  bare literal). accounts placement + AC-1 nav test surface + FR-20 per-surface parity flagged.
+
+### DECISION — user scope override (recorded per C-11 / How-to-Act #1)
+
+- **User directive (2026-07-31):** *"do all within 083, execute them in the right order — no phased
+  migration."* The backend gaps are **no longer deferred to separate features** — the ranked
+  Opportunity-queue RPC(s), live condition/readiness evaluation, position risk/factor engine,
+  signal-source health, per-strategy analytics, screener enrichment, and the Copilot MCP-invocation +
+  thread persistence are all **in scope for 083**, sequenced **backend → codegen/migration/config →
+  frontend** so each screen ships with real data (no shell-now/data-later).
+- **Governance consequence (must reconcile, surfaced to user, not papered over):** this overrides the
+  product spec's `## Out of Scope` ("new backend RPCs … a separate feature"), `## Proto Contract
+  Changes` ("No proto changes"), `## Database Changes` ("No schema changes"), and the `xstockstrat-ui`-
+  only Reviewers snapshot. Now active: **breaking/additive proto gate** (2 owners + platform lead),
+  **config-key gate** (config team) if any `<service>.<category>.<key>` added, **DB migration gate**
+  (DBA + service owner) for Copilot-thread persistence, and expanded reviewers (ingest / analysis /
+  portfolio / agent owners). **Follow-up:** refresh `product-spec.md` (scope/gates/reviewers) and
+  re-run `/sdd-review product-spec` before `/sdd-execute` — captured as an Open Thread on `design.md`.
+
+### Open Threads (carry to design.md / sdd-spec)
+
+- [ ] Refresh product-spec.md scope + governance gates + Reviewers to match the in-scope backend work;
+      re-review. (Before `/sdd-execute`.)
+- [ ] Producer-service recon (ingest / analysis / portfolio / agent / indicators) to ground the
+      backend ordering — running now in Phase 0b.
+
+### Round 2 — full-scope backend design (proposer vs adversary)
+
+- **Proposer:** analysis-owns-the-queue spine (zero new edges — analysis already reads ingest signals +
+  portfolio positions + owns the evaluator); Copilot threads → ledger append-events (no new pool);
+  client-side "read of queue" (no LLM); portfolio risk via new edges; per-strategy analytics + screener
+  enrichment; 8-step backend→frontend ordering.
+- **Adversary: NEEDS WORK, no Floor breach.** F-06 adjudicated **HELD** — verified `ledger.proto:14-15,33-61`
+  supports `stream_key` + `Struct payload` + `idempotency_key` append/replay; ledger append-only fits a
+  chat thread iff the UX never edits/deletes (bound as a product constraint). Objections resolved into the
+  design: (1) conviction/readiness formula was undefined for a number that ranks an order queue → **bound
+  to a deterministic ordinal** (passing-leaf ratio + normalized distance), not an invented %; (2) TRIM-vs-EXIT
+  "conviction cut" is a fabricated trade-action boundary → **collapsed to a single `REDUCE` tag**; (3) the
+  MCP-invocation "BFF mints an aud-bound JWT" is under-scoped — a UI-session token is UI-aud, agent needs
+  `aud==AGENT_PUBLIC_URL` via the full OAuth flow → **bound to UI-BFF-as-OAuth-client (top open risk, read-only
+  fallback)**; (4) `portfolio→trading` would create a trading↔portfolio gRPC cycle → **stop learned via a
+  ledger order-event instead** (portfolio already consumes ledger); (5) the proposer's own "need a global
+  positions RPC" worry is **overstated** — `ListPositions(user_id)` with unset `account_id` + `TradingMode
+  UNSPECIFIED` already returns all held positions (`portfolio.proto:105-114`), so **no new RPC**; (6) the
+  8-stacked-PR topology is the fails-082 silent-drop shape → **step PRs target the feature branch directly,
+  not base-chained**. The 2026-07-21 exhaustive-map tsc-break does **not** fire (new enum types, not appended
+  values), but the maps + nav test + AC-8 parity + C-12 fixtures must still be authored in-PR.
+
+### Decisions (design-approved)
+
+- **Chosen approach:** one feature, five additive backend subsystems on an analysis-owns-the-queue spine,
+  then a Nocturne UI consuming each screen's now-real RPC; backend→frontend order; no new DB pool (F-06 held);
+  no new synchronous inter-service cycle. Full detail in `design.md`.
+- **Action tag** = `ENTER/ADD/REDUCE` (no synthesized EXIT-vs-TRIM). **Conviction** = deterministic ordinal,
+  not a probability. **Copilot** = ledger-thread persistence + client-side summary + OAuth-client MCP
+  invocation (read-only fallback). **Stop-distance** via ledger event (no portfolio→trading cycle). **Factor**
+  from marketdata `sector` (config-map fallback). **Chrome** = env defaults + ChromeContext (**C-05 deviation
+  recorded** — no config-service keys; not an F-07 breach since defaults are env-overridable).
+- **Design gate:** presented twice via AskUserQuestion; user interrupted both without selecting, having already
+  given the explicit substantive directive ("do all within 083 … right order … no phased migration") and a
+  "continue" instruction. Proceeded to finalize the design with the recommended resolutions per that directive,
+  subject to user redirection. Rounds: 2 (full). Status: spec-ready → design-approved.
+
+### Open Threads (carry to /sdd-spec — full list in design.md § Open Risks)
+
+- [ ] **Before Step 1:** refresh product-spec.md scope/gates/Reviewers (backend in-scope) + re-run
+      `/sdd-review product-spec`.
+- [ ] **Top design risk:** Copilot MCP-invocation auth (UI-BFF-as-OAuth-client vs identity mint-RPC vs
+      read-only fallback) — resolve at Step 7 /sdd-spec.
+- [ ] Pin the conviction/readiness formula with a unit test (Step 2); verify factor `sector` (Step 5);
+      verify expectancy source / possible analysis schema add (Step 6); portfolio stop-state storage (Step 5);
+      ledger query-conn capacity note (Step 7); branch-lineage reconcile (fails 082).
+
+## Session 2026-07-31 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-ui + Phase 0b producers ingest/analysis/portfolio/agent/
+  indicators; key reuse patterns: analysis-owns-queue zero-new-edges, ledger append-store for Copilot threads,
+  additive-evaluator-sibling for readiness).
+- Phase 1 Grilling: 2 rounds (full). Chosen approach: five additive backend subsystems (analysis-owns-queue)
+  + Nocturne UI, backend→frontend. Rejected: ingest-owned queue, new agent DB (F-06), LLM copilot,
+  portfolio→trading edge, global-positions RPC, TRIM/EXIT split, base-chained step PRs.
+- Constitution rules touched: F-06 (held), F-07 (held), C-04, C-05 (deviation), C-03, C-09, C-10(a/b/d),
+  C-08/P-06, C-11, C-12/C-13. Floor breaches: none.
+- Status: spec-ready → design-approved.
+
+## Session 2026-07-31 — Copilot descope + product-spec refresh
+
+- **User decision:** Copilot ships as a **shallow beta** in 083 (rail chrome + client-side "read of the
+  queue"/concentration flag + ledger-persisted append-only thread, input in beta/read-only state — no live
+  MCP tool call); **full functionality** (authenticated MCP tool invocation via UI-as-OAuth-client →
+  agent-aud token, + any LLM generation) is a **separate future feature**. This retires the design's former
+  top open risk (the aud-bound-token mint surface) from 083's critical path. Bound into design.md § 3,
+  Open Risks (resolved), Ordering step 7; FR-4 + Out-of-Scope in product-spec.md.
+- **Product-spec refresh (user-requested):** reconciled the spec to the in-scope backend —
+  FR-4 (Copilot beta), Out of Scope (backend in-scope + full-Copilot deferred), Affected Services (added
+  analysis/ingest/portfolio + ledger/trading FYI + proto pass), Proto Contract Changes (additive pass + 4
+  enums), Config Key Changes (env-default chrome / C-05 deviation; conditional factor_map), Database Changes
+  (ingest migration 008 + conditionals), approval gates (proto owners + DBA + expanded service owners), and
+  marked all six Open Questions **RESOLVED**. feature.md Reviewers snapshot expanded (provisional; finalized
+  at /sdd-spec).
+- **Next:** re-run `/sdd-review ui-revamp-opportunities-first product-spec` on the refreshed spec, then
+  `/sdd-spec`.
+
+## Session 2026-07-31 — sdd-review impl-spec (advisory) + spec fixes
+
+- **Criteria (spec-reviewer): PASS WITH WARNINGS** — 31 steps, 21 clean ✓ / 10 ⚠ / 0 ✗ / 0 Floor breaches.
+  Every load-bearing code claim independently re-verified (proto field numbers additive, migration 008,
+  four enums `_UNSPECIFIED=0`, action-tag/conviction/factor/expectancy all backed by real data, F-06/F-07
+  held). **Overlap (feature-overlap): CLEAN** — no proto-field / migration / config-key / source-file
+  collision; no merge-order entry.
+- **Applied 4 fixes to implementation-spec.md** (still editable pre-execute; F-09 freezes bodies only at
+  dispatch): (1) **Step 21** nav-reachability rescoped to nav/breadcrumb presence + **Step 20** adds
+  placeholder route stubs so its red→green resolves within its own pairing (was spanning Steps 22–25 —
+  P-06/F-05); (2) **swapped Steps 12↔13** so the `portfolio.exposure.factor_map` config step (now 12)
+  precedes the portfolio service step that reads it (now 13) — fixed the Step-Dependencies section + the
+  `25 needs 13` + docs-step cross-refs; (3) **Step 1** new standalone messages given explicit `= N` field
+  numbers; (4) **Step 14** Go coverage command inlined. Remaining ⚠ (wildcard `**Files**` on broad UI/test
+  steps) accepted as inherent.
+- **Next:** `/sdd-execute ui-revamp-opportunities-first` (backend→frontend; step PRs target the feature
+  branch directly, not base-chained — fails 082; reconcile branch lineage before first write).
+
+## Session 2026-07-31 — sdd-review product-spec (re-validation of refreshed spec)
+
+- **Verdict: PASS WITH WARNINGS** (0 blockers, no Floor breach). Lifecycle **unchanged** (already
+  `design-approved` — this is a re-validation of the scope-expanded spec, not a `draft→spec-ready` gate).
+- **spec-reviewer:** every code-checkable claim verified against the tree — service names vs Registry, the
+  four new enums all new types with `_UNSPECIFIED=0` (C-04), `analysis.proto:340`/`portfolio.proto:43`/
+  `trading.proto:47` anchors, ingest migration 008 correct next number, `factor_map` key format, and the
+  tenancy claim (`portfolio.proto:105-114` `ListPositions(user_id)` returns all held positions). **F-06 HELD**
+  (ledger append-store, no new pool — `ledger.proto:14-15,27-45`); **F-07 HELD** conditionally (env-overridable
+  chrome defaults, not bare literals — enforce at execute). Spec consistent with design.md.
+- **Advisory warnings (→ /sdd-spec):** (1) C-07 — make the `.up.sql`+`.down.sql` pairing explicit for
+  migration 008; (2) C-1 trading-domain — enumerate FR-19 chrome env-default per-deployment values +
+  note the compose/dev/prod file updates; (3) F-07 watch — keep chrome defaults env-overridable at
+  implementation (no bare literals).
+- **feature-overlap: CLEAN** — no config-key / proto-field / migration / shared-source collision with any
+  in-flight feature. Two notes carried forward: pin the **conditional analysis** expectancy migration at
+  **010** (trunk has analysis 008/009) — done in product-spec DB section; and a **feature-number
+  duplication** — `083-droplet-compose-deploy` also occupied `083` (spec-ready, disjoint files → no merge
+  conflict). **RESOLVED 2026-07-31 (user decision):** renumbered `083-droplet-compose-deploy` → `084`
+  (next free NNN across local + remote refs); its branch is slug-only so unaffected. This 083 keeps its
+  number.
+- **Next:** `/sdd-spec ui-revamp-opportunities-first` (backend→frontend ordering; step PRs target the
+  feature branch directly, not base-chained; reconcile branch lineage per fails 082).
+
+## Session 2026-07-31 — sdd-spec
+
+- Generated implementation-spec.md with 31 steps. Status `design-approved` → `implementation-ready`.
+  Ordering backend→frontend per design.md § Ordering; step PRs target the feature branch directly
+  (NOT base-chained — fails.md 082).
+- Consumed recon.md + design.md as authoritative inputs; reused recon's grounded `path:line` Codebase
+  Map directly and did targeted inline discovery only for the design's open `/sdd-spec` decisions.
+- Key codebase findings (grep-resolved the design Open Risks):
+  - **Factor grouping REQUIRES `portfolio.exposure.factor_map`** — marketdata exposes no `sector`:
+    `Fundamentals` proto is fields 1–17 with no sector, and screener `_FUNDAMENTAL_FIELDS`
+    (`screener.py:32`) has none either. Design's "reuse marketdata sector" path is unavailable →
+    config key is the actual path (Step 13, C-05-governed). Resolves "Factor source unverified".
+  - **Expectancy is derivable — no analysis migration:** `analysis.backtest_runs` (migration 006)
+    stores `win_rate` + `profit_factor`; expectancy = closed form from those two columns. Resolves
+    "Expectancy source" toward no new schema. **Analysis migration 010 is NOT needed.**
+  - **Portfolio resting-stops held in-memory — no portfolio migration:** portfolio consumes ledger
+    events via `ConsumeOrderFills/PositionSyncs/BalanceSyncs` (`cmd/server/main.go:63-65`); extend
+    `ConsumeOrderFills` + boot-replay (matches existing position-state-from-events pattern). Resolves
+    "Portfolio stop-state storage". **Only ingest migration 008 is needed** (last is 007).
+  - **New `analysis→trading` edge is real:** `TRADING_ENDPOINT` is ABSENT from the analysis block in
+    `docker-compose.yml` and both `.do` specs (the `@427` hit belongs to the `xstockstrat-ui` block);
+    Step 15 adds it in all three. `Order.strategy_id = 15` / `ListOrders` confirmed in trading.proto.
+  - **Proto field-number floors** (all additive): analysis `ScreenResult` 1–6 → new 7+;
+    portfolio `Position` 1–13 → risk fields 14+; ingest `SignalSource` 1–7 → health 8+. Four new enums,
+    each `_UNSPECIFIED=0`; four exhaustive TS `Record<Enum,…>` maps authored in the same codegen PR
+    (Step 2, C-10(a/d) trap).
+  - **Traced evaluator is feasible:** `evaluate_with_series` (`evaluator.py:118`) + `_eval_condition`
+    (`:415`, bare bool, fns >/</>=/<=/crosses_above/crosses_below) → additive sibling
+    `evaluate_conditions_traced` emits per-leaf lhs_value/threshold/state/distance; conviction stays a
+    deterministic ordinal (passing/total), never a probability. Hot path (`:165` frozen conviction)
+    untouched.
+  - **Copilot shallow beta** uses the ledger append-store (`ledger.proto:14,33,37,45`), append-only,
+    no edit/delete UX — no new pool/DB/LLM (F-06 held). Ledger unchanged.
+  - **strat-lab plugin NOT affected** — 083 changes none of run_backtest/manage_strategy/
+    trigger_backfill/get_backfill_status/set_strategy_live; noted in Step 31 for the PR body.
+- Reviewers snapshot finalized (config team added because factor_map is used; ledger/trading FYI).
