@@ -142,7 +142,12 @@ export function ChartPanel() {
         {loading && !seriesRef.current && (
           <p className="text-xs text-muted-foreground mb-2">Loading…</p>
         )}
-        <div ref={containerRef} className="w-full" style={{ height: 320 }} />
+        <div
+          ref={containerRef}
+          data-testid="chart-container"
+          className="w-full"
+          style={{ height: 320 }}
+        />
       </CardContent>
     </Card>
   );
