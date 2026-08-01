@@ -361,3 +361,18 @@ test.describe('Strategy authoring — re-entry cooldown (feature 069)', () => {
     expect(def.cooldownDays).toBeUndefined();
   });
 });
+
+test.describe('Strategies list — handoff fidelity (feature 083)', () => {
+  test('renders the aggregate stat row and the Active/Paused/Off state badges', async ({
+    page,
+  }) => {
+    await addAdminCookie(page);
+    await page.goto('/insights/strategies');
+    // Aggregate stat row.
+    await expect(page.getByText('Active strategies')).toBeVisible({ timeout: 8000 });
+    await expect(page.getByText('Blended score')).toBeVisible();
+    // State vocabulary (never Live/Paper) — the mock carries active+liveEnabled and active-only defs.
+    await expect(page.getByText('Active', { exact: true }).first()).toBeVisible();
+    await expect(page.getByText('Paused', { exact: true }).first()).toBeVisible();
+  });
+});
