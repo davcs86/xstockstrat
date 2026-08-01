@@ -53,3 +53,32 @@ export const OPPORTUNITIES = [
     validUntil: VALID_UNTIL,
   },
 ];
+
+/** A SymbolReadiness (traced condition leaves) for the Signal-detail EvaluateReadiness mock. */
+export function symbolReadiness(symbol: string) {
+  return {
+    symbol,
+    conviction: 0.8,
+    passingConditions: 2,
+    totalConditions: 3,
+    conditions: [
+      {
+        refName: 'sma_fast',
+        lhsValue: 152.3,
+        threshold: 150,
+        fn: '>',
+        state: 1,
+        distanceToThreshold: 0.015,
+      },
+      { refName: 'rsi', lhsValue: 58, threshold: 70, fn: '<', state: 1, distanceToThreshold: 0.17 },
+      {
+        refName: 'volume',
+        lhsValue: 0.98,
+        threshold: 1.0,
+        fn: '>',
+        state: 2,
+        distanceToThreshold: -0.02,
+      },
+    ],
+  };
+}

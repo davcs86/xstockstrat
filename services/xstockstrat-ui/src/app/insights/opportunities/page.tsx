@@ -181,7 +181,15 @@ export default function OpportunitiesPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         <Button asChild variant="ghost" size="sm">
-                          <Link href={`/insights/market/${o.symbol}`}>Review</Link>
+                          <Link
+                            href={
+                              o.strategyId
+                                ? `/insights/market/${o.symbol}?strategy=${o.strategyId}`
+                                : `/insights/market/${o.symbol}`
+                            }
+                          >
+                            Review
+                          </Link>
                         </Button>
                       </TableCell>
                     </TableRow>

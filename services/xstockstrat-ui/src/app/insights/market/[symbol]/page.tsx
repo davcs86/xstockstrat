@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
@@ -10,6 +10,7 @@ import { ConnectError } from '@connectrpc/connect';
 import { marketDataClient } from '@/lib/browserClients/marketDataClient';
 import { type Timeframe, TIMEFRAMES, TIMEFRAME_ENUM, type Bar, mapBars } from '@/lib/chart';
 import { useCandlestickChart } from '@/hooks/useCandlestickChart';
+import { SignalReadiness } from '@/components/insights/SignalReadiness';
 
 export default function MarketSymbolPage() {
   const params = useParams<{ symbol: string }>();
@@ -123,6 +124,12 @@ export default function MarketSymbolPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* feature 083 — condition readiness for the selected/threaded strategy (FR-6).
+            Suspense boundary: SignalReadiness reads ?strategy= via useSearchParams. */}
+        <Suspense fallback={<div className="h-24" />}>
+          <SignalReadiness symbol={symbol} />
+        </Suspense>
       </div>
     </AppShell>
   );

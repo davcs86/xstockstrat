@@ -38,6 +38,7 @@ import {
   STRATEGY_DEFINITIONS,
   insufficientDataResult,
   OPPORTUNITIES,
+  symbolReadiness,
 } from './fixtures';
 
 export const TRADER_MOCK_PORT = 9091;
@@ -475,6 +476,10 @@ export async function startMockBackend(): Promise<void> {
         async listOpportunities(req) {
           const min = req.minConviction ?? 0;
           return { opportunities: OPPORTUNITIES.filter((o) => o.conviction >= min) };
+        },
+        // feature 083 — traced condition readiness for the Signal-detail panel.
+        async evaluateReadiness(req) {
+          return { readiness: (req.symbols.length ? req.symbols : ['AAPL']).map(symbolReadiness) };
         },
         async scoreStrategy() {
           return { overallScore: 0.5, rating: 'C' };
