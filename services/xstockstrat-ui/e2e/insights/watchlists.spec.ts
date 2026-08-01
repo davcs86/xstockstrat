@@ -121,6 +121,7 @@ test.describe('Watchlists (insights)', () => {
     await page.getByRole('option', { name: 'Live Test Strategy' }).click();
 
     await expect(readiness.getByText('AAPL')).toBeVisible({ timeout: 5000 });
-    await expect(readiness.getByText('2/3')).toBeVisible();
+    // 2 of 3 conditions pass → "1 away" (readiness bar + blocking-condition row).
+    await expect(readiness.getByText('1 away')).toBeVisible();
   });
 });

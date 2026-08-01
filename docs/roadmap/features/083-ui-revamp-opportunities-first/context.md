@@ -567,3 +567,18 @@ and **E (per-screen fidelity)** (skipping A sidebar, C mobile-companion page, D 
 - Feature promoted and committed: 37a7f5269454eadb810c4303d5100063e4f35eed
 - Status updated: `code-completed` → `launched`
 - Launched date: 2026-08-01
+
+### Handoff-fidelity — second review pass (deployed-screenshot feedback)
+
+User flagged the deployed Strategies + Watchlists as still low-fidelity:
+- **Strategies**: the list still rendered the legacy 065 score cards (Overall Score / Drawdown /
+  Sharpe / Win_rate + rating grade) instead of the handoff table, and "N active" double-counted
+  paused strategies. Rebuilt into the handoff **analytics table** (Strategy / State / Signals 30d /
+  Taken / Hit rate / Expectancy / Max DD / Score / Open) with **per-row GetStrategyAnalytics**;
+  fixed the count so "Active" = active && live_enabled (paused counted separately) — header, stat
+  tile and per-row State badges now agree.
+- **Watchlists**: upgraded the flat state-dot + N/M list to per-symbol rows with a **readiness bar**
+  (conviction) + **firing / N-away** state + the **blocking condition** (first not-yet-passing
+  leaf), sorted by conviction — all from the EvaluateReadiness `conditions`. Live price/change
+  columns remain omitted (no per-symbol quote in the readiness payload).
+- Full suite 180 passed; specs updated for both rebuilds.
