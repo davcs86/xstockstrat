@@ -51,6 +51,39 @@ No gRPC server — this is a frontend. It is a gRPC *client* of the backend serv
 
 `next.config.js` redirects `/` → `/trader` (`permanent: false`).
 
+## Opportunities-first shell (feature 083)
+
+The physical routes/segments above are **unchanged**; feature 083 layers an opportunities-first
+"Nocturne" presentation over them. Non-obvious pieces:
+
+- **Nav grouping** — the shared shell (`PlatformHeader`) presents four primary groups
+  **Decide / Discover / Engine / Book** (+ a pinned **Settings** group) over the four physical
+  segments. The nav model is the single source of truth in `src/components/shared/navGroups.tsx`
+  (`NAV_GROUPS`) — imported by both the desktop header and the mobile `BottomTabBar`. **Do not
+  import `NAV_GROUPS` from `PlatformHeader`** (that forms a `PlatformHeader ↔ BottomTabBar` import
+  cycle → a prerender TDZ crash); import from `navGroups.tsx`.
+- **Decide screens** — `insights/opportunities` (ranked queue over analysis `ListOpportunities`)
+  and the Signal-detail page `insights/market/[symbol]` (candlestick + `EvaluateReadiness`
+  readiness for an explicit strategy — via a strategy picker, never a fabricated signal→strategy
+  binding — plus an FR-6 order ticket re-presenting `OrderForm` inside its own `AccountProvider`).
+- **Enum render maps** — `src/lib/opportunityShared.tsx` holds the exhaustive
+  `Record<Enum, EnumRender>` maps (`OPPORTUNITY_ACTION`, `CONDITION_STATE`, `POSITION_RISK_FLAG`,
+  `SOURCE_HEALTH`) + `EnumBadge`. Adding a proto enum value without a map entry fails `tsc` here.
+- **Copilot rail (beta)** — `src/components/copilot/CopilotRail.tsx`, a 310px global rail mounted in
+  `PlatformHeader`, default off via `src/context/ChromeContext.tsx` (`showCopilot`). Two no-LLM
+  templated reads (pure helpers in `src/lib/copilot.ts`) + an **append-only** note thread persisted
+  in the ledger. The thread routes live on `traderBff`'s `LedgerService` (`appendEvent` +
+  copilot-aware `queryEvents`): the BFF forces `stream_key=copilot:<user>:default` +
+  `event_type=copilot.message` server-side from the verified session, so the browser never learns
+  the user id and can only touch its own thread. No agent DB, no LLM, no new pool (F-06).
+- **Mobile companion** — one shared `src/components/mobile/SectionRenderer.tsx` (section kinds
+  `head/stat/signal/chart/row/form/note/action`, ≥44px tap targets) drawn behind `sm:hidden`
+  beside the desktop layout, plus a fixed `BottomTabBar` (mobile-only) mounted globally in
+  `PlatformHeader`. Content wrappers add `pb-20 sm:pb-0` clearance.
+- **Non-happy states** — shared `src/components/ui/skeleton.tsx` (`Skeleton`) +
+  `src/components/shared/EmptyState.tsx`; per-card errors reuse the existing `CardNotice` /
+  `QueryStateMessages` (DRY).
+
 ## Dependencies
 
 The UI consumes these backend services over gRPC via its segment BFFs (endpoints from `*_ENDPOINT` env vars):
@@ -194,3 +227,8 @@ Requires backend gRPC services on 50051–50060 (and TimescaleDB for the config-
 | Dockerfile | `Dockerfile` |
 | OTel | `src/telemetry.ts` |
 | E2E | `e2e/`, `playwright.config.ts` |
+| Shell nav model (083) | `src/components/shared/navGroups.tsx`, `src/components/shared/PlatformHeader.tsx` |
+| Enum render maps (083) | `src/lib/opportunityShared.tsx` |
+| Copilot rail (083) | `src/components/copilot/CopilotRail.tsx`, `src/context/ChromeContext.tsx`, `src/lib/copilot.ts` |
+| Mobile companion (083) | `src/components/mobile/{SectionRenderer,BottomTabBar}.tsx`, `sections.ts` |
+| State primitives (083) | `src/components/ui/skeleton.tsx`, `src/components/shared/EmptyState.tsx` |

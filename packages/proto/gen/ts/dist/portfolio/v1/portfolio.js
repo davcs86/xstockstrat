@@ -5,7 +5,10 @@
 //   protoc               unknown
 // source: portfolio/v1/portfolio.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PortfolioServiceClient = exports.PortfolioServiceService = exports.RemoveWatchlistSymbolsResponse = exports.RemoveWatchlistSymbolsRequest = exports.AddWatchlistSymbolsResponse = exports.AddWatchlistSymbolsRequest = exports.DeleteWatchlistResponse = exports.DeleteWatchlistRequest = exports.UpdateWatchlistResponse = exports.UpdateWatchlistRequest = exports.ListWatchlistsResponse = exports.ListWatchlistsRequest = exports.GetWatchlistResponse = exports.GetWatchlistRequest = exports.CreateWatchlistResponse = exports.CreateWatchlistRequest = exports.Watchlist = exports.ListPortfoliosResponse = exports.ListPortfoliosRequest = exports.StreamPortfolioUpdatesRequest = exports.GetSnapshotRequest = exports.GetPnLRequest = exports.ListPositionsResponse = exports.ListPositionsRequest = exports.GetPositionRequest = exports.GetPortfolioRequest = exports.PnLResponse = exports.PortfolioSnapshot = exports.Position = exports.Portfolio = exports.PositionSide = exports.protobufPackage = void 0;
+exports.PortfolioServiceClient = exports.PortfolioServiceService = exports.RemoveWatchlistSymbolsResponse = exports.RemoveWatchlistSymbolsRequest = exports.AddWatchlistSymbolsResponse = exports.AddWatchlistSymbolsRequest = exports.DeleteWatchlistResponse = exports.DeleteWatchlistRequest = exports.UpdateWatchlistResponse = exports.UpdateWatchlistRequest = exports.ListWatchlistsResponse = exports.ListWatchlistsRequest = exports.GetWatchlistResponse = exports.GetWatchlistRequest = exports.CreateWatchlistResponse = exports.CreateWatchlistRequest = exports.Watchlist = exports.ListPortfoliosResponse = exports.ListPortfoliosRequest = exports.StreamPortfolioUpdatesRequest = exports.GetSnapshotRequest = exports.GetPnLRequest = exports.ListPositionsResponse = exports.ListPositionsRequest = exports.GetPositionRequest = exports.GetPortfolioRequest = exports.PnLResponse = exports.PortfolioSnapshot = exports.Position = exports.Portfolio = exports.PositionSide = exports.PositionRiskFlag = exports.protobufPackage = void 0;
+exports.positionRiskFlagFromJSON = positionRiskFlagFromJSON;
+exports.positionRiskFlagToJSON = positionRiskFlagToJSON;
+exports.positionRiskFlagToNumber = positionRiskFlagToNumber;
 exports.positionSideFromJSON = positionSideFromJSON;
 exports.positionSideToJSON = positionSideToJSON;
 exports.positionSideToNumber = positionSideToNumber;
@@ -15,6 +18,68 @@ const grpc_js_1 = require("@grpc/grpc-js");
 const common_1 = require("../../common/v1/common");
 const timestamp_1 = require("../../google/protobuf/timestamp");
 exports.protobufPackage = "xstockstrat.portfolio.v1";
+/** A risk cue surfaced on the Exposure surface (feature 083). Closed set → enum (C-04). */
+var PositionRiskFlag;
+(function (PositionRiskFlag) {
+    PositionRiskFlag["POSITION_RISK_FLAG_UNSPECIFIED"] = "POSITION_RISK_FLAG_UNSPECIFIED";
+    /** POSITION_RISK_FLAG_ADD_SIGNAL - a buy signal is live for this held symbol */
+    PositionRiskFlag["POSITION_RISK_FLAG_ADD_SIGNAL"] = "POSITION_RISK_FLAG_ADD_SIGNAL";
+    /** POSITION_RISK_FLAG_REDUCE_SIGNAL - a sell signal is live for this held symbol */
+    PositionRiskFlag["POSITION_RISK_FLAG_REDUCE_SIGNAL"] = "POSITION_RISK_FLAG_REDUCE_SIGNAL";
+    /** POSITION_RISK_FLAG_STOP_NEAR - stop-distance within the near threshold */
+    PositionRiskFlag["POSITION_RISK_FLAG_STOP_NEAR"] = "POSITION_RISK_FLAG_STOP_NEAR";
+    PositionRiskFlag["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(PositionRiskFlag || (exports.PositionRiskFlag = PositionRiskFlag = {}));
+function positionRiskFlagFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "POSITION_RISK_FLAG_UNSPECIFIED":
+            return PositionRiskFlag.POSITION_RISK_FLAG_UNSPECIFIED;
+        case 1:
+        case "POSITION_RISK_FLAG_ADD_SIGNAL":
+            return PositionRiskFlag.POSITION_RISK_FLAG_ADD_SIGNAL;
+        case 2:
+        case "POSITION_RISK_FLAG_REDUCE_SIGNAL":
+            return PositionRiskFlag.POSITION_RISK_FLAG_REDUCE_SIGNAL;
+        case 3:
+        case "POSITION_RISK_FLAG_STOP_NEAR":
+            return PositionRiskFlag.POSITION_RISK_FLAG_STOP_NEAR;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return PositionRiskFlag.UNRECOGNIZED;
+    }
+}
+function positionRiskFlagToJSON(object) {
+    switch (object) {
+        case PositionRiskFlag.POSITION_RISK_FLAG_UNSPECIFIED:
+            return "POSITION_RISK_FLAG_UNSPECIFIED";
+        case PositionRiskFlag.POSITION_RISK_FLAG_ADD_SIGNAL:
+            return "POSITION_RISK_FLAG_ADD_SIGNAL";
+        case PositionRiskFlag.POSITION_RISK_FLAG_REDUCE_SIGNAL:
+            return "POSITION_RISK_FLAG_REDUCE_SIGNAL";
+        case PositionRiskFlag.POSITION_RISK_FLAG_STOP_NEAR:
+            return "POSITION_RISK_FLAG_STOP_NEAR";
+        case PositionRiskFlag.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function positionRiskFlagToNumber(object) {
+    switch (object) {
+        case PositionRiskFlag.POSITION_RISK_FLAG_UNSPECIFIED:
+            return 0;
+        case PositionRiskFlag.POSITION_RISK_FLAG_ADD_SIGNAL:
+            return 1;
+        case PositionRiskFlag.POSITION_RISK_FLAG_REDUCE_SIGNAL:
+            return 2;
+        case PositionRiskFlag.POSITION_RISK_FLAG_STOP_NEAR:
+            return 3;
+        case PositionRiskFlag.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
 /**
  * PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.
  * Used only as an additive filter on ListPositionsRequest; the Position message itself
@@ -337,6 +402,12 @@ function createBasePosition() {
         accountId: "",
         dayPnl: 0,
         dayPnlPct: 0,
+        stopPrice: 0,
+        riskAtStop: 0,
+        stopDistancePct: 0,
+        factor: "",
+        flag: PositionRiskFlag.POSITION_RISK_FLAG_UNSPECIFIED,
+        exitRule: "",
     };
 }
 exports.Position = {
@@ -379,6 +450,24 @@ exports.Position = {
         }
         if (message.dayPnlPct !== 0) {
             writer.uint32(105).double(message.dayPnlPct);
+        }
+        if (message.stopPrice !== 0) {
+            writer.uint32(113).double(message.stopPrice);
+        }
+        if (message.riskAtStop !== 0) {
+            writer.uint32(121).double(message.riskAtStop);
+        }
+        if (message.stopDistancePct !== 0) {
+            writer.uint32(129).double(message.stopDistancePct);
+        }
+        if (message.factor !== "") {
+            writer.uint32(138).string(message.factor);
+        }
+        if (message.flag !== PositionRiskFlag.POSITION_RISK_FLAG_UNSPECIFIED) {
+            writer.uint32(144).int32(positionRiskFlagToNumber(message.flag));
+        }
+        if (message.exitRule !== "") {
+            writer.uint32(154).string(message.exitRule);
         }
         return writer;
     },
@@ -480,6 +569,48 @@ exports.Position = {
                     message.dayPnlPct = reader.double();
                     continue;
                 }
+                case 14: {
+                    if (tag !== 113) {
+                        break;
+                    }
+                    message.stopPrice = reader.double();
+                    continue;
+                }
+                case 15: {
+                    if (tag !== 121) {
+                        break;
+                    }
+                    message.riskAtStop = reader.double();
+                    continue;
+                }
+                case 16: {
+                    if (tag !== 129) {
+                        break;
+                    }
+                    message.stopDistancePct = reader.double();
+                    continue;
+                }
+                case 17: {
+                    if (tag !== 138) {
+                        break;
+                    }
+                    message.factor = reader.string();
+                    continue;
+                }
+                case 18: {
+                    if (tag !== 144) {
+                        break;
+                    }
+                    message.flag = positionRiskFlagFromJSON(reader.int32());
+                    continue;
+                }
+                case 19: {
+                    if (tag !== 154) {
+                        break;
+                    }
+                    message.exitRule = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -547,6 +678,30 @@ exports.Position = {
                 : isSet(object.day_pnl_pct)
                     ? globalThis.Number(object.day_pnl_pct)
                     : 0,
+            stopPrice: isSet(object.stopPrice)
+                ? globalThis.Number(object.stopPrice)
+                : isSet(object.stop_price)
+                    ? globalThis.Number(object.stop_price)
+                    : 0,
+            riskAtStop: isSet(object.riskAtStop)
+                ? globalThis.Number(object.riskAtStop)
+                : isSet(object.risk_at_stop)
+                    ? globalThis.Number(object.risk_at_stop)
+                    : 0,
+            stopDistancePct: isSet(object.stopDistancePct)
+                ? globalThis.Number(object.stopDistancePct)
+                : isSet(object.stop_distance_pct)
+                    ? globalThis.Number(object.stop_distance_pct)
+                    : 0,
+            factor: isSet(object.factor) ? globalThis.String(object.factor) : "",
+            flag: isSet(object.flag)
+                ? positionRiskFlagFromJSON(object.flag)
+                : PositionRiskFlag.POSITION_RISK_FLAG_UNSPECIFIED,
+            exitRule: isSet(object.exitRule)
+                ? globalThis.String(object.exitRule)
+                : isSet(object.exit_rule)
+                    ? globalThis.String(object.exit_rule)
+                    : "",
         };
     },
     toJSON(message) {
@@ -590,6 +745,24 @@ exports.Position = {
         if (message.dayPnlPct !== 0) {
             obj.dayPnlPct = message.dayPnlPct;
         }
+        if (message.stopPrice !== 0) {
+            obj.stopPrice = message.stopPrice;
+        }
+        if (message.riskAtStop !== 0) {
+            obj.riskAtStop = message.riskAtStop;
+        }
+        if (message.stopDistancePct !== 0) {
+            obj.stopDistancePct = message.stopDistancePct;
+        }
+        if (message.factor !== "") {
+            obj.factor = message.factor;
+        }
+        if (message.flag !== PositionRiskFlag.POSITION_RISK_FLAG_UNSPECIFIED) {
+            obj.flag = positionRiskFlagToJSON(message.flag);
+        }
+        if (message.exitRule !== "") {
+            obj.exitRule = message.exitRule;
+        }
         return obj;
     },
     create(base) {
@@ -610,6 +783,12 @@ exports.Position = {
         message.accountId = object.accountId ?? "";
         message.dayPnl = object.dayPnl ?? 0;
         message.dayPnlPct = object.dayPnlPct ?? 0;
+        message.stopPrice = object.stopPrice ?? 0;
+        message.riskAtStop = object.riskAtStop ?? 0;
+        message.stopDistancePct = object.stopDistancePct ?? 0;
+        message.factor = object.factor ?? "";
+        message.flag = object.flag ?? PositionRiskFlag.POSITION_RISK_FLAG_UNSPECIFIED;
+        message.exitRule = object.exitRule ?? "";
         return message;
     },
 };

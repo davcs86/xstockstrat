@@ -2,6 +2,20 @@ import { BinaryReader, BinaryWriter } from "@bufbuild/protobuf/wire";
 import { type CallOptions, type ChannelCredentials, Client, type ClientOptions, type ClientReadableStream, type ClientUnaryCall, type handleServerStreamingCall, type handleUnaryCall, type Metadata, type ServiceError, type UntypedServiceImplementation } from "@grpc/grpc-js";
 import { PageRequest, PageResponse, TimeRange, TradingMode } from "../../common/v1/common";
 export declare const protobufPackage = "xstockstrat.portfolio.v1";
+/** A risk cue surfaced on the Exposure surface (feature 083). Closed set → enum (C-04). */
+export declare enum PositionRiskFlag {
+    POSITION_RISK_FLAG_UNSPECIFIED = "POSITION_RISK_FLAG_UNSPECIFIED",
+    /** POSITION_RISK_FLAG_ADD_SIGNAL - a buy signal is live for this held symbol */
+    POSITION_RISK_FLAG_ADD_SIGNAL = "POSITION_RISK_FLAG_ADD_SIGNAL",
+    /** POSITION_RISK_FLAG_REDUCE_SIGNAL - a sell signal is live for this held symbol */
+    POSITION_RISK_FLAG_REDUCE_SIGNAL = "POSITION_RISK_FLAG_REDUCE_SIGNAL",
+    /** POSITION_RISK_FLAG_STOP_NEAR - stop-distance within the near threshold */
+    POSITION_RISK_FLAG_STOP_NEAR = "POSITION_RISK_FLAG_STOP_NEAR",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function positionRiskFlagFromJSON(object: any): PositionRiskFlag;
+export declare function positionRiskFlagToJSON(object: PositionRiskFlag): string;
+export declare function positionRiskFlagToNumber(object: PositionRiskFlag): number;
 /**
  * PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.
  * Used only as an additive filter on ListPositionsRequest; the Position message itself
@@ -55,6 +69,23 @@ export interface Position {
     dayPnl: number;
     /** fraction (e.g. 0.0125 = +1.25%) */
     dayPnlPct: number;
+    /**
+     * ── Risk / factor fields (feature 083 — Book → Exposure) ─────────────────────
+     * Resting-stop price learned from trading's order events via the ledger (no
+     * portfolio→trading synchronous edge; held in-memory, rebuilt on boot-replay).
+     * risk_at_stop / stop_distance_pct are computed on read off the broker-authoritative
+     * current_price: stop_distance_pct = (current_price − stop_price) / current_price.
+     */
+    stopPrice: number;
+    riskAtStop: number;
+    stopDistancePct: number;
+    /**
+     * factor grouping from the portfolio.exposure.factor_map config key (marketdata
+     * exposes no sector); "" → UI groups as "Unclassified".
+     */
+    factor: string;
+    flag: PositionRiskFlag;
+    exitRule: string;
 }
 export interface PortfolioSnapshot {
     portfolioId: string;

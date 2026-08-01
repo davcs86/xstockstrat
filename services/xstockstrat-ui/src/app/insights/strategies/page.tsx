@@ -6,6 +6,7 @@ import { AppShell } from '@/components/insights/AppShell';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { StatTile } from '@/components/shared/StatTile';
 import { useStrategies } from '@/hooks/useStrategies';
 import { useStrategyDefinitions, useManageStrategy } from '@/hooks/useStrategyDefinitions';
 import { useIsAdmin } from '@/hooks/useLiveStrategies';
@@ -27,6 +28,16 @@ export default function StrategiesPage() {
 
   const scoreById = new Map((scoresData?.strategies ?? []).map((s) => [s.strategyId, s]));
   const definitions = defsData?.definitions ?? [];
+  // Aggregate stats + the Active/Paused/Off state vocabulary (never Live/Paper — that would
+  // collide with the account trading mode; design.md § Strategies).
+  const activeCount = definitions.filter((d) => d.active).length;
+  const pausedCount = definitions.filter((d) => d.active && !d.liveEnabled).length;
+  const scoredDefs = definitions.filter((d) => scoreById.has(d.strategyId));
+  const scoredCount = scoredDefs.length;
+  const avgScore = scoredCount
+    ? scoredDefs.reduce((s, d) => s + Number(scoreById.get(d.strategyId)?.overallScore ?? 0), 0) /
+      scoredCount
+    : null;
 
   function handleDeactivate(strategyId: string) {
     if (
@@ -46,7 +57,7 @@ export default function StrategiesPage() {
           <div>
             <h1 className="text-xl font-bold tracking-tight">Strategies</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              All registered trading strategies with scores
+              {activeCount} active · these are what put signals in your queue.
             </p>
           </div>
           {isAdmin && (
@@ -56,6 +67,30 @@ export default function StrategiesPage() {
             </Button>
           )}
         </div>
+
+        {/* Aggregate stat row (feature 083) — from the definitions + merged scores. */}
+        {definitions.length > 0 && (
+          <div className="mb-6 grid grid-cols-2 overflow-hidden rounded-md border border-border sm:grid-cols-4">
+            <StatTile
+              label="Active strategies"
+              value={activeCount}
+              tone="gain"
+              sub={pausedCount > 0 ? `${pausedCount} paused` : undefined}
+            />
+            <StatTile label="Registered" value={definitions.length} sub="incl. inactive" />
+            <StatTile
+              label="Scored"
+              value={scoredCount}
+              tone="accent"
+              sub={`of ${definitions.length}`}
+            />
+            <StatTile
+              label="Blended score"
+              value={avgScore === null ? '—' : `${(avgScore * 100).toFixed(0)}%`}
+              sub="mean overall"
+            />
+          </div>
+        )}
 
         {isLoading && <p className="text-sm text-muted-foreground">Loading strategies…</p>}
         {error && <p className="text-sm text-destructive">Failed to load strategies</p>}
@@ -75,7 +110,12 @@ export default function StrategiesPage() {
                             {d.displayName || d.strategyId}
                           </p>
                           <div className="flex items-center gap-1.5 shrink-0">
-                            {!isActive && <Badge variant="secondary">inactive</Badge>}
+                            {/* State vocabulary (Active/Paused/Off) — never Live/Paper (083). */}
+                            <Badge
+                              variant={!isActive ? 'secondary' : d.liveEnabled ? 'buy' : 'warning'}
+                            >
+                              {!isActive ? 'Off' : d.liveEnabled ? 'Active' : 'Paused'}
+                            </Badge>
                             {score?.provisional && <Badge variant="secondary">Provisional</Badge>}
                             {score?.rating && (
                               <Badge variant={ratingVariant(score.rating)}>{score.rating}</Badge>

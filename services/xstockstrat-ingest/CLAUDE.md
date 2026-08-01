@@ -43,6 +43,10 @@ ingests signals via the `IngestSignal` gRPC RPC. The former HTTP/Connect-RPC ser
 - Schema: `ingest`
 - Table: `ingest.newsletter_signals` — TimescaleDB hypertable (7-day chunks by `ingested_at`)
 - Migration: `migrations/001_newsletter_signals.up.sql`
+- Table `ingest.signal_sources` — source registry; **migration `008_signal_source_health`** (feature
+  083) adds `health`/`last_seen_at`/`last_error`/`signals_fed`. `IngestSignal` bumps
+  `last_seen_at`+`signals_fed` (best-effort); `ListSignalSources` derives LIVE/STALE/DOWN health on
+  read from `last_seen_at` freshness (`signal_sources.derive_health_status`).
 - Table: `ingest.backfill_jobs` — durable backfill job state (plain table, **not** a hypertable);
   replaces the former in-memory `self._jobs` dict. Persists status, progress (`bars_processed` /
   `bars_total`), `failed_symbols`, and timestamps so jobs survive a restart. On startup the servicer

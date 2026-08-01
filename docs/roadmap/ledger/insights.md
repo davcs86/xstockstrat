@@ -434,3 +434,33 @@ reusing.
   inspectable invariant (a one-line passthrough, an unconditional call site) rather than skipping
   coverage or forcing a fragile end-to-end test. State the composition explicitly so a reviewer can
   audit the chain, not just the individual tests.
+
+### 2026-07-31 — 083-ui-revamp-opportunities-first — design
+- **Pattern**: To add durable, per-conversation state (a Copilot chat thread) **without a new DB pool**
+  when the F-06 budget is at the 20-connection cap, reuse the **ledger append-only store** instead of
+  giving the stateless service its own database: `AppendEvent` with `stream_key="<domain>:{user_id}:{id}"`
+  + a schemaless `google.protobuf.Struct` payload + `idempotency_key`, replayed via `QueryEvents(stream_key)`
+  (`sequence` monotonic per stream). No new pool, no migration, no new schema. **Precondition:** the data
+  must be genuinely append-only — ledger events are immutable, so a UX with edit/delete/clear-history
+  cannot use it; confirm that before choosing this home.
+- **Evidence**: `packages/proto/ledger/v1/ledger.proto:14-15,33-61`; feature 083 design.md § Chosen Approach
+  point 3 (Copilot), verified by the round-2 design-adversary against the proto.
+- **Rule it implies**: honors **F-06** — for append-only per-entity state, an existing append-log keyed by
+  `stream_key` is a no-new-pool persistence home; prefer it over a new service DB when the pool budget is full.
+
+### 2026-07-31 — 083-ui-revamp-opportunities-first — design
+- **Pattern**: Before adding an inter-service edge to read a value, check the **root dependency-graph
+  direction** first — the natural reader may already be dialed from the other side, so a new synchronous
+  edge would create a gRPC/`WAIT_FOR` **cycle**. Here portfolio needed the resting-STOP price from trading,
+  but trading→portfolio already exists; a `portfolio→trading` read edge would have closed a boot-order cycle.
+  The non-cyclic fix: portfolio (which already consumes ledger events for position state) learns the stop
+  from trading's **ledger order-event** — eventual-consistency on the derived value in exchange for no cycle.
+  Corollary caught the same round: a "conviction %" that ranks an **order-opening** queue must have its
+  formula pinned at design time (deterministic ordinal), and an action verb (EXIT vs TRIM) must never be
+  **synthesized from an undefined threshold** on a trade surface — collapse to the tag the source data
+  actually supports and let the human choose.
+- **Evidence**: feature 083 design.md § Rejected Alternatives (portfolio→trading, TRIM/EXIT, conviction-%);
+  root `CLAUDE.md` § Inter-Service Dependencies (trading→portfolio); `services/xstockstrat-portfolio/internal/service/portfolio_service.go:69-88` (dials ledger/marketdata/notify only).
+- **Rule it implies**: reinforces **P-03**/**C-10** — for a new cross-service read, verify the graph
+  direction and prefer an existing event channel over a reverse synchronous edge; never manufacture a
+  trade-action label or a ranking number from an undefined model on an order surface.

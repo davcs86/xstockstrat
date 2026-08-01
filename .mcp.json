@@ -13,6 +13,41 @@
       "headers": {
         "Authorization": "Bearer ${DIGITALOCEAN_TOKEN}"
       }
+    },
+    "digitalocean-droplets": {
+      "type": "http",
+      "url": "https://droplets.mcp.digitalocean.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${DIGITALOCEAN_TOKEN}"
+      }
+    },
+    "digitalocean-volumes": {
+      "type": "http",
+      "url": "https://volumes.mcp.digitalocean.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${DIGITALOCEAN_TOKEN}"
+      }
+    },
+    "digitalocean-spaces": {
+      "type": "http",
+      "url": "https://spaces.mcp.digitalocean.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${DIGITALOCEAN_TOKEN}"
+      }
+    },
+    "digitalocean-accounts": {
+      "type": "http",
+      "url": "https://accounts.mcp.digitalocean.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${DIGITALOCEAN_TOKEN}"
+      }
+    },
+    "digitalocean-insights": {
+      "type": "http",
+      "url": "https://insights.mcp.digitalocean.com/mcp",
+      "headers": {
+        "Authorization": "Bearer ${DIGITALOCEAN_TOKEN}"
+      }
     }
   }
 }

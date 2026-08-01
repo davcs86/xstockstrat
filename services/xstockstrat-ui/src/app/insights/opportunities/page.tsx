@@ -1,0 +1,355 @@
+'use client';
+import { useMemo, useState } from 'react';
+import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
+import { AppShell } from '@/components/insights/AppShell';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/components/ui/utils';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { OpportunityActionTag } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import type { Opportunity } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import { OPPORTUNITY_ACTION, EnumBadge } from '@/lib/opportunityShared';
+import { useOpportunities } from '@/hooks/useOpportunities';
+import { insightsPortfolioClient } from '@/lib/browserClients/insightsPortfolioClient';
+import { SectionRenderer } from '@/components/mobile/SectionRenderer';
+import type { Section } from '@/components/mobile/sections';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { StatTile } from '@/components/shared/StatTile';
+
+type SortKey = 'conviction' | 'expiry';
+const NINETY_MIN_MS = 90 * 60 * 1000;
+
+/** `HH:MM` local expiry from a protobuf-es Timestamp ({ seconds: bigint }); `—` when unset. */
+function expiresLabel(validUntil: { seconds: bigint } | undefined): string {
+  if (!validUntil || !validUntil.seconds) return '—';
+  const d = new Date(Number(validUntil.seconds) * 1000);
+  return d.toTimeString().slice(0, 5);
+}
+
+function msUntil(validUntil: { seconds: bigint } | undefined): number | null {
+  if (!validUntil || !validUntil.seconds) return null;
+  return Number(validUntil.seconds) * 1000 - Date.now();
+}
+
+/** Compact USD (e.g. $312k) for the Deployable stat. */
+function compactUsd(n: number): string {
+  if (n >= 1000) return `$${Math.round(n / 1000)}k`;
+  return `$${Math.round(n)}`;
+}
+
+/**
+ * Decide → Opportunities (feature 083, FR-5). The ranked opportunity queue over
+ * analysis.ListOpportunities, rendered as the handoff's conviction cards: a left edge/conviction
+ * number, an action tag, thesis, source + strategy, expiry, and Review/Snooze. Conviction is a
+ * defined value (never a fabricated %); rich fields the backend does not return (live price/
+ * change, sparkline, per-condition values, R:R) are intentionally omitted rather than faked.
+ */
+export default function OpportunitiesPage() {
+  const { data, isLoading, error } = useOpportunities(0);
+  const opportunities = useMemo(() => data?.opportunities ?? [], [data]);
+
+  const [minConviction, setMinConviction] = useState(0);
+  const [activeSources, setActiveSources] = useState<string[]>([]);
+  const [actionFilter, setActionFilter] = useState<string>('any');
+  const [sortKey, setSortKey] = useState<SortKey>('conviction');
+  const [snoozed, setSnoozed] = useState<Set<string>>(new Set());
+
+  // Deployable = real broker buying power (summed across accounts). Best-effort: on any error the
+  // stat renders "—" rather than a fabricated figure.
+  const { data: deployable } = useQuery({
+    queryKey: ['opportunities-buying-power'],
+    queryFn: async () => {
+      const resp = await insightsPortfolioClient.listPortfolios({});
+      return resp.portfolios.reduce((s, p) => s + Number(p.buyingPower ?? 0), 0);
+    },
+    retry: 0,
+    staleTime: 30_000,
+  });
+
+  const sources = useMemo(
+    () => Array.from(new Set(opportunities.map((o) => o.source).filter(Boolean))).sort(),
+    [opportunities],
+  );
+
+  const key = (o: Opportunity) => `${o.symbol}-${o.source}`;
+
+  const rows = useMemo(() => {
+    const filtered = opportunities.filter(
+      (o) =>
+        o.conviction >= minConviction &&
+        (activeSources.length === 0 || activeSources.includes(o.source)) &&
+        (actionFilter === 'any' || String(o.action) === actionFilter) &&
+        !snoozed.has(key(o)),
+    );
+    const sorted = [...filtered];
+    if (sortKey === 'conviction') {
+      sorted.sort((a, b) => b.conviction - a.conviction);
+    } else {
+      sorted.sort(
+        (a, b) => (msUntil(a.validUntil) ?? Infinity) - (msUntil(b.validUntil) ?? Infinity),
+      );
+    }
+    return sorted;
+  }, [opportunities, minConviction, activeSources, actionFilter, sortKey, snoozed]);
+
+  // Stat-row values (handoff framing), all computed from real queue data.
+  const expiringSoon = rows.filter((o) => {
+    const ms = msUntil(o.validUntil);
+    return ms !== null && ms > 0 && ms <= NINETY_MIN_MS;
+  });
+  const exitFlags = rows.filter((o) => o.action === OpportunityActionTag.REDUCE);
+  const freshEntries = rows.filter((o) => o.source && o.source !== 'portfolio');
+  const tickers = (list: Opportunity[]) =>
+    list
+      .slice(0, 3)
+      .map((o) => o.symbol)
+      .join(', ') || '—';
+
+  const toggleSource = (s: string) =>
+    setActiveSources((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
+  const snooze = (o: Opportunity) => setSnoozed((prev) => new Set(prev).add(key(o)));
+
+  const reviewHref = (o: Opportunity) =>
+    o.strategyId
+      ? `/insights/market/${o.symbol}?strategy=${o.strategyId}`
+      : `/insights/market/${o.symbol}`;
+
+  // Mobile 1:1 of the queue (FR-16) — the same rows as one `signal` section each.
+  const mobileSections: Section[] = rows.map((o) => ({
+    kind: 'signal',
+    symbol: o.symbol,
+    badge: OPPORTUNITY_ACTION[o.action],
+    conviction: o.conviction,
+    caption: o.thesis || o.source || undefined,
+    href: reviewHref(o),
+  }));
+
+  return (
+    <AppShell>
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 space-y-6">
+        <div>
+          <h1 className="text-lg font-semibold">Opportunities</h1>
+          <p className="text-sm text-muted-foreground">
+            Explained buy / trim / exit signals, ranked by conviction. The broker owns the ledger —
+            you act with one confirmation.
+          </p>
+        </div>
+
+        {/* 5-stat row (handoff framing) */}
+        <div className="grid grid-cols-2 overflow-hidden rounded-md border border-border sm:grid-cols-5">
+          <StatTile
+            label="Actionable now"
+            value={rows.length}
+            tone="accent"
+            sub={`of ${opportunities.length} evaluated · conv ≥ ${Math.round(minConviction * 100)}`}
+          />
+          <StatTile
+            label="Expiring < 90m"
+            value={expiringSoon.length}
+            tone="paper"
+            sub={tickers(expiringSoon)}
+          />
+          <StatTile
+            label="Exit / trim flags"
+            value={exitFlags.length}
+            tone="loss"
+            sub={tickers(exitFlags)}
+          />
+          <StatTile
+            label="Fresh entries"
+            value={freshEntries.length}
+            tone="gain"
+            sub="from watchlists & screener"
+          />
+          <StatTile
+            label="Deployable"
+            value={deployable === undefined ? '—' : compactUsd(deployable)}
+            sub="broker buying power"
+          />
+        </div>
+
+        {/* Filters */}
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveSources([])}
+              className={cn(
+                'rounded-full border px-3 py-1 text-xs transition-colors',
+                activeSources.length === 0
+                  ? 'border-primary bg-primary/20 text-foreground'
+                  : 'border-border text-muted-foreground hover:text-foreground',
+              )}
+            >
+              All sources
+            </button>
+            {sources.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => toggleSource(s)}
+                className={cn(
+                  'rounded-full border px-3 py-1 text-xs transition-colors',
+                  activeSources.includes(s)
+                    ? 'border-primary bg-primary/20 text-foreground'
+                    : 'border-border text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {s}
+              </button>
+            ))}
+            <div className="ml-auto flex items-center gap-2">
+              <Select value={actionFilter} onValueChange={setActionFilter}>
+                <SelectTrigger className="h-8 w-[130px]" aria-label="action filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any action</SelectItem>
+                  <SelectItem value={String(OpportunityActionTag.ENTER)}>Enter</SelectItem>
+                  <SelectItem value={String(OpportunityActionTag.ADD)}>Add</SelectItem>
+                  <SelectItem value={String(OpportunityActionTag.REDUCE)}>Reduce</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={sortKey} onValueChange={(v) => setSortKey(v as SortKey)}>
+                <SelectTrigger className="h-8 w-[150px]" aria-label="sort">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="conviction">Sort · Conviction</SelectItem>
+                  <SelectItem value="expiry">Sort · Soonest expiry</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+            min conviction
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={Math.round(minConviction * 100)}
+              onChange={(e) => setMinConviction(Number(e.target.value) / 100)}
+              className="accent-primary"
+              aria-label="Minimum conviction"
+            />
+            <span className="w-8 font-mono tabular-nums text-foreground">
+              {Math.round(minConviction * 100)}
+            </span>
+          </label>
+        </div>
+
+        {/* Queue — mobile: shared SectionRenderer (1:1, FR-16); desktop: conviction cards. */}
+        <div className="sm:hidden">
+          {isLoading ? (
+            <div className="space-y-2" data-testid="opportunities-loading">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-14 w-full" />
+              ))}
+            </div>
+          ) : error ? (
+            <p className="text-sm text-sell">Failed to load opportunities.</p>
+          ) : rows.length === 0 ? (
+            <EmptyState
+              title="No opportunities match the filter"
+              description="Loosen the min-conviction slider or clear the source chips to see more."
+            />
+          ) : (
+            <SectionRenderer sections={mobileSections} />
+          )}
+        </div>
+
+        <div className="hidden space-y-3 sm:block">
+          {isLoading ? (
+            <div className="space-y-3" data-testid="opportunities-loading-desktop">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Skeleton key={i} className="h-28 w-full" />
+              ))}
+            </div>
+          ) : error ? (
+            <p className="text-sm text-sell">Failed to load opportunities.</p>
+          ) : rows.length === 0 ? (
+            <EmptyState
+              title="No opportunities match the filter"
+              description="Loosen the min-conviction slider or clear the source chips to see more."
+            />
+          ) : (
+            rows.map((o) => (
+              <OpportunityCard key={key(o)} o={o} onSnooze={() => snooze(o)} href={reviewHref(o)} />
+            ))
+          )}
+        </div>
+      </div>
+    </AppShell>
+  );
+}
+
+function OpportunityCard({
+  o,
+  href,
+  onSnooze,
+}: {
+  o: Opportunity;
+  href: string;
+  onSnooze: () => void;
+}) {
+  const conv = Math.round(o.conviction * 100);
+  return (
+    <div
+      data-testid="opportunity-card"
+      className="flex gap-4 rounded-lg border border-border bg-card p-4"
+    >
+      {/* Left: conviction / conditions */}
+      <div className="flex w-16 shrink-0 flex-col items-center justify-center border-r border-border pr-4">
+        <span className="font-mono text-3xl font-semibold tabular-nums text-primary">{conv}</span>
+        {o.totalConditions > 0 ? (
+          <span className="mt-0.5 font-mono text-xs text-muted-foreground">
+            {o.passingConditions}/{o.totalConditions}
+          </span>
+        ) : (
+          <span className="mt-0.5 font-mono text-[9px] uppercase tracking-[0.13em] text-muted-foreground">
+            conv
+          </span>
+        )}
+      </div>
+
+      {/* Main */}
+      <div className="min-w-0 flex-1 space-y-1.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-mono font-semibold">{o.symbol}</span>
+          <EnumBadge render={OPPORTUNITY_ACTION[o.action]} />
+          {o.source && (
+            <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+              {o.source}
+            </span>
+          )}
+          {o.strategyId && (
+            <span className="font-mono text-xs text-muted-foreground">{o.strategyId}</span>
+          )}
+        </div>
+        <p className="text-sm text-muted-foreground">{o.thesis || '—'}</p>
+      </div>
+
+      {/* Right: expiry + actions */}
+      <div className="flex shrink-0 flex-col items-end justify-between gap-2">
+        <span className="font-mono text-xs text-muted-foreground">
+          expires {expiresLabel(o.validUntil)}
+        </span>
+        <div className="flex gap-2">
+          <Button asChild size="sm">
+            <Link href={href}>Review &amp; add</Link>
+          </Button>
+          <Button size="sm" variant="outline" onClick={onSnooze} data-testid={`snooze-${o.symbol}`}>
+            Snooze
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}

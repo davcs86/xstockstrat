@@ -58,6 +58,11 @@ router.service(AnalysisService, {
   ),
   // Admin scope gate — enforced server-side before forwarding to the gRPC service.
   setStrategyLive: forwardAdmin((req, opts) => analysisClient.setStrategyLive(req, opts)),
+  // feature 083 — opportunity queue + readiness + per-strategy analytics. All read-only;
+  // ListOpportunities takes its user from the propagated x-user-id header (forward → backendHeaders).
+  listOpportunities: forward((req, opts) => analysisClient.listOpportunities(req, opts)),
+  evaluateReadiness: forward((req, opts) => analysisClient.evaluateReadiness(req, opts)),
+  getStrategyAnalytics: forward((req, opts) => analysisClient.getStrategyAnalytics(req, opts)),
 });
 
 router.service(IngestService, {

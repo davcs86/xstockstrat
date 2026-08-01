@@ -48,6 +48,49 @@ type PortfolioService struct {
 
 	mu   sync.RWMutex
 	subs map[string]chan *portfoliov1.PortfolioSnapshot
+
+	// Resting-stop prices learned from trading's order events via the ledger (feature 083).
+	// In-memory, rebuilt on boot from a ledger replay (HydrateStops) — no portfolio migration,
+	// no synchronous portfolio→trading edge (which would create a trading↔portfolio cycle).
+	stops *stopStore
+}
+
+// stopNearThresholdPct — a position whose stop sits within this fraction of current price is
+// flagged POSITION_RISK_FLAG_STOP_NEAR on the Exposure surface (feature 083).
+const stopNearThresholdPct = 0.03
+
+// stopKey identifies a resting stop by (user, symbol, trading mode).
+type stopKey struct {
+	user   string
+	symbol string
+	mode   commonv1.TradingMode
+}
+
+// stopStore is a concurrency-safe in-memory map of learned resting-stop prices.
+type stopStore struct {
+	mu    sync.RWMutex
+	stops map[stopKey]float64
+}
+
+func newStopStore() *stopStore {
+	return &stopStore{stops: make(map[stopKey]float64)}
+}
+
+func (st *stopStore) set(k stopKey, price float64) {
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	if price > 0 {
+		st.stops[k] = price
+	} else {
+		delete(st.stops, k)
+	}
+}
+
+func (st *stopStore) get(k stopKey) (float64, bool) {
+	st.mu.RLock()
+	defer st.mu.RUnlock()
+	p, ok := st.stops[k]
+	return p, ok
 }
 
 // NewPortfolioService creates the service, opens the DB pool, and dials dependencies.
@@ -90,6 +133,7 @@ func NewPortfolioService(cfg *config.Config, cfgWatcher *config.Watcher) (*Portf
 		watchlists: repository.NewWatchlistRepo(repo.Pool()),
 		wlCfg:      cfgWatcher,
 		subs:       make(map[string]chan *portfoliov1.PortfolioSnapshot),
+		stops:      newStopStore(),
 	}
 	return svc, nil
 }
@@ -179,6 +223,10 @@ type orderFillPayload struct {
 	Mode      string  `json:"trading_mode"` // "TRADING_MODE_PAPER" | "TRADING_MODE_LIVE"
 	AccountId string  `json:"account_id"`
 	OrderID   string  `json:"order_id"`
+	// Resting-stop price carried by a stop/stop-limit order event (feature 083). Absent
+	// (zero) on plain market/limit fills. Learned into the in-memory stop store so the
+	// Exposure surface can show risk-at-stop without a portfolio→trading edge.
+	StopPrice float64 `json:"stop_price"`
 }
 
 func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1.LedgerEvent) {
@@ -198,6 +246,11 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 	mode := commonv1.TradingMode_TRADING_MODE_PAPER
 	if fill.Mode == "TRADING_MODE_LIVE" {
 		mode = commonv1.TradingMode_TRADING_MODE_LIVE
+	}
+
+	// feature 083 — learn the resting stop from the order event (if it carried one).
+	if fill.StopPrice > 0 && s.stops != nil {
+		s.stops.set(stopKey{user: fill.UserID, symbol: fill.Symbol, mode: mode}, fill.StopPrice)
 	}
 
 	// Get existing position to compute new avg entry
@@ -273,6 +326,90 @@ func (s *PortfolioService) enrichPositions(ctx context.Context, positions []*por
 		}
 		enrichPosition(p, quote.AskPrice, quote.BidPrice)
 	}
+	s.enrichRisk(ctx, positions)
+}
+
+// enrichRisk fills the feature-083 risk/factor fields on each position from the learned
+// resting stop (in-memory store) + the operator factor map, computed on read off the same
+// broker-authoritative CurrentPrice the valuation seam uses (C-10(b)). No DB access.
+func (s *PortfolioService) enrichRisk(ctx context.Context, positions []*portfoliov1.Position) {
+	userID := middleware.FromContext(ctx).UserID
+	var factorMap map[string]string
+	if s.cfg != nil {
+		factorMap = s.cfg.FactorMap()
+	}
+	for _, p := range positions {
+		enrichPositionRisk(p, userID, factorMap, s.stops)
+	}
+}
+
+// enrichPositionRisk sets the factor + stop-derived risk fields on a single position. Pure
+// (no ctx / service), so the mapping + arithmetic are unit-testable. An empty/absent factor
+// map leaves Factor "" (the UI groups those as "Unclassified").
+func enrichPositionRisk(p *portfoliov1.Position, userID string, factorMap map[string]string, stops *stopStore) {
+	if f, ok := factorMap[p.Symbol]; ok {
+		p.Factor = f
+	}
+	if stops == nil {
+		return
+	}
+	if stop, ok := stops.get(stopKey{user: userID, symbol: p.Symbol, mode: p.TradingMode}); ok {
+		applyStopRisk(p, stop)
+	}
+}
+
+// applyStopRisk sets stop-derived fields on a position from a resting stop price. Kept pure
+// (no ctx/store) so the arithmetic is unit-testable. stop_distance_pct and risk_at_stop both
+// come off CurrentPrice — the broker-authoritative value shared with the valuation path.
+func applyStopRisk(p *portfoliov1.Position, stop float64) {
+	if stop <= 0 || p.CurrentPrice <= 0 {
+		return
+	}
+	p.StopPrice = stop
+	p.StopDistancePct = (p.CurrentPrice - stop) / p.CurrentPrice
+	p.RiskAtStop = p.Qty * (p.CurrentPrice - stop)
+	p.ExitRule = fmt.Sprintf("Stop @ $%.2f", stop)
+	if p.StopDistancePct >= 0 && p.StopDistancePct <= stopNearThresholdPct {
+		p.Flag = portfoliov1.PositionRiskFlag_POSITION_RISK_FLAG_STOP_NEAR
+	}
+}
+
+// HydrateStops rebuilds the in-memory stop store at boot by replaying order events from the
+// ledger (best-effort — a ledger failure leaves the store empty rather than blocking startup).
+// Mirrors the existing position-state-from-events pattern; no portfolio migration.
+func (s *PortfolioService) HydrateStops(ctx context.Context) {
+	if s.stops == nil {
+		return
+	}
+	resp, err := s.ledger.QueryEvents(ctx, &ledgerv1.QueryEventsRequest{EventType: "order.filled"})
+	if err != nil {
+		slog.Warn("HydrateStops: QueryEvents failed", "error", err)
+		return
+	}
+	n := 0
+	for _, event := range resp.Events {
+		if event.Payload == nil {
+			continue
+		}
+		raw, err := event.Payload.MarshalJSON()
+		if err != nil {
+			continue
+		}
+		var fill orderFillPayload
+		if err := json.Unmarshal(raw, &fill); err != nil {
+			continue
+		}
+		if fill.StopPrice <= 0 {
+			continue
+		}
+		mode := commonv1.TradingMode_TRADING_MODE_PAPER
+		if fill.Mode == "TRADING_MODE_LIVE" {
+			mode = commonv1.TradingMode_TRADING_MODE_LIVE
+		}
+		s.stops.set(stopKey{user: fill.UserID, symbol: fill.Symbol, mode: mode}, fill.StopPrice)
+		n++
+	}
+	slog.Info("HydrateStops: replayed resting stops from ledger", "count", n)
 }
 
 // enrichPosition fills current price / market value / unrealized P&L on p from a quote's

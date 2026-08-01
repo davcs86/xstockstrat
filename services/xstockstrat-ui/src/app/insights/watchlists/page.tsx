@@ -13,6 +13,7 @@ import {
   useAddWatchlistSymbols,
   useRemoveWatchlistSymbols,
 } from '@/hooks/useWatchlists';
+import { WatchlistReadiness } from '@/components/insights/WatchlistReadiness';
 
 export default function WatchlistsPage() {
   const { data, isLoading, error } = useWatchlists();
@@ -56,7 +57,8 @@ export default function WatchlistsPage() {
         <div className="mb-6">
           <h1 className="text-xl font-bold tracking-tight">Watchlists</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Named symbol sets you own. Use them to scope screeners and scans.
+            Ranked by how close each name is to firing a signal — not by price change. Pick a
+            strategy to see each list&apos;s readiness.
           </p>
         </div>
 
@@ -150,6 +152,8 @@ export default function WatchlistsPage() {
                     Add
                   </Button>
                 </div>
+
+                <WatchlistReadiness symbols={wl.symbols} />
               </CardContent>
             </Card>
           ))}

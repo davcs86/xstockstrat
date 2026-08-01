@@ -104,6 +104,39 @@ export declare enum ScreenResultStatus {
 export declare function screenResultStatusFromJSON(object: any): ScreenResultStatus;
 export declare function screenResultStatusToJSON(object: ScreenResultStatus): string;
 export declare function screenResultStatusToNumber(object: ScreenResultStatus): number;
+/**
+ * The action a ranked opportunity suggests. Closed set → enum (C-04).
+ * TRIM/EXIT are deliberately collapsed into REDUCE — the platform must not
+ * synthesize a "fully exit vs trim" boundary on a row that opens a real order
+ * ticket; the human chooses trim vs exit at the ticket (design.md § 1).
+ */
+export declare enum OpportunityActionTag {
+    OPPORTUNITY_ACTION_TAG_UNSPECIFIED = "OPPORTUNITY_ACTION_TAG_UNSPECIFIED",
+    /** OPPORTUNITY_ACTION_TAG_ENTER - buy signal, not currently held */
+    OPPORTUNITY_ACTION_TAG_ENTER = "OPPORTUNITY_ACTION_TAG_ENTER",
+    /** OPPORTUNITY_ACTION_TAG_ADD - buy signal, already held */
+    OPPORTUNITY_ACTION_TAG_ADD = "OPPORTUNITY_ACTION_TAG_ADD",
+    /** OPPORTUNITY_ACTION_TAG_REDUCE - sell signal, held (trim or exit — human decides) */
+    OPPORTUNITY_ACTION_TAG_REDUCE = "OPPORTUNITY_ACTION_TAG_REDUCE",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function opportunityActionTagFromJSON(object: any): OpportunityActionTag;
+export declare function opportunityActionTagToJSON(object: OpportunityActionTag): string;
+export declare function opportunityActionTagToNumber(object: OpportunityActionTag): number;
+/** Per-condition-leaf evaluation state. Closed set → enum (C-04). */
+export declare enum ConditionState {
+    CONDITION_STATE_UNSPECIFIED = "CONDITION_STATE_UNSPECIFIED",
+    /** CONDITION_STATE_PASS - leaf currently satisfied */
+    CONDITION_STATE_PASS = "CONDITION_STATE_PASS",
+    /** CONDITION_STATE_SOFT - within the soft-band of the threshold but not passing */
+    CONDITION_STATE_SOFT = "CONDITION_STATE_SOFT",
+    /** CONDITION_STATE_FAIL - not satisfied, outside the soft-band */
+    CONDITION_STATE_FAIL = "CONDITION_STATE_FAIL",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function conditionStateFromJSON(object: any): ConditionState;
+export declare function conditionStateToJSON(object: ConditionState): string;
+export declare function conditionStateToNumber(object: ConditionState): number;
 export interface RunBacktestRequest {
     strategyId: string;
     range?: TimeRange | undefined;
@@ -379,6 +412,17 @@ export interface ScreenResult {
     status: ScreenResultStatus;
     /** populated when status == INSUFFICIENT_DATA */
     gap?: CoverageGap | undefined;
+    /**
+     * Raw column values surfaced on the screener results table (feature 083, FR-8).
+     * rsi/atr come from the analysis→indicators edge; ATR is a close-only approximation
+     * (indicators_engine.py) — surfaced as a known accuracy caveat, not exact.
+     * rev_growth is best-effort from Fundamentals.extra_metrics (0 when FMP omits it).
+     */
+    pe: number;
+    rsi: number;
+    atr: number;
+    revGrowth: number;
+    held: boolean;
 }
 export interface ScreenResult_CriterionScoresEntry {
     key: string;
@@ -418,6 +462,78 @@ export interface FundamentalsScanSummary {
     status: string;
     finishedAt?: Date | undefined;
 }
+/**
+ * One ranked opportunity on the Decide queue. conviction is a deterministic
+ * ordinal (passing/total leaves + normalized worst-distance-to-threshold), NOT a
+ * probability — the UI renders "N/M conditions" + strength bars, never a fake %.
+ */
+export interface Opportunity {
+    symbol: string;
+    action: OpportunityActionTag;
+    conviction: number;
+    passingConditions: number;
+    totalConditions: number;
+    thesis: string;
+    strategyId: string;
+    source: string;
+    validUntil?: Date | undefined;
+}
+/** One evaluated condition leaf from the traced evaluator (feature 083). */
+export interface ConditionEval {
+    refName: string;
+    lhsValue: number;
+    threshold: number;
+    /** >, <, >=, <=, crosses_above, crosses_below */
+    fn: string;
+    state: ConditionState;
+    /** normalized */
+    distanceToThreshold: number;
+}
+/** Per-symbol readiness — the traced evaluation of a strategy's entry rule. */
+export interface SymbolReadiness {
+    symbol: string;
+    conviction: number;
+    passingConditions: number;
+    totalConditions: number;
+    conditions: ConditionEval[];
+}
+/**
+ * Per-strategy analytics for the Engine → Strategies surface. expectancy and
+ * max_drawdown derive from persisted analysis.backtest_runs (win_rate +
+ * profit_factor); signals_30d from ingest QuerySignals; taken from trading
+ * ListOrders; queue_share from the opportunity-queue join.
+ */
+export interface StrategyAnalytics {
+    strategyId: string;
+    expectancy: number;
+    blendedHitRate: number;
+    maxDrawdown: number;
+    signals30d: number;
+    taken: number;
+    queueShare: number;
+}
+/**
+ * user_id is intentionally absent — taken from the propagated x-user-id header
+ * server-side (matching the portfolio watchlist convention), never from the wire.
+ */
+export interface ListOpportunitiesRequest {
+    page?: PageRequest | undefined;
+    minConviction: number;
+}
+export interface ListOpportunitiesResponse {
+    opportunities: Opportunity[];
+    page?: PageResponse | undefined;
+}
+export interface EvaluateReadinessRequest {
+    strategyId: string;
+    symbols: string[];
+}
+export interface EvaluateReadinessResponse {
+    readiness: SymbolReadiness[];
+}
+export interface GetStrategyAnalyticsRequest {
+    strategyId: string;
+}
 export declare const RunBacktestRequest: MessageFns<RunBacktestRequest>;
 export declare const CoverageGap: MessageFns<CoverageGap>;
 export declare const BacktestResult: MessageFns<BacktestResult>;
@@ -452,6 +568,15 @@ export declare const ScreenSymbolsRequest: MessageFns<ScreenSymbolsRequest>;
 export declare const ScreenSymbolsResponse: MessageFns<ScreenSymbolsResponse>;
 export declare const RunFundamentalsScanRequest: MessageFns<RunFundamentalsScanRequest>;
 export declare const FundamentalsScanSummary: MessageFns<FundamentalsScanSummary>;
+export declare const Opportunity: MessageFns<Opportunity>;
+export declare const ConditionEval: MessageFns<ConditionEval>;
+export declare const SymbolReadiness: MessageFns<SymbolReadiness>;
+export declare const StrategyAnalytics: MessageFns<StrategyAnalytics>;
+export declare const ListOpportunitiesRequest: MessageFns<ListOpportunitiesRequest>;
+export declare const ListOpportunitiesResponse: MessageFns<ListOpportunitiesResponse>;
+export declare const EvaluateReadinessRequest: MessageFns<EvaluateReadinessRequest>;
+export declare const EvaluateReadinessResponse: MessageFns<EvaluateReadinessResponse>;
+export declare const GetStrategyAnalyticsRequest: MessageFns<GetStrategyAnalyticsRequest>;
 export type AnalysisServiceService = typeof AnalysisServiceService;
 export declare const AnalysisServiceService: {
     readonly runBacktest: {
@@ -570,6 +695,43 @@ export declare const AnalysisServiceService: {
         readonly responseSerialize: (value: FundamentalsScanSummary) => Buffer;
         readonly responseDeserialize: (value: Buffer) => FundamentalsScanSummary;
     };
+    /**
+     * ── Opportunity queue + readiness + per-strategy analytics (feature 083) ─────
+     * Ranked opportunity queue for the Decide surface. Aggregates ingest signals,
+     * held positions, and the conviction/readiness evaluator (zero new edges).
+     */
+    readonly listOpportunities: {
+        readonly path: "/xstockstrat.analysis.v1.AnalysisService/ListOpportunities";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: ListOpportunitiesRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => ListOpportunitiesRequest;
+        readonly responseSerialize: (value: ListOpportunitiesResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => ListOpportunitiesResponse;
+    };
+    /**
+     * Per-symbol live condition evaluation (traced): passing/soft/failing leaves +
+     * distance-to-threshold. Feeds Signal-detail, Watchlist readiness, and the queue.
+     */
+    readonly evaluateReadiness: {
+        readonly path: "/xstockstrat.analysis.v1.AnalysisService/EvaluateReadiness";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: EvaluateReadinessRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => EvaluateReadinessRequest;
+        readonly responseSerialize: (value: EvaluateReadinessResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => EvaluateReadinessResponse;
+    };
+    /** Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share). */
+    readonly getStrategyAnalytics: {
+        readonly path: "/xstockstrat.analysis.v1.AnalysisService/GetStrategyAnalytics";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetStrategyAnalyticsRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetStrategyAnalyticsRequest;
+        readonly responseSerialize: (value: StrategyAnalytics) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => StrategyAnalytics;
+    };
 };
 export interface AnalysisServiceServer extends UntypedServiceImplementation {
     runBacktest: handleUnaryCall<RunBacktestRequest, BacktestResult>;
@@ -592,6 +754,19 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
     screenSymbols: handleUnaryCall<ScreenSymbolsRequest, ScreenSymbolsResponse>;
     /** Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped) */
     runFundamentalsScan: handleUnaryCall<RunFundamentalsScanRequest, FundamentalsScanSummary>;
+    /**
+     * ── Opportunity queue + readiness + per-strategy analytics (feature 083) ─────
+     * Ranked opportunity queue for the Decide surface. Aggregates ingest signals,
+     * held positions, and the conviction/readiness evaluator (zero new edges).
+     */
+    listOpportunities: handleUnaryCall<ListOpportunitiesRequest, ListOpportunitiesResponse>;
+    /**
+     * Per-symbol live condition evaluation (traced): passing/soft/failing leaves +
+     * distance-to-threshold. Feeds Signal-detail, Watchlist readiness, and the queue.
+     */
+    evaluateReadiness: handleUnaryCall<EvaluateReadinessRequest, EvaluateReadinessResponse>;
+    /** Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share). */
+    getStrategyAnalytics: handleUnaryCall<GetStrategyAnalyticsRequest, StrategyAnalytics>;
 }
 export interface AnalysisServiceClient extends Client {
     runBacktest(request: RunBacktestRequest, callback: (error: ServiceError | null, response: BacktestResult) => void): ClientUnaryCall;
@@ -638,6 +813,25 @@ export interface AnalysisServiceClient extends Client {
     runFundamentalsScan(request: RunFundamentalsScanRequest, callback: (error: ServiceError | null, response: FundamentalsScanSummary) => void): ClientUnaryCall;
     runFundamentalsScan(request: RunFundamentalsScanRequest, metadata: Metadata, callback: (error: ServiceError | null, response: FundamentalsScanSummary) => void): ClientUnaryCall;
     runFundamentalsScan(request: RunFundamentalsScanRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: FundamentalsScanSummary) => void): ClientUnaryCall;
+    /**
+     * ── Opportunity queue + readiness + per-strategy analytics (feature 083) ─────
+     * Ranked opportunity queue for the Decide surface. Aggregates ingest signals,
+     * held positions, and the conviction/readiness evaluator (zero new edges).
+     */
+    listOpportunities(request: ListOpportunitiesRequest, callback: (error: ServiceError | null, response: ListOpportunitiesResponse) => void): ClientUnaryCall;
+    listOpportunities(request: ListOpportunitiesRequest, metadata: Metadata, callback: (error: ServiceError | null, response: ListOpportunitiesResponse) => void): ClientUnaryCall;
+    listOpportunities(request: ListOpportunitiesRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: ListOpportunitiesResponse) => void): ClientUnaryCall;
+    /**
+     * Per-symbol live condition evaluation (traced): passing/soft/failing leaves +
+     * distance-to-threshold. Feeds Signal-detail, Watchlist readiness, and the queue.
+     */
+    evaluateReadiness(request: EvaluateReadinessRequest, callback: (error: ServiceError | null, response: EvaluateReadinessResponse) => void): ClientUnaryCall;
+    evaluateReadiness(request: EvaluateReadinessRequest, metadata: Metadata, callback: (error: ServiceError | null, response: EvaluateReadinessResponse) => void): ClientUnaryCall;
+    evaluateReadiness(request: EvaluateReadinessRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: EvaluateReadinessResponse) => void): ClientUnaryCall;
+    /** Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share). */
+    getStrategyAnalytics(request: GetStrategyAnalyticsRequest, callback: (error: ServiceError | null, response: StrategyAnalytics) => void): ClientUnaryCall;
+    getStrategyAnalytics(request: GetStrategyAnalyticsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: StrategyAnalytics) => void): ClientUnaryCall;
+    getStrategyAnalytics(request: GetStrategyAnalyticsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: StrategyAnalytics) => void): ClientUnaryCall;
 }
 export declare const AnalysisServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): AnalysisServiceClient;

@@ -427,6 +427,25 @@ export type SignalSource = Message<"xstockstrat.ingest.v1.SignalSource"> & {
      * @generated from field: google.protobuf.Struct config_json = 7;
      */
     configJson?: JsonObject | undefined;
+    /**
+     * ── Source-health fields (feature 083 — Engine → Signal sources) ─────────────
+     * health is derived from last_seen_at freshness vs a staleness threshold.
+     *
+     * @generated from field: xstockstrat.ingest.v1.SourceHealthStatus health = 8;
+     */
+    health: SourceHealthStatus;
+    /**
+     * @generated from field: google.protobuf.Timestamp last_seen_at = 9;
+     */
+    lastSeenAt?: Timestamp | undefined;
+    /**
+     * @generated from field: string last_error = 10;
+     */
+    lastError: string;
+    /**
+     * @generated from field: int64 signals_fed = 11;
+     */
+    signalsFed: bigint;
 };
 /**
  * Describes the message xstockstrat.ingest.v1.SignalSource.
@@ -568,6 +587,39 @@ export declare enum FillMode {
  * Describes the enum xstockstrat.ingest.v1.FillMode.
  */
 export declare const FillModeSchema: GenEnum<FillMode>;
+/**
+ * Health of a registered signal source (feature 083). Closed set → enum (C-04).
+ *
+ * @generated from enum xstockstrat.ingest.v1.SourceHealthStatus
+ */
+export declare enum SourceHealthStatus {
+    /**
+     * @generated from enum value: SOURCE_HEALTH_STATUS_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * fed within the freshness window
+     *
+     * @generated from enum value: SOURCE_HEALTH_STATUS_LIVE = 1;
+     */
+    LIVE = 1,
+    /**
+     * last-seen beyond freshness, within the down threshold
+     *
+     * @generated from enum value: SOURCE_HEALTH_STATUS_STALE = 2;
+     */
+    STALE = 2,
+    /**
+     * no signal beyond the down threshold, or last op errored
+     *
+     * @generated from enum value: SOURCE_HEALTH_STATUS_DOWN = 3;
+     */
+    DOWN = 3
+}
+/**
+ * Describes the enum xstockstrat.ingest.v1.SourceHealthStatus.
+ */
+export declare const SourceHealthStatusSchema: GenEnum<SourceHealthStatus>;
 /**
  * @generated from service xstockstrat.ingest.v1.IngestService
  */

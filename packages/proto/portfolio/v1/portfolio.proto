@@ -60,6 +60,27 @@ message Position {
   // which is total P&L since entry.
   double day_pnl = 12;       // dollars
   double day_pnl_pct = 13;   // fraction (e.g. 0.0125 = +1.25%)
+  // ── Risk / factor fields (feature 083 — Book → Exposure) ─────────────────────
+  // Resting-stop price learned from trading's order events via the ledger (no
+  // portfolio→trading synchronous edge; held in-memory, rebuilt on boot-replay).
+  // risk_at_stop / stop_distance_pct are computed on read off the broker-authoritative
+  // current_price: stop_distance_pct = (current_price − stop_price) / current_price.
+  double stop_price = 14;
+  double risk_at_stop = 15;
+  double stop_distance_pct = 16;
+  // factor grouping from the portfolio.exposure.factor_map config key (marketdata
+  // exposes no sector); "" → UI groups as "Unclassified".
+  string factor = 17;
+  PositionRiskFlag flag = 18;
+  string exit_rule = 19;
+}
+
+// A risk cue surfaced on the Exposure surface (feature 083). Closed set → enum (C-04).
+enum PositionRiskFlag {
+  POSITION_RISK_FLAG_UNSPECIFIED = 0;
+  POSITION_RISK_FLAG_ADD_SIGNAL = 1;     // a buy signal is live for this held symbol
+  POSITION_RISK_FLAG_REDUCE_SIGNAL = 2;  // a sell signal is live for this held symbol
+  POSITION_RISK_FLAG_STOP_NEAR = 3;      // stop-distance within the near threshold
 }
 
 // PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.

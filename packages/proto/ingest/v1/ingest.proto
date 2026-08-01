@@ -140,6 +140,20 @@ message SignalSource {
   bool   active            = 5;
   bool   has_credentials   = 6;
   google.protobuf.Struct config_json = 7;
+  // ── Source-health fields (feature 083 — Engine → Signal sources) ─────────────
+  // health is derived from last_seen_at freshness vs a staleness threshold.
+  SourceHealthStatus health = 8;
+  google.protobuf.Timestamp last_seen_at = 9;
+  string last_error = 10;
+  int64  signals_fed = 11;
+}
+
+// Health of a registered signal source (feature 083). Closed set → enum (C-04).
+enum SourceHealthStatus {
+  SOURCE_HEALTH_STATUS_UNSPECIFIED = 0;
+  SOURCE_HEALTH_STATUS_LIVE = 1;   // fed within the freshness window
+  SOURCE_HEALTH_STATUS_STALE = 2;  // last-seen beyond freshness, within the down threshold
+  SOURCE_HEALTH_STATUS_DOWN = 3;   // no signal beyond the down threshold, or last op errored
 }
 
 message ListSignalSourcesRequest {

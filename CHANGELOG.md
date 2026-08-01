@@ -17,6 +17,25 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ---
 
+## 2026-08-01
+
+### Features
+- phase7-observability: Completes the pending Phase 7 implementation roadmap item: activates the OTel SDK already stubbed in every service, routes telemetry to Grafana Cloud via the OTLP collector, and delivers service health, latency, and signal pipeline throughput dashboards — providing operational visibility before live capital is at risk.
+- fmp-key-to-secret-env: Feature 059 routed the FMP API key through `xstockstrat-config` as
+- fix-listkeys-wire-encoding: `ConfigService.ListKeys` built its response with **snake_case** field names and **numeric** enums,
+- fix-config-scope-resolution: `ConfigService` resolved **every** request to the `('dev', 'all')` scope, whatever the caller asked
+- ui-revamp-opportunities-first: Re-frame the `xstockstrat-ui` web app around a ranked **opportunity queue** — a Decide / Discover /
+
+### Proto Changes
+- analysis/v1/analysis.proto
+- ingest/v1/ingest.proto
+- portfolio/v1/portfolio.proto
+
+### Summary
+7 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-05-21
 
 ### Features

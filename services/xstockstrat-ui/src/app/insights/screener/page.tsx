@@ -49,7 +49,7 @@ export default function ScreenerPage() {
   const errorMessage =
     screen.error instanceof ConnectError
       ? screen.error.rawMessage
-      : screen.error?.message ?? null;
+      : (screen.error?.message ?? null);
 
   function addCriterion() {
     setCriteria((c) => [...c, newCriterion(c.length + 1)]);
@@ -86,7 +86,7 @@ export default function ScreenerPage() {
         <div className="mb-6">
           <h1 className="text-xl font-bold tracking-tight">Screener</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Rank a symbol universe against weighted criteria.
+            Find candidates worth watching — rank a symbol universe against weighted criteria.
           </p>
         </div>
 
@@ -118,7 +118,9 @@ export default function ScreenerPage() {
                     aria-label="comparator"
                     className="h-9 rounded-md border bg-background px-2 text-sm"
                     value={c.op}
-                    onChange={(e) => updateCriterion(i, { op: Number(e.target.value) as Comparator })}
+                    onChange={(e) =>
+                      updateCriterion(i, { op: Number(e.target.value) as Comparator })
+                    }
                   >
                     {COMPARATOR_LABELS.map((o) => (
                       <option key={o.value} value={o.value}>
@@ -176,6 +178,13 @@ export default function ScreenerPage() {
         )}
 
         {!screen.isPending && results.length > 0 && (
+          <div className="text-sm text-muted-foreground" data-testid="candidates-summary">
+            <span className="font-medium text-foreground">Candidates</span> ·{' '}
+            {results.filter((r) => r.passed).length} of {results.length} passed the hard filters
+          </div>
+        )}
+
+        {!screen.isPending && results.length > 0 && (
           <Card>
             <CardContent className="p-0">
               <table className="w-full text-sm" data-testid="screen-results">
@@ -184,6 +193,14 @@ export default function ScreenerPage() {
                     <th className="p-3">Rank</th>
                     <th className="p-3">Symbol</th>
                     <th className="p-3">Score</th>
+                    {/* feature 083 (FR-8) raw columns. ATR is a close-only approximation. */}
+                    <th className="p-3">P/E</th>
+                    <th className="p-3">RSI</th>
+                    <th className="p-3" title="ATR is a close-only approximation (not exact)">
+                      ATR
+                    </th>
+                    <th className="p-3">Rev growth</th>
+                    <th className="p-3">Held</th>
                     <th className="p-3">Passed</th>
                     <th className="p-3">Status</th>
                   </tr>
@@ -192,8 +209,25 @@ export default function ScreenerPage() {
                   {results.map((r, i) => (
                     <tr key={r.symbol} className="border-b" data-testid="result-row">
                       <td className="p-3">{i + 1}</td>
-                      <td className="p-3 font-medium">{r.symbol}</td>
-                      <td className="p-3">{r.score.toFixed(3)}</td>
+                      <td className="p-3 font-mono font-medium">{r.symbol}</td>
+                      <td
+                        className={`p-3 font-mono tabular-nums font-semibold ${
+                          r.score >= 0.8 ? 'text-buy' : r.score >= 0.7 ? 'text-primary' : ''
+                        }`}
+                      >
+                        {r.score.toFixed(3)}
+                      </td>
+                      <td className="p-3 font-mono tabular-nums">{r.pe ? r.pe.toFixed(1) : '—'}</td>
+                      <td className="p-3 font-mono tabular-nums">
+                        {r.rsi ? r.rsi.toFixed(0) : '—'}
+                      </td>
+                      <td className="p-3 font-mono tabular-nums">
+                        {r.atr ? r.atr.toFixed(2) : '—'}
+                      </td>
+                      <td className="p-3 font-mono tabular-nums">
+                        {r.revGrowth ? `${(r.revGrowth * 100).toFixed(1)}%` : '—'}
+                      </td>
+                      <td className="p-3">{r.held ? <Badge variant="paper">Held</Badge> : '—'}</td>
                       <td className="p-3">{r.passed ? '✓' : '—'}</td>
                       <td className="p-3">
                         {r.status === ScreenResultStatus.INSUFFICIENT_DATA ? (

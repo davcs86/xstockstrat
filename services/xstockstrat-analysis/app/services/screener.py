@@ -214,7 +214,44 @@ class ScreenerEngine:
 
             row["raws"][c.ref_name] = raw
             row["passes"][c.ref_name] = _comparator_passes(c.op, raw, c.threshold, c.threshold_high)
+
+        # feature 083 (FR-8) — raw display columns for the screener results table, best-effort.
+        # pe/rev_growth come from the cached fundamentals (populated when the scan fetched them);
+        # rsi/atr from the existing indicators edge. ATR is a close-only approximation
+        # (indicators_engine.py) — surfaced as a known accuracy caveat, not exact.
+        fund = fundamentals.get(symbol.upper()) if fundamentals_available else None
+        row["pe"] = float(getattr(fund, "pe_ratio", 0.0)) if fund is not None else 0.0
+        row["rev_growth"] = self._extra_metric(fund, "revenue_growth")
+        row["rsi"] = await self._latest_indicator("RSI", closes, propagation_meta)
+        row["atr"] = await self._latest_indicator("ATR", closes, propagation_meta)
         return row
+
+    async def _latest_indicator(self, indicator, closes, propagation_meta) -> float:
+        """Latest value of a built-in indicator over closes, best-effort (0.0 on failure)."""
+        if len(closes) < 2:
+            return 0.0
+        try:
+            resp = await self._indicators.ComputeIndicator(
+                indicators_pb2.ComputeIndicatorRequest(
+                    indicator=indicator, values=list(closes), params={}, timeframe="1d"
+                ),
+                metadata=propagation_meta,
+            )
+        except grpc.RpcError as e:
+            log.warning("latest %s failed: %s", indicator, e)
+            return 0.0
+        vals = [p.value for p in resp.result if p.value != 0]
+        return vals[-1] if vals else 0.0
+
+    @staticmethod
+    def _extra_metric(fund, key) -> float:
+        """Best-effort read of an open-ended Fundamentals.extra_metrics value (0.0 when absent)."""
+        if fund is None:
+            return 0.0
+        try:
+            return float(fund.extra_metrics.get(key, 0.0))
+        except (TypeError, ValueError):
+            return 0.0
 
     async def _fetch_signals(self, symbol, request, propagation_meta):
         if not request.signal_sources or request.signal_weight <= 0:
@@ -364,6 +401,11 @@ class ScreenerEngine:
             criterion_scores=criterion_scores,
             passed=passed,
             status=analysis_pb2.SCREEN_RESULT_STATUS_OK,
+            # feature 083 raw display columns (FR-8); held is set by the servicer cross-ref.
+            pe=row.get("pe", 0.0),
+            rsi=row.get("rsi", 0.0),
+            atr=row.get("atr", 0.0),
+            rev_growth=row.get("rev_growth", 0.0),
         )
 
 

@@ -4,6 +4,7 @@ import { timestampFromDate } from '@bufbuild/protobuf/wkt';
 import { AppShell } from '@/components/insights/AppShell';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { StatTile } from '@/components/shared/StatTile';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -157,12 +158,62 @@ export default function BackfillsPage() {
   return (
     <AppShell>
       <div className="p-4 sm:p-6 space-y-6">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">Backfills</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Create, monitor, cancel, and delete historical OHLCV backfills.
-          </p>
+        <div className="flex items-start justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-xl font-bold tracking-tight">Backfills</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              Create, monitor, cancel and delete historical OHLCV backfills that feed the engine.
+            </p>
+          </div>
+          {isAdmin && (
+            <Badge variant="info" className="uppercase tracking-wide text-[10px]">
+              Admin only
+            </Badge>
+          )}
         </div>
+
+        {/* Job stat row (feature 083) — from the polled BackfillJob list. */}
+        {(() => {
+          const jobs = data?.jobs ?? [];
+          if (jobs.length === 0) return null;
+          const running = jobs.filter((j) => j.status === BackfillStatus.RUNNING).length;
+          const queued = jobs.filter((j) => j.status === BackfillStatus.QUEUED).length;
+          const completed = jobs.filter((j) => j.status === BackfillStatus.COMPLETED).length;
+          const partial = jobs.filter((j) => j.status === BackfillStatus.PARTIAL).length;
+          const failed = jobs.filter((j) => j.status === BackfillStatus.FAILED).length;
+          const symbolsCovered = new Set(jobs.flatMap((j) => j.symbols)).size;
+          const barsStored = jobs.reduce((s, j) => s + Number(j.barsProcessed), 0);
+          const barsLabel =
+            barsStored >= 1_000_000
+              ? `${(barsStored / 1_000_000).toFixed(1)}M`
+              : barsStored >= 1_000
+                ? `${(barsStored / 1_000).toFixed(1)}k`
+                : String(barsStored);
+          return (
+            <div className="grid grid-cols-2 overflow-hidden rounded-md border border-border sm:grid-cols-5">
+              <StatTile
+                label="Jobs running"
+                value={running}
+                tone="accent"
+                sub={queued > 0 ? `${queued} queued behind` : undefined}
+              />
+              <StatTile
+                label="Completed"
+                value={completed}
+                tone="gain"
+                sub={`of ${jobs.length} shown`}
+              />
+              <StatTile label="Symbols covered" value={symbolsCovered} sub="across feeds" />
+              <StatTile label="Bars stored" value={barsLabel} sub="processed" />
+              <StatTile
+                label="Needs attention"
+                value={partial + failed}
+                tone={partial + failed > 0 ? 'loss' : undefined}
+                sub={`${partial} partial · ${failed} failed`}
+              />
+            </div>
+          );
+        })()}
 
         {/* Create backfill (FR-1) — admin only */}
         {isAdmin && (

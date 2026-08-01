@@ -5,13 +5,16 @@
 //   protoc               unknown
 // source: ingest/v1/ingest.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IngestServiceClient = exports.IngestServiceService = exports.ManageSignalSourceResponse = exports.ManageSignalSourceRequest = exports.ListSignalSourcesResponse = exports.ListSignalSourcesRequest = exports.SignalSource = exports.QuerySignalsResponse = exports.QuerySignalsRequest = exports.IngestSignalResponse = exports.IngestSignalRequest = exports.ExternalSignal = exports.NormalizeRawDataResponse = exports.NormalizeRawDataRequest = exports.ListBackfillJobsResponse = exports.CancelBackfillRequest = exports.ListBackfillJobsRequest = exports.GetBackfillStatusRequest = exports.TriggerBackfillResponse = exports.TriggerBackfillRequest = exports.BackfillJob = exports.FillMode = exports.BackfillStatus = exports.protobufPackage = void 0;
+exports.IngestServiceClient = exports.IngestServiceService = exports.ManageSignalSourceResponse = exports.ManageSignalSourceRequest = exports.ListSignalSourcesResponse = exports.ListSignalSourcesRequest = exports.SignalSource = exports.QuerySignalsResponse = exports.QuerySignalsRequest = exports.IngestSignalResponse = exports.IngestSignalRequest = exports.ExternalSignal = exports.NormalizeRawDataResponse = exports.NormalizeRawDataRequest = exports.ListBackfillJobsResponse = exports.CancelBackfillRequest = exports.ListBackfillJobsRequest = exports.GetBackfillStatusRequest = exports.TriggerBackfillResponse = exports.TriggerBackfillRequest = exports.BackfillJob = exports.SourceHealthStatus = exports.FillMode = exports.BackfillStatus = exports.protobufPackage = void 0;
 exports.backfillStatusFromJSON = backfillStatusFromJSON;
 exports.backfillStatusToJSON = backfillStatusToJSON;
 exports.backfillStatusToNumber = backfillStatusToNumber;
 exports.fillModeFromJSON = fillModeFromJSON;
 exports.fillModeToJSON = fillModeToJSON;
 exports.fillModeToNumber = fillModeToNumber;
+exports.sourceHealthStatusFromJSON = sourceHealthStatusFromJSON;
+exports.sourceHealthStatusToJSON = sourceHealthStatusToJSON;
+exports.sourceHealthStatusToNumber = sourceHealthStatusToNumber;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
@@ -152,6 +155,68 @@ function fillModeToNumber(object) {
         case FillMode.FILL_MODE_GAPS_ONLY:
             return 2;
         case FillMode.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/** Health of a registered signal source (feature 083). Closed set → enum (C-04). */
+var SourceHealthStatus;
+(function (SourceHealthStatus) {
+    SourceHealthStatus["SOURCE_HEALTH_STATUS_UNSPECIFIED"] = "SOURCE_HEALTH_STATUS_UNSPECIFIED";
+    /** SOURCE_HEALTH_STATUS_LIVE - fed within the freshness window */
+    SourceHealthStatus["SOURCE_HEALTH_STATUS_LIVE"] = "SOURCE_HEALTH_STATUS_LIVE";
+    /** SOURCE_HEALTH_STATUS_STALE - last-seen beyond freshness, within the down threshold */
+    SourceHealthStatus["SOURCE_HEALTH_STATUS_STALE"] = "SOURCE_HEALTH_STATUS_STALE";
+    /** SOURCE_HEALTH_STATUS_DOWN - no signal beyond the down threshold, or last op errored */
+    SourceHealthStatus["SOURCE_HEALTH_STATUS_DOWN"] = "SOURCE_HEALTH_STATUS_DOWN";
+    SourceHealthStatus["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(SourceHealthStatus || (exports.SourceHealthStatus = SourceHealthStatus = {}));
+function sourceHealthStatusFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "SOURCE_HEALTH_STATUS_UNSPECIFIED":
+            return SourceHealthStatus.SOURCE_HEALTH_STATUS_UNSPECIFIED;
+        case 1:
+        case "SOURCE_HEALTH_STATUS_LIVE":
+            return SourceHealthStatus.SOURCE_HEALTH_STATUS_LIVE;
+        case 2:
+        case "SOURCE_HEALTH_STATUS_STALE":
+            return SourceHealthStatus.SOURCE_HEALTH_STATUS_STALE;
+        case 3:
+        case "SOURCE_HEALTH_STATUS_DOWN":
+            return SourceHealthStatus.SOURCE_HEALTH_STATUS_DOWN;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return SourceHealthStatus.UNRECOGNIZED;
+    }
+}
+function sourceHealthStatusToJSON(object) {
+    switch (object) {
+        case SourceHealthStatus.SOURCE_HEALTH_STATUS_UNSPECIFIED:
+            return "SOURCE_HEALTH_STATUS_UNSPECIFIED";
+        case SourceHealthStatus.SOURCE_HEALTH_STATUS_LIVE:
+            return "SOURCE_HEALTH_STATUS_LIVE";
+        case SourceHealthStatus.SOURCE_HEALTH_STATUS_STALE:
+            return "SOURCE_HEALTH_STATUS_STALE";
+        case SourceHealthStatus.SOURCE_HEALTH_STATUS_DOWN:
+            return "SOURCE_HEALTH_STATUS_DOWN";
+        case SourceHealthStatus.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function sourceHealthStatusToNumber(object) {
+    switch (object) {
+        case SourceHealthStatus.SOURCE_HEALTH_STATUS_UNSPECIFIED:
+            return 0;
+        case SourceHealthStatus.SOURCE_HEALTH_STATUS_LIVE:
+            return 1;
+        case SourceHealthStatus.SOURCE_HEALTH_STATUS_STALE:
+            return 2;
+        case SourceHealthStatus.SOURCE_HEALTH_STATUS_DOWN:
+            return 3;
+        case SourceHealthStatus.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -1613,6 +1678,10 @@ function createBaseSignalSource() {
         active: false,
         hasCredentials: false,
         configJson: undefined,
+        health: SourceHealthStatus.SOURCE_HEALTH_STATUS_UNSPECIFIED,
+        lastSeenAt: undefined,
+        lastError: "",
+        signalsFed: 0,
     };
 }
 exports.SignalSource = {
@@ -1637,6 +1706,18 @@ exports.SignalSource = {
         }
         if (message.configJson !== undefined) {
             struct_1.Struct.encode(struct_1.Struct.wrap(message.configJson), writer.uint32(58).fork()).join();
+        }
+        if (message.health !== SourceHealthStatus.SOURCE_HEALTH_STATUS_UNSPECIFIED) {
+            writer.uint32(64).int32(sourceHealthStatusToNumber(message.health));
+        }
+        if (message.lastSeenAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.lastSeenAt), writer.uint32(74).fork()).join();
+        }
+        if (message.lastError !== "") {
+            writer.uint32(82).string(message.lastError);
+        }
+        if (message.signalsFed !== 0) {
+            writer.uint32(88).int64(message.signalsFed);
         }
         return writer;
     },
@@ -1696,6 +1777,34 @@ exports.SignalSource = {
                     message.configJson = struct_1.Struct.unwrap(struct_1.Struct.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 8: {
+                    if (tag !== 64) {
+                        break;
+                    }
+                    message.health = sourceHealthStatusFromJSON(reader.int32());
+                    continue;
+                }
+                case 9: {
+                    if (tag !== 74) {
+                        break;
+                    }
+                    message.lastSeenAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 10: {
+                    if (tag !== 82) {
+                        break;
+                    }
+                    message.lastError = reader.string();
+                    continue;
+                }
+                case 11: {
+                    if (tag !== 88) {
+                        break;
+                    }
+                    message.signalsFed = longToNumber(reader.int64());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1733,6 +1842,24 @@ exports.SignalSource = {
                 : isObject(object.config_json)
                     ? object.config_json
                     : undefined,
+            health: isSet(object.health)
+                ? sourceHealthStatusFromJSON(object.health)
+                : SourceHealthStatus.SOURCE_HEALTH_STATUS_UNSPECIFIED,
+            lastSeenAt: isSet(object.lastSeenAt)
+                ? fromJsonTimestamp(object.lastSeenAt)
+                : isSet(object.last_seen_at)
+                    ? fromJsonTimestamp(object.last_seen_at)
+                    : undefined,
+            lastError: isSet(object.lastError)
+                ? globalThis.String(object.lastError)
+                : isSet(object.last_error)
+                    ? globalThis.String(object.last_error)
+                    : "",
+            signalsFed: isSet(object.signalsFed)
+                ? globalThis.Number(object.signalsFed)
+                : isSet(object.signals_fed)
+                    ? globalThis.Number(object.signals_fed)
+                    : 0,
         };
     },
     toJSON(message) {
@@ -1758,6 +1885,18 @@ exports.SignalSource = {
         if (message.configJson !== undefined) {
             obj.configJson = message.configJson;
         }
+        if (message.health !== SourceHealthStatus.SOURCE_HEALTH_STATUS_UNSPECIFIED) {
+            obj.health = sourceHealthStatusToJSON(message.health);
+        }
+        if (message.lastSeenAt !== undefined) {
+            obj.lastSeenAt = message.lastSeenAt.toISOString();
+        }
+        if (message.lastError !== "") {
+            obj.lastError = message.lastError;
+        }
+        if (message.signalsFed !== 0) {
+            obj.signalsFed = Math.round(message.signalsFed);
+        }
         return obj;
     },
     create(base) {
@@ -1772,6 +1911,10 @@ exports.SignalSource = {
         message.active = object.active ?? false;
         message.hasCredentials = object.hasCredentials ?? false;
         message.configJson = object.configJson ?? undefined;
+        message.health = object.health ?? SourceHealthStatus.SOURCE_HEALTH_STATUS_UNSPECIFIED;
+        message.lastSeenAt = object.lastSeenAt ?? undefined;
+        message.lastError = object.lastError ?? "";
+        message.signalsFed = object.signalsFed ?? 0;
         return message;
     },
 };

@@ -1,0 +1,2133 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/nocturne-3bede643-12d3-43a0-a3c3-99d6ce1a1316/styles.css">
+<script src="_ds/nocturne-3bede643-12d3-43a0-a3c3-99d6ce1a1316/_ds_bundle.js"></script>
+<style>
+:root{--gain:#4cc79c;--loss:#e0787a;--paper:#c9b47e;--mono:ui-monospace,"SF Mono",Menlo,monospace}
+body{margin:0;font-size:14px;background:var(--color-bg)}
+a{color:var(--color-accent)}a:hover{color:var(--color-accent-300)}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:var(--color-neutral-800);border-radius:6px}
+::-webkit-scrollbar-track{background:transparent}
+[data-dens="comfortable"]{font-size:14.5px}
+[data-dens="comfortable"] .table td{padding-top:11px;padding-bottom:11px}
+[data-dens="comfortable"] .table th{padding-top:10px;padding-bottom:10px}
+</style>
+</helmet>
+
+<div data-dens="{{ dens }}" style="display:grid;grid-template-columns:212px 1fr;min-height:100vh;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body)">
+
+  <aside style="border-right:1px solid var(--color-divider);padding:14px 0 18px;display:flex;flex-direction:column;gap:16px;position:sticky;top:0;height:100vh;overflow:auto">
+    <div style="display:flex;align-items:center;gap:8px;padding:0 14px 2px">
+      <div style="width:22px;height:22px;border:1px solid var(--color-accent);border-radius:5px;display:grid;place-items:center;flex:none">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="var(--color-accent)" stroke-width="1.6"><path d="M1 12l4-5 3 3 3-6 4 4"></path></svg>
+      </div>
+      <div style="font-family:var(--font-heading);font-size:13.5px;letter-spacing:-0.01em">xstockstrat</div>
+    </div>
+
+    <sc-for list="{{ navSections }}" as="sec" hint-placeholder-count="3">
+      <div style="display:flex;flex-direction:column;gap:1px">
+        <div style="font:600 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--color-neutral-600);padding:0 16px 7px">{{ sec.label }}</div>
+        <sc-for list="{{ sec.items }}" as="it" hint-placeholder-count="2">
+          <button type="button" onClick="{{ it.go }}" style="{{ it.style }}" style-hover="background:color-mix(in srgb, var(--color-text) 6%, transparent)">
+            <span style="width:3px;height:13px;border-radius:2px;flex:none;background:{{ it.mark }}"></span>
+            <span style="flex:1;text-align:left">{{ it.label }}</span>
+            <span style="font:500 10px/1 var(--mono);color:{{ it.badgeColor }}">{{ it.badge }}</span>
+          </button>
+        </sc-for>
+      </div>
+    </sc-for>
+
+    <div style="margin-top:auto;padding:0 14px;display:flex;flex-direction:column;gap:8px">
+      <button type="button" onClick="{{ goMobile }}" class="btn btn-ghost" style="font-size:11.5px;justify-content:flex-start;padding:0 2px">Mobile companion →</button>
+      <div style="border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:9px 10px;display:flex;flex-direction:column;gap:5px">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="width:6px;height:6px;border-radius:50%;background:var(--gain)"></span>
+          <span style="font-size:11px;color:var(--color-neutral-400)">Signal engine live</span>
+        </div>
+        <div style="font:11px/1.4 var(--mono);color:var(--color-neutral-600)">last eval 14:32:08 · 240ms</div>
+      </div>
+    </div>
+  </aside>
+
+  <main style="display:flex;flex-direction:column;min-width:0">
+
+    <header style="display:flex;align-items:center;gap:11px;height:49px;padding:0 18px;border-bottom:1px solid var(--color-divider);position:sticky;top:0;background:var(--color-bg);z-index:20">
+      <div style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--color-neutral-500)">
+        <span>{{ crumbModule }}</span><span style="color:var(--color-neutral-700)">/</span><span style="color:var(--color-text)">{{ crumbPage }}</span>
+      </div>
+      <div style="width:1px;height:17px;background:var(--color-divider);margin:0 3px"></div>
+      <button type="button" style="display:flex;align-items:center;gap:7px;background:var(--color-surface);border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:5px 9px;color:var(--color-text);cursor:pointer;font:inherit;font-size:12px" style-hover="border-color:var(--color-neutral-600)">
+        <span style="font:11px/1 var(--mono);color:var(--color-neutral-500)">A1F2</span>
+        <span>Alpaca · Primary</span>
+        <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" style="opacity:.5"><path d="M4 6l4 4 4-4"></path></svg>
+      </button>
+      <span class="tag" style="background:color-mix(in srgb, var(--paper) 16%, transparent);color:var(--paper);font:10px/1.6 var(--mono);letter-spacing:.1em">PAPER</span>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:9px">
+        <button type="button" onClick="{{ toggleCopilot }}" style="{{ copilotBtnStyle }}">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 1.6l1.5 3.6 3.6 1.5-3.6 1.5L8 11.8 6.5 8.2 2.9 6.7l3.6-1.5z"></path><path d="M12.6 11.4l.6 1.5 1.5.6-1.5.6-.6 1.5-.6-1.5-1.5-.6 1.5-.6z"></path></svg>
+          Copilot
+        </button>
+      </div>
+    </header>
+
+    <div style="display:flex;min-width:0;flex:1;align-items:stretch">
+      <div style="flex:1;min-width:0">
+
+        <!-- OPPORTUNITIES -->
+        <sc-if value="{{ isOpps }}" hint-placeholder-val="{{ true }}">
+        <div>
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);border-bottom:1px solid var(--color-divider)">
+            <sc-for list="{{ queueStats }}" as="k" hint-placeholder-count="5">
+              <div style="padding:12px 18px;border-right:1px solid var(--color-divider);display:flex;flex-direction:column;gap:4px">
+                <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">{{ k.label }}</div>
+                <div style="font-family:var(--mono);font-size:19px;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;color:{{ k.color }}">{{ k.value }}</div>
+                <div style="font-size:11px;color:var(--color-neutral-500)">{{ k.sub }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:9px;padding:10px 18px;border-bottom:1px solid var(--color-divider);flex-wrap:wrap">
+            <div class="seg" style="height:29px">
+              <sc-for list="{{ sourceFilters }}" as="f" hint-placeholder-count="3">
+                <label class="seg-opt" style="padding:4px 11px;font-size:12px"><input type="radio" name="src" checked="{{ f.checked }}" onChange="{{ f.go }}">{{ f.label }}</label>
+              </sc-for>
+            </div>
+            <select class="input" style="height:29px;width:132px;font-size:12px"><option>Any action</option><option>Entries</option><option>Adds</option><option>Trims &amp; exits</option></select>
+            <select class="input" style="height:29px;width:150px;font-size:12px"><option>Any horizon</option><option>Intraday</option><option>Swing (2–10d)</option><option>Position (1–3mo)</option></select>
+            <div style="display:flex;align-items:center;gap:7px;padding:0 4px">
+              <span style="font-size:11.5px;color:var(--color-neutral-600)">min conviction</span>
+              <div style="width:78px;height:3px;border-radius:2px;background:var(--color-neutral-800);position:relative">
+                <div style="position:absolute;inset:0 auto 0 0;width:60%;background:var(--color-accent);border-radius:2px"></div>
+                <div style="position:absolute;left:60%;top:-3px;width:9px;height:9px;border-radius:50%;background:var(--color-accent)"></div>
+              </div>
+              <span style="font:12px/1 var(--mono);color:var(--color-text)">60</span>
+            </div>
+            <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+              <span style="font-size:11.5px;color:var(--color-neutral-600)">sort</span>
+              <select class="input" style="height:29px;width:150px;font-size:12px"><option>Conviction × edge</option><option>Expiring soonest</option><option>Newest</option><option>Position risk</option></select>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column">
+            <sc-for list="{{ opportunities }}" as="o" hint-placeholder-count="5">
+              <div onClick="{{ o.open }}" style="display:grid;grid-template-columns:66px 1fr 132px 168px;gap:15px;padding:14px 18px;border-bottom:1px solid var(--color-divider);cursor:pointer;align-items:center" style-hover="background:color-mix(in srgb, var(--color-text) 3%, transparent)">
+                <div style="display:flex;flex-direction:column;gap:5px;align-items:flex-start">
+                  <div style="font-family:var(--mono);font-size:21px;letter-spacing:-0.02em;font-variant-numeric:tabular-nums;color:{{ o.convColor }}">{{ o.conviction }}</div>
+                  <div style="width:100%;height:3px;border-radius:2px;background:var(--color-neutral-800);position:relative">
+                    <div style="position:absolute;inset:0 auto 0 0;border-radius:2px;width:{{ o.convPct }};background:{{ o.convColor }}"></div>
+                  </div>
+                  <div style="font:9px/1 var(--mono);letter-spacing:.1em;color:var(--color-neutral-600)">{{ o.edge }}</div>
+                </div>
+
+                <div style="min-width:0;display:flex;flex-direction:column;gap:6px">
+                  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                    <span style="font-family:var(--mono);font-size:15px;font-weight:600;letter-spacing:.02em">{{ o.symbol }}</span>
+                    <span class="tag" style="{{ o.actionStyle }}">{{ o.action }}</span>
+                    <span style="font:12.5px/1 var(--mono);font-variant-numeric:tabular-nums">{{ o.price }}</span>
+                    <span style="font:12px/1 var(--mono);font-variant-numeric:tabular-nums;color:{{ o.chgColor }}">{{ o.chg }}</span>
+                    <span style="width:1px;height:12px;background:var(--color-divider)"></span>
+                    <span class="tag tag-neutral" style="font-size:10.5px">{{ o.source }}</span>
+                    <span style="font-size:11px;color:var(--color-neutral-600);font-family:var(--mono)">{{ o.strategy }}</span>
+                    <span style="margin-left:auto;font:11px/1 var(--mono);color:{{ o.expiryColor }}">{{ o.expiry }}</span>
+                  </div>
+                  <div style="font-size:12.5px;color:var(--color-neutral-300);line-height:1.45;text-wrap:pretty">{{ o.thesis }}</div>
+                  <div style="display:flex;gap:5px;flex-wrap:wrap">
+                    <sc-for list="{{ o.triggers }}" as="t" hint-placeholder-count="3">
+                      <span style="font:11px/1 var(--mono);color:var(--color-neutral-400);border:1px solid var(--color-divider);border-radius:4px;padding:3px 6px">{{ t }}</span>
+                    </sc-for>
+                  </div>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:4px">
+                  <svg viewBox="0 0 120 40" preserveAspectRatio="none" style="width:100%;height:40px;display:block">
+                    <path d="{{ o.sparkFill }}" fill="{{ o.chgColor }}" opacity="0.12"></path>
+                    <path d="{{ o.spark }}" fill="none" stroke="{{ o.chgColor }}" stroke-width="1.4"></path>
+                    <circle cx="{{ o.sparkX }}" cy="{{ o.sparkY }}" r="2.6" fill="{{ o.chgColor }}"></circle>
+                  </svg>
+                  <div style="font:10px/1 var(--mono);color:var(--color-neutral-600);text-align:right">{{ o.sparkLabel }}</div>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:6px">
+                  <div style="display:flex;gap:6px">
+                    <button type="button" onClick="{{ o.open }}" class="btn btn-primary" style="font-size:12px;padding:5px 10px;flex:1">{{ o.cta }}</button>
+                    <button type="button" class="btn btn-secondary" style="font-size:12px;padding:5px 9px">Snooze</button>
+                  </div>
+                  <div style="display:flex;justify-content:space-between;font:11px/1 var(--mono);color:var(--color-neutral-600)">
+                    <span>{{ o.sizeHint }}</span><span>{{ o.rr }}</span>
+                  </div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="padding:13px 18px;display:flex;align-items:center;gap:10px">
+            <span style="font-size:11.5px;color:var(--color-neutral-600)">7 of 24 signals shown · 17 below conviction 60</span>
+            <button type="button" class="btn btn-ghost" style="font-size:12px;margin-left:auto">Show all</button>
+            <button type="button" class="btn btn-ghost" style="font-size:12px">Dismissed today (5)</button>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- SIGNAL DETAIL -->
+        <sc-if value="{{ isSignal }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display:flex;align-items:flex-start;gap:16px;padding:15px 18px 13px;border-bottom:1px solid var(--color-divider)">
+            <button type="button" onClick="{{ goOpps }}" class="btn btn-ghost" style="font-size:12px;padding:2px 4px;margin-top:5px">← Queue</button>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+                <span style="font-family:var(--mono);font-size:22px;font-weight:600;letter-spacing:.01em">NVDA</span>
+                <span class="tag" style="background:color-mix(in srgb, var(--gain) 16%, transparent);color:var(--gain);font:10.5px/1.6 var(--mono);letter-spacing:.08em">ADD</span>
+                <span style="font:16px/1 var(--mono);font-variant-numeric:tabular-nums">126.71</span>
+                <span style="font:12.5px/1 var(--mono);color:var(--gain)">+3.18 (+2.57%)</span>
+                <span class="tag tag-neutral" style="font-size:10.5px">Portfolio · 180 sh</span>
+              </div>
+              <div style="font-size:12px;color:var(--color-neutral-500);margin-top:5px">momentum-breakout-v4 · swing 2–10d · signal fired 14:12:41 ET · valid until 15:45</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:14px">
+              <div style="text-align:right">
+                <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;color:var(--color-neutral-600)">CONVICTION</div>
+                <div style="font-family:var(--mono);font-size:24px;color:var(--gain);letter-spacing:-0.02em">86</div>
+              </div>
+              <div style="text-align:right">
+                <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;color:var(--color-neutral-600)">EDGE (BT)</div>
+                <div style="font-family:var(--mono);font-size:24px;letter-spacing:-0.02em">+1.9%</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 306px">
+            <div style="border-right:1px solid var(--color-divider);min-width:0">
+              <div style="display:flex;align-items:center;gap:8px;padding:9px 18px;border-bottom:1px solid var(--color-divider)">
+                <div style="display:flex;gap:2px">
+                  <sc-for list="{{ tfTabs }}" as="t" hint-placeholder-count="5">
+                    <button type="button" onClick="{{ t.go }}" style="{{ t.style }}">{{ t.label }}</button>
+                  </sc-for>
+                </div>
+                <div style="margin-left:auto;display:flex;gap:5px">
+                  <span style="font:11px/1 var(--mono);color:var(--color-accent);border:1px solid var(--color-accent-800);border-radius:4px;padding:3px 6px">SMA 20</span>
+                  <span style="font:11px/1 var(--mono);color:var(--color-neutral-500);border:1px solid var(--color-divider);border-radius:4px;padding:3px 6px">+ indicator</span>
+                </div>
+              </div>
+              <div style="padding:14px 18px 10px">
+                <svg viewBox="0 0 1000 300" preserveAspectRatio="none" style="width:100%;height:252px;display:block">
+                  <g stroke="color-mix(in srgb, var(--color-text) 7%, transparent)" stroke-width="1">
+                    <line x1="0" y1="46" x2="1000" y2="46"></line><line x1="0" y1="116" x2="1000" y2="116"></line>
+                    <line x1="0" y1="186" x2="1000" y2="186"></line><line x1="0" y1="256" x2="1000" y2="256"></line>
+                  </g>
+                  <path d="{{ smaPath }}" fill="none" stroke="var(--color-accent)" stroke-width="1.5" opacity="0.8"></path>
+                  <sc-for list="{{ candles }}" as="c" hint-placeholder-count="0">
+                    <g>
+                      <line x1="{{ c.x }}" y1="{{ c.hi }}" x2="{{ c.x }}" y2="{{ c.lo }}" stroke="{{ c.fill }}" stroke-width="1" opacity="0.85"></line>
+                      <rect x="{{ c.bx }}" y="{{ c.by }}" width="{{ c.bw }}" height="{{ c.bh }}" fill="{{ c.fill }}"></rect>
+                    </g>
+                  </sc-for>
+                  <line x1="0" y1="96" x2="1000" y2="96" stroke="var(--loss)" stroke-width="1" stroke-dasharray="4 4" opacity="0.65"></line>
+                  <line x1="0" y1="212" x2="1000" y2="212" stroke="var(--gain)" stroke-width="1" stroke-dasharray="4 4" opacity="0.55"></line>
+                  <line x1="880" y1="0" x2="880" y2="300" stroke="var(--color-accent)" stroke-width="1" stroke-dasharray="3 4" opacity="0.8"></line>
+                  <circle cx="880" cy="150" r="4.5" fill="var(--color-bg)" stroke="var(--color-accent)" stroke-width="1.8"></circle>
+                </svg>
+                <div style="display:flex;gap:14px;padding-top:8px;font:11px/1 var(--mono);color:var(--color-neutral-600)">
+                  <span><span style="color:var(--loss)">— —</span> target 133.20</span>
+                  <span><span style="color:var(--gain)">— —</span> stop 121.90</span>
+                  <span><span style="color:var(--color-accent)">— —</span> signal bar</span>
+                </div>
+              </div>
+
+              <div style="border-top:1px solid var(--color-divider);padding:13px 18px 18px">
+                <div style="display:flex;align-items:center;gap:9px;margin-bottom:9px">
+                  <div style="font-family:var(--font-heading);font-size:13.5px">Why this fired</div>
+                  <span style="font-size:11.5px;color:var(--color-neutral-600)">5 of 6 conditions met · weighted score 0.86</span>
+                </div>
+                <table class="table" style="font-size:12.5px">
+                  <thead><tr><th>Condition</th><th style="text-align:right">Value</th><th style="text-align:right">Threshold</th><th style="width:150px">Contribution</th><th style="width:60px">State</th></tr></thead>
+                  <tbody>
+                    <sc-for list="{{ conditions }}" as="c" hint-placeholder-count="6">
+                      <tr>
+                        <td style="font-family:var(--mono);font-size:12px">{{ c.name }}</td>
+                        <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">{{ c.value }}</td>
+                        <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--color-neutral-500)">{{ c.threshold }}</td>
+                        <td>
+                          <div style="height:4px;border-radius:2px;background:var(--color-neutral-800);position:relative">
+                            <div style="position:absolute;inset:0 auto 0 0;border-radius:2px;width:{{ c.pct }};background:{{ c.color }}"></div>
+                          </div>
+                        </td>
+                        <td style="text-align:right"><span style="color:{{ c.color }};font:11px/1 var(--mono)">{{ c.state }}</span></td>
+                      </tr>
+                    </sc-for>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div style="display:flex;flex-direction:column">
+              <div style="padding:11px 15px;border-bottom:1px solid var(--color-divider);display:flex;align-items:center;justify-content:space-between">
+                <div style="font-family:var(--font-heading);font-size:13px">Act on signal</div>
+                <span style="font:10px/1 var(--mono);color:var(--color-neutral-600)">prefilled from strategy</span>
+              </div>
+              <div style="padding:13px 15px;display:flex;flex-direction:column;gap:9px">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+                  <button type="button" onClick="{{ setBuy }}" style="{{ buyStyle }}">BUY 60</button>
+                  <button type="button" onClick="{{ setSell }}" style="{{ sellStyle }}">SELL</button>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+                  <div class="field"><label for="s-type">Type</label><select id="s-type" class="input" style="height:30px"><option>Limit</option><option>Market</option><option>Stop limit</option></select></div>
+                  <div class="field"><label for="s-tif">TIF</label><select id="s-tif" class="input" style="height:30px"><option>Day</option><option>GTC</option><option>IOC</option></select></div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+                  <div class="field"><label for="s-qty">Qty</label><input id="s-qty" class="input" value="60" style="height:30px;font-family:var(--mono)"></div>
+                  <div class="field"><label for="s-px">Limit</label><input id="s-px" class="input" value="126.80" style="height:30px;font-family:var(--mono)"></div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+                  <div class="field"><label for="s-stop">Stop</label><input id="s-stop" class="input" value="121.90" style="height:30px;font-family:var(--mono)"></div>
+                  <div class="field"><label for="s-tgt">Target</label><input id="s-tgt" class="input" value="133.20" style="height:30px;font-family:var(--mono)"></div>
+                </div>
+                <div style="border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:9px 11px;display:flex;flex-direction:column;gap:5px">
+                  <sc-for list="{{ ticketRows }}" as="r" hint-placeholder-count="4">
+                    <div style="display:flex;justify-content:space-between;font-size:12px">
+                      <span style="color:var(--color-neutral-500)">{{ r.k }}</span>
+                      <span style="font-family:var(--mono);font-variant-numeric:tabular-nums;color:{{ r.color }}">{{ r.v }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+                <button type="button" class="btn btn-primary" style="width:100%;font-size:13px;padding:8px">Submit · add 60 NVDA</button>
+                <div style="display:flex;gap:6px">
+                  <button type="button" class="btn btn-secondary" style="flex:1;font-size:12px">Snooze 1h</button>
+                  <button type="button" class="btn btn-ghost" style="flex:1;font-size:12px">Dismiss</button>
+                </div>
+              </div>
+              <div style="margin-top:auto;border-top:1px solid var(--color-divider);padding:12px 15px;display:flex;flex-direction:column;gap:7px">
+                <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">Strategy track record</div>
+                <sc-for list="{{ trackRows }}" as="r" hint-placeholder-count="4">
+                  <div style="display:flex;justify-content:space-between;font-size:12px">
+                    <span style="color:var(--color-neutral-500)">{{ r.k }}</span>
+                    <span style="font-family:var(--mono);font-variant-numeric:tabular-nums;color:{{ r.color }}">{{ r.v }}</span>
+                  </div>
+                </sc-for>
+                <button type="button" onClick="{{ goStrategies }}" class="btn btn-ghost" style="font-size:11.5px;justify-content:flex-start;padding:0 2px">Open strategy →</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- WATCHLISTS -->
+        <sc-if value="{{ isWatch }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:15px 18px 13px;border-bottom:1px solid var(--color-divider)">
+            <div>
+              <div style="font:600 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent);margin-bottom:6px">Discover</div>
+              <h4 style="margin:0;font-size:19px">Watchlists</h4>
+              <div style="font-size:12px;color:var(--color-neutral-500);margin-top:4px">Ranked by how close each name is to firing a signal — not by price change</div>
+            </div>
+            <div style="display:flex;gap:7px">
+              <button type="button" onClick="{{ newWatch }}" class="btn btn-secondary" style="font-size:12.5px">New list</button>
+              <button type="button" onClick="{{ goScreener }}" class="btn btn-primary" style="font-size:12.5px">Build from screener</button>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:214px 1fr">
+            <div style="border-right:1px solid var(--color-divider);padding:11px 0">
+              <sc-for list="{{ watchlists }}" as="w" hint-placeholder-count="4">
+                <button type="button" style="{{ w.style }}" style-hover="background:color-mix(in srgb, var(--color-text) 5%, transparent)">
+                  <span style="flex:1;text-align:left">{{ w.name }}</span>
+                  <span style="font:11px/1 var(--mono);color:{{ w.color }}">{{ w.ready }}</span>
+                </button>
+              </sc-for>
+              <div style="padding:11px 14px 0;font-size:11px;color:var(--color-neutral-600);line-height:1.5">The number is how many names are within one condition of a signal.</div>
+            </div>
+            <div style="padding:13px 18px 18px;min-width:0">
+              <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
+                <div style="font-family:var(--font-heading);font-size:13.5px">Semis · 12 symbols</div>
+                <span style="font-size:11.5px;color:var(--color-neutral-600)">3 ready · 4 watching · 5 quiet</span>
+                <div class="seg" style="margin-left:auto;height:28px">
+                  <label class="seg-opt" style="padding:4px 10px;font-size:12px"><input type="radio" name="wv" checked>Readiness</label>
+                  <label class="seg-opt" style="padding:4px 10px;font-size:12px"><input type="radio" name="wv">Quotes</label>
+                </div>
+                <button type="button" onClick="{{ editWatch }}" class="btn btn-ghost" style="font-size:12px">Edit list</button>
+              </div>
+              <table class="table" style="font-size:12.5px">
+                <thead><tr><th>Symbol</th><th style="text-align:right">Last</th><th style="text-align:right">Chg</th><th style="width:170px">Signal readiness</th><th>Blocking condition</th><th>Strategy</th><th></th></tr></thead>
+                <tbody>
+                  <sc-for list="{{ watchRows }}" as="r" hint-placeholder-count="7">
+                    <tr onClick="{{ r.open }}" style="cursor:pointer">
+                      <td style="font-family:var(--mono);font-weight:600">{{ r.symbol }}</td>
+                      <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">{{ r.last }}</td>
+                      <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;color:{{ r.chgColor }}">{{ r.chg }}</td>
+                      <td>
+                        <div style="display:flex;align-items:center;gap:8px">
+                          <div style="flex:1;height:4px;border-radius:2px;background:var(--color-neutral-800);position:relative;max-width:104px">
+                            <div style="position:absolute;inset:0 auto 0 0;border-radius:2px;width:{{ r.pct }};background:{{ r.color }}"></div>
+                          </div>
+                          <span style="font:11.5px/1 var(--mono);color:{{ r.color }}">{{ r.state }}</span>
+                        </div>
+                      </td>
+                      <td style="font-family:var(--mono);font-size:11.5px;color:var(--color-neutral-500)">{{ r.blocking }}</td>
+                      <td style="font-family:var(--mono);font-size:11.5px;color:var(--color-neutral-500)">{{ r.strategy }}</td>
+                      <td style="text-align:right"><span style="color:var(--color-accent);font-size:11.5px">{{ r.action }}</span></td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- SCREENER -->
+        <sc-if value="{{ isScreener }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:15px 18px 13px;border-bottom:1px solid var(--color-divider)">
+            <div>
+              <div style="font:600 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent);margin-bottom:6px">Discover</div>
+              <h4 style="margin:0;font-size:19px">Screener</h4>
+              <div style="font-size:12px;color:var(--color-neutral-500);margin-top:4px">Find candidates worth watching · last run 2m ago on 412 symbols</div>
+            </div>
+            <div style="display:flex;gap:7px">
+              <button type="button" class="btn btn-secondary" style="font-size:12.5px">Save as watchlist</button>
+              <button type="button" class="btn btn-primary" style="font-size:12.5px">Run scan</button>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:336px 1fr">
+            <div style="border-right:1px solid var(--color-divider);padding:13px 16px;display:flex;flex-direction:column;gap:13px">
+              <div>
+                <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:7px">Universe</div>
+                <select class="input" style="height:30px;font-size:12.5px"><option>S&amp;P 500 · liquidity &gt; $50M ADV</option><option>Watchlist — Semis (12)</option><option>Russell 1000</option><option>Custom list</option></select>
+              </div>
+              <div>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">
+                  <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">Criteria</div>
+                  <span style="font-size:11px;color:var(--color-neutral-600)">weights normalize to 1.0</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:7px">
+                  <sc-for list="{{ criteria }}" as="c" hint-placeholder-count="4">
+                    <div style="border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:9px 10px;display:flex;flex-direction:column;gap:7px">
+                      <div style="display:flex;align-items:center;gap:6px">
+                        <span style="font:12.5px/1 var(--mono);flex:1">{{ c.metric }}</span>
+                        <span style="font:12.5px/1 var(--mono);color:var(--color-accent)">{{ c.op }}</span>
+                        <span style="font:12.5px/1 var(--mono);font-variant-numeric:tabular-nums">{{ c.threshold }}</span>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:9px">
+                        <span style="font-size:11px;color:var(--color-neutral-600);width:40px">weight</span>
+                        <div style="flex:1;height:3px;border-radius:2px;background:var(--color-neutral-800);position:relative">
+                          <div style="position:absolute;inset:0 auto 0 0;border-radius:2px;width:{{ c.weightPct }};background:var(--color-accent)"></div>
+                        </div>
+                        <span style="font:11.5px/1 var(--mono);width:24px;text-align:right">{{ c.weight }}</span>
+                        <span class="tag" style="{{ c.hardStyle }}">{{ c.hardLabel }}</span>
+                      </div>
+                    </div>
+                  </sc-for>
+                  <button type="button" class="btn btn-secondary" style="font-size:12.5px">+ Add criterion</button>
+                </div>
+              </div>
+              <div style="border:1px solid var(--color-accent-800);border-radius:var(--radius-md);padding:10px 11px;display:flex;flex-direction:column;gap:6px">
+                <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--color-accent-300)">
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 1.6l1.5 3.6 3.6 1.5-3.6 1.5L8 11.8 6.5 8.2 2.9 6.7l3.6-1.5z"></path></svg>
+                  Copilot
+                </div>
+                <div style="font-size:12px;color:var(--color-neutral-400);line-height:1.5">rev_growth_yoy and rsi_14 correlate 0.71 here — they are ranking the same names twice. Swapping one for <span style="font-family:var(--mono)">atr_pct</span> would spread the top ten across three sectors.</div>
+                <div style="display:flex;gap:6px"><button type="button" class="btn btn-primary" style="font-size:11.5px;padding:3px 8px">Apply</button><button type="button" class="btn btn-ghost" style="font-size:11.5px">Dismiss</button></div>
+              </div>
+            </div>
+            <div style="padding:13px 18px 18px;min-width:0">
+              <div style="display:flex;align-items:center;gap:9px;margin-bottom:10px">
+                <div style="font-family:var(--font-heading);font-size:13.5px">Candidates</div>
+                <span style="font-size:11.5px;color:var(--color-neutral-600)">7 of 412 passed hard filters</span>
+                <button type="button" class="btn btn-ghost" style="font-size:12px;margin-left:auto">Add top 5 to watchlist</button>
+              </div>
+              <table class="table" style="font-size:12.5px">
+                <thead><tr><th style="width:40px">#</th><th>Symbol</th><th style="width:190px">Score</th><th style="text-align:right">pe_ratio</th><th style="text-align:right">rsi_14</th><th style="text-align:right">rev_growth</th><th style="text-align:right">atr_pct</th><th>Held</th><th></th></tr></thead>
+                <tbody>
+                  <sc-for list="{{ screenRows }}" as="r" hint-placeholder-count="7">
+                    <tr>
+                      <td style="font-family:var(--mono);color:var(--color-neutral-500)">{{ r.rank }}</td>
+                      <td style="font-family:var(--mono);font-weight:600">{{ r.symbol }}</td>
+                      <td>
+                        <div style="display:flex;align-items:center;gap:8px">
+                          <div style="flex:1;height:4px;border-radius:2px;background:var(--color-neutral-800);position:relative;max-width:120px">
+                            <div style="position:absolute;inset:0 auto 0 0;border-radius:2px;width:{{ r.pct }};background:{{ r.color }}"></div>
+                          </div>
+                          <span style="font:12px/1 var(--mono);font-variant-numeric:tabular-nums;color:{{ r.color }}">{{ r.score }}</span>
+                        </div>
+                      </td>
+                      <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">{{ r.pe }}</td>
+                      <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">{{ r.rsi }}</td>
+                      <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">{{ r.rev }}</td>
+                      <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">{{ r.atr }}</td>
+                      <td style="font-size:11.5px;color:var(--color-neutral-500)">{{ r.held }}</td>
+                      <td style="text-align:right"><span style="color:var(--color-accent);font-size:11.5px">Watch</span></td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- STRATEGIES -->
+        <sc-if value="{{ isStrategies }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:15px 18px 13px;border-bottom:1px solid var(--color-divider)">
+            <div>
+              <div style="font:600 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent);margin-bottom:6px">Engine</div>
+              <h4 style="margin:0;font-size:19px">Strategies</h4>
+              <div style="font-size:12px;color:var(--color-neutral-500);margin-top:4px">Six active · these are what put signals in your queue</div>
+            </div>
+            <button type="button" onClick="{{ newStrategy }}" class="btn btn-primary" style="font-size:12.5px">New strategy</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);border-bottom:1px solid var(--color-divider)">
+            <sc-for list="{{ strategyStats }}" as="k" hint-placeholder-count="5">
+              <div style="padding:12px 18px;border-right:1px solid var(--color-divider);display:flex;flex-direction:column;gap:4px">
+                <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">{{ k.label }}</div>
+                <div style="font-family:var(--mono);font-size:18px;font-variant-numeric:tabular-nums;color:{{ k.color }}">{{ k.value }}</div>
+                <div style="font-size:11px;color:var(--color-neutral-500)">{{ k.sub }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="padding:14px 18px 0">
+            <table class="table" style="font-size:12.5px">
+              <thead><tr><th>Strategy</th><th>State</th><th style="text-align:right">Signals 30d</th><th style="text-align:right">Taken</th><th style="text-align:right">Hit rate</th><th style="text-align:right">Expectancy</th><th style="text-align:right">Max DD</th><th style="width:120px">Equity 90d</th><th></th></tr></thead>
+              <tbody>
+                <sc-for list="{{ strategies }}" as="s" hint-placeholder-count="6">
+                  <tr onClick="{{ s.open }}" style="cursor:pointer">
+                    <td style="font-family:var(--mono);font-weight:600">{{ s.id }}</td>
+                    <td><span class="tag" style="{{ s.stateStyle }}">{{ s.state }}</span></td>
+                    <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">{{ s.signals }}</td>
+                    <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--color-neutral-500)">{{ s.taken }}</td>
+                    <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;color:{{ s.hitColor }}">{{ s.hit }}</td>
+                    <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;color:{{ s.expColor }}">{{ s.exp }}</td>
+                    <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--loss)">{{ s.dd }}</td>
+                    <td>
+                      <svg viewBox="0 0 120 32" preserveAspectRatio="none" style="width:100%;height:28px;display:block">
+                        <path d="{{ s.spark }}" fill="none" stroke="{{ s.expColor }}" stroke-width="1.3"></path>
+                      </svg>
+                    </td>
+                    <td style="text-align:right"><span style="color:var(--color-accent);font-size:11.5px">Open →</span></td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+          <div style="padding:16px 18px 18px;display:grid;grid-template-columns:1fr 320px;gap:16px;align-items:start">
+            <div style="border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:14px 15px">
+              <div style="display:flex;align-items:center;gap:9px;margin-bottom:11px">
+                <div style="font-family:var(--mono);font-size:14px;font-weight:600">momentum-breakout-v4</div>
+                <span class="tag" style="background:color-mix(in srgb, var(--gain) 15%, transparent);color:var(--gain);font-size:10.5px">ACTIVE</span>
+                <span style="font-size:11.5px;color:var(--color-neutral-600)">backtest 2019-01 → 2026-07 · 1,842 signals</span>
+                <button type="button" onClick="{{ editStrategy }}" class="btn btn-ghost" style="font-size:12px;margin-left:auto">Edit formula</button>
+              </div>
+              <svg viewBox="0 0 900 220" preserveAspectRatio="none" style="width:100%;height:196px;display:block">
+                <g stroke="color-mix(in srgb, var(--color-text) 7%, transparent)" stroke-width="1">
+                  <line x1="0" y1="40" x2="900" y2="40"></line><line x1="0" y1="100" x2="900" y2="100"></line><line x1="0" y1="160" x2="900" y2="160"></line>
+                </g>
+                <path d="{{ benchPath }}" fill="none" stroke="var(--color-neutral-600)" stroke-width="1.3" stroke-dasharray="4 4"></path>
+                <path d="{{ equityFill }}" fill="var(--color-accent)" opacity="0.1"></path>
+                <path d="{{ equityPath }}" fill="none" stroke="var(--color-accent)" stroke-width="1.7"></path>
+              </svg>
+              <div style="display:flex;gap:16px;padding-top:9px;font:11px/1 var(--mono);color:var(--color-neutral-600)">
+                <span><span style="color:var(--color-accent)">——</span> strategy +148%</span>
+                <span><span style="color:var(--color-neutral-600)">— —</span> SPY +91%</span>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:9px">
+              <div style="border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:12px 13px;display:flex;flex-direction:column;gap:7px">
+                <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">Diagnostics</div>
+                <sc-for list="{{ diagnostics }}" as="d" hint-placeholder-count="6">
+                  <div style="display:flex;justify-content:space-between;font-size:12px">
+                    <span style="color:var(--color-neutral-500)">{{ d.k }}</span>
+                    <span style="font-family:var(--mono);font-variant-numeric:tabular-nums;color:{{ d.color }}">{{ d.v }}</span>
+                  </div>
+                </sc-for>
+              </div>
+              <div style="border:1px solid var(--color-accent-800);border-radius:var(--radius-md);padding:11px 12px;display:flex;flex-direction:column;gap:6px">
+                <div style="font-size:11.5px;color:var(--color-accent-300)">Copilot read</div>
+                <div style="font-size:12px;color:var(--color-neutral-400);line-height:1.5">Nearly all of the edge comes from signals where volume was above 2× ADV. Below 1.6× the expectancy is −0.1%. Raising the floor to 1.8× drops signal count 40% and lifts expectancy to +2.6%.</div>
+                <button type="button" class="btn btn-primary" style="font-size:11.5px;padding:3px 8px;align-self:flex-start">Backtest that change</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- EXPOSURE -->
+        <sc-if value="{{ isExits }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:15px 18px 13px;border-bottom:1px solid var(--color-divider)">
+            <div>
+              <div style="font:600 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent);margin-bottom:6px">Book</div>
+              <h4 style="margin:0;font-size:19px">Exposure</h4>
+              <div style="font-size:12px;color:var(--color-neutral-500);margin-top:4px">What each position is risking and what would trigger an exit — your broker has the P&amp;L</div>
+            </div>
+            <button type="button" onClick="{{ goOpps }}" class="btn btn-secondary" style="font-size:12.5px">2 exit flags in queue →</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid var(--color-divider)">
+            <sc-for list="{{ riskStats }}" as="k" hint-placeholder-count="4">
+              <div style="padding:12px 18px;border-right:1px solid var(--color-divider);display:flex;flex-direction:column;gap:4px">
+                <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">{{ k.label }}</div>
+                <div style="font-family:var(--mono);font-size:18px;font-variant-numeric:tabular-nums;color:{{ k.color }}">{{ k.value }}</div>
+                <div style="font-size:11px;color:var(--color-neutral-500)">{{ k.sub }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="padding:4px 18px 18px">
+            <table class="table" style="font-size:12.5px">
+              <thead><tr><th>Symbol</th><th style="text-align:right">Qty</th><th style="text-align:right">Weight</th><th style="text-align:right">Open R</th><th style="text-align:right">Risk at stop</th><th style="width:140px">Stop distance</th><th>Exit rule</th><th>Factor</th><th></th></tr></thead>
+              <tbody>
+                <sc-for list="{{ exposures }}" as="p" hint-placeholder-count="6">
+                  <tr onClick="{{ p.open }}" style="cursor:pointer">
+                    <td style="font-family:var(--mono);font-weight:600">{{ p.symbol }}</td>
+                    <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">{{ p.qty }}</td>
+                    <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">{{ p.weight }}</td>
+                    <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;color:{{ p.rColor }}">{{ p.openR }}</td>
+                    <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--loss)">{{ p.risk }}</td>
+                    <td>
+                      <div style="display:flex;align-items:center;gap:8px">
+                        <div style="flex:1;height:4px;border-radius:2px;background:var(--color-neutral-800);position:relative;max-width:80px">
+                          <div style="position:absolute;inset:0 auto 0 0;border-radius:2px;width:{{ p.stopPct }};background:{{ p.stopColor }}"></div>
+                        </div>
+                        <span style="font:11.5px/1 var(--mono);color:{{ p.stopColor }}">{{ p.stopDist }}</span>
+                      </div>
+                    </td>
+                    <td style="font-family:var(--mono);font-size:11.5px;color:var(--color-neutral-500)">{{ p.rule }}</td>
+                    <td style="font-size:11.5px;color:var(--color-neutral-500)">{{ p.factor }}</td>
+                    <td style="text-align:right"><span style="color:{{ p.flagColor }};font-size:11.5px">{{ p.flag }}</span></td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- SOURCES -->
+        <sc-if value="{{ isSources }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:15px 18px 13px;border-bottom:1px solid var(--color-divider)">
+            <div>
+              <div style="font:600 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent);margin-bottom:6px">Engine</div>
+              <h4 style="margin:0;font-size:19px">Signal sources</h4>
+              <div style="font-size:12px;color:var(--color-neutral-500);margin-top:4px">Inputs the strategies evaluate against, and whether they are fresh enough to trust</div>
+            </div>
+            <div style="display:flex;gap:7px">
+              <button type="button" class="btn btn-ghost" style="font-size:12.5px">Re-evaluate all</button>
+              <button type="button" onClick="{{ addSource }}" class="btn btn-primary" style="font-size:12.5px">Add source</button>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);border-bottom:1px solid var(--color-divider)">
+            <sc-for list="{{ sourceStats }}" as="k" hint-placeholder-count="5">
+              <div style="padding:12px 18px;border-right:1px solid var(--color-divider);display:flex;flex-direction:column;gap:4px">
+                <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">{{ k.label }}</div>
+                <div style="font-family:var(--mono);font-size:18px;font-variant-numeric:tabular-nums;color:{{ k.color }}">{{ k.value }}</div>
+                <div style="font-size:11px;color:var(--color-neutral-500)">{{ k.sub }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 340px;align-items:start">
+            <div style="border-right:1px solid var(--color-divider);min-width:0;overflow-x:auto;padding:4px 18px 18px">
+              <table class="table" style="font-size:12.5px;min-width:520px">
+                <thead><tr><th>Source</th><th>Kind</th><th style="text-align:right">Symbols</th><th style="width:80px">Cadence</th><th style="width:118px">Freshness</th><th>Feeds</th><th>Status</th></tr></thead>
+                <tbody>
+                  <sc-for list="{{ sources }}" as="s" hint-placeholder-count="6">
+                    <tr onClick="{{ s.open }}" style="{{ s.rowStyle }}" style-hover="background:color-mix(in srgb, var(--color-text) 3%, transparent)">
+                      <td>
+                        <div style="display:flex;align-items:center;gap:8px">
+                          <span style="width:3px;height:14px;border-radius:2px;flex:none;background:{{ s.markColor }}"></span>
+                          <span style="font-family:var(--mono);font-weight:600">{{ s.id }}</span>
+                        </div>
+                      </td>
+                      <td style="font-size:11.5px;color:var(--color-neutral-500)">{{ s.kind }}</td>
+                      <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">{{ s.symbols }}</td>
+                      <td>
+                        <svg viewBox="0 0 120 40" preserveAspectRatio="none" style="width:100%;height:22px;display:block">
+                          <path d="{{ s.spark }}" fill="none" stroke="{{ s.freshColor }}" stroke-width="1.6"></path>
+                        </svg>
+                      </td>
+                      <td>
+                        <div style="display:flex;align-items:center;gap:8px">
+                          <div style="flex:1;height:4px;border-radius:2px;background:var(--color-neutral-800);position:relative;max-width:64px">
+                            <div style="position:absolute;inset:0 auto 0 0;border-radius:2px;width:{{ s.healthPct }};background:{{ s.healthColor }}"></div>
+                          </div>
+                          <span style="font:11.5px/1 var(--mono);color:{{ s.freshColor }}">{{ s.fresh }}</span>
+                        </div>
+                      </td>
+                      <td style="font:11.5px/1 var(--mono);color:{{ s.usedByColor }}">{{ s.usedByLabel }}</td>
+                      <td><span class="tag" style="{{ s.statusStyle }}">{{ s.status }}</span></td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table>
+            </div>
+
+            <div style="display:flex;flex-direction:column;position:sticky;top:49px">
+              <div style="padding:12px 15px;border-bottom:1px solid var(--color-divider)">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <span style="font-family:var(--mono);font-size:14px;font-weight:600">{{ selId }}</span>
+                  <span class="tag" style="{{ selStatusStyle }}">{{ selStatus }}</span>
+                </div>
+                <div style="font-size:11.5px;color:var(--color-neutral-500);margin-top:4px">{{ selKind }}</div>
+              </div>
+              <div style="padding:13px 15px;display:flex;flex-direction:column;gap:14px">
+                <div style="display:flex;flex-direction:column;gap:7px">
+                  <div style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--color-neutral-500)">
+                    <span>expected {{ selExpected }}</span><span>updated {{ selFresh }} ago</span>
+                  </div>
+                  <div style="height:5px;border-radius:3px;background:var(--color-neutral-800);position:relative">
+                    <div style="position:absolute;inset:0 auto 0 0;border-radius:3px;width:{{ selHealthPct }};background:{{ selHealthColor }}"></div>
+                  </div>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:7px">
+                  <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">Feeds these strategies</div>
+                  <sc-if value="{{ selHasFeeds }}" hint-placeholder-val="{{ true }}">
+                    <div style="display:flex;gap:5px;flex-wrap:wrap">
+                      <sc-for list="{{ selFeeds }}" as="f" hint-placeholder-count="3">
+                        <span style="font:11px/1 var(--mono);color:var(--color-neutral-300);border:1px solid var(--color-divider);border-radius:4px;padding:3px 7px">{{ f }}</span>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ selNoFeeds }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:12px;color:var(--color-neutral-500);line-height:1.5">Not read by any live strategy right now — one is waiting on it.</div>
+                  </sc-if>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:2px">
+                  <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:5px">Health checks</div>
+                  <sc-for list="{{ selChecks }}" as="c" hint-placeholder-count="3">
+                    <div style="display:flex;align-items:center;gap:9px;padding:6px 0;border-bottom:1px solid color-mix(in srgb, var(--color-text) 6%, transparent)">
+                      <span style="font:11.5px/1 var(--mono);flex:1;color:var(--color-neutral-400)">{{ c.name }}</span>
+                      <span style="font:11.5px/1 var(--mono);font-variant-numeric:tabular-nums">{{ c.value }}</span>
+                      <span style="width:6px;height:6px;border-radius:50%;flex:none;background:{{ c.color }}"></span>
+                    </div>
+                  </sc-for>
+                </div>
+
+                <div style="display:flex;flex-direction:column;gap:5px">
+                  <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">Recent pulls</div>
+                  <sc-for list="{{ selLog }}" as="l" hint-placeholder-count="3">
+                    <div style="font:11px/1.6 var(--mono);color:var(--color-neutral-600)">{{ l }}</div>
+                  </sc-for>
+                </div>
+
+                <div style="border:1px solid var(--color-accent-800);border-radius:var(--radius-md);padding:10px 11px;display:flex;flex-direction:column;gap:6px">
+                  <div style="display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--color-accent-300)">
+                    <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M8 1.6l1.5 3.6 3.6 1.5-3.6 1.5L8 11.8 6.5 8.2 2.9 6.7l3.6-1.5z"></path></svg>
+                    Copilot
+                  </div>
+                  <div style="font-size:12px;color:var(--color-neutral-400);line-height:1.5;text-wrap:pretty">{{ selNote }}</div>
+                </div>
+              </div>
+              <div style="margin-top:auto;border-top:1px solid var(--color-divider);padding:11px 15px;display:flex;gap:7px">
+                <sc-if value="{{ selIsStale }}" hint-placeholder-val="{{ false }}">
+                  <button type="button" class="btn btn-primary" style="flex:1;font-size:12.5px">Reconnect</button>
+                </sc-if>
+                <button type="button" onClick="{{ editSource }}" class="btn btn-secondary" style="flex:1;font-size:12.5px">Edit source</button>
+                <button type="button" class="btn btn-ghost" style="font-size:12.5px">Disable</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ORDERS -->
+        <sc-if value="{{ isOrders }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:15px 18px 13px;border-bottom:1px solid var(--color-divider)">
+            <div>
+              <div style="font:600 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent);margin-bottom:6px">Book</div>
+              <h4 style="margin:0;font-size:19px">Orders</h4>
+              <div style="font-size:12px;color:var(--color-neutral-500);margin-top:4px">Every order traced back to the signal that produced it</div>
+            </div>
+            <div style="display:flex;gap:7px">
+              <button type="button" onClick="{{ goOpps }}" class="btn btn-ghost" style="font-size:12.5px">Back to queue</button>
+              <button type="button" onClick="{{ newOrder }}" class="btn btn-primary" style="font-size:12.5px">New order</button>
+            </div>
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:9px;padding:10px 18px;border-bottom:1px solid var(--color-divider);flex-wrap:wrap">
+            <div class="field" style="width:118px"><label for="of-sym">Symbol</label><input id="of-sym" class="input" placeholder="All" style="height:30px;font-family:var(--mono)"></div>
+            <div class="field" style="width:132px"><label for="of-status">Status</label><select id="of-status" class="input" style="height:30px"><option>Any status</option><option>Working</option><option>Filled</option><option>Rejected</option></select></div>
+            <div class="field" style="width:172px"><label for="of-strat">Origin strategy</label><select id="of-strat" class="input" style="height:30px"><option>Any strategy</option><option>momentum-breakout-v4</option><option>trailing-exit-atr</option><option>Manual</option></select></div>
+            <button type="button" class="btn btn-ghost" style="font-size:12px;margin-bottom:2px">Clear</button>
+          </div>
+          <div style="padding:4px 18px 18px">
+            <table class="table" style="font-size:12.5px">
+              <thead><tr><th>Symbol</th><th>Side</th><th>Type</th><th style="text-align:right">Qty</th><th style="text-align:right">Filled</th><th style="text-align:right">Avg</th><th>Status</th><th>From signal</th><th style="text-align:right">Placed</th><th></th></tr></thead>
+              <tbody>
+                <sc-for list="{{ orders }}" as="o" hint-placeholder-count="6">
+                  <tr onClick="{{ o.open }}" style="cursor:pointer">
+                    <td style="font-family:var(--mono);font-weight:600">{{ o.symbol }}</td>
+                    <td style="font-family:var(--mono);color:{{ o.sideColor }}">{{ o.side }}</td>
+                    <td style="font-size:11.5px;color:var(--color-neutral-500)">{{ o.type }}</td>
+                    <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">{{ o.qty }}</td>
+                    <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--color-neutral-500)">{{ o.filled }}</td>
+                    <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">{{ o.avg }}</td>
+                    <td><span class="tag" style="{{ o.statusStyle }}">{{ o.status }}</span></td>
+                    <td style="font-family:var(--mono);font-size:11.5px;color:var(--color-neutral-500)">{{ o.origin }}</td>
+                    <td style="text-align:right;font-family:var(--mono);font-size:11.5px;color:var(--color-neutral-600)">{{ o.time }}</td>
+                    <td style="text-align:right"><span style="color:var(--color-accent);font-size:11.5px">{{ o.action }}</span></td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- STRATEGY EDITOR -->
+        <sc-if value="{{ isStratEdit }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display:flex;align-items:center;gap:14px;padding:15px 18px 13px;border-bottom:1px solid var(--color-divider)">
+            <button type="button" onClick="{{ goStrategies }}" class="btn btn-ghost" style="font-size:12px;padding:2px 4px">← Strategies</button>
+            <div style="flex:1;min-width:0">
+              <div style="font:600 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent);margin-bottom:4px">Engine · strategy</div>
+              <div style="font-family:var(--mono);font-size:17px;font-weight:600">{{ stratEditTitle }}</div>
+            </div>
+            <div style="display:flex;gap:7px">
+              <button type="button" onClick="{{ goStrategies }}" class="btn btn-ghost" style="font-size:12.5px">Cancel</button>
+              <sc-if value="{{ notNew }}" hint-placeholder-val="{{ true }}"><button type="button" class="btn btn-secondary" style="font-size:12.5px;border-color:color-mix(in srgb, var(--loss) 40%, transparent);color:var(--loss)">Delete</button></sc-if>
+              <button type="button" class="btn btn-secondary" style="font-size:12.5px">Save draft</button>
+              <button type="button" class="btn btn-primary" style="font-size:12.5px">Save &amp; deploy</button>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 320px;align-items:start">
+            <div style="border-right:1px solid var(--color-divider);min-width:0;padding:14px 18px 20px;display:flex;flex-direction:column;gap:18px">
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">Definition</div>
+                <div class="field"><label>Name</label><input class="input" value="{{ stratEditTitle }}" placeholder="e.g. momentum-breakout-v5" style="height:30px;font-family:var(--mono)"></div>
+                <div class="field"><label>What it looks for</label><input class="input" value="Breakout above the 20-day on expanding volume after a short base." style="height:30px"></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+                  <div class="field"><label>Horizon</label><div class="seg" style="height:30px"><label class="seg-opt" style="font-size:12px"><input type="radio" name="se-h">Intraday</label><label class="seg-opt" style="font-size:12px"><input type="radio" name="se-h" checked>Swing</label><label class="seg-opt" style="font-size:12px"><input type="radio" name="se-h">Position</label></div></div>
+                  <div class="field"><label>State</label><div class="seg" style="height:30px"><label class="seg-opt" style="font-size:12px"><input type="radio" name="se-s" checked>Active</label><label class="seg-opt" style="font-size:12px"><input type="radio" name="se-s">Paused</label><label class="seg-opt" style="font-size:12px"><input type="radio" name="se-s">Off</label></div></div>
+                </div>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;align-items:center;gap:9px">
+                  <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">Entry conditions</div>
+                  <span style="font-size:11px;color:var(--color-neutral-600)">weights normalize to 1.0 · all must pass a hard gate</span>
+                  <button type="button" onClick="{{ addEntry }}" class="btn btn-ghost" style="font-size:12px;margin-left:auto">+ Add</button>
+                </div>
+                <sc-for list="{{ entryRules }}" as="r" hint-placeholder-count="4">
+                  <div style="border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:8px 10px;display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+                    <input class="input" value="{{ r.metric }}" style="height:28px;font-family:var(--mono);font-size:12px;flex:1;min-width:150px">
+                    <select class="input" style="height:28px;width:70px;font-size:12px"><option>{{ r.op }}</option><option>≥</option><option>≤</option><option>×</option><option>range</option></select>
+                    <input class="input" value="{{ r.threshold }}" style="height:28px;width:88px;font-family:var(--mono);font-size:12px;text-align:right">
+                    <div style="display:flex;align-items:center;gap:6px;width:104px">
+                      <span style="font-size:10.5px;color:var(--color-neutral-600)">wt</span>
+                      <div style="flex:1;height:3px;border-radius:2px;background:var(--color-neutral-800);position:relative"><div style="position:absolute;inset:0 auto 0 0;border-radius:2px;width:{{ r.weight }}%;background:var(--color-accent)"></div></div>
+                      <span style="font:11px/1 var(--mono);width:20px;text-align:right">{{ r.weight }}</span>
+                    </div>
+                    <button type="button" onClick="{{ r.remove }}" class="btn btn-ghost" style="padding:0 5px" aria-label="Remove condition"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4l8 8M12 4l-8 8"></path></svg></button>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;align-items:center;gap:9px">
+                  <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">Exit rules</div>
+                  <span style="font-size:11px;color:var(--color-neutral-600)">first rule to fire closes or trims the position</span>
+                  <button type="button" onClick="{{ addExit }}" class="btn btn-ghost" style="font-size:12px;margin-left:auto">+ Add</button>
+                </div>
+                <sc-for list="{{ exitRules }}" as="r" hint-placeholder-count="3">
+                  <div style="border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:8px 10px;display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+                    <input class="input" value="{{ r.metric }}" style="height:28px;font-family:var(--mono);font-size:12px;flex:1;min-width:150px">
+                    <select class="input" style="height:28px;width:70px;font-size:12px"><option>{{ r.op }}</option><option>≥</option><option>≤</option><option>×</option></select>
+                    <input class="input" value="{{ r.threshold }}" style="height:28px;width:88px;font-family:var(--mono);font-size:12px;text-align:right">
+                    <button type="button" onClick="{{ r.remove }}" class="btn btn-ghost" style="padding:0 5px" aria-label="Remove rule"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4l8 8M12 4l-8 8"></path></svg></button>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+
+            <div style="padding:14px 15px 20px;display:flex;flex-direction:column;gap:12px;position:sticky;top:49px">
+              <div style="border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:11px 12px;display:flex;flex-direction:column;gap:9px">
+                <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">Sizing &amp; risk</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                  <div class="field"><label>Base size</label><input class="input" value="1.5% eq" style="height:28px;font-family:var(--mono);font-size:12px"></div>
+                  <div class="field"><label>Max position</label><input class="input" value="10% eq" style="height:28px;font-family:var(--mono);font-size:12px"></div>
+                  <div class="field"><label>Risk / trade</label><input class="input" value="0.4% eq" style="height:28px;font-family:var(--mono);font-size:12px"></div>
+                  <div class="field"><label>Max open</label><input class="input" value="6" style="height:28px;font-family:var(--mono);font-size:12px"></div>
+                </div>
+              </div>
+              <div style="border:1px solid var(--color-accent-800);border-radius:var(--radius-md);padding:11px 12px;display:flex;flex-direction:column;gap:9px">
+                <div style="display:flex;align-items:center;gap:8px">
+                  <div style="font-size:12px;color:var(--color-accent-300)">Backtest preview</div>
+                  <span style="font:10px/1 var(--mono);color:var(--color-neutral-600);margin-left:auto">2019 → 2026</span>
+                </div>
+                <svg viewBox="0 0 900 220" preserveAspectRatio="none" style="width:100%;height:96px;display:block">
+                  <path d="{{ equityFill }}" fill="var(--color-accent)" opacity="0.1"></path>
+                  <path d="{{ equityPath }}" fill="none" stroke="var(--color-accent)" stroke-width="1.7"></path>
+                </svg>
+                <sc-for list="{{ diagnostics }}" as="d" hint-placeholder-count="4">
+                  <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--color-neutral-500)">{{ d.k }}</span><span style="font-family:var(--mono);font-variant-numeric:tabular-nums;color:{{ d.color }}">{{ d.v }}</span></div>
+                </sc-for>
+                <button type="button" class="btn btn-primary" style="font-size:12px;padding:5px 9px">Run full backtest</button>
+              </div>
+              <sc-if value="{{ notNew }}" hint-placeholder-val="{{ true }}">
+              <div style="border:1px solid color-mix(in srgb, var(--loss) 35%, transparent);border-radius:var(--radius-md);padding:11px 12px;display:flex;flex-direction:column;gap:7px">
+                <div style="font-size:11.5px;color:var(--loss)">Danger zone</div>
+                <div style="font-size:11.5px;color:var(--color-neutral-500);line-height:1.5">Deleting stops evaluation and removes 6 open signals tied to this strategy. Orders already placed are untouched.</div>
+                <button type="button" class="btn btn-secondary" style="font-size:12px;align-self:flex-start;border-color:color-mix(in srgb, var(--loss) 40%, transparent);color:var(--loss)">Delete strategy</button>
+              </div>
+              </sc-if>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- SOURCE EDITOR -->
+        <sc-if value="{{ isSourceEdit }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display:flex;align-items:center;gap:14px;padding:15px 18px 13px;border-bottom:1px solid var(--color-divider)">
+            <button type="button" onClick="{{ goSources }}" class="btn btn-ghost" style="font-size:12px;padding:2px 4px">← Sources</button>
+            <div style="flex:1;min-width:0">
+              <div style="font:600 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent);margin-bottom:4px">Engine · source</div>
+              <div style="font-family:var(--mono);font-size:17px;font-weight:600">{{ sourceEditTitle }}</div>
+            </div>
+            <div style="display:flex;gap:7px">
+              <button type="button" onClick="{{ goSources }}" class="btn btn-ghost" style="font-size:12.5px">Cancel</button>
+              <sc-if value="{{ notNew }}" hint-placeholder-val="{{ true }}"><button type="button" class="btn btn-secondary" style="font-size:12.5px;border-color:color-mix(in srgb, var(--loss) 40%, transparent);color:var(--loss)">Delete</button></sc-if>
+              <button type="button" class="btn btn-primary" style="font-size:12.5px">Save source</button>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 300px;align-items:start">
+            <div style="border-right:1px solid var(--color-divider);min-width:0;padding:14px 18px 20px;display:flex;flex-direction:column;gap:18px">
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">Identity</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+                  <div class="field"><label>Source ID</label><input class="input" value="options-flow" placeholder="lowercase-with-dashes" style="height:30px;font-family:var(--mono)"></div>
+                  <div class="field"><label>Kind</label><select class="input" style="height:30px"><option>Derived · unusual flow</option><option>Market data · bars</option><option>Market data · quotes</option><option>Fundamentals · daily</option><option>Events · calendar</option><option>NLP · rolling score</option></select></div>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">Connection</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+                  <div class="field"><label>Provider</label><select class="input" style="height:30px"><option>Cboe flow vendor</option><option>Alpaca</option><option>Sharadar</option><option>Custom webhook</option></select></div>
+                  <div class="field"><label>Update cadence</label><select class="input" style="height:30px"><option>~5m rolling</option><option>Streaming</option><option>Hourly</option><option>Daily</option></select></div>
+                </div>
+                <div class="field"><label>Endpoint</label><input class="input" value="wss://flow.vendor.io/v2/stream" style="height:30px;font-family:var(--mono);font-size:12px"></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+                  <div class="field"><label>API key</label><input class="input" type="password" value="sk_live_9f2c" style="height:30px;font-family:var(--mono);font-size:12px"></div>
+                  <div class="field"><label>Universe</label><select class="input" style="height:30px"><option>120 liquid single-names</option><option>S&amp;P 500</option><option>Watchlist — Semis</option></select></div>
+                </div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">Field mapping</div>
+                <table class="table" style="font-size:12px">
+                  <thead><tr><th>Vendor field</th><th></th><th>Engine field</th><th>Type</th></tr></thead>
+                  <tbody>
+                    <sc-for list="{{ fieldMap }}" as="f" hint-placeholder-count="4">
+                      <tr><td style="font-family:var(--mono);color:var(--color-neutral-400)">{{ f.from }}</td><td style="color:var(--color-neutral-700);text-align:center">→</td><td style="font-family:var(--mono)">{{ f.to }}</td><td style="font-size:11px;color:var(--color-neutral-500)">{{ f.type }}</td></tr>
+                    </sc-for>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div style="padding:14px 15px 20px;display:flex;flex-direction:column;gap:12px;position:sticky;top:49px">
+              <div style="border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:11px 12px;display:flex;flex-direction:column;gap:9px">
+                <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">Connection test</div>
+                <div style="display:flex;align-items:center;gap:8px;font-size:12px"><span style="width:7px;height:7px;border-radius:50%;background:var(--loss)"></span><span style="color:var(--color-neutral-400)">Last attempt timed out · 47m ago</span></div>
+                <button type="button" class="btn btn-secondary" style="font-size:12px">Test connection</button>
+              </div>
+              <div style="border:1px solid var(--color-accent-800);border-radius:var(--radius-md);padding:11px 12px;display:flex;flex-direction:column;gap:6px">
+                <div style="font-size:11.5px;color:var(--color-accent-300)">Copilot</div>
+                <div style="font-size:12px;color:var(--color-neutral-400);line-height:1.5">One strategy (gap-continuation) references this source as an optional confirm. Saving while it is down keeps that check disabled until the first good pull.</div>
+              </div>
+              <sc-if value="{{ notNew }}" hint-placeholder-val="{{ true }}">
+              <div style="border:1px solid color-mix(in srgb, var(--loss) 35%, transparent);border-radius:var(--radius-md);padding:11px 12px;display:flex;flex-direction:column;gap:7px">
+                <div style="font-size:11.5px;color:var(--loss)">Danger zone</div>
+                <button type="button" class="btn btn-secondary" style="font-size:12px;align-self:flex-start;border-color:color-mix(in srgb, var(--loss) 40%, transparent);color:var(--loss)">Delete source</button>
+              </div>
+              </sc-if>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- ORDER EDITOR -->
+        <sc-if value="{{ isOrderEdit }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display:flex;align-items:center;gap:14px;padding:15px 18px 13px;border-bottom:1px solid var(--color-divider)">
+            <button type="button" onClick="{{ goOrders }}" class="btn btn-ghost" style="font-size:12px;padding:2px 4px">← Orders</button>
+            <div style="flex:1;min-width:0">
+              <div style="font:600 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent);margin-bottom:4px">Book · order</div>
+              <div style="font-family:var(--mono);font-size:17px;font-weight:600">{{ orderEditTitle }}</div>
+            </div>
+            <div style="display:flex;gap:7px">
+              <button type="button" onClick="{{ goOrders }}" class="btn btn-ghost" style="font-size:12.5px">Cancel</button>
+              <sc-if value="{{ notNew }}" hint-placeholder-val="{{ true }}"><button type="button" class="btn btn-secondary" style="font-size:12.5px;border-color:color-mix(in srgb, var(--loss) 40%, transparent);color:var(--loss)">Cancel order</button></sc-if>
+              <button type="button" class="btn btn-primary" style="font-size:12.5px">Submit order</button>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 300px;align-items:start">
+            <div style="border-right:1px solid var(--color-divider);min-width:0;padding:14px 18px 20px;display:flex;flex-direction:column;gap:14px">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+                <div class="field"><label>Symbol</label><input class="input" value="AAPL" style="height:30px;font-family:var(--mono)"></div>
+                <div class="field"><label>Side</label><div class="seg" style="height:30px"><label class="seg-opt" style="font-size:12px"><input type="radio" name="oe-side">BUY</label><label class="seg-opt" style="font-size:12px"><input type="radio" name="oe-side" checked>SELL</label></div></div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+                <div class="field"><label>Type</label><select class="input" style="height:30px"><option>Limit</option><option>Market</option><option>Stop limit</option></select></div>
+                <div class="field"><label>TIF</label><select class="input" style="height:30px"><option>Day</option><option>GTC</option><option>IOC</option></select></div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+                <div class="field"><label>Qty</label><input class="input" value="60" style="height:30px;font-family:var(--mono)"></div>
+                <div class="field"><label>Limit price</label><input class="input" value="218.40" style="height:30px;font-family:var(--mono)"></div>
+                <div class="field"><label>Stop</label><input class="input" value="211.40" style="height:30px;font-family:var(--mono)"></div>
+                <div class="field"><label>Target</label><input class="input" value="—" style="height:30px;font-family:var(--mono)"></div>
+              </div>
+              <div class="field"><label>Origin</label><div style="display:flex;align-items:center;gap:8px"><span class="tag tag-neutral" style="font-size:11px">trailing-exit-atr</span><span style="font-size:11.5px;color:var(--color-neutral-500)">trim signal · conv 79 · fired 14:22</span></div></div>
+            </div>
+            <div style="padding:14px 15px 20px;display:flex;flex-direction:column;gap:12px;position:sticky;top:49px">
+              <div style="border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:11px 12px;display:flex;flex-direction:column;gap:6px">
+                <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">Order preview</div>
+                <sc-for list="{{ orderPreview }}" as="r" hint-placeholder-count="4">
+                  <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--color-neutral-500)">{{ r.k }}</span><span style="font-family:var(--mono);font-variant-numeric:tabular-nums;color:{{ r.color }}">{{ r.v }}</span></div>
+                </sc-for>
+              </div>
+              <div style="border:1px solid var(--color-accent-800);border-radius:var(--radius-md);padding:11px 12px;font-size:12px;color:var(--color-neutral-400);line-height:1.5">This sell brings AAPL from 120 → 60 shares and locks +$1.9k of the open 2.1R. Broker holds the position; the queue clears the trim flag on fill.</div>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- WATCHLIST EDITOR -->
+        <sc-if value="{{ isWatchEdit }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display:flex;align-items:center;gap:14px;padding:15px 18px 13px;border-bottom:1px solid var(--color-divider)">
+            <button type="button" onClick="{{ goWatch }}" class="btn btn-ghost" style="font-size:12px;padding:2px 4px">← Watchlists</button>
+            <div style="flex:1;min-width:0">
+              <div style="font:600 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent);margin-bottom:4px">Discover · watchlist</div>
+              <div style="font-family:var(--font-heading);font-size:17px">{{ watchEditTitle }}</div>
+            </div>
+            <div style="display:flex;gap:7px">
+              <button type="button" onClick="{{ goWatch }}" class="btn btn-ghost" style="font-size:12.5px">Cancel</button>
+              <sc-if value="{{ notNew }}" hint-placeholder-val="{{ true }}"><button type="button" class="btn btn-secondary" style="font-size:12.5px;border-color:color-mix(in srgb, var(--loss) 40%, transparent);color:var(--loss)">Delete</button></sc-if>
+              <button type="button" class="btn btn-primary" style="font-size:12.5px">Save list</button>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 300px;align-items:start">
+            <div style="border-right:1px solid var(--color-divider);min-width:0;padding:14px 18px 20px;display:flex;flex-direction:column;gap:16px">
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px">
+                <div class="field"><label>List name</label><input class="input" value="{{ wlNameVal }}" placeholder="e.g. Semis" style="height:30px"></div>
+                <div class="field"><label>Default strategy</label><select class="input" style="height:30px"><option>momentum-breakout-v4</option><option>gap-continuation</option><option>mean-revert-rsi</option><option>None</option></select></div>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <div style="display:flex;align-items:center;gap:9px">
+                  <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">Symbols</div>
+                  <span style="font-size:11px;color:var(--color-neutral-600)">{{ wlCount }} in list</span>
+                  <button type="button" onClick="{{ goScreener }}" class="btn btn-ghost" style="font-size:12px;margin-left:auto">Import from screener</button>
+                </div>
+                <div style="display:flex;gap:7px">
+                  <input class="input" value="{{ wlInputVal }}" onChange="{{ setWlInput }}" onKeyDown="{{ wlKey }}" placeholder="Add ticker — type and press Enter" style="height:32px;font-family:var(--mono);flex:1">
+                  <button type="button" onClick="{{ addWlSymbol }}" class="btn btn-primary" style="font-size:12.5px">Add</button>
+                </div>
+                <table class="table" style="font-size:12.5px">
+                  <thead><tr><th>Symbol</th><th style="text-align:right">Last</th><th style="text-align:right">Chg</th><th></th></tr></thead>
+                  <tbody>
+                    <sc-for list="{{ wlRows }}" as="r" hint-placeholder-count="6">
+                      <tr>
+                        <td style="font-family:var(--mono);font-weight:600">{{ r.symbol }}</td>
+                        <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">{{ r.last }}</td>
+                        <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;color:{{ r.chgColor }}">{{ r.chg }}</td>
+                        <td style="text-align:right;width:36px"><button type="button" onClick="{{ r.remove }}" class="btn btn-ghost" style="padding:0 5px" aria-label="Remove symbol"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4l8 8M12 4l-8 8"></path></svg></button></td>
+                      </tr>
+                    </sc-for>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div style="padding:14px 15px 20px;display:flex;flex-direction:column;gap:12px;position:sticky;top:49px">
+              <div style="border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:11px 12px;display:flex;flex-direction:column;gap:9px">
+                <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">List settings</div>
+                <div class="field"><label>Sort by</label><select class="input" style="height:30px"><option>Signal readiness</option><option>% change</option><option>Alphabetical</option></select></div>
+                <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-neutral-300);cursor:pointer"><input type="checkbox" checked>Alert when a symbol is one condition from firing</label>
+                <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--color-neutral-300);cursor:pointer"><input type="checkbox">Evaluate premarket</label>
+              </div>
+              <div style="border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:11px 12px;display:flex;flex-direction:column;gap:5px">
+                <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">Summary</div>
+                <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--color-neutral-500)">Symbols</span><span style="font-family:var(--mono)">{{ wlCount }}</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:var(--color-neutral-500)">Evaluated by</span><span style="font-family:var(--mono)">1 strategy</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- BACKTEST -->
+        <sc-if value="{{ isBacktest }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:15px 18px 13px;border-bottom:1px solid var(--color-divider)">
+            <div>
+              <div style="font:600 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent);margin-bottom:6px">Engine</div>
+              <h4 style="margin:0;font-size:19px">Backtest</h4>
+              <div style="font-size:12px;color:var(--color-neutral-500);margin-top:4px">Run a strategy over history, then read bar by bar why it did or didn't trade</div>
+            </div>
+            <div style="display:flex;gap:7px">
+              <button type="button" class="btn btn-ghost" style="font-size:12.5px">Run history</button>
+              <button type="button" class="btn btn-primary" style="font-size:12.5px">Run backtest</button>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1.5fr 1.5fr 1fr 1fr 1fr;gap:11px;padding:12px 18px;border-bottom:1px solid var(--color-divider);align-items:end">
+            <div class="field"><label>Strategy</label><select class="input" style="height:30px;font-family:var(--mono);font-size:12px"><option>momentum-breakout-v4</option><option>gap-continuation</option><option>mean-revert-rsi</option><option>earnings-drift-v2</option></select></div>
+            <div class="field"><label>Symbols</label><input class="input" value="AAPL, NVDA, MU" style="height:30px;font-family:var(--mono);font-size:12px"></div>
+            <div class="field"><label>Start</label><input class="input" type="date" value="2024-08-01" style="height:30px;font-size:12px"></div>
+            <div class="field"><label>End</label><input class="input" type="date" value="2026-07-30" style="height:30px;font-size:12px"></div>
+            <div class="field"><label>Timeframe</label><select class="input" style="height:30px;font-size:12px"><option>1 day</option><option>1 hour</option><option>15 min</option></select></div>
+          </div>
+          <div style="padding:12px 18px 0">
+            <div style="border:1px solid color-mix(in srgb, var(--loss) 40%, transparent);border-radius:var(--radius-md);padding:11px 13px;display:flex;align-items:center;gap:12px">
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="var(--loss)" stroke-width="1.5" style="flex:none"><path d="M8 5v4M8 11.5v.01M8 1.5L1 14h14z"></path></svg>
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12.5px;color:var(--color-text)">Insufficient history for <span style="font-family:var(--mono)">AAPL</span> — have 3 bars, need 52.</div>
+                <div style="font-size:11.5px;color:var(--color-neutral-500);margin-top:2px">The 75-day warm-up window <span style="font-family:var(--mono)">2024-08-12 → 2024-10-26</span> has no stored bars, so the indicators never resolve. Backfill it, then re-run.</div>
+              </div>
+              <button type="button" onClick="{{ goBackfills }}" class="btn btn-secondary" style="font-size:12px;flex:none">Backfill this range →</button>
+            </div>
+          </div>
+          <div style="padding:14px 18px 8px;display:grid;grid-template-columns:1fr 300px;gap:16px;align-items:start">
+            <div style="border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:14px 15px">
+              <div style="display:flex;align-items:center;gap:9px;margin-bottom:11px">
+                <div style="font-family:var(--font-heading);font-size:13.5px">Equity curve — % return per symbol</div>
+                <span style="font-size:11.5px;color:var(--color-neutral-600)">NVDA · MU · AAPL · 41 trades</span>
+                <span style="margin-left:auto;font:11px/1 var(--mono);color:var(--gain)">+18.4%</span>
+              </div>
+              <svg viewBox="0 0 900 220" preserveAspectRatio="none" style="width:100%;height:200px;display:block">
+                <g stroke="color-mix(in srgb, var(--color-text) 7%, transparent)" stroke-width="1">
+                  <line x1="0" y1="40" x2="900" y2="40"></line><line x1="0" y1="100" x2="900" y2="100"></line><line x1="0" y1="160" x2="900" y2="160"></line>
+                </g>
+                <path d="{{ benchPath }}" fill="none" stroke="var(--color-neutral-600)" stroke-width="1.3" stroke-dasharray="4 4"></path>
+                <path d="{{ equityFill }}" fill="var(--color-accent)" opacity="0.1"></path>
+                <path d="{{ equityPath }}" fill="none" stroke="var(--color-accent)" stroke-width="1.7"></path>
+                <sc-for list="{{ btMarkers }}" as="m" hint-placeholder-count="0">
+                  <circle cx="{{ m.cx }}" cy="{{ m.cy }}" r="4.5" fill="{{ m.fill }}" stroke="var(--color-bg)" stroke-width="1.4"></circle>
+                </sc-for>
+              </svg>
+              <div style="display:flex;gap:16px;padding-top:9px;font:11px/1 var(--mono);color:var(--color-neutral-600)">
+                <span><span style="color:var(--gain)">●</span> entry</span>
+                <span><span style="color:var(--loss)">●</span> exit</span>
+                <span style="margin-left:auto"><span style="color:var(--color-neutral-600)">— —</span> SPY buy &amp; hold</span>
+              </div>
+            </div>
+            <div style="border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:12px 13px;display:flex;flex-direction:column;gap:7px">
+              <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">Diagnostics</div>
+              <sc-for list="{{ diagnostics }}" as="d" hint-placeholder-count="6">
+                <div style="display:flex;justify-content:space-between;font-size:12px">
+                  <span style="color:var(--color-neutral-500)">{{ d.k }}</span>
+                  <span style="font-family:var(--mono);font-variant-numeric:tabular-nums;color:{{ d.color }}">{{ d.v }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="padding:6px 18px 4px;font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">Debug — day by day · NVDA · 52 bars · 40 warm-up</div>
+          <div style="padding:0 18px 18px;overflow-x:auto">
+            <table class="table" style="font-size:12px;min-width:640px">
+              <thead><tr><th>Date</th><th style="text-align:right">Close</th><th style="text-align:right">Volume</th><th style="text-align:right">sma_20</th><th style="text-align:right">rsi_14</th><th style="text-align:right">vol/adv</th><th style="text-align:right">Warm</th><th>Action</th><th style="text-align:right">Conv.</th></tr></thead>
+              <tbody>
+                <sc-for list="{{ btBars }}" as="b" hint-placeholder-count="8">
+                  <tr style="{{ b.rowStyle }}">
+                    <td style="font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--color-neutral-400)">{{ b.date }}</td>
+                    <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">{{ b.close }}</td>
+                    <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--color-neutral-500)">{{ b.vol }}</td>
+                    <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--color-neutral-400)">{{ b.sma }}</td>
+                    <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--color-neutral-400)">{{ b.rsi }}</td>
+                    <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--color-neutral-400)">{{ b.vadv }}</td>
+                    <td style="text-align:right;font-family:var(--mono);color:var(--color-neutral-600)">{{ b.warm }}</td>
+                    <td><span style="font-family:var(--mono);font-size:11.5px;color:{{ b.actionColor }}">{{ b.action }}</span></td>
+                    <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;color:{{ b.convColor }}">{{ b.conv }}</td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- BACKFILLS -->
+        <sc-if value="{{ isBackfills }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:15px 18px 13px;border-bottom:1px solid var(--color-divider)">
+            <div>
+              <div style="font:600 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent);margin-bottom:6px">Engine</div>
+              <h4 style="margin:0;font-size:19px">Backfills</h4>
+              <div style="font-size:12px;color:var(--color-neutral-500);margin-top:4px">Create, monitor, cancel and delete historical OHLCV backfills that feed the engine</div>
+            </div>
+            <span class="tag" style="background:color-mix(in srgb, var(--color-accent) 14%, transparent);color:var(--color-accent-200);font:10px/1.6 var(--mono);letter-spacing:.08em">ADMIN ONLY</span>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);border-bottom:1px solid var(--color-divider)">
+            <sc-for list="{{ backfillStats }}" as="k" hint-placeholder-count="5">
+              <div style="padding:12px 18px;border-right:1px solid var(--color-divider);display:flex;flex-direction:column;gap:4px">
+                <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">{{ k.label }}</div>
+                <div style="font-family:var(--mono);font-size:18px;font-variant-numeric:tabular-nums;color:{{ k.color }}">{{ k.value }}</div>
+                <div style="font-size:11px;color:var(--color-neutral-500)">{{ k.sub }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="padding:14px 18px 4px">
+            <div style="border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:13px 14px">
+              <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600);margin-bottom:10px">New backfill</div>
+              <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr auto;gap:11px;align-items:end">
+                <div class="field"><label>Symbols</label><input class="input" placeholder="AAPL, TSLA" style="height:30px;font-family:var(--mono);font-size:12px"></div>
+                <div class="field"><label>Timeframe</label><select class="input" style="height:30px;font-size:12px"><option>1 day</option><option>1 hour</option><option>15 min</option></select></div>
+                <div class="field"><label>Start</label><input class="input" type="date" value="2024-08-01" style="height:30px;font-size:12px"></div>
+                <div class="field"><label>End</label><input class="input" type="date" value="2026-07-30" style="height:30px;font-size:12px"></div>
+                <button type="button" class="btn btn-primary" style="font-size:12.5px;height:30px">Start backfill</button>
+              </div>
+              <label style="display:flex;align-items:center;gap:7px;margin-top:9px;font-size:11.5px;color:var(--color-neutral-500);cursor:pointer">
+                <input type="checkbox" style="accent-color:var(--color-accent)"> Overwrite existing bars in range
+              </label>
+            </div>
+          </div>
+          <div style="padding:8px 18px 4px;display:flex;align-items:center;gap:9px">
+            <select class="input" style="height:30px;font-size:12px;width:auto"><option>All statuses</option><option>Queued</option><option>Running</option><option>Completed</option><option>Partial</option><option>Failed</option><option>Canceled</option></select>
+            <input class="input" placeholder="Filter by symbol" style="height:30px;font-size:12px;max-width:200px">
+            <span style="margin-left:auto;font:11px/1 var(--mono);color:var(--color-neutral-600)">polling every 4s</span>
+          </div>
+          <div style="padding:4px 18px 18px;display:flex;flex-direction:column;gap:8px">
+            <sc-for list="{{ backfillJobs }}" as="j" hint-placeholder-count="4">
+              <div style="border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:11px 13px;display:flex;align-items:flex-start;gap:12px">
+                <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:6px">
+                  <div style="display:flex;align-items:center;gap:9px">
+                    <span class="tag" style="{{ j.statusStyle }}">{{ j.label }}</span>
+                    <span style="font-family:var(--mono);font-size:13px;font-weight:600">{{ j.symbols }}</span>
+                    <span style="font:11px/1 var(--mono);color:var(--color-neutral-600)">{{ j.tf }}</span>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <div style="flex:1;max-width:280px;height:4px;border-radius:2px;background:var(--color-neutral-800);position:relative">
+                      <div style="position:absolute;inset:0 auto 0 0;border-radius:2px;width:{{ j.pct }};background:{{ j.barColor }}"></div>
+                    </div>
+                    <span style="font:11.5px/1 var(--mono);font-variant-numeric:tabular-nums;color:var(--color-neutral-400)">bars {{ j.bars }} · chunks {{ j.chunks }}</span>
+                  </div>
+                  <sc-if value="{{ j.hasError }}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size:11.5px;color:var(--loss)">{{ j.error }}</div>
+                  </sc-if>
+                  <div style="font:10.5px/1 var(--mono);color:var(--color-neutral-700)">{{ j.jobId }}</div>
+                </div>
+                <sc-if value="{{ j.cancelable }}" hint-placeholder-val="{{ false }}">
+                  <button type="button" class="btn btn-secondary" style="font-size:11.5px;flex:none">Cancel</button>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <div style="padding:0 18px 22px">
+            <div style="border:1px solid color-mix(in srgb, var(--loss) 40%, transparent);border-radius:var(--radius-md);padding:13px 14px">
+              <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--loss);margin-bottom:3px">Delete backfilled data</div>
+              <div style="font-size:11.5px;color:var(--color-neutral-500);margin-bottom:10px">Permanently removes stored bars for a symbol. An empty range deletes <strong style="color:var(--color-neutral-300)">all</strong> bars for the symbol.</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:11px;align-items:end">
+                <div class="field"><label>Symbol</label><input class="input" placeholder="Symbol" style="height:30px;font-family:var(--mono);font-size:12px"></div>
+                <div class="field"><label>Timeframe</label><select class="input" style="height:30px;font-size:12px"><option>All timeframes</option><option>1 day</option><option>1 hour</option><option>15 min</option></select></div>
+                <div class="field"><label>Start</label><input class="input" type="date" style="height:30px;font-size:12px"></div>
+                <div class="field"><label>End</label><input class="input" type="date" style="height:30px;font-size:12px"></div>
+                <div class="field" style="grid-column:span 2"><label>Type the symbol to confirm</label><input class="input" placeholder="SYMBOL" style="height:30px;font-family:var(--mono);font-size:12px"></div>
+                <div class="field" style="grid-column:span 2"><label>Whole-symbol delete — type "DELETE ALL"</label><input class="input" placeholder="DELETE ALL" style="height:30px;font-family:var(--mono);font-size:12px"></div>
+              </div>
+              <button type="button" class="btn" style="font-size:12.5px;margin-top:11px;border:1px solid var(--loss);color:var(--loss);background:color-mix(in srgb, var(--loss) 8%, transparent)">Delete data</button>
+            </div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- PORTFOLIO -->
+        <sc-if value="{{ isPortfolio }}" hint-placeholder-val="{{ false }}">
+        <div>
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:15px 18px 13px;border-bottom:1px solid var(--color-divider)">
+            <div>
+              <div style="font:600 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent);margin-bottom:6px">Book</div>
+              <h4 style="margin:0;font-size:19px">Portfolio</h4>
+              <div style="font-size:12px;color:var(--color-neutral-500);margin-top:4px">A read-only mirror of what your brokers report — Alpaca and IBKR own the ledger and the P&amp;L</div>
+            </div>
+            <button type="button" onClick="{{ goExits }}" class="btn btn-secondary" style="font-size:12.5px">See risk in Exposure →</button>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(5,1fr);border-bottom:1px solid var(--color-divider)">
+            <sc-for list="{{ portfolioStats }}" as="k" hint-placeholder-count="5">
+              <div style="padding:12px 18px;border-right:1px solid var(--color-divider);display:flex;flex-direction:column;gap:4px">
+                <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">{{ k.label }}</div>
+                <div style="font-family:var(--mono);font-size:18px;font-variant-numeric:tabular-nums;color:{{ k.color }}">{{ k.value }}</div>
+                <div style="font-size:11px;color:var(--color-neutral-500)">{{ k.sub }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="padding:14px 18px 6px;display:grid;grid-template-columns:1fr 1fr;gap:14px">
+            <sc-for list="{{ portfolioAccounts }}" as="a" hint-placeholder-count="2">
+              <div style="border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:13px 15px;display:flex;flex-direction:column;gap:11px">
+                <div style="display:flex;align-items:center;gap:9px">
+                  <span style="font:11px/1 var(--mono);color:var(--color-neutral-500)">{{ a.code }}</span>
+                  <div style="font-family:var(--font-heading);font-size:14px;flex:1">{{ a.name }}</div>
+                  <span class="tag" style="background:color-mix(in srgb, var(--color-text) 8%, transparent);color:var(--color-neutral-400);font:10px/1.6 var(--mono)">{{ a.broker }}</span>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:9px 16px">
+                  <sc-for list="{{ a.stats }}" as="s" hint-placeholder-count="4">
+                    <div style="display:flex;flex-direction:column;gap:2px">
+                      <span style="font:600 9px/1 var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--color-neutral-600)">{{ s.k }}</span>
+                      <span style="font-family:var(--mono);font-size:14.5px;font-variant-numeric:tabular-nums;color:{{ s.color }}">{{ s.v }}</span>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="font-size:11.5px;color:var(--color-neutral-500)">{{ a.note }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="padding:6px 18px 4px;font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">Positions · reported by broker</div>
+          <div style="padding:0 18px 8px;overflow-x:auto">
+            <table class="table" style="font-size:12.5px;min-width:600px">
+              <thead><tr><th>Symbol</th><th>Account</th><th style="text-align:right">Qty</th><th style="text-align:right">Avg cost</th><th style="text-align:right">Mkt value</th><th style="text-align:right">Unrealized</th><th style="text-align:right">Day P&amp;L</th></tr></thead>
+              <tbody>
+                <sc-for list="{{ portfolioPositions }}" as="p" hint-placeholder-count="4">
+                  <tr>
+                    <td style="font-family:var(--mono);font-weight:600">{{ p.symbol }}</td>
+                    <td style="font-size:11.5px;color:var(--color-neutral-500)">{{ p.account }}</td>
+                    <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">{{ p.qty }}</td>
+                    <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--color-neutral-500)">{{ p.avg }}</td>
+                    <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums">{{ p.mkt }}</td>
+                    <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;color:{{ p.unrlColor }}">{{ p.unrl }}</td>
+                    <td style="text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;color:{{ p.dayColor }}">{{ p.day }}</td>
+                  </tr>
+                </sc-for>
+              </tbody>
+            </table>
+          </div>
+          <div style="padding:0 18px 22px">
+            <div style="font:11px/1.5 var(--mono);color:var(--color-neutral-700)">Balances refresh every 10s from the broker · xstockstrat never writes to the ledger</div>
+          </div>
+        </div>
+        </sc-if>
+
+        <!-- MOBILE -->
+        <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:20px 18px 28px">
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:18px">
+            <div>
+              <div style="font:600 9px/1 var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--color-accent);margin-bottom:6px">Companion</div>
+              <h4 style="margin:0;font-size:19px">Mobile — full parity with the desk</h4>
+              <div style="font-size:12px;color:var(--color-neutral-500);margin-top:4px">Every desktop screen adapted to the phone — same four tabs, same data, 44px minimum tap targets</div>
+            </div>
+            <button type="button" onClick="{{ goOpps }}" class="btn btn-ghost" style="font-size:12px">← Desktop</button>
+          </div>
+          <div style="display:flex;gap:26px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:8px">
+            <sc-for list="{{ phones }}" as="ph" hint-placeholder-count="4">
+              <div style="display:flex;flex-direction:column;gap:9px;flex:none">
+                <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ true }}" width="{{ 372 }}" height="{{ 780 }}" hint-size="372px,780px">
+                  <div style="background:var(--color-bg);min-height:100%;color:var(--color-text);font-family:var(--font-body);padding:52px 0 76px;position:relative">
+                    <div style="padding:8px 16px 9px;display:flex;align-items:center;gap:8px">
+                      <div style="font-family:var(--font-heading);font-size:19px;flex:1">{{ ph.title }}</div>
+                      <span class="tag" style="{{ ph.tagStyle }}">{{ ph.tag }}</span>
+                    </div>
+                    <div style="padding:0 16px 8px;font-size:11.5px;color:var(--color-neutral-500);line-height:1.4">{{ ph.sub }}</div>
+                    <sc-for list="{{ ph.sections }}" as="sec" hint-placeholder-count="2">
+                      <sc-if value="{{ sec.isHead }}" hint-placeholder-val="{{ false }}">
+                        <div style="padding:13px 16px 5px;font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">{{ sec.label }}</div>
+                      </sc-if>
+                      <sc-if value="{{ sec.isStat }}" hint-placeholder-val="{{ false }}">
+                        <div style="padding:2px 16px 4px;display:grid;grid-template-columns:1fr 1fr;gap:9px">
+                          <sc-for list="{{ sec.items }}" as="s" hint-placeholder-count="2">
+                            <div style="border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:9px 11px;display:flex;flex-direction:column;gap:3px">
+                              <span style="font:600 8.5px/1.1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--color-neutral-600)">{{ s.label }}</span>
+                              <span style="font-family:var(--mono);font-size:17px;font-variant-numeric:tabular-nums;color:{{ s.color }}">{{ s.value }}</span>
+                              <span style="font-size:10px;color:var(--color-neutral-500)">{{ s.sub }}</span>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ sec.isSignal }}" hint-placeholder-val="{{ false }}">
+                        <sc-for list="{{ sec.items }}" as="c" hint-placeholder-count="2">
+                          <div style="padding:11px 16px;border-top:1px solid var(--color-divider);display:flex;flex-direction:column;gap:7px">
+                            <div style="display:flex;align-items:center;gap:7px">
+                              <span style="font-family:var(--mono);font-size:15px;font-weight:600">{{ c.symbol }}</span>
+                              <span class="tag" style="{{ c.actionStyle }}">{{ c.action }}</span>
+                              <span style="margin-left:auto;font-family:var(--mono);font-size:17px;color:{{ c.convColor }}">{{ c.conviction }}</span>
+                            </div>
+                            <div style="font-size:12.5px;color:var(--color-neutral-300);line-height:1.45">{{ c.thesis }}</div>
+                            <div style="display:flex;align-items:center;gap:7px">
+                              <span style="font:11px/1 var(--mono);color:var(--color-neutral-600);flex:1">{{ c.meta }}</span>
+                              <button type="button" class="btn btn-secondary" style="font-size:12px;padding:6px 11px;min-height:36px">Snooze</button>
+                              <button type="button" class="btn btn-primary" style="font-size:12px;padding:6px 13px;min-height:36px">{{ c.cta }}</button>
+                            </div>
+                          </div>
+                        </sc-for>
+                      </sc-if>
+                      <sc-if value="{{ sec.isChart }}" hint-placeholder-val="{{ false }}">
+                        <div style="padding:4px 0 2px">
+                          <svg viewBox="0 0 340 120" preserveAspectRatio="none" style="width:100%;height:118px;display:block">
+                            <line x1="0" y1="36" x2="340" y2="36" stroke="var(--loss)" stroke-width="1" stroke-dasharray="4 4" opacity="0.55"></line>
+                            <line x1="0" y1="90" x2="340" y2="90" stroke="var(--gain)" stroke-width="1" stroke-dasharray="4 4" opacity="0.5"></line>
+                            <path d="M6 80 C 70 76, 120 68, 170 70 S 260 56, 334 44" fill="none" stroke="var(--color-accent)" stroke-width="1.4" opacity="0.8"></path>
+                            <sc-for list="{{ sec.candles }}" as="c" hint-placeholder-count="0">
+                              <g><line x1="{{ c.x }}" y1="{{ c.hi }}" x2="{{ c.x }}" y2="{{ c.lo }}" stroke="{{ c.fill }}" stroke-width="1" opacity="0.85"></line><rect x="{{ c.bx }}" y="{{ c.by }}" width="{{ c.bw }}" height="{{ c.bh }}" fill="{{ c.fill }}"></rect></g>
+                            </sc-for>
+                          </svg>
+                          <div style="padding:6px 16px 0;display:flex;gap:12px;font:10px/1 var(--mono);color:var(--color-neutral-600)">
+                            <span><span style="color:var(--loss)">— —</span> {{ sec.hiLabel }}</span>
+                            <span><span style="color:var(--gain)">— —</span> {{ sec.loLabel }}</span>
+                          </div>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ sec.isRow }}" hint-placeholder-val="{{ false }}">
+                        <div style="padding:0 16px">
+                          <sc-for list="{{ sec.items }}" as="r" hint-placeholder-count="3">
+                            <div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid color-mix(in srgb, var(--color-text) 7%, transparent)">
+                              <div style="flex:1;min-width:0">
+                                <div style="font-family:var(--mono);font-size:12.5px;font-weight:600">{{ r.left }}</div>
+                                <div style="font-size:10.5px;color:var(--color-neutral-500);margin-top:1px">{{ r.leftSub }}</div>
+                              </div>
+                              <div style="text-align:right">
+                                <div style="font-family:var(--mono);font-size:12.5px;font-variant-numeric:tabular-nums;color:{{ r.rightColor }}">{{ r.right }}</div>
+                                <div style="font-size:10.5px;color:var(--color-neutral-600);margin-top:1px">{{ r.rightSub }}</div>
+                              </div>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ sec.isForm }}" hint-placeholder-val="{{ false }}">
+                        <div style="padding:2px 16px 4px;display:flex;flex-direction:column;gap:9px">
+                          <sc-for list="{{ sec.items }}" as="f" hint-placeholder-count="3">
+                            <div style="display:flex;flex-direction:column;gap:4px">
+                              <span style="font:600 8.5px/1 var(--mono);letter-spacing:.09em;text-transform:uppercase;color:var(--color-neutral-600)">{{ f.label }}</span>
+                              <div style="border:1px solid var(--color-divider);border-radius:var(--radius-md);padding:9px 11px;font-family:var(--mono);font-size:12.5px;min-height:38px;display:flex;align-items:center;color:{{ f.color }}">{{ f.value }}</div>
+                            </div>
+                          </sc-for>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ sec.isNote }}" hint-placeholder-val="{{ false }}">
+                        <div style="margin:7px 16px 3px;border:1px solid {{ sec.noteBorder }};border-radius:var(--radius-md);padding:11px 12px;display:flex;flex-direction:column;gap:5px">
+                          <div style="font-size:11.5px;color:{{ sec.noteTitleColor }}">{{ sec.title }}</div>
+                          <div style="font-size:12px;color:var(--color-neutral-400);line-height:1.5">{{ sec.text }}</div>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ sec.isAction }}" hint-placeholder-val="{{ false }}">
+                        <div style="padding:11px 16px 2px;display:flex;gap:8px">
+                          <sc-for list="{{ sec.items }}" as="btn" hint-placeholder-count="2">
+                            <button type="button" class="{{ btn.cls }}" style="{{ btn.style }}">{{ btn.label }}</button>
+                          </sc-for>
+                        </div>
+                      </sc-if>
+                    </sc-for>
+                    <div style="position:absolute;left:0;right:0;bottom:0;background:var(--color-bg);border-top:1px solid var(--color-divider);display:flex;padding:9px 6px 11px">
+                      <sc-for list="{{ ph.tabs }}" as="t" hint-placeholder-count="4">
+                        <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px">
+                          <span style="width:20px;height:3px;border-radius:2px;background:{{ t.mark }}"></span>
+                          <span style="font:10px/1 var(--mono);color:{{ t.color }}">{{ t.label }}</span>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </div>
+                </x-import>
+                <div style="font-size:11.5px;color:var(--color-neutral-600);text-align:center">{{ ph.caption }}</div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+        </sc-if>
+
+      </div>
+
+      <sc-if value="{{ copilotOpen }}" hint-placeholder-val="{{ false }}">
+      <aside style="width:310px;flex:none;border-left:1px solid var(--color-divider);display:flex;flex-direction:column;position:sticky;top:49px;height:calc(100vh - 49px)">
+        <div style="padding:11px 14px;border-bottom:1px solid var(--color-divider);display:flex;align-items:center;gap:7px">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="var(--color-accent)" stroke-width="1.4"><path d="M8 1.6l1.5 3.6 3.6 1.5-3.6 1.5L8 11.8 6.5 8.2 2.9 6.7l3.6-1.5z"></path></svg>
+          <div style="font-family:var(--font-heading);font-size:13px;flex:1">Copilot</div>
+          <button type="button" onClick="{{ toggleCopilot }}" class="btn btn-ghost" style="padding:0 3px" aria-label="Close copilot">
+            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4l8 8M12 4l-8 8"></path></svg>
+          </button>
+        </div>
+        <div style="padding:13px 14px;display:flex;flex-direction:column;gap:12px;overflow:auto;flex:1">
+          <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">Read of the queue</div>
+          <div style="font-size:12.5px;color:var(--color-neutral-300);line-height:1.55;text-wrap:pretty">Seven signals cleared 60. Five are long semis or semi-adjacent — <span style="color:var(--color-text)">NVDA, AMD, AVGO, MU</span> — so taking all four would put 41% of equity in one factor. I'd take NVDA at full size and treat the others as one basket at a third size.</div>
+          <div style="border:1px solid var(--color-accent-800);border-radius:var(--radius-md);padding:10px 11px;display:flex;flex-direction:column;gap:7px">
+            <div style="font-size:11.5px;color:var(--color-accent-300)">Concentration flag</div>
+            <div style="font-size:12px;color:var(--color-neutral-400);line-height:1.5">Semis exposure would go 22% → 41% of equity if the whole queue is filled.</div>
+            <div style="display:flex;gap:6px"><button type="button" class="btn btn-primary" style="font-size:11.5px;padding:3px 8px">Size as basket</button><button type="button" class="btn btn-ghost" style="font-size:11.5px">Ignore</button></div>
+          </div>
+          <div style="height:1px;background:var(--color-divider)"></div>
+          <div style="font:600 9px/1 var(--mono);letter-spacing:.13em;text-transform:uppercase;color:var(--color-neutral-600)">Asked earlier</div>
+          <sc-for list="{{ copilotThread }}" as="m" hint-placeholder-count="3">
+            <div style="display:flex;flex-direction:column;gap:4px">
+              <div style="font:10px/1 var(--mono);letter-spacing:.08em;color:{{ m.roleColor }}">{{ m.role }}</div>
+              <div style="font-size:12.5px;color:var(--color-neutral-300);line-height:1.5;text-wrap:pretty">{{ m.text }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="border-top:1px solid var(--color-divider);padding:11px 14px;display:flex;flex-direction:column;gap:7px">
+          <input class="input" placeholder="Ask about a signal, symbol or strategy…" style="height:32px;font-size:12.5px">
+          <div style="display:flex;gap:5px;flex-wrap:wrap">
+            <sc-for list="{{ copilotChips }}" as="c" hint-placeholder-count="3">
+              <span style="font-size:11px;color:var(--color-neutral-400);border:1px solid var(--color-divider);border-radius:11px;padding:3px 8px;cursor:pointer">{{ c }}</span>
+            </sc-for>
+          </div>
+          <div style="font:10px/1.4 var(--mono);color:var(--color-neutral-700)">reads via MCP · 14 tools · read-only unless you confirm</div>
+        </div>
+      </aside>
+      </sc-if>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;density&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;compact&quot;,&quot;comfortable&quot;],&quot;default&quot;:&quot;compact&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Layout&quot;},&quot;showCopilot&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Layout&quot;},&quot;accountMode&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;paper&quot;,&quot;live&quot;],&quot;default&quot;:&quot;paper&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Data&quot;}}">
+const G='var(--gain)', L='var(--loss)', N4='var(--color-neutral-400)', N5='var(--color-neutral-500)', A='var(--color-accent)';
+
+function spark(seed, up){
+  let v=50, pts=[];
+  for(let i=0;i<40;i++){
+    seed=(seed*1103515245+12345)&0x7fffffff;
+    v += ((seed>>16)%100-50)/22 + (up?0.55:-0.5);
+    pts.push(v);
+  }
+  const mn=Math.min(...pts), mx=Math.max(...pts), r=(mx-mn)||1;
+  const xy = pts.map((p,i)=>[i*(120/39), 36 - (p-mn)/r*30 + 2]);
+  const d = xy.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+  return {spark:d, sparkFill:d+' L120 40 L0 40 Z', sparkX:xy[39][0].toFixed(1), sparkY:xy[39][1].toFixed(1)};
+}
+
+function candleSet(){
+  let seed=987, v=150, out=[];
+  for(let i=0;i<64;i++){
+    seed=(seed*1103515245+12345)&0x7fffffff;
+    const o=v, c=v+((seed>>16)%100-46)/9;
+    v=c;
+    const hi=Math.min(o,c)-6-((seed>>8)%9), lo=Math.max(o,c)+6+((seed>>4)%9);
+    const x=8+i*15.4, bw=9, up=c<o;
+    out.push({x:x.toFixed(1), hi:hi.toFixed(1), lo:lo.toFixed(1), bx:(x-bw/2).toFixed(1),
+      by:Math.min(o,c).toFixed(1), bw:bw, bh:Math.max(2,Math.abs(c-o)).toFixed(1),
+      fill: up?G:L});
+  }
+  return out;
+}
+
+const OPPS=[
+  {symbol:'NVDA',action:'ADD',conviction:86,edge:'EDGE +1.9%',price:'126.71',chg:'+2.57%',up:true,
+   source:'Portfolio · 180 sh',strategy:'momentum-breakout-v4',expiry:'expires 15:45',warn:false,
+   thesis:'Reclaimed the 20-day on 2.1× average volume after a five-day base; the pattern your v4 strategy has taken 34 times with a 64% hit rate.',
+   triggers:['close > sma_20 +1.4%','vol/adv 2.11','atr_pct 3.2','rsi_14 61.8','base_len 5d'],
+   cta:'Review & add',sizeHint:'+60 sh · $7.6k',rr:'R:R 1 : 2.4',sparkLabel:'20d'},
+  {symbol:'AAPL',action:'TRIM',conviction:79,edge:'RISK 2.1R',price:'218.92',chg:'+1.12%',up:true,
+   source:'Portfolio · 120 sh',strategy:'trailing-exit-atr',expiry:'expires at close',warn:true,
+   thesis:'Up 2.1R from entry with momentum decelerating three sessions running — the exit rule wants half off and the stop pulled to 211.40.',
+   triggers:['pnl_r 2.14','mom_slope −0.8','dist_to_stop 3.4%','days_held 19'],
+   cta:'Review trim',sizeHint:'−60 sh · $13.1k',rr:'locks +$1.9k',sparkLabel:'20d'},
+  {symbol:'MU',action:'ENTER',conviction:74,edge:'EDGE +1.4%',price:'104.38',chg:'+3.41%',up:true,
+   source:'Watchlist · Semis',strategy:'gap-continuation',expiry:'expires 15:15',warn:false,
+   thesis:'Gapped 3.4% on earnings and held the opening range for 90 minutes; no position yet, so this is a fresh entry at a third of standard size.',
+   triggers:['gap_pct 3.4','or_hold 90m','vol/adv 3.02','rsi_14 68.2'],
+   cta:'Open ticket',sizeHint:'+45 sh · $4.7k',rr:'R:R 1 : 1.9',sparkLabel:'20d'},
+  {symbol:'PANW',action:'ENTER',conviction:71,edge:'EDGE +1.2%',price:'337.05',chg:'+0.84%',up:true,
+   source:'Screener · Quality momentum',strategy:'mean-revert-rsi',expiry:'expires tomorrow',warn:false,
+   thesis:'Third touch of the rising 50-day with RSI back above 45 — the setup ranked first out of 18 names in this morning\u2019s scan.',
+   triggers:['sma_50 touch 3','rsi_14 46.9','rev_growth 19%','beta 1.08'],
+   cta:'Open ticket',sizeHint:'+22 sh · $7.4k',rr:'R:R 1 : 2.1',sparkLabel:'20d'},
+  {symbol:'TSLA',action:'EXIT',conviction:68,edge:'RISK −1.0R',price:'241.16',chg:'−2.28%',up:false,
+   source:'Portfolio · 90 sh',strategy:'thesis-invalidation',expiry:'expires 15:45',warn:true,
+   thesis:'Lost the entry base and the volume signature that justified the trade; the invalidation rule fired, so this is a full exit rather than a trim.',
+   triggers:['close < entry_base','vol_dry 0.6×','pnl_r −0.98'],
+   cta:'Review exit',sizeHint:'−90 sh · $21.7k',rr:'caps −$2.1k',sparkLabel:'20d'},
+  {symbol:'AVGO',action:'ADD',conviction:66,edge:'EDGE +0.9%',price:'168.44',chg:'+1.63%',up:true,
+   source:'Portfolio · 60 sh',strategy:'momentum-breakout-v4',expiry:'expires 15:45',warn:false,
+   thesis:'Same breakout as NVDA one day later and correlated 0.81 to it — worth a half add only if you are not filling the NVDA signal at full size.',
+   triggers:['close > sma_20 +0.9%','corr_nvda 0.81','vol/adv 1.44'],
+   cta:'Review add',sizeHint:'+30 sh · $5.1k',rr:'R:R 1 : 1.7',sparkLabel:'20d'},
+  {symbol:'COST',action:'ENTER',conviction:63,edge:'EDGE +0.7%',price:'884.20',chg:'+0.42%',up:true,
+   source:'Watchlist · Defensives',strategy:'mean-revert-rsi',expiry:'expires tomorrow',warn:false,
+   thesis:'Oversold into support on a name with no earnings inside the holding window — thin edge, but it diversifies a queue that is otherwise all semis.',
+   triggers:['rsi_14 33.1','dist_sma_200 +2.1%','no_earnings 14d'],
+   cta:'Open ticket',sizeHint:'+8 sh · $7.1k',rr:'R:R 1 : 1.6',sparkLabel:'20d'}
+];
+
+const SOURCES=[
+  {id:'alpaca-bars-1m',kind:'Market data · 1-min bars',symbols:'512',fresh:'240ms',expected:'streaming',health:98,usedBy:6,status:'live',sparkSeed:31,up:true,
+   feeds:['momentum-breakout-v4','trailing-exit-atr','gap-continuation','mean-revert-rsi','thesis-invalidation','earnings-drift-v2'],
+   checks:[['Websocket','connected','ok'],['Missing bars (session)','0','ok'],['Clock skew','+12ms','ok']],
+   log:['14:32:08 · 512 sym · 240ms','14:31:08 · 512 sym · 198ms','14:30:08 · 511 sym · 221ms'],
+   note:'The primary price feed — every strategy reads it. If it stalls the engine pauses evaluation instead of firing on stale bars.'},
+  {id:'alpaca-quotes',kind:'Market data · NBBO quotes',symbols:'512',fresh:'90ms',expected:'streaming',health:99,usedBy:6,status:'live',sparkSeed:53,up:true,
+   feeds:['momentum-breakout-v4','trailing-exit-atr','gap-continuation','mean-revert-rsi','thesis-invalidation','earnings-drift-v2'],
+   checks:[['Websocket','connected','ok'],['Spread sanity','pass','ok'],['Stale ticks','0','ok']],
+   log:['14:32:08 · 512 sym · 90ms','14:32:07 · 512 sym · 88ms','14:32:06 · 512 sym · 94ms'],
+   note:'Feeds the live limit-price check on the order ticket. Latency here sets how tight a marketable-limit the engine will suggest.'},
+  {id:'fundamentals-sharadar',kind:'Fundamentals · daily',symbols:'503',fresh:'14h',expected:'daily 06:00 ET',health:82,usedBy:2,status:'live',sparkSeed:77,up:true,
+   feeds:['mean-revert-rsi','earnings-drift-v2'],
+   checks:[['Last vendor drop','06:02 ET','ok'],['Coverage','503 / 503','ok'],['Restatements','2 flagged','warn']],
+   log:['06:02 · full refresh · 503 sym','yesterday 06:03 · 503 sym','2d ago 06:01 · 502 sym'],
+   note:'Daily by design — 14h old is expected. Only screening and ranking read it, never intraday triggers, so freshness is not time-critical.'},
+  {id:'earnings-calendar',kind:'Events · calendar',symbols:'503',fresh:'2h',expected:'hourly',health:95,usedBy:2,status:'live',sparkSeed:19,up:true,
+   feeds:['gap-continuation','earnings-drift-v2'],
+   checks:[['Next 2 weeks','61 events','ok'],['Confirmed vs est.','88%','ok'],['Timezone','normalized ET','ok']],
+   log:['13:00 · 61 upcoming','12:00 · 61 upcoming','11:00 · 60 upcoming'],
+   note:'Gates the earnings-window blackout — strategies suppress entries inside N days of a print using this feed.'},
+  {id:'news-sentiment',kind:'NLP · rolling score',symbols:'180',fresh:'6m',expected:'~5m rolling',health:90,usedBy:1,status:'live',sparkSeed:64,up:true,
+   feeds:['thesis-invalidation'],
+   checks:[['Model','finbert-v2','ok'],['Docs / hour','1,240','ok'],['Coverage','180 / 512','warn']],
+   log:['14:26 · 132 docs scored','14:21 · 118 docs','14:16 · 141 docs'],
+   note:'Only thesis-invalidation reads it, as a soft veto. Coverage is thin outside large caps, so it never fires a signal on its own.'},
+  {id:'options-flow',kind:'Derived · unusual flow',symbols:'120',fresh:'47m',expected:'~5m',health:24,usedBy:0,status:'stale',sparkSeed:88,up:false,
+   feeds:[],
+   checks:[['Vendor connection','timeout','fail'],['Last good pull','47m ago','fail'],['Queued strategies','1 waiting','warn']],
+   log:['13:45 · partial · 61 sym','13:40 · 120 sym','13:35 · 120 sym'],
+   note:'Stale for 47m — the vendor socket timed out. gap-continuation has an optional flow confirmation that is disabled until this recovers; no signals are blocked, but gap entries are scoring without it.'}
+];
+
+const DEFAULT_ENTRY=[
+  {metric:'close > sma_20',op:'× ≥',threshold:'1.01',weight:'40'},
+  {metric:'vol / adv_20',op:'≥',threshold:'1.50',weight:'30'},
+  {metric:'rsi_14',op:'range',threshold:'50 – 72',weight:'20'},
+  {metric:'base_length_days',op:'≥',threshold:'4',weight:'10'}
+];
+const DEFAULT_EXIT=[
+  {metric:'trailing_stop_atr',op:'×',threshold:'2.5',weight:'—'},
+  {metric:'target_r_multiple',op:'≥',threshold:'2.4 R',weight:'—'},
+  {metric:'time_stop_days',op:'≥',threshold:'15',weight:'—'}
+];
+const DEFAULT_WL=[
+  {symbol:'NVDA',last:'126.71',chg:'+2.57%',up:true},
+  {symbol:'AMD',last:'142.07',chg:'+2.11%',up:true},
+  {symbol:'AVGO',last:'168.44',chg:'+1.63%',up:true},
+  {symbol:'MU',last:'104.38',chg:'+3.41%',up:true},
+  {symbol:'TSM',last:'182.90',chg:'−0.34%',up:false},
+  {symbol:'INTC',last:'22.14',chg:'−1.08%',up:false}
+];
+
+class Component extends DCLogic {
+  state = {screen:'opps', copilot: (this.props?.showCopilot ?? true), side:'buy', tf:'1D', src:'all', srcSel:'options-flow',
+    crudMode:'edit', wlName:'Semis', wlInput:'',
+    wlSymbols:DEFAULT_WL.map(x=>Object.assign({},x)),
+    stratEntry:DEFAULT_ENTRY.map(x=>Object.assign({},x)),
+    stratExit:DEFAULT_EXIT.map(x=>Object.assign({},x))};
+
+  nav(screen){ return () => this.setState({screen}); }
+
+  openStrategy(mode){ return ()=>this.setState({screen:'strategyEdit',crudMode:mode,
+    stratEntry: mode==='new'?[{metric:'close > sma_20',op:'× ≥',threshold:'1.01',weight:'50'}]:DEFAULT_ENTRY.map(x=>Object.assign({},x)),
+    stratExit: mode==='new'?[{metric:'trailing_stop_atr',op:'×',threshold:'2.5',weight:'—'}]:DEFAULT_EXIT.map(x=>Object.assign({},x))}); }
+  openSource(mode){ return ()=>this.setState({screen:'sourceEdit',crudMode:mode}); }
+  openOrder(mode){ return ()=>this.setState({screen:'orderEdit',crudMode:mode}); }
+  openWatch(mode){ return ()=>this.setState({screen:'watchlistEdit',crudMode:mode,
+    wlName: mode==='new'?'':'Semis',
+    wlSymbols: mode==='new'?[]:DEFAULT_WL.map(x=>Object.assign({},x)), wlInput:''}); }
+
+  navModel(){
+    const s=this.state.screen;
+    const mk=(id,label,badge,badgeColor)=>{
+      const on = s===id;
+      return {label, badge, badgeColor: badgeColor||'var(--color-neutral-600)', go:this.nav(id),
+        mark: on ? A : 'transparent',
+        style:'display:flex;align-items:center;gap:9px;padding:6px 13px 6px 13px;border:0;background:'+
+          (on?'color-mix(in srgb, var(--color-accent) 12%, transparent)':'transparent')+
+          ';color:'+(on?'var(--color-text)':N4)+';font:inherit;font-size:12.5px;cursor:pointer;text-align:left'};
+    };
+    return [
+      {label:'Decide', items:[mk('opps','Opportunities','7',A), mk('signal','Signal detail','')]},
+      {label:'Discover', items:[mk('watch','Watchlists','4'), mk('screener','Screener','')]},
+      {label:'Engine', items:[mk('strategies','Strategies','6'), mk('backtest','Backtest',''), mk('sources','Signal sources',''), mk('backfills','Backfills','')]},
+      {label:'Book', items:[mk('exits','Exposure','6'), mk('portfolio','Portfolio',''), mk('orders','Orders','3')]}
+    ];
+  }
+
+  crumbs(){
+    const nn=this.state.crudMode==='new';
+    const m={opps:['Decide','Opportunities'],signal:['Decide','NVDA · momentum-breakout-v4'],
+      watch:['Discover','Watchlists'],screener:['Discover','Screener'],
+      strategies:['Engine','Strategies'],sources:['Engine','Signal sources'],
+      exits:['Book','Exposure'],orders:['Book','Orders'],mobile:['Companion','Mobile'],
+      backtest:['Engine','Backtest'],backfills:['Engine','Backfills'],portfolio:['Book','Portfolio'],
+      strategyEdit:['Engine',nn?'New strategy':'Edit strategy'],
+      sourceEdit:['Engine',nn?'Add source':'Edit source'],
+      orderEdit:['Book',nn?'New order':'Edit order'],
+      watchlistEdit:['Discover',nn?'New watchlist':'Edit watchlist']};
+    return m[this.state.screen]||['Decide','Opportunities'];
+  }
+
+  tabStyle(on){
+    return 'padding:4px 10px;border:0;border-radius:5px;font:inherit;font-size:12px;cursor:pointer;background:'+
+      (on?'color-mix(in srgb, var(--color-text) 9%, transparent)':'transparent')+';color:'+(on?'var(--color-text)':N5);
+  }
+
+  renderVals(){
+    const st=this.state, cr=this.crumbs();
+    const sel = SOURCES.find(x=>x.id===st.srcSel) || SOURCES[SOURCES.length-1];
+    const checkColor = k => k==='ok' ? G : (k==='warn' ? 'var(--paper)' : L);
+    const srcStatusStyle = status => status==='live'
+      ? 'background:color-mix(in srgb, var(--gain) 15%, transparent);color:'+G+';font:10px/1.6 var(--mono);letter-spacing:.06em'
+      : 'background:color-mix(in srgb, var(--loss) 15%, transparent);color:'+L+';font:10px/1.6 var(--mono);letter-spacing:.06em';
+    const sideBtn = (side,color) => {
+      const on = st.side===side;
+      return 'padding:8px;border-radius:var(--radius-md);border:1px solid '+(on?color:'var(--color-divider)')+
+        ';background:'+(on?'color-mix(in srgb, '+color+' 15%, transparent)':'transparent')+
+        ';color:'+(on?color:N5)+';font:600 12.5px/1 var(--mono);letter-spacing:.08em;cursor:pointer';
+    };
+    const actionTint = a => {
+      const c = (a==='ADD'||a==='ENTER') ? G : (a==='TRIM' ? 'var(--paper)' : L);
+      return 'background:color-mix(in srgb, '+c+' 15%, transparent);color:'+c+';font:10.5px/1.6 var(--mono);letter-spacing:.08em';
+    };
+
+    const tabBar = active => ['Decide','Discover','Engine','Book'].map(l=>({label:l, mark: l===active?A:'transparent', color: l===active?'var(--color-accent-100)':N5}));
+    const paperTag='background:color-mix(in srgb, var(--paper) 16%, transparent);color:var(--paper);font:9.5px/1.6 var(--mono);letter-spacing:.1em';
+    const admTag='background:color-mix(in srgb, var(--color-accent) 16%, transparent);color:var(--color-accent-200);font:9.5px/1.6 var(--mono);letter-spacing:.08em';
+    const cntTag='background:color-mix(in srgb, var(--color-text) 8%, transparent);color:'+N4+';font:9.5px/1.6 var(--mono);letter-spacing:.04em';
+    const noteWarn='var(--paper)', noteAcc='var(--color-accent-800)';
+    const mcandles = seed => { let v=70,out=[]; for(let i=0;i<20;i++){ seed=(seed*1103515245+12345)&0x7fffffff; const o=v,c=v+((seed>>16)%100-46)/7; v=c; const hi=Math.min(o,c)-3-((seed>>8)%5),lo=Math.max(o,c)+3+((seed>>4)%5); const x=12+i*16.4,bw=8,up=c<o; out.push({x:x.toFixed(1),hi:hi.toFixed(1),lo:lo.toFixed(1),bx:(x-bw/2).toFixed(1),by:Math.min(o,c).toFixed(1),bw:bw,bh:Math.max(2,Math.abs(c-o)).toFixed(1),fill:up?G:L}); } return out; };
+
+    return {
+      crumbModule:cr[0], crumbPage:cr[1],
+      navSections:this.navModel(),
+      isOpps: st.screen==='opps', isSignal: st.screen==='signal',
+      isWatch: st.screen==='watch', isScreener: st.screen==='screener',
+      isStrategies: st.screen==='strategies', isExits: st.screen==='exits',
+      isSources: st.screen==='sources', isOrders: st.screen==='orders',
+      isMobile: st.screen==='mobile',
+      isBacktest: st.screen==='backtest', isBackfills: st.screen==='backfills', isPortfolio: st.screen==='portfolio',
+      goScreener: this.nav('screener'),
+      dens: this.props?.density ?? 'compact',
+      isStratEdit: st.screen==='strategyEdit', isSourceEdit: st.screen==='sourceEdit',
+      isOrderEdit: st.screen==='orderEdit', isWatchEdit: st.screen==='watchlistEdit',
+      crudNew: st.crudMode==='new', notNew: st.crudMode!=='new',
+      stratEditTitle: st.crudMode==='new' ? 'New strategy' : 'momentum-breakout-v4',
+      sourceEditTitle: st.crudMode==='new' ? 'Add signal source' : 'options-flow',
+      orderEditTitle: st.crudMode==='new' ? 'New order' : 'AAPL · working sell',
+      watchEditTitle: st.crudMode==='new' ? 'New watchlist' : 'Edit · Semis',
+      newStrategy: this.openStrategy('new'), editStrategy: this.openStrategy('edit'),
+      addSource: this.openSource('new'), editSource: this.openSource('edit'),
+      newOrder: this.openOrder('new'), editOrder: this.openOrder('edit'),
+      newWatch: this.openWatch('new'), editWatch: this.openWatch('edit'),
+      goSources: this.nav('sources'), goOrders: this.nav('orders'), goWatch: this.nav('watch'),
+      goBackfills: this.nav('backfills'), goExits: this.nav('exits'), goBacktest: this.nav('backtest'), goPortfolio: this.nav('portfolio'),
+      entryRules: st.stratEntry.map((r,i)=>Object.assign({}, r, {remove:()=>this.setState(s=>({stratEntry:s.stratEntry.filter((_,j)=>j!==i)}))})),
+      exitRules: st.stratExit.map((r,i)=>Object.assign({}, r, {remove:()=>this.setState(s=>({stratExit:s.stratExit.filter((_,j)=>j!==i)}))})),
+      addEntry: ()=>this.setState(s=>({stratEntry:[...s.stratEntry,{metric:'new_metric',op:'≥',threshold:'0',weight:'10'}]})),
+      addExit: ()=>this.setState(s=>({stratExit:[...s.stratExit,{metric:'new_rule',op:'≥',threshold:'0',weight:'—'}]})),
+      wlNameVal: st.wlName, wlInputVal: st.wlInput, wlCount: st.wlSymbols.length,
+      setWlInput: (e)=>this.setState({wlInput:e.target.value}),
+      wlKey: (e)=>{ if(e.key==='Enter'){ e.preventDefault(); this.setState(s=>{const v=(s.wlInput||'').trim().toUpperCase(); if(!v)return null; return {wlSymbols:[...s.wlSymbols,{symbol:v,last:'—',chg:'added',up:true}],wlInput:''};}); } },
+      addWlSymbol: ()=>this.setState(s=>{const v=(s.wlInput||'').trim().toUpperCase(); if(!v)return null; return {wlSymbols:[...s.wlSymbols,{symbol:v,last:'—',chg:'added',up:true}],wlInput:''};}),
+      wlRows: st.wlSymbols.map((r,i)=>Object.assign({}, r, {chgColor:r.up?G:L, remove:()=>this.setState(s=>({wlSymbols:s.wlSymbols.filter((_,j)=>j!==i)}))})),
+      fieldMap:[
+        {from:'unusual_call_vol',to:'flow_call_ratio',type:'float'},
+        {from:'put_call_skew',to:'flow_skew',type:'float'},
+        {from:'sweep_count_5m',to:'flow_sweeps',type:'int'},
+        {from:'ts',to:'as_of',type:'datetime'}
+      ],
+      orderPreview:[
+        {k:'Est. proceeds',v:'$13,104',color:'var(--color-text)'},
+        {k:'Realized on fill',v:'+$1,910',color:G},
+        {k:'Position after',v:'60 sh · 5.3%',color:'var(--color-text)'},
+        {k:'Locks',v:'half of +2.1R',color:G}
+      ],
+
+      watchlists: [
+        {name:'Semis',ready:'3'},{name:'Quality momentum',ready:'2'},
+        {name:'Defensives',ready:'1'},{name:'Earnings next 2w',ready:'0'}
+      ].map((w,i)=>({name:w.name, ready:w.ready+' ready',
+        color: w.ready==='0' ? 'var(--color-neutral-600)' : A,
+        style:'display:flex;align-items:center;gap:8px;width:100%;padding:7px 14px;border:0;font:inherit;font-size:12.5px;cursor:pointer;background:'+
+          (i===0?'color-mix(in srgb, var(--color-accent) 12%, transparent)':'transparent')+';color:'+(i===0?'var(--color-text)':N4)})),
+
+      watchRows: [
+        {symbol:'MU',last:'104.38',chg:'+3.41%',up:true,pct:'100%',state:'firing',color:G,blocking:'—',strategy:'gap-continuation',action:'In queue →'},
+        {symbol:'AVGO',last:'168.44',chg:'+1.63%',up:true,pct:'100%',state:'firing',color:G,blocking:'—',strategy:'momentum-breakout-v4',action:'In queue →'},
+        {symbol:'AMD',last:'142.07',chg:'+2.11%',up:true,pct:'86%',state:'1 away',color:A,blocking:'vol/adv 1.31 < 1.50',strategy:'momentum-breakout-v4',action:'Alert me'},
+        {symbol:'SMCI',last:'38.62',chg:'+4.72%',up:true,pct:'74%',state:'1 away',color:A,blocking:'atr_pct 6.1 > 4.0',strategy:'gap-continuation',action:'Alert me'},
+        {symbol:'TSM',last:'182.90',chg:'−0.34%',up:false,pct:'52%',state:'watching',color:N4,blocking:'2 conditions',strategy:'momentum-breakout-v4',action:'Alert me'},
+        {symbol:'INTC',last:'22.14',chg:'−1.08%',up:false,pct:'23%',state:'quiet',color:'var(--color-neutral-600)',blocking:'3 conditions',strategy:'mean-revert-rsi',action:''},
+        {symbol:'ASML',last:'742.30',chg:'+0.58%',up:true,pct:'18%',state:'quiet',color:'var(--color-neutral-600)',blocking:'3 conditions',strategy:'momentum-breakout-v4',action:''}
+      ].map(r=>Object.assign({}, r, {chgColor: r.up?G:L, open:this.nav('signal')})),
+
+      criteria: [
+        {metric:'vol / adv_20',op:'≥',threshold:'1.50',weight:'0.4',weightPct:'40%',hard:true},
+        {metric:'rev_growth_yoy',op:'≥',threshold:'12%',weight:'0.3',weightPct:'30%',hard:false},
+        {metric:'rsi_14',op:'≤',threshold:'70',weight:'0.2',weightPct:'20%',hard:false},
+        {metric:'adv_usd',op:'≥',threshold:'$50M',weight:'0.1',weightPct:'10%',hard:true}
+      ].map(c=>Object.assign({}, c, {
+        hardLabel: c.hard?'hard':'rank',
+        hardStyle: c.hard
+          ? 'background:color-mix(in srgb, var(--paper) 15%, transparent);color:var(--paper);font-size:10px'
+          : 'background:color-mix(in srgb, var(--color-text) 8%, transparent);color:'+N5+';font-size:10px'
+      })),
+
+      screenRows: [
+        {rank:1,symbol:'PANW',score:'0.91',pct:'91%',pe:'52.4',rsi:'46.9',rev:'+19%',atr:'2.4',held:'—'},
+        {rank:2,symbol:'MU',score:'0.87',pct:'87%',pe:'18.2',rsi:'68.2',rev:'+41%',atr:'4.1',held:'—'},
+        {rank:3,symbol:'NVDA',score:'0.84',pct:'84%',pe:'44.1',rsi:'61.8',rev:'+62%',atr:'3.2',held:'180 sh'},
+        {rank:4,symbol:'CRWD',score:'0.78',pct:'78%',pe:'61.7',rsi:'54.2',rev:'+22%',atr:'3.0',held:'—'},
+        {rank:5,symbol:'AVGO',score:'0.72',pct:'72%',pe:'34.8',rsi:'59.4',rev:'+16%',atr:'2.7',held:'60 sh'},
+        {rank:6,symbol:'NOW',score:'0.66',pct:'66%',pe:'58.2',rsi:'51.0',rev:'+21%',atr:'2.2',held:'—'},
+        {rank:7,symbol:'COST',score:'0.61',pct:'61%',pe:'49.6',rsi:'33.1',rev:'+13%',atr:'1.4',held:'—'}
+      ].map(r=>Object.assign({}, r, {color: parseFloat(r.score)>=0.8 ? G : (parseFloat(r.score)>=0.65 ? A : N4)})),
+
+      strategies: [
+        {id:'momentum-breakout-v4',state:'ACTIVE',signals:'42',taken:'34',hit:'64.7%',exp:'+1.9%',dd:'−8.2%',up:true},
+        {id:'trailing-exit-atr',state:'ACTIVE',signals:'28',taken:'26',hit:'71.4%',exp:'+1.2%',dd:'−4.1%',up:true},
+        {id:'gap-continuation',state:'ACTIVE',signals:'19',taken:'11',hit:'54.5%',exp:'+1.4%',dd:'−11.6%',up:true},
+        {id:'mean-revert-rsi',state:'ACTIVE',signals:'31',taken:'18',hit:'58.1%',exp:'+0.7%',dd:'−9.4%',up:true},
+        {id:'thesis-invalidation',state:'ACTIVE',signals:'6',taken:'6',hit:'—',exp:'+0.4%',dd:'−2.0%',up:true},
+        {id:'earnings-drift-v2',state:'PAUSED',signals:'14',taken:'0',hit:'48.2%',exp:'−0.3%',dd:'−14.8%',up:false}
+      ].map((s,i)=>Object.assign({}, s, spark(41+i*23, s.up), {
+        open: this.openStrategy('edit'),
+        hitColor: s.hit==='—' ? N5 : (parseFloat(s.hit)>=60 ? G : N4),
+        expColor: s.up ? G : L,
+        stateStyle: s.state==='ACTIVE'
+          ? 'background:color-mix(in srgb, var(--gain) 15%, transparent);color:'+G+';font-size:10px'
+          : 'background:color-mix(in srgb, var(--paper) 15%, transparent);color:var(--paper);font-size:10px'
+      })),
+
+      equityPath:'M0 196 C 90 190, 150 178, 220 172 S 320 152, 400 150 S 470 122, 540 118 S 640 84, 720 70 S 830 44, 900 26',
+      equityFill:'M0 196 C 90 190, 150 178, 220 172 S 320 152, 400 150 S 470 122, 540 118 S 640 84, 720 70 S 830 44, 900 26 L900 220 L0 220 Z',
+      benchPath:'M0 198 C 100 194, 180 190, 260 184 S 400 176, 480 168 S 620 142, 720 124 S 840 96, 900 82',
+      diagnostics: [
+        {k:'CAGR',v:'+21.4%',color:G},{k:'Sharpe',v:'1.38',color:'var(--color-text)'},
+        {k:'Max drawdown',v:'−8.2%',color:L},{k:'Avg hold',v:'6.4 days',color:'var(--color-text)'},
+        {k:'Slippage assumed',v:'4 bps',color:N5},{k:'Trades / month',v:'~14',color:'var(--color-text)'}
+      ],
+
+      btMarkers:[
+        {cx:150,cy:180,fill:G},{cx:300,cy:158,fill:L},{cx:430,cy:150,fill:G},
+        {cx:560,cy:116,fill:L},{cx:690,cy:74,fill:G},{cx:820,cy:44,fill:L}
+      ],
+      btBars: [
+        {date:'2024-08-12',close:'—',vol:'—',sma:'—',rsi:'—',vadv:'—',warm:'✓',action:'Warm-up',conv:'—'},
+        {date:'2024-10-28',close:'118.40',vol:'38.2M',sma:'—',rsi:'—',vadv:'1.02',warm:'✓',action:'Warm-up',conv:'—'},
+        {date:'2024-11-04',close:'121.90',vol:'41.0M',sma:'119.85',rsi:'54.1',vadv:'1.11',warm:'',action:'Flat',conv:'0.32'},
+        {date:'2024-11-05',close:'124.63',vol:'62.7M',sma:'120.42',rsi:'61.8',vadv:'2.11',warm:'',action:'Buy',conv:'0.86'},
+        {date:'2024-11-06',close:'126.71',vol:'48.9M',sma:'121.20',rsi:'64.0',vadv:'1.58',warm:'',action:'Hold',conv:'0.71'},
+        {date:'2024-11-07',close:'128.02',vol:'39.4M',sma:'122.05',rsi:'66.2',vadv:'1.24',warm:'',action:'Hold',conv:'0.68'},
+        {date:'2024-11-08',close:'127.10',vol:'33.1M',sma:'122.88',rsi:'59.4',vadv:'0.98',warm:'',action:'Hold',conv:'0.55'},
+        {date:'2024-11-11',close:'132.98',vol:'71.2M',sma:'124.02',rsi:'72.6',vadv:'2.34',warm:'',action:'Sell',conv:'0.79'},
+        {date:'2024-11-12',close:'131.44',vol:'40.7M',sma:'124.90',rsi:'63.1',vadv:'1.30',warm:'',action:'Flat',conv:'0.28'}
+      ].map(b=>Object.assign({}, b, {
+        actionColor: b.action==='Buy'?G:(b.action==='Sell'?L:(b.action==='Warm-up'?N5:'var(--color-neutral-300)')),
+        convColor: b.conv==='—'?N5:(parseFloat(b.conv)>=0.7?G:(parseFloat(b.conv)>=0.5?A:N4)),
+        rowStyle:(b.action==='Buy'||b.action==='Sell')?'background:color-mix(in srgb, '+(b.action==='Buy'?G:L)+' 8%, transparent)':''
+      })),
+
+      backfillStats:[
+        {label:'Jobs running',value:'2',sub:'1 queued behind',color:A},
+        {label:'Completed today',value:'18',sub:'of 21 triggered',color:G},
+        {label:'Symbols covered',value:'512',sub:'1d · 1h · 15m',color:'var(--color-text)'},
+        {label:'Bars stored',value:'48.2M',sub:'across timeframes',color:'var(--color-text)'},
+        {label:'Needs attention',value:'2',sub:'1 partial · 1 failed',color:L}
+      ],
+      backfillJobs:[
+        {status:'running',label:'running',symbols:'AAPL',tf:'1d',bars:'100 / 500',chunks:'1 / 5',pct:'20%',jobId:'job-1',cancelable:true,error:''},
+        {status:'queued',label:'queued',symbols:'MU, SMCI',tf:'1h',bars:'0 / 2,400',chunks:'0 / 12',pct:'2%',jobId:'job-2',cancelable:true,error:''},
+        {status:'completed',label:'completed',symbols:'NVDA, AVGO, TSM',tf:'1d',bars:'5,412 / 5,412',chunks:'18 / 18',pct:'100%',jobId:'job-7',cancelable:false,error:''},
+        {status:'partial',label:'partial',symbols:'PANW, CRWD, NOW',tf:'15m',bars:'18,204 / 21,600',chunks:'9 / 12',pct:'84%',jobId:'job-5',cancelable:false,error:'CRWD: vendor returned 3 empty chunks — 15m history only starts 2023-04.'},
+        {status:'failed',label:'failed',symbols:'INTC',tf:'1d',bars:'0 / 5,412',chunks:'0 / 18',pct:'0%',jobId:'job-4',cancelable:false,error:'marketdata: upstream 429 — rate limited, retry after cooldown.'},
+        {status:'canceled',label:'canceled',symbols:'COST',tf:'1h',bars:'640 / 2,400',chunks:'3 / 12',pct:'27%',jobId:'job-3',cancelable:false,error:''}
+      ].map(j=>{
+        const c = j.status==='completed'?G:(j.status==='running'?A:(j.status==='partial'?'var(--paper)':(j.status==='failed'?L:N5)));
+        const tintBase = (j.status==='queued'||j.status==='canceled')?'var(--color-text)':c;
+        return Object.assign({}, j, {
+          hasError: !!j.error, barColor: c,
+          statusStyle:'background:color-mix(in srgb, '+tintBase+' 15%, transparent);color:'+c+';font:10px/1.6 var(--mono);letter-spacing:.06em'
+        });
+      }),
+
+      portfolioStats:[
+        {label:'Combined equity',value:'$80,000',sub:'2 accounts',color:'var(--color-text)'},
+        {label:'Cash',value:'$30,000',sub:'37% of equity',color:'var(--color-text)'},
+        {label:'Buying power',value:'$40,000',sub:'Alpaca margin',color:'var(--color-text)'},
+        {label:'Day P&L',value:'+$100',sub:'+0.13% blended',color:G},
+        {label:'Total P&L',value:'+$2,300',sub:'open + realized',color:G}
+      ],
+      portfolioAccounts:[
+        {code:'A1F2',name:'Alpaca · Primary',broker:'Alpaca',
+         stats:[{k:'Equity',v:'$50,000',color:'var(--color-text)'},{k:'Cash',v:'$20,000',color:'var(--color-text)'},{k:'Buying power',v:'$40,000',color:'var(--color-text)'},{k:'Day P&L',v:'+$150 · +0.30%',color:G},{k:'Total P&L',v:'+$1,500',color:G},{k:'Positions',v:'4 open',color:'var(--color-text)'}],
+         note:'Margin account · 4 open positions mirrored below'},
+        {code:'I9K3',name:'IBKR · Long-term',broker:'IBKR',
+         stats:[{k:'Equity',v:'$30,000',color:'var(--color-text)'},{k:'Cash',v:'$10,000',color:'var(--color-text)'},{k:'Buying power',v:'—',color:N5},{k:'Day P&L',v:'−$50 · −0.17%',color:L},{k:'Total P&L',v:'+$800',color:G},{k:'Positions',v:'flat today',color:N4}],
+         note:'Cash account · no open positions right now'}
+      ],
+      portfolioPositions:[
+        {symbol:'NVDA',account:'Alpaca · Primary',qty:'60',avg:'113.80',mkt:'$7,608',unrl:'+$820',day:'+$90',up:true,dayUp:true},
+        {symbol:'AAPL',account:'Alpaca · Primary',qty:'40',avg:'215.65',mkt:'$8,730',unrl:'+$100',day:'+$40',up:true,dayUp:true},
+        {symbol:'AVGO',account:'Alpaca · Primary',qty:'20',avg:'159.40',mkt:'$3,369',unrl:'+$180',day:'+$30',up:true,dayUp:true},
+        {symbol:'MSFT',account:'Alpaca · Primary',qty:'15',avg:'400.10',mkt:'$6,240',unrl:'+$400',day:'−$10',up:true,dayUp:false}
+      ].map(p=>Object.assign({}, p, {unrlColor:p.up?G:L, dayColor:p.dayUp?G:L})),
+
+      riskStats: [
+        {label:'Total risk at stops',value:'$4,180',sub:'1.3% of equity',color:'var(--color-text)'},
+        {label:'Largest factor',value:'Semis 22%',sub:'NVDA · AVGO · MU',color:'var(--paper)'},
+        {label:'Positions past target',value:'1',sub:'AAPL 2.1R',color:G},
+        {label:'Stops within 2%',value:'2',sub:'TSLA · PFE',color:L}
+      ],
+      exposures: [
+        {symbol:'NVDA',qty:'180',weight:'7.3%',openR:'+1.4R',risk:'−$860',stopDist:'3.8%',stopPct:'62%',stopColor:G,rColor:G,rule:'trailing-exit-atr',factor:'Semis',flag:'Add signal',flagColor:G},
+        {symbol:'AAPL',qty:'120',weight:'10.6%',openR:'+2.1R',risk:'−$1,120',stopDist:'3.4%',stopPct:'55%',stopColor:'var(--paper)',rColor:G,rule:'trailing-exit-atr',factor:'Mega-cap',flag:'Trim signal',flagColor:'var(--paper)'},
+        {symbol:'TSLA',qty:'90',weight:'8.8%',openR:'−1.0R',risk:'−$410',stopDist:'1.6%',stopPct:'22%',stopColor:L,rColor:L,rule:'thesis-invalidation',factor:'Discretionary',flag:'Exit signal',flagColor:L},
+        {symbol:'AVGO',qty:'60',weight:'4.1%',openR:'+0.6R',risk:'−$520',stopDist:'5.2%',stopPct:'82%',stopColor:G,rColor:G,rule:'trailing-exit-atr',factor:'Semis',flag:'Add signal',flagColor:G},
+        {symbol:'PFE',qty:'400',weight:'3.6%',openR:'−0.7R',risk:'−$690',stopDist:'1.9%',stopPct:'26%',stopColor:L,rColor:L,rule:'mean-revert-rsi',factor:'Healthcare',flag:'Stop near',flagColor:L},
+        {symbol:'COST',qty:'42',weight:'6.9%',openR:'+0.3R',risk:'−$580',stopDist:'4.4%',stopPct:'70%',stopColor:G,rColor:N4,rule:'mean-revert-rsi',factor:'Defensive',flag:'—',flagColor:N5}
+      ].map(p=>Object.assign({}, p, {open:this.nav('signal')})),
+
+      sources: SOURCES.map(s=>{
+        const sp=spark(s.sparkSeed, s.up);
+        return Object.assign({}, s, {
+          spark: sp.spark,
+          usedByLabel: s.usedBy===0 ? 'none' : (s.usedBy+' strat'),
+          usedByColor: s.usedBy===0 ? L : 'var(--color-neutral-400)',
+          freshColor: s.status==='stale' ? L : (s.health>=92 ? G : N4),
+          healthPct: s.health+'%',
+          healthColor: s.health>=90?G:(s.health>=55?'var(--paper)':L),
+          rowStyle: 'cursor:pointer;'+(st.srcSel===s.id?'background:color-mix(in srgb, var(--color-accent) 10%, transparent)':''),
+          markColor: st.srcSel===s.id?A:'transparent',
+          open: () => this.setState({srcSel:s.id}),
+          statusStyle: srcStatusStyle(s.status)
+        });
+      }),
+      sourceStats:[
+        {label:'Sources live',value:'5',sub:'of 6 configured',color:G},
+        {label:'Needs attention',value:'1',sub:'options-flow · 47m stale',color:L},
+        {label:'Symbols covered',value:'512',sub:'union across feeds',color:'var(--color-text)'},
+        {label:'Median latency',value:'240ms',sub:'price + quote feeds',color:G},
+        {label:'Strategies fed',value:'6 / 6',sub:'all evaluating',color:G}
+      ],
+      strategyStats:[
+        {label:'Active strategies',value:'5',sub:'1 paused',color:G},
+        {label:'Signals · 30d',value:'140',sub:'95 taken',color:'var(--color-text)'},
+        {label:'Blended hit rate',value:'62.1%',sub:'on taken signals',color:G},
+        {label:'Portfolio expectancy',value:'+1.3%',sub:'per signal',color:G},
+        {label:'Queue share',value:'71%',sub:'of the active queue',color:A}
+      ],
+      selId:sel.id, selKind:sel.kind, selStatus:sel.status,
+      selStatusStyle: srcStatusStyle(sel.status),
+      selFresh:sel.fresh, selExpected:sel.expected,
+      selHealthPct: sel.health+'%',
+      selHealthColor: sel.health>=90?G:(sel.health>=55?'var(--paper)':L),
+      selFeeds: sel.feeds, selHasFeeds: sel.feeds.length>0, selNoFeeds: sel.feeds.length===0,
+      selChecks: sel.checks.map(c=>({name:c[0],value:c[1],color:checkColor(c[2])})),
+      selLog: sel.log, selNote: sel.note,
+      selIsStale: sel.status==='stale',
+
+      orders: [
+        {symbol:'NVDA',side:'BUY',type:'Limit · day',qty:'60',filled:'60',avg:'126.74',status:'filled',origin:'momentum-breakout-v4',time:'14:14',action:'View'},
+        {symbol:'AAPL',side:'SELL',type:'Limit · day',qty:'60',filled:'0',avg:'—',status:'working',origin:'trailing-exit-atr',time:'14:22',action:'Edit'},
+        {symbol:'MU',side:'BUY',type:'Stop limit',qty:'45',filled:'0',avg:'—',status:'working',origin:'gap-continuation',time:'14:28',action:'Edit'},
+        {symbol:'TSLA',side:'SELL',type:'Market',qty:'90',filled:'90',avg:'241.02',status:'filled',origin:'thesis-invalidation',time:'13:51',action:'View'},
+        {symbol:'PANW',side:'BUY',type:'Limit · GTC',qty:'22',filled:'0',avg:'—',status:'working',origin:'Manual',time:'13:40',action:'Edit'},
+        {symbol:'SMCI',side:'BUY',type:'Limit · day',qty:'120',filled:'0',avg:'—',status:'rejected',origin:'gap-continuation',time:'11:02',action:'Why?'}
+      ].map(o=>Object.assign({}, o, {
+        open: this.openOrder('edit'),
+        sideColor: o.side==='BUY'?G:L,
+        statusStyle: (o.status==='filled'
+          ? 'background:color-mix(in srgb, var(--gain) 15%, transparent);color:'+G
+          : o.status==='working'
+          ? 'background:color-mix(in srgb, var(--color-accent) 15%, transparent);color:var(--color-accent-200)'
+          : 'background:color-mix(in srgb, var(--loss) 15%, transparent);color:'+L)+';font-size:10px'
+      })),
+
+      phones: [
+        {title:'Queue', tag:'PAPER', tagStyle:paperTag, tab:'Decide', caption:'Decide · the ranked queue',
+         sub:'7 actionable · 3 need you before the close',
+         sections:[
+           {isStat:true, items:[
+             {label:'Actionable',value:'7',sub:'conv ≥ 60',color:A},
+             {label:'Expiring <90m',value:'4',sub:'NVDA MU TSLA',color:'var(--paper)'}
+           ]},
+           {isSignal:true, items:[
+             {symbol:'NVDA',action:'ADD',actionStyle:actionTint('ADD'),conviction:'86',convColor:G,thesis:'Reclaimed the 20-day on 2.1× volume — v4 strategy, 64% hit rate.',meta:'+60 sh · expires 15:45',cta:'Review'},
+             {symbol:'AAPL',action:'TRIM',actionStyle:actionTint('TRIM'),conviction:'79',convColor:A,thesis:'Up 2.1R, momentum fading — half off, stop to 211.40.',meta:'−60 sh · at close',cta:'Review'},
+             {symbol:'TSLA',action:'EXIT',actionStyle:actionTint('EXIT'),conviction:'68',convColor:A,thesis:'Lost the entry base — invalidation rule fired, full exit.',meta:'−90 sh · expires 15:45',cta:'Review'}
+           ]}
+         ]},
+        {title:'NVDA', tag:'ADD', tagStyle:actionTint('ADD'), tab:'Decide', caption:'Decide · signal detail',
+         sub:'ADD · momentum-breakout-v4 · conv 86 · valid to 15:45',
+         sections:[
+           {isChart:true, candles:mcandles(771), hiLabel:'133.20 target', loLabel:'121.90 stop'},
+           {isHead:true, label:'Why this fired · 5 of 6'},
+           {isRow:true, items:[
+             {left:'close > sma_20 ×1.01',leftSub:'entry gate',right:'1.014',rightColor:G,rightSub:'pass'},
+             {left:'vol / adv_20',leftSub:'≥ 1.50',right:'2.11',rightColor:G,rightSub:'pass'},
+             {left:'rsi_14',leftSub:'50–72 band',right:'61.8',rightColor:G,rightSub:'pass'},
+             {left:'earnings_gap_days',leftSub:'≥ 10',right:'6',rightColor:'var(--paper)',rightSub:'soft'}
+           ]},
+           {isAction:true, items:[
+             {label:'Snooze 1h',cls:'btn btn-secondary',style:'font-size:12.5px;padding:11px 14px;min-height:46px'},
+             {label:'Add 60 NVDA →',cls:'btn btn-primary',style:'flex:1;font-size:13px;padding:11px;min-height:46px'}
+           ]}
+         ]},
+        {title:'Watchlists', tag:'4 lists', tagStyle:cntTag, tab:'Discover', caption:'Discover · watchlists',
+         sub:'Semis · 3 of 7 near firing',
+         sections:[
+           {isRow:true, items:[
+             {left:'MU',leftSub:'gap-continuation',right:'+3.41%',rightColor:G,rightSub:'firing · queued'},
+             {left:'AVGO',leftSub:'momentum-breakout-v4',right:'+1.63%',rightColor:G,rightSub:'firing · queued'},
+             {left:'AMD',leftSub:'1 away · vol/adv 1.31',right:'+2.11%',rightColor:G,rightSub:'86%'},
+             {left:'SMCI',leftSub:'1 away · atr 6.1',right:'+4.72%',rightColor:G,rightSub:'74%'},
+             {left:'TSM',leftSub:'watching · 2 conds',right:'−0.34%',rightColor:L,rightSub:'52%'}
+           ]},
+           {isAction:true, items:[{label:'+ New watchlist',cls:'btn btn-secondary',style:'flex:1;font-size:12.5px;min-height:44px'}]}
+         ]},
+        {title:'Screener', tag:'S&P 500', tagStyle:cntTag, tab:'Discover', caption:'Discover · screener',
+         sub:'Ranked by your criteria · top of 503',
+         sections:[
+           {isRow:true, items:[
+             {left:'PANW',leftSub:'pe 52.4 · rsi 46.9',right:'0.91',rightColor:G,rightSub:'rank 1'},
+             {left:'MU',leftSub:'pe 18.2 · rev +41%',right:'0.87',rightColor:G,rightSub:'rank 2'},
+             {left:'NVDA',leftSub:'held 180 sh',right:'0.84',rightColor:G,rightSub:'rank 3'},
+             {left:'CRWD',leftSub:'pe 61.7 · rsi 54.2',right:'0.78',rightColor:A,rightSub:'rank 4'},
+             {left:'AVGO',leftSub:'held 60 sh',right:'0.72',rightColor:A,rightSub:'rank 5'}
+           ]}
+         ]},
+        {title:'Strategies', tag:'6 active', tagStyle:cntTag, tab:'Engine', caption:'Engine · strategies',
+         sub:'What puts signals in your queue',
+         sections:[
+           {isStat:true, items:[
+             {label:'Active',value:'5',sub:'1 paused',color:G},
+             {label:'Hit rate',value:'62.1%',sub:'on taken',color:G}
+           ]},
+           {isRow:true, items:[
+             {left:'momentum-breakout-v4',leftSub:'active · 42 signals',right:'+1.9%',rightColor:G,rightSub:'exp / signal'},
+             {left:'trailing-exit-atr',leftSub:'active · 28 signals',right:'+1.2%',rightColor:G,rightSub:'71.4% hit'},
+             {left:'mean-revert-rsi',leftSub:'active · 31 signals',right:'+0.7%',rightColor:G,rightSub:'58.1% hit'},
+             {left:'earnings-drift-v2',leftSub:'paused · paper',right:'−0.3%',rightColor:L,rightSub:'48.2% hit'}
+           ]}
+         ]},
+        {title:'Backtest', tag:'v4', tagStyle:cntTag, tab:'Engine', caption:'Engine · backtest',
+         sub:'momentum-breakout-v4 · 2024 → 2026',
+         sections:[
+           {isChart:true, candles:mcandles(553), hiLabel:'+18.4% strat', loLabel:'+9.1% SPY'},
+           {isStat:true, items:[
+             {label:'CAGR',value:'+21.4%',sub:'net of 4bps',color:G},
+             {label:'Sharpe',value:'1.38',sub:'max DD −8.2%',color:'var(--color-text)'}
+           ]},
+           {isNote:true, noteBorder:noteWarn, noteTitleColor:'var(--paper)', title:'Insufficient history · AAPL', text:'Have 3 bars, need 52. Backfill 2024-08-12 → 2024-10-26, then re-run.'}
+         ]},
+        {title:'Sources', tag:'5 / 6 live', tagStyle:cntTag, tab:'Engine', caption:'Engine · signal sources',
+         sub:'Inputs the strategies read',
+         sections:[
+           {isRow:true, items:[
+             {left:'alpaca-bars-1m',leftSub:'1-min bars · 6 strat',right:'240ms',rightColor:G,rightSub:'live'},
+             {left:'alpaca-quotes',leftSub:'NBBO quotes · 6 strat',right:'90ms',rightColor:G,rightSub:'live'},
+             {left:'fundamentals-sharadar',leftSub:'daily · 2 strat',right:'14h',rightColor:'var(--paper)',rightSub:'live'},
+             {left:'options-flow',leftSub:'unusual flow · 1 strat',right:'47m',rightColor:L,rightSub:'stale'}
+           ]}
+         ]},
+        {title:'Backfills', tag:'ADMIN', tagStyle:admTag, tab:'Engine', caption:'Engine · backfills',
+         sub:'2 running · admin only',
+         sections:[
+           {isHead:true, label:'Jobs'},
+           {isRow:true, items:[
+             {left:'AAPL',leftSub:'1d · chunks 1/5',right:'running',rightColor:A,rightSub:'bars 100/500'},
+             {left:'MU, SMCI',leftSub:'1h · queued',right:'queued',rightColor:N4,rightSub:'0/2,400'},
+             {left:'NVDA, AVGO, TSM',leftSub:'1d · done',right:'completed',rightColor:G,rightSub:'5,412 bars'},
+             {left:'INTC',leftSub:'1d · upstream 429',right:'failed',rightColor:L,rightSub:'retrying'}
+           ]},
+           {isForm:true, items:[
+             {label:'Symbols',value:'AAPL, TSLA',color:'var(--color-text)'},
+             {label:'Timeframe · range',value:'1d · 2024-08 → 2026-07',color:'var(--color-text)'}
+           ]},
+           {isAction:true, items:[{label:'Start backfill',cls:'btn btn-primary',style:'flex:1;font-size:12.5px;min-height:44px'}]}
+         ]},
+        {title:'Exposure', tag:'6 positions', tagStyle:cntTag, tab:'Book', caption:'Book · exposure',
+         sub:'What each position risks · broker owns P&L',
+         sections:[
+           {isStat:true, items:[
+             {label:'Risk at stops',value:'$4,180',sub:'1.3% equity',color:'var(--color-text)'},
+             {label:'Largest factor',value:'Semis 22%',sub:'NVDA AVGO MU',color:'var(--paper)'}
+           ]},
+           {isRow:true, items:[
+             {left:'NVDA',leftSub:'trailing-exit-atr',right:'+1.4R',rightColor:G,rightSub:'add signal'},
+             {left:'AAPL',leftSub:'trailing-exit-atr',right:'+2.1R',rightColor:G,rightSub:'trim signal'},
+             {left:'TSLA',leftSub:'thesis-invalidation',right:'−1.0R',rightColor:L,rightSub:'exit signal'},
+             {left:'PFE',leftSub:'mean-revert-rsi',right:'−0.7R',rightColor:L,rightSub:'stop near'}
+           ]}
+         ]},
+        {title:'Portfolio', tag:'read-only', tagStyle:cntTag, tab:'Book', caption:'Book · portfolio',
+         sub:'Mirror of Alpaca + IBKR',
+         sections:[
+           {isStat:true, items:[
+             {label:'Equity',value:'$80,000',sub:'2 accounts',color:'var(--color-text)'},
+             {label:'Day P&L',value:'+$100',sub:'+0.13%',color:G}
+           ]},
+           {isHead:true, label:'Positions · Alpaca'},
+           {isRow:true, items:[
+             {left:'NVDA',leftSub:'60 sh · avg 113.80',right:'$7,608',rightColor:'var(--color-text)',rightSub:'+$820'},
+             {left:'AAPL',leftSub:'40 sh · avg 215.65',right:'$8,730',rightColor:'var(--color-text)',rightSub:'+$100'},
+             {left:'AVGO',leftSub:'20 sh · avg 159.40',right:'$3,369',rightColor:'var(--color-text)',rightSub:'+$180'},
+             {left:'MSFT',leftSub:'15 sh · avg 400.10',right:'$6,240',rightColor:'var(--color-text)',rightSub:'+$400'}
+           ]},
+           {isNote:true, noteBorder:noteAcc, noteTitleColor:'var(--color-accent-300)', title:'Broker-owned', text:'Balances refresh every 10s. xstockstrat never writes to the ledger.'}
+         ]},
+        {title:'Orders', tag:'3 working', tagStyle:cntTag, tab:'Book', caption:'Book · orders',
+         sub:'Today · 6 orders',
+         sections:[
+           {isRow:true, items:[
+             {left:'NVDA · BUY',leftSub:'limit day · momentum-v4',right:'filled',rightColor:G,rightSub:'60 @ 126.74'},
+             {left:'AAPL · SELL',leftSub:'limit day · trailing-atr',right:'working',rightColor:A,rightSub:'0 / 60'},
+             {left:'MU · BUY',leftSub:'stop limit · gap-cont',right:'working',rightColor:A,rightSub:'0 / 45'},
+             {left:'SMCI · BUY',leftSub:'limit day · gap-cont',right:'rejected',rightColor:L,rightSub:'buying power'}
+           ]}
+         ]}
+      ].map(p=>Object.assign({}, p, {tabs:tabBar(p.tab)})),
+
+      goOpps:this.nav('opps'), goStrategies:this.nav('strategies'), goMobile:this.nav('mobile'),
+      copilotOpen: st.copilot,
+      toggleCopilot: () => this.setState(s=>({copilot:!s.copilot})),
+      copilotBtnStyle:'display:flex;align-items:center;gap:6px;padding:5px 10px;border-radius:var(--radius-md);font:inherit;font-size:12px;cursor:pointer;border:1px solid '+
+        (st.copilot?A:'var(--color-divider)')+';background:'+(st.copilot?'color-mix(in srgb, var(--color-accent) 14%, transparent)':'transparent')+
+        ';color:'+(st.copilot?'var(--color-accent-100)':N4),
+
+      queueStats:[
+        {label:'Actionable now',value:'7',sub:'of 24 evaluated · conv ≥ 60',color:A},
+        {label:'Expiring < 90m',value:'4',sub:'NVDA, MU, TSLA, AVGO',color:'var(--paper)'},
+        {label:'Exit / trim flags',value:'2',sub:'AAPL 2.1R · TSLA −1.0R',color:L},
+        {label:'Fresh entries',value:'3',sub:'from watchlists & screener',color:G},
+        {label:'Deployable',value:'$312k',sub:'queue would use $56k',color:'var(--color-text)'}
+      ],
+
+      sourceFilters:['All sources','Portfolio','Watchlists','Screener'].map((label,i)=>({
+        label, checked: i===0, go: () => this.setState({src:label})
+      })),
+
+      opportunities: OPPS.map((o,i)=>Object.assign({}, o, spark(11+i*37, o.up), {
+        convPct: o.conviction+'%',
+        convColor: o.conviction>=80 ? G : (o.conviction>=70 ? A : N4),
+        actionStyle: actionTint(o.action),
+        chgColor: o.up?G:L,
+        expiryColor: o.warn?'var(--paper)':'var(--color-neutral-600)',
+        open: this.nav('signal')
+      })),
+
+      tfTabs:['5m','1H','1D','1W','1M'].map(label=>({label, go:()=>this.setState({tf:label}),
+        style:this.tabStyle(st.tf===label)})),
+      candles: candleSet(),
+      smaPath: 'M8 196 C 180 188, 300 172, 420 178 S 640 160, 760 150 S 900 138, 992 132',
+
+      setBuy:()=>this.setState({side:'buy'}), setSell:()=>this.setState({side:'sell'}),
+      buyStyle: sideBtn('buy', G), sellStyle: sideBtn('sell', L),
+
+      conditions:[
+        {name:'close > sma_20 * 1.01',value:'1.014',threshold:'1.010',pct:'88%',color:G,state:'pass'},
+        {name:'vol / adv_20',value:'2.11',threshold:'≥ 1.50',pct:'92%',color:G,state:'pass'},
+        {name:'base_length_days',value:'5',threshold:'≥ 4',pct:'70%',color:G,state:'pass'},
+        {name:'rsi_14',value:'61.8',threshold:'50 – 72',pct:'64%',color:G,state:'pass'},
+        {name:'atr_pct',value:'3.2',threshold:'≤ 4.0',pct:'55%',color:G,state:'pass'},
+        {name:'earnings_gap_days',value:'6',threshold:'≥ 10',pct:'18%',color:'var(--paper)',state:'soft'}
+      ],
+      ticketRows:[
+        {k:'Notional',v:'$7,608',color:'var(--color-text)'},
+        {k:'Risk at stop',v:'−$288 · 0.09% equity',color:L},
+        {k:'Position after',v:'240 sh · 9.8% equity',color:'var(--color-text)'},
+        {k:'Semis exposure after',v:'22% → 25%',color:'var(--paper)'}
+      ],
+      trackRows:[
+        {k:'Signals taken',v:'34',color:'var(--color-text)'},
+        {k:'Hit rate',v:'64.7%',color:G},
+        {k:'Avg win / loss',v:'+2.8% / −1.4%',color:'var(--color-text)'},
+        {k:'Expectancy',v:'+1.9% per signal',color:G}
+      ],
+
+      copilotThread:[
+        {role:'YOU',roleColor:N5,text:'Why is AAPL a trim and not a full exit?'},
+        {role:'COPILOT',roleColor:A,text:'The trend rule is still intact — price is above the 50-day and 3.4% from your stop. Only the momentum-deceleration rule fired, and historically that rule alone recovered 58% of the time, so the strategy takes half off instead of all.'},
+        {role:'YOU',roleColor:N5,text:'What did I miss yesterday?'},
+        {role:'COPILOT',roleColor:A,text:'Two signals expired unfilled: SMCI enter at 71 conviction (would be +2.4% today) and a GOOG trim at 64 (flat). Both expired because you were away past 15:45.'}
+      ],
+      copilotChips:['Size the queue for me','What expired unfilled?','Is this correlated to NVDA?','Backtest this condition']
+    };
+  }
+}
+</script>
+</body>
+</html>

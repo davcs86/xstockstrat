@@ -5,8 +5,13 @@ import type { JsonObject } from '@bufbuild/protobuf';
 import { AppShell } from '@/components/trader/AppShell';
 import { useAccountContext } from '@/context/AccountContext';
 import { usePositions } from '@/hooks/usePortfolio';
+import { POSITION_RISK_FLAG, EnumBadge } from '@/lib/opportunityShared';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/shared/EmptyState';
+import { StatTile } from '@/components/shared/StatTile';
+import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
 import { usePositionLineage } from '@/hooks/usePositionLineage';
-import { PositionSide } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
+import { PositionSide, PositionRiskFlag } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import type { Position } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -20,35 +25,39 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@/components/ui/table';
 
 type TradingMode = 'paper' | 'live';
 type PnlFilter = 'all' | 'winners' | 'losers';
 
-function fmtUsd(n: number | undefined | null): string {
-  if (n === undefined || n === null || Number.isNaN(Number(n))) return '—';
-  return `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function fmtPct(n: number | undefined | null): string {
-  if (n === undefined || n === null || Number.isNaN(Number(n))) return '—';
-  const pct = Number(n) * 100;
-  return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
-}
-
-function fmtSignedUsd(n: number | undefined | null): string {
-  if (n === undefined || n === null || Number.isNaN(Number(n))) return '—';
-  return `${Number(n) >= 0 ? '+' : ''}${fmtUsd(n)}`;
-}
-
-// pnlClass colors a P&L figure green/red by sign, matching the buy/sell palette.
-function pnlClass(n: number | undefined | null): string {
-  return Number(n ?? 0) >= 0 ? 'text-buy' : 'text-destructive';
-}
-
 // sideLabel derives Long/Short from the signed quantity (qty < 0 is short).
 function sideLabel(qty: number | undefined | null): string {
   return Number(qty ?? 0) < 0 ? 'Short' : 'Long';
+}
+
+// Open R = unrealized P&L expressed in units of the position's risk-at-stop (R-multiple).
+// Null when there is no stop-risk to normalize against.
+function openR(p: Position): number | null {
+  const r = Number(p.riskAtStop ?? 0);
+  if (!r) return null;
+  return Number(p.unrealizedPnl ?? 0) / r;
+}
+
+function fmtR(r: number | null): string {
+  if (r === null) return '—';
+  return `${r >= 0 ? '+' : ''}${r.toFixed(1)}R`;
+}
+
+// Exit-flag positions (Exposure → "N exit flags in queue"): a trim or a stop-near signal.
+function isExitFlag(p: Position): boolean {
+  return p.flag === PositionRiskFlag.REDUCE_SIGNAL || p.flag === PositionRiskFlag.STOP_NEAR;
 }
 
 export default function PositionsPage() {
@@ -84,6 +93,33 @@ export default function PositionsPage() {
   });
   const nextPageToken = data?.page?.nextPageToken ?? '';
 
+  // Exposure risk aggregates (all from the loaded Position risk fields; weight is share of the
+  // loaded page's gross market value — an approximation of portfolio weight).
+  const totalGrossMV = positions.reduce((s, p) => s + Math.abs(Number(p.marketValue ?? 0)), 0);
+  const weight = (p: Position) =>
+    totalGrossMV ? Math.abs(Number(p.marketValue ?? 0)) / totalGrossMV : 0;
+  const totalRiskAtStops = positions.reduce((s, p) => s + Number(p.riskAtStop ?? 0), 0);
+  const factorWeights = new Map<string, number>();
+  for (const p of positions) {
+    const f = p.factor || 'Unclassified';
+    factorWeights.set(f, (factorWeights.get(f) ?? 0) + weight(p));
+  }
+  const largestFactor = [...factorWeights.entries()].sort((a, b) => b[1] - a[1])[0];
+  const largestFactorTickers = positions
+    .filter((p) => (p.factor || 'Unclassified') === (largestFactor?.[0] ?? ''))
+    .slice(0, 3)
+    .map((p) => p.symbol)
+    .join(' · ');
+  const pastTarget = positions.filter((p) => {
+    const r = openR(p);
+    return r !== null && r >= 2;
+  });
+  const stopsWithin2 = positions.filter((p) => {
+    const d = Number(p.stopDistancePct ?? 0);
+    return p.stopPrice && d > 0 && d <= 0.02;
+  });
+  const exitFlagCount = positions.filter(isExitFlag).length;
+
   const lineage = usePositionLineage(
     selected?.symbol ?? null,
     selected?.accountId ?? selectedAccountId,
@@ -95,12 +131,66 @@ export default function PositionsPage() {
       <div className="p-4 sm:p-6 space-y-4">
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-xl font-bold tracking-tight">Positions</h1>
+            <h1 className="text-xl font-bold tracking-tight">Exposure</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Open positions for the selected account, refreshed every 10s
+              What each position is risking and what would trigger an exit — your broker has the
+              P&amp;L.
             </p>
           </div>
+          {exitFlagCount > 0 && (
+            <Button asChild variant="outline" size="sm">
+              <Link href="/insights/opportunities">
+                {exitFlagCount} exit flag{exitFlagCount === 1 ? '' : 's'} in queue →
+              </Link>
+            </Button>
+          )}
         </div>
+
+        {/* Risk stat row (feature 083 — Exposure is framed as risk, not P&L). */}
+        {positions.length > 0 && (
+          <div className="grid grid-cols-2 overflow-hidden rounded-md border border-border sm:grid-cols-4">
+            <StatTile
+              size="md"
+              label="Total risk at stops"
+              value={fmtUsd(totalRiskAtStops)}
+              tone="loss"
+              sub="if every stop filled"
+            />
+            <StatTile
+              size="md"
+              label="Largest factor"
+              value={
+                largestFactor ? `${largestFactor[0]} ${(largestFactor[1] * 100).toFixed(0)}%` : '—'
+              }
+              tone="paper"
+              sub={largestFactorTickers || undefined}
+            />
+            <StatTile
+              size="md"
+              label="Positions past target"
+              value={pastTarget.length}
+              tone="gain"
+              sub={
+                pastTarget
+                  .map((p) => p.symbol)
+                  .slice(0, 3)
+                  .join(' · ') || undefined
+              }
+            />
+            <StatTile
+              size="md"
+              label="Stops within 2%"
+              value={stopsWithin2.length}
+              tone="loss"
+              sub={
+                stopsWithin2
+                  .map((p) => p.symbol)
+                  .slice(0, 3)
+                  .join(' · ') || undefined
+              }
+            />
+          </div>
+        )}
 
         <Card>
           <CardHeader>
@@ -156,13 +246,23 @@ export default function PositionsPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {isLoading && <p className="text-sm text-muted-foreground">Loading positions…</p>}
+            {isLoading && (
+              <div className="space-y-2" data-testid="positions-loading">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-10 w-full" />
+                ))}
+              </div>
+            )}
             {error && <p className="text-sm text-destructive">Failed to load positions</p>}
             {!isLoading && !error && positions.length === 0 && (
-              <p className="text-sm text-muted-foreground py-6 text-center">
-                No open {mode} positions
-                {selectedAccountId ? '' : ' (select an account in the header)'}
-              </p>
+              <EmptyState
+                title={`No open ${mode} positions`}
+                description={
+                  selectedAccountId
+                    ? 'Positions you hold in this account will show here.'
+                    : 'Select an account in the header to load positions.'
+                }
+              />
             )}
             {positions.length > 0 && (
               <Table>
@@ -176,9 +276,19 @@ export default function PositionsPage() {
                     <TableHead className="text-right hidden lg:table-cell">Cost Basis</TableHead>
                     <TableHead className="text-right hidden md:table-cell">Market Value</TableHead>
                     <TableHead className="text-right">Today&apos;s P/L ($)</TableHead>
-                    <TableHead className="text-right hidden sm:table-cell">Today&apos;s P/L (%)</TableHead>
+                    <TableHead className="text-right hidden sm:table-cell">
+                      Today&apos;s P/L (%)
+                    </TableHead>
                     <TableHead className="text-right">Total P/L ($)</TableHead>
                     <TableHead className="text-right">Total P/L (%)</TableHead>
+                    {/* feature 083 — Exposure risk reframe (risk, not P&L). */}
+                    <TableHead className="text-right hidden sm:table-cell">Weight</TableHead>
+                    <TableHead className="text-right">Open R</TableHead>
+                    <TableHead className="text-right hidden md:table-cell">Risk at stop</TableHead>
+                    <TableHead className="hidden lg:table-cell">Exit rule</TableHead>
+                    <TableHead className="text-right hidden lg:table-cell">Factor</TableHead>
+                    <TableHead className="text-right hidden md:table-cell">Stop dist</TableHead>
+                    <TableHead className="text-right hidden md:table-cell">Flag</TableHead>
                     <TableHead className="text-right sr-only">Trade</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -192,7 +302,9 @@ export default function PositionsPage() {
                       <TableCell className="font-mono font-semibold">{p.symbol}</TableCell>
                       <TableCell className="text-muted-foreground">{sideLabel(p.qty)}</TableCell>
                       <TableCell className="text-right tabular-nums">{p.qty}</TableCell>
-                      <TableCell className="text-right tabular-nums">{fmtUsd(p.currentPrice)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {fmtUsd(p.currentPrice)}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums hidden sm:table-cell">
                         {fmtUsd(p.avgEntryPrice)}
                       </TableCell>
@@ -202,7 +314,9 @@ export default function PositionsPage() {
                       <TableCell className="text-right tabular-nums hidden md:table-cell">
                         {fmtUsd(p.marketValue)}
                       </TableCell>
-                      <TableCell className={`text-right tabular-nums font-semibold ${pnlClass(p.dayPnl)}`}>
+                      <TableCell
+                        className={`text-right tabular-nums font-semibold ${pnlClass(p.dayPnl)}`}
+                      >
                         {fmtSignedUsd(p.dayPnl)}
                       </TableCell>
                       <TableCell
@@ -210,11 +324,38 @@ export default function PositionsPage() {
                       >
                         {fmtPct(p.dayPnlPct)}
                       </TableCell>
-                      <TableCell className={`text-right tabular-nums font-semibold ${pnlClass(p.unrealizedPnl)}`}>
+                      <TableCell
+                        className={`text-right tabular-nums font-semibold ${pnlClass(p.unrealizedPnl)}`}
+                      >
                         {fmtSignedUsd(p.unrealizedPnl)}
                       </TableCell>
                       <TableCell className={`text-right tabular-nums ${pnlClass(p.unrealizedPnl)}`}>
                         {fmtPct(p.unrealizedPnlPct)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums hidden sm:table-cell text-muted-foreground">
+                        {`${(weight(p) * 100).toFixed(1)}%`}
+                      </TableCell>
+                      <TableCell
+                        className={`text-right tabular-nums ${
+                          openR(p) === null ? '' : pnlClass(openR(p))
+                        }`}
+                      >
+                        {fmtR(openR(p))}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums text-destructive hidden md:table-cell">
+                        {p.riskAtStop ? `-${fmtUsd(p.riskAtStop)}` : '—'}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground hidden lg:table-cell font-mono text-xs">
+                        {p.exitRule || '—'}
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground hidden lg:table-cell">
+                        {p.factor || 'Unclassified'}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums hidden md:table-cell">
+                        {p.stopPrice ? fmtPct(p.stopDistancePct) : '—'}
+                      </TableCell>
+                      <TableCell className="text-right hidden md:table-cell">
+                        {p.flag ? <EnumBadge render={POSITION_RISK_FLAG[p.flag]} /> : '—'}
                       </TableCell>
                       <TableCell className="text-right">
                         {/* Quick-trade shortcut: opens the order ticket pre-filled with this
@@ -306,7 +447,9 @@ export default function PositionsPage() {
                   <p className="text-xs text-muted-foreground">Loading fills…</p>
                 )}
                 {!lineage.isLoading && (lineage.data?.length ?? 0) === 0 && (
-                  <p className="text-xs text-muted-foreground">No order.filled events for this position.</p>
+                  <p className="text-xs text-muted-foreground">
+                    No order.filled events for this position.
+                  </p>
                 )}
                 {(lineage.data?.length ?? 0) > 0 && (
                   <Table>

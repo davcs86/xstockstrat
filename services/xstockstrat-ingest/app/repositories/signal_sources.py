@@ -1,6 +1,34 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime
+
+# Source-health freshness thresholds (feature 083). Health is derived on read from
+# last_seen_at: fed within LIVE → live; within STALE → stale; older / never / errored → down.
+_HEALTH_LIVE_SECONDS = 24 * 3600
+_HEALTH_STALE_SECONDS = 7 * 24 * 3600
+
+
+def derive_health_status(
+    last_seen_at: datetime | None, last_error: str | None, now: datetime
+) -> str:
+    """Derive a source's health string from last-seen freshness + last-error, on read.
+
+    Returns one of ``"live" | "stale" | "down" | "unspecified"`` (mapped to the
+    SourceHealthStatus enum by the servicer). A source that has never fed a signal
+    (``last_seen_at is None``) and has no error is ``"unspecified"`` (Unknown); a source
+    whose last operation errored is ``"down"``."""
+    if last_seen_at is None:
+        return "down" if last_error else "unspecified"
+    age = (now - last_seen_at).total_seconds()
+    if last_error and age >= _HEALTH_LIVE_SECONDS:
+        # A recent successful feed clears a stale error; an old feed + error → down.
+        return "down"
+    if age < _HEALTH_LIVE_SECONDS:
+        return "live"
+    if age < _HEALTH_STALE_SECONDS:
+        return "stale"
+    return "down"
 
 
 async def get_active_source(db_pool, slug: str) -> dict | None:
@@ -13,18 +41,39 @@ async def get_active_source(db_pool, slug: str) -> dict | None:
 
 
 async def list_all_sources(db_pool, include_inactive: bool = False) -> list[dict]:
+    cols = (
+        "slug, display_name, source_type, extractor_module, credentials_ref,"
+        " active, config_json, created_at, last_seen_at, last_error, signals_fed"
+    )
     if include_inactive:
         rows = await db_pool.fetch(
-            "SELECT slug, display_name, source_type, extractor_module, credentials_ref,"
-            " active, config_json, created_at FROM ingest.signal_sources ORDER BY created_at ASC"
+            f"SELECT {cols} FROM ingest.signal_sources ORDER BY created_at ASC"
         )
     else:
         rows = await db_pool.fetch(
-            "SELECT slug, display_name, source_type, extractor_module, credentials_ref,"
-            " active, config_json, created_at FROM ingest.signal_sources"
-            " WHERE active = TRUE ORDER BY created_at ASC"
+            f"SELECT {cols} FROM ingest.signal_sources WHERE active = TRUE ORDER BY created_at ASC"
         )
     return [dict(row) for row in rows]
+
+
+async def mark_source_fed(db_pool, slug: str) -> None:
+    """Record a successful signal feed: bump last_seen_at + signals_fed, clear last_error
+    (feature 083). Best-effort — callers wrap this so a bookkeeping failure never fails ingest."""
+    await db_pool.execute(
+        "UPDATE ingest.signal_sources"
+        " SET last_seen_at = NOW(), signals_fed = signals_fed + 1, last_error = NULL"
+        " WHERE slug = $1",
+        slug,
+    )
+
+
+async def mark_source_error(db_pool, slug: str, error: str) -> None:
+    """Record the last error a source's ingest hit (feature 083). Best-effort."""
+    await db_pool.execute(
+        "UPDATE ingest.signal_sources SET last_error = $2 WHERE slug = $1",
+        slug,
+        error,
+    )
 
 
 async def upsert_source(

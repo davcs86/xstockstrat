@@ -154,8 +154,11 @@ test.describe('ChartPanel component — trading dashboard', () => {
   });
 
   test('renders chart container after data loads', async ({ page }) => {
-    // lightweight-charts renders into a div container; match partial style to be layout-agnostic.
-    const chartDiv = page.locator('div[style*="320"]');
+    // The chart mounts into the stable container div (data-testid); lightweight-charts then
+    // injects a .tv-lightweight-charts child whose inline style also contains the 320 height,
+    // so a style-based selector matches 1-or-2 elements by timing (strict-mode flake). Target
+    // the container id, which is exactly one element whether or not the chart has drawn yet.
+    const chartDiv = page.getByTestId('chart-container');
     await expect(chartDiv).toBeVisible({ timeout: 10000 });
   });
 
@@ -192,6 +195,13 @@ test.describe('ChartPanel component — trading dashboard', () => {
         }),
       });
     });
+
+    // Wait for the chart to finish its async lightweight-charts import before clicking: until
+    // the series exists, ChartPanel.fetchBars early-returns and the click sends no GetBars,
+    // making this test flaky. The injected .tv-lightweight-charts child signals the series is ready.
+    await expect(
+      page.locator('[data-testid="chart-container"] .tv-lightweight-charts'),
+    ).toBeVisible({ timeout: 10000 });
 
     await page.getByRole('button', { name: '1h', exact: true }).click();
 

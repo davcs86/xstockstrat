@@ -37,6 +37,8 @@ import {
   STRATEGY_DEF_LIVE,
   STRATEGY_DEFINITIONS,
   insufficientDataResult,
+  OPPORTUNITIES,
+  symbolReadiness,
 } from './fixtures';
 
 export const TRADER_MOCK_PORT = 9091;
@@ -176,7 +178,8 @@ export async function startMockBackend(): Promise<void> {
           };
         },
         async listPortfolios() {
-          return { portfolios: [PORTFOLIO_ALPACA] };
+          // Both accounts so the Book → Portfolio combined view + account cards render (083).
+          return { portfolios: PORTFOLIOS };
         },
         async listPositions() {
           return {
@@ -187,11 +190,20 @@ export async function startMockBackend(): Promise<void> {
                 avgEntryPrice: 180.0,
                 currentPrice: 189.8,
                 marketValue: 1898.0,
-                unrealizedPnl: 98.0,
-                unrealizedPnlPct: 0.054,
+                // AC-8 valuation parity: AAPL's unrealized P&L must match PORTFOLIO_ALPACA's
+                // AAPL position (100.0) — both surfaces read the one broker-authoritative source.
+                unrealizedPnl: 100.0,
+                unrealizedPnlPct: 0.056,
                 costBasis: 1800.0,
                 accountId: 'alpaca-default',
                 tradingMode: 1,
+                // feature 083 risk/factor fields (Exposure).
+                stopPrice: 178.0,
+                riskAtStop: 118.0,
+                stopDistancePct: 0.062,
+                factor: 'Tech',
+                flag: 3, // POSITION_RISK_FLAG_STOP_NEAR
+                exitRule: 'Stop @ $178.00',
               },
               {
                 symbol: 'MSFT',
@@ -211,8 +223,27 @@ export async function startMockBackend(): Promise<void> {
         },
       });
 
+      // In-memory Copilot thread store (feature 083, Step 27) — the BFF rewrites the client
+      // key to copilot:<user>:default and forces event_type copilot.message before it reaches
+      // this mock, so we key by the resolved stream_key.
+      const copilotThreads = new Map<string, { role: string; text: string; sequence: bigint }[]>();
+
       router.service(LedgerService, {
-        async queryEvents() {
+        async queryEvents(req) {
+          if (req.eventType === 'copilot.message' || req.streamKey?.startsWith('copilot:')) {
+            const msgs = copilotThreads.get(req.streamKey) ?? [];
+            return {
+              events: msgs.map((m, i) => ({
+                eventId: `copilot-${i}`,
+                eventType: 'copilot.message',
+                streamKey: req.streamKey,
+                sourceService: 'xstockstrat-ui',
+                payload: { role: m.role, text: m.text },
+                sequence: m.sequence,
+              })),
+              page: { nextPageToken: '' },
+            };
+          }
           return {
             events: [
               {
@@ -234,6 +265,18 @@ export async function startMockBackend(): Promise<void> {
             ],
             page: { nextPageToken: '' },
           };
+        },
+        async appendEvent(req) {
+          const existing = copilotThreads.get(req.streamKey) ?? [];
+          const payload = (req.payload ?? {}) as Record<string, unknown>;
+          const sequence = BigInt(existing.length + 1);
+          existing.push({
+            role: String(payload.role ?? 'user'),
+            text: String(payload.text ?? ''),
+            sequence,
+          });
+          copilotThreads.set(req.streamKey, existing);
+          return { eventId: `copilot-${existing.length}`, sequence };
         },
       });
 
@@ -470,6 +513,27 @@ export async function startMockBackend(): Promise<void> {
         async listStrategies() {
           return { strategies: STRATEGY_SCORES };
         },
+        // feature 083 — ranked opportunity queue; honors the min_conviction filter.
+        async listOpportunities(req) {
+          const min = req.minConviction ?? 0;
+          return { opportunities: OPPORTUNITIES.filter((o) => o.conviction >= min) };
+        },
+        // feature 083 — traced condition readiness for the Signal-detail panel.
+        async evaluateReadiness(req) {
+          return { readiness: (req.symbols.length ? req.symbols : ['AAPL']).map(symbolReadiness) };
+        },
+        // feature 083 — per-strategy analytics for the Engine → Strategies detail.
+        async getStrategyAnalytics(req) {
+          return {
+            strategyId: req.strategyId,
+            expectancy: 0.35,
+            blendedHitRate: 0.62,
+            maxDrawdown: 0.14,
+            signals30d: 42,
+            taken: 9,
+            queueShare: 0.2,
+          };
+        },
         async scoreStrategy() {
           return { overallScore: 0.5, rating: 'C' };
         },
@@ -606,6 +670,12 @@ export async function startMockBackend(): Promise<void> {
                 passed: true,
                 status: 1,
                 criterionScores: { c1: 0.9 },
+                // feature 083 raw columns (FR-8).
+                pe: 22.5,
+                rsi: 58,
+                atr: 3.2,
+                revGrowth: 0.12,
+                held: true,
               },
               {
                 symbol: symbols[1] ?? 'BBB',
@@ -613,6 +683,11 @@ export async function startMockBackend(): Promise<void> {
                 passed: true,
                 status: 1,
                 criterionScores: { c1: 0.5 },
+                pe: 15,
+                rsi: 45,
+                atr: 2.1,
+                revGrowth: 0.05,
+                held: false,
               },
               {
                 symbol: symbols[2] ?? 'CCC',
@@ -767,13 +842,17 @@ export async function startMockBackend(): Promise<void> {
                 slug: 'example_simple_email',
                 displayName: 'Example Simple Email',
                 sourceType: 'simple_email',
-                extractorModule: 'app.extractors.example_simple_email',
                 active: true,
                 hasCredentials: true,
                 configJson: {
                   sender_patterns: ['noreply@example.com'],
                   subject_patterns: ['Signal:'],
                 },
+                extractorModule: 'app.extractors.example_simple_email',
+                // feature 083 source-health fields.
+                health: 1, // SOURCE_HEALTH_STATUS_LIVE
+                signalsFed: BigInt(128),
+                lastError: '',
               },
             ],
           };

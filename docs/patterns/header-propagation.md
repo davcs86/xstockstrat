@@ -154,3 +154,14 @@ propagationStore.run(extractFromMetadata(call.metadata), () => handle(call, call
 > Note: sink/source services (ledger, config) and auth (identity) make few or no authenticated
 > outbound calls, so they may keep the store unused. Wire the interceptor when a service starts
 > making outbound calls that must carry user/trace context.
+
+### Request-scoped outbound edges (non-exhaustive)
+
+New per-request outbound edges must carry the three headers via the calling service's existing
+propagation path. Recent additions:
+
+- **`xstockstrat-analysis` → `xstockstrat-trading`** (feature 083): `GetStrategyAnalytics` calls
+  `ListOrders(strategy_id)` for the "taken" count (`TRADING_ENDPOINT`). This is the first
+  analysis→trading edge; it forwards `x-user-id`/`x-access-scope`/`x-trace-id` through the analysis
+  servicer's per-method forwarding (feature 049), so no new wiring was needed — the edge is
+  non-cyclic (trading never calls analysis).

@@ -32,7 +32,12 @@ export default function OrdersPage() {
       <div className="p-4 sm:p-6 space-y-4">
         <div className="flex items-center gap-3">
           <BackToDashboardButton />
-          <h1 className="text-lg font-semibold">Orders</h1>
+          <div>
+            <h1 className="text-lg font-semibold">Orders</h1>
+            <p className="text-sm text-muted-foreground">
+              Every order traced back to the signal that produced it.
+            </p>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">

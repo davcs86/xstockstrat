@@ -64,6 +64,8 @@ func main() {
 	go svc.ConsumeOrderFills(ctx)
 	go svc.ConsumePositionSyncs(ctx)
 	go svc.ConsumeBalanceSyncs(ctx)
+	// feature 083 — rebuild the in-memory resting-stop store from ledger history (best-effort).
+	go svc.HydrateStops(ctx)
 
 	hdl := handler.NewPortfolioHandler(svc)
 

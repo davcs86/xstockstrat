@@ -13,6 +13,7 @@ import { timestampToDate } from '@/lib/protoTime';
 import { useStrategyReport, useBacktestHistory, useBacktestDetail } from '@/hooks/useStrategies';
 import { useRunBacktest, useTriggerBackfill } from '@/hooks/useBacktest';
 import { useGetStrategy, useSetStrategyLiveInsights } from '@/hooks/useStrategyDefinitions';
+import { useStrategyAnalytics } from '@/hooks/useOpportunities';
 import { useIsAdmin } from '@/hooks/useLiveStrategies';
 import { BacktestStatus } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { BacktestDiagnostics } from '@/components/insights/BacktestDiagnostics';
@@ -40,6 +41,7 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
   const { data: history } = useBacktestHistory(id);
   const { data: isAdmin } = useIsAdmin();
   const { data: definition } = useGetStrategy(id);
+  const { data: analytics } = useStrategyAnalytics(id);
   const setLive = useSetStrategyLiveInsights();
   const {
     mutate: runBacktestMutate,
@@ -208,6 +210,51 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                       Could not update live status — admin scope required.
                     </p>
                   )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* feature 083 — per-strategy analytics + Active/Paused/Off state (AC-5). */}
+            {definition && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>Analytics</CardTitle>
+                    <Badge
+                      variant={
+                        !definition.active ? 'secondary' : definition.liveEnabled ? 'buy' : 'paper'
+                      }
+                    >
+                      {!definition.active ? 'Off' : definition.liveEnabled ? 'Active' : 'Paused'}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div
+                    className="grid grid-cols-2 gap-3 sm:grid-cols-3"
+                    data-testid="strategy-analytics"
+                  >
+                    {[
+                      ['Expectancy', analytics ? analytics.expectancy.toFixed(2) : '—'],
+                      [
+                        'Hit rate',
+                        analytics ? `${(analytics.blendedHitRate * 100).toFixed(0)}%` : '—',
+                      ],
+                      [
+                        'Max drawdown',
+                        analytics ? `${(analytics.maxDrawdown * 100).toFixed(0)}%` : '—',
+                      ],
+                      ['Signals 30d', analytics ? String(analytics.signals30d) : '—'],
+                      ['Taken', analytics ? String(analytics.taken) : '—'],
+                    ].map(([label, value]) => (
+                      <div key={label} className="rounded-md border border-border p-3">
+                        <div className="text-xs text-muted-foreground">{label}</div>
+                        <div className="mt-1 font-mono tabular-nums text-lg font-semibold">
+                          {value}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </CardContent>
               </Card>
             )}
