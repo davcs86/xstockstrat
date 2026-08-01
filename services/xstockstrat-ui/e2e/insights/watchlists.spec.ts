@@ -4,7 +4,13 @@ import { addAuthCookie } from '../helpers/auth';
 // Stateful in-memory mock of the PortfolioService watchlist RPCs. The page drives
 // React-Query invalidation after every mutation, so ListWatchlists must reflect the
 // latest state — a static fixture would not survive the create→add→remove→delete flow.
-type Watchlist = { watchlistId: string; userId: string; name: string; description: string; symbols: string[] };
+type Watchlist = {
+  watchlistId: string;
+  userId: string;
+  name: string;
+  description: string;
+  symbols: string[];
+};
 
 async function mockWatchlists(page: Page): Promise<void> {
   const state: { lists: Watchlist[]; seq: number } = { lists: [], seq: 0 };
@@ -46,13 +52,16 @@ async function mockWatchlists(page: Page): Promise<void> {
     return json(route, { watchlist: wl });
   });
 
-  await page.route('**/xstockstrat.portfolio.v1.PortfolioService/RemoveWatchlistSymbols', (route) => {
-    const req = JSON.parse(route.request().postData() ?? '{}');
-    const wl = find(req.watchlistId);
-    const drop = norm(req.symbols ?? []);
-    if (wl) wl.symbols = wl.symbols.filter((s) => !drop.includes(s));
-    return json(route, { watchlist: wl });
-  });
+  await page.route(
+    '**/xstockstrat.portfolio.v1.PortfolioService/RemoveWatchlistSymbols',
+    (route) => {
+      const req = JSON.parse(route.request().postData() ?? '{}');
+      const wl = find(req.watchlistId);
+      const drop = norm(req.symbols ?? []);
+      if (wl) wl.symbols = wl.symbols.filter((s) => !drop.includes(s));
+      return json(route, { watchlist: wl });
+    },
+  );
 
   await page.route('**/xstockstrat.portfolio.v1.PortfolioService/DeleteWatchlist', (route) => {
     const req = JSON.parse(route.request().postData() ?? '{}');
@@ -89,6 +98,29 @@ test.describe('Watchlists (insights)', () => {
     page.on('dialog', (d) => d.accept());
     await page.getByRole('button', { name: 'Delete My List' }).click();
     await expect(page.getByRole('heading', { name: 'My List' })).toHaveCount(0, { timeout: 5000 });
-    await expect(page.getByText('No watchlists yet. Create one above.')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByText('No watchlists yet. Create one above.')).toBeVisible({
+      timeout: 5000,
+    });
+  });
+
+  test('per-watchlist readiness against a chosen strategy (feature 083)', async ({ page }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page);
+    await page.goto('/insights/watchlists');
+
+    await page.getByPlaceholder('e.g. Tech Large-Cap').fill('Ready List');
+    await page.getByRole('button', { name: 'Create' }).click();
+    await page.getByPlaceholder('Add symbols (e.g. AAPL MSFT)').fill('AAPL');
+    await page.getByRole('button', { name: 'Add' }).click();
+
+    const readiness = page.getByTestId('watchlist-readiness');
+    await expect(readiness).toBeVisible({ timeout: 5000 });
+
+    // Choose a strategy → EvaluateReadiness runs over the watchlist symbols.
+    await page.getByLabel('Readiness strategy').click();
+    await page.getByRole('option', { name: 'Live Test Strategy' }).click();
+
+    await expect(readiness.getByText('AAPL')).toBeVisible({ timeout: 5000 });
+    await expect(readiness.getByText('2/3')).toBeVisible();
   });
 });

@@ -29,4 +29,23 @@ test.describe('Screener', () => {
     // The third symbol is reported as insufficient data (not dropped).
     await expect(page.getByTestId('insufficient-data')).toBeVisible();
   });
+
+  test('renders the feature-083 raw columns (pe / rsi / atr / rev-growth / held)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/insights/screener');
+    await page.getByTestId('run-screen').click();
+    const results = page.getByTestId('screen-results');
+    await expect(results).toBeVisible({ timeout: 10000 });
+    // New column headers.
+    await expect(results.getByText('P/E')).toBeVisible();
+    await expect(results.getByText('RSI')).toBeVisible();
+    await expect(results.getByText('Rev growth')).toBeVisible();
+    // The top row carries its raw values + the Held badge.
+    const first = page.getByTestId('result-row').first();
+    await expect(first).toContainText('22.5'); // P/E
+    await expect(first).toContainText('58'); // RSI
+    await expect(first.getByText('Held')).toBeVisible();
+  });
 });

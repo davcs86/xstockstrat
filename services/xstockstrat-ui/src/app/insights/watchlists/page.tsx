@@ -13,6 +13,7 @@ import {
   useAddWatchlistSymbols,
   useRemoveWatchlistSymbols,
 } from '@/hooks/useWatchlists';
+import { WatchlistReadiness } from '@/components/insights/WatchlistReadiness';
 
 export default function WatchlistsPage() {
   const { data, isLoading, error } = useWatchlists();
@@ -150,6 +151,8 @@ export default function WatchlistsPage() {
                     Add
                   </Button>
                 </div>
+
+                <WatchlistReadiness symbols={wl.symbols} />
               </CardContent>
             </Card>
           ))}

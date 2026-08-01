@@ -617,6 +617,12 @@ export async function startMockBackend(): Promise<void> {
                 passed: true,
                 status: 1,
                 criterionScores: { c1: 0.9 },
+                // feature 083 raw columns (FR-8).
+                pe: 22.5,
+                rsi: 58,
+                atr: 3.2,
+                revGrowth: 0.12,
+                held: true,
               },
               {
                 symbol: symbols[1] ?? 'BBB',
@@ -624,6 +630,11 @@ export async function startMockBackend(): Promise<void> {
                 passed: true,
                 status: 1,
                 criterionScores: { c1: 0.5 },
+                pe: 15,
+                rsi: 45,
+                atr: 2.1,
+                revGrowth: 0.05,
+                held: false,
               },
               {
                 symbol: symbols[2] ?? 'CCC',
