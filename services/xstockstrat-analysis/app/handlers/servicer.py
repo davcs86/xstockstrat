@@ -28,6 +28,7 @@ from gen.ledger.v1 import ledger_pb2, ledger_pb2_grpc
 from gen.marketdata.v1 import marketdata_pb2, marketdata_pb2_grpc
 from gen.notify.v1 import notify_pb2_grpc
 from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc
+from gen.trading.v1 import trading_pb2, trading_pb2_grpc
 from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
@@ -111,6 +112,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         db_pool=None,
         notify_channel=None,
         portfolio_channel=None,
+        trading_channel=None,
     ):
         self._cfg = config_watcher
         self._marketdata = marketdata_pb2_grpc.MarketDataServiceStub(marketdata_channel)
@@ -118,6 +120,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         self._ingest = ingest_pb2_grpc.IngestServiceStub(ingest_channel)
         self._ledger = ledger_pb2_grpc.LedgerServiceStub(ledger_channel)
         self._notify = notify_pb2_grpc.NotifyServiceStub(notify_channel) if notify_channel else None
+        # Trading stub (feature 083) — GetStrategyAnalytics reads ListOrders(strategy_id) for the
+        # "taken" count. New analysis→trading edge (non-cyclic; trading does not dial analysis).
+        # nil when TRADING_ENDPOINT is not wired (tests).
+        self._trading = (
+            trading_pb2_grpc.TradingServiceStub(trading_channel) if trading_channel else None
+        )
         # Portfolio stub (feature 062) — used by the fundamentals signal producer for the
         # watchlist universe read. nil when PORTFOLIO_ENDPOINT is not wired (tests).
         self._portfolio = (
@@ -1764,7 +1772,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Enforce the overall scan deadline (default 120s).
         deadline = self._cfg.get_int("analysis.screener.max_duration_seconds", 120)
         try:
-            return await asyncio.wait_for(
+            resp = await asyncio.wait_for(
                 engine.screen(request, propagation_meta), timeout=deadline
             )
         except TimeoutError:
@@ -1772,6 +1780,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 grpc.StatusCode.DEADLINE_EXCEEDED,
                 f"screen exceeded {deadline}s deadline",
             )
+            return
+        # feature 083 (FR-8) — mark rows the caller already holds (best-effort cross-ref).
+        user_id = dict(context.invocation_metadata()).get("x-user-id", "")
+        held = await self._drain_held_symbols(user_id, propagation_meta)
+        for r in resp.results:
+            if r.symbol in held:
+                r.held = True
+        return resp
 
     async def RunFundamentalsScan(self, request, context):
         """Manually trigger one fundamentals signal producer scan (feature 062, admin-scoped).
@@ -1952,6 +1968,68 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 break
         return held
 
+    async def GetStrategyAnalytics(self, request, context):
+        """Per-strategy analytics for the Engine → Strategies surface (feature 083).
+
+        expectancy / hit-rate / max-DD derive from persisted analysis.backtest_runs (win_rate +
+        profit_factor — no per-trade column, no new migration); signals_30d from ingest
+        QuerySignals (30-day window); taken from the new analysis→trading ListOrders edge.
+        queue_share is reserved (0.0) — the current queue is signal-sourced and carries no
+        strategy attribution to divide by. C-03 headers propagate on every outbound call."""
+        propagation_meta = [
+            (k, v)
+            for k, v in context.invocation_metadata()
+            if k in ("x-user-id", "x-access-scope", "x-trace-id")
+        ]
+        strategy_id = request.strategy_id
+
+        expectancy = 0.0
+        blended_hit_rate = 0.0
+        max_drawdown = 0.0
+        if self._backtest_runs_repo is not None:
+            runs = await self._backtest_runs_repo.list_by_strategy(strategy_id, limit=20)
+            ok_runs = [r for r in runs if float(r.get("total_trades") or 0) > 0]
+            if ok_runs:
+                latest = ok_runs[0]
+                expectancy = _expectancy_from_metrics(
+                    float(latest.get("win_rate") or 0.0), float(latest.get("profit_factor") or 0.0)
+                )
+                blended_hit_rate = sum(float(r.get("win_rate") or 0.0) for r in ok_runs) / len(
+                    ok_runs
+                )
+                max_drawdown = max(float(r.get("max_drawdown") or 0.0) for r in ok_runs)
+
+        signals_30d = 0
+        try:
+            sig_resp = await self._ingest.QuerySignals(
+                ingest_pb2.QuerySignalsRequest(active_window=_recent_range(30)),
+                metadata=propagation_meta,
+            )
+            signals_30d = len(sig_resp.signals)
+        except grpc.RpcError as e:
+            log.warning("GetStrategyAnalytics: QuerySignals failed: %s", e)
+
+        taken = 0
+        if self._trading is not None:
+            try:
+                orders_resp = await self._trading.ListOrders(
+                    trading_pb2.ListOrdersRequest(strategy_id=strategy_id),
+                    metadata=propagation_meta,
+                )
+                taken = len(orders_resp.orders)
+            except grpc.RpcError as e:
+                log.warning("GetStrategyAnalytics: ListOrders failed: %s", e)
+
+        return analysis_pb2.StrategyAnalytics(
+            strategy_id=strategy_id,
+            expectancy=expectancy,
+            blended_hit_rate=blended_hit_rate,
+            max_drawdown=max_drawdown,
+            signals_30d=signals_30d,
+            taken=taken,
+            queue_share=0.0,
+        )
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -2005,6 +2083,20 @@ def _action_for(direction: str, held: bool):
     if d == "sell" and held:
         return analysis_pb2.OPPORTUNITY_ACTION_TAG_REDUCE
     return None
+
+
+def _expectancy_from_metrics(win_rate: float, profit_factor: float) -> float:
+    """Closed-form expectancy (in avg-loss units) from a run's win_rate + profit_factor —
+    no per-trade column needed (feature 083). profit_factor = (wins·avg_win)/(losses·avg_loss),
+    so payoff_ratio = profit_factor·(1−win_rate)/win_rate and
+    expectancy = win_rate·payoff_ratio − (1−win_rate). Guards win_rate ∈ {0, 1}."""
+    if win_rate <= 0.0:
+        return 0.0
+    if win_rate >= 1.0:
+        # All wins: no losing side to normalize against; expectancy is the whole win_rate.
+        return win_rate
+    payoff_ratio = profit_factor * (1.0 - win_rate) / win_rate
+    return win_rate * payoff_ratio - (1.0 - win_rate)
 
 
 # ── Backtest per-bar diagnostics helpers (feature 064-backtest-debug-info) ───────

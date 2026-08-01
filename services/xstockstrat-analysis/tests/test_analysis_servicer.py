@@ -792,6 +792,12 @@ class TestScreenSymbols:
         svc = make_servicer()
         # screener reads get_int — return the supplied defaults.
         svc._cfg.get_int = MagicMock(side_effect=lambda key, default=0: default)
+        # feature 083 — the screener now computes RSI/ATR raw columns per symbol; give the
+        # indicators stub an awaitable ComputeIndicator so those best-effort calls succeed.
+        svc._indicators = MagicMock()
+        svc._indicators.ComputeIndicator = AsyncMock(
+            return_value=SimpleNamespace(result=[SimpleNamespace(value=1.0)])
+        )
         return svc
 
     @staticmethod
@@ -3351,3 +3357,91 @@ class TestListOpportunities:
         pos_meta = dict(svc._portfolio.ListPositions.await_args_list[0].kwargs["metadata"])
         for meta in (sig_meta, pos_meta):
             assert meta == {"x-user-id": "u1", "x-access-scope": "7", "x-trace-id": "t1"}
+
+
+class TestGetStrategyAnalytics:
+    def _svc(self, runs, orders, signals_count):
+        svc = make_servicer()
+        svc._backtest_runs_repo = AsyncMock()
+        svc._backtest_runs_repo.list_by_strategy = AsyncMock(return_value=runs)
+        sig_resp = MagicMock()
+        sig_resp.signals = [MagicMock() for _ in range(signals_count)]
+        svc._ingest = MagicMock()
+        svc._ingest.QuerySignals = AsyncMock(return_value=sig_resp)
+        ord_resp = MagicMock()
+        ord_resp.orders = [MagicMock() for _ in range(orders)]
+        svc._trading = MagicMock()
+        svc._trading.ListOrders = AsyncMock(return_value=ord_resp)
+        return svc
+
+    @pytest.mark.asyncio
+    async def test_expectancy_closed_form(self):
+        # win_rate 0.6, profit_factor 1.5 → payoff 1.0 → expectancy 0.6*1.0 - 0.4 = 0.2
+        svc = self._svc(
+            runs=[
+                {"win_rate": 0.6, "profit_factor": 1.5, "max_drawdown": 0.12, "total_trades": 10}
+            ],
+            orders=3,
+            signals_count=5,
+        )
+        resp = await svc.GetStrategyAnalytics(
+            analysis_pb2.GetStrategyAnalyticsRequest(strategy_id="s1"), _ctx(_HEADERS)
+        )
+        assert abs(resp.expectancy - 0.2) < 1e-9
+        assert abs(resp.blended_hit_rate - 0.6) < 1e-9
+        assert abs(resp.max_drawdown - 0.12) < 1e-9
+        assert resp.signals_30d == 5
+        assert resp.taken == 3
+
+    @pytest.mark.asyncio
+    async def test_headers_reach_trading_edge(self):
+        svc = self._svc(
+            runs=[{"win_rate": 0.5, "profit_factor": 2.0, "max_drawdown": 0.1, "total_trades": 4}],
+            orders=1,
+            signals_count=0,
+        )
+        await svc.GetStrategyAnalytics(
+            analysis_pb2.GetStrategyAnalyticsRequest(strategy_id="s1"), _ctx(_HEADERS)
+        )
+        meta = dict(svc._trading.ListOrders.await_args.kwargs["metadata"])
+        assert meta == {"x-user-id": "u1", "x-access-scope": "7", "x-trace-id": "t1"}
+        # the ListOrders call is scoped to the strategy.
+        assert svc._trading.ListOrders.await_args.args[0].strategy_id == "s1"
+
+    @pytest.mark.asyncio
+    async def test_no_runs_yields_zero_metrics(self):
+        svc = self._svc(runs=[], orders=0, signals_count=0)
+        resp = await svc.GetStrategyAnalytics(
+            analysis_pb2.GetStrategyAnalyticsRequest(strategy_id="s1"), _ctx(_HEADERS)
+        )
+        assert resp.expectancy == 0.0 and resp.max_drawdown == 0.0
+
+
+class TestScreenSymbolsHeld:
+    @pytest.mark.asyncio
+    async def test_held_marked_from_positions(self):
+        svc = make_servicer()
+        # No fundamental criteria → fundamentals not fetched; technical path over closes.
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(
+            return_value=SimpleNamespace(
+                bars=[SimpleNamespace(close=c) for c in [10.0, 11.0, 12.0]]
+            )
+        )
+        svc._indicators = MagicMock()
+        svc._indicators.ComputeIndicator = AsyncMock(
+            return_value=SimpleNamespace(result=[SimpleNamespace(value=50.0)])
+        )
+        svc._ingest = MagicMock()
+        # portfolio holds AAPL (single page).
+        pos_resp = MagicMock()
+        pos_resp.positions = [MagicMock(symbol="AAPL")]
+        pos_resp.page.next_page_token = ""
+        svc._portfolio = MagicMock()
+        svc._portfolio.ListPositions = AsyncMock(return_value=pos_resp)
+
+        req = analysis_pb2.ScreenSymbolsRequest(symbols=["AAPL", "MSFT"])
+        resp = await svc.ScreenSymbols(req, _ctx(_HEADERS))
+        by_symbol = {r.symbol: r.held for r in resp.results}
+        assert by_symbol.get("AAPL") is True
+        assert by_symbol.get("MSFT") is False
