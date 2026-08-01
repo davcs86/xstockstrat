@@ -18,6 +18,13 @@ test.describe('Signal detail readiness', () => {
     await expect(page.getByText('rsi', { exact: false })).toBeVisible();
     // The picker reflects the threaded strategy.
     await expect(page.getByText('Live Test Strategy')).toBeVisible();
+
+    // Strategy track-record block (GetStrategyAnalytics): signals 30d 42, hit rate 62%, expectancy 0.35.
+    const record = page.getByTestId('strategy-track-record');
+    await expect(record).toBeVisible();
+    await expect(record).toContainText('42'); // signals 30d
+    await expect(record).toContainText('62%'); // hit rate
+    await expect(record).toContainText('0.35'); // expectancy
   });
 
   test('prompts to pick a strategy when none is threaded (no fabricated binding)', async ({

@@ -32,13 +32,13 @@ test.describe('Mobile companion', () => {
     }
   });
 
-  test('Opportunities renders the shared section renderer, not the desktop table', async ({
+  test('Opportunities renders the shared section renderer, not the desktop cards', async ({
     page,
   }) => {
     await page.goto('/insights/opportunities');
     await expect(page.getByTestId('mobile-sections')).toBeVisible({ timeout: 10000 });
-    // The desktop table is hidden on phone frames (hidden sm:block).
-    await expect(page.getByRole('table')).toBeHidden();
+    // The desktop conviction cards are hidden on phone frames (hidden sm:block).
+    await expect(page.getByTestId('opportunity-card').first()).toBeHidden();
     // At least one queued signal row renders as a section.
     await expect(page.getByTestId('mobile-sections').getByText('AAPL').first()).toBeVisible();
   });

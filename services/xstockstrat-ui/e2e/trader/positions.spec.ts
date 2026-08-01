@@ -26,4 +26,23 @@ test.describe('Positions — Exposure risk', () => {
     const msft = page.getByRole('row', { name: /MSFT/ });
     await expect(msft).toContainText('Unclassified');
   });
+
+  test('renders the risk-framed header, stat row and Open R / Risk-at-stop columns', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/trader/positions');
+
+    // Risk framing (not "Positions"/P&L).
+    await expect(page.getByRole('heading', { name: 'Exposure' })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Total risk at stops')).toBeVisible();
+    await expect(page.getByText('Largest factor')).toBeVisible();
+
+    // AAPL: riskAtStop 118 → "-$118.00"; Open R = unrealizedPnl 100 / 118 ≈ +0.8R.
+    const aapl = page.getByRole('row', { name: /AAPL/ });
+    await expect(aapl).toContainText('-$118.00'); // risk at stop
+    await expect(aapl).toContainText('+0.8R'); // open R
+    // MSFT has no stop → Open R falls back to em-dash.
+    await expect(page.getByRole('row', { name: /MSFT/ })).toContainText('—');
+  });
 });

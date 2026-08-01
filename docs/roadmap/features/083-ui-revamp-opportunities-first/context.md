@@ -496,3 +496,67 @@ session — flagged in the PR body per the root CLAUDE.md Teardown rule.
   directly — no base-chained per-step branches. strat-lab plugin unaffected (083 changes none of
   its tracked RPCs). Feature is code-complete; full e2e (174) + unit coverage (99% on exercised
   `src/lib`) green.
+
+### Session (2026-08-01) — Handoff-fidelity pass (user-requested): B Opportunities cards
+
+User reviewed the deployed app vs `design-handoff/` and asked to close **B (Opportunities cards)**
+and **E (per-screen fidelity)** (skipping A sidebar, C mobile-companion page, D copilot polish).
+
+- **Opportunities queue rebuilt table → conviction cards** matching the handoff card grammar: a
+  left edge/conviction number (+ N/M conditions), ticker + action tag + source chip + strategy,
+  thesis, expiry, and **Review & add / Snooze** buttons. Snooze is a real client-side dismiss.
+- **5-stat row reframed to the handoff**: Actionable now (of N evaluated · conv ≥ X) · Expiring
+  <90m (+tickers) · Exit/trim flags (+tickers) · Fresh entries · **Deployable** (real broker
+  buying power via `insightsPortfolioClient.listPortfolios`, best-effort → "—" on error).
+- **Controls added**: Any-action filter + sort (Conviction / Soonest expiry) alongside the source
+  chips + min-conviction slider.
+- **No-fabrication constraint honored**: the handoff card also shows live price/change %, a
+  sparkline, per-condition value chips (`close > sma_20 +1.4%`), and R:R + share sizing — **none
+  of which `ListOpportunities` returns**. These are intentionally omitted (not faked); surfacing
+  them is a backend-extension follow-up (new `Opportunity` fields + a marketdata quote/bars read).
+- Mobile keeps the SectionRenderer 1:1 (Step 28). e2e updated (cards not table); full suite green
+  (175 passed, 1 pre-existing chart-panel flake).
+
+### Handoff-fidelity pass — E: Exposure (Book) risk reframe
+
+- **Header reframed** "Positions" → **"Exposure"** with the risk description + a "N exit flags in
+  queue →" button (count of REDUCE_SIGNAL/STOP_NEAR positions, links to Opportunities).
+- **4-stat risk row added** (all from real Position risk fields): Total risk at stops (Σ riskAtStop),
+  Largest factor (weight-share by factor + tickers), Positions past target (Open R ≥ 2), Stops
+  within 2% (stopDistancePct ≤ 0.02).
+- **Risk columns added**: Weight (share of loaded gross MV), **Open R** (unrealizedPnl / riskAtStop),
+  Risk at stop ($), Exit rule — alongside the Factor/Stop-dist/Flag from Step 25. The existing P&L
+  columns, filters, pagination, and fill-lineage detail sheet are kept (no regression).
+- e2e extended (Exposure header + stat row + Open R/Risk-at-stop); full suite green (176 passed).
+
+### Handoff-fidelity pass — E: Portfolio (Book) rebuild
+
+- Rebuilt the Book → Portfolio page (was a thin PortfolioPanel wrapper) to the handoff: header +
+  "See risk in Exposure →" link, a **combined 5-stat row** (equity/cash/buying-power/day-P&L/
+  total-P&L summed across accounts via `usePortfolios(null)`), **one card per account** (Alpaca +
+  IBKR), and the **broker-reported positions table** (`usePositions`, full columns) with the
+  refreshed ledger disclaimer. PortfolioPanel is unchanged (still used by the trader dashboard).
+- **Shared `src/lib/money.ts`** (fmtUsd/fmtSignedUsd/fmtPct/pnlClass) extracted and adopted by
+  Portfolio + Exposure (was inlined per page — DRY guard rail).
+- Mock `listPortfolios` widened to both accounts (PORTFOLIOS) so the combined view renders; e2e
+  updated (combined stats + 2 cards + positions table). valuation-parity (AC-8) still green; full
+  suite 177 passed.
+
+### Handoff-fidelity pass — E screens 3–8 (Screener, Orders, Strategies, Signal detail, Watchlists, Backfills)
+
+- **Screener**: "Candidates · N of M passed" summary + Score-column coloring (≥0.8 gain / ≥0.7 accent).
+- **Orders**: signal-trace description, Origin→"From signal" label, Placed (HH:MM from createdAt) column.
+- **Strategies**: aggregate stat row (active/registered/scored/blended score) + Active/Paused/Off state
+  badge per card (from active + live_enabled — never Live/Paper). Per-row analytics table is a
+  per-strategy-analytics follow-up.
+- **Signal detail**: strategy track-record block (Signals 30d / Taken / Hit rate / Expectancy) via
+  GetStrategyAnalytics on the selected strategy. Order-ticket sizing rows omitted (no per-signal
+  sizing data).
+- **Watchlists**: header reframed to the readiness-not-price framing (the readiness table + "N ready"
+  landed in Step 23).
+- **Backfills**: job stat row (jobs running/completed/symbols covered/bars stored/needs attention)
+  from the polled BackfillJob list + ADMIN ONLY badge. Backtest (feature 068) already ships the
+  coverage-gap notice + day-by-day debug table — left unchanged.
+- Shared: `src/lib/money.ts` + `src/components/shared/StatTile.tsx` now back the Opportunities,
+  Exposure, Portfolio, Signal-sources, Strategies and Backfills stat rows (DRY). Each screen's e2e
+  extended; per-screen commits pushed to PR #832.
