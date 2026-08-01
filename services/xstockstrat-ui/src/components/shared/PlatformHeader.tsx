@@ -4,14 +4,15 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
-  BarChart2,
-  TrendingUp,
-  Settings,
-  Menu,
-  Activity,
-  KeyRound,
-  ChevronDown,
-} from 'lucide-react';
+  Target,
+  MagnifyingGlass,
+  Gauge,
+  BookOpen,
+  GearSix,
+  List,
+  CaretDown,
+  Lightning,
+} from '@phosphor-icons/react';
 import { cn } from '../ui/utils';
 import { Button } from '../ui/button';
 import {
@@ -24,9 +25,12 @@ import {
 } from '../ui/sheet';
 import { Separator } from '../ui/separator';
 
+// Physical routes are UNCHANGED (/trader | /insights | /config-ui | /accounts); the
+// Decide / Discover / Engine / Book grouping is a presentation layer over them (feature 083,
+// design.md § Frontend). Retained for back-compat with callers that still import them.
 export type PlatformSegment = 'trader' | 'insights' | 'config' | 'accounts';
 
-/** A secondary, in-segment navigation link rendered after the platform nav. */
+/** A secondary, in-segment navigation link. */
 export interface SubNavItem {
   label: string;
   href: string;
@@ -34,47 +38,73 @@ export interface SubNavItem {
   match?: 'exact' | 'prefix';
 }
 
-interface PlatformNavItem {
-  segment: PlatformSegment;
+interface NavGroup {
+  key: string;
   label: string;
-  href: string;
   icon: React.ReactNode;
+  items: SubNavItem[];
 }
 
-const PLATFORM_NAV: PlatformNavItem[] = [
-  { segment: 'trader', label: 'Trader', href: '/trader', icon: <TrendingUp className="h-4 w-4" /> },
+// The four opportunities-first groups + a pinned Settings surface that keeps every admin/account
+// screen reachable (C-10(a) — the nav-reachability test walks this rendered shell).
+const NAV_GROUPS: NavGroup[] = [
   {
-    segment: 'insights',
-    label: 'Insights',
-    href: '/insights',
-    icon: <BarChart2 className="h-4 w-4" />,
+    key: 'decide',
+    label: 'Decide',
+    icon: <Target className="h-4 w-4" weight="bold" />,
+    items: [{ label: 'Opportunities', href: '/insights/opportunities' }],
   },
   {
-    segment: 'config',
-    label: 'Config',
-    href: '/config-ui',
-    icon: <Settings className="h-4 w-4" />,
+    key: 'discover',
+    label: 'Discover',
+    icon: <MagnifyingGlass className="h-4 w-4" weight="bold" />,
+    items: [
+      { label: 'Watchlists', href: '/insights/watchlists' },
+      { label: 'Screener', href: '/insights/screener' },
+    ],
   },
   {
-    segment: 'accounts',
-    label: 'Accounts',
-    href: '/accounts/authorized-apps',
-    icon: <KeyRound className="h-4 w-4" />,
+    key: 'engine',
+    label: 'Engine',
+    icon: <Gauge className="h-4 w-4" weight="bold" />,
+    items: [
+      { label: 'Strategies', href: '/insights/strategies' },
+      { label: 'Formulas', href: '/insights/formulas' },
+      { label: 'Signal sources', href: '/config-ui/sources' },
+      { label: 'Backfills', href: '/insights/backfills' },
+    ],
+  },
+  {
+    key: 'book',
+    label: 'Book',
+    icon: <BookOpen className="h-4 w-4" weight="bold" />,
+    items: [
+      { label: 'Exposure', href: '/trader/positions' },
+      { label: 'Portfolio', href: '/trader/portfolio' },
+      { label: 'Orders', href: '/trader/orders' },
+    ],
+  },
+  {
+    key: 'settings',
+    label: 'Settings',
+    icon: <GearSix className="h-4 w-4" weight="bold" />,
+    items: [
+      { label: 'Trader home', href: '/trader', match: 'exact' },
+      { label: 'Insights home', href: '/insights', match: 'exact' },
+      { label: 'Accounts', href: '/trader/accounts' },
+      { label: 'Config', href: '/config-ui', match: 'exact' },
+      { label: 'Audit log', href: '/config-ui/audit' },
+      { label: 'Authorized apps', href: '/accounts/authorized-apps' },
+      { label: 'MCP tools', href: '/accounts/mcp-tools' },
+    ],
   },
 ];
 
-const SEGMENT_HOME: Record<PlatformSegment, string> = {
-  trader: '/trader',
-  insights: '/insights',
-  config: '/config-ui',
-  accounts: '/accounts/authorized-apps',
-};
+const HOME_HREF = '/insights/opportunities';
 
 /**
- * Canonical submodule lists for every segment — the single source of truth shared by
- * the desktop sub-nav (each shell passes `PLATFORM_SUBNAV[segment]`) and the mobile
- * accordion drawer, which renders every module's submodules so any destination is
- * reachable without first switching modules.
+ * Canonical submodule lists per legacy segment — retained for any caller still importing it
+ * (e.g. the mobile-companion renderer). The desktop shell now renders NAV_GROUPS.
  */
 export const PLATFORM_SUBNAV: Record<PlatformSegment, SubNavItem[]> = {
   trader: [
@@ -83,7 +113,7 @@ export const PLATFORM_SUBNAV: Record<PlatformSegment, SubNavItem[]> = {
     { label: 'Accounts', href: '/trader/accounts' },
   ],
   insights: [
-    { label: 'Dashboard', href: '/insights', match: 'exact' },
+    { label: 'Opportunities', href: '/insights/opportunities' },
     { label: 'Strategies', href: '/insights/strategies' },
     { label: 'Formulas', href: '/insights/formulas' },
     { label: 'Screener', href: '/insights/screener' },
@@ -105,129 +135,114 @@ function isItemActive(pathname: string | null, item: SubNavItem): boolean {
   return item.match === 'exact' ? pathname === item.href : pathname.startsWith(item.href);
 }
 
+/** The group + item the current pathname resolves to (for active-mark + breadcrumb). */
+function resolveActive(pathname: string | null): { group: NavGroup; item?: SubNavItem } {
+  for (const group of NAV_GROUPS) {
+    const item = group.items.find((i) => isItemActive(pathname, i));
+    if (item) return { group, item };
+  }
+  // Dynamic Decide routes (e.g. /insights/market/[symbol]) resolve to the Decide group.
+  if (pathname?.startsWith('/insights/market')) return { group: NAV_GROUPS[0] };
+  return { group: NAV_GROUPS[0] };
+}
+
 interface PlatformHeaderProps {
-  /** Which top-level segment is active — drives nav highlighting and the logo link. */
-  segment: PlatformSegment;
-  /** Optional in-segment secondary navigation (e.g. Dashboard / Strategies / Formulas). */
+  /** Legacy: active segment (ignored — the active group is derived from the pathname). */
+  segment?: PlatformSegment;
+  /** Legacy: per-segment sub-nav (ignored — the shell renders NAV_GROUPS). */
   subNav?: SubNavItem[];
   /** Right-aligned actions (e.g. the account selector). */
   actions?: React.ReactNode;
 }
 
 /**
- * PlatformHeader is the single header shared across every UI segment
- * (trader, insights, config). It renders the logo, platform-level navigation,
- * an optional in-segment sub-nav, and a slot for right-aligned actions, with a
- * mobile sheet that exposes every module and its submodules as an accordion.
+ * PlatformHeader — the shared opportunities-first shell chrome. A sticky top bar with the
+ * Decide / Discover / Engine / Book (+ Settings) group nav, a `Group / Page` breadcrumb, and a
+ * right-aligned actions slot, plus a mobile sheet that exposes every group and item so any
+ * destination is reachable without switching context first.
  */
-export function PlatformHeader({ segment, subNav, actions }: PlatformHeaderProps) {
+export function PlatformHeader({ actions }: PlatformHeaderProps) {
   const pathname = usePathname();
-  // Accordion: the active module starts expanded; others collapse until tapped.
-  const [expanded, setExpanded] = React.useState<PlatformSegment>(segment);
+  const { group: activeGroup, item: activeItem } = resolveActive(pathname);
+  const [expanded, setExpanded] = React.useState<string>(activeGroup.key);
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-sm">
-      <div className="flex h-14 items-center gap-4 px-4 sm:px-6">
-        {/* Logo */}
+      {/* Row 1 — logo, group tabs, actions */}
+      <div className="flex h-[49px] items-center gap-4 px-4 sm:px-6">
         <Link
-          href={SEGMENT_HOME[segment]}
+          href={HOME_HREF}
           className="flex items-center gap-2 text-primary font-semibold shrink-0"
         >
-          <Activity className="h-5 w-5" />
+          <Lightning className="h-5 w-5" weight="fill" />
           <span className="hidden sm:inline text-sm">xstockstrat</span>
         </Link>
 
         <Separator orientation="vertical" className="h-6 hidden sm:block" />
 
-        {/* Desktop nav */}
-        <nav className="hidden sm:flex items-center gap-1 flex-1">
-          {PLATFORM_NAV.map((item) => (
-            <a
-              key={item.segment}
-              href={item.href}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors',
-                item.segment === segment
-                  ? 'bg-accent text-foreground font-medium'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
-              )}
-            >
-              {item.icon}
-              {item.label}
-            </a>
-          ))}
-
-          {subNav && subNav.length > 0 && (
-            <>
-              <Separator orientation="vertical" className="h-5 mx-1" />
-              {subNav.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={cn(
-                    'px-3 py-1.5 rounded-md text-sm transition-colors',
-                    isItemActive(pathname, item)
-                      ? 'text-foreground font-medium'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
-                  )}
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </>
-          )}
+        <nav aria-label="Primary" className="hidden sm:flex items-center gap-1 flex-1">
+          {NAV_GROUPS.map((group) => {
+            const isActive = group.key === activeGroup.key;
+            return (
+              <Link
+                key={group.key}
+                href={group.items[0].href}
+                aria-current={isActive ? 'page' : undefined}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors border-l-2',
+                  isActive
+                    ? 'bg-accent text-foreground font-medium border-primary'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-accent/50 border-transparent',
+                )}
+              >
+                {group.icon}
+                {group.label}
+              </Link>
+            );
+          })}
         </nav>
 
-        {/* Right actions */}
         <div className="flex items-center gap-2 ml-auto">
           {actions}
-          {/* Mobile nav trigger */}
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="sm:hidden">
-                <Menu className="h-5 w-5" />
+                <List className="h-5 w-5" />
                 <span className="sr-only">Open menu</span>
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="overflow-y-auto">
               <SheetHeader>
                 <SheetTitle className="flex items-center gap-2 text-primary">
-                  <Activity className="h-5 w-5" />
+                  <Lightning className="h-5 w-5" weight="fill" />
                   xstockstrat
                 </SheetTitle>
               </SheetHeader>
-              {/* Two-level accordion: every module, each expandable to its submodules. */}
-              <nav className="mt-6 flex flex-col gap-1">
-                {PLATFORM_NAV.map((item) => {
-                  const isActiveSegment = item.segment === segment;
-                  const isOpen = expanded === item.segment;
-                  const items = PLATFORM_SUBNAV[item.segment];
+              <nav aria-label="Mobile" className="mt-6 flex flex-col gap-1">
+                {NAV_GROUPS.map((group) => {
+                  const isOpen = expanded === group.key;
                   return (
-                    <div key={item.segment} className="flex flex-col">
+                    <div key={group.key} className="flex flex-col">
                       <button
                         type="button"
                         aria-expanded={isOpen}
-                        onClick={() =>
-                          setExpanded((prev) =>
-                            prev === item.segment ? ('' as PlatformSegment) : item.segment,
-                          )
-                        }
+                        onClick={() => setExpanded((prev) => (prev === group.key ? '' : group.key))}
                         className={cn(
                           'flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors text-left',
-                          isActiveSegment
+                          group.key === activeGroup.key
                             ? 'bg-accent text-foreground font-medium'
                             : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
                         )}
                       >
-                        {item.icon}
-                        <span className="flex-1">{item.label}</span>
-                        <ChevronDown
+                        {group.icon}
+                        <span className="flex-1">{group.label}</span>
+                        <CaretDown
                           className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')}
                         />
                       </button>
                       {isOpen && (
                         <div className="ml-4 mt-1 flex flex-col gap-1 border-l border-border pl-3">
-                          {items.map((sub) => (
+                          {group.items.map((sub) => (
                             <SheetClose asChild key={sub.href}>
                               <Link
                                 href={sub.href}
@@ -251,6 +266,37 @@ export function PlatformHeader({ segment, subNav, actions }: PlatformHeaderProps
             </SheetContent>
           </Sheet>
         </div>
+      </div>
+
+      {/* Row 2 — breadcrumb + the active group's item links */}
+      <div className="hidden sm:flex items-center gap-2 px-4 sm:px-6 h-9 border-t border-border/60">
+        <span className="text-xs text-muted-foreground shrink-0" aria-label="Breadcrumb">
+          <span className="text-muted-foreground">{activeGroup.label}</span>
+          {activeItem && (
+            <>
+              <span className="mx-1.5 opacity-50">/</span>
+              <span className="text-foreground font-medium">{activeItem.label}</span>
+            </>
+          )}
+        </span>
+        <Separator orientation="vertical" className="h-4 mx-1" />
+        <nav aria-label="Section" className="flex items-center gap-1 overflow-x-auto">
+          {activeGroup.items.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              aria-current={isItemActive(pathname, item) ? 'page' : undefined}
+              className={cn(
+                'px-2.5 py-1 rounded-md text-xs whitespace-nowrap transition-colors',
+                isItemActive(pathname, item)
+                  ? 'text-foreground font-medium bg-accent/60'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
+              )}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </nav>
       </div>
     </header>
   );
