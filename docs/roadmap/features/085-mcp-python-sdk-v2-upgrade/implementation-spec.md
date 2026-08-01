@@ -2,7 +2,7 @@
 
 **Status**: `code-completed`
 **Created**: 2026-07-30
-**Feature**: `docs/roadmap/features/080-mcp-python-sdk-v2-upgrade/feature.md`
+**Feature**: `docs/roadmap/features/085-mcp-python-sdk-v2-upgrade/feature.md`
 **Total Steps**: 5
 **Feature Branch**: `feature/mcp-python-sdk-v2-upgrade`
 
@@ -555,7 +555,7 @@ captures per `tdd-gate.md`; do not skip the teeth-proof.
 
    ```python
    """Regression test: real caller claims flowing through the real Streamable HTTP transport
-   (feature 080, closing design.md's Open Risk 1).
+   (feature 085, closing design.md's Open Risk 1).
 
    Every existing test either calls a tool function directly or hand-builds a `ctx` fixture
    (test_config_tools.py's `_ctx()`). This drives an actual JSON-RPC session through

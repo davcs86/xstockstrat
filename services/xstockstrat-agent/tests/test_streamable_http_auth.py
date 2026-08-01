@@ -1,5 +1,5 @@
 """Regression test: real caller claims flowing through the real Streamable HTTP transport
-(feature 080, closing design.md's Open Risk 1).
+(feature 085, closing design.md's Open Risk 1).
 
 Every existing test either calls a tool function directly or hand-builds a `ctx` fixture
 (test_config_tools.py's `_ctx()`). This drives an actual JSON-RPC session through

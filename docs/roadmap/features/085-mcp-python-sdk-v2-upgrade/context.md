@@ -1,8 +1,8 @@
 # Context: mcp-python-sdk-v2-upgrade
 
-**Feature**: `docs/roadmap/features/080-mcp-python-sdk-v2-upgrade/feature.md`
-**Product Spec**: `docs/roadmap/features/080-mcp-python-sdk-v2-upgrade/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/080-mcp-python-sdk-v2-upgrade/implementation-spec.md`
+**Feature**: `docs/roadmap/features/085-mcp-python-sdk-v2-upgrade/feature.md`
+**Product Spec**: `docs/roadmap/features/085-mcp-python-sdk-v2-upgrade/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/085-mcp-python-sdk-v2-upgrade/implementation-spec.md`
 
 ---
 
@@ -202,3 +202,28 @@ then `/sdd-execute mcp-python-sdk-v2-upgrade`.
   ruff clean, zero stray `FastMCP` references. Status: `implementation-ready` → `code-completed`.
 
 **Next**: open the integration PR from `claude/mcp-2-upgrade-e3v1uy` to `main-dev`.
+
+## Session 2026-08-01T00:00:00Z — rebase + feature-number collision resolved
+
+- Rebased `claude/mcp-2-upgrade-e3v1uy` onto `origin/main-dev` (this branch's base had gone stale
+  — 171 files, ~19k lines landed on `main-dev` since this branch was cut, including features 080
+  through 084). The rebase applied cleanly with **zero git conflicts**, since none of the
+  concurrent work touched `services/xstockstrat-agent/` or this feature's own directory.
+- However, `main-dev` now has `080-fix-backfill-timeframe-enum` (already `launched`), so this
+  feature's `080-` prefix collided — the classic "two features raced on the same number" case
+  `docs/runbooks/feature-workflow.md` § Feature Numbering describes (git doesn't flag this as a
+  merge conflict since the directory names differ, so it had to be caught by policy, not by
+  `git rebase`). Resolved per that runbook's collision-resolution rule: renumbered to the next
+  free number after rebasing, `085` (the highest existing was `084-droplet-compose-deploy`), via
+  `git mv docs/roadmap/features/080-mcp-python-sdk-v2-upgrade
+  docs/roadmap/features/085-mcp-python-sdk-v2-upgrade`.
+- Updated every self-referential path/number per the runbook's checklist: the three
+  `**Feature**`/`**Product Spec**`/`**Implementation Spec**` path lines in this file, the
+  `**Feature**` path line in `implementation-spec.md`, and the "(feature 080, ...)" prose mention
+  in `implementation-spec.md` Step 4's embedded code AND in the actual
+  `tests/test_streamable_http_auth.py` docstring (both now say "feature 085"). Checked
+  `CHANGELOG.md`/`merge-order.md` — neither referenced this feature by number, so no change
+  needed there. No branch rename needed (branches key off the slug, unchanged).
+- Re-ran the full verification after the rename: **138 passed**, 68% coverage, ruff clean —
+  unaffected, since the renumbering only touched doc paths and one docstring comment, not any
+  executable logic.
