@@ -55,3 +55,4 @@ a fixture module and register it above (never copy-paste it into a second site).
 | Backfill jobs | `e2e/insights/backfills.spec.ts` (`runningJob()` factory) — carries **both** `timeframe: '1d'` and `timeframeEnum: 'TIMEFRAME_1DAY'` (feature 080) |
 | Watchlists (stateful mock) | `e2e/insights/watchlists.spec.ts` (`mockWatchlists`) |
 | MCP tool list | `e2e/accounts/mcp-tools.spec.ts` (`SAMPLE_TOOLS`) |
+| Copilot rail thread notes | `e2e/fixtures/copilotThread.ts` (`COPILOT_NOTE`/`COPILOT_NOTE_TEXT`) + `e2e/mock-backend.ts` (in-memory `copilotThreads` store via `appendEvent`/`queryEvents`) |

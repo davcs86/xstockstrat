@@ -410,3 +410,26 @@ session — flagged in the PR body per the root CLAUDE.md Teardown rule.
   passed on retry); `pnpm run test:coverage` 100% on exercised `src/lib/**` (feature-065 ≥40% gate).
   Mock RPC handlers for ListOpportunities/EvaluateReadiness/GetStrategyAnalytics/enriched
   ScreenResult/source-health/risk-Position were already added with the Step 22-25 screens.
+
+### Session (2026-08-01) — Step 27 (Copilot shallow-beta rail)
+
+- **Rail** (`components/copilot/CopilotRail.tsx`): 310px, default off, global (mounted in
+  PlatformHeader so all four segments get it via one seam). Two client-side templated reads
+  (queue summary + concentration flag — pure helpers in `src/lib/copilot.ts`, no LLM), an
+  append-only note thread replayed from the ledger, and the beta footer "MCP · N tools ·
+  read-only unless you confirm". No edit/delete/clear affordance (append-only, F-06).
+- **ChromeContext** (`context/ChromeContext.tsx`): `showCopilot` (default false) + toggle;
+  provider mounted inside PlatformHeader; a Sparkle toggle button in the top bar (accent-filled
+  when active, `aria-pressed`).
+- **Ledger wiring (deviation from spec's insightsBff)**: LedgerService lives in `traderBff.ts`
+  (browser `ledgerClient` → /trader/api), so the copilot thread routes went there, not insightsBff.
+  `appendEvent` forces `stream_key=copilot:<user>:default` + `event_type=copilot.message` +
+  `source=xstockstrat-ui` server-side from the verified session; `queryEvents` rewrites any
+  `copilot:`-prefixed client key to the per-user thread (lineage `order:` keys pass through). The
+  browser never learns the user id and can only read/write its own thread. Ledger proto UNCHANGED.
+- **Summary source (beta simplification)**: reads `ListOpportunities` only; the design's "+ position
+  weights" fold-in is deferred — concentration is a queue-concentration heuristic, noted in the copy.
+- **Tests**: `src/lib/copilot.test.ts` (7 unit tests over the pure helpers — counts toward the 065
+  coverage gate); `e2e/copilot.spec.ts` (default-off + toggle, queue/flag/footer, note persist+replay)
+  with `e2e/fixtures/copilotThread.ts` (+ INVENTORY row) + mock-backend in-memory `copilotThreads`
+  store (`appendEvent`/`queryEvents`). Full e2e suite green (168 passed); unit 36 passed.

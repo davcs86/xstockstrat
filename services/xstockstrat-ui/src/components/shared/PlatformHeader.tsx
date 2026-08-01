@@ -12,9 +12,12 @@ import {
   List,
   CaretDown,
   Lightning,
+  Sparkle,
 } from '@phosphor-icons/react';
 import { cn } from '../ui/utils';
 import { Button } from '../ui/button';
+import { ChromeProvider, useChrome } from '@/context/ChromeContext';
+import { CopilotRail } from '../copilot/CopilotRail';
 import {
   Sheet,
   SheetClose,
@@ -188,7 +191,40 @@ interface PlatformHeaderProps {
  * right-aligned actions slot, plus a mobile sheet that exposes every group and item so any
  * destination is reachable without switching context first.
  */
-export function PlatformHeader({ actions }: PlatformHeaderProps) {
+/**
+ * Copilot rail toggle — accent-filled when the rail is open (FR-19). Consumes ChromeContext,
+ * so it must render inside the ChromeProvider mounted by PlatformHeader below.
+ */
+function CopilotToggle() {
+  const { showCopilot, toggleCopilot } = useChrome();
+  return (
+    <Button
+      variant={showCopilot ? 'default' : 'ghost'}
+      size="icon"
+      aria-label="Toggle copilot"
+      aria-pressed={showCopilot}
+      data-testid="copilot-toggle"
+      onClick={toggleCopilot}
+    >
+      <Sparkle className="h-5 w-5" weight={showCopilot ? 'fill' : 'regular'} />
+    </Button>
+  );
+}
+
+/**
+ * PlatformHeader mounts the ChromeProvider so every segment shares the Copilot rail state, and
+ * renders the rail alongside the header chrome (default off — FR-4).
+ */
+export function PlatformHeader(props: PlatformHeaderProps) {
+  return (
+    <ChromeProvider>
+      <PlatformHeaderInner {...props} />
+      <CopilotRail />
+    </ChromeProvider>
+  );
+}
+
+function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
   const pathname = usePathname();
   const isAdmin = useHeaderIsAdmin();
   const { group: activeGroup, item: activeItem } = resolveActive(pathname);
@@ -235,6 +271,7 @@ export function PlatformHeader({ actions }: PlatformHeaderProps) {
 
         <div className="flex items-center gap-2 ml-auto">
           {actions}
+          <CopilotToggle />
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="sm:hidden">

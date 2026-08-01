@@ -222,8 +222,27 @@ export async function startMockBackend(): Promise<void> {
         },
       });
 
+      // In-memory Copilot thread store (feature 083, Step 27) — the BFF rewrites the client
+      // key to copilot:<user>:default and forces event_type copilot.message before it reaches
+      // this mock, so we key by the resolved stream_key.
+      const copilotThreads = new Map<string, { role: string; text: string; sequence: bigint }[]>();
+
       router.service(LedgerService, {
-        async queryEvents() {
+        async queryEvents(req) {
+          if (req.eventType === 'copilot.message' || req.streamKey?.startsWith('copilot:')) {
+            const msgs = copilotThreads.get(req.streamKey) ?? [];
+            return {
+              events: msgs.map((m, i) => ({
+                eventId: `copilot-${i}`,
+                eventType: 'copilot.message',
+                streamKey: req.streamKey,
+                sourceService: 'xstockstrat-ui',
+                payload: { role: m.role, text: m.text },
+                sequence: m.sequence,
+              })),
+              page: { nextPageToken: '' },
+            };
+          }
           return {
             events: [
               {
@@ -245,6 +264,18 @@ export async function startMockBackend(): Promise<void> {
             ],
             page: { nextPageToken: '' },
           };
+        },
+        async appendEvent(req) {
+          const existing = copilotThreads.get(req.streamKey) ?? [];
+          const payload = (req.payload ?? {}) as Record<string, unknown>;
+          const sequence = BigInt(existing.length + 1);
+          existing.push({
+            role: String(payload.role ?? 'user'),
+            text: String(payload.text ?? ''),
+            sequence,
+          });
+          copilotThreads.set(req.streamKey, existing);
+          return { eventId: `copilot-${existing.length}`, sequence };
         },
       });
 

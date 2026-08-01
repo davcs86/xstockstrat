@@ -20,3 +20,4 @@ export * from './strategies';
 export * from './formulas';
 export * from './backtests';
 export * from './opportunities';
+export * from './copilotThread';
