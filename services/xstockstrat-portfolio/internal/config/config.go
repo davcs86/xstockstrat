@@ -2,6 +2,7 @@ package config
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -124,6 +125,23 @@ func (w *Watcher) GetFloat(key string, defaultVal float64) float64 {
 		return fv.FloatVal
 	}
 	return defaultVal
+}
+
+// FactorMapKey is the config key holding a JSON object mapping symbol → factor name
+// (feature 083). marketdata exposes no sector, so this operator-defined map is the factor
+// source for the Exposure screen's factor grouping. Default "{}" (empty → "Unclassified").
+const FactorMapKey = "portfolio.exposure.factor_map"
+
+// FactorMap returns the parsed portfolio.exposure.factor_map (symbol → factor), or an empty
+// map when the key is unset or its JSON is unparseable (never nil).
+func (w *Watcher) FactorMap() map[string]string {
+	raw := w.GetString(FactorMapKey, "{}")
+	m := map[string]string{}
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		slog.Warn("portfolio.exposure.factor_map is not valid JSON; using empty map", "error", err)
+		return map[string]string{}
+	}
+	return m
 }
 
 // GetBool returns the bool value for key, or defaultVal if not set.
