@@ -433,3 +433,24 @@ session — flagged in the PR body per the root CLAUDE.md Teardown rule.
   coverage gate); `e2e/copilot.spec.ts` (default-off + toggle, queue/flag/footer, note persist+replay)
   with `e2e/fixtures/copilotThread.ts` (+ INVENTORY row) + mock-backend in-memory `copilotThreads`
   store (`appendEvent`/`queryEvents`). Full e2e suite green (168 passed); unit 36 passed.
+
+### Session (2026-08-01) — Step 28 (mobile companion)
+
+- **SectionRenderer** (`components/mobile/SectionRenderer.tsx` + `sections.ts`): the one shared
+  mobile renderer for the 8 section kinds (head/stat/signal/chart/row/form/note/action). All
+  interactive rows ≥44px (FR-16). Drawn behind `sm:hidden` next to the desktop layout so the two
+  stay in lock-step (no divergent mobile tree).
+- **BottomTabBar** (`components/mobile/BottomTabBar.tsx`): fixed mobile bottom nav over the four
+  primary groups (Decide/Discover/Engine/Book), mobile-only, ≥56px targets, active-by-pathname.
+  Mounted globally in PlatformHeader; content wrappers get `pb-20 sm:pb-0` clearance.
+- **Nav model extraction (cycle fix)**: `NAV_GROUPS` + the nav interfaces moved to
+  `components/shared/navGroups.tsx`. Before this, BottomTabBar importing `NAV_GROUPS` from
+  PlatformHeader (which imports BottomTabBar) formed an import cycle → `ReferenceError: Cannot
+  access 'F' before initialization` at prerender of `/config-ui/audit`. Both the header and the
+  tab bar now import from the standalone module — one source of truth, no cycle.
+- **First consumer**: the Opportunities queue renders 1:1 on mobile via SectionRenderer (one
+  `signal` section per row) with the desktop table `hidden sm:block`. Broader per-screen adoption
+  of the section model is incremental follow-up — the primitive, the nav, and the responsive
+  screens already deliver phone parity + navigation.
+- **Tests**: `e2e/mobile.spec.ts` (bottom bar + 4 ≥44px targets, section renderer vs table,
+  cross-group nav). Full build green after the cycle fix; mobile+copilot+nav e2e 8 passed.

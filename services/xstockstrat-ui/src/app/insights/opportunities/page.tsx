@@ -16,6 +16,8 @@ import {
 import { OpportunityActionTag } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { OPPORTUNITY_ACTION, EnumBadge } from '@/lib/opportunityShared';
 import { useOpportunities } from '@/hooks/useOpportunities';
+import { SectionRenderer } from '@/components/mobile/SectionRenderer';
+import type { Section } from '@/components/mobile/sections';
 
 /** Expiry label from a protobuf-es Timestamp ({ seconds: bigint }). */
 function expiryLabel(validUntil: { seconds: bigint } | undefined): string {
@@ -69,6 +71,21 @@ export default function OpportunitiesPage() {
 
   const toggleSource = (s: string) =>
     setActiveSources((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
+
+  // Mobile 1:1 of the queue (FR-16) — the same rows as one `signal` section each, rendered by
+  // the shared SectionRenderer instead of the cramped desktop table.
+  const reviewHref = (o: (typeof rows)[number]) =>
+    o.strategyId
+      ? `/insights/market/${o.symbol}?strategy=${o.strategyId}`
+      : `/insights/market/${o.symbol}`;
+  const mobileSections: Section[] = rows.map((o) => ({
+    kind: 'signal',
+    symbol: o.symbol,
+    badge: OPPORTUNITY_ACTION[o.action],
+    conviction: o.conviction,
+    caption: o.thesis || o.source || undefined,
+    href: reviewHref(o),
+  }));
 
   return (
     <AppShell>
@@ -126,8 +143,21 @@ export default function OpportunitiesPage() {
           </label>
         </div>
 
+        {/* Queue — mobile: shared SectionRenderer (1:1, FR-16); desktop: full table. */}
+        <div className="sm:hidden">
+          {isLoading ? (
+            <p className="text-sm text-muted-foreground">Loading opportunities…</p>
+          ) : error ? (
+            <p className="text-sm text-sell">Failed to load opportunities.</p>
+          ) : rows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No opportunities match the filter.</p>
+          ) : (
+            <SectionRenderer sections={mobileSections} />
+          )}
+        </div>
+
         {/* Queue */}
-        <Card>
+        <Card className="hidden sm:block">
           <CardContent className="p-0">
             {isLoading ? (
               <div className="p-6 text-sm text-muted-foreground">Loading opportunities…</div>

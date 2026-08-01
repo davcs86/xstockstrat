@@ -11,7 +11,7 @@ export default function ConfigUILayout({ children }: { children: React.ReactNode
   return (
     <Providers>
       <PlatformHeader segment="config" subNav={PLATFORM_SUBNAV.config} />
-      <main className="p-4 sm:p-6">{children}</main>
+      <main className="p-4 pb-20 sm:p-6 sm:pb-6">{children}</main>
     </Providers>
   );
 }

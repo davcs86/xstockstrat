@@ -3,21 +3,13 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import {
-  Target,
-  MagnifyingGlass,
-  Gauge,
-  BookOpen,
-  GearSix,
-  List,
-  CaretDown,
-  Lightning,
-  Sparkle,
-} from '@phosphor-icons/react';
+import { List, CaretDown, Lightning, Sparkle } from '@phosphor-icons/react';
 import { cn } from '../ui/utils';
 import { Button } from '../ui/button';
 import { ChromeProvider, useChrome } from '@/context/ChromeContext';
 import { CopilotRail } from '../copilot/CopilotRail';
+import { BottomTabBar } from '../mobile/BottomTabBar';
+import { NAV_GROUPS, HOME_HREF, type SubNavItem, type NavItem, type NavGroup } from './navGroups';
 import {
   Sheet,
   SheetClose,
@@ -32,26 +24,6 @@ import { Separator } from '../ui/separator';
 // Decide / Discover / Engine / Book grouping is a presentation layer over them (feature 083,
 // design.md § Frontend). Retained for back-compat with callers that still import them.
 export type PlatformSegment = 'trader' | 'insights' | 'config' | 'accounts';
-
-/** A secondary, in-segment navigation link. */
-export interface SubNavItem {
-  label: string;
-  href: string;
-  /** 'exact' matches the pathname exactly; 'prefix' matches by startsWith. Default 'prefix'. */
-  match?: 'exact' | 'prefix';
-}
-
-interface NavItem extends SubNavItem {
-  /** Admin-only entry (FR-7) — hidden from non-admins; the BFF re-enforces on every call. */
-  adminOnly?: boolean;
-}
-
-interface NavGroup {
-  key: string;
-  label: string;
-  icon: React.ReactNode;
-  items: NavItem[];
-}
 
 /**
  * Provider-free admin check for the shared shell. useIsAdmin (react-query) is unavailable in
@@ -77,60 +49,6 @@ function useHeaderIsAdmin(): boolean {
 
 // The four opportunities-first groups + a pinned Settings surface that keeps every admin/account
 // screen reachable (C-10(a) — the nav-reachability test walks this rendered shell).
-const NAV_GROUPS: NavGroup[] = [
-  {
-    key: 'decide',
-    label: 'Decide',
-    icon: <Target className="h-4 w-4" weight="bold" />,
-    items: [{ label: 'Opportunities', href: '/insights/opportunities' }],
-  },
-  {
-    key: 'discover',
-    label: 'Discover',
-    icon: <MagnifyingGlass className="h-4 w-4" weight="bold" />,
-    items: [
-      { label: 'Watchlists', href: '/insights/watchlists' },
-      { label: 'Screener', href: '/insights/screener' },
-    ],
-  },
-  {
-    key: 'engine',
-    label: 'Engine',
-    icon: <Gauge className="h-4 w-4" weight="bold" />,
-    items: [
-      { label: 'Strategies', href: '/insights/strategies' },
-      { label: 'Formulas', href: '/insights/formulas' },
-      { label: 'Signal sources', href: '/config-ui/sources' },
-      { label: 'Backfills', href: '/insights/backfills', adminOnly: true },
-    ],
-  },
-  {
-    key: 'book',
-    label: 'Book',
-    icon: <BookOpen className="h-4 w-4" weight="bold" />,
-    items: [
-      { label: 'Exposure', href: '/trader/positions' },
-      { label: 'Portfolio', href: '/trader/portfolio' },
-      { label: 'Orders', href: '/trader/orders' },
-    ],
-  },
-  {
-    key: 'settings',
-    label: 'Settings',
-    icon: <GearSix className="h-4 w-4" weight="bold" />,
-    items: [
-      { label: 'Trader home', href: '/trader', match: 'exact' },
-      { label: 'Insights home', href: '/insights', match: 'exact' },
-      { label: 'Accounts', href: '/trader/accounts' },
-      { label: 'Config', href: '/config-ui', match: 'exact' },
-      { label: 'Audit log', href: '/config-ui/audit' },
-      { label: 'Authorized apps', href: '/accounts/authorized-apps' },
-      { label: 'MCP tools', href: '/accounts/mcp-tools' },
-    ],
-  },
-];
-
-const HOME_HREF = '/insights/opportunities';
 
 /**
  * Canonical submodule lists per legacy segment — retained for any caller still importing it
@@ -220,6 +138,8 @@ export function PlatformHeader(props: PlatformHeaderProps) {
     <ChromeProvider>
       <PlatformHeaderInner {...props} />
       <CopilotRail />
+      {/* Fixed mobile bottom nav (FR-16). Content wrappers add pb for clearance (see AppShells). */}
+      <BottomTabBar />
     </ChromeProvider>
   );
 }

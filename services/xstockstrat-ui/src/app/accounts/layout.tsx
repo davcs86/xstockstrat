@@ -20,7 +20,7 @@ export default function AccountsLayout({ children }: { children: React.ReactNode
   return (
     <AgentUrlProvider value={agentUrl}>
       <PlatformHeader segment="accounts" subNav={PLATFORM_SUBNAV.accounts} />
-      <main className="p-4 sm:p-6">{children}</main>
+      <main className="p-4 pb-20 sm:p-6 sm:pb-6">{children}</main>
     </AgentUrlProvider>
   );
 }
