@@ -6,6 +6,8 @@ import { AppShell } from '@/components/trader/AppShell';
 import { useAccountContext } from '@/context/AccountContext';
 import { usePositions } from '@/hooks/usePortfolio';
 import { POSITION_RISK_FLAG, EnumBadge } from '@/lib/opportunityShared';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/shared/EmptyState';
 import { usePositionLineage } from '@/hooks/usePositionLineage';
 import { PositionSide } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import type { Position } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
@@ -164,13 +166,23 @@ export default function PositionsPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {isLoading && <p className="text-sm text-muted-foreground">Loading positions…</p>}
+            {isLoading && (
+              <div className="space-y-2" data-testid="positions-loading">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-10 w-full" />
+                ))}
+              </div>
+            )}
             {error && <p className="text-sm text-destructive">Failed to load positions</p>}
             {!isLoading && !error && positions.length === 0 && (
-              <p className="text-sm text-muted-foreground py-6 text-center">
-                No open {mode} positions
-                {selectedAccountId ? '' : ' (select an account in the header)'}
-              </p>
+              <EmptyState
+                title={`No open ${mode} positions`}
+                description={
+                  selectedAccountId
+                    ? 'Positions you hold in this account will show here.'
+                    : 'Select an account in the header to load positions.'
+                }
+              />
             )}
             {positions.length > 0 && (
               <Table>

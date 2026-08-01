@@ -18,6 +18,8 @@ import { OPPORTUNITY_ACTION, EnumBadge } from '@/lib/opportunityShared';
 import { useOpportunities } from '@/hooks/useOpportunities';
 import { SectionRenderer } from '@/components/mobile/SectionRenderer';
 import type { Section } from '@/components/mobile/sections';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/shared/EmptyState';
 
 /** Expiry label from a protobuf-es Timestamp ({ seconds: bigint }). */
 function expiryLabel(validUntil: { seconds: bigint } | undefined): string {
@@ -146,11 +148,18 @@ export default function OpportunitiesPage() {
         {/* Queue — mobile: shared SectionRenderer (1:1, FR-16); desktop: full table. */}
         <div className="sm:hidden">
           {isLoading ? (
-            <p className="text-sm text-muted-foreground">Loading opportunities…</p>
+            <div className="space-y-2" data-testid="opportunities-loading">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-14 w-full" />
+              ))}
+            </div>
           ) : error ? (
             <p className="text-sm text-sell">Failed to load opportunities.</p>
           ) : rows.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No opportunities match the filter.</p>
+            <EmptyState
+              title="No opportunities match the filter"
+              description="Loosen the min-conviction slider or clear the source chips to see more."
+            />
           ) : (
             <SectionRenderer sections={mobileSections} />
           )}
@@ -160,13 +169,18 @@ export default function OpportunitiesPage() {
         <Card className="hidden sm:block">
           <CardContent className="p-0">
             {isLoading ? (
-              <div className="p-6 text-sm text-muted-foreground">Loading opportunities…</div>
+              <div className="space-y-2 p-4" data-testid="opportunities-loading-desktop">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <Skeleton key={i} className="h-10 w-full" />
+                ))}
+              </div>
             ) : error ? (
               <div className="p-6 text-sm text-sell">Failed to load opportunities.</div>
             ) : rows.length === 0 ? (
-              <div className="p-6 text-sm text-muted-foreground">
-                No opportunities match the filter.
-              </div>
+              <EmptyState
+                title="No opportunities match the filter"
+                description="Loosen the min-conviction slider or clear the source chips to see more."
+              />
             ) : (
               <Table>
                 <TableHeader>

@@ -454,3 +454,21 @@ session — flagged in the PR body per the root CLAUDE.md Teardown rule.
   screens already deliver phone parity + navigation.
 - **Tests**: `e2e/mobile.spec.ts` (bottom bar + 4 ≥44px targets, section renderer vs table,
   cross-group nav). Full build green after the cycle fix; mobile+copilot+nav e2e 8 passed.
+
+### Session (2026-08-01) — Steps 29+30 (non-happy states + states/mobile e2e + gate)
+
+- **Primitives**: added `components/ui/skeleton.tsx` (Skeleton) + `components/shared/EmptyState.tsx`.
+  Deviation: the spec listed a `CardError` too, but `CardNotice variant="error"` +
+  `QueryStateMessages` already cover per-card errors — added a third near-duplicate would trip the
+  DRY guard rail, so errors reuse the existing primitives (documented).
+- **Applied to** the flagship Decide (Opportunities: skeleton rows desktop+mobile, EmptyState on
+  no-match, error copy) and Book (positions/Exposure: skeleton rows + EmptyState) screens. The
+  other Steps 22-25 screens already carried loading/empty/error states inline from those steps;
+  the new primitives standardize the pattern. Backfills destructive-confirm (typed symbol +
+  "DELETE ALL") is unchanged (FR-5) — verified by e2e.
+- **e2e** `e2e/non-happy-states.spec.ts` (RED-green): Opportunities loading skeleton → data,
+  empty-state on no-match, per-card error on a 500 (retry:1), and the Backfills whole-symbol
+  delete staying gated until both typed confirmations match. Mobile e2e (Step 28) complete.
+- **Gate (AC-11)**: full Playwright suite green — **174 passed** (1 pre-existing chart-panel
+  timeframeEnum flake, passed on retry); `pnpm run test:coverage` 99% on exercised `src/lib/**`
+  (≥40% floor, feature-065).
