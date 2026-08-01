@@ -591,3 +591,17 @@ User flagged the deployed Strategies + Watchlists as still low-fidelity:
   inside its own container and the page body never scrolls horizontally. Added a phone-viewport
   e2e guard asserting `scrollWidth <= clientWidth`. (The strategy-detail Past-Runs raw table was
   already `overflow-x-auto`-wrapped by feature 068 — no change.)
+
+### Handoff-fidelity — phone-frame overflow sweep (all screens)
+
+- Added `e2e/mobile-overflow.spec.ts` — visits every screen at 390px and asserts the page body
+  does not scroll horizontally (`scrollWidth <= clientWidth`). It found the real offenders
+  empirically: **all three `/trader/*` pages (Exposure/Portfolio/Orders) overflowed by 101px** —
+  a shared trader-header element, not the tables (those use the overflow-wrapped `<Table>`).
+- Root cause: the `AccountSelector` trigger was a fixed `w-[180px]`, and the Step-27 Copilot toggle
+  added another header button — together they blew past the phone width. Fixes: AccountSelector
+  `w-[120px] sm:w-[180px]`, the manage-accounts gear `hidden sm:inline-flex` (accounts still
+  reachable via nav → Accounts on mobile), and the PlatformHeader row-1 gap/padding tightened on
+  mobile (`gap-2 px-3 sm:gap-4 sm:px-6`). All 14 routes now fit the frame; full suite 194 passed.
+- Process note: the earlier "Screener matches the handoff" claim was content-only — I now gate
+  mobile layout with this sweep so overflow regressions fail CI instead of needing a screenshot.
