@@ -318,8 +318,8 @@ signals_fed BIGINT NOT NULL DEFAULT 0;`. `.down.sql` drops the four columns. Mir
 **Status**: `pending`
 **Service**: `xstockstrat-ingest`
 **Files**:
-- `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
-- `services/xstockstrat-ingest/app/repositories/` — modify (signal-sources repo)
+- `services/xstockstrat-ingest/app/handlers/servicer.py` — modify (populate `health`/`last_seen_at`/`last_error`/`signals_fed` on `ListSignalSources`; track last-seen/last-error on the ingest path)
+- `services/xstockstrat-ingest/app/repositories/signal_sources.py` — modify (read/scan the new source-health columns added in Step 9)
 
 **Reviewers**: `xstockstrat-ingest` (service owner) — signal normalization/idempotency, source schema stability
 
@@ -343,7 +343,7 @@ behavior unchanged (analysis owns the dedup guard — ingest `CLAUDE.md`).
 **Status**: `pending`
 **Service**: `xstockstrat-ingest`
 **Files**:
-- `services/xstockstrat-ingest/tests/` — create/modify a source-health test
+- `services/xstockstrat-ingest/tests/test_source_health.py` — create (or extend the existing signal-source test file discovery finds under `tests/`)
 
 **Reviewers**: `xstockstrat-ingest` (service owner)
 
@@ -526,7 +526,7 @@ where a raw column is legitimately a fundamental; keep the blended `criterion_sc
 **Status**: `pending`
 **Service**: `xstockstrat-analysis`
 **Files**:
-- `services/xstockstrat-analysis/tests/` — modify the screener test
+- `services/xstockstrat-analysis/tests/test_screener_enrichment.py` — create (or extend the existing screener test file discovery finds under `tests/`, e.g. a `test_screener*.py`)
 
 **Reviewers**: `xstockstrat-analysis` (service owner)
 
@@ -572,9 +572,9 @@ tokens + `--background` in `tailwind.config.js:40-42` to the Nocturne values; ad
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx` — modify (nav grouping, badges, breadcrumb)
-- `services/xstockstrat-ui/src/components/ui/` — create missing primitives as needed (Dialog/Tabs/Tooltip/Slider/Skeleton/Chip)
-- `services/xstockstrat-ui/src/app/**` — modify layouts for the 212px sidebar / 49px top bar / content region
-- `services/xstockstrat-ui/src/app/insights/**` — create **thin placeholder route pages** (`page.tsx` rendering a titled empty shell) for each new Decide/Discover/Engine screen so every sidebar link resolves; Steps 22–25 replace them with the real screens
+- `services/xstockstrat-ui/src/components/ui/{dialog,tabs,tooltip,slider,skeleton,chip}.tsx` — create **only** the primitives the shell needs (Dialog may resolve via the existing `@radix-ui/react-dialog` dep; create only the missing ones discovery confirms)
+- `services/xstockstrat-ui/src/app/layout.tsx` + `services/xstockstrat-ui/src/app/{trader,insights,config-ui,accounts}/layout.tsx` — modify (212px sidebar / 49px top bar / content region)
+- `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx` — create the thin placeholder (`page.tsx` rendering a titled empty shell) for the one genuinely-new Decide route; existing routes (watchlists/screener/strategies/backfills/market) already resolve. If discovery finds another new screen route needs a stub, add it under `src/app/insights/<screen>/page.tsx` (Steps 22–25 replace stubs with real screens)
 
 **Reviewers**: `xstockstrat-ui` (service owner) — nav reachability, shell correctness
 
@@ -635,8 +635,10 @@ surfaces use `addAdminCookie`.
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
-- `services/xstockstrat-ui/src/app/insights/**` — create Opportunities + Signal-detail routes (under `/insights`, per design)
-- `services/xstockstrat-ui/src/lib/insightsBff.ts` + `src/lib/browserClients/*` — modify (wire `ListOpportunities`/`EvaluateReadiness`)
+- `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx` — replace the Step-20 stub with the real Opportunities queue
+- `services/xstockstrat-ui/src/app/insights/market/[symbol]/page.tsx` — modify (Signal detail: conditions from `EvaluateReadiness` + order ticket re-presenting `OrderForm.tsx`; extends the existing candlestick view)
+- `services/xstockstrat-ui/src/lib/insightsBff.ts` — modify (register `ListOpportunities`/`EvaluateReadiness` on the insights router)
+- `services/xstockstrat-ui/src/lib/browserClients/` — modify the insights/analysis browser client (exact filename confirmed at execute discovery)
 - `services/xstockstrat-ui/e2e/fixtures/opportunities.ts` — create (C-12 fixture + INVENTORY row)
 - `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` — modify
 
@@ -664,8 +666,9 @@ renders as "N/M conditions" + bars, never a fake %. Add `e2e/fixtures/opportunit
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
-- `services/xstockstrat-ui/src/app/insights/watchlists/**`, `src/app/insights/screener/**` — modify
-- `services/xstockstrat-ui/e2e/fixtures/` — modify/extend (readiness + enriched screener rows)
+- `services/xstockstrat-ui/src/app/insights/watchlists/page.tsx` (+ the watchlist editor page discovery finds under `watchlists/`) — modify
+- `services/xstockstrat-ui/src/app/insights/screener/page.tsx` — modify
+- `services/xstockstrat-ui/e2e/fixtures/watchlists.ts` — create/extend (readiness rows) + `e2e/fixtures/INVENTORY.md` — modify; extend the inline `screenSymbols` mock in `e2e/mock-backend.ts` for the enriched columns (centralize on a second consumer, C-12)
 
 **Reviewers**: `xstockstrat-ui` (service owner)
 
@@ -689,8 +692,10 @@ column tooltip.
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
-- `services/xstockstrat-ui/src/app/insights/{strategies,backfills}/**`, signal-sources + backtest views — modify
-- `services/xstockstrat-ui/e2e/fixtures/` — modify (StrategyAnalytics, source-health fixtures + INVENTORY rows)
+- `services/xstockstrat-ui/src/app/insights/strategies/page.tsx` + `strategies/[id]/page.tsx` — modify (Strategies list/detail + backtest views; the coverage-gap card lives in `strategies/[id]/page.tsx:290-334`)
+- `services/xstockstrat-ui/src/app/insights/backfills/page.tsx` — modify
+- Signal-sources view: modify the existing sources page discovery finds (`src/app/config-ui/sources/page.tsx`) or a new `src/app/insights/sources/page.tsx` if design places it under Engine — exact route confirmed at execute discovery
+- `services/xstockstrat-ui/e2e/fixtures/strategies.ts` — extend (StrategyAnalytics) + create `e2e/fixtures/signalSources.ts` (source-health) + `e2e/fixtures/INVENTORY.md` — modify
 
 **Reviewers**: `xstockstrat-ui` (service owner)
 
@@ -715,8 +720,10 @@ Backfills stays admin-gated (create+delete panels only for admins; typed-symbol 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
-- `services/xstockstrat-ui/src/app/trader/**` (positions→Exposure reframe, orders) + Portfolio view — modify
-- `services/xstockstrat-ui/e2e/fixtures/portfolios.ts` — reuse (`PORTFOLIO_ALPACA/IBKR/PORTFOLIOS`)
+- `services/xstockstrat-ui/src/app/trader/positions/page.tsx` — modify (positions → Exposure risk reframe, consuming the Step-13 `Position` risk fields)
+- `services/xstockstrat-ui/src/app/trader/orders/page.tsx` + `orders/[id]/page.tsx` — modify (Orders table + order detail)
+- `services/xstockstrat-ui/src/app/trader/portfolio/page.tsx` — create the read-only broker-mirror Portfolio view (new route under the Book tab; exact route confirmed at execute discovery)
+- `services/xstockstrat-ui/e2e/fixtures/portfolios.ts` — reuse (`PORTFOLIO_ALPACA/IBKR/PORTFOLIOS`); migrate the inline `mock-backend.ts` positions/orders mocks to fixtures on a second consumer (C-12)
 
 **Reviewers**: `xstockstrat-ui` (service owner)
 
@@ -773,9 +780,10 @@ mock-backend handlers for `ListOpportunities`/`EvaluateReadiness`/`GetStrategyAn
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
-- `services/xstockstrat-ui/src/components/**` — create the 310px Copilot rail
-- `services/xstockstrat-ui/src/lib/insightsBff.ts` + `src/lib/browserClients/*` — modify (wire ledger `AppendEvent`/`QueryEvents`)
-- `services/xstockstrat-ui/e2e/` — modify (rail e2e + thread fixture)
+- `services/xstockstrat-ui/src/components/copilot/CopilotRail.tsx` — create the 310px rail (+ any small sub-components it needs under `src/components/copilot/`)
+- `services/xstockstrat-ui/src/lib/insightsBff.ts` — modify (wire ledger `AppendEvent`/`QueryEvents` thread routes)
+- `services/xstockstrat-ui/src/lib/browserClients/` — modify the ledger browser client (exact filename confirmed at execute discovery)
+- `services/xstockstrat-ui/e2e/copilot.spec.ts` — create (rail e2e) + `e2e/fixtures/copilotThread.ts` — create (thread fixture + INVENTORY row)
 
 **Reviewers**: `xstockstrat-ui` (service owner); `xstockstrat-ledger` (owner, FYI) — append-store usage
 
@@ -800,8 +808,8 @@ read-only — no live tool call). Default off via `ChromeContext`/`showCopilot`.
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
-- `services/xstockstrat-ui/src/components/**` — create the mobile section renderer + bottom tab bar
-- `services/xstockstrat-ui/e2e/` — modify (mobile e2e)
+- `services/xstockstrat-ui/src/components/mobile/SectionRenderer.tsx` + `src/components/mobile/BottomTabBar.tsx` — create (the shared section renderer for kinds `stat`/`signal`/`chart`/`row`/`form`/`note`/`action`/`head` + the fixed bottom tab bar; additional small section components under `src/components/mobile/`)
+- `services/xstockstrat-ui/e2e/mobile.spec.ts` — create (mobile e2e; also referenced by Step 30)
 
 **Reviewers**: `xstockstrat-ui` (service owner)
 
@@ -823,7 +831,8 @@ a fixed bottom tab bar, ≥44px tap targets. Same routes/screens in a responsive
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
-- `services/xstockstrat-ui/src/app/**`, `src/components/**` — modify (skeletons, empty copy, per-card error)
+- `services/xstockstrat-ui/src/components/ui/skeleton.tsx` + `services/xstockstrat-ui/src/components/shared/{EmptyState,CardError}.tsx` — create the shared loading/empty/error primitives
+- `services/xstockstrat-ui/src/app/insights/` + `services/xstockstrat-ui/src/app/trader/` — modify each data screen built in Steps 22–25 to render those states (scoped to the screen `page.tsx` files those steps created/modified — no repo-wide edit); Backfills delete panel keeps its destructive-confirm gating (`backfills/page.tsx:72,134-137`)
 
 **Reviewers**: `xstockstrat-ui` (service owner)
 
@@ -846,7 +855,9 @@ preserve the Backfills destructive-confirm gates; reflect the real poll/stream c
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
-- `services/xstockstrat-ui/e2e/**` — create mobile + state specs
+- `services/xstockstrat-ui/e2e/mobile.spec.ts` — create/complete (mobile parity + ≥44px tap targets; created in Step 28)
+- `services/xstockstrat-ui/e2e/non-happy-states.spec.ts` — create (loading/empty/error + destructive-confirm gating)
+- (verification only — runs the full existing `e2e/` suite + the vitest coverage gate; no other new files)
 
 **Reviewers**: `xstockstrat-ui` (service owner)
 

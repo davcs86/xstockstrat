@@ -235,6 +235,21 @@
 - **Next:** `/sdd-execute ui-revamp-opportunities-first` (backend→frontend; step PRs target the feature
   branch directly, not base-chained — fails 082; reconcile branch lineage before first write).
 
+## Session 2026-08-01 — resolve remaining impl-spec warnings (tighten `**Files**`)
+
+- Addressed the deferred impl-spec review warnings (the wildcard/bare-directory `**Files**` entries that
+  reduce auditability and weaken `/sdd-execute`'s F-08 per-step staging guard). Tightened Steps 10, 11, 18,
+  20, 22, 23, 24, 25, 27, 28, 29, 30 from repo/segment-wide globs (`src/app/**`, `src/components/**`,
+  `e2e/**`, bare `tests/`, `app/repositories/`) to concrete file lists / dir-scoped paths, each with an
+  "exact file confirmed at execute discovery" note only where a new-file set is genuinely open. Remaining
+  intentional wildcards: `packages/proto/gen/**` (codegen output), a single `src/lib/browserClients/` dir
+  (one client file), and the conditional `internal/testdata/` C-13 home.
+- The earlier PR (#830) was **merged**, so this follow-up restarts `claude/ui-revamp-opportunities-lwrinp`
+  from `origin/main-dev` (which carries the merged work) and opens a **new** PR — a merged PR cannot track
+  follow-up work.
+- No lifecycle change (still `implementation-ready`); step **bodies/instructions/verification unchanged** —
+  only `**Files**` precision. Ready for `/sdd-execute`.
+
 ## Session 2026-07-31 — sdd-review product-spec (re-validation of refreshed spec)
 
 - **Verdict: PASS WITH WARNINGS** (0 blockers, no Floor breach). Lifecycle **unchanged** (already
