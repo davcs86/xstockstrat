@@ -22,12 +22,23 @@ from app.config.watcher import ConfigWatcher
 from app.repositories import backfill_chunks, backfill_jobs
 from app.repositories.signal_sources import (
     deactivate_source,
+    derive_health_status,
     list_all_sources,
+    mark_source_error,
+    mark_source_fed,
     upsert_source,
     validate_config_json,
 )
 
 log = logging.getLogger(__name__)
+
+# feature 083 — source-health string → SourceHealthStatus enum.
+_HEALTH_ENUM = {
+    "live": ingest_pb2.SOURCE_HEALTH_STATUS_LIVE,
+    "stale": ingest_pb2.SOURCE_HEALTH_STATUS_STALE,
+    "down": ingest_pb2.SOURCE_HEALTH_STATUS_DOWN,
+    "unspecified": ingest_pb2.SOURCE_HEALTH_STATUS_UNSPECIFIED,
+}
 
 # Canonical timeframe <-> Timeframe enum int (mirrors marketdata internal/timeframe + 053).
 # 15m is the smallest supported interval; the deprecated 1m/5m enums (1/2) are intentionally
@@ -702,8 +713,20 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             signal_id = row["id"]
         except Exception as e:
             log.error("failed to insert signal: %s", e)
+            try:  # feature 083 — record the source's last error (best-effort)
+                await mark_source_error(self._db, signal.source, str(e))
+            except Exception as bookkeeping_err:
+                log.warning(
+                    "failed to record source error for %s: %s", signal.source, bookkeeping_err
+                )
             await context.abort(grpc.StatusCode.INTERNAL, f"database error: {e}")
             return
+
+        # feature 083 — record a successful feed (last_seen_at + signals_fed++, clear last_error).
+        try:
+            await mark_source_fed(self._db, signal.source)
+        except Exception as e:
+            log.warning("failed to record source feed for %s: %s", signal.source, e)
 
         log.info(
             "ingested signal id=%d source=%s symbol=%s direction=%s",
@@ -855,6 +878,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
 
         from google.protobuf.struct_pb2 import Struct
 
+        now = datetime.now(UTC)
         sources = []
         for row in rows:
             cfg = Struct()
@@ -864,17 +888,25 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                     if isinstance(row["config_json"], dict)
                     else json.loads(row["config_json"])
                 )
-            sources.append(
-                ingest_pb2.SignalSource(
-                    slug=row["slug"],
-                    display_name=row["display_name"],
-                    source_type=row["source_type"],
-                    extractor_module=row["extractor_module"],
-                    active=row["active"],
-                    has_credentials=(row["credentials_ref"] is not None),
-                    config_json=cfg,
-                )
+            # feature 083 — health is derived on read from last_seen_at freshness + last_error.
+            last_seen = row.get("last_seen_at")
+            last_error = row.get("last_error")
+            health = _HEALTH_ENUM[derive_health_status(last_seen, last_error, now)]
+            source = ingest_pb2.SignalSource(
+                slug=row["slug"],
+                display_name=row["display_name"],
+                source_type=row["source_type"],
+                extractor_module=row["extractor_module"],
+                active=row["active"],
+                has_credentials=(row["credentials_ref"] is not None),
+                config_json=cfg,
+                health=health,
+                last_error=last_error or "",
+                signals_fed=row.get("signals_fed") or 0,
             )
+            if last_seen is not None:
+                source.last_seen_at.FromDatetime(last_seen)
+            sources.append(source)
         return ingest_pb2.ListSignalSourcesResponse(sources=sources)
 
     async def ManageSignalSource(self, request, context):
