@@ -541,3 +541,22 @@ and **E (per-screen fidelity)** (skipping A sidebar, C mobile-companion page, D 
 - Mock `listPortfolios` widened to both accounts (PORTFOLIOS) so the combined view renders; e2e
   updated (combined stats + 2 cards + positions table). valuation-parity (AC-8) still green; full
   suite 177 passed.
+
+### Handoff-fidelity pass — E screens 3–8 (Screener, Orders, Strategies, Signal detail, Watchlists, Backfills)
+
+- **Screener**: "Candidates · N of M passed" summary + Score-column coloring (≥0.8 gain / ≥0.7 accent).
+- **Orders**: signal-trace description, Origin→"From signal" label, Placed (HH:MM from createdAt) column.
+- **Strategies**: aggregate stat row (active/registered/scored/blended score) + Active/Paused/Off state
+  badge per card (from active + live_enabled — never Live/Paper). Per-row analytics table is a
+  per-strategy-analytics follow-up.
+- **Signal detail**: strategy track-record block (Signals 30d / Taken / Hit rate / Expectancy) via
+  GetStrategyAnalytics on the selected strategy. Order-ticket sizing rows omitted (no per-signal
+  sizing data).
+- **Watchlists**: header reframed to the readiness-not-price framing (the readiness table + "N ready"
+  landed in Step 23).
+- **Backfills**: job stat row (jobs running/completed/symbols covered/bars stored/needs attention)
+  from the polled BackfillJob list + ADMIN ONLY badge. Backtest (feature 068) already ships the
+  coverage-gap notice + day-by-day debug table — left unchanged.
+- Shared: `src/lib/money.ts` + `src/components/shared/StatTile.tsx` now back the Opportunities,
+  Exposure, Portfolio, Signal-sources, Strategies and Backfills stat rows (DRY). Each screen's e2e
+  extended; per-screen commits pushed to PR #832.

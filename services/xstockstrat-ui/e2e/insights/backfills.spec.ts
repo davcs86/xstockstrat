@@ -56,6 +56,10 @@ test.describe('Backfills page — admin visibility (FR-7)', () => {
     await expect(page.getByRole('heading', { name: 'Backfills' })).toBeVisible({ timeout: 20000 });
     await expect(page.getByText('New backfill')).toBeVisible();
     await expect(page.getByText('Delete backfilled data')).toBeVisible();
+    // Job stat row (feature 083) + ADMIN ONLY badge.
+    await expect(page.getByText('Jobs running')).toBeVisible();
+    await expect(page.getByText('Needs attention')).toBeVisible();
+    await expect(page.getByText('Admin only')).toBeVisible();
   });
 
   test('non-admin sees neither the nav entry nor the admin-only panels', async ({ page }) => {
