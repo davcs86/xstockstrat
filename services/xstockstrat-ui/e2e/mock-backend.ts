@@ -178,7 +178,8 @@ export async function startMockBackend(): Promise<void> {
           };
         },
         async listPortfolios() {
-          return { portfolios: [PORTFOLIO_ALPACA] };
+          // Both accounts so the Book → Portfolio combined view + account cards render (083).
+          return { portfolios: PORTFOLIOS };
         },
         async listPositions() {
           return {

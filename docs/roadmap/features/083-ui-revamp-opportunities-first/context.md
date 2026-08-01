@@ -528,3 +528,16 @@ and **E (per-screen fidelity)** (skipping A sidebar, C mobile-companion page, D 
   Risk at stop ($), Exit rule — alongside the Factor/Stop-dist/Flag from Step 25. The existing P&L
   columns, filters, pagination, and fill-lineage detail sheet are kept (no regression).
 - e2e extended (Exposure header + stat row + Open R/Risk-at-stop); full suite green (176 passed).
+
+### Handoff-fidelity pass — E: Portfolio (Book) rebuild
+
+- Rebuilt the Book → Portfolio page (was a thin PortfolioPanel wrapper) to the handoff: header +
+  "See risk in Exposure →" link, a **combined 5-stat row** (equity/cash/buying-power/day-P&L/
+  total-P&L summed across accounts via `usePortfolios(null)`), **one card per account** (Alpaca +
+  IBKR), and the **broker-reported positions table** (`usePositions`, full columns) with the
+  refreshed ledger disclaimer. PortfolioPanel is unchanged (still used by the trader dashboard).
+- **Shared `src/lib/money.ts`** (fmtUsd/fmtSignedUsd/fmtPct/pnlClass) extracted and adopted by
+  Portfolio + Exposure (was inlined per page — DRY guard rail).
+- Mock `listPortfolios` widened to both accounts (PORTFOLIOS) so the combined view renders; e2e
+  updated (combined stats + 2 cards + positions table). valuation-parity (AC-8) still green; full
+  suite 177 passed.

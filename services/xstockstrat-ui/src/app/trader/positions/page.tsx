@@ -9,6 +9,7 @@ import { POSITION_RISK_FLAG, EnumBadge } from '@/lib/opportunityShared';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { StatTile } from '@/components/shared/StatTile';
+import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
 import { usePositionLineage } from '@/hooks/usePositionLineage';
 import { PositionSide, PositionRiskFlag } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import type { Position } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
@@ -35,27 +36,6 @@ import {
 
 type TradingMode = 'paper' | 'live';
 type PnlFilter = 'all' | 'winners' | 'losers';
-
-function fmtUsd(n: number | undefined | null): string {
-  if (n === undefined || n === null || Number.isNaN(Number(n))) return '—';
-  return `$${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function fmtPct(n: number | undefined | null): string {
-  if (n === undefined || n === null || Number.isNaN(Number(n))) return '—';
-  const pct = Number(n) * 100;
-  return `${pct >= 0 ? '+' : ''}${pct.toFixed(2)}%`;
-}
-
-function fmtSignedUsd(n: number | undefined | null): string {
-  if (n === undefined || n === null || Number.isNaN(Number(n))) return '—';
-  return `${Number(n) >= 0 ? '+' : ''}${fmtUsd(n)}`;
-}
-
-// pnlClass colors a P&L figure green/red by sign, matching the buy/sell palette.
-function pnlClass(n: number | undefined | null): string {
-  return Number(n ?? 0) >= 0 ? 'text-buy' : 'text-destructive';
-}
 
 // sideLabel derives Long/Short from the signed quantity (qty < 0 is short).
 function sideLabel(qty: number | undefined | null): string {
