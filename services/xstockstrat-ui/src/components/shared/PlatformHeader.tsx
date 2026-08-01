@@ -156,7 +156,7 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-sm">
       {/* Row 1 — logo, group tabs, actions */}
-      <div className="flex h-[49px] items-center gap-4 px-4 sm:px-6">
+      <div className="flex h-[49px] items-center gap-2 px-3 sm:gap-4 sm:px-6">
         <Link
           href={HOME_HREF}
           className="flex items-center gap-2 text-primary font-semibold shrink-0"

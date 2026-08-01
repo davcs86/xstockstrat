@@ -187,61 +187,69 @@ export default function ScreenerPage() {
         {!screen.isPending && results.length > 0 && (
           <Card>
             <CardContent className="p-0">
-              <table className="w-full text-sm" data-testid="screen-results">
-                <thead>
-                  <tr className="border-b text-left text-muted-foreground">
-                    <th className="p-3">Rank</th>
-                    <th className="p-3">Symbol</th>
-                    <th className="p-3">Score</th>
-                    {/* feature 083 (FR-8) raw columns. ATR is a close-only approximation. */}
-                    <th className="p-3">P/E</th>
-                    <th className="p-3">RSI</th>
-                    <th className="p-3" title="ATR is a close-only approximation (not exact)">
-                      ATR
-                    </th>
-                    <th className="p-3">Rev growth</th>
-                    <th className="p-3">Held</th>
-                    <th className="p-3">Passed</th>
-                    <th className="p-3">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {results.map((r, i) => (
-                    <tr key={r.symbol} className="border-b" data-testid="result-row">
-                      <td className="p-3">{i + 1}</td>
-                      <td className="p-3 font-mono font-medium">{r.symbol}</td>
-                      <td
-                        className={`p-3 font-mono tabular-nums font-semibold ${
-                          r.score >= 0.8 ? 'text-buy' : r.score >= 0.7 ? 'text-primary' : ''
-                        }`}
-                      >
-                        {r.score.toFixed(3)}
-                      </td>
-                      <td className="p-3 font-mono tabular-nums">{r.pe ? r.pe.toFixed(1) : '—'}</td>
-                      <td className="p-3 font-mono tabular-nums">
-                        {r.rsi ? r.rsi.toFixed(0) : '—'}
-                      </td>
-                      <td className="p-3 font-mono tabular-nums">
-                        {r.atr ? r.atr.toFixed(2) : '—'}
-                      </td>
-                      <td className="p-3 font-mono tabular-nums">
-                        {r.revGrowth ? `${(r.revGrowth * 100).toFixed(1)}%` : '—'}
-                      </td>
-                      <td className="p-3">{r.held ? <Badge variant="paper">Held</Badge> : '—'}</td>
-                      <td className="p-3">{r.passed ? '✓' : '—'}</td>
-                      <td className="p-3">
-                        {r.status === ScreenResultStatus.INSUFFICIENT_DATA ? (
-                          <Badge variant="warning" data-testid="insufficient-data">
-                            Insufficient data
-                          </Badge>
-                        ) : (
-                          <Badge variant="info">OK</Badge>
-                        )}
-                      </td>
+              {/* Wide table → scroll horizontally within its own container so the phone frame
+                  never overflows (the results table has 10 columns). */}
+              <div className="w-full overflow-x-auto">
+                <table className="w-full text-sm min-w-[640px]" data-testid="screen-results">
+                  <thead>
+                    <tr className="border-b text-left text-muted-foreground">
+                      <th className="p-3 whitespace-nowrap">Rank</th>
+                      <th className="p-3">Symbol</th>
+                      <th className="p-3">Score</th>
+                      {/* feature 083 (FR-8) raw columns. ATR is a close-only approximation. */}
+                      <th className="p-3">P/E</th>
+                      <th className="p-3">RSI</th>
+                      <th className="p-3" title="ATR is a close-only approximation (not exact)">
+                        ATR
+                      </th>
+                      <th className="p-3 whitespace-nowrap">Rev growth</th>
+                      <th className="p-3">Held</th>
+                      <th className="p-3">Passed</th>
+                      <th className="p-3">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {results.map((r, i) => (
+                      <tr key={r.symbol} className="border-b" data-testid="result-row">
+                        <td className="p-3">{i + 1}</td>
+                        <td className="p-3 font-mono font-medium">{r.symbol}</td>
+                        <td
+                          className={`p-3 font-mono tabular-nums font-semibold ${
+                            r.score >= 0.8 ? 'text-buy' : r.score >= 0.7 ? 'text-primary' : ''
+                          }`}
+                        >
+                          {r.score.toFixed(3)}
+                        </td>
+                        <td className="p-3 font-mono tabular-nums">
+                          {r.pe ? r.pe.toFixed(1) : '—'}
+                        </td>
+                        <td className="p-3 font-mono tabular-nums">
+                          {r.rsi ? r.rsi.toFixed(0) : '—'}
+                        </td>
+                        <td className="p-3 font-mono tabular-nums">
+                          {r.atr ? r.atr.toFixed(2) : '—'}
+                        </td>
+                        <td className="p-3 font-mono tabular-nums">
+                          {r.revGrowth ? `${(r.revGrowth * 100).toFixed(1)}%` : '—'}
+                        </td>
+                        <td className="p-3">
+                          {r.held ? <Badge variant="paper">Held</Badge> : '—'}
+                        </td>
+                        <td className="p-3">{r.passed ? '✓' : '—'}</td>
+                        <td className="p-3">
+                          {r.status === ScreenResultStatus.INSUFFICIENT_DATA ? (
+                            <Badge variant="warning" data-testid="insufficient-data">
+                              Insufficient data
+                            </Badge>
+                          ) : (
+                            <Badge variant="info">OK</Badge>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </CardContent>
           </Card>
         )}

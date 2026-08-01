@@ -567,3 +567,41 @@ and **E (per-screen fidelity)** (skipping A sidebar, C mobile-companion page, D 
 - Feature promoted and committed: 37a7f5269454eadb810c4303d5100063e4f35eed
 - Status updated: `code-completed` → `launched`
 - Launched date: 2026-08-01
+
+### Handoff-fidelity — second review pass (deployed-screenshot feedback)
+
+User flagged the deployed Strategies + Watchlists as still low-fidelity:
+- **Strategies**: the list still rendered the legacy 065 score cards (Overall Score / Drawdown /
+  Sharpe / Win_rate + rating grade) instead of the handoff table, and "N active" double-counted
+  paused strategies. Rebuilt into the handoff **analytics table** (Strategy / State / Signals 30d /
+  Taken / Hit rate / Expectancy / Max DD / Score / Open) with **per-row GetStrategyAnalytics**;
+  fixed the count so "Active" = active && live_enabled (paused counted separately) — header, stat
+  tile and per-row State badges now agree.
+- **Watchlists**: upgraded the flat state-dot + N/M list to per-symbol rows with a **readiness bar**
+  (conviction) + **firing / N-away** state + the **blocking condition** (first not-yet-passing
+  leaf), sorted by conviction — all from the EvaluateReadiness `conditions`. Live price/change
+  columns remain omitted (no per-symbol quote in the readiness payload).
+- Full suite 180 passed; specs updated for both rebuilds.
+
+### Handoff-fidelity — Screener mobile responsiveness fix
+
+- The Screener results table was a **raw `<table>`** (not the shared `<Table>` component, which
+  wraps in `overflow-auto`), so its 10 columns overflowed the phone frame horizontally and clipped
+  the Status column. Wrapped it in `overflow-x-auto` + `min-w-[640px]` so the wide table scrolls
+  inside its own container and the page body never scrolls horizontally. Added a phone-viewport
+  e2e guard asserting `scrollWidth <= clientWidth`. (The strategy-detail Past-Runs raw table was
+  already `overflow-x-auto`-wrapped by feature 068 — no change.)
+
+### Handoff-fidelity — phone-frame overflow sweep (all screens)
+
+- Added `e2e/mobile-overflow.spec.ts` — visits every screen at 390px and asserts the page body
+  does not scroll horizontally (`scrollWidth <= clientWidth`). It found the real offenders
+  empirically: **all three `/trader/*` pages (Exposure/Portfolio/Orders) overflowed by 101px** —
+  a shared trader-header element, not the tables (those use the overflow-wrapped `<Table>`).
+- Root cause: the `AccountSelector` trigger was a fixed `w-[180px]`, and the Step-27 Copilot toggle
+  added another header button — together they blew past the phone width. Fixes: AccountSelector
+  `w-[120px] sm:w-[180px]`, the manage-accounts gear `hidden sm:inline-flex` (accounts still
+  reachable via nav → Accounts on mobile), and the PlatformHeader row-1 gap/padding tightened on
+  mobile (`gap-2 px-3 sm:gap-4 sm:px-6`). All 14 routes now fit the frame; full suite 194 passed.
+- Process note: the earlier "Screener matches the handoff" claim was content-only — I now gate
+  mobile layout with this sweep so overflow regressions fail CI instead of needing a screenshot.
