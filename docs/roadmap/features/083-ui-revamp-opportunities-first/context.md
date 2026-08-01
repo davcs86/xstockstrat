@@ -217,6 +217,24 @@
 - **Next:** re-run `/sdd-review ui-revamp-opportunities-first product-spec` on the refreshed spec, then
   `/sdd-spec`.
 
+## Session 2026-07-31 — sdd-review impl-spec (advisory) + spec fixes
+
+- **Criteria (spec-reviewer): PASS WITH WARNINGS** — 31 steps, 21 clean ✓ / 10 ⚠ / 0 ✗ / 0 Floor breaches.
+  Every load-bearing code claim independently re-verified (proto field numbers additive, migration 008,
+  four enums `_UNSPECIFIED=0`, action-tag/conviction/factor/expectancy all backed by real data, F-06/F-07
+  held). **Overlap (feature-overlap): CLEAN** — no proto-field / migration / config-key / source-file
+  collision; no merge-order entry.
+- **Applied 4 fixes to implementation-spec.md** (still editable pre-execute; F-09 freezes bodies only at
+  dispatch): (1) **Step 21** nav-reachability rescoped to nav/breadcrumb presence + **Step 20** adds
+  placeholder route stubs so its red→green resolves within its own pairing (was spanning Steps 22–25 —
+  P-06/F-05); (2) **swapped Steps 12↔13** so the `portfolio.exposure.factor_map` config step (now 12)
+  precedes the portfolio service step that reads it (now 13) — fixed the Step-Dependencies section + the
+  `25 needs 13` + docs-step cross-refs; (3) **Step 1** new standalone messages given explicit `= N` field
+  numbers; (4) **Step 14** Go coverage command inlined. Remaining ⚠ (wildcard `**Files**` on broad UI/test
+  steps) accepted as inherent.
+- **Next:** `/sdd-execute ui-revamp-opportunities-first` (backend→frontend; step PRs target the feature
+  branch directly, not base-chained — fails 082; reconcile branch lineage before first write).
+
 ## Session 2026-07-31 — sdd-review product-spec (re-validation of refreshed spec)
 
 - **Verdict: PASS WITH WARNINGS** (0 blockers, no Floor breach). Lifecycle **unchanged** (already

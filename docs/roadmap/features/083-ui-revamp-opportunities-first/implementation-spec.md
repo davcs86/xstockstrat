@@ -29,11 +29,12 @@ order-event, not a reverse `portfolio→trading` edge).
 - Step 5 (`EvaluateReadiness`) requires Step 3 (traced evaluator sibling).
 - Step 7 (`ListOpportunities`) requires Step 5 (conviction/readiness) + the existing portfolio
   `ListPositions` and ingest `QuerySignals` edges.
-- Step 12 (portfolio risk/factor) requires Step 13 (config key `portfolio.exposure.factor_map`) — the
-  factor map is read at Step 12's factor-grouping code path; land 13 first or in the same PR.
+- Step 13 (portfolio risk/factor service) requires Step 12 (config key `portfolio.exposure.factor_map`) —
+  the factor map is read at Step 13's factor-grouping code path, so the config key is now ordered **first**
+  (Step 12 before Step 13).
 - Step 15 (`GetStrategyAnalytics`) requires Step 1's proto + the new `analysis→trading` edge env vars.
 - Steps 19–30 (frontend) require Step 2 (TS stubs + enum maps) and their respective backend RPC steps:
-  22 needs 5+7; 23 needs 7+17; 24 needs 10; 25 needs 12; 27 (Copilot) needs only the existing ledger RPCs.
+  22 needs 5+7; 23 needs 7+17; 24 needs 10; 25 needs 13; 27 (Copilot) needs only the existing ledger RPCs.
 - Step 21 (nav-reachability e2e, C-10(a)) requires Step 20 (shell/nav) and must enumerate every screen
   incl. the pinned `accounts` surface.
 - Step 26 (FR-20 order-parity + AC-8 valuation-parity + per-screen e2e) requires Steps 22–25.
@@ -78,13 +79,14 @@ carries the `:61-64` "persisted verbatim" warning, unaffected here since these a
    Add messages/enums:
    - `enum OpportunityActionTag { OPPORTUNITY_ACTION_TAG_UNSPECIFIED = 0; OPPORTUNITY_ACTION_TAG_ENTER = 1; OPPORTUNITY_ACTION_TAG_ADD = 2; OPPORTUNITY_ACTION_TAG_REDUCE = 3; }` — TRIM/EXIT deliberately collapsed to `REDUCE` (design.md § Rejected Alternatives; insights.md 2026-07-31).
    - `enum ConditionState { CONDITION_STATE_UNSPECIFIED = 0; CONDITION_STATE_PASS = 1; CONDITION_STATE_SOFT = 2; CONDITION_STATE_FAIL = 3; }`
-   - `message Opportunity { string symbol; OpportunityActionTag action; double conviction; int32 passing_conditions; int32 total_conditions; string thesis; string strategy_id; string source; google.protobuf.Timestamp valid_until; }` (conviction is the deterministic ordinal `passing/total` + normalized worst-distance — NOT a probability; design.md § 2).
-   - `message ConditionEval { string ref_name; double lhs_value; double threshold; string fn; ConditionState state; double distance_to_threshold; }`
-   - `message SymbolReadiness { string symbol; double conviction; int32 passing_conditions; int32 total_conditions; repeated ConditionEval conditions; }`
-   - `message StrategyAnalytics { string strategy_id; double expectancy; double blended_hit_rate; double max_drawdown; int32 signals_30d; int32 taken; double queue_share; }`
-   - `ListOpportunitiesRequest { xstockstrat.common.v1.PageRequest page; double min_conviction; }` (`user_id` intentionally absent — taken from the propagated `x-user-id` header, matching the portfolio watchlist convention at `portfolio.proto:157-158`); `ListOpportunitiesResponse { repeated Opportunity opportunities; xstockstrat.common.v1.PageResponse page; }`.
-   - `EvaluateReadinessRequest { string strategy_id; repeated string symbols; }`; `EvaluateReadinessResponse { repeated SymbolReadiness readiness; }`.
-   - `GetStrategyAnalyticsRequest { string strategy_id; }`.
+   - `message Opportunity { string symbol = 1; OpportunityActionTag action = 2; double conviction = 3; int32 passing_conditions = 4; int32 total_conditions = 5; string thesis = 6; string strategy_id = 7; string source = 8; google.protobuf.Timestamp valid_until = 9; }` (conviction is the deterministic ordinal `passing/total` + normalized worst-distance — NOT a probability; design.md § 2).
+   - `message ConditionEval { string ref_name = 1; double lhs_value = 2; double threshold = 3; string fn = 4; ConditionState state = 5; double distance_to_threshold = 6; }`
+   - `message SymbolReadiness { string symbol = 1; double conviction = 2; int32 passing_conditions = 3; int32 total_conditions = 4; repeated ConditionEval conditions = 5; }`
+   - `message StrategyAnalytics { string strategy_id = 1; double expectancy = 2; double blended_hit_rate = 3; double max_drawdown = 4; int32 signals_30d = 5; int32 taken = 6; double queue_share = 7; }`
+   - `message ListOpportunitiesRequest { xstockstrat.common.v1.PageRequest page = 1; double min_conviction = 2; }` (`user_id` intentionally absent — taken from the propagated `x-user-id` header, matching the portfolio watchlist convention at `portfolio.proto:157-158`); `message ListOpportunitiesResponse { repeated Opportunity opportunities = 1; xstockstrat.common.v1.PageResponse page = 2; }`.
+   - `message EvaluateReadinessRequest { string strategy_id = 1; repeated string symbols = 2; }`; `message EvaluateReadinessResponse { repeated SymbolReadiness readiness = 1; }`.
+   - `message GetStrategyAnalyticsRequest { string strategy_id = 1; }`.
+   (New **standalone** messages number from 1; only the **extension** fields on existing messages below use the verified 7+/14+/8+ floors.)
    - Extend `ScreenResult` (`:340`) additively with fields **7+**: `double pe = 7; double rsi = 8; double atr = 9; double rev_growth = 10; bool held = 11;` (raw column values for the screener results table, FR-8).
 2. **`portfolio.proto`** — add `enum PositionRiskFlag { POSITION_RISK_FLAG_UNSPECIFIED = 0; POSITION_RISK_FLAG_ADD_SIGNAL = 1; POSITION_RISK_FLAG_REDUCE_SIGNAL = 2; POSITION_RISK_FLAG_STOP_NEAR = 3; }` and extend `Position` (`:43`) with fields **14+**: `double stop_price = 14; double risk_at_stop = 15; double stop_distance_pct = 16; string factor = 17; PositionRiskFlag flag = 18; string exit_rule = 19;`.
 3. **`ingest.proto`** — add `enum SourceHealthStatus { SOURCE_HEALTH_STATUS_UNSPECIFIED = 0; SOURCE_HEALTH_STATUS_LIVE = 1; SOURCE_HEALTH_STATUS_STALE = 2; SOURCE_HEALTH_STATUS_DOWN = 3; }` and extend `SignalSource` (`:135`) with fields **8+**: `SourceHealthStatus health = 8; google.protobuf.Timestamp last_seen_at = 9; string last_error = 10; int64 signals_fed = 11;`.
@@ -356,38 +358,10 @@ aged `last_seen_at` maps to STALE/DOWN; `ListSignalSources` returns the enriched
 
 ---
 
-### Step 12 — service: portfolio Position risk/factor fields + ledger-event stop learning
+### Step 12 — config: `portfolio.exposure.factor_map`
 
-**Status**: `pending`
-**Service**: `xstockstrat-portfolio`
-**Files**:
-- `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
-- `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go` — modify (scan the risk fields onto Position; no schema change)
-
-**Reviewers**: `xstockstrat-portfolio` (service owner) — P&L/valuation accuracy, concurrent write safety
-
-**Codebase Evidence**:
-- `Position` risk fields (`stop_price`/`risk_at_stop`/`stop_distance_pct`/`factor`/`flag`/`exit_rule`) added in Step 1 (fields 14–19).
-- Portfolio consumes ledger events via `ConsumeOrderFills` / `ConsumePositionSyncs` / `ConsumeBalanceSyncs` (`cmd/server/main.go:63-65`) — resting-stop price is learned by **extending `ConsumeOrderFills`** to read trading's order-event `stop_price` (trading→portfolio edge already exists; a reverse `portfolio→trading` edge would create a cycle — design.md § 4, insights.md 2026-07-31). **Store the learned stop in-memory** (rebuilt from ledger replay at boot, mirroring the existing position-state-from-events pattern) → **no portfolio migration**.
-- C-10(b) valuation seam is HEALED: `ListPositions`/`ListPortfolios` share `positionColumns`/`scanPositionRow` (`portfolio_repo.go:225,114-118`); `current_price` is broker-authoritative. Stop-distance `= (current_price − stop_price) / current_price` off that same `current_price` (design.md § 4).
-- **Factor grouping REQUIRES the config key** — marketdata exposes **no `sector`**: the `Fundamentals` proto message has fields 1–17 with no `sector` (`marketdata.proto` `message Fundamentals`), and the screener whitelist `_FUNDAMENTAL_FIELDS` (`screener.py:32`) has no sector either. So the design's "reuse portfolio→marketdata sector" path is unavailable; factor comes from `portfolio.exposure.factor_map` (Step 13). This resolves design.md Open Risk "Factor source unverified" decisively.
-- Go propagation interceptor `internal/middleware/propagation.go:27` (C-03) — reuse for any new outbound call.
-
-**TDD**: `red-green required`.
-
-**Instructions**: (1) Compute `risk_at_stop`, `stop_distance_pct` on read from the learned `stop_price` +
-broker `current_price`; derive `flag` (`STOP_NEAR` when stop-distance within a threshold; `ADD_SIGNAL`/
-`REDUCE_SIGNAL` from held-vs-signal cross-ref where available). (2) Extend `ConsumeOrderFills` to capture
-`stop_price` from the order event into an in-memory per-(user,symbol,mode) map, hydrated at boot from a
-ledger `QueryEvents` replay. (3) Map `factor` via the `portfolio.exposure.factor_map` config value
-(Step 13) keyed by symbol; empty → `""` (UI groups as "Unclassified"). No new DB pool, no migration
-(F-06 held).
-
-**Verification**: covered by Step 14. Lint: `cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-download-mode=mod`.
-
----
-
-### Step 13 — config: `portfolio.exposure.factor_map`
+> **Ordered before the portfolio service step (13) that reads this key** — a `service` step must not
+> consume a config key registered later (impl-spec review, B3). Swapped from the original 13→12.
 
 **Status**: `pending`
 **Service**: `xstockstrat-portfolio`
@@ -400,7 +374,7 @@ ledger `QueryEvents` replay. (3) Map `factor` via the `portfolio.exposure.factor
 
 **Codebase Evidence**:
 - Config read pattern: portfolio `internal/config/config.go:60` (`config.Watcher`, recon Phase-0b). Naming `<service>.<category>.<key>` (C-05); defaults declared in the service CLAUDE.md; read via `WatchConfig` (F-07 — env-overridable/config-served, never a bare source literal).
-- Key is REQUIRED (not conditional) because marketdata has no `sector` (Step 12 evidence). This is the design.md Open Risk resolution.
+- Key is REQUIRED (not conditional) because marketdata has no `sector` (Step 13 evidence). This is the design.md Open Risk resolution.
 
 **TDD**: `N/A (config)`.
 
@@ -410,6 +384,37 @@ in the `docs/patterns/config-governance.md` Per-Feature Registered Keys log (fea
 `docs/runbooks/config-rollout.md` for the rollout note.
 
 **Verification**: `grep -n "portfolio.exposure.factor_map" services/xstockstrat-portfolio/internal/config/config.go services/xstockstrat-portfolio/CLAUDE.md docs/patterns/config-governance.md` — present in all three; no bare-literal factor map in source (F-07).
+
+---
+
+### Step 13 — service: portfolio Position risk/factor fields + ledger-event stop learning
+
+**Status**: `pending`
+**Service**: `xstockstrat-portfolio`
+**Files**:
+- `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
+- `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go` — modify (scan the risk fields onto Position; no schema change)
+
+**Reviewers**: `xstockstrat-portfolio` (service owner) — P&L/valuation accuracy, concurrent write safety
+
+**Codebase Evidence**:
+- `Position` risk fields (`stop_price`/`risk_at_stop`/`stop_distance_pct`/`factor`/`flag`/`exit_rule`) added in Step 1 (fields 14–19).
+- Portfolio consumes ledger events via `ConsumeOrderFills` / `ConsumePositionSyncs` / `ConsumeBalanceSyncs` (`cmd/server/main.go:64-66`) — resting-stop price is learned by **extending `ConsumeOrderFills`** to read trading's order-event `stop_price` (trading→portfolio edge already exists; a reverse `portfolio→trading` edge would create a cycle — design.md § 4, insights.md 2026-07-31). **Store the learned stop in-memory** (rebuilt from ledger replay at boot, mirroring the existing position-state-from-events pattern) → **no portfolio migration**.
+- C-10(b) valuation seam is HEALED: `ListPositions`/`ListPortfolios` share `positionColumns`/`scanPositionRow` (`portfolio_repo.go:225,114-118`); `current_price` is broker-authoritative. Stop-distance `= (current_price − stop_price) / current_price` off that same `current_price` (design.md § 4).
+- **Factor grouping REQUIRES the config key** — marketdata exposes **no `sector`**: the `Fundamentals` proto message has fields 1–17 with no `sector` (`marketdata.proto` `message Fundamentals`), and the screener whitelist `_FUNDAMENTAL_FIELDS` (`screener.py:32`) has no sector either. So the design's "reuse portfolio→marketdata sector" path is unavailable; factor comes from `portfolio.exposure.factor_map` (registered in Step 12). This resolves design.md Open Risk "Factor source unverified" decisively.
+- Go propagation interceptor `internal/middleware/propagation.go:27` (C-03) — reuse for any new outbound call.
+
+**TDD**: `red-green required`.
+
+**Instructions**: (1) Compute `risk_at_stop`, `stop_distance_pct` on read from the learned `stop_price` +
+broker `current_price`; derive `flag` (`STOP_NEAR` when stop-distance within a threshold; `ADD_SIGNAL`/
+`REDUCE_SIGNAL` from held-vs-signal cross-ref where available). (2) Extend `ConsumeOrderFills` to capture
+`stop_price` from the order event into an in-memory per-(user,symbol,mode) map, hydrated at boot from a
+ledger `QueryEvents` replay. (3) Map `factor` via the `portfolio.exposure.factor_map` config value
+(registered in Step 12) keyed by symbol; empty → `""` (UI groups as "Unclassified"). No new DB pool, no
+migration (F-06 held).
+
+**Verification**: covered by Step 14. Lint: `cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-download-mode=mod`.
 
 ---
 
@@ -433,7 +438,7 @@ stop map and survives a boot-replay; empty factor map → `factor=""`. If risk l
 CI-excluded package (`service`/`repository`), note "New logic is in an excluded package — integration/unit
 test verification is sufficient; no coverage threshold applies" and still ship the test.
 
-**Verification**: `cd services/xstockstrat-portfolio && GOWORK=off go test ./... -race -count=1` (red→green) and the Go coverage command from `reference/spec-template.md` (confirm ≥40% on measured packages) and `GOWORK=off golangci-lint run --modules-download-mode=mod`.
+**Verification**: `cd services/xstockstrat-portfolio && GOWORK=off go test ./... -race -count=1` (red→green); coverage `GOWORK=off go test ./... -coverprofile=coverage.out && go tool cover -func=coverage.out | tail -1` — confirm the total ≥40% on measured packages (the `service`/`repository` packages are CI-excluded, so risk logic landing there is verified by the unit/integration cases above, not the threshold); and `GOWORK=off golangci-lint run --modules-download-mode=mod`.
 
 ---
 
@@ -569,6 +574,7 @@ tokens + `--background` in `tailwind.config.js:40-42` to the Nocturne values; ad
 - `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx` — modify (nav grouping, badges, breadcrumb)
 - `services/xstockstrat-ui/src/components/ui/` — create missing primitives as needed (Dialog/Tabs/Tooltip/Slider/Skeleton/Chip)
 - `services/xstockstrat-ui/src/app/**` — modify layouts for the 212px sidebar / 49px top bar / content region
+- `services/xstockstrat-ui/src/app/insights/**` — create **thin placeholder route pages** (`page.tsx` rendering a titled empty shell) for each new Decide/Discover/Engine screen so every sidebar link resolves; Steps 22–25 replace them with the real screens
 
 **Reviewers**: `xstockstrat-ui` (service owner) — nav reachability, shell correctness
 
@@ -584,9 +590,11 @@ per-item count badges + 3px accent active-mark; 49px sticky top bar with `Module
 account switcher, PAPER/LIVE tag from `AccountContext`/`TradingModeBadge`, Copilot toggle; sidebar footer
 "Mobile companion →" + "Signal engine live" card). Regroup `PLATFORM_SUBNAV` under the four tabs; keep
 `accounts` (`authorized-apps` + `mcp-tools`) reachable from the pinned top-bar account/settings surface.
-Build only the `components/ui/*` primitives the shell needs.
+Build only the `components/ui/*` primitives the shell needs. **Also add the thin placeholder route pages**
+(titled empty shells) for every new screen route so each sidebar link resolves before its real screen
+lands in Steps 22–25 (so Step 21's reachability walk has real targets, not 404s).
 
-**Verification**: `cd services/xstockstrat-ui && pnpm lint && pnpm build`; Step 21 asserts reachability.
+**Verification**: `cd services/xstockstrat-ui && pnpm lint && pnpm build`; Step 21 asserts nav reachability.
 
 ---
 
@@ -603,13 +611,20 @@ Build only the `components/ui/*` primitives the shell needs.
 - **No central nav-reachability spec exists today** (recon; SSR warmup list `e2e/warmup.setup.ts:14` even omits `/trader/positions`) — this closes the fails.md 2026-07-01 060 / C-10(a) trap.
 - Auth helpers: `e2e/helpers/auth.ts` (`addAuthCookie`, `addAdminCookie`, `addCookieWithRoles`) — never re-implement JWT signing (C-12; INVENTORY.md auth row).
 
-**TDD**: `red-green required` (asserts new-shell reachability; fails against the pre-Step-20 nav).
+**TDD**: `red-green required` (asserts new-shell nav reachability against the Step-20 shell + route stubs; fails against the pre-Step-20 nav).
+
+**Scope note (impl-spec review, P-06/F-05):** this step asserts **nav reachability + breadcrumb presence**
+only — that every screen (incl. `accounts`) is reachable by walking the rendered shell and the breadcrumb
+reflects the active screen, against the Step-20 placeholder routes. It does **not** assert per-screen
+*content*; **full-screen content reachability is re-asserted in Step 26** once Steps 22–25 land the real
+screens. This keeps Step 21's red→green resolvable within its own pairing (Step 20), not spanning Steps 22–25.
 
 **Instructions**: For every screen — Opportunities, Signal detail, Watchlists, Screener, Strategies,
 Backtest, Signal sources, Backfills, Exposure, Portfolio, Orders, **and** the `accounts`
 `authorized-apps` + `mcp-tools` surfaces — assert it is reachable by walking the actually-rendered shell
-from the sidebar/top-bar (not by direct-URL), and that the breadcrumb reflects the active screen. Use
-`e2e/helpers/auth.ts` cookies; admin-only surfaces use `addAdminCookie`.
+from the sidebar/top-bar (not by direct-URL), the target route resolves (the Step-20 stub or real screen,
+not a 404), and the breadcrumb reflects the active screen. Use `e2e/helpers/auth.ts` cookies; admin-only
+surfaces use `addAdminCookie`.
 
 **Verification**: `cd services/xstockstrat-ui && pnpm test:e2e -- nav-reachability` — all screens reachable; breadcrumb assertions pass.
 
@@ -853,11 +868,11 @@ the Backfills delete panel enforces typed-symbol + "DELETE ALL". Reuse fixtures/
 **Service**: `docs/` + service CLAUDE.md files
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify (new RPCs `ListOpportunities`/`EvaluateReadiness`/`GetStrategyAnalytics`; new `analysis→trading` dependency edge + `TRADING_ENDPOINT`; screener enrichment)
-- `services/xstockstrat-portfolio/CLAUDE.md` — modify (Position risk/factor fields; ledger order-event stop consumer; `portfolio.exposure.factor_map` — done in Step 13, verify)
+- `services/xstockstrat-portfolio/CLAUDE.md` — modify (Position risk/factor fields; ledger order-event stop consumer; `portfolio.exposure.factor_map` — done in Step 12, verify)
 - `services/xstockstrat-ingest/CLAUDE.md` — modify (source-health fields + migration 008)
 - `services/xstockstrat-ui/CLAUDE.md` — modify (new Decide screens, four-tab nav grouping, Copilot rail beta, `opportunityShared` maps)
 - `docs/patterns/header-propagation.md` — modify (record the new `analysis→trading` request-scoped edge)
-- `docs/patterns/config-governance.md` — verify the Per-Feature Registered Keys log row for `portfolio.exposure.factor_map` (Step 13)
+- `docs/patterns/config-governance.md` — verify the Per-Feature Registered Keys log row for `portfolio.exposure.factor_map` (Step 12)
 
 **Reviewers**: none (docs)
 
