@@ -60,6 +60,14 @@ A second asyncio background loop (`app/engine/fundsignal_loop.py`) runs a daily 
 
 New dependency edges: **analysis → ingest write** (`IngestSignal` / `ManageSignalSource`, gRPC not DB) and **analysis → portfolio read** (watchlist universe; requires `PORTFOLIO_ENDPOINT`). The loop reuses the existing asyncpg pool (no new pool — budget stays 2).
 
+### Decide-surface RPCs (feature 083)
+
+Three read RPCs back the opportunities-first UI, all over the existing evaluator (`app/services/evaluator.py`) — no new pool:
+
+- **`ListOpportunities`** — ranked opportunity queue. Conviction is `ExternalSignal.conviction` for signal-sourced rows (documented deviation: `passing/total` is `0/0` there — a queued external signal carries no strategy binding to evaluate); held positions come from the **analysis → portfolio read** edge.
+- **`EvaluateReadiness`** — per-symbol traced condition leaves (`ConditionState` PASS/SOFT/FAIL) + a deterministic conviction ordinal (passing/total leaves, never a probability) for an explicit `strategy_id` — the Signal-detail readiness panel.
+- **`GetStrategyAnalytics`** — per-strategy expectancy / hit-rate / max-DD / signals / taken. The "taken" count uses `ListOrders(strategy_id)` over the new non-cyclic **analysis → trading read** edge (`TRADING_ENDPOINT`); `queue_share` is reserved (`0.0`).
+
 ### Cross-Stock Score Derivation (feature 065) & Pre-Window Warm-Up Prefix (feature 071)
 
 Design-level detail — fingerprint eligibility, empirical-Bayes aggregation with worked calibration anchors, recompute triggers, warm-up prefix sizing, and the FR/OQ caveats — lives on-demand in this service's `docs/` folder (**`scoring.md`**, **`warmup.md`**). The **binding** invariants are **ANALYSIS-2** (evidence-weighted EB grade) and **ANALYSIS-3** (definition-fingerprint eligibility) in `docs/context-constitution.md`.
@@ -90,7 +98,8 @@ triggers backtests via the `RunBacktest` gRPC RPC. The former HTTP/Connect-RPC s
 | xstockstrat-marketdata | gRPC read | Historical OHLCV data for backtesting |
 | xstockstrat-indicators | gRPC read | SMA/EMA/indicator computation |
 | xstockstrat-ingest | gRPC read/write | QuerySignals for signal-weighted backtesting; `IngestSignal`/`ManageSignalSource` for the fundamentals signal producer (feature 062) |
-| xstockstrat-portfolio | gRPC read | Watchlist universe for the fundamentals signal producer (feature 062) |
+| xstockstrat-portfolio | gRPC read | Watchlist universe for the fundamentals signal producer (feature 062); held positions for the `ListOpportunities` queue + `ScreenResult.held` cross-ref (feature 083) |
+| xstockstrat-trading | gRPC read | `ListOrders(strategy_id)` for the `GetStrategyAnalytics` "taken" count (feature 083 — new non-cyclic analysis→trading edge; `TRADING_ENDPOINT`) |
 | xstockstrat-ledger | gRPC write | Store backtest lifecycle events |
 | xstockstrat-notify | gRPC write | Alert on completed backtests |
 
@@ -203,7 +212,8 @@ CONFIG_ENDPOINT=xstockstrat-config:50060
 MARKETDATA_ENDPOINT=xstockstrat-marketdata:50053
 INDICATORS_ENDPOINT=xstockstrat-indicators:50054
 INGEST_ENDPOINT=xstockstrat-ingest:50055
-PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052   # feature 062 — fundamentals signal producer watchlist universe
+PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052   # feature 062 — fundamentals signal producer watchlist universe; feature 083 — ListOpportunities held positions
+TRADING_ENDPOINT=xstockstrat-trading:50051       # feature 083 — GetStrategyAnalytics ListOrders "taken" count
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
 DATABASE_URL=postgres://xstockstrat:${POSTGRES_PASSWORD}@timescaledb:5432/xstockstrat?sslmode=disable  # constructed by docker-compose from POSTGRES_PASSWORD in .env

@@ -28,6 +28,15 @@ service AnalysisService {
   rpc ScreenSymbols(ScreenSymbolsRequest) returns (ScreenSymbolsResponse);
   // Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped)
   rpc RunFundamentalsScan(RunFundamentalsScanRequest) returns (FundamentalsScanSummary);
+  // ── Opportunity queue + readiness + per-strategy analytics (feature 083) ─────
+  // Ranked opportunity queue for the Decide surface. Aggregates ingest signals,
+  // held positions, and the conviction/readiness evaluator (zero new edges).
+  rpc ListOpportunities(ListOpportunitiesRequest) returns (ListOpportunitiesResponse);
+  // Per-symbol live condition evaluation (traced): passing/soft/failing leaves +
+  // distance-to-threshold. Feeds Signal-detail, Watchlist readiness, and the queue.
+  rpc EvaluateReadiness(EvaluateReadinessRequest) returns (EvaluateReadinessResponse);
+  // Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share).
+  rpc GetStrategyAnalytics(GetStrategyAnalyticsRequest) returns (StrategyAnalytics);
 }
 
 message RunBacktestRequest {
@@ -344,6 +353,15 @@ message ScreenResult {
   bool passed = 4;
   ScreenResultStatus status = 5;
   CoverageGap gap = 6;                        // populated when status == INSUFFICIENT_DATA
+  // Raw column values surfaced on the screener results table (feature 083, FR-8).
+  // rsi/atr come from the analysis→indicators edge; ATR is a close-only approximation
+  // (indicators_engine.py) — surfaced as a known accuracy caveat, not exact.
+  // rev_growth is best-effort from Fundamentals.extra_metrics (0 when FMP omits it).
+  double pe = 7;
+  double rsi = 8;
+  double atr = 9;
+  double rev_growth = 10;
+  bool held = 11;
 }
 
 message ScreenSymbolsRequest {
@@ -380,4 +398,96 @@ message FundamentalsScanSummary {
   int32 deferred_count = 5;
   string status = 6;               // "completed" | "budget_deferred" | "failed"
   google.protobuf.Timestamp finished_at = 7;
+}
+
+// ── Opportunity queue + readiness + per-strategy analytics (feature 083) ──────
+
+// The action a ranked opportunity suggests. Closed set → enum (C-04).
+// TRIM/EXIT are deliberately collapsed into REDUCE — the platform must not
+// synthesize a "fully exit vs trim" boundary on a row that opens a real order
+// ticket; the human chooses trim vs exit at the ticket (design.md § 1).
+enum OpportunityActionTag {
+  OPPORTUNITY_ACTION_TAG_UNSPECIFIED = 0;
+  OPPORTUNITY_ACTION_TAG_ENTER = 1;   // buy signal, not currently held
+  OPPORTUNITY_ACTION_TAG_ADD = 2;     // buy signal, already held
+  OPPORTUNITY_ACTION_TAG_REDUCE = 3;  // sell signal, held (trim or exit — human decides)
+}
+
+// Per-condition-leaf evaluation state. Closed set → enum (C-04).
+enum ConditionState {
+  CONDITION_STATE_UNSPECIFIED = 0;
+  CONDITION_STATE_PASS = 1;  // leaf currently satisfied
+  CONDITION_STATE_SOFT = 2;  // within the soft-band of the threshold but not passing
+  CONDITION_STATE_FAIL = 3;  // not satisfied, outside the soft-band
+}
+
+// One ranked opportunity on the Decide queue. conviction is a deterministic
+// ordinal (passing/total leaves + normalized worst-distance-to-threshold), NOT a
+// probability — the UI renders "N/M conditions" + strength bars, never a fake %.
+message Opportunity {
+  string symbol = 1;
+  OpportunityActionTag action = 2;
+  double conviction = 3;
+  int32 passing_conditions = 4;
+  int32 total_conditions = 5;
+  string thesis = 6;
+  string strategy_id = 7;
+  string source = 8;
+  google.protobuf.Timestamp valid_until = 9;
+}
+
+// One evaluated condition leaf from the traced evaluator (feature 083).
+message ConditionEval {
+  string ref_name = 1;
+  double lhs_value = 2;
+  double threshold = 3;
+  string fn = 4;  // >, <, >=, <=, crosses_above, crosses_below
+  ConditionState state = 5;
+  double distance_to_threshold = 6;  // normalized
+}
+
+// Per-symbol readiness — the traced evaluation of a strategy's entry rule.
+message SymbolReadiness {
+  string symbol = 1;
+  double conviction = 2;
+  int32 passing_conditions = 3;
+  int32 total_conditions = 4;
+  repeated ConditionEval conditions = 5;
+}
+
+// Per-strategy analytics for the Engine → Strategies surface. expectancy and
+// max_drawdown derive from persisted analysis.backtest_runs (win_rate +
+// profit_factor); signals_30d from ingest QuerySignals; taken from trading
+// ListOrders; queue_share from the opportunity-queue join.
+message StrategyAnalytics {
+  string strategy_id = 1;
+  double expectancy = 2;
+  double blended_hit_rate = 3;
+  double max_drawdown = 4;
+  int32 signals_30d = 5;
+  int32 taken = 6;
+  double queue_share = 7;
+}
+
+// user_id is intentionally absent — taken from the propagated x-user-id header
+// server-side (matching the portfolio watchlist convention), never from the wire.
+message ListOpportunitiesRequest {
+  xstockstrat.common.v1.PageRequest page = 1;
+  double min_conviction = 2;
+}
+message ListOpportunitiesResponse {
+  repeated Opportunity opportunities = 1;
+  xstockstrat.common.v1.PageResponse page = 2;
+}
+
+message EvaluateReadinessRequest {
+  string strategy_id = 1;
+  repeated string symbols = 2;
+}
+message EvaluateReadinessResponse {
+  repeated SymbolReadiness readiness = 1;
+}
+
+message GetStrategyAnalyticsRequest {
+  string strategy_id = 1;
 }

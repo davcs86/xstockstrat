@@ -20,6 +20,7 @@ import {
   forward,
   forwardAdmin,
 } from '@/lib/bffShared';
+import { COPILOT_STREAM_PREFIX, COPILOT_EVENT_TYPE, copilotStreamKey } from '@/lib/copilot';
 
 const router = createBffRouter();
 
@@ -113,8 +114,34 @@ router.service(AnalysisService, {
 });
 
 router.service(LedgerService, {
-  // Read-only event query — used for position↔order fill lineage (order.filled events).
-  queryEvents: forward((req, opts) => ledgerClient.queryEvents(req, opts)),
+  // Read event query. Two callers: position↔order fill lineage (order.filled, stream_key
+  // "order:…") and the Copilot rail thread. For copilot: streams the BFF rewrites the
+  // client-supplied key to the per-user thread server-side (the browser never learns the
+  // user id and can only read its own thread).
+  queryEvents: async (req, ctx) => {
+    const claims = await requireSession(ctx);
+    const streamKey = req.streamKey?.startsWith(COPILOT_STREAM_PREFIX)
+      ? copilotStreamKey(claims.user_id)
+      : req.streamKey;
+    return ledgerClient.queryEvents(
+      { ...req, streamKey },
+      { headers: backendHeaders(claims, ctx) },
+    );
+  },
+  // Copilot rail note persistence — append-only (F-06: no agent DB/LLM/pool). The stream key,
+  // event type, and source are forced server-side; the client cannot write outside its thread.
+  appendEvent: async (req, ctx) => {
+    const claims = await requireSession(ctx);
+    return ledgerClient.appendEvent(
+      {
+        ...req,
+        streamKey: copilotStreamKey(claims.user_id),
+        eventType: COPILOT_EVENT_TYPE,
+        sourceService: 'xstockstrat-ui',
+      },
+      { headers: backendHeaders(claims, ctx) },
+    );
+  },
 });
 
 // In the consolidated app there is no basePath — Next.js does NOT strip a prefix.

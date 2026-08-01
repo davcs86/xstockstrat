@@ -36,6 +36,15 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 083 — opportunities-first UI revamp (`xstockstrat-portfolio`)
+
+The Exposure surface groups positions by factor. marketdata exposes no `sector`, so factor is
+sourced from an operator-defined symbol→factor map read via `WatchConfig` (`Watcher.FactorMap()`).
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `portfolio.exposure.factor_map` | string (JSON) | `"{}"` | JSON object mapping symbol → factor name for the Exposure screen's factor grouping. Unmapped symbols group as "Unclassified"; invalid JSON reads as an empty map. |
+
 ### feature 069 — strategy re-entry cooldown (`xstockstrat-analysis`)
 
 Per-strategy re-entry cooldown so a rule-based strategy's `entry_rule` can't immediately refire on a symbol right after an exit. The per-strategy duration travels via the proto field `StrategyDefinition.cooldown_days` (explicit presence: unset → this default, explicit `0` → no cooldown, negative → rejected); this config key is only the platform-wide default applied when the field is unset.

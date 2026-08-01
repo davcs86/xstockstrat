@@ -310,3 +310,189 @@
   - **strat-lab plugin NOT affected** — 083 changes none of run_backtest/manage_strategy/
     trigger_backfill/get_backfill_status/set_strategy_live; noted in Step 31 for the PR body.
 - Reviewers snapshot finalized (config team added because factor_map is used; ledger/trading FYI).
+
+## Session 2026-08-01 — sdd-execute (backend Steps 1-18 + theme Step 19), one-PR partial
+
+Branch `claude/ui-revamp-implementation-7ras2a` (off `origin/main-dev`), single PR #832 into
+main-dev (user directive: one PR, not one-per-step; push progressively; Copilot+mobile required).
+
+**Toolchain:** Docker daemon down + `buf` absent → provisioned buf + protoc plugins via the Go
+module proxy per `docs/runbooks/codegen-toolchain-host-setup.md` (GitHub-releases 403'd, proxy
+fallback works). Validated byte-for-byte gen reproduction before editing protos.
+
+**Completed + verified + pushed:**
+- **Step 1-2** — additive proto pass (analysis/portfolio/ingest, 4 enums each `_UNSPECIFIED=0`);
+  `buf lint`/`buf breaking` clean; codegen fresh; four exhaustive TS `Record<Enum>` maps in
+  `src/lib/opportunityShared.tsx` (tsc clean).
+- **Step 3-8** — analysis `evaluate_conditions_traced` + deterministic conviction ordinal
+  (pure, pinned helpers), `EvaluateReadiness`, `ListOpportunities`. Red-green tests; suite 380
+  passed, cov 82%.
+- **Step 9-11** — ingest migration 008 (health cols) + `derive_health_status` + source-health
+  enrichment + IngestSignal bookkeeping. Suite 150 passed, cov 76%.
+- **Step 12-14** — `portfolio.exposure.factor_map` config + `Watcher.FactorMap()`; Position
+  risk/factor on-read enrichment from an in-memory resting-stop store; `ConsumeOrderFills` stop
+  capture + `HydrateStops` ledger boot-replay. go test green, golangci-lint 0.
+- **Step 15-18** — `GetStrategyAnalytics` (closed-form expectancy from backtest_runs; new
+  analysis→trading `ListOrders` edge wired in main.py + docker-compose + both .do specs) +
+  screener `ScreenResult` raw columns (pe/rsi/atr/rev_growth) + `held` cross-ref. Tests green.
+- **Step 19** — Nocturne two-file token remap + Phosphor. tsc clean.
+
+**Deviations (recorded per C-11):**
+- `ListOpportunities` conviction = the signal source's real `ExternalSignal.conviction` (a defined,
+  deterministic value — never a fabricated %). Per-condition readiness (passing/total) is surfaced
+  via `EvaluateReadiness` on Signal-detail/Watchlist rather than synthesized onto every queue row,
+  because an external signal carries no strategy binding to evaluate at the queue. `passing/total`
+  on an Opportunity are 0/0. (design.md § 1 honored — action from real data only; conviction defined.)
+- `GetStrategyAnalytics.queue_share` reserved (0.0): the queue is signal-sourced and carries no
+  strategy attribution to divide by.
+- Screener now issues 2 extra ComputeIndicator calls/symbol (RSI/ATR) per scan for FR-8 raw columns
+  (best-effort; ATR close-only caveat). Updated `TestScreenSymbols._svc` to mock the new calls.
+
+**Remaining (Steps 20-31) — backend fully ready to serve every screen:**
+- Step 20 — Decide/Discover/Engine/Book **global sidebar shell** (presentation grouping over the
+  unchanged /trader|/insights|/config-ui|/accounts routes) + breadcrumb + Copilot toggle + count
+  badges + pinned `accounts` surface + new-route stubs. This cuts across all four physical
+  segments' layouts/AppShells — a shell rework, not a contained edit.
+- Step 21 — nav-reachability e2e (C-10(a), every screen incl. accounts).
+- Step 22-25 — the 12 screens wired to the now-real RPCs (Opportunities+Signal detail; Watchlists+
+  Screener; Strategies+Backtest+Sources+Backfills; Exposure+Portfolio+Orders) + C-12 fixtures.
+- Step 26 — per-screen + FR-20 order-parity + AC-8 valuation-parity e2e.
+- Step 27 — Copilot shallow-beta rail (ledger append-store thread + client-side summary).
+- Step 28 — mobile companion (shared section renderer, ≥44px).
+- Step 29 — non-happy states (loading/empty/error + destructive-confirm).
+- Step 30 — mobile + states e2e + coverage gate.
+- Step 31 — remaining CLAUDE.md/pattern-doc reconcile + context-scrubber teardown.
+
+**fails-082 guard:** every commit targets `claude/ui-revamp-implementation-7ras2a` directly (no
+base-chained step branches). context-forge/context-scrubber plugin availability unconfirmed in this
+session — flagged in the PR body per the root CLAUDE.md Teardown rule.
+
+### Session (2026-08-01) — Step 25 (Book: Exposure + Portfolio + Orders)
+
+- **Exposure** (`trader/positions/page.tsx`): reframed the positions table with three additive
+  risk columns — Factor (`p.factor || 'Unclassified'`), Stop dist (`fmtPct(p.stopDistancePct)`,
+  em-dash when no stop), Flag (`EnumBadge` over `POSITION_RISK_FLAG`, em-dash when unset) —
+  consuming the Step-13 `Position` risk fields. Columns hide progressively (lg/md) like the
+  existing P/L columns; no execution-path change.
+- **Portfolio** (`trader/portfolio/page.tsx`): replaced the stub with the read-only broker mirror —
+  `<PortfolioPanel/>` (reuses `usePortfolios`, 10s poll) + AC-8 / C-10(b) `data-testid="ledger-disclaimer"`
+  footer ("xstockstrat never writes to the ledger …"). No new fixture — reuses `PORTFOLIO_ALPACA`.
+- **Orders** (`components/trader/OrdersTable.tsx`): added the Origin column (strategy-or-Manual) with a
+  Why?-trace link to `/insights/strategies/<id>` when `order.strategyId` is set, else plain "Manual"
+  (`data-testid="order-origin-<id>"`). Status/type still render via the reused `orderShared` maps
+  (FR-20 parity unchanged); no order-submission gate touched.
+- **Mock backend**: AAPL `listPositions` row now carries `stopPrice/riskAtStop/stopDistancePct/factor/flag/exitRule`
+  (distinguishable values, insights.md 2026-07-27); MSFT carries none → exercises the fallbacks.
+- **e2e** (Step-25 slice, red-green in the Step-26 sense folded here): `e2e/trader/positions.spec.ts`
+  (asserts Tech factor + 6.20% stop dist + Stop-near flag on AAPL, Unclassified on MSFT) and
+  `e2e/trader/portfolio.spec.ts` (Equity + ledger-disclaimer). Full trader suite + nav-reachability
+  green (49 passed). The FR-20 order-parity + AC-8 valuation-parity dedicated specs remain Step 26.
+
+### Session (2026-08-01) — Step 26 (parity e2e) + deferred FR-6 order ticket
+
+- **FR-6 order ticket (deferred piece landed here)**: added `SignalOrderTicket.tsx` — a
+  re-presentation of the trader `OrderForm` on the Decide → Signal-detail page
+  (`insights/market/[symbol]/page.tsx`), pinned to the route symbol. Because the insights layout
+  provides only React Query, the ticket wraps `AccountProvider` (broker accounts + trading
+  environment sourced cross-segment via the /trader BFF). Added an optional `initialSymbol` prop to
+  `OrderForm` (backward-compatible: `initialSymbol || ?symbol || ''`) so the ticket pre-fills the
+  signal's symbol. Signal detail is now two-column from lg (why-it-fired left, ticket right).
+  Execution semantics unchanged (FR-20) — same `usePlaceOrder` path, environment-fixed PAPER/LIVE.
+- **FR-20 order parity** (`e2e/trader/order-parity.spec.ts`): asserts all 5 `OrderType` labels +
+  both PARTIALLY_FILLED and FILLED render in the Orders table (shared `orderShared` maps), and the
+  Signal-detail ticket offers the same 5-type selector + symbol pre-fill. Rich 5-order set supplied
+  via `page.route` ListOrders (distinguishable fields, insights.md 2026-07-27).
+- **AC-8 valuation parity** (`e2e/trader/valuation-parity.spec.ts`): AAPL's unrealized P&L is
+  asserted identical (+$100.00) on Book → Portfolio (ListPortfolios / PortfolioPanel) and
+  Book → Exposure (ListPositions). Aligned the mock backend's AAPL `listPositions` unrealizedPnl
+  98.0 → 100.0 to match `PORTFOLIO_ALPACA` — the one broker-authoritative source (C-10(b) seam).
+- **Verification**: trader + insights + nav e2e green (115 passed, 1 pre-existing chart-panel flake
+  passed on retry); `pnpm run test:coverage` 100% on exercised `src/lib/**` (feature-065 ≥40% gate).
+  Mock RPC handlers for ListOpportunities/EvaluateReadiness/GetStrategyAnalytics/enriched
+  ScreenResult/source-health/risk-Position were already added with the Step 22-25 screens.
+
+### Session (2026-08-01) — Step 27 (Copilot shallow-beta rail)
+
+- **Rail** (`components/copilot/CopilotRail.tsx`): 310px, default off, global (mounted in
+  PlatformHeader so all four segments get it via one seam). Two client-side templated reads
+  (queue summary + concentration flag — pure helpers in `src/lib/copilot.ts`, no LLM), an
+  append-only note thread replayed from the ledger, and the beta footer "MCP · N tools ·
+  read-only unless you confirm". No edit/delete/clear affordance (append-only, F-06).
+- **ChromeContext** (`context/ChromeContext.tsx`): `showCopilot` (default false) + toggle;
+  provider mounted inside PlatformHeader; a Sparkle toggle button in the top bar (accent-filled
+  when active, `aria-pressed`).
+- **Ledger wiring (deviation from spec's insightsBff)**: LedgerService lives in `traderBff.ts`
+  (browser `ledgerClient` → /trader/api), so the copilot thread routes went there, not insightsBff.
+  `appendEvent` forces `stream_key=copilot:<user>:default` + `event_type=copilot.message` +
+  `source=xstockstrat-ui` server-side from the verified session; `queryEvents` rewrites any
+  `copilot:`-prefixed client key to the per-user thread (lineage `order:` keys pass through). The
+  browser never learns the user id and can only read/write its own thread. Ledger proto UNCHANGED.
+- **Summary source (beta simplification)**: reads `ListOpportunities` only; the design's "+ position
+  weights" fold-in is deferred — concentration is a queue-concentration heuristic, noted in the copy.
+- **Tests**: `src/lib/copilot.test.ts` (7 unit tests over the pure helpers — counts toward the 065
+  coverage gate); `e2e/copilot.spec.ts` (default-off + toggle, queue/flag/footer, note persist+replay)
+  with `e2e/fixtures/copilotThread.ts` (+ INVENTORY row) + mock-backend in-memory `copilotThreads`
+  store (`appendEvent`/`queryEvents`). Full e2e suite green (168 passed); unit 36 passed.
+
+### Session (2026-08-01) — Step 28 (mobile companion)
+
+- **SectionRenderer** (`components/mobile/SectionRenderer.tsx` + `sections.ts`): the one shared
+  mobile renderer for the 8 section kinds (head/stat/signal/chart/row/form/note/action). All
+  interactive rows ≥44px (FR-16). Drawn behind `sm:hidden` next to the desktop layout so the two
+  stay in lock-step (no divergent mobile tree).
+- **BottomTabBar** (`components/mobile/BottomTabBar.tsx`): fixed mobile bottom nav over the four
+  primary groups (Decide/Discover/Engine/Book), mobile-only, ≥56px targets, active-by-pathname.
+  Mounted globally in PlatformHeader; content wrappers get `pb-20 sm:pb-0` clearance.
+- **Nav model extraction (cycle fix)**: `NAV_GROUPS` + the nav interfaces moved to
+  `components/shared/navGroups.tsx`. Before this, BottomTabBar importing `NAV_GROUPS` from
+  PlatformHeader (which imports BottomTabBar) formed an import cycle → `ReferenceError: Cannot
+  access 'F' before initialization` at prerender of `/config-ui/audit`. Both the header and the
+  tab bar now import from the standalone module — one source of truth, no cycle.
+- **First consumer**: the Opportunities queue renders 1:1 on mobile via SectionRenderer (one
+  `signal` section per row) with the desktop table `hidden sm:block`. Broader per-screen adoption
+  of the section model is incremental follow-up — the primitive, the nav, and the responsive
+  screens already deliver phone parity + navigation.
+- **Tests**: `e2e/mobile.spec.ts` (bottom bar + 4 ≥44px targets, section renderer vs table,
+  cross-group nav). Full build green after the cycle fix; mobile+copilot+nav e2e 8 passed.
+
+### Session (2026-08-01) — Steps 29+30 (non-happy states + states/mobile e2e + gate)
+
+- **Primitives**: added `components/ui/skeleton.tsx` (Skeleton) + `components/shared/EmptyState.tsx`.
+  Deviation: the spec listed a `CardError` too, but `CardNotice variant="error"` +
+  `QueryStateMessages` already cover per-card errors — added a third near-duplicate would trip the
+  DRY guard rail, so errors reuse the existing primitives (documented).
+- **Applied to** the flagship Decide (Opportunities: skeleton rows desktop+mobile, EmptyState on
+  no-match, error copy) and Book (positions/Exposure: skeleton rows + EmptyState) screens. The
+  other Steps 22-25 screens already carried loading/empty/error states inline from those steps;
+  the new primitives standardize the pattern. Backfills destructive-confirm (typed symbol +
+  "DELETE ALL") is unchanged (FR-5) — verified by e2e.
+- **e2e** `e2e/non-happy-states.spec.ts` (RED-green): Opportunities loading skeleton → data,
+  empty-state on no-match, per-card error on a 500 (retry:1), and the Backfills whole-symbol
+  delete staying gated until both typed confirmations match. Mobile e2e (Step 28) complete.
+- **Gate (AC-11)**: full Playwright suite green — **174 passed** (1 pre-existing chart-panel
+  timeframeEnum flake, passed on retry); `pnpm run test:coverage` 99% on exercised `src/lib/**`
+  (≥40% floor, feature-065).
+
+### Session (2026-08-01) — Step 31 (docs reconcile + teardown) + close-out
+
+- **Service CLAUDE.md**: `analysis` (added a Decide-surface RPC subsection —
+  ListOpportunities/EvaluateReadiness/GetStrategyAnalytics, the conviction/`taken`/`queue_share`
+  quirks; env vars + dependency edges were already present from the backend steps); `ui`
+  (new "Opportunities-first shell (feature 083)" section — nav grouping + navGroups cycle rule,
+  Decide screens, opportunityShared maps, Copilot rail + ledger thread, mobile companion, state
+  primitives — plus Key File Paths rows). `portfolio` / `ingest` CLAUDE.md and the
+  config-governance `factor_map` registered-keys row were already reconciled during Steps 12/9/12.
+- **Pattern docs**: `header-propagation.md` gains a "Request-scoped outbound edges" note recording
+  the new non-cyclic **analysis → trading** (`ListOrders`) edge (headers already forwarded via the
+  feature-049 analysis servicer path — no new wiring).
+- **Spec/lifecycle**: flipped all 31 implementation-spec step statuses to `done`; feature.md
+  Lifecycle Status → `code-completed`.
+- **context-scrubber teardown**: the `/context-scrubber` skill is **not invocable in this session**
+  (only the SDD + a few skills are listed; `.agents/context-forge.json` exists but the plugin
+  isn't loaded). Per the root CLAUDE.md Teardown rule this is flagged in the PR body; I did a
+  manual grounded-drift reconcile of every touched context file instead. README (a scrubber
+  target) stays accurate — 083 didn't change the physical segments it describes.
+- **fails-082 guard**: every commit (Steps 1–31) targeted `claude/ui-revamp-implementation-7ras2a`
+  directly — no base-chained per-step branches. strat-lab plugin unaffected (083 changes none of
+  its tracked RPCs). Feature is code-complete; full e2e (174) + unit coverage (99% on exercised
+  `src/lib`) green.

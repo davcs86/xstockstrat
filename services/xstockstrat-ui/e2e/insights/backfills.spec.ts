@@ -46,9 +46,9 @@ test.describe('Backfills page — admin visibility (FR-7)', () => {
     await addAdminCookie(page);
     await stubList(page);
 
-    await page.goto('/insights');
-    // First test on a cold dev server — allow for on-demand route compilation + the
-    // useIsAdmin() fetch before the admin-gated nav entry appears.
+    // Backfills lives under the Engine group (feature 083 shell); its sub-nav shows on any
+    // Engine route. Allow for on-demand route compilation + the /api/auth/me admin fetch.
+    await page.goto('/insights/strategies');
     await expect(page.getByRole('link', { name: 'Strategies' })).toBeVisible({ timeout: 20000 });
     await expect(page.getByRole('link', { name: 'Backfills' })).toBeVisible({ timeout: 20000 });
 
@@ -62,8 +62,8 @@ test.describe('Backfills page — admin visibility (FR-7)', () => {
     await addAuthCookie(page);
     await stubList(page);
 
-    await page.goto('/insights');
-    // Positive control: the nav is rendered (Strategies present) but Backfills is gated out.
+    // Positive control: the Engine sub-nav is rendered (Strategies present) but Backfills is gated out.
+    await page.goto('/insights/strategies');
     await expect(page.getByRole('link', { name: 'Strategies' })).toBeVisible({ timeout: 20000 });
     await expect(page.getByRole('link', { name: 'Backfills' })).toHaveCount(0);
 

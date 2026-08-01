@@ -168,6 +168,43 @@ class StrategyEvaluator:
             )
         return decisions, component_series
 
+    async def evaluate_conditions_traced(
+        self,
+        definition,  # analysis_pb2.StrategyDefinition
+        bars: list,
+        symbol: str,
+        signals_map: dict[str, list]
+        | None = None,  # reserved (entry-rule leaves are component refs)
+    ) -> dict:
+        """Additive sibling (feature 083). Trace the ``entry_rule``'s condition leaves at the
+        LAST bar — each leaf's ``lhs_value``, ``threshold``, ``fn``, PASS/SOFT/FAIL ``state`` and
+        normalized ``distance_to_threshold`` — plus a deterministic conviction ordinal.
+
+        Does NOT touch ``evaluate`` / ``evaluate_with_series`` / ``_eval_condition``'s bool
+        contract — the live loop and the frozen backtest conviction depend on them
+        (insights.md 2026-07-08). Reuses the same ``_compute_component`` / ``component_series``
+        assembly, so the traced values come from the identical ``_resolve_term`` lookups.
+
+        Returns a ``SymbolReadiness``-shaped dict (snake_case) the servicer maps to proto:
+        ``{symbol, conviction, passing_conditions, total_conditions, conditions:[…]}``.
+        """
+        if not bars:
+            return _empty_readiness(symbol)
+        _validate_definition(definition)
+        closes = [b.close for b in bars]
+        component_series: dict[str, list] = {}
+        for comp in definition.components:
+            series_map = await self._compute_component(comp, closes)
+            primary = series_map.get("value", [None] * len(closes))
+            component_series[comp.ref_name] = primary
+            for series_name, series in series_map.items():
+                component_series[f"{comp.ref_name}.{series_name}"] = series
+        entry_rule = json.loads(definition.entry_rule) if definition.entry_rule else None
+        last = len(bars) - 1
+        leaves = list(_iter_leaves(entry_rule)) if entry_rule else []
+        evals = [_eval_leaf_traced(leaf, component_series, last) for leaf in leaves]
+        return _readiness_from_evals(symbol, evals)
+
     async def _compute_component(self, comp, closes: list[float]) -> dict[str, list[float | None]]:
         """
         Compute a single component's output series over all bars.
@@ -466,3 +503,131 @@ def _resolve_term(term: Any, series: dict[str, list], i: int) -> float | None:
         s = series.get(term, [])
         return s[i] if i < len(s) else None
     return float(term) if term is not None else None
+
+
+# ── Traced readiness / conviction (feature 083) ──────────────────────────────
+#
+# The conviction/readiness formula is PINNED here as a pure, unit-testable function
+# (design.md Open Risk "Conviction/readiness formula", C-01). Conviction is a
+# DETERMINISTIC ORDINAL — passing/total leaves plus a normalized worst-distance
+# tie-breaker — NOT a probability. The UI renders "N/M conditions" + strength bars,
+# never a fabricated %.
+
+# Fraction of the threshold within which a not-yet-passing leaf counts as SOFT
+# (a "configurable" soft-band, exposed as a parameter for tests; default here).
+_READINESS_SOFT_BAND = 0.05
+
+
+def _iter_leaves(node: Any):
+    """Yield every leaf (``fn``) node across an AND/OR condition tree. Non-raising:
+    malformed/non-dict nodes are skipped."""
+    if not isinstance(node, dict):
+        return
+    if node.get("op") in ("AND", "OR"):
+        for child in node.get("conditions", []):
+            yield from _iter_leaves(child)
+    elif "fn" in node:
+        yield node
+
+
+def _leaf_state(
+    lhs: float | None, threshold: float | None, fn: str, soft_band: float = _READINESS_SOFT_BAND
+) -> tuple[int, float]:
+    """Classify one leaf at the last bar into (ConditionState, normalized distance).
+
+    ``distance`` is the signed margin on the PASSING side, normalized by the threshold
+    magnitude: > 0 means comfortably passing, 0 at the threshold, < 0 not passing. A
+    ``crosses_above``/``crosses_below`` leaf is read as its current above/below position
+    (a cross is momentary; readiness reports proximity to the boundary)."""
+    if lhs is None or threshold is None:
+        return analysis_pb2.CONDITION_STATE_UNSPECIFIED, 0.0
+    if fn in (">", ">=", "crosses_above"):
+        margin = lhs - threshold
+    elif fn in ("<", "<=", "crosses_below"):
+        margin = threshold - lhs
+    else:
+        return analysis_pb2.CONDITION_STATE_UNSPECIFIED, 0.0
+    denom = max(abs(threshold), abs(lhs), 1e-9)
+    norm = margin / denom
+    if fn in (">", "crosses_above"):
+        passed = lhs > threshold
+    elif fn == ">=":
+        passed = lhs >= threshold
+    elif fn in ("<", "crosses_below"):
+        passed = lhs < threshold
+    else:  # "<="
+        passed = lhs <= threshold
+    if passed:
+        return analysis_pb2.CONDITION_STATE_PASS, norm
+    if norm >= -soft_band:
+        return analysis_pb2.CONDITION_STATE_SOFT, norm
+    return analysis_pb2.CONDITION_STATE_FAIL, norm
+
+
+def _eval_leaf_traced(leaf: dict, series: dict[str, list], i: int) -> dict:
+    """Emit a ConditionEval-shaped dict for a single leaf at bar ``i`` using the same
+    ``_resolve_term`` values ``_eval_condition`` reads."""
+    lhs_ref = leaf.get("lhs")
+    rhs = leaf.get("rhs")
+    fn = leaf.get("fn", "")
+    lhs_val = _resolve_term(lhs_ref, series, i)
+    if isinstance(rhs, str):
+        threshold = _resolve_term(rhs, series, i)
+    else:
+        threshold = float(rhs) if rhs is not None else None
+    state, dist = _leaf_state(lhs_val, threshold, fn)
+    return {
+        "ref_name": lhs_ref if isinstance(lhs_ref, str) else "",
+        "lhs_value": lhs_val if lhs_val is not None else 0.0,
+        "threshold": threshold if threshold is not None else 0.0,
+        "fn": fn,
+        "state": state,
+        "distance_to_threshold": dist,
+    }
+
+
+def _conviction_ordinal(passing: int, total: int, evals: list[dict]) -> float:
+    """Deterministic conviction in [0, 1]: the passing/total ratio, nudged within a single
+    ratio-bucket by how close the nearest not-yet-passing leaf sits to its threshold. Strictly
+    monotone in ``passing`` (the nudge is < 1/total), so it moves whenever a leaf flips
+    (guards against an inert formula, insights.md 2026-07-27)."""
+    if total == 0:
+        return 0.0
+    if passing == total:
+        return 1.0
+    pass_ratio = passing / total
+    soft_or_fail = [
+        e["distance_to_threshold"]
+        for e in evals
+        if e["state"] in (analysis_pb2.CONDITION_STATE_SOFT, analysis_pb2.CONDITION_STATE_FAIL)
+    ]
+    if soft_or_fail and _READINESS_SOFT_BAND > 0:
+        best = max(soft_or_fail)  # closest to the threshold (norm nearest 0, <= 0)
+        closeness = min(max(1.0 + best / _READINESS_SOFT_BAND, 0.0), 1.0)
+    else:
+        closeness = 0.0
+    return pass_ratio + (closeness * 0.999) / total
+
+
+def _readiness_from_evals(symbol: str, evals: list[dict]) -> dict:
+    """Assemble the SymbolReadiness-shaped dict from traced leaf evals."""
+    total = len(evals)
+    passing = sum(1 for e in evals if e["state"] == analysis_pb2.CONDITION_STATE_PASS)
+    return {
+        "symbol": symbol,
+        "conviction": _conviction_ordinal(passing, total, evals),
+        "passing_conditions": passing,
+        "total_conditions": total,
+        "conditions": evals,
+    }
+
+
+def _empty_readiness(symbol: str) -> dict:
+    """Readiness for a symbol with no bars: zero conviction, no conditions."""
+    return {
+        "symbol": symbol,
+        "conviction": 0.0,
+        "passing_conditions": 0,
+        "total_conditions": 0,
+        "conditions": [],
+    }

@@ -18,7 +18,7 @@ export function AppShell({ children, actions }: AppShellProps) {
   return (
     <div className="min-h-screen bg-background">
       <PlatformHeader segment="insights" subNav={subNav} actions={actions} />
-      <main className="flex-1">{children}</main>
+      <main className="flex-1 pb-20 sm:pb-0">{children}</main>
     </div>
   );
 }

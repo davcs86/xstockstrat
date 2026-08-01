@@ -3,26 +3,29 @@
 @tailwind utilities;
 
 @layer base {
+  /* Nocturne dark theme (feature 083). App is dark-only — a two-file value remap of the
+     existing tokens, not a new system. Brand accent = blurple (#9184d9); gain/loss/paper
+     live in tailwind.config.js. Background ≈ #161826. */
   :root {
-    --background: 222 47% 4%;
+    --background: 232 27% 11%;
     --foreground: 213 31% 91%;
-    --card: 222 47% 7%;
+    --card: 232 22% 15%;
     --card-foreground: 213 31% 91%;
-    --popover: 222 47% 7%;
+    --popover: 232 22% 15%;
     --popover-foreground: 213 31% 91%;
-    --primary: 163 100% 44%;
-    --primary-foreground: 222 47% 4%;
-    --secondary: 222 20% 14%;
+    --primary: 249 53% 68%;
+    --primary-foreground: 240 40% 10%;
+    --secondary: 232 16% 20%;
     --secondary-foreground: 213 31% 91%;
-    --muted: 222 20% 14%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 222 20% 18%;
+    --muted: 232 16% 20%;
+    --muted-foreground: 232 12% 62%;
+    --accent: 232 16% 24%;
     --accent-foreground: 213 31% 91%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 210 40% 98%;
-    --border: 222 20% 14%;
-    --input: 222 20% 14%;
-    --ring: 163 100% 44%;
+    --border: 232 16% 22%;
+    --input: 232 16% 22%;
+    --ring: 249 53% 68%;
     --radius: 0.5rem;
   }
 
@@ -32,6 +35,8 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-feature-settings:
+      'rlig' 1,
+      'calt' 1;
   }
 }

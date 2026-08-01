@@ -32,6 +32,7 @@ LEDGER_ENDPOINT = os.environ.get("LEDGER_ENDPOINT", "xstockstrat-ledger:50057")
 NOTIFY_ENDPOINT = os.environ.get("NOTIFY_ENDPOINT", "xstockstrat-notify:50059")
 # Feature 062 — fundamentals signal producer reads the watchlist universe from portfolio.
 PORTFOLIO_ENDPOINT = os.environ.get("PORTFOLIO_ENDPOINT", "xstockstrat-portfolio:50052")
+TRADING_ENDPOINT = os.environ.get("TRADING_ENDPOINT", "xstockstrat-trading:50051")
 DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 
@@ -58,6 +59,7 @@ async def serve():
         db_pool=db_pool,
         notify_channel=grpc.aio.insecure_channel(NOTIFY_ENDPOINT),
         portfolio_channel=grpc.aio.insecure_channel(PORTFOLIO_ENDPOINT),
+        trading_channel=grpc.aio.insecure_channel(TRADING_ENDPOINT),
     )
 
     # ── gRPC server (internal, port 50056) ────────────────────────────────

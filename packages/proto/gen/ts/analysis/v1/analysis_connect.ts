@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BacktestResult, FundamentalsScanSummary, GetBacktestRequest, GetStrategyReportRequest, GetStrategyRequest, ListBacktestsRequest, ListBacktestsResponse, ListStrategiesRequest, ListStrategiesResponse, ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse, ManageStrategyRequest, RunBacktestRequest, RunFundamentalsScanRequest, ScoreStrategyRequest, ScreenSymbolsRequest, ScreenSymbolsResponse, SetStrategyLiveRequest, SetStrategyLiveResponse, StrategyDefinition, StrategyReport, StrategyScore } from "./analysis_pb.js";
+import { BacktestResult, EvaluateReadinessRequest, EvaluateReadinessResponse, FundamentalsScanSummary, GetBacktestRequest, GetStrategyAnalyticsRequest, GetStrategyReportRequest, GetStrategyRequest, ListBacktestsRequest, ListBacktestsResponse, ListOpportunitiesRequest, ListOpportunitiesResponse, ListStrategiesRequest, ListStrategiesResponse, ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse, ManageStrategyRequest, RunBacktestRequest, RunFundamentalsScanRequest, ScoreStrategyRequest, ScreenSymbolsRequest, ScreenSymbolsResponse, SetStrategyLiveRequest, SetStrategyLiveResponse, StrategyAnalytics, StrategyDefinition, StrategyReport, StrategyScore } from "./analysis_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -128,6 +128,42 @@ export const AnalysisService = {
       name: "RunFundamentalsScan",
       I: RunFundamentalsScanRequest,
       O: FundamentalsScanSummary,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * ── Opportunity queue + readiness + per-strategy analytics (feature 083) ─────
+     * Ranked opportunity queue for the Decide surface. Aggregates ingest signals,
+     * held positions, and the conviction/readiness evaluator (zero new edges).
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.ListOpportunities
+     */
+    listOpportunities: {
+      name: "ListOpportunities",
+      I: ListOpportunitiesRequest,
+      O: ListOpportunitiesResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Per-symbol live condition evaluation (traced): passing/soft/failing leaves +
+     * distance-to-threshold. Feeds Signal-detail, Watchlist readiness, and the queue.
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.EvaluateReadiness
+     */
+    evaluateReadiness: {
+      name: "EvaluateReadiness",
+      I: EvaluateReadinessRequest,
+      O: EvaluateReadinessResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share).
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.GetStrategyAnalytics
+     */
+    getStrategyAnalytics: {
+      name: "GetStrategyAnalytics",
+      I: GetStrategyAnalyticsRequest,
+      O: StrategyAnalytics,
       kind: MethodKind.Unary,
     },
   }

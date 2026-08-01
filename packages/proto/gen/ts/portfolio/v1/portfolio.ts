@@ -33,6 +33,71 @@ import { Timestamp } from "../../google/protobuf/timestamp";
 
 export const protobufPackage = "xstockstrat.portfolio.v1";
 
+/** A risk cue surfaced on the Exposure surface (feature 083). Closed set → enum (C-04). */
+export enum PositionRiskFlag {
+  POSITION_RISK_FLAG_UNSPECIFIED = "POSITION_RISK_FLAG_UNSPECIFIED",
+  /** POSITION_RISK_FLAG_ADD_SIGNAL - a buy signal is live for this held symbol */
+  POSITION_RISK_FLAG_ADD_SIGNAL = "POSITION_RISK_FLAG_ADD_SIGNAL",
+  /** POSITION_RISK_FLAG_REDUCE_SIGNAL - a sell signal is live for this held symbol */
+  POSITION_RISK_FLAG_REDUCE_SIGNAL = "POSITION_RISK_FLAG_REDUCE_SIGNAL",
+  /** POSITION_RISK_FLAG_STOP_NEAR - stop-distance within the near threshold */
+  POSITION_RISK_FLAG_STOP_NEAR = "POSITION_RISK_FLAG_STOP_NEAR",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function positionRiskFlagFromJSON(object: any): PositionRiskFlag {
+  switch (object) {
+    case 0:
+    case "POSITION_RISK_FLAG_UNSPECIFIED":
+      return PositionRiskFlag.POSITION_RISK_FLAG_UNSPECIFIED;
+    case 1:
+    case "POSITION_RISK_FLAG_ADD_SIGNAL":
+      return PositionRiskFlag.POSITION_RISK_FLAG_ADD_SIGNAL;
+    case 2:
+    case "POSITION_RISK_FLAG_REDUCE_SIGNAL":
+      return PositionRiskFlag.POSITION_RISK_FLAG_REDUCE_SIGNAL;
+    case 3:
+    case "POSITION_RISK_FLAG_STOP_NEAR":
+      return PositionRiskFlag.POSITION_RISK_FLAG_STOP_NEAR;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return PositionRiskFlag.UNRECOGNIZED;
+  }
+}
+
+export function positionRiskFlagToJSON(object: PositionRiskFlag): string {
+  switch (object) {
+    case PositionRiskFlag.POSITION_RISK_FLAG_UNSPECIFIED:
+      return "POSITION_RISK_FLAG_UNSPECIFIED";
+    case PositionRiskFlag.POSITION_RISK_FLAG_ADD_SIGNAL:
+      return "POSITION_RISK_FLAG_ADD_SIGNAL";
+    case PositionRiskFlag.POSITION_RISK_FLAG_REDUCE_SIGNAL:
+      return "POSITION_RISK_FLAG_REDUCE_SIGNAL";
+    case PositionRiskFlag.POSITION_RISK_FLAG_STOP_NEAR:
+      return "POSITION_RISK_FLAG_STOP_NEAR";
+    case PositionRiskFlag.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function positionRiskFlagToNumber(object: PositionRiskFlag): number {
+  switch (object) {
+    case PositionRiskFlag.POSITION_RISK_FLAG_UNSPECIFIED:
+      return 0;
+    case PositionRiskFlag.POSITION_RISK_FLAG_ADD_SIGNAL:
+      return 1;
+    case PositionRiskFlag.POSITION_RISK_FLAG_REDUCE_SIGNAL:
+      return 2;
+    case PositionRiskFlag.POSITION_RISK_FLAG_STOP_NEAR:
+      return 3;
+    case PositionRiskFlag.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 /**
  * PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.
  * Used only as an additive filter on ListPositionsRequest; the Position message itself
@@ -131,6 +196,23 @@ export interface Position {
   dayPnl: number;
   /** fraction (e.g. 0.0125 = +1.25%) */
   dayPnlPct: number;
+  /**
+   * ── Risk / factor fields (feature 083 — Book → Exposure) ─────────────────────
+   * Resting-stop price learned from trading's order events via the ledger (no
+   * portfolio→trading synchronous edge; held in-memory, rebuilt on boot-replay).
+   * risk_at_stop / stop_distance_pct are computed on read off the broker-authoritative
+   * current_price: stop_distance_pct = (current_price − stop_price) / current_price.
+   */
+  stopPrice: number;
+  riskAtStop: number;
+  stopDistancePct: number;
+  /**
+   * factor grouping from the portfolio.exposure.factor_map config key (marketdata
+   * exposes no sector); "" → UI groups as "Unclassified".
+   */
+  factor: string;
+  flag: PositionRiskFlag;
+  exitRule: string;
 }
 
 export interface PortfolioSnapshot {
@@ -578,6 +660,12 @@ function createBasePosition(): Position {
     accountId: "",
     dayPnl: 0,
     dayPnlPct: 0,
+    stopPrice: 0,
+    riskAtStop: 0,
+    stopDistancePct: 0,
+    factor: "",
+    flag: PositionRiskFlag.POSITION_RISK_FLAG_UNSPECIFIED,
+    exitRule: "",
   };
 }
 
@@ -621,6 +709,24 @@ export const Position: MessageFns<Position> = {
     }
     if (message.dayPnlPct !== 0) {
       writer.uint32(105).double(message.dayPnlPct);
+    }
+    if (message.stopPrice !== 0) {
+      writer.uint32(113).double(message.stopPrice);
+    }
+    if (message.riskAtStop !== 0) {
+      writer.uint32(121).double(message.riskAtStop);
+    }
+    if (message.stopDistancePct !== 0) {
+      writer.uint32(129).double(message.stopDistancePct);
+    }
+    if (message.factor !== "") {
+      writer.uint32(138).string(message.factor);
+    }
+    if (message.flag !== PositionRiskFlag.POSITION_RISK_FLAG_UNSPECIFIED) {
+      writer.uint32(144).int32(positionRiskFlagToNumber(message.flag));
+    }
+    if (message.exitRule !== "") {
+      writer.uint32(154).string(message.exitRule);
     }
     return writer;
   },
@@ -736,6 +842,54 @@ export const Position: MessageFns<Position> = {
           message.dayPnlPct = reader.double();
           continue;
         }
+        case 14: {
+          if (tag !== 113) {
+            break;
+          }
+
+          message.stopPrice = reader.double();
+          continue;
+        }
+        case 15: {
+          if (tag !== 121) {
+            break;
+          }
+
+          message.riskAtStop = reader.double();
+          continue;
+        }
+        case 16: {
+          if (tag !== 129) {
+            break;
+          }
+
+          message.stopDistancePct = reader.double();
+          continue;
+        }
+        case 17: {
+          if (tag !== 138) {
+            break;
+          }
+
+          message.factor = reader.string();
+          continue;
+        }
+        case 18: {
+          if (tag !== 144) {
+            break;
+          }
+
+          message.flag = positionRiskFlagFromJSON(reader.int32());
+          continue;
+        }
+        case 19: {
+          if (tag !== 154) {
+            break;
+          }
+
+          message.exitRule = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -804,6 +958,30 @@ export const Position: MessageFns<Position> = {
         : isSet(object.day_pnl_pct)
         ? globalThis.Number(object.day_pnl_pct)
         : 0,
+      stopPrice: isSet(object.stopPrice)
+        ? globalThis.Number(object.stopPrice)
+        : isSet(object.stop_price)
+        ? globalThis.Number(object.stop_price)
+        : 0,
+      riskAtStop: isSet(object.riskAtStop)
+        ? globalThis.Number(object.riskAtStop)
+        : isSet(object.risk_at_stop)
+        ? globalThis.Number(object.risk_at_stop)
+        : 0,
+      stopDistancePct: isSet(object.stopDistancePct)
+        ? globalThis.Number(object.stopDistancePct)
+        : isSet(object.stop_distance_pct)
+        ? globalThis.Number(object.stop_distance_pct)
+        : 0,
+      factor: isSet(object.factor) ? globalThis.String(object.factor) : "",
+      flag: isSet(object.flag)
+        ? positionRiskFlagFromJSON(object.flag)
+        : PositionRiskFlag.POSITION_RISK_FLAG_UNSPECIFIED,
+      exitRule: isSet(object.exitRule)
+        ? globalThis.String(object.exitRule)
+        : isSet(object.exit_rule)
+        ? globalThis.String(object.exit_rule)
+        : "",
     };
   },
 
@@ -848,6 +1026,24 @@ export const Position: MessageFns<Position> = {
     if (message.dayPnlPct !== 0) {
       obj.dayPnlPct = message.dayPnlPct;
     }
+    if (message.stopPrice !== 0) {
+      obj.stopPrice = message.stopPrice;
+    }
+    if (message.riskAtStop !== 0) {
+      obj.riskAtStop = message.riskAtStop;
+    }
+    if (message.stopDistancePct !== 0) {
+      obj.stopDistancePct = message.stopDistancePct;
+    }
+    if (message.factor !== "") {
+      obj.factor = message.factor;
+    }
+    if (message.flag !== PositionRiskFlag.POSITION_RISK_FLAG_UNSPECIFIED) {
+      obj.flag = positionRiskFlagToJSON(message.flag);
+    }
+    if (message.exitRule !== "") {
+      obj.exitRule = message.exitRule;
+    }
     return obj;
   },
 
@@ -869,6 +1065,12 @@ export const Position: MessageFns<Position> = {
     message.accountId = object.accountId ?? "";
     message.dayPnl = object.dayPnl ?? 0;
     message.dayPnlPct = object.dayPnlPct ?? 0;
+    message.stopPrice = object.stopPrice ?? 0;
+    message.riskAtStop = object.riskAtStop ?? 0;
+    message.stopDistancePct = object.stopDistancePct ?? 0;
+    message.factor = object.factor ?? "";
+    message.flag = object.flag ?? PositionRiskFlag.POSITION_RISK_FLAG_UNSPECIFIED;
+    message.exitRule = object.exitRule ?? "";
     return message;
   },
 };

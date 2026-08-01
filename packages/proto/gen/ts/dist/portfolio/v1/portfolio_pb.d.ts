@@ -127,6 +127,39 @@ export type Position = Message<"xstockstrat.portfolio.v1.Position"> & {
      * @generated from field: double day_pnl_pct = 13;
      */
     dayPnlPct: number;
+    /**
+     * ── Risk / factor fields (feature 083 — Book → Exposure) ─────────────────────
+     * Resting-stop price learned from trading's order events via the ledger (no
+     * portfolio→trading synchronous edge; held in-memory, rebuilt on boot-replay).
+     * risk_at_stop / stop_distance_pct are computed on read off the broker-authoritative
+     * current_price: stop_distance_pct = (current_price − stop_price) / current_price.
+     *
+     * @generated from field: double stop_price = 14;
+     */
+    stopPrice: number;
+    /**
+     * @generated from field: double risk_at_stop = 15;
+     */
+    riskAtStop: number;
+    /**
+     * @generated from field: double stop_distance_pct = 16;
+     */
+    stopDistancePct: number;
+    /**
+     * factor grouping from the portfolio.exposure.factor_map config key (marketdata
+     * exposes no sector); "" → UI groups as "Unclassified".
+     *
+     * @generated from field: string factor = 17;
+     */
+    factor: string;
+    /**
+     * @generated from field: xstockstrat.portfolio.v1.PositionRiskFlag flag = 18;
+     */
+    flag: PositionRiskFlag;
+    /**
+     * @generated from field: string exit_rule = 19;
+     */
+    exitRule: string;
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.Position.
@@ -685,6 +718,39 @@ export type RemoveWatchlistSymbolsResponse = Message<"xstockstrat.portfolio.v1.R
  * Use `create(RemoveWatchlistSymbolsResponseSchema)` to create a new message.
  */
 export declare const RemoveWatchlistSymbolsResponseSchema: GenMessage<RemoveWatchlistSymbolsResponse>;
+/**
+ * A risk cue surfaced on the Exposure surface (feature 083). Closed set → enum (C-04).
+ *
+ * @generated from enum xstockstrat.portfolio.v1.PositionRiskFlag
+ */
+export declare enum PositionRiskFlag {
+    /**
+     * @generated from enum value: POSITION_RISK_FLAG_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * a buy signal is live for this held symbol
+     *
+     * @generated from enum value: POSITION_RISK_FLAG_ADD_SIGNAL = 1;
+     */
+    ADD_SIGNAL = 1,
+    /**
+     * a sell signal is live for this held symbol
+     *
+     * @generated from enum value: POSITION_RISK_FLAG_REDUCE_SIGNAL = 2;
+     */
+    REDUCE_SIGNAL = 2,
+    /**
+     * stop-distance within the near threshold
+     *
+     * @generated from enum value: POSITION_RISK_FLAG_STOP_NEAR = 3;
+     */
+    STOP_NEAR = 3
+}
+/**
+ * Describes the enum xstockstrat.portfolio.v1.PositionRiskFlag.
+ */
+export declare const PositionRiskFlagSchema: GenEnum<PositionRiskFlag>;
 /**
  * PositionSide distinguishes a long (qty > 0) from a short (qty < 0) position.
  * Used only as an additive filter on ListPositionsRequest; the Position message itself

@@ -354,9 +354,10 @@ services:
       INDICATORS_ENDPOINT: xstockstrat-indicators:50054
       INGEST_ENDPOINT: xstockstrat-ingest:50055
       PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
+      TRADING_ENDPOINT: xstockstrat-trading:50051
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
-      WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057 xstockstrat-indicators:50054"
+      WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057 xstockstrat-indicators:50054 xstockstrat-trading:50051"
       SERVICE_NAME: analysis
       DB_POOL_MAX: "2"
       MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}
