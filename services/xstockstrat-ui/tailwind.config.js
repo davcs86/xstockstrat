@@ -37,9 +37,14 @@ module.exports = {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
         },
-        buy: 'hsl(163 100% 40%)',
-        sell: 'hsl(0 84% 55%)',
-        paper: 'hsl(48 96% 53%)',
+        // Nocturne semantic roles (feature 083): gain #4cc79c / loss #e0787a / paper #c9b47e.
+        buy: 'hsl(159 52% 54%)',
+        sell: 'hsl(359 63% 67%)',
+        paper: 'hsl(43 41% 64%)',
+      },
+      fontFamily: {
+        // Numbers, tickers, IDs, thresholds and timestamps render mono + tabular-nums (FR-3).
+        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
       },
       borderRadius: {
         lg: 'var(--radius)',
