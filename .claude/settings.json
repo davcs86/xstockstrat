@@ -5,7 +5,8 @@
       "source": {
         "source": "github",
         "repo": "davcs86/agent-plugins"
-      }
+      },
+      "autoUpdate": true
     }
   },
   "enabledPlugins": {
