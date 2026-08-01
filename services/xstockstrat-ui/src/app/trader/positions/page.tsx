@@ -5,6 +5,7 @@ import type { JsonObject } from '@bufbuild/protobuf';
 import { AppShell } from '@/components/trader/AppShell';
 import { useAccountContext } from '@/context/AccountContext';
 import { usePositions } from '@/hooks/usePortfolio';
+import { POSITION_RISK_FLAG, EnumBadge } from '@/lib/opportunityShared';
 import { usePositionLineage } from '@/hooks/usePositionLineage';
 import { PositionSide } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import type { Position } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
@@ -20,7 +21,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@/components/ui/table';
 
 type TradingMode = 'paper' | 'live';
 type PnlFilter = 'all' | 'winners' | 'losers';
@@ -176,9 +184,15 @@ export default function PositionsPage() {
                     <TableHead className="text-right hidden lg:table-cell">Cost Basis</TableHead>
                     <TableHead className="text-right hidden md:table-cell">Market Value</TableHead>
                     <TableHead className="text-right">Today&apos;s P/L ($)</TableHead>
-                    <TableHead className="text-right hidden sm:table-cell">Today&apos;s P/L (%)</TableHead>
+                    <TableHead className="text-right hidden sm:table-cell">
+                      Today&apos;s P/L (%)
+                    </TableHead>
                     <TableHead className="text-right">Total P/L ($)</TableHead>
                     <TableHead className="text-right">Total P/L (%)</TableHead>
+                    {/* feature 083 — Exposure risk reframe. */}
+                    <TableHead className="text-right hidden lg:table-cell">Factor</TableHead>
+                    <TableHead className="text-right hidden md:table-cell">Stop dist</TableHead>
+                    <TableHead className="text-right hidden md:table-cell">Flag</TableHead>
                     <TableHead className="text-right sr-only">Trade</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -192,7 +206,9 @@ export default function PositionsPage() {
                       <TableCell className="font-mono font-semibold">{p.symbol}</TableCell>
                       <TableCell className="text-muted-foreground">{sideLabel(p.qty)}</TableCell>
                       <TableCell className="text-right tabular-nums">{p.qty}</TableCell>
-                      <TableCell className="text-right tabular-nums">{fmtUsd(p.currentPrice)}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {fmtUsd(p.currentPrice)}
+                      </TableCell>
                       <TableCell className="text-right tabular-nums hidden sm:table-cell">
                         {fmtUsd(p.avgEntryPrice)}
                       </TableCell>
@@ -202,7 +218,9 @@ export default function PositionsPage() {
                       <TableCell className="text-right tabular-nums hidden md:table-cell">
                         {fmtUsd(p.marketValue)}
                       </TableCell>
-                      <TableCell className={`text-right tabular-nums font-semibold ${pnlClass(p.dayPnl)}`}>
+                      <TableCell
+                        className={`text-right tabular-nums font-semibold ${pnlClass(p.dayPnl)}`}
+                      >
                         {fmtSignedUsd(p.dayPnl)}
                       </TableCell>
                       <TableCell
@@ -210,11 +228,22 @@ export default function PositionsPage() {
                       >
                         {fmtPct(p.dayPnlPct)}
                       </TableCell>
-                      <TableCell className={`text-right tabular-nums font-semibold ${pnlClass(p.unrealizedPnl)}`}>
+                      <TableCell
+                        className={`text-right tabular-nums font-semibold ${pnlClass(p.unrealizedPnl)}`}
+                      >
                         {fmtSignedUsd(p.unrealizedPnl)}
                       </TableCell>
                       <TableCell className={`text-right tabular-nums ${pnlClass(p.unrealizedPnl)}`}>
                         {fmtPct(p.unrealizedPnlPct)}
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground hidden lg:table-cell">
+                        {p.factor || 'Unclassified'}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums hidden md:table-cell">
+                        {p.stopPrice ? fmtPct(p.stopDistancePct) : '—'}
+                      </TableCell>
+                      <TableCell className="text-right hidden md:table-cell">
+                        {p.flag ? <EnumBadge render={POSITION_RISK_FLAG[p.flag]} /> : '—'}
                       </TableCell>
                       <TableCell className="text-right">
                         {/* Quick-trade shortcut: opens the order ticket pre-filled with this
@@ -306,7 +335,9 @@ export default function PositionsPage() {
                   <p className="text-xs text-muted-foreground">Loading fills…</p>
                 )}
                 {!lineage.isLoading && (lineage.data?.length ?? 0) === 0 && (
-                  <p className="text-xs text-muted-foreground">No order.filled events for this position.</p>
+                  <p className="text-xs text-muted-foreground">
+                    No order.filled events for this position.
+                  </p>
                 )}
                 {(lineage.data?.length ?? 0) > 0 && (
                   <Table>

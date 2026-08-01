@@ -366,3 +366,24 @@ fallback works). Validated byte-for-byte gen reproduction before editing protos.
 **fails-082 guard:** every commit targets `claude/ui-revamp-implementation-7ras2a` directly (no
 base-chained step branches). context-forge/context-scrubber plugin availability unconfirmed in this
 session — flagged in the PR body per the root CLAUDE.md Teardown rule.
+
+### Session (2026-08-01) — Step 25 (Book: Exposure + Portfolio + Orders)
+
+- **Exposure** (`trader/positions/page.tsx`): reframed the positions table with three additive
+  risk columns — Factor (`p.factor || 'Unclassified'`), Stop dist (`fmtPct(p.stopDistancePct)`,
+  em-dash when no stop), Flag (`EnumBadge` over `POSITION_RISK_FLAG`, em-dash when unset) —
+  consuming the Step-13 `Position` risk fields. Columns hide progressively (lg/md) like the
+  existing P/L columns; no execution-path change.
+- **Portfolio** (`trader/portfolio/page.tsx`): replaced the stub with the read-only broker mirror —
+  `<PortfolioPanel/>` (reuses `usePortfolios`, 10s poll) + AC-8 / C-10(b) `data-testid="ledger-disclaimer"`
+  footer ("xstockstrat never writes to the ledger …"). No new fixture — reuses `PORTFOLIO_ALPACA`.
+- **Orders** (`components/trader/OrdersTable.tsx`): added the Origin column (strategy-or-Manual) with a
+  Why?-trace link to `/insights/strategies/<id>` when `order.strategyId` is set, else plain "Manual"
+  (`data-testid="order-origin-<id>"`). Status/type still render via the reused `orderShared` maps
+  (FR-20 parity unchanged); no order-submission gate touched.
+- **Mock backend**: AAPL `listPositions` row now carries `stopPrice/riskAtStop/stopDistancePct/factor/flag/exitRule`
+  (distinguishable values, insights.md 2026-07-27); MSFT carries none → exercises the fallbacks.
+- **e2e** (Step-25 slice, red-green in the Step-26 sense folded here): `e2e/trader/positions.spec.ts`
+  (asserts Tech factor + 6.20% stop dist + Stop-near flag on AAPL, Unclassified on MSFT) and
+  `e2e/trader/portfolio.spec.ts` (Equity + ledger-disclaimer). Full trader suite + nav-reachability
+  green (49 passed). The FR-20 order-parity + AC-8 valuation-parity dedicated specs remain Step 26.

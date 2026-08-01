@@ -1,7 +1,9 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 import type { Order } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { OrderStatus, OrderType } from '@xstockstrat/proto/trading/v1/trading_pb';
+import { BASE_PATH_INSIGHTS } from '@/lib/basepath';
 import { useOrderUpdates } from '@/hooks/useOrderUpdates';
 import { useCancelOrder } from '@/hooks/useCancelOrder';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
@@ -75,6 +77,8 @@ export function OrdersTable({
                 <TableHead className="text-right">Filled</TableHead>
                 <TableHead className="text-right hidden md:table-cell">Avg Price</TableHead>
                 <TableHead>Status</TableHead>
+                {/* feature 083 — order origin (strategy-or-Manual) + Why? trace link. */}
+                <TableHead className="hidden lg:table-cell">Origin</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -97,6 +101,20 @@ export function OrdersTable({
                       {formatUsd(order.filledAvgPrice)}
                     </TableCell>
                     <OrderStatusCell status={order.status} />
+                    <TableCell className="hidden lg:table-cell text-muted-foreground">
+                      {order.strategyId ? (
+                        <Link
+                          href={`${BASE_PATH_INSIGHTS}/strategies/${encodeURIComponent(order.strategyId)}`}
+                          className="text-primary hover:underline"
+                          title="Why? — the strategy that originated this order"
+                          data-testid={`order-origin-${order.orderId}`}
+                        >
+                          {order.strategyId}
+                        </Link>
+                      ) : (
+                        <span data-testid={`order-origin-${order.orderId}`}>Manual</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-right whitespace-nowrap">
                       <Button
                         type="button"

@@ -194,6 +194,13 @@ export async function startMockBackend(): Promise<void> {
                 costBasis: 1800.0,
                 accountId: 'alpaca-default',
                 tradingMode: 1,
+                // feature 083 risk/factor fields (Exposure).
+                stopPrice: 178.0,
+                riskAtStop: 118.0,
+                stopDistancePct: 0.062,
+                factor: 'Tech',
+                flag: 3, // POSITION_RISK_FLAG_STOP_NEAR
+                exitRule: 'Stop @ $178.00',
               },
               {
                 symbol: 'MSFT',
