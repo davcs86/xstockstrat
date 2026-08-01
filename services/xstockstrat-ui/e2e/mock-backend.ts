@@ -37,6 +37,7 @@ import {
   STRATEGY_DEF_LIVE,
   STRATEGY_DEFINITIONS,
   insufficientDataResult,
+  OPPORTUNITIES,
 } from './fixtures';
 
 export const TRADER_MOCK_PORT = 9091;
@@ -469,6 +470,11 @@ export async function startMockBackend(): Promise<void> {
       router.service(AnalysisService, {
         async listStrategies() {
           return { strategies: STRATEGY_SCORES };
+        },
+        // feature 083 — ranked opportunity queue; honors the min_conviction filter.
+        async listOpportunities(req) {
+          const min = req.minConviction ?? 0;
+          return { opportunities: OPPORTUNITIES.filter((o) => o.conviction >= min) };
         },
         async scoreStrategy() {
           return { overallScore: 0.5, rating: 'C' };
