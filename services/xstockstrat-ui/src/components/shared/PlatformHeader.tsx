@@ -38,11 +38,38 @@ export interface SubNavItem {
   match?: 'exact' | 'prefix';
 }
 
+interface NavItem extends SubNavItem {
+  /** Admin-only entry (FR-7) — hidden from non-admins; the BFF re-enforces on every call. */
+  adminOnly?: boolean;
+}
+
 interface NavGroup {
   key: string;
   label: string;
   icon: React.ReactNode;
-  items: SubNavItem[];
+  items: NavItem[];
+}
+
+/**
+ * Provider-free admin check for the shared shell. useIsAdmin (react-query) is unavailable in
+ * the /accounts and /config-ui segments (no QueryClientProvider), so the header reads the
+ * non-sensitive `{ isAdmin }` flag from /api/auth/me directly. Defaults false until resolved.
+ */
+function useHeaderIsAdmin(): boolean {
+  const [isAdmin, setIsAdmin] = React.useState(false);
+  React.useEffect(() => {
+    let alive = true;
+    fetch('/api/auth/me', { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (alive && d) setIsAdmin(Boolean(d.isAdmin));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return isAdmin;
 }
 
 // The four opportunities-first groups + a pinned Settings surface that keeps every admin/account
@@ -71,7 +98,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: 'Strategies', href: '/insights/strategies' },
       { label: 'Formulas', href: '/insights/formulas' },
       { label: 'Signal sources', href: '/config-ui/sources' },
-      { label: 'Backfills', href: '/insights/backfills' },
+      { label: 'Backfills', href: '/insights/backfills', adminOnly: true },
     ],
   },
   {
@@ -163,8 +190,12 @@ interface PlatformHeaderProps {
  */
 export function PlatformHeader({ actions }: PlatformHeaderProps) {
   const pathname = usePathname();
+  const isAdmin = useHeaderIsAdmin();
   const { group: activeGroup, item: activeItem } = resolveActive(pathname);
   const [expanded, setExpanded] = React.useState<string>(activeGroup.key);
+  // Admin-only entries (Backfills, FR-7) are hidden from non-admins.
+  const visibleItems = (items: NavItem[]) => items.filter((i) => !i.adminOnly || isAdmin);
+  const activeItems = visibleItems(activeGroup.items);
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-sm">
@@ -242,7 +273,7 @@ export function PlatformHeader({ actions }: PlatformHeaderProps) {
                       </button>
                       {isOpen && (
                         <div className="ml-4 mt-1 flex flex-col gap-1 border-l border-border pl-3">
-                          {group.items.map((sub) => (
+                          {visibleItems(group.items).map((sub) => (
                             <SheetClose asChild key={sub.href}>
                               <Link
                                 href={sub.href}
@@ -281,7 +312,7 @@ export function PlatformHeader({ actions }: PlatformHeaderProps) {
         </span>
         <Separator orientation="vertical" className="h-4 mx-1" />
         <nav aria-label="Section" className="flex items-center gap-1 overflow-x-auto">
-          {activeGroup.items.map((item) => (
+          {activeItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
