@@ -560,3 +560,10 @@ and **E (per-screen fidelity)** (skipping A sidebar, C mobile-companion page, D 
 - Shared: `src/lib/money.ts` + `src/components/shared/StatTile.tsx` now back the Opportunities,
   Exposure, Portfolio, Signal-sources, Strategies and Backfills stat rows (DRY). Each screen's e2e
   extended; per-screen commits pushed to PR #832.
+
+## Session 2026-08-01 (CI: feature status automation)
+
+- Promotion PR #834 merged to main
+- Feature promoted and committed: 37a7f5269454eadb810c4303d5100063e4f35eed
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-01

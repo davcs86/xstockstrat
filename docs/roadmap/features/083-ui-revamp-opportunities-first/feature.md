@@ -1,6 +1,8 @@
 # Feature: ui-revamp-opportunities-first
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 37a7f5269454eadb810c4303d5100063e4f35eed
+**Launched date**: 2026-08-01
 **Development Branch**: `feature/ui-revamp-opportunities-first`
 **Created**: 2026-07-31
 **Last Updated**: 2026-07-31
@@ -17,6 +19,7 @@
 | 2026-07-31 | `design-approved` (unchanged) | /sdd-review | Refreshed multi-service product spec re-reviewed: **PASS WITH WARNINGS** (0 blockers, no Floor breach — F-06/F-07 held; 3 advisory warnings deferred to /sdd-spec). Overlap **CLEAN**. Copilot descoped to shallow beta. Lifecycle unchanged (re-validation, not a re-gate). |
 | 2026-07-31 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 31 steps. Grep-resolved the design Open Risks: factor grouping **requires** `portfolio.exposure.factor_map` (marketdata `Fundamentals` proto has no `sector`); expectancy is **derivable** from `backtest_runs` `win_rate`+`profit_factor` (no analysis migration); portfolio resting-stops held **in-memory** via `ConsumeOrderFills` replay (no portfolio migration); only ingest migration **008** needed; new `analysis→trading` `TRADING_ENDPOINT` edge confirmed absent in all three deployment files. |
 
+| 2026-08-01 | `code-completed` → `launched` | CI workflow | Promoted via PR #834; committed 37a7f5269454eadb810c4303d5100063e4f35eed |
 ---
 
 ## Artifacts
