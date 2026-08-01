@@ -69,6 +69,15 @@ const (
 	// AnalysisServiceRunFundamentalsScanProcedure is the fully-qualified name of the AnalysisService's
 	// RunFundamentalsScan RPC.
 	AnalysisServiceRunFundamentalsScanProcedure = "/xstockstrat.analysis.v1.AnalysisService/RunFundamentalsScan"
+	// AnalysisServiceListOpportunitiesProcedure is the fully-qualified name of the AnalysisService's
+	// ListOpportunities RPC.
+	AnalysisServiceListOpportunitiesProcedure = "/xstockstrat.analysis.v1.AnalysisService/ListOpportunities"
+	// AnalysisServiceEvaluateReadinessProcedure is the fully-qualified name of the AnalysisService's
+	// EvaluateReadiness RPC.
+	AnalysisServiceEvaluateReadinessProcedure = "/xstockstrat.analysis.v1.AnalysisService/EvaluateReadiness"
+	// AnalysisServiceGetStrategyAnalyticsProcedure is the fully-qualified name of the AnalysisService's
+	// GetStrategyAnalytics RPC.
+	AnalysisServiceGetStrategyAnalyticsProcedure = "/xstockstrat.analysis.v1.AnalysisService/GetStrategyAnalytics"
 )
 
 // AnalysisServiceClient is a client for the xstockstrat.analysis.v1.AnalysisService service.
@@ -91,6 +100,15 @@ type AnalysisServiceClient interface {
 	ScreenSymbols(context.Context, *connect.Request[v1.ScreenSymbolsRequest]) (*connect.Response[v1.ScreenSymbolsResponse], error)
 	// Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped)
 	RunFundamentalsScan(context.Context, *connect.Request[v1.RunFundamentalsScanRequest]) (*connect.Response[v1.FundamentalsScanSummary], error)
+	// ── Opportunity queue + readiness + per-strategy analytics (feature 083) ─────
+	// Ranked opportunity queue for the Decide surface. Aggregates ingest signals,
+	// held positions, and the conviction/readiness evaluator (zero new edges).
+	ListOpportunities(context.Context, *connect.Request[v1.ListOpportunitiesRequest]) (*connect.Response[v1.ListOpportunitiesResponse], error)
+	// Per-symbol live condition evaluation (traced): passing/soft/failing leaves +
+	// distance-to-threshold. Feeds Signal-detail, Watchlist readiness, and the queue.
+	EvaluateReadiness(context.Context, *connect.Request[v1.EvaluateReadinessRequest]) (*connect.Response[v1.EvaluateReadinessResponse], error)
+	// Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share).
+	GetStrategyAnalytics(context.Context, *connect.Request[v1.GetStrategyAnalyticsRequest]) (*connect.Response[v1.StrategyAnalytics], error)
 }
 
 // NewAnalysisServiceClient constructs a client for the xstockstrat.analysis.v1.AnalysisService
@@ -176,6 +194,24 @@ func NewAnalysisServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(analysisServiceMethods.ByName("RunFundamentalsScan")),
 			connect.WithClientOptions(opts...),
 		),
+		listOpportunities: connect.NewClient[v1.ListOpportunitiesRequest, v1.ListOpportunitiesResponse](
+			httpClient,
+			baseURL+AnalysisServiceListOpportunitiesProcedure,
+			connect.WithSchema(analysisServiceMethods.ByName("ListOpportunities")),
+			connect.WithClientOptions(opts...),
+		),
+		evaluateReadiness: connect.NewClient[v1.EvaluateReadinessRequest, v1.EvaluateReadinessResponse](
+			httpClient,
+			baseURL+AnalysisServiceEvaluateReadinessProcedure,
+			connect.WithSchema(analysisServiceMethods.ByName("EvaluateReadiness")),
+			connect.WithClientOptions(opts...),
+		),
+		getStrategyAnalytics: connect.NewClient[v1.GetStrategyAnalyticsRequest, v1.StrategyAnalytics](
+			httpClient,
+			baseURL+AnalysisServiceGetStrategyAnalyticsProcedure,
+			connect.WithSchema(analysisServiceMethods.ByName("GetStrategyAnalytics")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -193,6 +229,9 @@ type analysisServiceClient struct {
 	setStrategyLive         *connect.Client[v1.SetStrategyLiveRequest, v1.SetStrategyLiveResponse]
 	screenSymbols           *connect.Client[v1.ScreenSymbolsRequest, v1.ScreenSymbolsResponse]
 	runFundamentalsScan     *connect.Client[v1.RunFundamentalsScanRequest, v1.FundamentalsScanSummary]
+	listOpportunities       *connect.Client[v1.ListOpportunitiesRequest, v1.ListOpportunitiesResponse]
+	evaluateReadiness       *connect.Client[v1.EvaluateReadinessRequest, v1.EvaluateReadinessResponse]
+	getStrategyAnalytics    *connect.Client[v1.GetStrategyAnalyticsRequest, v1.StrategyAnalytics]
 }
 
 // RunBacktest calls xstockstrat.analysis.v1.AnalysisService.RunBacktest.
@@ -255,6 +294,21 @@ func (c *analysisServiceClient) RunFundamentalsScan(ctx context.Context, req *co
 	return c.runFundamentalsScan.CallUnary(ctx, req)
 }
 
+// ListOpportunities calls xstockstrat.analysis.v1.AnalysisService.ListOpportunities.
+func (c *analysisServiceClient) ListOpportunities(ctx context.Context, req *connect.Request[v1.ListOpportunitiesRequest]) (*connect.Response[v1.ListOpportunitiesResponse], error) {
+	return c.listOpportunities.CallUnary(ctx, req)
+}
+
+// EvaluateReadiness calls xstockstrat.analysis.v1.AnalysisService.EvaluateReadiness.
+func (c *analysisServiceClient) EvaluateReadiness(ctx context.Context, req *connect.Request[v1.EvaluateReadinessRequest]) (*connect.Response[v1.EvaluateReadinessResponse], error) {
+	return c.evaluateReadiness.CallUnary(ctx, req)
+}
+
+// GetStrategyAnalytics calls xstockstrat.analysis.v1.AnalysisService.GetStrategyAnalytics.
+func (c *analysisServiceClient) GetStrategyAnalytics(ctx context.Context, req *connect.Request[v1.GetStrategyAnalyticsRequest]) (*connect.Response[v1.StrategyAnalytics], error) {
+	return c.getStrategyAnalytics.CallUnary(ctx, req)
+}
+
 // AnalysisServiceHandler is an implementation of the xstockstrat.analysis.v1.AnalysisService
 // service.
 type AnalysisServiceHandler interface {
@@ -276,6 +330,15 @@ type AnalysisServiceHandler interface {
 	ScreenSymbols(context.Context, *connect.Request[v1.ScreenSymbolsRequest]) (*connect.Response[v1.ScreenSymbolsResponse], error)
 	// Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped)
 	RunFundamentalsScan(context.Context, *connect.Request[v1.RunFundamentalsScanRequest]) (*connect.Response[v1.FundamentalsScanSummary], error)
+	// ── Opportunity queue + readiness + per-strategy analytics (feature 083) ─────
+	// Ranked opportunity queue for the Decide surface. Aggregates ingest signals,
+	// held positions, and the conviction/readiness evaluator (zero new edges).
+	ListOpportunities(context.Context, *connect.Request[v1.ListOpportunitiesRequest]) (*connect.Response[v1.ListOpportunitiesResponse], error)
+	// Per-symbol live condition evaluation (traced): passing/soft/failing leaves +
+	// distance-to-threshold. Feeds Signal-detail, Watchlist readiness, and the queue.
+	EvaluateReadiness(context.Context, *connect.Request[v1.EvaluateReadinessRequest]) (*connect.Response[v1.EvaluateReadinessResponse], error)
+	// Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share).
+	GetStrategyAnalytics(context.Context, *connect.Request[v1.GetStrategyAnalyticsRequest]) (*connect.Response[v1.StrategyAnalytics], error)
 }
 
 // NewAnalysisServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -357,6 +420,24 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 		connect.WithSchema(analysisServiceMethods.ByName("RunFundamentalsScan")),
 		connect.WithHandlerOptions(opts...),
 	)
+	analysisServiceListOpportunitiesHandler := connect.NewUnaryHandler(
+		AnalysisServiceListOpportunitiesProcedure,
+		svc.ListOpportunities,
+		connect.WithSchema(analysisServiceMethods.ByName("ListOpportunities")),
+		connect.WithHandlerOptions(opts...),
+	)
+	analysisServiceEvaluateReadinessHandler := connect.NewUnaryHandler(
+		AnalysisServiceEvaluateReadinessProcedure,
+		svc.EvaluateReadiness,
+		connect.WithSchema(analysisServiceMethods.ByName("EvaluateReadiness")),
+		connect.WithHandlerOptions(opts...),
+	)
+	analysisServiceGetStrategyAnalyticsHandler := connect.NewUnaryHandler(
+		AnalysisServiceGetStrategyAnalyticsProcedure,
+		svc.GetStrategyAnalytics,
+		connect.WithSchema(analysisServiceMethods.ByName("GetStrategyAnalytics")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.analysis.v1.AnalysisService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AnalysisServiceRunBacktestProcedure:
@@ -383,6 +464,12 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 			analysisServiceScreenSymbolsHandler.ServeHTTP(w, r)
 		case AnalysisServiceRunFundamentalsScanProcedure:
 			analysisServiceRunFundamentalsScanHandler.ServeHTTP(w, r)
+		case AnalysisServiceListOpportunitiesProcedure:
+			analysisServiceListOpportunitiesHandler.ServeHTTP(w, r)
+		case AnalysisServiceEvaluateReadinessProcedure:
+			analysisServiceEvaluateReadinessHandler.ServeHTTP(w, r)
+		case AnalysisServiceGetStrategyAnalyticsProcedure:
+			analysisServiceGetStrategyAnalyticsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -438,4 +525,16 @@ func (UnimplementedAnalysisServiceHandler) ScreenSymbols(context.Context, *conne
 
 func (UnimplementedAnalysisServiceHandler) RunFundamentalsScan(context.Context, *connect.Request[v1.RunFundamentalsScanRequest]) (*connect.Response[v1.FundamentalsScanSummary], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.RunFundamentalsScan is not implemented"))
+}
+
+func (UnimplementedAnalysisServiceHandler) ListOpportunities(context.Context, *connect.Request[v1.ListOpportunitiesRequest]) (*connect.Response[v1.ListOpportunitiesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.ListOpportunities is not implemented"))
+}
+
+func (UnimplementedAnalysisServiceHandler) EvaluateReadiness(context.Context, *connect.Request[v1.EvaluateReadinessRequest]) (*connect.Response[v1.EvaluateReadinessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.EvaluateReadiness is not implemented"))
+}
+
+func (UnimplementedAnalysisServiceHandler) GetStrategyAnalytics(context.Context, *connect.Request[v1.GetStrategyAnalyticsRequest]) (*connect.Response[v1.StrategyAnalytics], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.GetStrategyAnalytics is not implemented"))
 }

@@ -29,6 +29,20 @@ export declare enum FillMode {
 export declare function fillModeFromJSON(object: any): FillMode;
 export declare function fillModeToJSON(object: FillMode): string;
 export declare function fillModeToNumber(object: FillMode): number;
+/** Health of a registered signal source (feature 083). Closed set → enum (C-04). */
+export declare enum SourceHealthStatus {
+    SOURCE_HEALTH_STATUS_UNSPECIFIED = "SOURCE_HEALTH_STATUS_UNSPECIFIED",
+    /** SOURCE_HEALTH_STATUS_LIVE - fed within the freshness window */
+    SOURCE_HEALTH_STATUS_LIVE = "SOURCE_HEALTH_STATUS_LIVE",
+    /** SOURCE_HEALTH_STATUS_STALE - last-seen beyond freshness, within the down threshold */
+    SOURCE_HEALTH_STATUS_STALE = "SOURCE_HEALTH_STATUS_STALE",
+    /** SOURCE_HEALTH_STATUS_DOWN - no signal beyond the down threshold, or last op errored */
+    SOURCE_HEALTH_STATUS_DOWN = "SOURCE_HEALTH_STATUS_DOWN",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function sourceHealthStatusFromJSON(object: any): SourceHealthStatus;
+export declare function sourceHealthStatusToJSON(object: SourceHealthStatus): string;
+export declare function sourceHealthStatusToNumber(object: SourceHealthStatus): number;
 export interface BackfillJob {
     jobId: string;
     symbols: string[];
@@ -149,6 +163,14 @@ export interface SignalSource {
     configJson?: {
         [key: string]: any;
     } | undefined;
+    /**
+     * ── Source-health fields (feature 083 — Engine → Signal sources) ─────────────
+     * health is derived from last_seen_at freshness vs a staleness threshold.
+     */
+    health: SourceHealthStatus;
+    lastSeenAt?: Date | undefined;
+    lastError: string;
+    signalsFed: number;
 }
 export interface ListSignalSourcesRequest {
     includeInactive: boolean;

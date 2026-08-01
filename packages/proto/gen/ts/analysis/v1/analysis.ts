@@ -564,6 +564,141 @@ export function screenResultStatusToNumber(object: ScreenResultStatus): number {
   }
 }
 
+/**
+ * The action a ranked opportunity suggests. Closed set → enum (C-04).
+ * TRIM/EXIT are deliberately collapsed into REDUCE — the platform must not
+ * synthesize a "fully exit vs trim" boundary on a row that opens a real order
+ * ticket; the human chooses trim vs exit at the ticket (design.md § 1).
+ */
+export enum OpportunityActionTag {
+  OPPORTUNITY_ACTION_TAG_UNSPECIFIED = "OPPORTUNITY_ACTION_TAG_UNSPECIFIED",
+  /** OPPORTUNITY_ACTION_TAG_ENTER - buy signal, not currently held */
+  OPPORTUNITY_ACTION_TAG_ENTER = "OPPORTUNITY_ACTION_TAG_ENTER",
+  /** OPPORTUNITY_ACTION_TAG_ADD - buy signal, already held */
+  OPPORTUNITY_ACTION_TAG_ADD = "OPPORTUNITY_ACTION_TAG_ADD",
+  /** OPPORTUNITY_ACTION_TAG_REDUCE - sell signal, held (trim or exit — human decides) */
+  OPPORTUNITY_ACTION_TAG_REDUCE = "OPPORTUNITY_ACTION_TAG_REDUCE",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function opportunityActionTagFromJSON(object: any): OpportunityActionTag {
+  switch (object) {
+    case 0:
+    case "OPPORTUNITY_ACTION_TAG_UNSPECIFIED":
+      return OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED;
+    case 1:
+    case "OPPORTUNITY_ACTION_TAG_ENTER":
+      return OpportunityActionTag.OPPORTUNITY_ACTION_TAG_ENTER;
+    case 2:
+    case "OPPORTUNITY_ACTION_TAG_ADD":
+      return OpportunityActionTag.OPPORTUNITY_ACTION_TAG_ADD;
+    case 3:
+    case "OPPORTUNITY_ACTION_TAG_REDUCE":
+      return OpportunityActionTag.OPPORTUNITY_ACTION_TAG_REDUCE;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return OpportunityActionTag.UNRECOGNIZED;
+  }
+}
+
+export function opportunityActionTagToJSON(object: OpportunityActionTag): string {
+  switch (object) {
+    case OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED:
+      return "OPPORTUNITY_ACTION_TAG_UNSPECIFIED";
+    case OpportunityActionTag.OPPORTUNITY_ACTION_TAG_ENTER:
+      return "OPPORTUNITY_ACTION_TAG_ENTER";
+    case OpportunityActionTag.OPPORTUNITY_ACTION_TAG_ADD:
+      return "OPPORTUNITY_ACTION_TAG_ADD";
+    case OpportunityActionTag.OPPORTUNITY_ACTION_TAG_REDUCE:
+      return "OPPORTUNITY_ACTION_TAG_REDUCE";
+    case OpportunityActionTag.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function opportunityActionTagToNumber(object: OpportunityActionTag): number {
+  switch (object) {
+    case OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED:
+      return 0;
+    case OpportunityActionTag.OPPORTUNITY_ACTION_TAG_ENTER:
+      return 1;
+    case OpportunityActionTag.OPPORTUNITY_ACTION_TAG_ADD:
+      return 2;
+    case OpportunityActionTag.OPPORTUNITY_ACTION_TAG_REDUCE:
+      return 3;
+    case OpportunityActionTag.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
+/** Per-condition-leaf evaluation state. Closed set → enum (C-04). */
+export enum ConditionState {
+  CONDITION_STATE_UNSPECIFIED = "CONDITION_STATE_UNSPECIFIED",
+  /** CONDITION_STATE_PASS - leaf currently satisfied */
+  CONDITION_STATE_PASS = "CONDITION_STATE_PASS",
+  /** CONDITION_STATE_SOFT - within the soft-band of the threshold but not passing */
+  CONDITION_STATE_SOFT = "CONDITION_STATE_SOFT",
+  /** CONDITION_STATE_FAIL - not satisfied, outside the soft-band */
+  CONDITION_STATE_FAIL = "CONDITION_STATE_FAIL",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function conditionStateFromJSON(object: any): ConditionState {
+  switch (object) {
+    case 0:
+    case "CONDITION_STATE_UNSPECIFIED":
+      return ConditionState.CONDITION_STATE_UNSPECIFIED;
+    case 1:
+    case "CONDITION_STATE_PASS":
+      return ConditionState.CONDITION_STATE_PASS;
+    case 2:
+    case "CONDITION_STATE_SOFT":
+      return ConditionState.CONDITION_STATE_SOFT;
+    case 3:
+    case "CONDITION_STATE_FAIL":
+      return ConditionState.CONDITION_STATE_FAIL;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return ConditionState.UNRECOGNIZED;
+  }
+}
+
+export function conditionStateToJSON(object: ConditionState): string {
+  switch (object) {
+    case ConditionState.CONDITION_STATE_UNSPECIFIED:
+      return "CONDITION_STATE_UNSPECIFIED";
+    case ConditionState.CONDITION_STATE_PASS:
+      return "CONDITION_STATE_PASS";
+    case ConditionState.CONDITION_STATE_SOFT:
+      return "CONDITION_STATE_SOFT";
+    case ConditionState.CONDITION_STATE_FAIL:
+      return "CONDITION_STATE_FAIL";
+    case ConditionState.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function conditionStateToNumber(object: ConditionState): number {
+  switch (object) {
+    case ConditionState.CONDITION_STATE_UNSPECIFIED:
+      return 0;
+    case ConditionState.CONDITION_STATE_PASS:
+      return 1;
+    case ConditionState.CONDITION_STATE_SOFT:
+      return 2;
+    case ConditionState.CONDITION_STATE_FAIL:
+      return 3;
+    case ConditionState.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 export interface RunBacktestRequest {
   strategyId: string;
   range?: TimeRange | undefined;
@@ -858,7 +993,20 @@ export interface ScreenResult {
   passed: boolean;
   status: ScreenResultStatus;
   /** populated when status == INSUFFICIENT_DATA */
-  gap?: CoverageGap | undefined;
+  gap?:
+    | CoverageGap
+    | undefined;
+  /**
+   * Raw column values surfaced on the screener results table (feature 083, FR-8).
+   * rsi/atr come from the analysis→indicators edge; ATR is a close-only approximation
+   * (indicators_engine.py) — surfaced as a known accuracy caveat, not exact.
+   * rev_growth is best-effort from Fundamentals.extra_metrics (0 when FMP omits it).
+   */
+  pe: number;
+  rsi: number;
+  atr: number;
+  revGrowth: number;
+  held: boolean;
 }
 
 export interface ScreenResult_CriterionScoresEntry {
@@ -902,6 +1050,87 @@ export interface FundamentalsScanSummary {
   /** "completed" | "budget_deferred" | "failed" */
   status: string;
   finishedAt?: Date | undefined;
+}
+
+/**
+ * One ranked opportunity on the Decide queue. conviction is a deterministic
+ * ordinal (passing/total leaves + normalized worst-distance-to-threshold), NOT a
+ * probability — the UI renders "N/M conditions" + strength bars, never a fake %.
+ */
+export interface Opportunity {
+  symbol: string;
+  action: OpportunityActionTag;
+  conviction: number;
+  passingConditions: number;
+  totalConditions: number;
+  thesis: string;
+  strategyId: string;
+  source: string;
+  validUntil?: Date | undefined;
+}
+
+/** One evaluated condition leaf from the traced evaluator (feature 083). */
+export interface ConditionEval {
+  refName: string;
+  lhsValue: number;
+  threshold: number;
+  /** >, <, >=, <=, crosses_above, crosses_below */
+  fn: string;
+  state: ConditionState;
+  /** normalized */
+  distanceToThreshold: number;
+}
+
+/** Per-symbol readiness — the traced evaluation of a strategy's entry rule. */
+export interface SymbolReadiness {
+  symbol: string;
+  conviction: number;
+  passingConditions: number;
+  totalConditions: number;
+  conditions: ConditionEval[];
+}
+
+/**
+ * Per-strategy analytics for the Engine → Strategies surface. expectancy and
+ * max_drawdown derive from persisted analysis.backtest_runs (win_rate +
+ * profit_factor); signals_30d from ingest QuerySignals; taken from trading
+ * ListOrders; queue_share from the opportunity-queue join.
+ */
+export interface StrategyAnalytics {
+  strategyId: string;
+  expectancy: number;
+  blendedHitRate: number;
+  maxDrawdown: number;
+  signals30d: number;
+  taken: number;
+  queueShare: number;
+}
+
+/**
+ * user_id is intentionally absent — taken from the propagated x-user-id header
+ * server-side (matching the portfolio watchlist convention), never from the wire.
+ */
+export interface ListOpportunitiesRequest {
+  page?: PageRequest | undefined;
+  minConviction: number;
+}
+
+export interface ListOpportunitiesResponse {
+  opportunities: Opportunity[];
+  page?: PageResponse | undefined;
+}
+
+export interface EvaluateReadinessRequest {
+  strategyId: string;
+  symbols: string[];
+}
+
+export interface EvaluateReadinessResponse {
+  readiness: SymbolReadiness[];
+}
+
+export interface GetStrategyAnalyticsRequest {
+  strategyId: string;
 }
 
 function createBaseRunBacktestRequest(): RunBacktestRequest {
@@ -4836,6 +5065,11 @@ function createBaseScreenResult(): ScreenResult {
     passed: false,
     status: ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED,
     gap: undefined,
+    pe: 0,
+    rsi: 0,
+    atr: 0,
+    revGrowth: 0,
+    held: false,
   };
 }
 
@@ -4858,6 +5092,21 @@ export const ScreenResult: MessageFns<ScreenResult> = {
     }
     if (message.gap !== undefined) {
       CoverageGap.encode(message.gap, writer.uint32(50).fork()).join();
+    }
+    if (message.pe !== 0) {
+      writer.uint32(57).double(message.pe);
+    }
+    if (message.rsi !== 0) {
+      writer.uint32(65).double(message.rsi);
+    }
+    if (message.atr !== 0) {
+      writer.uint32(73).double(message.atr);
+    }
+    if (message.revGrowth !== 0) {
+      writer.uint32(81).double(message.revGrowth);
+    }
+    if (message.held !== false) {
+      writer.uint32(88).bool(message.held);
     }
     return writer;
   },
@@ -4920,6 +5169,46 @@ export const ScreenResult: MessageFns<ScreenResult> = {
           message.gap = CoverageGap.decode(reader, reader.uint32());
           continue;
         }
+        case 7: {
+          if (tag !== 57) {
+            break;
+          }
+
+          message.pe = reader.double();
+          continue;
+        }
+        case 8: {
+          if (tag !== 65) {
+            break;
+          }
+
+          message.rsi = reader.double();
+          continue;
+        }
+        case 9: {
+          if (tag !== 73) {
+            break;
+          }
+
+          message.atr = reader.double();
+          continue;
+        }
+        case 10: {
+          if (tag !== 81) {
+            break;
+          }
+
+          message.revGrowth = reader.double();
+          continue;
+        }
+        case 11: {
+          if (tag !== 88) {
+            break;
+          }
+
+          message.held = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -4955,6 +5244,15 @@ export const ScreenResult: MessageFns<ScreenResult> = {
         ? screenResultStatusFromJSON(object.status)
         : ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED,
       gap: isSet(object.gap) ? CoverageGap.fromJSON(object.gap) : undefined,
+      pe: isSet(object.pe) ? globalThis.Number(object.pe) : 0,
+      rsi: isSet(object.rsi) ? globalThis.Number(object.rsi) : 0,
+      atr: isSet(object.atr) ? globalThis.Number(object.atr) : 0,
+      revGrowth: isSet(object.revGrowth)
+        ? globalThis.Number(object.revGrowth)
+        : isSet(object.rev_growth)
+        ? globalThis.Number(object.rev_growth)
+        : 0,
+      held: isSet(object.held) ? globalThis.Boolean(object.held) : false,
     };
   },
 
@@ -4984,6 +5282,21 @@ export const ScreenResult: MessageFns<ScreenResult> = {
     if (message.gap !== undefined) {
       obj.gap = CoverageGap.toJSON(message.gap);
     }
+    if (message.pe !== 0) {
+      obj.pe = message.pe;
+    }
+    if (message.rsi !== 0) {
+      obj.rsi = message.rsi;
+    }
+    if (message.atr !== 0) {
+      obj.atr = message.atr;
+    }
+    if (message.revGrowth !== 0) {
+      obj.revGrowth = message.revGrowth;
+    }
+    if (message.held !== false) {
+      obj.held = message.held;
+    }
     return obj;
   },
 
@@ -5006,6 +5319,11 @@ export const ScreenResult: MessageFns<ScreenResult> = {
     message.passed = object.passed ?? false;
     message.status = object.status ?? ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED;
     message.gap = (object.gap !== undefined && object.gap !== null) ? CoverageGap.fromPartial(object.gap) : undefined;
+    message.pe = object.pe ?? 0;
+    message.rsi = object.rsi ?? 0;
+    message.atr = object.atr ?? 0;
+    message.revGrowth = object.revGrowth ?? 0;
+    message.held = object.held ?? false;
     return message;
   },
 };
@@ -5665,6 +5983,1059 @@ export const FundamentalsScanSummary: MessageFns<FundamentalsScanSummary> = {
   },
 };
 
+function createBaseOpportunity(): Opportunity {
+  return {
+    symbol: "",
+    action: OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED,
+    conviction: 0,
+    passingConditions: 0,
+    totalConditions: 0,
+    thesis: "",
+    strategyId: "",
+    source: "",
+    validUntil: undefined,
+  };
+}
+
+export const Opportunity: MessageFns<Opportunity> = {
+  encode(message: Opportunity, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    if (message.action !== OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED) {
+      writer.uint32(16).int32(opportunityActionTagToNumber(message.action));
+    }
+    if (message.conviction !== 0) {
+      writer.uint32(25).double(message.conviction);
+    }
+    if (message.passingConditions !== 0) {
+      writer.uint32(32).int32(message.passingConditions);
+    }
+    if (message.totalConditions !== 0) {
+      writer.uint32(40).int32(message.totalConditions);
+    }
+    if (message.thesis !== "") {
+      writer.uint32(50).string(message.thesis);
+    }
+    if (message.strategyId !== "") {
+      writer.uint32(58).string(message.strategyId);
+    }
+    if (message.source !== "") {
+      writer.uint32(66).string(message.source);
+    }
+    if (message.validUntil !== undefined) {
+      Timestamp.encode(toTimestamp(message.validUntil), writer.uint32(74).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): Opportunity {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseOpportunity();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.action = opportunityActionTagFromJSON(reader.int32());
+          continue;
+        }
+        case 3: {
+          if (tag !== 25) {
+            break;
+          }
+
+          message.conviction = reader.double();
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.passingConditions = reader.int32();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.totalConditions = reader.int32();
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.thesis = reader.string();
+          continue;
+        }
+        case 7: {
+          if (tag !== 58) {
+            break;
+          }
+
+          message.strategyId = reader.string();
+          continue;
+        }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.source = reader.string();
+          continue;
+        }
+        case 9: {
+          if (tag !== 74) {
+            break;
+          }
+
+          message.validUntil = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): Opportunity {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      action: isSet(object.action)
+        ? opportunityActionTagFromJSON(object.action)
+        : OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED,
+      conviction: isSet(object.conviction) ? globalThis.Number(object.conviction) : 0,
+      passingConditions: isSet(object.passingConditions)
+        ? globalThis.Number(object.passingConditions)
+        : isSet(object.passing_conditions)
+        ? globalThis.Number(object.passing_conditions)
+        : 0,
+      totalConditions: isSet(object.totalConditions)
+        ? globalThis.Number(object.totalConditions)
+        : isSet(object.total_conditions)
+        ? globalThis.Number(object.total_conditions)
+        : 0,
+      thesis: isSet(object.thesis) ? globalThis.String(object.thesis) : "",
+      strategyId: isSet(object.strategyId)
+        ? globalThis.String(object.strategyId)
+        : isSet(object.strategy_id)
+        ? globalThis.String(object.strategy_id)
+        : "",
+      source: isSet(object.source) ? globalThis.String(object.source) : "",
+      validUntil: isSet(object.validUntil)
+        ? fromJsonTimestamp(object.validUntil)
+        : isSet(object.valid_until)
+        ? fromJsonTimestamp(object.valid_until)
+        : undefined,
+    };
+  },
+
+  toJSON(message: Opportunity): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.action !== OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED) {
+      obj.action = opportunityActionTagToJSON(message.action);
+    }
+    if (message.conviction !== 0) {
+      obj.conviction = message.conviction;
+    }
+    if (message.passingConditions !== 0) {
+      obj.passingConditions = Math.round(message.passingConditions);
+    }
+    if (message.totalConditions !== 0) {
+      obj.totalConditions = Math.round(message.totalConditions);
+    }
+    if (message.thesis !== "") {
+      obj.thesis = message.thesis;
+    }
+    if (message.strategyId !== "") {
+      obj.strategyId = message.strategyId;
+    }
+    if (message.source !== "") {
+      obj.source = message.source;
+    }
+    if (message.validUntil !== undefined) {
+      obj.validUntil = message.validUntil.toISOString();
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<Opportunity>, I>>(base?: I): Opportunity {
+    return Opportunity.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<Opportunity>, I>>(object: I): Opportunity {
+    const message = createBaseOpportunity();
+    message.symbol = object.symbol ?? "";
+    message.action = object.action ?? OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED;
+    message.conviction = object.conviction ?? 0;
+    message.passingConditions = object.passingConditions ?? 0;
+    message.totalConditions = object.totalConditions ?? 0;
+    message.thesis = object.thesis ?? "";
+    message.strategyId = object.strategyId ?? "";
+    message.source = object.source ?? "";
+    message.validUntil = object.validUntil ?? undefined;
+    return message;
+  },
+};
+
+function createBaseConditionEval(): ConditionEval {
+  return {
+    refName: "",
+    lhsValue: 0,
+    threshold: 0,
+    fn: "",
+    state: ConditionState.CONDITION_STATE_UNSPECIFIED,
+    distanceToThreshold: 0,
+  };
+}
+
+export const ConditionEval: MessageFns<ConditionEval> = {
+  encode(message: ConditionEval, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.refName !== "") {
+      writer.uint32(10).string(message.refName);
+    }
+    if (message.lhsValue !== 0) {
+      writer.uint32(17).double(message.lhsValue);
+    }
+    if (message.threshold !== 0) {
+      writer.uint32(25).double(message.threshold);
+    }
+    if (message.fn !== "") {
+      writer.uint32(34).string(message.fn);
+    }
+    if (message.state !== ConditionState.CONDITION_STATE_UNSPECIFIED) {
+      writer.uint32(40).int32(conditionStateToNumber(message.state));
+    }
+    if (message.distanceToThreshold !== 0) {
+      writer.uint32(49).double(message.distanceToThreshold);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ConditionEval {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseConditionEval();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.refName = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.lhsValue = reader.double();
+          continue;
+        }
+        case 3: {
+          if (tag !== 25) {
+            break;
+          }
+
+          message.threshold = reader.double();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.fn = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.state = conditionStateFromJSON(reader.int32());
+          continue;
+        }
+        case 6: {
+          if (tag !== 49) {
+            break;
+          }
+
+          message.distanceToThreshold = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ConditionEval {
+    return {
+      refName: isSet(object.refName)
+        ? globalThis.String(object.refName)
+        : isSet(object.ref_name)
+        ? globalThis.String(object.ref_name)
+        : "",
+      lhsValue: isSet(object.lhsValue)
+        ? globalThis.Number(object.lhsValue)
+        : isSet(object.lhs_value)
+        ? globalThis.Number(object.lhs_value)
+        : 0,
+      threshold: isSet(object.threshold) ? globalThis.Number(object.threshold) : 0,
+      fn: isSet(object.fn) ? globalThis.String(object.fn) : "",
+      state: isSet(object.state) ? conditionStateFromJSON(object.state) : ConditionState.CONDITION_STATE_UNSPECIFIED,
+      distanceToThreshold: isSet(object.distanceToThreshold)
+        ? globalThis.Number(object.distanceToThreshold)
+        : isSet(object.distance_to_threshold)
+        ? globalThis.Number(object.distance_to_threshold)
+        : 0,
+    };
+  },
+
+  toJSON(message: ConditionEval): unknown {
+    const obj: any = {};
+    if (message.refName !== "") {
+      obj.refName = message.refName;
+    }
+    if (message.lhsValue !== 0) {
+      obj.lhsValue = message.lhsValue;
+    }
+    if (message.threshold !== 0) {
+      obj.threshold = message.threshold;
+    }
+    if (message.fn !== "") {
+      obj.fn = message.fn;
+    }
+    if (message.state !== ConditionState.CONDITION_STATE_UNSPECIFIED) {
+      obj.state = conditionStateToJSON(message.state);
+    }
+    if (message.distanceToThreshold !== 0) {
+      obj.distanceToThreshold = message.distanceToThreshold;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ConditionEval>, I>>(base?: I): ConditionEval {
+    return ConditionEval.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ConditionEval>, I>>(object: I): ConditionEval {
+    const message = createBaseConditionEval();
+    message.refName = object.refName ?? "";
+    message.lhsValue = object.lhsValue ?? 0;
+    message.threshold = object.threshold ?? 0;
+    message.fn = object.fn ?? "";
+    message.state = object.state ?? ConditionState.CONDITION_STATE_UNSPECIFIED;
+    message.distanceToThreshold = object.distanceToThreshold ?? 0;
+    return message;
+  },
+};
+
+function createBaseSymbolReadiness(): SymbolReadiness {
+  return { symbol: "", conviction: 0, passingConditions: 0, totalConditions: 0, conditions: [] };
+}
+
+export const SymbolReadiness: MessageFns<SymbolReadiness> = {
+  encode(message: SymbolReadiness, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    if (message.conviction !== 0) {
+      writer.uint32(17).double(message.conviction);
+    }
+    if (message.passingConditions !== 0) {
+      writer.uint32(24).int32(message.passingConditions);
+    }
+    if (message.totalConditions !== 0) {
+      writer.uint32(32).int32(message.totalConditions);
+    }
+    for (const v of message.conditions) {
+      ConditionEval.encode(v!, writer.uint32(42).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SymbolReadiness {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSymbolReadiness();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.conviction = reader.double();
+          continue;
+        }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.passingConditions = reader.int32();
+          continue;
+        }
+        case 4: {
+          if (tag !== 32) {
+            break;
+          }
+
+          message.totalConditions = reader.int32();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.conditions.push(ConditionEval.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SymbolReadiness {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      conviction: isSet(object.conviction) ? globalThis.Number(object.conviction) : 0,
+      passingConditions: isSet(object.passingConditions)
+        ? globalThis.Number(object.passingConditions)
+        : isSet(object.passing_conditions)
+        ? globalThis.Number(object.passing_conditions)
+        : 0,
+      totalConditions: isSet(object.totalConditions)
+        ? globalThis.Number(object.totalConditions)
+        : isSet(object.total_conditions)
+        ? globalThis.Number(object.total_conditions)
+        : 0,
+      conditions: globalThis.Array.isArray(object?.conditions)
+        ? object.conditions.map((e: any) => ConditionEval.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: SymbolReadiness): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.conviction !== 0) {
+      obj.conviction = message.conviction;
+    }
+    if (message.passingConditions !== 0) {
+      obj.passingConditions = Math.round(message.passingConditions);
+    }
+    if (message.totalConditions !== 0) {
+      obj.totalConditions = Math.round(message.totalConditions);
+    }
+    if (message.conditions?.length) {
+      obj.conditions = message.conditions.map((e) => ConditionEval.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SymbolReadiness>, I>>(base?: I): SymbolReadiness {
+    return SymbolReadiness.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SymbolReadiness>, I>>(object: I): SymbolReadiness {
+    const message = createBaseSymbolReadiness();
+    message.symbol = object.symbol ?? "";
+    message.conviction = object.conviction ?? 0;
+    message.passingConditions = object.passingConditions ?? 0;
+    message.totalConditions = object.totalConditions ?? 0;
+    message.conditions = object.conditions?.map((e) => ConditionEval.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseStrategyAnalytics(): StrategyAnalytics {
+  return { strategyId: "", expectancy: 0, blendedHitRate: 0, maxDrawdown: 0, signals30d: 0, taken: 0, queueShare: 0 };
+}
+
+export const StrategyAnalytics: MessageFns<StrategyAnalytics> = {
+  encode(message: StrategyAnalytics, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.strategyId !== "") {
+      writer.uint32(10).string(message.strategyId);
+    }
+    if (message.expectancy !== 0) {
+      writer.uint32(17).double(message.expectancy);
+    }
+    if (message.blendedHitRate !== 0) {
+      writer.uint32(25).double(message.blendedHitRate);
+    }
+    if (message.maxDrawdown !== 0) {
+      writer.uint32(33).double(message.maxDrawdown);
+    }
+    if (message.signals30d !== 0) {
+      writer.uint32(40).int32(message.signals30d);
+    }
+    if (message.taken !== 0) {
+      writer.uint32(48).int32(message.taken);
+    }
+    if (message.queueShare !== 0) {
+      writer.uint32(57).double(message.queueShare);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): StrategyAnalytics {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseStrategyAnalytics();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.strategyId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.expectancy = reader.double();
+          continue;
+        }
+        case 3: {
+          if (tag !== 25) {
+            break;
+          }
+
+          message.blendedHitRate = reader.double();
+          continue;
+        }
+        case 4: {
+          if (tag !== 33) {
+            break;
+          }
+
+          message.maxDrawdown = reader.double();
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.signals30d = reader.int32();
+          continue;
+        }
+        case 6: {
+          if (tag !== 48) {
+            break;
+          }
+
+          message.taken = reader.int32();
+          continue;
+        }
+        case 7: {
+          if (tag !== 57) {
+            break;
+          }
+
+          message.queueShare = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): StrategyAnalytics {
+    return {
+      strategyId: isSet(object.strategyId)
+        ? globalThis.String(object.strategyId)
+        : isSet(object.strategy_id)
+        ? globalThis.String(object.strategy_id)
+        : "",
+      expectancy: isSet(object.expectancy) ? globalThis.Number(object.expectancy) : 0,
+      blendedHitRate: isSet(object.blendedHitRate)
+        ? globalThis.Number(object.blendedHitRate)
+        : isSet(object.blended_hit_rate)
+        ? globalThis.Number(object.blended_hit_rate)
+        : 0,
+      maxDrawdown: isSet(object.maxDrawdown)
+        ? globalThis.Number(object.maxDrawdown)
+        : isSet(object.max_drawdown)
+        ? globalThis.Number(object.max_drawdown)
+        : 0,
+      signals30d: isSet(object.signals30d)
+        ? globalThis.Number(object.signals30d)
+        : isSet(object.signals_30d)
+        ? globalThis.Number(object.signals_30d)
+        : 0,
+      taken: isSet(object.taken) ? globalThis.Number(object.taken) : 0,
+      queueShare: isSet(object.queueShare)
+        ? globalThis.Number(object.queueShare)
+        : isSet(object.queue_share)
+        ? globalThis.Number(object.queue_share)
+        : 0,
+    };
+  },
+
+  toJSON(message: StrategyAnalytics): unknown {
+    const obj: any = {};
+    if (message.strategyId !== "") {
+      obj.strategyId = message.strategyId;
+    }
+    if (message.expectancy !== 0) {
+      obj.expectancy = message.expectancy;
+    }
+    if (message.blendedHitRate !== 0) {
+      obj.blendedHitRate = message.blendedHitRate;
+    }
+    if (message.maxDrawdown !== 0) {
+      obj.maxDrawdown = message.maxDrawdown;
+    }
+    if (message.signals30d !== 0) {
+      obj.signals30d = Math.round(message.signals30d);
+    }
+    if (message.taken !== 0) {
+      obj.taken = Math.round(message.taken);
+    }
+    if (message.queueShare !== 0) {
+      obj.queueShare = message.queueShare;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<StrategyAnalytics>, I>>(base?: I): StrategyAnalytics {
+    return StrategyAnalytics.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<StrategyAnalytics>, I>>(object: I): StrategyAnalytics {
+    const message = createBaseStrategyAnalytics();
+    message.strategyId = object.strategyId ?? "";
+    message.expectancy = object.expectancy ?? 0;
+    message.blendedHitRate = object.blendedHitRate ?? 0;
+    message.maxDrawdown = object.maxDrawdown ?? 0;
+    message.signals30d = object.signals30d ?? 0;
+    message.taken = object.taken ?? 0;
+    message.queueShare = object.queueShare ?? 0;
+    return message;
+  },
+};
+
+function createBaseListOpportunitiesRequest(): ListOpportunitiesRequest {
+  return { page: undefined, minConviction: 0 };
+}
+
+export const ListOpportunitiesRequest: MessageFns<ListOpportunitiesRequest> = {
+  encode(message: ListOpportunitiesRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.page !== undefined) {
+      PageRequest.encode(message.page, writer.uint32(10).fork()).join();
+    }
+    if (message.minConviction !== 0) {
+      writer.uint32(17).double(message.minConviction);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListOpportunitiesRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListOpportunitiesRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.page = PageRequest.decode(reader, reader.uint32());
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.minConviction = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ListOpportunitiesRequest {
+    return {
+      page: isSet(object.page) ? PageRequest.fromJSON(object.page) : undefined,
+      minConviction: isSet(object.minConviction)
+        ? globalThis.Number(object.minConviction)
+        : isSet(object.min_conviction)
+        ? globalThis.Number(object.min_conviction)
+        : 0,
+    };
+  },
+
+  toJSON(message: ListOpportunitiesRequest): unknown {
+    const obj: any = {};
+    if (message.page !== undefined) {
+      obj.page = PageRequest.toJSON(message.page);
+    }
+    if (message.minConviction !== 0) {
+      obj.minConviction = message.minConviction;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListOpportunitiesRequest>, I>>(base?: I): ListOpportunitiesRequest {
+    return ListOpportunitiesRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListOpportunitiesRequest>, I>>(object: I): ListOpportunitiesRequest {
+    const message = createBaseListOpportunitiesRequest();
+    message.page = (object.page !== undefined && object.page !== null)
+      ? PageRequest.fromPartial(object.page)
+      : undefined;
+    message.minConviction = object.minConviction ?? 0;
+    return message;
+  },
+};
+
+function createBaseListOpportunitiesResponse(): ListOpportunitiesResponse {
+  return { opportunities: [], page: undefined };
+}
+
+export const ListOpportunitiesResponse: MessageFns<ListOpportunitiesResponse> = {
+  encode(message: ListOpportunitiesResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.opportunities) {
+      Opportunity.encode(v!, writer.uint32(10).fork()).join();
+    }
+    if (message.page !== undefined) {
+      PageResponse.encode(message.page, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ListOpportunitiesResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseListOpportunitiesResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.opportunities.push(Opportunity.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.page = PageResponse.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ListOpportunitiesResponse {
+    return {
+      opportunities: globalThis.Array.isArray(object?.opportunities)
+        ? object.opportunities.map((e: any) => Opportunity.fromJSON(e))
+        : [],
+      page: isSet(object.page) ? PageResponse.fromJSON(object.page) : undefined,
+    };
+  },
+
+  toJSON(message: ListOpportunitiesResponse): unknown {
+    const obj: any = {};
+    if (message.opportunities?.length) {
+      obj.opportunities = message.opportunities.map((e) => Opportunity.toJSON(e));
+    }
+    if (message.page !== undefined) {
+      obj.page = PageResponse.toJSON(message.page);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ListOpportunitiesResponse>, I>>(base?: I): ListOpportunitiesResponse {
+    return ListOpportunitiesResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ListOpportunitiesResponse>, I>>(object: I): ListOpportunitiesResponse {
+    const message = createBaseListOpportunitiesResponse();
+    message.opportunities = object.opportunities?.map((e) => Opportunity.fromPartial(e)) || [];
+    message.page = (object.page !== undefined && object.page !== null)
+      ? PageResponse.fromPartial(object.page)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseEvaluateReadinessRequest(): EvaluateReadinessRequest {
+  return { strategyId: "", symbols: [] };
+}
+
+export const EvaluateReadinessRequest: MessageFns<EvaluateReadinessRequest> = {
+  encode(message: EvaluateReadinessRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.strategyId !== "") {
+      writer.uint32(10).string(message.strategyId);
+    }
+    for (const v of message.symbols) {
+      writer.uint32(18).string(v!);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): EvaluateReadinessRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseEvaluateReadinessRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.strategyId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.symbols.push(reader.string());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): EvaluateReadinessRequest {
+    return {
+      strategyId: isSet(object.strategyId)
+        ? globalThis.String(object.strategyId)
+        : isSet(object.strategy_id)
+        ? globalThis.String(object.strategy_id)
+        : "",
+      symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+    };
+  },
+
+  toJSON(message: EvaluateReadinessRequest): unknown {
+    const obj: any = {};
+    if (message.strategyId !== "") {
+      obj.strategyId = message.strategyId;
+    }
+    if (message.symbols?.length) {
+      obj.symbols = message.symbols;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<EvaluateReadinessRequest>, I>>(base?: I): EvaluateReadinessRequest {
+    return EvaluateReadinessRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<EvaluateReadinessRequest>, I>>(object: I): EvaluateReadinessRequest {
+    const message = createBaseEvaluateReadinessRequest();
+    message.strategyId = object.strategyId ?? "";
+    message.symbols = object.symbols?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseEvaluateReadinessResponse(): EvaluateReadinessResponse {
+  return { readiness: [] };
+}
+
+export const EvaluateReadinessResponse: MessageFns<EvaluateReadinessResponse> = {
+  encode(message: EvaluateReadinessResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.readiness) {
+      SymbolReadiness.encode(v!, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): EvaluateReadinessResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseEvaluateReadinessResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.readiness.push(SymbolReadiness.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): EvaluateReadinessResponse {
+    return {
+      readiness: globalThis.Array.isArray(object?.readiness)
+        ? object.readiness.map((e: any) => SymbolReadiness.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: EvaluateReadinessResponse): unknown {
+    const obj: any = {};
+    if (message.readiness?.length) {
+      obj.readiness = message.readiness.map((e) => SymbolReadiness.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<EvaluateReadinessResponse>, I>>(base?: I): EvaluateReadinessResponse {
+    return EvaluateReadinessResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<EvaluateReadinessResponse>, I>>(object: I): EvaluateReadinessResponse {
+    const message = createBaseEvaluateReadinessResponse();
+    message.readiness = object.readiness?.map((e) => SymbolReadiness.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseGetStrategyAnalyticsRequest(): GetStrategyAnalyticsRequest {
+  return { strategyId: "" };
+}
+
+export const GetStrategyAnalyticsRequest: MessageFns<GetStrategyAnalyticsRequest> = {
+  encode(message: GetStrategyAnalyticsRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.strategyId !== "") {
+      writer.uint32(10).string(message.strategyId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetStrategyAnalyticsRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetStrategyAnalyticsRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.strategyId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetStrategyAnalyticsRequest {
+    return {
+      strategyId: isSet(object.strategyId)
+        ? globalThis.String(object.strategyId)
+        : isSet(object.strategy_id)
+        ? globalThis.String(object.strategy_id)
+        : "",
+    };
+  },
+
+  toJSON(message: GetStrategyAnalyticsRequest): unknown {
+    const obj: any = {};
+    if (message.strategyId !== "") {
+      obj.strategyId = message.strategyId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetStrategyAnalyticsRequest>, I>>(base?: I): GetStrategyAnalyticsRequest {
+    return GetStrategyAnalyticsRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetStrategyAnalyticsRequest>, I>>(object: I): GetStrategyAnalyticsRequest {
+    const message = createBaseGetStrategyAnalyticsRequest();
+    message.strategyId = object.strategyId ?? "";
+    return message;
+  },
+};
+
 export type AnalysisServiceService = typeof AnalysisServiceService;
 export const AnalysisServiceService = {
   runBacktest: {
@@ -5796,6 +7167,48 @@ export const AnalysisServiceService = {
       Buffer.from(FundamentalsScanSummary.encode(value).finish()),
     responseDeserialize: (value: Buffer): FundamentalsScanSummary => FundamentalsScanSummary.decode(value),
   },
+  /**
+   * ── Opportunity queue + readiness + per-strategy analytics (feature 083) ─────
+   * Ranked opportunity queue for the Decide surface. Aggregates ingest signals,
+   * held positions, and the conviction/readiness evaluator (zero new edges).
+   */
+  listOpportunities: {
+    path: "/xstockstrat.analysis.v1.AnalysisService/ListOpportunities" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: ListOpportunitiesRequest): Buffer =>
+      Buffer.from(ListOpportunitiesRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): ListOpportunitiesRequest => ListOpportunitiesRequest.decode(value),
+    responseSerialize: (value: ListOpportunitiesResponse): Buffer =>
+      Buffer.from(ListOpportunitiesResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): ListOpportunitiesResponse => ListOpportunitiesResponse.decode(value),
+  },
+  /**
+   * Per-symbol live condition evaluation (traced): passing/soft/failing leaves +
+   * distance-to-threshold. Feeds Signal-detail, Watchlist readiness, and the queue.
+   */
+  evaluateReadiness: {
+    path: "/xstockstrat.analysis.v1.AnalysisService/EvaluateReadiness" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: EvaluateReadinessRequest): Buffer =>
+      Buffer.from(EvaluateReadinessRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): EvaluateReadinessRequest => EvaluateReadinessRequest.decode(value),
+    responseSerialize: (value: EvaluateReadinessResponse): Buffer =>
+      Buffer.from(EvaluateReadinessResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): EvaluateReadinessResponse => EvaluateReadinessResponse.decode(value),
+  },
+  /** Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share). */
+  getStrategyAnalytics: {
+    path: "/xstockstrat.analysis.v1.AnalysisService/GetStrategyAnalytics" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetStrategyAnalyticsRequest): Buffer =>
+      Buffer.from(GetStrategyAnalyticsRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetStrategyAnalyticsRequest => GetStrategyAnalyticsRequest.decode(value),
+    responseSerialize: (value: StrategyAnalytics): Buffer => Buffer.from(StrategyAnalytics.encode(value).finish()),
+    responseDeserialize: (value: Buffer): StrategyAnalytics => StrategyAnalytics.decode(value),
+  },
 } as const;
 
 export interface AnalysisServiceServer extends UntypedServiceImplementation {
@@ -5819,6 +7232,19 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
   screenSymbols: handleUnaryCall<ScreenSymbolsRequest, ScreenSymbolsResponse>;
   /** Manually trigger the fundamentals signal producer scan (feature 062, admin-scoped) */
   runFundamentalsScan: handleUnaryCall<RunFundamentalsScanRequest, FundamentalsScanSummary>;
+  /**
+   * ── Opportunity queue + readiness + per-strategy analytics (feature 083) ─────
+   * Ranked opportunity queue for the Decide surface. Aggregates ingest signals,
+   * held positions, and the conviction/readiness evaluator (zero new edges).
+   */
+  listOpportunities: handleUnaryCall<ListOpportunitiesRequest, ListOpportunitiesResponse>;
+  /**
+   * Per-symbol live condition evaluation (traced): passing/soft/failing leaves +
+   * distance-to-threshold. Feeds Signal-detail, Watchlist readiness, and the queue.
+   */
+  evaluateReadiness: handleUnaryCall<EvaluateReadinessRequest, EvaluateReadinessResponse>;
+  /** Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share). */
+  getStrategyAnalytics: handleUnaryCall<GetStrategyAnalyticsRequest, StrategyAnalytics>;
 }
 
 export interface AnalysisServiceClient extends Client {
@@ -6009,6 +7435,61 @@ export interface AnalysisServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: FundamentalsScanSummary) => void,
+  ): ClientUnaryCall;
+  /**
+   * ── Opportunity queue + readiness + per-strategy analytics (feature 083) ─────
+   * Ranked opportunity queue for the Decide surface. Aggregates ingest signals,
+   * held positions, and the conviction/readiness evaluator (zero new edges).
+   */
+  listOpportunities(
+    request: ListOpportunitiesRequest,
+    callback: (error: ServiceError | null, response: ListOpportunitiesResponse) => void,
+  ): ClientUnaryCall;
+  listOpportunities(
+    request: ListOpportunitiesRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: ListOpportunitiesResponse) => void,
+  ): ClientUnaryCall;
+  listOpportunities(
+    request: ListOpportunitiesRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: ListOpportunitiesResponse) => void,
+  ): ClientUnaryCall;
+  /**
+   * Per-symbol live condition evaluation (traced): passing/soft/failing leaves +
+   * distance-to-threshold. Feeds Signal-detail, Watchlist readiness, and the queue.
+   */
+  evaluateReadiness(
+    request: EvaluateReadinessRequest,
+    callback: (error: ServiceError | null, response: EvaluateReadinessResponse) => void,
+  ): ClientUnaryCall;
+  evaluateReadiness(
+    request: EvaluateReadinessRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: EvaluateReadinessResponse) => void,
+  ): ClientUnaryCall;
+  evaluateReadiness(
+    request: EvaluateReadinessRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: EvaluateReadinessResponse) => void,
+  ): ClientUnaryCall;
+  /** Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share). */
+  getStrategyAnalytics(
+    request: GetStrategyAnalyticsRequest,
+    callback: (error: ServiceError | null, response: StrategyAnalytics) => void,
+  ): ClientUnaryCall;
+  getStrategyAnalytics(
+    request: GetStrategyAnalyticsRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: StrategyAnalytics) => void,
+  ): ClientUnaryCall;
+  getStrategyAnalytics(
+    request: GetStrategyAnalyticsRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: StrategyAnalytics) => void,
   ): ClientUnaryCall;
 }
 

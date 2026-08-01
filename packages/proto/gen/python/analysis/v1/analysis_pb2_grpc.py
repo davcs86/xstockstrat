@@ -94,6 +94,21 @@ class AnalysisServiceStub(object):
                 request_serializer=analysis_dot_v1_dot_analysis__pb2.RunFundamentalsScanRequest.SerializeToString,
                 response_deserializer=analysis_dot_v1_dot_analysis__pb2.FundamentalsScanSummary.FromString,
                 _registered_method=True)
+        self.ListOpportunities = channel.unary_unary(
+                '/xstockstrat.analysis.v1.AnalysisService/ListOpportunities',
+                request_serializer=analysis_dot_v1_dot_analysis__pb2.ListOpportunitiesRequest.SerializeToString,
+                response_deserializer=analysis_dot_v1_dot_analysis__pb2.ListOpportunitiesResponse.FromString,
+                _registered_method=True)
+        self.EvaluateReadiness = channel.unary_unary(
+                '/xstockstrat.analysis.v1.AnalysisService/EvaluateReadiness',
+                request_serializer=analysis_dot_v1_dot_analysis__pb2.EvaluateReadinessRequest.SerializeToString,
+                response_deserializer=analysis_dot_v1_dot_analysis__pb2.EvaluateReadinessResponse.FromString,
+                _registered_method=True)
+        self.GetStrategyAnalytics = channel.unary_unary(
+                '/xstockstrat.analysis.v1.AnalysisService/GetStrategyAnalytics',
+                request_serializer=analysis_dot_v1_dot_analysis__pb2.GetStrategyAnalyticsRequest.SerializeToString,
+                response_deserializer=analysis_dot_v1_dot_analysis__pb2.StrategyAnalytics.FromString,
+                _registered_method=True)
 
 
 class AnalysisServiceServicer(object):
@@ -177,6 +192,30 @@ class AnalysisServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def ListOpportunities(self, request, context):
+        """── Opportunity queue + readiness + per-strategy analytics (feature 083) ─────
+        Ranked opportunity queue for the Decide surface. Aggregates ingest signals,
+        held positions, and the conviction/readiness evaluator (zero new edges).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def EvaluateReadiness(self, request, context):
+        """Per-symbol live condition evaluation (traced): passing/soft/failing leaves +
+        distance-to-threshold. Feeds Signal-detail, Watchlist readiness, and the queue.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetStrategyAnalytics(self, request, context):
+        """Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_AnalysisServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -239,6 +278,21 @@ def add_AnalysisServiceServicer_to_server(servicer, server):
                     servicer.RunFundamentalsScan,
                     request_deserializer=analysis_dot_v1_dot_analysis__pb2.RunFundamentalsScanRequest.FromString,
                     response_serializer=analysis_dot_v1_dot_analysis__pb2.FundamentalsScanSummary.SerializeToString,
+            ),
+            'ListOpportunities': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListOpportunities,
+                    request_deserializer=analysis_dot_v1_dot_analysis__pb2.ListOpportunitiesRequest.FromString,
+                    response_serializer=analysis_dot_v1_dot_analysis__pb2.ListOpportunitiesResponse.SerializeToString,
+            ),
+            'EvaluateReadiness': grpc.unary_unary_rpc_method_handler(
+                    servicer.EvaluateReadiness,
+                    request_deserializer=analysis_dot_v1_dot_analysis__pb2.EvaluateReadinessRequest.FromString,
+                    response_serializer=analysis_dot_v1_dot_analysis__pb2.EvaluateReadinessResponse.SerializeToString,
+            ),
+            'GetStrategyAnalytics': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetStrategyAnalytics,
+                    request_deserializer=analysis_dot_v1_dot_analysis__pb2.GetStrategyAnalyticsRequest.FromString,
+                    response_serializer=analysis_dot_v1_dot_analysis__pb2.StrategyAnalytics.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -565,6 +619,87 @@ class AnalysisService(object):
             '/xstockstrat.analysis.v1.AnalysisService/RunFundamentalsScan',
             analysis_dot_v1_dot_analysis__pb2.RunFundamentalsScanRequest.SerializeToString,
             analysis_dot_v1_dot_analysis__pb2.FundamentalsScanSummary.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListOpportunities(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.analysis.v1.AnalysisService/ListOpportunities',
+            analysis_dot_v1_dot_analysis__pb2.ListOpportunitiesRequest.SerializeToString,
+            analysis_dot_v1_dot_analysis__pb2.ListOpportunitiesResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def EvaluateReadiness(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.analysis.v1.AnalysisService/EvaluateReadiness',
+            analysis_dot_v1_dot_analysis__pb2.EvaluateReadinessRequest.SerializeToString,
+            analysis_dot_v1_dot_analysis__pb2.EvaluateReadinessResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetStrategyAnalytics(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.analysis.v1.AnalysisService/GetStrategyAnalytics',
+            analysis_dot_v1_dot_analysis__pb2.GetStrategyAnalyticsRequest.SerializeToString,
+            analysis_dot_v1_dot_analysis__pb2.StrategyAnalytics.FromString,
             options,
             channel_credentials,
             insecure,

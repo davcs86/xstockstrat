@@ -5,7 +5,8 @@
 //   protoc               unknown
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.BacktestStatus = exports.protobufPackage = void 0;
+exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.ConditionState = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.BacktestStatus = exports.protobufPackage = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.GetStrategyAnalyticsRequest = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = void 0;
 exports.backtestStatusFromJSON = backtestStatusFromJSON;
 exports.backtestStatusToJSON = backtestStatusToJSON;
 exports.backtestStatusToNumber = backtestStatusToNumber;
@@ -30,6 +31,12 @@ exports.screenKindToNumber = screenKindToNumber;
 exports.screenResultStatusFromJSON = screenResultStatusFromJSON;
 exports.screenResultStatusToJSON = screenResultStatusToJSON;
 exports.screenResultStatusToNumber = screenResultStatusToNumber;
+exports.opportunityActionTagFromJSON = opportunityActionTagFromJSON;
+exports.opportunityActionTagToJSON = opportunityActionTagToJSON;
+exports.opportunityActionTagToNumber = opportunityActionTagToNumber;
+exports.conditionStateFromJSON = conditionStateFromJSON;
+exports.conditionStateToJSON = conditionStateToJSON;
+exports.conditionStateToNumber = conditionStateToNumber;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
@@ -541,6 +548,135 @@ function screenResultStatusToNumber(object) {
         case ScreenResultStatus.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA:
             return 2;
         case ScreenResultStatus.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/**
+ * The action a ranked opportunity suggests. Closed set → enum (C-04).
+ * TRIM/EXIT are deliberately collapsed into REDUCE — the platform must not
+ * synthesize a "fully exit vs trim" boundary on a row that opens a real order
+ * ticket; the human chooses trim vs exit at the ticket (design.md § 1).
+ */
+var OpportunityActionTag;
+(function (OpportunityActionTag) {
+    OpportunityActionTag["OPPORTUNITY_ACTION_TAG_UNSPECIFIED"] = "OPPORTUNITY_ACTION_TAG_UNSPECIFIED";
+    /** OPPORTUNITY_ACTION_TAG_ENTER - buy signal, not currently held */
+    OpportunityActionTag["OPPORTUNITY_ACTION_TAG_ENTER"] = "OPPORTUNITY_ACTION_TAG_ENTER";
+    /** OPPORTUNITY_ACTION_TAG_ADD - buy signal, already held */
+    OpportunityActionTag["OPPORTUNITY_ACTION_TAG_ADD"] = "OPPORTUNITY_ACTION_TAG_ADD";
+    /** OPPORTUNITY_ACTION_TAG_REDUCE - sell signal, held (trim or exit — human decides) */
+    OpportunityActionTag["OPPORTUNITY_ACTION_TAG_REDUCE"] = "OPPORTUNITY_ACTION_TAG_REDUCE";
+    OpportunityActionTag["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(OpportunityActionTag || (exports.OpportunityActionTag = OpportunityActionTag = {}));
+function opportunityActionTagFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "OPPORTUNITY_ACTION_TAG_UNSPECIFIED":
+            return OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED;
+        case 1:
+        case "OPPORTUNITY_ACTION_TAG_ENTER":
+            return OpportunityActionTag.OPPORTUNITY_ACTION_TAG_ENTER;
+        case 2:
+        case "OPPORTUNITY_ACTION_TAG_ADD":
+            return OpportunityActionTag.OPPORTUNITY_ACTION_TAG_ADD;
+        case 3:
+        case "OPPORTUNITY_ACTION_TAG_REDUCE":
+            return OpportunityActionTag.OPPORTUNITY_ACTION_TAG_REDUCE;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return OpportunityActionTag.UNRECOGNIZED;
+    }
+}
+function opportunityActionTagToJSON(object) {
+    switch (object) {
+        case OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED:
+            return "OPPORTUNITY_ACTION_TAG_UNSPECIFIED";
+        case OpportunityActionTag.OPPORTUNITY_ACTION_TAG_ENTER:
+            return "OPPORTUNITY_ACTION_TAG_ENTER";
+        case OpportunityActionTag.OPPORTUNITY_ACTION_TAG_ADD:
+            return "OPPORTUNITY_ACTION_TAG_ADD";
+        case OpportunityActionTag.OPPORTUNITY_ACTION_TAG_REDUCE:
+            return "OPPORTUNITY_ACTION_TAG_REDUCE";
+        case OpportunityActionTag.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function opportunityActionTagToNumber(object) {
+    switch (object) {
+        case OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED:
+            return 0;
+        case OpportunityActionTag.OPPORTUNITY_ACTION_TAG_ENTER:
+            return 1;
+        case OpportunityActionTag.OPPORTUNITY_ACTION_TAG_ADD:
+            return 2;
+        case OpportunityActionTag.OPPORTUNITY_ACTION_TAG_REDUCE:
+            return 3;
+        case OpportunityActionTag.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/** Per-condition-leaf evaluation state. Closed set → enum (C-04). */
+var ConditionState;
+(function (ConditionState) {
+    ConditionState["CONDITION_STATE_UNSPECIFIED"] = "CONDITION_STATE_UNSPECIFIED";
+    /** CONDITION_STATE_PASS - leaf currently satisfied */
+    ConditionState["CONDITION_STATE_PASS"] = "CONDITION_STATE_PASS";
+    /** CONDITION_STATE_SOFT - within the soft-band of the threshold but not passing */
+    ConditionState["CONDITION_STATE_SOFT"] = "CONDITION_STATE_SOFT";
+    /** CONDITION_STATE_FAIL - not satisfied, outside the soft-band */
+    ConditionState["CONDITION_STATE_FAIL"] = "CONDITION_STATE_FAIL";
+    ConditionState["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(ConditionState || (exports.ConditionState = ConditionState = {}));
+function conditionStateFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "CONDITION_STATE_UNSPECIFIED":
+            return ConditionState.CONDITION_STATE_UNSPECIFIED;
+        case 1:
+        case "CONDITION_STATE_PASS":
+            return ConditionState.CONDITION_STATE_PASS;
+        case 2:
+        case "CONDITION_STATE_SOFT":
+            return ConditionState.CONDITION_STATE_SOFT;
+        case 3:
+        case "CONDITION_STATE_FAIL":
+            return ConditionState.CONDITION_STATE_FAIL;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return ConditionState.UNRECOGNIZED;
+    }
+}
+function conditionStateToJSON(object) {
+    switch (object) {
+        case ConditionState.CONDITION_STATE_UNSPECIFIED:
+            return "CONDITION_STATE_UNSPECIFIED";
+        case ConditionState.CONDITION_STATE_PASS:
+            return "CONDITION_STATE_PASS";
+        case ConditionState.CONDITION_STATE_SOFT:
+            return "CONDITION_STATE_SOFT";
+        case ConditionState.CONDITION_STATE_FAIL:
+            return "CONDITION_STATE_FAIL";
+        case ConditionState.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function conditionStateToNumber(object) {
+    switch (object) {
+        case ConditionState.CONDITION_STATE_UNSPECIFIED:
+            return 0;
+        case ConditionState.CONDITION_STATE_PASS:
+            return 1;
+        case ConditionState.CONDITION_STATE_SOFT:
+            return 2;
+        case ConditionState.CONDITION_STATE_FAIL:
+            return 3;
+        case ConditionState.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -4141,6 +4277,11 @@ function createBaseScreenResult() {
         passed: false,
         status: ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED,
         gap: undefined,
+        pe: 0,
+        rsi: 0,
+        atr: 0,
+        revGrowth: 0,
+        held: false,
     };
 }
 exports.ScreenResult = {
@@ -4162,6 +4303,21 @@ exports.ScreenResult = {
         }
         if (message.gap !== undefined) {
             exports.CoverageGap.encode(message.gap, writer.uint32(50).fork()).join();
+        }
+        if (message.pe !== 0) {
+            writer.uint32(57).double(message.pe);
+        }
+        if (message.rsi !== 0) {
+            writer.uint32(65).double(message.rsi);
+        }
+        if (message.atr !== 0) {
+            writer.uint32(73).double(message.atr);
+        }
+        if (message.revGrowth !== 0) {
+            writer.uint32(81).double(message.revGrowth);
+        }
+        if (message.held !== false) {
+            writer.uint32(88).bool(message.held);
         }
         return writer;
     },
@@ -4217,6 +4373,41 @@ exports.ScreenResult = {
                     message.gap = exports.CoverageGap.decode(reader, reader.uint32());
                     continue;
                 }
+                case 7: {
+                    if (tag !== 57) {
+                        break;
+                    }
+                    message.pe = reader.double();
+                    continue;
+                }
+                case 8: {
+                    if (tag !== 65) {
+                        break;
+                    }
+                    message.rsi = reader.double();
+                    continue;
+                }
+                case 9: {
+                    if (tag !== 73) {
+                        break;
+                    }
+                    message.atr = reader.double();
+                    continue;
+                }
+                case 10: {
+                    if (tag !== 81) {
+                        break;
+                    }
+                    message.revGrowth = reader.double();
+                    continue;
+                }
+                case 11: {
+                    if (tag !== 88) {
+                        break;
+                    }
+                    message.held = reader.bool();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -4245,6 +4436,15 @@ exports.ScreenResult = {
                 ? screenResultStatusFromJSON(object.status)
                 : ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED,
             gap: isSet(object.gap) ? exports.CoverageGap.fromJSON(object.gap) : undefined,
+            pe: isSet(object.pe) ? globalThis.Number(object.pe) : 0,
+            rsi: isSet(object.rsi) ? globalThis.Number(object.rsi) : 0,
+            atr: isSet(object.atr) ? globalThis.Number(object.atr) : 0,
+            revGrowth: isSet(object.revGrowth)
+                ? globalThis.Number(object.revGrowth)
+                : isSet(object.rev_growth)
+                    ? globalThis.Number(object.rev_growth)
+                    : 0,
+            held: isSet(object.held) ? globalThis.Boolean(object.held) : false,
         };
     },
     toJSON(message) {
@@ -4273,6 +4473,21 @@ exports.ScreenResult = {
         if (message.gap !== undefined) {
             obj.gap = exports.CoverageGap.toJSON(message.gap);
         }
+        if (message.pe !== 0) {
+            obj.pe = message.pe;
+        }
+        if (message.rsi !== 0) {
+            obj.rsi = message.rsi;
+        }
+        if (message.atr !== 0) {
+            obj.atr = message.atr;
+        }
+        if (message.revGrowth !== 0) {
+            obj.revGrowth = message.revGrowth;
+        }
+        if (message.held !== false) {
+            obj.held = message.held;
+        }
         return obj;
     },
     create(base) {
@@ -4291,6 +4506,11 @@ exports.ScreenResult = {
         message.passed = object.passed ?? false;
         message.status = object.status ?? ScreenResultStatus.SCREEN_RESULT_STATUS_UNSPECIFIED;
         message.gap = (object.gap !== undefined && object.gap !== null) ? exports.CoverageGap.fromPartial(object.gap) : undefined;
+        message.pe = object.pe ?? 0;
+        message.rsi = object.rsi ?? 0;
+        message.atr = object.atr ?? 0;
+        message.revGrowth = object.revGrowth ?? 0;
+        message.held = object.held ?? false;
         return message;
     },
 };
@@ -4893,6 +5113,970 @@ exports.FundamentalsScanSummary = {
         return message;
     },
 };
+function createBaseOpportunity() {
+    return {
+        symbol: "",
+        action: OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED,
+        conviction: 0,
+        passingConditions: 0,
+        totalConditions: 0,
+        thesis: "",
+        strategyId: "",
+        source: "",
+        validUntil: undefined,
+    };
+}
+exports.Opportunity = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        if (message.action !== OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED) {
+            writer.uint32(16).int32(opportunityActionTagToNumber(message.action));
+        }
+        if (message.conviction !== 0) {
+            writer.uint32(25).double(message.conviction);
+        }
+        if (message.passingConditions !== 0) {
+            writer.uint32(32).int32(message.passingConditions);
+        }
+        if (message.totalConditions !== 0) {
+            writer.uint32(40).int32(message.totalConditions);
+        }
+        if (message.thesis !== "") {
+            writer.uint32(50).string(message.thesis);
+        }
+        if (message.strategyId !== "") {
+            writer.uint32(58).string(message.strategyId);
+        }
+        if (message.source !== "") {
+            writer.uint32(66).string(message.source);
+        }
+        if (message.validUntil !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.validUntil), writer.uint32(74).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseOpportunity();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.action = opportunityActionTagFromJSON(reader.int32());
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 25) {
+                        break;
+                    }
+                    message.conviction = reader.double();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 32) {
+                        break;
+                    }
+                    message.passingConditions = reader.int32();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.totalConditions = reader.int32();
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 50) {
+                        break;
+                    }
+                    message.thesis = reader.string();
+                    continue;
+                }
+                case 7: {
+                    if (tag !== 58) {
+                        break;
+                    }
+                    message.strategyId = reader.string();
+                    continue;
+                }
+                case 8: {
+                    if (tag !== 66) {
+                        break;
+                    }
+                    message.source = reader.string();
+                    continue;
+                }
+                case 9: {
+                    if (tag !== 74) {
+                        break;
+                    }
+                    message.validUntil = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            action: isSet(object.action)
+                ? opportunityActionTagFromJSON(object.action)
+                : OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED,
+            conviction: isSet(object.conviction) ? globalThis.Number(object.conviction) : 0,
+            passingConditions: isSet(object.passingConditions)
+                ? globalThis.Number(object.passingConditions)
+                : isSet(object.passing_conditions)
+                    ? globalThis.Number(object.passing_conditions)
+                    : 0,
+            totalConditions: isSet(object.totalConditions)
+                ? globalThis.Number(object.totalConditions)
+                : isSet(object.total_conditions)
+                    ? globalThis.Number(object.total_conditions)
+                    : 0,
+            thesis: isSet(object.thesis) ? globalThis.String(object.thesis) : "",
+            strategyId: isSet(object.strategyId)
+                ? globalThis.String(object.strategyId)
+                : isSet(object.strategy_id)
+                    ? globalThis.String(object.strategy_id)
+                    : "",
+            source: isSet(object.source) ? globalThis.String(object.source) : "",
+            validUntil: isSet(object.validUntil)
+                ? fromJsonTimestamp(object.validUntil)
+                : isSet(object.valid_until)
+                    ? fromJsonTimestamp(object.valid_until)
+                    : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.action !== OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED) {
+            obj.action = opportunityActionTagToJSON(message.action);
+        }
+        if (message.conviction !== 0) {
+            obj.conviction = message.conviction;
+        }
+        if (message.passingConditions !== 0) {
+            obj.passingConditions = Math.round(message.passingConditions);
+        }
+        if (message.totalConditions !== 0) {
+            obj.totalConditions = Math.round(message.totalConditions);
+        }
+        if (message.thesis !== "") {
+            obj.thesis = message.thesis;
+        }
+        if (message.strategyId !== "") {
+            obj.strategyId = message.strategyId;
+        }
+        if (message.source !== "") {
+            obj.source = message.source;
+        }
+        if (message.validUntil !== undefined) {
+            obj.validUntil = message.validUntil.toISOString();
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.Opportunity.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseOpportunity();
+        message.symbol = object.symbol ?? "";
+        message.action = object.action ?? OpportunityActionTag.OPPORTUNITY_ACTION_TAG_UNSPECIFIED;
+        message.conviction = object.conviction ?? 0;
+        message.passingConditions = object.passingConditions ?? 0;
+        message.totalConditions = object.totalConditions ?? 0;
+        message.thesis = object.thesis ?? "";
+        message.strategyId = object.strategyId ?? "";
+        message.source = object.source ?? "";
+        message.validUntil = object.validUntil ?? undefined;
+        return message;
+    },
+};
+function createBaseConditionEval() {
+    return {
+        refName: "",
+        lhsValue: 0,
+        threshold: 0,
+        fn: "",
+        state: ConditionState.CONDITION_STATE_UNSPECIFIED,
+        distanceToThreshold: 0,
+    };
+}
+exports.ConditionEval = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.refName !== "") {
+            writer.uint32(10).string(message.refName);
+        }
+        if (message.lhsValue !== 0) {
+            writer.uint32(17).double(message.lhsValue);
+        }
+        if (message.threshold !== 0) {
+            writer.uint32(25).double(message.threshold);
+        }
+        if (message.fn !== "") {
+            writer.uint32(34).string(message.fn);
+        }
+        if (message.state !== ConditionState.CONDITION_STATE_UNSPECIFIED) {
+            writer.uint32(40).int32(conditionStateToNumber(message.state));
+        }
+        if (message.distanceToThreshold !== 0) {
+            writer.uint32(49).double(message.distanceToThreshold);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseConditionEval();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.refName = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 17) {
+                        break;
+                    }
+                    message.lhsValue = reader.double();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 25) {
+                        break;
+                    }
+                    message.threshold = reader.double();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.fn = reader.string();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.state = conditionStateFromJSON(reader.int32());
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 49) {
+                        break;
+                    }
+                    message.distanceToThreshold = reader.double();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            refName: isSet(object.refName)
+                ? globalThis.String(object.refName)
+                : isSet(object.ref_name)
+                    ? globalThis.String(object.ref_name)
+                    : "",
+            lhsValue: isSet(object.lhsValue)
+                ? globalThis.Number(object.lhsValue)
+                : isSet(object.lhs_value)
+                    ? globalThis.Number(object.lhs_value)
+                    : 0,
+            threshold: isSet(object.threshold) ? globalThis.Number(object.threshold) : 0,
+            fn: isSet(object.fn) ? globalThis.String(object.fn) : "",
+            state: isSet(object.state) ? conditionStateFromJSON(object.state) : ConditionState.CONDITION_STATE_UNSPECIFIED,
+            distanceToThreshold: isSet(object.distanceToThreshold)
+                ? globalThis.Number(object.distanceToThreshold)
+                : isSet(object.distance_to_threshold)
+                    ? globalThis.Number(object.distance_to_threshold)
+                    : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.refName !== "") {
+            obj.refName = message.refName;
+        }
+        if (message.lhsValue !== 0) {
+            obj.lhsValue = message.lhsValue;
+        }
+        if (message.threshold !== 0) {
+            obj.threshold = message.threshold;
+        }
+        if (message.fn !== "") {
+            obj.fn = message.fn;
+        }
+        if (message.state !== ConditionState.CONDITION_STATE_UNSPECIFIED) {
+            obj.state = conditionStateToJSON(message.state);
+        }
+        if (message.distanceToThreshold !== 0) {
+            obj.distanceToThreshold = message.distanceToThreshold;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ConditionEval.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseConditionEval();
+        message.refName = object.refName ?? "";
+        message.lhsValue = object.lhsValue ?? 0;
+        message.threshold = object.threshold ?? 0;
+        message.fn = object.fn ?? "";
+        message.state = object.state ?? ConditionState.CONDITION_STATE_UNSPECIFIED;
+        message.distanceToThreshold = object.distanceToThreshold ?? 0;
+        return message;
+    },
+};
+function createBaseSymbolReadiness() {
+    return { symbol: "", conviction: 0, passingConditions: 0, totalConditions: 0, conditions: [] };
+}
+exports.SymbolReadiness = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        if (message.conviction !== 0) {
+            writer.uint32(17).double(message.conviction);
+        }
+        if (message.passingConditions !== 0) {
+            writer.uint32(24).int32(message.passingConditions);
+        }
+        if (message.totalConditions !== 0) {
+            writer.uint32(32).int32(message.totalConditions);
+        }
+        for (const v of message.conditions) {
+            exports.ConditionEval.encode(v, writer.uint32(42).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSymbolReadiness();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 17) {
+                        break;
+                    }
+                    message.conviction = reader.double();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.passingConditions = reader.int32();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 32) {
+                        break;
+                    }
+                    message.totalConditions = reader.int32();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.conditions.push(exports.ConditionEval.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            conviction: isSet(object.conviction) ? globalThis.Number(object.conviction) : 0,
+            passingConditions: isSet(object.passingConditions)
+                ? globalThis.Number(object.passingConditions)
+                : isSet(object.passing_conditions)
+                    ? globalThis.Number(object.passing_conditions)
+                    : 0,
+            totalConditions: isSet(object.totalConditions)
+                ? globalThis.Number(object.totalConditions)
+                : isSet(object.total_conditions)
+                    ? globalThis.Number(object.total_conditions)
+                    : 0,
+            conditions: globalThis.Array.isArray(object?.conditions)
+                ? object.conditions.map((e) => exports.ConditionEval.fromJSON(e))
+                : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.conviction !== 0) {
+            obj.conviction = message.conviction;
+        }
+        if (message.passingConditions !== 0) {
+            obj.passingConditions = Math.round(message.passingConditions);
+        }
+        if (message.totalConditions !== 0) {
+            obj.totalConditions = Math.round(message.totalConditions);
+        }
+        if (message.conditions?.length) {
+            obj.conditions = message.conditions.map((e) => exports.ConditionEval.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SymbolReadiness.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSymbolReadiness();
+        message.symbol = object.symbol ?? "";
+        message.conviction = object.conviction ?? 0;
+        message.passingConditions = object.passingConditions ?? 0;
+        message.totalConditions = object.totalConditions ?? 0;
+        message.conditions = object.conditions?.map((e) => exports.ConditionEval.fromPartial(e)) || [];
+        return message;
+    },
+};
+function createBaseStrategyAnalytics() {
+    return { strategyId: "", expectancy: 0, blendedHitRate: 0, maxDrawdown: 0, signals30d: 0, taken: 0, queueShare: 0 };
+}
+exports.StrategyAnalytics = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.strategyId !== "") {
+            writer.uint32(10).string(message.strategyId);
+        }
+        if (message.expectancy !== 0) {
+            writer.uint32(17).double(message.expectancy);
+        }
+        if (message.blendedHitRate !== 0) {
+            writer.uint32(25).double(message.blendedHitRate);
+        }
+        if (message.maxDrawdown !== 0) {
+            writer.uint32(33).double(message.maxDrawdown);
+        }
+        if (message.signals30d !== 0) {
+            writer.uint32(40).int32(message.signals30d);
+        }
+        if (message.taken !== 0) {
+            writer.uint32(48).int32(message.taken);
+        }
+        if (message.queueShare !== 0) {
+            writer.uint32(57).double(message.queueShare);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseStrategyAnalytics();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.strategyId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 17) {
+                        break;
+                    }
+                    message.expectancy = reader.double();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 25) {
+                        break;
+                    }
+                    message.blendedHitRate = reader.double();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 33) {
+                        break;
+                    }
+                    message.maxDrawdown = reader.double();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.signals30d = reader.int32();
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 48) {
+                        break;
+                    }
+                    message.taken = reader.int32();
+                    continue;
+                }
+                case 7: {
+                    if (tag !== 57) {
+                        break;
+                    }
+                    message.queueShare = reader.double();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            strategyId: isSet(object.strategyId)
+                ? globalThis.String(object.strategyId)
+                : isSet(object.strategy_id)
+                    ? globalThis.String(object.strategy_id)
+                    : "",
+            expectancy: isSet(object.expectancy) ? globalThis.Number(object.expectancy) : 0,
+            blendedHitRate: isSet(object.blendedHitRate)
+                ? globalThis.Number(object.blendedHitRate)
+                : isSet(object.blended_hit_rate)
+                    ? globalThis.Number(object.blended_hit_rate)
+                    : 0,
+            maxDrawdown: isSet(object.maxDrawdown)
+                ? globalThis.Number(object.maxDrawdown)
+                : isSet(object.max_drawdown)
+                    ? globalThis.Number(object.max_drawdown)
+                    : 0,
+            signals30d: isSet(object.signals30d)
+                ? globalThis.Number(object.signals30d)
+                : isSet(object.signals_30d)
+                    ? globalThis.Number(object.signals_30d)
+                    : 0,
+            taken: isSet(object.taken) ? globalThis.Number(object.taken) : 0,
+            queueShare: isSet(object.queueShare)
+                ? globalThis.Number(object.queueShare)
+                : isSet(object.queue_share)
+                    ? globalThis.Number(object.queue_share)
+                    : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.strategyId !== "") {
+            obj.strategyId = message.strategyId;
+        }
+        if (message.expectancy !== 0) {
+            obj.expectancy = message.expectancy;
+        }
+        if (message.blendedHitRate !== 0) {
+            obj.blendedHitRate = message.blendedHitRate;
+        }
+        if (message.maxDrawdown !== 0) {
+            obj.maxDrawdown = message.maxDrawdown;
+        }
+        if (message.signals30d !== 0) {
+            obj.signals30d = Math.round(message.signals30d);
+        }
+        if (message.taken !== 0) {
+            obj.taken = Math.round(message.taken);
+        }
+        if (message.queueShare !== 0) {
+            obj.queueShare = message.queueShare;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.StrategyAnalytics.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseStrategyAnalytics();
+        message.strategyId = object.strategyId ?? "";
+        message.expectancy = object.expectancy ?? 0;
+        message.blendedHitRate = object.blendedHitRate ?? 0;
+        message.maxDrawdown = object.maxDrawdown ?? 0;
+        message.signals30d = object.signals30d ?? 0;
+        message.taken = object.taken ?? 0;
+        message.queueShare = object.queueShare ?? 0;
+        return message;
+    },
+};
+function createBaseListOpportunitiesRequest() {
+    return { page: undefined, minConviction: 0 };
+}
+exports.ListOpportunitiesRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.page !== undefined) {
+            common_1.PageRequest.encode(message.page, writer.uint32(10).fork()).join();
+        }
+        if (message.minConviction !== 0) {
+            writer.uint32(17).double(message.minConviction);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListOpportunitiesRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.page = common_1.PageRequest.decode(reader, reader.uint32());
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 17) {
+                        break;
+                    }
+                    message.minConviction = reader.double();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            page: isSet(object.page) ? common_1.PageRequest.fromJSON(object.page) : undefined,
+            minConviction: isSet(object.minConviction)
+                ? globalThis.Number(object.minConviction)
+                : isSet(object.min_conviction)
+                    ? globalThis.Number(object.min_conviction)
+                    : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.page !== undefined) {
+            obj.page = common_1.PageRequest.toJSON(message.page);
+        }
+        if (message.minConviction !== 0) {
+            obj.minConviction = message.minConviction;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListOpportunitiesRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListOpportunitiesRequest();
+        message.page = (object.page !== undefined && object.page !== null)
+            ? common_1.PageRequest.fromPartial(object.page)
+            : undefined;
+        message.minConviction = object.minConviction ?? 0;
+        return message;
+    },
+};
+function createBaseListOpportunitiesResponse() {
+    return { opportunities: [], page: undefined };
+}
+exports.ListOpportunitiesResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.opportunities) {
+            exports.Opportunity.encode(v, writer.uint32(10).fork()).join();
+        }
+        if (message.page !== undefined) {
+            common_1.PageResponse.encode(message.page, writer.uint32(18).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseListOpportunitiesResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.opportunities.push(exports.Opportunity.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.page = common_1.PageResponse.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            opportunities: globalThis.Array.isArray(object?.opportunities)
+                ? object.opportunities.map((e) => exports.Opportunity.fromJSON(e))
+                : [],
+            page: isSet(object.page) ? common_1.PageResponse.fromJSON(object.page) : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.opportunities?.length) {
+            obj.opportunities = message.opportunities.map((e) => exports.Opportunity.toJSON(e));
+        }
+        if (message.page !== undefined) {
+            obj.page = common_1.PageResponse.toJSON(message.page);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ListOpportunitiesResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseListOpportunitiesResponse();
+        message.opportunities = object.opportunities?.map((e) => exports.Opportunity.fromPartial(e)) || [];
+        message.page = (object.page !== undefined && object.page !== null)
+            ? common_1.PageResponse.fromPartial(object.page)
+            : undefined;
+        return message;
+    },
+};
+function createBaseEvaluateReadinessRequest() {
+    return { strategyId: "", symbols: [] };
+}
+exports.EvaluateReadinessRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.strategyId !== "") {
+            writer.uint32(10).string(message.strategyId);
+        }
+        for (const v of message.symbols) {
+            writer.uint32(18).string(v);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseEvaluateReadinessRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.strategyId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.symbols.push(reader.string());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            strategyId: isSet(object.strategyId)
+                ? globalThis.String(object.strategyId)
+                : isSet(object.strategy_id)
+                    ? globalThis.String(object.strategy_id)
+                    : "",
+            symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.strategyId !== "") {
+            obj.strategyId = message.strategyId;
+        }
+        if (message.symbols?.length) {
+            obj.symbols = message.symbols;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.EvaluateReadinessRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseEvaluateReadinessRequest();
+        message.strategyId = object.strategyId ?? "";
+        message.symbols = object.symbols?.map((e) => e) || [];
+        return message;
+    },
+};
+function createBaseEvaluateReadinessResponse() {
+    return { readiness: [] };
+}
+exports.EvaluateReadinessResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.readiness) {
+            exports.SymbolReadiness.encode(v, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseEvaluateReadinessResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.readiness.push(exports.SymbolReadiness.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            readiness: globalThis.Array.isArray(object?.readiness)
+                ? object.readiness.map((e) => exports.SymbolReadiness.fromJSON(e))
+                : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.readiness?.length) {
+            obj.readiness = message.readiness.map((e) => exports.SymbolReadiness.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.EvaluateReadinessResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseEvaluateReadinessResponse();
+        message.readiness = object.readiness?.map((e) => exports.SymbolReadiness.fromPartial(e)) || [];
+        return message;
+    },
+};
+function createBaseGetStrategyAnalyticsRequest() {
+    return { strategyId: "" };
+}
+exports.GetStrategyAnalyticsRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.strategyId !== "") {
+            writer.uint32(10).string(message.strategyId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetStrategyAnalyticsRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.strategyId = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            strategyId: isSet(object.strategyId)
+                ? globalThis.String(object.strategyId)
+                : isSet(object.strategy_id)
+                    ? globalThis.String(object.strategy_id)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.strategyId !== "") {
+            obj.strategyId = message.strategyId;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetStrategyAnalyticsRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetStrategyAnalyticsRequest();
+        message.strategyId = object.strategyId ?? "";
+        return message;
+    },
+};
 exports.AnalysisServiceService = {
     runBacktest: {
         path: "/xstockstrat.analysis.v1.AnalysisService/RunBacktest",
@@ -5009,6 +6193,43 @@ exports.AnalysisServiceService = {
         requestDeserialize: (value) => exports.RunFundamentalsScanRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.FundamentalsScanSummary.encode(value).finish()),
         responseDeserialize: (value) => exports.FundamentalsScanSummary.decode(value),
+    },
+    /**
+     * ── Opportunity queue + readiness + per-strategy analytics (feature 083) ─────
+     * Ranked opportunity queue for the Decide surface. Aggregates ingest signals,
+     * held positions, and the conviction/readiness evaluator (zero new edges).
+     */
+    listOpportunities: {
+        path: "/xstockstrat.analysis.v1.AnalysisService/ListOpportunities",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.ListOpportunitiesRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.ListOpportunitiesRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.ListOpportunitiesResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.ListOpportunitiesResponse.decode(value),
+    },
+    /**
+     * Per-symbol live condition evaluation (traced): passing/soft/failing leaves +
+     * distance-to-threshold. Feeds Signal-detail, Watchlist readiness, and the queue.
+     */
+    evaluateReadiness: {
+        path: "/xstockstrat.analysis.v1.AnalysisService/EvaluateReadiness",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.EvaluateReadinessRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.EvaluateReadinessRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.EvaluateReadinessResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.EvaluateReadinessResponse.decode(value),
+    },
+    /** Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share). */
+    getStrategyAnalytics: {
+        path: "/xstockstrat.analysis.v1.AnalysisService/GetStrategyAnalytics",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.GetStrategyAnalyticsRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.GetStrategyAnalyticsRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.StrategyAnalytics.encode(value).finish()),
+        responseDeserialize: (value) => exports.StrategyAnalytics.decode(value),
     },
 };
 exports.AnalysisServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.AnalysisServiceService, "xstockstrat.analysis.v1.AnalysisService");

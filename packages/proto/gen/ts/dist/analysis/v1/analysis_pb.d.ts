@@ -896,6 +896,31 @@ export type ScreenResult = Message<"xstockstrat.analysis.v1.ScreenResult"> & {
      * @generated from field: xstockstrat.analysis.v1.CoverageGap gap = 6;
      */
     gap?: CoverageGap | undefined;
+    /**
+     * Raw column values surfaced on the screener results table (feature 083, FR-8).
+     * rsi/atr come from the analysis→indicators edge; ATR is a close-only approximation
+     * (indicators_engine.py) — surfaced as a known accuracy caveat, not exact.
+     * rev_growth is best-effort from Fundamentals.extra_metrics (0 when FMP omits it).
+     *
+     * @generated from field: double pe = 7;
+     */
+    pe: number;
+    /**
+     * @generated from field: double rsi = 8;
+     */
+    rsi: number;
+    /**
+     * @generated from field: double atr = 9;
+     */
+    atr: number;
+    /**
+     * @generated from field: double rev_growth = 10;
+     */
+    revGrowth: number;
+    /**
+     * @generated from field: bool held = 11;
+     */
+    held: boolean;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.ScreenResult.
@@ -1034,6 +1059,256 @@ export type FundamentalsScanSummary = Message<"xstockstrat.analysis.v1.Fundament
  * Use `create(FundamentalsScanSummarySchema)` to create a new message.
  */
 export declare const FundamentalsScanSummarySchema: GenMessage<FundamentalsScanSummary>;
+/**
+ * One ranked opportunity on the Decide queue. conviction is a deterministic
+ * ordinal (passing/total leaves + normalized worst-distance-to-threshold), NOT a
+ * probability — the UI renders "N/M conditions" + strength bars, never a fake %.
+ *
+ * @generated from message xstockstrat.analysis.v1.Opportunity
+ */
+export type Opportunity = Message<"xstockstrat.analysis.v1.Opportunity"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * @generated from field: xstockstrat.analysis.v1.OpportunityActionTag action = 2;
+     */
+    action: OpportunityActionTag;
+    /**
+     * @generated from field: double conviction = 3;
+     */
+    conviction: number;
+    /**
+     * @generated from field: int32 passing_conditions = 4;
+     */
+    passingConditions: number;
+    /**
+     * @generated from field: int32 total_conditions = 5;
+     */
+    totalConditions: number;
+    /**
+     * @generated from field: string thesis = 6;
+     */
+    thesis: string;
+    /**
+     * @generated from field: string strategy_id = 7;
+     */
+    strategyId: string;
+    /**
+     * @generated from field: string source = 8;
+     */
+    source: string;
+    /**
+     * @generated from field: google.protobuf.Timestamp valid_until = 9;
+     */
+    validUntil?: Timestamp | undefined;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.Opportunity.
+ * Use `create(OpportunitySchema)` to create a new message.
+ */
+export declare const OpportunitySchema: GenMessage<Opportunity>;
+/**
+ * One evaluated condition leaf from the traced evaluator (feature 083).
+ *
+ * @generated from message xstockstrat.analysis.v1.ConditionEval
+ */
+export type ConditionEval = Message<"xstockstrat.analysis.v1.ConditionEval"> & {
+    /**
+     * @generated from field: string ref_name = 1;
+     */
+    refName: string;
+    /**
+     * @generated from field: double lhs_value = 2;
+     */
+    lhsValue: number;
+    /**
+     * @generated from field: double threshold = 3;
+     */
+    threshold: number;
+    /**
+     * >, <, >=, <=, crosses_above, crosses_below
+     *
+     * @generated from field: string fn = 4;
+     */
+    fn: string;
+    /**
+     * @generated from field: xstockstrat.analysis.v1.ConditionState state = 5;
+     */
+    state: ConditionState;
+    /**
+     * normalized
+     *
+     * @generated from field: double distance_to_threshold = 6;
+     */
+    distanceToThreshold: number;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.ConditionEval.
+ * Use `create(ConditionEvalSchema)` to create a new message.
+ */
+export declare const ConditionEvalSchema: GenMessage<ConditionEval>;
+/**
+ * Per-symbol readiness — the traced evaluation of a strategy's entry rule.
+ *
+ * @generated from message xstockstrat.analysis.v1.SymbolReadiness
+ */
+export type SymbolReadiness = Message<"xstockstrat.analysis.v1.SymbolReadiness"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * @generated from field: double conviction = 2;
+     */
+    conviction: number;
+    /**
+     * @generated from field: int32 passing_conditions = 3;
+     */
+    passingConditions: number;
+    /**
+     * @generated from field: int32 total_conditions = 4;
+     */
+    totalConditions: number;
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.ConditionEval conditions = 5;
+     */
+    conditions: ConditionEval[];
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.SymbolReadiness.
+ * Use `create(SymbolReadinessSchema)` to create a new message.
+ */
+export declare const SymbolReadinessSchema: GenMessage<SymbolReadiness>;
+/**
+ * Per-strategy analytics for the Engine → Strategies surface. expectancy and
+ * max_drawdown derive from persisted analysis.backtest_runs (win_rate +
+ * profit_factor); signals_30d from ingest QuerySignals; taken from trading
+ * ListOrders; queue_share from the opportunity-queue join.
+ *
+ * @generated from message xstockstrat.analysis.v1.StrategyAnalytics
+ */
+export type StrategyAnalytics = Message<"xstockstrat.analysis.v1.StrategyAnalytics"> & {
+    /**
+     * @generated from field: string strategy_id = 1;
+     */
+    strategyId: string;
+    /**
+     * @generated from field: double expectancy = 2;
+     */
+    expectancy: number;
+    /**
+     * @generated from field: double blended_hit_rate = 3;
+     */
+    blendedHitRate: number;
+    /**
+     * @generated from field: double max_drawdown = 4;
+     */
+    maxDrawdown: number;
+    /**
+     * @generated from field: int32 signals_30d = 5;
+     */
+    signals30d: number;
+    /**
+     * @generated from field: int32 taken = 6;
+     */
+    taken: number;
+    /**
+     * @generated from field: double queue_share = 7;
+     */
+    queueShare: number;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.StrategyAnalytics.
+ * Use `create(StrategyAnalyticsSchema)` to create a new message.
+ */
+export declare const StrategyAnalyticsSchema: GenMessage<StrategyAnalytics>;
+/**
+ * user_id is intentionally absent — taken from the propagated x-user-id header
+ * server-side (matching the portfolio watchlist convention), never from the wire.
+ *
+ * @generated from message xstockstrat.analysis.v1.ListOpportunitiesRequest
+ */
+export type ListOpportunitiesRequest = Message<"xstockstrat.analysis.v1.ListOpportunitiesRequest"> & {
+    /**
+     * @generated from field: xstockstrat.common.v1.PageRequest page = 1;
+     */
+    page?: PageRequest | undefined;
+    /**
+     * @generated from field: double min_conviction = 2;
+     */
+    minConviction: number;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.ListOpportunitiesRequest.
+ * Use `create(ListOpportunitiesRequestSchema)` to create a new message.
+ */
+export declare const ListOpportunitiesRequestSchema: GenMessage<ListOpportunitiesRequest>;
+/**
+ * @generated from message xstockstrat.analysis.v1.ListOpportunitiesResponse
+ */
+export type ListOpportunitiesResponse = Message<"xstockstrat.analysis.v1.ListOpportunitiesResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.Opportunity opportunities = 1;
+     */
+    opportunities: Opportunity[];
+    /**
+     * @generated from field: xstockstrat.common.v1.PageResponse page = 2;
+     */
+    page?: PageResponse | undefined;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.ListOpportunitiesResponse.
+ * Use `create(ListOpportunitiesResponseSchema)` to create a new message.
+ */
+export declare const ListOpportunitiesResponseSchema: GenMessage<ListOpportunitiesResponse>;
+/**
+ * @generated from message xstockstrat.analysis.v1.EvaluateReadinessRequest
+ */
+export type EvaluateReadinessRequest = Message<"xstockstrat.analysis.v1.EvaluateReadinessRequest"> & {
+    /**
+     * @generated from field: string strategy_id = 1;
+     */
+    strategyId: string;
+    /**
+     * @generated from field: repeated string symbols = 2;
+     */
+    symbols: string[];
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.EvaluateReadinessRequest.
+ * Use `create(EvaluateReadinessRequestSchema)` to create a new message.
+ */
+export declare const EvaluateReadinessRequestSchema: GenMessage<EvaluateReadinessRequest>;
+/**
+ * @generated from message xstockstrat.analysis.v1.EvaluateReadinessResponse
+ */
+export type EvaluateReadinessResponse = Message<"xstockstrat.analysis.v1.EvaluateReadinessResponse"> & {
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.SymbolReadiness readiness = 1;
+     */
+    readiness: SymbolReadiness[];
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.EvaluateReadinessResponse.
+ * Use `create(EvaluateReadinessResponseSchema)` to create a new message.
+ */
+export declare const EvaluateReadinessResponseSchema: GenMessage<EvaluateReadinessResponse>;
+/**
+ * @generated from message xstockstrat.analysis.v1.GetStrategyAnalyticsRequest
+ */
+export type GetStrategyAnalyticsRequest = Message<"xstockstrat.analysis.v1.GetStrategyAnalyticsRequest"> & {
+    /**
+     * @generated from field: string strategy_id = 1;
+     */
+    strategyId: string;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.GetStrategyAnalyticsRequest.
+ * Use `create(GetStrategyAnalyticsRequestSchema)` to create a new message.
+ */
+export declare const GetStrategyAnalyticsRequestSchema: GenMessage<GetStrategyAnalyticsRequest>;
 /**
  * @generated from enum xstockstrat.analysis.v1.BacktestStatus
  */
@@ -1285,6 +1560,75 @@ export declare enum ScreenResultStatus {
  */
 export declare const ScreenResultStatusSchema: GenEnum<ScreenResultStatus>;
 /**
+ * The action a ranked opportunity suggests. Closed set → enum (C-04).
+ * TRIM/EXIT are deliberately collapsed into REDUCE — the platform must not
+ * synthesize a "fully exit vs trim" boundary on a row that opens a real order
+ * ticket; the human chooses trim vs exit at the ticket (design.md § 1).
+ *
+ * @generated from enum xstockstrat.analysis.v1.OpportunityActionTag
+ */
+export declare enum OpportunityActionTag {
+    /**
+     * @generated from enum value: OPPORTUNITY_ACTION_TAG_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * buy signal, not currently held
+     *
+     * @generated from enum value: OPPORTUNITY_ACTION_TAG_ENTER = 1;
+     */
+    ENTER = 1,
+    /**
+     * buy signal, already held
+     *
+     * @generated from enum value: OPPORTUNITY_ACTION_TAG_ADD = 2;
+     */
+    ADD = 2,
+    /**
+     * sell signal, held (trim or exit — human decides)
+     *
+     * @generated from enum value: OPPORTUNITY_ACTION_TAG_REDUCE = 3;
+     */
+    REDUCE = 3
+}
+/**
+ * Describes the enum xstockstrat.analysis.v1.OpportunityActionTag.
+ */
+export declare const OpportunityActionTagSchema: GenEnum<OpportunityActionTag>;
+/**
+ * Per-condition-leaf evaluation state. Closed set → enum (C-04).
+ *
+ * @generated from enum xstockstrat.analysis.v1.ConditionState
+ */
+export declare enum ConditionState {
+    /**
+     * @generated from enum value: CONDITION_STATE_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * leaf currently satisfied
+     *
+     * @generated from enum value: CONDITION_STATE_PASS = 1;
+     */
+    PASS = 1,
+    /**
+     * within the soft-band of the threshold but not passing
+     *
+     * @generated from enum value: CONDITION_STATE_SOFT = 2;
+     */
+    SOFT = 2,
+    /**
+     * not satisfied, outside the soft-band
+     *
+     * @generated from enum value: CONDITION_STATE_FAIL = 3;
+     */
+    FAIL = 3
+}
+/**
+ * Describes the enum xstockstrat.analysis.v1.ConditionState.
+ */
+export declare const ConditionStateSchema: GenEnum<ConditionState>;
+/**
  * @generated from service xstockstrat.analysis.v1.AnalysisService
  */
 export declare const AnalysisService: GenService<{
@@ -1393,5 +1737,38 @@ export declare const AnalysisService: GenService<{
         methodKind: "unary";
         input: typeof RunFundamentalsScanRequestSchema;
         output: typeof FundamentalsScanSummarySchema;
+    };
+    /**
+     * ── Opportunity queue + readiness + per-strategy analytics (feature 083) ─────
+     * Ranked opportunity queue for the Decide surface. Aggregates ingest signals,
+     * held positions, and the conviction/readiness evaluator (zero new edges).
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.ListOpportunities
+     */
+    listOpportunities: {
+        methodKind: "unary";
+        input: typeof ListOpportunitiesRequestSchema;
+        output: typeof ListOpportunitiesResponseSchema;
+    };
+    /**
+     * Per-symbol live condition evaluation (traced): passing/soft/failing leaves +
+     * distance-to-threshold. Feeds Signal-detail, Watchlist readiness, and the queue.
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.EvaluateReadiness
+     */
+    evaluateReadiness: {
+        methodKind: "unary";
+        input: typeof EvaluateReadinessRequestSchema;
+        output: typeof EvaluateReadinessResponseSchema;
+    };
+    /**
+     * Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share).
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.GetStrategyAnalytics
+     */
+    getStrategyAnalytics: {
+        methodKind: "unary";
+        input: typeof GetStrategyAnalyticsRequestSchema;
+        output: typeof StrategyAnalyticsSchema;
     };
 }>;
