@@ -472,3 +472,27 @@ session — flagged in the PR body per the root CLAUDE.md Teardown rule.
 - **Gate (AC-11)**: full Playwright suite green — **174 passed** (1 pre-existing chart-panel
   timeframeEnum flake, passed on retry); `pnpm run test:coverage` 99% on exercised `src/lib/**`
   (≥40% floor, feature-065).
+
+### Session (2026-08-01) — Step 31 (docs reconcile + teardown) + close-out
+
+- **Service CLAUDE.md**: `analysis` (added a Decide-surface RPC subsection —
+  ListOpportunities/EvaluateReadiness/GetStrategyAnalytics, the conviction/`taken`/`queue_share`
+  quirks; env vars + dependency edges were already present from the backend steps); `ui`
+  (new "Opportunities-first shell (feature 083)" section — nav grouping + navGroups cycle rule,
+  Decide screens, opportunityShared maps, Copilot rail + ledger thread, mobile companion, state
+  primitives — plus Key File Paths rows). `portfolio` / `ingest` CLAUDE.md and the
+  config-governance `factor_map` registered-keys row were already reconciled during Steps 12/9/12.
+- **Pattern docs**: `header-propagation.md` gains a "Request-scoped outbound edges" note recording
+  the new non-cyclic **analysis → trading** (`ListOrders`) edge (headers already forwarded via the
+  feature-049 analysis servicer path — no new wiring).
+- **Spec/lifecycle**: flipped all 31 implementation-spec step statuses to `done`; feature.md
+  Lifecycle Status → `code-completed`.
+- **context-scrubber teardown**: the `/context-scrubber` skill is **not invocable in this session**
+  (only the SDD + a few skills are listed; `.agents/context-forge.json` exists but the plugin
+  isn't loaded). Per the root CLAUDE.md Teardown rule this is flagged in the PR body; I did a
+  manual grounded-drift reconcile of every touched context file instead. README (a scrubber
+  target) stays accurate — 083 didn't change the physical segments it describes.
+- **fails-082 guard**: every commit (Steps 1–31) targeted `claude/ui-revamp-implementation-7ras2a`
+  directly — no base-chained per-step branches. strat-lab plugin unaffected (083 changes none of
+  its tracked RPCs). Feature is code-complete; full e2e (174) + unit coverage (99% on exercised
+  `src/lib`) green.

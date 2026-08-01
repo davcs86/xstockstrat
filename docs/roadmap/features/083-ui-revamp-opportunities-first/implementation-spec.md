@@ -1,6 +1,6 @@
 # Implementation Spec: ui-revamp-opportunities-first
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-07-31
 **Feature**: `docs/roadmap/features/083-ui-revamp-opportunities-first/feature.md`
 **Total Steps**: 31
@@ -51,7 +51,7 @@ order-event, not a reverse `portfolio→trading` edge).
 
 ### Step 1 — proto: additive pass on analysis / portfolio / ingest (four new enums)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -99,7 +99,7 @@ carries the `:61-64` "persisted verbatim" warning, unaffected here since these a
 
 ### Step 2 — proto-gen: regenerate stubs + author the four exhaustive TS `Record<Enum,…>` maps
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto` + `xstockstrat-ui`
 **Files**:
 - `packages/proto/gen/**` — regenerate (do not hand-edit)
@@ -132,7 +132,7 @@ fails the build).
 
 ### Step 3 — service: analysis traced-evaluator sibling + deterministic conviction
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/evaluator.py` — modify
@@ -166,7 +166,7 @@ fails the build).
 
 ### Step 4 — test: analysis evaluator trace + conviction ordinal
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_evaluator_traced.py` — create
@@ -194,7 +194,7 @@ after) and `pytest --cov=app --cov-fail-under=40` and `ruff check . && ruff form
 
 ### Step 5 — service: analysis `EvaluateReadiness` RPC
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -220,7 +220,7 @@ indicators/marketdata calls via the existing per-method `metadata` pattern (`ser
 
 ### Step 6 — test: analysis `EvaluateReadiness`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify (add `EvaluateReadiness` cases)
@@ -241,7 +241,7 @@ indicators/marketdata stubs (C-03).
 
 ### Step 7 — service: analysis `ListOpportunities` RPC (queue aggregation)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -268,7 +268,7 @@ headers on every outbound call (existing per-method `metadata`).
 
 ### Step 8 — test: analysis `ListOpportunities`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -290,7 +290,7 @@ propagate.
 
 ### Step 9 — migration: ingest 008 — signal-source health columns
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/migrations/008_signal_source_health.up.sql` — create
@@ -315,7 +315,7 @@ signals_fed BIGINT NOT NULL DEFAULT 0;`. `.down.sql` drops the four columns. Mir
 
 ### Step 10 — service: ingest source-health population + `ListSignalSources` enrichment
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify (populate `health`/`last_seen_at`/`last_error`/`signals_fed` on `ListSignalSources`; track last-seen/last-error on the ingest path)
@@ -340,7 +340,7 @@ behavior unchanged (analysis owns the dedup guard — ingest `CLAUDE.md`).
 
 ### Step 11 — test: ingest source-health
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_source_health.py` — create (or extend the existing signal-source test file discovery finds under `tests/`)
@@ -363,7 +363,7 @@ aged `last_seen_at` maps to STALE/DOWN; `ListSignalSources` returns the enriched
 > **Ordered before the portfolio service step (13) that reads this key** — a `service` step must not
 > consume a config key registered later (impl-spec review, B3). Swapped from the original 13→12.
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/config/config.go` — modify (register the key + default)
@@ -389,7 +389,7 @@ in the `docs/patterns/config-governance.md` Per-Feature Registered Keys log (fea
 
 ### Step 13 — service: portfolio Position risk/factor fields + ledger-event stop learning
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service.go` — modify
@@ -420,7 +420,7 @@ migration (F-06 held).
 
 ### Step 14 — test: portfolio risk/factor + stop-distance
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_service_test.go` — create/modify
@@ -444,7 +444,7 @@ test verification is sufficient; no coverage threshold applies" and still ship t
 
 ### Step 15 — service: analysis `GetStrategyAnalytics` (+ new `analysis→trading` edge)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -477,7 +477,7 @@ to the analysis component `envs` in both `.do` specs.
 
 ### Step 16 — test: analysis `GetStrategyAnalytics`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -498,7 +498,7 @@ trading stub (C-03 on the new edge).
 
 ### Step 17 — service: analysis `ScreenResult` enrichment (raw pe/rsi/atr/rev_growth/held)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/screener.py` — modify
@@ -523,7 +523,7 @@ where a raw column is legitimately a fundamental; keep the blended `criterion_sc
 
 ### Step 18 — test: analysis screener enrichment
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_screener_enrichment.py` — create (or extend the existing screener test file discovery finds under `tests/`, e.g. a `test_screener*.py`)
@@ -542,7 +542,7 @@ symbol. Assert the blended `criterion_scores`/`passed` behavior is unchanged (no
 
 ### Step 19 — service: UI Nocturne token remap (two-file, additive Phosphor)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/globals.css` — modify
@@ -568,7 +568,7 @@ tokens + `--background` in `tailwind.config.js:40-42` to the Nocturne values; ad
 
 ### Step 20 — service: UI Decide/Discover/Engine/Book shell + nav regroup + pinned `accounts` surface
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx` — modify (nav grouping, badges, breadcrumb)
@@ -600,7 +600,7 @@ lands in Steps 22–25 (so Step 21's reachability walk has real targets, not 404
 
 ### Step 21 — test: UI nav-reachability e2e (C-10(a), every screen incl. `accounts`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/nav-reachability.spec.ts` — create
@@ -632,7 +632,7 @@ surfaces use `addAdminCookie`.
 
 ### Step 22 — service: UI Decide screens — Opportunities queue + Signal detail
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx` — replace the Step-20 stub with the real Opportunities queue
@@ -663,7 +663,7 @@ renders as "N/M conditions" + bars, never a fake %. Add `e2e/fixtures/opportunit
 
 ### Step 23 — service: UI Discover screens — Watchlists + Screener
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/watchlists/page.tsx` (+ the watchlist editor page discovery finds under `watchlists/`) — modify
@@ -689,7 +689,7 @@ column tooltip.
 
 ### Step 24 — service: UI Engine screens — Strategies + Backtest + Signal sources + Backfills
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/strategies/page.tsx` + `strategies/[id]/page.tsx` — modify (Strategies list/detail + backtest views; the coverage-gap card lives in `strategies/[id]/page.tsx:290-334`)
@@ -717,7 +717,7 @@ Backfills stays admin-gated (create+delete panels only for admins; typed-symbol 
 
 ### Step 25 — service: UI Book screens — Exposure + Portfolio + Orders
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/page.tsx` — modify (positions → Exposure risk reframe, consuming the Step-13 `Position` risk fields)
@@ -748,7 +748,7 @@ centralization of the inline `mock-backend.ts` order/position mocks.
 
 ### Step 26 — test: UI per-screen e2e + FR-20 order parity + AC-8 valuation parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/*.spec.ts`, `e2e/trader/*.spec.ts` — create/modify (per-screen)
@@ -777,7 +777,7 @@ mock-backend handlers for `ListOpportunities`/`EvaluateReadiness`/`GetStrategyAn
 
 ### Step 27 — service: UI Copilot shallow-beta rail (ledger append-store thread + client-side summary)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/copilot/CopilotRail.tsx` — create the 310px rail (+ any small sub-components it needs under `src/components/copilot/`)
@@ -805,7 +805,7 @@ read-only — no live tool call). Default off via `ChromeContext`/`showCopilot`.
 
 ### Step 28 — service: UI mobile companion (shared section renderer, ≥44px)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/mobile/SectionRenderer.tsx` + `src/components/mobile/BottomTabBar.tsx` — create (the shared section renderer for kinds `stat`/`signal`/`chart`/`row`/`form`/`note`/`action`/`head` + the fixed bottom tab bar; additional small section components under `src/components/mobile/`)
@@ -828,7 +828,7 @@ a fixed bottom tab bar, ≥44px tap targets. Same routes/screens in a responsive
 
 ### Step 29 — service: UI non-happy-path states (loading / empty / error + destructive-confirm)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/skeleton.tsx` + `services/xstockstrat-ui/src/components/shared/{EmptyState,CardError}.tsx` — create the shared loading/empty/error primitives
@@ -852,7 +852,7 @@ preserve the Backfills destructive-confirm gates; reflect the real poll/stream c
 
 ### Step 30 — test: UI mobile + non-happy-state e2e + full-suite/coverage gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mobile.spec.ts` — create/complete (mobile parity + ≥44px tap targets; created in Step 28)
@@ -875,7 +875,7 @@ the Backfills delete panel enforces typed-symbol + "DELETE ALL". Reuse fixtures/
 
 ### Step 31 — docs: reconcile CLAUDE.md surfaces + registered keys + context-scrubber teardown
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` + service CLAUDE.md files
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify (new RPCs `ListOpportunities`/`EvaluateReadiness`/`GetStrategyAnalytics`; new `analysis→trading` dependency edge + `TRADING_ENDPOINT`; screener enrichment)
