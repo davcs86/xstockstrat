@@ -18,6 +18,7 @@ import pytest
 from gen.analysis.v1 import analysis_pb2
 from gen.common.v1 import common_pb2
 from gen.config.v1 import config_pb2
+from gen.ingest.v1 import ingest_pb2
 from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
@@ -3136,3 +3137,217 @@ class TestPrefixFormulaCost:
         assert sizes == [23, 23]
         # ...and the declaration is fetched once for the whole run, not once per symbol.
         assert svc._indicators.GetFormula.await_count == 1
+
+
+# ---------------------------------------------------------------------------
+# EvaluateReadiness + ListOpportunities (feature 083)
+# ---------------------------------------------------------------------------
+
+
+def _ctx(headers):
+    """A gRPC context whose invocation_metadata replays the given headers."""
+    ctx = MagicMock()
+    ctx.invocation_metadata = MagicMock(return_value=list(headers.items()))
+    ctx.abort = AsyncMock()
+    return ctx
+
+
+_HEADERS = {"x-user-id": "u1", "x-access-scope": "7", "x-trace-id": "t1"}
+
+
+def _bars_resp(closes):
+    """A GetBars page: one bar per close with a monotonic time cursor, no next page."""
+    resp = MagicMock()
+    bars = []
+    for i, c in enumerate(closes):
+        b = MagicMock()
+        b.close = c
+        b.time.seconds = 1_700_000_000 + i * 86_400
+        b.time.nanos = 0
+        bars.append(b)
+    resp.bars = bars
+    resp.page.next_page_token = ""
+    return resp
+
+
+def _strategy_row_single_gt(threshold=100.0):
+    """A strategy row whose entry_rule is a single `sma > threshold` leaf (SMA≈close)."""
+    definition = analysis_pb2.StrategyDefinition(
+        strategy_id="s1",
+        display_name="S1",
+        components=[
+            analysis_pb2.StrategyComponent(
+                ref_name="sma",
+                kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                indicator="SMA",
+                params={"period": 3.0},
+            )
+        ],
+        entry_rule=json.dumps({"fn": ">", "lhs": "sma", "rhs": threshold}),
+    )
+    return {
+        "strategy_id": "s1",
+        "display_name": "S1",
+        "active": True,
+        "live_enabled": True,
+        "definition_json": json_format.MessageToDict(definition),
+    }
+
+
+class TestEvaluateReadiness:
+    def _svc(self, bars_by_symbol):
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=_strategy_row_single_gt())
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(
+            side_effect=lambda req, metadata=None: _bars_resp(bars_by_symbol[req.symbol])
+        )
+        # SMA ≈ close: return one point per close, value == close.
+        svc._indicators = MagicMock()
+        svc._indicators.ComputeIndicator = AsyncMock(
+            side_effect=lambda req, metadata=None: SimpleNamespace(
+                result=[SimpleNamespace(value=v, extra={}) for v in req.values]
+            )
+        )
+        return svc
+
+    @pytest.mark.asyncio
+    async def test_firing_symbol_passes_high_conviction(self):
+        svc = self._svc({"AAPL": [120.0, 130.0, 150.0]})
+        resp = await svc.EvaluateReadiness(
+            analysis_pb2.EvaluateReadinessRequest(strategy_id="s1", symbols=["AAPL"]),
+            _ctx(_HEADERS),
+        )
+        r = resp.readiness[0]
+        assert r.symbol == "AAPL"
+        assert r.passing_conditions == 1 and r.total_conditions == 1
+        assert r.conviction == 1.0
+        assert r.conditions[0].state == analysis_pb2.CONDITION_STATE_PASS
+
+    @pytest.mark.asyncio
+    async def test_near_symbol_soft_with_distance(self):
+        # last SMA 98 vs threshold 100 → within the 5% soft-band → SOFT, distance < 0.
+        svc = self._svc({"AAPL": [95.0, 97.0, 98.0]})
+        resp = await svc.EvaluateReadiness(
+            analysis_pb2.EvaluateReadinessRequest(strategy_id="s1", symbols=["AAPL"]),
+            _ctx(_HEADERS),
+        )
+        r = resp.readiness[0]
+        assert r.passing_conditions == 0
+        assert r.conditions[0].state == analysis_pb2.CONDITION_STATE_SOFT
+        assert r.conditions[0].distance_to_threshold < 0
+        assert 0.0 < r.conviction < 1.0
+
+    @pytest.mark.asyncio
+    async def test_headers_reach_marketdata_and_indicators(self):
+        svc = self._svc({"AAPL": [120.0, 130.0, 150.0]})
+        await svc.EvaluateReadiness(
+            analysis_pb2.EvaluateReadinessRequest(strategy_id="s1", symbols=["AAPL"]),
+            _ctx(_HEADERS),
+        )
+        md_meta = dict(svc._marketdata.GetBars.await_args.kwargs["metadata"])
+        ind_meta = dict(svc._indicators.ComputeIndicator.await_args.kwargs["metadata"])
+        for meta in (md_meta, ind_meta):
+            assert meta["x-user-id"] == "u1"
+            assert meta["x-access-scope"] == "7"
+            assert meta["x-trace-id"] == "t1"
+
+    @pytest.mark.asyncio
+    async def test_unknown_strategy_aborts_not_found(self):
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
+        ctx = _ctx(_HEADERS)
+        await svc.EvaluateReadiness(
+            analysis_pb2.EvaluateReadinessRequest(strategy_id="nope", symbols=["AAPL"]), ctx
+        )
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.NOT_FOUND
+
+
+def _sig(symbol, direction, conviction, source="src"):
+    return ingest_pb2.ExternalSignal(
+        symbol=symbol,
+        direction=direction,
+        conviction=conviction,
+        source=source,
+        headline=f"{direction} {symbol}",
+    )
+
+
+class TestListOpportunities:
+    def _svc(self, signals, position_pages):
+        svc = make_servicer()
+        sig_resp = MagicMock()
+        sig_resp.signals = signals
+        sig_resp.page.next_page_token = ""
+        svc._ingest = MagicMock()
+        svc._ingest.QuerySignals = AsyncMock(return_value=sig_resp)
+
+        pos_resps = []
+        for symbols, token in position_pages:
+            r = MagicMock()
+            r.positions = [MagicMock(symbol=s) for s in symbols]
+            r.page.next_page_token = token
+            pos_resps.append(r)
+        svc._portfolio = MagicMock()
+        svc._portfolio.ListPositions = AsyncMock(side_effect=pos_resps)
+        return svc
+
+    @pytest.mark.asyncio
+    async def test_action_tags_from_direction_and_held(self):
+        svc = self._svc(
+            signals=[
+                _sig("AAPL", "buy", 0.9),  # not held → ENTER
+                _sig("MSFT", "buy", 0.8),  # held → ADD
+                _sig("TSLA", "sell", 0.7),  # held (page 2) → REDUCE
+                _sig("NVDA", "sell", 0.95),  # not held → skipped
+                _sig("IBM", "hold", 0.99),  # not actionable → skipped
+            ],
+            position_pages=[(["MSFT"], "p2"), (["TSLA"], "")],  # multi-page drain
+        )
+        resp = await svc.ListOpportunities(analysis_pb2.ListOpportunitiesRequest(), _ctx(_HEADERS))
+        by_symbol = {o.symbol: o.action for o in resp.opportunities}
+        assert by_symbol["AAPL"] == analysis_pb2.OPPORTUNITY_ACTION_TAG_ENTER
+        assert by_symbol["MSFT"] == analysis_pb2.OPPORTUNITY_ACTION_TAG_ADD
+        assert by_symbol["TSLA"] == analysis_pb2.OPPORTUNITY_ACTION_TAG_REDUCE
+        assert "NVDA" not in by_symbol  # sell + not held
+        assert "IBM" not in by_symbol  # hold
+
+    @pytest.mark.asyncio
+    async def test_ranked_by_conviction_desc(self):
+        svc = self._svc(
+            signals=[_sig("AAPL", "buy", 0.3), _sig("MSFT", "buy", 0.9), _sig("GOOG", "buy", 0.6)],
+            position_pages=[([], "")],
+        )
+        resp = await svc.ListOpportunities(analysis_pb2.ListOpportunitiesRequest(), _ctx(_HEADERS))
+        assert [o.symbol for o in resp.opportunities] == ["MSFT", "GOOG", "AAPL"]
+
+    @pytest.mark.asyncio
+    async def test_min_conviction_filters(self):
+        svc = self._svc(
+            signals=[_sig("AAPL", "buy", 0.9), _sig("MSFT", "buy", 0.5)],
+            position_pages=[([], "")],
+        )
+        resp = await svc.ListOpportunities(
+            analysis_pb2.ListOpportunitiesRequest(min_conviction=0.85), _ctx(_HEADERS)
+        )
+        assert [o.symbol for o in resp.opportunities] == ["AAPL"]
+
+    @pytest.mark.asyncio
+    async def test_multipage_positions_drain_and_headers(self):
+        svc = self._svc(
+            signals=[_sig("TSLA", "sell", 0.7)],
+            position_pages=[(["MSFT"], "p2"), (["TSLA"], "")],
+        )
+        resp = await svc.ListOpportunities(analysis_pb2.ListOpportunitiesRequest(), _ctx(_HEADERS))
+        # TSLA is only held on page 2 — a single-page read would have missed it.
+        assert resp.opportunities[0].symbol == "TSLA"
+        assert resp.opportunities[0].action == analysis_pb2.OPPORTUNITY_ACTION_TAG_REDUCE
+        assert svc._portfolio.ListPositions.await_count == 2
+        # user_id is taken from the header, and the three headers propagate to both edges.
+        assert svc._portfolio.ListPositions.await_args_list[0].args[0].user_id == "u1"
+        sig_meta = dict(svc._ingest.QuerySignals.await_args.kwargs["metadata"])
+        pos_meta = dict(svc._portfolio.ListPositions.await_args_list[0].kwargs["metadata"])
+        for meta in (sig_meta, pos_meta):
+            assert meta == {"x-user-id": "u1", "x-access-scope": "7", "x-trace-id": "t1"}

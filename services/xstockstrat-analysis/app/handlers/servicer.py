@@ -27,7 +27,7 @@ from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc
 from gen.ledger.v1 import ledger_pb2, ledger_pb2_grpc
 from gen.marketdata.v1 import marketdata_pb2, marketdata_pb2_grpc
 from gen.notify.v1 import notify_pb2_grpc
-from gen.portfolio.v1 import portfolio_pb2_grpc
+from gen.portfolio.v1 import portfolio_pb2, portfolio_pb2_grpc
 from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
@@ -85,6 +85,15 @@ _BAR_PAGE_SIZE = 1000
 # than returning what it has: silently truncating here would reintroduce the very bug this
 # helper exists to fix, and would do so as a function of a config value.
 _MAX_BAR_PAGES = 32
+
+# feature 083 — opportunity queue / readiness.
+# Recent-bar lookback for EvaluateReadiness: ~400 calendar days ≈ 280 trading bars, enough
+# to warm up long indicators (e.g. SMA/EMA up to ~200 periods) for a last-bar readiness read.
+_READINESS_LOOKBACK_DAYS = 400
+# Backstop for draining paginated QuerySignals / ListPositions in ListOpportunities.
+_MAX_DRAIN_PAGES = 50
+# Default queue page size when the request omits one.
+_DEFAULT_OPP_PAGE_SIZE = 50
 
 
 class _BarFetchError(Exception):
@@ -1791,8 +1800,211 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             metadata=propagation_meta,
         )
 
+    # ── Opportunity queue + readiness (feature 083) ─────────────────────────────
+
+    async def EvaluateReadiness(self, request, context):
+        """Trace a strategy's entry-rule conditions against recent bars for each requested
+        symbol (feature 083). Returns per-symbol PASS/SOFT/FAIL leaves + a deterministic
+        conviction ordinal. Propagates the C-03 header tuple on every outbound call."""
+        propagation_meta = [
+            (k, v)
+            for k, v in context.invocation_metadata()
+            if k in ("x-user-id", "x-access-scope", "x-trace-id")
+        ]
+        if self._strategies_repo is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "strategy store unavailable")
+            return
+        row = await self._strategies_repo.get_by_id(request.strategy_id)
+        if row is None:
+            await context.abort(
+                grpc.StatusCode.NOT_FOUND, f"strategy '{request.strategy_id}' not found"
+            )
+            return
+        definition = _row_to_strategy_definition(row)
+        evaluator = StrategyEvaluator(self._indicators, propagation_meta)
+        range_msg = _recent_range(_READINESS_LOOKBACK_DAYS)
+        readiness = []
+        for symbol in request.symbols:
+            try:
+                bars = await self._fetch_bars_paged(symbol, range_msg, propagation_meta)
+            except Exception as e:  # bar fetch is best-effort per symbol
+                log.warning("EvaluateReadiness: bars fetch failed for %s: %s", symbol, e)
+                bars = []
+            trace = await evaluator.evaluate_conditions_traced(definition, bars, symbol)
+            readiness.append(_readiness_to_proto(trace))
+        return analysis_pb2.EvaluateReadinessResponse(readiness=readiness)
+
+    async def ListOpportunities(self, request, context):
+        """Ranked opportunity queue for the Decide surface (feature 083). Aggregates the three
+        inputs analysis already terminates — active ingest signals, held portfolio positions,
+        and (per the design) the conviction it owns — with ZERO new edges. Ranking/dedup is
+        compute-on-read (no ranking table, no migration).
+
+        Action tag is derived from real data only: ``direction × held`` —
+        ``buy & !held → ENTER``, ``buy & held → ADD``, ``sell & held → REDUCE``. TRIM/EXIT are
+        collapsed into the single non-prescriptive ``REDUCE`` (the human chooses at the ticket).
+
+        Conviction is the signal source's own real confidence (``ExternalSignal.conviction``) —
+        a defined, deterministic value, never a fabricated %. Per-condition readiness
+        (passing/total leaves) is surfaced separately via ``EvaluateReadiness`` on the
+        Signal-detail / Watchlist surfaces rather than synthesized onto every queue row, since
+        an external signal carries no strategy binding to evaluate here (design.md § 1)."""
+        propagation_meta = [
+            (k, v)
+            for k, v in context.invocation_metadata()
+            if k in ("x-user-id", "x-access-scope", "x-trace-id")
+        ]
+        metadata = dict(context.invocation_metadata())
+        user_id = metadata.get("x-user-id", "")
+
+        signals = await self._drain_active_signals(propagation_meta)
+        held = await self._drain_held_symbols(user_id, propagation_meta)
+
+        # Build one opportunity per actionable signal; keep the highest-conviction row per symbol.
+        best: dict[str, analysis_pb2.Opportunity] = {}
+        for sig in signals:
+            action = _action_for(sig.direction, sig.symbol in held)
+            if action is None:  # hold / watchlist / sell-not-held → not actionable
+                continue
+            opp = analysis_pb2.Opportunity(
+                symbol=sig.symbol,
+                action=action,
+                conviction=sig.conviction,
+                passing_conditions=0,
+                total_conditions=0,
+                thesis=sig.headline,
+                strategy_id="",
+                source=sig.source,
+                valid_until=sig.valid_until,
+            )
+            prev = best.get(sig.symbol)
+            if prev is None or opp.conviction > prev.conviction:
+                best[sig.symbol] = opp
+
+        ranked = sorted(best.values(), key=lambda o: o.conviction, reverse=True)
+        if request.min_conviction > 0:
+            ranked = [o for o in ranked if o.conviction >= request.min_conviction]
+
+        # Simple offset pagination (page_token = integer offset).
+        page_size = request.page.page_size if request.page.page_size > 0 else _DEFAULT_OPP_PAGE_SIZE
+        try:
+            offset = int(request.page.page_token) if request.page.page_token else 0
+        except ValueError:
+            offset = 0
+        window = ranked[offset : offset + page_size]
+        next_token = str(offset + page_size) if offset + page_size < len(ranked) else ""
+        return analysis_pb2.ListOpportunitiesResponse(
+            opportunities=window,
+            page=common_pb2.PageResponse(next_page_token=next_token),
+        )
+
+    async def _drain_active_signals(self, propagation_meta) -> list:
+        """Drain all currently-active ingest signals (paginated). Best-effort: an ingest
+        failure yields an empty queue rather than aborting."""
+        window = _recent_range(0)  # [now, now] — signals whose validity covers now
+        out: list = []
+        page_token = ""
+        for _ in range(_MAX_DRAIN_PAGES):
+            try:
+                resp = await self._ingest.QuerySignals(
+                    ingest_pb2.QuerySignalsRequest(
+                        active_window=window,
+                        page=common_pb2.PageRequest(
+                            page_size=_BAR_PAGE_SIZE, page_token=page_token
+                        ),
+                    ),
+                    metadata=propagation_meta,
+                )
+            except grpc.RpcError as e:
+                log.warning("ListOpportunities: QuerySignals failed: %s", e)
+                return out
+            out.extend(resp.signals)
+            page_token = resp.page.next_page_token
+            if not page_token:
+                break
+        return out
+
+    async def _drain_held_symbols(self, user_id, propagation_meta) -> set:
+        """Drain the set of symbols the user holds across all accounts/modes (paginated).
+        ``ListPositions(user_id)`` with ``account_id`` unset + ``TradingMode UNSPECIFIED``
+        already returns every held position — no new global-positions RPC needed."""
+        if self._portfolio is None:
+            return set()
+        held: set = set()
+        page_token = ""
+        for _ in range(_MAX_DRAIN_PAGES):
+            try:
+                resp = await self._portfolio.ListPositions(
+                    portfolio_pb2.ListPositionsRequest(
+                        user_id=user_id,
+                        page=common_pb2.PageRequest(
+                            page_size=_BAR_PAGE_SIZE, page_token=page_token
+                        ),
+                    ),
+                    metadata=propagation_meta,
+                )
+            except grpc.RpcError as e:
+                log.warning("ListOpportunities: ListPositions failed: %s", e)
+                return held
+            held.update(p.symbol for p in resp.positions)
+            page_token = resp.page.next_page_token
+            if not page_token:
+                break
+        return held
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+
+# ── Opportunity queue / readiness helpers (feature 083) ─────────────────────────
+
+
+def _recent_range(lookback_days: int) -> "common_pb2.TimeRange":
+    """A ``TimeRange`` ending now and starting ``lookback_days`` before it (0 → a point at
+    now). Used for the readiness bar window and the active-signal query window."""
+    now_ts = Timestamp()
+    now_ts.GetCurrentTime()
+    rng = common_pb2.TimeRange()
+    rng.end.seconds = now_ts.seconds
+    rng.start.seconds = max(0, now_ts.seconds - lookback_days * 86_400)
+    return rng
+
+
+def _readiness_to_proto(trace: dict) -> "analysis_pb2.SymbolReadiness":
+    """Map a traced-readiness dict (evaluator._readiness_from_evals shape) to proto."""
+    return analysis_pb2.SymbolReadiness(
+        symbol=trace["symbol"],
+        conviction=trace["conviction"],
+        passing_conditions=trace["passing_conditions"],
+        total_conditions=trace["total_conditions"],
+        conditions=[
+            analysis_pb2.ConditionEval(
+                ref_name=c["ref_name"],
+                lhs_value=c["lhs_value"],
+                threshold=c["threshold"],
+                fn=c["fn"],
+                state=c["state"],
+                distance_to_threshold=c["distance_to_threshold"],
+            )
+            for c in trace["conditions"]
+        ],
+    )
+
+
+def _action_for(direction: str, held: bool):
+    """Derive an OpportunityActionTag from a signal's direction × held-position, using real
+    data only: buy&!held→ENTER, buy&held→ADD, sell&held→REDUCE. Returns None for the
+    non-actionable cases (hold/watchlist, or a sell with no position to reduce)."""
+    d = (direction or "").lower()
+    if d == "buy":
+        return (
+            analysis_pb2.OPPORTUNITY_ACTION_TAG_ADD
+            if held
+            else analysis_pb2.OPPORTUNITY_ACTION_TAG_ENTER
+        )
+    if d == "sell" and held:
+        return analysis_pb2.OPPORTUNITY_ACTION_TAG_REDUCE
+    return None
 
 
 # ── Backtest per-bar diagnostics helpers (feature 064-backtest-debug-info) ───────
