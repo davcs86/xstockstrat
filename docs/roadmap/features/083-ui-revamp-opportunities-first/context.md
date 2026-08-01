@@ -310,3 +310,59 @@
   - **strat-lab plugin NOT affected** — 083 changes none of run_backtest/manage_strategy/
     trigger_backfill/get_backfill_status/set_strategy_live; noted in Step 31 for the PR body.
 - Reviewers snapshot finalized (config team added because factor_map is used; ledger/trading FYI).
+
+## Session 2026-08-01 — sdd-execute (backend Steps 1-18 + theme Step 19), one-PR partial
+
+Branch `claude/ui-revamp-implementation-7ras2a` (off `origin/main-dev`), single PR #832 into
+main-dev (user directive: one PR, not one-per-step; push progressively; Copilot+mobile required).
+
+**Toolchain:** Docker daemon down + `buf` absent → provisioned buf + protoc plugins via the Go
+module proxy per `docs/runbooks/codegen-toolchain-host-setup.md` (GitHub-releases 403'd, proxy
+fallback works). Validated byte-for-byte gen reproduction before editing protos.
+
+**Completed + verified + pushed:**
+- **Step 1-2** — additive proto pass (analysis/portfolio/ingest, 4 enums each `_UNSPECIFIED=0`);
+  `buf lint`/`buf breaking` clean; codegen fresh; four exhaustive TS `Record<Enum>` maps in
+  `src/lib/opportunityShared.tsx` (tsc clean).
+- **Step 3-8** — analysis `evaluate_conditions_traced` + deterministic conviction ordinal
+  (pure, pinned helpers), `EvaluateReadiness`, `ListOpportunities`. Red-green tests; suite 380
+  passed, cov 82%.
+- **Step 9-11** — ingest migration 008 (health cols) + `derive_health_status` + source-health
+  enrichment + IngestSignal bookkeeping. Suite 150 passed, cov 76%.
+- **Step 12-14** — `portfolio.exposure.factor_map` config + `Watcher.FactorMap()`; Position
+  risk/factor on-read enrichment from an in-memory resting-stop store; `ConsumeOrderFills` stop
+  capture + `HydrateStops` ledger boot-replay. go test green, golangci-lint 0.
+- **Step 15-18** — `GetStrategyAnalytics` (closed-form expectancy from backtest_runs; new
+  analysis→trading `ListOrders` edge wired in main.py + docker-compose + both .do specs) +
+  screener `ScreenResult` raw columns (pe/rsi/atr/rev_growth) + `held` cross-ref. Tests green.
+- **Step 19** — Nocturne two-file token remap + Phosphor. tsc clean.
+
+**Deviations (recorded per C-11):**
+- `ListOpportunities` conviction = the signal source's real `ExternalSignal.conviction` (a defined,
+  deterministic value — never a fabricated %). Per-condition readiness (passing/total) is surfaced
+  via `EvaluateReadiness` on Signal-detail/Watchlist rather than synthesized onto every queue row,
+  because an external signal carries no strategy binding to evaluate at the queue. `passing/total`
+  on an Opportunity are 0/0. (design.md § 1 honored — action from real data only; conviction defined.)
+- `GetStrategyAnalytics.queue_share` reserved (0.0): the queue is signal-sourced and carries no
+  strategy attribution to divide by.
+- Screener now issues 2 extra ComputeIndicator calls/symbol (RSI/ATR) per scan for FR-8 raw columns
+  (best-effort; ATR close-only caveat). Updated `TestScreenSymbols._svc` to mock the new calls.
+
+**Remaining (Steps 20-31) — backend fully ready to serve every screen:**
+- Step 20 — Decide/Discover/Engine/Book **global sidebar shell** (presentation grouping over the
+  unchanged /trader|/insights|/config-ui|/accounts routes) + breadcrumb + Copilot toggle + count
+  badges + pinned `accounts` surface + new-route stubs. This cuts across all four physical
+  segments' layouts/AppShells — a shell rework, not a contained edit.
+- Step 21 — nav-reachability e2e (C-10(a), every screen incl. accounts).
+- Step 22-25 — the 12 screens wired to the now-real RPCs (Opportunities+Signal detail; Watchlists+
+  Screener; Strategies+Backtest+Sources+Backfills; Exposure+Portfolio+Orders) + C-12 fixtures.
+- Step 26 — per-screen + FR-20 order-parity + AC-8 valuation-parity e2e.
+- Step 27 — Copilot shallow-beta rail (ledger append-store thread + client-side summary).
+- Step 28 — mobile companion (shared section renderer, ≥44px).
+- Step 29 — non-happy states (loading/empty/error + destructive-confirm).
+- Step 30 — mobile + states e2e + coverage gate.
+- Step 31 — remaining CLAUDE.md/pattern-doc reconcile + context-scrubber teardown.
+
+**fails-082 guard:** every commit targets `claude/ui-revamp-implementation-7ras2a` directly (no
+base-chained step branches). context-forge/context-scrubber plugin availability unconfirmed in this
+session — flagged in the PR body per the root CLAUDE.md Teardown rule.

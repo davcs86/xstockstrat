@@ -90,7 +90,8 @@ triggers backtests via the `RunBacktest` gRPC RPC. The former HTTP/Connect-RPC s
 | xstockstrat-marketdata | gRPC read | Historical OHLCV data for backtesting |
 | xstockstrat-indicators | gRPC read | SMA/EMA/indicator computation |
 | xstockstrat-ingest | gRPC read/write | QuerySignals for signal-weighted backtesting; `IngestSignal`/`ManageSignalSource` for the fundamentals signal producer (feature 062) |
-| xstockstrat-portfolio | gRPC read | Watchlist universe for the fundamentals signal producer (feature 062) |
+| xstockstrat-portfolio | gRPC read | Watchlist universe for the fundamentals signal producer (feature 062); held positions for the `ListOpportunities` queue + `ScreenResult.held` cross-ref (feature 083) |
+| xstockstrat-trading | gRPC read | `ListOrders(strategy_id)` for the `GetStrategyAnalytics` "taken" count (feature 083 — new non-cyclic analysis→trading edge; `TRADING_ENDPOINT`) |
 | xstockstrat-ledger | gRPC write | Store backtest lifecycle events |
 | xstockstrat-notify | gRPC write | Alert on completed backtests |
 
@@ -203,7 +204,8 @@ CONFIG_ENDPOINT=xstockstrat-config:50060
 MARKETDATA_ENDPOINT=xstockstrat-marketdata:50053
 INDICATORS_ENDPOINT=xstockstrat-indicators:50054
 INGEST_ENDPOINT=xstockstrat-ingest:50055
-PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052   # feature 062 — fundamentals signal producer watchlist universe
+PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052   # feature 062 — fundamentals signal producer watchlist universe; feature 083 — ListOpportunities held positions
+TRADING_ENDPOINT=xstockstrat-trading:50051       # feature 083 — GetStrategyAnalytics ListOrders "taken" count
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
 DATABASE_URL=postgres://xstockstrat:${POSTGRES_PASSWORD}@timescaledb:5432/xstockstrat?sslmode=disable  # constructed by docker-compose from POSTGRES_PASSWORD in .env
