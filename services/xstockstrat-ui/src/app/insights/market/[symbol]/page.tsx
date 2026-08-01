@@ -11,6 +11,7 @@ import { marketDataClient } from '@/lib/browserClients/marketDataClient';
 import { type Timeframe, TIMEFRAMES, TIMEFRAME_ENUM, type Bar, mapBars } from '@/lib/chart';
 import { useCandlestickChart } from '@/hooks/useCandlestickChart';
 import { SignalReadiness } from '@/components/insights/SignalReadiness';
+import { SignalOrderTicket } from '@/components/insights/SignalOrderTicket';
 
 export default function MarketSymbolPage() {
   const params = useParams<{ symbol: string }>();
@@ -125,11 +126,21 @@ export default function MarketSymbolPage() {
           </CardContent>
         </Card>
 
-        {/* feature 083 — condition readiness for the selected/threaded strategy (FR-6).
-            Suspense boundary: SignalReadiness reads ?strategy= via useSearchParams. */}
-        <Suspense fallback={<div className="h-24" />}>
-          <SignalReadiness symbol={symbol} />
-        </Suspense>
+        {/* feature 083 — Signal detail (FR-6): why the signal fired (left) + the order ticket
+            (right). Both read useSearchParams (?strategy= / ?symbol=) so each sits in a Suspense
+            boundary. On narrow screens they stack; from lg they sit side-by-side. */}
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <Suspense fallback={<div className="h-24" />}>
+              <SignalReadiness symbol={symbol} />
+            </Suspense>
+          </div>
+          <div className="lg:col-span-1">
+            <Suspense fallback={<div className="h-24" />}>
+              <SignalOrderTicket symbol={symbol} />
+            </Suspense>
+          </div>
+        </div>
       </div>
     </AppShell>
   );

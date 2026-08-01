@@ -4,7 +4,11 @@ import { useSearchParams } from 'next/navigation';
 import type { TradingMode } from '@/app/trader/page';
 import { useAccountContext } from '@/context/AccountContext';
 import { usePlaceOrder } from '@/hooks/usePlaceOrder';
-import { OrderSide as PbOrderSide, OrderType as PbOrderType, OrderStatus } from '@xstockstrat/proto/trading/v1/trading_pb';
+import {
+  OrderSide as PbOrderSide,
+  OrderType as PbOrderType,
+  OrderStatus,
+} from '@xstockstrat/proto/trading/v1/trading_pb';
 import { TradingMode as PbTradingMode } from '@xstockstrat/proto/common/v1/common_pb';
 import { ConnectError } from '@connectrpc/connect';
 // BASE_PATH no longer needed — calls go through the typed Connect client.
@@ -34,15 +38,19 @@ const ORDER_TYPE_ENUM: Record<OrderType, PbOrderType> = {
 
 interface OrderFormProps {
   mode: TradingMode;
+  // Optional caller-supplied symbol (feature 083 FR-6 — the Signal-detail order ticket is
+  // pinned to the signal's symbol, which arrives as a route param, not the ?symbol deep link).
+  initialSymbol?: string;
 }
 
-export function OrderForm({ mode }: OrderFormProps) {
+export function OrderForm({ mode, initialSymbol }: OrderFormProps) {
   const { selectedAccountId } = useAccountContext();
   // Quick-trade deep link: the positions table links here as /trader?symbol=SYM so the
-  // ticket opens pre-filled. Seed the initial value from the param, then keep it in sync
-  // if the param changes (without clobbering what the user types once it's empty).
+  // ticket opens pre-filled. An explicit initialSymbol (Signal detail) takes precedence over
+  // the ?symbol param. Seed the initial value, then keep it in sync if it changes (without
+  // clobbering what the user types once it's empty).
   const searchParams = useSearchParams();
-  const prefillSymbol = (searchParams.get('symbol') ?? '').toUpperCase();
+  const prefillSymbol = (initialSymbol || searchParams.get('symbol') || '').toUpperCase();
   const [symbol, setSymbol] = useState(prefillSymbol);
   useEffect(() => {
     if (prefillSymbol) setSymbol(prefillSymbol);
@@ -74,18 +82,24 @@ export function OrderForm({ mode }: OrderFormProps) {
         onSuccess: (order) => {
           setIsErrorMsg(false);
           setMessage(`Order placed: ${order.orderId} (${OrderStatus[order.status] ?? 'UNKNOWN'})`);
-          setSymbol(''); setQty(''); setLimitPrice(''); setStopPrice('');
+          setSymbol('');
+          setQty('');
+          setLimitPrice('');
+          setStopPrice('');
         },
         onError: (err) => {
           setIsErrorMsg(true);
-          setMessage(err instanceof ConnectError ? (err as ConnectError).rawMessage : (err as Error).message);
+          setMessage(
+            err instanceof ConnectError ? (err as ConnectError).rawMessage : (err as Error).message,
+          );
         },
       },
     );
   };
 
   const needsLimitPrice = orderType === 'limit' || orderType === 'stop_limit';
-  const needsStopPrice = orderType === 'stop' || orderType === 'stop_limit' || orderType === 'trailing_stop';
+  const needsStopPrice =
+    orderType === 'stop' || orderType === 'stop_limit' || orderType === 'trailing_stop';
 
   return (
     <Card>
@@ -174,9 +188,7 @@ export function OrderForm({ mode }: OrderFormProps) {
           </Button>
 
           {message && (
-            <p className={`text-xs ${isErrorMsg ? 'text-destructive' : 'text-buy'}`}>
-              {message}
-            </p>
+            <p className={`text-xs ${isErrorMsg ? 'text-destructive' : 'text-buy'}`}>{message}</p>
           )}
           {!selectedAccountId && (
             <p className="text-xs text-muted-foreground">

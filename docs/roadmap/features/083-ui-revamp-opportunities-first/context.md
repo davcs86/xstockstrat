@@ -387,3 +387,26 @@ session — flagged in the PR body per the root CLAUDE.md Teardown rule.
   (asserts Tech factor + 6.20% stop dist + Stop-near flag on AAPL, Unclassified on MSFT) and
   `e2e/trader/portfolio.spec.ts` (Equity + ledger-disclaimer). Full trader suite + nav-reachability
   green (49 passed). The FR-20 order-parity + AC-8 valuation-parity dedicated specs remain Step 26.
+
+### Session (2026-08-01) — Step 26 (parity e2e) + deferred FR-6 order ticket
+
+- **FR-6 order ticket (deferred piece landed here)**: added `SignalOrderTicket.tsx` — a
+  re-presentation of the trader `OrderForm` on the Decide → Signal-detail page
+  (`insights/market/[symbol]/page.tsx`), pinned to the route symbol. Because the insights layout
+  provides only React Query, the ticket wraps `AccountProvider` (broker accounts + trading
+  environment sourced cross-segment via the /trader BFF). Added an optional `initialSymbol` prop to
+  `OrderForm` (backward-compatible: `initialSymbol || ?symbol || ''`) so the ticket pre-fills the
+  signal's symbol. Signal detail is now two-column from lg (why-it-fired left, ticket right).
+  Execution semantics unchanged (FR-20) — same `usePlaceOrder` path, environment-fixed PAPER/LIVE.
+- **FR-20 order parity** (`e2e/trader/order-parity.spec.ts`): asserts all 5 `OrderType` labels +
+  both PARTIALLY_FILLED and FILLED render in the Orders table (shared `orderShared` maps), and the
+  Signal-detail ticket offers the same 5-type selector + symbol pre-fill. Rich 5-order set supplied
+  via `page.route` ListOrders (distinguishable fields, insights.md 2026-07-27).
+- **AC-8 valuation parity** (`e2e/trader/valuation-parity.spec.ts`): AAPL's unrealized P&L is
+  asserted identical (+$100.00) on Book → Portfolio (ListPortfolios / PortfolioPanel) and
+  Book → Exposure (ListPositions). Aligned the mock backend's AAPL `listPositions` unrealizedPnl
+  98.0 → 100.0 to match `PORTFOLIO_ALPACA` — the one broker-authoritative source (C-10(b) seam).
+- **Verification**: trader + insights + nav e2e green (115 passed, 1 pre-existing chart-panel flake
+  passed on retry); `pnpm run test:coverage` 100% on exercised `src/lib/**` (feature-065 ≥40% gate).
+  Mock RPC handlers for ListOpportunities/EvaluateReadiness/GetStrategyAnalytics/enriched
+  ScreenResult/source-health/risk-Position were already added with the Step 22-25 screens.

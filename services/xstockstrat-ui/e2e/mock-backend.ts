@@ -189,8 +189,10 @@ export async function startMockBackend(): Promise<void> {
                 avgEntryPrice: 180.0,
                 currentPrice: 189.8,
                 marketValue: 1898.0,
-                unrealizedPnl: 98.0,
-                unrealizedPnlPct: 0.054,
+                // AC-8 valuation parity: AAPL's unrealized P&L must match PORTFOLIO_ALPACA's
+                // AAPL position (100.0) — both surfaces read the one broker-authoritative source.
+                unrealizedPnl: 100.0,
+                unrealizedPnlPct: 0.056,
                 costBasis: 1800.0,
                 accountId: 'alpaca-default',
                 tradingMode: 1,
