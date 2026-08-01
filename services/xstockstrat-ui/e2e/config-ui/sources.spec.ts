@@ -30,7 +30,7 @@ async function callBff(
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body),
       });
-      const responseBody = await res.json() as Record<string, unknown>;
+      const responseBody = (await res.json()) as Record<string, unknown>;
       return { status: res.status, body: responseBody };
     },
     { url, body },
@@ -72,7 +72,7 @@ test.describe('GET /api/sources — ListSignalSources data contract', () => {
       expect(src).toHaveProperty('displayName');
       expect(src).toHaveProperty('sourceType');
       expect(src).toHaveProperty('active');
-      expect(src).toHaveProperty('hasCredentials');  // mock uses true so proto3 includes it
+      expect(src).toHaveProperty('hasCredentials'); // mock uses true so proto3 includes it
       expect(typeof src.active).toBe('boolean');
       expect(typeof src.hasCredentials).toBe('boolean');
     }
@@ -114,8 +114,14 @@ test.describe('POST /api/sources — ManageSignalSource data contract', () => {
     await addAuthCookie(page);
     await page.goto('/auth/login');
     const { status, body } = await callBff(page, MANAGE_SOURCE_BFF, {
-      source: { slug: 'example_simple_email', displayName: 'Test', sourceType: 'simple_email',
-                extractorModule: 'app.extractors.noop', active: false, configJson: {} },
+      source: {
+        slug: 'example_simple_email',
+        displayName: 'Test',
+        sourceType: 'simple_email',
+        extractorModule: 'app.extractors.noop',
+        active: false,
+        configJson: {},
+      },
       operation: 'deactivate',
     });
     expect(status).toBe(200);
@@ -132,7 +138,11 @@ test.describe('/sources page — UI contract', () => {
   test('page loads and renders the Signal Sources heading', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto(SOURCES_PAGE);
-    await expect(page.getByText('Signal Sources')).toBeVisible({ timeout: 8000 });
+    // Target the page heading specifically — the feature-083 Engine sub-nav also has a
+    // "Signal sources" link, so a bare getByText would be ambiguous.
+    await expect(page.getByRole('heading', { name: 'Signal Sources' })).toBeVisible({
+      timeout: 8000,
+    });
   });
 
   test('table shows the mock source slug', async ({ page }) => {
