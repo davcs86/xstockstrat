@@ -301,9 +301,23 @@ finding) — every one CONFIRMED. Disposition:
 - `services/xstockstrat-agent/docs/context-constitution-findings.md` — the 10 behavioral defects
   recorded as open, pointing here, so they are not re-discovered.
 
-**Routed, NOT yet implemented (need the SDD pipeline — `/sdd-design` → `/sdd-spec` → `/sdd-execute`
-with design gates):** the behavioral code fixes remain open per the Suggested routing above —
-Track B (F-9 range-validate, F-5 `ALREADY_EXISTS`, F-7 precondition, F-4 `min_conviction`/component,
-F-11 gate `TriggerBackfill`, F-10 notify validation) and Track C (F-1, F-2/F-3, F-6, F-8 registry,
-F-10 additive tools, F-11 caller-derived scope). Not folded into the docs PR because each is a
-proto/migration/cross-service change this repo routes through SDD, not a bare edit.
+**Routed to SDD feature directories (2026-08-02) — `draft`, not yet implemented.** The behavioral
+fixes were bundled by shared surface / root cause (per the cross-finding notes) into nine Track C
+features. Each needs the SDD pipeline (`/sdd-design` → `/sdd-spec` → `/sdd-execute` with design
+gates); the full per-finding fix plan lives in this report and each feature's `context.md` points
+back here.
+
+| Feature dir | Findings | Severity | Design depth |
+|---|---|---|---|
+| `086-fix-mcp-formula-lifecycle` | F-2, F-3, F-10 (get/list_formulas) | SEV-2 | full |
+| `087-fix-mcp-additive-tools` | F-10 (test_formula, cancel_backfill, list_strategies, source-health, emit_alert fields) | SEV-2 | quick |
+| `088-fix-mcp-signal-source-verbs` | F-6 | SEV-2 | full |
+| `089-fix-mcp-strategy-lifecycle` | F-5, F-7 | SEV-2 | full |
+| `090-fix-mcp-screener-correctness` | F-4 | SEV-3 | full |
+| `091-fix-mcp-config-key-registry` | F-8 | SEV-3 | full |
+| `092-fix-mcp-writepath-authz` | F-11 | SEV-2 | full |
+| `093-fix-mcp-extract-credentials` | F-1 | SEV-2 | full |
+| `094-fix-mcp-server-input-validation` | F-9 (code), F-10 (notify validation) | SEV-3 | quick |
+
+Run `/sdd-status` for live state, or `/sdd-design <slug>` to start any one. Not folded into the
+docs PR's code because each is a proto/migration/cross-service change this repo routes through SDD.
