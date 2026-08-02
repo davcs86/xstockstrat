@@ -36,7 +36,7 @@ export function SignalReadiness({ symbol }: { symbol: string }) {
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <CardTitle className="text-base">Readiness</CardTitle>
+          <CardTitle className="text-base">Why this fired</CardTitle>
           <Select value={strategyId} onValueChange={setStrategyId}>
             <SelectTrigger className="h-8 w-56" aria-label="Strategy">
               <SelectValue placeholder="Select a strategy…" />
