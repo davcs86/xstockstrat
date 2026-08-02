@@ -178,6 +178,7 @@ class TestScreenSymbolsClient:
     @pytest.mark.asyncio
     async def test_screen_symbols_sends_grpc_call(self):
         from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+        from gen.common.v1 import common_pb2  # type: ignore
 
         resp = analysis_pb2.ScreenSymbolsResponse(
             results=[
@@ -189,7 +190,14 @@ class TestScreenSymbolsClient:
                     status=analysis_pb2.SCREEN_RESULT_STATUS_OK,
                 )
             ],
-            coverage_gaps=[analysis_pb2.CoverageGap(symbol="TSLA")],
+            coverage_gaps=[
+                analysis_pb2.CoverageGap(
+                    symbol="TSLA",
+                    timeframe=common_pb2.Timeframe.TIMEFRAME_1DAY,
+                    bars_have=5,
+                    bars_need=50,
+                )
+            ],
         )
         mock_stub = MagicMock()
         mock_stub.ScreenSymbols = AsyncMock(return_value=resp)
@@ -206,7 +214,19 @@ class TestScreenSymbolsClient:
                             "op": "COMPARATOR_LTE",
                             "threshold": 25.0,
                             "hard_filter": True,
-                        }
+                        },
+                        {
+                            "ref_name": "rsi",
+                            "kind": "SCREEN_KIND_TECHNICAL_INDICATOR",
+                            "op": "COMPARATOR_LT",
+                            "threshold": 30.0,
+                            "component": {
+                                "kind": "builtin",
+                                "ref_name": "rsi",
+                                "indicator": "RSI",
+                                "params": {"period": 14},
+                            },
+                        },
                     ],
                 )
         # Channel opened against the (test-patched) analysis endpoint symbol.
@@ -223,12 +243,28 @@ class TestScreenSymbolsClient:
             "passed": True,
             "status": "SCREEN_RESULT_STATUS_OK",
         }
-        assert result["coverage_gaps"] == [{"symbol": "TSLA"}]
+        # feature 090: gap detail is projected (timeframe enum name; int64 bars as JSON strings).
+        assert result["coverage_gaps"] == [
+            {
+                "symbol": "TSLA",
+                "timeframe": "TIMEFRAME_1DAY",
+                "bars_have": "5",
+                "bars_need": "50",
+            }
+        ]
         # Enum-name criterion mapping reached the request unmodified.
         sent_req = mock_stub.ScreenSymbols.call_args[0][0]
         assert sent_req.criteria[0].kind == analysis_pb2.SCREEN_KIND_FUNDAMENTAL
         assert sent_req.criteria[0].op == analysis_pb2.COMPARATOR_LTE
         assert sent_req.criteria[0].hard_filter is True
+        # feature 090: technical criterion's component dict is mapped into the ScreenCriterion.
+        tech = sent_req.criteria[1]
+        assert tech.kind == analysis_pb2.SCREEN_KIND_TECHNICAL_INDICATOR
+        assert tech.component.kind == analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR
+        assert tech.component.indicator == "RSI"
+        assert tech.component.params["period"] == pytest.approx(14.0)
+        # Fundamental criterion carries no component.
+        assert not sent_req.criteria[0].HasField("component")
 
     @pytest.mark.asyncio
     async def test_register_maps_parameter_definitions(self):

@@ -291,6 +291,27 @@ async def run_backtest(
     )
 
 
+def _build_component(c: dict[str, Any]):
+    """Map a component dict → StrategyComponent (feature 090: shared by manage_strategy and the
+    screen_symbols technical-criterion component). Raises ValueError on an unknown kind."""
+    from gen.analysis.v1 import analysis_pb2  # noqa: PLC0415
+
+    kind_map = {
+        "builtin": analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+        "formula": analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
+    }
+    kind = c.get("kind", "builtin")
+    if kind not in kind_map:
+        raise ValueError(f"unknown component kind '{kind}' (expected builtin/formula)")
+    return analysis_pb2.StrategyComponent(
+        ref_name=c.get("ref_name", ""),
+        kind=kind_map[kind],
+        indicator=c.get("indicator", ""),
+        formula_id=c.get("formula_id", ""),
+        params={k: float(v) for k, v in (c.get("params") or {}).items()},
+    )
+
+
 async def screen_symbols(
     symbols: list[str],
     criteria: list[dict[str, Any]] | None = None,
@@ -304,12 +325,16 @@ async def screen_symbols(
 
     ``criteria`` is a list of plain dicts (JSON-shaped) mapped into ``ScreenCriterion`` protos;
     ``kind`` / ``op`` accept either the enum name (e.g. ``"SCREEN_KIND_FUNDAMENTAL"``,
-    ``"COMPARATOR_GTE"``) or a numeric value. The ``component`` field (for technical kinds) is
-    not mapped from string input in this thin wrapper. Defaults of ``0`` / ``0.0`` let the analysis
-    side apply its own config-driven defaults (e.g. ``analysis.screener.default_rank_limit``).
+    ``"COMPARATOR_GTE"``) or a numeric value. For technical kinds
+    (``SCREEN_KIND_TECHNICAL_*``) supply a ``component`` dict (same shape as a strategy
+    component: ``ref_name`` / ``kind`` / ``indicator`` / ``formula_id`` / ``params``) — it is
+    mapped via ``_build_component`` and is required by the analysis side to score the criterion
+    (feature 090). Defaults of ``0`` / ``0.0`` let the analysis side apply its own config-driven
+    defaults (e.g. ``analysis.screener.default_rank_limit``).
     Carries only ``x-mcp-secret`` — no admin ``x-access-scope``.
     """
     from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
+    from gen.common.v1 import common_pb2  # noqa: PLC0415
 
     req_criteria = [
         analysis_pb2.ScreenCriterion(
@@ -329,6 +354,7 @@ async def screen_symbols(
             threshold_high=c.get("threshold_high", 0.0),
             weight=c.get("weight", 0.0),
             hard_filter=c.get("hard_filter", False),
+            component=(_build_component(c["component"]) if c.get("component") else None),
         )
         for c in (criteria or [])
     ]
@@ -357,7 +383,16 @@ async def screen_symbols(
             }
             for r in resp.results
         ],
-        "coverage_gaps": [{"symbol": g.symbol} for g in resp.coverage_gaps],
+        "coverage_gaps": [
+            {
+                "symbol": g.symbol,
+                "timeframe": common_pb2.Timeframe.Name(g.timeframe),
+                # int64 fields serialize as JSON strings (matches run_backtest bars contract).
+                "bars_have": str(g.bars_have),
+                "bars_need": str(g.bars_need),
+            }
+            for g in resp.coverage_gaps
+        ],
     }
 
 
@@ -387,24 +422,7 @@ async def manage_strategy(
             f"unknown operation '{operation}' (expected register/update/deactivate/reactivate)"
         )
 
-    kind_map = {
-        "builtin": analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
-        "formula": analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
-    }
-    components = []
-    for c in definition.get("components", []):
-        kind = c.get("kind", "builtin")
-        if kind not in kind_map:
-            raise ValueError(f"unknown component kind '{kind}' (expected builtin/formula)")
-        components.append(
-            analysis_pb2.StrategyComponent(
-                ref_name=c.get("ref_name", ""),
-                kind=kind_map[kind],
-                indicator=c.get("indicator", ""),
-                formula_id=c.get("formula_id", ""),
-                params={k: float(v) for k, v in (c.get("params") or {}).items()},
-            )
-        )
+    components = [_build_component(c) for c in definition.get("components", [])]
 
     pb_def = analysis_pb2.StrategyDefinition(
         strategy_id=definition.get("strategy_id", ""),

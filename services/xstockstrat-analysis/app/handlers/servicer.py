@@ -1928,6 +1928,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 f"screen exceeded {deadline}s deadline",
             )
             return
+        except ValueError as e:
+            # feature 090: an unknown fundamental metric_name (a typo of a closed field, or an
+            # open metric absent from every scanned symbol) surfaces as INVALID_ARGUMENT rather
+            # than a silent skip.
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
+            return
         # feature 083 (FR-8) — mark rows the caller already holds (best-effort cross-ref).
         user_id = dict(context.invocation_metadata()).get("x-user-id", "")
         held = await self._drain_held_symbols(user_id, propagation_meta)

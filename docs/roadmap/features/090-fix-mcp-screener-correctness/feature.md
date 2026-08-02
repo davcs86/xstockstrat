@@ -1,7 +1,7 @@
 # Feature: fix-mcp-screener-correctness
 
 **Type**: bug
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/fix-mcp-screener-correctness`
 **Source Report**: docs/reports/2026-08-01-mcp-tools-alignment-triage.md (F-4)
 **Severity**: SEV-3
