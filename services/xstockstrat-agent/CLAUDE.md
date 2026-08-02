@@ -27,7 +27,7 @@ Python 3.12 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
 
 ## MCP Tools
 
-The agent registers seventeen tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
+The agent registers nineteen tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
 reference):
 
 | Tool | Purpose |

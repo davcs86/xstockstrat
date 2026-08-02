@@ -1022,6 +1022,7 @@ function createBaseBacktestResult() {
         coverageGaps: [],
         diagnostics: [],
         initialCapital: 0,
+        warnings: [],
     };
 }
 exports.BacktestResult = {
@@ -1070,6 +1071,9 @@ exports.BacktestResult = {
         }
         if (message.initialCapital !== 0) {
             writer.uint32(121).double(message.initialCapital);
+        }
+        for (const v of message.warnings) {
+            writer.uint32(130).string(v);
         }
         return writer;
     },
@@ -1185,6 +1189,13 @@ exports.BacktestResult = {
                     message.initialCapital = reader.double();
                     continue;
                 }
+                case 16: {
+                    if (tag !== 130) {
+                        break;
+                    }
+                    message.warnings.push(reader.string());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1262,6 +1273,9 @@ exports.BacktestResult = {
                 : isSet(object.initial_capital)
                     ? globalThis.Number(object.initial_capital)
                     : 0,
+            warnings: globalThis.Array.isArray(object?.warnings)
+                ? object.warnings.map((e) => globalThis.String(e))
+                : [],
         };
     },
     toJSON(message) {
@@ -1311,6 +1325,9 @@ exports.BacktestResult = {
         if (message.initialCapital !== 0) {
             obj.initialCapital = message.initialCapital;
         }
+        if (message.warnings?.length) {
+            obj.warnings = message.warnings;
+        }
         return obj;
     },
     create(base) {
@@ -1333,6 +1350,7 @@ exports.BacktestResult = {
         message.coverageGaps = object.coverageGaps?.map((e) => exports.CoverageGap.fromPartial(e)) || [];
         message.diagnostics = object.diagnostics?.map((e) => exports.SymbolDiagnostics.fromPartial(e)) || [];
         message.initialCapital = object.initialCapital ?? 0;
+        message.warnings = object.warnings?.map((e) => e) || [];
         return message;
     },
 };
@@ -3420,6 +3438,7 @@ function createBaseStrategyDefinition() {
         active: false,
         liveEnabled: false,
         cooldownDays: undefined,
+        warnings: [],
     };
 }
 exports.StrategyDefinition = {
@@ -3450,6 +3469,9 @@ exports.StrategyDefinition = {
         }
         if (message.cooldownDays !== undefined) {
             writer.uint32(72).int32(message.cooldownDays);
+        }
+        for (const v of message.warnings) {
+            writer.uint32(82).string(v);
         }
         return writer;
     },
@@ -3523,6 +3545,13 @@ exports.StrategyDefinition = {
                     message.cooldownDays = reader.int32();
                     continue;
                 }
+                case 10: {
+                    if (tag !== 82) {
+                        break;
+                    }
+                    message.warnings.push(reader.string());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -3572,6 +3601,9 @@ exports.StrategyDefinition = {
                 : isSet(object.cooldown_days)
                     ? globalThis.Number(object.cooldown_days)
                     : undefined,
+            warnings: globalThis.Array.isArray(object?.warnings)
+                ? object.warnings.map((e) => globalThis.String(e))
+                : [],
         };
     },
     toJSON(message) {
@@ -3603,6 +3635,9 @@ exports.StrategyDefinition = {
         if (message.cooldownDays !== undefined) {
             obj.cooldownDays = Math.round(message.cooldownDays);
         }
+        if (message.warnings?.length) {
+            obj.warnings = message.warnings;
+        }
         return obj;
     },
     create(base) {
@@ -3619,6 +3654,7 @@ exports.StrategyDefinition = {
         message.active = object.active ?? false;
         message.liveEnabled = object.liveEnabled ?? false;
         message.cooldownDays = object.cooldownDays ?? undefined;
+        message.warnings = object.warnings?.map((e) => e) || [];
         return message;
     },
 };
