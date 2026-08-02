@@ -212,7 +212,6 @@ services:
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057"
       SERVICE_NAME: notify
       DB_POOL_MAX: "1"
-      MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
     ports:
       - "50059:50059"
@@ -320,7 +319,6 @@ services:
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057 xstockstrat-identity:50058"
       SERVICE_NAME: ingest
       DB_POOL_MAX: "2"
-      MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
       - "50055:50055"
@@ -360,7 +358,6 @@ services:
       WAIT_FOR: "xstockstrat-config:50060 xstockstrat-ledger:50057 xstockstrat-indicators:50054 xstockstrat-trading:50051"
       SERVICE_NAME: analysis
       DB_POOL_MAX: "2"
-      MCP_AGENT_SECRET: ${MCP_AGENT_SECRET:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
     ports:
       - "50056:50056"

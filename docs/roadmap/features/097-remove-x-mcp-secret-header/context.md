@@ -216,3 +216,21 @@
 - Files modified: `services/xstockstrat-agent/app/client.py`,
   `services/xstockstrat-agent/app/auth.py`, `services/xstockstrat-agent/tests/test_client.py`.
 - Deviations: none beyond the in-scope lint-fix noted above.
+
+### Step 2 — Trim `MCP_AGENT_SECRET` from notify/ingest/analysis deployment wiring [done]
+
+- Removed the `MCP_AGENT_SECRET` block from `xstockstrat-notify`/`xstockstrat-ingest`/
+  `xstockstrat-analysis`'s blocks in `docker-compose.yml` (single-line deletes) and `.do/app.yaml`/
+  `.do/app.dev.yaml` (3-line key/scope/type deletes each). Verified exactly one remaining
+  `MCP_AGENT_SECRET` hit per file (the `xstockstrat-agent` block) via grep. All three YAML files
+  parse cleanly (`python3 -c "import yaml; yaml.safe_load(...)"`).
+- **Deviation (logged in `## Deviation Log`, Step 2 entry)**: the mandated live `docker compose
+  up`/`ps` smoke check could not run — the Docker daemon cannot start in this sandboxed session
+  (`service docker start` → `ulimit: error setting limit (Operation not permitted)`; CLI present,
+  daemon blocked by sandbox privileges). Substituted `docker compose config` (no daemon needed) —
+  confirmed the merged compose file resolves cleanly and confirmed programmatically that
+  notify/ingest/analysis's rendered env blocks no longer carry `MCP_AGENT_SECRET` while agent's
+  still does. Combined with `recon.md`'s confirmed zero source-code reads of the var in those three
+  services, this is high-confidence but not a live-boot proof — flagged for a human/CI check with
+  daemon access before merging to `main`.
+- Files modified: `docker-compose.yml`, `.do/app.yaml`, `.do/app.dev.yaml`.

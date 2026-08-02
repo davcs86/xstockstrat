@@ -182,7 +182,7 @@ grep -rn "x-mcp-secret" services/xstockstrat-agent/app/
 
 ### Step 2 — config: Trim `MCP_AGENT_SECRET` from notify/ingest/analysis deployment wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`, `xstockstrat-ingest`, `xstockstrat-analysis` (env-wiring only —
 no source-code change in any of the three; `xstockstrat-agent`'s own wiring is untouched)
 **Files**:
@@ -582,4 +582,28 @@ grep -rln "x-mcp-secret" . --exclude-dir=.git --exclude-dir=node_modules
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Step 2 — smoke-check fallback
+
+**Disposition**: CI-equivalent fallback (sequential-mode verification fallback, applied without
+asking per `reference/sequential-mode.md` § Sequential-mode carve-outs — logged here as required).
+
+Step 2's specced verification called for an actually-executed `docker compose up -d
+xstockstrat-notify xstockstrat-ingest xstockstrat-analysis xstockstrat-agent && docker compose ps`
+smoke check (no CI job boots the compose stack, so this was meant to be the feature's real
+verification evidence). In this execution environment, the Docker **daemon** cannot start
+(`service docker start` fails with `ulimit: error setting limit (Operation not permitted)` — a
+sandbox privilege restriction, not a code defect; `docker` and `docker compose` CLIs are present
+and functional, only `dockerd` is blocked).
+
+Substituted a structural-equivalent check using `docker compose config` (a pure client-side
+render/validate operation that needs no daemon): confirmed the merged compose file parses and
+resolves cleanly, and confirmed programmatically (`docker compose config` piped through a Python
+YAML check) that `xstockstrat-notify`/`xstockstrat-ingest`/`xstockstrat-analysis`'s rendered
+`environment` blocks no longer contain `MCP_AGENT_SECRET` while `xstockstrat-agent`'s still does —
+i.e., docker-compose's own config resolution proves the edit is structurally correct. Combined with
+`recon.md`'s already-confirmed finding that none of the three services' source code reads
+`MCP_AGENT_SECRET`/`x-mcp-secret` anywhere, this gives high confidence the services will boot
+unaffected, though it does not prove a live container actually reaches a healthy state. The live
+`docker compose up`/`ps` check remains the more complete verification and should be run in an
+environment where the Docker daemon is available (e.g. by a human reviewer, or in a future CI job)
+before this lands on `main`.
