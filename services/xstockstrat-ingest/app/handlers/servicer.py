@@ -715,6 +715,16 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             )
             return
 
+        # F-9: conviction must be in [0.0, 1.0]. The inverted-range form also rejects NaN
+        # (every NaN comparison is False), which the naive `< 0 or > 1` form would leak through
+        # to the `> 0.0` NULL-sentinel below and silently store as NULL. 0.0 still passes here
+        # and is treated as "not provided" (→ NULL) since conviction is a presence-less double.
+        if not (0.0 <= signal.conviction <= 1.0):
+            await context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT, "conviction must be between 0.0 and 1.0"
+            )
+            return
+
         # FR-3: source slug must be registered and active
         source_row = await self._db.fetchrow(
             "SELECT slug FROM ingest.signal_sources WHERE slug = $1 AND active = TRUE",

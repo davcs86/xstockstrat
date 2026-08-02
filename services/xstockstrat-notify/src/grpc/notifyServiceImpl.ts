@@ -29,6 +29,12 @@ export class NotifyServiceImpl {
    */
   async emitAlert(call: any, callback: any) {
     const req = call.request;
+    // F-10: reject empty (or whitespace-only) title/body before persisting. proto3 strings
+    // default to "" (never null), so the NOT NULL columns never fire — a blank alert would
+    // otherwise be stored and delivered blank. code 3 === INVALID_ARGUMENT.
+    if (!req.title?.trim() || !req.body?.trim()) {
+      return callback({ code: 3, message: 'title and body are required' });
+    }
     const alertId = uuidv4();
     const now = new Date();
 

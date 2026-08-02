@@ -213,7 +213,7 @@ Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exc
 | `symbol` | `string` | Yes | Ticker symbol, e.g. `"NVDA"` |
 | `direction` | `string` | Yes | One of `"buy"`, `"sell"`, `"hold"`, `"watchlist"` |
 | `valid_from` | `string` | Yes | ISO 8601 datetime, e.g. `"2026-05-01T00:00:00Z"` |
-| `conviction` | `float` | No | Signal confidence, `0.0`–`1.0`. Omit if unknown — ingest stores an absent (or `0.0`) value as unset (NULL) and reads it back as `0.0` meaning "unknown confidence" (invariant INGEST-4). **No source default is applied.** |
+| `conviction` | `float` | No | Signal confidence, `0.0`–`1.0`. Omit if unknown — ingest stores an absent (or `0.0`) value as unset (NULL) and reads it back as `0.0` meaning "unknown confidence" (invariant INGEST-4). **No source default is applied.** An out-of-range value (`< 0.0` or `> 1.0`) or NaN is rejected `INVALID_ARGUMENT` at the ingest boundary (not `INTERNAL`). |
 | `valid_until` | `string` | No | ISO 8601 datetime — signal expiry |
 | `headline` | `string` | No | Short summary for display |
 | `raw_url` | `string` | No | Source URL for attribution |
@@ -231,6 +231,7 @@ Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exc
 |---|---|
 | Unknown `source` slug | `invalid argument` (INVALID_ARGUMENT) from ingest |
 | `valid_from` missing | `invalid argument` (INVALID_ARGUMENT) from ingest |
+| `conviction` out of range (`< 0.0` or `> 1.0`) or NaN | `invalid argument` (INVALID_ARGUMENT) from ingest |
 | Auto-alert emission fails | Warning logged; signal is already ingested — not rolled back |
 
 ---
@@ -260,12 +261,14 @@ Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or
 ```
 
 Unknown `severity` strings are silently coerced to `"info"` (valid values: `info`, `warning`,
-`error`, `critical`); `title`/`body` are stored and delivered with no server-side validation.
+`error`, `critical`). `title` and `body` are required and non-blank — an empty or whitespace-only
+title or body is rejected `INVALID_ARGUMENT` by notify before the alert is persisted or delivered.
 
 **Errors**
 
 | Condition | Error |
 |---|---|
+| Empty or whitespace-only `title` or `body` | `invalid argument` (INVALID_ARGUMENT) from notify |
 | Notify service unreachable | `httpx` connection error propagated |
 
 ---

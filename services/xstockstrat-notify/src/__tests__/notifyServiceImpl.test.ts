@@ -198,6 +198,57 @@ describe('emitAlert', () => {
     assert.match(capturedSql, /insert into/i);
     assert.strictEqual(capturedParams[1], 1); // ALERT_SEVERITY_INFO → 1, bound numerically
   });
+
+  // Feature 094 (F-10): empty/whitespace-only title or body is rejected INVALID_ARGUMENT
+  // (code 3) before the INSERT. The pool below would otherwise succeed, so a code-3 callback
+  // proves the guard fired — not a DB error.
+  const invalidFieldCases: Array<[string, string, string]> = [
+    ['empty title', '', 'b'],
+    ['empty body', 't', ''],
+    ['whitespace-only title', '   ', 'b'],
+    ['whitespace-only body', 't', '\t\n'],
+  ];
+  for (const [name, title, body] of invalidFieldCases) {
+    it(`rejects ${name} with INVALID_ARGUMENT (code 3)`, async () => {
+      let queried = false;
+      const pool = {
+        async query(_sql: string, _params?: any[]) {
+          queried = true;
+          return { rows: [] };
+        },
+      };
+      const impl = new NotifyServiceImpl(pool as any, {} as any);
+      const call = { request: { severity: 'ALERT_SEVERITY_INFO', category: 'c', title, body, sourceService: 's' } };
+
+      await new Promise<void>((resolve) => {
+        impl.emitAlert(call, (err: any) => {
+          assert.ok(err, 'expected an error callback');
+          assert.strictEqual(err.code, 3);
+          resolve();
+        });
+      });
+      assert.strictEqual(queried, false, 'guard must reject before touching the DB');
+    });
+  }
+
+  it('accepts a non-empty title and body (reaches the DB)', async () => {
+    let queried = false;
+    const pool = {
+      async query(_sql: string, _params?: any[]) {
+        queried = true;
+        return { rows: [] };
+      },
+    };
+    const impl = new NotifyServiceImpl(pool as any, {} as any);
+    const call = {
+      request: { severity: 'ALERT_SEVERITY_INFO', category: 'c', title: 't', body: 'b', sourceService: 's' },
+    };
+
+    await new Promise<void>((resolve, reject) => {
+      impl.emitAlert(call, (err: any) => (err ? reject(err) : resolve()));
+    });
+    assert.strictEqual(queried, true, 'a valid alert must reach the DB');
+  });
 });
 
 // ---------------------------------------------------------------------------
