@@ -2,7 +2,7 @@
 
 **Created**: 2026-08-02
 **From**: product-spec.md
-**Affected services**: xstockstrat-indicators (Python), xstockstrat-agent (Python)
+**Affected services**: xstockstrat-indicators (Python), xstockstrat-agent (Python), xstockstrat-analysis (Python), xstockstrat-ui (Next.js) — *analysis + ui added by user steer 2026-08-02: soft-delete accepted only if strategy runs detect and flag a referenced formula's deletion to the user.*
 
 ---
 
@@ -65,6 +65,21 @@ reference-checked instead of a blind hard delete. Findings F-2, F-3, F-10 (formu
 - **Cross-service unique-violation / not-found honesty**: `UpdateFormula` on unknown id and register-on-existing behavior not yet characterized for AIP-161 semantics — confirm servicer behavior.
 - `## Not found`: no `update_mask`/`FieldMask` anywhere in indicators; no referential FK between `indicators.formulas` and strategies; no `get_formula` client fn / tool; no `_build_output` helper; `INDICATORS_ENDPOINT` not patched in agent conftest.
 - Ledger trap (2026-08-02, fails): hand-written dict→proto builders silently drop proto fields — descriptor-parity test is the mandated antidote. Same-PR rule: a `manage_formula` behavior change must update the docstring + `docs/runbooks/mcp-tools.md` + `plugins/strat-lab` skill if they describe it.
+
+## Expansion — analysis + ui (user steer 2026-08-02)
+
+- **`xstockstrat-analysis`** (Python) — CI coverage ≥40 (`.github/workflows/ci.yml:340-342`)
+  - Write-time formula validation `_fetch_formula_outputs` — `app/handlers/servicer.py:179-202`; the per-component `GetFormula` at `:194`; **errors are swallowed → `{"value"}` at `:199-201`** (a missing/deleted formula is silently accepted today). Called from ManageStrategy REGISTER `:1556`, UPDATE `:1603`. Abort path: `context.abort(INVALID_ARGUMENT)` (`:214-215`).
+  - Run-path formula resolution uses **`ExecuteFormula`** (no `deleted` signal): evaluator `_compute_component` `app/services/evaluator.py:237`, screener `app/services/screener.py:283`, fundamentals `app/services/fundamentals_scoring.py:52`. `ExecuteFormulaResponse` (`indicators.proto:77-87`) carries only success/error.
+  - **Backtest warmup prefetch `_declared_formula_warmup` — `servicer.py:1151`** calls `GetFormula` per referenced formula (swallows RpcError→0 `:1156-1157`). **This is the detection point** — it already holds each `FormulaDefinition`, so it can read the new `deleted` flag and collect deleted refs for the run.
+  - Backtest result surface: `BacktestResult` proto `packages/proto/analysis/v1/analysis.proto:74-93`, wire-persisted verbatim / additive-only (`:70-73`); last field `initial_capital=15` → **next free 16**; existing `coverage_gaps=13`, `diagnostics=14`. **No warnings field** — add `repeated string warnings = 16`.
+  - Live status: `GetStrategy` returns bare `StrategyDefinition` (`:1672-1682`); `StrategyDefinition` next free 10, `StrategyAnalytics` next free 8; no health/warnings field, no health RPC. (Live-continuous flagging = follow-up, not 086.)
+  - update_mask template (070) confirmed: `servicer.py:1567-1582`, `_MASKABLE_PATHS`/`_COLUMN_AUTHORITATIVE_PATHS` `:2334-2340`, `_merge_definition_json` `:2347`, `_guard_erasure` `:2371`.
+  - Tests: `tests/test_analysis_servicer.py` (GetFormula mocks `:1209,:1251,:3082,:3137`); conftest `tests/conftest.py:11-29`.
+- **`xstockstrat-ui`** (Next.js)
+  - `FormulaWorkspace.tsx` — existing **read-only pattern for `SYSTEM_FORMULA_AUTHOR`** (`:46-52`) to mirror for a `deleted` formula (badge + disable edit). Edit page `src/app/insights/formulas/[id]/page.tsx`; hooks `src/hooks/useFormulas.ts` (`useFormula`, `useUpdateFormula:57`, `useDeleteFormula`).
+  - `BacktestDiagnostics.tsx:51` renders `diagnostics: SymbolDiagnostics[]` — mirror for a new `warnings` banner (fed from `BacktestResult.warnings`).
+  - C-12 fixtures: `e2e/fixtures/formulas.ts` (`FORMULA_RSI`, `FORMULA_MACD`, `FORMULAS`), `e2e/fixtures/backtests.ts` (`BacktestResult`), `INVENTORY.md` rows 18-19. Mock backend `e2e/mock-backend.ts` (`runBacktest`, formula handlers).
 
 ## Recommended Scope
 
