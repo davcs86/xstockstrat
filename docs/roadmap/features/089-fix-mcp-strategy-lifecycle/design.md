@@ -18,22 +18,31 @@ Honest strategy lifecycle, mirroring feature 088's `ManageSignalSource` verb wor
 - Add `reactivate(strategy_id)` → `UPDATE analysis.strategies SET active = TRUE, updated_at = NOW()
   WHERE strategy_id = $1 RETURNING *`; returns None if the id is gone (mirror `deactivate`).
 
+### 2b. shared firing predicate (DRY — adversary C-10)
+- Extract the live loop's `_symbols_for` (`live_loop.py:109-114`) to a **module-level**
+  `strategy_symbols(definition) -> list[str]` (in `app/engine/live_loop.py`). `_symbols_for` becomes a
+  one-line delegate; `SetStrategyLive` imports the same function. One source of the firing-symbol
+  contract, so the precondition and the consumer cannot drift (the exact ledger-2026-08-02 drift class).
+
 ### 3. analysis servicer (`app/handlers/servicer.py`)
-- **REGISTER existence check** (`ManageStrategy` `:1555-1563`): before `create`, `get_by_id(id)` — if
-  it exists (active OR inactive), abort `ALREADY_EXISTS` ("strategy '<id>' already exists; use
-  reactivate to bring back a deactivated one"). Cleaner than catching `UniqueViolationError` and needs
-  no `asyncpg` import; a deactivated strategy still occupies the PK, so this correctly routes the caller
-  to reactivate.
-- **REACTIVATE op**: `repo.reactivate(id)` → `NOT_FOUND` if None; else return the row.
+- **REGISTER existence check + atomic backstop** (`ManageStrategy` `:1555-1563`): before `create`,
+  `get_by_id(id)` — if it exists (active OR inactive), abort `ALREADY_EXISTS` ("strategy '<id>' already
+  exists; use reactivate to bring back a deactivated one"). **AND** wrap `create` in
+  `try/except asyncpg.UniqueViolationError → ALREADY_EXISTS` (`import asyncpg`) as the atomic backstop
+  so a concurrent duplicate can't leak `INTERNAL` (the TOCTOU the AC names). The register payload's
+  new definition is dropped on ALREADY_EXISTS — the tool docstring must say so.
+- **REACTIVATE op**: `get_by_id(id)` → `NOT_FOUND` if None; **re-validate the stored definition** via
+  `_validate_definition_proto(_row_to_strategy_definition(row), context)` (like register) so a
+  reactivated strategy that references a now-missing/deleted formula is rejected `INVALID_ARGUMENT`
+  instead of silently erroring every live cycle (upholds AC-4); then `repo.reactivate(id)`.
 - **SetStrategyLive preconditions** (`:1697`): when `request.live_enabled` is **true**, fetch
-  `get_by_id(id)` (NOT_FOUND if None), build the definition, and:
+  `get_by_id(id)` (NOT_FOUND if None), and:
   - if `not row["active"]` → `FAILED_PRECONDITION` ("cannot enable live on an inactive strategy");
-  - else compute symbols exactly as the live loop does (`_symbols_for` logic: `signal_params.symbols`)
-    and if empty → `FAILED_PRECONDITION` ("strategy has no signal_params.symbols; live evaluation
-    would never fire").
+  - else `strategy_symbols(_row_to_strategy_definition(row))` (the **shared** helper) empty →
+    `FAILED_PRECONDITION` ("strategy has no signal_params.symbols; live evaluation would never fire").
   When `live_enabled` is **false** (disable), skip all checks — disable is always allowed, even on an
   inert config. Then call `set_live_enabled` as today.
-- The live-loop predicate (`live_enabled AND active`, `_symbols_for`) is **unchanged** — we fix the
+- The live-loop predicate (`live_enabled AND active`, `strategy_symbols`) is **unchanged** — we fix the
   input so an enabled strategy always satisfies the firing contract (AC-4).
 
 ### 4. agent (`app/client.py`, `app/tools.py`)
@@ -58,8 +67,13 @@ Honest strategy lifecycle, mirroring feature 088's `ManageSignalSource` verb wor
   it non-strict; the explicit REACTIVATE verb mirrors 088 and keeps `ALREADY_EXISTS` honest.
 - **`SetStrategyLiveResponse.warnings` instead of `FAILED_PRECONDITION`** — rejected: the AC asks for a
   hard rejection of an inert enable; `FAILED_PRECONDITION` needs no proto change and is unambiguous.
-- **Catch `asyncpg.UniqueViolationError` on register** — rejected in favor of a `get_by_id` pre-check:
-  no new import, and the deactivated-strategy case routes to reactivate with a clear message.
+- **`get_by_id` pre-check ALONE on register (no violation catch)** — rejected: not atomic (TOCTOU) —
+  the design now uses both the pre-check (friendly routing message) and a `UniqueViolationError` catch.
+- **Replicate `_symbols_for` in the servicer** — rejected: two copies of the firing contract drift
+  (C-10). Extracted to a shared `strategy_symbols` helper instead.
+- **REACTIVATE as a bare `active=TRUE` flip (no re-validation)** — rejected: a reactivated strategy
+  referencing a deleted/missing formula would pass every precondition yet error every live cycle,
+  violating AC-4. Reactivate re-validates the definition.
 - **Auto-clear `live_enabled` on deactivate** — out of scope (product-spec); the enable-time
   precondition already makes the inert-live case unreachable going forward.
 

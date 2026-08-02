@@ -260,6 +260,7 @@ enum StrategyOperation {
   STRATEGY_OPERATION_REGISTER = 1;
   STRATEGY_OPERATION_UPDATE = 2;
   STRATEGY_OPERATION_DEACTIVATE = 3;
+  STRATEGY_OPERATION_REACTIVATE = 4;  // set active=TRUE; re-validates the stored definition (feature 089)
 }
 
 message ManageStrategyRequest {

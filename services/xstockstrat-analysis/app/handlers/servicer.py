@@ -18,6 +18,7 @@ import math
 import uuid
 from datetime import UTC
 
+import asyncpg
 import grpc
 import numpy as np
 from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc
@@ -1554,12 +1555,29 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         if op == analysis_pb2.STRATEGY_OPERATION_REGISTER:
             await self._validate_definition_proto(definition, context)
+            # Feature 089: strict register. An existing id (active OR deactivated) is a conflict —
+            # route the caller to reactivate rather than silently overwrite or crash on the PK.
+            if await self._strategies_repo.get_by_id(definition.strategy_id) is not None:
+                await context.abort(
+                    grpc.StatusCode.ALREADY_EXISTS,
+                    f"strategy '{definition.strategy_id}' already exists; use the reactivate "
+                    "operation to bring back a deactivated strategy",
+                )
+                return
             definition_json = json_format.MessageToDict(
                 definition, preserving_proto_field_name=True
             )
-            row = await self._strategies_repo.create(
-                definition.strategy_id, definition.display_name, definition_json
-            )
+            try:
+                row = await self._strategies_repo.create(
+                    definition.strategy_id, definition.display_name, definition_json
+                )
+            except asyncpg.UniqueViolationError:
+                # Atomic backstop for a concurrent duplicate that raced the get_by_id check.
+                await context.abort(
+                    grpc.StatusCode.ALREADY_EXISTS,
+                    f"strategy '{definition.strategy_id}' already exists",
+                )
+                return
             return _row_to_strategy_definition(row)
         if op == analysis_pb2.STRATEGY_OPERATION_UPDATE:
             # feature 070: an update_mask turns UPDATE into a partial merge. Absent mask keeps the
@@ -1667,6 +1685,28 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 )
                 return
             return _row_to_strategy_definition(row)
+        if op == analysis_pb2.STRATEGY_OPERATION_REACTIVATE:
+            # Feature 089: reactivation decoupled from update. Re-validate the STORED definition
+            # first (a referenced formula may have gone missing while it was deactivated) so a
+            # reactivated strategy satisfies the firing contract, rather than erroring each cycle.
+            existing = await self._strategies_repo.get_by_id(definition.strategy_id)
+            if existing is None:
+                await context.abort(
+                    grpc.StatusCode.NOT_FOUND,
+                    f"strategy '{definition.strategy_id}' not found",
+                )
+                return
+            await self._validate_definition_proto(
+                _row_to_strategy_definition(existing), context
+            )
+            row = await self._strategies_repo.reactivate(definition.strategy_id)
+            if row is None:
+                await context.abort(
+                    grpc.StatusCode.NOT_FOUND,
+                    f"strategy '{definition.strategy_id}' not found",
+                )
+                return
+            return _row_to_strategy_definition(row)
         await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "unknown strategy operation")
 
     async def GetStrategy(self, request, context):
@@ -1709,6 +1749,32 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             for k, v in context.invocation_metadata()
             if k in ("x-user-id", "x-access-scope", "x-trace-id")
         ]
+
+        # Feature 089 (F-7): enabling live on an inert config stores a flag that never fires. The
+        # live loop selects `live_enabled AND active` and skips a strategy with no
+        # signal_params.symbols, so reject both at enable time (FAILED_PRECONDITION). Disabling is
+        # ALWAYS allowed — even on an inert config — so an operator can always turn live off.
+        if request.live_enabled:
+            from app.engine.live_loop import strategy_symbols  # noqa: PLC0415 (avoids import cycle)
+
+            existing = await self._strategies_repo.get_by_id(request.strategy_id)
+            if existing is None:
+                await context.abort(
+                    grpc.StatusCode.NOT_FOUND, f"strategy '{request.strategy_id}' not found"
+                )
+                return
+            if not existing["active"]:
+                await context.abort(
+                    grpc.StatusCode.FAILED_PRECONDITION,
+                    "cannot enable live evaluation on an inactive strategy; reactivate it first",
+                )
+                return
+            if not strategy_symbols(_row_to_strategy_definition(existing)):
+                await context.abort(
+                    grpc.StatusCode.FAILED_PRECONDITION,
+                    "strategy has no signal_params.symbols; live evaluation would never fire",
+                )
+                return
 
         row = await self._strategies_repo.set_live_enabled(
             request.strategy_id, request.live_enabled

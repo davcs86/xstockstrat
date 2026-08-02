@@ -1456,7 +1456,13 @@ export declare enum StrategyOperation {
     /**
      * @generated from enum value: STRATEGY_OPERATION_DEACTIVATE = 3;
      */
-    DEACTIVATE = 3
+    DEACTIVATE = 3,
+    /**
+     * set active=TRUE; re-validates the stored definition (feature 089)
+     *
+     * @generated from enum value: STRATEGY_OPERATION_REACTIVATE = 4;
+     */
+    REACTIVATE = 4
 }
 /**
  * Describes the enum xstockstrat.analysis.v1.StrategyOperation.

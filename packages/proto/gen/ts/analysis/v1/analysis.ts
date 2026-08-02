@@ -302,6 +302,8 @@ export enum StrategyOperation {
   STRATEGY_OPERATION_REGISTER = "STRATEGY_OPERATION_REGISTER",
   STRATEGY_OPERATION_UPDATE = "STRATEGY_OPERATION_UPDATE",
   STRATEGY_OPERATION_DEACTIVATE = "STRATEGY_OPERATION_DEACTIVATE",
+  /** STRATEGY_OPERATION_REACTIVATE - set active=TRUE; re-validates the stored definition (feature 089) */
+  STRATEGY_OPERATION_REACTIVATE = "STRATEGY_OPERATION_REACTIVATE",
   UNRECOGNIZED = "UNRECOGNIZED",
 }
 
@@ -319,6 +321,9 @@ export function strategyOperationFromJSON(object: any): StrategyOperation {
     case 3:
     case "STRATEGY_OPERATION_DEACTIVATE":
       return StrategyOperation.STRATEGY_OPERATION_DEACTIVATE;
+    case 4:
+    case "STRATEGY_OPERATION_REACTIVATE":
+      return StrategyOperation.STRATEGY_OPERATION_REACTIVATE;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -336,6 +341,8 @@ export function strategyOperationToJSON(object: StrategyOperation): string {
       return "STRATEGY_OPERATION_UPDATE";
     case StrategyOperation.STRATEGY_OPERATION_DEACTIVATE:
       return "STRATEGY_OPERATION_DEACTIVATE";
+    case StrategyOperation.STRATEGY_OPERATION_REACTIVATE:
+      return "STRATEGY_OPERATION_REACTIVATE";
     case StrategyOperation.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
@@ -352,6 +359,8 @@ export function strategyOperationToNumber(object: StrategyOperation): number {
       return 2;
     case StrategyOperation.STRATEGY_OPERATION_DEACTIVATE:
       return 3;
+    case StrategyOperation.STRATEGY_OPERATION_REACTIVATE:
+      return 4;
     case StrategyOperation.UNRECOGNIZED:
     default:
       return -1;
