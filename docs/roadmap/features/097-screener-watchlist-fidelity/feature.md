@@ -1,6 +1,6 @@
 # Feature: screener-watchlist-fidelity
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/screener-watchlist-fidelity`
 **Created**: 2026-08-02
 **Last Updated**: 2026-08-02
@@ -12,13 +12,18 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-02 | `idea` → `draft` | /sdd-story | Product spec generated — derivable-only fidelity fixes for the Screener and Watchlists pages left low-fidelity by feature 083; livestream (LAST/CHG/Quotes) split to a named backlog follow-up |
+| 2026-08-02 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, quick+1) and approved; recon.md + design.md written. No Floor breach. User resolved the FR-10 fork → single "Evaluated against" caption (not per-row STRATEGY column). All adversary fixes folded in (nodata bucket, divide-by-zero guard, DRY isFiring, no exhaustive Comparator map, requested-symbol-set parity denominator, lifted useOpportunities, create auto-select, formatLastRun-once). _Note: skipped `/sdd-review product-spec` — proceeded draft→design-approved directly._ |
+| 2026-08-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps (UI-only, xstockstrat-ui `/insights`): (1) src/lib helpers + DRY isFiring, (2) their vitest units, (3) Screener display, (4) Screener→watchlist actions, (5) Watchlists master-detail, (6) e2e. Every step cites grep-verified `path:line`; no proto/config/migration. |
+| 2026-08-02 | `implementation-ready` → `code-completed` | manual execute | All 6 steps implemented on the harness branch `claude/ui-revamp-low-fidelity-ii5p1h` (single-branch mandate; deviations logged in implementation-spec). Verified: `pnpm build`/`lint`/`test:coverage` pass (helpers 100%), 79 `e2e/insights` specs pass (14 new), DRY `check-duplication.sh services/xstockstrat-ui/src` = 0 clones. |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec screener-watchlist-fidelity`_
+- [Recon](recon.md) — grounded codebase dossier (xstockstrat-ui)
+- [Design](design.md) — debated, approved architecture (derivable-only, UI-only)
+- [Implementation Spec](implementation-spec.md) — 6 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -44,4 +49,6 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review screener-watchlist-fidelity product-spec` — AI review of product spec before running /sdd-spec
+Code-complete on `claude/ui-revamp-low-fidelity-ii5p1h`; PR open against `main`. On merge + promotion,
+CI flips this to `launched`. Backlog follow-up for the deferred livestream surfaces:
+`098-watchlist-live-quotes`.

@@ -67,9 +67,12 @@ readiness is strategy-scoped, never a fabricated per-symbol binding), show a "<N
 watching = some pass, quiet = none pass), and a per-symbol readiness row (readiness bar + firing/N-away +
 blocking condition) — folding in / extending the existing `WatchlistReadiness` component.
 
-FR-10. **Strategy column.** Each readiness row shows the strategy it was evaluated against (the chosen
-strategy's display name), matching the design's STRATEGY column, without fabricating a per-symbol
-strategy binding.
+FR-10. **Evaluated-strategy display.** The readiness view shows which strategy the list was evaluated
+against, as a single "Evaluated against: `<strategy>`" caption above the rows (**not** a per-row STRATEGY
+column). _Design decision 2026-08-02: readiness is strategy-scoped (one strategy for the whole list), so
+a per-row column would repeat one name on every row and visually re-imply the per-symbol signal→strategy
+binding feature 083 forbids; the caption is the honest form. Supersedes the literal "per-row STRATEGY
+column" reading of the handoff._
 
 FR-11. **"In queue" indicator.** A watchlist symbol that is currently a live opportunity (present in
 analysis `ListOpportunities` for the user) is marked accordingly ("in queue"), derived from the existing
@@ -153,9 +156,11 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
    page; "Add top N to watchlist" adds the top-N symbols to a chosen existing list.
 5. The Watchlists page renders a master-detail layout; selecting a list shows its detail; all existing
    CRUD still works.
-6. With a strategy selected, the selected watchlist shows a "<N> ready · <N> watching · <N> quiet"
-   roll-up whose counts sum to the symbol count and are derived from `EvaluateReadiness` condition
-   states; each row shows the strategy name and blocking condition; no per-symbol strategy is fabricated.
+6. With a strategy selected, the selected watchlist shows a "<N> ready · <N> watching · <N> quiet
+   [· <N> no-data]" roll-up whose counts sum to the **requested symbol count** (an un-evaluable symbol
+   buckets as `no-data`, never `quiet`) and are derived from a single `EvaluateReadiness` result; the
+   view shows the evaluated strategy as one caption (not a per-row column) and each row shows its
+   blocking condition; no per-symbol strategy is fabricated.
 7. A watchlist symbol present in `ListOpportunities` is marked "in queue".
 8. No LAST/CHG/Quotes UI is present (deferred); a Playwright e2e asserts the derivable surfaces above
    against the mock backend, and the mock is extended only with **already-defined** RPC fields.

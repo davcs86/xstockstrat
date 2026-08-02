@@ -1,46 +1,59 @@
 'use client';
-import { useState } from 'react';
-import { Plus, Trash2, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Plus } from 'lucide-react';
 import { AppShell } from '@/components/insights/AppShell';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  useWatchlists,
-  useCreateWatchlist,
-  useDeleteWatchlist,
-  useAddWatchlistSymbols,
-  useRemoveWatchlistSymbols,
-} from '@/hooks/useWatchlists';
-import { WatchlistReadiness } from '@/components/insights/WatchlistReadiness';
+import { cn } from '@/components/ui/utils';
+import { useWatchlists, useCreateWatchlist, useDeleteWatchlist } from '@/hooks/useWatchlists';
+import { WatchlistDetail } from '@/components/insights/WatchlistDetail';
 
 export default function WatchlistsPage() {
   const { data, isLoading, error } = useWatchlists();
   const createWl = useCreateWatchlist();
   const deleteWl = useDeleteWatchlist();
-  const addSymbols = useAddWatchlistSymbols();
-  const removeSymbols = useRemoveWatchlistSymbols();
 
   const [newName, setNewName] = useState('');
-  // Per-watchlist "add symbol" input state, keyed by watchlist id.
-  const [symbolInputs, setSymbolInputs] = useState<Record<string, string>>({});
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // A just-created list id we want to select as soon as it lands in the refetched list. Setting
+  // selectedId directly in create's onSuccess would race the ListWatchlists refetch — the reconcile
+  // effect would see an id "not in the list yet" and clobber it back to the first list.
+  const pendingSelectRef = useRef<string | null>(null);
+
+  const watchlists = useMemo(() => data?.watchlists ?? [], [data]);
+
+  // Keep the selection valid: honor a pending just-created id once it appears, default to the first
+  // list, and reconcile to the first remaining / null when the selected list is deleted or the set
+  // empties (a dangling id → blank detail).
+  useEffect(() => {
+    const pending = pendingSelectRef.current;
+    if (pending && watchlists.some((wl) => wl.watchlistId === pending)) {
+      pendingSelectRef.current = null;
+      setSelectedId(pending);
+      return;
+    }
+    if (watchlists.length === 0) {
+      if (selectedId !== null) setSelectedId(null);
+      return;
+    }
+    if (!selectedId || !watchlists.some((wl) => wl.watchlistId === selectedId)) {
+      setSelectedId(watchlists[0].watchlistId);
+    }
+  }, [watchlists, selectedId]);
 
   function handleCreate() {
     const name = newName.trim();
     if (!name) return;
-    createWl.mutate({ name }, { onSuccess: () => setNewName('') });
-  }
-
-  function handleAddSymbol(watchlistId: string) {
-    const raw = (symbolInputs[watchlistId] ?? '').trim();
-    if (!raw) return;
-    // Allow comma/space-separated entry; server uppercases + de-dupes.
-    const symbols = raw.split(/[\s,]+/).filter(Boolean);
-    if (symbols.length === 0) return;
-    addSymbols.mutate(
-      { watchlistId, symbols },
-      { onSuccess: () => setSymbolInputs((s) => ({ ...s, [watchlistId]: '' })) },
+    createWl.mutate(
+      { name },
+      {
+        onSuccess: (res) => {
+          setNewName('');
+          // Auto-select the created list once the refetch includes it (see pendingSelectRef).
+          if (res?.watchlist?.watchlistId) pendingSelectRef.current = res.watchlist.watchlistId;
+        },
+      },
     );
   }
 
@@ -49,7 +62,7 @@ export default function WatchlistsPage() {
     deleteWl.mutate(watchlistId);
   }
 
-  const watchlists = data?.watchlists ?? [];
+  const selected = watchlists.find((wl) => wl.watchlistId === selectedId) ?? null;
 
   return (
     <AppShell>
@@ -93,71 +106,48 @@ export default function WatchlistsPage() {
           <p className="text-sm text-muted-foreground">No watchlists yet. Create one above.</p>
         )}
 
-        <div className="space-y-4">
-          {watchlists.map((wl) => (
-            <Card key={wl.watchlistId}>
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h2 className="font-semibold">{wl.name}</h2>
-                    {wl.description && (
-                      <p className="text-sm text-muted-foreground">{wl.description}</p>
-                    )}
-                  </div>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => handleDelete(wl.watchlistId, wl.name)}
-                    aria-label={`Delete ${wl.name}`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-
-                <div className="flex flex-wrap gap-1.5 mb-3" data-testid="symbol-list">
-                  {wl.symbols.length === 0 && (
-                    <span className="text-sm text-muted-foreground">No symbols</span>
-                  )}
-                  {wl.symbols.map((sym) => (
-                    <Badge key={sym} variant="info" className="gap-1">
-                      {sym}
+        {watchlists.length > 0 && (
+          <div className="grid gap-4 md:grid-cols-[minmax(0,16rem)_1fr]">
+            {/* Master column — select a list to see its detail. */}
+            <Card>
+              <CardContent className="p-2" data-testid="watchlist-master">
+                <ul className="space-y-1">
+                  {watchlists.map((wl) => (
+                    <li key={wl.watchlistId}>
                       <button
                         type="button"
-                        aria-label={`Remove ${sym}`}
-                        onClick={() =>
-                          removeSymbols.mutate({ watchlistId: wl.watchlistId, symbols: [sym] })
-                        }
+                        onClick={() => setSelectedId(wl.watchlistId)}
+                        aria-current={wl.watchlistId === selectedId}
+                        className={cn(
+                          'flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm',
+                          wl.watchlistId === selectedId
+                            ? 'bg-accent text-accent-foreground'
+                            : 'hover:bg-accent/50',
+                        )}
                       >
-                        <X className="h-3 w-3" />
+                        <span className="truncate font-medium">{wl.name}</span>
+                        <span className="ml-2 shrink-0 text-xs text-muted-foreground tabular-nums">
+                          {wl.symbols.length}
+                        </span>
                       </button>
-                    </Badge>
+                    </li>
                   ))}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Input
-                    value={symbolInputs[wl.watchlistId] ?? ''}
-                    onChange={(e) =>
-                      setSymbolInputs((s) => ({ ...s, [wl.watchlistId]: e.target.value }))
-                    }
-                    onKeyDown={(e) => e.key === 'Enter' && handleAddSymbol(wl.watchlistId)}
-                    placeholder="Add symbols (e.g. AAPL MSFT)"
-                    className="max-w-xs"
-                  />
-                  <Button
-                    size="sm"
-                    variant="default"
-                    onClick={() => handleAddSymbol(wl.watchlistId)}
-                  >
-                    Add
-                  </Button>
-                </div>
-
-                <WatchlistReadiness symbols={wl.symbols} />
+                </ul>
               </CardContent>
             </Card>
-          ))}
-        </div>
+
+            {/* Detail column — the selected list. */}
+            <Card>
+              <CardContent className="p-0">
+                {selected ? (
+                  <WatchlistDetail watchlist={selected} onDelete={handleDelete} />
+                ) : (
+                  <p className="p-4 text-sm text-muted-foreground">Select a watchlist.</p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
       </div>
     </AppShell>
   );

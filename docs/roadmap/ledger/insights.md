@@ -548,3 +548,22 @@ reusing.
   its Verification greps for zero of; (b) at execute time, a final sweep's survivors are triaged by
   *what they claim* (current-tense/active → fix regardless of original scope; negative-assertion
   test code → leave), not by whether the file was on the original list.
+
+### 2026-08-02 — 097-screener-watchlist-fidelity — design
+- **Pattern**: When a design surface is **scoped by a single upstream choice** (readiness is evaluated
+  against **one** strategy for the whole list), render that dimension as a **single caption** ("Evaluated
+  against: `<strategy>`"), never a per-row column that repeats the identical value. A repeated column is
+  not merely noisy — it visually re-implies a **per-row binding that does not exist** (here a per-symbol
+  signal→strategy binding feature 083 explicitly forbids). Complement for derived roll-ups over a
+  producer that can return an **empty/degenerate** row: bucket the degenerate case as its own honest
+  state (`nodata` = `total_conditions==0`, the evaluator's per-symbol bar-fetch fallback) rather than
+  folding it into a real state (`quiet`), and reconcile the roll-up denominator against the **requested
+  input set** (count absent symbols as `nodata`) so `sum === requested.length` holds even if a future
+  producer drops rows — defends the count-parity invariant beyond the mock's current 1:1 guarantee.
+- **Evidence**: `docs/roadmap/features/097-screener-watchlist-fidelity/design.md` §§ 1, 4, Rejected
+  Alternatives; `services/xstockstrat-analysis/app/services/evaluator.py:191`,
+  `app/handlers/servicer.py:1996-2003` (1:1 append + empty-readiness fallback);
+  `services/xstockstrat-ui/src/components/insights/WatchlistReadiness.tsx:34-44` (083 no-fabricated-binding).
+- **Rule it implies**: extends **C-10(b)** — a UI dimension fixed by one upstream selection is a caption,
+  not a per-row column; and a derived count over a producer with a degenerate-row fallback needs both a
+  distinct bucket for the degenerate case and a denominator reconciled to the requested input set.
