@@ -428,7 +428,16 @@ async def manage_formula(
             p.max = float(d["max"])
         return p
 
+    def _build_output(d: dict):
+        # Feature 086: mirror _build_parameter for declared output series (FormulaOutput).
+        return indicators_pb2.FormulaOutput(
+            name=d.get("name", ""),
+            description=d.get("description", ""),
+        )
+
     parameters = [_build_parameter(d) for d in formula.get("parameters", [])]
+    outputs = [_build_output(d) for d in formula.get("outputs", [])]
+    warmup_period = int(formula.get("warmup_period") or 0)
 
     async with grpc.aio.insecure_channel(INDICATORS_ENDPOINT) as channel:
         stub = indicators_pb2_grpc.IndicatorsServiceStub(channel)
@@ -441,23 +450,32 @@ async def manage_formula(
                     is_public=formula.get("is_public", False),
                     author=formula.get("author", ""),
                     parameters=parameters,
+                    outputs=outputs,
+                    warmup_period=warmup_period,
                 ),
                 metadata=_metadata(),
             )
             return {"formula_id": resp.formula_id}
         if operation == "update":
-            resp = await stub.UpdateFormula(
-                indicators_pb2.UpdateFormulaRequest(
-                    formula_id=formula["formula_id"],
-                    user_id=formula["user_id"],
-                    name=formula.get("name", ""),
-                    description=formula.get("description", ""),
-                    source=formula.get("source", ""),
-                    is_public=formula.get("is_public", False),
-                    parameters=parameters,
-                ),
-                metadata=_metadata(),
+            from google.protobuf import field_mask_pb2  # noqa: PLC0415
+
+            req = indicators_pb2.UpdateFormulaRequest(
+                formula_id=formula["formula_id"],
+                user_id=formula["user_id"],
+                name=formula.get("name", ""),
+                description=formula.get("description", ""),
+                source=formula.get("source", ""),
+                is_public=formula.get("is_public", False),
+                parameters=parameters,
+                outputs=outputs,
+                warmup_period=warmup_period,
             )
+            # Feature 086: AIP-161 partial update. When update_mask is supplied, only the named
+            # paths are applied server-side (unlisted fields are preserved); absent = full replace.
+            update_mask = formula.get("update_mask")
+            if update_mask:
+                req.update_mask.CopyFrom(field_mask_pb2.FieldMask(paths=list(update_mask)))
+            resp = await stub.UpdateFormula(req, metadata=_metadata())
             return MessageToDict(resp.formula)
         resp = await stub.DeleteFormula(
             indicators_pb2.DeleteFormulaRequest(
@@ -485,6 +503,23 @@ async def list_formulas(
             metadata=_metadata(),
         )
     return [MessageToDict(f) for f in resp.formulas]
+
+
+async def get_formula(formula_id: str) -> dict[str, Any]:
+    """Fetch one formula definition via gRPC GetFormula (feature 086 read tool).
+
+    The returned dict includes the ``deleted`` flag, so a caller can do safe read-modify-write
+    and see whether a formula has been soft-deleted.
+    """
+    from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(INDICATORS_ENDPOINT) as channel:
+        stub = indicators_pb2_grpc.IndicatorsServiceStub(channel)
+        resp = await stub.GetFormula(
+            indicators_pb2.GetFormulaRequest(formula_id=formula_id),
+            metadata=_metadata(),
+        )
+    return MessageToDict(resp)
 
 
 async def manage_signal_source(

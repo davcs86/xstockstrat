@@ -244,7 +244,7 @@ re-running leaves an empty `git diff packages/proto/gen/` (proto-freshness parit
 
 ### Step 8 — service: agent full builders, read tools, safe partial update
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -282,7 +282,7 @@ re-running leaves an empty `git diff packages/proto/gen/` (proto-freshness parit
 
 ### Step 9 — test: agent client/tool + descriptor-parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_client.py` — modify

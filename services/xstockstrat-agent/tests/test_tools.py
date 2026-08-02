@@ -1036,3 +1036,78 @@ class TestGetStrategyTool:
         with patch.object(client, "get_strategy", AsyncMock(side_effect=err)):
             with pytest.raises(RuntimeError, match="strategy not found"):
                 await _tool_fn(server, "get_strategy")(strategy_id="x")
+
+
+class TestFormulaPartialUpdateTool:
+    @pytest.mark.asyncio
+    async def test_update_derives_mask_from_supplied_fields(self):
+        server = _make_server()
+        with patch.object(
+            client, "manage_formula", AsyncMock(return_value={"formulaId": "f-1"})
+        ) as m:
+            await _tool_fn(server, "manage_formula")(
+                operation="update",
+                formula_id="f-1",
+                formula_author_user_id="u1",
+                description="tweak",
+            )
+        formula = m.call_args.kwargs["formula"]
+        assert formula["update_mask"] == ["description"]
+
+    @pytest.mark.asyncio
+    async def test_update_is_public_false_is_masked(self):
+        # is_public=False is a real value (unpublish), distinct from omitting it.
+        server = _make_server()
+        with patch.object(
+            client, "manage_formula", AsyncMock(return_value={"formulaId": "f-1"})
+        ) as m:
+            await _tool_fn(server, "manage_formula")(
+                operation="update",
+                formula_id="f-1",
+                formula_author_user_id="u1",
+                is_public=False,
+            )
+        assert m.call_args.kwargs["formula"]["update_mask"] == ["is_public"]
+
+    @pytest.mark.asyncio
+    async def test_update_omitted_field_not_in_mask(self):
+        server = _make_server()
+        with patch.object(
+            client, "manage_formula", AsyncMock(return_value={"formulaId": "f-1"})
+        ) as m:
+            await _tool_fn(server, "manage_formula")(
+                operation="update",
+                formula_id="f-1",
+                formula_author_user_id="u1",
+                description="only this",
+            )
+        assert "is_public" not in m.call_args.kwargs["formula"]["update_mask"]
+
+    @pytest.mark.asyncio
+    async def test_update_with_no_fields_raises(self):
+        server = _make_server()
+        with pytest.raises(RuntimeError, match="at least one field"):
+            await _tool_fn(server, "manage_formula")(
+                operation="update", formula_id="f-1", formula_author_user_id="u1"
+            )
+
+
+class TestFormulaReadTools:
+    @pytest.mark.asyncio
+    async def test_get_formula_tool_registered(self):
+        server = _make_server()
+        with patch.object(
+            client, "get_formula", AsyncMock(return_value={"formulaId": "f-1", "deleted": True})
+        ) as m:
+            result = await _tool_fn(server, "get_formula")(formula_id="f-1")
+        m.assert_awaited_once_with("f-1")
+        assert result["deleted"] is True
+
+    @pytest.mark.asyncio
+    async def test_list_formulas_tool_wraps_list(self):
+        server = _make_server()
+        with patch.object(
+            client, "list_formulas", AsyncMock(return_value=[{"formulaId": "f-1"}])
+        ):
+            result = await _tool_fn(server, "list_formulas")(author_filter="u1")
+        assert result == {"formulas": [{"formulaId": "f-1"}]}
