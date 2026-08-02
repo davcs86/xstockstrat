@@ -313,3 +313,16 @@
   no contradictions found. This does not replace a full context-scrubber pass (which checks for
   broader drift patterns this manual grep doesn't cover), so a real `/context-scrubber scan` should
   still be run by a future session once the plugin is available.
+
+## Session 2026-08-02T01:25:00Z — Integration PR
+
+- Merge-order gate: `docs/roadmap/features/merge-order.md` has no entry for this feature — no
+  blocker.
+- Opened the integration PR: **https://github.com/davcs86/xstockstrat/pull/857**
+  (`claude/remove-x-mcp-secret-header-icog9j` → `main-dev`). This is the single PR for the whole
+  feature per the requester's explicit "no intermediate PRs" instruction — all 5 steps' commits are
+  in its diff.
+- Subscribed to PR activity for CI watch (§5.8) — will fix real CI failures, rebase on a
+  merge-conflict notice, and report the two items flagged in the PR body (live Docker smoke check,
+  `/context-scrubber scan`) as outstanding for a reviewer with the right access.
+- Feature status remains `code-completed` until the PR merges.
