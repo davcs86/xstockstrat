@@ -63,9 +63,17 @@ The physical routes/segments above are **unchanged**; feature 083 layers an oppo
   import `NAV_GROUPS` from `PlatformHeader`** (that forms a `PlatformHeader ↔ BottomTabBar` import
   cycle → a prerender TDZ crash); import from `navGroups.tsx`.
 - **Decide screens** — `insights/opportunities` (ranked queue over analysis `ListOpportunities`)
-  and the Signal-detail page `insights/market/[symbol]` (candlestick + `EvaluateReadiness`
-  readiness for an explicit strategy — via a strategy picker, never a fabricated signal→strategy
-  binding — plus an FR-6 order ticket re-presenting `OrderForm` inside its own `AccountProvider`).
+  and the Signal-detail page `insights/market/[symbol]`. Signal-detail is a two-column grammar:
+  **left** = candlestick chart + "Why this fired" (`EvaluateReadiness` for an explicit strategy —
+  via a strategy picker, never a fabricated signal→strategy binding); **right** = an FR-6 order
+  ticket re-presenting `OrderForm` inside its own `AccountProvider`. The header enriches from the
+  ranked queue when the symbol is in it (action tag + Conviction from the matching `Opportunity`,
+  Edge (BT) from `GetStrategyAnalytics`); it degrades to symbol + price only when the symbol is not
+  a live opportunity (e.g. opened from Screener) — never fabricated.
+- **Single-position detail** — the row-click `Sheet` on Book → Exposure (`trader/positions`) is
+  risk-framed to mirror the Exposure table: a StatTile row (Open R / Risk at stop / Stop distance /
+  Weight), a "Position risk" block (factor / exit rule / flag), then the read-only broker-reported
+  values (C-10(b)) and the fill lineage.
 - **Enum render maps** — `src/lib/opportunityShared.tsx` holds the exhaustive
   `Record<Enum, EnumRender>` maps (`OPPORTUNITY_ACTION`, `CONDITION_STATE`, `POSITION_RISK_FLAG`,
   `SOURCE_HEALTH`) + `EnumBadge`. Adding a proto enum value without a map entry fails `tsc` here.

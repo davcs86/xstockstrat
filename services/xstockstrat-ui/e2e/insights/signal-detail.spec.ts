@@ -10,7 +10,13 @@ test.describe('Signal detail readiness', () => {
   test('renders traced conditions for the threaded strategy', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto('/insights/market/AAPL?strategy=strat-live-001');
-    await expect(page.getByText('Readiness')).toBeVisible({ timeout: 8000 });
+    await expect(page.getByText('Why this fired')).toBeVisible({ timeout: 8000 });
+    // Signal-detail header enrichment: AAPL is in the ranked queue (action ENTER, conviction 0.9).
+    // The header stats come from ListOpportunities (a separate query from readiness), so wait for
+    // the queue fetch to resolve before asserting.
+    await expect(page.getByRole('link', { name: /Queue/ })).toBeVisible();
+    await expect(page.getByText('Conviction')).toBeVisible({ timeout: 10000 }); // CONVICTION stat
+    await expect(page.getByText('Edge (BT)')).toBeVisible(); // EDGE (BT) stat from analytics
     // Deterministic conviction as N/M conditions (never a fabricated %).
     await expect(page.getByText('2/3 conditions')).toBeVisible();
     // Traced leaves from EvaluateReadiness.
