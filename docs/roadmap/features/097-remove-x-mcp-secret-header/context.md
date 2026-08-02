@@ -292,3 +292,24 @@
 - Deviations: 2, both logged in `## Deviation Log` (Step 5 entry) — see above.
 
 **All 5 steps done. Feature status: `code-completed`.**
+
+## Session 2026-08-02T01:20:00Z — Teardown check (root CLAUDE.md § Teardown)
+
+- This session changed multiple context files (`CLAUDE.md` root, `services/xstockstrat-agent/
+  CLAUDE.md`, `services/xstockstrat-notify/CLAUDE.md`, `docs/runbooks/CLAUDE.md`,
+  `services/xstockstrat-agent/docs/context-constitution.md`,
+  `docs/context-constitution-findings.md`), which per root `CLAUDE.md` § Teardown requires running
+  `/context-scrubber scan` (scoped to what was touched) before pushing/opening the PR.
+- **The context-forge plugin is not available in this session** — `ListPlugins` shows it enabled at
+  the account level, but the `Skill` tool returns `Unknown skill: context-scrubber` when invoked, and
+  it does not appear in this session's available-skills listing. Per the Teardown instruction's own
+  fallback ("If the context-forge plugin is not available in the session, say so in the PR body
+  rather than skipping silently"), this is recorded here and will be stated in the integration PR
+  body rather than silently skipped.
+- **Substitute manual review performed**: grepped for lingering `triple-purposed` phrasing (zero
+  hits anywhere outside historical feature dirs) and `dual-purpose` phrasing (zero hits outside an
+  unrelated other feature's historical `recon.md`), and re-read every `MCP_AGENT_SECRET` mention
+  left in the four touched `CLAUDE.md` files — all consistently describe it as OAuth-signing-only,
+  no contradictions found. This does not replace a full context-scrubber pass (which checks for
+  broader drift patterns this manual grep doesn't cover), so a real `/context-scrubber scan` should
+  still be run by a future session once the plugin is available.
