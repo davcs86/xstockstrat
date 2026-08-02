@@ -270,3 +270,40 @@ text, reproducible from the findings above). The pass must:
   F-7 precondition check, F-9 conviction range validation.
 - **Docs-only:** F-12 (runbook rows, strat-lab skill intent) and F-13 (the tools.py docstring
   synchronization pass).
+
+---
+
+## Triage disposition (2026-08-02)
+
+All 13 findings were re-verified against current `main-dev` code (one read-only investigator per
+finding) — every one CONFIRMED. Disposition:
+
+**Fixed in this pass (docs-only — no behavior change):**
+
+- **F-12** — corrected the drifted rows in `docs/runbooks/mcp-tools.md` (`emit_alert` return is
+  `{"alert_id": …}` not `{"success": true}`; `min_conviction` marked ignored; `ingest_signal`
+  conviction "no source default"; `HTTP 400` → gRPC status rows; technical screen kinds noted as
+  silently skipped) and updated the `strat-lab` skill/README to the feature-070 partial-merge
+  semantics (it had taught pre-070 full-replace).
+- **F-13** — synchronized every affected `tools.py` docstring to verified behavior: the three false
+  claims (F-9 conviction default, F-3 `outputs`, F-7 `list_strategy_definitions`), the destructive /
+  side-effect behavior (auto-alert, full-replace formula/source updates, hard delete, one-way
+  strategy lifecycle, `set_config` create-on-typo, `set_strategy_live` inert-success, extract-tool
+  credential caveat), and result-interpretation notes (return shapes, camelCase vs snake_case,
+  int64-as-JSON-string, severity coercion, empty-namespace-not-an-error). The test-guarded
+  substring `"Ingest a trading signal"` is preserved; `pytest` (55 tool tests) + `ruff` green.
+
+**Prevention captured (context hardening):**
+
+- Ledger `fails.md` (2026-08-02) — the doc↔behavior drift meta-cause (RC-1 + hand-written docs with
+  no executable link); `insights.md` (2026-08-02) — the descriptor-parity / return-shape
+  contract-test antidote (mirror `test_backtest_view.py`).
+- `services/xstockstrat-agent/docs/context-constitution-findings.md` — the 10 behavioral defects
+  recorded as open, pointing here, so they are not re-discovered.
+
+**Routed, NOT yet implemented (need the SDD pipeline — `/sdd-design` → `/sdd-spec` → `/sdd-execute`
+with design gates):** the behavioral code fixes remain open per the Suggested routing above —
+Track B (F-9 range-validate, F-5 `ALREADY_EXISTS`, F-7 precondition, F-4 `min_conviction`/component,
+F-11 gate `TriggerBackfill`, F-10 notify validation) and Track C (F-1, F-2/F-3, F-6, F-8 registry,
+F-10 additive tools, F-11 caller-derived scope). Not folded into the docs PR because each is a
+proto/migration/cross-service change this repo routes through SDD, not a bare edit.
