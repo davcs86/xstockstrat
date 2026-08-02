@@ -469,3 +469,18 @@ reusing.
 - **Pattern**: The durable antidote to MCP-surface drift is a **descriptor-parity / return-shape contract test** over each hand-written dict→proto request builder and each projection, mirroring the one guard that kept `run_backtest` honest: `test_backtest_view.py::test_summary_key_set_covers_every_proto_field` asserts the agent's field set equals `<Message>.DESCRIPTOR.fields_by_name` minus an explicit `_INTENTIONALLY_UNSET` set, so a newly-added proto field fails the test until the builder/projection carries it (or explicitly opts out). Applying the same guard to the `RegisterFormulaRequest`, `ScreenCriterion`, `SignalSource`, and `EmitAlertRequest` builders would have caught F-3/F-4/F-6/F-10 at commit time instead of via a manual audit.
 - **Evidence**: `services/xstockstrat-agent/tests/test_backtest_view.py` (the template); report RC-1 + meta-cause (`docs/reports/2026-08-01-mcp-tools-alignment-triage.md`).
 - **Rule it implies**: reinforces **C-10** — every agent request builder / response projection that mirrors a proto gets a descriptor-parity test with an explicit opt-out set; new proto fields then fail closed rather than silently dropping off the MCP surface.
+
+### 2026-08-02 — 093-fix-mcp-extract-credentials — design
+- **Pattern**: When a "credential/secret handling" bug tempts a quick fix that *reads a secret from
+  ordinary config*, check the platform's secret model first — if secrets are `is_secret` **references**
+  that the config server **redacts** on read, then a plaintext config credential is both a C-05
+  violation AND gets disclosed unredacted by any read tool. The honest minimal fix is often to make the
+  broken capability **loudly unsupported** (raise a clear error — the "surface, don't swallow" win)
+  rather than entrench the antipattern; defer the real resolver as its own feature. Second lesson
+  (RC-1): a config/read helper that projects a **single oneof field** (`v.string_val or None`) silently
+  returns `None` for every other type — a `value_type='float'`/`'bool'` key never resolves regardless
+  of scope. Stringify the **active** oneof (`WhichOneof` → `str(getattr(...))`) and test the projection
+  with a non-string fixture, or the "fix" leaves the key broken for a different reason than the report
+  blamed.
+- **Evidence**: feature 093 design.md §1–2 + Rejected Alternatives; `services/xstockstrat-agent/app/client.py:693` (string_val-only) vs `:872-876` (the correct WhichOneof projection); `services/xstockstrat-config/CLAUDE.md` invariant #6.
+- **Rule it implies**: reinforces **C-05**/**P-03** — never resolve a secret from non-`is_secret` config; and extends the RC-1 antidote to *projection* helpers, not just request builders (test the returned value for a non-string type).
