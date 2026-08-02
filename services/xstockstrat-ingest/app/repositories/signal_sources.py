@@ -76,7 +76,15 @@ async def mark_source_error(db_pool, slug: str, error: str) -> None:
     )
 
 
-async def upsert_source(
+async def get_source(db_pool, slug: str) -> dict | None:
+    """Fetch a signal source by slug, or None (feature 088: honest register/update verbs)."""
+    row = await db_pool.fetchrow(
+        "SELECT * FROM ingest.signal_sources WHERE slug = $1", slug
+    )
+    return dict(row) if row is not None else None
+
+
+async def insert_source(
     db_pool,
     *,
     slug: str,
@@ -87,20 +95,14 @@ async def upsert_source(
     config_json: dict | None,
     active: bool = True,
 ) -> dict:
-    # The pool registers no JSONB codec, so asyncpg expects JSONB parameters as
-    # JSON text, not dicts. Readers already handle both str and dict rows.
+    """Strict create (feature 088). Raises asyncpg.UniqueViolationError on an existing slug — the
+    servicer maps that to ALREADY_EXISTS. Replaces the old blind upsert on the register path."""
+    # The pool has no JSONB codec, so asyncpg expects JSONB params as JSON text, not dicts.
     config_param = json.dumps(config_json) if config_json is not None else None
     row = await db_pool.fetchrow(
         "INSERT INTO ingest.signal_sources"
         " (slug, display_name, source_type, extractor_module, credentials_ref, config_json, active)"
         " VALUES ($1, $2, $3, $4, $5, $6, $7)"
-        " ON CONFLICT (slug) DO UPDATE SET"
-        "   display_name = EXCLUDED.display_name,"
-        "   source_type = EXCLUDED.source_type,"
-        "   extractor_module = EXCLUDED.extractor_module,"
-        "   credentials_ref = EXCLUDED.credentials_ref,"
-        "   config_json = EXCLUDED.config_json,"
-        "   active = EXCLUDED.active"
         " RETURNING *",
         slug,
         display_name,
@@ -111,6 +113,47 @@ async def upsert_source(
         active,
     )
     return dict(row)
+
+
+async def update_source(
+    db_pool,
+    *,
+    slug: str,
+    display_name: str,
+    source_type: str,
+    extractor_module: str,
+    credentials_ref: str | None,
+    config_json: dict | None,
+) -> dict | None:
+    """Write the already-merged columns for an existing source (feature 088). Never touches `active`
+    (lifecycle is reactivate/deactivate only). Returns None if the slug is gone."""
+    config_param = json.dumps(config_json) if config_json is not None else None
+    row = await db_pool.fetchrow(
+        "UPDATE ingest.signal_sources SET"
+        "   display_name = $2,"
+        "   source_type = $3,"
+        "   extractor_module = $4,"
+        "   credentials_ref = $5,"
+        "   config_json = $6"
+        " WHERE slug = $1"
+        " RETURNING *",
+        slug,
+        display_name,
+        source_type,
+        extractor_module,
+        credentials_ref,
+        config_param,
+    )
+    return dict(row) if row is not None else None
+
+
+async def reactivate_source(db_pool, slug: str) -> dict | None:
+    """Set active = TRUE (feature 088: reactivation decoupled from update)."""
+    row = await db_pool.fetchrow(
+        "UPDATE ingest.signal_sources SET active = TRUE WHERE slug = $1 RETURNING *",
+        slug,
+    )
+    return dict(row) if row is not None else None
 
 
 async def deactivate_source(db_pool, slug: str) -> dict | None:

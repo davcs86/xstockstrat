@@ -598,19 +598,28 @@ Lists custom formula definitions from `xstockstrat-indicators`. Soft-deleted for
 
 ### `manage_signal_source`
 
-Registers, updates, or deactivates a signal source in `xstockstrat-ingest`.
+Registers, updates, reactivates, or deactivates a signal source in `xstockstrat-ingest`.
+**Honest verbs (feature 088)** — register/update are no longer a blind full-replace upsert:
+
+- **`register`** — strict create. An existing slug returns `ALREADY_EXISTS` (no silent overwrite).
+- **`update`** — AIP-161 **partial merge**: pass only the fields you want to change; every omitted
+  field is **preserved** (an omitted `credentials_ref` keeps the stored secret — it is no longer
+  NULLed). An unknown slug returns `NOT_FOUND`. At least one field must be supplied. `active` and
+  `slug` cannot be changed via `update`.
+- **`reactivate`** — sets `active=true`; **decoupled** from update (update never touches `active`).
+- **`deactivate`** — sets `active=false`.
 
 **Parameters**
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `operation` | `string` | Yes | `"register"`, `"update"`, or `"deactivate"` |
+| `operation` | `string` | Yes | `"register"`, `"update"`, `"reactivate"`, or `"deactivate"` |
 | `slug` | `string` | Yes | Source slug |
-| `display_name` | `string` | No | Human-readable name |
-| `source_type` | `string` | No | Source type (e.g. `"newsletter"`) |
-| `config_json` | `object` | No | Source configuration |
-| `extractor_module` | `string` | No | Extractor module name |
-| `credentials_ref` | `string` | No | Reference to stored credentials — forwarded to the backend, **never echoed** |
+| `display_name` | `string` | No | Human-readable name (on `update`, changed only if supplied) |
+| `source_type` | `string` | No | Source type (on `update`, changed only if supplied) |
+| `config_json` | `object` | No | Source configuration (on `update`, changed only if supplied) |
+| `extractor_module` | `string` | No | Extractor module name (on `update`, changed only if supplied) |
+| `credentials_ref` | `string` | No | Reference to stored credentials — forwarded, **never echoed**. On `update`, omit to preserve the stored ref; pass `""` to clear it |
 
 **Return**
 
@@ -622,8 +631,10 @@ Registers, updates, or deactivates a signal source in `xstockstrat-ingest`.
 
 | Condition | Error |
 |---|---|
-| Invalid source fields | `invalid argument` (INVALID_ARGUMENT) |
-| `deactivate` on unknown source | `signal source not found` (NOT_FOUND) |
+| `register` on an existing slug | `signal source already exists` (ALREADY_EXISTS) |
+| `update`/`reactivate`/`deactivate` on unknown source | `signal source not found` (NOT_FOUND) |
+| `update` masking `active`/`slug`, or update with no fields | `invalid argument` (INVALID_ARGUMENT) |
+| `authenticated_website` / `mediated_authenticated_website` with no (merged) credential | `invalid argument` (INVALID_ARGUMENT) |
 | `credentials_ref` exposure | **Never** — `credentials_ref` is intentionally omitted from the return and never exposed to Claude (FR-12) |
 
 ---

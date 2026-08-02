@@ -17,6 +17,7 @@ import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import grpc
 from gen.ingest.v1 import ingest_pb2
 from gen.marketdata.v1 import marketdata_pb2
 from gen.notify.v1 import notify_pb2
@@ -346,7 +347,7 @@ class FundamentalsSignalLoop:
         try:
             await self._ingest.ManageSignalSource(
                 ingest_pb2.ManageSignalSourceRequest(
-                    operation="register",
+                    operation_enum=ingest_pb2.SIGNAL_SOURCE_OPERATION_REGISTER,
                     source=ingest_pb2.SignalSource(
                         slug=source_slug,
                         display_name="Fundamentals Signal Producer",
@@ -358,8 +359,14 @@ class FundamentalsSignalLoop:
                 metadata=meta,
             )
             self._source_registered = True
-        except Exception as e:  # noqa: BLE001 - tolerate already-registered / transient
-            log.warning("fundsignal: source registration failed (non-fatal): %s", e)
+        except grpc.aio.AioRpcError as e:
+            # Feature 088: register is now strict, so a restart re-registering the source gets
+            # ALREADY_EXISTS — that means it IS registered, so set the flag (no per-cycle spam).
+            # Any other code is a real (still non-fatal) failure and must not look registered.
+            if e.code() == grpc.StatusCode.ALREADY_EXISTS:
+                self._source_registered = True
+            else:
+                log.warning("fundsignal: source registration failed (non-fatal): %s", e)
 
     async def _emit_signal(self, source, symbol, direction, conviction, valid_days, metadata):
         now = datetime.now(UTC)

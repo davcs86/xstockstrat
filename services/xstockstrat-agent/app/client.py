@@ -645,13 +645,24 @@ async def manage_signal_source(
     operation: str,
     source: dict[str, Any],
     credentials_ref: str | None = None,
+    update_mask: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Register/update/deactivate a signal source via gRPC ManageSignalSource (admin-scoped).
+    """Register/update/reactivate/deactivate a signal source via gRPC ManageSignalSource (admin).
 
+    Feature 088: honest verbs. `operation` maps to the SignalSourceOperation enum; on `update`,
+    `update_mask` selects the fields to merge (omitted fields are preserved server-side).
     FR-12: credentials_ref is forwarded to the backend but never echoed in the response.
     """
     from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # noqa: PLC0415
+    from google.protobuf import field_mask_pb2  # noqa: PLC0415
     from google.protobuf.struct_pb2 import Struct  # noqa: PLC0415
+
+    op_enum = {
+        "register": ingest_pb2.SIGNAL_SOURCE_OPERATION_REGISTER,
+        "update": ingest_pb2.SIGNAL_SOURCE_OPERATION_UPDATE,
+        "reactivate": ingest_pb2.SIGNAL_SOURCE_OPERATION_REACTIVATE,
+        "deactivate": ingest_pb2.SIGNAL_SOURCE_OPERATION_DEACTIVATE,
+    }.get(operation, ingest_pb2.SIGNAL_SOURCE_OPERATION_UNSPECIFIED)
 
     src = ingest_pb2.SignalSource(
         slug=source.get("slug", ""),
@@ -666,9 +677,13 @@ async def manage_signal_source(
         cfg.update(config_json)
         src.config_json.CopyFrom(cfg)
 
-    req = ingest_pb2.ManageSignalSourceRequest(source=src, operation=operation)
-    if credentials_ref:
+    req = ingest_pb2.ManageSignalSourceRequest(source=src, operation_enum=op_enum)
+    # credentials_ref: set whenever provided (including "" to clear on a masked update); the
+    # update_mask decides whether the server applies it or preserves the stored ref.
+    if credentials_ref is not None:
         req.credentials_ref = credentials_ref
+    if update_mask:
+        req.update_mask.CopyFrom(field_mask_pb2.FieldMask(paths=list(update_mask)))
 
     # Forward the admin access scope so ingest's role check (x-access-scope & 0x04) passes.
     meta = _admin_metadata()

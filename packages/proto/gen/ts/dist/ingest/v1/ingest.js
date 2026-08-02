@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: ingest/v1/ingest.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IngestServiceClient = exports.IngestServiceService = exports.ManageSignalSourceResponse = exports.ManageSignalSourceRequest = exports.ListSignalSourcesResponse = exports.ListSignalSourcesRequest = exports.SignalSource = exports.QuerySignalsResponse = exports.QuerySignalsRequest = exports.IngestSignalResponse = exports.IngestSignalRequest = exports.ExternalSignal = exports.NormalizeRawDataResponse = exports.NormalizeRawDataRequest = exports.ListBackfillJobsResponse = exports.CancelBackfillRequest = exports.ListBackfillJobsRequest = exports.GetBackfillStatusRequest = exports.TriggerBackfillResponse = exports.TriggerBackfillRequest = exports.BackfillJob = exports.SourceHealthStatus = exports.FillMode = exports.BackfillStatus = exports.protobufPackage = void 0;
+exports.IngestServiceClient = exports.IngestServiceService = exports.ManageSignalSourceResponse = exports.ManageSignalSourceRequest = exports.ListSignalSourcesResponse = exports.ListSignalSourcesRequest = exports.SignalSource = exports.QuerySignalsResponse = exports.QuerySignalsRequest = exports.IngestSignalResponse = exports.IngestSignalRequest = exports.ExternalSignal = exports.NormalizeRawDataResponse = exports.NormalizeRawDataRequest = exports.ListBackfillJobsResponse = exports.CancelBackfillRequest = exports.ListBackfillJobsRequest = exports.GetBackfillStatusRequest = exports.TriggerBackfillResponse = exports.TriggerBackfillRequest = exports.BackfillJob = exports.SignalSourceOperation = exports.SourceHealthStatus = exports.FillMode = exports.BackfillStatus = exports.protobufPackage = void 0;
 exports.backfillStatusFromJSON = backfillStatusFromJSON;
 exports.backfillStatusToJSON = backfillStatusToJSON;
 exports.backfillStatusToNumber = backfillStatusToNumber;
@@ -15,10 +15,14 @@ exports.fillModeToNumber = fillModeToNumber;
 exports.sourceHealthStatusFromJSON = sourceHealthStatusFromJSON;
 exports.sourceHealthStatusToJSON = sourceHealthStatusToJSON;
 exports.sourceHealthStatusToNumber = sourceHealthStatusToNumber;
+exports.signalSourceOperationFromJSON = signalSourceOperationFromJSON;
+exports.signalSourceOperationToJSON = signalSourceOperationToJSON;
+exports.signalSourceOperationToNumber = signalSourceOperationToNumber;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
 const common_1 = require("../../common/v1/common");
+const field_mask_1 = require("../../google/protobuf/field_mask");
 const struct_1 = require("../../google/protobuf/struct");
 const timestamp_1 = require("../../google/protobuf/timestamp");
 exports.protobufPackage = "xstockstrat.ingest.v1";
@@ -217,6 +221,77 @@ function sourceHealthStatusToNumber(object) {
         case SourceHealthStatus.SOURCE_HEALTH_STATUS_DOWN:
             return 3;
         case SourceHealthStatus.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/** Closed verb set for ManageSignalSource (feature 088). Closed set → enum (C-04). */
+var SignalSourceOperation;
+(function (SignalSourceOperation) {
+    SignalSourceOperation["SIGNAL_SOURCE_OPERATION_UNSPECIFIED"] = "SIGNAL_SOURCE_OPERATION_UNSPECIFIED";
+    /** SIGNAL_SOURCE_OPERATION_REGISTER - strict create: ALREADY_EXISTS on an existing slug */
+    SignalSourceOperation["SIGNAL_SOURCE_OPERATION_REGISTER"] = "SIGNAL_SOURCE_OPERATION_REGISTER";
+    /** SIGNAL_SOURCE_OPERATION_UPDATE - NOT_FOUND if missing; AIP-161 partial merge via update_mask */
+    SignalSourceOperation["SIGNAL_SOURCE_OPERATION_UPDATE"] = "SIGNAL_SOURCE_OPERATION_UPDATE";
+    /** SIGNAL_SOURCE_OPERATION_REACTIVATE - set active=TRUE; decoupled from update (RC-6) */
+    SignalSourceOperation["SIGNAL_SOURCE_OPERATION_REACTIVATE"] = "SIGNAL_SOURCE_OPERATION_REACTIVATE";
+    /** SIGNAL_SOURCE_OPERATION_DEACTIVATE - set active=FALSE */
+    SignalSourceOperation["SIGNAL_SOURCE_OPERATION_DEACTIVATE"] = "SIGNAL_SOURCE_OPERATION_DEACTIVATE";
+    SignalSourceOperation["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(SignalSourceOperation || (exports.SignalSourceOperation = SignalSourceOperation = {}));
+function signalSourceOperationFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "SIGNAL_SOURCE_OPERATION_UNSPECIFIED":
+            return SignalSourceOperation.SIGNAL_SOURCE_OPERATION_UNSPECIFIED;
+        case 1:
+        case "SIGNAL_SOURCE_OPERATION_REGISTER":
+            return SignalSourceOperation.SIGNAL_SOURCE_OPERATION_REGISTER;
+        case 2:
+        case "SIGNAL_SOURCE_OPERATION_UPDATE":
+            return SignalSourceOperation.SIGNAL_SOURCE_OPERATION_UPDATE;
+        case 3:
+        case "SIGNAL_SOURCE_OPERATION_REACTIVATE":
+            return SignalSourceOperation.SIGNAL_SOURCE_OPERATION_REACTIVATE;
+        case 4:
+        case "SIGNAL_SOURCE_OPERATION_DEACTIVATE":
+            return SignalSourceOperation.SIGNAL_SOURCE_OPERATION_DEACTIVATE;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return SignalSourceOperation.UNRECOGNIZED;
+    }
+}
+function signalSourceOperationToJSON(object) {
+    switch (object) {
+        case SignalSourceOperation.SIGNAL_SOURCE_OPERATION_UNSPECIFIED:
+            return "SIGNAL_SOURCE_OPERATION_UNSPECIFIED";
+        case SignalSourceOperation.SIGNAL_SOURCE_OPERATION_REGISTER:
+            return "SIGNAL_SOURCE_OPERATION_REGISTER";
+        case SignalSourceOperation.SIGNAL_SOURCE_OPERATION_UPDATE:
+            return "SIGNAL_SOURCE_OPERATION_UPDATE";
+        case SignalSourceOperation.SIGNAL_SOURCE_OPERATION_REACTIVATE:
+            return "SIGNAL_SOURCE_OPERATION_REACTIVATE";
+        case SignalSourceOperation.SIGNAL_SOURCE_OPERATION_DEACTIVATE:
+            return "SIGNAL_SOURCE_OPERATION_DEACTIVATE";
+        case SignalSourceOperation.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function signalSourceOperationToNumber(object) {
+    switch (object) {
+        case SignalSourceOperation.SIGNAL_SOURCE_OPERATION_UNSPECIFIED:
+            return 0;
+        case SignalSourceOperation.SIGNAL_SOURCE_OPERATION_REGISTER:
+            return 1;
+        case SignalSourceOperation.SIGNAL_SOURCE_OPERATION_UPDATE:
+            return 2;
+        case SignalSourceOperation.SIGNAL_SOURCE_OPERATION_REACTIVATE:
+            return 3;
+        case SignalSourceOperation.SIGNAL_SOURCE_OPERATION_DEACTIVATE:
+            return 4;
+        case SignalSourceOperation.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -2031,7 +2106,13 @@ exports.ListSignalSourcesResponse = {
     },
 };
 function createBaseManageSignalSourceRequest() {
-    return { source: undefined, credentialsRef: "", operation: "" };
+    return {
+        source: undefined,
+        credentialsRef: "",
+        operation: "",
+        updateMask: undefined,
+        operationEnum: SignalSourceOperation.SIGNAL_SOURCE_OPERATION_UNSPECIFIED,
+    };
 }
 exports.ManageSignalSourceRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -2043,6 +2124,12 @@ exports.ManageSignalSourceRequest = {
         }
         if (message.operation !== "") {
             writer.uint32(26).string(message.operation);
+        }
+        if (message.updateMask !== undefined) {
+            field_mask_1.FieldMask.encode(field_mask_1.FieldMask.wrap(message.updateMask), writer.uint32(34).fork()).join();
+        }
+        if (message.operationEnum !== SignalSourceOperation.SIGNAL_SOURCE_OPERATION_UNSPECIFIED) {
+            writer.uint32(40).int32(signalSourceOperationToNumber(message.operationEnum));
         }
         return writer;
     },
@@ -2074,6 +2161,20 @@ exports.ManageSignalSourceRequest = {
                     message.operation = reader.string();
                     continue;
                 }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.updateMask = field_mask_1.FieldMask.unwrap(field_mask_1.FieldMask.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 40) {
+                        break;
+                    }
+                    message.operationEnum = signalSourceOperationFromJSON(reader.int32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -2091,6 +2192,16 @@ exports.ManageSignalSourceRequest = {
                     ? globalThis.String(object.credentials_ref)
                     : "",
             operation: isSet(object.operation) ? globalThis.String(object.operation) : "",
+            updateMask: isSet(object.updateMask)
+                ? field_mask_1.FieldMask.unwrap(field_mask_1.FieldMask.fromJSON(object.updateMask))
+                : isSet(object.update_mask)
+                    ? field_mask_1.FieldMask.unwrap(field_mask_1.FieldMask.fromJSON(object.update_mask))
+                    : undefined,
+            operationEnum: isSet(object.operationEnum)
+                ? signalSourceOperationFromJSON(object.operationEnum)
+                : isSet(object.operation_enum)
+                    ? signalSourceOperationFromJSON(object.operation_enum)
+                    : SignalSourceOperation.SIGNAL_SOURCE_OPERATION_UNSPECIFIED,
         };
     },
     toJSON(message) {
@@ -2104,6 +2215,12 @@ exports.ManageSignalSourceRequest = {
         if (message.operation !== "") {
             obj.operation = message.operation;
         }
+        if (message.updateMask !== undefined) {
+            obj.updateMask = field_mask_1.FieldMask.toJSON(field_mask_1.FieldMask.wrap(message.updateMask));
+        }
+        if (message.operationEnum !== SignalSourceOperation.SIGNAL_SOURCE_OPERATION_UNSPECIFIED) {
+            obj.operationEnum = signalSourceOperationToJSON(message.operationEnum);
+        }
         return obj;
     },
     create(base) {
@@ -2116,6 +2233,8 @@ exports.ManageSignalSourceRequest = {
             : undefined;
         message.credentialsRef = object.credentialsRef ?? "";
         message.operation = object.operation ?? "";
+        message.updateMask = object.updateMask ?? undefined;
+        message.operationEnum = object.operationEnum ?? SignalSourceOperation.SIGNAL_SOURCE_OPERATION_UNSPECIFIED;
         return message;
     },
 };

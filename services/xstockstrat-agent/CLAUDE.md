@@ -44,7 +44,7 @@ reference):
 | `manage_formula` | Register/update/delete custom formulas |
 | `get_formula` | Read one stored formula's full definition incl. `deleted` (read-only, feature 086) |
 | `list_formulas` | List formula definitions, soft-deleted excluded (read-only, feature 086) |
-| `manage_signal_source` | Register/update/deactivate signal sources |
+| `manage_signal_source` | Register/update/reactivate/deactivate signal sources (honest verbs — feature 088) |
 | `set_strategy_live` | Enable/disable continuous live evaluation + alerting for a strategy (feature 048) |
 | `trigger_backfill` | Trigger an OHLCV history backfill via xstockstrat-ingest (admin-scoped write, feature 066) |
 | `get_backfill_status` | Check one backfill job or list recent jobs (read-only, feature 066) |
