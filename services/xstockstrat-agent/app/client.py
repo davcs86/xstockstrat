@@ -384,8 +384,7 @@ async def manage_strategy(
     }
     if operation not in op_map:
         raise ValueError(
-            f"unknown operation '{operation}' "
-            "(expected register/update/deactivate/reactivate)"
+            f"unknown operation '{operation}' (expected register/update/deactivate/reactivate)"
         )
 
     kind_map = {

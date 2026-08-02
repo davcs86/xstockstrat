@@ -1767,9 +1767,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     f"strategy '{definition.strategy_id}' not found",
                 )
                 return
-            await self._validate_definition_proto(
-                _row_to_strategy_definition(existing), context
-            )
+            await self._validate_definition_proto(_row_to_strategy_definition(existing), context)
             row = await self._strategies_repo.reactivate(definition.strategy_id)
             if row is None:
                 await context.abort(

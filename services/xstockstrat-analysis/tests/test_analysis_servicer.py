@@ -3493,9 +3493,7 @@ class TestStrategyLifecycle089:
         definition = _valid_definition()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
-        svc._strategies_repo.create = AsyncMock(
-            side_effect=asyncpg.UniqueViolationError("dup")
-        )
+        svc._strategies_repo.create = AsyncMock(side_effect=asyncpg.UniqueViolationError("dup"))
         ctx = _admin_ctx()
         with pytest.raises(Exception, match="aborted"):
             await svc.ManageStrategy(
@@ -3579,6 +3577,8 @@ class TestStrategyLifecycle089:
         resp = await svc.SetStrategyLive(req, ctx)
         assert resp.definition.strategy_id == "s1"
         svc._strategies_repo.get_by_id.assert_not_awaited()  # no precondition fetch on disable
+
+
 # Feature 086 — deleted-formula flagging (write refusal + backtest/live status)
 # ---------------------------------------------------------------------------
 
