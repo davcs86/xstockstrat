@@ -62,7 +62,7 @@ then same-PR docs. No migration (servicer-side behavior only), no new pool, no c
 
 ### Step 3 — service: ingest verb split (register/update/reactivate/deactivate)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -102,7 +102,7 @@ then same-PR docs. No migration (servicer-side behavior only), no new pool, no c
 
 ### Step 4 — test: ingest verbs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**: `services/xstockstrat-ingest/tests/test_signal_sources.py` — modify
 **Reviewers**: `xstockstrat-ingest` owner — test adequacy
