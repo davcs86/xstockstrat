@@ -95,11 +95,13 @@ class TestManageStrategyClient:
                         "entry_rule": "",
                         "exit_rule": "",
                     },
+                    access_scope=15,
                 )
         assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.ANALYSIS_ENDPOINT
         meta = mock_stub.ManageStrategy.call_args.kwargs["metadata"]
         assert ("x-mcp-secret", "test-secret") in meta
-        assert ("x-access-scope", "7") in meta
+        # feature 092: forwards the caller's derived scope (was a hardcoded 7).
+        assert ("x-access-scope", "15") in meta
         assert not any(k == "authorization" for k, _ in meta)
         assert result["strategyId"] == "x"
 
@@ -289,10 +291,12 @@ class TestSetStrategyLiveClient:
         with patch("app.client.grpc") as mock_grpc:
             mock_grpc.aio.insecure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
-                result = await client.set_strategy_live(strategy_id="s1", live_enabled=True)
+                result = await client.set_strategy_live(
+                    strategy_id="s1", live_enabled=True, access_scope=15
+                )
         assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.ANALYSIS_ENDPOINT
         meta = mock_stub.SetStrategyLive.call_args.kwargs["metadata"]
-        assert ("x-access-scope", "7") in meta
+        assert ("x-access-scope", "15") in meta  # feature 092: caller-derived scope
         assert not any(k == "authorization" for k, _ in meta)
         assert result["live_enabled"] is True
 
@@ -321,11 +325,13 @@ class TestTriggerBackfillClient:
         with patch("app.client.grpc") as mock_grpc:
             mock_grpc.aio.insecure_channel.return_value = _channel_cm()
             with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
-                result = await client.trigger_backfill(symbols=["AAPL"], timeframe="1d")
+                result = await client.trigger_backfill(
+                    symbols=["AAPL"], timeframe="1d", access_scope=15
+                )
         assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.INGEST_ENDPOINT
         meta = mock_stub.TriggerBackfill.call_args.kwargs["metadata"]
         assert ("x-mcp-secret", "test-secret") in meta
-        assert ("x-access-scope", "7") in meta
+        assert ("x-access-scope", "15") in meta  # feature 092: caller-derived scope
         assert result == {"job_id": "j-1", "status": "BACKFILL_STATUS_QUEUED"}
 
     @pytest.mark.asyncio

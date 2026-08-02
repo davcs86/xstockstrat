@@ -1,6 +1,6 @@
 # Implementation Spec: fix-mcp-writepath-authz
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-08-02
 **Feature**: `docs/roadmap/features/092-fix-mcp-writepath-authz/feature.md`
 **Total Steps**: 6
@@ -40,7 +40,7 @@ changes.
 
 ### Step 1 — service: Gate ingest `TriggerBackfill` on admin scope
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -84,7 +84,7 @@ changes.
 
 ### Step 2 — test: `TriggerBackfill` gate test + migrate bare-`MagicMock` cases; centralize `_ctx`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_ingest_servicer.py` — modify
@@ -143,7 +143,7 @@ changes.
 
 ### Step 3 — test: notify `EmitAlert` internal-caller contract + compile-first harness
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-notify`
 **Files**:
 - `services/xstockstrat-notify/package.json` — modify
@@ -215,7 +215,7 @@ changes.
 
 ### Step 4 — service: Flip the four hardcoded-admin agent tools to caller-derived scope; delete `_admin_metadata()`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -309,7 +309,7 @@ changes.
 
 ### Step 5 — test: Per-tool caller-derived-scope + ctx-injection tests; flip the `"7"` assertions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_config_tools.py` — modify
@@ -382,7 +382,7 @@ changes.
 
 ### Step 6 — docs: Re-forge invariants + same-PR surface parity (C-10)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` + service `CLAUDE.md`s + `plugins/strat-lab/`
 **Files**:
 - `services/xstockstrat-agent/docs/context-constitution.md` — modify (AGENT-3, AGENT-4)

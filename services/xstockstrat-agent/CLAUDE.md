@@ -1,7 +1,7 @@
 # xstockstrat-agent — CLAUDE.md
 
 <!-- context-forge:constitution-pointer:start -->
-> **Constitution:** non-obvious local invariants (ephemeral per-call gRPC channels, lazy `gen.*` imports, hardcoded admin metadata, `MCP_AGENT_SECRET` triple-purpose, `aud`-bound JWT) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (`namespace="agent"` hardcode, `MCP_TRANSPORT` stdio default) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+> **Constitution:** non-obvious local invariants (ephemeral per-call gRPC channels, lazy `gen.*` imports, caller-derived admin scope on management write tools, `MCP_AGENT_SECRET` triple-purpose, `aud`-bound JWT) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (`namespace="agent"` hardcode, `MCP_TRANSPORT` stdio default) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
 <!-- context-forge:constitution-pointer:end -->
 
 ## Role
@@ -17,9 +17,10 @@ naming the replacement URL. `MCP_TRANSPORT=sse` remains accepted as a deprecated
 `http` (it logs a warning and starts the same server), as does `MCP_SSE_PORT` for
 `MCP_HTTP_PORT`. `MCP_TRANSPORT=stdio` is unaffected and stays for local use.
 All outbound gRPC calls to platform services carry `x-mcp-secret` when `MCP_AGENT_SECRET` is
-set; the management tools forward a hardcoded admin `x-access-scope` so the backends' role checks
-pass — with one exception, `set_config`, which forwards the real caller's derived scope
-(feature 073; see § Management-tool authorization).
+set; every management **write** tool forwards the **real caller's derived** `x-access-scope` so the
+backends' role checks *verify* admin (feature 092 generalized this from the feature-073
+`set_config`-only case; the old hardcoded admin scope was removed). See § Management-tool
+authorization.
 
 ## Language
 
@@ -52,20 +53,30 @@ reference):
 
 ### Management-tool authorization
 
-The management tools (`manage_strategy`, `manage_formula`, `manage_signal_source`,
-`set_strategy_live`, `trigger_backfill`) forward a hardcoded admin `x-access-scope` on their backend gRPC calls.
-Internal services (e.g. `xstockstrat-analysis` `SetStrategyLive`) only perform a role check on the
-propagated `x-access-scope`; `manage_formula` additionally relies on the indicators backend's
-author-ownership check. The MCP endpoint itself is gated by OAuth 2.1 (see below).
+The four management **write** tools that hit a backend admin gate — `manage_strategy`,
+`manage_signal_source`, `set_strategy_live`, `trigger_backfill` — forward the **real calling
+user's** derived `x-access-scope` on their backend gRPC calls (feature 092; `set_config` has done
+this since feature 073). The scope is derived from the caller's identity roles by `app/scopes.py`
+`roles_to_access_scope` (a port of the UI's `rolesToAccessScope`) via the shared
+`app/tools.py` `_caller_access_scope(ctx, tool)` helper, so a **non-admin operator is rejected
+`PERMISSION_DENIED`** by the backend gate (analysis `ManageStrategy`/`SetStrategyLive`, ingest
+`ManageSignalSource`/`TriggerBackfill` — all check the ADMIN bit `0x04`) rather than silently
+succeeding under a hardcoded admin override. The claims come from `app/main.py` `_authorized`, which
+publishes them on the request's ASGI scope under `MCP_CLAIMS_SCOPE_KEY`; each tool reads them via its
+injected `ctx: Context`. The old hardcoded `_admin_metadata()` (`x-access-scope=7`) tuple was
+**removed** by feature 092.
 
-**`set_config` is the documented exception (feature 073).** It forwards the **real calling user's**
-scope, derived from their identity roles by `app/scopes.py` `roles_to_access_scope` (a port of the
-UI's `rolesToAccessScope`), so a non-admin operator is rejected `PERMISSION_DENIED` by
-`xstockstrat-config`'s gate rather than silently succeeding under a service-wide admin override.
-The claims come from `app/main.py` `_authorized`, which publishes them on the request's ASGI scope
-under `MCP_CLAIMS_SCOPE_KEY`; the tool reads them via its injected `ctx: Context`.
+**`manage_formula` is different** — it forwards **no** admin scope (plain `_metadata()`); the
+indicators backend enforces an **author-ownership** check instead (admin is only an override there).
+It is not a hardcoded-admin forwarder and was left unchanged by feature 092.
 
-That plumbing is why `set_config` refuses when no verified claims are present. Feature 079
+**`EmitAlert` (xstockstrat-notify) is intentionally ungated** (feature 092): it is an internal
+service-caller RPC on the private gRPC network whose trust boundary is the network plus the agent's
+OAuth edge — every caller (the agent, plus analysis/ingest/trading loops) is internal and sends no
+admin scope, so a per-call role gate would break them all. Documented as an explicit contract, not an
+oversight.
+
+That plumbing is also why these tools refuse when no verified claims are present. Feature 079
 **removed** the legacy SSE transport whose `POST /messages` returned before `_authorized` ran, so
 every tool call now passes the gate and the check is **defence in depth** rather than the live
 transport guard. It must keep its current shape: back when both transports existed, a check based

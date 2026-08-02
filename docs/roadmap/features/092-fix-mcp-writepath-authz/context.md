@@ -97,3 +97,56 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Per-tool ctx SDK-wiring: prove with the paired ctx-injection guard per tool at execute.
 - F-05 split: Step 4 deletes `_admin_metadata()` (breaks existing tests); carry green-making minimum
   in Step 4's commit, full assertion rewrites in Step 5.
+
+---
+
+## Session 2026-08-02 — sdd-review impl-spec (advisory)
+
+- Criteria pass (spec-reviewer): PASS — 0 failures, 2 advisory notes (Step 4 "live" substring
+  trading-domain false-positive; Step 3 unpaired-by-design test/harness step, not a C-08 miss). Every
+  spot-checked path:line verified; load-bearing gate-before-flip order confirmed (Step 1 ingest gate <
+  Step 4 agent flip); notify Step 3 genuinely defeats the 074 trap (compile-first + hard import assert
+  + demonstrated red). No Floor breach — F-11 is resolved, not breached.
+- Overlap pass (feature-overlap): CLEAN. No migration/proto/config (structurally impossible). Soft
+  coordination note: 088 (fix-mcp-signal-source-verbs, still draft) also rewrites `manage_signal_source`
+  in client.py/tools.py — whichever lands second rebases that function; no blocking merge-order row.
+  091's set_config edits are disjoint (092 only rewrites two set_config comments); 093/094 disjoint.
+- Proceeding to implementation on the feature branch (one PR per feature).
+
+---
+
+## Session 2026-08-02 — sdd-execute (implementation)
+
+All 6 steps implemented on feature/fix-mcp-writepath-authz (one PR into main-dev), TDD gates honored.
+
+- **Step 1-2 (ingest)**: `_has_admin_scope` gate added to `TriggerBackfill` after the `_db is None`
+  check (mirrors CancelBackfill). Centralized `_ctx(access_scope)` into `tests/conftest.py` (C-13 —
+  test_ingest_servicer became the second consumer). RED demonstrated (gate removed → the NOT_FOUND
+  case fails "DID NOT RAISE"); GREEN 152 tests, coverage 76%. Migrated the 2 bare-MagicMock
+  TriggerBackfill cases + added the gate/queues pair; imported `grpc` into test_ingest_servicer.
+- **Step 3 (notify)**: EmitAlert left ungated (internal-service-caller contract). Switched
+  package.json to compile-first (`tsc && node --test dist/...`), replaced the lazy try/catch import
+  with a STATIC import + hard "import succeeded" harness assertion, removed all silent-skip guards
+  (incl. the serialization test's optional proto import). Added the metadata-less EmitAlert contract
+  test. RED demonstrated (stub admin gate → contract test + 2 metadata-less tests fail); GREEN 16
+  tests, 0 skipped, coverage 84.6%. Fixed a latent type error the strip-types mode never caught.
+- **Step 4-5 (agent)**: added a shared `_caller_access_scope(ctx, tool)` helper (DRY — avoids 5
+  copies of the claims block); flipped manage_strategy/manage_signal_source/set_strategy_live/
+  trigger_backfill to `ctx` + caller-derived scope; refactored set_config onto the helper (fail-fast
+  preserved); DELETED `_admin_metadata()`; updated scopes.py docstring + set_config comments.
+  Centralized `_ctx`/ADMIN/TRADER/VIEWER into the agent conftest (C-13 — test_tools became a 2nd
+  consumer); rewrote `test_other_management_tools...` → `test_all_management_tools_forward_the_callers_
+  derived_scope` (also the ctx-injection guard for all 5); added per-tool scope-forwarding +
+  None-claims tests; flipped the test_client.py "7" assertions to "15"; injected ctx into 15
+  test_tools.py call sites; reworded the streamable_http_auth comment. GREEN 150 tests, coverage 68%,
+  ruff clean.
+- **Step 6 (docs, C-10)**: re-forged AGENT-3/AGENT-4 + the CLAUDE.md constitution-header pointer;
+  marked F-11 finding RESOLVED; agent CLAUDE.md § Management-tool authorization (corrected the
+  manage_formula grouping, added the EmitAlert contract); ingest CLAUDE.md (TriggerBackfill gated);
+  notify CLAUDE.md (EmitAlert contract + compile-first harness); mcp-tools.md (trigger_backfill/
+  manage_strategy/manage_signal_source/emit_alert authz + set_config no-longer-exception framing);
+  product-spec behavior-change call-out. strat-lab verified authz-text-free (no edit). context-forge
+  plugin unavailable — teardown scan not run; noted in PR.
+- Verified: all four backends gate on ADMIN 0x04 (incl. SetStrategyLive). Non-admins lose the four
+  tools (intended F-11 fix).
+- Status: implementation-ready → code-completed.

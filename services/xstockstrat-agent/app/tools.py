@@ -58,6 +58,25 @@ def _claims_from_context(ctx: Context) -> dict | None:
     return claims if isinstance(claims, dict) else None
 
 
+def _caller_access_scope(ctx: Context, tool: str) -> int:
+    """Derive the REAL caller's ``x-access-scope`` from their verified claims.
+
+    Feature 073 introduced this for ``set_config``; feature 092 generalized it to every management
+    write tool (``manage_strategy``, ``manage_signal_source``, ``set_strategy_live``,
+    ``trigger_backfill``) so admin is *verified by the backend gate*, not asserted via a hardcoded
+    scope. Raises when no verified claims are present (the Streamable HTTP transport authenticates
+    the tool call itself; the legacy SSE transport that didn't was removed by feature 079)."""
+    claims = _claims_from_context(ctx)
+    if claims is None:
+        raise RuntimeError(
+            f"{tool} requires the Streamable HTTP transport, where the tool call itself "
+            "is authenticated. No verified caller claims are present on this request, so the "
+            "caller's role cannot be established. (The legacy SSE transport, which never "
+            "authenticated individual tool calls, was removed by feature 079.)"
+        )
+    return roles_to_access_scope(claims.get("roles"))
+
+
 def _grpc_error_message(exc: grpc.aio.AioRpcError, not_found: str = "not found") -> str:
     """Map a gRPC error to a concise, caller-facing message for an MCP tool."""
     code = exc.code()
@@ -390,6 +409,7 @@ def register_tools(server: MCPServer) -> None:
 
     @server.tool()
     async def manage_strategy(
+        ctx: Context,
         operation: str,
         strategy_id: str,
         display_name: str | None = None,
@@ -497,9 +517,15 @@ def register_tools(server: MCPServer) -> None:
                 )
             update_mask = mask
 
+        # feature 092: forward the caller's REAL derived scope (was a hardcoded admin 7); the
+        # analysis ManageStrategy backend enforces the ADMIN bit, so a non-admin is rejected there.
+        access_scope = _caller_access_scope(ctx, "manage_strategy")
         try:
             return await client.manage_strategy(
-                operation=operation, definition=definition, update_mask=update_mask
+                operation=operation,
+                definition=definition,
+                update_mask=update_mask,
+                access_scope=access_scope,
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="strategy not found")) from e
@@ -577,6 +603,7 @@ def register_tools(server: MCPServer) -> None:
 
     @server.tool()
     async def manage_signal_source(
+        ctx: Context,
         operation: str,
         slug: str,
         display_name: str = "",
@@ -608,17 +635,20 @@ def register_tools(server: MCPServer) -> None:
             "extractor_module": extractor_module,
             "config_json": config_json or {},
         }
+        access_scope = _caller_access_scope(ctx, "manage_signal_source")  # feature 092
         try:
             return await client.manage_signal_source(
                 operation=operation,
                 source=source,
                 credentials_ref=credentials_ref,
+                access_scope=access_scope,
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="signal source not found")) from e
 
     @server.tool()
     async def set_strategy_live(
+        ctx: Context,
         strategy_id: str,
         live_enabled: bool,
     ) -> dict:
@@ -632,15 +662,19 @@ def register_tools(server: MCPServer) -> None:
             signal_params.symbols.
         Returns a 4-field subset, NOT the full definition:
             {"strategy_id", "display_name", "live_enabled", "active"}."""
+        access_scope = _caller_access_scope(ctx, "set_strategy_live")  # feature 092
         try:
             return await client.set_strategy_live(
-                strategy_id=strategy_id, live_enabled=live_enabled
+                strategy_id=strategy_id,
+                live_enabled=live_enabled,
+                access_scope=access_scope,
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="strategy not found")) from e
 
     @server.tool()
     async def trigger_backfill(
+        ctx: Context,
         symbols: list[str],
         timeframe: str = "1d",
         start: str | None = None,
@@ -661,6 +695,7 @@ def register_tools(server: MCPServer) -> None:
         Returns {"job_id", "status"}. Ingest performs NO synchronous input validation —
         it queues unconditionally and bad input surfaces as a terminal FAILED/PARTIAL
         job; poll get_backfill_status with the returned job_id to observe the outcome."""
+        access_scope = _caller_access_scope(ctx, "trigger_backfill")  # feature 092
         try:
             return await client.trigger_backfill(
                 symbols=symbols,
@@ -669,6 +704,7 @@ def register_tools(server: MCPServer) -> None:
                 end=end,
                 overwrite=overwrite,
                 fill_mode=fill_mode,
+                access_scope=access_scope,
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e)) from e
@@ -826,14 +862,9 @@ def register_tools(server: MCPServer) -> None:
                 "(see docs/patterns/config-governance.md)."
             )
 
-        claims = _claims_from_context(ctx)
-        if claims is None:
-            raise RuntimeError(
-                "set_config requires the Streamable HTTP transport, where the tool call itself "
-                "is authenticated. No verified caller claims are present on this request, so the "
-                "caller's role cannot be established. (The legacy SSE transport, which never "
-                "authenticated individual tool calls, was removed by feature 079.)"
-            )
+        # feature 092: shared with the other management tools; still fails fast (before the
+        # ListKeys network call) when no verified claims are present.
+        access_scope = _caller_access_scope(ctx, "set_config")
 
         env, mode = _resolve_scope(environment, trading_mode)
 
@@ -855,7 +886,6 @@ def register_tools(server: MCPServer) -> None:
                     "delivered as type: SECRET environment variables."
                 )
 
-        access_scope = roles_to_access_scope(claims.get("roles"))
         try:
             return await client.set_config(
                 namespace=namespace,

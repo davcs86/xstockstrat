@@ -1,7 +1,7 @@
 # Feature: fix-mcp-writepath-authz
 
 **Type**: bug
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/fix-mcp-writepath-authz`
 **Source Report**: docs/reports/2026-08-01-mcp-tools-alignment-triage.md (F-11)
 **Severity**: SEV-2
@@ -17,6 +17,7 @@
 | 2026-08-02 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the MCP-alignment triage report (F-11) |
 | 2026-08-02 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. ingest gate TriggerBackfill; notify EmitAlert = explicit internal-service-caller contract (no gate, adversary-ruled); agent flips 4 hardcoded-admin tools to caller-derived scope + deletes `_admin_metadata()`. Non-admins lose these tools (intended). |
 | 2026-08-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
+| 2026-08-02 | `implementation-ready` → `code-completed` | /sdd-execute | All 6 steps implemented. ingest TriggerBackfill gated (152 tests); notify EmitAlert contract compile-first (16, RED demonstrated); agent 4 tools flipped + `_admin_metadata()` deleted (150 tests); docs re-forged. One PR into main-dev. |
 
 ---
 
