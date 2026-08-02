@@ -58,3 +58,57 @@
     `/sdd-spec` time and note in `merge-order.md` once this feature reaches
     `implementation-ready`, per the reviewing agent's recommendation.
 - Status: draft → spec-ready.
+
+## Session 2026-08-02T00:20:00Z — sdd-design (quick, 1 round)
+
+- **Phase 0 Recon**: spawned 4 parallel `codebase-discovery` agents (agent, notify, ingest,
+  analysis) → wrote `recon.md`. Key findings beyond the story-time recon: `auth.py::_metadata()`
+  has **two** call sites (`validate_bearer_jwt` AND `validate_bearer_claims`, not just the former);
+  `test_client.py` has exactly 6 `x-mcp-secret` assertion sites; `test_auth.py` exists (an earlier
+  sub-agent had missed it) and needs no changes since it never asserts on `_metadata()`'s output;
+  `AGENT-4`/`AGENT-6` in `docs/context-constitution.md` already cite stale evidence line numbers
+  independent of this feature, corrected in the same edit rather than propagated forward.
+- **Phase 1 Grilling**: 1 round (quick mode). Proposer gave a 3-step subtraction plan (agent code +
+  test / infra env trim / doc reconciliation). Adversary found no Floor breach but 5 real gaps:
+  (1) Step 3 omitted `.env.example`/`scripts/setup-env.sh` despite FR-4 already naming them —
+  synthesis fix: carried into design explicitly. (2) `docs/launch-pdfs/product-features.md:186` —
+  a **live, uncorrected** claim ("Platform services trust this header...") in launch/marketing
+  collateral, never surveyed by recon or named in product-spec — added to FR-4/product-spec scope;
+  its rendered PDF is regenerated via `scripts/build-launch-pdfs.py` (verified the `markdown`/
+  `weasyprint` toolchain installs cleanly in this session's environment via `pip install`).
+  (3) `docs/reports/2026-08-01-mcp-tools-alignment-triage.md:57` — a genuine historical survivor
+  (describes a proposed-and-never-built RPC gate) that AC-1's original exemption wording didn't
+  cover — widened the exemption set to `docs/roadmap/features/*/`, `docs/roadmap/ledger/`, and
+  `docs/reports/` explicitly, replacing the vaguer original wording. (4) Step 2 (infra env-var
+  trim) claimed "existing CI coverage" as verification, but no CI job boots `docker-compose.yml` at
+  all (confirmed zero `docker compose` references in `.github/workflows/ci.yml`) — made the manual
+  `docker compose up`/`ps` smoke check a mandatory, actually-executed verification step, not
+  aspirational. (5) The "leave `auth.py`'s orphaned `MCP_AGENT_SECRET` read in place" judgment call
+  was applied asymmetrically — `client.py:22`'s copy becomes equally orphaned; resolved by treating
+  both symmetrically (leave both, documented as a deliberate minimalism trade-off — see design.md
+  Rejected Alternatives).
+- **Gate**: no `AskUserQuestion` was raised for this round. All 5 objections had a single clear,
+  non-ambiguous engineering fix (not a genuine architecture fork), and the user's original task
+  instruction explicitly said to "run the SDD process until completion in one PR" — treated as
+  standing authorization to resolve non-forking design-quality gaps autonomously rather than pause
+  the pipeline on every non-blocking adversarial finding. This is recorded here per Constitution
+  P-03/P-04 so the decision is auditable, not silent.
+- Updated `product-spec.md`: FR-4 now names `docs/launch-pdfs/product-features.md`; AC-1 split into
+  a hard-zero check (`services/xstockstrat-agent/app/`) + a reviewed repo-wide check with an
+  explicit historical-survivor exemption set; AC-4 now mandates the executed smoke check; Feature
+  Workflow Notes / Open Questions updated to match the branch deviation and the symmetric-orphan
+  decision.
+- Constitution rules touched: C-01, C-08, C-10, C-14, P-03, F-02/F-03, F-04 (all honored — see
+  `design.md` § Constitution Rules Touched). No Floor breach at any point.
+- Status: spec-ready → design-approved.
+
+## Open Threads (mirrored from design.md § Open Risks)
+
+- [ ] `docs/runbooks/mcp-tools.md`'s inline "sends `x-mcp-secret`" clauses beyond `:241,388,707`
+  may not be exhaustive — re-grep at `/sdd-spec` time before finalizing step 3's instructions.
+- [ ] `docs/launch-pdfs/product-features.pdf` regeneration needs `markdown`/`weasyprint` — installed
+  successfully in this session's environment; re-verify availability at execute time and record an
+  explicit deferral note here if it's ever unavailable (never a silent skip).
+- [ ] `.do/app.yaml`'s `MCP_AGENT_SECRET` notify/ingest/analysis block is also touched by
+  `084-droplet-compose-deploy` (`spec-ready`, not yet implemented) — rebase-risk only, watch at
+  `/sdd-spec` time.

@@ -48,17 +48,24 @@ agent block / `.env.example` / `scripts/setup-env.sh` (still needed there for th
 
 FR-4. `docs/runbooks/mcp-tools.md`, `docs/setup/digitalocean.md`, `docs/runbooks/CLAUDE.md`, root
 `CLAUDE.md`, `services/xstockstrat-agent/CLAUDE.md`, `services/xstockstrat-notify/CLAUDE.md`,
-`services/xstockstrat-agent/docs/context-constitution.md`, `.env.example`, and
-`scripts/setup-env.sh` no longer describe an `x-mcp-secret` header being sent, checked, or
-enforced anywhere. Any claim of downstream enforcement (e.g. `docs/runbooks/mcp-tools.md`'s
-"Those services reject requests without the correct header", `.env.example:38,40`'s "Shared secret
-sent as x-mcp-secret header on all downstream HTTP calls… Leave empty to skip header enforcement",
-or `scripts/setup-env.sh`'s "header enforcement disabled" / "x-mcp-secret header will not be sent"
-messaging and its prompt claiming the value "must match value set in ingest, notify, and analysis")
-is deleted or rewritten, not merely softened — it was never true in current source, and once FR-3
-removes the var from those three services' blocks, the "must match" framing becomes actively wrong.
-`.env.example` and `scripts/setup-env.sh` keep prompting for / documenting `MCP_AGENT_SECRET` itself
-(still needed for OAuth signing per FR-2) — only the header-enforcement narrative around it changes.
+`services/xstockstrat-agent/docs/context-constitution.md`, `.env.example`,
+`scripts/setup-env.sh`, and `docs/launch-pdfs/product-features.md` no longer describe an
+`x-mcp-secret` header being sent, checked, or enforced anywhere. Any claim of downstream
+enforcement (e.g. `docs/runbooks/mcp-tools.md`'s "Those services reject requests without the
+correct header", `.env.example:38,40`'s "Shared secret sent as x-mcp-secret header on all
+downstream HTTP calls… Leave empty to skip header enforcement", `scripts/setup-env.sh`'s "header
+enforcement disabled" / "x-mcp-secret header will not be sent" messaging and its prompt claiming
+the value "must match value set in ingest, notify, and analysis", or
+`docs/launch-pdfs/product-features.md:186`'s "Platform services trust this header as 'request
+originated from the AI agent surface'") is deleted or rewritten, not merely softened — it was never
+true in current source, and once FR-3 removes the var from those three services' blocks, the "must
+match" framing becomes actively wrong. `.env.example` and `scripts/setup-env.sh` keep prompting
+for / documenting `MCP_AGENT_SECRET` itself (still needed for OAuth signing per FR-2) — only the
+header-enforcement narrative around it changes. `docs/launch-pdfs/product-features.md`'s rendered
+`product-features.pdf` is regenerated (`python3 scripts/build-launch-pdfs.py product-features`) so
+the shipped PDF matches the corrected source; if the build toolchain (`markdown`, `weasyprint`) is
+unavailable in the execution environment, this is recorded as an explicit, named deferral in
+`context.md` — not silently skipped.
 
 FR-5. Test coverage is updated to match: `services/xstockstrat-agent/tests/test_client.py`'s
 assertions that `_metadata()` returns an `x-mcp-secret` tuple are removed/replaced with assertions
@@ -95,6 +102,9 @@ per-step PRs) — recorded in this repo's completed-feature backlog
 - `xstockstrat-ingest` — drops the same env var from its infra blocks
 - `xstockstrat-analysis` — drops the same env var from its infra blocks
 
+No proto, RPC, or inter-service call behavior changes at any of these four services — only the
+gRPC metadata attached to existing calls, deployment env wiring, and documentation change.
+
 ## Consumer Surface(s)
 
 - [ ] **UI**
@@ -121,22 +131,35 @@ DO App Platform `SECRET`-scoped env var, never a config-service key.)
 
 ## Feature Workflow Notes
 
-Branch to create: `feature/remove-x-mcp-secret-header` (branch from `main-dev`)
+Branch: `claude/remove-x-mcp-secret-header-icog9j` (harness-assigned for this session; branched
+from `main-dev`; see `feature.md` and `context.md` for the deviation note — this replaces the
+default `feature/remove-x-mcp-secret-header` convention for this run only)
 Approval gates required (per docs/runbooks/feature-workflow.md):
 - [x] 1 service owner approval (non-breaking, no proto/config/schema change)
 
 **Explicit instruction for this feature (from the requester):** run the full SDD pipeline to
 completion — story → design (quick) → spec → review → execute — and land it as **one PR** with
 **no intermediate per-step PRs**. Use `/sdd-execute remove-x-mcp-secret-header sequential`, which
-commits one commit per step directly on `feature/remove-x-mcp-secret-header` and opens a single
-integration PR to `main-dev` at the end, rather than the default per-step-PR mode.
+commits one commit per step directly on the development branch and opens a single integration PR
+to `main-dev` at the end, rather than the default per-step-PR mode.
 
 ## Acceptance Criteria
 
-1. `grep -rn "x-mcp-secret"` across the repo returns zero hits in source code, tests, and docs
-   (a historical mention in `docs/roadmap/features/097-remove-x-mcp-secret-header/` itself, in
-   past-tense/removed-feature framing, and in other already-`launched` feature dirs' historical
-   records, is acceptable — those are an immutable log, not live doc claims).
+1. `grep -rn "x-mcp-secret"` inside `services/xstockstrat-agent/app/` (the only place the literal
+   header string is ever constructed) returns zero hits — this is the hard-zero, no-legitimate-
+   survivor-possible check (per the `079-remove-mcp-sse-transport` removal-feature lesson in
+   `docs/roadmap/ledger/fails.md`: gate a removal on symbols that cease to exist, not on a
+   vocabulary count). Separately, `grep -rln "x-mcp-secret"` across the full repo is reviewed
+   file-by-file, and every live/current-tense claim that a service sends, checks, or enforces the
+   header is corrected (FR-4). A survivor is acceptable **only** when it is inside one of these
+   historical/dated-snapshot locations, describing the header in past-tense/removed-feature or
+   proposed-and-rejected framing, never as a live claim: `docs/roadmap/features/*/` (any feature
+   directory, not just this one — e.g. `092-fix-mcp-writepath-authz`'s design record),
+   `docs/roadmap/ledger/` (`insights.md`/`fails.md`), `docs/reports/` (dated point-in-time
+   snapshots, e.g. `docs/reports/2026-08-01-mcp-tools-alignment-triage.md:57`, which describes a
+   proposed-and-never-built RPC gate). `docs/launch-pdfs/product-features.md` is explicitly **not**
+   exempt — it is live marketing collateral making a current-tense trust claim
+   (`:186`, corrected by FR-4) — nor is any other doc not in the exemption list above.
 2. `xstockstrat-agent`'s outbound gRPC metadata never includes an `x-mcp-secret` key, verified by
    an updated `test_client.py` assertion.
 3. `MCP_AGENT_SECRET` still exists as an env var wired to `xstockstrat-agent` (docker-compose,
@@ -145,7 +168,12 @@ integration PR to `main-dev` at the end, rather than the default per-step-PR mod
    unmodified in behavior.
 4. `MCP_AGENT_SECRET` is removed from `xstockstrat-notify`, `xstockstrat-ingest`, and
    `xstockstrat-analysis`'s env blocks in `docker-compose.yml`, `.do/app.yaml`, and
-   `.do/app.dev.yaml` (it served no purpose there once the header is gone).
+   `.do/app.dev.yaml` (it served no purpose there once the header is gone). Since no CI job boots
+   the `docker-compose.yml` stack (confirmed absent from `.github/workflows/ci.yml`), this
+   criterion additionally requires an actually-executed local smoke check —
+   `docker compose up -d xstockstrat-notify xstockstrat-ingest xstockstrat-analysis xstockstrat-agent`
+   followed by `docker compose ps` confirming all four report healthy/running — run and its output
+   recorded (not merely asserted) before this step is considered verified.
 5. `docs/runbooks/mcp-tools.md` and `docs/setup/digitalocean.md` no longer claim any service
    enforces or checks `x-mcp-secret`.
 6. `AGENT-6` in `services/xstockstrat-agent/docs/context-constitution.md` accurately describes
@@ -166,3 +194,11 @@ integration PR to `main-dev` at the end, rather than the default per-step-PR mod
   var, narrow its documented purpose, don't rename it in this feature.
 - [ ] Should `MCP_AGENT_SECRET` eventually be renamed to reflect its sole remaining purpose? Left
   as an explicit out-of-scope follow-up (see above) rather than bundled here.
+- [x] **Resolved in design (Phase 1, round 1):** after `_metadata()` in both `client.py` and
+  `auth.py` unconditionally returns `[]`, the module-level `MCP_AGENT_SECRET = os.environ.get(...)`
+  read in each of those two files becomes dead code (only `oauth_server.py`'s copy stays
+  load-bearing). Decision: leave both dead reads in place symmetrically, rather than deleting them,
+  because deleting `client.py`'s copy would also require editing `conftest.py`'s
+  `monkeypatch.setattr(client, "MCP_AGENT_SECRET", ...)` fixture (widening the diff for a
+  functionally inert cleanup) and the leftover reads cost nothing at runtime. See `design.md`
+  Rejected Alternatives.

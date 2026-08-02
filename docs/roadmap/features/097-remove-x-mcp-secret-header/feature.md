@@ -1,6 +1,6 @@
 # Feature: remove-x-mcp-secret-header
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `design-approved`
 **Development Branch**: `claude/remove-x-mcp-secret-header-icog9j` (harness-assigned; see context.md deviation note — this session runs the full SDD pipeline and lands the single integration PR from this branch instead of a separate `feature/remove-x-mcp-secret-header` branch)
 **Created**: 2026-08-02
 **Last Updated**: 2026-08-02
@@ -13,12 +13,15 @@
 |---|---|---|---|
 | 2026-08-02 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-02 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS; 1 warning fixed pre-approval; overlap scan WARN-only, no blockers) |
+| 2026-08-02 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon](recon.md) — grounded codebase dossier (Phase 0)
+- [Design](design.md) — debated, approved architecture (Phase 1)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec <slug>`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -41,4 +44,4 @@ agent's stateless OAuth `txn` blob (invariant `AGENT-6`).
 
 ## Next Action
 
-`/sdd-design remove-x-mcp-secret-header quick` — grounded design debate before /sdd-spec
+`/sdd-spec remove-x-mcp-secret-header` — generate implementation spec from the approved design
