@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Seventeen tools:
+Twenty-two tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -11,11 +11,16 @@ Seventeen tools:
   screen_symbols       — scans a symbol universe via gRPC ScreenSymbols (read-only)
   manage_strategy     — register/update/deactivate/reactivate stored strategies (update = merge)
   get_strategy        — reads a stored strategy's full definition (read-only)
-  manage_formula      — registers/updates/deletes custom formulas in indicators
-  manage_signal_source — registers/updates/deactivates signal sources in ingest
+  manage_formula      — registers/updates(partial merge)/soft-deletes custom formulas in indicators
+  get_formula         — reads one stored formula's full definition incl. `deleted` (read-only)
+  list_formulas       — lists formula definitions, soft-deleted excluded (read-only)
+  manage_signal_source — registers/updates/reactivates/deactivates signal sources in ingest
   set_strategy_live   — enables/disables live alert evaluation for a strategy
   trigger_backfill    — triggers an OHLCV history backfill via gRPC TriggerBackfill (admin-scoped)
   get_backfill_status — checks a backfill job / lists recent jobs (read-only)
+  cancel_backfill     — cancels a queued/running backfill job (admin-scoped)
+  test_formula        — dry-runs inline formula source in the sandbox, registers nothing (read-only)
+  list_strategies     — lists stored strategy definitions (read-only)
   get_config          — reads a namespace's current config values, secrets redacted (read-only)
   list_config_keys    — lists a namespace's registered config keys, metadata only (read-only)
   set_config          — writes one non-secret config value (admin-scoped write)
@@ -266,6 +271,9 @@ def register_tools(server: MCPServer) -> None:
         body: str,
         source_service: str = "xstockstrat-agent",
         target_user_id: str = "",
+        context: dict | None = None,
+        tags: list[str] | None = None,
+        correlation_id: str = "",
     ) -> dict:
         """Emit an alert via xstockstrat-notify.
         severity: one of 'info', 'warning', 'error', 'critical' (case-insensitive). Any
@@ -274,6 +282,9 @@ def register_tools(server: MCPServer) -> None:
         title/body: stored and delivered verbatim with NO server-side validation — empty strings
             are accepted and delivered blank, so populate both.
         target_user_id: defaults to '' which BROADCASTS to all users; set it to target one user.
+        context: optional structured JSON object stored and fanned out with the alert.
+        tags: optional list of string tags for filtering/grouping.
+        correlation_id: optional id to correlate related alerts.
         Use for system-level alerts or alerts not tied to a specific ingested signal (ingest_signal
             already auto-alerts high-conviction signals).
         Returns {"alert_id": <str>}."""
@@ -284,6 +295,9 @@ def register_tools(server: MCPServer) -> None:
             body=body,
             source_service=source_service,
             target_user_id=target_user_id,
+            context=context,
+            tags=tags,
+            correlation_id=correlation_id,
         )
 
     # structured_output=False is forward-protection, not load-bearing today: for a bare `-> list`
@@ -508,46 +522,52 @@ def register_tools(server: MCPServer) -> None:
     @server.tool()
     async def manage_formula(
         operation: str,
-        name: str = "",
-        description: str = "",
-        source: str = "",
-        is_public: bool = False,
+        name: str | None = None,
+        description: str | None = None,
+        source: str | None = None,
+        is_public: bool | None = None,
         formula_id: str = "",
         author: str = "",
         formula_author_user_id: str = "",
         parameters: list[dict] | None = None,
+        outputs: list[dict] | None = None,
+        warmup_period: int | None = None,
     ) -> dict:
         """Register/update/delete a custom formula in xstockstrat-indicators.
         operation: 'register' | 'update' | 'delete'.
-        name/description/source/is_public: for register and update.
+        name/description/source/is_public: for register and update. On UPDATE these are
+            presence-detected — pass a field only if you want to change it (see UPDATE below).
         author: stored immutably on register.
         formula_id: required for update/delete.
         formula_author_user_id: required for update/delete; must match the formula's original
             author (the indicators backend returns PERMISSION_DENIED otherwise).
-        parameters: typed parameter definitions for register/update — a list of
+        parameters: typed parameter definitions — a list of
             {name, type, default, description, required, min, max} where type is one of
             'int'|'float'|'bool'|'string' and min/max apply to numeric params only. Values
             are read inside the formula via params["<name>"].
+        outputs: declared secondary output series — a list of {name, description}. Declaring an
+            output makes it addressable in strategy rules as "<ref>.<name>"; the implicit "value"
+            series is always available and must NOT be declared here. A formula can therefore be
+            genuinely multi-series (no more one-formula-per-series workaround).
+        warmup_period: bars of warm-up before this formula's outputs are valid (int ≥ 0).
 
-        UPDATE IS A FULL REPLACE (not a partial merge): every field you omit is sent as its
-            default and OVERWRITES the stored value — an omitted source is blanked, omitted
-            parameters are dropped, is_public silently resets to False. No read-back tool exists
-            (get_formula/list_formulas are not registered), so you cannot recover the current
-            definition: keep the full registration payload and resend ALL fields on every update.
-        DELETE IS A HARD DELETE with no reference check — any strategy still referencing the
-            formula will fail later at evaluation time. Treat delete as forbidden while any
-            strategy uses the formula.
+        UPDATE IS A PARTIAL MERGE (AIP-161): only the fields you actually pass are changed; every
+            field you omit is preserved. Passing is_public=false unpublishes; omitting is_public
+            leaves it as-is. `source` cannot be blanked. Use get_formula/list_formulas to read a
+            formula back before editing. (At least one field must be supplied to update.)
+        DELETE IS A SOFT DELETE: the formula is marked deleted (non-destructive), hidden from
+            list_formulas, and can no longer be updated, but strategies that already reference it
+            keep evaluating on its last-saved definition — and both their backtests
+            (BacktestResult.warnings) and live status (get_strategy → warnings) flag the deletion
+            to the user. You cannot bind a NEW strategy to a deleted formula.
         Returns per operation: register → {"formula_id": <str>}; update → the full stored formula
-            in camelCase; delete → {"success": <bool>}.
+            in camelCase (incl. `deleted`); delete → {"success": <bool>}.
 
         source: plain Python, executed in a subprocess sandbox (no filesystem/network access).
             Two dicts are already in scope — data (series input, e.g. data["close"], a list of
             floats) and params (validated typed scalars, e.g. params["period"]) — and the
             formula must assign its output to a `result` dict with a "value" key (the primary
-            series). Only "value" is usable through this tool: it does NOT send the RegisterFormula
-            `outputs` or `warmup_period` fields, so any additional keys you put in `result` are NOT
-            declared to the backend and are ignored (analysis falls back to just "value"). To build
-            a multi-series indicator, register one formula per series.
+            series) plus one key per declared `outputs` entry.
             Only imports in the `indicators.sandbox.allowed_imports` config key are permitted
             (default: numpy, pandas, math, statistics). Within those, at least these functions
             are available for building custom indicators:
@@ -564,56 +584,114 @@ def register_tools(server: MCPServer) -> None:
         formula: dict = {
             "formula_id": formula_id,
             "user_id": formula_author_user_id,
-            "name": name,
-            "description": description,
-            "source": source,
-            "is_public": is_public,
             "author": author,
+            "name": name or "",
+            "description": description or "",
+            "source": source or "",
+            "is_public": bool(is_public),
             "parameters": parameters or [],
+            "outputs": outputs or [],
+            "warmup_period": warmup_period or 0,
         }
+        if operation == "update":
+            # Derive the AIP-161 update_mask from the fields actually supplied (non-None), so an
+            # omitted field is preserved rather than wiped. Never fall back to a maskless full
+            # replace from the tool.
+            supplied = {
+                "name": name,
+                "description": description,
+                "source": source,
+                "is_public": is_public,
+                "parameters": parameters,
+                "outputs": outputs,
+                "warmup_period": warmup_period,
+            }
+            mask = [field for field, val in supplied.items() if val is not None]
+            if not mask:
+                raise RuntimeError("update requires at least one field to change")
+            formula["update_mask"] = mask
         try:
             return await client.manage_formula(operation=operation, formula=formula)
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="formula not found")) from e
 
     @server.tool()
+    async def get_formula(formula_id: str) -> dict:
+        """Fetch one custom formula's stored definition from xstockstrat-indicators.
+        formula_id: required.
+        Returns the formula in camelCase incl. name, description, source, isPublic, parameters,
+            outputs, warmupPeriod, and `deleted` (true when soft-deleted). Use this for safe
+            read-modify-write: read the formula, change the fields you want, then call
+            manage_formula(operation='update', ...) with only those fields."""
+        try:
+            return await client.get_formula(formula_id)
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="formula not found")) from e
+
+    @server.tool()
+    async def list_formulas(author_filter: str = "", include_public: bool = True) -> dict:
+        """List custom formula definitions from xstockstrat-indicators.
+        author_filter: if non-empty, restrict to formulas authored by this user id.
+        include_public: also include public formulas regardless of author_filter (default true).
+        Soft-deleted formulas are excluded. Returns {"formulas": [<formula in camelCase>, ...]}."""
+        try:
+            return {"formulas": await client.list_formulas(author_filter, include_public)}
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
+
+    @server.tool()
     async def manage_signal_source(
         operation: str,
         slug: str,
-        display_name: str = "",
-        source_type: str = "",
+        display_name: str | None = None,
+        source_type: str | None = None,
         config_json: dict | None = None,
-        extractor_module: str = "",
+        extractor_module: str | None = None,
         credentials_ref: str | None = None,
     ) -> dict:
-        """Register/update/deactivate a signal source in xstockstrat-ingest.
-        operation: 'register' | 'update' | 'deactivate'.
-        slug/display_name/source_type/extractor_module/config_json: SignalSource fields.
-        credentials_ref: optional reference forwarded to the ingest backend. It is NEVER
-            echoed back in the response and never exposed to the caller (FR-12).
-        DESTRUCTIVE UPSERT: 'register' and 'update' are the SAME blind full-replace — register on
-            an existing slug silently overwrites it, update on an unknown slug silently creates it,
-            and every field you omit BLANKS the stored value. In particular, omitting
-            credentials_ref NULLs the stored reference (has_credentials flips to false), so always
-            re-supply it from your own records. Resend the COMPLETE definition every time (read
-            current fields from list_signal_sources first).
-        REACTIVATION: register/update always sends active=True, so either also reactivates a
-            deactivated source — this is the only reactivation path, and there is no way to update
-            without reactivating.
+        """Register/update/reactivate/deactivate a signal source in xstockstrat-ingest.
+        operation: 'register' | 'update' | 'reactivate' | 'deactivate'. These are HONEST,
+            distinct verbs (feature 088):
+            - register: strict create — an existing slug returns ALREADY_EXISTS (no overwrite).
+              Provide slug/display_name/source_type/extractor_module (+config_json/credentials_ref).
+            - update: PARTIAL MERGE — pass only the fields to change; every omitted field is
+              PRESERVED. An unknown slug returns NOT_FOUND. (At least one field must be supplied.)
+            - reactivate: set active=true; decoupled from update (update never changes active).
+            - deactivate: set active=false.
+        slug: always required (the source key).
+        credentials_ref: reference forwarded to the backend; NEVER echoed back (FR-12). On update it
+            is preserved when omitted; pass "" to explicitly clear it. A `authenticated_website` or
+            `mediated_authenticated_website` source requires a credential (validated on the merged
+            result).
         Returns {"slug", "display_name", "source_type", "extractor_module", "active",
             "has_credentials"} — credentials_ref is never included."""
-        source: dict = {
-            "slug": slug,
-            "display_name": display_name,
-            "source_type": source_type,
-            "extractor_module": extractor_module,
-            "config_json": config_json or {},
-        }
+        source: dict = {"slug": slug}
+        if display_name is not None:
+            source["display_name"] = display_name
+        if source_type is not None:
+            source["source_type"] = source_type
+        if extractor_module is not None:
+            source["extractor_module"] = extractor_module
+        if config_json is not None:
+            source["config_json"] = config_json
+        update_mask: list[str] | None = None
+        if operation == "update":
+            supplied = {
+                "display_name": display_name,
+                "source_type": source_type,
+                "extractor_module": extractor_module,
+                "config_json": config_json,
+                "credentials_ref": credentials_ref,
+            }
+            update_mask = [field for field, val in supplied.items() if val is not None]
+            if not update_mask:
+                raise RuntimeError("update requires at least one field to change")
         try:
             return await client.manage_signal_source(
                 operation=operation,
                 source=source,
                 credentials_ref=credentials_ref,
+                update_mask=update_mask,
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="signal source not found")) from e
@@ -704,6 +782,59 @@ def register_tools(server: MCPServer) -> None:
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="backfill job not found")) from e
+
+    @server.tool()
+    async def cancel_backfill(job_id: str) -> dict:
+        """Cancel a queued or running OHLCV backfill job in xstockstrat-ingest (admin-scoped).
+        job_id: the job to cancel (from trigger_backfill or get_backfill_status).
+        Use this to stop a paid backfill you started that is no longer wanted. A job that has
+            already completed/failed cannot be canceled.
+        Returns {"job": {...}} with the updated BackfillJob (status should be canceled)."""
+        try:
+            return await client.cancel_backfill(job_id)
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="backfill job not found")) from e
+
+    @server.tool()
+    async def test_formula(
+        source: str,
+        input_data: dict | None = None,
+        input_params: dict | None = None,
+        parameters: list[dict] | None = None,
+        timeout_ms: int = 0,
+    ) -> dict:
+        """Dry-run inline formula source in the sandbox WITHOUT registering it (read-only).
+        Use this to validate a formula's behavior before manage_formula(operation='register').
+        source: plain Python; assign the result to a `result` dict with a 'value' key. `data`
+            (series input, e.g. data['close']) and `params` (typed scalars) are in scope.
+        input_data: JSON object passed to the formula as `data` (e.g. {'close': [1,2,3]}).
+        input_params: parameter VALUES exposed as `params` (e.g. {'period': 14}).
+        parameters: optional typed parameter DEFINITIONS to validate input_params for this run.
+        timeout_ms: 0 = use the configured sandbox timeout.
+        Returns the full sandbox result: success, output (the result dict; NON-FINITE values such
+            as NaN/Infinity are returned as null), stdout, stderr, error, exit_reason,
+            parameter_errors, execution_ms (int64 as a JSON string)."""
+        try:
+            return await client.execute_formula(
+                formula_source=source,
+                input_data=input_data,
+                input_params=input_params,
+                parameters=parameters,
+                timeout_ms_override=timeout_ms,
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
+
+    @server.tool()
+    async def list_strategies(include_inactive: bool = False) -> dict:
+        """List stored strategy definitions from xstockstrat-analysis (read-only).
+        include_inactive: also include deactivated strategies (default false).
+        Returns {"strategies": [<definition>, ...]} — each definition is snake_case, matching
+            get_strategy (so a list → get → manage_strategy edit loop stays consistent)."""
+        try:
+            return {"strategies": await client.list_strategy_definitions(include_inactive)}
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
 
     @server.tool()
     async def get_strategy(strategy_id: str) -> dict:

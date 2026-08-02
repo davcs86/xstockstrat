@@ -90,6 +90,10 @@ message BacktestResult {
   // when the request omitted it) — required to rebuild the equity curve for a
   // historical run (feature 068).
   double initial_capital = 15;
+  // Human-readable run warnings surfaced to the user (feature 086), e.g. a strategy referenced a
+  // formula that has since been soft-deleted — the run still completed using its last-saved
+  // definition. Empty on a clean run.
+  repeated string warnings = 16;
 }
 
 message TradeRecord {
@@ -253,6 +257,11 @@ message StrategyDefinition {
   // unset → platform default (analysis.strategy.default_cooldown_days); explicit 0 → no cooldown
   // (immediate re-entry allowed); negative → rejected at write time (INVALID_ARGUMENT).
   optional int32 cooldown_days = 9;
+  // Human-readable status warnings surfaced to the user on read (feature 086), e.g. a component
+  // references a formula that has been soft-deleted — the strategy still evaluates (live and in
+  // backtests) using the formula's last-saved definition, but the deletion is flagged. Populated
+  // by GetStrategy; empty elsewhere.
+  repeated string warnings = 10;
 }
 
 enum StrategyOperation {

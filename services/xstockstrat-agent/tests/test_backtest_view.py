@@ -165,7 +165,7 @@ def test_summary_key_set_covers_every_proto_field():
     """
     from gen.analysis.v1 import analysis_pb2  # in-function per AGENT-2 — the module stays pure
 
-    kept = set(_HEAD_KEYS) | set(_METRIC_KEYS) | {"coverage_gaps", "diagnostics"}
+    kept = set(_HEAD_KEYS) | set(_METRIC_KEYS) | {"coverage_gaps", "diagnostics", "warnings"}
     assert kept | set(_INTENTIONALLY_DROPPED) == set(
         analysis_pb2.BacktestResult.DESCRIPTOR.fields_by_name
     )

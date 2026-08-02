@@ -7,6 +7,7 @@ option go_package = "github.com/xstockstrat/contracts/gen/go/ingest/v1;ingestv1"
 import "google/protobuf/timestamp.proto";
 import "common/v1/common.proto";
 import "google/protobuf/struct.proto";
+import "google/protobuf/field_mask.proto";
 
 service IngestService {
   rpc TriggerBackfill(TriggerBackfillRequest) returns (TriggerBackfillResponse);
@@ -164,12 +165,27 @@ message ListSignalSourcesResponse {
   repeated SignalSource sources = 1;
 }
 
-// ManageSignalSourceRequest: operation is "register" | "update" | "deactivate".
-// credentials_ref is only processed on register/update; ignored on deactivate.
+// Closed verb set for ManageSignalSource (feature 088). Closed set → enum (C-04).
+enum SignalSourceOperation {
+  SIGNAL_SOURCE_OPERATION_UNSPECIFIED = 0;
+  SIGNAL_SOURCE_OPERATION_REGISTER = 1;    // strict create: ALREADY_EXISTS on an existing slug
+  SIGNAL_SOURCE_OPERATION_UPDATE = 2;      // NOT_FOUND if missing; AIP-161 partial merge via update_mask
+  SIGNAL_SOURCE_OPERATION_REACTIVATE = 3;  // set active=TRUE; decoupled from update (RC-6)
+  SIGNAL_SOURCE_OPERATION_DEACTIVATE = 4;  // set active=FALSE
+}
+
+// ManageSignalSourceRequest verbs (feature 088): prefer operation_enum; the string operation is kept
+// for back-compat and read only when operation_enum is UNSPECIFIED.
+// credentials_ref is processed on register/update; ignored on reactivate/deactivate. On a masked
+// update it is a virtual mask path: listed → apply (empty clears); unlisted → the stored ref is kept.
 message ManageSignalSourceRequest {
   SignalSource source         = 1;
   string       credentials_ref = 2;
-  string       operation      = 3;
+  string       operation      = 3 [deprecated = true];  // use operation_enum (feature 088)
+  // AIP-161 partial update (feature 088). Applies to UPDATE only; absent = full replace (back-compat).
+  google.protobuf.FieldMask update_mask = 4;
+  // Preferred verb selector (feature 088); when set (!= UNSPECIFIED) it wins over the string operation.
+  SignalSourceOperation operation_enum = 5;
 }
 
 message ManageSignalSourceResponse {

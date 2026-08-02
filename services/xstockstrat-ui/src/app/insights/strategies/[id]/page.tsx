@@ -173,6 +173,22 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
               </Card>
             ) : null}
 
+            {/* Feature 086: live-status warning when a referenced formula was soft-deleted. */}
+            {definition && definition.warnings.length > 0 && (
+              <Card data-testid="strategy-warnings">
+                <CardHeader>
+                  <CardTitle>Warnings</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ul className="list-disc space-y-1 pl-5 text-sm text-[hsl(38_92%_50%)]">
+                    {definition.warnings.map((w, i) => (
+                      <li key={i}>{w}</li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Live evaluation toggle */}
             {definition && (
               <Card>
@@ -331,6 +347,20 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
               <Card>
                 <CardContent className="pt-5">
                   <p className="text-sm text-muted-foreground">Loading run detail…</p>
+                </CardContent>
+              </Card>
+            )}
+            {result && result.warnings.length > 0 && (
+              <Card data-testid="backtest-warnings">
+                <CardHeader>
+                  <CardTitle>Warnings</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ul className="list-disc space-y-1 pl-5 text-sm text-[hsl(38_92%_50%)]">
+                    {result.warnings.map((w, i) => (
+                      <li key={i}>{w}</li>
+                    ))}
+                  </ul>
                 </CardContent>
               </Card>
             )}

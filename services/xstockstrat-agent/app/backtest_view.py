@@ -68,6 +68,11 @@ def summarize(result: dict[str, Any]) -> dict[str, Any]:
     if "coverage_gaps" in result:
         summary["coverage_gaps"] = result["coverage_gaps"]
 
+    # Feature 086: surface run warnings inline (e.g. a referenced formula was soft-deleted). Small
+    # and must reach the caller even on an INSUFFICIENT_DATA run with no attachment.
+    if "warnings" in result:
+        summary["warnings"] = result["warnings"]
+
     # Same key name as feature 064 so existing readers keep their path — only `bars` is dropped.
     if "diagnostics" in result:
         summary["diagnostics"] = [
