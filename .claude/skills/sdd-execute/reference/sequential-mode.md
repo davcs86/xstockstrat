@@ -38,9 +38,10 @@ For each feature in the sequence, in order:
 1. Run **BOOT SEQUENCE** (B0–B5) scoped to this feature's slug/dir.
 2. **Re-spec gate** (§5.3).
 3. **Up-front confirm** (§5.4).
-4. **Step loop** — one commit per step, smart checkpoints (§5.5 / §5.5b).
-5. **Integration PR** (§5.6) + **CI watch** (§5.8).
-6. Advance to the next feature. Do **not** wait for the integration PR to merge first; cross-feature
+4. **Tooling setup** (§5.4b) — install only what this feature's steps need; blocker if unavailable.
+5. **Step loop** — one commit per step, smart checkpoints (§5.5 / §5.5b).
+6. **Integration PR** (§5.6) + **CI watch** (§5.8).
+7. Advance to the next feature. Do **not** wait for the integration PR to merge first; cross-feature
    ordering is governed by `merge-order.md` and surfaced as a blocker (§5.7) if violated.
 
 ### 5.3 Re-spec gate (read-only validation first; the sole sanctioned spec edit)
@@ -66,9 +67,15 @@ After §5.3's read-only validation, present the combined plan for this feature: 
 (which steps will be re-spec'd and why) **and** the ordered list of pending steps to execute, with
 each step's **consumer surface** annotated (backend / `ui` / `agent` — see §5.5b) so the operator
 sees where the checkpoints will fall. Ask one `AskUserQuestion` (proceed / stop). On proceed: commit
-the re-spec (if any) per §5.3, then run §5.5, pausing only at **checkpoints** (§5.5b) and **blockers**
-(§5.7) — no further per-step confirmation. This single confirmation **replaces** the per-step Phase-2
-confirmation for this feature.
+the re-spec (if any) per §5.3, then run **TOOLING SETUP** (§5.4b), then run §5.5, pausing only at
+**checkpoints** (§5.5b) and **blockers** (§5.7) — no further per-step confirmation. This single
+confirmation **replaces** the per-step Phase-2 confirmation for this feature.
+
+### 5.4b Tooling setup (mandatory, once per feature, before the step loop)
+Read and execute **`reference/tooling-setup.md`** scoped to this feature's **pending steps** — install
+only the toolchain those steps need (nothing speculative), pinned to the version table, and never a
+database. A tool that is required but unavailable is a **blocker** (§5.7), raised **now** via
+`AskUserQuestion` rather than discovered mid-loop where it would stall the run or skip a verification.
 
 ### 5.5 Step loop — one commit per step, no per-step PR
 Set up the feature branch **once** via the branch-sync *setup* (fetch, create-or-checkout

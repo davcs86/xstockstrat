@@ -2,15 +2,17 @@
 name: sdd-execute
 description: Phase 3 of SDD — execute implementation steps with mandatory codebase discovery, explicit user confirmation before any writes, a red-before-green TDD gate, and (in the default modes) a branch + PR per step. Usage — /sdd-execute <feature-slug> [step-number|next|all|sequential]. `sequential` runs a feature (or an ordered multi-feature sequence with per-feature re-spec) end-to-end as one commit per step on the feature branch — no per-step PRs — pausing at smart operator checkpoints (consumer-surface boundaries and a step cap) with one up-front confirmation per feature, and opens a single integration PR at the end. Use this whenever the user asks to implement, build, code, or land a feature that already has an implementation spec, to do the next step, to resume or continue a feature from an earlier session, to open the final integration PR, or to unblock a blocked step. Re-reads context.md at every session start so prior decisions carry forward.
 argument-hint: <feature-slug | "feat-a (re-spec if needed) > feat-b ..."> [step-number|next|all|sequential]
-allowed-tools: Read Write Edit Task Bash(ls *) Bash(find *) Bash(grep *) Bash(mkdir *) Bash(go *) Bash(go install *) Bash(golangci-lint *) Bash(python *) Bash(python3 *) Bash(uv *) Bash(pip *) Bash(ruff *) Bash(pnpm *) Bash(npx *) Bash(buf *) Bash(curl *) Bash(psql *) Bash(docker *) Bash(git diff *) Bash(git status *) Bash(git fetch *) Bash(git pull *) Bash(git show *) Bash(git ls-remote *) Bash(git checkout *) Bash(git branch *) Bash(git merge *) Bash(git rebase *) Bash(git push *) Bash(git add *) Bash(git commit *) Bash(gh pr *)
+allowed-tools: Read Write Edit Task Bash(ls *) Bash(find *) Bash(grep *) Bash(mkdir *) Bash(go *) Bash(go install *) Bash(golangci-lint *) Bash(python *) Bash(python3 *) Bash(uv *) Bash(pip *) Bash(ruff *) Bash(pnpm *) Bash(npx *) Bash(npm *) Bash(corepack *) Bash(which *) Bash(buf *) Bash(curl *) Bash(psql *) Bash(docker *) Bash(git diff *) Bash(git status *) Bash(git fetch *) Bash(git pull *) Bash(git show *) Bash(git ls-remote *) Bash(git checkout *) Bash(git branch *) Bash(git merge *) Bash(git rebase *) Bash(git push *) Bash(git add *) Bash(git commit *) Bash(gh pr *)
 effort: high
 ---
 
 You are executing implementation steps for an xstockstrat feature. You follow strict rules: discover before writing, confirm before writes (per step in the default modes; **once up-front per feature** in `sequential` mode — see `reference/sequential-mode.md`), and document everything in context.md so that any future session can resume without relying on conversation history.
 
 **Progressive disclosure**: this file is the always-loaded core (boot, the 3-phase per-step
-execution, commit/PR, and the HARD CONSTRAINTS safety rails). Three `reference/` files load only
+execution, commit/PR, and the HARD CONSTRAINTS safety rails). The `reference/` files load only
 when their path activates — do not read them up front:
+- `reference/tooling-setup.md` — read **once per session** at TOOLING SETUP (after STEP SELECTOR,
+  before the first step) — **mandatory**, every mode.
 - `reference/sequential-mode.md` — read **only** when `$ARGUMENTS[1] == sequential`.
 - `reference/deviation-handling.md` — read when a deviation or in-scope-unresolvable gap arises.
 - `reference/repo-conventions.md` — read when a step touches proto / migrations / config keys / lint / header propagation / frontend test mocks.
@@ -116,6 +118,25 @@ Parse `$ARGUMENTS[1]`:
 
 If no `pending` steps are found (all steps are `done`, `skipped`, or `blocked`):
 → go to **ALL-DONE PATH** below instead of stopping.
+
+---
+
+## TOOLING SETUP — Mandatory, once per session, before the first step
+
+Once the STEP SELECTOR has resolved **which** steps will run this session, read
+**`reference/tooling-setup.md`** and execute it **before** BRANCH SYNC / Phase 1 of the first step.
+It installs **only** the toolchain those selected steps need (nothing speculative), pinned to the
+root `CLAUDE.md` § Language Versions & Tooling table, and turns a missing/broken tool into an
+**up-front blocker** instead of a mid-step failure or a silently skipped verification.
+
+- **Default modes** (`next` / number / `all`): run it here, after the STEP SELECTOR, scoped to the
+  target step (+ its paired `test` step's tools).
+- **Sequential mode**: it runs inside the driver — after the §5.4 up-front confirm, before the §5.5
+  step loop — scoped to that feature's pending steps.
+
+Never begin a step whose `**Verification**` needs a tool this phase has not confirmed present (or for
+which a fallback was not decided here). **Never install a database** as part of setup — migration
+steps are verified offline (see Phase 3 / HARD CONSTRAINTS).
 
 ---
 
@@ -417,6 +438,11 @@ below are **non-overridable** — no "proceed anyway" or sequential-mode carve-o
   green outputs go in the PR body + `context.md`, never by editing the step body. Non-code-bearing
   steps record `TDD: N/A`.
 - **Never write or edit any file before Phase 2 user confirmation.**
+- **Never begin a step before TOOLING SETUP has confirmed its verification tools** (or decided a
+  fallback) — `reference/tooling-setup.md`, run once per session after the STEP SELECTOR. Install
+  **only** what the selected steps need; a tool failure found mid-step (that stops the run or silently
+  skips a verification) is the exact failure this phase prevents. Setup never installs or starts a
+  database.
 - **Never guess a file path or symbol name.** If not found in Phase 1 discovery, block the step.
 - **Never commit before Phase 3 verification passes.** All commits happen in STEP COMMIT + PR, after verification.
 - **Never target `main-dev` or `main` in a step PR.** Always target the `**Development Branch**` from `feature.md`.
