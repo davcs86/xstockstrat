@@ -146,3 +146,25 @@
   - `AGENT-6`'s framing target confirmed as **single-purpose** (per `design.md`, which supersedes
     `recon.md`'s draft "dual-purpose" language) — `design.md` is the later, debated, authoritative
     source when the two differ.
+
+## Session 2026-08-02T00:40:00Z — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 3 warnings (all advisory — did not block). Independently spot-checked ~40
+  path:line citations across 18 files; every one matched exactly, including the two deliberately-
+  flagged stale `context-constitution.md` evidence lines. No Floor breach.
+- Unresolved ⚠ carried into execution (none require a spec change — noted for awareness):
+  - Step 1: paired test-step folded into the same step rather than a separate `test` step —
+    explicitly logged deviation (F-05/P-03 cited in Step Dependencies), substance of C-08
+    satisfied. — [x] acknowledged, no action needed (by design).
+  - Step 2: `config:` category label doesn't cleanly match `reviewer-registry.md`'s literal
+    config-key mapping (this is deployment env-var wiring, not an `xstockstrat-config` key;
+    Platform Lead is the substantively correct reviewer). — [x] acknowledged, no action needed.
+  - Step 3: touches 7 files (B2's >5-file split-consideration threshold) — reviewer's own
+    assessment: "likely fine as-is" given the single-theme, low-risk nature of each edit. —
+    [x] acknowledged, not splitting.
+- Overlap findings (Mode B): clean — no migration/proto-field/config-key/file collision within the
+  `implementation-ready`/`in-progress` set. One pre-existing WARN carried forward (`084-droplet-
+  compose-deploy`, still `spec-ready`, no committed impl-spec yet) — fixed a small imprecision in
+  Step Dependencies (`.do/app.yaml` → `.do/app.dev.yaml`, matching 084's actual scoped file) in the
+  same session, committed separately.
+- Proceeding to `/sdd-execute remove-x-mcp-secret-header sequential` — no blockers found.
