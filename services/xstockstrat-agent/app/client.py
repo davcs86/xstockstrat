@@ -28,11 +28,6 @@ def _metadata() -> list[tuple[str, str]]:
     return []
 
 
-def _admin_metadata() -> list[tuple[str, str]]:
-    """x-mcp-secret plus the hardcoded admin x-access-scope for write/management RPCs."""
-    return [*_metadata(), ("x-access-scope", "7")]
-
-
 def _iso_to_timestamp(iso_str: str) -> Timestamp:
     dt = datetime.fromisoformat(iso_str.replace("Z", "+00:00"))
     if dt.tzinfo is None:
@@ -400,6 +395,7 @@ async def manage_strategy(
     operation: str,
     definition: dict[str, Any],
     update_mask: list[str] | None = None,
+    access_scope: int = 0,
 ) -> dict[str, Any]:
     """Register/update/deactivate a stored strategy via gRPC ManageStrategy (admin-scoped).
 
@@ -447,8 +443,9 @@ async def manage_strategy(
     if update_mask is not None:
         req.update_mask.paths.extend(update_mask)
 
-    # Analysis does a role check on the propagated x-access-scope (admin bit).
-    meta = _admin_metadata()
+    # feature 092: forward the caller's REAL derived scope (was a hardcoded admin 7). Analysis
+    # does the role check on the propagated x-access-scope (admin bit), so it rejects a non-admin.
+    meta = [*_metadata(), ("x-access-scope", str(access_scope))]
     async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.ManageStrategy(req, metadata=meta)
@@ -534,18 +531,20 @@ async def execute_formula(
         return {"success": False, "error": f"could not serialize formula output: {e}"}
 
 
-async def cancel_backfill(job_id: str) -> dict[str, Any]:
+async def cancel_backfill(job_id: str, access_scope: int = 0) -> dict[str, Any]:
     """Cancel a queued/running backfill job via gRPC CancelBackfill (admin-scoped, feature 087).
 
-    Mirrors trigger_backfill: CancelBackfill is admin-gated server-side, so it carries the admin
-    x-access-scope. Returns the updated job in the same {"job": …} envelope as get_backfill_status.
+    Mirrors trigger_backfill: CancelBackfill is admin-gated server-side, so it forwards the
+    caller's derived x-access-scope (feature 092 — no hardcoded admin). Returns the updated job in
+    the same {"job": …} envelope as get_backfill_status.
     """
     from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # noqa: PLC0415
 
     async with grpc.aio.insecure_channel(INGEST_ENDPOINT) as channel:
         stub = ingest_pb2_grpc.IngestServiceStub(channel)
         resp = await stub.CancelBackfill(
-            ingest_pb2.CancelBackfillRequest(job_id=job_id), metadata=_admin_metadata()
+            ingest_pb2.CancelBackfillRequest(job_id=job_id),
+            metadata=[*_metadata(), ("x-access-scope", str(access_scope))],
         )
     return {
         "job": MessageToDict(
@@ -667,6 +666,7 @@ async def manage_signal_source(
     source: dict[str, Any],
     credentials_ref: str | None = None,
     update_mask: list[str] | None = None,
+    access_scope: int = 0,
 ) -> dict[str, Any]:
     """Register/update/reactivate/deactivate a signal source via gRPC ManageSignalSource (admin).
 
@@ -706,8 +706,9 @@ async def manage_signal_source(
     if update_mask:
         req.update_mask.CopyFrom(field_mask_pb2.FieldMask(paths=list(update_mask)))
 
-    # Forward the admin access scope so ingest's role check (x-access-scope & 0x04) passes.
-    meta = _admin_metadata()
+    # feature 092: forward the caller's REAL derived scope (was a hardcoded admin 7); ingest's
+    # role check (x-access-scope & 0x04) rejects a non-admin.
+    meta = [*_metadata(), ("x-access-scope", str(access_scope))]
     async with grpc.aio.insecure_channel(INGEST_ENDPOINT) as channel:
         stub = ingest_pb2_grpc.IngestServiceStub(channel)
         resp = await stub.ManageSignalSource(req, metadata=meta)
@@ -842,14 +843,17 @@ async def refresh_oauth_token(refresh_token: str, resource: str) -> dict[str, An
     }
 
 
-async def set_strategy_live(strategy_id: str, live_enabled: bool) -> dict[str, Any]:
+async def set_strategy_live(
+    strategy_id: str, live_enabled: bool, access_scope: int = 0
+) -> dict[str, Any]:
     """Enable/disable live evaluation via SetStrategyLive RPC (admin-scoped).
 
-    Forwards the admin access scope so the internal analysis service's role check passes.
+    feature 092: forwards the caller's REAL derived scope (was a hardcoded admin 7) so the internal
+    analysis service's role check (admin bit) rejects a non-admin.
     """
     from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
 
-    meta = _admin_metadata()
+    meta = [*_metadata(), ("x-access-scope", str(access_scope))]
     async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.SetStrategyLive(
@@ -903,6 +907,7 @@ async def trigger_backfill(
     end: str | None = None,
     overwrite: bool = False,
     fill_mode: str | None = None,
+    access_scope: int = 0,
 ) -> dict[str, Any]:
     """Trigger a historical OHLCV backfill via gRPC TriggerBackfill (admin-scoped write).
 
@@ -952,9 +957,12 @@ async def trigger_backfill(
         # One-sided ranges are safe: ingest treats an unset bound (seconds == 0) as open.
         req.range.CopyFrom(tr)
 
+    # feature 092: forward the caller's REAL derived scope (was a hardcoded admin 7); ingest's
+    # new TriggerBackfill gate (x-access-scope & 0x04) rejects a non-admin.
+    meta = [*_metadata(), ("x-access-scope", str(access_scope))]
     async with grpc.aio.insecure_channel(INGEST_ENDPOINT) as channel:
         stub = ingest_pb2_grpc.IngestServiceStub(channel)
-        resp = await stub.TriggerBackfill(req, metadata=_admin_metadata())
+        resp = await stub.TriggerBackfill(req, metadata=meta)
     return {"job_id": resp.job_id, "status": ingest_pb2.BackfillStatus.Name(resp.status)}
 
 
@@ -1117,10 +1125,10 @@ async def set_config(
 ) -> dict:
     """ConfigService.SetConfig, forwarding the REAL caller's access scope.
 
-    This is the one management call that does not use _admin_metadata()'s hardcoded tuple -- a
-    deliberate, tool-scoped deviation from invariant AGENT-4 (feature 073 FR-5). The server-side
-    ADMIN-bit gate (feature 074) is what enforces it, so a non-admin caller gets PERMISSION_DENIED
-    here rather than a silent success.
+    Feature 073 introduced caller-derived scope here; feature 092 generalized it to every management
+    tool (the hardcoded-admin ``_admin_metadata()`` was removed), so this is no longer an exception.
+    The server-side ADMIN-bit gate (feature 074) is what enforces it, so a non-admin caller gets
+    PERMISSION_DENIED here rather than a silent success.
     """
     from gen.config.v1 import config_pb2, config_pb2_grpc  # noqa: PLC0415
 
@@ -1148,7 +1156,8 @@ async def set_config(
                 trading_mode=mode,
                 create_key=create_key,
             ),
-            # NOT _admin_metadata(): the caller's real scope, so the server's gate decides.
+            # The caller's real derived scope, so the server's gate decides (feature 092: every
+            # management tool now does this; the hardcoded-admin path was removed).
             metadata=[*_metadata(), ("x-access-scope", str(access_scope))],
         )
         return {"version": resp.version, "updated_at": resp.updated_at.ToDatetime().isoformat()}

@@ -208,6 +208,12 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         if self._db is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
             return
+        # Feature 092 (F-11): admin-gate the quota-spending backfill, mirroring CancelBackfill /
+        # ManageSignalSource. Placed after the _db check so an unconfigured DB still returns
+        # UNAVAILABLE.
+        if not self._has_admin_scope(context):
+            await context.abort(grpc.StatusCode.PERMISSION_DENIED, "admin scope required")
+            return
         job_id = str(uuid.uuid4())
         propagation_meta = self._propagation_meta(context)
         # Canonicalize BEFORE persisting (feature 080 FR-13). _canonical_timeframe prefers the

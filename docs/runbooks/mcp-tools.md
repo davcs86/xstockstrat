@@ -231,7 +231,7 @@ Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exc
 
 ### `emit_alert`
 
-Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or notifications not tied to an ingested signal.
+Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or notifications not tied to an ingested signal. Sends `x-mcp-secret`, **no** admin `x-access-scope`: `EmitAlert` is an internal-service-caller RPC that is intentionally **not** role-gated (feature 092) — its trust boundary is the private network plus the agent's OAuth edge, and every caller (agent + internal service loops) is unauthenticated at the RPC layer.
 
 **Parameters**
 
@@ -426,6 +426,9 @@ fundamentals are available; a degraded scan still skips them).
 ### `manage_strategy`
 
 Registers, updates, deactivates, or **reactivates** a stored strategy definition in `xstockstrat-analysis`.
+**Admin-scoped write** — forwards the **caller's real derived** `x-access-scope` (feature 092; was a
+hardcoded admin scope); a non-admin is rejected `PERMISSION_DENIED` by the analysis `ManageStrategy`
+gate.
 
 > **Lifecycle is reversible (feature 089).** `deactivate` sets `active=false`; `reactivate` sets it
 > back to `true` and **re-validates the stored definition** (so a reactivate can fail
@@ -612,6 +615,10 @@ Lists custom formula definitions from `xstockstrat-indicators`. Soft-deleted for
 ### `manage_signal_source`
 
 Registers, updates, reactivates, or deactivates a signal source in `xstockstrat-ingest`.
+**Admin-scoped write** — forwards the **caller's real derived** `x-access-scope` (feature 092; was a
+hardcoded admin scope); a non-admin is rejected `PERMISSION_DENIED` by the ingest `ManageSignalSource`
+gate.
+
 **Honest verbs (feature 088)** — register/update are no longer a blind full-replace upsert:
 
 - **`register`** — strict create. An existing slug returns `ALREADY_EXISTS` (no silent overwrite).
@@ -655,7 +662,9 @@ Registers, updates, reactivates, or deactivates a signal source in `xstockstrat-
 ### `trigger_backfill`
 
 Triggers a historical OHLCV backfill via `xstockstrat-ingest` `TriggerBackfill` (feature 066).
-**Write/management op** — sends `x-mcp-secret` **and** the hardcoded admin `x-access-scope`.
+**Admin-scoped write** — forwards the **caller's real derived** `x-access-scope` (feature 092;
+was a hardcoded admin scope). `TriggerBackfill` is now admin-gated server-side, so a non-admin
+caller is rejected `PERMISSION_DENIED` ("admin scope required") rather than queuing a paid job.
 
 **Parameters**
 
@@ -828,10 +837,11 @@ Write **one non-secret** config value. **Admin-scoped write. Streamable HTTP tra
 
 Returns `{version, updated_at}` — **never the value**.
 
-**Authorization uses your real role, not a service-wide admin override.** Unlike every other
-management tool, `set_config` forwards the calling user's derived `x-access-scope`, so
-`xstockstrat-config` rejects a non-admin caller with `PERMISSION_DENIED` ("admin scope required").
-This is the documented exception to invariant **AGENT-4**.
+**Authorization uses your real role, not a service-wide admin override.** `set_config` forwards the
+calling user's derived `x-access-scope`, so `xstockstrat-config` rejects a non-admin caller with
+`PERMISSION_DENIED` ("admin scope required"). Since feature 092 this is how **every** management
+write tool works (it was `set_config`-only under feature 073); the hardcoded admin scope was removed
+(invariant **AGENT-3/AGENT-4**).
 
 **Secret keys cannot be written.** Rejected both by the `secret.` name prefix (checked before any
 RPC — the only thing that can stop a *new* secret key being created) and by the `is_secret` flag

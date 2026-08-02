@@ -24,6 +24,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import IngestServicer, job_row_to_proto
 from tests._helpers import job_row as _job_row
+from tests.conftest import _ctx  # feature 092 (C-13): centralized admin/no-admin context builder
 
 
 def make_servicer(
@@ -268,7 +269,8 @@ class TestTriggerBackfill:
             patch("asyncio.create_task"),
             patch(f"{_REPO}.insert_job", AsyncMock()) as insert,
         ):
-            resp = await svc.TriggerBackfill(req, context=MagicMock())
+            # feature 092: TriggerBackfill is now admin-gated — pass an admin-scoped context.
+            resp = await svc.TriggerBackfill(req, _ctx("4"))
 
         assert resp.status == ingest_pb2.BACKFILL_STATUS_QUEUED
         assert resp.job_id != ""
@@ -297,7 +299,7 @@ class TestTriggerBackfill:
             patch("asyncio.create_task"),
             patch(f"{_REPO}.insert_job", AsyncMock()) as insert,
         ):
-            await svc.TriggerBackfill(req, context=MagicMock())
+            await svc.TriggerBackfill(req, _ctx("4"))  # feature 092: admin-scoped
 
         assert insert.await_args.kwargs["timeframe"] == "15m"
         queued = [
@@ -315,6 +317,44 @@ class TestTriggerBackfill:
         context.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception, match="aborted"):
             await svc.TriggerBackfill(req, context)
+
+    @pytest.mark.asyncio
+    async def test_permission_denied_without_admin_scope(self):
+        """Feature 092 (F-11): the quota-spending backfill is admin-gated, like CancelBackfill.
+
+        RED before the gate: a no-admin caller previously queued a paid job unconditionally.
+        """
+        svc = make_servicer(db=MagicMock())
+        req = MagicMock()
+        req.symbols = ["AAPL"]
+        req.timeframe = "1d"
+        req.range = common_pb2.TimeRange()
+        ctx = _ctx("0")  # no ADMIN bit
+        with (
+            patch("asyncio.create_task") as spawn,
+            patch(f"{_REPO}.insert_job", AsyncMock()) as insert,
+        ):
+            with pytest.raises(Exception, match="aborted"):
+                await svc.TriggerBackfill(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
+        insert.assert_not_awaited()  # no paid job queued
+        spawn.assert_not_called()  # no runner spawned
+
+    @pytest.mark.asyncio
+    async def test_admin_scope_queues(self):
+        """An admin caller still gets a QUEUED job (AC1)."""
+        svc = make_servicer(db=MagicMock())
+        req = MagicMock()
+        req.symbols = ["AAPL"]
+        req.timeframe = "1d"
+        req.range = common_pb2.TimeRange()
+        with (
+            patch("asyncio.create_task"),
+            patch(f"{_REPO}.insert_job", AsyncMock()) as insert,
+        ):
+            resp = await svc.TriggerBackfill(req, _ctx("4"))
+        assert resp.status == ingest_pb2.BACKFILL_STATUS_QUEUED
+        insert.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------

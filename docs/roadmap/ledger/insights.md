@@ -470,6 +470,21 @@ reusing.
 - **Evidence**: `services/xstockstrat-agent/tests/test_backtest_view.py` (the template); report RC-1 + meta-cause (`docs/reports/2026-08-01-mcp-tools-alignment-triage.md`).
 - **Rule it implies**: reinforces **C-10** — every agent request builder / response projection that mirrors a proto gets a descriptor-parity test with an explicit opt-out set; new proto fields then fail closed rather than silently dropping off the MCP surface.
 
+### 2026-08-02 — 092-fix-mcp-writepath-authz — design
+- **Pattern**: When an ungated internal RPC is flagged for "missing authz," first enumerate **who
+  actually calls it and what each caller sends** before choosing a gate — the caller set decides the
+  model. Here every `EmitAlert` caller was unauthenticated/internal (analysis loops send no metadata;
+  the agent sends only `x-mcp-secret`), so (a) an admin-bit gate breaks every caller, and (b)
+  enforcing `x-mcp-secret` **inverts** the trust boundary — the one *external* caller (the OAuth-gated
+  agent) is the only one that sends the secret, while trusted internal callers don't. The correct
+  answer for a low-severity, no-admin-semantics RPC behind the private network was an **explicit
+  internal-service-caller contract** (documented + tested), not a per-call gate. Corollary: when a
+  hardcoded elevated credential is replaced by the caller's real derived scope, that is an intended
+  **access reduction** for non-privileged callers — call it out in the product-spec, don't let it
+  read as a regression. And "function X is now orphaned → delete it" is an absence claim: grep for
+  live refs (tests/docstrings) first — deleting past a test assertion breaks collection.
+- **Evidence**: feature 092 design.md §3 + Rejected Alternatives; `services/xstockstrat-notify/src/grpc/notifyServiceImpl.ts:30`; caller survey in recon.md.
+- **Rule it implies**: reinforces **P-03**/**C-01** — pick an authz model from the verified caller set, not the RPC in isolation; grep-verify every "orphaned/only-affected" absence claim at the design gate.
 ### 2026-08-02 — 091-fix-mcp-config-key-registry — design
 - **Pattern**: To audit **row creation** on a table written via `INSERT … ON CONFLICT DO UPDATE`, add a
   dedicated **`AFTER INSERT`** trigger — never widen an existing `BEFORE UPDATE` audit trigger to

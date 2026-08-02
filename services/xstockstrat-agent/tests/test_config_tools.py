@@ -7,19 +7,19 @@ Three things these must actually prove, because each was a live design trap:
   2. set_config's transport rule is enforced by the ABSENCE of verified claims on the ASGI
      scope, not by inspecting the request. Both transports hand a tool a Starlette Request with
      an Authorization header, so neither could tell them apart. SSE was removed by 079.
-  3. set_config forwards the caller's REAL derived scope, not _admin_metadata()'s hardcoded
-     tuple — and the other management tools keep using the hardcoded one.
+  3. set_config forwards the caller's REAL derived scope, not a hardcoded admin tuple — and
+     feature 092 flipped the other management tools to forward the derived scope too.
 """
 
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from mcp.server.mcpserver import MCPServer
 
 from app import client
-from app.scopes import MCP_CLAIMS_SCOPE_KEY, roles_to_access_scope
+from app.scopes import roles_to_access_scope
 from app.tools import register_tools
+from tests.conftest import ADMIN, TRADER, _ctx  # feature 092 (C-13): shared helpers
 
 
 def _make_server() -> MCPServer:
@@ -30,17 +30,6 @@ def _make_server() -> MCPServer:
 
 def _tool_fn(server: MCPServer, name: str):
     return server._tool_manager.get_tool(name).fn
-
-
-def _ctx(claims: dict | None, *, with_request: bool = True):
-    """A context whose request carries (or lacks) verified claims on its ASGI scope."""
-    state = {MCP_CLAIMS_SCOPE_KEY: claims} if claims is not None else {}
-    request = SimpleNamespace(scope={"state": state}) if with_request else None
-    return SimpleNamespace(request_context=SimpleNamespace(request=request))
-
-
-ADMIN = {"user_id": "u-1", "email": "a@b.c", "roles": ["admin"], "aud": "http://x"}
-TRADER = {"user_id": "u-2", "email": "t@b.c", "roles": ["trader"], "aud": "http://x"}
 
 
 class TestRolesToAccessScope:
@@ -227,6 +216,49 @@ class TestSetConfigForwardsRealScope:
         assert not forwarded & 0x04
 
 
+# feature 092: the four formerly-hardcoded-admin tools now forward the caller's derived scope,
+# exactly like set_config. (name, client_attr, call_kwargs)
+_FLIPPED_TOOLS = [
+    ("manage_strategy", "manage_strategy", {"operation": "register", "strategy_id": "x"}),
+    ("manage_signal_source", "manage_signal_source", {"operation": "register", "slug": "s"}),
+    ("set_strategy_live", "set_strategy_live", {"strategy_id": "x", "live_enabled": True}),
+    ("trigger_backfill", "trigger_backfill", {"symbols": ["AAPL"]}),
+]
+
+
+class TestManagementToolsForwardDerivedScope:
+    """Feature 092: manage_strategy / manage_signal_source / set_strategy_live / trigger_backfill
+    forward the CALLER's derived x-access-scope (was a hardcoded admin 7). RED before the flip:
+    the tools had no ctx and the client wrappers hardcoded 7."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("tool, client_attr, kwargs", _FLIPPED_TOOLS)
+    async def test_admin_forwards_scope_15(self, tool, client_attr, kwargs):
+        server = _make_server()
+        with patch.object(client, client_attr, AsyncMock(return_value={})) as write:
+            await _tool_fn(server, tool)(ctx=_ctx(ADMIN), **kwargs)
+        assert write.await_args.kwargs["access_scope"] == 15  # admin, not the old hardcoded 7
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("tool, client_attr, kwargs", _FLIPPED_TOOLS)
+    async def test_non_admin_forwards_real_scope_without_admin_bit(self, tool, client_attr, kwargs):
+        server = _make_server()
+        with patch.object(client, client_attr, AsyncMock(return_value={})) as write:
+            await _tool_fn(server, tool)(ctx=_ctx(TRADER), **kwargs)
+        forwarded = write.await_args.kwargs["access_scope"]
+        assert forwarded == 11  # trader — the backend gate, not the agent, rejects it
+        assert not forwarded & 0x04
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("tool, client_attr, kwargs", _FLIPPED_TOOLS)
+    async def test_refuses_without_verified_claims(self, tool, client_attr, kwargs):
+        server = _make_server()
+        with patch.object(client, client_attr, AsyncMock(return_value={})) as write:
+            with pytest.raises(RuntimeError, match="Streamable HTTP"):
+                await _tool_fn(server, tool)(ctx=_ctx(None), **kwargs)
+        write.assert_not_awaited()
+
+
 class TestSetConfigCreateKey:
     """Feature 091: the tool forwards create_key to the client (server enforces the gate)."""
 
@@ -348,6 +380,19 @@ class TestSdkWiring:
         assert "ctx" not in props
         assert props["value_type"]["enum"] == ["string", "int", "float", "bool"]
 
-    def test_other_management_tools_still_use_the_hardcoded_admin_tuple(self):
-        """FR-5's AGENT-4 deviation is scoped to set_config only."""
-        assert client._admin_metadata()[-1] == ("x-access-scope", "7")
+    def test_all_management_tools_forward_the_callers_derived_scope(self):
+        """Feature 092: the hardcoded-admin `_admin_metadata()` tuple was removed. Every management
+        write tool now takes `ctx` (SDK-injected) and forwards the caller's derived scope — what was
+        a set_config-only deviation (AGENT-4) is now the platform-wide rule."""
+        assert not hasattr(client, "_admin_metadata"), "the hardcoded admin tuple must be gone"
+        server = _make_server()
+        for tool in (
+            "manage_strategy",
+            "manage_signal_source",
+            "set_strategy_live",
+            "trigger_backfill",
+            "set_config",
+        ):
+            t = server._tool_manager.get_tool(tool)
+            assert t.context_kwarg == "ctx", f"{tool} must have SDK-wired ctx"
+            assert "ctx" not in t.parameters["properties"], f"{tool} ctx leaked into inputSchema"

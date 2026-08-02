@@ -60,6 +60,16 @@ quota-spending RPC sits in the gap. See report F-11 (RC — authz asymmetry).
       backend gate rather than silently succeeding under scope=7.
 - [ ] AGENT-3/AGENT-4 invariant docs updated to match.
 
+## Intended Behavior Change (not a regression)
+
+Replacing the hardcoded admin `x-access-scope=7` (which carried the ADMIN bit for *every* caller)
+with the caller's **real** derived scope means a **non-admin OAuth operator** (trader → scope 11 =
+READ|WRITE|TRADING; viewer → 1) **loses** `manage_strategy`, `manage_signal_source`,
+`set_strategy_live`, and `trigger_backfill` — all four backends require the ADMIN bit (`0x04`). This
+is the point of F-11 (admin is now *verified*, not asserted), not a regression. `manage_formula`
+(author-ownership) and the read tools are unaffected. `EmitAlert` was deliberately left ungated (an
+internal-service-caller contract; see design.md).
+
 ## Out of Scope
 
 - `cancel_backfill` tool addition itself (feature 087) — this feature only concerns the gating model.
