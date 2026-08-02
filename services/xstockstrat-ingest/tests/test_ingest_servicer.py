@@ -860,6 +860,66 @@ class TestIngestSignalRegistryValidation:
 
 
 # ---------------------------------------------------------------------------
+# IngestSignal — conviction range validation (F-9)
+# ---------------------------------------------------------------------------
+
+
+class TestIngestSignalConvictionValidation:
+    """F-9: conviction outside [0.0, 1.0] (and NaN) is rejected INVALID_ARGUMENT.
+
+    RED cases mock the full happy path (registry lookup + INSERT + ledger) so that, in the
+    pre-guard tree, IngestSignal runs to completion and returns a response — the abort never
+    fires and ``pytest.raises("aborted")`` cleanly reports DID NOT RAISE. Once the guard lands,
+    it aborts before the registry lookup, so the same mocks are never consumed.
+    """
+
+    def _make_signal_req(self, conviction: float) -> ingest_pb2.IngestSignalRequest:
+        ts = Timestamp()
+        ts.GetCurrentTime()
+        signal = ingest_pb2.ExternalSignal(
+            source="unusual_whales",
+            symbol="AAPL",
+            direction="buy",
+            valid_from=ts,
+            conviction=conviction,
+        )
+        return ingest_pb2.IngestSignalRequest(signal=signal)
+
+    def _servicer_full_happy_path(self):
+        svc = make_servicer()
+        svc._db = MagicMock()
+        # registry lookup returns a slug row, then the INSERT returns an id
+        svc._db.fetchrow = AsyncMock(side_effect=[{"slug": "unusual_whales"}, {"id": 42}])
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        return svc
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("conviction", [1.5, -0.1, float("nan")])
+    async def test_aborts_on_out_of_range_conviction(self, conviction):
+        import grpc
+
+        svc = self._servicer_full_happy_path()
+        context = MagicMock()
+        context.abort = AsyncMock(side_effect=Exception("aborted"))
+
+        with pytest.raises(Exception, match="aborted"):
+            await svc.IngestSignal(self._make_signal_req(conviction), context)
+
+        context.abort.assert_awaited_once()
+        assert context.abort.call_args[0][0] == grpc.StatusCode.INVALID_ARGUMENT
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("conviction", [0.7, 0.0])
+    async def test_in_range_conviction_proceeds(self, conviction):
+        # 0.7 proceeds to INSERT; 0.0 passes the guard and falls through to the NULL
+        # sentinel (stored NULL, not rejected) — both must still succeed.
+        svc = self._servicer_full_happy_path()
+        resp = await svc.IngestSignal(self._make_signal_req(conviction), context=MagicMock())
+        assert resp.signal_id == 42
+
+
+# ---------------------------------------------------------------------------
 # ManageSignalSource — auth + CRUD paths
 # ---------------------------------------------------------------------------
 

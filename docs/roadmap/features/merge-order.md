@@ -84,6 +84,25 @@ cache, and 062 reserves call-budget headroom (200/250) for 060's interactive sca
 >   `xstockstrat-analysis` edit inside 071's `RunBacktest` span. 072's design chose `EmbeddedResource`
 >   and touches no analysis code, so **072 stays rebase-only** and needs no hard ordering row.
 
+> **Note on the MCP-alignment triage features (085 + 092 + 094) — rebase-only, no hard ordering row.**
+> Feature `094 fix-mcp-server-input-validation` shares source files with two other in-flight features,
+> but none is a field-number / migration / config-key collision, so per the Coverage note above these
+> are **not** hard ordering rows — whichever lands second simply rebases:
+>
+> - **092 `fix-mcp-writepath-authz` ↔ 094 on `xstockstrat-notify`.** Both flip notify's test harness
+>   from `--experimental-strip-types` to the compile-first script (`tsc && node --test dist/__tests__/*.test.js`)
+>   in `package.json` and rewrite `src/__tests__/notifyServiceImpl.test.ts` to static imports — an
+>   **identical-intent** change. Reconciliation is a union of the two added cases (092: an `EmitAlert`
+>   descriptor-parity test; 094: the empty/whitespace title-body validation cases). If 092 also gates
+>   `emitAlert` authz, its guard and 094's input guard sit adjacently at the top of the same method
+>   (`notifyServiceImpl.ts` `emitAlert`) — semantically disjoint (authz vs input validation), a textual
+>   rebase, not a real conflict.
+> - **092 ↔ 094 on `xstockstrat-ingest` `servicer.py`.** 092 adds a `TriggerBackfill` authz gate; 094
+>   adds an `IngestSignal` conviction guard — **different handlers**, no overlap.
+> - **085 `mcp-python-sdk-v2-upgrade` ↔ 094 on `app/tools.py`.** 085 rewrites imports/decorators/
+>   signatures wholesale; 094 edits only the `ingest_signal` and `emit_alert` **docstring bodies**.
+>   Disjoint lines; 085 (code-completed) lands first and 094 rebases its two docstring edits onto it.
+
 ---
 
 ## How to add an entry manually
