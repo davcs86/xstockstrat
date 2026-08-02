@@ -30,3 +30,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Docs: mcp-tools.md sections (cancel_backfill/test_formula/list_strategies) + list_signal_sources health fields + emit_alert params; counts 17→20 across mcp-tools.md/CLAUDE.md/tools.py.
 - Note: branched from main-dev, so this branch's baseline is the pre-086 client/tools; 086 (PR #843) and 087 both edit the tool catalog + counts, so a small merge reconciliation is expected per merge-order.
 - Status: draft → code-completed.
+
+## Session 2026-08-02 (CI: feature status automation)
+
+- Promotion PR #844 merged to main
+- Feature promoted and committed: a76237080a282abac145b7f88a6044869132ba5f
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-02

@@ -30,3 +30,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Cross-feature: 086/087/088/089 all touch agent client.py/tools.py/mcp-tools.md/strat-lab skill — merge-order reconciliation noted.
 - Constitution: C-04, C-08/P-06, C-09, C-10, F-01/F-06/F-07 (none). Floor breaches: none.
 - Status: → design-approved.
+
+## Session 2026-08-02 (CI: feature status automation)
+
+- Promotion PR #844 merged to main
+- Feature promoted and committed: a76237080a282abac145b7f88a6044869132ba5f
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-02

@@ -1,7 +1,9 @@
 # Feature: fix-mcp-additive-tools
 
 **Type**: bug
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: a76237080a282abac145b7f88a6044869132ba5f
+**Launched date**: 2026-08-02
 **Development Branch**: `feature/fix-mcp-additive-tools`
 **Source Report**: docs/reports/2026-08-01-mcp-tools-alignment-triage.md (F-10 (test_formula, cancel_backfill, list_strategies, source-health passthrough, emit_alert context/tags/correlation_id))
 **Severity**: SEV-2
@@ -17,6 +19,7 @@
 | 2026-08-02 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the MCP-alignment triage report (F-10 (test_formula, cancel_backfill, list_strategies, source-health passthrough, emit_alert context/tags/correlation_id)) |
 | 2026-08-02 | `draft` → `code-completed` | /sdd-design+/sdd-execute | Quick design (adversary fixes folded) + all 5 steps implemented; agent-only additive tools |
 
+| 2026-08-02 | `code-completed` → `launched` | CI workflow | Promoted via PR #844; committed a76237080a282abac145b7f88a6044869132ba5f |
 ---
 
 ## Artifacts

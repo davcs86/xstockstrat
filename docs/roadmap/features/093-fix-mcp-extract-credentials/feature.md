@@ -1,7 +1,9 @@
 # Feature: fix-mcp-extract-credentials
 
 **Type**: bug
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: a76237080a282abac145b7f88a6044869132ba5f
+**Launched date**: 2026-08-02
 **Development Branch**: `feature/fix-mcp-extract-credentials`
 **Source Report**: docs/reports/2026-08-01-mcp-tools-alignment-triage.md (F-1)
 **Severity**: SEV-2
@@ -19,6 +21,7 @@
 | 2026-08-02 | `implementation-ready` → `code-completed` | /sdd-execute | All 3 steps: get_config_value env+typed-projection+non-swallow (O1 RED demonstrated); extract tools raise RuntimeError when credentials required; alert/OAuth env-scoped best-effort; docs. Agent 146 tests, coverage 71%. One PR into main-dev. |
 | 2026-08-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 3 steps (atomic agent-only service step + paired RED-first test step + same-PR docs). No proto/migration/new config key. |
 
+| 2026-08-02 | `code-completed` → `launched` | CI workflow | Promoted via PR #844; committed a76237080a282abac145b7f88a6044869132ba5f |
 ---
 
 ## Artifacts

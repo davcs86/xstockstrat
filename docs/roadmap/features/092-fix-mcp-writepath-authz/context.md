@@ -150,3 +150,10 @@ All 6 steps implemented on feature/fix-mcp-writepath-authz (one PR into main-dev
 - Verified: all four backends gate on ADMIN 0x04 (incl. SetStrategyLive). Non-admins lose the four
   tools (intended F-11 fix).
 - Status: implementation-ready → code-completed.
+
+## Session 2026-08-02 (CI: feature status automation)
+
+- Promotion PR #844 merged to main
+- Feature promoted and committed: a76237080a282abac145b7f88a6044869132ba5f
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-02

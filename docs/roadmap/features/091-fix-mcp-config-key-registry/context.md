@@ -141,3 +141,10 @@ session's branch directive), each step's TDD/verification gate honored.
   this session, so the teardown scan could not run; touched context/docs were updated by hand to
   match the new behavior (noted in the PR body).
 - Status: implementation-ready → code-completed.
+
+## Session 2026-08-02 (CI: feature status automation)
+
+- Promotion PR #844 merged to main
+- Feature promoted and committed: a76237080a282abac145b7f88a6044869132ba5f
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-02

@@ -50,3 +50,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   section + errors table. strat-lab plugin does not describe screen_symbols → no skill change.
 - Verified: analysis 384 passed (coverage 82.8%), agent 138 passed (coverage 68.7%), ruff clean.
 - No proto/migration/config change. Status: → code-completed.
+
+## Session 2026-08-02 (CI: feature status automation)
+
+- Promotion PR #844 merged to main
+- Feature promoted and committed: a76237080a282abac145b7f88a6044869132ba5f
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-02

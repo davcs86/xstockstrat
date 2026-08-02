@@ -46,3 +46,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Step 13 (docs): mcp-tools.md manage_formula partial-merge + soft-delete + read-tool sections; 17->19 across tools.py docstring, agent/runbook CLAUDE.md. strat-lab needs no change (describes manage_strategy, not manage_formula). Commit ec51a7c.
 - Deviation: dropped the design's `clear_fields` param on manage_formula — every formula field's "clear" is expressible by value ([]/""/0/false) under the None-sentinel, so clear_fields is redundant (source is protected by the erasure guard regardless). Minimum-that-solves-it.
 - Status: implementation-ready -> code-completed.
+
+## Session 2026-08-02 (CI: feature status automation)
+
+- Promotion PR #844 merged to main
+- Feature promoted and committed: a76237080a282abac145b7f88a6044869132ba5f
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-02

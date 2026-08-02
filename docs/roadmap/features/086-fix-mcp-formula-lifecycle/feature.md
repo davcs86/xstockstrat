@@ -1,7 +1,9 @@
 # Feature: fix-mcp-formula-lifecycle
 
 **Type**: bug
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: a76237080a282abac145b7f88a6044869132ba5f
+**Launched date**: 2026-08-02
 **Development Branch**: `feature/fix-mcp-formula-lifecycle`
 **Source Report**: docs/reports/2026-08-01-mcp-tools-alignment-triage.md (F-2, F-3, F-10 (get_formula/list_formulas))
 **Severity**: SEV-2
@@ -18,6 +20,7 @@
 | 2026-08-02 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved with user steer (analysis binding-refusal + backtest run-flagging + UI deleted-handling added to scope); recon.md + design.md written |
 | 2026-08-02 | `implementation-ready` → `code-completed` | /sdd-execute | All 13 steps implemented + verified (proto/migration/indicators/analysis/agent/ui/docs); ready for integration PR |
 
+| 2026-08-02 | `code-completed` → `launched` | CI workflow | Promoted via PR #844; committed a76237080a282abac145b7f88a6044869132ba5f |
 ---
 
 ## Artifacts

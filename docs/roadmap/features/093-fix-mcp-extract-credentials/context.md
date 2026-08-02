@@ -152,3 +152,10 @@ All 3 steps on feature/fix-mcp-extract-credentials (one PR into main-dev), agent
 - AC-3 (secure resolver) deferred; AC-4 reinterpreted. Non-cred sources still extract; a cred
   source now fails loudly instead of silently fetching unauthenticated.
 - Status: implementation-ready → code-completed.
+
+## Session 2026-08-02 (CI: feature status automation)
+
+- Promotion PR #844 merged to main
+- Feature promoted and committed: a76237080a282abac145b7f88a6044869132ba5f
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-02

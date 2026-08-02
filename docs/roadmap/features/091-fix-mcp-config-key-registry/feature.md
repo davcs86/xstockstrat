@@ -1,7 +1,9 @@
 # Feature: fix-mcp-config-key-registry
 
 **Type**: bug
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: a76237080a282abac145b7f88a6044869132ba5f
+**Launched date**: 2026-08-02
 **Development Branch**: `feature/fix-mcp-config-key-registry`
 **Source Report**: docs/reports/2026-08-01-mcp-tools-alignment-triage.md (F-8)
 **Severity**: SEV-3
@@ -19,6 +21,7 @@
 | 2026-08-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps (proto → proto-gen → migration 010 → config service+test → agent service+test → docs). |
 | 2026-08-02 | `implementation-ready` → `code-completed` | /sdd-execute | All 8 steps implemented on feature branch. Migration verified on live Postgres (create audited once, no double-fire on update). Config 37/37 tests (RED demonstrated), agent 141 tests + descriptor-parity guard (RED demonstrated). One PR into main-dev. |
 
+| 2026-08-02 | `code-completed` → `launched` | CI workflow | Promoted via PR #844; committed a76237080a282abac145b7f88a6044869132ba5f |
 ---
 
 ## Artifacts

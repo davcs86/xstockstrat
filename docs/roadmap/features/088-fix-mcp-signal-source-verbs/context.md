@@ -30,3 +30,10 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Chosen: AIP-161 verb split + SignalSourceOperation enum + update_mask; credentials_ref virtual mask path; strict register (ALREADY_EXISTS) / NOT_FOUND update / reactivate / deactivate; merged-row credential check closing the mediated_authenticated_website gap; descriptor-parity test; same-PR docs (mcp-tools.md + docstring; not in strat-lab).
 - Constitution: C-04 (new enum), C-08/P-06 (paired tests incl. UI e2e), C-09 (additive proto), C-10 (parity + all callers fixed), F-01/F-06/F-07 (none). Floor breaches: none.
 - Status: → design-approved.
+
+## Session 2026-08-02 (CI: feature status automation)
+
+- Promotion PR #844 merged to main
+- Feature promoted and committed: a76237080a282abac145b7f88a6044869132ba5f
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-02
