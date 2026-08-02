@@ -3,8 +3,28 @@
 import pathlib
 import sys
 import types
+from types import SimpleNamespace
 
 import pytest
+
+# Claim sets for the derived-scope tests (feature 073/092). roles_to_access_scope maps
+# admin→15, trader→11, viewer→1; only admin carries the ADMIN bit (0x04).
+ADMIN = {"user_id": "u-1", "email": "a@b.c", "roles": ["admin"], "aud": "http://x"}
+TRADER = {"user_id": "u-2", "email": "t@b.c", "roles": ["trader"], "aud": "http://x"}
+VIEWER = {"user_id": "u-3", "email": "v@b.c", "roles": ["viewer"], "aud": "http://x"}
+
+
+def _ctx(claims: dict | None, *, with_request: bool = True):
+    """A fake MCP Context whose request carries (or lacks) verified claims on its ASGI scope.
+
+    Centralized here (feature 092, C-13) once test_tools.py became a second consumer of the
+    builder test_config_tools.py had inline. Import: ``from tests.conftest import _ctx, ADMIN``.
+    """
+    from app.scopes import MCP_CLAIMS_SCOPE_KEY  # local import: gen path is set up below
+
+    state = {MCP_CLAIMS_SCOPE_KEY: claims} if claims is not None else {}
+    request = SimpleNamespace(scope={"state": state}) if with_request else None
+    return SimpleNamespace(request_context=SimpleNamespace(request=request))
 
 
 def _setup_gen_path() -> None:
@@ -45,3 +65,20 @@ def set_env(monkeypatch):
     monkeypatch.setattr(client, "NOTIFY_ENDPOINT", "notify-test:50059")
     monkeypatch.setattr(client, "ANALYSIS_ENDPOINT", "analysis-test:50056")
     monkeypatch.setattr(client, "MCP_AGENT_SECRET", "test-secret")
+
+
+def credentialed_source(**overrides) -> dict:
+    """A signal source with has_credentials=True (feature 093, C-13 shared fixture).
+
+    Consumed by both extract-tool tests to exercise the "credentials required → RuntimeError"
+    branch, which the default (has_credentials=False) `_SOURCES` fixtures never reach.
+    """
+    src = {
+        "slug": "cred_src",
+        "display_name": "Credentialed Source",
+        "source_type": "mediated_authenticated_website",
+        "config_json": {"url": "https://gated.example.com"},
+        "has_credentials": True,
+    }
+    src.update(overrides)
+    return src

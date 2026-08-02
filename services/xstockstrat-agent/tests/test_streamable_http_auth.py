@@ -95,6 +95,7 @@ def test_set_config_receives_the_real_callers_scope_over_the_real_transport():
         assert body["result"]["isError"] is False
 
     # The proof: set_config called client.set_config with the ADMIN scope derived from the
-    # REAL bearer token's claims (roles=["admin"] -> 15), not the hardcoded tuple every other
-    # management tool forwards (client._admin_metadata()[-1] == ("x-access-scope", "7")).
+    # REAL bearer token's claims (roles=["admin"] -> 15). Feature 092 removed the old hardcoded
+    # ("x-access-scope", "7") tuple, so every management tool now forwards the caller's real scope
+    # end-to-end exactly like this.
     assert mock_set.await_args.kwargs["access_scope"] == 15

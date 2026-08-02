@@ -11,7 +11,8 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { StatTile } from '@/components/shared/StatTile';
 import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
 import { usePositionLineage } from '@/hooks/usePositionLineage';
-import { PositionSide, PositionRiskFlag } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
+import { openR, fmtR, sideLabel, isExitFlag } from '@/lib/positionRisk';
+import { PositionSide } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import type { Position } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -36,29 +37,6 @@ import {
 
 type TradingMode = 'paper' | 'live';
 type PnlFilter = 'all' | 'winners' | 'losers';
-
-// sideLabel derives Long/Short from the signed quantity (qty < 0 is short).
-function sideLabel(qty: number | undefined | null): string {
-  return Number(qty ?? 0) < 0 ? 'Short' : 'Long';
-}
-
-// Open R = unrealized P&L expressed in units of the position's risk-at-stop (R-multiple).
-// Null when there is no stop-risk to normalize against.
-function openR(p: Position): number | null {
-  const r = Number(p.riskAtStop ?? 0);
-  if (!r) return null;
-  return Number(p.unrealizedPnl ?? 0) / r;
-}
-
-function fmtR(r: number | null): string {
-  if (r === null) return '—';
-  return `${r >= 0 ? '+' : ''}${r.toFixed(1)}R`;
-}
-
-// Exit-flag positions (Exposure → "N exit flags in queue"): a trim or a stop-near signal.
-function isExitFlag(p: Position): boolean {
-  return p.flag === PositionRiskFlag.REDUCE_SIGNAL || p.flag === PositionRiskFlag.STOP_NEAR;
-}
 
 export default function PositionsPage() {
   const { selectedAccountId, environmentMode } = useAccountContext();
@@ -299,7 +277,17 @@ export default function PositionsPage() {
                       onClick={() => setSelected(p)}
                       className="cursor-pointer"
                     >
-                      <TableCell className="font-mono font-semibold">{p.symbol}</TableCell>
+                      <TableCell className="font-mono font-semibold">
+                        {/* Symbol links to the dedicated full-page Position view (feature 096);
+                            the rest of the row still opens the quick-peek Sheet. */}
+                        <Link
+                          href={`/trader/positions/${encodeURIComponent(p.symbol)}`}
+                          className="hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {p.symbol}
+                        </Link>
+                      </TableCell>
                       <TableCell className="text-muted-foreground">{sideLabel(p.qty)}</TableCell>
                       <TableCell className="text-right tabular-nums">{p.qty}</TableCell>
                       <TableCell className="text-right tabular-nums">
@@ -414,32 +402,109 @@ export default function PositionsPage() {
       <Sheet open={!!selected} onOpenChange={(open) => !open && setSelected(null)}>
         <SheetContent className="overflow-y-auto">
           <SheetHeader>
-            <SheetTitle className="font-mono">{selected?.symbol} — position detail</SheetTitle>
+            <SheetTitle className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-lg font-semibold">{selected?.symbol}</span>
+              {selected && (
+                <span className="text-xs font-normal text-muted-foreground">
+                  {sideLabel(selected.qty)}
+                  {selected.factor ? ` · ${selected.factor}` : ''}
+                </span>
+              )}
+              {selected?.flag ? <EnumBadge render={POSITION_RISK_FLAG[selected.flag]} /> : null}
+            </SheetTitle>
           </SheetHeader>
           {selected && (
-            <div className="px-4 space-y-4">
-              <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                <dt className="text-muted-foreground">Qty</dt>
-                <dd className="text-right tabular-nums">{selected.qty}</dd>
-                <dt className="text-muted-foreground">Avg entry</dt>
-                <dd className="text-right tabular-nums">{fmtUsd(selected.avgEntryPrice)}</dd>
-                <dt className="text-muted-foreground">Current price</dt>
-                <dd className="text-right tabular-nums">{fmtUsd(selected.currentPrice)}</dd>
-                <dt className="text-muted-foreground">Market value</dt>
-                <dd className="text-right tabular-nums">{fmtUsd(selected.marketValue)}</dd>
-                <dt className="text-muted-foreground">Today&apos;s P/L</dt>
-                <dd className={`text-right tabular-nums ${pnlClass(selected.dayPnl)}`}>
-                  {fmtSignedUsd(selected.dayPnl)} ({fmtPct(selected.dayPnlPct)})
-                </dd>
-                <dt className="text-muted-foreground">Total P/L</dt>
-                <dd className={`text-right tabular-nums ${pnlClass(selected.unrealizedPnl)}`}>
-                  {fmtSignedUsd(selected.unrealizedPnl)} ({fmtPct(selected.unrealizedPnlPct)})
-                </dd>
-                <dt className="text-muted-foreground">Cost basis</dt>
-                <dd className="text-right tabular-nums">{fmtUsd(selected.costBasis)}</dd>
-                <dt className="text-muted-foreground">Account</dt>
-                <dd className="text-right font-mono text-xs">{selected.accountId || '—'}</dd>
-              </dl>
+            <div className="px-4 space-y-5">
+              {/* Deep link from the quick-peek Sheet to the dedicated full-page view (feature 096). */}
+              <Button asChild variant="outline" size="sm" className="w-full min-h-[44px]">
+                <Link href={`/trader/positions/${encodeURIComponent(selected.symbol)}`}>
+                  Open full view →
+                </Link>
+              </Button>
+              {/* Risk stat row (feature 083 — the single position is risk-framed, matching the
+                  Exposure surface: what it risks and what triggers an exit). All from the enriched
+                  Position risk fields; em-dash fallbacks when the position carries no resting stop. */}
+              <div className="grid grid-cols-2 overflow-hidden rounded-md border border-border">
+                <StatTile
+                  size="md"
+                  label="Open R"
+                  value={fmtR(openR(selected))}
+                  tone={
+                    openR(selected) === null
+                      ? undefined
+                      : (openR(selected) as number) >= 0
+                        ? 'gain'
+                        : 'loss'
+                  }
+                  sub="P&L in units of risk"
+                />
+                <StatTile
+                  size="md"
+                  label="Risk at stop"
+                  value={selected.riskAtStop ? `-${fmtUsd(selected.riskAtStop)}` : '—'}
+                  tone={selected.riskAtStop ? 'loss' : undefined}
+                  sub="if the stop filled"
+                />
+                <StatTile
+                  size="md"
+                  label="Stop distance"
+                  value={selected.stopPrice ? fmtPct(selected.stopDistancePct) : '—'}
+                  tone={selected.stopPrice ? 'paper' : undefined}
+                  sub={selected.stopPrice ? `stop ${fmtUsd(selected.stopPrice)}` : 'no stop set'}
+                />
+                <StatTile
+                  size="md"
+                  label="Weight"
+                  value={`${(weight(selected) * 100).toFixed(1)}%`}
+                  sub="of loaded gross MV"
+                />
+              </div>
+
+              {/* Exit rule / factor (risk framing). */}
+              <div>
+                <p className="mb-2 font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
+                  Position risk
+                </p>
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                  <dt className="text-muted-foreground">Factor</dt>
+                  <dd className="text-right">{selected.factor || 'Unclassified'}</dd>
+                  <dt className="text-muted-foreground">Exit rule</dt>
+                  <dd className="text-right font-mono text-xs">{selected.exitRule || '—'}</dd>
+                  <dt className="text-muted-foreground">Flag</dt>
+                  <dd className="text-right">
+                    {selected.flag ? POSITION_RISK_FLAG[selected.flag].label : '—'}
+                  </dd>
+                </dl>
+              </div>
+
+              {/* Broker-reported values (read-only mirror — C-10(b): the broker owns the P&L). */}
+              <div>
+                <p className="mb-2 font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
+                  Reported by broker
+                </p>
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+                  <dt className="text-muted-foreground">Qty</dt>
+                  <dd className="text-right tabular-nums">{selected.qty}</dd>
+                  <dt className="text-muted-foreground">Avg entry</dt>
+                  <dd className="text-right tabular-nums">{fmtUsd(selected.avgEntryPrice)}</dd>
+                  <dt className="text-muted-foreground">Current price</dt>
+                  <dd className="text-right tabular-nums">{fmtUsd(selected.currentPrice)}</dd>
+                  <dt className="text-muted-foreground">Market value</dt>
+                  <dd className="text-right tabular-nums">{fmtUsd(selected.marketValue)}</dd>
+                  <dt className="text-muted-foreground">Today&apos;s P/L</dt>
+                  <dd className={`text-right tabular-nums ${pnlClass(selected.dayPnl)}`}>
+                    {fmtSignedUsd(selected.dayPnl)} ({fmtPct(selected.dayPnlPct)})
+                  </dd>
+                  <dt className="text-muted-foreground">Total P/L</dt>
+                  <dd className={`text-right tabular-nums ${pnlClass(selected.unrealizedPnl)}`}>
+                    {fmtSignedUsd(selected.unrealizedPnl)} ({fmtPct(selected.unrealizedPnlPct)})
+                  </dd>
+                  <dt className="text-muted-foreground">Cost basis</dt>
+                  <dd className="text-right tabular-nums">{fmtUsd(selected.costBasis)}</dd>
+                  <dt className="text-muted-foreground">Account</dt>
+                  <dd className="text-right font-mono text-xs">{selected.accountId || '—'}</dd>
+                </dl>
+              </div>
 
               <div>
                 <h3 className="text-sm font-semibold mb-2">Fill lineage</h3>

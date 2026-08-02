@@ -6,6 +6,7 @@ option go_package = "github.com/xstockstrat/contracts/gen/go/indicators/v1;indic
 
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
+import "google/protobuf/field_mask.proto";
 import "common/v1/common.proto";
 
 // IndicatorsService — formula engine and sandboxed Python execution.
@@ -141,6 +142,9 @@ message FormulaDefinition {
   repeated FormulaParameter parameters = 10;
   repeated FormulaOutput outputs = 11;    // declared output series (beyond implicit "value")
   int32 warmup_period = 12;               // bars of warm-up before this formula's outputs are valid (feature 064)
+  // true = soft-deleted (feature 086): still evaluable for strategies that already reference it
+  // (GetFormula/ExecuteFormula stay deleted-agnostic), hidden from ListFormulas, and not updatable.
+  bool deleted = 13;
 }
 
 message ListIndicatorsRequest {}
@@ -198,6 +202,10 @@ message UpdateFormulaRequest {
   repeated FormulaParameter parameters = 7;
   repeated FormulaOutput outputs = 8;  // declared output series (beyond implicit "value")
   int32 warmup_period = 9;             // bars of warm-up before this formula's outputs are valid (feature 064)
+  // AIP-161 partial update (feature 086). Absent = full replace (back-compat: the UI sends a full
+  // payload every call). Present = merge only the named paths onto the stored row; unlisted fields
+  // are preserved. Reject an update whose target formula is soft-deleted (FAILED_PRECONDITION).
+  google.protobuf.FieldMask update_mask = 10;
 }
 
 message UpdateFormulaResponse {

@@ -63,9 +63,13 @@ services:
         value: ${xstockstrat-indicators.PRIVATE_DOMAIN}:50054
       - key: DATABASE_URL
         scope: RUN_TIME
-        value: ${xstockstrat.DATABASE_URL}
-      - key: DB_POOL_MAX
-        value: "2"
+        # Transaction-pool (PgBouncer :25061/staging) — see docs/patterns/database.md § Connection pooling
+        value: postgresql://${xstockstrat.USERNAME}:${xstockstrat.PASSWORD}@${xstockstrat.HOSTNAME}:25061/staging?sslmode=require
+      - key: DB_PGBOUNCER
+        value: "true"
+      # DB_POOL_MAX intentionally unset: this service connects via the PgBouncer
+      # transaction pool, so its client→pooler pool is not a backend-slot budget
+      # (see docs/patterns/database.md § Connection pooling). Code default is 2.
       - key: SERVICE_NAME
         value: trading
       - key: BROKER_ACCOUNTS_ENCRYPTION_KEY
@@ -94,9 +98,11 @@ services:
         value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
       - key: DATABASE_URL
         scope: RUN_TIME
-        value: ${xstockstrat.DATABASE_URL}
-      - key: DB_POOL_MAX
-        value: "2"
+        # Transaction-pool (PgBouncer :25061/staging) — see docs/patterns/database.md § Connection pooling
+        value: postgresql://${xstockstrat.USERNAME}:${xstockstrat.PASSWORD}@${xstockstrat.HOSTNAME}:25061/staging?sslmode=require
+      - key: DB_PGBOUNCER
+        value: "true"
+      # DB_POOL_MAX intentionally unset — pooled service, see trading above. Code default is 2.
       - key: SERVICE_NAME
         value: portfolio
 
@@ -121,7 +127,10 @@ services:
         value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
       - key: DATABASE_URL
         scope: RUN_TIME
-        value: ${xstockstrat.DATABASE_URL}
+        # Transaction-pool (PgBouncer :25061/staging) — see docs/patterns/database.md § Connection pooling
+        value: postgresql://${xstockstrat.USERNAME}:${xstockstrat.PASSWORD}@${xstockstrat.HOSTNAME}:25061/staging?sslmode=require
+      - key: DB_PGBOUNCER
+        value: "true"
       - key: ALPACA_API_KEY
         scope: RUN_TIME
         value: YOUR_DEV_ALPACA_API_KEY
@@ -134,8 +143,7 @@ services:
         scope: RUN_TIME
         value: YOUR_DEV_FMP_API_KEY
         type: SECRET
-      - key: DB_POOL_MAX
-        value: "2"
+      # DB_POOL_MAX intentionally unset — pooled service, see trading above. Code default is 2.
       - key: SERVICE_NAME
         value: marketdata
 
@@ -162,13 +170,15 @@ services:
         value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
       - key: WAIT_FOR
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060 ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057
-      - key: DB_POOL_MAX
-        value: "2"
+      # DB_POOL_MAX intentionally unset — pooled service, see trading above. Code default is 2.
       - key: SERVICE_NAME
         value: indicators
+      - key: DB_PGBOUNCER
+        value: "true"
       - key: DATABASE_URL
         scope: RUN_TIME
-        value: ${xstockstrat.DATABASE_URL}
+        # Transaction-pool (PgBouncer :25061/staging) — see docs/patterns/database.md § Connection pooling
+        value: postgresql://${xstockstrat.USERNAME}:${xstockstrat.PASSWORD}@${xstockstrat.HOSTNAME}:25061/staging?sslmode=require
 
   - name: xstockstrat-ingest
     image:
@@ -197,9 +207,11 @@ services:
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060 ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057 ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
       - key: DATABASE_URL
         scope: RUN_TIME
-        value: ${xstockstrat.DATABASE_URL}
-      - key: DB_POOL_MAX
-        value: "2"
+        # Transaction-pool (PgBouncer :25061/staging) — see docs/patterns/database.md § Connection pooling
+        value: postgresql://${xstockstrat.USERNAME}:${xstockstrat.PASSWORD}@${xstockstrat.HOSTNAME}:25061/staging?sslmode=require
+      - key: DB_PGBOUNCER
+        value: "true"
+      # DB_POOL_MAX intentionally unset — pooled service, see trading above. Code default is 2.
       - key: SERVICE_NAME
         value: ingest
       - key: MCP_AGENT_SECRET
@@ -239,9 +251,11 @@ services:
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060 ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057 ${xstockstrat-indicators.PRIVATE_DOMAIN}:50054
       - key: DATABASE_URL
         scope: RUN_TIME
-        value: ${xstockstrat.DATABASE_URL}
-      - key: DB_POOL_MAX
-        value: "2"
+        # Transaction-pool (PgBouncer :25061/staging) — see docs/patterns/database.md § Connection pooling
+        value: postgresql://${xstockstrat.USERNAME}:${xstockstrat.PASSWORD}@${xstockstrat.HOSTNAME}:25061/staging?sslmode=require
+      - key: DB_PGBOUNCER
+        value: "true"
+      # DB_POOL_MAX intentionally unset — pooled service, see trading above. Code default is 2.
       - key: SERVICE_NAME
         value: analysis
       - key: MCP_AGENT_SECRET

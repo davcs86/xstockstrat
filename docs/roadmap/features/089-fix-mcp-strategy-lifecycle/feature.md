@@ -1,7 +1,7 @@
 # Feature: fix-mcp-strategy-lifecycle
 
 **Type**: bug
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/fix-mcp-strategy-lifecycle`
 **Source Report**: docs/reports/2026-08-01-mcp-tools-alignment-triage.md (F-5, F-7)
 **Severity**: SEV-2

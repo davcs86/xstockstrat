@@ -141,4 +141,23 @@ Print the per-step findings table + overlap block + a summary count (use the sha
 reference files). All findings are advisory:
 > "Strongly recommend resolving ✗ items before running /sdd-execute. Proceed anyway? (your
 > call — this check is advisory)"
-Do not modify `feature.md`, `context.md`, or `implementation-spec.md`.
+
+Do not modify `feature.md` or `implementation-spec.md` (Mode B never changes lifecycle or the spec).
+
+**Do record the findings in `context.md`** so they survive into execution and cannot be silently
+dropped. Append (this is the one Mode-B write — an advisory note, not a lifecycle change):
+
+```markdown
+## Session <ISO timestamp> — sdd-review impl-spec (advisory)
+
+- Result: <N failures, M warnings> (advisory — did not block).
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step <N>: <finding + Constitution ID> — [ ] unaddressed
+  - ...
+- Overlap findings: <list or "none">
+```
+
+`/sdd-execute` reads this at boot (**C-02**) and MUST announce any item still `[ ] unaddressed`
+at each checkpoint and at session end — an unaddressed warning that never reaches the operator is
+a **P-03** ("no silent deviation") failure. Mark an item resolved by editing its checkbox to `[x]`
+in the same `context.md` block when the step that clears it lands.

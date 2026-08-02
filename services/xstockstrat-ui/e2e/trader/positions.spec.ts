@@ -45,4 +45,27 @@ test.describe('Positions — Exposure risk', () => {
     // MSFT has no stop → Open R falls back to em-dash.
     await expect(page.getByRole('row', { name: /MSFT/ })).toContainText('—');
   });
+
+  test('opens the risk-framed single-position detail sheet on row click', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/trader/positions');
+
+    const aapl = page.getByRole('row', { name: /AAPL/ });
+    await expect(aapl).toBeVisible({ timeout: 10000 });
+    // Click an inert cell to open the quick-peek Sheet. The symbol cell links to the dedicated
+    // full-page Position view (feature 096) and the Trade button stops propagation, so target the
+    // Side cell, whose click bubbles to the row's Sheet handler.
+    await aapl.getByText('Long', { exact: true }).click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    // Risk-framed header + stat grammar (feature 083 — single position mirrors Exposure).
+    await expect(dialog.getByText('Stop near').first()).toBeVisible(); // flag (badge + risk row)
+    await expect(dialog.getByText('Open R')).toBeVisible();
+    await expect(dialog.getByText('Risk at stop')).toBeVisible();
+    await expect(dialog).toContainText('-$118.00'); // risk at stop value
+    await expect(dialog.getByText('Position risk')).toBeVisible(); // risk section
+    await expect(dialog).toContainText('Stop @ $178.00'); // exit rule
+    await expect(dialog.getByText('Reported by broker')).toBeVisible(); // broker mirror section
+  });
 });

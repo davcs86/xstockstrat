@@ -605,3 +605,45 @@ User flagged the deployed Strategies + Watchlists as still low-fidelity:
   mobile (`gap-2 px-3 sm:gap-4 sm:px-6`). All 14 routes now fit the frame; full suite 194 passed.
 - Process note: the earlier "Screener matches the handoff" claim was content-only — I now gate
   mobile layout with this sweep so overflow regressions fail CI instead of needing a screenshot.
+
+## Session 2026-08-02 — Handoff-fidelity: single Opportunity + single Position detail pages
+
+User asked to raise the fidelity of the two **detail** views (the earlier passes covered the list
+screens). Branch `claude/opportunity-position-ui-revamp-b1urkz` off `origin/main-dev` (which carries
+the launched 083). Presentation-only, no proto/RPC/config/DB change — worked within 083's approved
+Nocturne design handoff (screenshot 02 = Signal detail; Exposure grammar for the position sheet).
+
+- **Single Opportunity (Signal detail, `insights/market/[symbol]`)** rebuilt to the handoff header +
+  two-column grammar: a **← Queue** back button (was "Back to dashboard" → `/insights`, now
+  `/insights/opportunities`); a header that enriches from the ranked queue — action tag +
+  **Conviction** stat from the matching `Opportunity` (preferring the `?strategy=` thread, else the
+  highest-conviction symbol match), **Edge (BT)** from `GetStrategyAnalytics.expectancy`, a source
+  chip, and a `strategy · source · valid until HH:MM` meta line. Body is now the handoff 2-col:
+  **left** = Price card (chart + timeframe tabs) + "Why this fired" (`SignalReadiness`, whose title
+  changed `Readiness` → `Why this fired`); **right** = the FR-6 order ticket. **No fabrication** —
+  when the symbol is not in the queue the header degrades to symbol + price only; rich handoff
+  extras the backend doesn't return (target/stop overlay lines, per-condition sparkline) stay
+  omitted, not faked.
+- **Single Position (row-click `Sheet` on `trader/positions`)** rebuilt from a flat `<dl>` to the
+  risk-framed grammar mirroring Exposure: a StatTile row (**Open R / Risk at stop / Stop distance /
+  Weight**, em-dash fallbacks when no resting stop), a **Position risk** block (factor / exit rule /
+  flag), then the read-only **Reported by broker** block (C-10(b)) + the existing fill lineage. Title
+  gains side + factor + the flag badge. All from the already-enriched `Position` risk fields — no new
+  data path.
+- **Test-infra fix (needed to run e2e in this sandbox):** `e2e/global-setup.ts` preflight
+  `chromium.launch()` now honors `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` (the same override the
+  chromium *project* already uses in `playwright.config.ts`) — a no-op in CI (env unset, pinned
+  browser build matches), but lets the preflight launch the pre-installed Chromium when the repo's
+  pinned Playwright build ≠ the sandbox's baked browser build.
+- **e2e:** extended `signal-detail.spec.ts` (Queue link + Conviction/Edge header stats) and
+  `positions.spec.ts` (new test: row-click opens the risk-framed detail sheet — Open R, Risk at
+  stop `-$118.00`, Position risk / Stop @ $178.00, Reported-by-broker). Targeted specs green
+  (signal-detail ×2, positions ×3, mobile-overflow, order-parity). `tsc` + `next lint` + prettier
+  clean. **Pre-existing flake noted:** `nav-reachability.spec.ts` intermittently fails on
+  `/trader/accounts` under cold `pnpm dev` (the nav click races the on-demand route compile) —
+  reproduced on the untouched baseline, so not a regression; CI serves a prebuilt bundle
+  (`pnpm start`), which isn't subject to it.
+- **context-scrubber teardown:** the `/context-scrubber` skill is not invocable in this session
+  (only SDD + a few skills are listed). Did a manual grounded reconcile instead — updated the ui
+  `CLAUDE.md` "Decide screens" bullet (Signal-detail two-column + header enrichment) and added a
+  "Single-position detail" bullet.

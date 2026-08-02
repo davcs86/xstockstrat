@@ -52,8 +52,13 @@ Service startup
               └── Subsequent messages: update_type=DELTA (carries the FULL namespace — `changedKeys=Object.keys(values)` — a wholesale replace, not just changed keys)
 
 Config change (via SetConfig RPC)
+  └── existence gate (feature 091): a write to an unregistered (namespace,key,environment,
+        trading_mode) scope is refused NOT_FOUND unless the request sets create_key=true
   └── INSERT/UPDATE config.config_values
         └── audit trigger fires → config.config_audit row written
+              ├── UPDATE: config_value_audit (BEFORE UPDATE, on a value change) — old→new
+              └── CREATE: config_value_audit_insert (AFTER INSERT, migration 010, feature 091)
+                    — one row with author + value, old_value NULL
         └── pg_notify('config_changed', {namespace, key, environment, trading_mode})
               └── ConfigServiceImpl receives LISTEN notification
                     └── Reloads namespace from DB

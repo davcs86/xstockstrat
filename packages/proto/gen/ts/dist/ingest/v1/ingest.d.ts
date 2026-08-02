@@ -43,6 +43,22 @@ export declare enum SourceHealthStatus {
 export declare function sourceHealthStatusFromJSON(object: any): SourceHealthStatus;
 export declare function sourceHealthStatusToJSON(object: SourceHealthStatus): string;
 export declare function sourceHealthStatusToNumber(object: SourceHealthStatus): number;
+/** Closed verb set for ManageSignalSource (feature 088). Closed set → enum (C-04). */
+export declare enum SignalSourceOperation {
+    SIGNAL_SOURCE_OPERATION_UNSPECIFIED = "SIGNAL_SOURCE_OPERATION_UNSPECIFIED",
+    /** SIGNAL_SOURCE_OPERATION_REGISTER - strict create: ALREADY_EXISTS on an existing slug */
+    SIGNAL_SOURCE_OPERATION_REGISTER = "SIGNAL_SOURCE_OPERATION_REGISTER",
+    /** SIGNAL_SOURCE_OPERATION_UPDATE - NOT_FOUND if missing; AIP-161 partial merge via update_mask */
+    SIGNAL_SOURCE_OPERATION_UPDATE = "SIGNAL_SOURCE_OPERATION_UPDATE",
+    /** SIGNAL_SOURCE_OPERATION_REACTIVATE - set active=TRUE; decoupled from update (RC-6) */
+    SIGNAL_SOURCE_OPERATION_REACTIVATE = "SIGNAL_SOURCE_OPERATION_REACTIVATE",
+    /** SIGNAL_SOURCE_OPERATION_DEACTIVATE - set active=FALSE */
+    SIGNAL_SOURCE_OPERATION_DEACTIVATE = "SIGNAL_SOURCE_OPERATION_DEACTIVATE",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function signalSourceOperationFromJSON(object: any): SignalSourceOperation;
+export declare function signalSourceOperationToJSON(object: SignalSourceOperation): string;
+export declare function signalSourceOperationToNumber(object: SignalSourceOperation): number;
 export interface BackfillJob {
     jobId: string;
     symbols: string[];
@@ -179,13 +195,24 @@ export interface ListSignalSourcesResponse {
     sources: SignalSource[];
 }
 /**
- * ManageSignalSourceRequest: operation is "register" | "update" | "deactivate".
- * credentials_ref is only processed on register/update; ignored on deactivate.
+ * ManageSignalSourceRequest verbs (feature 088): prefer operation_enum; the string operation is kept
+ * for back-compat and read only when operation_enum is UNSPECIFIED.
+ * credentials_ref is processed on register/update; ignored on reactivate/deactivate. On a masked
+ * update it is a virtual mask path: listed → apply (empty clears); unlisted → the stored ref is kept.
  */
 export interface ManageSignalSourceRequest {
     source?: SignalSource | undefined;
     credentialsRef: string;
+    /**
+     * use operation_enum (feature 088)
+     *
+     * @deprecated
+     */
     operation: string;
+    /** AIP-161 partial update (feature 088). Applies to UPDATE only; absent = full replace (back-compat). */
+    updateMask?: string[] | undefined;
+    /** Preferred verb selector (feature 088); when set (!= UNSPECIFIED) it wins over the string operation. */
+    operationEnum: SignalSourceOperation;
 }
 export interface ManageSignalSourceResponse {
     source?: SignalSource | undefined;

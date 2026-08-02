@@ -16,8 +16,11 @@ skill).
 | Strategy scores | `STRATEGY_SCORE_{HIGH,MID,LOW}`, `STRATEGY_SCORES` | `e2e/fixtures/strategies.ts` | `xstockstrat.analysis.v1.StrategyScore` | `e2e/mock-backend.ts` (`listStrategies`), `e2e/insights/dashboard.spec.ts` |
 | Strategy definitions | `STRATEGY_DEF_LIVE`, `STRATEGY_DEF_INACTIVE`, `STRATEGY_DEFINITIONS` | `e2e/fixtures/strategies.ts` | `xstockstrat.analysis.v1.StrategyDefinition` | `e2e/mock-backend.ts` (`listStrategyDefinitions`, `setStrategyLive`), `e2e/trader/live-strategies.spec.ts` (asserts `strat-live-001`) |
 | Custom formulas | `FORMULA_RSI`, `FORMULA_MACD`, `FORMULAS` | `e2e/fixtures/formulas.ts` | `xstockstrat.indicators.v1.FormulaDefinition` (list row) | `e2e/insights/formulas.spec.ts`, `e2e/insights/strategy-authoring.spec.ts` |
+| Soft-deleted formula (086) | `FORMULA_DELETED` | `e2e/fixtures/formulas.ts` | `xstockstrat.indicators.v1.FormulaDefinition` (full, `deleted: true`) | `e2e/insights/formula-deletion.spec.ts` (GetFormula stub) |
 | Backtest coverage gaps | `insufficientDataResult`, `prefixGapRange`, `BACKTEST_GAP_{SYMBOL,BARS_HAVE,BARS_NEED}`, `BACKTEST_PREFIX_DAYS` | `e2e/fixtures/backtests.ts` | `xstockstrat.analysis.v1.CoverageGap` / `BacktestResult` | `e2e/mock-backend.ts` (`runBacktest` default branch), `e2e/insights/backtest-coverage.spec.ts` |
 | Opportunity queue | `OPPORTUNITIES` | `e2e/fixtures/opportunities.ts` | `xstockstrat.analysis.v1.Opportunity` | `e2e/mock-backend.ts` (`listOpportunities`), `e2e/insights/opportunities.spec.ts` |
+| Positions | `POSITION_AAPL`, `POSITION_MSFT`, `POSITIONS`, `positionForSymbol` | `e2e/fixtures/positions.ts` | `xstockstrat.portfolio.v1.Position` | `e2e/mock-backend.ts` (`listPositions`, `getPosition`), `e2e/trader/{positions,position-detail,valuation-parity}.spec.ts` |
+| Orders (shared mock set) | `ORDER_FILLED`, `ORDER_WORKING`, `ORDERS`, `orderForId` | `e2e/fixtures/orders.ts` | `xstockstrat.trading.v1.Order` | `e2e/mock-backend.ts` (`listOrders`, `getOrder`), `e2e/trader/order-ticket.spec.ts` |
 
 ## Recurring sentinel ids (stay inline, but are reserved)
 
@@ -40,9 +43,8 @@ a fixture module and register it above (never copy-paste it into a second site).
 
 | Domain | Current home |
 |---|---|
-| Orders (list + management states) | `e2e/mock-backend.ts` (`listOrders`), `e2e/trader/orders.spec.ts` (`ORDERS`) — two different order sets, each single-site |
+| Orders (scenario overrides) | `e2e/trader/orders.spec.ts` + `e2e/trader/order-parity.spec.ts` — bespoke `page.route()` order sets, each single-site (the shared mock-backend set is centralized in `e2e/fixtures/orders.ts`) |
 | Aggregate portfolio (`getPortfolio`) | `e2e/mock-backend.ts` |
-| Positions (`listPositions`) | `e2e/mock-backend.ts` |
 | Ledger events | `e2e/mock-backend.ts` (`queryEvents`) |
 | Alerts (stream + list) | `e2e/mock-backend.ts` (`streamAlerts`, `listAlerts`) |
 | OHLCV bars / assets | `e2e/mock-backend.ts` (`getBars`, `listAssets`) — bars carry the canonical `timeframe: '1d'` **plus** `timeframeEnum` (feature 080) |

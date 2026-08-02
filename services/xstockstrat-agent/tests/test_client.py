@@ -95,11 +95,13 @@ class TestManageStrategyClient:
                         "entry_rule": "",
                         "exit_rule": "",
                     },
+                    access_scope=15,
                 )
         assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.ANALYSIS_ENDPOINT
         meta = mock_stub.ManageStrategy.call_args.kwargs["metadata"]
         assert ("x-mcp-secret", "test-secret") in meta
-        assert ("x-access-scope", "7") in meta
+        # feature 092: forwards the caller's derived scope (was a hardcoded 7).
+        assert ("x-access-scope", "15") in meta
         assert not any(k == "authorization" for k, _ in meta)
         assert result["strategyId"] == "x"
 
@@ -134,6 +136,23 @@ class TestManageStrategyClient:
         with pytest.raises(ValueError):
             await client.manage_strategy(operation="bogus", definition={})
 
+    @pytest.mark.asyncio
+    async def test_reactivate_maps_to_enum(self):
+        # Feature 089: reactivate is an honest verb mapped to STRATEGY_OPERATION_REACTIVATE.
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+
+        resp = analysis_pb2.StrategyDefinition(strategy_id="s1", display_name="S1", active=True)
+        mock_stub = MagicMock()
+        mock_stub.ManageStrategy = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
+                await client.manage_strategy(
+                    operation="reactivate", definition={"strategy_id": "s1", "display_name": "S1"}
+                )
+        sent = mock_stub.ManageStrategy.call_args[0][0]
+        assert sent.operation == analysis_pb2.STRATEGY_OPERATION_REACTIVATE
+
 
 class TestManageFormulaClient:
     @pytest.mark.asyncio
@@ -161,6 +180,7 @@ class TestScreenSymbolsClient:
     @pytest.mark.asyncio
     async def test_screen_symbols_sends_grpc_call(self):
         from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+        from gen.common.v1 import common_pb2  # type: ignore
 
         resp = analysis_pb2.ScreenSymbolsResponse(
             results=[
@@ -172,7 +192,14 @@ class TestScreenSymbolsClient:
                     status=analysis_pb2.SCREEN_RESULT_STATUS_OK,
                 )
             ],
-            coverage_gaps=[analysis_pb2.CoverageGap(symbol="TSLA")],
+            coverage_gaps=[
+                analysis_pb2.CoverageGap(
+                    symbol="TSLA",
+                    timeframe=common_pb2.Timeframe.TIMEFRAME_1DAY,
+                    bars_have=5,
+                    bars_need=50,
+                )
+            ],
         )
         mock_stub = MagicMock()
         mock_stub.ScreenSymbols = AsyncMock(return_value=resp)
@@ -189,7 +216,19 @@ class TestScreenSymbolsClient:
                             "op": "COMPARATOR_LTE",
                             "threshold": 25.0,
                             "hard_filter": True,
-                        }
+                        },
+                        {
+                            "ref_name": "rsi",
+                            "kind": "SCREEN_KIND_TECHNICAL_INDICATOR",
+                            "op": "COMPARATOR_LT",
+                            "threshold": 30.0,
+                            "component": {
+                                "kind": "builtin",
+                                "ref_name": "rsi",
+                                "indicator": "RSI",
+                                "params": {"period": 14},
+                            },
+                        },
                     ],
                 )
         # Channel opened against the (test-patched) analysis endpoint symbol.
@@ -206,12 +245,28 @@ class TestScreenSymbolsClient:
             "passed": True,
             "status": "SCREEN_RESULT_STATUS_OK",
         }
-        assert result["coverage_gaps"] == [{"symbol": "TSLA"}]
+        # feature 090: gap detail is projected (timeframe enum name; int64 bars as JSON strings).
+        assert result["coverage_gaps"] == [
+            {
+                "symbol": "TSLA",
+                "timeframe": "TIMEFRAME_1DAY",
+                "bars_have": "5",
+                "bars_need": "50",
+            }
+        ]
         # Enum-name criterion mapping reached the request unmodified.
         sent_req = mock_stub.ScreenSymbols.call_args[0][0]
         assert sent_req.criteria[0].kind == analysis_pb2.SCREEN_KIND_FUNDAMENTAL
         assert sent_req.criteria[0].op == analysis_pb2.COMPARATOR_LTE
         assert sent_req.criteria[0].hard_filter is True
+        # feature 090: technical criterion's component dict is mapped into the ScreenCriterion.
+        tech = sent_req.criteria[1]
+        assert tech.kind == analysis_pb2.SCREEN_KIND_TECHNICAL_INDICATOR
+        assert tech.component.kind == analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR
+        assert tech.component.indicator == "RSI"
+        assert tech.component.params["period"] == pytest.approx(14.0)
+        # Fundamental criterion carries no component.
+        assert not sent_req.criteria[0].HasField("component")
 
     @pytest.mark.asyncio
     async def test_register_maps_parameter_definitions(self):
@@ -289,10 +344,12 @@ class TestSetStrategyLiveClient:
         with patch("app.client.grpc") as mock_grpc:
             mock_grpc.aio.insecure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
-                result = await client.set_strategy_live(strategy_id="s1", live_enabled=True)
+                result = await client.set_strategy_live(
+                    strategy_id="s1", live_enabled=True, access_scope=15
+                )
         assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.ANALYSIS_ENDPOINT
         meta = mock_stub.SetStrategyLive.call_args.kwargs["metadata"]
-        assert ("x-access-scope", "7") in meta
+        assert ("x-access-scope", "15") in meta  # feature 092: caller-derived scope
         assert not any(k == "authorization" for k, _ in meta)
         assert result["live_enabled"] is True
 
@@ -321,11 +378,13 @@ class TestTriggerBackfillClient:
         with patch("app.client.grpc") as mock_grpc:
             mock_grpc.aio.insecure_channel.return_value = _channel_cm()
             with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
-                result = await client.trigger_backfill(symbols=["AAPL"], timeframe="1d")
+                result = await client.trigger_backfill(
+                    symbols=["AAPL"], timeframe="1d", access_scope=15
+                )
         assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.INGEST_ENDPOINT
         meta = mock_stub.TriggerBackfill.call_args.kwargs["metadata"]
         assert ("x-mcp-secret", "test-secret") in meta
-        assert ("x-access-scope", "7") in meta
+        assert ("x-access-scope", "15") in meta  # feature 092: caller-derived scope
         assert result == {"job_id": "j-1", "status": "BACKFILL_STATUS_QUEUED"}
 
     @pytest.mark.asyncio
@@ -547,3 +606,206 @@ class TestManageStrategyUpdateMask:
 
         as_dict = json_format.MessageToDict(sent.definition, preserving_proto_field_name=True)
         assert "active" not in as_dict
+
+
+# ── get_config_value (feature 093) ──────────────────────────────────────────
+
+
+class TestGetConfigValueClient:
+    """Feature 093: env-scoped, typed-oneof-projecting, non-swallowing config read."""
+
+    @staticmethod
+    def _resp(values: dict):
+        from gen.config.v1 import config_pb2  # type: ignore
+
+        return config_pb2.ConfigSnapshot(namespace="agent", version="1", values=values)
+
+    @pytest.mark.asyncio
+    async def test_float_val_key_is_projected_as_string(self):
+        """O1 (ledger RC-1): a float_val key must stringify to '0.7', NOT return None. The old
+        string_val-only projection returned None for the float-typed signal.alert_threshold."""
+        from gen.config.v1 import config_pb2, config_pb2_grpc  # type: ignore
+
+        resp = self._resp({"signal.alert_threshold": config_pb2.ConfigValue(float_val=0.7)})
+        mock_stub = MagicMock()
+        mock_stub.GetConfig = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(config_pb2_grpc, "ConfigServiceStub", return_value=mock_stub):
+                out = await client.get_config_value(
+                    "signal.alert_threshold", namespace="agent", environment="production"
+                )
+        assert out == "0.7"
+
+    @pytest.mark.asyncio
+    async def test_scope_and_metadata_reach_the_request(self):
+        from gen.common.v1 import common_pb2  # type: ignore
+        from gen.config.v1 import config_pb2, config_pb2_grpc  # type: ignore
+
+        resp = self._resp({"k": config_pb2.ConfigValue(string_val="v")})
+        mock_stub = MagicMock()
+        mock_stub.GetConfig = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(config_pb2_grpc, "ConfigServiceStub", return_value=mock_stub):
+                out = await client.get_config_value(
+                    "k", namespace="marketdata", environment="production", trading_mode="live"
+                )
+        assert out == "v"
+        req = mock_stub.GetConfig.call_args.args[0]
+        assert req.namespace == "marketdata"
+        assert req.environment == common_pb2.ENVIRONMENT_PRODUCTION  # not the dev default
+        assert req.trading_mode == common_pb2.TRADING_MODE_LIVE
+        assert ("x-mcp-secret", "test-secret") in mock_stub.GetConfig.call_args.kwargs["metadata"]
+
+    @pytest.mark.asyncio
+    async def test_absent_key_returns_none(self):
+        from gen.config.v1 import config_pb2_grpc  # type: ignore
+
+        resp = self._resp({})
+        mock_stub = MagicMock()
+        mock_stub.GetConfig = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(config_pb2_grpc, "ConfigServiceStub", return_value=mock_stub):
+                out = await client.get_config_value("missing", namespace="agent", environment="dev")
+        assert out is None
+
+    @pytest.mark.asyncio
+    async def test_transport_error_is_surfaced_not_swallowed(self):
+        """AC-2: a transport error propagates, not swallowed to None (old behavior removed)."""
+        import grpc as _grpc
+        from gen.config.v1 import config_pb2_grpc  # type: ignore
+
+        err = _grpc.aio.AioRpcError(_grpc.StatusCode.UNAVAILABLE, None, None, details="config down")
+        mock_stub = MagicMock()
+        mock_stub.GetConfig = AsyncMock(side_effect=err)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            mock_grpc.aio.AioRpcError = _grpc.aio.AioRpcError
+            with patch.object(config_pb2_grpc, "ConfigServiceStub", return_value=mock_stub):
+                with pytest.raises(_grpc.aio.AioRpcError):
+                    await client.get_config_value("k", namespace="agent", environment="dev")
+
+
+# ── feature 087 additive client fns ────────────────────────────────────────
+
+
+class TestAdditiveClientFns:
+    @pytest.mark.asyncio
+    async def test_execute_formula_projects_result(self):
+        from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc  # type: ignore
+
+        resp = indicators_pb2.ExecuteFormulaResponse(success=True)
+        resp.output.update({"value": 1.5})
+        mock_stub = MagicMock()
+        mock_stub.ExecuteFormula = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(indicators_pb2_grpc, "IndicatorsServiceStub", return_value=mock_stub):
+                result = await client.execute_formula(
+                    formula_source="result = {'value': 1.5}",
+                    input_data={"close": [1, 2, 3]},
+                )
+        assert result["success"] is True
+        assert result["output"]["value"] == 1.5
+        # read-only: no admin scope
+        meta = dict(mock_stub.ExecuteFormula.call_args.kwargs["metadata"])
+        assert "x-access-scope" not in meta
+
+    @pytest.mark.asyncio
+    async def test_execute_formula_scrubs_nonfinite_output(self):
+        # A dry-run of unvalidated source commonly emits NaN — must not raise (ledger 2026-07-21).
+        from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc  # type: ignore
+
+        resp = indicators_pb2.ExecuteFormulaResponse(success=True)
+        resp.output.update({"value": float("nan"), "ok": 2.0})
+        mock_stub = MagicMock()
+        mock_stub.ExecuteFormula = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(indicators_pb2_grpc, "IndicatorsServiceStub", return_value=mock_stub):
+                result = await client.execute_formula(formula_source="x")
+        assert result["output"]["value"] is None  # NaN scrubbed
+        assert result["output"]["ok"] == 2.0
+
+    @pytest.mark.asyncio
+    async def test_cancel_backfill_admin_scope(self):
+        from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
+
+        resp = ingest_pb2.BackfillJob(job_id="j-1")
+        mock_stub = MagicMock()
+        mock_stub.CancelBackfill = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
+                result = await client.cancel_backfill("j-1", access_scope=15)
+        assert result["job"]["job_id"] == "j-1"
+        meta = dict(mock_stub.CancelBackfill.call_args.kwargs["metadata"])
+        # feature 092: forwards the caller's derived scope, no longer a hardcoded "7"
+        assert meta.get("x-access-scope") == "15"
+
+    @pytest.mark.asyncio
+    async def test_list_strategy_definitions_snake_case(self):
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+
+        resp = analysis_pb2.ListStrategyDefinitionsResponse(
+            definitions=[analysis_pb2.StrategyDefinition(strategy_id="s1", live_enabled=True)]
+        )
+        mock_stub = MagicMock()
+        mock_stub.ListStrategyDefinitions = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
+                result = await client.list_strategy_definitions()
+        assert result[0]["strategy_id"] == "s1"  # snake_case, not strategyId
+        assert result[0]["live_enabled"] is True
+
+    @pytest.mark.asyncio
+    async def test_list_signal_sources_health_fields(self):
+        from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
+
+        src = ingest_pb2.SignalSource(
+            slug="s",
+            display_name="S",
+            source_type="mediated_simple_email",
+            active=True,
+            health=1,
+            last_error="",
+            signals_fed=42,
+        )  # last_seen_at intentionally unset
+        resp = ingest_pb2.ListSignalSourcesResponse(sources=[src])
+        mock_stub = MagicMock()
+        mock_stub.ListSignalSources = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
+                result = await client.list_signal_sources()
+        row = result[0]
+        assert row["active"] is True
+        assert row["signals_fed"] == 42
+        assert "health" in row and "last_error" in row
+        assert row["last_seen_at"] is None  # unset → None, not the epoch
+
+    @pytest.mark.asyncio
+    async def test_emit_alert_sends_extra_fields(self):
+        from gen.notify.v1 import notify_pb2, notify_pb2_grpc  # type: ignore
+
+        mock_stub = MagicMock()
+        mock_stub.EmitAlert = AsyncMock(return_value=notify_pb2.EmitAlertResponse(alert_id="a1"))
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(notify_pb2_grpc, "NotifyServiceStub", return_value=mock_stub):
+                await client.emit_alert(
+                    severity="warning",
+                    category="system",
+                    title="t",
+                    body="b",
+                    context={"k": "v"},
+                    tags=["a", "b"],
+                    correlation_id="corr-1",
+                )
+        req = mock_stub.EmitAlert.call_args.args[0]
+        assert req.correlation_id == "corr-1"
+        assert list(req.tags) == ["a", "b"]
+        assert req.context["k"] == "v"

@@ -93,6 +93,10 @@ message SetConfigRequest {
   string reason = 5;
   xstockstrat.common.v1.Environment environment = 6;
   xstockstrat.common.v1.TradingMode trading_mode = 7;
+  // When true, allow this write to CREATE a not-yet-registered key at the exact
+  // (namespace,key,environment,trading_mode) scope. Default false: a write to an
+  // unregistered scope is refused with NOT_FOUND, so a typo cannot mint an orphan key.
+  bool create_key = 8;
 }
 
 message SetConfigResponse {

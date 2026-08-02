@@ -312,6 +312,28 @@ export class ConfigServiceImpl {
       return;
     }
 
+    // Feature 091: existence gate. A write to a not-yet-registered (namespace,key,env,mode)
+    // scope is refused with NOT_FOUND unless the caller explicitly opts in with create_key —
+    // so a typo can't silently mint an orphan row no service reads. The SELECT is scoped
+    // EXACT to the upsert's ON CONFLICT key (namespace,key,environment,trading_mode); it must
+    // NOT broaden to `OR trading_mode='all'`, since the read paths resolve (mode OR 'all')
+    // with no precedence — a mode-broadening gate would let a per-mode write "find" an 'all'
+    // row and then INSERT a distinct mode-exact row, a nondeterministic read-shadow.
+    // ts-proto decodes the wire field as camelCase `createKey`; read snake_case too defensively.
+    const createKey = call.request.createKey ?? call.request.create_key ?? false;
+    const existing = await this.pool.query(
+      `SELECT 1 FROM config.config_values
+       WHERE namespace = $1 AND key = $2 AND environment = $3 AND trading_mode = $4 LIMIT 1`,
+      [namespace, key, env, mode]
+    );
+    if (existing.rows.length === 0 && !createKey) {
+      callback({
+        code: 5, // NOT_FOUND
+        message: `config key not registered: ${namespace}.${key} (env=${env}, mode=${mode}); pass create_key=true to register it`,
+      });
+      return;
+    }
+
     try {
       await this.pool.query(
         `INSERT INTO config.config_values (namespace, key, value_type, value_data, updated_by, update_reason, environment, trading_mode)

@@ -157,13 +157,36 @@ def test_register_rejects_non_https():
 
 
 def test_register_disabled_returns_403():
-    async def _cfg(key):
+    async def _cfg(key, *, namespace, environment, trading_mode="all"):
+        # feature 093: the DCR reads are env-scoped in the agent namespace.
+        assert namespace == "agent"
+        assert environment in ("dev", "production")
         return "false" if key == "oauth.registration_enabled" else None
 
     with patch.object(client, "get_config_value", _cfg):
         with TestClient(_app()) as tc:
             r = tc.post("/oauth/register", json={"redirect_uris": ["https://a/cb"]})
     assert r.status_code == 403
+
+
+def test_register_survives_config_read_failure():
+    """feature 093: a config transport error must NOT 500 DCR — registration defaults to enabled
+    and an empty allowlist (best-effort reads), so a valid https client still registers."""
+    import grpc
+
+    err = grpc.aio.AioRpcError(grpc.StatusCode.UNAVAILABLE, None, None, details="config down")
+    with (
+        patch.object(client, "get_config_value", AsyncMock(side_effect=err)),
+        patch.object(
+            client,
+            "register_oauth_client",
+            AsyncMock(return_value={"client_id": "oauthc_y", "redirect_uris": ["https://a/cb"]}),
+        ),
+    ):
+        with TestClient(_app()) as tc:
+            r = tc.post("/oauth/register", json={"redirect_uris": ["https://a/cb"]})
+    assert r.status_code == 201
+    assert r.json()["client_id"] == "oauthc_y"
 
 
 # ── /oauth/authorize validation (AC-B3) ─────────────────────────────────────
