@@ -27,6 +27,7 @@ import {
   timeframeToNumber,
   TimeRange,
 } from "../../common/v1/common";
+import { FieldMask } from "../../google/protobuf/field_mask";
 import { Struct } from "../../google/protobuf/struct";
 import { Timestamp } from "../../google/protobuf/timestamp";
 
@@ -240,6 +241,80 @@ export function sourceHealthStatusToNumber(object: SourceHealthStatus): number {
   }
 }
 
+/** Closed verb set for ManageSignalSource (feature 088). Closed set → enum (C-04). */
+export enum SignalSourceOperation {
+  SIGNAL_SOURCE_OPERATION_UNSPECIFIED = "SIGNAL_SOURCE_OPERATION_UNSPECIFIED",
+  /** SIGNAL_SOURCE_OPERATION_REGISTER - strict create: ALREADY_EXISTS on an existing slug */
+  SIGNAL_SOURCE_OPERATION_REGISTER = "SIGNAL_SOURCE_OPERATION_REGISTER",
+  /** SIGNAL_SOURCE_OPERATION_UPDATE - NOT_FOUND if missing; AIP-161 partial merge via update_mask */
+  SIGNAL_SOURCE_OPERATION_UPDATE = "SIGNAL_SOURCE_OPERATION_UPDATE",
+  /** SIGNAL_SOURCE_OPERATION_REACTIVATE - set active=TRUE; decoupled from update (RC-6) */
+  SIGNAL_SOURCE_OPERATION_REACTIVATE = "SIGNAL_SOURCE_OPERATION_REACTIVATE",
+  /** SIGNAL_SOURCE_OPERATION_DEACTIVATE - set active=FALSE */
+  SIGNAL_SOURCE_OPERATION_DEACTIVATE = "SIGNAL_SOURCE_OPERATION_DEACTIVATE",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function signalSourceOperationFromJSON(object: any): SignalSourceOperation {
+  switch (object) {
+    case 0:
+    case "SIGNAL_SOURCE_OPERATION_UNSPECIFIED":
+      return SignalSourceOperation.SIGNAL_SOURCE_OPERATION_UNSPECIFIED;
+    case 1:
+    case "SIGNAL_SOURCE_OPERATION_REGISTER":
+      return SignalSourceOperation.SIGNAL_SOURCE_OPERATION_REGISTER;
+    case 2:
+    case "SIGNAL_SOURCE_OPERATION_UPDATE":
+      return SignalSourceOperation.SIGNAL_SOURCE_OPERATION_UPDATE;
+    case 3:
+    case "SIGNAL_SOURCE_OPERATION_REACTIVATE":
+      return SignalSourceOperation.SIGNAL_SOURCE_OPERATION_REACTIVATE;
+    case 4:
+    case "SIGNAL_SOURCE_OPERATION_DEACTIVATE":
+      return SignalSourceOperation.SIGNAL_SOURCE_OPERATION_DEACTIVATE;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return SignalSourceOperation.UNRECOGNIZED;
+  }
+}
+
+export function signalSourceOperationToJSON(object: SignalSourceOperation): string {
+  switch (object) {
+    case SignalSourceOperation.SIGNAL_SOURCE_OPERATION_UNSPECIFIED:
+      return "SIGNAL_SOURCE_OPERATION_UNSPECIFIED";
+    case SignalSourceOperation.SIGNAL_SOURCE_OPERATION_REGISTER:
+      return "SIGNAL_SOURCE_OPERATION_REGISTER";
+    case SignalSourceOperation.SIGNAL_SOURCE_OPERATION_UPDATE:
+      return "SIGNAL_SOURCE_OPERATION_UPDATE";
+    case SignalSourceOperation.SIGNAL_SOURCE_OPERATION_REACTIVATE:
+      return "SIGNAL_SOURCE_OPERATION_REACTIVATE";
+    case SignalSourceOperation.SIGNAL_SOURCE_OPERATION_DEACTIVATE:
+      return "SIGNAL_SOURCE_OPERATION_DEACTIVATE";
+    case SignalSourceOperation.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function signalSourceOperationToNumber(object: SignalSourceOperation): number {
+  switch (object) {
+    case SignalSourceOperation.SIGNAL_SOURCE_OPERATION_UNSPECIFIED:
+      return 0;
+    case SignalSourceOperation.SIGNAL_SOURCE_OPERATION_REGISTER:
+      return 1;
+    case SignalSourceOperation.SIGNAL_SOURCE_OPERATION_UPDATE:
+      return 2;
+    case SignalSourceOperation.SIGNAL_SOURCE_OPERATION_REACTIVATE:
+      return 3;
+    case SignalSourceOperation.SIGNAL_SOURCE_OPERATION_DEACTIVATE:
+      return 4;
+    case SignalSourceOperation.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 export interface BackfillJob {
   jobId: string;
   symbols: string[];
@@ -397,13 +472,26 @@ export interface ListSignalSourcesResponse {
 }
 
 /**
- * ManageSignalSourceRequest: operation is "register" | "update" | "deactivate".
- * credentials_ref is only processed on register/update; ignored on deactivate.
+ * ManageSignalSourceRequest verbs (feature 088): prefer operation_enum; the string operation is kept
+ * for back-compat and read only when operation_enum is UNSPECIFIED.
+ * credentials_ref is processed on register/update; ignored on reactivate/deactivate. On a masked
+ * update it is a virtual mask path: listed → apply (empty clears); unlisted → the stored ref is kept.
  */
 export interface ManageSignalSourceRequest {
   source?: SignalSource | undefined;
   credentialsRef: string;
+  /**
+   * use operation_enum (feature 088)
+   *
+   * @deprecated
+   */
   operation: string;
+  /** AIP-161 partial update (feature 088). Applies to UPDATE only; absent = full replace (back-compat). */
+  updateMask?:
+    | string[]
+    | undefined;
+  /** Preferred verb selector (feature 088); when set (!= UNSPECIFIED) it wins over the string operation. */
+  operationEnum: SignalSourceOperation;
 }
 
 export interface ManageSignalSourceResponse {
@@ -2387,7 +2475,13 @@ export const ListSignalSourcesResponse: MessageFns<ListSignalSourcesResponse> = 
 };
 
 function createBaseManageSignalSourceRequest(): ManageSignalSourceRequest {
-  return { source: undefined, credentialsRef: "", operation: "" };
+  return {
+    source: undefined,
+    credentialsRef: "",
+    operation: "",
+    updateMask: undefined,
+    operationEnum: SignalSourceOperation.SIGNAL_SOURCE_OPERATION_UNSPECIFIED,
+  };
 }
 
 export const ManageSignalSourceRequest: MessageFns<ManageSignalSourceRequest> = {
@@ -2400,6 +2494,12 @@ export const ManageSignalSourceRequest: MessageFns<ManageSignalSourceRequest> = 
     }
     if (message.operation !== "") {
       writer.uint32(26).string(message.operation);
+    }
+    if (message.updateMask !== undefined) {
+      FieldMask.encode(FieldMask.wrap(message.updateMask), writer.uint32(34).fork()).join();
+    }
+    if (message.operationEnum !== SignalSourceOperation.SIGNAL_SOURCE_OPERATION_UNSPECIFIED) {
+      writer.uint32(40).int32(signalSourceOperationToNumber(message.operationEnum));
     }
     return writer;
   },
@@ -2435,6 +2535,22 @@ export const ManageSignalSourceRequest: MessageFns<ManageSignalSourceRequest> = 
           message.operation = reader.string();
           continue;
         }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.updateMask = FieldMask.unwrap(FieldMask.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 5: {
+          if (tag !== 40) {
+            break;
+          }
+
+          message.operationEnum = signalSourceOperationFromJSON(reader.int32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2453,6 +2569,16 @@ export const ManageSignalSourceRequest: MessageFns<ManageSignalSourceRequest> = 
         ? globalThis.String(object.credentials_ref)
         : "",
       operation: isSet(object.operation) ? globalThis.String(object.operation) : "",
+      updateMask: isSet(object.updateMask)
+        ? FieldMask.unwrap(FieldMask.fromJSON(object.updateMask))
+        : isSet(object.update_mask)
+        ? FieldMask.unwrap(FieldMask.fromJSON(object.update_mask))
+        : undefined,
+      operationEnum: isSet(object.operationEnum)
+        ? signalSourceOperationFromJSON(object.operationEnum)
+        : isSet(object.operation_enum)
+        ? signalSourceOperationFromJSON(object.operation_enum)
+        : SignalSourceOperation.SIGNAL_SOURCE_OPERATION_UNSPECIFIED,
     };
   },
 
@@ -2467,6 +2593,12 @@ export const ManageSignalSourceRequest: MessageFns<ManageSignalSourceRequest> = 
     if (message.operation !== "") {
       obj.operation = message.operation;
     }
+    if (message.updateMask !== undefined) {
+      obj.updateMask = FieldMask.toJSON(FieldMask.wrap(message.updateMask));
+    }
+    if (message.operationEnum !== SignalSourceOperation.SIGNAL_SOURCE_OPERATION_UNSPECIFIED) {
+      obj.operationEnum = signalSourceOperationToJSON(message.operationEnum);
+    }
     return obj;
   },
 
@@ -2480,6 +2612,8 @@ export const ManageSignalSourceRequest: MessageFns<ManageSignalSourceRequest> = 
       : undefined;
     message.credentialsRef = object.credentialsRef ?? "";
     message.operation = object.operation ?? "";
+    message.updateMask = object.updateMask ?? undefined;
+    message.operationEnum = object.operationEnum ?? SignalSourceOperation.SIGNAL_SOURCE_OPERATION_UNSPECIFIED;
     return message;
   },
 };

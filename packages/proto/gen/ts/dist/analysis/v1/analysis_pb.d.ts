@@ -161,6 +161,14 @@ export type BacktestResult = Message<"xstockstrat.analysis.v1.BacktestResult"> &
      * @generated from field: double initial_capital = 15;
      */
     initialCapital: number;
+    /**
+     * Human-readable run warnings surfaced to the user (feature 086), e.g. a strategy referenced a
+     * formula that has since been soft-deleted — the run still completed using its last-saved
+     * definition. Empty on a clean run.
+     *
+     * @generated from field: repeated string warnings = 16;
+     */
+    warnings: string[];
 };
 /**
  * Describes the message xstockstrat.analysis.v1.BacktestResult.
@@ -678,6 +686,15 @@ export type StrategyDefinition = Message<"xstockstrat.analysis.v1.StrategyDefini
      * @generated from field: optional int32 cooldown_days = 9;
      */
     cooldownDays?: number | undefined;
+    /**
+     * Human-readable status warnings surfaced to the user on read (feature 086), e.g. a component
+     * references a formula that has been soft-deleted — the strategy still evaluates (live and in
+     * backtests) using the formula's last-saved definition, but the deletion is flagged. Populated
+     * by GetStrategy; empty elsewhere.
+     *
+     * @generated from field: repeated string warnings = 10;
+     */
+    warnings: string[];
 };
 /**
  * Describes the message xstockstrat.analysis.v1.StrategyDefinition.
@@ -1456,7 +1473,13 @@ export declare enum StrategyOperation {
     /**
      * @generated from enum value: STRATEGY_OPERATION_DEACTIVATE = 3;
      */
-    DEACTIVATE = 3
+    DEACTIVATE = 3,
+    /**
+     * set active=TRUE; re-validates the stored definition (feature 089)
+     *
+     * @generated from enum value: STRATEGY_OPERATION_REACTIVATE = 4;
+     */
+    REACTIVATE = 4
 }
 /**
  * Describes the enum xstockstrat.analysis.v1.StrategyOperation.

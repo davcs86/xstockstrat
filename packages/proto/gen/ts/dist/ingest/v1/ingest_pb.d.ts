@@ -1,5 +1,5 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import type { Timestamp } from "@bufbuild/protobuf/wkt";
+import type { FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
 import type { PageRequest, PageResponse, Timeframe, TimeRange } from "../../common/v1/common_pb";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 /**
@@ -481,8 +481,10 @@ export type ListSignalSourcesResponse = Message<"xstockstrat.ingest.v1.ListSigna
  */
 export declare const ListSignalSourcesResponseSchema: GenMessage<ListSignalSourcesResponse>;
 /**
- * ManageSignalSourceRequest: operation is "register" | "update" | "deactivate".
- * credentials_ref is only processed on register/update; ignored on deactivate.
+ * ManageSignalSourceRequest verbs (feature 088): prefer operation_enum; the string operation is kept
+ * for back-compat and read only when operation_enum is UNSPECIFIED.
+ * credentials_ref is processed on register/update; ignored on reactivate/deactivate. On a masked
+ * update it is a virtual mask path: listed → apply (empty clears); unlisted → the stored ref is kept.
  *
  * @generated from message xstockstrat.ingest.v1.ManageSignalSourceRequest
  */
@@ -496,9 +498,24 @@ export type ManageSignalSourceRequest = Message<"xstockstrat.ingest.v1.ManageSig
      */
     credentialsRef: string;
     /**
-     * @generated from field: string operation = 3;
+     * use operation_enum (feature 088)
+     *
+     * @generated from field: string operation = 3 [deprecated = true];
+     * @deprecated
      */
     operation: string;
+    /**
+     * AIP-161 partial update (feature 088). Applies to UPDATE only; absent = full replace (back-compat).
+     *
+     * @generated from field: google.protobuf.FieldMask update_mask = 4;
+     */
+    updateMask?: FieldMask | undefined;
+    /**
+     * Preferred verb selector (feature 088); when set (!= UNSPECIFIED) it wins over the string operation.
+     *
+     * @generated from field: xstockstrat.ingest.v1.SignalSourceOperation operation_enum = 5;
+     */
+    operationEnum: SignalSourceOperation;
 };
 /**
  * Describes the message xstockstrat.ingest.v1.ManageSignalSourceRequest.
@@ -620,6 +637,45 @@ export declare enum SourceHealthStatus {
  * Describes the enum xstockstrat.ingest.v1.SourceHealthStatus.
  */
 export declare const SourceHealthStatusSchema: GenEnum<SourceHealthStatus>;
+/**
+ * Closed verb set for ManageSignalSource (feature 088). Closed set → enum (C-04).
+ *
+ * @generated from enum xstockstrat.ingest.v1.SignalSourceOperation
+ */
+export declare enum SignalSourceOperation {
+    /**
+     * @generated from enum value: SIGNAL_SOURCE_OPERATION_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * strict create: ALREADY_EXISTS on an existing slug
+     *
+     * @generated from enum value: SIGNAL_SOURCE_OPERATION_REGISTER = 1;
+     */
+    REGISTER = 1,
+    /**
+     * NOT_FOUND if missing; AIP-161 partial merge via update_mask
+     *
+     * @generated from enum value: SIGNAL_SOURCE_OPERATION_UPDATE = 2;
+     */
+    UPDATE = 2,
+    /**
+     * set active=TRUE; decoupled from update (RC-6)
+     *
+     * @generated from enum value: SIGNAL_SOURCE_OPERATION_REACTIVATE = 3;
+     */
+    REACTIVATE = 3,
+    /**
+     * set active=FALSE
+     *
+     * @generated from enum value: SIGNAL_SOURCE_OPERATION_DEACTIVATE = 4;
+     */
+    DEACTIVATE = 4
+}
+/**
+ * Describes the enum xstockstrat.ingest.v1.SignalSourceOperation.
+ */
+export declare const SignalSourceOperationSchema: GenEnum<SignalSourceOperation>;
 /**
  * @generated from service xstockstrat.ingest.v1.IngestService
  */

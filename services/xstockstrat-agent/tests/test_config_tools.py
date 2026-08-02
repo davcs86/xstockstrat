@@ -7,11 +7,11 @@ Three things these must actually prove, because each was a live design trap:
   2. set_config's transport rule is enforced by the ABSENCE of verified claims on the ASGI
      scope, not by inspecting the request. Both transports hand a tool a Starlette Request with
      an Authorization header, so neither could tell them apart. SSE was removed by 079.
-  3. set_config forwards the caller's REAL derived scope, not _admin_metadata()'s hardcoded
-     tuple — and the other management tools keep using the hardcoded one.
+  3. set_config forwards the caller's REAL derived scope, not a hardcoded admin tuple — and
+     feature 092 flipped the other management tools to forward the derived scope too.
 """
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from mcp.server.mcpserver import MCPServer
@@ -257,6 +257,95 @@ class TestManagementToolsForwardDerivedScope:
             with pytest.raises(RuntimeError, match="Streamable HTTP"):
                 await _tool_fn(server, tool)(ctx=_ctx(None), **kwargs)
         write.assert_not_awaited()
+
+
+class TestSetConfigCreateKey:
+    """Feature 091: the tool forwards create_key to the client (server enforces the gate)."""
+
+    @pytest.mark.asyncio
+    async def test_forwards_create_key_true(self):
+        server = _make_server()
+        with (
+            patch.object(client, "list_config_keys", AsyncMock(return_value={"keys": []})),
+            patch.object(
+                client, "set_config", AsyncMock(return_value={"version": "1", "updated_at": "t"})
+            ) as write,
+        ):
+            await _tool_fn(server, "set_config")(
+                ctx=_ctx(ADMIN),
+                namespace="marketdata",
+                key="marketdata.fmp.new_knob",
+                value_type="bool",
+                value="true",
+                author="me",
+                reason="r",
+                create_key=True,
+            )
+        assert write.await_args.kwargs["create_key"] is True
+
+    @pytest.mark.asyncio
+    async def test_defaults_create_key_false(self):
+        server = _make_server()
+        with (
+            patch.object(client, "list_config_keys", AsyncMock(return_value={"keys": []})),
+            patch.object(
+                client, "set_config", AsyncMock(return_value={"version": "1", "updated_at": "t"})
+            ) as write,
+        ):
+            await _tool_fn(server, "set_config")(
+                ctx=_ctx(ADMIN),
+                namespace="marketdata",
+                key="marketdata.fmp.enabled",
+                value_type="bool",
+                value="true",
+                author="me",
+                reason="r",
+            )
+        assert write.await_args.kwargs["create_key"] is False
+
+
+class TestSetConfigRequestParity:
+    """Feature 091 (RC-1 guard): the hand-written SetConfigRequest builder must carry EVERY proto
+    field. Mirror test_backtest_view.py::test_summary_key_set_covers_every_proto_field — pass a
+    non-default value for every field and assert the built request's set fields equal the proto
+    descriptor's fields, so a future added field fails closed instead of silently dropping off."""
+
+    @pytest.mark.asyncio
+    async def test_builder_covers_every_proto_field(self):
+        from gen.config.v1 import config_pb2, config_pb2_grpc  # noqa: PLC0415
+
+        captured = {}
+
+        async def _capture(req, metadata=None):
+            captured["req"] = req
+            return config_pb2.SetConfigResponse(version="1")
+
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=MagicMock())
+        cm.__aexit__ = AsyncMock(return_value=False)
+        stub = MagicMock()
+        stub.SetConfig = AsyncMock(side_effect=_capture)
+        with (
+            patch("app.client.grpc") as mock_grpc,
+            patch.object(config_pb2_grpc, "ConfigServiceStub", return_value=stub),
+        ):
+            mock_grpc.aio.insecure_channel.return_value = cm
+            # A distinct non-default value for every SetConfigRequest field so each appears in
+            # ListFields(): environment='production'/trading_mode='live' map to non-zero enums.
+            await client.set_config(
+                namespace="ns",
+                key="k",
+                value_type="string",
+                value="v",
+                environment="production",
+                trading_mode="live",
+                author="a",
+                reason="r",
+                access_scope=15,
+                create_key=True,
+            )
+        built = {f.name for f, _ in captured["req"].ListFields()}
+        assert built == set(config_pb2.SetConfigRequest.DESCRIPTOR.fields_by_name)
 
 
 class TestScopeDefaulting:

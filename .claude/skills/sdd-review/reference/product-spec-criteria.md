@@ -27,8 +27,10 @@ the gate (**F-11**).
 | 8 | **Acceptance Criteria** | Missing or not verifiable (no observable outcome stated) |
 | 9 | **Open Questions** | Any `- [ ]` items remain unchecked and unresolved |
 | 10 | **Integration completeness (`C-10`)** | Spec touches a shared/duplicated surface but omits completing it: (a) adds a new UI page/route without stating it will be registered in the shared nav (`PLATFORM_SUBNAV`) and reachable from it; (b) introduces a displayed value from an authoritative source (broker/mark-to-market) without requiring parity across **every** RPC/read path that surfaces it (e.g. `ListPositions` ↔ `ListPortfolios`); (c) seeds or depends on a shared resource other services use without a mutation-protection requirement (and, for any new ownership sentinel like `author="system"`, a governance note) |
+| 11 | **Consumer surface named (`C-14`)** | `## Consumer Surface(s)` section is missing or every box is unchecked; OR the spec changes backend behavior with an end-user-visible consequence (a new/changed RPC, response field, computed value, or stored state a user would act on) yet names no UI segment and no Agent tool AND does not justify `None — internal/platform-only`; OR a surface is marked deferred without pointing at a **named follow-up feature**. (Verify against `## Affected Services` + `## Functional Requirements`: a purely internal service-to-service change may legitimately be `None`; a change a trader/analyst/operator would observe may not.) |
 
 WARN (advisory, does not block):
+- `## Consumer Surface(s)` names a surface but does not say *what* changes there (which is fine to firm up at design/spec time, but flag it)
 - `## Out of Scope` has items but they seem insufficiently explicit
 - Acceptance criteria exist but are qualitative rather than quantitative
 

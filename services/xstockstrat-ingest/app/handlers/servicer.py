@@ -4,6 +4,7 @@ normalises raw data payloads, and persists newsletter signals to TimescaleDB.
 """
 
 import asyncio
+import json
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -23,14 +24,51 @@ from app.repositories import backfill_chunks, backfill_jobs
 from app.repositories.signal_sources import (
     deactivate_source,
     derive_health_status,
+    get_source,
+    insert_source,
     list_all_sources,
     mark_source_error,
     mark_source_fed,
-    upsert_source,
+    reactivate_source,
+    update_source,
     validate_config_json,
 )
 
 log = logging.getLogger(__name__)
+
+# Feature 088 — honest ManageSignalSource verbs (AIP-161 partial update).
+_SS_MASKABLE_PATHS = frozenset(
+    {"display_name", "source_type", "extractor_module", "config_json", "credentials_ref"}
+)
+# slug is the PK; active is column-authoritative (lifecycle via reactivate/deactivate only, RC-6).
+_SS_COLUMN_AUTH_PATHS = frozenset({"slug", "active"})
+_SS_CREDENTIAL_REQUIRED_TYPES = frozenset(
+    {"authenticated_website", "mediated_authenticated_website"}
+)
+
+
+def _resolve_ss_operation(request) -> str | None:
+    """Feature 088: prefer operation_enum; fall back to the deprecated string. Unknown → None."""
+    enum_to_str = {
+        ingest_pb2.SIGNAL_SOURCE_OPERATION_REGISTER: "register",
+        ingest_pb2.SIGNAL_SOURCE_OPERATION_UPDATE: "update",
+        ingest_pb2.SIGNAL_SOURCE_OPERATION_REACTIVATE: "reactivate",
+        ingest_pb2.SIGNAL_SOURCE_OPERATION_DEACTIVATE: "deactivate",
+    }
+    if request.operation_enum != ingest_pb2.SIGNAL_SOURCE_OPERATION_UNSPECIFIED:
+        return enum_to_str.get(request.operation_enum)
+    op = request.operation
+    return op if op in ("register", "update", "reactivate", "deactivate") else None
+
+
+def _cfg_to_dict(value) -> dict | None:
+    """Coerce a stored config_json (dict or JSON string, per asyncpg) to a dict, or None."""
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return value
+    return json.loads(str(value))
+
 
 # feature 083 — source-health string → SourceHealthStatus enum.
 _HEALTH_ENUM = {
@@ -915,6 +953,20 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             sources.append(source)
         return ingest_pb2.ListSignalSourcesResponse(sources=sources)
 
+    @staticmethod
+    def _validate_source_write(
+        source_type: str, config_json: dict | None, credentials_ref: str | None
+    ) -> str | None:
+        """Feature 088: validate a register/update write on the *effective* (post-merge) fields.
+        Covers config_json shape and the credential-required rule for both credential types
+        (closing the mediated_authenticated_website gap)."""
+        err = validate_config_json(source_type, config_json)
+        if err:
+            return err
+        if source_type in _SS_CREDENTIAL_REQUIRED_TYPES and not credentials_ref:
+            return f"{source_type} source requires credentials_ref"
+        return None
+
     async def ManageSignalSource(self, request, context):
         if self._db is None:
             await context.abort(grpc.StatusCode.UNAVAILABLE, "database not connected")
@@ -922,46 +974,111 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         if not self._has_admin_scope(context):
             await context.abort(grpc.StatusCode.PERMISSION_DENIED, "admin scope required")
             return
-        op = request.operation
+        op = _resolve_ss_operation(request)
         src = request.source
-        if op in ("register", "update"):
-            if src.source_type == "authenticated_website" and not request.credentials_ref:
-                await context.abort(
-                    grpc.StatusCode.INVALID_ARGUMENT,
-                    "authenticated_website source requires credentials_ref",
-                )
-                return
-            # MessageToDict, not dict(): dict() keeps nested Struct/ListValue protobuf
-            # objects as values, which neither json.dumps nor asyncpg can encode.
-            cfg_dict = MessageToDict(src.config_json) if src.config_json else None
-            err = validate_config_json(src.source_type, cfg_dict)
-            if err:
-                await context.abort(grpc.StatusCode.INVALID_ARGUMENT, err)
-                return
-            row = await upsert_source(
-                self._db,
-                slug=src.slug,
-                display_name=src.display_name,
-                source_type=src.source_type,
-                extractor_module=src.extractor_module,
-                credentials_ref=request.credentials_ref or None,
-                config_json=cfg_dict,
-                active=src.active,
+        if op is None:
+            await context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT,
+                "unknown operation: must be register, update, reactivate, or deactivate",
             )
+            return
+        if op == "reactivate":
+            row = await reactivate_source(self._db, src.slug)
+            if row is None:
+                await context.abort(grpc.StatusCode.NOT_FOUND, f"source '{src.slug}' not found")
+                return
         elif op == "deactivate":
             row = await deactivate_source(self._db, src.slug)
             if row is None:
                 await context.abort(grpc.StatusCode.NOT_FOUND, f"source '{src.slug}' not found")
                 return
-        else:
-            await context.abort(
-                grpc.StatusCode.INVALID_ARGUMENT,
-                f"unknown operation '{op}': must be register, update, or deactivate",
+        elif op == "register":
+            # Strict create: an existing slug is a conflict, not a silent overwrite (feature 088).
+            if await get_source(self._db, src.slug) is not None:
+                await context.abort(
+                    grpc.StatusCode.ALREADY_EXISTS, f"source '{src.slug}' already exists"
+                )
+                return
+            # MessageToDict, not dict(): dict() keeps nested Struct/ListValue protobuf objects as
+            # values, which neither json.dumps nor asyncpg can encode.
+            cfg_dict = MessageToDict(src.config_json) if src.config_json else None
+            merged_cred = request.credentials_ref or None
+            err = self._validate_source_write(src.source_type, cfg_dict, merged_cred)
+            if err:
+                await context.abort(grpc.StatusCode.INVALID_ARGUMENT, err)
+                return
+            row = await insert_source(
+                self._db,
+                slug=src.slug,
+                display_name=src.display_name,
+                source_type=src.source_type,
+                extractor_module=src.extractor_module,
+                credentials_ref=merged_cred,
+                config_json=cfg_dict,
+                active=True,
             )
-            return
-        import json
+        else:  # update — AIP-161 partial merge onto the stored row (feature 088)
+            stored = await get_source(self._db, src.slug)
+            if stored is None:
+                await context.abort(grpc.StatusCode.NOT_FOUND, f"source '{src.slug}' not found")
+                return
+            has_mask = request.HasField("update_mask")
+            mask = set(request.update_mask.paths) if has_mask else None
+            if has_mask:
+                authoritative = mask & _SS_COLUMN_AUTH_PATHS
+                if authoritative:
+                    await context.abort(
+                        grpc.StatusCode.INVALID_ARGUMENT,
+                        f"cannot update column-authoritative field(s) {sorted(authoritative)} via "
+                        "update_mask; use reactivate/deactivate for `active`",
+                    )
+                    return
+                unknown = mask - _SS_MASKABLE_PATHS
+                if unknown:
+                    await context.abort(
+                        grpc.StatusCode.INVALID_ARGUMENT,
+                        f"unknown update_mask path(s): {sorted(unknown)}",
+                    )
+                    return
 
-        from google.protobuf.struct_pb2 import Struct
+            def _use_req(field: str) -> bool:
+                return mask is None or field in mask
+
+            merged_display = (
+                src.display_name if _use_req("display_name") else stored["display_name"]
+            )
+            merged_type = src.source_type if _use_req("source_type") else stored["source_type"]
+            merged_extractor = (
+                src.extractor_module if _use_req("extractor_module") else stored["extractor_module"]
+            )
+            merged_cfg = (
+                (MessageToDict(src.config_json) if src.config_json else None)
+                if _use_req("config_json")
+                else _cfg_to_dict(stored["config_json"])
+            )
+            # credentials_ref is a virtual mask path (not on the SignalSource message): masked →
+            # apply the request value (empty string clears); unlisted → preserve the stored ref.
+            merged_cred = (
+                (request.credentials_ref or None)
+                if _use_req("credentials_ref")
+                else stored["credentials_ref"]
+            )
+            err = self._validate_source_write(merged_type, merged_cfg, merged_cred)
+            if err:
+                await context.abort(grpc.StatusCode.INVALID_ARGUMENT, err)
+                return
+            row = await update_source(
+                self._db,
+                slug=src.slug,
+                display_name=merged_display,
+                source_type=merged_type,
+                extractor_module=merged_extractor,
+                credentials_ref=merged_cred,
+                config_json=merged_cfg,
+            )
+            if row is None:
+                await context.abort(grpc.StatusCode.NOT_FOUND, f"source '{src.slug}' not found")
+                return
 
         cfg_out = Struct()
         if row["config_json"]:

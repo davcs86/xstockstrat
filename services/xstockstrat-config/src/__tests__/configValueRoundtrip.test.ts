@@ -83,6 +83,9 @@ describe('SetConfig value round-trip over a real gRPC connection', () => {
     const pool: any = {
       query: async (sql: string, params?: unknown[]) => {
         if (sql.includes('INSERT INTO config.config_values')) lastInsert = params;
+        // Feature 091: the existence gate SELECTs before the upsert; these round-trip cases
+        // write to a registered key, so return a row so the gate passes.
+        if (sql.includes('SELECT 1 FROM config.config_values')) return { rows: [{ '?column?': 1 }] };
         return { rows: [] };
       },
       connect: async () => ({ query: async () => {}, on: () => {} }),
