@@ -112,3 +112,37 @@
 - [ ] `.do/app.yaml`'s `MCP_AGENT_SECRET` notify/ingest/analysis block is also touched by
   `084-droplet-compose-deploy` (`spec-ready`, not yet implemented) — rebase-risk only, watch at
   `/sdd-spec` time.
+
+## Session 2026-08-02T00:30:00Z — sdd-spec
+
+- Generated `implementation-spec.md` with **5 steps**. Status → `implementation-ready`.
+- Step boundaries: Step 1 (service, `xstockstrat-agent`) bundles the `client.py`/`auth.py`
+  `_metadata()` removal **and** the six `test_client.py` assertion rewrites into one step (not the
+  default "test step immediately after") — all six assertions break simultaneously with the code
+  change, so splitting them across two steps would leave Step 1's own commit failing verification
+  (Floor **F-05**); mirrors the ledger's 2026-07-27 (072) "green-making minimum travels with the
+  breaking change" insight. Step 2 (config) trims the `MCP_AGENT_SECRET` block from
+  notify/ingest/analysis in `docker-compose.yml`/`.do/app*.yaml`, verified by a mandatory,
+  actually-executed `docker compose up`/`ps` smoke check (no CI job boots the compose stack). Steps
+  3–5 (docs) split the doc reconciliation by audience — reference/constitution docs, operator setup
+  docs, launch collateral — each independently verifiable via a scoped `grep -rn "x-mcp-secret"`
+  zero-hit check.
+- Key codebase findings beyond `recon.md`/`design.md` (fresh re-verification at spec time):
+  - Re-ran the repo-wide `grep -rn "x-mcp-secret\|MCP_AGENT_SECRET"` at spec time (not just the
+    scoped greps recon used) — confirms `docs/runbooks/mcp-tools.md`'s three inline clauses
+    (`:241,388,707`) plus its downstream-enforcement section (`:74-81`) are the **complete** set in
+    that file; resolves `design.md` Open Risk #1 ("may not be exhaustive") — it is exhaustive.
+  - `python3 -c "import markdown, weasyprint"` succeeds in this session's environment (versions
+    3.10.3 / 69.0) — resolves `design.md` Open Risk #2; Step 5's PDF regeneration is written as a
+    real run, not a deferral.
+  - Confirmed `.do/app.yaml` and `.do/app.dev.yaml` have **byte-identical** line numbers for all
+    four `MCP_AGENT_SECRET` blocks (`:217-219` ingest, `:261-263` analysis, `:295-297` agent — kept,
+    `:402-404` notify) — both files' Step 2 instructions are identical.
+  - Three additional stale `x-mcp-secret` mentions inside `client.py` beyond the `_metadata()`
+    helper itself, found via a fresh grep of the file in isolation: `:332` (`screen_symbols`
+    docstring), `:730-733` (OAuth-helpers comment block), `:889` (`get_config_value` docstring) —
+    all folded into Step 1's Instructions so the hard-zero grep of `services/xstockstrat-agent/app/`
+    (Acceptance Criterion 1a) actually passes after Step 1 lands.
+  - `AGENT-6`'s framing target confirmed as **single-purpose** (per `design.md`, which supersedes
+    `recon.md`'s draft "dual-purpose" language) — `design.md` is the later, debated, authoritative
+    source when the two differ.
