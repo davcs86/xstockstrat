@@ -905,6 +905,38 @@ class TestScreenSymbols:
         assert "cheap" not in resp.results[0].criterion_scores
         assert resp.results[0].passed is True
 
+    @pytest.mark.asyncio
+    async def test_unknown_metric_aborts_invalid_argument(self):
+        """feature 090: a fundamental metric_name typo → INVALID_ARGUMENT, not a silent skip."""
+        from gen.analysis.v1 import analysis_pb2
+        from gen.marketdata.v1 import marketdata_pb2
+
+        svc = self._svc()
+        svc._marketdata.GetBars = AsyncMock(return_value=self._bars([1.0, 2.0, 3.0]))
+        svc._marketdata.GetFundamentalsMulti = AsyncMock(
+            return_value=SimpleNamespace(
+                fundamentals=[marketdata_pb2.Fundamentals(symbol="AAA", pe_ratio=15.0)]
+            )
+        )
+        ctx = self._ctx()
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+
+        req = analysis_pb2.ScreenSymbolsRequest(
+            symbols=["AAA"],
+            criteria=[
+                analysis_pb2.ScreenCriterion(
+                    ref_name="cheap",
+                    kind=analysis_pb2.SCREEN_KIND_FUNDAMENTAL,
+                    metric_name="pe_ration",  # typo of pe_ratio
+                    op=analysis_pb2.COMPARATOR_LT,
+                    threshold=20.0,
+                )
+            ],
+        )
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ScreenSymbols(req, ctx)
+        assert ctx.abort.await_args.args[0].name == "INVALID_ARGUMENT"
+
 
 # ---------------------------------------------------------------------------
 # RunFundamentalsScan (feature 062)

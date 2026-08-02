@@ -370,18 +370,21 @@ Scans an explicit universe of symbols via `xstockstrat-analysis` `ScreenSymbols`
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `symbols` | `string[]` | Yes | Explicit ticker list to screen, e.g. `["NVDA", "AAPL"]` |
-| `criteria` | `object[]` | No | Criterion dicts; each key set: `ref_name`, `kind` (`"SCREEN_KIND_FUNDAMENTAL"` \| `"SCREEN_KIND_TECHNICAL_FORMULA"` \| `"SCREEN_KIND_TECHNICAL_INDICATOR"` \| `"SCREEN_KIND_SIGNAL"`), `metric_name`, `op` (e.g. `"COMPARATOR_GTE"`, `"COMPARATOR_BETWEEN"`), `threshold`, `threshold_high`, `weight`, `hard_filter` |
+| `criteria` | `object[]` | No | Criterion dicts; each key set: `ref_name`, `kind` (`"SCREEN_KIND_FUNDAMENTAL"` \| `"SCREEN_KIND_TECHNICAL_FORMULA"` \| `"SCREEN_KIND_TECHNICAL_INDICATOR"` \| `"SCREEN_KIND_SIGNAL"`), `metric_name`, `op` (e.g. `"COMPARATOR_GTE"`, `"COMPARATOR_BETWEEN"`), `threshold`, `threshold_high`, `weight`, `hard_filter`, and — for technical kinds — a `component` dict |
 | `signal_sources` | `string[]` | No | Signal source names for the signal-blend kind |
 | `signal_weight` | `float` | No | Share of score from signals (default `0.0`) |
 | `technical_weight` | `float` | No | Share of score from technicals (default `1.0`) |
-| `min_conviction` | `float` | No | **Accepted on the wire but currently ignored by `ScreenSymbols`** — the screener never reads this field; pass/fail is decided by `criteria` (notably `hard_filter`), not a blended-score floor. Default `0.0`. |
+| `min_conviction` | `float` | No | **Honored as a hard floor** (feature 090): results whose relative-conviction `score` is below the entry threshold for this `min_conviction` (`max(0.5 + min_conviction·0.5, 0.55)`, the same transform a backtest applies) are dropped. `coverage_gaps` are unaffected. Default `0.0` (no floor). |
 | `rank_limit` | `int` | No | Cap on returned results; `0` ⇒ analysis-side default (`analysis.screener.default_rank_limit`) |
 
-`kind` and `op` accept either the enum name (string) or a numeric value. The `component` field
-(required by the technical kinds) is **not mapped** from string input in this thin wrapper, so
-`SCREEN_KIND_TECHNICAL_FORMULA` / `SCREEN_KIND_TECHNICAL_INDICATOR` criteria are **silently
-skipped** — only fundamental and signal kinds are effective today. An unknown fundamental
-`metric_name` is likewise skipped rather than rejected.
+`kind` and `op` accept either the enum name (string) or a numeric value. For technical kinds,
+supply a `component` dict (same shape as a strategy component: `ref_name` / `kind`
+(`"builtin"`|`"formula"`) / `indicator` / `formula_id` / `params`); the wrapper maps it via
+`_build_component` and sends it, so `SCREEN_KIND_TECHNICAL_FORMULA` /
+`SCREEN_KIND_TECHNICAL_INDICATOR` criteria are **scored** (feature 090). An unknown fundamental
+`metric_name` — a typo of a closed field, or an open metric that no scanned symbol carries — is
+**rejected with `INVALID_ARGUMENT`** rather than silently skipped (only enforceable when
+fundamentals are available; a degraded scan still skips them).
 
 **Return**
 
@@ -390,17 +393,19 @@ skipped** — only fundamental and signal kinds are effective today. An unknown 
   "results": [
     { "symbol": "NVDA", "score": 0.91, "criterion_scores": { "pe": 1.0 }, "passed": true, "status": "SCREEN_RESULT_STATUS_OK" }
   ],
-  "coverage_gaps": [ { "symbol": "TSLA" } ]
+  "coverage_gaps": [ { "symbol": "TSLA", "timeframe": "TIMEFRAME_1DAY", "bars_have": "5", "bars_need": "50" } ]
 }
 ```
 
-`status` is the `ScreenResultStatus` name (`SCREEN_RESULT_STATUS_OK` | `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`); `coverage_gaps` lists symbols lacking enough data to screen.
+`status` is the `ScreenResultStatus` name (`SCREEN_RESULT_STATUS_OK` | `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`); `coverage_gaps` lists symbols lacking enough data to screen, each with its `timeframe` (enum name) and `bars_have`/`bars_need` (int64 as JSON **strings**, matching `run_backtest`). Gaps are computed **before** `rank_limit` truncation (feature 090), so an under-covered symbol ranked below the cut still appears.
 
 **Errors**
 
 | Condition | Error |
 |---|---|
 | Over-cap universe (> `analysis.screener.max_universe_size`) | Truncated analysis-side |
+| Unknown fundamental `metric_name` (typo, or absent from every scanned symbol) when fundamentals are available | `INVALID_ARGUMENT` |
+| Unknown component `kind` (not `builtin`/`formula`) | `ValueError` client-side, before the gRPC call |
 | Analysis service unreachable | gRPC error propagated |
 
 ---

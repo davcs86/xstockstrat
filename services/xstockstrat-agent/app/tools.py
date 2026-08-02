@@ -364,20 +364,24 @@ def register_tools(server: MCPServer) -> None:
         """Scan a universe of symbols via xstockstrat-analysis and return ranked candidates.
         symbols: explicit ticker list to screen e.g. ['NVDA', 'AAPL'] (no watchlist resolution).
         criteria: list of criterion dicts, each with keys: ref_name, kind
-            ('SCREEN_KIND_FUNDAMENTAL' | 'SCREEN_KIND_SIGNAL'), metric_name, op (e.g.
-            'COMPARATOR_GTE'), threshold, threshold_high, weight, hard_filter.
-            ONLY fundamental and signal kinds work today. 'SCREEN_KIND_TECHNICAL_FORMULA' /
-            'SCREEN_KIND_TECHNICAL_INDICATOR' criteria are accepted but SILENTLY SKIPPED (this
-            wrapper never sends the `component` field they require), and an unknown fundamental
-            metric_name is likewise silently skipped, not rejected.
+            ('SCREEN_KIND_FUNDAMENTAL' | 'SCREEN_KIND_SIGNAL' | 'SCREEN_KIND_TECHNICAL_FORMULA' |
+            'SCREEN_KIND_TECHNICAL_INDICATOR'), metric_name, op (e.g. 'COMPARATOR_GTE'),
+            threshold, threshold_high, weight, hard_filter.
+            For technical kinds supply a `component` dict (same shape as a strategy component:
+            ref_name / kind ('builtin'|'formula') / indicator / formula_id / params) — it is now
+            mapped and sent, so technical criteria are scored (feature 090). An unknown fundamental
+            metric_name (a typo, or an open metric no scanned symbol carries) is REJECTED with
+            INVALID_ARGUMENT rather than silently skipped.
         signal_sources/signal_weight/technical_weight: optional signal-blend params.
-        min_conviction: accepted but currently a DEAD knob — the screener never reads it. Apply
-            your own conviction cutoff on the results instead.
+        min_conviction: honored as a hard floor (feature 090) — candidates whose relative
+            conviction score is below the entry threshold for this min_conviction are dropped from
+            results (coverage_gaps are unaffected).
         rank_limit: cap on returned results (0 = analysis default). Read-only, no admin scope.
         Returns {"results": [{"symbol", "score", "criterion_scores" (per-ref_name map), "passed"
-            (bool), "status"}], "coverage_gaps": [{"symbol"}]}. coverage_gaps carries only the
-            symbol (timeframe / bars-available / bars-needed detail is dropped) and is computed
-            AFTER rank truncation. Filter candidates on `passed`."""
+            (bool), "status"}], "coverage_gaps": [{"symbol", "timeframe", "bars_have",
+            "bars_need"}]}. coverage_gaps now carries the full gap detail (bars_have/bars_need as
+            JSON strings — int64) and is computed BEFORE rank truncation, so an under-covered
+            symbol ranked below the cut still surfaces. Filter candidates on `passed`."""
         return await client.screen_symbols(
             symbols=symbols,
             criteria=criteria,

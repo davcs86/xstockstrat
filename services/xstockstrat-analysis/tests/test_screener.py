@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import grpc
+import pytest
 from gen.analysis.v1 import analysis_pb2
 from gen.marketdata.v1 import marketdata_pb2
 from google.protobuf.struct_pb2 import Struct
@@ -189,6 +190,85 @@ async def test_rank_limit_caps_results():
     )
     resp = await engine.screen(req)
     assert len(resp.results) == 2
+
+
+# ── feature 090 (AC-2): min_conviction is a hard floor ────────────────────────
+
+
+async def test_min_conviction_filters_low_score_symbols():
+    md = AsyncMock()
+    md.GetBars = AsyncMock(return_value=bars([1.0, 2.0, 3.0]))
+    ind = AsyncMock()
+    # AAA→0.1 (norm 0.0), BBB→0.9 (norm ~0.89), CCC→1.0 (norm 1.0); pure-technical score == norm.
+    ind.ExecuteFormula = AsyncMock(
+        side_effect=[formula_resp([0.1]), formula_resp([0.9]), formula_resp([1.0])]
+    )
+    engine = make_engine(md, ind)
+    req = analysis_pb2.ScreenSymbolsRequest(
+        symbols=["AAA", "BBB", "CCC"],
+        criteria=[formula_criterion("f1", "fid", analysis_pb2.COMPARATOR_GT, 0.0)],
+        min_conviction=0.1,  # buy_threshold = max(0.55, 0.55) = 0.55
+    )
+    resp = await engine.screen(req)
+    # AAA (0.0) is below the 0.55 floor and dropped; BBB and CCC clear it.
+    symbols = {r.symbol for r in resp.results}
+    assert symbols == {"BBB", "CCC"}
+    assert "AAA" not in symbols
+
+
+# ── feature 090 (AC-4): gaps come from the full list, before truncation ───────
+
+
+async def test_coverage_gaps_survive_rank_limit_truncation():
+    md = AsyncMock()
+    # AAA/BBB have bars; CCC has none → INSUFFICIENT_DATA, ranked last, truncated by rank_limit=1.
+    md.GetBars = AsyncMock(
+        side_effect=[bars([1.0, 2.0, 3.0]), bars([1.0, 2.0, 3.0]), bars([])]
+    )
+    ind = AsyncMock()
+    ind.ExecuteFormula = AsyncMock(
+        side_effect=[formula_resp([0.9]), formula_resp([0.1])]
+    )
+    engine = make_engine(md, ind)
+    req = analysis_pb2.ScreenSymbolsRequest(
+        symbols=["AAA", "BBB", "CCC"],
+        criteria=[formula_criterion("f1", "fid", analysis_pb2.COMPARATOR_GT, 0.0)],
+        rank_limit=1,
+    )
+    resp = await engine.screen(req)
+    assert len(resp.results) == 1  # truncated to the single top result
+    # CCC's gap still surfaces even though it was truncated out of results.
+    gap_symbols = {g.symbol for g in resp.coverage_gaps}
+    assert gap_symbols == {"CCC"}
+
+
+# ── feature 090: unknown fundamental metric_name → ValueError ─────────────────
+
+
+async def test_unknown_fundamental_metric_raises():
+    md = AsyncMock()
+    md.GetBars = AsyncMock(return_value=bars([1.0, 2.0, 3.0]))
+    md.GetFundamentalsMulti = AsyncMock(
+        return_value=SimpleNamespace(
+            fundamentals=[marketdata_pb2.Fundamentals(symbol="AAA", pe_ratio=15.0)]
+        )
+    )
+    ind = AsyncMock()
+    engine = make_engine(md, ind)
+    req = analysis_pb2.ScreenSymbolsRequest(
+        symbols=["AAA"],
+        criteria=[
+            analysis_pb2.ScreenCriterion(
+                ref_name="cheap",
+                kind=analysis_pb2.SCREEN_KIND_FUNDAMENTAL,
+                metric_name="pe_ration",  # typo of pe_ratio
+                op=analysis_pb2.COMPARATOR_LT,
+                threshold=20.0,
+            )
+        ],
+    )
+    with pytest.raises(ValueError, match="pe_ration"):
+        await engine.screen(req)
 
 
 # ── universe cap (OQ-060-d) ───────────────────────────────────────────────────
