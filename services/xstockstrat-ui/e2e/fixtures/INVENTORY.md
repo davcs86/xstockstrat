@@ -16,6 +16,7 @@ skill).
 | Strategy scores | `STRATEGY_SCORE_{HIGH,MID,LOW}`, `STRATEGY_SCORES` | `e2e/fixtures/strategies.ts` | `xstockstrat.analysis.v1.StrategyScore` | `e2e/mock-backend.ts` (`listStrategies`), `e2e/insights/dashboard.spec.ts` |
 | Strategy definitions | `STRATEGY_DEF_LIVE`, `STRATEGY_DEF_INACTIVE`, `STRATEGY_DEFINITIONS` | `e2e/fixtures/strategies.ts` | `xstockstrat.analysis.v1.StrategyDefinition` | `e2e/mock-backend.ts` (`listStrategyDefinitions`, `setStrategyLive`), `e2e/trader/live-strategies.spec.ts` (asserts `strat-live-001`) |
 | Custom formulas | `FORMULA_RSI`, `FORMULA_MACD`, `FORMULAS` | `e2e/fixtures/formulas.ts` | `xstockstrat.indicators.v1.FormulaDefinition` (list row) | `e2e/insights/formulas.spec.ts`, `e2e/insights/strategy-authoring.spec.ts` |
+| Soft-deleted formula (086) | `FORMULA_DELETED` | `e2e/fixtures/formulas.ts` | `xstockstrat.indicators.v1.FormulaDefinition` (full, `deleted: true`) | `e2e/insights/formula-deletion.spec.ts` (GetFormula stub) |
 | Backtest coverage gaps | `insufficientDataResult`, `prefixGapRange`, `BACKTEST_GAP_{SYMBOL,BARS_HAVE,BARS_NEED}`, `BACKTEST_PREFIX_DAYS` | `e2e/fixtures/backtests.ts` | `xstockstrat.analysis.v1.CoverageGap` / `BacktestResult` | `e2e/mock-backend.ts` (`runBacktest` default branch), `e2e/insights/backtest-coverage.spec.ts` |
 | Opportunity queue | `OPPORTUNITIES` | `e2e/fixtures/opportunities.ts` | `xstockstrat.analysis.v1.Opportunity` | `e2e/mock-backend.ts` (`listOpportunities`), `e2e/insights/opportunities.spec.ts` |
 

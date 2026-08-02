@@ -4,12 +4,13 @@ All gRPC calls include x-mcp-secret metadata when MCP_AGENT_SECRET is set.
 GetConfigValue() makes a one-shot gRPC call to xstockstrat-config to resolve credentials.
 """
 
+import math
 import os
 from datetime import UTC, datetime
 from typing import Any
 
 import grpc
-from google.protobuf.json_format import MessageToDict
+from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.timestamp_pb2 import Timestamp
 
 INGEST_ENDPOINT = os.environ.get("INGEST_ENDPOINT", "xstockstrat-ingest:50055")
@@ -41,6 +42,67 @@ def _iso_to_timestamp(iso_str: str) -> Timestamp:
     return ts
 
 
+def _ts_to_iso(ts: Timestamp) -> str:
+    """RFC3339 UTC string for a protobuf Timestamp (feature 087)."""
+    return ts.ToDatetime(tzinfo=UTC).isoformat()
+
+
+def _scrub_struct_nonfinite(struct) -> None:
+    """In-place replace NaN/±Inf `number_value`s in a protobuf Struct with null (feature 087).
+
+    A test_formula dry-run of unvalidated source commonly emits NaN/Inf (div-by-zero, warm-up,
+    log≤0); the sandbox does not scrub these, so `MessageToDict` on the output Struct raises
+    ValueError (ledger 2026-07-21). Scrubbing the Struct BEFORE projection keeps the dry-run honest
+    instead of a 500. Must run on the proto, not the projected dict — MessageToDict is what raises.
+    """
+
+    def _scrub_value(v) -> None:
+        kind = v.WhichOneof("kind")
+        if kind == "number_value" and not math.isfinite(v.number_value):
+            v.null_value = 0  # google.protobuf.NullValue.NULL_VALUE
+        elif kind == "struct_value":
+            _scrub_struct_nonfinite(v.struct_value)
+        elif kind == "list_value":
+            for item in v.list_value.values:
+                _scrub_value(item)
+
+    for v in struct.fields.values():
+        _scrub_value(v)
+
+
+def _build_formula_parameter(d: dict):
+    """Build a FormulaParameter proto from a dict (shared by manage_formula + execute_formula)."""
+    from gen.indicators.v1 import indicators_pb2  # noqa: PLC0415
+
+    param_type_map = {
+        "int": indicators_pb2.PARAMETER_TYPE_INT,
+        "float": indicators_pb2.PARAMETER_TYPE_FLOAT,
+        "bool": indicators_pb2.PARAMETER_TYPE_BOOL,
+        "string": indicators_pb2.PARAMETER_TYPE_STRING,
+    }
+    p = indicators_pb2.FormulaParameter(
+        name=d.get("name", ""),
+        type=param_type_map.get(
+            str(d.get("type", "")).lower(),
+            indicators_pb2.PARAMETER_TYPE_UNSPECIFIED,
+        ),
+        description=d.get("description", ""),
+        required=bool(d.get("required", False)),
+    )
+    default = d.get("default")
+    if isinstance(default, bool):
+        p.default_value.bool_value = default
+    elif isinstance(default, (int, float)):
+        p.default_value.number_value = default
+    elif isinstance(default, str):
+        p.default_value.string_value = default
+    if d.get("min") is not None:
+        p.min = float(d["min"])
+    if d.get("max") is not None:
+        p.max = float(d["max"])
+    return p
+
+
 _SEVERITY_MAP: dict[str, int] = {
     "info": 1,  # ALERT_SEVERITY_INFO
     "warning": 2,  # ALERT_SEVERITY_WARNING
@@ -66,9 +128,25 @@ async def list_signal_sources(include_inactive: bool = False) -> list[dict[str, 
             "source_type": src.source_type,
             "config_json": MessageToDict(src.config_json),
             "has_credentials": src.has_credentials,
+            # Feature 087: surface active + source-health fields the projection had dropped
+            "active": src.active,
+            "health": _SOURCE_HEALTH_NAME(src.health),
+            "last_seen_at": (
+                _ts_to_iso(src.last_seen_at) if src.HasField("last_seen_at") else None
+            ),
+            "last_error": src.last_error,
+            # int64 → a JSON number here (manual projection), not the int64-as-string contract.
+            "signals_fed": src.signals_fed,
         }
         for src in resp.sources
     ]
+
+
+def _SOURCE_HEALTH_NAME(value: int) -> str:
+    """SourceHealthStatus enum value → its name (feature 087). Imported lazily per AGENT-2."""
+    from gen.ingest.v1 import ingest_pb2  # noqa: PLC0415
+
+    return ingest_pb2.SourceHealthStatus.Name(value)
 
 
 async def ingest_signal(
@@ -118,25 +196,34 @@ async def emit_alert(
     body: str,
     source_service: str = "xstockstrat-agent",
     target_user_id: str = "",
+    context: dict[str, Any] | None = None,
+    tags: list[str] | None = None,
+    correlation_id: str = "",
 ) -> dict[str, Any]:
     """Emit an alert via gRPC EmitAlert."""
     from gen.notify.v1 import notify_pb2, notify_pb2_grpc  # noqa: PLC0415
+    from google.protobuf.struct_pb2 import Struct  # noqa: PLC0415
 
     severity_val = _SEVERITY_MAP.get(severity.lower(), 1)
 
+    req = notify_pb2.EmitAlertRequest(
+        severity=severity_val,
+        category=category,
+        title=title,
+        body=body,
+        source_service=source_service,
+        target_user_id=target_user_id,
+        correlation_id=correlation_id,
+    )
+    if context:
+        # Feature 087: structured context stored + fanned out by notify (context=7).
+        req.context.CopyFrom(ParseDict(context, Struct()))
+    if tags:
+        req.tags.extend(tags)
+
     async with grpc.aio.insecure_channel(NOTIFY_ENDPOINT) as channel:
         stub = notify_pb2_grpc.NotifyServiceStub(channel)
-        resp = await stub.EmitAlert(
-            notify_pb2.EmitAlertRequest(
-                severity=severity_val,
-                category=category,
-                title=title,
-                body=body,
-                source_service=source_service,
-                target_user_id=target_user_id,
-            ),
-            metadata=_metadata(),
-        )
+        resp = await stub.EmitAlert(req, metadata=_metadata())
     return {"alert_id": resp.alert_id}
 
 
@@ -204,6 +291,27 @@ async def run_backtest(
     )
 
 
+def _build_component(c: dict[str, Any]):
+    """Map a component dict → StrategyComponent (feature 090: shared by manage_strategy and the
+    screen_symbols technical-criterion component). Raises ValueError on an unknown kind."""
+    from gen.analysis.v1 import analysis_pb2  # noqa: PLC0415
+
+    kind_map = {
+        "builtin": analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+        "formula": analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
+    }
+    kind = c.get("kind", "builtin")
+    if kind not in kind_map:
+        raise ValueError(f"unknown component kind '{kind}' (expected builtin/formula)")
+    return analysis_pb2.StrategyComponent(
+        ref_name=c.get("ref_name", ""),
+        kind=kind_map[kind],
+        indicator=c.get("indicator", ""),
+        formula_id=c.get("formula_id", ""),
+        params={k: float(v) for k, v in (c.get("params") or {}).items()},
+    )
+
+
 async def screen_symbols(
     symbols: list[str],
     criteria: list[dict[str, Any]] | None = None,
@@ -217,12 +325,16 @@ async def screen_symbols(
 
     ``criteria`` is a list of plain dicts (JSON-shaped) mapped into ``ScreenCriterion`` protos;
     ``kind`` / ``op`` accept either the enum name (e.g. ``"SCREEN_KIND_FUNDAMENTAL"``,
-    ``"COMPARATOR_GTE"``) or a numeric value. The ``component`` field (for technical kinds) is
-    not mapped from string input in this thin wrapper. Defaults of ``0`` / ``0.0`` let the analysis
-    side apply its own config-driven defaults (e.g. ``analysis.screener.default_rank_limit``).
+    ``"COMPARATOR_GTE"``) or a numeric value. For technical kinds
+    (``SCREEN_KIND_TECHNICAL_*``) supply a ``component`` dict (same shape as a strategy
+    component: ``ref_name`` / ``kind`` / ``indicator`` / ``formula_id`` / ``params``) — it is
+    mapped via ``_build_component`` and is required by the analysis side to score the criterion
+    (feature 090). Defaults of ``0`` / ``0.0`` let the analysis side apply its own config-driven
+    defaults (e.g. ``analysis.screener.default_rank_limit``).
     Carries only ``x-mcp-secret`` — no admin ``x-access-scope``.
     """
     from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
+    from gen.common.v1 import common_pb2  # noqa: PLC0415
 
     req_criteria = [
         analysis_pb2.ScreenCriterion(
@@ -242,6 +354,7 @@ async def screen_symbols(
             threshold_high=c.get("threshold_high", 0.0),
             weight=c.get("weight", 0.0),
             hard_filter=c.get("hard_filter", False),
+            component=(_build_component(c["component"]) if c.get("component") else None),
         )
         for c in (criteria or [])
     ]
@@ -270,7 +383,16 @@ async def screen_symbols(
             }
             for r in resp.results
         ],
-        "coverage_gaps": [{"symbol": g.symbol} for g in resp.coverage_gaps],
+        "coverage_gaps": [
+            {
+                "symbol": g.symbol,
+                "timeframe": common_pb2.Timeframe.Name(g.timeframe),
+                # int64 fields serialize as JSON strings (matches run_backtest bars contract).
+                "bars_have": str(g.bars_have),
+                "bars_need": str(g.bars_need),
+            }
+            for g in resp.coverage_gaps
+        ],
     }
 
 
@@ -293,28 +415,14 @@ async def manage_strategy(
         "register": analysis_pb2.STRATEGY_OPERATION_REGISTER,
         "update": analysis_pb2.STRATEGY_OPERATION_UPDATE,
         "deactivate": analysis_pb2.STRATEGY_OPERATION_DEACTIVATE,
+        "reactivate": analysis_pb2.STRATEGY_OPERATION_REACTIVATE,
     }
     if operation not in op_map:
-        raise ValueError(f"unknown operation '{operation}' (expected register/update/deactivate)")
-
-    kind_map = {
-        "builtin": analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
-        "formula": analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
-    }
-    components = []
-    for c in definition.get("components", []):
-        kind = c.get("kind", "builtin")
-        if kind not in kind_map:
-            raise ValueError(f"unknown component kind '{kind}' (expected builtin/formula)")
-        components.append(
-            analysis_pb2.StrategyComponent(
-                ref_name=c.get("ref_name", ""),
-                kind=kind_map[kind],
-                indicator=c.get("indicator", ""),
-                formula_id=c.get("formula_id", ""),
-                params={k: float(v) for k, v in (c.get("params") or {}).items()},
-            )
+        raise ValueError(
+            f"unknown operation '{operation}' (expected register/update/deactivate/reactivate)"
         )
+
+    components = [_build_component(c) for c in definition.get("components", [])]
 
     pb_def = analysis_pb2.StrategyDefinition(
         strategy_id=definition.get("strategy_id", ""),
@@ -382,7 +490,68 @@ async def list_strategy_definitions(include_inactive: bool = False) -> list[dict
             analysis_pb2.ListStrategyDefinitionsRequest(include_inactive=include_inactive),
             metadata=_metadata(),
         )
-    return [MessageToDict(d) for d in resp.definitions]
+    # Feature 087: snake_case to match get_strategy (avoids a third casing across list→get→manage).
+    return [MessageToDict(d, preserving_proto_field_name=True) for d in resp.definitions]
+
+
+async def execute_formula(
+    formula_source: str,
+    input_data: dict[str, Any] | None = None,
+    input_params: dict[str, Any] | None = None,
+    parameters: list[dict[str, Any]] | None = None,
+    timeout_ms_override: int = 0,
+) -> dict[str, Any]:
+    """Dry-run inline formula source in the sandbox via gRPC ExecuteFormula (feature 087).
+
+    Registers nothing — read-only (`_metadata()`, no admin scope; ExecuteFormula performs no
+    scope/author check, the subprocess sandbox is the security boundary). Non-finite output values
+    are scrubbed to null so the projection never 500s on the median unvalidated-source case.
+    """
+    from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc  # noqa: PLC0415
+    from google.protobuf.struct_pb2 import Struct  # noqa: PLC0415
+
+    req = indicators_pb2.ExecuteFormulaRequest(
+        formula_source=formula_source,
+        timeout_ms_override=int(timeout_ms_override or 0),
+    )
+    if input_data:
+        req.input_data.CopyFrom(ParseDict(input_data, Struct()))
+    if input_params:
+        req.input_params.CopyFrom(ParseDict(input_params, Struct()))
+    if parameters:
+        for d in parameters:
+            req.parameters.append(_build_formula_parameter(d))
+
+    async with grpc.aio.insecure_channel(INDICATORS_ENDPOINT) as channel:
+        stub = indicators_pb2_grpc.IndicatorsServiceStub(channel)
+        resp = await stub.ExecuteFormula(req, metadata=_metadata())
+    _scrub_struct_nonfinite(resp.output)
+    try:
+        return MessageToDict(
+            resp, preserving_proto_field_name=True, always_print_fields_with_no_presence=True
+        )
+    except ValueError as e:  # defence in depth — a non-finite slipped past the scrub
+        return {"success": False, "error": f"could not serialize formula output: {e}"}
+
+
+async def cancel_backfill(job_id: str) -> dict[str, Any]:
+    """Cancel a queued/running backfill job via gRPC CancelBackfill (admin-scoped, feature 087).
+
+    Mirrors trigger_backfill: CancelBackfill is admin-gated server-side, so it carries the admin
+    x-access-scope. Returns the updated job in the same {"job": …} envelope as get_backfill_status.
+    """
+    from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(INGEST_ENDPOINT) as channel:
+        stub = ingest_pb2_grpc.IngestServiceStub(channel)
+        resp = await stub.CancelBackfill(
+            ingest_pb2.CancelBackfillRequest(job_id=job_id), metadata=_admin_metadata()
+        )
+    return {
+        "job": MessageToDict(
+            resp, preserving_proto_field_name=True, always_print_fields_with_no_presence=True
+        )
+    }
 
 
 async def manage_formula(
@@ -398,37 +567,17 @@ async def manage_formula(
     if operation not in ("register", "update", "delete"):
         raise ValueError(f"unknown operation '{operation}' (expected register/update/delete)")
 
-    param_type_map = {
-        "int": indicators_pb2.PARAMETER_TYPE_INT,
-        "float": indicators_pb2.PARAMETER_TYPE_FLOAT,
-        "bool": indicators_pb2.PARAMETER_TYPE_BOOL,
-        "string": indicators_pb2.PARAMETER_TYPE_STRING,
-    }
+    parameters = [_build_formula_parameter(d) for d in formula.get("parameters", [])]
 
-    def _build_parameter(d: dict):
-        p = indicators_pb2.FormulaParameter(
+    def _build_output(d: dict):
+        # Feature 086: mirror _build_formula_parameter for declared output series (FormulaOutput).
+        return indicators_pb2.FormulaOutput(
             name=d.get("name", ""),
-            type=param_type_map.get(
-                str(d.get("type", "")).lower(),
-                indicators_pb2.PARAMETER_TYPE_UNSPECIFIED,
-            ),
             description=d.get("description", ""),
-            required=bool(d.get("required", False)),
         )
-        default = d.get("default")
-        if isinstance(default, bool):
-            p.default_value.bool_value = default
-        elif isinstance(default, (int, float)):
-            p.default_value.number_value = default
-        elif isinstance(default, str):
-            p.default_value.string_value = default
-        if d.get("min") is not None:
-            p.min = float(d["min"])
-        if d.get("max") is not None:
-            p.max = float(d["max"])
-        return p
 
-    parameters = [_build_parameter(d) for d in formula.get("parameters", [])]
+    outputs = [_build_output(d) for d in formula.get("outputs", [])]
+    warmup_period = int(formula.get("warmup_period") or 0)
 
     async with grpc.aio.insecure_channel(INDICATORS_ENDPOINT) as channel:
         stub = indicators_pb2_grpc.IndicatorsServiceStub(channel)
@@ -441,23 +590,32 @@ async def manage_formula(
                     is_public=formula.get("is_public", False),
                     author=formula.get("author", ""),
                     parameters=parameters,
+                    outputs=outputs,
+                    warmup_period=warmup_period,
                 ),
                 metadata=_metadata(),
             )
             return {"formula_id": resp.formula_id}
         if operation == "update":
-            resp = await stub.UpdateFormula(
-                indicators_pb2.UpdateFormulaRequest(
-                    formula_id=formula["formula_id"],
-                    user_id=formula["user_id"],
-                    name=formula.get("name", ""),
-                    description=formula.get("description", ""),
-                    source=formula.get("source", ""),
-                    is_public=formula.get("is_public", False),
-                    parameters=parameters,
-                ),
-                metadata=_metadata(),
+            from google.protobuf import field_mask_pb2  # noqa: PLC0415
+
+            req = indicators_pb2.UpdateFormulaRequest(
+                formula_id=formula["formula_id"],
+                user_id=formula["user_id"],
+                name=formula.get("name", ""),
+                description=formula.get("description", ""),
+                source=formula.get("source", ""),
+                is_public=formula.get("is_public", False),
+                parameters=parameters,
+                outputs=outputs,
+                warmup_period=warmup_period,
             )
+            # Feature 086: AIP-161 partial update. When update_mask is supplied, only the named
+            # paths are applied server-side (unlisted fields are preserved); absent = full replace.
+            update_mask = formula.get("update_mask")
+            if update_mask:
+                req.update_mask.CopyFrom(field_mask_pb2.FieldMask(paths=list(update_mask)))
+            resp = await stub.UpdateFormula(req, metadata=_metadata())
             return MessageToDict(resp.formula)
         resp = await stub.DeleteFormula(
             indicators_pb2.DeleteFormulaRequest(
@@ -487,17 +645,45 @@ async def list_formulas(
     return [MessageToDict(f) for f in resp.formulas]
 
 
+async def get_formula(formula_id: str) -> dict[str, Any]:
+    """Fetch one formula definition via gRPC GetFormula (feature 086 read tool).
+
+    The returned dict includes the ``deleted`` flag, so a caller can do safe read-modify-write
+    and see whether a formula has been soft-deleted.
+    """
+    from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(INDICATORS_ENDPOINT) as channel:
+        stub = indicators_pb2_grpc.IndicatorsServiceStub(channel)
+        resp = await stub.GetFormula(
+            indicators_pb2.GetFormulaRequest(formula_id=formula_id),
+            metadata=_metadata(),
+        )
+    return MessageToDict(resp)
+
+
 async def manage_signal_source(
     operation: str,
     source: dict[str, Any],
     credentials_ref: str | None = None,
+    update_mask: list[str] | None = None,
 ) -> dict[str, Any]:
-    """Register/update/deactivate a signal source via gRPC ManageSignalSource (admin-scoped).
+    """Register/update/reactivate/deactivate a signal source via gRPC ManageSignalSource (admin).
 
+    Feature 088: honest verbs. `operation` maps to the SignalSourceOperation enum; on `update`,
+    `update_mask` selects the fields to merge (omitted fields are preserved server-side).
     FR-12: credentials_ref is forwarded to the backend but never echoed in the response.
     """
     from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # noqa: PLC0415
+    from google.protobuf import field_mask_pb2  # noqa: PLC0415
     from google.protobuf.struct_pb2 import Struct  # noqa: PLC0415
+
+    op_enum = {
+        "register": ingest_pb2.SIGNAL_SOURCE_OPERATION_REGISTER,
+        "update": ingest_pb2.SIGNAL_SOURCE_OPERATION_UPDATE,
+        "reactivate": ingest_pb2.SIGNAL_SOURCE_OPERATION_REACTIVATE,
+        "deactivate": ingest_pb2.SIGNAL_SOURCE_OPERATION_DEACTIVATE,
+    }.get(operation, ingest_pb2.SIGNAL_SOURCE_OPERATION_UNSPECIFIED)
 
     src = ingest_pb2.SignalSource(
         slug=source.get("slug", ""),
@@ -512,9 +698,13 @@ async def manage_signal_source(
         cfg.update(config_json)
         src.config_json.CopyFrom(cfg)
 
-    req = ingest_pb2.ManageSignalSourceRequest(source=src, operation=operation)
-    if credentials_ref:
+    req = ingest_pb2.ManageSignalSourceRequest(source=src, operation_enum=op_enum)
+    # credentials_ref: set whenever provided (including "" to clear on a masked update); the
+    # update_mask decides whether the server applies it or preserves the stored ref.
+    if credentials_ref is not None:
         req.credentials_ref = credentials_ref
+    if update_mask:
+        req.update_mask.CopyFrom(field_mask_pb2.FieldMask(paths=list(update_mask)))
 
     # Forward the admin access scope so ingest's role check (x-access-scope & 0x04) passes.
     meta = _admin_metadata()
