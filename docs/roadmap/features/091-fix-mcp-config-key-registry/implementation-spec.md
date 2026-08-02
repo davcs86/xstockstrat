@@ -1,6 +1,6 @@
 # Implementation Spec: fix-mcp-config-key-registry
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-08-02
 **Feature**: `docs/roadmap/features/091-fix-mcp-config-key-registry/feature.md`
 **Total Steps**: 8
@@ -31,7 +31,7 @@ the existence refusal **server-side only**, so the existing empty-`keys` agent m
 
 ### Step 1 — proto: add `SetConfigRequest.create_key` field 8
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/config/v1/config.proto` — modify
@@ -64,7 +64,7 @@ Both must pass (additive scalar field → no breaking-change violation).
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/ts/**` — modify (generated)
@@ -95,7 +95,7 @@ grep -rn "createKey\|create_key" packages/proto/gen/ts/config/v1/config.ts   # f
 
 ### Step 3 — migration: audit key creation via a dedicated AFTER INSERT trigger (`010`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/010_config_audit_insert_trigger.up.sql` — create
@@ -149,7 +149,7 @@ Expect: `insert_audits = 1` after the INSERT, `insert_audits = 1` (unchanged) an
 
 ### Step 4 — service: config `setConfig` existence gate (mode-exact) + `create_key` bypass
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -192,7 +192,7 @@ Expect: `insert_audits = 1` after the INSERT, `insert_audits = 1` (unchanged) an
 
 ### Step 5 — test: config existence gate + wire contract (covers Step 4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/setConfigAuthz.test.ts` — modify
@@ -225,7 +225,7 @@ Confirm the run reports the new NOT_FOUND / create_key cases as executed (not si
 
 ### Step 6 — service: agent `set_config` forwards `create_key`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -253,7 +253,7 @@ Confirm the run reports the new NOT_FOUND / create_key cases as executed (not si
 
 ### Step 7 — test: agent `create_key` forwarding + `SetConfigRequest` descriptor parity (covers Step 6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_config_tools.py` — modify
@@ -289,7 +289,7 @@ Confirm the new forwarding and descriptor-parity cases pass post-implementation 
 
 ### Step 8 — docs: reconcile every surface that describes `set_config`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/` + service CLAUDE.md + findings
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify

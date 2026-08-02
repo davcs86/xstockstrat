@@ -683,6 +683,7 @@ Write **one non-secret** config value. **Admin-scoped write. Streamable HTTP tra
 | `reason` | string | yes | Recorded alongside `author` |
 | `environment` | string | no | Defaults to the agent's `APPLICATION_ENV` |
 | `trading_mode` | string | no | Defaults to the agent's `TRADING_MODE` |
+| `create_key` | bool | no | Default `false`. Set `true` **only** to deliberately register a brand-new key at this `(namespace, environment, trading_mode)` scope. Left false, a write to an unregistered scope is refused (see Errors) so a typo cannot mint an orphan key (feature 091). |
 
 Returns `{version, updated_at}` — **never the value**.
 
@@ -700,15 +701,26 @@ flag lookup fails, the write is refused rather than allowed through.
 serves. The tool still refuses when no verified caller claims are on the request; that check is now
 defence in depth rather than the live transport guard.
 
+**Key creation is gated (feature 091).** A write to a not-yet-registered key at the exact
+`(namespace, environment, trading_mode)` scope is refused with `NOT_FOUND` unless you pass
+`create_key=true`. This closes the old blind-upsert hole where a mistyped key silently created an
+orphan row no service reads. `list_config_keys` first and copy the key verbatim; use `create_key`
+only when you genuinely intend to register a new key. (The only key-creation paths are now migration
+seeds and `set_config(create_key=true)` — config-ui can no longer typo-mint keys, so "new keys
+require a PR" is enforced, not merely conventional.)
+
 **Three behaviors worth knowing before you rely on a write:**
 
 - `value_type` is honored only when **creating** a key. `SetConfig`'s `ON CONFLICT … DO UPDATE`
   does not update the type column, so for an existing key the stored type wins.
 - Pass JSON-valued config as a `string` — that is byte-identical to what the server stores.
-- **Creating a new key writes no audit row**, and neither does rewriting a key to its existing
-  value: the `config.config_audit` trigger fires `BEFORE UPDATE` and only on a value change.
+- **Key creation is audited** (feature 091): a `create_key=true` create writes a `config.config_audit`
+  row (author + value, `old_value` NULL) via a dedicated `AFTER INSERT` trigger, alongside the
+  existing `BEFORE UPDATE` audit. Rewriting a key to its existing value still writes no row (the
+  update trigger fires only on a value change).
 
-**Errors:** `PERMISSION_DENIED` → "admin scope required"; `INVALID_ARGUMENT` → missing author.
+**Errors:** `PERMISSION_DENIED` → "admin scope required"; `INVALID_ARGUMENT` → missing author;
+`NOT_FOUND` → "config key not registered" (pass `create_key=true` to create it).
 
 ---
 

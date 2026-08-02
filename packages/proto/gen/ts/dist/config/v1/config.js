@@ -913,6 +913,7 @@ function createBaseSetConfigRequest() {
         reason: "",
         environment: common_1.Environment.ENVIRONMENT_UNSPECIFIED,
         tradingMode: common_1.TradingMode.TRADING_MODE_UNSPECIFIED,
+        createKey: false,
     };
 }
 exports.SetConfigRequest = {
@@ -937,6 +938,9 @@ exports.SetConfigRequest = {
         }
         if (message.tradingMode !== common_1.TradingMode.TRADING_MODE_UNSPECIFIED) {
             writer.uint32(56).int32((0, common_1.tradingModeToNumber)(message.tradingMode));
+        }
+        if (message.createKey !== false) {
+            writer.uint32(64).bool(message.createKey);
         }
         return writer;
     },
@@ -996,6 +1000,13 @@ exports.SetConfigRequest = {
                     message.tradingMode = (0, common_1.tradingModeFromJSON)(reader.int32());
                     continue;
                 }
+                case 8: {
+                    if (tag !== 64) {
+                        break;
+                    }
+                    message.createKey = reader.bool();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1019,6 +1030,11 @@ exports.SetConfigRequest = {
                 : isSet(object.trading_mode)
                     ? (0, common_1.tradingModeFromJSON)(object.trading_mode)
                     : common_1.TradingMode.TRADING_MODE_UNSPECIFIED,
+            createKey: isSet(object.createKey)
+                ? globalThis.Boolean(object.createKey)
+                : isSet(object.create_key)
+                    ? globalThis.Boolean(object.create_key)
+                    : false,
         };
     },
     toJSON(message) {
@@ -1044,6 +1060,9 @@ exports.SetConfigRequest = {
         if (message.tradingMode !== common_1.TradingMode.TRADING_MODE_UNSPECIFIED) {
             obj.tradingMode = (0, common_1.tradingModeToJSON)(message.tradingMode);
         }
+        if (message.createKey !== false) {
+            obj.createKey = message.createKey;
+        }
         return obj;
     },
     create(base) {
@@ -1060,6 +1079,7 @@ exports.SetConfigRequest = {
         message.reason = object.reason ?? "";
         message.environment = object.environment ?? common_1.Environment.ENVIRONMENT_UNSPECIFIED;
         message.tradingMode = object.tradingMode ?? common_1.TradingMode.TRADING_MODE_UNSPECIFIED;
+        message.createKey = object.createKey ?? false;
         return message;
     },
 };

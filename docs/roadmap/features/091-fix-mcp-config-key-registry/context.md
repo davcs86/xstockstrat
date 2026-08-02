@@ -92,3 +92,52 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   unset" state) — reopen only if a future feature needs a value-less registered key.
 - Governance narrowing (config-ui can no longer typo-mint keys) — surfaced as a docs note in Step 8, not a code gate.
 - 074 zero-assertion trap — Step 5 must prove a red in the COMPILED `dist/` suite with non-zero assertions.
+
+---
+
+## Session 2026-08-02 — sdd-review impl-spec (advisory)
+
+- Criteria pass (spec-reviewer): PASS — 0 blockers, 0 warnings, 3 accepted-pattern NOTES (Step 2
+  codegen wildcards; Steps 4/6 prose-only Verification delegating to their paired test steps). Every
+  spot-checked path:line verified accurate (proto field 8 free, migration 010 next, setConfig
+  structure, agent tool/client, descriptor-parity template). No Floor risk (F-01/F-06 honored).
+- Overlap pass (feature-overlap): CLEAN. Proto field 8 free; config migration 010 free; 091 is the
+  cohort's only implementation-ready feature so it lands first. Forward coordination: 092
+  (writepath-authz) and 093 (extract-credentials) will touch client.set_config scope forwarding —
+  they rebase onto merged 091; no blocking merge-order row needed now.
+- Proceeding to implementation directly on the feature branch (one PR per feature, per the session's
+  branch directive), honoring each step's TDD/verification gate.
+
+---
+
+## Session 2026-08-02 — sdd-execute (implementation)
+
+All 8 steps implemented on feature/fix-mcp-config-key-registry (one PR into main-dev, per the
+session's branch directive), each step's TDD/verification gate honored.
+
+- **Step 1-2 (proto)**: `SetConfigRequest.create_key = 8` (additive). `buf lint` + `buf breaking`
+  (vs main-dev) pass; `buf-gen.sh` regenerated all three language stubs — diff scoped to create_key.
+- **Step 3 (migration 010)**: dedicated `config.audit_config_insert()` + `config_value_audit_insert`
+  AFTER INSERT trigger; BEFORE UPDATE trigger untouched (F-01). **Verified on a live Postgres 16
+  container** (migrations 001→010 applied): a fresh INSERT audits exactly once (old_value NULL); a
+  subsequent ON CONFLICT update adds NO phantom insert-audit (insert_audits=1, total=2). Down reverts
+  cleanly; up is idempotent.
+- **Step 4-5 (config)**: mode-exact existence gate in `setConfig` before the upsert (reads
+  `call.request.createKey ?? create_key` for the camelCase wire encoding). RED demonstrated in the
+  COMPILED suite (gate disabled → "refuses unregistered → NOT_FOUND" case fails); GREEN 37/37,
+  coverage 70%. Also fixed two SIBLING suites the gate broke (configValueRoundtrip, scopeResolution)
+  — their always-empty mock pools now return a row for the existence SELECT (fix-every-affected-
+  surface, not just the flagged file).
+- **Step 6-7 (agent)**: `set_config` tool + `client.set_config` forward `create_key` (pure
+  passthrough; server authoritative; empty-`keys` mocks stay valid). Docstring's now-false
+  "blind upsert / no reachable key-not-found / creation unaudited" claims rewritten. Added a
+  `SetConfigRequest` descriptor-parity guard (RC-1) — RED demonstrated (drop the field → fails
+  closed). GREEN 141 tests, coverage 70%, ruff clean.
+- **Step 8 (docs, C-10)**: mcp-tools.md (create_key row, NOT_FOUND error, audited-creation), agent
+  CLAUDE.md (tool row + authz block), config CLAUDE.md (WatchConfig flow: gate + dual audit
+  triggers), config findings doc (audit-on-UPDATE-only marked RESOLVED). strat-lab does not cover
+  set_config (verified — no edit).
+- **Context-scrubber**: the context-forge plugin / `/context-scrubber` skill is not available in
+  this session, so the teardown scan could not run; touched context/docs were updated by hand to
+  match the new behavior (noted in the PR body).
+- Status: implementation-ready → code-completed.

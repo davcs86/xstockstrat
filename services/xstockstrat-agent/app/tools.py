@@ -793,13 +793,14 @@ def register_tools(server: MCPServer) -> None:
         reason: str,
         environment: str = "",
         trading_mode: str = "",
+        create_key: bool = False,
     ) -> dict:
         """Write one non-secret config value in xstockstrat-config (admin-scoped write).
         namespace: config namespace, e.g. 'marketdata'.
-        key: the config key, e.g. 'marketdata.fmp.enabled'. WARNING: writes are a blind upsert with
-          no existence check — a mistyped key silently CREATES a new orphan key that no service
-          reads (there is no reachable "key not found" error). Call list_config_keys first and copy
-          the key verbatim.
+        key: the config key, e.g. 'marketdata.fmp.enabled'. A write to a not-yet-registered key
+          at this exact (namespace, environment, trading_mode) scope is REFUSED with NOT_FOUND
+          ("config key not registered") unless you pass create_key=true — so a typo can no longer
+          silently mint an orphan key. Call list_config_keys first and copy the key verbatim.
         value_type: one of string, int, float, bool. Pass JSON-valued config as a 'string' —
           that is byte-identical to what the server stores. NOTE value_type is only honored when
           CREATING a new key; for an existing key the stored type wins and this is ignored.
@@ -808,14 +809,16 @@ def register_tools(server: MCPServer) -> None:
         reason: why — required, and recorded alongside author.
         environment: 'dev' or 'production'. Omit to use this agent deployment's own environment.
         trading_mode: 'paper', 'live' or 'all'. Omit to use this agent's own trading mode.
+        create_key: set true ONLY to deliberately register a brand-new key at this scope; leave
+          false (the default) for every normal update so a mistyped key is rejected rather than
+          created. Key creation is audited (config.config_audit) just like an update.
         Returns {version, updated_at}. Never echoes the value back.
 
         Authorization uses YOUR role, not a service-wide admin override: the write is rejected
         with 'admin scope required' unless your session has the admin role. Secret keys cannot be
         written here at all — credentials are delivered as type: SECRET environment variables.
         Requires the Streamable HTTP transport, the only remote transport the agent serves since
-        feature 079 removed the legacy SSE one. Creating a NEW key writes no audit row (the audit
-        trigger fires on update only), and neither does rewriting a key to its existing value."""
+        feature 079 removed the legacy SSE one."""
         # Prong (b) first: a name check is the ONLY thing that can stop a brand-new secret key.
         # SetConfigRequest carries no is_secret field and the column defaults FALSE, so without
         # this a caller could create an unflagged row holding a plaintext credential.
@@ -867,6 +870,7 @@ def register_tools(server: MCPServer) -> None:
                 author=author,
                 reason=reason,
                 access_scope=access_scope,
+                create_key=create_key,
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="config key not found")) from e

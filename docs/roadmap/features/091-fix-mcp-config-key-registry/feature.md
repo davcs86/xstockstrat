@@ -1,7 +1,7 @@
 # Feature: fix-mcp-config-key-registry
 
 **Type**: bug
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/fix-mcp-config-key-registry`
 **Source Report**: docs/reports/2026-08-01-mcp-tools-alignment-triage.md (F-8)
 **Severity**: SEV-3
@@ -17,6 +17,7 @@
 | 2026-08-02 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the MCP-alignment triage report (F-8) |
 | 2026-08-02 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. Single-table (no registry): migration 010 AFTER INSERT audit trigger + mode-exact existence gate + additive `create_key`. AC-3 unset-half reinterpreted (design-gate resolution). |
 | 2026-08-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps (proto → proto-gen → migration 010 → config service+test → agent service+test → docs). |
+| 2026-08-02 | `implementation-ready` → `code-completed` | /sdd-execute | All 8 steps implemented on feature branch. Migration verified on live Postgres (create audited once, no double-fire on update). Config 37/37 tests (RED demonstrated), agent 141 tests + descriptor-parity guard (RED demonstrated). One PR into main-dev. |
 
 ---
 

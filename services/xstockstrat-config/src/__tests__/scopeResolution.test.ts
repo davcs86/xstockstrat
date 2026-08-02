@@ -32,6 +32,10 @@ describe('scope resolution over a real gRPC connection', () => {
   before(async () => {
     const pool: any = {
       query: async (sql: string, params?: any[]) => {
+        // Feature 091: the setConfig existence gate SELECTs before the upsert; this scope
+        // case writes to a registered key, so return a row so the gate passes (and don't let
+        // it clobber readParams, which the ListKeys cases assert on).
+        if (sql.includes('SELECT 1 FROM config.config_values')) return { rows: [{ '?column?': 1 }] };
         if (sql.includes('INSERT INTO config.config_values')) writeParams = params;
         else if (sql.includes('WHERE namespace')) readParams = params;
         return { rows: [] };
