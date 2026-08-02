@@ -1,6 +1,6 @@
 ---
 name: sdd-execute
-description: Phase 3 of SDD — execute implementation steps with mandatory codebase discovery, explicit user confirmation before any writes, a red-before-green TDD gate, and a branch + PR per step. Usage — /sdd-execute <feature-slug> [step-number|next|all|sequential]. `sequential` runs a feature (or an ordered multi-feature sequence with per-feature re-spec) end-to-end as stacked per-step PRs, with one up-front confirmation per feature instead of a per-step stop. Use this whenever the user asks to implement, build, code, or land a feature that already has an implementation spec, to do the next step, to resume or continue a feature from an earlier session, to open the final integration PR, or to unblock a blocked step. Re-reads context.md at every session start so prior decisions carry forward.
+description: Phase 3 of SDD — execute implementation steps with mandatory codebase discovery, explicit user confirmation before any writes, a red-before-green TDD gate, and (in the default modes) a branch + PR per step. Usage — /sdd-execute <feature-slug> [step-number|next|all|sequential]. `sequential` runs a feature (or an ordered multi-feature sequence with per-feature re-spec) end-to-end as one commit per step on the feature branch — no per-step PRs — pausing at smart operator checkpoints (consumer-surface boundaries and a step cap) with one up-front confirmation per feature, and opens a single integration PR at the end. Use this whenever the user asks to implement, build, code, or land a feature that already has an implementation spec, to do the next step, to resume or continue a feature from an earlier session, to open the final integration PR, or to unblock a blocked step. Re-reads context.md at every session start so prior decisions carry forward.
 argument-hint: <feature-slug | "feat-a (re-spec if needed) > feat-b ..."> [step-number|next|all|sequential]
 allowed-tools: Read Write Edit Task Bash(ls *) Bash(find *) Bash(grep *) Bash(mkdir *) Bash(go *) Bash(go install *) Bash(golangci-lint *) Bash(python *) Bash(python3 *) Bash(uv *) Bash(pip *) Bash(ruff *) Bash(pnpm *) Bash(npx *) Bash(buf *) Bash(curl *) Bash(psql *) Bash(docker *) Bash(git diff *) Bash(git status *) Bash(git fetch *) Bash(git pull *) Bash(git show *) Bash(git ls-remote *) Bash(git checkout *) Bash(git branch *) Bash(git merge *) Bash(git rebase *) Bash(git push *) Bash(git add *) Bash(git commit *) Bash(gh pr *)
 effort: high
@@ -93,8 +93,13 @@ Evaluate the current branch:
 ```
 Resuming: <slug> (lifecycle: <status>)
 Prior sessions: <list ## Session headings from context.md>
+Open review warnings: <count of `[ ] unaddressed` items from any "sdd-review impl-spec (advisory)" context.md note, or "none">
+Consumer surface(s) (C-14): <surfaces the pending steps touch — a step with **Service** `xstockstrat-ui` → UI, `xstockstrat-agent` → Agent; "none/internal" if no step touches either>
 Target: Step N — <title>
 ```
+Carry the open review warnings forward — they must appear in every checkpoint report and the
+session-end accountability block until the step that clears each one lands (then flip its checkbox
+to `[x]` in the context.md note).
 
 ---
 
@@ -165,8 +170,12 @@ When invoked and all steps are already complete (lifecycle `code-completed`):
 
 Read `.claude/skills/sdd-execute/templates/branch-sync.md` and execute the procedure,
 substituting `<dev-branch>` and `<slug>` from `feature.md` and `<N>` from the current step number.
-`<base-branch>` defaults to `<dev-branch>`; in **sequential mode** pass the prior step branch for
-steps after the first (`reference/sequential-mode.md` §5.5).
+`<base-branch>` defaults to `<dev-branch>`.
+
+**Sequential mode does not create per-step branches.** It runs the branch-sync *setup* (fetch,
+create-or-checkout `<dev-branch>`, merge `main-dev`) **once per feature** and then commits every
+step directly to `<dev-branch>` — skip step 6 of `branch-sync.md` (the `feature-steps/<slug>-step-<N>`
+sub-branch). See `reference/sequential-mode.md` §5.5.
 
 ---
 
@@ -238,6 +247,14 @@ red), then implement, then confirm it **passes** (capture green). Record both in
 1. Read each target file fully before editing (never overwrite blindly).
 2. Apply **only** the changes described in the confirmed plan — no cleanup, no refactoring, no extra improvements.
 3. Run the step's `**Verification**` command. Report the exact output. (For a code-bearing step this is the green run of the TDD gate.)
+   - **Never start a database (or any long-running service container) to verify a step.** A
+     `migration` step is verified **offline**: confirm `NNN_*.up.sql` and `NNN_*.down.sql` both
+     exist with the correct next `NNN` and that the `.down.sql` reverses the `.up.sql` by
+     inspection. The real apply-and-rollback runs in CI / at deploy against the managed database —
+     not here. If a step's `**Verification**` names `docker run postgres`, a `migrate` apply, or
+     `psql` against a spun-up instance, **substitute the offline check** and record the substitution
+     as a `## Deviation Log` entry (`**Disposition**: offline migration check — live apply deferred
+     to CI`). Do not sit waiting on a container to become ready.
 4. If verification **passes**:
    - Update **only** the step's `**Status**` field in implementation-spec.md: `**Status**: \`pending\`` → `**Status**: \`done\``
    - **Do NOT modify any other part of the step** — `**Instructions**`, `**Codebase Evidence**`, `**Verification**`, `**Files**`, and `**Reviewers**` are immutable records of the original plan. Deviations go in the `## Deviation Log` only.
@@ -310,8 +327,11 @@ Substitute all `<placeholders>` before use.
    Merge the PR into <dev-branch>, then run: /sdd-execute <slug> next
    ```
    Do not proceed to the next step in the same session.
-   **Sequential-mode override:** do NOT stop — print "Step <N> done (PR <url>). Continuing to Step
-   <N+1>." and proceed to the next step (`reference/sequential-mode.md` §5.5).
+   **Sequential-mode override:** this whole STEP COMMIT + PR section (per-step sub-branch + step PR +
+   STOP) is **replaced** in sequential mode by the commit-and-checkpoint procedure in
+   `reference/sequential-mode.md` §5.6 — one commit per step directly on `<dev-branch>`, **no per-step
+   PR**, a report at each smart checkpoint (surface boundary / step cap), and a single integration PR
+   at the end. Do not open a per-step PR in sequential mode.
 
 ---
 
@@ -368,12 +388,22 @@ After the last step in the requested range (or on any stop):
    **Stopped at**: Step X (<reason, or "all complete">)
    **Next**: /sdd-execute <slug> next
    ```
-4. Print to user:
+4. Print to user, including the **mandatory accountability block** (P-03 — nothing gets buried in
+   the diff):
    ```
    Session complete. N/M steps done. Feature lifecycle: <status>.
    Context log: $FEATURE_DIR/context.md
+
+   Accountability:
+   - Out-of-scope changes: none | <list each + how it was dispositioned (blocker/deviation)>
+   - Open questions / items: none | <unresolved ## Open Items + Open Threads without a target step>
+   - Unaddressed review warnings: none | <items still `[ ] unaddressed` from the sdd-review impl-spec context.md note>
+
    Next: /sdd-execute <slug> next
    ```
+   If any of the three lines is non-empty, do **not** soften it — the point of the block is that the
+   operator sees these before deciding to continue. "Out-of-scope changes" should read `none`: a
+   real one means a HARD CONSTRAINT was bent and it must say so explicitly.
 
 ---
 
@@ -392,6 +422,19 @@ below are **non-overridable** — no "proceed anyway" or sequential-mode carve-o
 - **Never target `main-dev` or `main` in a step PR.** Always target the `**Development Branch**` from `feature.md`.
 - **Never stage files outside the step's `**Files**` section plus `implementation-spec.md`, `feature.md`, and `context.md`** (and, when a ledger write is due, `docs/roadmap/ledger/insights.md` or `fails.md`) — Constitution **F-08**.
 - **Never edit a `.up.sql` migration that has been committed to `main-dev`.** Add a new numbered migration instead.
+- **Never start a database or other long-running service container to verify a step.** Migration
+  reversibility is proven **offline** (up/down parity + correct `NNN`); the live apply is CI's job.
+  Substitute the offline check for any `docker run postgres` / `migrate` / `psql`-against-a-live-DB
+  verification and log the substitution as a deviation. Applies in **every** mode (Floor-adjacent —
+  no carve-out). This is the rail that stops the "hang waiting on a DB to come up" failure.
+- **Never make an out-of-scope change silently, and never let one go unannounced.** Changes outside
+  the current step's `**Files**`/scope are forbidden (see the next bullet). If a step *cannot* be
+  completed without one, do not just make it — **escalate** it via the gap protocol
+  (`reference/deviation-handling.md`; a **blocker** in sequential mode) and get a decision. Any
+  out-of-scope change that did happen, any still-open question, and any unaddressed
+  `/sdd-review impl-spec` warning MUST be listed in the next checkpoint report and the session-end
+  summary. An unannounced deviation is a **P-03** violation — the operator finding out from the diff
+  is exactly the failure this rule prevents.
 - **Never make changes outside the current step's scope** — no opportunistic cleanup, no refactoring, no extra files. (Exception: making the code the step *itself* introduced pass the step's lint/format Verification — e.g. `ruff format`, gofmt, or fixing a `golangci-lint`/`pnpm run lint` finding on the step's own changed lines — is in scope, not cleanup. Do not reformat or lint-fix code the step did not touch.)
 - **`implementation-spec.md` step bodies are immutable during execution.** The only permitted change to a step entry is flipping `**Status**` from `pending` to `done` (or `blocked`/`skipped`). The `**Instructions**`, `**Codebase Evidence**`, `**Verification**`, `**Files**`, and `**Reviewers**` fields must never be edited — they are the permanent record of the original plan. All divergence from that plan belongs exclusively in the `## Deviation Log` section.
 
