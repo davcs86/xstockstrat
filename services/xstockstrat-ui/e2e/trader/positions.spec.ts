@@ -52,8 +52,10 @@ test.describe('Positions — Exposure risk', () => {
 
     const aapl = page.getByRole('row', { name: /AAPL/ });
     await expect(aapl).toBeVisible({ timeout: 10000 });
-    // Click the symbol cell (not the Trade button, which stops propagation).
-    await aapl.getByText('AAPL', { exact: true }).click();
+    // Click an inert cell to open the quick-peek Sheet. The symbol cell links to the dedicated
+    // full-page Position view (feature 096) and the Trade button stops propagation, so target the
+    // Side cell, whose click bubbles to the row's Sheet handler.
+    await aapl.getByText('Long', { exact: true }).click();
 
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();

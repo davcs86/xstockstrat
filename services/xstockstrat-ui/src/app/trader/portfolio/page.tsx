@@ -166,7 +166,15 @@ export default function PortfolioPage() {
                   <TableBody>
                     {positions.map((p) => (
                       <TableRow key={`${p.accountId}-${p.symbol}`}>
-                        <TableCell className="font-mono font-semibold">{p.symbol}</TableCell>
+                        <TableCell className="font-mono font-semibold">
+                          {/* Links to the dedicated single-Position page (feature 096). */}
+                          <Link
+                            href={`/trader/positions/${encodeURIComponent(p.symbol)}`}
+                            className="hover:underline"
+                          >
+                            {p.symbol}
+                          </Link>
+                        </TableCell>
                         <TableCell className="hidden sm:table-cell text-muted-foreground">
                           {accountName(p.accountId)}
                         </TableCell>

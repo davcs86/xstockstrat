@@ -57,3 +57,27 @@ export function usePositions(
     refetchInterval: 10_000,
   });
 }
+
+// Single authoritative position for the dedicated Position page (feature 096) — backed by
+// PortfolioService.GetPosition through the trader BFF. Reads one broker-authoritative Position
+// (rather than filtering listPositions client-side) so the page's unrealized P&L ties to the
+// Exposure list and Portfolio (C-10(b) valuation parity). Disabled until a symbol is set.
+export function usePosition(
+  symbol: string,
+  mode: 'paper' | 'live',
+  selectedAccountId: string | null,
+) {
+  const toPbMode = (m: 'paper' | 'live') =>
+    m === 'live' ? PbTradingMode.LIVE : PbTradingMode.PAPER;
+  return useQuery({
+    queryKey: ['position', mode, selectedAccountId, symbol],
+    enabled: !!symbol,
+    queryFn: () =>
+      portfolioClient.getPosition({
+        tradingMode: toPbMode(mode),
+        symbol,
+        ...(selectedAccountId ? { accountId: selectedAccountId } : {}),
+      }),
+    refetchInterval: 10_000,
+  });
+}
