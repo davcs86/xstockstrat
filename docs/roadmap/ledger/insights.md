@@ -519,3 +519,32 @@ reusing.
 - **Pattern**: To make a cross-service resource **safely deletable** without a reverse dependency edge, use **soft-delete + a surfaced `deleted` flag + run-time flagging at the existing consumer**, not a hard reference-checked delete that dials the consumer. Here indicators soft-deletes a formula (`deleted_at`, exposed as `FormulaDefinition.deleted`), keeps `get_by_id` deleted-agnostic so strategies already referencing it keep evaluating, and analysis — which already fetches each referenced formula via `GetFormula` at strategy-write (`_fetch_formula_outputs`) and at the backtest warmup prefetch (`_declared_formula_warmup`) — refuses *new* bindings to a deleted formula and appends a user-visible line to a new additive `BacktestResult.warnings` field. Zero new inter-service edges, zero new DB pool. The key move: a "soft delete" is only honest if the deleted state is **surfaced by every read path AND flagged in the run output** — otherwise it silently hides a hard-delete (the adversary's AC-dishonesty objection). Reuse the consumer's *existing* fetch site as the detection point rather than adding `deleted` to the hot-path RPC response (avoids a multi-call-site blast radius).
 - **Evidence**: `docs/roadmap/features/086-fix-mcp-formula-lifecycle/design.md` §§ Chosen Approach 2/4, Rejected Alternatives; analysis `_fetch_formula_outputs` (`servicer.py:194-201`), `_declared_formula_warmup` (`servicer.py:1151`); root CLAUDE.md dep graph (analysis→indicators already exists, reverse edge would cycle — ledger 2026-07-31 083).
 - **Rule it implies**: extends **C-10(b)** and **F-06** — for a deletable resource another service depends on, prefer soft-delete + surfaced flag + run-flag at the consumer's existing fetch site over a reverse referential-delete edge; and "soft delete" is not honest unless the deleted state is observable in reads and flagged in runs.
+
+### 2026-08-02 — 097-remove-x-mcp-secret-header — execute
+- **Pattern**: Writing a **removal feature's** replacement doc/comment text is easy to get subtly
+  wrong twice, both caught only at execute time, not spec time. First: when a step's own
+  `**Verification**` demands a hard zero-count of the removed vocabulary in a set of files, the
+  step's *Instructions* must not suggest replacement wording that re-quotes the removed term — even
+  in clearly-past-tense "feature N removed X" framing — because the literal string still trips the
+  grep. Prefer generic phrasing ("the header" / "its shared-secret header") over naming the removed
+  symbol, or the step verifies itself false the moment you follow its own suggested wording. Second:
+  a final repo-wide sweep (per the `079-remove-mcp-sse-transport` "hard-zero on symbols, reviewed
+  survivors on vocabulary" lesson) reliably surfaces **out-of-scope files no recon pass named** —
+  here a root `docs/context-constitution-findings.md` "Open questions" entry describing the
+  soon-to-be-false pre-removal behavior as current fact. Treat every sweep survivor as needing a
+  hand verdict, not a blanket pass/fail: a doc claim of current/active behavior gets fixed even if
+  outside the original file list (P-03 — a known false claim is never left alone because a file
+  wasn't named in advance); a **negative test assertion** using the removed literal as its
+  comparison target (`assert not any(k == "<removed-header>" ...)`) is the opposite of a stale
+  claim — it's the permanent anti-reintroduction guard — and is correctly left alone even though its
+  file isn't in any formal exemption list.
+- **Evidence**: `docs/roadmap/features/097-remove-x-mcp-secret-header/implementation-spec.md` §
+  Deviation Log, Step 3 and Step 5 entries; `docs/context-constitution-findings.md:37` (the
+  out-of-scope stale claim, fixed); `services/xstockstrat-agent/tests/test_client.py` (the
+  reviewed-and-accepted negative-assertion survivor); reinforces `docs/roadmap/ledger/fails.md`
+  2026-07-29 `079-remove-mcp-sse-transport`.
+- **Rule it implies**: extends the **P-03** removal-verification-gate lesson from `fails.md` 079 —
+  (a) at spec time, never let a step's own suggested replacement text reintroduce the literal string
+  its Verification greps for zero of; (b) at execute time, a final sweep's survivors are triaged by
+  *what they claim* (current-tense/active → fix regardless of original scope; negative-assertion
+  test code → leave), not by whether the file was on the original list.

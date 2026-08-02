@@ -194,7 +194,7 @@ All inter-service connection env vars follow these patterns. **Never invent new 
 - No `XSTOCKSTRAT_` prefix on inter-service connection vars (the only historical exception, the nginx `PRIVATE_URL` vars, was removed with nginx — see above).
 - No `_URL` suffix on inter-service connection vars — always `_ENDPOINT`.
 - When a new service introduces connection env vars, check `docker-compose.yml` first — the var may already exist in another service's block and only needs to be added to the new service's block with the same value.
-- `N8N_WEBHOOK_SECRET` was removed by feature 011 (`remove-n8n-references`). Do not reference it. The MCP agent uses `MCP_AGENT_SECRET` (sent as `x-mcp-secret` header on outbound calls to identify itself to platform services); the receiving services do not currently enforce it.
+- `N8N_WEBHOOK_SECRET` was removed by feature 011 (`remove-n8n-references`). Do not reference it. The MCP agent uses `MCP_AGENT_SECRET` solely to HMAC-sign its stateless OAuth `txn` blob (`app/oauth_server.py`) — it is not sent as an outbound header (removed by feature 097).
 
 ---
 

@@ -214,9 +214,6 @@ services:
       # DB_POOL_MAX intentionally unset — pooled service, see trading above. Code default is 2.
       - key: SERVICE_NAME
         value: ingest
-      - key: MCP_AGENT_SECRET
-        scope: RUN_TIME
-        type: SECRET
 
   - name: xstockstrat-analysis
     image:
@@ -258,9 +255,6 @@ services:
       # DB_POOL_MAX intentionally unset — pooled service, see trading above. Code default is 2.
       - key: SERVICE_NAME
         value: analysis
-      - key: MCP_AGENT_SECRET
-        scope: RUN_TIME
-        type: SECRET
 
   - name: xstockstrat-agent
     image:
@@ -399,9 +393,6 @@ services:
         value: "1"
       - key: SERVICE_NAME
         value: notify
-      - key: MCP_AGENT_SECRET
-        scope: RUN_TIME
-        type: SECRET
 
   - name: xstockstrat-config
     image:

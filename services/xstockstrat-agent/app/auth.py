@@ -20,8 +20,6 @@ MCP_AGENT_SECRET = os.environ.get("MCP_AGENT_SECRET", "")
 
 
 def _metadata() -> list[tuple[str, str]]:
-    if MCP_AGENT_SECRET:
-        return [("x-mcp-secret", MCP_AGENT_SECRET)]
     return []
 
 

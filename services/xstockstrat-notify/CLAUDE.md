@@ -39,11 +39,13 @@ Connect router and `src/webhooks/` handlers) was removed.
 
 `EmitAlert` is **intentionally not role-gated**. It is a private-network, gRPC-only RPC whose trust
 boundary is the network plus the agent's OAuth 2.1 edge. Every caller is internal and unauthenticated
-at the RPC layer: the MCP agent sends only `x-mcp-secret` (no admin scope), and the analysis
-live/fundsignal loops, ingest backfill auto-alert, and the Go trading/marketdata/portfolio services
-send propagated headers or no metadata — **none** carries an admin bit. An admin gate would break
-every caller; enforcing `x-mcp-secret` would invert the trust boundary (only the *external* agent
-sends it). This decision is pinned by a test in `src/__tests__/notifyServiceImpl.test.ts`
+at the RPC layer: the MCP agent sends no metadata at all (feature 097 removed its shared-secret
+header), and the analysis live/fundsignal loops, ingest backfill auto-alert, and the Go
+trading/marketdata/portfolio services send propagated headers or no metadata — **none** carries an
+admin bit. An admin gate would break every caller — no caller (internal or the agent) sends any
+distinguishing header today, so there is nothing left to invert-enforce; the private-network-plus-
+OAuth-edge trust established by feature 092 is unaffected by feature 097's header removal. This
+decision is pinned by a test in `src/__tests__/notifyServiceImpl.test.ts`
 (a metadata-less `EmitAlert` must succeed). F-11 (write-path authz) considered and deliberately left
 `EmitAlert` ungated.
 
