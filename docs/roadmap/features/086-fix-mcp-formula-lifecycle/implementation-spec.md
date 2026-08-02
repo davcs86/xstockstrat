@@ -319,7 +319,7 @@ re-running leaves an empty `git diff packages/proto/gen/` (proto-freshness parit
 
 ### Step 10 — service: ui deleted-edit gate + backtest warning render
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/FormulaWorkspace.tsx` — modify
@@ -346,7 +346,7 @@ re-running leaves an empty `git diff packages/proto/gen/` (proto-freshness parit
 
 ### Step 11 — test: ui Playwright + C-12 fixtures
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/formulas.ts` — modify (add a soft-deleted formula fixture)

@@ -23,3 +23,21 @@ export const FORMULA_MACD = {
 };
 
 export const FORMULAS = [FORMULA_RSI, FORMULA_MACD];
+
+/**
+ * A soft-deleted formula (feature 086) — GetFormula returns it with `deleted: true`. The edit page
+ * renders it read-only with a "Deleted" badge and hides Save/Delete. Full definition shape (not a
+ * list-row subset) because the detail page reads source/parameters/outputs.
+ */
+export const FORMULA_DELETED = {
+  formulaId: 'f-deleted',
+  name: 'Retired RSI',
+  description: 'A formula that has been soft-deleted',
+  source: 'result = {"value": 1.0}',
+  author: TEST_USER_ID,
+  isPublic: false,
+  parameters: [],
+  outputs: [],
+  warmupPeriod: 0,
+  deleted: true,
+};
