@@ -56,3 +56,39 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   product-spec AC-3 note. Reopen if the literal persisted state is required.
 - Governance narrowing (config-ui can no longer typo-mint keys) — verify-only; target: spec verify step.
 - 074 compiled-JS zero-assertion trap — every config test step must prove a red in dist/.
+
+---
+
+## Session 2026-08-02 — sdd-spec
+
+- Generated implementation-spec.md with 8 steps. Status: design-approved → implementation-ready.
+- Step order: 1 proto (`SetConfigRequest.create_key = 8`) → 2 proto-gen → 3 migration `010` (AFTER
+  INSERT audit trigger) → 4 config service (mode-exact existence gate) → 5 config test (paired,
+  loopback) → 6 agent service (tool + client forward `create_key`) → 7 agent test (paired,
+  descriptor-parity) → 8 docs.
+- Key codebase findings (verified against source, not just recon):
+  - `SetConfigRequest` ends at field 7 (`trading_mode`) — `config.proto:88-96`; `create_key = 8` is additive.
+  - Last config migration is `009` → next is `010`; audit trigger `config_value_audit` is `BEFORE UPDATE`
+    only (`001:49-51`), function redefined in `002:33-43`. `010` adds a NEW `AFTER INSERT` trigger, leaves
+    the update trigger untouched (F-01).
+  - `setConfig` upsert conflict key is `(namespace,key,environment,trading_mode)` (`configServiceImpl.ts:319`);
+    existence SELECT is mode-EXACT on that grain, inserted after the author check (`:309-313`) and before the
+    upsert (`:315`). Use `existing.rows.length === 0` (mock-pool compatible; real pg has no rowCount in the stub).
+  - **Wire trap surfaced**: ts-proto sends camelCase over the wire (`listKeysWire.test.ts:4-8`; impl's snake_case
+    `trading_mode` read is a logged defect, `setConfigAuthz.test.ts:173-178`). Impl must read `call.request.createKey`
+    (read `createKey ?? create_key`); the Step 5 loopback case passing `createKey: true` is the end-to-end proof.
+  - **Existing test breakage identified**: `setConfigAuthz.test.ts`'s always-`{rows:[]}` pool (`:83-88`) flips the
+    "allows an admin write" case to NOT_FOUND once the gate lands, and its `queries[0]` INSERT assertions
+    (`:153, :162`) shift because the existence SELECT becomes query 0. Step 5 branches the pool on SQL and finds
+    the INSERT by name.
+  - Agent gate is **server-side only** (design §3) — the empty-`keys` mocks (`test_config_tools.py:168/189/211`)
+    stay valid; agent change is a pure `create_key` passthrough (tool `:786-796`, `:859-870`; client `:916-962`).
+  - Descriptor-parity test template: `test_backtest_view.py:157-174` — applied to `SetConfigRequest` via
+    `ListFields()` vs `DESCRIPTOR.fields_by_name` (ledger insight 2026-08-02, RC-1 guard).
+- Reviewers snapshot written to feature.md (Proto Reviewer, DBA, xstockstrat-config, xstockstrat-agent).
+
+### Open Threads
+- AC-3 unset-half reinterpretation carried into the spec (design decision; no literal persisted "registered but
+  unset" state) — reopen only if a future feature needs a value-less registered key.
+- Governance narrowing (config-ui can no longer typo-mint keys) — surfaced as a docs note in Step 8, not a code gate.
+- 074 zero-assertion trap — Step 5 must prove a red in the COMPILED `dist/` suite with non-zero assertions.
