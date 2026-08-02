@@ -48,7 +48,7 @@ transaction-mode connection pool (PgBouncer) instead of the direct cluster port:
 
 | Route | Port | Services |
 |---|---|---|
-| **Pooled** (PgBouncer transaction mode) | `:25061`, pool `staging` | trading, portfolio, marketdata (Go) · indicators, ingest, analysis (Python) |
+| **Pooled** (PgBouncer transaction mode) | `:25061`, pool `staging` / `production` (one per database) | trading, portfolio, marketdata (Go) · indicators, ingest, analysis (Python) |
 | **Direct** | `:25060` | config, ledger, identity, notify, ui · the `db-migrator` job |
 
 Transaction pooling returns a backend connection to the pool after each transaction, so many idle
@@ -71,9 +71,12 @@ the direct path is unchanged, so production and the Node services are untouched)
 | asyncpg (Python) | `statement_cache_size=0` | `services/xstockstrat-{indicators,ingest,analysis}/app/main.py` |
 | node-postgres (Node) | none (no server-side prepared statements by default) | — |
 
-**Production:** only a `staging` pool exists today; `.do/app.yaml` (prod) is unchanged. Enabling
-pooling there is a follow-up — create a production pool on the cluster, then mirror the `app.dev.yaml`
-wiring (pool URL + `DB_PGBOUNCER=true`) for the same six services.
+**Both environments are pooled.** Each database has its own transaction-mode pool on the cluster —
+`staging` (db `xstockstrat-staging`, wired in `.do/app.dev.yaml`) and `production` (db
+`xstockstrat-production`, wired in `.do/app.yaml`) — and both use the `:25061/<pool-name>` URL +
+`DB_PGBOUNCER=true` for the same six services. Pool size is small (5) because transaction mode needs
+only a few backends per pool and the two pools share the cluster with the direct services; raise it
+only after re-checking the ~22-slot cluster budget.
 
 ## Approval
 
