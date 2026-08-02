@@ -39,6 +39,10 @@ import {
   insufficientDataResult,
   OPPORTUNITIES,
   symbolReadiness,
+  POSITIONS,
+  positionForSymbol,
+  ORDERS,
+  orderForId,
 } from './fixtures';
 
 export const TRADER_MOCK_PORT = 9091;
@@ -119,31 +123,25 @@ export async function startMockBackend(): Promise<void> {
         async placeOrder() {
           return { orderId: 'mock-order-001', status: 3, tradingMode: 1 };
         },
-        async listOrders() {
-          return {
-            orders: [
-              {
-                orderId: 'mock-order-001',
-                symbol: 'AAPL',
-                side: 1,
-                qty: 10,
-                filledQty: 10,
-                filledAvgPrice: 175.5,
-                status: 3,
-                tradingMode: 1,
-              },
-              {
-                orderId: 'mock-order-002',
-                symbol: 'TSLA',
-                side: 2,
-                qty: 5,
-                filledQty: 0,
-                filledAvgPrice: 0,
-                status: 1,
-                tradingMode: 1,
-              },
-            ],
-          };
+        async cancelOrder() {
+          // Order-ticket page Cancel action (feature 096). Specs that need a specific
+          // CancelOrder response still page.route() their own (orders.spec.ts).
+          return { success: true };
+        },
+        async replaceOrder(req) {
+          // Order-ticket page Edit → ReplaceOrder (feature 096); echoes the working order back
+          // as still NEW so the UI reflects the amendment.
+          return { ...orderForId(req.orderId), status: 1 };
+        },
+        async listOrders(req) {
+          // Server-side symbol filter (feature 096): the per-symbol Orders & fills table on the
+          // Position page issues ListOrders with a symbol; the unfiltered Orders list omits it.
+          const orders = req.symbol ? ORDERS.filter((o) => o.symbol === req.symbol) : ORDERS;
+          return { orders };
+        },
+        async getOrder(req) {
+          // Single-order read for the order-ticket page (feature 096).
+          return orderForId(req.orderId);
         },
         async listBrokerAccounts() {
           return { accounts: BROKER_ACCOUNTS };
@@ -182,44 +180,14 @@ export async function startMockBackend(): Promise<void> {
           return { portfolios: PORTFOLIOS };
         },
         async listPositions() {
-          return {
-            positions: [
-              {
-                symbol: 'AAPL',
-                qty: 10,
-                avgEntryPrice: 180.0,
-                currentPrice: 189.8,
-                marketValue: 1898.0,
-                // AC-8 valuation parity: AAPL's unrealized P&L must match PORTFOLIO_ALPACA's
-                // AAPL position (100.0) — both surfaces read the one broker-authoritative source.
-                unrealizedPnl: 100.0,
-                unrealizedPnlPct: 0.056,
-                costBasis: 1800.0,
-                accountId: 'alpaca-default',
-                tradingMode: 1,
-                // feature 083 risk/factor fields (Exposure).
-                stopPrice: 178.0,
-                riskAtStop: 118.0,
-                stopDistancePct: 0.062,
-                factor: 'Tech',
-                flag: 3, // POSITION_RISK_FLAG_STOP_NEAR
-                exitRule: 'Stop @ $178.00',
-              },
-              {
-                symbol: 'MSFT',
-                qty: -5,
-                avgEntryPrice: 420.0,
-                currentPrice: 410.0,
-                marketValue: -2050.0,
-                unrealizedPnl: 50.0,
-                unrealizedPnlPct: 0.024,
-                costBasis: -2100.0,
-                accountId: 'alpaca-default',
-                tradingMode: 1,
-              },
-            ],
-            page: { nextPageToken: '' },
-          };
+          // POSITIONS carries the AAPL (factor Tech, stop, flag STOP_NEAR) + MSFT (no risk meta)
+          // fixtures. AAPL unrealizedPnl (100.0) matches PORTFOLIO_ALPACA for C-10(b) parity.
+          return { positions: POSITIONS, page: { nextPageToken: '' } };
+        },
+        async getPosition(req) {
+          // Single-position read for the dedicated Position page (feature 096); same authoritative
+          // fixture as listPositions so the page's unrealized P&L ties to the Exposure list.
+          return positionForSymbol(req.symbol);
         },
       });
 

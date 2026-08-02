@@ -87,6 +87,15 @@ router.service(PortfolioService, {
       { headers: backendHeaders(claims, ctx) },
     );
   },
+  async getPosition(req, ctx) {
+    const claims = await requireSession(ctx);
+    // Single-position read for the dedicated Position page (feature 096). Same userId
+    // injection as listPositions so the position is always scoped to the verified caller.
+    return portfolioClient.getPosition(
+      { ...req, userId: claims.user_id },
+      { headers: backendHeaders(claims, ctx) },
+    );
+  },
 });
 
 router.service(MarketDataService, {

@@ -11,7 +11,8 @@ import { EmptyState } from '@/components/shared/EmptyState';
 import { StatTile } from '@/components/shared/StatTile';
 import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
 import { usePositionLineage } from '@/hooks/usePositionLineage';
-import { PositionSide, PositionRiskFlag } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
+import { openR, fmtR, sideLabel, isExitFlag } from '@/lib/positionRisk';
+import { PositionSide } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import type { Position } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -36,29 +37,6 @@ import {
 
 type TradingMode = 'paper' | 'live';
 type PnlFilter = 'all' | 'winners' | 'losers';
-
-// sideLabel derives Long/Short from the signed quantity (qty < 0 is short).
-function sideLabel(qty: number | undefined | null): string {
-  return Number(qty ?? 0) < 0 ? 'Short' : 'Long';
-}
-
-// Open R = unrealized P&L expressed in units of the position's risk-at-stop (R-multiple).
-// Null when there is no stop-risk to normalize against.
-function openR(p: Position): number | null {
-  const r = Number(p.riskAtStop ?? 0);
-  if (!r) return null;
-  return Number(p.unrealizedPnl ?? 0) / r;
-}
-
-function fmtR(r: number | null): string {
-  if (r === null) return '—';
-  return `${r >= 0 ? '+' : ''}${r.toFixed(1)}R`;
-}
-
-// Exit-flag positions (Exposure → "N exit flags in queue"): a trim or a stop-near signal.
-function isExitFlag(p: Position): boolean {
-  return p.flag === PositionRiskFlag.REDUCE_SIGNAL || p.flag === PositionRiskFlag.STOP_NEAR;
-}
 
 export default function PositionsPage() {
   const { selectedAccountId, environmentMode } = useAccountContext();
@@ -299,7 +277,17 @@ export default function PositionsPage() {
                       onClick={() => setSelected(p)}
                       className="cursor-pointer"
                     >
-                      <TableCell className="font-mono font-semibold">{p.symbol}</TableCell>
+                      <TableCell className="font-mono font-semibold">
+                        {/* Symbol links to the dedicated full-page Position view (feature 096);
+                            the rest of the row still opens the quick-peek Sheet. */}
+                        <Link
+                          href={`/trader/positions/${encodeURIComponent(p.symbol)}`}
+                          className="hover:underline"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {p.symbol}
+                        </Link>
+                      </TableCell>
                       <TableCell className="text-muted-foreground">{sideLabel(p.qty)}</TableCell>
                       <TableCell className="text-right tabular-nums">{p.qty}</TableCell>
                       <TableCell className="text-right tabular-nums">
@@ -427,6 +415,12 @@ export default function PositionsPage() {
           </SheetHeader>
           {selected && (
             <div className="px-4 space-y-5">
+              {/* Deep link from the quick-peek Sheet to the dedicated full-page view (feature 096). */}
+              <Button asChild variant="outline" size="sm" className="w-full min-h-[44px]">
+                <Link href={`/trader/positions/${encodeURIComponent(selected.symbol)}`}>
+                  Open full view →
+                </Link>
+              </Button>
               {/* Risk stat row (feature 083 — the single position is risk-framed, matching the
                   Exposure surface: what it risks and what triggers an exit). All from the enriched
                   Position risk fields; em-dash fallbacks when the position carries no resting stop. */}

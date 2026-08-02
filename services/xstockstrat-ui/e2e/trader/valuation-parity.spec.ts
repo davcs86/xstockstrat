@@ -13,13 +13,13 @@ test.describe('AC-8 valuation parity', () => {
   test('AAPL unrealized P&L is identical on Portfolio and Exposure', async ({ page }) => {
     await addAuthCookie(page);
 
-    // Portfolio (read-only broker mirror) — PortfolioPanel lists AAPL's unrealized P&L.
+    // Portfolio (read-only broker mirror) — the AAPL positions row lists its unrealized P&L.
+    // Row-scoped locator (feature 096 wrapped the symbol cell in a Link to the Position page).
     await page.goto('/trader/portfolio');
     await expect(page.getByTestId('ledger-disclaimer')).toBeVisible({ timeout: 10000 });
-    const portfolioAapl = page.getByText('AAPL', { exact: true }).first();
-    await expect(portfolioAapl).toBeVisible();
-    const portfolioPnl = portfolioAapl.locator('..');
-    await expect(portfolioPnl).toContainText('+$100.00');
+    const portfolioRow = page.getByRole('row', { name: /AAPL/ });
+    await expect(portfolioRow).toBeVisible();
+    await expect(portfolioRow).toContainText('+$100.00');
 
     // Exposure (positions) — the AAPL row's Total P/L ($) reads the same source.
     await page.goto('/trader/positions');
