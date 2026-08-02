@@ -267,3 +267,28 @@
   documented/prompted in all three; `bash -n scripts/setup-env.sh` passes.
 - Files modified: `.env.example`, `scripts/setup-env.sh`, `docs/setup/digitalocean.md`.
 - Deviations: none.
+
+### Step 5 — Correct launch collateral and regenerate its PDF [done]
+
+- Corrected `docs/launch-pdfs/product-features.md:186`'s "Platform services trust this header..."
+  claim; regenerated `product-features.pdf` via `python3 scripts/build-launch-pdfs.py
+  product-features` (toolchain confirmed available, real run not a deferral — 72.1 KB output).
+- **Final AC-1(b) repo-wide sweep** (`grep -rln "x-mcp-secret" . --exclude-dir=.git
+  --exclude-dir=node_modules --exclude-dir=__pycache__`) found two survivors outside this
+  feature's original scope (both reviewed by hand, full detail in `## Deviation Log` Step 5 entry):
+  - `docs/context-constitution-findings.md:37` — a live, current-tense doc-drift claim
+    ("`_metadata()` now sends only `x-mcp-secret`") that Step 1 made false. **Fixed** — reworded +
+    corrected the stale evidence citation in the same edit. Not in AC-1's exemption list and a real
+    current-tense claim, so this was an in-scope correction, not an accepted survivor.
+  - `services/xstockstrat-agent/tests/test_client.py` — Step 1's own negative-assertion regression
+    guards (`assert not any(k == "x-mcp-secret" ...)`). **Reviewed and accepted, unchanged** — the
+    literal string is required as the comparison target to prove the header's absence; this is a
+    permanent anti-reintroduction guard, not a claim the header is sent.
+  - Every other remaining hit falls inside `docs/roadmap/features/*/`, `docs/roadmap/ledger/`, or
+    `docs/reports/` in past-tense/removed-feature or proposed-and-rejected framing, matching AC-1's
+    exemption exactly.
+- Files modified: `docs/launch-pdfs/product-features.md`, `docs/launch-pdfs/product-features.pdf`,
+  `docs/context-constitution-findings.md`.
+- Deviations: 2, both logged in `## Deviation Log` (Step 5 entry) — see above.
+
+**All 5 steps done. Feature status: `code-completed`.**

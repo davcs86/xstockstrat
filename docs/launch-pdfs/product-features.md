@@ -183,7 +183,7 @@ Exposed tools:
 - **Query alerts** — recent notifications from the notify service
 - **Place paper orders** — convenience wrapper for the trading service
 
-The agent forwards an `x-mcp-secret` header on outbound calls (`MCP_AGENT_SECRET` env var) to identify itself. Platform services trust this header as "request originated from the AI agent surface."
+The agent authenticates to Claude.ai via OAuth 2.1 (RFC 8414/9728); its outbound calls to platform services carry no shared-secret header — internal RPCs trust the private network plus the agent's OAuth edge (see `docs/roadmap/features/092-fix-mcp-writepath-authz`).
 
 ---
 

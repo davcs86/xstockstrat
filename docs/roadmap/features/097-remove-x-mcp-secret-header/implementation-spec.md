@@ -520,7 +520,7 @@ bash -n scripts/setup-env.sh
 
 ### Step 5 — docs: Correct launch collateral and regenerate its PDF
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/launch-pdfs/`
 **Files**:
 - `docs/launch-pdfs/product-features.md` — modify
@@ -622,3 +622,35 @@ survivor exemption list, which covers only `docs/roadmap/features/*/`, `docs/roa
 `/sdd-spec` time, discovered only now. Resolved by rewording those four spots to preserve the exact
 same meaning without the literal string (e.g. "the header" / "its shared-secret header" instead of
 naming `x-mcp-secret`), then re-ran the step's own Verification — passes cleanly (zero hits).
+
+### Step 5 — final AC-1(b) sweep found two survivors outside the spec's file list
+
+**Disposition**: one fixed in-scope (out-of-scope file correction, minimal), one reviewed and
+accepted as a legitimate non-issue.
+
+Step 5's final repo-wide `grep -rln "x-mcp-secret"` sweep found two hits neither this feature's
+original file list nor the design/spec-time recon anticipated:
+
+1. **`docs/context-constitution-findings.md:37`** (root-level context-forge findings doc, not under
+   `docs/roadmap/`) — an "Open questions" entry stating "`_metadata()` now sends only
+   `x-mcp-secret`" as a **current-tense claim**, describing pre-097 behavior that Step 1 just made
+   false. Not in AC-1's exemption list (root `docs/` isn't `docs/roadmap/features/*/`,
+   `docs/roadmap/ledger/`, or `docs/reports/`), and a live current-tense claim besides. Fixed:
+   reworded the clause to "sends no shared-secret header at all (feature 097 removed the outbound
+   header entirely)" and corrected the stale evidence citation in the same edit (the old
+   `client.py:332` line no longer refers to `_metadata()`'s general behavior). Minimal, in-scope
+   correction of a doc-drift claim — exactly the class of defect this feature exists to fix,
+   discovered by the sweep exactly as `recon.md`'s Risks section anticipated it might be.
+2. **`services/xstockstrat-agent/tests/test_client.py`** (Step 1's own rewritten assertions, e.g.
+   `assert not any(k == "x-mcp-secret" for k, _ in meta)`) — reviewed and **accepted, not changed**.
+   These are negative-assertion regression guards: the literal string must appear as the comparison
+   target for the test to prove the header's *absence*, which is the correct permanent guard against
+   reintroduction (the same class of protection the design's Rejected Alternatives section already
+   anticipated when it noted the rewritten assertions "double as the regression guard... without a
+   separate literal-grep test"). This is not a doc claim of current sending/enforcement — it is
+   test code proving the opposite — so it falls outside what AC-1(b)'s exemption set was ever meant
+   to police, even though the file path itself isn't in that literal exemption list. No action
+   taken.
+
+Both were reviewed by hand as the step's Verification requires ("every remaining hit reviewed by
+hand... no other survivor is acceptable" outside the named directories) rather than glossed over.
