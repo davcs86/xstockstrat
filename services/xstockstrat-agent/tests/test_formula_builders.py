@@ -132,9 +132,7 @@ class TestFormulaBuilderBehavior:
         )
         with patch("app.client.grpc") as mock_grpc:
             mock_grpc.aio.insecure_channel.return_value = _channel_cm()
-            with patch.object(
-                indicators_pb2_grpc, "IndicatorsServiceStub", return_value=mock_stub
-            ):
+            with patch.object(indicators_pb2_grpc, "IndicatorsServiceStub", return_value=mock_stub):
                 await client.manage_formula(
                     operation="update",
                     formula={"formula_id": "f-1", "user_id": "u", "name": "n"},
@@ -152,8 +150,6 @@ class TestFormulaBuilderBehavior:
         )
         with patch("app.client.grpc") as mock_grpc:
             mock_grpc.aio.insecure_channel.return_value = _channel_cm()
-            with patch.object(
-                indicators_pb2_grpc, "IndicatorsServiceStub", return_value=mock_stub
-            ):
+            with patch.object(indicators_pb2_grpc, "IndicatorsServiceStub", return_value=mock_stub):
                 result = await client.get_formula("f-1")
         assert result["deleted"] is True

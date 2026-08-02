@@ -750,9 +750,7 @@ class TestFormulaPartialUpdate:
         from gen.indicators.v1 import indicators_pb2
 
         servicer, _ = _update_servicer(_full_row(deleted_at=datetime.datetime(2026, 1, 1)))
-        req = indicators_pb2.UpdateFormulaRequest(
-            formula_id="f", user_id="user-1", description="x"
-        )
+        req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="user-1", description="x")
         req.update_mask.paths.append("description")
         ctx = _ctx([])
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))

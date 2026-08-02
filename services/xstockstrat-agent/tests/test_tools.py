@@ -1106,8 +1106,6 @@ class TestFormulaReadTools:
     @pytest.mark.asyncio
     async def test_list_formulas_tool_wraps_list(self):
         server = _make_server()
-        with patch.object(
-            client, "list_formulas", AsyncMock(return_value=[{"formulaId": "f-1"}])
-        ):
+        with patch.object(client, "list_formulas", AsyncMock(return_value=[{"formulaId": "f-1"}])):
             result = await _tool_fn(server, "list_formulas")(author_filter="u1")
         assert result == {"formulas": [{"formulaId": "f-1"}]}

@@ -3559,9 +3559,7 @@ class TestBacktestDeletedFormulaWarning:
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         svc._backtest_run_symbols_repo = AsyncMock()
         svc._marketdata = MagicMock()
-        svc._marketdata.GetBars = AsyncMock(
-            return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars)
-        )
+        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars))
         svc._indicators = MagicMock()
 
         async def _execute(req, **kw):
