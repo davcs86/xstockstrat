@@ -9,7 +9,7 @@ findings log.
 | What the docs say | What the code does | Evidence | Suggested action |
 |---|---|---|---|
 | 3 config keys `notify.stream.max_subscribers`, `notify.alert.retention_days`, `notify.alert.max_body_bytes` | None read by any code — no subscriber cap, no retention job, no body-size validation | `CLAUDE.md:48-50` (grep zero) | Wire or delete the keys |
-| CLAUDE.md dependency "xstockstrat-ledger — Emit alert lifecycle events" + `LEDGER_ENDPOINT` | No ledger client and no `LEDGER_ENDPOINT` read anywhere | `CLAUDE.md:39,57` vs `src/` (grep zero) | Delete the fictional dep |
+| CLAUDE.md dependency "xstockstrat-ledger — Emit alert lifecycle events" + `LEDGER_ENDPOINT` | No ledger client and no `LEDGER_ENDPOINT` read anywhere | `CLAUDE.md:39,57` vs `src/` (grep zero) | ✓ **RESOLVED** (2026-08-02 refresh) — the fictional `xstockstrat-ledger` dep + `LEDGER_ENDPOINT` were removed from the deps table (config + PostgreSQL only) |
 
 ## Latent bugs (looks broken, not merely non-obvious)
 
