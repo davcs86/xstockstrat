@@ -32,6 +32,49 @@ On DigitalOcean, the `db-migrator` PRE_DEPLOY job runs automatically on every de
 3. **Never edit an applied `.up.sql`** (committed to `main-dev`) — add a new numbered migration instead.
 4. Test locally: `./scripts/db-migrate.sh`
 
+## Connection pooling (PgBouncer)
+
+Staging and production share **one** managed cluster (`xstockstrat`, plan `db-s-1vcpu-1gb`, single
+node) — two databases on ~22 usable connections. The per-service pool budget below (§ root
+`CLAUDE.md`) sums to 20 *per environment*, sized as if one environment owned the cluster. During a
+rolling deploy DigitalOcean runs old + new replicas concurrently, briefly doubling a service's
+connections; with both environments deploying at once (the daily promotion) this overruns the shared
+limit and Postgres returns `53300 remaining connection slots are reserved…`. A service that connects
+without retry (config's `SELECT 1`) then exits non-zero, failing its readiness probe and triggering
+an auto-rollback.
+
+To absorb that spike, the six **stateless-query** Go/Python services route through DigitalOcean's
+transaction-mode connection pool (PgBouncer) instead of the direct cluster port:
+
+| Route | Port | Services |
+|---|---|---|
+| **Pooled** (PgBouncer transaction mode) | `:25061`, pool `staging` | trading, portfolio, marketdata (Go) · indicators, ingest, analysis (Python) |
+| **Direct** | `:25060` | config, ledger, identity, notify, ui · the `db-migrator` job |
+
+Transaction pooling returns a backend connection to the pool after each transaction, so many idle
+client-pool connections multiplex onto a handful of backends — removing the deploy-time spike.
+
+**Why the split (do not pool these):**
+
+- **`LISTEN`/`NOTIFY` is incompatible with transaction pooling.** `config` runs `LISTEN
+  config_changed` and `ledger` holds a dedicated `EventNotifier` listener — both need a
+  session-pinned connection, so they stay **direct**.
+- **golang-migrate needs session-level advisory locks + DDL**, so the `db-migrator` job stays
+  **direct**.
+
+**Driver requirements — gated behind the `DB_PGBOUNCER` env var** (set only on the pooled services;
+the direct path is unchanged, so production and the Node services are untouched):
+
+| Driver | Requirement when `DB_PGBOUNCER=true` | Where |
+|---|---|---|
+| pgx (Go) | `cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeExec` — unnamed statements, safe per-transaction | `services/xstockstrat-{trading,portfolio,marketdata}/internal/repository/pool.go` |
+| asyncpg (Python) | `statement_cache_size=0` | `services/xstockstrat-{indicators,ingest,analysis}/app/main.py` |
+| node-postgres (Node) | none (no server-side prepared statements by default) | — |
+
+**Production:** only a `staging` pool exists today; `.do/app.yaml` (prod) is unchanged. Enabling
+pooling there is a follow-up — create a production pool on the cluster, then mirror the `app.dev.yaml`
+wiring (pool URL + `DB_PGBOUNCER=true`) for the same six services.
+
 ## Approval
 
 DB schema migrations require DBA review + service owner approval (see `docs/runbooks/approval-flow.md`).

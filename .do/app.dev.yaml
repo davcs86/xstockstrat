@@ -63,7 +63,10 @@ services:
         value: ${xstockstrat-indicators.PRIVATE_DOMAIN}:50054
       - key: DATABASE_URL
         scope: RUN_TIME
-        value: ${xstockstrat.DATABASE_URL}
+        # Transaction-pool (PgBouncer :25061/staging) — see docs/patterns/database.md § Connection pooling
+        value: postgresql://${xstockstrat.USERNAME}:${xstockstrat.PASSWORD}@${xstockstrat.HOSTNAME}:25061/staging?sslmode=require
+      - key: DB_PGBOUNCER
+        value: "true"
       - key: DB_POOL_MAX
         value: "2"
       - key: SERVICE_NAME
@@ -94,7 +97,10 @@ services:
         value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
       - key: DATABASE_URL
         scope: RUN_TIME
-        value: ${xstockstrat.DATABASE_URL}
+        # Transaction-pool (PgBouncer :25061/staging) — see docs/patterns/database.md § Connection pooling
+        value: postgresql://${xstockstrat.USERNAME}:${xstockstrat.PASSWORD}@${xstockstrat.HOSTNAME}:25061/staging?sslmode=require
+      - key: DB_PGBOUNCER
+        value: "true"
       - key: DB_POOL_MAX
         value: "2"
       - key: SERVICE_NAME
@@ -121,7 +127,10 @@ services:
         value: ${xstockstrat-notify.PRIVATE_DOMAIN}:50059
       - key: DATABASE_URL
         scope: RUN_TIME
-        value: ${xstockstrat.DATABASE_URL}
+        # Transaction-pool (PgBouncer :25061/staging) — see docs/patterns/database.md § Connection pooling
+        value: postgresql://${xstockstrat.USERNAME}:${xstockstrat.PASSWORD}@${xstockstrat.HOSTNAME}:25061/staging?sslmode=require
+      - key: DB_PGBOUNCER
+        value: "true"
       - key: ALPACA_API_KEY
         scope: RUN_TIME
         value: YOUR_DEV_ALPACA_API_KEY
@@ -166,9 +175,12 @@ services:
         value: "2"
       - key: SERVICE_NAME
         value: indicators
+      - key: DB_PGBOUNCER
+        value: "true"
       - key: DATABASE_URL
         scope: RUN_TIME
-        value: ${xstockstrat.DATABASE_URL}
+        # Transaction-pool (PgBouncer :25061/staging) — see docs/patterns/database.md § Connection pooling
+        value: postgresql://${xstockstrat.USERNAME}:${xstockstrat.PASSWORD}@${xstockstrat.HOSTNAME}:25061/staging?sslmode=require
 
   - name: xstockstrat-ingest
     image:
@@ -197,7 +209,10 @@ services:
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060 ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057 ${xstockstrat-identity.PRIVATE_DOMAIN}:50058
       - key: DATABASE_URL
         scope: RUN_TIME
-        value: ${xstockstrat.DATABASE_URL}
+        # Transaction-pool (PgBouncer :25061/staging) — see docs/patterns/database.md § Connection pooling
+        value: postgresql://${xstockstrat.USERNAME}:${xstockstrat.PASSWORD}@${xstockstrat.HOSTNAME}:25061/staging?sslmode=require
+      - key: DB_PGBOUNCER
+        value: "true"
       - key: DB_POOL_MAX
         value: "2"
       - key: SERVICE_NAME
@@ -239,7 +254,10 @@ services:
         value: ${xstockstrat-config.PRIVATE_DOMAIN}:50060 ${xstockstrat-ledger.PRIVATE_DOMAIN}:50057 ${xstockstrat-indicators.PRIVATE_DOMAIN}:50054
       - key: DATABASE_URL
         scope: RUN_TIME
-        value: ${xstockstrat.DATABASE_URL}
+        # Transaction-pool (PgBouncer :25061/staging) — see docs/patterns/database.md § Connection pooling
+        value: postgresql://${xstockstrat.USERNAME}:${xstockstrat.PASSWORD}@${xstockstrat.HOSTNAME}:25061/staging?sslmode=require
+      - key: DB_PGBOUNCER
+        value: "true"
       - key: DB_POOL_MAX
         value: "2"
       - key: SERVICE_NAME

@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -25,6 +26,15 @@ func newPool(ctx context.Context, connStr string) (*pgxpool.Pool, error) {
 		if n, err := strconv.Atoi(v); err == nil && n > 0 {
 			cfg.MaxConns = int32(n)
 		}
+	}
+	// PgBouncer transaction-pooling compatibility: when DB_PGBOUNCER is set the
+	// service connects through DigitalOcean's transaction-mode pool, where
+	// session-scoped (named) prepared statements are unsafe — consecutive queries
+	// may land on different backend connections. QueryExecModeExec uses unnamed
+	// statements that are safe per-transaction. The direct-connection path keeps
+	// pgx's default statement caching.
+	if v := os.Getenv("DB_PGBOUNCER"); v == "true" || v == "1" {
+		cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeExec
 	}
 	return pgxpool.NewWithConfig(ctx, cfg)
 }

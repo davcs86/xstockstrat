@@ -47,7 +47,13 @@ async def serve():
     log.info("config snapshot received")
 
     db_pool = await asyncpg.create_pool(
-        DATABASE_URL, min_size=1, max_size=int(os.environ.get("DB_POOL_MAX", "2"))
+        DATABASE_URL,
+        min_size=1,
+        max_size=int(os.environ.get("DB_POOL_MAX", "2")),
+        # PgBouncer transaction mode: disable asyncpg's prepared-statement cache,
+        # unsafe when consecutive queries land on different backend connections.
+        # Keeps asyncpg's default (100) on the direct-connection path.
+        statement_cache_size=0 if os.environ.get("DB_PGBOUNCER") in ("true", "1") else 100,
     )
     log.info("database pool established")
 
