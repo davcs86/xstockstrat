@@ -1,7 +1,7 @@
 # xstockstrat-agent — CLAUDE.md
 
 <!-- context-forge:constitution-pointer:start -->
-> **Constitution:** non-obvious local invariants (ephemeral per-call gRPC channels, lazy `gen.*` imports, caller-derived admin scope on management write tools, `MCP_AGENT_SECRET` triple-purpose, `aud`-bound JWT) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (`namespace="agent"` hardcode, `MCP_TRANSPORT` stdio default) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+> **Constitution:** non-obvious local invariants (ephemeral per-call gRPC channels, lazy `gen.*` imports, caller-derived admin scope on management write tools, `MCP_AGENT_SECRET` OAuth-signing-only, `aud`-bound JWT) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (`namespace="agent"` hardcode, `MCP_TRANSPORT` stdio default) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
 <!-- context-forge:constitution-pointer:end -->
 
 ## Role
@@ -16,8 +16,7 @@ transport at `/sse` + `/messages` was **removed by feature 079**; those paths no
 naming the replacement URL. `MCP_TRANSPORT=sse` remains accepted as a deprecated alias for
 `http` (it logs a warning and starts the same server), as does `MCP_SSE_PORT` for
 `MCP_HTTP_PORT`. `MCP_TRANSPORT=stdio` is unaffected and stays for local use.
-All outbound gRPC calls to platform services carry `x-mcp-secret` when `MCP_AGENT_SECRET` is
-set; every management **write** tool forwards the **real caller's derived** `x-access-scope` so the
+Every management **write** tool forwards the **real caller's derived** `x-access-scope` so the
 backends' role checks *verify* admin (feature 092 generalized this from the feature-073
 `set_config`-only case; the old hardcoded admin scope was removed). See § Management-tool
 authorization.
@@ -151,7 +150,7 @@ now **environment-scoped** (`namespace`/`environment` are required — the old s
 ```text
 MCP_TRANSPORT=http   # `sse` still accepted as a deprecated alias
 MCP_HTTP_PORT=9000   # `MCP_SSE_PORT` still accepted as a deprecated fallback
-MCP_AGENT_SECRET=<shared secret>
+MCP_AGENT_SECRET=<shared secret>   # HMAC-signs the OAuth txn blob only — not sent as an outbound header
 INGEST_ENDPOINT=xstockstrat-ingest:50055
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
 ANALYSIS_ENDPOINT=xstockstrat-analysis:50056

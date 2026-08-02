@@ -234,3 +234,23 @@
   services, this is high-confidence but not a live-boot proof — flagged for a human/CI check with
   daemon access before merging to `main`.
 - Files modified: `docker-compose.yml`, `.do/app.yaml`, `.do/app.dev.yaml`.
+
+### Step 3 — Reconcile reference/constitution docs describing `x-mcp-secret` [done]
+
+- Deleted `mcp-tools.md`'s `### x-mcp-secret (downstream enforcement)` section wholesale (heading,
+  sentence, one-row table) and reworded its 3 inline "sends `x-mcp-secret`" clauses. Reworded
+  `docs/runbooks/CLAUDE.md`'s pointer, root `CLAUDE.md`'s env-var sentence, `services/xstockstrat-
+  agent/CLAUDE.md` (banner, outbound-calls sentence, env-var table annotation),
+  `services/xstockstrat-agent/docs/context-constitution.md` (`AGENT-4` drops the header claim +
+  corrects evidence; `AGENT-6` moves from triple- to single-purpose), `services/xstockstrat-notify/
+  CLAUDE.md` (two prose lines, contract unchanged), and the notify test's explanatory comment.
+- **Deviation (logged in `## Deviation Log`, Step 3 entry)**: found a self-inconsistency in my own
+  Step 3 Instructions — the suggested replacement wording for `AGENT-4`/`AGENT-6`/notify
+  `CLAUDE.md`/the test comment included the literal string `x-mcp-secret` in past-tense framing,
+  contradicting the same step's Verification (zero hits across those exact files — correctly, since
+  none are in AC-1's historical-survivor exemption list). Reworded those 4 spots to drop the literal
+  string while preserving meaning; re-ran Verification — passes (zero hits both greps).
+- Files modified: `docs/runbooks/mcp-tools.md`, `docs/runbooks/CLAUDE.md`, `CLAUDE.md`,
+  `services/xstockstrat-agent/CLAUDE.md`, `services/xstockstrat-agent/docs/context-constitution.md`,
+  `services/xstockstrat-notify/CLAUDE.md`,
+  `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`.

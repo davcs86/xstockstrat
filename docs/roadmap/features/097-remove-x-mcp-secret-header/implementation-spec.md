@@ -260,7 +260,7 @@ docker compose ps
 
 ### Step 3 — docs: Reconcile reference/constitution docs describing `x-mcp-secret`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`, `CLAUDE.md` (root), `xstockstrat-agent`, `xstockstrat-notify`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify
@@ -607,3 +607,18 @@ unaffected, though it does not prove a live container actually reaches a healthy
 `docker compose up`/`ps` check remains the more complete verification and should be run in an
 environment where the Docker daemon is available (e.g. by a human reviewer, or in a future CI job)
 before this lands on `main`.
+
+### Step 3 — Instructions/Verification self-inconsistency
+
+**Disposition**: applied at execution time (in-scope wording fix, not a scope change).
+
+Step 3's own suggested replacement wording for `AGENT-4`, `AGENT-6`,
+`services/xstockstrat-notify/CLAUDE.md`, and the notify test comment (Instructions items 5 and 6-7)
+included the literal string `x-mcp-secret` in past-tense "feature 097 removed x-mcp-secret"
+framing — but the same step's `**Verification**` demands zero `x-mcp-secret` hits across those
+exact files (correctly — none of them are in product-spec Acceptance Criterion 1's historical-
+survivor exemption list, which covers only `docs/roadmap/features/*/`, `docs/roadmap/ledger/`, and
+`docs/reports/`). This is a self-inconsistency in the Instructions vs. Verification I wrote at
+`/sdd-spec` time, discovered only now. Resolved by rewording those four spots to preserve the exact
+same meaning without the literal string (e.g. "the header" / "its shared-secret header" instead of
+naming `x-mcp-secret`), then re-ran the step's own Verification — passes cleanly (zero hits).
