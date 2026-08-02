@@ -1,7 +1,7 @@
 # Feature: fix-mcp-extract-credentials
 
 **Type**: bug
-**Lifecycle Status**: `design-approved`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/fix-mcp-extract-credentials`
 **Source Report**: docs/reports/2026-08-01-mcp-tools-alignment-triage.md (F-1)
 **Severity**: SEV-2
@@ -16,6 +16,7 @@
 |---|---|---|---|
 | 2026-08-02 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the MCP-alignment triage report (F-1) |
 | 2026-08-02 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, full). Chosen: option (c) — env-scope + typed-projection fix for the legitimate reads (alert_threshold, OAuth); extract-tool credentials made loudly unsupported (raise) rather than a plaintext-config antipattern. AC-3 (radical resolver) deferred; AC-4 reinterpreted. |
+| 2026-08-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 3 steps (atomic agent-only service step + paired RED-first test step + same-PR docs). No proto/migration/new config key. |
 
 ---
 
@@ -24,7 +25,7 @@
 - [Product Spec](product-spec.md) — bug description and fix scope
 - [Recon](recon.md) — grounded codebase dossier (agent + ingest + config)
 - [Design](design.md) — approved option-(c) architecture (2-round debate)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-mcp-extract-credentials`_
+- [Implementation Spec](implementation-spec.md) — 3 numbered steps with codebase-grounded evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -33,6 +34,15 @@
 
 Give extract-tool credentials one owner: interim env/namespace-scoped, non-swallowing config read; radical — ingest resolves its own credentials_ref via a ResolveSourceCredential RPC (or server-side extraction), deleting the agent's dev-scoped plaintext-key path.
 
+## Reviewers
+
+Canonical snapshot from `docs/runbooks/reviewer-registry.md` (stable unless `/sdd-spec` re-runs).
+
+| Reviewer | Focus |
+|---|---|
+| xstockstrat-agent (service owner) | MCP tool contract stability (name, parameters, return shape) and `docs/runbooks/mcp-tools.md` parity; no secret values in tool output or the unauthenticated `GET /api/tools` catalog |
+| Security | No secrets resolved from non-`secret.*` config; secret keys use the `secret.*` prefix; auth-scope correctness (this fix removes a plaintext-config credential read and env-scopes the OAuth DCR reads) |
+
 ## Next Action
 
-`/sdd-spec fix-mcp-extract-credentials` — generate the implementation spec from the approved design
+`/sdd-review fix-mcp-extract-credentials impl-spec` — validate implementation spec, then `/sdd-execute fix-mcp-extract-credentials`
