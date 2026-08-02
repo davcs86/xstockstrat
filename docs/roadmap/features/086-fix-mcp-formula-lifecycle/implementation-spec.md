@@ -53,8 +53,9 @@ generated `deleted` flag; the UI depends on the generated `warnings`/`deleted` f
    ("absent = full replace (back-compat); present = merge only the named paths"); add
    `bool deleted = 13;` to `FormulaDefinition` with a comment ("true = soft-deleted; still evaluable for
    existing references, hidden from ListFormulas, not updatable").
-2. In `analysis.proto`: add `repeated string warnings = 16;` to `BacktestResult` with a comment
-   ("human-readable run warnings, e.g. a referenced formula was deleted").
+2. In `analysis.proto`: add `repeated string warnings = 16;` to `BacktestResult` and
+   `repeated string warnings = 10;` to `StrategyDefinition` (live-status flag; user steer — do not
+   defer live) with comments.
 3. Re-verify next-free numbers against remote refs (ledger 081): `git ls-remote --heads origin` union +
    `grep` the two messages — confirm 10/13/16 unused on any branch.
 
@@ -90,7 +91,7 @@ re-running leaves an empty `git diff packages/proto/gen/` (proto-freshness parit
 
 ### Step 3 — migration: indicators formula soft-delete column
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/migrations/005_add_formula_soft_delete.up.sql` — create
@@ -118,7 +119,7 @@ re-running leaves an empty `git diff packages/proto/gen/` (proto-freshness parit
 
 ### Step 4 — service: indicators partial-merge update + soft-delete
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/app/services/formulas_repository.py` — modify
@@ -154,7 +155,7 @@ re-running leaves an empty `git diff packages/proto/gen/` (proto-freshness parit
 
 ### Step 5 — test: indicators formula lifecycle
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-indicators`
 **Files**:
 - `services/xstockstrat-indicators/tests/test_formulas.py` — modify
@@ -201,9 +202,13 @@ re-running leaves an empty `git diff packages/proto/gen/` (proto-freshness parit
 1. In `_fetch_formula_outputs`, after `GetFormula` returns and before reading `.outputs`:
    `if formula.deleted:` `context.abort(INVALID_ARGUMENT, "strategy references deleted formula <id>")`.
    (Leaves the pre-existing truly-missing-formula swallow unchanged — out of scope.)
-2. In the backtest path: extend `_declared_formula_warmup` (or its caller) to collect referenced
-   formulas whose `GetFormula` returns `deleted=True`, and append a human-readable line per deleted
-   formula to the `BacktestResult.warnings` field on the response. The run still completes.
+2. Add a shared helper `_deleted_formula_warnings(definition, propagation_meta) -> list[str]` that
+   iterates `definition.components`, `GetFormula`s each custom-formula component, and returns a
+   human-readable line per formula with `deleted=True` (swallow RpcError like the warmup path).
+3. Backtest path: populate `BacktestResult.warnings` from the helper on the response.
+4. Live status (user steer — do not defer): in `GetStrategy` (`servicer.py:1672-1682`), after building
+   the definition via `_row_to_strategy_definition`, call the helper and set `definition.warnings`.
+   The run/read still completes; deletion is flagged, not silently ignored.
 
 **Verification**: covered by Step 7.
 
@@ -229,6 +234,8 @@ re-running leaves an empty `git diff packages/proto/gen/` (proto-freshness parit
 2. Backtest of a strategy referencing a deleted formula → `BacktestResult.warnings` contains the
    formula id/name; the run still returns OK.
 3. Backtest of a strategy with no deleted references → `warnings` empty (no false positives).
+4. `GetStrategy` for a strategy referencing a deleted formula → `StrategyDefinition.warnings` contains
+   the flag (live-status); clean strategy → empty.
 
 **Verification**:
 `cd services/xstockstrat-analysis && ruff check app tests && pytest --cov=app --cov-fail-under=40` — passes.

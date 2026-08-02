@@ -2007,7 +2007,12 @@ type StrategyDefinition struct {
 	// Per-symbol re-entry cooldown in calendar days (feature 069). optional = explicit presence:
 	// unset → platform default (analysis.strategy.default_cooldown_days); explicit 0 → no cooldown
 	// (immediate re-entry allowed); negative → rejected at write time (INVALID_ARGUMENT).
-	CooldownDays  *int32 `protobuf:"varint,9,opt,name=cooldown_days,json=cooldownDays,proto3,oneof" json:"cooldown_days,omitempty"`
+	CooldownDays *int32 `protobuf:"varint,9,opt,name=cooldown_days,json=cooldownDays,proto3,oneof" json:"cooldown_days,omitempty"`
+	// Human-readable status warnings surfaced to the user on read (feature 086), e.g. a component
+	// references a formula that has been soft-deleted — the strategy still evaluates (live and in
+	// backtests) using the formula's last-saved definition, but the deletion is flagged. Populated
+	// by GetStrategy; empty elsewhere.
+	Warnings      []string `protobuf:"bytes,10,rep,name=warnings,proto3" json:"warnings,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2103,6 +2108,13 @@ func (x *StrategyDefinition) GetCooldownDays() int32 {
 		return *x.CooldownDays
 	}
 	return 0
+}
+
+func (x *StrategyDefinition) GetWarnings() []string {
+	if x != nil {
+		return x.Warnings
+	}
+	return nil
 }
 
 type ManageStrategyRequest struct {
@@ -3744,7 +3756,7 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x06params\x18\x05 \x03(\v26.xstockstrat.analysis.v1.StrategyComponent.ParamsEntryR\x06params\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\"\x95\x03\n" +
+	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\"\xb1\x03\n" +
 	"\x12StrategyDefinition\x12\x1f\n" +
 	"\vstrategy_id\x18\x01 \x01(\tR\n" +
 	"strategyId\x12!\n" +
@@ -3758,7 +3770,9 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\rsignal_params\x18\x06 \x01(\v2\x17.google.protobuf.StructR\fsignalParams\x12\x16\n" +
 	"\x06active\x18\a \x01(\bR\x06active\x12!\n" +
 	"\flive_enabled\x18\b \x01(\bR\vliveEnabled\x12(\n" +
-	"\rcooldown_days\x18\t \x01(\x05H\x00R\fcooldownDays\x88\x01\x01B\x10\n" +
+	"\rcooldown_days\x18\t \x01(\x05H\x00R\fcooldownDays\x88\x01\x01\x12\x1a\n" +
+	"\bwarnings\x18\n" +
+	" \x03(\tR\bwarningsB\x10\n" +
 	"\x0e_cooldown_days\"\xeb\x01\n" +
 	"\x15ManageStrategyRequest\x12H\n" +
 	"\toperation\x18\x01 \x01(\x0e2*.xstockstrat.analysis.v1.StrategyOperationR\toperation\x12K\n" +

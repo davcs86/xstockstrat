@@ -18,6 +18,8 @@ feature 070's `ManageStrategy` end-to-end, across four services.
 - `bool deleted = 13` on `FormulaDefinition` (fields 1–12 used; 13 next free — recon `indicators.proto:131-144`).
 - `repeated string warnings = 16` on `analysis.v1.BacktestResult` (last field `initial_capital=15`;
   16 next free; message is wire-persisted-verbatim / additive-only — recon `analysis.proto:70-93`).
+- `repeated string warnings = 10` on `analysis.v1.StrategyDefinition` (last field `cooldown_days=9`;
+  10 next free) — populated by `GetStrategy` for the live-status flag (user steer: do not defer live).
 - Run `./scripts/buf-gen.sh`; `buf lint` + `buf breaking` on the feature branch (all additive).
 
 ### 2. indicators — partial update + soft-delete (`app/handlers/servicer.py`, `app/services/formulas_repository.py`)
@@ -58,12 +60,17 @@ feature 070's `ManageStrategy` end-to-end, across four services.
   `INVALID_ARGUMENT` "strategy references deleted formula <id>" via the existing
   `context.abort` path (`:214-215`). A NEW strategy can no longer bind to a soft-deleted formula.
   (The pre-existing swallow of a truly-*missing* formula is unchanged — out of scope.)
-- **Run-time flag** (satisfies the soft-delete acceptance constraint): in the backtest warmup prefetch
-  `_declared_formula_warmup` (recon `servicer.py:1151`), which already `GetFormula`s each referenced
-  formula, collect the deleted ones and populate `BacktestResult.warnings` with a human-readable line
-  ("Formula '<name>' (<id>) referenced by this strategy has been deleted; the backtest used its
-  last-saved definition."). The run still completes (get_by_id deleted-agnostic) — deletion is
-  *flagged*, not silently ignored.
+- **Run-time flag — backtest** (satisfies the soft-delete acceptance constraint): a shared helper
+  `_deleted_formula_warnings(definition, meta)` iterates the strategy's custom-formula components
+  (mirror `_fetch_formula_outputs` `servicer.py:187-201`), `GetFormula`s each, and returns a
+  human-readable line per `deleted=True` formula ("Formula '<name>' (<id>) referenced by this
+  strategy has been deleted; the run used its last-saved definition."). The backtest path populates
+  `BacktestResult.warnings` from it. The run still completes (get_by_id deleted-agnostic) — deletion
+  is *flagged*, not silently ignored.
+- **Run-time flag — live status** (user steer: do not defer live): the **same** helper populates
+  `StrategyDefinition.warnings` in the `GetStrategy` handler (recon `servicer.py:1672-1682`), so a
+  user (or the agent `get_strategy` tool / the UI strategy page) reading a live strategy that
+  references a deleted formula sees the flag. One helper, two surfaces — no duplication.
 
 ### 5. ui — gate edit + render the run warning (`services/xstockstrat-ui/src`)
 - `FormulaWorkspace` / edit page: when `formula.deleted`, render a "Deleted" badge and disable edit,
@@ -71,6 +78,8 @@ feature 070's `ManageStrategy` end-to-end, across four services.
   — a stale `/insights/formulas/[id]` URL no longer offers an edit that fails at save.
 - `BacktestDiagnostics` (or the backtest results view): render `BacktestResult.warnings` as a warning
   banner, mirroring the coverage-gap pattern (recon `BacktestDiagnostics.tsx:51`).
+- Strategy view/page: render `StrategyDefinition.warnings` (from `GetStrategy`) as a status warning so
+  a live strategy referencing a deleted formula is flagged in the UI too.
 - C-12 test data: a soft-deleted formula fixture in `e2e/fixtures/formulas.ts` and a
   warnings-bearing `BacktestResult` in `e2e/fixtures/backtests.ts` + `INVENTORY.md` rows; Playwright
   specs assert the read-only edit gate and the warning banner.
@@ -102,11 +111,11 @@ feature 070's `ManageStrategy` end-to-end, across four services.
 
 ## Open Risks
 
-- [ ] **Live-strategy continuous flagging deferred** — 086 flags deletion in *backtests* (the discrete
-  user-invoked run). A LIVE strategy whose referenced formula is later deleted keeps evaluating and is
-  not continuously flagged (no strategy-health field/RPC exists — recon `StrategyDefinition`/`StrategyAnalytics`).
-  The write-time refusal blocks *new* deleted bindings; the `deleted` flag gives a future feature the
-  data to add a live-health surface. Target: follow-up feature, not 086. **Confirm acceptable with user.**
+- [x] ~~Live-strategy flagging deferred~~ — **resolved by user steer (do not defer live):** live
+  status is flagged via `StrategyDefinition.warnings=10` populated by `GetStrategy` using the same
+  `_deleted_formula_warnings` helper as the backtest path. Both the discrete backtest run and the live
+  strategy read now surface a referenced formula's deletion. Continuous *push* alerting (notify) on the
+  transition is still out of scope — the flag is surfaced on read (GetStrategy / UI / agent get_strategy).
 - [ ] **maskless-path residual** — a maskless (non-UI, buggy) `UpdateFormula` can still blank
   parameters/outputs/warmup/is_public (erasure guard covers `source` only). Intentional (UI parity);
   documented in the docstring. Target: docstring step.

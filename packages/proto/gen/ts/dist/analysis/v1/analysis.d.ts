@@ -351,6 +351,13 @@ export interface StrategyDefinition {
      * (immediate re-entry allowed); negative → rejected at write time (INVALID_ARGUMENT).
      */
     cooldownDays?: number | undefined;
+    /**
+     * Human-readable status warnings surfaced to the user on read (feature 086), e.g. a component
+     * references a formula that has been soft-deleted — the strategy still evaluates (live and in
+     * backtests) using the formula's last-saved definition, but the deletion is flagged. Populated
+     * by GetStrategy; empty elsewhere.
+     */
+    warnings: string[];
 }
 export interface ManageStrategyRequest {
     operation: StrategyOperation;

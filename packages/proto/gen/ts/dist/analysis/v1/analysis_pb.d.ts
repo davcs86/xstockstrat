@@ -686,6 +686,15 @@ export type StrategyDefinition = Message<"xstockstrat.analysis.v1.StrategyDefini
      * @generated from field: optional int32 cooldown_days = 9;
      */
     cooldownDays?: number | undefined;
+    /**
+     * Human-readable status warnings surfaced to the user on read (feature 086), e.g. a component
+     * references a formula that has been soft-deleted — the strategy still evaluates (live and in
+     * backtests) using the formula's last-saved definition, but the deletion is flagged. Populated
+     * by GetStrategy; empty elsewhere.
+     *
+     * @generated from field: repeated string warnings = 10;
+     */
+    warnings: string[];
 };
 /**
  * Describes the message xstockstrat.analysis.v1.StrategyDefinition.
