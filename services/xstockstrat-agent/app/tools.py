@@ -9,7 +9,7 @@ Seventeen tools:
   emit_alert           — emits an alert via gRPC EmitAlert
   run_backtest         — triggers a backtest via gRPC RunBacktest
   screen_symbols       — scans a symbol universe via gRPC ScreenSymbols (read-only)
-  manage_strategy     — registers/updates/deactivates stored strategies (update = partial merge)
+  manage_strategy     — register/update/deactivate/reactivate stored strategies (update = merge)
   get_strategy        — reads a stored strategy's full definition (read-only)
   manage_formula      — registers/updates/deletes custom formulas in indicators
   manage_signal_source — registers/updates/deactivates signal sources in ingest
@@ -400,8 +400,8 @@ def register_tools(server: MCPServer) -> None:
         cooldown_days: int | None = None,
         clear_fields: list[str] | None = None,
     ) -> dict:
-        """Register/update/deactivate a stored strategy in xstockstrat-analysis.
-        operation: 'register' | 'update' | 'deactivate'.
+        """Register/update/deactivate/reactivate a stored strategy in xstockstrat-analysis.
+        operation: 'register' | 'update' | 'deactivate' | 'reactivate'.
         strategy_id: lowercase/underscore identifier (e.g. 'sma_crossover').
         display_name: human-readable name.
         components: list of {ref_name, kind ('builtin'|'formula'), indicator, formula_id, params}.
@@ -453,10 +453,11 @@ def register_tools(server: MCPServer) -> None:
         signal_params) changes the strategy's definition fingerprint, so its derived grade is
         cleared until a fresh backtest supplies new evidence. A rename does not.
 
-        LIFECYCLE IS ONE-WAY: 'deactivate' is permanent — there is no reactivation operation, and
-        re-registering the same strategy_id does NOT overwrite or reactivate; it fails with a
-        generic INTERNAL error (a unique-key violation, not ALREADY_EXISTS). To revise a retired
-        strategy, register a new versioned id (e.g. 'x_v2').
+        LIFECYCLE (feature 089): 'deactivate' is reversible via 'reactivate' (sets active=true and
+        re-validates the stored definition — a reactivate can fail INVALID_ARGUMENT if a referenced
+        formula went missing). Re-registering an existing strategy_id (active or deactivated)
+        returns ALREADY_EXISTS and DROPS the submitted definition — it does not overwrite; use
+        'update' to revise, or 'reactivate' to bring back a deactivated strategy.
 
         RESPONSE CASING: this tool returns the definition with camelCase keys (e.g. `refName`,
         `entryRule`), UNLIKE get_strategy, which returns snake_case. To round-trip an edit, fetch
@@ -625,11 +626,11 @@ def register_tools(server: MCPServer) -> None:
         """Enable or disable live alert evaluation for a strategy.
         strategy_id: ID of the strategy to toggle (from manage_strategy / get_strategy).
         live_enabled: true to enable continuous live evaluation + alerting; false to disable.
-        Enabling SUCCEEDS even on configurations that can never fire: the live loop only runs
-            strategies with live_enabled AND active=true, and silently skips any strategy whose
-            signal_params has no `symbols`. A success here does NOT guarantee alerts fire — after
-            enabling, call get_strategy and confirm active=true and a non-empty
-            signal_params.symbols.
+        Enabling is REJECTED (FAILED_PRECONDITION, feature 089) on a configuration that could never
+            fire: an inactive strategy, or one whose signal_params has no `symbols`. So a successful
+            enable now guarantees the strategy satisfies the live loop's firing contract
+            (live_enabled AND active, with symbols). Disabling is ALWAYS allowed, even on an inert
+            config, so you can always turn live off.
         Returns a 4-field subset, NOT the full definition:
             {"strategy_id", "display_name", "live_enabled", "active"}."""
         try:

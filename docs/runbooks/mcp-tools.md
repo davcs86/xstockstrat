@@ -407,7 +407,14 @@ skipped** — only fundamental and signal kinds are effective today. An unknown 
 
 ### `manage_strategy`
 
-Registers, updates, or deactivates a stored strategy definition in `xstockstrat-analysis`.
+Registers, updates, deactivates, or **reactivates** a stored strategy definition in `xstockstrat-analysis`.
+
+> **Lifecycle is reversible (feature 089).** `deactivate` sets `active=false`; `reactivate` sets it
+> back to `true` and **re-validates the stored definition** (so a reactivate can fail
+> `INVALID_ARGUMENT` if a referenced formula went missing while the strategy was retired). `register`
+> is strict — re-registering an existing `strategy_id` (active *or* deactivated) returns
+> `ALREADY_EXISTS` and **drops** the submitted definition (it does not overwrite); use `update` to
+> revise, or `reactivate` to bring one back.
 
 > **`update` is a PARTIAL MERGE (feature 070).** Only the fields you actually pass are changed;
 > everything else is preserved server-side. Tuning one parameter is therefore safe:
@@ -427,7 +434,7 @@ Registers, updates, or deactivates a stored strategy definition in `xstockstrat-
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `operation` | `string` | Yes | `"register"`, `"update"`, or `"deactivate"` |
+| `operation` | `string` | Yes | `"register"`, `"update"`, `"deactivate"`, or `"reactivate"` |
 | `strategy_id` | `string` | Yes | Lowercase/underscore identifier, e.g. `"sma_crossover"` |
 | `display_name` | `string` | No | Human-readable name |
 | `components` | `object[]` | No | `{ref_name, kind ("builtin"\|"formula"), indicator, formula_id, params}` |
@@ -451,7 +458,8 @@ Registers, updates, or deactivates a stored strategy definition in `xstockstrat-
 | Negative `cooldown_days` | `invalid argument` (INVALID_ARGUMENT) |
 | `update` with no fields and no `clear_fields` | `ValueError` raised client-side, before any RPC |
 | An `update` that would empty `components` or blank a rule without naming it for erasure | `invalid argument` (INVALID_ARGUMENT) — the server refuses; the message names `update_mask` as the escape hatch |
-| `update`/`deactivate` on unknown strategy | `strategy not found` (NOT_FOUND) |
+| `update`/`deactivate`/`reactivate` on unknown strategy | `strategy not found` (NOT_FOUND) |
+| `register` on an existing strategy_id (active or deactivated) | `strategy already exists` (ALREADY_EXISTS) |
 
 **Effect on the derived grade.** Changing a scoring-relevant field (`components`, rules,
 `cooldown_days`, `signal_params`) changes the strategy's definition fingerprint, so its derived

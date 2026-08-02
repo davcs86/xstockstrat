@@ -134,6 +134,23 @@ class TestManageStrategyClient:
         with pytest.raises(ValueError):
             await client.manage_strategy(operation="bogus", definition={})
 
+    @pytest.mark.asyncio
+    async def test_reactivate_maps_to_enum(self):
+        # Feature 089: reactivate is an honest verb mapped to STRATEGY_OPERATION_REACTIVATE.
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+
+        resp = analysis_pb2.StrategyDefinition(strategy_id="s1", display_name="S1", active=True)
+        mock_stub = MagicMock()
+        mock_stub.ManageStrategy = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
+                await client.manage_strategy(
+                    operation="reactivate", definition={"strategy_id": "s1", "display_name": "S1"}
+                )
+        sent = mock_stub.ManageStrategy.call_args[0][0]
+        assert sent.operation == analysis_pb2.STRATEGY_OPERATION_REACTIVATE
+
 
 class TestManageFormulaClient:
     @pytest.mark.asyncio
