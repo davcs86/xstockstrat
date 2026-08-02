@@ -52,7 +52,7 @@ omission, so **C-14** requires no UI/Agent-tool step here.
 
 ### Step 1 — service: Remove `x-mcp-secret` header emission from `xstockstrat-agent` (+ paired tests)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify

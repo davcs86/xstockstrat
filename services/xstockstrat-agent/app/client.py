@@ -1,6 +1,7 @@
 """
 Shared async gRPC client for xstockstrat-agent.
-All gRPC calls include x-mcp-secret metadata when MCP_AGENT_SECRET is set.
+MCP_AGENT_SECRET is not sent on outbound calls (feature 097) — it signs the agent's stateless
+OAuth txn blob in app/oauth_server.py.
 GetConfigValue() makes a one-shot gRPC call to xstockstrat-config to resolve credentials.
 """
 
@@ -26,8 +27,6 @@ IDENTITY_ENDPOINT = os.environ.get("IDENTITY_ENDPOINT", "xstockstrat-identity:50
 
 
 def _metadata() -> list[tuple[str, str]]:
-    if MCP_AGENT_SECRET:
-        return [("x-mcp-secret", MCP_AGENT_SECRET)]
     return []
 
 
@@ -329,7 +328,7 @@ async def screen_symbols(
     mapped via ``_build_component`` and is required by the analysis side to score the criterion
     (feature 090). Defaults of ``0`` / ``0.0`` let the analysis side apply its own config-driven
     defaults (e.g. ``analysis.screener.default_rank_limit``).
-    Carries only ``x-mcp-secret`` — no admin ``x-access-scope``.
+    Read-only: carries no admin ``x-access-scope``.
     """
     from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
     from gen.common.v1 import common_pb2  # noqa: PLC0415
@@ -729,8 +728,8 @@ async def manage_signal_source(
 
 # ── OAuth 2.1 backend gRPC helpers (feature 049 Part B) ──────────────────────
 # These call identity's OAuth RPCs over gRPC. DCR + the OAuth handshake happen before any
-# inbound user context exists, so they carry only _metadata() (x-mcp-secret) — there is no
-# x-user-id/x-access-scope to forward at the pre-token stage.
+# inbound user context exists, so they carry only _metadata() (empty since feature 097) — there
+# is no x-user-id/x-access-scope to forward at the pre-token stage.
 
 
 async def register_oauth_client(redirect_uris: list[str], client_name: str) -> dict[str, Any]:
@@ -886,7 +885,7 @@ async def get_config_value(
       (``signal.alert_threshold`` is ``value_type='float'``), so the value never resolved regardless
       of scope.
     - **Error surfacing (AC-2):** a transport error propagates, not swallowed to ``None``.
-      ``None`` now means only "key genuinely absent". Sends ``x-mcp-secret`` via ``_metadata()``.
+      ``None`` now means only "key genuinely absent".
     """
     from gen.config.v1 import config_pb2, config_pb2_grpc  # noqa: PLC0415
 

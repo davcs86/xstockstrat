@@ -168,3 +168,51 @@
   Step Dependencies (`.do/app.yaml` → `.do/app.dev.yaml`, matching 084's actual scoped file) in the
   same session, committed separately.
 - Proceeding to `/sdd-execute remove-x-mcp-secret-header sequential` — no blockers found.
+
+## Session 2026-08-02T00:50:00Z — sdd-execute sequential (start)
+
+- Mode-entry confirmation (§5.1b): user agreed to proceed with the 5-step sequential plan.
+- **Re-spec gate (§5.3)**: merged `origin/main-dev` into this branch
+  (`023260c` "docs: context-constitution full refresh (re-ground drift + 5 new rules) (#784)"
+  landed upstream, plus earlier `092`/MCP-SDK-v2-upgrade commits already in `main-dev`). Re-ran
+  every step's `**Codebase Evidence**` against the merged tree:
+  - Steps 1, 2, 4, 5: every cited `path:line` matches exactly — zero drift.
+  - Step 3: `services/xstockstrat-agent/docs/context-constitution.md` was touched by the upstream
+    refresh. `AGENT-4`'s evidence citation independently improved from the stale `app/client.py:24-27`
+    our spec was written against to `app/client.py:28` (compatible with, narrower than, our planned
+    `:28-31` correction) and its example column now correctly cites `app/tools.py:77` (was `:61`,
+    shifted by unrelated upstream work — not something Step 3 touches). `AGENT-6`'s evidence for
+    `oauth_server.py` independently corrected to `:42,52` (matches what Step 3 already planned) but
+    still cites the stale `app/auth.py:43` in its example column (unchanged — still needs Step 3's
+    planned fix). **Directive was `none`** (no re-spec requested); this is minor, semantically-
+    compatible textual drift on one file (the substantive edit — drop the "forwards x-mcp-secret"
+    claim, correct the stale `auth.py:43` citation, retarget AGENT-6 to single-purpose framing —
+    is unaffected), so no `AskUserQuestion` blocker was raised; Step 3's instructions are applied
+    against the current text at execution time and the adaptation is logged here per P-03 rather
+    than edited into the (otherwise immutable) step body. Pushed the merge commit to
+    `claude/remove-x-mcp-secret-header-icog9j` (`6a8cc79`).
+- **Up-front confirm (§5.4)**: for this single-feature sequence, the plan presented at 5.1b (5
+  steps, one commit each, checkpoints/blockers only, single integration PR) is unchanged after the
+  re-spec gate found no plan-altering drift — treating the 5.1b approval as satisfying 5.4 rather
+  than re-asking an identical question, noted explicitly here rather than silently skipped.
+- **Tooling setup (§5.4b)**: `uv sync --extra dev` in `services/xstockstrat-agent` → Python 3.12.3 ✓
+  (uv-managed venv; host Python was 3.11), ruff 0.15.8 ✓, pytest 9.0.3 ✓. Docker 29.3.1 / Docker
+  Compose v5.1.1 ✓ (for Step 2's mandatory smoke check). `python3 -c "import markdown, weasyprint"`
+  ✓ (for Step 5, re-confirmed from the design/spec-time check). No Go/Node tools needed — no step
+  touches those languages.
+
+### Step 1 — Remove `x-mcp-secret` header emission from `xstockstrat-agent` (+ paired tests) [done]
+
+- Rewrote the 6 `test_client.py` assertions to the target state first; confirmed **red**
+  (`uv run pytest tests/test_client.py -q` → exactly the expected 6 failures against unmodified
+  `client.py`/`auth.py`). Then made `client.py`'s and `auth.py`'s `_metadata()` unconditionally
+  `return []`, corrected the 3 stale docstring/comment mentions in `client.py` (`:3`, `:331`,
+  `:731-732`, `:888` post-edit line numbers), and applied the identical `_metadata()` edit to
+  `auth.py`. Re-ran full suite: **green** (194 passed, 75.74% coverage, well above the 40%
+  threshold). `ruff check`/`ruff format --check`: one line-length violation on my own new comment
+  line (`client.py:731`, 101 > 100 chars) — reflowed it (in-scope per HARD CONSTRAINTS' own-line
+  lint-fix exception, not a cleanup) and re-verified green. Hard-zero check
+  (`grep -rn "x-mcp-secret" services/xstockstrat-agent/app/`) → zero hits, confirmed.
+- Files modified: `services/xstockstrat-agent/app/client.py`,
+  `services/xstockstrat-agent/app/auth.py`, `services/xstockstrat-agent/tests/test_client.py`.
+- Deviations: none beyond the in-scope lint-fix noted above.

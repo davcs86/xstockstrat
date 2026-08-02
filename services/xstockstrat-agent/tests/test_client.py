@@ -7,9 +7,9 @@ import pytest
 from app import client
 
 
-def test_metadata_includes_mcp_secret():
-    """When MCP_AGENT_SECRET is set, _metadata returns x-mcp-secret tuple."""
-    assert ("x-mcp-secret", "test-secret") in client._metadata()
+def test_metadata_never_includes_secret():
+    """_metadata() never attaches a header — MCP_AGENT_SECRET is not forwarded (feature 097)."""
+    assert client._metadata() == []
 
 
 def test_metadata_empty_when_no_secret(monkeypatch):
@@ -99,7 +99,7 @@ class TestManageStrategyClient:
                 )
         assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.ANALYSIS_ENDPOINT
         meta = mock_stub.ManageStrategy.call_args.kwargs["metadata"]
-        assert ("x-mcp-secret", "test-secret") in meta
+        assert not any(k == "x-mcp-secret" for k, _ in meta)
         # feature 092: forwards the caller's derived scope (was a hardcoded 7).
         assert ("x-access-scope", "15") in meta
         assert not any(k == "authorization" for k, _ in meta)
@@ -233,9 +233,9 @@ class TestScreenSymbolsClient:
                 )
         # Channel opened against the (test-patched) analysis endpoint symbol.
         assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.ANALYSIS_ENDPOINT
-        # Read-only: carries x-mcp-secret, never an admin x-access-scope.
+        # Read-only: carries no security metadata (no shared secret, no admin x-access-scope).
         meta = mock_stub.ScreenSymbols.call_args.kwargs["metadata"]
-        assert ("x-mcp-secret", "test-secret") in meta
+        assert not any(k == "x-mcp-secret" for k, _ in meta)
         assert not any(k == "x-access-scope" for k, _ in meta)
         # Response is shaped into a JSON-serializable dict.
         assert result["results"][0] == {
@@ -383,7 +383,7 @@ class TestTriggerBackfillClient:
                 )
         assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.INGEST_ENDPOINT
         meta = mock_stub.TriggerBackfill.call_args.kwargs["metadata"]
-        assert ("x-mcp-secret", "test-secret") in meta
+        assert not any(k == "x-mcp-secret" for k, _ in meta)
         assert ("x-access-scope", "15") in meta  # feature 092: caller-derived scope
         assert result == {"job_id": "j-1", "status": "BACKFILL_STATUS_QUEUED"}
 
@@ -490,7 +490,7 @@ class TestGetBackfillStatusClient:
         assert mock_stub.GetBackfillStatus.called
         assert not mock_stub.ListBackfillJobs.called
         meta = mock_stub.GetBackfillStatus.call_args.kwargs["metadata"]
-        assert ("x-mcp-secret", "test-secret") in meta
+        assert not any(k == "x-mcp-secret" for k, _ in meta)
         assert not any(k == "x-access-scope" for k, _ in meta)
         # {"job": ...} envelope, snake_case keys, zero-valued fields visible while polling.
         # (int64 proto fields serialize as strings — same as run_backtest's output.)
@@ -656,7 +656,9 @@ class TestGetConfigValueClient:
         assert req.namespace == "marketdata"
         assert req.environment == common_pb2.ENVIRONMENT_PRODUCTION  # not the dev default
         assert req.trading_mode == common_pb2.TRADING_MODE_LIVE
-        assert ("x-mcp-secret", "test-secret") in mock_stub.GetConfig.call_args.kwargs["metadata"]
+        assert not any(
+            k == "x-mcp-secret" for k, _ in mock_stub.GetConfig.call_args.kwargs["metadata"]
+        )
 
     @pytest.mark.asyncio
     async def test_absent_key_returns_none(self):
