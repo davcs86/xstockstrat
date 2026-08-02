@@ -184,7 +184,7 @@ re-running leaves an empty `git diff packages/proto/gen/` (proto-freshness parit
 
 ### Step 6 — service: analysis binding-refusal + backtest deletion flag
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -216,7 +216,7 @@ re-running leaves an empty `git diff packages/proto/gen/` (proto-freshness parit
 
 ### Step 7 — test: analysis refusal + backtest warning
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
