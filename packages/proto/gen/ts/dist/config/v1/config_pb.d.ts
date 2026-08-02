@@ -233,6 +233,14 @@ export type SetConfigRequest = Message<"xstockstrat.config.v1.SetConfigRequest">
      * @generated from field: xstockstrat.common.v1.TradingMode trading_mode = 7;
      */
     tradingMode: TradingMode;
+    /**
+     * When true, allow this write to CREATE a not-yet-registered key at the exact
+     * (namespace,key,environment,trading_mode) scope. Default false: a write to an
+     * unregistered scope is refused with NOT_FOUND, so a typo cannot mint an orphan key.
+     *
+     * @generated from field: bool create_key = 8;
+     */
+    createKey: boolean;
 };
 /**
  * Describes the message xstockstrat.config.v1.SetConfigRequest.

@@ -53,7 +53,7 @@ reference):
 | `list_strategies` | List stored strategy definitions (read-only, feature 087) |
 | `get_config` | Read a namespace's current config values, secret values redacted (read-only, feature 073) |
 | `list_config_keys` | List a namespace's registered config keys, metadata only (read-only, feature 073) |
-| `set_config` | Write one non-secret config value (admin-scoped write, feature 073) |
+| `set_config` | Write one non-secret config value (admin-scoped write, feature 073); a write to an unregistered key scope is refused `NOT_FOUND` unless `create_key=true` (feature 091) |
 
 ### Management-tool authorization
 
@@ -80,6 +80,14 @@ carrying an `Authorization` header, so only the absence of verified claims disti
 `set_config` also refuses any `is_secret` key (checked by name prefix *and* by the flag from
 `ListKeys`): credentials are delivered as `type: SECRET` environment variables, never as config
 values.
+
+**Key-creation gate (feature 091).** `set_config` forwards a `create_key` flag
+(`SetConfigRequest.create_key`, default false). `xstockstrat-config` refuses a write to a
+not-yet-registered `(namespace, key, environment, trading_mode)` scope with `NOT_FOUND` unless
+`create_key=true`, so a mistyped key can no longer silently mint an orphan row. The refusal is
+enforced **server-side** (the agent is a pure passthrough — no client-side existence check), and
+key creation is audited. This is purely additive to the secret-refusal and real-scope-forwarding
+behavior above.
 
 ### OAuth 2.1 edge auth (feature 049 Part B)
 

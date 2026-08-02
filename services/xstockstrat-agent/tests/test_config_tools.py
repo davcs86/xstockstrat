@@ -12,7 +12,7 @@ Three things these must actually prove, because each was a live design trap:
 """
 
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from mcp.server.mcpserver import MCPServer
@@ -225,6 +225,95 @@ class TestSetConfigForwardsRealScope:
         forwarded = write.await_args.kwargs["access_scope"]
         assert forwarded == 11
         assert not forwarded & 0x04
+
+
+class TestSetConfigCreateKey:
+    """Feature 091: the tool forwards create_key to the client (server enforces the gate)."""
+
+    @pytest.mark.asyncio
+    async def test_forwards_create_key_true(self):
+        server = _make_server()
+        with (
+            patch.object(client, "list_config_keys", AsyncMock(return_value={"keys": []})),
+            patch.object(
+                client, "set_config", AsyncMock(return_value={"version": "1", "updated_at": "t"})
+            ) as write,
+        ):
+            await _tool_fn(server, "set_config")(
+                ctx=_ctx(ADMIN),
+                namespace="marketdata",
+                key="marketdata.fmp.new_knob",
+                value_type="bool",
+                value="true",
+                author="me",
+                reason="r",
+                create_key=True,
+            )
+        assert write.await_args.kwargs["create_key"] is True
+
+    @pytest.mark.asyncio
+    async def test_defaults_create_key_false(self):
+        server = _make_server()
+        with (
+            patch.object(client, "list_config_keys", AsyncMock(return_value={"keys": []})),
+            patch.object(
+                client, "set_config", AsyncMock(return_value={"version": "1", "updated_at": "t"})
+            ) as write,
+        ):
+            await _tool_fn(server, "set_config")(
+                ctx=_ctx(ADMIN),
+                namespace="marketdata",
+                key="marketdata.fmp.enabled",
+                value_type="bool",
+                value="true",
+                author="me",
+                reason="r",
+            )
+        assert write.await_args.kwargs["create_key"] is False
+
+
+class TestSetConfigRequestParity:
+    """Feature 091 (RC-1 guard): the hand-written SetConfigRequest builder must carry EVERY proto
+    field. Mirror test_backtest_view.py::test_summary_key_set_covers_every_proto_field — pass a
+    non-default value for every field and assert the built request's set fields equal the proto
+    descriptor's fields, so a future added field fails closed instead of silently dropping off."""
+
+    @pytest.mark.asyncio
+    async def test_builder_covers_every_proto_field(self):
+        from gen.config.v1 import config_pb2, config_pb2_grpc  # noqa: PLC0415
+
+        captured = {}
+
+        async def _capture(req, metadata=None):
+            captured["req"] = req
+            return config_pb2.SetConfigResponse(version="1")
+
+        cm = MagicMock()
+        cm.__aenter__ = AsyncMock(return_value=MagicMock())
+        cm.__aexit__ = AsyncMock(return_value=False)
+        stub = MagicMock()
+        stub.SetConfig = AsyncMock(side_effect=_capture)
+        with (
+            patch("app.client.grpc") as mock_grpc,
+            patch.object(config_pb2_grpc, "ConfigServiceStub", return_value=stub),
+        ):
+            mock_grpc.aio.insecure_channel.return_value = cm
+            # A distinct non-default value for every SetConfigRequest field so each appears in
+            # ListFields(): environment='production'/trading_mode='live' map to non-zero enums.
+            await client.set_config(
+                namespace="ns",
+                key="k",
+                value_type="string",
+                value="v",
+                environment="production",
+                trading_mode="live",
+                author="a",
+                reason="r",
+                access_scope=15,
+                create_key=True,
+            )
+        built = {f.name for f, _ in captured["req"].ListFields()}
+        assert built == set(config_pb2.SetConfigRequest.DESCRIPTOR.fields_by_name)
 
 
 class TestScopeDefaulting:

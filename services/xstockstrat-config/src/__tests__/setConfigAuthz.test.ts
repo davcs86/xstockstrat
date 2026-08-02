@@ -77,12 +77,26 @@ describe('SetConfig authorization over a real gRPC connection', () => {
   let server: grpc.Server;
   let client: any;
   let queries: { sql: string; params?: unknown[] }[] = [];
+  // Feature 091: steer the existence-gate SELECT per case. Default: the key is registered
+  // (one row), so the pre-existing authz cases keep asserting on the write. Set to false
+  // to simulate an unregistered (namespace,key,env,mode) scope.
+  let keyExists = true;
+
+  /** Locate the recorded INSERT (feature 091: the existence SELECT is now query 0). */
+  function insertQuery() {
+    return queries.find((q) => q.sql.includes('INSERT INTO config.config_values'));
+  }
 
   before(async () => {
-    // Records every query so a denied call can assert that NOTHING was written.
+    // Records every query so a denied call can assert that NOTHING was written. The
+    // existence SELECT (feature 091) returns a row or not per `keyExists`; everything
+    // else returns empty.
     const recordingPool: any = {
       query: async (sql: string, params?: unknown[]) => {
         queries.push({ sql, params });
+        if (sql.includes('SELECT 1 FROM config.config_values')) {
+          return { rows: keyExists ? [{ '?column?': 1 }] : [] };
+        }
         return { rows: [] };
       },
       connect: async () => ({ query: async () => {}, on: () => {} }),
@@ -146,20 +160,24 @@ describe('SetConfig authorization over a real gRPC connection', () => {
 
   it('allows an admin caller and performs the write', async () => {
     queries = [];
+    keyExists = true; // registered key → gate passes
     const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '7' }));
     assert.equal(err, null, 'admin write must succeed');
-    assert.ok(queries.length >= 1, 'the INSERT must run for an authorized caller');
+    // feature 091: the existence SELECT is now query 0; locate the INSERT by SQL.
+    const insert = insertQuery();
+    assert.ok(insert, 'the INSERT must run for an authorized, registered-key caller');
     // params[4] is `updated_by` in the INSERT's parameter list.
-    assert.equal(queries[0].params?.[4], 'tester');
+    assert.equal(insert!.params?.[4], 'tester');
   });
 
   it('falls back to the propagated x-user-id when no author is supplied', async () => {
     queries = [];
+    keyExists = true;
     const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '4', [HEADER_USER_ID]: 'u-42' }), {
       author: '',
     });
     assert.equal(err, null);
-    assert.equal(queries[0].params?.[4], 'u-42', 'updated_by falls back to the caller id');
+    assert.equal(insertQuery()!.params?.[4], 'u-42', 'updated_by falls back to the caller id');
   });
 
   it('refuses an unattributable write (no author, no x-user-id)', async () => {
@@ -168,6 +186,39 @@ describe('SetConfig authorization over a real gRPC connection', () => {
     assert.ok(err);
     assert.equal(err.code, grpc.status.INVALID_ARGUMENT);
     assert.equal(queries.length, 0, 'an anonymous write must not reach config_audit');
+  });
+
+  // ── Feature 091: existence gate (create_key) ──────────────────────────────
+  it('refuses a write to an unregistered key with NOT_FOUND, and writes nothing', async () => {
+    queries = [];
+    keyExists = false; // existence SELECT returns no row
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '7' }));
+    assert.ok(err, 'expected a gRPC error for an unregistered key');
+    assert.equal(err.code, grpc.status.NOT_FOUND);
+    assert.match(err.details ?? err.message, /not registered/);
+    // Only the existence SELECT ran — no INSERT, no pg_notify.
+    assert.equal(insertQuery(), undefined, 'no INSERT may run for an unregistered write');
+    assert.ok(
+      !queries.some((q) => q.sql.includes('pg_notify')),
+      'no pg_notify may run for a refused write',
+    );
+  });
+
+  it('creates an unregistered key when create_key=true (proves the field is wired over the wire)', async () => {
+    queries = [];
+    keyExists = false; // unregistered scope
+    // createKey travels as camelCase over the ts-proto wire; this is the loopback proof.
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '7' }), { createKey: true });
+    assert.equal(err, null, 'create_key=true must let the write proceed');
+    assert.ok(insertQuery(), 'the INSERT must run when create_key=true');
+  });
+
+  it('allows a normal update of a registered key without create_key (gate does not over-block)', async () => {
+    queries = [];
+    keyExists = true; // registered
+    const { err } = await setConfig(md({ [HEADER_ACCESS_SCOPE]: '7' }));
+    assert.equal(err, null, 'a registered-key update must not require create_key');
+    assert.ok(insertQuery(), 'the INSERT (upsert) must run for a registered key');
   });
 
   // NOTE: these cases deliberately assert only on authz outcome, author resolution and

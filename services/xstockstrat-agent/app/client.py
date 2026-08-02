@@ -1113,6 +1113,7 @@ async def set_config(
     author: str,
     reason: str,
     access_scope: int,
+    create_key: bool = False,
 ) -> dict:
     """ConfigService.SetConfig, forwarding the REAL caller's access scope.
 
@@ -1145,6 +1146,7 @@ async def set_config(
                 reason=reason,
                 environment=env,
                 trading_mode=mode,
+                create_key=create_key,
             ),
             # NOT _admin_metadata(): the caller's real scope, so the server's gate decides.
             metadata=[*_metadata(), ("x-access-scope", str(access_scope))],
