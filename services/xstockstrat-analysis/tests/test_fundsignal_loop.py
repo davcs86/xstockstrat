@@ -194,3 +194,46 @@ class TestScoreDirection:
         loop = _make_loop({"analysis.fundsignal.min_conviction_to_emit": 1.1})
         await loop.run_once(override_symbols=["AAPL", "MSFT"])
         loop._ingest.IngestSignal.assert_not_called()
+
+
+class TestSourceRegistrationTolerance:
+    """Feature 088: strict register means a restart re-registering gets ALREADY_EXISTS."""
+
+    def _err(self, code):
+        import grpc
+
+        return grpc.aio.AioRpcError(code, grpc.aio.Metadata(), grpc.aio.Metadata(), "x")
+
+    @pytest.mark.asyncio
+    async def test_already_exists_marks_registered(self):
+        import grpc
+
+        loop = _make_loop()
+        loop._ingest.ManageSignalSource = AsyncMock(
+            side_effect=self._err(grpc.StatusCode.ALREADY_EXISTS)
+        )
+        loop._source_registered = False
+        await loop._ensure_source_registered("fundamentals", [])
+        assert loop._source_registered is True  # treated as registered, no per-cycle retry spam
+
+    @pytest.mark.asyncio
+    async def test_other_error_is_non_fatal_but_not_registered(self):
+        import grpc
+
+        loop = _make_loop()
+        loop._ingest.ManageSignalSource = AsyncMock(
+            side_effect=self._err(grpc.StatusCode.UNAVAILABLE)
+        )
+        loop._source_registered = False
+        await loop._ensure_source_registered("fundamentals", [])  # non-fatal, does not raise
+        assert loop._source_registered is False  # a real failure must not masquerade as registered
+
+    @pytest.mark.asyncio
+    async def test_sends_register_enum(self):
+        from gen.ingest.v1 import ingest_pb2
+
+        loop = _make_loop()
+        loop._source_registered = False
+        await loop._ensure_source_registered("fundamentals", [])
+        req = loop._ingest.ManageSignalSource.call_args[0][0]
+        assert req.operation_enum == ingest_pb2.SIGNAL_SOURCE_OPERATION_REGISTER

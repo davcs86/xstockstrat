@@ -17,6 +17,12 @@ from app.services.formulas_repository import FormulasRepository
 
 log = logging.getLogger(__name__)
 
+# Feature 086: fields an UpdateFormula update_mask may name (AIP-161 partial update). Any other path
+# is rejected with INVALID_ARGUMENT. formula_id/user_id/author/created_at are not maskable.
+_FORMULA_MASKABLE_PATHS = frozenset(
+    {"name", "description", "source", "is_public", "parameters", "outputs", "warmup_period"}
+)
+
 
 class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
     def __init__(self, config_watcher: ConfigWatcher, db_pool=None):
@@ -313,23 +319,80 @@ class IndicatorsServicer(indicators_pb2_grpc.IndicatorsServiceServicer):
                 grpc.StatusCode.PERMISSION_DENIED, "user_id does not match formula author"
             )
             return
+        # Feature 086: a soft-deleted formula is not updatable.
+        if row.get("deleted_at") is not None:
+            await context.abort(
+                grpc.StatusCode.FAILED_PRECONDITION,
+                "formula is deleted and cannot be updated",
+            )
+            return
+        # Feature 086: AIP-161 partial update. Absent update_mask keeps the pre-086 full-replace
+        # (back-compat: the UI sends a complete payload every call). A present mask merges only the
+        # named paths onto the stored row; unlisted fields are preserved.
+        has_mask = request.HasField("update_mask")
+        mask = set(request.update_mask.paths) if has_mask else None
+        if has_mask:
+            unknown = mask - _FORMULA_MASKABLE_PATHS
+            if unknown:
+                await context.abort(
+                    grpc.StatusCode.INVALID_ARGUMENT,
+                    f"unknown update_mask path(s): {', '.join(sorted(unknown))}",
+                )
+                return
+
+        def _use_req(field: str) -> bool:
+            return mask is None or field in mask
+
+        eff_name = request.name if _use_req("name") else row["name"]
+        eff_description = (
+            request.description if _use_req("description") else (row["description"] or "")
+        )
+        eff_source = request.source if _use_req("source") else row["source"]
+        eff_is_public = request.is_public if _use_req("is_public") else row["is_public"]
+        eff_parameters = (
+            [MessageToDict(p) for p in request.parameters]
+            if _use_req("parameters")
+            else (row.get("parameters") or [])
+        )
+        eff_outputs = (
+            [MessageToDict(o) for o in request.outputs]
+            if _use_req("outputs")
+            else (row.get("outputs") or [])
+        )
+        eff_warmup = (
+            request.warmup_period
+            if _use_req("warmup_period")
+            else (row.get("warmup_period", 0) or 0)
+        )
+        # Erasure guard (mirrors analysis _guard_erasure, scoped to the required `source` column):
+        # a masked update may not blank source. parameters/outputs/warmup can be cleared.
+        if has_mask and "source" in mask and not eff_source:
+            await context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT,
+                "update_mask cannot blank the required 'source' field",
+            )
+            return
         try:
-            params_validation.validate_definitions(request.parameters)
-            params_validation.validate_outputs(request.outputs)
-            if request.warmup_period < 0:
+            # Validate only the fields actually being written from the request (the stored values
+            # for unmasked fields are already valid from a prior write).
+            if _use_req("parameters"):
+                params_validation.validate_definitions(request.parameters)
+            if _use_req("outputs"):
+                params_validation.validate_outputs(request.outputs)
+            if _use_req("warmup_period") and eff_warmup < 0:
                 raise ValueError("warmup_period must be >= 0")
         except ValueError as e:
             await context.abort(grpc.StatusCode.INVALID_ARGUMENT, str(e))
             return
         updated = await self._repo.update(
             formula_id=request.formula_id,
-            name=request.name,
-            description=request.description,
-            source=request.source,
-            is_public=request.is_public,
-            parameters=[MessageToDict(p) for p in request.parameters],
-            outputs=[MessageToDict(o) for o in request.outputs],
-            warmup_period=request.warmup_period,
+            name=eff_name,
+            description=eff_description,
+            source=eff_source,
+            is_public=eff_is_public,
+            parameters=eff_parameters,
+            outputs=eff_outputs,
+            warmup_period=eff_warmup,
         )
         self._formulas.pop(request.formula_id, None)
         return indicators_pb2.UpdateFormulaResponse(formula=_row_to_formula(updated))
@@ -387,4 +450,5 @@ def _row_to_formula(row: dict) -> "indicators_pb2.FormulaDefinition":
         ],
         outputs=[ParseDict(o, indicators_pb2.FormulaOutput()) for o in (row.get("outputs") or [])],
         warmup_period=row.get("warmup_period", 0) or 0,
+        deleted=row.get("deleted_at") is not None,
     )

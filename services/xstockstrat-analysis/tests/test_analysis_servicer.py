@@ -13,6 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import asyncpg
 import grpc
 import pytest
 from gen.analysis.v1 import analysis_pb2
@@ -607,6 +608,7 @@ class TestManageStrategy:
         svc = make_servicer()
         definition = _valid_definition()
         svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=None)  # feature 089: not existing
         svc._strategies_repo.create = AsyncMock(return_value=_row_for(definition))
         req = analysis_pb2.ManageStrategyRequest(
             operation=analysis_pb2.STRATEGY_OPERATION_REGISTER, definition=definition
@@ -734,15 +736,16 @@ class TestSetStrategyLive:
     async def test_permits_admin_scope(self):
         svc = make_servicer()
         svc._strategies_repo = AsyncMock()
-        svc._strategies_repo.set_live_enabled = AsyncMock(
-            return_value={
-                "strategy_id": "s1",
-                "display_name": "S1",
-                "active": True,
-                "live_enabled": True,
-                "definition_json": {},
-            }
-        )
+        # Feature 089: enabling precondition-checks active + signal_params.symbols via get_by_id.
+        live_row = {
+            "strategy_id": "s1",
+            "display_name": "S1",
+            "active": True,
+            "live_enabled": True,
+            "definition_json": {"strategy_id": "s1", "signal_params": {"symbols": ["AAPL"]}},
+        }
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=live_row)
+        svc._strategies_repo.set_live_enabled = AsyncMock(return_value=live_row)
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         req = MagicMock()
@@ -758,6 +761,8 @@ class TestSetStrategyLive:
     async def test_returns_not_found_for_missing_strategy(self):
         svc = make_servicer()
         svc._strategies_repo = AsyncMock()
+        # Feature 089: on enable the NOT_FOUND now comes from the get_by_id precondition fetch.
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
         svc._strategies_repo.set_live_enabled = AsyncMock(return_value=None)
         req = MagicMock()
         req.strategy_id = "missing"
@@ -2432,6 +2437,7 @@ class TestBacktestCooldown:
         definition = _valid_definition()
         definition.cooldown_days = 0
         svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=None)  # feature 089: not existing
         svc._strategies_repo.create = AsyncMock(return_value=_row_for(definition))
         req = analysis_pb2.ManageStrategyRequest(
             operation=analysis_pb2.STRATEGY_OPERATION_REGISTER, definition=definition
@@ -3477,3 +3483,271 @@ class TestScreenSymbolsHeld:
         by_symbol = {r.symbol: r.held for r in resp.results}
         assert by_symbol.get("AAPL") is True
         assert by_symbol.get("MSFT") is False
+
+
+# ---------------------------------------------------------------------------
+# Feature 089 — honest strategy lifecycle (reactivate + live preconditions)
+# ---------------------------------------------------------------------------
+
+
+def _live_row(active=True, symbols=("AAPL",)):
+    sp = {"symbols": list(symbols)} if symbols else {}
+    return {
+        "strategy_id": "s1",
+        "display_name": "S1",
+        "active": active,
+        "live_enabled": False,
+        "definition_json": {"strategy_id": "s1", "display_name": "S1", "signal_params": sp},
+    }
+
+
+class TestStrategyLifecycle089:
+    @pytest.mark.asyncio
+    async def test_register_duplicate_returns_already_exists(self):
+        svc = make_servicer()
+        definition = _valid_definition()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=_row_for(definition))
+        ctx = _admin_ctx()
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(
+                analysis_pb2.ManageStrategyRequest(
+                    operation=analysis_pb2.STRATEGY_OPERATION_REGISTER, definition=definition
+                ),
+                ctx,
+            )
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.ALREADY_EXISTS
+        svc._strategies_repo.create.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_register_unique_violation_maps_to_already_exists(self):
+        svc = make_servicer()
+        definition = _valid_definition()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
+        svc._strategies_repo.create = AsyncMock(side_effect=asyncpg.UniqueViolationError("dup"))
+        ctx = _admin_ctx()
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(
+                analysis_pb2.ManageStrategyRequest(
+                    operation=analysis_pb2.STRATEGY_OPERATION_REGISTER, definition=definition
+                ),
+                ctx,
+            )
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.ALREADY_EXISTS
+
+    @pytest.mark.asyncio
+    async def test_reactivate_sets_active(self):
+        svc = make_servicer()
+        definition = _valid_definition()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=_row_for(definition))
+        reactivated = {**_row_for(definition), "active": True}
+        svc._strategies_repo.reactivate = AsyncMock(return_value=reactivated)
+        resp = await svc.ManageStrategy(
+            analysis_pb2.ManageStrategyRequest(
+                operation=analysis_pb2.STRATEGY_OPERATION_REACTIVATE, definition=definition
+            ),
+            _admin_ctx(),
+        )
+        assert resp.strategy_id == "sma_x"
+        svc._strategies_repo.reactivate.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_reactivate_not_found(self):
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
+        ctx = _admin_ctx()
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(
+                analysis_pb2.ManageStrategyRequest(
+                    operation=analysis_pb2.STRATEGY_OPERATION_REACTIVATE,
+                    definition=_valid_definition(),
+                ),
+                ctx,
+            )
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_enable_live_on_inactive_rejected(self):
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=_live_row(active=False))
+        req = MagicMock(strategy_id="s1", live_enabled=True)
+        ctx = _admin_ctx()
+        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]
+        with pytest.raises(Exception, match="aborted"):
+            await svc.SetStrategyLive(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.FAILED_PRECONDITION
+
+    @pytest.mark.asyncio
+    async def test_enable_live_without_symbols_rejected(self):
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=_live_row(symbols=()))
+        req = MagicMock(strategy_id="s1", live_enabled=True)
+        ctx = _admin_ctx()
+        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]
+        with pytest.raises(Exception, match="aborted"):
+            await svc.SetStrategyLive(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.FAILED_PRECONDITION
+
+    @pytest.mark.asyncio
+    async def test_disable_live_always_allowed_even_when_inert(self):
+        # Disabling skips the preconditions entirely — an operator can always turn live off.
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.set_live_enabled = AsyncMock(
+            return_value=_live_row(active=False, symbols=())
+        )
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        req = MagicMock(strategy_id="s1", live_enabled=False)
+        ctx = MagicMock()
+        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]
+        resp = await svc.SetStrategyLive(req, ctx)
+        assert resp.definition.strategy_id == "s1"
+        svc._strategies_repo.get_by_id.assert_not_awaited()  # no precondition fetch on disable
+
+
+# Feature 086 — deleted-formula flagging (write refusal + backtest/live status)
+# ---------------------------------------------------------------------------
+
+
+def _custom_formula_definition(strategy_id="s-cf", formula_id="fid"):
+    return analysis_pb2.StrategyDefinition(
+        strategy_id=strategy_id,
+        display_name="CF strat",
+        active=True,
+        components=[
+            analysis_pb2.StrategyComponent(
+                ref_name="myf",
+                kind=analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
+                formula_id=formula_id,
+            )
+        ],
+        entry_rule=json.dumps({"fn": ">", "lhs": "myf", "rhs": 0}),
+    )
+
+
+class TestDeletedFormulaFlag:
+    @pytest.mark.asyncio
+    async def test_warnings_helper_flags_deleted(self):
+        svc = make_servicer()
+        svc._indicators = MagicMock()
+        svc._indicators.GetFormula = AsyncMock(
+            return_value=indicators_pb2.FormulaDefinition(
+                formula_id="fid", name="RSI", deleted=True
+            )
+        )
+        warnings = await svc._deleted_formula_warnings(_custom_formula_definition(), [])
+        assert len(warnings) == 1
+        assert "fid" in warnings[0] and "RSI" in warnings[0]
+
+    @pytest.mark.asyncio
+    async def test_warnings_helper_empty_when_live(self):
+        svc = make_servicer()
+        svc._indicators = MagicMock()
+        svc._indicators.GetFormula = AsyncMock(
+            return_value=indicators_pb2.FormulaDefinition(formula_id="fid", deleted=False)
+        )
+        warnings = await svc._deleted_formula_warnings(_custom_formula_definition(), [])
+        assert warnings == []
+
+    @pytest.mark.asyncio
+    async def test_register_refuses_deleted_formula_binding(self):
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        svc._indicators = MagicMock()
+        svc._indicators.GetFormula = AsyncMock(
+            return_value=indicators_pb2.FormulaDefinition(
+                formula_id="fid", name="RSI", deleted=True
+            )
+        )
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_REGISTER,
+            definition=_custom_formula_definition(),
+        )
+        ctx = _admin_ctx()
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.INVALID_ARGUMENT
+        svc._strategies_repo.create.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_get_strategy_flags_deleted_formula(self):
+        svc = make_servicer()
+        definition = _custom_formula_definition()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=_row_for(definition))
+        svc._indicators = MagicMock()
+        svc._indicators.GetFormula = AsyncMock(
+            return_value=indicators_pb2.FormulaDefinition(
+                formula_id="fid", name="RSI", deleted=True
+            )
+        )
+        ctx = MagicMock()
+        ctx.invocation_metadata = MagicMock(return_value=[])
+        req = analysis_pb2.GetStrategyRequest(strategy_id="s-cf")
+        result = await svc.GetStrategy(req, ctx)
+        assert len(result.warnings) == 1
+        assert "fid" in result.warnings[0]
+
+    @pytest.mark.asyncio
+    async def test_get_strategy_no_warning_when_formula_live(self):
+        svc = make_servicer()
+        definition = _custom_formula_definition()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=_row_for(definition))
+        svc._indicators = MagicMock()
+        svc._indicators.GetFormula = AsyncMock(
+            return_value=indicators_pb2.FormulaDefinition(formula_id="fid", deleted=False)
+        )
+        ctx = MagicMock()
+        ctx.invocation_metadata = MagicMock(return_value=[])
+        req = analysis_pb2.GetStrategyRequest(strategy_id="s-cf")
+        result = await svc.GetStrategy(req, ctx)
+        assert list(result.warnings) == []
+
+
+class TestBacktestDeletedFormulaWarning:
+    @pytest.mark.asyncio
+    async def test_backtest_flags_deleted_formula_and_fetches_once(self):
+        from google.protobuf.struct_pb2 import Struct
+
+        bars = _series_bars(5, 12)
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._backtest_run_symbols_repo = AsyncMock()
+        svc._marketdata = MagicMock()
+        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars))
+        svc._indicators = MagicMock()
+
+        async def _execute(req, **kw):
+            n = len(req.input_data["close"])
+            out = Struct()
+            out.update({"value": [1.0] * n})
+            return SimpleNamespace(success=True, output=out, error="")
+
+        svc._indicators.ExecuteFormula = AsyncMock(side_effect=_execute)
+        svc._indicators.GetFormula = AsyncMock(
+            return_value=indicators_pb2.FormulaDefinition(
+                formula_id="f-1", name="RSI", warmup_period=3, deleted=True
+            )
+        )
+        definition = analysis_pb2.StrategyDefinition(
+            components=[
+                analysis_pb2.StrategyComponent(
+                    ref_name="ff",
+                    kind=analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
+                    formula_id="f-1",
+                )
+            ],
+            entry_rule=json.dumps({"fn": ">", "lhs": "ff", "rhs": 0}),
+        )
+        result = await svc.RunBacktest(_windowed_req(definition), context=MagicMock())
+        assert any("f-1" in w for w in result.warnings)
+        # The deletion was captured on the warm-up prefetch's single fetch — no extra GetFormula.
+        assert svc._indicators.GetFormula.await_count == 1

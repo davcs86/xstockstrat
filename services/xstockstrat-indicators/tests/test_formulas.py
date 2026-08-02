@@ -135,17 +135,31 @@ class TestFormulasRepository:
         assert len(rows) == 2
         assert rows[1]["input_schema"] == {"k": "v"}
 
-    async def test_delete_returns_true_on_success(self):
+    async def test_delete_soft_deletes_and_returns_true(self):
+        # Feature 086: delete is now a soft-delete (UPDATE ... SET deleted_at), not a hard DELETE.
         pool = MagicMock()
-        pool.execute = AsyncMock(return_value="DELETE 1")
+        pool.execute = AsyncMock(return_value="UPDATE 1")
         repo = FormulasRepository(pool)
         assert await repo.delete("x") is True
+        sql = pool.execute.await_args.args[0]
+        assert "deleted_at" in sql and "UPDATE" in sql
+        assert "DELETE FROM" not in sql
 
-    async def test_delete_returns_false_when_not_found(self):
+    async def test_delete_idempotent_returns_false_when_already_deleted(self):
         pool = MagicMock()
-        pool.execute = AsyncMock(return_value="DELETE 0")
+        pool.execute = AsyncMock(return_value="UPDATE 0")
         repo = FormulasRepository(pool)
         assert await repo.delete("x") is False
+
+    async def test_list_excludes_soft_deleted(self):
+        # Feature 086: ListFormulas hides soft-deleted rows.
+        pool = MagicMock()
+        pool.fetchval = AsyncMock(return_value=0)
+        pool.fetch = AsyncMock(return_value=[])
+        repo = FormulasRepository(pool)
+        await repo.list(author_filter="u", include_public=True, page_size=0, page_offset=0)
+        assert "deleted_at IS NULL" in pool.fetch.await_args.args[0]
+        assert "deleted_at IS NULL" in pool.fetchval.await_args.args[0]
 
 
 # ---------------------------------------------------------------------------
@@ -637,3 +651,125 @@ class TestSystemFormulaReadOnly:
         with pytest.raises(Exception):
             await servicer.DeleteFormula(req, ctx)
         assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
+
+
+# ---------------------------------------------------------------------------
+# Feature 086 — AIP-161 partial update + honest soft-delete
+# ---------------------------------------------------------------------------
+
+
+def _full_row(author="user-1", deleted_at=None):
+    return {
+        "formula_id": "f",
+        "name": "orig name",
+        "description": "orig desc",
+        "source": "x = 1",
+        "author": author,
+        "is_public": True,
+        "input_schema": {},
+        "parameters": [{"name": "keepme"}],
+        "outputs": [{"name": "s2"}],
+        "warmup_period": 7,
+        "created_at": None,
+        "updated_at": None,
+        "deleted_at": deleted_at,
+    }
+
+
+def _update_servicer(row):
+    servicer = IndicatorsServicer(config_watcher=MagicMock())
+    repo = MagicMock()
+    repo.get_by_id = AsyncMock(return_value=row)
+    # repo.update echoes a clean, parseable row (empty parameters/outputs so _row_to_formula works).
+    clean = {**row, "parameters": [], "outputs": []}
+    repo.update = AsyncMock(return_value=clean)
+    servicer._repo = repo
+    return servicer, repo
+
+
+class TestFormulaPartialUpdate:
+    async def test_masked_update_preserves_unmasked_fields(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer, repo = _update_servicer(_full_row())
+        req = indicators_pb2.UpdateFormulaRequest(
+            formula_id="f", user_id="user-1", description="new desc"
+        )
+        req.update_mask.paths.append("description")
+        await servicer.UpdateFormula(req, _ctx([]))
+        kw = repo.update.await_args.kwargs
+        assert kw["description"] == "new desc"  # masked field written
+        assert kw["name"] == "orig name"  # unmasked preserved
+        assert kw["source"] == "x = 1"
+        assert kw["is_public"] is True
+        assert kw["parameters"] == [{"name": "keepme"}]
+        assert kw["outputs"] == [{"name": "s2"}]
+        assert kw["warmup_period"] == 7
+
+    async def test_maskless_update_full_replace(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer, repo = _update_servicer(_full_row())
+        req = indicators_pb2.UpdateFormulaRequest(
+            formula_id="f", user_id="user-1", name="n2", source="y = 2"
+        )
+        await servicer.UpdateFormula(req, _ctx([]))
+        kw = repo.update.await_args.kwargs
+        assert kw["name"] == "n2"
+        assert kw["source"] == "y = 2"
+        assert kw["description"] == ""  # full-replace back-compat: omitted → default
+        assert kw["is_public"] is False
+
+    async def test_masked_blank_source_rejected(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer, _ = _update_servicer(_full_row())
+        req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="user-1", source="")
+        req.update_mask.paths.append("source")
+        ctx = _ctx([])
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception):
+            await servicer.UpdateFormula(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.INVALID_ARGUMENT
+
+    async def test_unknown_mask_path_rejected(self):
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer, _ = _update_servicer(_full_row())
+        req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="user-1")
+        req.update_mask.paths.append("bogus_field")
+        ctx = _ctx([])
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception):
+            await servicer.UpdateFormula(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.INVALID_ARGUMENT
+
+    async def test_update_soft_deleted_formula_rejected(self):
+        import datetime
+
+        from gen.indicators.v1 import indicators_pb2
+
+        servicer, _ = _update_servicer(_full_row(deleted_at=datetime.datetime(2026, 1, 1)))
+        req = indicators_pb2.UpdateFormulaRequest(formula_id="f", user_id="user-1", description="x")
+        req.update_mask.paths.append("description")
+        ctx = _ctx([])
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception):
+            await servicer.UpdateFormula(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.FAILED_PRECONDITION
+
+
+class TestFormulaDeletedFlag:
+    def test_row_to_formula_sets_deleted_true(self):
+        import datetime
+
+        from app.handlers.servicer import _row_to_formula
+
+        f = _row_to_formula(_full_row(deleted_at=datetime.datetime(2026, 1, 1)))
+        assert f.deleted is True
+
+    def test_row_to_formula_deleted_false_when_live(self):
+        from app.handlers.servicer import _row_to_formula
+
+        f = _row_to_formula(_full_row(deleted_at=None))
+        assert f.deleted is False

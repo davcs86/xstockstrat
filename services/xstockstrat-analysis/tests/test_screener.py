@@ -222,13 +222,9 @@ async def test_min_conviction_filters_low_score_symbols():
 async def test_coverage_gaps_survive_rank_limit_truncation():
     md = AsyncMock()
     # AAA/BBB have bars; CCC has none → INSUFFICIENT_DATA, ranked last, truncated by rank_limit=1.
-    md.GetBars = AsyncMock(
-        side_effect=[bars([1.0, 2.0, 3.0]), bars([1.0, 2.0, 3.0]), bars([])]
-    )
+    md.GetBars = AsyncMock(side_effect=[bars([1.0, 2.0, 3.0]), bars([1.0, 2.0, 3.0]), bars([])])
     ind = AsyncMock()
-    ind.ExecuteFormula = AsyncMock(
-        side_effect=[formula_resp([0.9]), formula_resp([0.1])]
-    )
+    ind.ExecuteFormula = AsyncMock(side_effect=[formula_resp([0.9]), formula_resp([0.1])])
     engine = make_engine(md, ind)
     req = analysis_pb2.ScreenSymbolsRequest(
         symbols=["AAA", "BBB", "CCC"],

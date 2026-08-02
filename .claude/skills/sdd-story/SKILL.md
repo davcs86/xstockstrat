@@ -164,6 +164,20 @@ FR-2. ...
 Exact service names from CLAUDE.md Service Registry:
 - `xstockstrat-<name>` — <why>
 
+## Consumer Surface(s)
+
+_Constitution **C-14**._ The end-user-reachable surface(s) this capability is consumed through.
+A backend-only change that never reaches a UI segment or an Agent tool leaves the capability
+**unusable** — name the surface here so it is scoped now, not discovered stale after the backing
+service already shipped. Check every box that applies and say what changes there:
+
+- [ ] **UI** — `xstockstrat-ui` segment(s): `/trader` | `/insights` | `/config-ui` (name each; e.g. new page/route, new field, new control) — reachable per **C-10** (registered in `PLATFORM_SUBNAV`)
+- [ ] **Agent** — `xstockstrat-agent` MCP tool(s): `<tool name(s)>` (new tool, new arg, or changed response mapping)
+- [ ] **None** — internal/platform-only, no end-user surface. State why the capability needs no consumer-facing change (e.g. "consumed only by another backend service over gRPC").
+
+If a surface is real but deliberately deferred, it must point at a **named follow-up feature**
+(record the sign-off in `context.md`), never a vague "later" — that is the only C-14 override.
+
 ## Proto Contract Changes
 
 - [ ] No proto changes required
@@ -197,6 +211,12 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 - [ ] <question>
 ```
 
+**Filling `## Consumer Surface(s)` (C-14):** infer the surface from the story, not from the
+backend. Ask "once this ships, where does a *user* see or invoke it?" If the story implies a UI
+view or an agent action, name that segment/tool — do not leave every box unchecked and do not
+default to "None" just because the story is phrased in backend terms. If it is genuinely unclear
+which surface, raise it in `## Open Questions` (behavior #1 — surface the fork, never guess).
+
 ### 8. Write context.md
 
 Write `docs/roadmap/features/${FEATURE_DIRNAME}/context.md`:
@@ -227,5 +247,10 @@ Files written:
   product-spec.md     — requirements (review and edit before next step)
   context.md          — session log
 
+Consumer surface(s) (C-14): <echo the boxes you checked — e.g. "UI /insights + Agent run_backtest", or "None (internal)">
+
 Next: review product-spec.md, then run /sdd-review <slug> product-spec
 ```
+
+Echoing the consumer surface here is deliberate: it is the field most often left stale, so the
+operator sees it before the spec advances.

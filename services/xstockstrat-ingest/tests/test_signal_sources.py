@@ -8,8 +8,11 @@ import pytest
 from app.repositories.signal_sources import (
     deactivate_source,
     get_active_source,
+    get_source,
+    insert_source,
     list_all_sources,
-    upsert_source,
+    reactivate_source,
+    update_source,
     validate_config_json,
 )
 
@@ -218,27 +221,33 @@ class TestListAllSources:
 
 
 # ---------------------------------------------------------------------------
-# upsert_source
+# insert_source / update_source / get_source / reactivate_source (feature 088)
 # ---------------------------------------------------------------------------
 
 
-class TestUpsertSource:
+def _row(**over):
+    base = {
+        "slug": "uw",
+        "display_name": "UW",
+        "source_type": "simple_email",
+        "extractor_module": "app.extractors.noop",
+        "credentials_ref": None,
+        "active": True,
+        "config_json": None,
+        "created_at": None,
+    }
+    base.update(over)
+    return base
+
+
+class TestInsertUpdateSource:
     @pytest.mark.asyncio
-    async def test_calls_insert_on_conflict(self):
+    async def test_insert_is_a_plain_insert_no_conflict(self):
+        # Feature 088: register is a strict INSERT (no ON CONFLICT); a duplicate slug raises
+        # UniqueViolationError, which the servicer maps to ALREADY_EXISTS.
         db = MagicMock()
-        db.fetchrow = AsyncMock(
-            return_value={
-                "slug": "uw",
-                "display_name": "UW",
-                "source_type": "simple_email",
-                "extractor_module": "app.extractors.noop",
-                "credentials_ref": None,
-                "active": True,
-                "config_json": None,
-                "created_at": None,
-            }
-        )
-        result = await upsert_source(
+        db.fetchrow = AsyncMock(return_value=_row())
+        result = await insert_source(
             db,
             slug="uw",
             display_name="UW",
@@ -248,28 +257,15 @@ class TestUpsertSource:
             config_json=None,
         )
         assert result["slug"] == "uw"
-        sql_call = db.fetchrow.call_args[0][0]
-        assert "ON CONFLICT" in sql_call
-        assert "RETURNING" in sql_call
+        sql = db.fetchrow.call_args[0][0]
+        assert "INSERT INTO" in sql and "RETURNING" in sql
+        assert "ON CONFLICT" not in sql
 
     @pytest.mark.asyncio
-    async def test_config_json_passed_as_json_text(self):
-        # The pool has no JSONB codec, so asyncpg rejects dict parameters — the
-        # repository must serialize config_json to JSON text before binding.
+    async def test_insert_config_json_passed_as_json_text(self):
         db = MagicMock()
-        db.fetchrow = AsyncMock(
-            return_value={
-                "slug": "edgar",
-                "display_name": "EDGAR",
-                "source_type": "mediated_simple_website",
-                "extractor_module": "",
-                "credentials_ref": None,
-                "active": True,
-                "config_json": '{"url": "https://example.com", "scrape_selector": "entry"}',
-                "created_at": None,
-            }
-        )
-        await upsert_source(
+        db.fetchrow = AsyncMock(return_value=_row(source_type="mediated_simple_website"))
+        await insert_source(
             db,
             slug="edgar",
             display_name="EDGAR",
@@ -280,36 +276,44 @@ class TestUpsertSource:
         )
         config_arg = db.fetchrow.call_args[0][6]
         assert isinstance(config_arg, str)
-        assert json.loads(config_arg) == {
-            "url": "https://example.com",
-            "scrape_selector": "entry",
-        }
+        assert json.loads(config_arg) == {"url": "https://example.com", "scrape_selector": "entry"}
 
     @pytest.mark.asyncio
-    async def test_none_config_json_stays_none(self):
+    async def test_update_writes_merged_columns_and_never_active(self):
         db = MagicMock()
-        db.fetchrow = AsyncMock(
-            return_value={
-                "slug": "uw",
-                "display_name": "UW",
-                "source_type": "simple_email",
-                "extractor_module": "app.extractors.noop",
-                "credentials_ref": None,
-                "active": True,
-                "config_json": None,
-                "created_at": None,
-            }
-        )
-        await upsert_source(
+        db.fetchrow = AsyncMock(return_value=_row(display_name="New"))
+        await update_source(
             db,
             slug="uw",
-            display_name="UW",
+            display_name="New",
             source_type="simple_email",
             extractor_module="app.extractors.noop",
-            credentials_ref=None,
+            credentials_ref="secret.x",
             config_json=None,
         )
-        assert db.fetchrow.call_args[0][6] is None
+        sql = db.fetchrow.call_args[0][0]
+        assert sql.strip().startswith("UPDATE ingest.signal_sources")
+        assert "active" not in sql  # lifecycle stays reactivate/deactivate only
+
+    @pytest.mark.asyncio
+    async def test_get_source_returns_none_when_missing(self):
+        db = MagicMock()
+        db.fetchrow = AsyncMock(return_value=None)
+        assert await get_source(db, "nope") is None
+
+    @pytest.mark.asyncio
+    async def test_reactivate_sets_active_true(self):
+        db = MagicMock()
+        db.fetchrow = AsyncMock(return_value=_row(active=True))
+        row = await reactivate_source(db, "uw")
+        assert row["active"] is True
+        assert "active = TRUE" in db.fetchrow.call_args[0][0]
+
+    @pytest.mark.asyncio
+    async def test_reactivate_returns_none_when_missing(self):
+        db = MagicMock()
+        db.fetchrow = AsyncMock(return_value=None)
+        assert await reactivate_source(db, "nope") is None
 
 
 # ---------------------------------------------------------------------------

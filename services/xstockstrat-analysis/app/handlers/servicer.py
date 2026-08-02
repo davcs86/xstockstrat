@@ -18,6 +18,7 @@ import math
 import uuid
 from datetime import UTC
 
+import asyncpg
 import grpc
 import numpy as np
 from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc
@@ -55,6 +56,14 @@ from app.services.screener import ScreenerEngine
 _compute_signal_score = scoring.compute_signal_score
 
 log = logging.getLogger(__name__)
+
+
+def _deleted_formula_warning(name: str, formula_id: str) -> str:
+    """Feature 086: the single, shared wording for a soft-deleted-formula run/status warning."""
+    return (
+        f"Formula '{name}' ({formula_id}) referenced by this strategy has been deleted; "
+        f"the run used its last-saved definition."
+    )
 
 
 class _InsufficientData(Exception):
@@ -201,6 +210,45 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             formula_outputs[comp.formula_id] = allowed
         return formula_outputs
 
+    async def _deleted_formula_warnings(self, definition, propagation_meta) -> list[str]:
+        """Warnings for each custom-formula component whose formula is soft-deleted (feature 086).
+
+        Each referenced formula is fetched once; a fetch failure (e.g. NOT_FOUND) is swallowed —
+        only a live ``deleted`` flag is a deletion signal. Used both to flag deletion on read
+        (backtest run + GetStrategy live status) and to refuse a new binding on write.
+        """
+        warnings: list[str] = []
+        seen: set[str] = set()
+        for comp in definition.components:
+            if comp.kind != analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA:
+                continue
+            if not comp.formula_id or comp.formula_id in seen:
+                continue
+            seen.add(comp.formula_id)
+            try:
+                formula = await self._indicators.GetFormula(
+                    indicators_pb2.GetFormulaRequest(formula_id=comp.formula_id),
+                    metadata=propagation_meta,
+                )
+            except grpc.aio.AioRpcError:
+                continue
+            if formula.deleted:
+                warnings.append(_deleted_formula_warning(formula.name, comp.formula_id))
+        return warnings
+
+    async def _refuse_deleted_bindings(self, definition, context, propagation_meta) -> bool:
+        """Write-time guard (feature 086): refuse binding a strategy to a soft-deleted formula.
+
+        Checks the request's own components (not the stored union), so an update that leaves an
+        already-deleted binding untouched is not blocked, but no new deleted binding is accepted.
+        Returns True if it aborted.
+        """
+        warnings = await self._deleted_formula_warnings(definition, propagation_meta)
+        if warnings:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, warnings[0])
+            return True
+        return False
+
     async def _validate_definition_proto(self, definition, context) -> None:
         """Validate a StrategyDefinition; abort INVALID_ARGUMENT on failure."""
         propagation_meta = [
@@ -208,6 +256,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             for k, v in context.invocation_metadata()
             if k in ("x-user-id", "x-access-scope", "x-trace-id")
         ]
+        # Feature 086: refuse binding a strategy to a soft-deleted formula (aborts on the first).
+        if await self._refuse_deleted_bindings(definition, context, propagation_meta):
+            return
         formula_outputs = await self._fetch_formula_outputs(definition, propagation_meta)
         try:
             _validate_definition(definition, formula_outputs)
@@ -348,11 +399,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         symbol_cells: list[dict] = []
         # feature 064: declared formula warm-ups fetched once per run, reused across symbols.
         formula_warmup_cache: dict[str, int] = {}
+        # feature 086: deleted-formula warnings captured during that same single fetch per formula.
+        formula_deleted_cache: dict[str, str] = {}
         # feature 071: and resolved BEFORE the loop, so symbol 1 sizes its prefix from the same
         # cache symbol N does (see _prefetch_formula_warmups).
         if active_definition is not None and start_set:
             await self._prefetch_formula_warmups(
-                active_definition, formula_warmup_cache, propagation_meta
+                active_definition, formula_warmup_cache, propagation_meta, formula_deleted_cache
             )
 
         for symbol in request.symbols:
@@ -496,6 +549,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             result.coverage_gaps.extend(coverage_gaps)
         if all_diagnostics:  # feature 064 — per-bar diagnostics for every simulated symbol
             result.diagnostics.extend(all_diagnostics)
+        # Feature 086: flag any referenced formula that has been soft-deleted (the run still
+        # completed using its last-saved definition). The deletion was detected during the warm-up
+        # prefetch's single GetFormula per formula — no extra fetch here.
+        if formula_deleted_cache:
+            result.warnings.extend(formula_deleted_cache.values())
         self._backtests[backtest_id] = result
         # Index by strategy_id for ScoreStrategy lookup
         self._backtests[request.strategy_id] = result
@@ -1139,12 +1197,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 warmup = max(warmup, _first_resolved_index(component_series.get(ref, []), n))
         return warmup
 
-    async def _declared_formula_warmup(self, formula_id, cache, propagation_meta) -> int:
+    async def _declared_formula_warmup(
+        self, formula_id, cache, propagation_meta, deleted_cache=None
+    ) -> int:
         """Declared `warmup_period` for one formula, memoized in `cache` for the whole run.
 
         An unreachable formula caches 0 rather than raising: a missing declaration must not
         fail a backtest, and the 0 is cached so one dead formula can't re-issue the failing
-        RPC once per symbol.
+        RPC once per symbol. When `deleted_cache` is provided (feature 086), the same single
+        fetch also records a soft-delete warning for the formula — no extra GetFormula.
         """
         if formula_id not in cache:
             try:
@@ -1153,11 +1214,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     metadata=propagation_meta,
                 )
                 cache[formula_id] = int(getattr(formula, "warmup_period", 0) or 0)
+                if deleted_cache is not None and getattr(formula, "deleted", False):
+                    deleted_cache[formula_id] = _deleted_formula_warning(formula.name, formula_id)
             except grpc.RpcError:
                 cache[formula_id] = 0
         return cache[formula_id]
 
-    async def _prefetch_formula_warmups(self, definition, cache, propagation_meta) -> None:
+    async def _prefetch_formula_warmups(
+        self, definition, cache, propagation_meta, deleted_cache=None
+    ) -> None:
         """Fill `cache` for every referenced custom formula BEFORE the symbol loop (feature 071).
 
         Ordering matters: `warmup.required_prefix_bars` is pure and reads this cache at the
@@ -1174,7 +1239,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         for ref in refs:
             comp = ref_to_comp.get(ref)
             if comp is not None and comp.kind == analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA:
-                await self._declared_formula_warmup(comp.formula_id, cache, propagation_meta)
+                await self._declared_formula_warmup(
+                    comp.formula_id, cache, propagation_meta, deleted_cache
+                )
 
     async def ScoreStrategy(self, request, context):
         """Manually recompute a strategy's headline grade from its evidence cells (feature 065).
@@ -1554,12 +1621,29 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         if op == analysis_pb2.STRATEGY_OPERATION_REGISTER:
             await self._validate_definition_proto(definition, context)
+            # Feature 089: strict register. An existing id (active OR deactivated) is a conflict —
+            # route the caller to reactivate rather than silently overwrite or crash on the PK.
+            if await self._strategies_repo.get_by_id(definition.strategy_id) is not None:
+                await context.abort(
+                    grpc.StatusCode.ALREADY_EXISTS,
+                    f"strategy '{definition.strategy_id}' already exists; use the reactivate "
+                    "operation to bring back a deactivated strategy",
+                )
+                return
             definition_json = json_format.MessageToDict(
                 definition, preserving_proto_field_name=True
             )
-            row = await self._strategies_repo.create(
-                definition.strategy_id, definition.display_name, definition_json
-            )
+            try:
+                row = await self._strategies_repo.create(
+                    definition.strategy_id, definition.display_name, definition_json
+                )
+            except asyncpg.UniqueViolationError:
+                # Atomic backstop for a concurrent duplicate that raced the get_by_id check.
+                await context.abort(
+                    grpc.StatusCode.ALREADY_EXISTS,
+                    f"strategy '{definition.strategy_id}' already exists",
+                )
+                return
             return _row_to_strategy_definition(row)
         if op == analysis_pb2.STRATEGY_OPERATION_UPDATE:
             # feature 070: an update_mask turns UPDATE into a partial merge. Absent mask keeps the
@@ -1596,6 +1680,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     grpc.StatusCode.NOT_FOUND,
                     f"strategy '{definition.strategy_id}' not found",
                 )
+                return
+            # Feature 086: refuse a new binding to a soft-deleted formula. Checks the request's own
+            # components only, so an update that leaves an existing (already-deleted) binding
+            # untouched is not blocked.
+            if await self._refuse_deleted_bindings(definition, context, propagation_meta):
                 return
             union = analysis_pb2.StrategyDefinition()
             union.CopyFrom(_row_to_strategy_definition(pre))
@@ -1667,6 +1756,26 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 )
                 return
             return _row_to_strategy_definition(row)
+        if op == analysis_pb2.STRATEGY_OPERATION_REACTIVATE:
+            # Feature 089: reactivation decoupled from update. Re-validate the STORED definition
+            # first (a referenced formula may have gone missing while it was deactivated) so a
+            # reactivated strategy satisfies the firing contract, rather than erroring each cycle.
+            existing = await self._strategies_repo.get_by_id(definition.strategy_id)
+            if existing is None:
+                await context.abort(
+                    grpc.StatusCode.NOT_FOUND,
+                    f"strategy '{definition.strategy_id}' not found",
+                )
+                return
+            await self._validate_definition_proto(_row_to_strategy_definition(existing), context)
+            row = await self._strategies_repo.reactivate(definition.strategy_id)
+            if row is None:
+                await context.abort(
+                    grpc.StatusCode.NOT_FOUND,
+                    f"strategy '{definition.strategy_id}' not found",
+                )
+                return
+            return _row_to_strategy_definition(row)
         await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "unknown strategy operation")
 
     async def GetStrategy(self, request, context):
@@ -1679,7 +1788,19 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 grpc.StatusCode.NOT_FOUND, f"strategy '{request.strategy_id}' not found"
             )
             return
-        return _row_to_strategy_definition(row)
+        definition = _row_to_strategy_definition(row)
+        # Feature 086 (live-status flag): surface a warning if this strategy references a
+        # soft-deleted formula. It still evaluates (live and in backtests) on the last-saved
+        # definition, but the deletion is flagged to whoever reads the strategy.
+        propagation_meta = [
+            (k, v)
+            for k, v in context.invocation_metadata()
+            if k in ("x-user-id", "x-access-scope", "x-trace-id")
+        ]
+        deleted_warnings = await self._deleted_formula_warnings(definition, propagation_meta)
+        if deleted_warnings:
+            definition.warnings.extend(deleted_warnings)
+        return definition
 
     async def ListStrategyDefinitions(self, request, context):
         if self._strategies_repo is None:
@@ -1709,6 +1830,32 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             for k, v in context.invocation_metadata()
             if k in ("x-user-id", "x-access-scope", "x-trace-id")
         ]
+
+        # Feature 089 (F-7): enabling live on an inert config stores a flag that never fires. The
+        # live loop selects `live_enabled AND active` and skips a strategy with no
+        # signal_params.symbols, so reject both at enable time (FAILED_PRECONDITION). Disabling is
+        # ALWAYS allowed — even on an inert config — so an operator can always turn live off.
+        if request.live_enabled:
+            from app.engine.live_loop import strategy_symbols  # noqa: PLC0415 (avoids import cycle)
+
+            existing = await self._strategies_repo.get_by_id(request.strategy_id)
+            if existing is None:
+                await context.abort(
+                    grpc.StatusCode.NOT_FOUND, f"strategy '{request.strategy_id}' not found"
+                )
+                return
+            if not existing["active"]:
+                await context.abort(
+                    grpc.StatusCode.FAILED_PRECONDITION,
+                    "cannot enable live evaluation on an inactive strategy; reactivate it first",
+                )
+                return
+            if not strategy_symbols(_row_to_strategy_definition(existing)):
+                await context.abort(
+                    grpc.StatusCode.FAILED_PRECONDITION,
+                    "strategy has no signal_params.symbols; live evaluation would never fire",
+                )
+                return
 
         row = await self._strategies_repo.set_live_enabled(
             request.strategy_id, request.live_enabled
