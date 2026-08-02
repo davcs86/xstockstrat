@@ -24,6 +24,7 @@ from urllib.parse import quote
 from starlette.responses import JSONResponse, RedirectResponse
 
 from app import client
+from app.scopes import resolve_scope
 
 log = logging.getLogger(__name__)
 
@@ -67,7 +68,15 @@ async def register(request):
         )
 
     # agent.oauth.registration_enabled (bool, default true). Disabled => 403.
-    reg_enabled = await client.get_config_value("oauth.registration_enabled")
+    # feature 093: env-scoped read; best-effort (a config failure must not 500 DCR).
+    _env, _mode = resolve_scope("", "")
+    try:
+        reg_enabled = await client.get_config_value(
+            "oauth.registration_enabled", namespace="agent", environment=_env, trading_mode=_mode
+        )
+    except Exception as e:
+        log.warning("oauth.registration_enabled read failed, defaulting to enabled: %s", e)
+        reg_enabled = None
     if reg_enabled is not None and reg_enabled.strip().lower() in ("false", "0", "no"):
         return JSONResponse(
             {"error": "access_denied", "error_description": "registration disabled"}, 403
@@ -82,7 +91,13 @@ async def register(request):
 
     # agent.oauth.allowed_redirect_uris (comma-separated exact URIs). When set, require an exact
     # match; otherwise fall back to the https:// minimum (identity enforces the same).
-    allowed_raw = await client.get_config_value("oauth.allowed_redirect_uris")
+    try:
+        allowed_raw = await client.get_config_value(
+            "oauth.allowed_redirect_uris", namespace="agent", environment=_env, trading_mode=_mode
+        )
+    except Exception as e:
+        log.warning("oauth.allowed_redirect_uris read failed, defaulting to empty allowlist: %s", e)
+        allowed_raw = None
     allowlist = [u.strip() for u in allowed_raw.split(",")] if allowed_raw else []
     allowlist = [u for u in allowlist if u]
     for uri in redirect_uris:

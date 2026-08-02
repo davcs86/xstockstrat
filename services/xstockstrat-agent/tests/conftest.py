@@ -65,3 +65,20 @@ def set_env(monkeypatch):
     monkeypatch.setattr(client, "NOTIFY_ENDPOINT", "notify-test:50059")
     monkeypatch.setattr(client, "ANALYSIS_ENDPOINT", "analysis-test:50056")
     monkeypatch.setattr(client, "MCP_AGENT_SECRET", "test-secret")
+
+
+def credentialed_source(**overrides) -> dict:
+    """A signal source with has_credentials=True (feature 093, C-13 shared fixture).
+
+    Consumed by both extract-tool tests to exercise the "credentials required → RuntimeError"
+    branch, which the default (has_credentials=False) `_SOURCES` fixtures never reach.
+    """
+    src = {
+        "slug": "cred_src",
+        "display_name": "Credentialed Source",
+        "source_type": "mediated_authenticated_website",
+        "config_json": {"url": "https://gated.example.com"},
+        "has_credentials": True,
+    }
+    src.update(overrides)
+    return src

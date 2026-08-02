@@ -184,6 +184,39 @@ async def test_extract_website_content_no_url_raises():
             await _tool_fn(server, "extract_website_content")(source_slug="site1")
 
 
+# ── feature 093: a source requiring credentials is loudly UNSUPPORTED ─────────
+
+
+@pytest.mark.asyncio
+async def test_extract_email_content_raises_when_credentials_required():
+    """A has_credentials=True source RAISES RuntimeError (secure resolution unsupported) rather
+    than silently reading a plaintext config credential and fetching unauthenticated."""
+    from tests.conftest import credentialed_source
+
+    src = credentialed_source(slug="cred_email", source_type="mediated_email_attachment")
+    with patch.object(client, "list_signal_sources", AsyncMock(return_value=[src])):
+        with patch.object(client, "get_config_value", AsyncMock()) as read:
+            server = _make_server()
+            with pytest.raises(RuntimeError, match="not supported yet"):
+                await _tool_fn(server, "extract_email_content")(
+                    source_slug="cred_email", attachments_b64=["dGVzdA=="]
+                )
+        read.assert_not_awaited()  # no credential config read happens at all
+
+
+@pytest.mark.asyncio
+async def test_extract_website_content_raises_when_credentials_required():
+    from tests.conftest import credentialed_source
+
+    src = credentialed_source(slug="cred_site")
+    with patch.object(client, "list_signal_sources", AsyncMock(return_value=[src])):
+        with patch.object(client, "get_config_value", AsyncMock()) as read:
+            server = _make_server()
+            with pytest.raises(RuntimeError, match="not supported yet"):
+                await _tool_fn(server, "extract_website_content")(source_slug="cred_site")
+        read.assert_not_awaited()
+
+
 # ── ingest_signal ──────────────────────────────────────────────────────────
 
 
@@ -231,6 +264,36 @@ async def test_ingest_signal_auto_alert_above_threshold():
             conviction=0.8,
         )
         mock_alert.assert_called_once()
+    # feature 093: the threshold read is env-scoped in the `agent` namespace (was env-blind).
+    kw = mock_config.await_args.kwargs
+    assert kw["namespace"] == "agent"
+    assert kw["environment"] in ("dev", "production")
+
+
+@pytest.mark.asyncio
+async def test_ingest_signal_survives_threshold_read_failure():
+    """feature 093: the post-commit threshold read is best-effort — a transport error must NOT
+    fail ingest_signal (the signal is already persisted); it falls back to the default 0.6."""
+    import grpc
+
+    err = grpc.aio.AioRpcError(grpc.StatusCode.UNAVAILABLE, None, None, details="config down")
+    mock_ingest = AsyncMock(return_value={"signal_id": 9})
+    mock_alert = AsyncMock(return_value={"alert_id": "a1"})
+    with (
+        patch.object(client, "ingest_signal", mock_ingest),
+        patch.object(client, "emit_alert", mock_alert),
+        patch.object(client, "get_config_value", AsyncMock(side_effect=err)),
+    ):
+        server = _make_server()
+        result = await _tool_fn(server, "ingest_signal")(
+            source="unusual_whales",
+            symbol="NVDA",
+            direction="buy",
+            valid_from="2026-05-01T00:00:00Z",
+            conviction=0.8,  # ≥ default 0.6 → alert still fires
+        )
+    assert result == {"signal_id": 9}  # ingest did not fail
+    mock_alert.assert_called_once()  # default threshold used
 
 
 # ── emit_alert ────────────────────────────────────────────────────────────

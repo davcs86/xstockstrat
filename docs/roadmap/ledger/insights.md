@@ -470,6 +470,20 @@ reusing.
 - **Evidence**: `services/xstockstrat-agent/tests/test_backtest_view.py` (the template); report RC-1 + meta-cause (`docs/reports/2026-08-01-mcp-tools-alignment-triage.md`).
 - **Rule it implies**: reinforces **C-10** — every agent request builder / response projection that mirrors a proto gets a descriptor-parity test with an explicit opt-out set; new proto fields then fail closed rather than silently dropping off the MCP surface.
 
+### 2026-08-02 — 093-fix-mcp-extract-credentials — design
+- **Pattern**: When a "credential/secret handling" bug tempts a quick fix that *reads a secret from
+  ordinary config*, check the platform's secret model first — if secrets are `is_secret` **references**
+  that the config server **redacts** on read, then a plaintext config credential is both a C-05
+  violation AND gets disclosed unredacted by any read tool. The honest minimal fix is often to make the
+  broken capability **loudly unsupported** (raise a clear error — the "surface, don't swallow" win)
+  rather than entrench the antipattern; defer the real resolver as its own feature. Second lesson
+  (RC-1): a config/read helper that projects a **single oneof field** (`v.string_val or None`) silently
+  returns `None` for every other type — a `value_type='float'`/`'bool'` key never resolves regardless
+  of scope. Stringify the **active** oneof (`WhichOneof` → `str(getattr(...))`) and test the projection
+  with a non-string fixture, or the "fix" leaves the key broken for a different reason than the report
+  blamed.
+- **Evidence**: feature 093 design.md §1–2 + Rejected Alternatives; `services/xstockstrat-agent/app/client.py:693` (string_val-only) vs `:872-876` (the correct WhichOneof projection); `services/xstockstrat-config/CLAUDE.md` invariant #6.
+- **Rule it implies**: reinforces **C-05**/**P-03** — never resolve a secret from non-`is_secret` config; and extends the RC-1 antidote to *projection* helpers, not just request builders (test the returned value for a non-string type).
 ### 2026-08-02 — 092-fix-mcp-writepath-authz — design
 - **Pattern**: When an ungated internal RPC is flagged for "missing authz," first enumerate **who
   actually calls it and what each caller sends** before choosing a gate — the caller set decides the
