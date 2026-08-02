@@ -16,6 +16,11 @@ test mocks.
   docs/roadmap/phase3-deviations.md) and document as deviation.
 - **Migrations**: naming is `NNN_description.up.sql` + `NNN_description.down.sql`. NNN is the next
   integer after the last file found by `ls services/<name>/migrations/ | sort | tail -1`.
+  **Verify a migration step offline — never start a database.** Confirm both `.up.sql` and `.down.sql`
+  exist with the correct `NNN` and that `.down` reverses `.up` by inspection; the live apply/rollback
+  is CI's job at deploy. A step whose `**Verification**` names `docker run postgres` / `migrate` /
+  `psql`-against-a-live-DB gets the offline check substituted (logged as a deviation) — do not hang
+  waiting on a container (SKILL.md Phase 3 / HARD CONSTRAINTS).
 - **After proto changes**: run `./scripts/buf-gen.sh` to regenerate stubs; include generated files in
   the commit.
 - **Config keys**: format is `<service-short-name>.<category>.<key>` — verify before writing.

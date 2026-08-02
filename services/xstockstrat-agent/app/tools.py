@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Seventeen tools:
+Twenty-two tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -9,13 +9,18 @@ Seventeen tools:
   emit_alert           — emits an alert via gRPC EmitAlert
   run_backtest         — triggers a backtest via gRPC RunBacktest
   screen_symbols       — scans a symbol universe via gRPC ScreenSymbols (read-only)
-  manage_strategy     — registers/updates/deactivates stored strategies (update = partial merge)
+  manage_strategy     — register/update/deactivate/reactivate stored strategies (update = merge)
   get_strategy        — reads a stored strategy's full definition (read-only)
-  manage_formula      — registers/updates/deletes custom formulas in indicators
-  manage_signal_source — registers/updates/deactivates signal sources in ingest
+  manage_formula      — registers/updates(partial merge)/soft-deletes custom formulas in indicators
+  get_formula         — reads one stored formula's full definition incl. `deleted` (read-only)
+  list_formulas       — lists formula definitions, soft-deleted excluded (read-only)
+  manage_signal_source — registers/updates/reactivates/deactivates signal sources in ingest
   set_strategy_live   — enables/disables live alert evaluation for a strategy
   trigger_backfill    — triggers an OHLCV history backfill via gRPC TriggerBackfill (admin-scoped)
   get_backfill_status — checks a backfill job / lists recent jobs (read-only)
+  cancel_backfill     — cancels a queued/running backfill job (admin-scoped)
+  test_formula        — dry-runs inline formula source in the sandbox, registers nothing (read-only)
+  list_strategies     — lists stored strategy definitions (read-only)
   get_config          — reads a namespace's current config values, secrets redacted (read-only)
   list_config_keys    — lists a namespace's registered config keys, metadata only (read-only)
   set_config          — writes one non-secret config value (admin-scoped write)
@@ -67,6 +72,25 @@ def _claims_from_context(ctx: Context) -> dict | None:
     scope = getattr(request, "scope", None) or {}
     claims = (scope.get("state") or {}).get(MCP_CLAIMS_SCOPE_KEY)
     return claims if isinstance(claims, dict) else None
+
+
+def _caller_access_scope(ctx: Context, tool: str) -> int:
+    """Derive the REAL caller's ``x-access-scope`` from their verified claims.
+
+    Feature 073 introduced this for ``set_config``; feature 092 generalized it to every management
+    write tool (``manage_strategy``, ``manage_signal_source``, ``set_strategy_live``,
+    ``trigger_backfill``) so admin is *verified by the backend gate*, not asserted via a hardcoded
+    scope. Raises when no verified claims are present (the Streamable HTTP transport authenticates
+    the tool call itself; the legacy SSE transport that didn't was removed by feature 079)."""
+    claims = _claims_from_context(ctx)
+    if claims is None:
+        raise RuntimeError(
+            f"{tool} requires the Streamable HTTP transport, where the tool call itself "
+            "is authenticated. No verified caller claims are present on this request, so the "
+            "caller's role cannot be established. (The legacy SSE transport, which never "
+            "authenticated individual tool calls, was removed by feature 079.)"
+        )
+    return roles_to_access_scope(claims.get("roles"))
 
 
 def _grpc_error_message(exc: grpc.aio.AioRpcError, not_found: str = "not found") -> str:
@@ -278,6 +302,9 @@ def register_tools(server: MCPServer) -> None:
         body: str,
         source_service: str = "xstockstrat-agent",
         target_user_id: str = "",
+        context: dict | None = None,
+        tags: list[str] | None = None,
+        correlation_id: str = "",
     ) -> dict:
         """Emit an alert via xstockstrat-notify.
         severity: one of 'info', 'warning', 'error', 'critical' (case-insensitive). Any
@@ -286,6 +313,9 @@ def register_tools(server: MCPServer) -> None:
         title/body: stored and delivered verbatim with NO server-side validation — empty strings
             are accepted and delivered blank, so populate both.
         target_user_id: defaults to '' which BROADCASTS to all users; set it to target one user.
+        context: optional structured JSON object stored and fanned out with the alert.
+        tags: optional list of string tags for filtering/grouping.
+        correlation_id: optional id to correlate related alerts.
         Use for system-level alerts or alerts not tied to a specific ingested signal (ingest_signal
             already auto-alerts high-conviction signals).
         Returns {"alert_id": <str>}."""
@@ -296,6 +326,9 @@ def register_tools(server: MCPServer) -> None:
             body=body,
             source_service=source_service,
             target_user_id=target_user_id,
+            context=context,
+            tags=tags,
+            correlation_id=correlation_id,
         )
 
     # structured_output=False is forward-protection, not load-bearing today: for a bare `-> list`
@@ -376,20 +409,24 @@ def register_tools(server: MCPServer) -> None:
         """Scan a universe of symbols via xstockstrat-analysis and return ranked candidates.
         symbols: explicit ticker list to screen e.g. ['NVDA', 'AAPL'] (no watchlist resolution).
         criteria: list of criterion dicts, each with keys: ref_name, kind
-            ('SCREEN_KIND_FUNDAMENTAL' | 'SCREEN_KIND_SIGNAL'), metric_name, op (e.g.
-            'COMPARATOR_GTE'), threshold, threshold_high, weight, hard_filter.
-            ONLY fundamental and signal kinds work today. 'SCREEN_KIND_TECHNICAL_FORMULA' /
-            'SCREEN_KIND_TECHNICAL_INDICATOR' criteria are accepted but SILENTLY SKIPPED (this
-            wrapper never sends the `component` field they require), and an unknown fundamental
-            metric_name is likewise silently skipped, not rejected.
+            ('SCREEN_KIND_FUNDAMENTAL' | 'SCREEN_KIND_SIGNAL' | 'SCREEN_KIND_TECHNICAL_FORMULA' |
+            'SCREEN_KIND_TECHNICAL_INDICATOR'), metric_name, op (e.g. 'COMPARATOR_GTE'),
+            threshold, threshold_high, weight, hard_filter.
+            For technical kinds supply a `component` dict (same shape as a strategy component:
+            ref_name / kind ('builtin'|'formula') / indicator / formula_id / params) — it is now
+            mapped and sent, so technical criteria are scored (feature 090). An unknown fundamental
+            metric_name (a typo, or an open metric no scanned symbol carries) is REJECTED with
+            INVALID_ARGUMENT rather than silently skipped.
         signal_sources/signal_weight/technical_weight: optional signal-blend params.
-        min_conviction: accepted but currently a DEAD knob — the screener never reads it. Apply
-            your own conviction cutoff on the results instead.
+        min_conviction: honored as a hard floor (feature 090) — candidates whose relative
+            conviction score is below the entry threshold for this min_conviction are dropped from
+            results (coverage_gaps are unaffected).
         rank_limit: cap on returned results (0 = analysis default). Read-only, no admin scope.
         Returns {"results": [{"symbol", "score", "criterion_scores" (per-ref_name map), "passed"
-            (bool), "status"}], "coverage_gaps": [{"symbol"}]}. coverage_gaps carries only the
-            symbol (timeframe / bars-available / bars-needed detail is dropped) and is computed
-            AFTER rank truncation. Filter candidates on `passed`."""
+            (bool), "status"}], "coverage_gaps": [{"symbol", "timeframe", "bars_have",
+            "bars_need"}]}. coverage_gaps now carries the full gap detail (bars_have/bars_need as
+            JSON strings — int64) and is computed BEFORE rank truncation, so an under-covered
+            symbol ranked below the cut still surfaces. Filter candidates on `passed`."""
         return await client.screen_symbols(
             symbols=symbols,
             criteria=criteria,
@@ -402,6 +439,7 @@ def register_tools(server: MCPServer) -> None:
 
     @server.tool()
     async def manage_strategy(
+        ctx: Context,
         operation: str,
         strategy_id: str,
         display_name: str | None = None,
@@ -412,8 +450,8 @@ def register_tools(server: MCPServer) -> None:
         cooldown_days: int | None = None,
         clear_fields: list[str] | None = None,
     ) -> dict:
-        """Register/update/deactivate a stored strategy in xstockstrat-analysis.
-        operation: 'register' | 'update' | 'deactivate'.
+        """Register/update/deactivate/reactivate a stored strategy in xstockstrat-analysis.
+        operation: 'register' | 'update' | 'deactivate' | 'reactivate'.
         strategy_id: lowercase/underscore identifier (e.g. 'sma_crossover').
         display_name: human-readable name.
         components: list of {ref_name, kind ('builtin'|'formula'), indicator, formula_id, params}.
@@ -465,10 +503,11 @@ def register_tools(server: MCPServer) -> None:
         signal_params) changes the strategy's definition fingerprint, so its derived grade is
         cleared until a fresh backtest supplies new evidence. A rename does not.
 
-        LIFECYCLE IS ONE-WAY: 'deactivate' is permanent — there is no reactivation operation, and
-        re-registering the same strategy_id does NOT overwrite or reactivate; it fails with a
-        generic INTERNAL error (a unique-key violation, not ALREADY_EXISTS). To revise a retired
-        strategy, register a new versioned id (e.g. 'x_v2').
+        LIFECYCLE (feature 089): 'deactivate' is reversible via 'reactivate' (sets active=true and
+        re-validates the stored definition — a reactivate can fail INVALID_ARGUMENT if a referenced
+        formula went missing). Re-registering an existing strategy_id (active or deactivated)
+        returns ALREADY_EXISTS and DROPS the submitted definition — it does not overwrite; use
+        'update' to revise, or 'reactivate' to bring back a deactivated strategy.
 
         RESPONSE CASING: this tool returns the definition with camelCase keys (e.g. `refName`,
         `entryRule`), UNLIKE get_strategy, which returns snake_case. To round-trip an edit, fetch
@@ -509,9 +548,15 @@ def register_tools(server: MCPServer) -> None:
                 )
             update_mask = mask
 
+        # feature 092: forward the caller's REAL derived scope (was a hardcoded admin 7); the
+        # analysis ManageStrategy backend enforces the ADMIN bit, so a non-admin is rejected there.
+        access_scope = _caller_access_scope(ctx, "manage_strategy")
         try:
             return await client.manage_strategy(
-                operation=operation, definition=definition, update_mask=update_mask
+                operation=operation,
+                definition=definition,
+                update_mask=update_mask,
+                access_scope=access_scope,
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="strategy not found")) from e
@@ -519,46 +564,52 @@ def register_tools(server: MCPServer) -> None:
     @server.tool()
     async def manage_formula(
         operation: str,
-        name: str = "",
-        description: str = "",
-        source: str = "",
-        is_public: bool = False,
+        name: str | None = None,
+        description: str | None = None,
+        source: str | None = None,
+        is_public: bool | None = None,
         formula_id: str = "",
         author: str = "",
         formula_author_user_id: str = "",
         parameters: list[dict] | None = None,
+        outputs: list[dict] | None = None,
+        warmup_period: int | None = None,
     ) -> dict:
         """Register/update/delete a custom formula in xstockstrat-indicators.
         operation: 'register' | 'update' | 'delete'.
-        name/description/source/is_public: for register and update.
+        name/description/source/is_public: for register and update. On UPDATE these are
+            presence-detected — pass a field only if you want to change it (see UPDATE below).
         author: stored immutably on register.
         formula_id: required for update/delete.
         formula_author_user_id: required for update/delete; must match the formula's original
             author (the indicators backend returns PERMISSION_DENIED otherwise).
-        parameters: typed parameter definitions for register/update — a list of
+        parameters: typed parameter definitions — a list of
             {name, type, default, description, required, min, max} where type is one of
             'int'|'float'|'bool'|'string' and min/max apply to numeric params only. Values
             are read inside the formula via params["<name>"].
+        outputs: declared secondary output series — a list of {name, description}. Declaring an
+            output makes it addressable in strategy rules as "<ref>.<name>"; the implicit "value"
+            series is always available and must NOT be declared here. A formula can therefore be
+            genuinely multi-series (no more one-formula-per-series workaround).
+        warmup_period: bars of warm-up before this formula's outputs are valid (int ≥ 0).
 
-        UPDATE IS A FULL REPLACE (not a partial merge): every field you omit is sent as its
-            default and OVERWRITES the stored value — an omitted source is blanked, omitted
-            parameters are dropped, is_public silently resets to False. No read-back tool exists
-            (get_formula/list_formulas are not registered), so you cannot recover the current
-            definition: keep the full registration payload and resend ALL fields on every update.
-        DELETE IS A HARD DELETE with no reference check — any strategy still referencing the
-            formula will fail later at evaluation time. Treat delete as forbidden while any
-            strategy uses the formula.
+        UPDATE IS A PARTIAL MERGE (AIP-161): only the fields you actually pass are changed; every
+            field you omit is preserved. Passing is_public=false unpublishes; omitting is_public
+            leaves it as-is. `source` cannot be blanked. Use get_formula/list_formulas to read a
+            formula back before editing. (At least one field must be supplied to update.)
+        DELETE IS A SOFT DELETE: the formula is marked deleted (non-destructive), hidden from
+            list_formulas, and can no longer be updated, but strategies that already reference it
+            keep evaluating on its last-saved definition — and both their backtests
+            (BacktestResult.warnings) and live status (get_strategy → warnings) flag the deletion
+            to the user. You cannot bind a NEW strategy to a deleted formula.
         Returns per operation: register → {"formula_id": <str>}; update → the full stored formula
-            in camelCase; delete → {"success": <bool>}.
+            in camelCase (incl. `deleted`); delete → {"success": <bool>}.
 
         source: plain Python, executed in a subprocess sandbox (no filesystem/network access).
             Two dicts are already in scope — data (series input, e.g. data["close"], a list of
             floats) and params (validated typed scalars, e.g. params["period"]) — and the
             formula must assign its output to a `result` dict with a "value" key (the primary
-            series). Only "value" is usable through this tool: it does NOT send the RegisterFormula
-            `outputs` or `warmup_period` fields, so any additional keys you put in `result` are NOT
-            declared to the backend and are ignored (analysis falls back to just "value"). To build
-            a multi-series indicator, register one formula per series.
+            series) plus one key per declared `outputs` entry.
             Only imports in the `indicators.sandbox.allowed_imports` config key are permitted
             (default: numpy, pandas, math, statistics). Within those, at least these functions
             are available for building custom indicators:
@@ -575,84 +626,150 @@ def register_tools(server: MCPServer) -> None:
         formula: dict = {
             "formula_id": formula_id,
             "user_id": formula_author_user_id,
-            "name": name,
-            "description": description,
-            "source": source,
-            "is_public": is_public,
             "author": author,
+            "name": name or "",
+            "description": description or "",
+            "source": source or "",
+            "is_public": bool(is_public),
             "parameters": parameters or [],
+            "outputs": outputs or [],
+            "warmup_period": warmup_period or 0,
         }
+        if operation == "update":
+            # Derive the AIP-161 update_mask from the fields actually supplied (non-None), so an
+            # omitted field is preserved rather than wiped. Never fall back to a maskless full
+            # replace from the tool.
+            supplied = {
+                "name": name,
+                "description": description,
+                "source": source,
+                "is_public": is_public,
+                "parameters": parameters,
+                "outputs": outputs,
+                "warmup_period": warmup_period,
+            }
+            mask = [field for field, val in supplied.items() if val is not None]
+            if not mask:
+                raise RuntimeError("update requires at least one field to change")
+            formula["update_mask"] = mask
         try:
             return await client.manage_formula(operation=operation, formula=formula)
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="formula not found")) from e
 
     @server.tool()
+    async def get_formula(formula_id: str) -> dict:
+        """Fetch one custom formula's stored definition from xstockstrat-indicators.
+        formula_id: required.
+        Returns the formula in camelCase incl. name, description, source, isPublic, parameters,
+            outputs, warmupPeriod, and `deleted` (true when soft-deleted). Use this for safe
+            read-modify-write: read the formula, change the fields you want, then call
+            manage_formula(operation='update', ...) with only those fields."""
+        try:
+            return await client.get_formula(formula_id)
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="formula not found")) from e
+
+    @server.tool()
+    async def list_formulas(author_filter: str = "", include_public: bool = True) -> dict:
+        """List custom formula definitions from xstockstrat-indicators.
+        author_filter: if non-empty, restrict to formulas authored by this user id.
+        include_public: also include public formulas regardless of author_filter (default true).
+        Soft-deleted formulas are excluded. Returns {"formulas": [<formula in camelCase>, ...]}."""
+        try:
+            return {"formulas": await client.list_formulas(author_filter, include_public)}
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
+
+    @server.tool()
     async def manage_signal_source(
+        ctx: Context,
         operation: str,
         slug: str,
-        display_name: str = "",
-        source_type: str = "",
+        display_name: str | None = None,
+        source_type: str | None = None,
         config_json: dict | None = None,
-        extractor_module: str = "",
+        extractor_module: str | None = None,
         credentials_ref: str | None = None,
     ) -> dict:
-        """Register/update/deactivate a signal source in xstockstrat-ingest.
-        operation: 'register' | 'update' | 'deactivate'.
-        slug/display_name/source_type/extractor_module/config_json: SignalSource fields.
-        credentials_ref: optional reference forwarded to the ingest backend. It is NEVER
-            echoed back in the response and never exposed to the caller (FR-12).
-        DESTRUCTIVE UPSERT: 'register' and 'update' are the SAME blind full-replace — register on
-            an existing slug silently overwrites it, update on an unknown slug silently creates it,
-            and every field you omit BLANKS the stored value. In particular, omitting
-            credentials_ref NULLs the stored reference (has_credentials flips to false), so always
-            re-supply it from your own records. Resend the COMPLETE definition every time (read
-            current fields from list_signal_sources first).
-        REACTIVATION: register/update always sends active=True, so either also reactivates a
-            deactivated source — this is the only reactivation path, and there is no way to update
-            without reactivating.
+        """Register/update/reactivate/deactivate a signal source in xstockstrat-ingest.
+        operation: 'register' | 'update' | 'reactivate' | 'deactivate'. These are HONEST,
+            distinct verbs (feature 088):
+            - register: strict create — an existing slug returns ALREADY_EXISTS (no overwrite).
+              Provide slug/display_name/source_type/extractor_module (+config_json/credentials_ref).
+            - update: PARTIAL MERGE — pass only the fields to change; every omitted field is
+              PRESERVED. An unknown slug returns NOT_FOUND. (At least one field must be supplied.)
+            - reactivate: set active=true; decoupled from update (update never changes active).
+            - deactivate: set active=false.
+        slug: always required (the source key).
+        credentials_ref: reference forwarded to the backend; NEVER echoed back (FR-12). On update it
+            is preserved when omitted; pass "" to explicitly clear it. A `authenticated_website` or
+            `mediated_authenticated_website` source requires a credential (validated on the merged
+            result).
         Returns {"slug", "display_name", "source_type", "extractor_module", "active",
             "has_credentials"} — credentials_ref is never included."""
-        source: dict = {
-            "slug": slug,
-            "display_name": display_name,
-            "source_type": source_type,
-            "extractor_module": extractor_module,
-            "config_json": config_json or {},
-        }
+        source: dict = {"slug": slug}
+        if display_name is not None:
+            source["display_name"] = display_name
+        if source_type is not None:
+            source["source_type"] = source_type
+        if extractor_module is not None:
+            source["extractor_module"] = extractor_module
+        if config_json is not None:
+            source["config_json"] = config_json
+        update_mask: list[str] | None = None
+        if operation == "update":
+            supplied = {
+                "display_name": display_name,
+                "source_type": source_type,
+                "extractor_module": extractor_module,
+                "config_json": config_json,
+                "credentials_ref": credentials_ref,
+            }
+            update_mask = [field for field, val in supplied.items() if val is not None]
+            if not update_mask:
+                raise RuntimeError("update requires at least one field to change")
+        access_scope = _caller_access_scope(ctx, "manage_signal_source")  # feature 092
         try:
             return await client.manage_signal_source(
                 operation=operation,
                 source=source,
                 credentials_ref=credentials_ref,
+                update_mask=update_mask,
+                access_scope=access_scope,
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="signal source not found")) from e
 
     @server.tool()
     async def set_strategy_live(
+        ctx: Context,
         strategy_id: str,
         live_enabled: bool,
     ) -> dict:
         """Enable or disable live alert evaluation for a strategy.
         strategy_id: ID of the strategy to toggle (from manage_strategy / get_strategy).
         live_enabled: true to enable continuous live evaluation + alerting; false to disable.
-        Enabling SUCCEEDS even on configurations that can never fire: the live loop only runs
-            strategies with live_enabled AND active=true, and silently skips any strategy whose
-            signal_params has no `symbols`. A success here does NOT guarantee alerts fire — after
-            enabling, call get_strategy and confirm active=true and a non-empty
-            signal_params.symbols.
+        Enabling is REJECTED (FAILED_PRECONDITION, feature 089) on a configuration that could never
+            fire: an inactive strategy, or one whose signal_params has no `symbols`. So a successful
+            enable now guarantees the strategy satisfies the live loop's firing contract
+            (live_enabled AND active, with symbols). Disabling is ALWAYS allowed, even on an inert
+            config, so you can always turn live off.
         Returns a 4-field subset, NOT the full definition:
             {"strategy_id", "display_name", "live_enabled", "active"}."""
+        access_scope = _caller_access_scope(ctx, "set_strategy_live")  # feature 092
         try:
             return await client.set_strategy_live(
-                strategy_id=strategy_id, live_enabled=live_enabled
+                strategy_id=strategy_id,
+                live_enabled=live_enabled,
+                access_scope=access_scope,
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="strategy not found")) from e
 
     @server.tool()
     async def trigger_backfill(
+        ctx: Context,
         symbols: list[str],
         timeframe: str = "1d",
         start: str | None = None,
@@ -673,6 +790,7 @@ def register_tools(server: MCPServer) -> None:
         Returns {"job_id", "status"}. Ingest performs NO synchronous input validation —
         it queues unconditionally and bad input surfaces as a terminal FAILED/PARTIAL
         job; poll get_backfill_status with the returned job_id to observe the outcome."""
+        access_scope = _caller_access_scope(ctx, "trigger_backfill")  # feature 092
         try:
             return await client.trigger_backfill(
                 symbols=symbols,
@@ -681,6 +799,7 @@ def register_tools(server: MCPServer) -> None:
                 end=end,
                 overwrite=overwrite,
                 fill_mode=fill_mode,
+                access_scope=access_scope,
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e)) from e
@@ -715,6 +834,60 @@ def register_tools(server: MCPServer) -> None:
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="backfill job not found")) from e
+
+    @server.tool()
+    async def cancel_backfill(ctx: Context, job_id: str) -> dict:
+        """Cancel a queued or running OHLCV backfill job in xstockstrat-ingest (admin-scoped).
+        job_id: the job to cancel (from trigger_backfill or get_backfill_status).
+        Use this to stop a paid backfill you started that is no longer wanted. A job that has
+            already completed/failed cannot be canceled.
+        Returns {"job": {...}} with the updated BackfillJob (status should be canceled)."""
+        access_scope = _caller_access_scope(ctx, "cancel_backfill")  # feature 092
+        try:
+            return await client.cancel_backfill(job_id, access_scope=access_scope)
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="backfill job not found")) from e
+
+    @server.tool()
+    async def test_formula(
+        source: str,
+        input_data: dict | None = None,
+        input_params: dict | None = None,
+        parameters: list[dict] | None = None,
+        timeout_ms: int = 0,
+    ) -> dict:
+        """Dry-run inline formula source in the sandbox WITHOUT registering it (read-only).
+        Use this to validate a formula's behavior before manage_formula(operation='register').
+        source: plain Python; assign the result to a `result` dict with a 'value' key. `data`
+            (series input, e.g. data['close']) and `params` (typed scalars) are in scope.
+        input_data: JSON object passed to the formula as `data` (e.g. {'close': [1,2,3]}).
+        input_params: parameter VALUES exposed as `params` (e.g. {'period': 14}).
+        parameters: optional typed parameter DEFINITIONS to validate input_params for this run.
+        timeout_ms: 0 = use the configured sandbox timeout.
+        Returns the full sandbox result: success, output (the result dict; NON-FINITE values such
+            as NaN/Infinity are returned as null), stdout, stderr, error, exit_reason,
+            parameter_errors, execution_ms (int64 as a JSON string)."""
+        try:
+            return await client.execute_formula(
+                formula_source=source,
+                input_data=input_data,
+                input_params=input_params,
+                parameters=parameters,
+                timeout_ms_override=timeout_ms,
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
+
+    @server.tool()
+    async def list_strategies(include_inactive: bool = False) -> dict:
+        """List stored strategy definitions from xstockstrat-analysis (read-only).
+        include_inactive: also include deactivated strategies (default false).
+        Returns {"strategies": [<definition>, ...]} — each definition is snake_case, matching
+            get_strategy (so a list → get → manage_strategy edit loop stays consistent)."""
+        try:
+            return {"strategies": await client.list_strategy_definitions(include_inactive)}
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
 
     @server.tool()
     async def get_strategy(strategy_id: str) -> dict:
@@ -800,13 +973,14 @@ def register_tools(server: MCPServer) -> None:
         reason: str,
         environment: str = "",
         trading_mode: str = "",
+        create_key: bool = False,
     ) -> dict:
         """Write one non-secret config value in xstockstrat-config (admin-scoped write).
         namespace: config namespace, e.g. 'marketdata'.
-        key: the config key, e.g. 'marketdata.fmp.enabled'. WARNING: writes are a blind upsert with
-          no existence check — a mistyped key silently CREATES a new orphan key that no service
-          reads (there is no reachable "key not found" error). Call list_config_keys first and copy
-          the key verbatim.
+        key: the config key, e.g. 'marketdata.fmp.enabled'. A write to a not-yet-registered key
+          at this exact (namespace, environment, trading_mode) scope is REFUSED with NOT_FOUND
+          ("config key not registered") unless you pass create_key=true — so a typo can no longer
+          silently mint an orphan key. Call list_config_keys first and copy the key verbatim.
         value_type: one of string, int, float, bool. Pass JSON-valued config as a 'string' —
           that is byte-identical to what the server stores. NOTE value_type is only honored when
           CREATING a new key; for an existing key the stored type wins and this is ignored.
@@ -815,14 +989,16 @@ def register_tools(server: MCPServer) -> None:
         reason: why — required, and recorded alongside author.
         environment: 'dev' or 'production'. Omit to use this agent deployment's own environment.
         trading_mode: 'paper', 'live' or 'all'. Omit to use this agent's own trading mode.
+        create_key: set true ONLY to deliberately register a brand-new key at this scope; leave
+          false (the default) for every normal update so a mistyped key is rejected rather than
+          created. Key creation is audited (config.config_audit) just like an update.
         Returns {version, updated_at}. Never echoes the value back.
 
         Authorization uses YOUR role, not a service-wide admin override: the write is rejected
         with 'admin scope required' unless your session has the admin role. Secret keys cannot be
         written here at all — credentials are delivered as type: SECRET environment variables.
         Requires the Streamable HTTP transport, the only remote transport the agent serves since
-        feature 079 removed the legacy SSE one. Creating a NEW key writes no audit row (the audit
-        trigger fires on update only), and neither does rewriting a key to its existing value."""
+        feature 079 removed the legacy SSE one."""
         # Prong (b) first: a name check is the ONLY thing that can stop a brand-new secret key.
         # SetConfigRequest carries no is_secret field and the column defaults FALSE, so without
         # this a caller could create an unflagged row holding a plaintext credential.
@@ -833,14 +1009,9 @@ def register_tools(server: MCPServer) -> None:
                 "(see docs/patterns/config-governance.md)."
             )
 
-        claims = _claims_from_context(ctx)
-        if claims is None:
-            raise RuntimeError(
-                "set_config requires the Streamable HTTP transport, where the tool call itself "
-                "is authenticated. No verified caller claims are present on this request, so the "
-                "caller's role cannot be established. (The legacy SSE transport, which never "
-                "authenticated individual tool calls, was removed by feature 079.)"
-            )
+        # feature 092: shared with the other management tools; still fails fast (before the
+        # ListKeys network call) when no verified claims are present.
+        access_scope = _caller_access_scope(ctx, "set_config")
 
         env, mode = _resolve_scope(environment, trading_mode)
 
@@ -862,7 +1033,6 @@ def register_tools(server: MCPServer) -> None:
                     "delivered as type: SECRET environment variables."
                 )
 
-        access_scope = roles_to_access_scope(claims.get("roles"))
         try:
             return await client.set_config(
                 namespace=namespace,
@@ -874,6 +1044,7 @@ def register_tools(server: MCPServer) -> None:
                 author=author,
                 reason=reason,
                 access_scope=access_scope,
+                create_key=create_key,
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="config key not found")) from e

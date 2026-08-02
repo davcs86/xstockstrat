@@ -5,10 +5,10 @@ rather than an import because that helper is TypeScript in another service; the 
 platform contract, mirrored server-side in services/xstockstrat-config/src/grpc/authz.ts
 (``ADMIN_SCOPE = 0x04``) and in the Python servicers' ``_has_admin_scope``.
 
-Note there are two "admin" numbers in this codebase and they are both correct:
-  * 15 — a real admin session's full scope (READ|WRITE|ADMIN|TRADING), produced here
-  * 7  — the legacy hardcoded tuple in client._admin_metadata(), used by the other management
-         tools (invariant AGENT-3). Both carry the ADMIN bit, so both pass a 0x04 check.
+A real admin session's full scope is ``15`` (READ|WRITE|ADMIN|TRADING). Feature 092 removed the
+legacy hardcoded ``x-access-scope=7`` tuple (``client._admin_metadata()``): every management write
+tool now forwards the caller's real derived scope from here, so the backend's ``0x04`` role check
+verifies admin instead of trusting an asserted constant.
 """
 
 import os

@@ -88,6 +88,12 @@ export interface SetConfigRequest {
     reason: string;
     environment: Environment;
     tradingMode: TradingMode;
+    /**
+     * When true, allow this write to CREATE a not-yet-registered key at the exact
+     * (namespace,key,environment,trading_mode) scope. Default false: a write to an
+     * unregistered scope is refused with NOT_FOUND, so a typo cannot mint an orphan key.
+     */
+    createKey: boolean;
 }
 export interface SetConfigResponse {
     version: string;

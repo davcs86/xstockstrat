@@ -213,6 +213,12 @@ export interface SetConfigRequest {
   reason: string;
   environment: Environment;
   tradingMode: TradingMode;
+  /**
+   * When true, allow this write to CREATE a not-yet-registered key at the exact
+   * (namespace,key,environment,trading_mode) scope. Default false: a write to an
+   * unregistered scope is refused with NOT_FOUND, so a typo cannot mint an orphan key.
+   */
+  createKey: boolean;
 }
 
 export interface SetConfigResponse {
@@ -1104,6 +1110,7 @@ function createBaseSetConfigRequest(): SetConfigRequest {
     reason: "",
     environment: Environment.ENVIRONMENT_UNSPECIFIED,
     tradingMode: TradingMode.TRADING_MODE_UNSPECIFIED,
+    createKey: false,
   };
 }
 
@@ -1129,6 +1136,9 @@ export const SetConfigRequest: MessageFns<SetConfigRequest> = {
     }
     if (message.tradingMode !== TradingMode.TRADING_MODE_UNSPECIFIED) {
       writer.uint32(56).int32(tradingModeToNumber(message.tradingMode));
+    }
+    if (message.createKey !== false) {
+      writer.uint32(64).bool(message.createKey);
     }
     return writer;
   },
@@ -1196,6 +1206,14 @@ export const SetConfigRequest: MessageFns<SetConfigRequest> = {
           message.tradingMode = tradingModeFromJSON(reader.int32());
           continue;
         }
+        case 8: {
+          if (tag !== 64) {
+            break;
+          }
+
+          message.createKey = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1220,6 +1238,11 @@ export const SetConfigRequest: MessageFns<SetConfigRequest> = {
         : isSet(object.trading_mode)
         ? tradingModeFromJSON(object.trading_mode)
         : TradingMode.TRADING_MODE_UNSPECIFIED,
+      createKey: isSet(object.createKey)
+        ? globalThis.Boolean(object.createKey)
+        : isSet(object.create_key)
+        ? globalThis.Boolean(object.create_key)
+        : false,
     };
   },
 
@@ -1246,6 +1269,9 @@ export const SetConfigRequest: MessageFns<SetConfigRequest> = {
     if (message.tradingMode !== TradingMode.TRADING_MODE_UNSPECIFIED) {
       obj.tradingMode = tradingModeToJSON(message.tradingMode);
     }
+    if (message.createKey !== false) {
+      obj.createKey = message.createKey;
+    }
     return obj;
   },
 
@@ -1263,6 +1289,7 @@ export const SetConfigRequest: MessageFns<SetConfigRequest> = {
     message.reason = object.reason ?? "";
     message.environment = object.environment ?? Environment.ENVIRONMENT_UNSPECIFIED;
     message.tradingMode = object.tradingMode ?? TradingMode.TRADING_MODE_UNSPECIFIED;
+    message.createKey = object.createKey ?? false;
     return message;
   },
 };

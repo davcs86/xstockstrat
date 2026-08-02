@@ -245,6 +245,7 @@ const (
 	StrategyOperation_STRATEGY_OPERATION_REGISTER    StrategyOperation = 1
 	StrategyOperation_STRATEGY_OPERATION_UPDATE      StrategyOperation = 2
 	StrategyOperation_STRATEGY_OPERATION_DEACTIVATE  StrategyOperation = 3
+	StrategyOperation_STRATEGY_OPERATION_REACTIVATE  StrategyOperation = 4 // set active=TRUE; re-validates the stored definition (feature 089)
 )
 
 // Enum value maps for StrategyOperation.
@@ -254,12 +255,14 @@ var (
 		1: "STRATEGY_OPERATION_REGISTER",
 		2: "STRATEGY_OPERATION_UPDATE",
 		3: "STRATEGY_OPERATION_DEACTIVATE",
+		4: "STRATEGY_OPERATION_REACTIVATE",
 	}
 	StrategyOperation_value = map[string]int32{
 		"STRATEGY_OPERATION_UNSPECIFIED": 0,
 		"STRATEGY_OPERATION_REGISTER":    1,
 		"STRATEGY_OPERATION_UPDATE":      2,
 		"STRATEGY_OPERATION_DEACTIVATE":  3,
+		"STRATEGY_OPERATION_REACTIVATE":  4,
 	}
 )
 
@@ -766,8 +769,12 @@ type BacktestResult struct {
 	// when the request omitted it) — required to rebuild the equity curve for a
 	// historical run (feature 068).
 	InitialCapital float64 `protobuf:"fixed64,15,opt,name=initial_capital,json=initialCapital,proto3" json:"initial_capital,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Human-readable run warnings surfaced to the user (feature 086), e.g. a strategy referenced a
+	// formula that has since been soft-deleted — the run still completed using its last-saved
+	// definition. Empty on a clean run.
+	Warnings      []string `protobuf:"bytes,16,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BacktestResult) Reset() {
@@ -903,6 +910,13 @@ func (x *BacktestResult) GetInitialCapital() float64 {
 		return x.InitialCapital
 	}
 	return 0
+}
+
+func (x *BacktestResult) GetWarnings() []string {
+	if x != nil {
+		return x.Warnings
+	}
+	return nil
 }
 
 type TradeRecord struct {
@@ -1996,7 +2010,12 @@ type StrategyDefinition struct {
 	// Per-symbol re-entry cooldown in calendar days (feature 069). optional = explicit presence:
 	// unset → platform default (analysis.strategy.default_cooldown_days); explicit 0 → no cooldown
 	// (immediate re-entry allowed); negative → rejected at write time (INVALID_ARGUMENT).
-	CooldownDays  *int32 `protobuf:"varint,9,opt,name=cooldown_days,json=cooldownDays,proto3,oneof" json:"cooldown_days,omitempty"`
+	CooldownDays *int32 `protobuf:"varint,9,opt,name=cooldown_days,json=cooldownDays,proto3,oneof" json:"cooldown_days,omitempty"`
+	// Human-readable status warnings surfaced to the user on read (feature 086), e.g. a component
+	// references a formula that has been soft-deleted — the strategy still evaluates (live and in
+	// backtests) using the formula's last-saved definition, but the deletion is flagged. Populated
+	// by GetStrategy; empty elsewhere.
+	Warnings      []string `protobuf:"bytes,10,rep,name=warnings,proto3" json:"warnings,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2092,6 +2111,13 @@ func (x *StrategyDefinition) GetCooldownDays() int32 {
 		return *x.CooldownDays
 	}
 	return 0
+}
+
+func (x *StrategyDefinition) GetWarnings() []string {
+	if x != nil {
+		return x.Warnings
+	}
+	return nil
 }
 
 type ManageStrategyRequest struct {
@@ -3596,7 +3622,7 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x0frequested_range\x18\x03 \x01(\v2 .xstockstrat.common.v1.TimeRangeR\x0erequestedRange\x12\x1b\n" +
 	"\tbars_have\x18\x04 \x01(\x03R\bbarsHave\x12\x1b\n" +
 	"\tbars_need\x18\x05 \x01(\x03R\bbarsNeed\x122\n" +
-	"\x03gap\x18\x06 \x01(\v2 .xstockstrat.common.v1.TimeRangeR\x03gap\"\xcb\x05\n" +
+	"\x03gap\x18\x06 \x01(\v2 .xstockstrat.common.v1.TimeRangeR\x03gap\"\xe7\x05\n" +
 	"\x0eBacktestResult\x12\x1f\n" +
 	"\vbacktest_id\x18\x01 \x01(\tR\n" +
 	"backtestId\x12\x1f\n" +
@@ -3615,7 +3641,8 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x06status\x18\f \x01(\x0e2'.xstockstrat.analysis.v1.BacktestStatusR\x06status\x12I\n" +
 	"\rcoverage_gaps\x18\r \x03(\v2$.xstockstrat.analysis.v1.CoverageGapR\fcoverageGaps\x12L\n" +
 	"\vdiagnostics\x18\x0e \x03(\v2*.xstockstrat.analysis.v1.SymbolDiagnosticsR\vdiagnostics\x12'\n" +
-	"\x0finitial_capital\x18\x0f \x01(\x01R\x0einitialCapital\"\x91\x02\n" +
+	"\x0finitial_capital\x18\x0f \x01(\x01R\x0einitialCapital\x12\x1a\n" +
+	"\bwarnings\x18\x10 \x03(\tR\bwarnings\"\x91\x02\n" +
 	"\vTradeRecord\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12\x12\n" +
 	"\x04side\x18\x02 \x01(\tR\x04side\x12\x10\n" +
@@ -3732,7 +3759,7 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x06params\x18\x05 \x03(\v26.xstockstrat.analysis.v1.StrategyComponent.ParamsEntryR\x06params\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\"\x95\x03\n" +
+	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\"\xb1\x03\n" +
 	"\x12StrategyDefinition\x12\x1f\n" +
 	"\vstrategy_id\x18\x01 \x01(\tR\n" +
 	"strategyId\x12!\n" +
@@ -3746,7 +3773,9 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\rsignal_params\x18\x06 \x01(\v2\x17.google.protobuf.StructR\fsignalParams\x12\x16\n" +
 	"\x06active\x18\a \x01(\bR\x06active\x12!\n" +
 	"\flive_enabled\x18\b \x01(\bR\vliveEnabled\x12(\n" +
-	"\rcooldown_days\x18\t \x01(\x05H\x00R\fcooldownDays\x88\x01\x01B\x10\n" +
+	"\rcooldown_days\x18\t \x01(\x05H\x00R\fcooldownDays\x88\x01\x01\x12\x1a\n" +
+	"\bwarnings\x18\n" +
+	" \x03(\tR\bwarningsB\x10\n" +
 	"\x0e_cooldown_days\"\xeb\x01\n" +
 	"\x15ManageStrategyRequest\x12H\n" +
 	"\toperation\x18\x01 \x01(\x0e2*.xstockstrat.analysis.v1.StrategyOperationR\toperation\x12K\n" +
@@ -3910,12 +3939,13 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\rComponentKind\x12\x1e\n" +
 	"\x1aCOMPONENT_KIND_UNSPECIFIED\x10\x00\x12$\n" +
 	" COMPONENT_KIND_BUILTIN_INDICATOR\x10\x01\x12!\n" +
-	"\x1dCOMPONENT_KIND_CUSTOM_FORMULA\x10\x02*\x9a\x01\n" +
+	"\x1dCOMPONENT_KIND_CUSTOM_FORMULA\x10\x02*\xbd\x01\n" +
 	"\x11StrategyOperation\x12\"\n" +
 	"\x1eSTRATEGY_OPERATION_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bSTRATEGY_OPERATION_REGISTER\x10\x01\x12\x1d\n" +
 	"\x19STRATEGY_OPERATION_UPDATE\x10\x02\x12!\n" +
-	"\x1dSTRATEGY_OPERATION_DEACTIVATE\x10\x03*\x8e\x01\n" +
+	"\x1dSTRATEGY_OPERATION_DEACTIVATE\x10\x03\x12!\n" +
+	"\x1dSTRATEGY_OPERATION_REACTIVATE\x10\x04*\x8e\x01\n" +
 	"\n" +
 	"Comparator\x12\x1a\n" +
 	"\x16COMPARATOR_UNSPECIFIED\x10\x00\x12\x11\n" +

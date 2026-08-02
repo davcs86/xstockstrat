@@ -2,32 +2,33 @@
  * Unit tests for NotifyServiceImpl — no real DB required.
  *
  * Tests cover matchesSubscriber logic (via `as any` access), rowToAlert shape,
- * and streamAlerts subscriber registration/deregistration.
+ * streamAlerts subscriber registration/deregistration, and the EmitAlert
+ * internal-service-caller contract (feature 092).
  *
- * Tests gracefully skip if the TypeScript import fails in strip-only mode
- * (parameter properties); they run fully when --experimental-transform-types
- * or a supporting runtime is used.
+ * Feature 092: this suite now runs against COMPILED output (`tsc && node --test
+ * dist/__tests__/*.test.js`) with a STATIC import, not `--experimental-strip-types`
+ * against source. The impl uses TS parameter properties that strip-only mode cannot
+ * compile, so the previous lazy `try/catch` import silently skipped every case (0
+ * assertions — fails.md 2026-07-29 / feature 074). A static import fails HARD on any
+ * import error, and the harness test below asserts the import succeeded.
  *
- * Run: node --experimental-strip-types --test src/__tests__/*.test.ts
+ * Run: pnpm run test  (tsc && node --test dist/__tests__/*.test.js)
  */
-import { describe, it, before } from 'node:test';
+import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
+import { NotifyServiceImpl, rowToAlert } from '../grpc/notifyServiceImpl.js';
+import { Alert } from '@xstockstrat/proto/notify/v1/notify';
+
 // ---------------------------------------------------------------------------
-// Lazy imports
+// Harness — the import must succeed, never silently skip (074 guard)
 // ---------------------------------------------------------------------------
 
-let NotifyServiceImpl: any;
-let rowToAlert: any;
-
-before(async () => {
-  try {
-    const mod = await import('../grpc/notifyServiceImpl.js');
-    NotifyServiceImpl = mod.NotifyServiceImpl;
-    rowToAlert = mod.rowToAlert;
-  } catch {
-    // Unsupported TypeScript syntax in strip-only mode — tests will be skipped.
-  }
+describe('test harness', () => {
+  it('imports the implementation under test', () => {
+    assert.ok(NotifyServiceImpl, 'NotifyServiceImpl import must succeed — never skip silently');
+    assert.ok(rowToAlert, 'rowToAlert import must succeed');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -44,9 +45,8 @@ function makePool(rows: any[] = [], throws?: Error) {
 }
 
 function makeImpl(rows: any[] = [], throws?: Error) {
-  if (!NotifyServiceImpl) return null;
   const pool = makePool(rows, throws);
-  return new NotifyServiceImpl(pool, {});
+  return new NotifyServiceImpl(pool as any, {} as any);
 }
 
 // makeAlert produces fan-out alert objects (camelCase — proto field names)
@@ -67,7 +67,6 @@ function makeAlert(overrides: any = {}) {
 
 describe('rowToAlert', () => {
   it('maps row to alert proto shape', () => {
-    if (!rowToAlert) return;
     const now = new Date('2024-01-01T00:00:00Z');
     // DB rows use snake_case column names
     const row = {
@@ -92,7 +91,6 @@ describe('rowToAlert', () => {
   });
 
   it('uses empty string for null correlation_id and target_user_id', () => {
-    if (!rowToAlert) return;
     const row = {
       alert_id: 'a2',
       severity: 1,
@@ -122,7 +120,6 @@ describe('emitAlert', () => {
   // but notify.alerts.severity is INTEGER. Binding the raw string raised
   // `invalid input syntax for type integer: "ALERT_SEVERITY_WARNING"`.
   it('binds severity as the numeric enum value, not the string enum', async () => {
-    if (!NotifyServiceImpl) return;
     let capturedParams: any[] = [];
     const pool = {
       async query(_sql: string, params?: any[]) {
@@ -130,7 +127,7 @@ describe('emitAlert', () => {
         return { rows: [] };
       },
     };
-    const impl = new NotifyServiceImpl(pool, {});
+    const impl = new NotifyServiceImpl(pool as any, {} as any);
     const call = {
       request: {
         severity: 'ALERT_SEVERITY_WARNING',
@@ -152,7 +149,6 @@ describe('emitAlert', () => {
 
   it('calls back with error code 13 on DB failure', async () => {
     const impl = makeImpl([], new Error('insert failed'));
-    if (!impl) return;
     const call = {
       request: { severity: 'ALERT_SEVERITY_INFO', category: 'c', title: 't', body: 'b', sourceService: 's' },
     };
@@ -165,6 +161,43 @@ describe('emitAlert', () => {
       });
     });
   });
+
+  // Feature 092 (F-11): EmitAlert is an INTERNAL-SERVICE-CALLER contract, not a role-gated RPC.
+  // Its trust boundary is the private gRPC network plus the agent's OAuth 2.1 edge — every caller
+  // is internal/unauthenticated (analysis loops send no metadata; the agent sends only
+  // x-mcp-secret). This test PINS that contract: a call carrying NO scope/secret metadata must
+  // succeed and persist the alert. An admin gate here would break every current caller.
+  // (Design decision recorded in the feature 092 design.md; adversary-ruled.)
+  it('accepts an unauthenticated internal caller (no scope/secret metadata) and persists the alert', async () => {
+    let capturedSql = '';
+    let capturedParams: any[] = [];
+    const pool = {
+      async query(sql: string, params?: any[]) {
+        capturedSql = sql;
+        capturedParams = params ?? [];
+        return { rows: [] };
+      },
+    };
+    const impl = new NotifyServiceImpl(pool as any, {} as any);
+    // No `metadata` on the call object at all — the internal-caller shape.
+    const call = {
+      request: {
+        severity: 'ALERT_SEVERITY_INFO',
+        category: 'system',
+        title: 'internal',
+        body: 'from a service loop',
+        sourceService: 'analysis',
+      },
+    };
+
+    await new Promise<void>((resolve, reject) => {
+      impl.emitAlert(call, (err: any) => (err ? reject(err) : resolve()));
+    });
+
+    // The INSERT ran (the alert was persisted) — the RPC did not reject an unauthenticated caller.
+    assert.match(capturedSql, /insert into/i);
+    assert.strictEqual(capturedParams[1], 1); // ALERT_SEVERITY_INFO → 1, bound numerically
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -174,7 +207,6 @@ describe('emitAlert', () => {
 describe('matchesSubscriber', () => {
   it('allows broadcast alert (no targetUserId)', () => {
     const impl = makeImpl();
-    if (!impl) return;
     const alert = makeAlert({ targetUserId: '' });
     const sub = { userId: 'user-1', categories: [], severities: [], includeAcknowledged: false, call: {} };
     assert.strictEqual((impl as any).matchesSubscriber(alert, sub), true);
@@ -182,7 +214,6 @@ describe('matchesSubscriber', () => {
 
   it('allows alert targeting specific user when sub matches', () => {
     const impl = makeImpl();
-    if (!impl) return;
     const alert = makeAlert({ targetUserId: 'user-1' });
     const sub = { userId: 'user-1', categories: [], severities: [], includeAcknowledged: false, call: {} };
     assert.strictEqual((impl as any).matchesSubscriber(alert, sub), true);
@@ -190,7 +221,6 @@ describe('matchesSubscriber', () => {
 
   it('blocks alert targeting different user', () => {
     const impl = makeImpl();
-    if (!impl) return;
     const alert = makeAlert({ targetUserId: 'user-2' });
     const sub = { userId: 'user-1', categories: [], severities: [], includeAcknowledged: false, call: {} };
     assert.strictEqual((impl as any).matchesSubscriber(alert, sub), false);
@@ -198,7 +228,6 @@ describe('matchesSubscriber', () => {
 
   it('filters by category when categories array is set', () => {
     const impl = makeImpl();
-    if (!impl) return;
     const alert = makeAlert({ category: 'system' });
     const sub = { userId: '', categories: ['trading'], severities: [], includeAcknowledged: false, call: {} };
     assert.strictEqual((impl as any).matchesSubscriber(alert, sub), false);
@@ -206,7 +235,6 @@ describe('matchesSubscriber', () => {
 
   it('allows matching category', () => {
     const impl = makeImpl();
-    if (!impl) return;
     const alert = makeAlert({ category: 'trading' });
     const sub = { userId: '', categories: ['trading'], severities: [], includeAcknowledged: false, call: {} };
     assert.strictEqual((impl as any).matchesSubscriber(alert, sub), true);
@@ -214,7 +242,6 @@ describe('matchesSubscriber', () => {
 
   it('filters by severity when severities array is set', () => {
     const impl = makeImpl();
-    if (!impl) return;
     const alert = makeAlert({ severity: 3 });
     const sub = { userId: '', categories: [], severities: [1, 2], includeAcknowledged: false, call: {} };
     assert.strictEqual((impl as any).matchesSubscriber(alert, sub), false);
@@ -222,7 +249,6 @@ describe('matchesSubscriber', () => {
 
   it('filters acknowledged when includeAcknowledged=false', () => {
     const impl = makeImpl();
-    if (!impl) return;
     const alert = makeAlert({ acknowledged: true });
     const sub = { userId: '', categories: [], severities: [], includeAcknowledged: false, call: {} };
     assert.strictEqual((impl as any).matchesSubscriber(alert, sub), false);
@@ -230,7 +256,6 @@ describe('matchesSubscriber', () => {
 
   it('allows acknowledged when includeAcknowledged=true', () => {
     const impl = makeImpl();
-    if (!impl) return;
     const alert = makeAlert({ acknowledged: true });
     const sub = { userId: '', categories: [], severities: [], includeAcknowledged: true, call: {} };
     assert.strictEqual((impl as any).matchesSubscriber(alert, sub), true);
@@ -244,7 +269,6 @@ describe('matchesSubscriber', () => {
 describe('streamAlerts', () => {
   it('registers subscriber and deregisters on cancelled', () => {
     const impl = makeImpl();
-    if (!impl) return;
 
     const cancelHandlers: Array<() => void> = [];
     const mockCall = {
@@ -277,16 +301,7 @@ describe('streamAlerts', () => {
 // ---------------------------------------------------------------------------
 
 describe('rowToAlert serialization (regression)', () => {
-  it('produces a Date createdAt that ts-proto encodes without throwing', async () => {
-    if (!rowToAlert) return;
-
-    let Alert: any;
-    try {
-      ({ Alert } = await import('@xstockstrat/proto/notify/v1/notify.js'));
-    } catch {
-      return; // proto package unavailable in this runtime — skip.
-    }
-
+  it('produces a Date createdAt that ts-proto encodes without throwing', () => {
     const alert = rowToAlert({
       alert_id: 'a1',
       severity: 2,

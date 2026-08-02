@@ -576,14 +576,18 @@ func (x *GetConfigRequest) GetTradingMode() v1.TradingMode {
 }
 
 type SetConfigRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
-	Value         *ConfigValue           `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
-	Author        string                 `protobuf:"bytes,4,opt,name=author,proto3" json:"author,omitempty"`
-	Reason        string                 `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
-	Environment   v1.Environment         `protobuf:"varint,6,opt,name=environment,proto3,enum=xstockstrat.common.v1.Environment" json:"environment,omitempty"`
-	TradingMode   v1.TradingMode         `protobuf:"varint,7,opt,name=trading_mode,json=tradingMode,proto3,enum=xstockstrat.common.v1.TradingMode" json:"trading_mode,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Namespace   string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Key         string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Value       *ConfigValue           `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	Author      string                 `protobuf:"bytes,4,opt,name=author,proto3" json:"author,omitempty"`
+	Reason      string                 `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
+	Environment v1.Environment         `protobuf:"varint,6,opt,name=environment,proto3,enum=xstockstrat.common.v1.Environment" json:"environment,omitempty"`
+	TradingMode v1.TradingMode         `protobuf:"varint,7,opt,name=trading_mode,json=tradingMode,proto3,enum=xstockstrat.common.v1.TradingMode" json:"trading_mode,omitempty"`
+	// When true, allow this write to CREATE a not-yet-registered key at the exact
+	// (namespace,key,environment,trading_mode) scope. Default false: a write to an
+	// unregistered scope is refused with NOT_FOUND, so a typo cannot mint an orphan key.
+	CreateKey     bool `protobuf:"varint,8,opt,name=create_key,json=createKey,proto3" json:"create_key,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -665,6 +669,13 @@ func (x *SetConfigRequest) GetTradingMode() v1.TradingMode {
 		return x.TradingMode
 	}
 	return v1.TradingMode(0)
+}
+
+func (x *SetConfigRequest) GetCreateKey() bool {
+	if x != nil {
+		return x.CreateKey
+	}
+	return false
 }
 
 type SetConfigResponse struct {
@@ -967,7 +978,7 @@ const file_config_v1_config_proto_rawDesc = "" +
 	"\x10GetConfigRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12D\n" +
 	"\venvironment\x18\x02 \x01(\x0e2\".xstockstrat.common.v1.EnvironmentR\venvironment\x12E\n" +
-	"\ftrading_mode\x18\x03 \x01(\x0e2\".xstockstrat.common.v1.TradingModeR\vtradingMode\"\xb9\x02\n" +
+	"\ftrading_mode\x18\x03 \x01(\x0e2\".xstockstrat.common.v1.TradingModeR\vtradingMode\"\xd8\x02\n" +
 	"\x10SetConfigRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x128\n" +
@@ -975,7 +986,9 @@ const file_config_v1_config_proto_rawDesc = "" +
 	"\x06author\x18\x04 \x01(\tR\x06author\x12\x16\n" +
 	"\x06reason\x18\x05 \x01(\tR\x06reason\x12D\n" +
 	"\venvironment\x18\x06 \x01(\x0e2\".xstockstrat.common.v1.EnvironmentR\venvironment\x12E\n" +
-	"\ftrading_mode\x18\a \x01(\x0e2\".xstockstrat.common.v1.TradingModeR\vtradingMode\"h\n" +
+	"\ftrading_mode\x18\a \x01(\x0e2\".xstockstrat.common.v1.TradingModeR\vtradingMode\x12\x1d\n" +
+	"\n" +
+	"create_key\x18\b \x01(\bR\tcreateKey\"h\n" +
 	"\x11SetConfigResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x129\n" +
 	"\n" +

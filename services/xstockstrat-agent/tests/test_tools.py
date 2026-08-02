@@ -11,6 +11,7 @@ from mcp.server.mcpserver import MCPServer
 
 from app import client
 from app.tools import _EXTRACTOR_TOOL_MAP, register_tools
+from tests.conftest import ADMIN, _ctx  # feature 092: shared ctx/claims helpers
 
 
 def _make_server() -> MCPServer:
@@ -315,6 +316,9 @@ async def test_emit_alert_calls_grpc():
             body="Body text",
             source_service="xstockstrat-agent",
             target_user_id="",
+            context=None,
+            tags=None,
+            correlation_id="",
         )
 
 
@@ -627,6 +631,7 @@ class TestManageStrategyTool:
             client, "manage_strategy", AsyncMock(return_value={"strategy_id": "sma_x"})
         ) as m:
             result = await _tool_fn(server, "manage_strategy")(
+                ctx=_ctx(ADMIN),
                 operation="register",
                 strategy_id="sma_x",
                 display_name="SMA X",
@@ -647,19 +652,21 @@ class TestManageStrategyTool:
         ) as m:
             # Non-zero value forwarded.
             await _tool_fn(server, "manage_strategy")(
-                operation="register", strategy_id="s", cooldown_days=14
+                ctx=_ctx(ADMIN), operation="register", strategy_id="s", cooldown_days=14
             )
             assert m.call_args.kwargs["definition"]["cooldown_days"] == 14
 
             # Explicit 0 (no cooldown) must NOT be dropped by a truthy check.
             await _tool_fn(server, "manage_strategy")(
-                operation="register", strategy_id="s", cooldown_days=0
+                ctx=_ctx(ADMIN), operation="register", strategy_id="s", cooldown_days=0
             )
             defn = m.call_args.kwargs["definition"]
             assert "cooldown_days" in defn and defn["cooldown_days"] == 0
 
             # Omitted → key absent (server applies the platform default).
-            await _tool_fn(server, "manage_strategy")(operation="register", strategy_id="s")
+            await _tool_fn(server, "manage_strategy")(
+                ctx=_ctx(ADMIN), operation="register", strategy_id="s"
+            )
             assert "cooldown_days" not in m.call_args.kwargs["definition"]
 
     @pytest.mark.asyncio
@@ -672,7 +679,7 @@ class TestManageStrategyTool:
             with pytest.raises(RuntimeError, match="strategy not found"):
                 # supply a field: an empty update is now rejected client-side before the RPC
                 await _tool_fn(server, "manage_strategy")(
-                    operation="update", strategy_id="x", display_name="X"
+                    ctx=_ctx(ADMIN), operation="update", strategy_id="x", display_name="X"
                 )
 
 
@@ -743,6 +750,7 @@ class TestManageSignalSourceTool:
         }
         with patch.object(client, "manage_signal_source", AsyncMock(return_value=returned)) as m:
             result = await _tool_fn(server, "manage_signal_source")(
+                ctx=_ctx(ADMIN),
                 operation="register",
                 slug="uw",
                 display_name="UW",
@@ -765,7 +773,7 @@ class TestSetStrategyLiveTool:
         }
         with patch.object(client, "set_strategy_live", AsyncMock(return_value=returned)) as m:
             result = await _tool_fn(server, "set_strategy_live")(
-                strategy_id="s1", live_enabled=True
+                ctx=_ctx(ADMIN), strategy_id="s1", live_enabled=True
             )
         assert result == returned
         assert m.call_args.kwargs["strategy_id"] == "s1"
@@ -949,6 +957,7 @@ class TestTriggerBackfillTool:
         payload = {"job_id": "j-1", "status": "BACKFILL_STATUS_QUEUED"}
         with patch.object(client, "trigger_backfill", AsyncMock(return_value=payload)) as m:
             result = await _tool_fn(server, "trigger_backfill")(
+                ctx=_ctx(ADMIN),
                 symbols=["AAPL"],
                 timeframe="1d",
                 start="2020-01-01T00:00:00Z",
@@ -969,7 +978,7 @@ class TestTriggerBackfillTool:
         err = _rpc_error(grpc.StatusCode.UNAVAILABLE, "boom")
         with patch.object(client, "trigger_backfill", AsyncMock(side_effect=err)):
             with pytest.raises(RuntimeError, match="boom"):
-                await _tool_fn(server, "trigger_backfill")(symbols=["AAPL"])
+                await _tool_fn(server, "trigger_backfill")(ctx=_ctx(ADMIN), symbols=["AAPL"])
 
 
 class TestGetBackfillStatusTool:
@@ -1013,7 +1022,7 @@ class TestManageStrategyPartialUpdate:
         server = _make_server()
         with patch.object(client, "manage_strategy", AsyncMock(return_value={})) as m:
             await _tool_fn(server, "manage_strategy")(
-                operation="update", strategy_id="range_mr_v3", cooldown_days=45
+                ctx=_ctx(ADMIN), operation="update", strategy_id="range_mr_v3", cooldown_days=45
             )
         kwargs = m.await_args.kwargs
         assert kwargs["definition"] == {"strategy_id": "range_mr_v3", "cooldown_days": 45}
@@ -1028,7 +1037,7 @@ class TestManageStrategyPartialUpdate:
         server = _make_server()
         with patch.object(client, "manage_strategy", AsyncMock(return_value={})) as m:
             await _tool_fn(server, "manage_strategy")(
-                operation="update", strategy_id="x", cooldown_days=0
+                ctx=_ctx(ADMIN), operation="update", strategy_id="x", cooldown_days=0
             )
         assert m.await_args.kwargs["definition"]["cooldown_days"] == 0
         assert m.await_args.kwargs["update_mask"] == ["cooldown_days"]
@@ -1039,7 +1048,7 @@ class TestManageStrategyPartialUpdate:
         server = _make_server()
         with patch.object(client, "manage_strategy", AsyncMock(return_value={})) as m:
             await _tool_fn(server, "manage_strategy")(
-                operation="update", strategy_id="x", clear_fields=["exit_rule"]
+                ctx=_ctx(ADMIN), operation="update", strategy_id="x", clear_fields=["exit_rule"]
             )
         kwargs = m.await_args.kwargs
         assert kwargs["update_mask"] == ["exit_rule"]
@@ -1052,7 +1061,9 @@ class TestManageStrategyPartialUpdate:
         server = _make_server()
         with patch.object(client, "manage_strategy", AsyncMock()) as m:
             with pytest.raises(ValueError, match="at least one field to change"):
-                await _tool_fn(server, "manage_strategy")(operation="update", strategy_id="x")
+                await _tool_fn(server, "manage_strategy")(
+                    ctx=_ctx(ADMIN), operation="update", strategy_id="x"
+                )
         m.assert_not_awaited()
 
     @pytest.mark.asyncio
@@ -1061,6 +1072,7 @@ class TestManageStrategyPartialUpdate:
         server = _make_server()
         with patch.object(client, "manage_strategy", AsyncMock(return_value={})) as m:
             await _tool_fn(server, "manage_strategy")(
+                ctx=_ctx(ADMIN),
                 operation="register",
                 strategy_id="x",
                 display_name="X",
@@ -1073,7 +1085,11 @@ class TestManageStrategyPartialUpdate:
         server = _make_server()
         with patch.object(client, "manage_strategy", AsyncMock(return_value={})) as m:
             await _tool_fn(server, "manage_strategy")(
-                operation="update", strategy_id="x", display_name="New", entry_rule="{}"
+                ctx=_ctx(ADMIN),
+                operation="update",
+                strategy_id="x",
+                display_name="New",
+                entry_rule="{}",
             )
         assert sorted(m.await_args.kwargs["update_mask"]) == ["display_name", "entry_rule"]
 
@@ -1099,3 +1115,165 @@ class TestGetStrategyTool:
         with patch.object(client, "get_strategy", AsyncMock(side_effect=err)):
             with pytest.raises(RuntimeError, match="strategy not found"):
                 await _tool_fn(server, "get_strategy")(strategy_id="x")
+
+
+class TestAdditiveTools:
+    @pytest.mark.asyncio
+    async def test_test_formula_dispatches_inline_source(self):
+        server = _make_server()
+        with patch.object(
+            client, "execute_formula", AsyncMock(return_value={"success": True})
+        ) as m:
+            result = await _tool_fn(server, "test_formula")(
+                source="result = {'value': 1}", input_data={"close": [1, 2]}
+            )
+        assert result == {"success": True}
+        assert m.call_args.kwargs["formula_source"] == "result = {'value': 1}"
+
+    @pytest.mark.asyncio
+    async def test_cancel_backfill_dispatches(self):
+        server = _make_server()
+        with patch.object(
+            client, "cancel_backfill", AsyncMock(return_value={"job": {"job_id": "j-1"}})
+        ) as m:
+            result = await _tool_fn(server, "cancel_backfill")(ctx=_ctx(ADMIN), job_id="j-1")
+        m.assert_awaited_once_with("j-1", access_scope=15)  # admin roles → scope 15 (feature 092)
+        assert result["job"]["job_id"] == "j-1"
+
+    @pytest.mark.asyncio
+    async def test_list_strategies_wraps_definitions(self):
+        server = _make_server()
+        with patch.object(
+            client, "list_strategy_definitions", AsyncMock(return_value=[{"strategy_id": "s1"}])
+        ):
+            result = await _tool_fn(server, "list_strategies")(include_inactive=True)
+        assert result == {"strategies": [{"strategy_id": "s1"}]}
+
+    @pytest.mark.asyncio
+    async def test_emit_alert_forwards_extra_fields(self):
+        server = _make_server()
+        with patch.object(client, "emit_alert", AsyncMock(return_value={"alert_id": "a1"})) as m:
+            await _tool_fn(server, "emit_alert")(
+                severity="info",
+                category="system",
+                title="t",
+                body="b",
+                context={"k": "v"},
+                tags=["x"],
+                correlation_id="c1",
+            )
+        kw = m.call_args.kwargs
+        assert kw["context"] == {"k": "v"}
+        assert kw["tags"] == ["x"]
+        assert kw["correlation_id"] == "c1"
+
+
+class TestFormulaPartialUpdateTool:
+    @pytest.mark.asyncio
+    async def test_update_derives_mask_from_supplied_fields(self):
+        server = _make_server()
+        with patch.object(
+            client, "manage_formula", AsyncMock(return_value={"formulaId": "f-1"})
+        ) as m:
+            await _tool_fn(server, "manage_formula")(
+                operation="update",
+                formula_id="f-1",
+                formula_author_user_id="u1",
+                description="tweak",
+            )
+        formula = m.call_args.kwargs["formula"]
+        assert formula["update_mask"] == ["description"]
+
+    @pytest.mark.asyncio
+    async def test_update_is_public_false_is_masked(self):
+        # is_public=False is a real value (unpublish), distinct from omitting it.
+        server = _make_server()
+        with patch.object(
+            client, "manage_formula", AsyncMock(return_value={"formulaId": "f-1"})
+        ) as m:
+            await _tool_fn(server, "manage_formula")(
+                operation="update",
+                formula_id="f-1",
+                formula_author_user_id="u1",
+                is_public=False,
+            )
+        assert m.call_args.kwargs["formula"]["update_mask"] == ["is_public"]
+
+    @pytest.mark.asyncio
+    async def test_update_omitted_field_not_in_mask(self):
+        server = _make_server()
+        with patch.object(
+            client, "manage_formula", AsyncMock(return_value={"formulaId": "f-1"})
+        ) as m:
+            await _tool_fn(server, "manage_formula")(
+                operation="update",
+                formula_id="f-1",
+                formula_author_user_id="u1",
+                description="only this",
+            )
+        assert "is_public" not in m.call_args.kwargs["formula"]["update_mask"]
+
+    @pytest.mark.asyncio
+    async def test_update_with_no_fields_raises(self):
+        server = _make_server()
+        with pytest.raises(RuntimeError, match="at least one field"):
+            await _tool_fn(server, "manage_formula")(
+                operation="update", formula_id="f-1", formula_author_user_id="u1"
+            )
+
+
+class TestFormulaReadTools:
+    @pytest.mark.asyncio
+    async def test_get_formula_tool_registered(self):
+        server = _make_server()
+        with patch.object(
+            client, "get_formula", AsyncMock(return_value={"formulaId": "f-1", "deleted": True})
+        ) as m:
+            result = await _tool_fn(server, "get_formula")(formula_id="f-1")
+        m.assert_awaited_once_with("f-1")
+        assert result["deleted"] is True
+
+    @pytest.mark.asyncio
+    async def test_list_formulas_tool_wraps_list(self):
+        server = _make_server()
+        with patch.object(client, "list_formulas", AsyncMock(return_value=[{"formulaId": "f-1"}])):
+            result = await _tool_fn(server, "list_formulas")(author_filter="u1")
+        assert result == {"formulas": [{"formulaId": "f-1"}]}
+
+
+class TestManageSignalSourceVerbsTool:
+    @pytest.mark.asyncio
+    async def test_update_derives_mask_from_supplied_fields(self):
+        server = _make_server()
+        with patch.object(client, "manage_signal_source", AsyncMock(return_value={})) as m:
+            await _tool_fn(server, "manage_signal_source")(
+                ctx=_ctx(ADMIN), operation="update", slug="uw", display_name="New Name"
+            )
+        assert m.call_args.kwargs["update_mask"] == ["display_name"]
+
+    @pytest.mark.asyncio
+    async def test_update_credentials_ref_joins_mask(self):
+        server = _make_server()
+        with patch.object(client, "manage_signal_source", AsyncMock(return_value={})) as m:
+            await _tool_fn(server, "manage_signal_source")(
+                ctx=_ctx(ADMIN), operation="update", slug="uw", credentials_ref="secret.new"
+            )
+        assert "credentials_ref" in m.call_args.kwargs["update_mask"]
+
+    @pytest.mark.asyncio
+    async def test_update_with_no_fields_raises(self):
+        server = _make_server()
+        with pytest.raises(RuntimeError, match="at least one field"):
+            await _tool_fn(server, "manage_signal_source")(
+                ctx=_ctx(ADMIN), operation="update", slug="uw"
+            )
+
+    @pytest.mark.asyncio
+    async def test_reactivate_forwards_operation(self):
+        server = _make_server()
+        with patch.object(client, "manage_signal_source", AsyncMock(return_value={})) as m:
+            await _tool_fn(server, "manage_signal_source")(
+                ctx=_ctx(ADMIN), operation="reactivate", slug="uw"
+            )
+        assert m.call_args.kwargs["operation"] == "reactivate"
+        assert m.call_args.kwargs["update_mask"] is None

@@ -13,6 +13,7 @@ from gen.ingest.v1 import ingest_pb2
 from app.handlers.servicer import IngestServicer
 from app.repositories import backfill_jobs
 from tests._helpers import job_row as _job_row
+from tests.conftest import _ctx  # feature 092 (C-13): centralized fake-context builder
 
 _REPO = "app.repositories.backfill_jobs"
 
@@ -29,20 +30,6 @@ def _make_servicer(db=None) -> IngestServicer:
     svc._ledger = MagicMock()
     svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
     return svc
-
-
-def _ctx(access_scope: str = "4"):
-    """A fake gRPC context: invocation_metadata carries the access scope; abort raises."""
-    ctx = MagicMock()
-    ctx.invocation_metadata = MagicMock(
-        return_value=[
-            ("x-access-scope", access_scope),
-            ("x-user-id", "u1"),
-            ("x-trace-id", "t1"),
-        ]
-    )
-    ctx.abort = AsyncMock(side_effect=Exception("aborted"))
-    return ctx
 
 
 # ── CancelBackfill ──────────────────────────────────────────────────────────

@@ -64,9 +64,15 @@ full debate, 2–5 rounds) and announce context:
 Designing: <slug> (lifecycle: <status>)
 Mode: <quick — 1 round | full debate — 2–5 rounds>
 Affected services (from product-spec): <list>
+Consumer surface(s) (C-14, from product-spec): <UI segment(s) / Agent tool(s), or "None (internal)">
 Relevant ledger entries: <count fails / insights, or "none">
 Starting Phase 0 — Recon.
 ```
+
+If the product spec names a consumer surface (a UI segment or an Agent tool) that is **not** in
+`## Affected Services`, treat the surface's service (`xstockstrat-ui` / `xstockstrat-agent`) as an
+affected service for recon purposes — it gets its own discovery pass in Phase 0. Silently reconning
+only the backend services is how the surface ends up stale (**C-14**).
 
 ---
 

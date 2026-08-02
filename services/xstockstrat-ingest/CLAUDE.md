@@ -28,6 +28,12 @@ This service is **gRPC-only** (`app/main.py` runs a single `grpc.aio` server). T
 ingests signals via the `IngestSignal` gRPC RPC. The former HTTP/Connect-RPC server on `8055`
 (and its `/webhooks/{trigger-backfill,backfill-status,ingest-signal}` handlers) was removed.
 
+**Authorization.** `TriggerBackfill` (the provider-quota-spending op), `CancelBackfill`, and
+`ManageSignalSource` are **admin-gated** — they abort `PERMISSION_DENIED` ("admin scope required")
+unless the propagated `x-access-scope` carries the ADMIN bit (`0x04`), via the shared
+`IngestServicer._has_admin_scope`. (`TriggerBackfill`'s gate was added by feature 092 — F-11; before
+that it queued paid jobs for any caller.)
+
 ## Dependencies
 
 | Dependency | Type | Reason |

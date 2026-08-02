@@ -34,6 +34,19 @@ log = logging.getLogger(__name__)
 _LOOKBACK_DAYS = 365  # window of bars fetched per (strategy, symbol) for warm-up + evaluation
 
 
+def strategy_symbols(definition) -> list[str]:
+    """The per-strategy symbol universe from ``signal_params.symbols`` (empty if unset).
+
+    Single source of the live-loop firing contract (feature 089): the loop selects rows and the
+    SetStrategyLive precondition both call this, so an "enabled but never-fires" (no-symbols) config
+    is rejected by exactly the predicate the consumer applies — no drift (C-10).
+    """
+    if not definition.HasField("signal_params"):
+        return []
+    params = json_format.MessageToDict(definition.signal_params)
+    return [str(s) for s in (params.get("symbols") or [])]
+
+
 class LiveEvaluationLoop:
     def __init__(
         self,
@@ -108,10 +121,7 @@ class LiveEvaluationLoop:
 
     def _symbols_for(self, definition) -> list[str]:
         """Per-strategy symbol universe from signal_params.symbols (empty if unset)."""
-        if not definition.HasField("signal_params"):
-            return []
-        params = json_format.MessageToDict(definition.signal_params)
-        return [str(s) for s in (params.get("symbols") or [])]
+        return strategy_symbols(definition)
 
     def _recent_range(self) -> common_pb2.TimeRange:
         end = Timestamp()

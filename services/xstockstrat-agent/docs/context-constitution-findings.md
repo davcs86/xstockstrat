@@ -43,7 +43,7 @@ open defect until its track lands.
 | F-8 | `set_config` typo silently creates an orphan key (blind upsert); agent already has the `ListKeys` answer and discards it | `app/tools.py` `set_config`; config `configServiceImpl.ts` | B + C |
 | F-9 | `ingest_signal` conviction: no source default (docs fixed); `>1.0` fails as INTERNAL not INVALID_ARGUMENT | ingest `servicer.py` | B |
 | F-10 | Built RPCs with no MCP surface: `ExecuteFormula` (test_formula), `CancelBackfill`, `ListStrategyDefinitions`, `GetFormula`/`ListFormulas`, source-health fields, `emit_alert` context/tags/correlation_id — all additive, zero backend change | `app/client.py` (unused fns), `app/tools.py` | C |
-| F-11 | `TriggerBackfill` is ungated server-side while `CancelBackfill` is admin-gated; the agent's "admin-scoped" label is decorative (unverified `x-access-scope=7`) | ingest `servicer.py`; `app/client.py` `_admin_metadata` | B + C |
+| F-11 | ~~`TriggerBackfill` is ungated server-side while `CancelBackfill` is admin-gated; the agent's "admin-scoped" label is decorative (unverified `x-access-scope=7`)~~ **RESOLVED (feature 092):** ingest `TriggerBackfill` now admin-gates via `_has_admin_scope` (mirrors `CancelBackfill`); the agent forwards the caller's *real* derived scope on all four management write tools (hardcoded `_admin_metadata()` removed); `EmitAlert` codified as an internal-service-caller contract (private-network + OAuth-edge trust boundary, no per-call gate). | ~~ingest `servicer.py`; `app/client.py` `_admin_metadata`~~ Resolved | B + C |
 
 **Antidote (prevention):** add descriptor-parity/return-shape contract tests over the `app/client.py`
 request builders + projections, mirroring `tests/test_backtest_view.py` (the only tool that did not

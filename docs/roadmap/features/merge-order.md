@@ -101,3 +101,13 @@ has not yet reached `launched` status, it warns the user and asks for confirmati
 proceeding with the PR.
 
 Per-step PRs (step branch → feature branch) are not affected by this file.
+
+## MCP-alignment cohort (086–094, 2026-08-02)
+
+Features 086–094 (the `fix-mcp-*` triage cohort) all touch the shared agent surfaces
+`services/xstockstrat-agent/app/{client.py,tools.py}`, `docs/runbooks/mcp-tools.md`, the tool
+catalog count, and the `plugins/strat-lab` skill. They are independent in behavior but **will
+conflict textually on those shared files** — merge them one at a time and reconcile the tool
+catalog list + count on each merge. Proto: each adds a distinct enum/message (086 formula
+`update_mask`/`deleted`, 088 `SignalSourceOperation`, 089 `StrategyOperation.REACTIVATE`) — no
+proto-field collisions, but re-run `./scripts/buf-gen.sh` after each merge.
