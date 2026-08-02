@@ -245,6 +245,7 @@ const (
 	StrategyOperation_STRATEGY_OPERATION_REGISTER    StrategyOperation = 1
 	StrategyOperation_STRATEGY_OPERATION_UPDATE      StrategyOperation = 2
 	StrategyOperation_STRATEGY_OPERATION_DEACTIVATE  StrategyOperation = 3
+	StrategyOperation_STRATEGY_OPERATION_REACTIVATE  StrategyOperation = 4 // set active=TRUE; re-validates the stored definition (feature 089)
 )
 
 // Enum value maps for StrategyOperation.
@@ -254,12 +255,14 @@ var (
 		1: "STRATEGY_OPERATION_REGISTER",
 		2: "STRATEGY_OPERATION_UPDATE",
 		3: "STRATEGY_OPERATION_DEACTIVATE",
+		4: "STRATEGY_OPERATION_REACTIVATE",
 	}
 	StrategyOperation_value = map[string]int32{
 		"STRATEGY_OPERATION_UNSPECIFIED": 0,
 		"STRATEGY_OPERATION_REGISTER":    1,
 		"STRATEGY_OPERATION_UPDATE":      2,
 		"STRATEGY_OPERATION_DEACTIVATE":  3,
+		"STRATEGY_OPERATION_REACTIVATE":  4,
 	}
 )
 
@@ -3936,12 +3939,13 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\rComponentKind\x12\x1e\n" +
 	"\x1aCOMPONENT_KIND_UNSPECIFIED\x10\x00\x12$\n" +
 	" COMPONENT_KIND_BUILTIN_INDICATOR\x10\x01\x12!\n" +
-	"\x1dCOMPONENT_KIND_CUSTOM_FORMULA\x10\x02*\x9a\x01\n" +
+	"\x1dCOMPONENT_KIND_CUSTOM_FORMULA\x10\x02*\xbd\x01\n" +
 	"\x11StrategyOperation\x12\"\n" +
 	"\x1eSTRATEGY_OPERATION_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bSTRATEGY_OPERATION_REGISTER\x10\x01\x12\x1d\n" +
 	"\x19STRATEGY_OPERATION_UPDATE\x10\x02\x12!\n" +
-	"\x1dSTRATEGY_OPERATION_DEACTIVATE\x10\x03*\x8e\x01\n" +
+	"\x1dSTRATEGY_OPERATION_DEACTIVATE\x10\x03\x12!\n" +
+	"\x1dSTRATEGY_OPERATION_REACTIVATE\x10\x04*\x8e\x01\n" +
 	"\n" +
 	"Comparator\x12\x1a\n" +
 	"\x16COMPARATOR_UNSPECIFIED\x10\x00\x12\x11\n" +

@@ -60,6 +60,8 @@ export declare enum StrategyOperation {
     STRATEGY_OPERATION_REGISTER = "STRATEGY_OPERATION_REGISTER",
     STRATEGY_OPERATION_UPDATE = "STRATEGY_OPERATION_UPDATE",
     STRATEGY_OPERATION_DEACTIVATE = "STRATEGY_OPERATION_DEACTIVATE",
+    /** STRATEGY_OPERATION_REACTIVATE - set active=TRUE; re-validates the stored definition (feature 089) */
+    STRATEGY_OPERATION_REACTIVATE = "STRATEGY_OPERATION_REACTIVATE",
     UNRECOGNIZED = "UNRECOGNIZED"
 }
 export declare function strategyOperationFromJSON(object: any): StrategyOperation;

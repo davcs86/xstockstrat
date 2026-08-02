@@ -380,9 +380,12 @@ async def manage_strategy(
         "register": analysis_pb2.STRATEGY_OPERATION_REGISTER,
         "update": analysis_pb2.STRATEGY_OPERATION_UPDATE,
         "deactivate": analysis_pb2.STRATEGY_OPERATION_DEACTIVATE,
+        "reactivate": analysis_pb2.STRATEGY_OPERATION_REACTIVATE,
     }
     if operation not in op_map:
-        raise ValueError(f"unknown operation '{operation}' (expected register/update/deactivate)")
+        raise ValueError(
+            f"unknown operation '{operation}' (expected register/update/deactivate/reactivate)"
+        )
 
     kind_map = {
         "builtin": analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,

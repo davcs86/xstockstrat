@@ -78,9 +78,7 @@ async def mark_source_error(db_pool, slug: str, error: str) -> None:
 
 async def get_source(db_pool, slug: str) -> dict | None:
     """Fetch a signal source by slug, or None (feature 088: honest register/update verbs)."""
-    row = await db_pool.fetchrow(
-        "SELECT * FROM ingest.signal_sources WHERE slug = $1", slug
-    )
+    row = await db_pool.fetchrow("SELECT * FROM ingest.signal_sources WHERE slug = $1", slug)
     return dict(row) if row is not None else None
 
 

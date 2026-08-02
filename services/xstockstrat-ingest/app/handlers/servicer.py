@@ -69,6 +69,7 @@ def _cfg_to_dict(value) -> dict | None:
         return value
     return json.loads(str(value))
 
+
 # feature 083 — source-health string → SourceHealthStatus enum.
 _HEALTH_ENUM = {
     "live": ingest_pb2.SOURCE_HEALTH_STATUS_LIVE,
