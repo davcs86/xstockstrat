@@ -547,3 +547,119 @@ class TestManageStrategyUpdateMask:
 
         as_dict = json_format.MessageToDict(sent.definition, preserving_proto_field_name=True)
         assert "active" not in as_dict
+
+
+# ── feature 087 additive client fns ────────────────────────────────────────
+
+
+class TestAdditiveClientFns:
+    @pytest.mark.asyncio
+    async def test_execute_formula_projects_result(self):
+        from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc  # type: ignore
+
+        resp = indicators_pb2.ExecuteFormulaResponse(success=True)
+        resp.output.update({"value": 1.5})
+        mock_stub = MagicMock()
+        mock_stub.ExecuteFormula = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(
+                indicators_pb2_grpc, "IndicatorsServiceStub", return_value=mock_stub
+            ):
+                result = await client.execute_formula(
+                    formula_source="result = {'value': 1.5}",
+                    input_data={"close": [1, 2, 3]},
+                )
+        assert result["success"] is True
+        assert result["output"]["value"] == 1.5
+        # read-only: no admin scope
+        meta = dict(mock_stub.ExecuteFormula.call_args.kwargs["metadata"])
+        assert "x-access-scope" not in meta
+
+    @pytest.mark.asyncio
+    async def test_execute_formula_scrubs_nonfinite_output(self):
+        # A dry-run of unvalidated source commonly emits NaN — must not raise (ledger 2026-07-21).
+        from gen.indicators.v1 import indicators_pb2, indicators_pb2_grpc  # type: ignore
+
+        resp = indicators_pb2.ExecuteFormulaResponse(success=True)
+        resp.output.update({"value": float("nan"), "ok": 2.0})
+        mock_stub = MagicMock()
+        mock_stub.ExecuteFormula = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(
+                indicators_pb2_grpc, "IndicatorsServiceStub", return_value=mock_stub
+            ):
+                result = await client.execute_formula(formula_source="x")
+        assert result["output"]["value"] is None  # NaN scrubbed
+        assert result["output"]["ok"] == 2.0
+
+    @pytest.mark.asyncio
+    async def test_cancel_backfill_admin_scope(self):
+        from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
+
+        resp = ingest_pb2.BackfillJob(job_id="j-1")
+        mock_stub = MagicMock()
+        mock_stub.CancelBackfill = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
+                result = await client.cancel_backfill("j-1")
+        assert result["job"]["job_id"] == "j-1"
+        meta = dict(mock_stub.CancelBackfill.call_args.kwargs["metadata"])
+        assert meta.get("x-access-scope") == "7"
+
+    @pytest.mark.asyncio
+    async def test_list_strategy_definitions_snake_case(self):
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+
+        resp = analysis_pb2.ListStrategyDefinitionsResponse(
+            definitions=[analysis_pb2.StrategyDefinition(strategy_id="s1", live_enabled=True)]
+        )
+        mock_stub = MagicMock()
+        mock_stub.ListStrategyDefinitions = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
+                result = await client.list_strategy_definitions()
+        assert result[0]["strategy_id"] == "s1"  # snake_case, not strategyId
+        assert result[0]["live_enabled"] is True
+
+    @pytest.mark.asyncio
+    async def test_list_signal_sources_health_fields(self):
+        from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
+
+        src = ingest_pb2.SignalSource(
+            slug="s", display_name="S", source_type="mediated_simple_email",
+            active=True, health=1, last_error="", signals_fed=42,
+        )  # last_seen_at intentionally unset
+        resp = ingest_pb2.ListSignalSourcesResponse(sources=[src])
+        mock_stub = MagicMock()
+        mock_stub.ListSignalSources = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
+                result = await client.list_signal_sources()
+        row = result[0]
+        assert row["active"] is True
+        assert row["signals_fed"] == 42
+        assert "health" in row and "last_error" in row
+        assert row["last_seen_at"] is None  # unset → None, not the epoch
+
+    @pytest.mark.asyncio
+    async def test_emit_alert_sends_extra_fields(self):
+        from gen.notify.v1 import notify_pb2, notify_pb2_grpc  # type: ignore
+
+        mock_stub = MagicMock()
+        mock_stub.EmitAlert = AsyncMock(return_value=notify_pb2.EmitAlertResponse(alert_id="a1"))
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(notify_pb2_grpc, "NotifyServiceStub", return_value=mock_stub):
+                await client.emit_alert(
+                    severity="warning", category="system", title="t", body="b",
+                    context={"k": "v"}, tags=["a", "b"], correlation_id="corr-1",
+                )
+        req = mock_stub.EmitAlert.call_args.args[0]
+        assert req.correlation_id == "corr-1"
+        assert list(req.tags) == ["a", "b"]
+        assert req.context["k"] == "v"

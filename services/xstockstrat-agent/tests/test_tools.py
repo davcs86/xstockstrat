@@ -252,6 +252,9 @@ async def test_emit_alert_calls_grpc():
             body="Body text",
             source_service="xstockstrat-agent",
             target_user_id="",
+            context=None,
+            tags=None,
+            correlation_id="",
         )
 
 
@@ -1036,3 +1039,51 @@ class TestGetStrategyTool:
         with patch.object(client, "get_strategy", AsyncMock(side_effect=err)):
             with pytest.raises(RuntimeError, match="strategy not found"):
                 await _tool_fn(server, "get_strategy")(strategy_id="x")
+
+
+class TestAdditiveTools:
+    @pytest.mark.asyncio
+    async def test_test_formula_dispatches_inline_source(self):
+        server = _make_server()
+        with patch.object(
+            client, "execute_formula", AsyncMock(return_value={"success": True})
+        ) as m:
+            result = await _tool_fn(server, "test_formula")(
+                source="result = {'value': 1}", input_data={"close": [1, 2]}
+            )
+        assert result == {"success": True}
+        assert m.call_args.kwargs["formula_source"] == "result = {'value': 1}"
+
+    @pytest.mark.asyncio
+    async def test_cancel_backfill_dispatches(self):
+        server = _make_server()
+        with patch.object(
+            client, "cancel_backfill", AsyncMock(return_value={"job": {"job_id": "j-1"}})
+        ) as m:
+            result = await _tool_fn(server, "cancel_backfill")(job_id="j-1")
+        m.assert_awaited_once_with("j-1")
+        assert result["job"]["job_id"] == "j-1"
+
+    @pytest.mark.asyncio
+    async def test_list_strategies_wraps_definitions(self):
+        server = _make_server()
+        with patch.object(
+            client, "list_strategy_definitions", AsyncMock(return_value=[{"strategy_id": "s1"}])
+        ):
+            result = await _tool_fn(server, "list_strategies")(include_inactive=True)
+        assert result == {"strategies": [{"strategy_id": "s1"}]}
+
+    @pytest.mark.asyncio
+    async def test_emit_alert_forwards_extra_fields(self):
+        server = _make_server()
+        with patch.object(
+            client, "emit_alert", AsyncMock(return_value={"alert_id": "a1"})
+        ) as m:
+            await _tool_fn(server, "emit_alert")(
+                severity="info", category="system", title="t", body="b",
+                context={"k": "v"}, tags=["x"], correlation_id="c1",
+            )
+        kw = m.call_args.kwargs
+        assert kw["context"] == {"k": "v"}
+        assert kw["tags"] == ["x"]
+        assert kw["correlation_id"] == "c1"
