@@ -8,8 +8,8 @@ live in the root findings log.
 
 | What the docs say | What the code does | Evidence | Suggested action |
 |---|---|---|---|
-| Config key `identity.jwt.secret` listed as consumed ("resolved from secret store") | Secret comes from `process.env.JWT_SECRET` only; code comments that secrets are NOT in config | `CLAUDE.md:76` vs `identityServiceImpl.ts:29-31` | Remove the config key from docs (IDENTITY-1) |
-| CLAUDE.md dependency "xstockstrat-ledger — Auth event audit trail" + `LEDGER_ENDPOINT` | No ledger client; auth events are only `log.info` lines | `CLAUDE.md:45,89` vs `src/` (grep zero) | Implement the audit trail or delete the dep |
+| Config key `identity.jwt.secret` listed as consumed ("resolved from secret store") | Secret comes from `process.env.JWT_SECRET` only; code comments that secrets are NOT in config | `CLAUDE.md:76` vs `identityServiceImpl.ts:29-31` | ✓ **RESOLVED** (2026-08-02 refresh) — CLAUDE.md:80 now states the JWT signing key is read from `JWT_SECRET` env, not a config key (IDENTITY-1) |
+| CLAUDE.md dependency "xstockstrat-ledger — Auth event audit trail" + `LEDGER_ENDPOINT` | No ledger client; auth events are only `log.info` lines | `CLAUDE.md:45,89` vs `src/` (grep zero) | ✓ **RESOLVED** (2026-08-02 refresh) — the fictional `xstockstrat-ledger` dep + `LEDGER_ENDPOINT` were removed from the deps table (config + PostgreSQL only) |
 | `package.json` description "Auth, JWT, and **API key** management"; comment `revokeAuthorizedApp` "mirrors revokeApiKey" | API-key feature fully removed (migration `005_drop_api_keys`, all `*ApiKey` RPCs gone) | `package.json:4`, `identityServiceImpl.ts:498` | Update description + stale comment |
 
 ## Open questions (unresolved *why* — needs a maintainer)

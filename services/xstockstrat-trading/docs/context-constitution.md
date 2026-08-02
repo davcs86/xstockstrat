@@ -38,7 +38,7 @@ down, and the places that break them. Does not restate documented/CI-enforced ru
 
 | What | Where |
 |---|---|
-| `AccountRepo` reuses `TradingRepo.Pool()` (no second pool); cap=2 | `cmd/server/main.go:83`, `internal/repository/pool.go:15-28`; root pool budget |
+| `AccountRepo` reuses `TradingRepo.Pool()` (no second pool); cap=2; PgBouncer exec-mode (root PLAT-7) | `cmd/server/main.go:83`, `internal/repository/pool.go:16-41` (`defaultMaxConns:16`, `QueryExecModeExec:37`); root pool budget |
 | Header propagation via server+client interceptors | `internal/middleware/propagation.go`; `docs/patterns/header-propagation.md` (root PLAT-4) |
 | Blocks on config `WatchConfig` snapshot (90s) before serving | `internal/config/config.go:131-140`; `docs/patterns/config-startup.md` |
 
