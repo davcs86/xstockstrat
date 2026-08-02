@@ -67,6 +67,40 @@ _Populated by /sdd-execute as implementation proceeds._
 
 Categories to use for step naming: `proto`, `proto-gen`, `migration`, `service`, `config`, `docs`, `test`.
 
+## Consumer-surface coverage rule (Constitution C-14)
+
+Read the product spec's `## Consumer Surface(s)`. For **every** surface it names, the spec MUST
+contain at least one step that lands the change on that surface:
+
+- A named **UI** segment (`/trader` / `/insights` / `/config-ui`) → a `service` step touching
+  `services/xstockstrat-ui/` (page/route/component + its client call), plus — for a new page/route —
+  the `PLATFORM_SUBNAV` nav registration and reachability test that **C-10** already requires.
+- A named **Agent** tool → a `service` step touching `services/xstockstrat-agent/` (the MCP tool
+  definition / arg / response mapping).
+
+Do not stop at the backend step that produces the data. A spec that updates the RPC but never the
+UI/Agent that exposes it is the exact "backing service updated, consumer surface stale" failure
+C-14 exists to catch. If the product spec marked the surface `None — internal/platform-only`, no
+such step is required — restate that in `## Execution Summary` so the reader knows it was a decision,
+not an omission. A deferred surface must name its follow-up feature in `## Step Dependencies`.
+
+## Migration step verification is offline — never bring up a database
+
+A `migration` step is non-code-bearing (`**TDD**: N/A`). Its `**Verification**` must be an
+**offline, no-DB** check the execute loop can run in seconds — never a command that starts or waits
+on a database. Write it as: both `NNN_*.up.sql` and `NNN_*.down.sql` exist with the correct next
+`NNN`, and the `.down.sql` reverses the `.up.sql` by inspection. Example:
+
+```
+ls services/<name>/migrations/<NNN>_*.up.sql services/<name>/migrations/<NNN>_*.down.sql
+# then read both: confirm every CREATE/ALTER/ADD in .up has an inverse DROP/ALTER in .down
+```
+
+The real apply-and-rollback runs in CI / at deploy against the managed database — that is where a
+live migration is proven, not in `/sdd-execute`. Do **not** spec `docker run postgres`, a `migrate`
+apply, or `psql` against a spun-up instance as a step verification (v5 executors hang waiting on the
+container). This mirrors `/sdd-execute`'s HARD CONSTRAINT.
+
 ## Test step pairing rule
 
 Every `service` step for a non-frontend service must have a corresponding `test` step (Constitution

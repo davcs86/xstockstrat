@@ -75,6 +75,8 @@ export interface FormulaWorkspaceProps {
   onCancel: () => void;
   onDelete?: () => void;
   deleting?: boolean;
+  /** Feature 086: a soft-deleted formula renders read-only with a "Deleted" badge. */
+  deleted?: boolean;
 }
 
 /**
@@ -96,6 +98,7 @@ export function FormulaWorkspace({
   initialOutputs,
   initialWarmupPeriod = 0,
   author,
+  deleted = false,
   saving,
   saveError,
   onSave,
@@ -119,9 +122,10 @@ export function FormulaWorkspace({
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [showReference, setShowReference] = useState(true);
 
-  // Built-in system formulas are immutable: hide Save/Delete and disable every editor input.
-  // The Run cell stays enabled so the formula can still be inspected/executed.
-  const readOnly = author === SYSTEM_FORMULA_AUTHOR;
+  // Built-in system formulas are immutable, and a soft-deleted formula (feature 086) cannot be
+  // edited: both hide Save/Delete and disable every editor input. The Run cell stays enabled so the
+  // formula can still be inspected/executed.
+  const readOnly = author === SYSTEM_FORMULA_AUTHOR || deleted;
 
   const executeMut = useExecuteFormula();
 
@@ -185,7 +189,12 @@ export function FormulaWorkspace({
           </h1>
           {author && <span className="text-xs text-muted-foreground">by {author}</span>}
           <Badge variant={isPublic ? 'info' : 'warning'}>{isPublic ? 'Public' : 'Private'}</Badge>
-          {readOnly && <Badge variant="info">Read-only · system formula</Badge>}
+          {deleted && (
+            <Badge variant="warning" data-testid="formula-deleted-badge">
+              Deleted
+            </Badge>
+          )}
+          {readOnly && !deleted && <Badge variant="info">Read-only · system formula</Badge>}
         </div>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={() => setShowReference((s) => !s)}>
