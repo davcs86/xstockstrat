@@ -469,3 +469,20 @@ reusing.
 - **Pattern**: The durable antidote to MCP-surface drift is a **descriptor-parity / return-shape contract test** over each hand-written dict→proto request builder and each projection, mirroring the one guard that kept `run_backtest` honest: `test_backtest_view.py::test_summary_key_set_covers_every_proto_field` asserts the agent's field set equals `<Message>.DESCRIPTOR.fields_by_name` minus an explicit `_INTENTIONALLY_UNSET` set, so a newly-added proto field fails the test until the builder/projection carries it (or explicitly opts out). Applying the same guard to the `RegisterFormulaRequest`, `ScreenCriterion`, `SignalSource`, and `EmitAlertRequest` builders would have caught F-3/F-4/F-6/F-10 at commit time instead of via a manual audit.
 - **Evidence**: `services/xstockstrat-agent/tests/test_backtest_view.py` (the template); report RC-1 + meta-cause (`docs/reports/2026-08-01-mcp-tools-alignment-triage.md`).
 - **Rule it implies**: reinforces **C-10** — every agent request builder / response projection that mirrors a proto gets a descriptor-parity test with an explicit opt-out set; new proto fields then fail closed rather than silently dropping off the MCP surface.
+
+### 2026-08-02 — 091-fix-mcp-config-key-registry — design
+- **Pattern**: To audit **row creation** on a table written via `INSERT … ON CONFLICT DO UPDATE`, add a
+  dedicated **`AFTER INSERT`** trigger — never widen an existing `BEFORE UPDATE` audit trigger to
+  `BEFORE INSERT OR UPDATE`. Under `ON CONFLICT DO UPDATE` the update path fires the `BEFORE INSERT` arm
+  (for every proposed row, `OLD` NULL → a phantom `old_value=NULL` "creation" audit row, even on a no-op
+  re-write) *and* the `BEFORE UPDATE` arm → two audit rows per update and an uncorrelatable creation vs
+  update log. `AFTER INSERT` fires only for rows *actually* inserted (the conflict/update branch does not
+  fire it), so creation is audited exactly once and the update path stays untouched. Second half of the
+  same design: a write-time **existence gate must be scoped-EXACT to the table's `ON CONFLICT` conflict
+  key** (here `(namespace,key,environment,trading_mode)`), not broadened to mirror a read predicate
+  (`… OR trading_mode='all'`) — broadening lets a write "find" a broader row then INSERT a distinct
+  narrower one, manufacturing a duplicate the read paths resolve nondeterministically (no `ORDER BY`
+  precedence).
+- **Evidence**: feature 091 design.md §1–2; `services/xstockstrat-config/migrations/001_config_tables.up.sql:40,49-51`; `services/xstockstrat-config/src/grpc/configServiceImpl.ts:316-325,343`.
+- **Rule it implies**: reinforces **F-01**/**C-08** — audit-on-create is an `AFTER INSERT` trigger in a
+  new migration, and any existence/dedup gate matches the exact conflict-key grain of the write it guards.
