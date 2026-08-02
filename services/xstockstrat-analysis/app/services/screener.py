@@ -93,6 +93,13 @@ class ScreenerEngine:
                 symbols, propagation_meta
             )
 
+        # feature 090: reject a fundamental criterion whose metric_name is neither a closed
+        # `_FUNDAMENTAL_FIELDS` field nor a key any fetched symbol actually carries in its open
+        # `extra_metrics` map — catches a typo (e.g. `pe_ration`) that would otherwise be silently
+        # skipped. Only enforceable when fundamentals are available (can't validate absent data).
+        if fundamental_criteria and fundamentals_available:
+            self._validate_fundamental_metrics(fundamental_criteria, fundamentals)
+
         # Evaluate every symbol; collect raw per-criterion values for universe normalization.
         per_symbol = []  # list of dicts: {symbol, raws, passes, signal_score, status, gap}
         for symbol in symbols:
@@ -114,19 +121,33 @@ class ScreenerEngine:
         for row in per_symbol:
             results.append(self._build_result(row, criteria, request, norm))
 
-        # Rank descending by score; cap to rank_limit (default config).
+        # Rank descending by score.
         results.sort(key=lambda r: r.score, reverse=True)
+
+        # feature 090 (AC-4): coverage_gaps come from the FULL sorted list, BEFORE min_conviction
+        # and rank_limit truncation — an INSUFFICIENT_DATA symbol ranked below the cut must still
+        # surface its gap so the caller knows to backfill it.
+        coverage_gaps = [
+            r.gap
+            for r in results
+            if r.status == analysis_pb2.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA
+        ]
+
+        # feature 090 (AC-2): honor min_conviction as a hard floor. `r.score` is a min-max
+        # normalized relative conviction in [0,1], so filter against the same transform a backtest
+        # applies to its entry decision — `scoring.buy_threshold` — for one platform-wide meaning
+        # of the field (rather than a raw-scale `score >= min_conviction`).
+        if request.min_conviction > 0:
+            thr = scoring.buy_threshold(request.min_conviction)
+            results = [r for r in results if r.score >= thr]
+
+        # Cap to rank_limit (default config) LAST.
         rank_limit = request.rank_limit or self._cfg.get_int(
             "analysis.screener.default_rank_limit", 50
         )
         if rank_limit > 0:
             results = results[:rank_limit]
 
-        coverage_gaps = [
-            r.gap
-            for r in results
-            if r.status == analysis_pb2.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA
-        ]
         return analysis_pb2.ScreenSymbolsResponse(results=results, coverage_gaps=coverage_gaps)
 
     async def _fetch_fundamentals(self, symbols, propagation_meta):
@@ -314,6 +335,25 @@ class ScreenerEngine:
             vals = [p.value for p in resp.result if p.value != 0]
             return vals[-1] if vals else None
         return None
+
+    @staticmethod
+    def _validate_fundamental_metrics(fundamental_criteria, fundamentals):
+        """feature 090: raise ValueError on a fundamental metric_name that is neither a closed
+        `_FUNDAMENTAL_FIELDS` field nor an `extra_metrics` key any fetched symbol carries.
+
+        Residual (documented in design.md): because `extra_metrics` is open-ended, a *legitimate*
+        open metric that no scanned symbol happens to carry is indistinguishable from a typo and
+        also raises here — honest, since such a criterion can score no symbol in this scan.
+        """
+        known = set(_FUNDAMENTAL_FIELDS)
+        for fund in fundamentals.values():
+            known.update(fund.extra_metrics.keys())
+        for c in fundamental_criteria:
+            if c.metric_name and c.metric_name not in known:
+                raise ValueError(
+                    f"unknown fundamental metric_name '{c.metric_name}' "
+                    f"(not a known field and absent from every scanned symbol's extra_metrics)"
+                )
 
     @staticmethod
     def _fundamental_value(fund, metric_name):

@@ -157,6 +157,11 @@ export interface FormulaDefinition {
     outputs: FormulaOutput[];
     /** bars of warm-up before this formula's outputs are valid (feature 064) */
     warmupPeriod: number;
+    /**
+     * true = soft-deleted (feature 086): still evaluable for strategies that already reference it
+     * (GetFormula/ExecuteFormula stay deleted-agnostic), hidden from ListFormulas, and not updatable.
+     */
+    deleted: boolean;
 }
 export interface FormulaDefinition_InputSchemaEntry {
     key: string;
@@ -226,6 +231,12 @@ export interface UpdateFormulaRequest {
     outputs: FormulaOutput[];
     /** bars of warm-up before this formula's outputs are valid (feature 064) */
     warmupPeriod: number;
+    /**
+     * AIP-161 partial update (feature 086). Absent = full replace (back-compat: the UI sends a full
+     * payload every call). Present = merge only the named paths onto the stored row; unlisted fields
+     * are preserved. Reject an update whose target formula is soft-deleted (FAILED_PRECONDITION).
+     */
+    updateMask?: string[] | undefined;
 }
 export interface UpdateFormulaResponse {
     formula?: FormulaDefinition | undefined;

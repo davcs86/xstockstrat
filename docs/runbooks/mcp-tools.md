@@ -1,6 +1,6 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the seventeen tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the twenty-two tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 ---
@@ -34,7 +34,7 @@ directly on port 9000.
 
 **Direct (local):** `http://localhost:9000`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same seventeen tools' `name`,
+**Tool catalog (UI display).** `GET /api/tools` returns the same twenty-two tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
 capabilities (the same data documented below), never user data or credentials. It powers the
 `xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
@@ -104,11 +104,21 @@ Lists active signal sources registered in `xstockstrat-ingest`. Enriches each so
       "display_name": "Unusual Whales",
       "source_type": "mediated_simple_email",
       "config_json": {},
-      "extractor_tool": null
+      "extractor_tool": null,
+      "active": true,
+      "health": "SOURCE_HEALTH_STATUS_HEALTHY",
+      "last_seen_at": "2026-08-02T12:00:00+00:00",
+      "last_error": "",
+      "signals_fed": 42
     }
   ]
 }
 ```
+
+Source-health fields (feature 083, surfaced by feature 087): `active` (bool), `health`
+(`SourceHealthStatus` enum **name**), `last_seen_at` (RFC3339, or `null` for a source that has never
+fed a signal), `last_error` (string), `signals_fed` (**int64 as a JSON number** in this projection —
+unlike the int64-as-string contract of `run_backtest`/`get_backfill_status`).
 
 `extractor_tool` values:
 
@@ -134,6 +144,8 @@ Lists active signal sources registered in `xstockstrat-ingest`. Enriches each so
 
 Extracts raw text from email attachments (PDF or plain text) or gated URLs for a registered source. **Call only when the source's `extractor_tool` is `"extract_email_content"`.**
 
+> **Credentials (feature 093):** a source registered with credentials (`has_credentials=true`) currently **raises `RuntimeError`** — secure per-source credential resolution is not yet supported. The platform stores secrets as `is_secret` references that the config service redacts, so there is no safe way to resolve a password here (a plaintext config credential would violate config governance and be disclosed unredacted). Only `has_credentials=false` sources are extractable today; secure resolution is a tracked follow-up (AC-3).
+
 **Parameters**
 
 | Parameter | Type | Required | Description |
@@ -156,13 +168,16 @@ All attachments and URLs are concatenated with double newlines.
 |---|---|
 | Neither `attachments_b64` nor `urls` provided | `ValueError: At least one of attachments_b64 or urls must be provided` |
 | `source_slug` not found or inactive | `ValueError: Unknown or inactive source slug: '<slug>'` |
-| PDF is password-protected but no credentials configured | `ValueError: PDF is password-protected but no credentials_ref is configured` |
+| Source requires credentials (`has_credentials=true`) | `RuntimeError: secure per-source credential resolution is not supported yet …` (feature 093 — secure resolution is a deferred follow-up) |
+| PDF is password-protected (an encrypted PDF on a `has_credentials=false` source) | `ValueError` from the PDF parser |
 
 ---
 
 ### `extract_website_content`
 
 Fetches and returns raw text from a registered website source. The URL is read from the source's `config_json.url` — Claude never constructs URLs. **Call only when the source's `extractor_tool` is `"extract_website_content"`.**
+
+> **Credentials (feature 093):** as with `extract_email_content`, a source with `has_credentials=true` **raises `RuntimeError`** — secure per-source credential resolution is a deferred follow-up (AC-3). Only `has_credentials=false` sources are extractable today.
 
 **Parameters**
 
@@ -182,6 +197,7 @@ Fetches and returns raw text from a registered website source. The URL is read f
 |---|---|
 | `source_slug` not found or inactive | `ValueError: Unknown or inactive source slug: '<slug>'` |
 | Source has no `url` in `config_json` | `ValueError: Source '<slug>' has no url in config_json` |
+| Source requires credentials (`has_credentials=true`) | `RuntimeError: secure per-source credential resolution is not supported yet …` (feature 093) |
 
 ---
 
@@ -222,7 +238,7 @@ Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exc
 
 ### `emit_alert`
 
-Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or notifications not tied to an ingested signal.
+Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or notifications not tied to an ingested signal. Sends `x-mcp-secret`, **no** admin `x-access-scope`: `EmitAlert` is an internal-service-caller RPC that is intentionally **not** role-gated (feature 092) — its trust boundary is the private network plus the agent's OAuth edge, and every caller (agent + internal service loops) is unauthenticated at the RPC layer.
 
 **Parameters**
 
@@ -234,6 +250,9 @@ Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or
 | `body` | `string` | Yes | Alert body text |
 | `source_service` | `string` | No | Emitting service name (default `"xstockstrat-agent"`) |
 | `target_user_id` | `string` | No | Target user ID (default `""` = broadcast) |
+| `context` | `object` | No | Structured JSON context stored + fanned out with the alert (feature 087) |
+| `tags` | `string[]` | No | Tags for filtering/grouping (feature 087) |
+| `correlation_id` | `string` | No | Id to correlate related alerts (feature 087) |
 
 **Return**
 
@@ -373,18 +392,21 @@ Scans an explicit universe of symbols via `xstockstrat-analysis` `ScreenSymbols`
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `symbols` | `string[]` | Yes | Explicit ticker list to screen, e.g. `["NVDA", "AAPL"]` |
-| `criteria` | `object[]` | No | Criterion dicts; each key set: `ref_name`, `kind` (`"SCREEN_KIND_FUNDAMENTAL"` \| `"SCREEN_KIND_TECHNICAL_FORMULA"` \| `"SCREEN_KIND_TECHNICAL_INDICATOR"` \| `"SCREEN_KIND_SIGNAL"`), `metric_name`, `op` (e.g. `"COMPARATOR_GTE"`, `"COMPARATOR_BETWEEN"`), `threshold`, `threshold_high`, `weight`, `hard_filter` |
+| `criteria` | `object[]` | No | Criterion dicts; each key set: `ref_name`, `kind` (`"SCREEN_KIND_FUNDAMENTAL"` \| `"SCREEN_KIND_TECHNICAL_FORMULA"` \| `"SCREEN_KIND_TECHNICAL_INDICATOR"` \| `"SCREEN_KIND_SIGNAL"`), `metric_name`, `op` (e.g. `"COMPARATOR_GTE"`, `"COMPARATOR_BETWEEN"`), `threshold`, `threshold_high`, `weight`, `hard_filter`, and — for technical kinds — a `component` dict |
 | `signal_sources` | `string[]` | No | Signal source names for the signal-blend kind |
 | `signal_weight` | `float` | No | Share of score from signals (default `0.0`) |
 | `technical_weight` | `float` | No | Share of score from technicals (default `1.0`) |
-| `min_conviction` | `float` | No | **Accepted on the wire but currently ignored by `ScreenSymbols`** — the screener never reads this field; pass/fail is decided by `criteria` (notably `hard_filter`), not a blended-score floor. Default `0.0`. |
+| `min_conviction` | `float` | No | **Honored as a hard floor** (feature 090): results whose relative-conviction `score` is below the entry threshold for this `min_conviction` (`max(0.5 + min_conviction·0.5, 0.55)`, the same transform a backtest applies) are dropped. `coverage_gaps` are unaffected. Default `0.0` (no floor). |
 | `rank_limit` | `int` | No | Cap on returned results; `0` ⇒ analysis-side default (`analysis.screener.default_rank_limit`) |
 
-`kind` and `op` accept either the enum name (string) or a numeric value. The `component` field
-(required by the technical kinds) is **not mapped** from string input in this thin wrapper, so
-`SCREEN_KIND_TECHNICAL_FORMULA` / `SCREEN_KIND_TECHNICAL_INDICATOR` criteria are **silently
-skipped** — only fundamental and signal kinds are effective today. An unknown fundamental
-`metric_name` is likewise skipped rather than rejected.
+`kind` and `op` accept either the enum name (string) or a numeric value. For technical kinds,
+supply a `component` dict (same shape as a strategy component: `ref_name` / `kind`
+(`"builtin"`|`"formula"`) / `indicator` / `formula_id` / `params`); the wrapper maps it via
+`_build_component` and sends it, so `SCREEN_KIND_TECHNICAL_FORMULA` /
+`SCREEN_KIND_TECHNICAL_INDICATOR` criteria are **scored** (feature 090). An unknown fundamental
+`metric_name` — a typo of a closed field, or an open metric that no scanned symbol carries — is
+**rejected with `INVALID_ARGUMENT`** rather than silently skipped (only enforceable when
+fundamentals are available; a degraded scan still skips them).
 
 **Return**
 
@@ -393,24 +415,36 @@ skipped** — only fundamental and signal kinds are effective today. An unknown 
   "results": [
     { "symbol": "NVDA", "score": 0.91, "criterion_scores": { "pe": 1.0 }, "passed": true, "status": "SCREEN_RESULT_STATUS_OK" }
   ],
-  "coverage_gaps": [ { "symbol": "TSLA" } ]
+  "coverage_gaps": [ { "symbol": "TSLA", "timeframe": "TIMEFRAME_1DAY", "bars_have": "5", "bars_need": "50" } ]
 }
 ```
 
-`status` is the `ScreenResultStatus` name (`SCREEN_RESULT_STATUS_OK` | `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`); `coverage_gaps` lists symbols lacking enough data to screen.
+`status` is the `ScreenResultStatus` name (`SCREEN_RESULT_STATUS_OK` | `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`); `coverage_gaps` lists symbols lacking enough data to screen, each with its `timeframe` (enum name) and `bars_have`/`bars_need` (int64 as JSON **strings**, matching `run_backtest`). Gaps are computed **before** `rank_limit` truncation (feature 090), so an under-covered symbol ranked below the cut still appears.
 
 **Errors**
 
 | Condition | Error |
 |---|---|
 | Over-cap universe (> `analysis.screener.max_universe_size`) | Truncated analysis-side |
+| Unknown fundamental `metric_name` (typo, or absent from every scanned symbol) when fundamentals are available | `INVALID_ARGUMENT` |
+| Unknown component `kind` (not `builtin`/`formula`) | `ValueError` client-side, before the gRPC call |
 | Analysis service unreachable | gRPC error propagated |
 
 ---
 
 ### `manage_strategy`
 
-Registers, updates, or deactivates a stored strategy definition in `xstockstrat-analysis`.
+Registers, updates, deactivates, or **reactivates** a stored strategy definition in `xstockstrat-analysis`.
+**Admin-scoped write** — forwards the **caller's real derived** `x-access-scope` (feature 092; was a
+hardcoded admin scope); a non-admin is rejected `PERMISSION_DENIED` by the analysis `ManageStrategy`
+gate.
+
+> **Lifecycle is reversible (feature 089).** `deactivate` sets `active=false`; `reactivate` sets it
+> back to `true` and **re-validates the stored definition** (so a reactivate can fail
+> `INVALID_ARGUMENT` if a referenced formula went missing while the strategy was retired). `register`
+> is strict — re-registering an existing `strategy_id` (active *or* deactivated) returns
+> `ALREADY_EXISTS` and **drops** the submitted definition (it does not overwrite); use `update` to
+> revise, or `reactivate` to bring one back.
 
 > **`update` is a PARTIAL MERGE (feature 070).** Only the fields you actually pass are changed;
 > everything else is preserved server-side. Tuning one parameter is therefore safe:
@@ -430,7 +464,7 @@ Registers, updates, or deactivates a stored strategy definition in `xstockstrat-
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `operation` | `string` | Yes | `"register"`, `"update"`, or `"deactivate"` |
+| `operation` | `string` | Yes | `"register"`, `"update"`, `"deactivate"`, or `"reactivate"` |
 | `strategy_id` | `string` | Yes | Lowercase/underscore identifier, e.g. `"sma_crossover"` |
 | `display_name` | `string` | No | Human-readable name |
 | `components` | `object[]` | No | `{ref_name, kind ("builtin"\|"formula"), indicator, formula_id, params}` |
@@ -454,7 +488,8 @@ Registers, updates, or deactivates a stored strategy definition in `xstockstrat-
 | Negative `cooldown_days` | `invalid argument` (INVALID_ARGUMENT) |
 | `update` with no fields and no `clear_fields` | `ValueError` raised client-side, before any RPC |
 | An `update` that would empty `components` or blank a rule without naming it for erasure | `invalid argument` (INVALID_ARGUMENT) — the server refuses; the message names `update_mask` as the escape hatch |
-| `update`/`deactivate` on unknown strategy | `strategy not found` (NOT_FOUND) |
+| `update`/`deactivate`/`reactivate` on unknown strategy | `strategy not found` (NOT_FOUND) |
+| `register` on an existing strategy_id (active or deactivated) | `strategy already exists` (ALREADY_EXISTS) |
 
 **Effect on the derived grade.** Changing a scoring-relevant field (`components`, rules,
 `cooldown_days`, `signal_params`) changes the strategy's definition fingerprint, so its derived
@@ -513,13 +548,27 @@ Registers, updates, or deletes a custom formula definition in `xstockstrat-indic
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `operation` | `string` | Yes | `"register"`, `"update"`, or `"delete"` |
-| `name` | `string` | register/update | Formula name |
+| `name` | `string` | register | Formula name (on update, pass only to change it) |
 | `description` | `string` | No | Formula description |
-| `source` | `string` | register/update | Python formula source |
-| `is_public` | `bool` | No | Whether the formula is public (default `false`) |
+| `source` | `string` | register | Python formula source (on update, pass only to change it; cannot be blanked) |
+| `is_public` | `bool` | No | Whether the formula is public (register default `false`) |
+| `parameters` | `list` | No | Typed parameter definitions `{name, type, default, description, required, min, max}` |
+| `outputs` | `list` | No | Declared secondary output series `{name, description}`; addressable in strategy rules as `<ref>.<name>`. The implicit `value` series is always present and must not be declared. |
+| `warmup_period` | `int` | No | Bars of warm-up before the formula's outputs are valid |
 | `formula_id` | `string` | update/delete | Formula identifier |
 | `author` | `string` | register | Author, stored immutably on register |
 | `formula_author_user_id` | `string` | update/delete | Must match the formula's original `author` (else PERMISSION_DENIED) |
+
+**Update is a partial merge (AIP-161).** Only the fields you pass are changed; omitted fields are
+preserved. Pass `is_public=false` to unpublish; omit it to leave it unchanged. At least one field
+must be supplied. `source` cannot be blanked. Use `get_formula`/`list_formulas` to read a formula
+back before editing.
+
+**Delete is a soft delete.** The formula is marked `deleted` (non-destructive), hidden from
+`list_formulas`, and can no longer be updated, but strategies that already reference it keep
+evaluating on its last-saved definition — and both their backtests (`run_backtest` →
+`warnings`) and live status (`get_strategy` → `warnings`) flag the deletion to the user. You
+cannot bind a **new** strategy to a deleted formula (`ManageStrategy` returns `INVALID_ARGUMENT`).
 
 **Return**
 
@@ -527,30 +576,79 @@ Registers, updates, or deletes a custom formula definition in `xstockstrat-indic
 { "formula_id": "f-abc123" }
 ```
 
+register → `{"formula_id": …}`; update → the full stored formula in camelCase (incl. `deleted`);
+delete → `{"success": true}`.
+
 **Errors**
 
 | Condition | Error |
 |---|---|
 | `formula_author_user_id` ≠ author | `permission denied` (PERMISSION_DENIED) |
 | `update`/`delete` on unknown formula | `formula not found` (NOT_FOUND) |
+| `update` with no fields supplied | `update requires at least one field to change` |
+| `update` on a soft-deleted formula | `formula is deleted and cannot be updated` (FAILED_PRECONDITION) |
 
 ---
 
-### `manage_signal_source`
+### `get_formula`
 
-Registers, updates, or deactivates a signal source in `xstockstrat-ingest`.
+Fetches one custom formula's stored definition from `xstockstrat-indicators`.
 
 **Parameters**
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `operation` | `string` | Yes | `"register"`, `"update"`, or `"deactivate"` |
+| `formula_id` | `string` | Yes | Formula identifier |
+
+**Return** — the formula in camelCase incl. `name`, `description`, `source`, `isPublic`,
+`parameters`, `outputs`, `warmupPeriod`, and `deleted` (true when soft-deleted). Use for safe
+read-modify-write: read, then `manage_formula(operation="update", …)` with only the changed fields.
+
+---
+
+### `list_formulas`
+
+Lists custom formula definitions from `xstockstrat-indicators`. Soft-deleted formulas are excluded.
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `author_filter` | `string` | No | If non-empty, restrict to formulas authored by this user id |
+| `include_public` | `bool` | No | Also include public formulas regardless of `author_filter` (default `true`) |
+
+**Return** — `{"formulas": [<formula in camelCase>, …]}`.
+
+---
+
+### `manage_signal_source`
+
+Registers, updates, reactivates, or deactivates a signal source in `xstockstrat-ingest`.
+**Admin-scoped write** — forwards the **caller's real derived** `x-access-scope` (feature 092; was a
+hardcoded admin scope); a non-admin is rejected `PERMISSION_DENIED` by the ingest `ManageSignalSource`
+gate.
+
+**Honest verbs (feature 088)** — register/update are no longer a blind full-replace upsert:
+
+- **`register`** — strict create. An existing slug returns `ALREADY_EXISTS` (no silent overwrite).
+- **`update`** — AIP-161 **partial merge**: pass only the fields you want to change; every omitted
+  field is **preserved** (an omitted `credentials_ref` keeps the stored secret — it is no longer
+  NULLed). An unknown slug returns `NOT_FOUND`. At least one field must be supplied. `active` and
+  `slug` cannot be changed via `update`.
+- **`reactivate`** — sets `active=true`; **decoupled** from update (update never touches `active`).
+- **`deactivate`** — sets `active=false`.
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `operation` | `string` | Yes | `"register"`, `"update"`, `"reactivate"`, or `"deactivate"` |
 | `slug` | `string` | Yes | Source slug |
-| `display_name` | `string` | No | Human-readable name |
-| `source_type` | `string` | No | Source type (e.g. `"newsletter"`) |
-| `config_json` | `object` | No | Source configuration |
-| `extractor_module` | `string` | No | Extractor module name |
-| `credentials_ref` | `string` | No | Reference to stored credentials — forwarded to the backend, **never echoed** |
+| `display_name` | `string` | No | Human-readable name (on `update`, changed only if supplied) |
+| `source_type` | `string` | No | Source type (on `update`, changed only if supplied) |
+| `config_json` | `object` | No | Source configuration (on `update`, changed only if supplied) |
+| `extractor_module` | `string` | No | Extractor module name (on `update`, changed only if supplied) |
+| `credentials_ref` | `string` | No | Reference to stored credentials — forwarded, **never echoed**. On `update`, omit to preserve the stored ref; pass `""` to clear it |
 
 **Return**
 
@@ -562,8 +660,10 @@ Registers, updates, or deactivates a signal source in `xstockstrat-ingest`.
 
 | Condition | Error |
 |---|---|
-| Invalid source fields | `invalid argument` (INVALID_ARGUMENT) |
-| `deactivate` on unknown source | `signal source not found` (NOT_FOUND) |
+| `register` on an existing slug | `signal source already exists` (ALREADY_EXISTS) |
+| `update`/`reactivate`/`deactivate` on unknown source | `signal source not found` (NOT_FOUND) |
+| `update` masking `active`/`slug`, or update with no fields | `invalid argument` (INVALID_ARGUMENT) |
+| `authenticated_website` / `mediated_authenticated_website` with no (merged) credential | `invalid argument` (INVALID_ARGUMENT) |
 | `credentials_ref` exposure | **Never** — `credentials_ref` is intentionally omitted from the return and never exposed to Claude (FR-12) |
 
 ---
@@ -571,7 +671,9 @@ Registers, updates, or deactivates a signal source in `xstockstrat-ingest`.
 ### `trigger_backfill`
 
 Triggers a historical OHLCV backfill via `xstockstrat-ingest` `TriggerBackfill` (feature 066).
-**Write/management op** — sends `x-mcp-secret` **and** the hardcoded admin `x-access-scope`.
+**Admin-scoped write** — forwards the **caller's real derived** `x-access-scope` (feature 092;
+was a hardcoded admin scope). `TriggerBackfill` is now admin-gated server-side, so a non-admin
+caller is rejected `PERMISSION_DENIED` ("admin scope required") rather than queuing a paid job.
 
 **Parameters**
 
@@ -633,6 +735,60 @@ or, in list mode:
 
 ---
 
+### `cancel_backfill`
+
+Cancels a queued/running backfill job via ingest `CancelBackfill`. **Admin-scoped** (forwards
+`x-access-scope`) — unlike `trigger_backfill`, this RPC is checked server-side (feature 087).
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `job_id` | `string` | Yes | The job to cancel |
+
+**Return** — `{ "job": { … } }` (the updated `BackfillJob`, status `canceled`).
+
+**Errors**: unknown `job_id` → `backfill job not found` (NOT_FOUND); already-terminal job → server error.
+
+---
+
+### `test_formula`
+
+Dry-runs **inline** formula source in the indicators sandbox via `ExecuteFormula`, **registering
+nothing** (feature 087). **Read-only** — no admin scope; the subprocess sandbox is the boundary.
+Use before `manage_formula(operation="register", …)` to validate behavior.
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `source` | `string` | Yes | Python formula source (assign a `result` dict with a `value` key) |
+| `input_data` | `object` | No | Passed to the formula as `data` (e.g. `{"close": [1,2,3]}`) |
+| `input_params` | `object` | No | Parameter VALUES exposed as `params` |
+| `parameters` | `list` | No | Typed parameter DEFINITIONS to validate `input_params` for this run |
+| `timeout_ms` | `int` | No | `0` ⇒ configured sandbox timeout |
+
+**Return** — the full sandbox result: `success`, `output` (the result dict; **non-finite values such
+as `NaN`/`Infinity` are returned as `null`** so the projection never fails), `stdout`, `stderr`,
+`error`, `exit_reason`, `parameter_errors`, `execution_ms` (int64 as a JSON string).
+
+---
+
+### `list_strategies`
+
+Lists stored strategy definitions via analysis `ListStrategyDefinitions` (feature 087). **Read-only.**
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `include_inactive` | `bool` | No | Also include deactivated strategies (default `false`) |
+
+**Return** — `{ "strategies": [ <definition>, … ] }`. Each definition is **snake_case**, matching
+`get_strategy` (so a `list_strategies → get_strategy → manage_strategy` edit loop stays consistent).
+
+---
+
 ### `get_config`
 
 Read a namespace's current config values from `xstockstrat-config`. **Read-only.**
@@ -686,13 +842,15 @@ Write **one non-secret** config value. **Admin-scoped write. Streamable HTTP tra
 | `reason` | string | yes | Recorded alongside `author` |
 | `environment` | string | no | Defaults to the agent's `APPLICATION_ENV` |
 | `trading_mode` | string | no | Defaults to the agent's `TRADING_MODE` |
+| `create_key` | bool | no | Default `false`. Set `true` **only** to deliberately register a brand-new key at this `(namespace, environment, trading_mode)` scope. Left false, a write to an unregistered scope is refused (see Errors) so a typo cannot mint an orphan key (feature 091). |
 
 Returns `{version, updated_at}` — **never the value**.
 
-**Authorization uses your real role, not a service-wide admin override.** Unlike every other
-management tool, `set_config` forwards the calling user's derived `x-access-scope`, so
-`xstockstrat-config` rejects a non-admin caller with `PERMISSION_DENIED` ("admin scope required").
-This is the documented exception to invariant **AGENT-4**.
+**Authorization uses your real role, not a service-wide admin override.** `set_config` forwards the
+calling user's derived `x-access-scope`, so `xstockstrat-config` rejects a non-admin caller with
+`PERMISSION_DENIED` ("admin scope required"). Since feature 092 this is how **every** management
+write tool works (it was `set_config`-only under feature 073); the hardcoded admin scope was removed
+(invariant **AGENT-3/AGENT-4**).
 
 **Secret keys cannot be written.** Rejected both by the `secret.` name prefix (checked before any
 RPC — the only thing that can stop a *new* secret key being created) and by the `is_secret` flag
@@ -703,15 +861,26 @@ flag lookup fails, the write is refused rather than allowed through.
 serves. The tool still refuses when no verified caller claims are on the request; that check is now
 defence in depth rather than the live transport guard.
 
+**Key creation is gated (feature 091).** A write to a not-yet-registered key at the exact
+`(namespace, environment, trading_mode)` scope is refused with `NOT_FOUND` unless you pass
+`create_key=true`. This closes the old blind-upsert hole where a mistyped key silently created an
+orphan row no service reads. `list_config_keys` first and copy the key verbatim; use `create_key`
+only when you genuinely intend to register a new key. (The only key-creation paths are now migration
+seeds and `set_config(create_key=true)` — config-ui can no longer typo-mint keys, so "new keys
+require a PR" is enforced, not merely conventional.)
+
 **Three behaviors worth knowing before you rely on a write:**
 
 - `value_type` is honored only when **creating** a key. `SetConfig`'s `ON CONFLICT … DO UPDATE`
   does not update the type column, so for an existing key the stored type wins.
 - Pass JSON-valued config as a `string` — that is byte-identical to what the server stores.
-- **Creating a new key writes no audit row**, and neither does rewriting a key to its existing
-  value: the `config.config_audit` trigger fires `BEFORE UPDATE` and only on a value change.
+- **Key creation is audited** (feature 091): a `create_key=true` create writes a `config.config_audit`
+  row (author + value, `old_value` NULL) via a dedicated `AFTER INSERT` trigger, alongside the
+  existing `BEFORE UPDATE` audit. Rewriting a key to its existing value still writes no row (the
+  update trigger fires only on a value change).
 
-**Errors:** `PERMISSION_DENIED` → "admin scope required"; `INVALID_ARGUMENT` → missing author.
+**Errors:** `PERMISSION_DENIED` → "admin scope required"; `INVALID_ARGUMENT` → missing author;
+`NOT_FOUND` → "config key not registered" (pass `create_key=true` to create it).
 
 ---
 

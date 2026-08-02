@@ -190,6 +190,16 @@ grpcurl -plaintext -d '{
 
 Use this path for curated signal feeds that publish **directional recommendations with a time window**: Unusual Whales, MarketWatch, Dividendology, Pure Power Picks, Simply Wall St., and similar services.
 
+> **Per-source extraction credentials are NOT yet supported (feature 093).** If you register a
+> source with a `credentials_ref` / `has_credentials=true` (a password-protected PDF or an
+> authenticated website), the MCP `extract_email_content` / `extract_website_content` tools will
+> **raise `RuntimeError`** — do not seed a plaintext credential in config to work around it. The
+> platform's secret model stores secrets as `is_secret` references that the config service redacts,
+> so there is no governance-clean way to resolve a per-source password in the agent today (a plaintext
+> config value would violate config governance and be disclosed unredacted by `get_config`). A secure
+> resolver (server-side extraction or an ingest credential-resolution RPC) is a tracked follow-up.
+> Only `has_credentials=false` sources are extractable via the MCP tools for now.
+
 These are not OHLCV feeds. They produce structured signals such as:
 
 > _"Unusual Whales: BUY $NVDA — large call sweep detected, valid 2–10 trading days"_

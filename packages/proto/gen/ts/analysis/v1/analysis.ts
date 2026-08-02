@@ -302,6 +302,8 @@ export enum StrategyOperation {
   STRATEGY_OPERATION_REGISTER = "STRATEGY_OPERATION_REGISTER",
   STRATEGY_OPERATION_UPDATE = "STRATEGY_OPERATION_UPDATE",
   STRATEGY_OPERATION_DEACTIVATE = "STRATEGY_OPERATION_DEACTIVATE",
+  /** STRATEGY_OPERATION_REACTIVATE - set active=TRUE; re-validates the stored definition (feature 089) */
+  STRATEGY_OPERATION_REACTIVATE = "STRATEGY_OPERATION_REACTIVATE",
   UNRECOGNIZED = "UNRECOGNIZED",
 }
 
@@ -319,6 +321,9 @@ export function strategyOperationFromJSON(object: any): StrategyOperation {
     case 3:
     case "STRATEGY_OPERATION_DEACTIVATE":
       return StrategyOperation.STRATEGY_OPERATION_DEACTIVATE;
+    case 4:
+    case "STRATEGY_OPERATION_REACTIVATE":
+      return StrategyOperation.STRATEGY_OPERATION_REACTIVATE;
     case -1:
     case "UNRECOGNIZED":
     default:
@@ -336,6 +341,8 @@ export function strategyOperationToJSON(object: StrategyOperation): string {
       return "STRATEGY_OPERATION_UPDATE";
     case StrategyOperation.STRATEGY_OPERATION_DEACTIVATE:
       return "STRATEGY_OPERATION_DEACTIVATE";
+    case StrategyOperation.STRATEGY_OPERATION_REACTIVATE:
+      return "STRATEGY_OPERATION_REACTIVATE";
     case StrategyOperation.UNRECOGNIZED:
     default:
       return "UNRECOGNIZED";
@@ -352,6 +359,8 @@ export function strategyOperationToNumber(object: StrategyOperation): number {
       return 2;
     case StrategyOperation.STRATEGY_OPERATION_DEACTIVATE:
       return 3;
+    case StrategyOperation.STRATEGY_OPERATION_REACTIVATE:
+      return 4;
     case StrategyOperation.UNRECOGNIZED:
     default:
       return -1;
@@ -752,6 +761,12 @@ export interface BacktestResult {
    * historical run (feature 068).
    */
   initialCapital: number;
+  /**
+   * Human-readable run warnings surfaced to the user (feature 086), e.g. a strategy referenced a
+   * formula that has since been soft-deleted — the run still completed using its last-saved
+   * definition. Empty on a clean run.
+   */
+  warnings: string[];
 }
 
 export interface TradeRecord {
@@ -918,7 +933,16 @@ export interface StrategyDefinition {
    * unset → platform default (analysis.strategy.default_cooldown_days); explicit 0 → no cooldown
    * (immediate re-entry allowed); negative → rejected at write time (INVALID_ARGUMENT).
    */
-  cooldownDays?: number | undefined;
+  cooldownDays?:
+    | number
+    | undefined;
+  /**
+   * Human-readable status warnings surfaced to the user on read (feature 086), e.g. a component
+   * references a formula that has been soft-deleted — the strategy still evaluates (live and in
+   * backtests) using the formula's last-saved definition, but the deletion is flagged. Populated
+   * by GetStrategy; empty elsewhere.
+   */
+  warnings: string[];
 }
 
 export interface ManageStrategyRequest {
@@ -1499,6 +1523,7 @@ function createBaseBacktestResult(): BacktestResult {
     coverageGaps: [],
     diagnostics: [],
     initialCapital: 0,
+    warnings: [],
   };
 }
 
@@ -1548,6 +1573,9 @@ export const BacktestResult: MessageFns<BacktestResult> = {
     }
     if (message.initialCapital !== 0) {
       writer.uint32(121).double(message.initialCapital);
+    }
+    for (const v of message.warnings) {
+      writer.uint32(130).string(v!);
     }
     return writer;
   },
@@ -1679,6 +1707,14 @@ export const BacktestResult: MessageFns<BacktestResult> = {
           message.initialCapital = reader.double();
           continue;
         }
+        case 16: {
+          if (tag !== 130) {
+            break;
+          }
+
+          message.warnings.push(reader.string());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1757,6 +1793,9 @@ export const BacktestResult: MessageFns<BacktestResult> = {
         : isSet(object.initial_capital)
         ? globalThis.Number(object.initial_capital)
         : 0,
+      warnings: globalThis.Array.isArray(object?.warnings)
+        ? object.warnings.map((e: any) => globalThis.String(e))
+        : [],
     };
   },
 
@@ -1807,6 +1846,9 @@ export const BacktestResult: MessageFns<BacktestResult> = {
     if (message.initialCapital !== 0) {
       obj.initialCapital = message.initialCapital;
     }
+    if (message.warnings?.length) {
+      obj.warnings = message.warnings;
+    }
     return obj;
   },
 
@@ -1830,6 +1872,7 @@ export const BacktestResult: MessageFns<BacktestResult> = {
     message.coverageGaps = object.coverageGaps?.map((e) => CoverageGap.fromPartial(e)) || [];
     message.diagnostics = object.diagnostics?.map((e) => SymbolDiagnostics.fromPartial(e)) || [];
     message.initialCapital = object.initialCapital ?? 0;
+    message.warnings = object.warnings?.map((e) => e) || [];
     return message;
   },
 };
@@ -4126,6 +4169,7 @@ function createBaseStrategyDefinition(): StrategyDefinition {
     active: false,
     liveEnabled: false,
     cooldownDays: undefined,
+    warnings: [],
   };
 }
 
@@ -4157,6 +4201,9 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
     }
     if (message.cooldownDays !== undefined) {
       writer.uint32(72).int32(message.cooldownDays);
+    }
+    for (const v of message.warnings) {
+      writer.uint32(82).string(v!);
     }
     return writer;
   },
@@ -4240,6 +4287,14 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
           message.cooldownDays = reader.int32();
           continue;
         }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          message.warnings.push(reader.string());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -4290,6 +4345,9 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
         : isSet(object.cooldown_days)
         ? globalThis.Number(object.cooldown_days)
         : undefined,
+      warnings: globalThis.Array.isArray(object?.warnings)
+        ? object.warnings.map((e: any) => globalThis.String(e))
+        : [],
     };
   },
 
@@ -4322,6 +4380,9 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
     if (message.cooldownDays !== undefined) {
       obj.cooldownDays = Math.round(message.cooldownDays);
     }
+    if (message.warnings?.length) {
+      obj.warnings = message.warnings;
+    }
     return obj;
   },
 
@@ -4339,6 +4400,7 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
     message.active = object.active ?? false;
     message.liveEnabled = object.liveEnabled ?? false;
     message.cooldownDays = object.cooldownDays ?? undefined;
+    message.warnings = object.warnings?.map((e) => e) || [];
     return message;
   },
 };

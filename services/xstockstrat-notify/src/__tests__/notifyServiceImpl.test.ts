@@ -1,21 +1,35 @@
 /**
  * Unit tests for NotifyServiceImpl — no real DB required.
  *
- * Tests cover emitAlert input validation + severity binding, matchesSubscriber logic
- * (via `as any` access), rowToAlert shape, and streamAlerts subscriber registration.
+ * Tests cover matchesSubscriber logic (via `as any` access), rowToAlert shape,
+ * streamAlerts subscriber registration/deregistration, and the EmitAlert
+ * internal-service-caller contract (feature 092).
  *
- * Compile-first harness (feature 094): `tsc && node --test dist/__tests__/*.test.js`.
- * NotifyServiceImpl uses a parameter-property constructor that `--experimental-strip-types`
- * cannot compile, so the former strip-types harness left every case as a zero-assertion skip
- * (the lazy try/catch import + `if (!impl) return` early-returns never executed). Static imports
- * against compiled output remove that trap — every case below runs for real.
+ * Feature 092: this suite now runs against COMPILED output (`tsc && node --test
+ * dist/__tests__/*.test.js`) with a STATIC import, not `--experimental-strip-types`
+ * against source. The impl uses TS parameter properties that strip-only mode cannot
+ * compile, so the previous lazy `try/catch` import silently skipped every case (0
+ * assertions — fails.md 2026-07-29 / feature 074). A static import fails HARD on any
+ * import error, and the harness test below asserts the import succeeded.
  *
- * Run: pnpm test
+ * Run: pnpm run test  (tsc && node --test dist/__tests__/*.test.js)
  */
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { NotifyServiceImpl, rowToAlert } from '../grpc/notifyServiceImpl';
+
+import { NotifyServiceImpl, rowToAlert } from '../grpc/notifyServiceImpl.js';
 import { Alert } from '@xstockstrat/proto/notify/v1/notify';
+
+// ---------------------------------------------------------------------------
+// Harness — the import must succeed, never silently skip (074 guard)
+// ---------------------------------------------------------------------------
+
+describe('test harness', () => {
+  it('imports the implementation under test', () => {
+    assert.ok(NotifyServiceImpl, 'NotifyServiceImpl import must succeed — never skip silently');
+    assert.ok(rowToAlert, 'rowToAlert import must succeed');
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -148,9 +162,46 @@ describe('emitAlert', () => {
     });
   });
 
-  // F-10: empty/whitespace-only title or body is rejected INVALID_ARGUMENT (code 3)
-  // before the INSERT. The pool below would otherwise succeed, so a code-3 callback proves
-  // the guard fired — not a DB error.
+  // Feature 092 (F-11): EmitAlert is an INTERNAL-SERVICE-CALLER contract, not a role-gated RPC.
+  // Its trust boundary is the private gRPC network plus the agent's OAuth 2.1 edge — every caller
+  // is internal/unauthenticated (analysis loops send no metadata; the agent sends only
+  // x-mcp-secret). This test PINS that contract: a call carrying NO scope/secret metadata must
+  // succeed and persist the alert. An admin gate here would break every current caller.
+  // (Design decision recorded in the feature 092 design.md; adversary-ruled.)
+  it('accepts an unauthenticated internal caller (no scope/secret metadata) and persists the alert', async () => {
+    let capturedSql = '';
+    let capturedParams: any[] = [];
+    const pool = {
+      async query(sql: string, params?: any[]) {
+        capturedSql = sql;
+        capturedParams = params ?? [];
+        return { rows: [] };
+      },
+    };
+    const impl = new NotifyServiceImpl(pool as any, {} as any);
+    // No `metadata` on the call object at all — the internal-caller shape.
+    const call = {
+      request: {
+        severity: 'ALERT_SEVERITY_INFO',
+        category: 'system',
+        title: 'internal',
+        body: 'from a service loop',
+        sourceService: 'analysis',
+      },
+    };
+
+    await new Promise<void>((resolve, reject) => {
+      impl.emitAlert(call, (err: any) => (err ? reject(err) : resolve()));
+    });
+
+    // The INSERT ran (the alert was persisted) — the RPC did not reject an unauthenticated caller.
+    assert.match(capturedSql, /insert into/i);
+    assert.strictEqual(capturedParams[1], 1); // ALERT_SEVERITY_INFO → 1, bound numerically
+  });
+
+  // Feature 094 (F-10): empty/whitespace-only title or body is rejected INVALID_ARGUMENT
+  // (code 3) before the INSERT. The pool below would otherwise succeed, so a code-3 callback
+  // proves the guard fired — not a DB error.
   const invalidFieldCases: Array<[string, string, string]> = [
     ['empty title', '', 'b'],
     ['empty body', 't', ''],

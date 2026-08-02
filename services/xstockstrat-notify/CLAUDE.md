@@ -35,6 +35,23 @@ Connect router and `src/webhooks/` handlers) was removed.
 - Alerts are also persisted to `notify.alerts` for history and replay
 - Alert matching: by `user_id`, `categories[]`, `severities[]`
 
+## Authorization — EmitAlert is an internal-service-caller contract (feature 092)
+
+`EmitAlert` is **intentionally not role-gated**. It is a private-network, gRPC-only RPC whose trust
+boundary is the network plus the agent's OAuth 2.1 edge. Every caller is internal and unauthenticated
+at the RPC layer: the MCP agent sends only `x-mcp-secret` (no admin scope), and the analysis
+live/fundsignal loops, ingest backfill auto-alert, and the Go trading/marketdata/portfolio services
+send propagated headers or no metadata — **none** carries an admin bit. An admin gate would break
+every caller; enforcing `x-mcp-secret` would invert the trust boundary (only the *external* agent
+sends it). This decision is pinned by a test in `src/__tests__/notifyServiceImpl.test.ts`
+(a metadata-less `EmitAlert` must succeed). F-11 (write-path authz) considered and deliberately left
+`EmitAlert` ungated.
+
+**Tests run compile-first** (`tsc && node --test dist/__tests__/*.test.js`) with a **static** import
+and a hard "import succeeded" assertion — feature 092 replaced the `--experimental-strip-types`
+harness whose lazy `try/catch` import silently skipped every case (0 assertions; the feature-074
+zero-assertion trap).
+
 ## Dependencies
 
 | Dependency | Type | Reason |

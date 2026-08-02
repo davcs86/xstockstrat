@@ -142,8 +142,9 @@ class FormulasRepository:
         page_offset: int,
     ) -> tuple[list[dict], int]:
         # An empty author_filter never matches the author column, so when no filter
-        # is supplied only the include_public branch returns rows.
-        where = "WHERE (author = $1 OR ($2 AND is_public = TRUE))"
+        # is supplied only the include_public branch returns rows. Soft-deleted formulas
+        # (deleted_at IS NOT NULL, feature 086) are hidden from listing.
+        where = "WHERE deleted_at IS NULL AND (author = $1 OR ($2 AND is_public = TRUE))"
         total = await self._db.fetchval(
             f"SELECT COUNT(*) FROM indicators.formulas {where}",
             author_filter,
@@ -192,8 +193,12 @@ class FormulasRepository:
         return _to_dict(row)
 
     async def delete(self, formula_id) -> bool:
+        # Feature 086: soft-delete — stamp deleted_at instead of a hard DELETE so strategies that
+        # already reference it keep evaluating (get_by_id stays deleted-agnostic). Idempotent:
+        # a second delete of an already-deleted formula affects no row and returns False.
         result = await self._db.execute(
-            "DELETE FROM indicators.formulas WHERE formula_id = $1::uuid",
+            "UPDATE indicators.formulas SET deleted_at = NOW() "
+            "WHERE formula_id = $1::uuid AND deleted_at IS NULL",
             formula_id,
         )
-        return result == "DELETE 1"
+        return result == "UPDATE 1"

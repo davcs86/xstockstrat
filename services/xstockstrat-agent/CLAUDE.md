@@ -1,7 +1,7 @@
 # xstockstrat-agent — CLAUDE.md
 
 <!-- context-forge:constitution-pointer:start -->
-> **Constitution:** non-obvious local invariants (ephemeral per-call gRPC channels, lazy `gen.*` imports, hardcoded admin metadata, `MCP_AGENT_SECRET` triple-purpose, `aud`-bound JWT) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (`namespace="agent"` hardcode, `MCP_TRANSPORT` stdio default) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
+> **Constitution:** non-obvious local invariants (ephemeral per-call gRPC channels, lazy `gen.*` imports, caller-derived admin scope on management write tools, `MCP_AGENT_SECRET` triple-purpose, `aud`-bound JWT) live in [`docs/context-constitution.md`](docs/context-constitution.md); defects (`namespace="agent"` hardcode, `MCP_TRANSPORT` stdio default) in [`docs/context-constitution-findings.md`](docs/context-constitution-findings.md). Inherits the root [`PLAT-*` constitution](../../docs/context-constitution.md).
 <!-- context-forge:constitution-pointer:end -->
 
 ## Role
@@ -17,9 +17,10 @@ naming the replacement URL. `MCP_TRANSPORT=sse` remains accepted as a deprecated
 `http` (it logs a warning and starts the same server), as does `MCP_SSE_PORT` for
 `MCP_HTTP_PORT`. `MCP_TRANSPORT=stdio` is unaffected and stays for local use.
 All outbound gRPC calls to platform services carry `x-mcp-secret` when `MCP_AGENT_SECRET` is
-set; the management tools forward a hardcoded admin `x-access-scope` so the backends' role checks
-pass — with one exception, `set_config`, which forwards the real caller's derived scope
-(feature 073; see § Management-tool authorization).
+set; every management **write** tool forwards the **real caller's derived** `x-access-scope` so the
+backends' role checks *verify* admin (feature 092 generalized this from the feature-073
+`set_config`-only case; the old hardcoded admin scope was removed). See § Management-tool
+authorization.
 
 ## Language
 
@@ -27,7 +28,7 @@ Python 3.12 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
 
 ## MCP Tools
 
-The agent registers seventeen tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
+The agent registers twenty-two tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
 reference):
 
 | Tool | Purpose |
@@ -42,30 +43,45 @@ reference):
 | `manage_strategy` | Register/update/deactivate stored strategies (`update` is a **partial merge** — feature 070) |
 | `get_strategy` | Read a stored strategy's full definition (read-only, feature 070) |
 | `manage_formula` | Register/update/delete custom formulas |
-| `manage_signal_source` | Register/update/deactivate signal sources |
+| `get_formula` | Read one stored formula's full definition incl. `deleted` (read-only, feature 086) |
+| `list_formulas` | List formula definitions, soft-deleted excluded (read-only, feature 086) |
+| `manage_signal_source` | Register/update/reactivate/deactivate signal sources (honest verbs — feature 088) |
 | `set_strategy_live` | Enable/disable continuous live evaluation + alerting for a strategy (feature 048) |
 | `trigger_backfill` | Trigger an OHLCV history backfill via xstockstrat-ingest (admin-scoped write, feature 066) |
 | `get_backfill_status` | Check one backfill job or list recent jobs (read-only, feature 066) |
+| `cancel_backfill` | Cancel a queued/running backfill job (admin-scoped, feature 087) |
+| `test_formula` | Dry-run inline formula source in the sandbox, registers nothing (read-only, feature 087) |
+| `list_strategies` | List stored strategy definitions (read-only, feature 087) |
 | `get_config` | Read a namespace's current config values, secret values redacted (read-only, feature 073) |
 | `list_config_keys` | List a namespace's registered config keys, metadata only (read-only, feature 073) |
-| `set_config` | Write one non-secret config value (admin-scoped write, feature 073) |
+| `set_config` | Write one non-secret config value (admin-scoped write, feature 073); a write to an unregistered key scope is refused `NOT_FOUND` unless `create_key=true` (feature 091) |
 
 ### Management-tool authorization
 
-The management tools (`manage_strategy`, `manage_formula`, `manage_signal_source`,
-`set_strategy_live`, `trigger_backfill`) forward a hardcoded admin `x-access-scope` on their backend gRPC calls.
-Internal services (e.g. `xstockstrat-analysis` `SetStrategyLive`) only perform a role check on the
-propagated `x-access-scope`; `manage_formula` additionally relies on the indicators backend's
-author-ownership check. The MCP endpoint itself is gated by OAuth 2.1 (see below).
+The four management **write** tools that hit a backend admin gate — `manage_strategy`,
+`manage_signal_source`, `set_strategy_live`, `trigger_backfill` — forward the **real calling
+user's** derived `x-access-scope` on their backend gRPC calls (feature 092; `set_config` has done
+this since feature 073). The scope is derived from the caller's identity roles by `app/scopes.py`
+`roles_to_access_scope` (a port of the UI's `rolesToAccessScope`) via the shared
+`app/tools.py` `_caller_access_scope(ctx, tool)` helper, so a **non-admin operator is rejected
+`PERMISSION_DENIED`** by the backend gate (analysis `ManageStrategy`/`SetStrategyLive`, ingest
+`ManageSignalSource`/`TriggerBackfill` — all check the ADMIN bit `0x04`) rather than silently
+succeeding under a hardcoded admin override. The claims come from `app/main.py` `_authorized`, which
+publishes them on the request's ASGI scope under `MCP_CLAIMS_SCOPE_KEY`; each tool reads them via its
+injected `ctx: Context`. The old hardcoded `_admin_metadata()` (`x-access-scope=7`) tuple was
+**removed** by feature 092.
 
-**`set_config` is the documented exception (feature 073).** It forwards the **real calling user's**
-scope, derived from their identity roles by `app/scopes.py` `roles_to_access_scope` (a port of the
-UI's `rolesToAccessScope`), so a non-admin operator is rejected `PERMISSION_DENIED` by
-`xstockstrat-config`'s gate rather than silently succeeding under a service-wide admin override.
-The claims come from `app/main.py` `_authorized`, which publishes them on the request's ASGI scope
-under `MCP_CLAIMS_SCOPE_KEY`; the tool reads them via its injected `ctx: Context`.
+**`manage_formula` is different** — it forwards **no** admin scope (plain `_metadata()`); the
+indicators backend enforces an **author-ownership** check instead (admin is only an override there).
+It is not a hardcoded-admin forwarder and was left unchanged by feature 092.
 
-That plumbing is why `set_config` refuses when no verified claims are present. Feature 079
+**`EmitAlert` (xstockstrat-notify) is intentionally ungated** (feature 092): it is an internal
+service-caller RPC on the private gRPC network whose trust boundary is the network plus the agent's
+OAuth edge — every caller (the agent, plus analysis/ingest/trading loops) is internal and sends no
+admin scope, so a per-call role gate would break them all. Documented as an explicit contract, not an
+oversight.
+
+That plumbing is also why these tools refuse when no verified claims are present. Feature 079
 **removed** the legacy SSE transport whose `POST /messages` returned before `_authorized` ran, so
 every tool call now passes the gate and the check is **defence in depth** rather than the live
 transport guard. It must keep its current shape: back when both transports existed, a check based
@@ -75,6 +91,14 @@ carrying an `Authorization` header, so only the absence of verified claims disti
 `set_config` also refuses any `is_secret` key (checked by name prefix *and* by the flag from
 `ListKeys`): credentials are delivered as `type: SECRET` environment variables, never as config
 values.
+
+**Key-creation gate (feature 091).** `set_config` forwards a `create_key` flag
+(`SetConfigRequest.create_key`, default false). `xstockstrat-config` refuses a write to a
+not-yet-registered `(namespace, key, environment, trading_mode)` scope with `NOT_FOUND` unless
+`create_key=true`, so a mistyped key can no longer silently mint an orphan row. The refusal is
+enforced **server-side** (the agent is a pure passthrough — no client-side existence check), and
+key creation is audited. This is purely additive to the secret-refusal and real-scope-forwarding
+behavior above.
 
 ### OAuth 2.1 edge auth (feature 049 Part B)
 
@@ -109,12 +133,18 @@ discovery/endpoint URLs (in DO it is `${APP_URL}/agent`).
 
 ## Config Keys Consumed
 
-Namespace: `agent` (resolved via one-shot `GetConfig` → `client.get_config_value("<bare-key>")`).
+Namespace: `agent` (resolved via one-shot `GetConfig` → `client.get_config_value(key,
+namespace="agent", environment=<resolved>, trading_mode=<resolved>)`). **Feature 093:** the read is
+now **environment-scoped** (`namespace`/`environment` are required — the old signature hardcoded
+`namespace="agent"` and sent no environment, so a production agent read the dev row) and projects the
+**active oneof** stringified (a `float`/`bool` key like `signal.alert_threshold` used to read back as
+`None`); a transport failure is surfaced, not swallowed to `None`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `agent.oauth.registration_enabled` | bool | `true` | Allow RFC 7591 DCR at `/oauth/register` (disabled ⇒ 403) |
 | `agent.oauth.allowed_redirect_uris` | string | `""` | Comma-separated exact redirect URIs; empty = require `https://` at registration only |
+| `agent.signal.alert_threshold` | float | `0.6` | Conviction threshold above which `ingest_signal` auto-emits an alert (feature 093 — was env-blind, so effectively always the default; now env-scoped, best-effort) |
 
 ## Environment Variables
 

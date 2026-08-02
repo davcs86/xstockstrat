@@ -191,19 +191,11 @@ export default function SourcesPage() {
   }
 
   function handleToggle(src: SignalSource) {
+    // Feature 088: reactivation is its own honest verb, decoupled from update (which no longer
+    // touches `active`). Deactivate stays a distinct verb.
     const req = src.active
       ? { source: { slug: src.slug }, operation: 'deactivate' }
-      : {
-          source: {
-            slug: src.slug,
-            displayName: src.displayName,
-            sourceType: src.sourceType,
-            extractorModule: src.extractorModule,
-            active: true,
-            configJson: src.configJson,
-          },
-          operation: 'update',
-        };
+      : { source: { slug: src.slug }, operation: 'reactivate' };
     manageMutate(req);
   }
 
@@ -211,7 +203,7 @@ export default function SourcesPage() {
     setSaveError(null);
     const isNew = editingSlug === '__new__';
     const configJson = buildConfigJson(form);
-    const req = {
+    const base = {
       source: {
         slug: form.slug,
         displayName: form.displayName,
@@ -220,9 +212,27 @@ export default function SourcesPage() {
         active: form.active,
         configJson,
       },
-      operation: isNew ? 'register' : 'update',
       ...(form.credentialsRef ? { credentialsRef: form.credentialsRef } : {}),
     };
+    // Feature 088: on update, derive an AIP-161 update_mask so an omitted secret is PRESERVED.
+    // Always submit the editable text fields; include credentials_ref only when a new secret was
+    // typed. Paths are the backend's snake_case field names. `active`/`slug` are never masked
+    // (column-authoritative; lifecycle uses the reactivate/deactivate verbs).
+    const req = isNew
+      ? { ...base, operation: 'register' }
+      : {
+          ...base,
+          operation: 'update',
+          updateMask: {
+            paths: [
+              'display_name',
+              'source_type',
+              'extractor_module',
+              'config_json',
+              ...(form.credentialsRef ? ['credentials_ref'] : []),
+            ],
+          },
+        };
     manageMutate(req, {
       onSuccess: () => closeForm(),
       onError: (e) => setSaveError(errMessage(e)),

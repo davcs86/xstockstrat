@@ -12,6 +12,7 @@ from contextlib import ExitStack, contextmanager
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import grpc
 import pytest
 from gen.common.v1 import common_pb2
 from gen.config.v1 import config_pb2
@@ -23,6 +24,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import IngestServicer, job_row_to_proto
 from tests._helpers import job_row as _job_row
+from tests.conftest import _ctx  # feature 092 (C-13): centralized admin/no-admin context builder
 
 
 def make_servicer(
@@ -267,7 +269,8 @@ class TestTriggerBackfill:
             patch("asyncio.create_task"),
             patch(f"{_REPO}.insert_job", AsyncMock()) as insert,
         ):
-            resp = await svc.TriggerBackfill(req, context=MagicMock())
+            # feature 092: TriggerBackfill is now admin-gated — pass an admin-scoped context.
+            resp = await svc.TriggerBackfill(req, _ctx("4"))
 
         assert resp.status == ingest_pb2.BACKFILL_STATUS_QUEUED
         assert resp.job_id != ""
@@ -296,7 +299,7 @@ class TestTriggerBackfill:
             patch("asyncio.create_task"),
             patch(f"{_REPO}.insert_job", AsyncMock()) as insert,
         ):
-            await svc.TriggerBackfill(req, context=MagicMock())
+            await svc.TriggerBackfill(req, _ctx("4"))  # feature 092: admin-scoped
 
         assert insert.await_args.kwargs["timeframe"] == "15m"
         queued = [
@@ -314,6 +317,44 @@ class TestTriggerBackfill:
         context.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception, match="aborted"):
             await svc.TriggerBackfill(req, context)
+
+    @pytest.mark.asyncio
+    async def test_permission_denied_without_admin_scope(self):
+        """Feature 092 (F-11): the quota-spending backfill is admin-gated, like CancelBackfill.
+
+        RED before the gate: a no-admin caller previously queued a paid job unconditionally.
+        """
+        svc = make_servicer(db=MagicMock())
+        req = MagicMock()
+        req.symbols = ["AAPL"]
+        req.timeframe = "1d"
+        req.range = common_pb2.TimeRange()
+        ctx = _ctx("0")  # no ADMIN bit
+        with (
+            patch("asyncio.create_task") as spawn,
+            patch(f"{_REPO}.insert_job", AsyncMock()) as insert,
+        ):
+            with pytest.raises(Exception, match="aborted"):
+                await svc.TriggerBackfill(req, ctx)
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
+        insert.assert_not_awaited()  # no paid job queued
+        spawn.assert_not_called()  # no runner spawned
+
+    @pytest.mark.asyncio
+    async def test_admin_scope_queues(self):
+        """An admin caller still gets a QUEUED job (AC1)."""
+        svc = make_servicer(db=MagicMock())
+        req = MagicMock()
+        req.symbols = ["AAPL"]
+        req.timeframe = "1d"
+        req.range = common_pb2.TimeRange()
+        with (
+            patch("asyncio.create_task"),
+            patch(f"{_REPO}.insert_job", AsyncMock()) as insert,
+        ):
+            resp = await svc.TriggerBackfill(req, _ctx("4"))
+        assert resp.status == ingest_pb2.BACKFILL_STATUS_QUEUED
+        insert.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------
@@ -970,16 +1011,20 @@ class TestManageSignalSource:
     async def test_register_succeeds_with_admin_scope(self):
         svc = make_servicer()
         svc._db = MagicMock()
+        # Feature 088: register first SELECTs (get_source → None = not existing), then INSERTs.
         svc._db.fetchrow = AsyncMock(
-            return_value={
-                "slug": "uw",
-                "display_name": "UW",
-                "source_type": "simple_email",
-                "extractor_module": "app.extractors.noop",
-                "credentials_ref": None,
-                "active": True,
-                "config_json": None,
-            }
+            side_effect=[
+                None,
+                {
+                    "slug": "uw",
+                    "display_name": "UW",
+                    "source_type": "simple_email",
+                    "extractor_module": "app.extractors.noop",
+                    "credentials_ref": None,
+                    "active": True,
+                    "config_json": None,
+                },
+            ]
         )
 
         from google.protobuf.struct_pb2 import Struct
@@ -1079,3 +1124,163 @@ class TestListSignalSources:
         req = ingest_pb2.ListSignalSourcesRequest(include_inactive=False)
         resp = await svc.ListSignalSources(req, context=MagicMock())
         assert resp.sources[0].has_credentials is True
+
+
+# ---------------------------------------------------------------------------
+# Feature 088 — honest ManageSignalSource verbs
+# ---------------------------------------------------------------------------
+
+_SS = "app.handlers.servicer"
+
+
+def _admin_ctx():
+    ctx = MagicMock()
+    ctx.invocation_metadata = MagicMock(return_value=[("x-access-scope", "7")])
+    ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+    return ctx
+
+
+def _stored(**over):
+    base = {
+        "slug": "uw",
+        "display_name": "UW",
+        "source_type": "authenticated_website",
+        "extractor_module": "app.extractors.web",
+        "credentials_ref": "secret.ingest.uw",
+        "active": True,
+        "config_json": {"url": "https://x.com", "scrape_selector": ".a"},
+    }
+    base.update(over)
+    return base
+
+
+class TestManageSignalSourceVerbs:
+    @pytest.mark.asyncio
+    async def test_register_existing_slug_already_exists(self):
+        svc = make_servicer()
+        svc._db = MagicMock()
+        req = ingest_pb2.ManageSignalSourceRequest(
+            source=ingest_pb2.SignalSource(slug="uw", source_type="simple_email"),
+            operation="register",
+        )
+        with patch(f"{_SS}.get_source", AsyncMock(return_value=_stored())):
+            ctx = _admin_ctx()
+            with pytest.raises(Exception, match="aborted"):
+                await svc.ManageSignalSource(req, ctx)
+        assert ctx.abort.call_args[0][0] == grpc.StatusCode.ALREADY_EXISTS
+
+    @pytest.mark.asyncio
+    async def test_update_unknown_slug_not_found(self):
+        svc = make_servicer()
+        svc._db = MagicMock()
+        req = ingest_pb2.ManageSignalSourceRequest(
+            source=ingest_pb2.SignalSource(slug="nope", source_type="simple_email"),
+            operation="update",
+        )
+        with patch(f"{_SS}.get_source", AsyncMock(return_value=None)):
+            ctx = _admin_ctx()
+            with pytest.raises(Exception, match="aborted"):
+                await svc.ManageSignalSource(req, ctx)
+        assert ctx.abort.call_args[0][0] == grpc.StatusCode.NOT_FOUND
+
+    @pytest.mark.asyncio
+    async def test_masked_update_preserves_credentials_and_type(self):
+        svc = make_servicer()
+        svc._db = MagicMock()
+        req = ingest_pb2.ManageSignalSourceRequest(
+            source=ingest_pb2.SignalSource(slug="uw", display_name="New Name"),
+            operation="update",
+        )
+        req.update_mask.paths.append("display_name")
+        updated = _stored(display_name="New Name")
+        with (
+            patch(f"{_SS}.get_source", AsyncMock(return_value=_stored())),
+            patch(f"{_SS}.update_source", AsyncMock(return_value=updated)) as up,
+        ):
+            await svc.ManageSignalSource(req, _admin_ctx())
+        kw = up.call_args.kwargs
+        assert kw["display_name"] == "New Name"
+        assert kw["credentials_ref"] == "secret.ingest.uw"  # preserved (not masked)
+        assert kw["source_type"] == "authenticated_website"
+
+    @pytest.mark.asyncio
+    async def test_masking_active_rejected(self):
+        svc = make_servicer()
+        svc._db = MagicMock()
+        req = ingest_pb2.ManageSignalSourceRequest(
+            source=ingest_pb2.SignalSource(slug="uw"), operation="update"
+        )
+        req.update_mask.paths.append("active")
+        with patch(f"{_SS}.get_source", AsyncMock(return_value=_stored())):
+            ctx = _admin_ctx()
+            with pytest.raises(Exception, match="aborted"):
+                await svc.ManageSignalSource(req, ctx)
+        assert ctx.abort.call_args[0][0] == grpc.StatusCode.INVALID_ARGUMENT
+
+    @pytest.mark.asyncio
+    async def test_masked_credentials_ref_empty_clears(self):
+        svc = make_servicer()
+        svc._db = MagicMock()
+        # Change to a non-credential type so clearing the ref is allowed.
+        req = ingest_pb2.ManageSignalSourceRequest(
+            source=ingest_pb2.SignalSource(slug="uw", source_type="simple_website"),
+            credentials_ref="",
+            operation="update",
+        )
+        req.update_mask.paths.append("source_type")
+        req.update_mask.paths.append("credentials_ref")
+        updated = _stored(source_type="simple_website", credentials_ref=None)
+        with (
+            patch(f"{_SS}.get_source", AsyncMock(return_value=_stored())),
+            patch(f"{_SS}.update_source", AsyncMock(return_value=updated)) as up,
+        ):
+            await svc.ManageSignalSource(req, _admin_ctx())
+        assert up.call_args.kwargs["credentials_ref"] is None
+
+    @pytest.mark.asyncio
+    async def test_mediated_authenticated_website_credential_gap_closed(self):
+        # Masked update switching to mediated_authenticated_website with no credential → rejected.
+        svc = make_servicer()
+        svc._db = MagicMock()
+        req = ingest_pb2.ManageSignalSourceRequest(
+            source=ingest_pb2.SignalSource(slug="uw", source_type="mediated_authenticated_website"),
+            credentials_ref="",
+            operation="update",
+        )
+        req.update_mask.paths.append("source_type")
+        req.update_mask.paths.append("credentials_ref")  # cleared → no credential
+        with patch(f"{_SS}.get_source", AsyncMock(return_value=_stored(credentials_ref=None))):
+            ctx = _admin_ctx()
+            with pytest.raises(Exception, match="aborted"):
+                await svc.ManageSignalSource(req, ctx)
+        assert ctx.abort.call_args[0][0] == grpc.StatusCode.INVALID_ARGUMENT
+
+    @pytest.mark.asyncio
+    async def test_reactivate_sets_active(self):
+        svc = make_servicer()
+        svc._db = MagicMock()
+        req = ingest_pb2.ManageSignalSourceRequest(
+            source=ingest_pb2.SignalSource(slug="uw"),
+            operation_enum=ingest_pb2.SIGNAL_SOURCE_OPERATION_REACTIVATE,
+        )
+        with patch(f"{_SS}.reactivate_source", AsyncMock(return_value=_stored(active=True))) as r:
+            resp = await svc.ManageSignalSource(req, _admin_ctx())
+        r.assert_awaited_once()
+        assert resp.source.active is True
+
+    @pytest.mark.asyncio
+    async def test_operation_enum_preferred_over_string(self):
+        # operation_enum=UPDATE wins even if the deprecated string is empty/mismatched.
+        svc = make_servicer()
+        svc._db = MagicMock()
+        req = ingest_pb2.ManageSignalSourceRequest(
+            source=ingest_pb2.SignalSource(slug="uw", display_name="X"),
+            operation_enum=ingest_pb2.SIGNAL_SOURCE_OPERATION_UPDATE,
+        )
+        req.update_mask.paths.append("display_name")
+        with (
+            patch(f"{_SS}.get_source", AsyncMock(return_value=_stored())),
+            patch(f"{_SS}.update_source", AsyncMock(return_value=_stored(display_name="X"))) as up,
+        ):
+            await svc.ManageSignalSource(req, _admin_ctx())
+        up.assert_awaited_once()

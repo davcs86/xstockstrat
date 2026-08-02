@@ -61,6 +61,7 @@ export default function FormulaDetailPage({ params }: { params: Promise<{ id: st
           initialOutputs={formula.outputs}
           initialWarmupPeriod={formula.warmupPeriod}
           author={formula.author}
+          deleted={formula.deleted}
           saving={updateMut.isPending}
           saveError={updateError}
           onSave={(values) => updateMut.mutate({ formulaId: id, ...values })}

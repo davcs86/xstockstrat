@@ -131,6 +131,19 @@ class StrategiesRepository:
         )
         return _to_dict(row)
 
+    async def reactivate(self, strategy_id: str) -> dict | None:
+        """Feature 089: set active = TRUE (reactivation decoupled from update). None if missing."""
+        row = await self._db.fetchrow(
+            """
+            UPDATE analysis.strategies
+               SET active = TRUE, updated_at = NOW()
+             WHERE strategy_id = $1
+            RETURNING *
+            """,
+            strategy_id,
+        )
+        return _to_dict(row)
+
     async def list(
         self,
         include_inactive: bool = False,

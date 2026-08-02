@@ -180,3 +180,63 @@ test.describe('/sources page — UI contract', () => {
     expect(content).not.toMatch(/credentials_ref/);
   });
 });
+
+test.describe('Feature 088 — honest signal-source verbs (form → mask)', () => {
+  test('editing a source without a new secret sends a mask that omits credentials_ref', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto(SOURCES_PAGE);
+    await expect(page.getByRole('heading', { name: 'Signal Sources' })).toBeVisible({
+      timeout: 15000,
+    });
+    await page.getByRole('button', { name: 'Edit' }).first().click();
+    // Change the display name only; do NOT type a credential.
+    const nameInput = page.getByPlaceholder('Display name');
+    await nameInput.fill('Renamed Source');
+
+    const reqPromise = page.waitForRequest(
+      (r) => r.url().includes('/ManageSignalSource') && r.method() === 'POST',
+    );
+    await page.getByRole('button', { name: 'Save' }).click();
+    const body = (await reqPromise).postData() ?? '';
+    // update verb + a mask that carries display_name but never the secret.
+    expect(body).toContain('update');
+    expect(body.toLowerCase()).not.toContain('credentialsref');
+    expect(body.toLowerCase()).not.toContain('credentials_ref');
+    expect(body.toLowerCase()).toContain('displayname');
+  });
+
+  test('enabling an inactive source uses the reactivate verb', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.route(`**${LIST_SOURCES_BFF}`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          sources: [
+            {
+              slug: 'example_simple_email',
+              displayName: 'Example Simple Email',
+              sourceType: 'simple_email',
+              active: false,
+              hasCredentials: true,
+              configJson: { sender_patterns: ['x@y.com'], subject_patterns: ['S:'] },
+              extractorModule: 'app.extractors.example_simple_email',
+              health: 3,
+              signalsFed: '0',
+              lastError: '',
+            },
+          ],
+        }),
+      });
+    });
+    await page.goto(SOURCES_PAGE);
+    const reqPromise = page.waitForRequest(
+      (r) => r.url().includes('/ManageSignalSource') && r.method() === 'POST',
+    );
+    await page.getByRole('button', { name: 'Enable' }).first().click();
+    const body = (await reqPromise).postData() ?? '';
+    expect(body).toContain('reactivate');
+  });
+});

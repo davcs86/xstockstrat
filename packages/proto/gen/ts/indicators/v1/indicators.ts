@@ -19,6 +19,7 @@ import {
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
 import { TimeRange } from "../../common/v1/common";
+import { FieldMask } from "../../google/protobuf/field_mask";
 import { Struct, Value } from "../../google/protobuf/struct";
 import { Timestamp } from "../../google/protobuf/timestamp";
 
@@ -304,6 +305,11 @@ export interface FormulaDefinition {
   outputs: FormulaOutput[];
   /** bars of warm-up before this formula's outputs are valid (feature 064) */
   warmupPeriod: number;
+  /**
+   * true = soft-deleted (feature 086): still evaluable for strategies that already reference it
+   * (GetFormula/ExecuteFormula stay deleted-agnostic), hidden from ListFormulas, and not updatable.
+   */
+  deleted: boolean;
 }
 
 export interface FormulaDefinition_InputSchemaEntry {
@@ -382,6 +388,12 @@ export interface UpdateFormulaRequest {
   outputs: FormulaOutput[];
   /** bars of warm-up before this formula's outputs are valid (feature 064) */
   warmupPeriod: number;
+  /**
+   * AIP-161 partial update (feature 086). Absent = full replace (back-compat: the UI sends a full
+   * payload every call). Present = merge only the named paths onto the stored row; unlisted fields
+   * are preserved. Reject an update whose target formula is soft-deleted (FAILED_PRECONDITION).
+   */
+  updateMask?: string[] | undefined;
 }
 
 export interface UpdateFormulaResponse {
@@ -1913,6 +1925,7 @@ function createBaseFormulaDefinition(): FormulaDefinition {
     parameters: [],
     outputs: [],
     warmupPeriod: 0,
+    deleted: false,
   };
 }
 
@@ -1953,6 +1966,9 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
     }
     if (message.warmupPeriod !== 0) {
       writer.uint32(96).int32(message.warmupPeriod);
+    }
+    if (message.deleted !== false) {
+      writer.uint32(104).bool(message.deleted);
     }
     return writer;
   },
@@ -2063,6 +2079,14 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
           message.warmupPeriod = reader.int32();
           continue;
         }
+        case 13: {
+          if (tag !== 104) {
+            break;
+          }
+
+          message.deleted = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2126,6 +2150,7 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
         : isSet(object.warmup_period)
         ? globalThis.Number(object.warmup_period)
         : 0,
+      deleted: isSet(object.deleted) ? globalThis.Boolean(object.deleted) : false,
     };
   },
 
@@ -2173,6 +2198,9 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
     if (message.warmupPeriod !== 0) {
       obj.warmupPeriod = Math.round(message.warmupPeriod);
     }
+    if (message.deleted !== false) {
+      obj.deleted = message.deleted;
+    }
     return obj;
   },
 
@@ -2201,6 +2229,7 @@ export const FormulaDefinition: MessageFns<FormulaDefinition> = {
     message.parameters = object.parameters?.map((e) => FormulaParameter.fromPartial(e)) || [];
     message.outputs = object.outputs?.map((e) => FormulaOutput.fromPartial(e)) || [];
     message.warmupPeriod = object.warmupPeriod ?? 0;
+    message.deleted = object.deleted ?? false;
     return message;
   },
 };
@@ -3174,6 +3203,7 @@ function createBaseUpdateFormulaRequest(): UpdateFormulaRequest {
     parameters: [],
     outputs: [],
     warmupPeriod: 0,
+    updateMask: undefined,
   };
 }
 
@@ -3205,6 +3235,9 @@ export const UpdateFormulaRequest: MessageFns<UpdateFormulaRequest> = {
     }
     if (message.warmupPeriod !== 0) {
       writer.uint32(72).int32(message.warmupPeriod);
+    }
+    if (message.updateMask !== undefined) {
+      FieldMask.encode(FieldMask.wrap(message.updateMask), writer.uint32(82).fork()).join();
     }
     return writer;
   },
@@ -3288,6 +3321,14 @@ export const UpdateFormulaRequest: MessageFns<UpdateFormulaRequest> = {
           message.warmupPeriod = reader.int32();
           continue;
         }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          message.updateMask = FieldMask.unwrap(FieldMask.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3328,6 +3369,11 @@ export const UpdateFormulaRequest: MessageFns<UpdateFormulaRequest> = {
         : isSet(object.warmup_period)
         ? globalThis.Number(object.warmup_period)
         : 0,
+      updateMask: isSet(object.updateMask)
+        ? FieldMask.unwrap(FieldMask.fromJSON(object.updateMask))
+        : isSet(object.update_mask)
+        ? FieldMask.unwrap(FieldMask.fromJSON(object.update_mask))
+        : undefined,
     };
   },
 
@@ -3360,6 +3406,9 @@ export const UpdateFormulaRequest: MessageFns<UpdateFormulaRequest> = {
     if (message.warmupPeriod !== 0) {
       obj.warmupPeriod = Math.round(message.warmupPeriod);
     }
+    if (message.updateMask !== undefined) {
+      obj.updateMask = FieldMask.toJSON(FieldMask.wrap(message.updateMask));
+    }
     return obj;
   },
 
@@ -3377,6 +3426,7 @@ export const UpdateFormulaRequest: MessageFns<UpdateFormulaRequest> = {
     message.parameters = object.parameters?.map((e) => FormulaParameter.fromPartial(e)) || [];
     message.outputs = object.outputs?.map((e) => FormulaOutput.fromPartial(e)) || [];
     message.warmupPeriod = object.warmupPeriod ?? 0;
+    message.updateMask = object.updateMask ?? undefined;
     return message;
   },
 };
