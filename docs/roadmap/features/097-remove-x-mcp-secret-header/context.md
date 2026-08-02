@@ -254,3 +254,16 @@
   `services/xstockstrat-agent/CLAUDE.md`, `services/xstockstrat-agent/docs/context-constitution.md`,
   `services/xstockstrat-notify/CLAUDE.md`,
   `services/xstockstrat-notify/src/__tests__/notifyServiceImpl.test.ts`.
+
+### Step 4 — Reconcile operator setup docs describing `x-mcp-secret` [done]
+
+- Reworded `.env.example`'s comment block, `scripts/setup-env.sh`'s intro `info` lines, choice-3
+  prompt text, `warn` message, `prompt_value` description, written-`.env` comment, and summary-print
+  lines to describe `MCP_AGENT_SECRET` as OAuth-signing-only. Reworded
+  `docs/setup/digitalocean.md`'s MCP agent secret section (dropped the stale "Step 12 (x-mcp-secret
+  enforcement)" reference). All three files keep prompting for / documenting the variable itself
+  (still needed for OAuth signing).
+- Verification: zero `x-mcp-secret` hits across the three files; `MCP_AGENT_SECRET` still
+  documented/prompted in all three; `bash -n scripts/setup-env.sh` passes.
+- Files modified: `.env.example`, `scripts/setup-env.sh`, `docs/setup/digitalocean.md`.
+- Deviations: none.

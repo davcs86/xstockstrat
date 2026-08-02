@@ -405,7 +405,7 @@ grep -n "triple-purposed" services/xstockstrat-agent/docs/context-constitution.m
 
 ### Step 4 — docs: Reconcile operator setup docs describing `x-mcp-secret`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/setup/`, repo-root setup scripts
 **Files**:
 - `.env.example` — modify

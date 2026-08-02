@@ -336,9 +336,9 @@ Set on: `xstockstrat-agent`
 openssl rand -hex 32
 ```
 
-Set as `MCP_AGENT_SECRET` on both apps. The same value must be configured in
-`xstockstrat-ingest`, `xstockstrat-notify`, and `xstockstrat-analysis` once Step 12
-(x-mcp-secret enforcement) is deployed. Leave empty to skip header enforcement.
+Set as `MCP_AGENT_SECRET` on both apps (dev and prod). It is required for the agent's OAuth 2.1
+login flow (`app/oauth_server.py` HMAC-signs the `txn` blob with it) — `xstockstrat-ingest`,
+`xstockstrat-notify`, and `xstockstrat-analysis` do not read this variable.
 
 ```bash
 doctl apps update $DO_DEV_APP_ID \
