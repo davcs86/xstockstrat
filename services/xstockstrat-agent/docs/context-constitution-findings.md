@@ -24,5 +24,30 @@ question tracked in the root findings log.
 | `app/config/__init__.py` | empty, unused package; config access goes through `client.get_config_value` | `app/config/__init__.py` |
 | `app/prompts/signal_extraction.md` (+ `__init__.py`) | zero references (no `@server.prompt`, no file read) | `app/prompts/` (grep zero) |
 
+## MCP tool ↔ backend alignment audit (2026-08-01) — 13 findings, all verified
+
+Full triage: [`docs/reports/2026-08-01-mcp-tools-alignment-triage.md`](../../../docs/reports/2026-08-01-mcp-tools-alignment-triage.md).
+Every finding was re-confirmed against current code on 2026-08-02. The **docs-only** portions (F-12
+runbook/skill rows, F-13 `tools.py` docstring sync) were fixed in that pass — the docstrings now
+describe today's real behavior. The behavioral fixes below are **routed, not yet done**; each is an
+open defect until its track lands.
+
+| ID | Behavioral defect (code still to fix) | Evidence | Track |
+|---|---|---|---|
+| F-1 | Extract-tool credentials: `get_config_value` reads a dev-scoped `agent`-namespace key and swallows errors — `has_credentials` does not guarantee resolution (dupe of the latent bug above) | `app/client.py` `get_config_value`; `app/tools.py` extract tools | C |
+| F-2/F-3 | `manage_formula` update is full-replace (no `update_mask`); `outputs`/`warmup_period` never sent; no `get_formula`/`list_formulas` read tools | `app/client.py` `manage_formula` builders; `app/tools.py` `manage_formula` | C |
+| F-4 | `screen_symbols` never maps `ScreenCriterion.component` (technical kinds silently skipped); `min_conviction` sent but unread | `app/client.py` `screen_symbols` | B/C |
+| F-5 | Strategy re-register raises generic INTERNAL, not ALREADY_EXISTS; no reactivate path | analysis `servicer.py`/`repositories/strategies.py` | B/C |
+| F-6 | `manage_signal_source` register/update is one destructive upsert; omitted `credentials_ref` NULLs it; update always reactivates (`active=True` hardcoded) | `app/client.py` `manage_signal_source`; ingest `servicer.py` | C |
+| F-7 | `set_strategy_live` succeeds on inert configs (inactive / no symbols) — no FAILED_PRECONDITION | analysis `live_loop.py`, `SetStrategyLive` handler | B/C |
+| F-8 | `set_config` typo silently creates an orphan key (blind upsert); agent already has the `ListKeys` answer and discards it | `app/tools.py` `set_config`; config `configServiceImpl.ts` | B + C |
+| F-9 | `ingest_signal` conviction: no source default (docs fixed); `>1.0` fails as INTERNAL not INVALID_ARGUMENT | ingest `servicer.py` | B |
+| F-10 | Built RPCs with no MCP surface: `ExecuteFormula` (test_formula), `CancelBackfill`, `ListStrategyDefinitions`, `GetFormula`/`ListFormulas`, source-health fields, `emit_alert` context/tags/correlation_id — all additive, zero backend change | `app/client.py` (unused fns), `app/tools.py` | C |
+| F-11 | `TriggerBackfill` is ungated server-side while `CancelBackfill` is admin-gated; the agent's "admin-scoped" label is decorative (unverified `x-access-scope=7`) | ingest `servicer.py`; `app/client.py` `_admin_metadata` | B + C |
+
+**Antidote (prevention):** add descriptor-parity/return-shape contract tests over the `app/client.py`
+request builders + projections, mirroring `tests/test_backtest_view.py` (the only tool that did not
+drift). See ledger `docs/roadmap/ledger/insights.md` (2026-08-02) and `fails.md` (2026-08-02).
+
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

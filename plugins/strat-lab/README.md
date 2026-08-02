@@ -20,8 +20,9 @@ fix baked into the skill:
    aggregates them (sum PnL / average return).
 3. **An edited strategy can silently produce garbage.** The skill verifies every run against an
    oracle to the digit — trade blotter and per-bar indicator checkpoints — before trusting it, and
-   warns that `manage_strategy update` is replace-semantics (send the full definition or you wipe
-   the components).
+   warns that `manage_strategy update` is a partial merge (feature 070): omitted fields are
+   preserved, and only `clear_fields` blanks one — so a mis-aimed `clear_fields` is the way you
+   wipe components, not an omission.
 
 It also ensures **data coverage first** (`trigger_backfill` / `get_backfill_status`) so a data gap
 is never mistaken for a strategy problem.

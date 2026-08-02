@@ -127,7 +127,13 @@ def register_tools(server: MCPServer) -> None:
         attachments_b64: list of base64-encoded attachment bytes (PDF, etc.).
         urls: list of URLs to fetch (for mediated_linked_email sources).
         At least one of attachments_b64 or urls must be provided.
-        Returns {raw_text: str}. Credentials are never exposed in the response."""
+        Returns {raw_text: str}. Credentials are never exposed in the response.
+        CREDENTIAL CAVEAT: credential resolution is only ATTEMPTED, not guaranteed. A source's
+            has_credentials flag does not mean the secret will resolve — the lookup reads a single
+            agent-namespace, dev-scoped config key and swallows any failure to None, so a
+            password-protected PDF or gated URL may silently fall back to an unauthenticated fetch
+            or fail outright. Treat results as best-effort; do not assume authenticated content was
+            retrieved."""
         if not attachments_b64 and not urls:
             raise ValueError("At least one of attachments_b64 or urls must be provided")
 
@@ -161,7 +167,12 @@ def register_tools(server: MCPServer) -> None:
         Called only when a source's extractor_tool equals 'extract_website_content'.
         source_slug: slug from list_signal_sources.
         The URL is read from the source's config_json.url — Claude never constructs URLs.
-        Returns {raw_text: str}. Credentials are never exposed in the response."""
+        Returns {raw_text: str}. Credentials are never exposed in the response.
+        CREDENTIAL CAVEAT: credential resolution is only ATTEMPTED, not guaranteed. A source's
+            has_credentials flag does not mean the secret will resolve — the lookup reads a single
+            agent-namespace, dev-scoped config key and swallows any failure to None, so an
+            authenticated site may silently fall back to an unauthenticated fetch or fail outright.
+            Treat results as best-effort; do not assume authenticated content was retrieved."""
         src = await _get_source(source_slug)
 
         config_json = src.get("config_json") or {}
@@ -200,8 +211,14 @@ def register_tools(server: MCPServer) -> None:
         symbol: ticker symbol e.g. 'NVDA'.
         direction: one of 'buy', 'sell', 'hold', 'watchlist'.
         valid_from: ISO 8601 datetime string e.g. '2026-05-01T00:00:00Z'.
-        conviction: float 0.0-1.0 (optional, ingest applies source default if absent).
-        Returns signal_id on success; raises on unknown source slug (INVALID_ARGUMENT)."""
+        conviction: float in (0.0, 1.0], optional. There is NO source default — an omitted
+            conviction is stored as NULL, not backfilled, so pass it explicitly whenever known. A
+            value > 1.0 is not caught here and fails downstream as INTERNAL, not INVALID_ARGUMENT.
+        SIDE EFFECT: on success this tool AUTO-EMITS an alert when conviction is present and >= the
+            agent.signal.alert_threshold config value (default 0.6); an alert failure does not fail
+            the ingest. Do NOT also call emit_alert for the same signal, or you will double-alert.
+        Returns {"signal_id": <int>} on success; raises on unknown source slug
+        (INVALID_ARGUMENT)."""
         result = await client.ingest_signal(
             source=source,
             symbol=symbol,
@@ -251,9 +268,15 @@ def register_tools(server: MCPServer) -> None:
         target_user_id: str = "",
     ) -> dict:
         """Emit an alert via xstockstrat-notify.
-        severity: e.g. 'info', 'warning', 'critical'.
+        severity: one of 'info', 'warning', 'error', 'critical' (case-insensitive). Any
+            unrecognized value is silently coerced to 'info' — it is not rejected.
         category: alert category e.g. 'signal', 'system'.
-        Use for system-level alerts or alerts not tied to a specific ingested signal."""
+        title/body: stored and delivered verbatim with NO server-side validation — empty strings
+            are accepted and delivered blank, so populate both.
+        target_user_id: defaults to '' which BROADCASTS to all users; set it to target one user.
+        Use for system-level alerts or alerts not tied to a specific ingested signal (ingest_signal
+            already auto-alerts high-conviction signals).
+        Returns {"alert_id": <str>}."""
         return await client.emit_alert(
             severity=severity,
             category=category,
@@ -301,7 +324,10 @@ def register_tools(server: MCPServer) -> None:
         A run with no diagnostics and no trades (e.g. BACKTEST_STATUS_INSUFFICIENT_DATA) has NO
         attachment — the summary with `coverage_gaps` is the whole result.
         `summary["attachments"]` names each attached resource's `uri` and `mime_type`, so you can
-        tell the user detail exists even if your client shows no attachment affordance."""
+        tell the user detail exists even if your client shows no attachment affordance.
+        Note: 64-bit integer fields in the attached full result (e.g. per-bar `volume`, and
+        `bars_have`/`bars_need` inside `coverage_gaps`) are serialized as JSON STRINGS, not
+        numbers — parse them before arithmetic."""
         result = await client.run_backtest(
             strategy_id=strategy_id,
             symbols=symbols,
@@ -338,10 +364,20 @@ def register_tools(server: MCPServer) -> None:
         """Scan a universe of symbols via xstockstrat-analysis and return ranked candidates.
         symbols: explicit ticker list to screen e.g. ['NVDA', 'AAPL'] (no watchlist resolution).
         criteria: list of criterion dicts, each with keys: ref_name, kind
-            (e.g. 'SCREEN_KIND_FUNDAMENTAL'|'SCREEN_KIND_TECHNICAL_FORMULA'|'SCREEN_KIND_SIGNAL'),
-            metric_name, op (e.g. 'COMPARATOR_GTE'), threshold, threshold_high, weight, hard_filter.
-        signal_sources/signal_weight/technical_weight/min_conviction: optional signal-blend params.
-        rank_limit: cap on returned results (0 = analysis default). Read-only, no admin scope."""
+            ('SCREEN_KIND_FUNDAMENTAL' | 'SCREEN_KIND_SIGNAL'), metric_name, op (e.g.
+            'COMPARATOR_GTE'), threshold, threshold_high, weight, hard_filter.
+            ONLY fundamental and signal kinds work today. 'SCREEN_KIND_TECHNICAL_FORMULA' /
+            'SCREEN_KIND_TECHNICAL_INDICATOR' criteria are accepted but SILENTLY SKIPPED (this
+            wrapper never sends the `component` field they require), and an unknown fundamental
+            metric_name is likewise silently skipped, not rejected.
+        signal_sources/signal_weight/technical_weight: optional signal-blend params.
+        min_conviction: accepted but currently a DEAD knob — the screener never reads it. Apply
+            your own conviction cutoff on the results instead.
+        rank_limit: cap on returned results (0 = analysis default). Read-only, no admin scope.
+        Returns {"results": [{"symbol", "score", "criterion_scores" (per-ref_name map), "passed"
+            (bool), "status"}], "coverage_gaps": [{"symbol"}]}. coverage_gaps carries only the
+            symbol (timeframe / bars-available / bars-needed detail is dropped) and is computed
+            AFTER rank truncation. Filter candidates on `passed`."""
         return await client.screen_symbols(
             symbols=symbols,
             criteria=criteria,
@@ -415,7 +451,16 @@ def register_tools(server: MCPServer) -> None:
 
         Note: changing any scoring-relevant field (components, rules, cooldown_days,
         signal_params) changes the strategy's definition fingerprint, so its derived grade is
-        cleared until a fresh backtest supplies new evidence. A rename does not."""
+        cleared until a fresh backtest supplies new evidence. A rename does not.
+
+        LIFECYCLE IS ONE-WAY: 'deactivate' is permanent — there is no reactivation operation, and
+        re-registering the same strategy_id does NOT overwrite or reactivate; it fails with a
+        generic INTERNAL error (a unique-key violation, not ALREADY_EXISTS). To revise a retired
+        strategy, register a new versioned id (e.g. 'x_v2').
+
+        RESPONSE CASING: this tool returns the definition with camelCase keys (e.g. `refName`,
+        `entryRule`), UNLIKE get_strategy, which returns snake_case. To round-trip an edit, fetch
+        with get_strategy (snake_case matches this tool's INPUT), not from this response."""
         # feature 070: send ONLY what the caller supplied. The previous version defaulted these
         # to ""/[] and shipped them unconditionally, so `manage_strategy(operation="update",
         # strategy_id=..., cooldown_days=45)` transmitted explicit-empty components and rules and
@@ -483,13 +528,25 @@ def register_tools(server: MCPServer) -> None:
             'int'|'float'|'bool'|'string' and min/max apply to numeric params only. Values
             are read inside the formula via params["<name>"].
 
+        UPDATE IS A FULL REPLACE (not a partial merge): every field you omit is sent as its
+            default and OVERWRITES the stored value — an omitted source is blanked, omitted
+            parameters are dropped, is_public silently resets to False. No read-back tool exists
+            (get_formula/list_formulas are not registered), so you cannot recover the current
+            definition: keep the full registration payload and resend ALL fields on every update.
+        DELETE IS A HARD DELETE with no reference check — any strategy still referencing the
+            formula will fail later at evaluation time. Treat delete as forbidden while any
+            strategy uses the formula.
+        Returns per operation: register → {"formula_id": <str>}; update → the full stored formula
+            in camelCase; delete → {"success": <bool>}.
+
         source: plain Python, executed in a subprocess sandbox (no filesystem/network access).
             Two dicts are already in scope — data (series input, e.g. data["close"], a list of
             floats) and params (validated typed scalars, e.g. params["period"]) — and the
-            formula must assign its output to a `result` dict with at least a "value" key (the
-            primary series); any other keys are declared output series (see the `outputs` field
-            on the underlying RegisterFormula RPC, e.g. for a z-score or efficiency-ratio
-            indicator that emits more than one series).
+            formula must assign its output to a `result` dict with a "value" key (the primary
+            series). Only "value" is usable through this tool: it does NOT send the RegisterFormula
+            `outputs` or `warmup_period` fields, so any additional keys you put in `result` are NOT
+            declared to the backend and are ignored (analysis falls back to just "value"). To build
+            a multi-series indicator, register one formula per series.
             Only imports in the `indicators.sandbox.allowed_imports` config key are permitted
             (default: numpy, pandas, math, statistics). Within those, at least these functions
             are available for building custom indicators:
@@ -532,7 +589,18 @@ def register_tools(server: MCPServer) -> None:
         operation: 'register' | 'update' | 'deactivate'.
         slug/display_name/source_type/extractor_module/config_json: SignalSource fields.
         credentials_ref: optional reference forwarded to the ingest backend. It is NEVER
-            echoed back in the response and never exposed to the caller (FR-12)."""
+            echoed back in the response and never exposed to the caller (FR-12).
+        DESTRUCTIVE UPSERT: 'register' and 'update' are the SAME blind full-replace — register on
+            an existing slug silently overwrites it, update on an unknown slug silently creates it,
+            and every field you omit BLANKS the stored value. In particular, omitting
+            credentials_ref NULLs the stored reference (has_credentials flips to false), so always
+            re-supply it from your own records. Resend the COMPLETE definition every time (read
+            current fields from list_signal_sources first).
+        REACTIVATION: register/update always sends active=True, so either also reactivates a
+            deactivated source — this is the only reactivation path, and there is no way to update
+            without reactivating.
+        Returns {"slug", "display_name", "source_type", "extractor_module", "active",
+            "has_credentials"} — credentials_ref is never included."""
         source: dict = {
             "slug": slug,
             "display_name": display_name,
@@ -555,9 +623,15 @@ def register_tools(server: MCPServer) -> None:
         live_enabled: bool,
     ) -> dict:
         """Enable or disable live alert evaluation for a strategy.
-        strategy_id: ID of the strategy to toggle (from list_strategy_definitions/manage_strategy).
+        strategy_id: ID of the strategy to toggle (from manage_strategy / get_strategy).
         live_enabled: true to enable continuous live evaluation + alerting; false to disable.
-        Returns the updated strategy definition with live_enabled reflected."""
+        Enabling SUCCEEDS even on configurations that can never fire: the live loop only runs
+            strategies with live_enabled AND active=true, and silently skips any strategy whose
+            signal_params has no `symbols`. A success here does NOT guarantee alerts fire — after
+            enabling, call get_strategy and confirm active=true and a non-empty
+            signal_params.symbols.
+        Returns a 4-field subset, NOT the full definition:
+            {"strategy_id", "display_name", "live_enabled", "active"}."""
         try:
             return await client.set_strategy_live(
                 strategy_id=strategy_id, live_enabled=live_enabled
@@ -577,11 +651,13 @@ def register_tools(server: MCPServer) -> None:
         """Trigger a historical OHLCV backfill in xstockstrat-ingest (admin-scoped write).
         symbols: explicit ticker list, e.g. ["AAPL", "MSFT"]; max 50 per call.
         timeframe: one of 15m/15Min/1h/1Hour/1d/1Day (canonicalized; default '1d').
-        start / end: optional ISO 8601 datetimes bounding the range; one-sided allowed;
-            both omitted = the service's default range.
+        start / end: optional ISO 8601 datetimes bounding the range; one-sided allowed; both
+            omitted = the service default, a 365-day lookback ending now (range_end − 365d).
         overwrite: true re-fetches bars that already exist.
         fill_mode: 'full' | 'gaps_only'; omitted = server default FULL. 'gaps_only'
             fetches only missing ranges (cheaper on provider quota).
+        Client-side guards raise ValueError BEFORE anything is queued: empty symbols, > 50
+            symbols, an unknown timeframe or fill_mode, or start after end.
         Returns {"job_id", "status"}. Ingest performs NO synchronous input validation —
         it queues unconditionally and bad input surfaces as a terminal FAILED/PARTIAL
         job; poll get_backfill_status with the returned job_id to observe the outcome."""
@@ -614,7 +690,9 @@ def register_tools(server: MCPServer) -> None:
         symbol: list mode only — optional ticker filter.
         limit: list mode page size; 0 = server default (100).
         page_token: pass the previous response's next_page_token to fetch the next page.
-        List mode returns {"jobs": [...], "next_page_token": "..."}."""
+        List mode returns {"jobs": [...], "next_page_token": "..."}.
+        Note: bars_processed and bars_total are 64-bit integers serialized as JSON STRINGS, not
+            numbers — parse before arithmetic."""
         try:
             return await client.get_backfill_status(
                 job_id=job_id,
@@ -665,7 +743,10 @@ def register_tools(server: MCPServer) -> None:
         {value, value_type, is_secret}.
         Any key flagged is_secret has its value replaced with '[redacted]' — secret values are
         never returned by this tool. Note trading-mode scoping applies only to keys stored with a
-        specific mode; keys stored as 'all' are returned for every mode."""
+        specific mode; keys stored as 'all' are returned for every mode.
+        Note: an unknown or empty namespace is NOT an error — it returns an empty `values` map, so
+        an empty result does not confirm the namespace name. `version` is an opaque monotonic
+        counter, not a timestamp."""
         env, mode = _resolve_scope(environment, trading_mode)
         try:
             result = await client.get_config(
@@ -690,7 +771,9 @@ def register_tools(server: MCPServer) -> None:
         Returns {namespace, environment, trading_mode, keys[]} where each key carries key,
         description, default_value, is_secret and consuming_service.
         No values are returned by this RPC at all, so nothing here can leak a secret. Use it to
-        discover what exists and which keys are secret before calling set_config."""
+        discover what exists and which keys are secret before calling set_config.
+        Note: an unknown or empty namespace is NOT an error — it returns an empty `keys` list, so
+        an empty result does not confirm the namespace name."""
         env, mode = _resolve_scope(environment, trading_mode)
         try:
             return await client.list_config_keys(
@@ -713,7 +796,10 @@ def register_tools(server: MCPServer) -> None:
     ) -> dict:
         """Write one non-secret config value in xstockstrat-config (admin-scoped write).
         namespace: config namespace, e.g. 'marketdata'.
-        key: the config key, e.g. 'marketdata.fmp.enabled'.
+        key: the config key, e.g. 'marketdata.fmp.enabled'. WARNING: writes are a blind upsert with
+          no existence check — a mistyped key silently CREATES a new orphan key that no service
+          reads (there is no reachable "key not found" error). Call list_config_keys first and copy
+          the key verbatim.
         value_type: one of string, int, float, bool. Pass JSON-valued config as a 'string' —
           that is byte-identical to what the server stores. NOTE value_type is only honored when
           CREATING a new key; for an existing key the stored type wins and this is ignored.
