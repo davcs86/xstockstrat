@@ -97,59 +97,6 @@ These tracking fields make production audits easy: you can always see exactly wh
 
 ---
 
----
-
-## Automation: Preventing Stale Statuses
-
-Three complementary mechanisms keep feature statuses in sync with production reality:
-
-### 1. Enhanced `/promote` Skill (P7)
-
-When you run `/promote` to create a promotion PR from `main-dev` to `main`, the skill now:
-
-- Detects features at `code-completed` that are being promoted
-- Marks them as `code-completed` (unchanged during PR creation)
-- Creates a promotion PR with links to all affected features
-
-### 2. CI Validation Workflow (`ci-validate-feature-status.yml`)
-
-**Automatically runs on every push to `main`.** After a promotion PR merges:
-
-1. Detects the merge commit by looking for "release: promote" in the message
-2. Finds all features that were promoted in that PR
-3. For each feature, **automatically**:
-   - Updates status: `code-completed` → `launched`
-   - Sets `**Committed to main**` field to the commit SHA
-   - Sets `**Launched date**` to today's date
-   - Adds a status history entry with promotion PR number
-   - Updates `context.md` with session notes
-   - Commits and pushes the changes back to main
-
-This means **you never manually update feature statuses after promotion** — it happens automatically.
-
-### 3. Structural Tracking (commit SHA + date)
-
-Every `launched` feature now has:
-
-- `**Committed to main**: <commit-sha>` — makes the git ref explicit
-- `**Launched date**: YYYY-MM-DD` — makes promotion timing explicit
-
-This enables production audits: "What features shipped on 2026-05-12?" → search for that date in all feature.md files.
-
----
-
-## Workflow Summary
-
-| Action | Manual / Auto | Result |
-|---|---|---|
-| Run `/sdd-execute` to complete all steps | Manual (user) | Feature reaches `code-completed` |
-| Open integration PR → main-dev | Manual (user) | Feature merged to dev trunk |
-| Run `/promote` workflow | Manual (user) or Auto (CI) | Promotion PR created with feature list |
-| Merge promotion PR to main | Manual (reviewer) | CI workflow auto-triggers |
-| **CI validates and updates statuses** | **Automatic** | Feature marked `launched`, tracked with commit SHA + date |
-
----
-
 ## Key Rules
 
 1. **Never edit files related to a feature without first reading its `context.md`.** Prior sessions document deviations and decisions that are not visible in the code itself.

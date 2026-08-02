@@ -8,7 +8,7 @@ findings log.
 
 | What the docs say | What the code does | Evidence | Suggested action |
 |---|---|---|---|
-| CLAUDE.md: immutability "enforced via PostgreSQL rules (`NO UPDATE`/`NO DELETE`)" | Rules aren't supported on hypertables; enforced via `deny_mutation` **triggers** | `CLAUDE.md:5` vs `migrations/001_…up.sql:26,46-60` | Correct the wording to "triggers" |
+| CLAUDE.md: immutability "enforced via PostgreSQL rules (`NO UPDATE`/`NO DELETE`)" | Rules aren't supported on hypertables; enforced via `deny_mutation` **triggers** | `CLAUDE.md:5` vs `migrations/001_…up.sql:26,46-60` | ✓ **RESOLVED** (2026-08-02 refresh) — CLAUDE.md:9,32 now say immutability is "enforced via PostgreSQL **triggers**, `deny_mutation`" |
 | 3 documented config keys (`notify_enabled`, `retention.years`, `compression.after_days`) | Read by no code; `ConfigWatcher` is a startup gate only. `ledger.stream.notify_enabled=false` is a no-op (the DB trigger fires unconditionally) | `CLAUDE.md:62-67` vs `src/` (grep zero), `migrations/001_…up.sql:87-89` | Wire or delete the keys |
 
 ## Latent bugs (looks broken, not merely non-obvious)
