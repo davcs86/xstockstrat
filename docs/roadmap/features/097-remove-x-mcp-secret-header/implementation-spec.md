@@ -41,9 +41,12 @@ omission, so **C-14** requires no UI/Agent-tool step here.
   no-silent-deviation principle (**P-03**).
 - Watch for a rebase risk (not a logic conflict) between Step 2 and
   `084-droplet-compose-deploy` (`spec-ready`, not yet implemented), which also touches
-  `.do/app.yaml`'s `MCP_AGENT_SECRET` **provisioning mechanism** in the same file — flagged in this
-  feature's `context.md` from the product-spec review session. 084 has not landed, so there is
-  nothing to reconcile today; re-check at merge time if 084 lands first.
+  `.do/app.dev.yaml`'s `MCP_AGENT_SECRET` **provisioning mechanism** in the same file (084's
+  product-spec scopes this to `.do/app.dev.yaml` only — `.do/app.yaml`/prod is explicitly Out of
+  Scope for 084) — flagged in this feature's `context.md` from the product-spec review session. 084
+  has not landed and its FR-5 secrets mechanism is still an open design question, so there is
+  nothing concrete to reconcile today; re-check at merge time if 084 lands first (per the impl-spec
+  review's overlap scan).
 
 ---
 
