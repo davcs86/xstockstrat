@@ -1036,3 +1036,37 @@ class TestGetStrategyTool:
         with patch.object(client, "get_strategy", AsyncMock(side_effect=err)):
             with pytest.raises(RuntimeError, match="strategy not found"):
                 await _tool_fn(server, "get_strategy")(strategy_id="x")
+
+
+class TestManageSignalSourceVerbsTool:
+    @pytest.mark.asyncio
+    async def test_update_derives_mask_from_supplied_fields(self):
+        server = _make_server()
+        with patch.object(client, "manage_signal_source", AsyncMock(return_value={})) as m:
+            await _tool_fn(server, "manage_signal_source")(
+                operation="update", slug="uw", display_name="New Name"
+            )
+        assert m.call_args.kwargs["update_mask"] == ["display_name"]
+
+    @pytest.mark.asyncio
+    async def test_update_credentials_ref_joins_mask(self):
+        server = _make_server()
+        with patch.object(client, "manage_signal_source", AsyncMock(return_value={})) as m:
+            await _tool_fn(server, "manage_signal_source")(
+                operation="update", slug="uw", credentials_ref="secret.new"
+            )
+        assert "credentials_ref" in m.call_args.kwargs["update_mask"]
+
+    @pytest.mark.asyncio
+    async def test_update_with_no_fields_raises(self):
+        server = _make_server()
+        with pytest.raises(RuntimeError, match="at least one field"):
+            await _tool_fn(server, "manage_signal_source")(operation="update", slug="uw")
+
+    @pytest.mark.asyncio
+    async def test_reactivate_forwards_operation(self):
+        server = _make_server()
+        with patch.object(client, "manage_signal_source", AsyncMock(return_value={})) as m:
+            await _tool_fn(server, "manage_signal_source")(operation="reactivate", slug="uw")
+        assert m.call_args.kwargs["operation"] == "reactivate"
+        assert m.call_args.kwargs["update_mask"] is None

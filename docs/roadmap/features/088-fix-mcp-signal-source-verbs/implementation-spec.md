@@ -156,7 +156,7 @@ not raise; a different code (e.g. UNAVAILABLE) is not swallowed.
 
 ### Step 7 — service: agent client + tool
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**: `services/xstockstrat-agent/app/client.py` — modify; `services/xstockstrat-agent/app/tools.py` — modify
 **Reviewers**: `xstockstrat-agent` owner — MCP contract stability, return shape
@@ -177,7 +177,7 @@ not raise; a different code (e.g. UNAVAILABLE) is not swallowed.
 
 ### Step 8 — test: agent client/tool + descriptor-parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**: `services/xstockstrat-agent/tests/test_client.py`, `tests/test_tools.py`, `tests/test_signal_source_builder.py` (create)
 **Reviewers**: `xstockstrat-agent` owner

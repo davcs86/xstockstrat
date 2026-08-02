@@ -579,40 +579,55 @@ def register_tools(server: MCPServer) -> None:
     async def manage_signal_source(
         operation: str,
         slug: str,
-        display_name: str = "",
-        source_type: str = "",
+        display_name: str | None = None,
+        source_type: str | None = None,
         config_json: dict | None = None,
-        extractor_module: str = "",
+        extractor_module: str | None = None,
         credentials_ref: str | None = None,
     ) -> dict:
-        """Register/update/deactivate a signal source in xstockstrat-ingest.
-        operation: 'register' | 'update' | 'deactivate'.
-        slug/display_name/source_type/extractor_module/config_json: SignalSource fields.
-        credentials_ref: optional reference forwarded to the ingest backend. It is NEVER
-            echoed back in the response and never exposed to the caller (FR-12).
-        DESTRUCTIVE UPSERT: 'register' and 'update' are the SAME blind full-replace — register on
-            an existing slug silently overwrites it, update on an unknown slug silently creates it,
-            and every field you omit BLANKS the stored value. In particular, omitting
-            credentials_ref NULLs the stored reference (has_credentials flips to false), so always
-            re-supply it from your own records. Resend the COMPLETE definition every time (read
-            current fields from list_signal_sources first).
-        REACTIVATION: register/update always sends active=True, so either also reactivates a
-            deactivated source — this is the only reactivation path, and there is no way to update
-            without reactivating.
+        """Register/update/reactivate/deactivate a signal source in xstockstrat-ingest.
+        operation: 'register' | 'update' | 'reactivate' | 'deactivate'. These are HONEST,
+            distinct verbs (feature 088):
+            - register: strict create — an existing slug returns ALREADY_EXISTS (no overwrite).
+              Provide slug/display_name/source_type/extractor_module (+config_json/credentials_ref).
+            - update: PARTIAL MERGE — pass only the fields to change; every omitted field is
+              PRESERVED. An unknown slug returns NOT_FOUND. (At least one field must be supplied.)
+            - reactivate: set active=true; decoupled from update (update never changes active).
+            - deactivate: set active=false.
+        slug: always required (the source key).
+        credentials_ref: reference forwarded to the backend; NEVER echoed back (FR-12). On update it
+            is preserved when omitted; pass "" to explicitly clear it. A `authenticated_website` or
+            `mediated_authenticated_website` source requires a credential (validated on the merged
+            result).
         Returns {"slug", "display_name", "source_type", "extractor_module", "active",
             "has_credentials"} — credentials_ref is never included."""
-        source: dict = {
-            "slug": slug,
-            "display_name": display_name,
-            "source_type": source_type,
-            "extractor_module": extractor_module,
-            "config_json": config_json or {},
-        }
+        source: dict = {"slug": slug}
+        if display_name is not None:
+            source["display_name"] = display_name
+        if source_type is not None:
+            source["source_type"] = source_type
+        if extractor_module is not None:
+            source["extractor_module"] = extractor_module
+        if config_json is not None:
+            source["config_json"] = config_json
+        update_mask: list[str] | None = None
+        if operation == "update":
+            supplied = {
+                "display_name": display_name,
+                "source_type": source_type,
+                "extractor_module": extractor_module,
+                "config_json": config_json,
+                "credentials_ref": credentials_ref,
+            }
+            update_mask = [field for field, val in supplied.items() if val is not None]
+            if not update_mask:
+                raise RuntimeError("update requires at least one field to change")
         try:
             return await client.manage_signal_source(
                 operation=operation,
                 source=source,
                 credentials_ref=credentials_ref,
+                update_mask=update_mask,
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="signal source not found")) from e
