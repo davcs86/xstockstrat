@@ -1,7 +1,7 @@
 # Feature: fix-mcp-signal-source-verbs
 
 **Type**: bug
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/fix-mcp-signal-source-verbs`
 **Source Report**: docs/reports/2026-08-01-mcp-tools-alignment-triage.md (F-6)
 **Severity**: SEV-2

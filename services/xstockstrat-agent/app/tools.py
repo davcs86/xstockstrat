@@ -12,7 +12,7 @@ Seventeen tools:
   manage_strategy     — registers/updates/deactivates stored strategies (update = partial merge)
   get_strategy        — reads a stored strategy's full definition (read-only)
   manage_formula      — registers/updates/deletes custom formulas in indicators
-  manage_signal_source — registers/updates/deactivates signal sources in ingest
+  manage_signal_source — registers/updates/reactivates/deactivates signal sources in ingest
   set_strategy_live   — enables/disables live alert evaluation for a strategy
   trigger_backfill    — triggers an OHLCV history backfill via gRPC TriggerBackfill (admin-scoped)
   get_backfill_status — checks a backfill job / lists recent jobs (read-only)

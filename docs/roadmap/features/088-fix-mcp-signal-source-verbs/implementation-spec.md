@@ -1,6 +1,6 @@
 # Implementation Spec: fix-mcp-signal-source-verbs
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-08-02
 **Feature**: `docs/roadmap/features/088-fix-mcp-signal-source-verbs/feature.md`
 **Total Steps**: 11
@@ -193,7 +193,7 @@ not raise; a different code (e.g. UNAVAILABLE) is not swallowed.
 
 ### Step 9 — service: config-ui sources page mask + reactivate (R2 scope fix)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**: `services/xstockstrat-ui/src/app/config-ui/sources/page.tsx` — modify
 **Reviewers**: `xstockstrat-ui` owner — config mutation safety, no secret rendered
@@ -212,7 +212,7 @@ not raise; a different code (e.g. UNAVAILABLE) is not swallowed.
 
 ### Step 10 — test: config-ui e2e
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**: `services/xstockstrat-ui/e2e/config-ui/signal-sources.spec.ts` (modify or create); fixtures + `INVENTORY.md` if a new domain object is needed
 **Reviewers**: `xstockstrat-ui` owner
@@ -225,7 +225,7 @@ not raise; a different code (e.g. UNAVAILABLE) is not swallowed.
 
 ### Step 11 — docs: same-PR MCP surface sync
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` + `xstockstrat-agent`
 **Files**: `docs/runbooks/mcp-tools.md` — modify; `services/xstockstrat-agent/app/tools.py` docstring (in Step 7)
 **Reviewers**: none (docs)
