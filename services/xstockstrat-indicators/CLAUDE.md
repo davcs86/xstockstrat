@@ -50,7 +50,7 @@ HTTP/Connect-RPC server on `8054` was removed.
 - Migrations: `migrations/001_formulas.*` (table); `migrations/002_formula_parameters.*` (adds the
   `parameters` JSONB column); `migrations/003_formula_outputs.*` (adds the `outputs` JSONB column);
   `migrations/004_formula_warmup.*` (adds the `warmup_period` INTEGER column)
-- Pool: `asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=int(os.environ.get("DB_POOL_MAX", "2")), statement_cache_size=…)` in `app/main.py` (max 2 keeps the 20-connection budget). `statement_cache_size` is `0` when `DB_PGBOUNCER` is set — the service connects through the DigitalOcean transaction-mode pool where cached prepared statements are unsafe (see `docs/patterns/database.md` § Connection pooling); otherwise asyncpg's default (100).
+- Pool: `asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=int(os.environ.get("DB_POOL_MAX", "2")), statement_cache_size=…)` in `app/main.py`. `DB_POOL_MAX` is **not** set in the deploy specs for this service — it connects through the DigitalOcean transaction-mode pool (`:25061`), where the client-pool size is not a backend-slot budget, so `max_size` falls back to the code default (2). `statement_cache_size` is `0` when `DB_PGBOUNCER` is set (cached prepared statements are unsafe under transaction pooling — see `docs/patterns/database.md` § Connection pooling); otherwise asyncpg's default (100).
 
 ## Config Keys Consumed
 

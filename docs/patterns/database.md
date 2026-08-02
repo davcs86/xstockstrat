@@ -71,6 +71,13 @@ the direct path is unchanged, so production and the Node services are untouched)
 | asyncpg (Python) | `statement_cache_size=0` | `services/xstockstrat-{indicators,ingest,analysis}/app/main.py` |
 | node-postgres (Node) | none (no server-side prepared statements by default) | — |
 
+**`DB_POOL_MAX` is not set on the pooled services.** Behind a transaction pool it bounds only the
+client→PgBouncer connection count, not backend slots — so it's left at the code default (2, via
+`defaultMaxConns` in pgx / the `"2"` fallback in `asyncpg.create_pool`). The backend cap for the six
+pooled services is the pool's own `size`, not `DB_POOL_MAX`; raising `DB_POOL_MAX` there is a safe
+concurrency knob that does not consume cluster slots. Only the **direct** services (`config`, `ledger`,
+`identity`, `notify`, `ui`) still set `DB_POOL_MAX`, and theirs are the real backend-slot budget.
+
 **Both environments are pooled.** Each database has its own transaction-mode pool on the cluster —
 `staging` (db `xstockstrat-staging`, wired in `.do/app.dev.yaml`) and `production` (db
 `xstockstrat-production`, wired in `.do/app.yaml`) — and both use the `:25061/<pool-name>` URL +
