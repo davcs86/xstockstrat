@@ -547,3 +547,83 @@ class TestManageStrategyUpdateMask:
 
         as_dict = json_format.MessageToDict(sent.definition, preserving_proto_field_name=True)
         assert "active" not in as_dict
+
+
+# ── get_config_value (feature 093) ──────────────────────────────────────────
+
+
+class TestGetConfigValueClient:
+    """Feature 093: env-scoped, typed-oneof-projecting, non-swallowing config read."""
+
+    @staticmethod
+    def _resp(values: dict):
+        from gen.config.v1 import config_pb2  # type: ignore
+
+        return config_pb2.ConfigSnapshot(namespace="agent", version="1", values=values)
+
+    @pytest.mark.asyncio
+    async def test_float_val_key_is_projected_as_string(self):
+        """O1 (ledger RC-1): a float_val key must stringify to '0.7', NOT return None. The old
+        string_val-only projection returned None for the float-typed signal.alert_threshold."""
+        from gen.config.v1 import config_pb2, config_pb2_grpc  # type: ignore
+
+        resp = self._resp({"signal.alert_threshold": config_pb2.ConfigValue(float_val=0.7)})
+        mock_stub = MagicMock()
+        mock_stub.GetConfig = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(config_pb2_grpc, "ConfigServiceStub", return_value=mock_stub):
+                out = await client.get_config_value(
+                    "signal.alert_threshold", namespace="agent", environment="production"
+                )
+        assert out == "0.7"
+
+    @pytest.mark.asyncio
+    async def test_scope_and_metadata_reach_the_request(self):
+        from gen.common.v1 import common_pb2  # type: ignore
+        from gen.config.v1 import config_pb2, config_pb2_grpc  # type: ignore
+
+        resp = self._resp({"k": config_pb2.ConfigValue(string_val="v")})
+        mock_stub = MagicMock()
+        mock_stub.GetConfig = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(config_pb2_grpc, "ConfigServiceStub", return_value=mock_stub):
+                out = await client.get_config_value(
+                    "k", namespace="marketdata", environment="production", trading_mode="live"
+                )
+        assert out == "v"
+        req = mock_stub.GetConfig.call_args.args[0]
+        assert req.namespace == "marketdata"
+        assert req.environment == common_pb2.ENVIRONMENT_PRODUCTION  # not the dev default
+        assert req.trading_mode == common_pb2.TRADING_MODE_LIVE
+        assert ("x-mcp-secret", "test-secret") in mock_stub.GetConfig.call_args.kwargs["metadata"]
+
+    @pytest.mark.asyncio
+    async def test_absent_key_returns_none(self):
+        from gen.config.v1 import config_pb2_grpc  # type: ignore
+
+        resp = self._resp({})
+        mock_stub = MagicMock()
+        mock_stub.GetConfig = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(config_pb2_grpc, "ConfigServiceStub", return_value=mock_stub):
+                out = await client.get_config_value("missing", namespace="agent", environment="dev")
+        assert out is None
+
+    @pytest.mark.asyncio
+    async def test_transport_error_is_surfaced_not_swallowed(self):
+        """AC-2: a transport error propagates, not swallowed to None (old behavior removed)."""
+        import grpc as _grpc
+        from gen.config.v1 import config_pb2_grpc  # type: ignore
+
+        err = _grpc.aio.AioRpcError(_grpc.StatusCode.UNAVAILABLE, None, None, details="config down")
+        mock_stub = MagicMock()
+        mock_stub.GetConfig = AsyncMock(side_effect=err)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            mock_grpc.aio.AioRpcError = _grpc.aio.AioRpcError
+            with patch.object(config_pb2_grpc, "ConfigServiceStub", return_value=mock_stub):
+                with pytest.raises(_grpc.aio.AioRpcError):
+                    await client.get_config_value("k", namespace="agent", environment="dev")

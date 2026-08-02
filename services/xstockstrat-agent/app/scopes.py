@@ -1,4 +1,4 @@
-"""Role → access-scope bitmask for outbound platform calls.
+"""Role → access-scope bitmask + config-scope resolution for outbound platform calls.
 
 A Python port of ``rolesToAccessScope`` in services/xstockstrat-ui/src/lib/auth.ts. It is a port
 rather than an import because that helper is TypeScript in another service; the bit values are the
@@ -11,11 +11,30 @@ Note there are two "admin" numbers in this codebase and they are both correct:
          tools (invariant AGENT-3). Both carry the ADMIN bit, so both pass a 0x04 check.
 """
 
+import os
+
 #: ASGI ``scope["state"]`` key under which app/main.py's `_authorized` publishes the verified
 #: caller claims for the current request, and from which app/tools.py reads them. Defined here so
 #: neither module has to import the other. Present on every tool-call request, since feature
 #: 079 removed the legacy SSE transport whose `POST /messages` bypassed `_authorized`.
 MCP_CLAIMS_SCOPE_KEY = "mcp_claims"
+
+
+def resolve_scope(environment: str, trading_mode: str) -> tuple[str, str]:
+    """Resolve the (environment, trading_mode) config scope for an outbound read/write.
+
+    Scope resolution: explicit parameter → this agent deployment's APPLICATION_ENV / TRADING_MODE →
+    those env vars' own defaults. Never the proto zero-value: environment/trading_mode are
+    deployment properties in env vars (confirmed with the user), so a production agent must not
+    read/write a dev row when the caller omits them. Lifted here (feature 092/093) from the
+    ``tools.py`` ``_resolve_scope`` closure so ``oauth_server.py`` can share it.
+    """
+    env = environment or os.environ.get("APPLICATION_ENV", "development")
+    env = "production" if env == "production" else "dev"
+    mode = trading_mode or os.environ.get("TRADING_MODE", "paper")
+    mode = mode if mode in ("paper", "live", "all") else "all"
+    return env, mode
+
 
 _READ = 0x01
 _WRITE = 0x02

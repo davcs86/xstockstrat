@@ -24,7 +24,6 @@ Seventeen tools:
 import base64
 import json
 import logging
-import os
 from typing import Literal
 
 import grpc
@@ -32,10 +31,22 @@ from mcp.server.mcpserver import Context, MCPServer
 from mcp.types import TextContent
 
 from app import backtest_view, client
-from app.scopes import MCP_CLAIMS_SCOPE_KEY, roles_to_access_scope
+from app.scopes import MCP_CLAIMS_SCOPE_KEY, resolve_scope, roles_to_access_scope
 
 _ALERT_THRESHOLD_DEFAULT = 0.6
 _ALERT_THRESHOLD_CONFIG_KEY = "signal.alert_threshold"
+
+# feature 093: secure per-source extract credentials are not yet supported. The old path read a
+# plaintext `source.<slug>.credentials` config key — a C-05 / config-invariant-#6 violation (secrets
+# are is_secret references that GetConfig redacts; a plaintext value would be disclosed unredacted).
+# So a source that requires credentials raises loudly (AC-2) instead of silently fetching
+# unauthenticated. The secure resolver (AC-3) is a deferred follow-up.
+_CREDENTIALS_UNSUPPORTED = (
+    "secure per-source credential resolution is not supported yet: source '{slug}' is registered "
+    "with credentials (has_credentials=true), but the platform's secret store is not wired to the "
+    "extract tools. This is a tracked follow-up (feature 093 AC-3); the tool refuses rather than "
+    "fetch unauthenticated content."
+)
 
 log = logging.getLogger(__name__)
 
@@ -128,33 +139,30 @@ def register_tools(server: MCPServer) -> None:
         urls: list of URLs to fetch (for mediated_linked_email sources).
         At least one of attachments_b64 or urls must be provided.
         Returns {raw_text: str}. Credentials are never exposed in the response.
-        CREDENTIAL CAVEAT: credential resolution is only ATTEMPTED, not guaranteed. A source's
-            has_credentials flag does not mean the secret will resolve — the lookup reads a single
-            agent-namespace, dev-scoped config key and swallows any failure to None, so a
-            password-protected PDF or gated URL may silently fall back to an unauthenticated fetch
-            or fail outright. Treat results as best-effort; do not assume authenticated content was
-            retrieved."""
+        CREDENTIAL CAVEAT (feature 093): a source that requires credentials (has_credentials=true)
+            currently RAISES — secure per-source credential resolution is not yet supported, because
+            the platform stores secrets as is_secret references that the config service redacts, so
+            there is no safe way to resolve a password here. Only sources with has_credentials=false
+            (no credentials needed) are extractable today. Secure resolution is a follow-up."""
         if not attachments_b64 and not urls:
             raise ValueError("At least one of attachments_b64 or urls must be provided")
 
         src = await _get_source(source_slug)
 
-        password: str | None = None
         if src.get("has_credentials"):
-            # Credentials are stored in config under the conventional key source.<slug>.credentials
-            password = await client.get_config_value(f"source.{source_slug}.credentials")
+            raise RuntimeError(_CREDENTIALS_UNSUPPORTED.format(slug=source_slug))
 
         texts: list[str] = []
 
         if attachments_b64:
             for b64_data in attachments_b64:
                 raw = base64.b64decode(b64_data)
-                text = _extract_from_bytes(raw, password=password)
+                text = _extract_from_bytes(raw, password=None)
                 texts.append(text)
 
         if urls:
             for url in urls:
-                text = await _fetch_url(url, password=password)
+                text = await _fetch_url(url, password=None)
                 texts.append(text)
 
         return {"raw_text": "\n\n".join(texts)}
@@ -168,11 +176,10 @@ def register_tools(server: MCPServer) -> None:
         source_slug: slug from list_signal_sources.
         The URL is read from the source's config_json.url — Claude never constructs URLs.
         Returns {raw_text: str}. Credentials are never exposed in the response.
-        CREDENTIAL CAVEAT: credential resolution is only ATTEMPTED, not guaranteed. A source's
-            has_credentials flag does not mean the secret will resolve — the lookup reads a single
-            agent-namespace, dev-scoped config key and swallows any failure to None, so an
-            authenticated site may silently fall back to an unauthenticated fetch or fail outright.
-            Treat results as best-effort; do not assume authenticated content was retrieved."""
+        CREDENTIAL CAVEAT (feature 093): a source that requires credentials (has_credentials=true)
+            currently RAISES — secure per-source credential resolution is not yet supported (the
+            platform stores secrets as is_secret references the config service redacts). Only
+            has_credentials=false sources work today; secure resolution is a follow-up."""
         src = await _get_source(source_slug)
 
         config_json = src.get("config_json") or {}
@@ -180,10 +187,8 @@ def register_tools(server: MCPServer) -> None:
         if not url:
             raise ValueError(f"Source '{source_slug}' has no url in config_json")
 
-        password: str | None = None
         if src.get("has_credentials"):
-            # Credentials are stored in config under the conventional key source.<slug>.credentials
-            password = await client.get_config_value(f"source.{source_slug}.credentials")
+            raise RuntimeError(_CREDENTIALS_UNSUPPORTED.format(slug=source_slug))
 
         # Optional per-source request headers (e.g. SEC EDGAR rejects requests
         # without a declared User-Agent identifying the caller).
@@ -191,7 +196,7 @@ def register_tools(server: MCPServer) -> None:
         if not isinstance(request_headers, dict):
             request_headers = None
 
-        text = await _fetch_url(url, password=password, headers=request_headers)
+        text = await _fetch_url(url, password=None, headers=request_headers)
         return {"raw_text": text}
 
     @server.tool()
@@ -231,12 +236,19 @@ def register_tools(server: MCPServer) -> None:
             tags=tags,
         )
         # Auto-emit alert for high-conviction signals — deterministic rule, not model-driven.
-        threshold_str = await client.get_config_value(_ALERT_THRESHOLD_CONFIG_KEY)
+        # feature 093: env-scoped read (was env-blind → always the dev row → the default). Broad
+        # try/except because this read is POST-COMMIT (the signal is already persisted above), so it
+        # must never fail ingest_signal — any error falls back to the default.
+        env, mode = _resolve_scope("", "")
         try:
+            threshold_str = await client.get_config_value(
+                _ALERT_THRESHOLD_CONFIG_KEY, namespace="agent", environment=env, trading_mode=mode
+            )
             alert_threshold = (
                 float(threshold_str) if threshold_str is not None else _ALERT_THRESHOLD_DEFAULT
             )
-        except (ValueError, TypeError):
+        except Exception as e:
+            log.warning("alert-threshold read failed, using default: %s", e)
             alert_threshold = _ALERT_THRESHOLD_DEFAULT
         if conviction is not None and conviction >= alert_threshold:
             try:
@@ -721,17 +733,12 @@ def register_tools(server: MCPServer) -> None:
 
     # ── xstockstrat-config tools (feature 073) ───────────────────────────────────────────────
     #
-    # Scope resolution for all three: explicit parameter -> this agent deployment's
-    # APPLICATION_ENV / TRADING_MODE -> those env vars' own defaults. Never the proto zero-value:
-    # environment/trading_mode are deployment properties carried in env vars (confirmed with the
-    # user), so a production agent must not silently write a dev row when the caller omits them.
+    # Scope resolution lives in app/scopes.py `resolve_scope` (feature 093 lifted it there so
+    # oauth_server.py, outside this closure, shares one normalizer). This thin wrapper keeps the
+    # three tool call sites below unchanged.
 
     def _resolve_scope(environment: str, trading_mode: str) -> tuple[str, str]:
-        env = environment or os.environ.get("APPLICATION_ENV", "development")
-        env = "production" if env == "production" else "dev"
-        mode = trading_mode or os.environ.get("TRADING_MODE", "paper")
-        mode = mode if mode in ("paper", "live", "all") else "all"
-        return env, mode
+        return resolve_scope(environment, trading_mode)
 
     @server.tool()
     async def get_config(namespace: str, environment: str = "", trading_mode: str = "") -> dict:

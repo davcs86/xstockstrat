@@ -109,12 +109,18 @@ discovery/endpoint URLs (in DO it is `${APP_URL}/agent`).
 
 ## Config Keys Consumed
 
-Namespace: `agent` (resolved via one-shot `GetConfig` → `client.get_config_value("<bare-key>")`).
+Namespace: `agent` (resolved via one-shot `GetConfig` → `client.get_config_value(key,
+namespace="agent", environment=<resolved>, trading_mode=<resolved>)`). **Feature 093:** the read is
+now **environment-scoped** (`namespace`/`environment` are required — the old signature hardcoded
+`namespace="agent"` and sent no environment, so a production agent read the dev row) and projects the
+**active oneof** stringified (a `float`/`bool` key like `signal.alert_threshold` used to read back as
+`None`); a transport failure is surfaced, not swallowed to `None`.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `agent.oauth.registration_enabled` | bool | `true` | Allow RFC 7591 DCR at `/oauth/register` (disabled ⇒ 403) |
 | `agent.oauth.allowed_redirect_uris` | string | `""` | Comma-separated exact redirect URIs; empty = require `https://` at registration only |
+| `agent.signal.alert_threshold` | float | `0.6` | Conviction threshold above which `ingest_signal` auto-emits an alert (feature 093 — was env-blind, so effectively always the default; now env-scoped, best-effort) |
 
 ## Environment Variables
 

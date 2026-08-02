@@ -1,6 +1,6 @@
 # Implementation Spec: fix-mcp-extract-credentials
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-08-02
 **Feature**: `docs/roadmap/features/093-fix-mcp-extract-credentials/feature.md`
 **Total Steps**: 3
@@ -40,7 +40,7 @@ decisive case is the typed-projection contract (a `float_val` fixture must strin
 
 ### Step 1 — service: env-scope, typed-projection, non-swallowing `get_config_value` + lift the scope normalizer + make extract credentials loudly unsupported
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify (`get_config_value` `:678-695`)
@@ -172,7 +172,7 @@ no secrets resolved from non-`secret.*` config, secret keys use the `secret.*` p
 
 ### Step 2 — test: RED-first coverage for the env-scoped projection contract, the unsupported-credential raise, and the best-effort callers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_client.py` — modify (net-new `get_config_value` cases)
@@ -244,7 +244,7 @@ tool output
 
 ### Step 3 — docs: same-PR documentation of the unsupported-credential state and the newly-consumed config key
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`, `services/xstockstrat-agent/`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify (extract-tool credential behavior + error table)

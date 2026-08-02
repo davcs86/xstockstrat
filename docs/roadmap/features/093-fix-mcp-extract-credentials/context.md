@@ -105,3 +105,50 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   future dedicated feature if a credential-resolution convention is defined.
 - O1 typed-projection is a RETURN-SHAPE contract (RC-1) — Step 2's `test_client.py` case MUST use a
   `float_val` fixture and assert the stringified value `"0.7"`, not just the request shape.
+
+---
+
+## Session 2026-08-02 — sdd-review impl-spec (advisory)
+
+- Criteria (spec-reviewer): PASS — 0 failures, 0 warnings, 2 informational NOTEs (agent CLAUDE.md:112
+  "get_config_value(<bare-key>)" sentence goes stale under the kwargs change; findings latent row :17
+  shares the same root cause as :37 — reconcile both). F-05 atomicity independently confirmed (5
+  production callers + the one signature-sensitive test_oauth stub all in Step 1); O1 float_val→"0.7"
+  RED test present (RC-1 antidote); C-08/C-10/C-13 met. Folding both NOTEs into Step 3.
+- Overlap (feature-overlap): CLEAN — no hard collisions. Shared-file rebase risk only, function-
+  disjoint, with unmerged 091/092 (client.py get_config_value vs set_config/_admin_metadata; tools.py
+  _resolve_scope vs set_config/ctx; scopes.py new resolve_scope vs 092 docstring; conftest.py/
+  test_client.py additive). No merge-order row; 093 rebases last on this agent surface.
+- Proceeding to implementation on the feature branch (one PR per feature).
+
+---
+
+## Session 2026-08-02 — sdd-execute (implementation)
+
+All 3 steps on feature/fix-mcp-extract-credentials (one PR into main-dev), agent-only, TDD honored.
+
+- **Step 1 (atomic, F-05)**: lifted the env/mode normalizer into `app/scopes.py` `resolve_scope`
+  (tools `_resolve_scope` + oauth_server share it). `get_config_value` → required `namespace`/
+  `environment` kwargs, `metadata=_metadata()`, ACTIVE-oneof stringified projection (O1 fix — a
+  float key returned None under the old string_val-only read), and re-raises transport errors
+  (AC-2). Extract tools removed the plaintext credential read and now `raise RuntimeError` when
+  `has_credentials=True` (shared `_CREDENTIALS_UNSUPPORTED` message). alert_threshold + both OAuth
+  reads env-scoped with broad `except Exception` best-effort catches (post-commit / outside-try —
+  must not fail ingest_signal / 500 DCR). Widened the hand-written test_oauth `_cfg` stub. Suite
+  green atomically (138), no intermediate TypeError.
+- **Step 2 (RED-first)**: test_client `TestGetConfigValueClient` — float_val→"0.7" (O1, RC-1
+  antidote — RED demonstrated by reverting to string_val-only → returns None), scope+metadata in
+  request, absent→None, AioRpcError propagates. test_tools — both extract tools raise RuntimeError
+  when credentials required (no config read happens) + alert-scope + best-effort survives read
+  failure. test_oauth — DCR reads env-scoped + survives a config transport error (still 201).
+  `credentialed_source` fixture centralized in conftest (C-13, two consumers). GREEN 146, coverage
+  71%, ruff clean.
+- **Step 3 (docs, C-10)**: mcp-tools.md both extract sections (credentials-unsupported callout +
+  error rows); agent CLAUDE.md § Config Keys Consumed (added agent.signal.alert_threshold + fixed
+  the stale get_config_value(<bare-key>) sentence — review NOTE 1); findings F-1 :37 + latent :17
+  both marked RESOLVED (NOTE 2); add-data-source.md AC-4 reinterpreted (per-source extract creds
+  not yet supported — no plaintext seeding). strat-lab verified — does not cover the extract tools.
+  context-forge/context-scrubber plugin unavailable — teardown scan not run; noted in PR.
+- AC-3 (secure resolver) deferred; AC-4 reinterpreted. Non-cred sources still extract; a cred
+  source now fails loudly instead of silently fetching unauthenticated.
+- Status: implementation-ready → code-completed.

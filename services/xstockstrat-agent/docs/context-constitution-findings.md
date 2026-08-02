@@ -14,7 +14,7 @@ question tracked in the root findings log.
 
 | Issue | Impact | Evidence |
 |---|---|---|
-| `client.get_config_value` hardcodes `namespace="agent"` but is called to read `signal.alert_threshold` and `source.<slug>.credentials` — keys not in the `agent.*` namespace | Those reads may always return `None` and silently fall back to defaults (alert threshold 0.6 / no credentials) | `app/client.py:689`, `app/tools.py:32,193` |
+| ~~`client.get_config_value` hardcodes `namespace="agent"` … reads may always return `None` and silently fall back to defaults~~ **RESOLVED (feature 093):** `get_config_value` now takes required `namespace`/`environment`, projects the active oneof stringified (the `float`-typed `signal.alert_threshold` returned `None` under the old `string_val`-only read regardless of scope), and surfaces transport errors instead of swallowing. `signal.alert_threshold`/OAuth reads are env-scoped best-effort; the `source.<slug>.credentials` plaintext read was **removed** (extract tools raise when credentials are required — a plaintext config secret would violate C-05/invariant #6). | Resolved | `app/client.py` `get_config_value`; `app/tools.py` extract tools + alert read; `app/oauth_server.py` |
 | `MCP_TRANSPORT` default is `"stdio"` while the whole service (port 9000, OAuth, Streamable HTTP) assumes the HTTP transport; an **unrecognized** value also falls through to stdio | Running without the env var set — or with a typo like `htp` — starts the wrong transport. Still open after feature 079, but **narrowed**: `resolve_transport()` now logs a warning on both the deprecated `sse` alias and any unrecognized value. The fallthrough itself is deliberate (AC-4). Aggravating factor: the agent has no HTTP healthcheck (only a TCP probe on 9000 in compose, and no `health_check` block in `.do/app*.yaml`), so the mis-start is otherwise silent | `app/main.py` `resolve_transport()` |
 
 ## Dead / orphaned code
@@ -34,7 +34,7 @@ open defect until its track lands.
 
 | ID | Behavioral defect (code still to fix) | Evidence | Track |
 |---|---|---|---|
-| F-1 | Extract-tool credentials: `get_config_value` reads a dev-scoped `agent`-namespace key and swallows errors — `has_credentials` does not guarantee resolution (dupe of the latent bug above) | `app/client.py` `get_config_value`; `app/tools.py` extract tools | C |
+| F-1 | ~~Extract-tool credentials: `get_config_value` reads a dev-scoped `agent`-namespace key and swallows errors~~ **RESOLVED (feature 093):** `get_config_value` env/namespace-scoped + typed-oneof projection + non-swallowing; extract tools no longer read a plaintext-config credential (they raise when one is required — secure resolution deferred, AC-3). | `app/client.py` `get_config_value`; `app/tools.py` extract tools | ✅ done |
 | F-2/F-3 | `manage_formula` update is full-replace (no `update_mask`); `outputs`/`warmup_period` never sent; no `get_formula`/`list_formulas` read tools | `app/client.py` `manage_formula` builders; `app/tools.py` `manage_formula` | C |
 | F-4 | `screen_symbols` never maps `ScreenCriterion.component` (technical kinds silently skipped); `min_conviction` sent but unread | `app/client.py` `screen_symbols` | B/C |
 | F-5 | Strategy re-register raises generic INTERNAL, not ALREADY_EXISTS; no reactivate path | analysis `servicer.py`/`repositories/strategies.py` | B/C |

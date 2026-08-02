@@ -4,6 +4,7 @@ All gRPC calls include x-mcp-secret metadata when MCP_AGENT_SECRET is set.
 GetConfigValue() makes a one-shot gRPC call to xstockstrat-config to resolve credentials.
 """
 
+import logging
 import os
 from datetime import UTC, datetime
 from typing import Any
@@ -11,6 +12,8 @@ from typing import Any
 import grpc
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.timestamp_pb2 import Timestamp
+
+log = logging.getLogger(__name__)
 
 INGEST_ENDPOINT = os.environ.get("INGEST_ENDPOINT", "xstockstrat-ingest:50055")
 NOTIFY_ENDPOINT = os.environ.get("NOTIFY_ENDPOINT", "xstockstrat-notify:50059")
@@ -675,24 +678,44 @@ async def set_strategy_live(strategy_id: str, live_enabled: bool) -> dict[str, A
     }
 
 
-async def get_config_value(key: str) -> str | None:
-    """
-    Resolve a config key value via one-shot GetConfig gRPC call to xstockstrat-config.
-    Used by extract_email_content / extract_website_content to resolve credentials.
-    Returns None if the key is absent or the call fails.
-    """
-    try:
-        from gen.config.v1 import config_pb2, config_pb2_grpc  # noqa: PLC0415
+async def get_config_value(
+    key: str, *, namespace: str, environment: str, trading_mode: str = "all"
+) -> str | None:
+    """Resolve one config value via a one-shot, ENVIRONMENT-SCOPED GetConfig gRPC call.
 
+    Feature 093 fixed three bugs in this helper:
+    - **Scope (AC-1):** ``namespace`` and ``environment`` are now REQUIRED — the old body hardcoded
+      ``namespace="agent"`` and sent no environment (config defaulted to dev), so a production agent
+      read the dev row. Callers pass their real scope (see ``scopes.resolve_scope``).
+    - **Typed projection (O1):** returns the ACTIVE oneof stringified, mirroring ``get_config``
+      (:872-875). The old ``string_val``-only read returned ``None`` for a non-string key
+      (``signal.alert_threshold`` is ``value_type='float'``), so the value never resolved regardless
+      of scope.
+    - **Error surfacing (AC-2):** a transport error propagates, not swallowed to ``None``.
+      ``None`` now means only "key genuinely absent". Sends ``x-mcp-secret`` via ``_metadata()``.
+    """
+    from gen.config.v1 import config_pb2, config_pb2_grpc  # noqa: PLC0415
+
+    env, mode = _config_scope(environment, trading_mode)
+    try:
         async with grpc.aio.insecure_channel(CONFIG_ENDPOINT) as channel:
             stub = config_pb2_grpc.ConfigServiceStub(channel)
-            snapshot = await stub.GetConfig(config_pb2.GetConfigRequest(namespace="agent"))
-            v = snapshot.values.get(key)
-            if v is None:
-                return None
-            return v.string_val or None
-    except Exception:
+            snapshot = await stub.GetConfig(
+                config_pb2.GetConfigRequest(
+                    namespace=namespace, environment=env, trading_mode=mode
+                ),
+                metadata=_metadata(),
+            )
+    except grpc.aio.AioRpcError:
+        # AC-2: surface a transport failure, never swallow it to None (which is reserved for an
+        # absent key). The caller decides whether to fail or fall back to a default.
+        log.warning("get_config_value: GetConfig failed for %s.%s", namespace, key)
+        raise
+    cv = snapshot.values.get(key)
+    if cv is None:
         return None
+    which = cv.WhichOneof("value")
+    return str(getattr(cv, which)) if which else None
 
 
 # ── backfill client (feature 066) ────────────────────────────────────────────

@@ -1,7 +1,7 @@
 # Feature: fix-mcp-extract-credentials
 
 **Type**: bug
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/fix-mcp-extract-credentials`
 **Source Report**: docs/reports/2026-08-01-mcp-tools-alignment-triage.md (F-1)
 **Severity**: SEV-2
@@ -16,6 +16,7 @@
 |---|---|---|---|
 | 2026-08-02 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the MCP-alignment triage report (F-1) |
 | 2026-08-02 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, full). Chosen: option (c) — env-scope + typed-projection fix for the legitimate reads (alert_threshold, OAuth); extract-tool credentials made loudly unsupported (raise) rather than a plaintext-config antipattern. AC-3 (radical resolver) deferred; AC-4 reinterpreted. |
+| 2026-08-02 | `implementation-ready` → `code-completed` | /sdd-execute | All 3 steps: get_config_value env+typed-projection+non-swallow (O1 RED demonstrated); extract tools raise RuntimeError when credentials required; alert/OAuth env-scoped best-effort; docs. Agent 146 tests, coverage 71%. One PR into main-dev. |
 | 2026-08-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 3 steps (atomic agent-only service step + paired RED-first test step + same-PR docs). No proto/migration/new config key. |
 
 ---

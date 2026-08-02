@@ -134,6 +134,8 @@ Lists active signal sources registered in `xstockstrat-ingest`. Enriches each so
 
 Extracts raw text from email attachments (PDF or plain text) or gated URLs for a registered source. **Call only when the source's `extractor_tool` is `"extract_email_content"`.**
 
+> **Credentials (feature 093):** a source registered with credentials (`has_credentials=true`) currently **raises `RuntimeError`** — secure per-source credential resolution is not yet supported. The platform stores secrets as `is_secret` references that the config service redacts, so there is no safe way to resolve a password here (a plaintext config credential would violate config governance and be disclosed unredacted). Only `has_credentials=false` sources are extractable today; secure resolution is a tracked follow-up (AC-3).
+
 **Parameters**
 
 | Parameter | Type | Required | Description |
@@ -156,13 +158,16 @@ All attachments and URLs are concatenated with double newlines.
 |---|---|
 | Neither `attachments_b64` nor `urls` provided | `ValueError: At least one of attachments_b64 or urls must be provided` |
 | `source_slug` not found or inactive | `ValueError: Unknown or inactive source slug: '<slug>'` |
-| PDF is password-protected but no credentials configured | `ValueError: PDF is password-protected but no credentials_ref is configured` |
+| Source requires credentials (`has_credentials=true`) | `RuntimeError: secure per-source credential resolution is not supported yet …` (feature 093 — secure resolution is a deferred follow-up) |
+| PDF is password-protected (an encrypted PDF on a `has_credentials=false` source) | `ValueError` from the PDF parser |
 
 ---
 
 ### `extract_website_content`
 
 Fetches and returns raw text from a registered website source. The URL is read from the source's `config_json.url` — Claude never constructs URLs. **Call only when the source's `extractor_tool` is `"extract_website_content"`.**
+
+> **Credentials (feature 093):** as with `extract_email_content`, a source with `has_credentials=true` **raises `RuntimeError`** — secure per-source credential resolution is a deferred follow-up (AC-3). Only `has_credentials=false` sources are extractable today.
 
 **Parameters**
 
@@ -182,6 +187,7 @@ Fetches and returns raw text from a registered website source. The URL is read f
 |---|---|
 | `source_slug` not found or inactive | `ValueError: Unknown or inactive source slug: '<slug>'` |
 | Source has no `url` in `config_json` | `ValueError: Source '<slug>' has no url in config_json` |
+| Source requires credentials (`has_credentials=true`) | `RuntimeError: secure per-source credential resolution is not supported yet …` (feature 093) |
 
 ---
 
