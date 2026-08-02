@@ -766,8 +766,12 @@ type BacktestResult struct {
 	// when the request omitted it) — required to rebuild the equity curve for a
 	// historical run (feature 068).
 	InitialCapital float64 `protobuf:"fixed64,15,opt,name=initial_capital,json=initialCapital,proto3" json:"initial_capital,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Human-readable run warnings surfaced to the user (feature 086), e.g. a strategy referenced a
+	// formula that has since been soft-deleted — the run still completed using its last-saved
+	// definition. Empty on a clean run.
+	Warnings      []string `protobuf:"bytes,16,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BacktestResult) Reset() {
@@ -903,6 +907,13 @@ func (x *BacktestResult) GetInitialCapital() float64 {
 		return x.InitialCapital
 	}
 	return 0
+}
+
+func (x *BacktestResult) GetWarnings() []string {
+	if x != nil {
+		return x.Warnings
+	}
+	return nil
 }
 
 type TradeRecord struct {
@@ -3596,7 +3607,7 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x0frequested_range\x18\x03 \x01(\v2 .xstockstrat.common.v1.TimeRangeR\x0erequestedRange\x12\x1b\n" +
 	"\tbars_have\x18\x04 \x01(\x03R\bbarsHave\x12\x1b\n" +
 	"\tbars_need\x18\x05 \x01(\x03R\bbarsNeed\x122\n" +
-	"\x03gap\x18\x06 \x01(\v2 .xstockstrat.common.v1.TimeRangeR\x03gap\"\xcb\x05\n" +
+	"\x03gap\x18\x06 \x01(\v2 .xstockstrat.common.v1.TimeRangeR\x03gap\"\xe7\x05\n" +
 	"\x0eBacktestResult\x12\x1f\n" +
 	"\vbacktest_id\x18\x01 \x01(\tR\n" +
 	"backtestId\x12\x1f\n" +
@@ -3615,7 +3626,8 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x06status\x18\f \x01(\x0e2'.xstockstrat.analysis.v1.BacktestStatusR\x06status\x12I\n" +
 	"\rcoverage_gaps\x18\r \x03(\v2$.xstockstrat.analysis.v1.CoverageGapR\fcoverageGaps\x12L\n" +
 	"\vdiagnostics\x18\x0e \x03(\v2*.xstockstrat.analysis.v1.SymbolDiagnosticsR\vdiagnostics\x12'\n" +
-	"\x0finitial_capital\x18\x0f \x01(\x01R\x0einitialCapital\"\x91\x02\n" +
+	"\x0finitial_capital\x18\x0f \x01(\x01R\x0einitialCapital\x12\x1a\n" +
+	"\bwarnings\x18\x10 \x03(\tR\bwarnings\"\x91\x02\n" +
 	"\vTradeRecord\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12\x12\n" +
 	"\x04side\x18\x02 \x01(\tR\x04side\x12\x10\n" +

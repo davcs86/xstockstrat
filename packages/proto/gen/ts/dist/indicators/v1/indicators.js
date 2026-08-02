@@ -16,6 +16,7 @@ exports.parameterTypeToNumber = parameterTypeToNumber;
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
 const common_1 = require("../../common/v1/common");
+const field_mask_1 = require("../../google/protobuf/field_mask");
 const struct_1 = require("../../google/protobuf/struct");
 const timestamp_1 = require("../../google/protobuf/timestamp");
 exports.protobufPackage = "xstockstrat.indicators.v1";
@@ -1514,6 +1515,7 @@ function createBaseFormulaDefinition() {
         parameters: [],
         outputs: [],
         warmupPeriod: 0,
+        deleted: false,
     };
 }
 exports.FormulaDefinition = {
@@ -1553,6 +1555,9 @@ exports.FormulaDefinition = {
         }
         if (message.warmupPeriod !== 0) {
             writer.uint32(96).int32(message.warmupPeriod);
+        }
+        if (message.deleted !== false) {
+            writer.uint32(104).bool(message.deleted);
         }
         return writer;
     },
@@ -1650,6 +1655,13 @@ exports.FormulaDefinition = {
                     message.warmupPeriod = reader.int32();
                     continue;
                 }
+                case 13: {
+                    if (tag !== 104) {
+                        break;
+                    }
+                    message.deleted = reader.bool();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1706,6 +1718,7 @@ exports.FormulaDefinition = {
                 : isSet(object.warmup_period)
                     ? globalThis.Number(object.warmup_period)
                     : 0,
+            deleted: isSet(object.deleted) ? globalThis.Boolean(object.deleted) : false,
         };
     },
     toJSON(message) {
@@ -1752,6 +1765,9 @@ exports.FormulaDefinition = {
         if (message.warmupPeriod !== 0) {
             obj.warmupPeriod = Math.round(message.warmupPeriod);
         }
+        if (message.deleted !== false) {
+            obj.deleted = message.deleted;
+        }
         return obj;
     },
     create(base) {
@@ -1776,6 +1792,7 @@ exports.FormulaDefinition = {
         message.parameters = object.parameters?.map((e) => exports.FormulaParameter.fromPartial(e)) || [];
         message.outputs = object.outputs?.map((e) => exports.FormulaOutput.fromPartial(e)) || [];
         message.warmupPeriod = object.warmupPeriod ?? 0;
+        message.deleted = object.deleted ?? false;
         return message;
     },
 };
@@ -2645,6 +2662,7 @@ function createBaseUpdateFormulaRequest() {
         parameters: [],
         outputs: [],
         warmupPeriod: 0,
+        updateMask: undefined,
     };
 }
 exports.UpdateFormulaRequest = {
@@ -2675,6 +2693,9 @@ exports.UpdateFormulaRequest = {
         }
         if (message.warmupPeriod !== 0) {
             writer.uint32(72).int32(message.warmupPeriod);
+        }
+        if (message.updateMask !== undefined) {
+            field_mask_1.FieldMask.encode(field_mask_1.FieldMask.wrap(message.updateMask), writer.uint32(82).fork()).join();
         }
         return writer;
     },
@@ -2748,6 +2769,13 @@ exports.UpdateFormulaRequest = {
                     message.warmupPeriod = reader.int32();
                     continue;
                 }
+                case 10: {
+                    if (tag !== 82) {
+                        break;
+                    }
+                    message.updateMask = field_mask_1.FieldMask.unwrap(field_mask_1.FieldMask.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -2787,6 +2815,11 @@ exports.UpdateFormulaRequest = {
                 : isSet(object.warmup_period)
                     ? globalThis.Number(object.warmup_period)
                     : 0,
+            updateMask: isSet(object.updateMask)
+                ? field_mask_1.FieldMask.unwrap(field_mask_1.FieldMask.fromJSON(object.updateMask))
+                : isSet(object.update_mask)
+                    ? field_mask_1.FieldMask.unwrap(field_mask_1.FieldMask.fromJSON(object.update_mask))
+                    : undefined,
         };
     },
     toJSON(message) {
@@ -2818,6 +2851,9 @@ exports.UpdateFormulaRequest = {
         if (message.warmupPeriod !== 0) {
             obj.warmupPeriod = Math.round(message.warmupPeriod);
         }
+        if (message.updateMask !== undefined) {
+            obj.updateMask = field_mask_1.FieldMask.toJSON(field_mask_1.FieldMask.wrap(message.updateMask));
+        }
         return obj;
     },
     create(base) {
@@ -2834,6 +2870,7 @@ exports.UpdateFormulaRequest = {
         message.parameters = object.parameters?.map((e) => exports.FormulaParameter.fromPartial(e)) || [];
         message.outputs = object.outputs?.map((e) => exports.FormulaOutput.fromPartial(e)) || [];
         message.warmupPeriod = object.warmupPeriod ?? 0;
+        message.updateMask = object.updateMask ?? undefined;
         return message;
     },
 };

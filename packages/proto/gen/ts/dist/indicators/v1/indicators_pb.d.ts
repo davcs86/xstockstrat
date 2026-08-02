@@ -1,5 +1,5 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import type { Timestamp, Value } from "@bufbuild/protobuf/wkt";
+import type { FieldMask, Timestamp, Value } from "@bufbuild/protobuf/wkt";
 import type { TimeRange } from "../../common/v1/common_pb";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 /**
@@ -356,6 +356,13 @@ export type FormulaDefinition = Message<"xstockstrat.indicators.v1.FormulaDefini
      * @generated from field: int32 warmup_period = 12;
      */
     warmupPeriod: number;
+    /**
+     * true = soft-deleted (feature 086): still evaluable for strategies that already reference it
+     * (GetFormula/ExecuteFormula stay deleted-agnostic), hidden from ListFormulas, and not updatable.
+     *
+     * @generated from field: bool deleted = 13;
+     */
+    deleted: boolean;
 };
 /**
  * Describes the message xstockstrat.indicators.v1.FormulaDefinition.
@@ -591,6 +598,14 @@ export type UpdateFormulaRequest = Message<"xstockstrat.indicators.v1.UpdateForm
      * @generated from field: int32 warmup_period = 9;
      */
     warmupPeriod: number;
+    /**
+     * AIP-161 partial update (feature 086). Absent = full replace (back-compat: the UI sends a full
+     * payload every call). Present = merge only the named paths onto the stored row; unlisted fields
+     * are preserved. Reject an update whose target formula is soft-deleted (FAILED_PRECONDITION).
+     *
+     * @generated from field: google.protobuf.FieldMask update_mask = 10;
+     */
+    updateMask?: FieldMask | undefined;
 };
 /**
  * Describes the message xstockstrat.indicators.v1.UpdateFormulaRequest.

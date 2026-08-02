@@ -1,7 +1,7 @@
 # Feature: fix-mcp-formula-lifecycle
 
 **Type**: bug
-**Lifecycle Status**: `design-approved`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/fix-mcp-formula-lifecycle`
 **Source Report**: docs/reports/2026-08-01-mcp-tools-alignment-triage.md (F-2, F-3, F-10 (get_formula/list_formulas))
 **Severity**: SEV-2

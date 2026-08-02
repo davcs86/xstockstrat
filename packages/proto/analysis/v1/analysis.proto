@@ -90,6 +90,10 @@ message BacktestResult {
   // when the request omitted it) — required to rebuild the equity curve for a
   // historical run (feature 068).
   double initial_capital = 15;
+  // Human-readable run warnings surfaced to the user (feature 086), e.g. a strategy referenced a
+  // formula that has since been soft-deleted — the run still completed using its last-saved
+  // definition. Empty on a clean run.
+  repeated string warnings = 16;
 }
 
 message TradeRecord {

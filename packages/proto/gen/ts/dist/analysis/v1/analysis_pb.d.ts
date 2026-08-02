@@ -161,6 +161,14 @@ export type BacktestResult = Message<"xstockstrat.analysis.v1.BacktestResult"> &
      * @generated from field: double initial_capital = 15;
      */
     initialCapital: number;
+    /**
+     * Human-readable run warnings surfaced to the user (feature 086), e.g. a strategy referenced a
+     * formula that has since been soft-deleted — the run still completed using its last-saved
+     * definition. Empty on a clean run.
+     *
+     * @generated from field: repeated string warnings = 16;
+     */
+    warnings: string[];
 };
 /**
  * Describes the message xstockstrat.analysis.v1.BacktestResult.

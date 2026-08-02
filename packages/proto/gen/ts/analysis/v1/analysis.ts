@@ -752,6 +752,12 @@ export interface BacktestResult {
    * historical run (feature 068).
    */
   initialCapital: number;
+  /**
+   * Human-readable run warnings surfaced to the user (feature 086), e.g. a strategy referenced a
+   * formula that has since been soft-deleted — the run still completed using its last-saved
+   * definition. Empty on a clean run.
+   */
+  warnings: string[];
 }
 
 export interface TradeRecord {
@@ -1499,6 +1505,7 @@ function createBaseBacktestResult(): BacktestResult {
     coverageGaps: [],
     diagnostics: [],
     initialCapital: 0,
+    warnings: [],
   };
 }
 
@@ -1548,6 +1555,9 @@ export const BacktestResult: MessageFns<BacktestResult> = {
     }
     if (message.initialCapital !== 0) {
       writer.uint32(121).double(message.initialCapital);
+    }
+    for (const v of message.warnings) {
+      writer.uint32(130).string(v!);
     }
     return writer;
   },
@@ -1679,6 +1689,14 @@ export const BacktestResult: MessageFns<BacktestResult> = {
           message.initialCapital = reader.double();
           continue;
         }
+        case 16: {
+          if (tag !== 130) {
+            break;
+          }
+
+          message.warnings.push(reader.string());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1757,6 +1775,9 @@ export const BacktestResult: MessageFns<BacktestResult> = {
         : isSet(object.initial_capital)
         ? globalThis.Number(object.initial_capital)
         : 0,
+      warnings: globalThis.Array.isArray(object?.warnings)
+        ? object.warnings.map((e: any) => globalThis.String(e))
+        : [],
     };
   },
 
@@ -1807,6 +1828,9 @@ export const BacktestResult: MessageFns<BacktestResult> = {
     if (message.initialCapital !== 0) {
       obj.initialCapital = message.initialCapital;
     }
+    if (message.warnings?.length) {
+      obj.warnings = message.warnings;
+    }
     return obj;
   },
 
@@ -1830,6 +1854,7 @@ export const BacktestResult: MessageFns<BacktestResult> = {
     message.coverageGaps = object.coverageGaps?.map((e) => CoverageGap.fromPartial(e)) || [];
     message.diagnostics = object.diagnostics?.map((e) => SymbolDiagnostics.fromPartial(e)) || [];
     message.initialCapital = object.initialCapital ?? 0;
+    message.warnings = object.warnings?.map((e) => e) || [];
     return message;
   },
 };

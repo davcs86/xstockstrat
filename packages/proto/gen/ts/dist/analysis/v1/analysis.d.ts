@@ -188,6 +188,12 @@ export interface BacktestResult {
      * historical run (feature 068).
      */
     initialCapital: number;
+    /**
+     * Human-readable run warnings surfaced to the user (feature 086), e.g. a strategy referenced a
+     * formula that has since been soft-deleted — the run still completed using its last-saved
+     * definition. Empty on a clean run.
+     */
+    warnings: string[];
 }
 export interface TradeRecord {
     symbol: string;
