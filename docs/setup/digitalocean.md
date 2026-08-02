@@ -389,6 +389,16 @@ Both apps reference the same cluster (`xstockstrat`) but with different `db_name
 
 The app specs already declare `cluster_name: xstockstrat` and `db_name` for each environment, so `doctl apps update` will wire them automatically once the cluster exists.
 
+> **Connection pooling (staging).** Because both environments share one small cluster (~22 usable
+> connections), the six stateless-query Go/Python services in `.do/app.dev.yaml` connect through a
+> **PgBouncer transaction pool** (`:25061`, pool name `staging`) instead of the direct port, so a
+> rolling deploy no longer exhausts the shared connection limit. config, ledger, the other Node
+> leaves, and the `db-migrator` job stay on the direct port (`:25060`) — they use `LISTEN`/`NOTIFY`
+> or migration advisory locks, which transaction pooling does not support. The pool is created once
+> per database on the cluster (Databases → cluster → Connection Pools; `mode: transaction`); prod has
+> no pool yet. Full rationale and the `DB_PGBOUNCER` driver requirements →
+> `docs/patterns/database.md` § Connection pooling (PgBouncer).
+
 Via doctl:
 
 ```bash

@@ -212,6 +212,16 @@ service in code and overridable with the **`DB_POOL_MAX`** env var (Go `pgxpool.
 `asyncpg.create_pool(max_size=…)`, Node `pg.Pool({ max })`). **When adding a new DB-backed service or
 raising any service's pool, re-check this table so the total never exceeds 20.**
 
+**Staging routes the six stateless-query Go/Python services through a PgBouncer transaction pool**
+(`:25061`) so their client-pool maxes multiplex onto a few backend connections and no longer spike
+the shared cluster during rolling deploys; config, ledger, the other Node leaves, and the
+`db-migrator` job stay on the direct port because they use `LISTEN`/`NOTIFY` or migration advisory
+locks. The budget below is still the conservative per-environment cap. Full rationale, the
+direct-vs-pooled split, and the `DB_PGBOUNCER` driver requirements → `docs/patterns/database.md`
+§ Connection pooling (PgBouncer). (One shared `db-s-1vcpu-1gb` cluster hosts **both** staging and
+production, so two environments deploying at once — the daily promotion — is what exhausts the ~22
+usable slots.)
+
 | Service | Lang | Pool max | Notes |
 |---|---|---|---|
 | xstockstrat-trading | Go | 2 | Single shared `pgxpool` — `AccountRepo` reuses `TradingRepo.Pool()` (no second pool) |

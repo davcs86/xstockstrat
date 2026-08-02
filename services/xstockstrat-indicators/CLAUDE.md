@@ -50,7 +50,7 @@ HTTP/Connect-RPC server on `8054` was removed.
 - Migrations: `migrations/001_formulas.*` (table); `migrations/002_formula_parameters.*` (adds the
   `parameters` JSONB column); `migrations/003_formula_outputs.*` (adds the `outputs` JSONB column);
   `migrations/004_formula_warmup.*` (adds the `warmup_period` INTEGER column)
-- Pool: `asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=int(os.environ.get("DB_POOL_MAX", "2")))` created in `app/main.py:49-50` (max 2 keeps the 20-connection budget)
+- Pool: `asyncpg.create_pool(DATABASE_URL, min_size=1, max_size=int(os.environ.get("DB_POOL_MAX", "2")), statement_cache_size=…)` in `app/main.py` (max 2 keeps the 20-connection budget). `statement_cache_size` is `0` when `DB_PGBOUNCER` is set — the service connects through the DigitalOcean transaction-mode pool where cached prepared statements are unsafe (see `docs/patterns/database.md` § Connection pooling); otherwise asyncpg's default (100).
 
 ## Config Keys Consumed
 
