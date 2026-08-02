@@ -206,36 +206,48 @@ TimescaleDB (PostgreSQL). Each service owns its schema; migrations run via `scri
 
 ### Connection Pool Budget
 
-The managed DigitalOcean PostgreSQL plan allows **20 connections shared across all services**. Each
-service caps its pool small so the sum of all pool maxes stays at or below 20. Pool size is set per
-service in code and overridable with the **`DB_POOL_MAX`** env var (Go `pgxpool.MaxConns`, Python
-`asyncpg.create_pool(max_size=…)`, Node `pg.Pool({ max })`). **When adding a new DB-backed service or
-raising any service's pool, re-check this table so the total never exceeds 20.**
+The managed DigitalOcean PostgreSQL plan allows **~22 connections shared across all services**. Each
+**direct** service caps its pool small so the sum of direct pool maxes stays well under that. Pool size
+is set per service in code and overridable with the **`DB_POOL_MAX`** env var (Go `pgxpool.MaxConns`,
+Python `asyncpg.create_pool(max_size=…)`, Node `pg.Pool({ max })`). **When adding a new DB-backed
+service or raising any *direct* service's pool, re-check this table so the direct total stays safe.**
 
-**Staging routes the six stateless-query Go/Python services through a PgBouncer transaction pool**
-(`:25061`) so their client-pool maxes multiplex onto a few backend connections and no longer spike
-the shared cluster during rolling deploys; config, ledger, the other Node leaves, and the
-`db-migrator` job stay on the direct port because they use `LISTEN`/`NOTIFY` or migration advisory
-locks. The budget below is still the conservative per-environment cap. Full rationale, the
+**`DB_POOL_MAX` is deliberately *not set* on the six pooled services** (`.do/app.*.yaml`): behind a
+PgBouncer transaction pool it governs only the client→pooler connection count, not scarce backend
+slots, so it's left at the code default (2). The backend cap for those six is the pool's own `size`,
+not `DB_POOL_MAX`. Raising it there is a safe concurrency knob that does **not** consume cluster slots;
+raising it on a **direct** service does.
+
+**Both environments route the six stateless-query Go/Python services through a per-database PgBouncer
+transaction pool** (`:25061`, pool `staging`/`production`) so their client-pool maxes multiplex onto a
+few backend connections and no longer spike the shared cluster during rolling deploys; config, ledger,
+the other Node leaves, and the `db-migrator` job stay on the direct port because they use
+`LISTEN`/`NOTIFY` or migration advisory locks. The budget below is still the conservative
+per-environment cap. Full rationale, the
 direct-vs-pooled split, and the `DB_PGBOUNCER` driver requirements → `docs/patterns/database.md`
 § Connection pooling (PgBouncer). (One shared `db-s-1vcpu-1gb` cluster hosts **both** staging and
 production, so two environments deploying at once — the daily promotion — is what exhausts the ~22
 usable slots.)
 
-| Service | Lang | Pool max | Notes |
-|---|---|---|---|
-| xstockstrat-trading | Go | 2 | Single shared `pgxpool` — `AccountRepo` reuses `TradingRepo.Pool()` (no second pool) |
-| xstockstrat-portfolio | Go | 2 | |
-| xstockstrat-marketdata | Go | 2 | |
-| xstockstrat-indicators | Python | 2 | |
-| xstockstrat-ingest | Python | 2 | |
-| xstockstrat-analysis | Python | 2 | |
-| xstockstrat-ledger | Node | 2 | 1 query-pool conn (`DB_POOL_MAX=1`) + 1 dedicated LISTEN/NOTIFY conn (`EventNotifier`). Live `StreamEvents` subscribers share the single listener and never borrow from the query pool, so concurrent streams can't starve `AppendEvent`. |
-| xstockstrat-identity | Node | 2 | |
-| xstockstrat-config | Node | 2 | |
-| xstockstrat-notify | Node | 1 | Light DB use (alert history only) |
-| xstockstrat-ui | Next.js | 1 | config-ui audit route only |
-| **Total** | | **20** | At the DigitalOcean shared limit |
+| Service | Lang | Route | Pool max | Notes |
+|---|---|---|---|---|
+| xstockstrat-trading | Go | pool `:25061` | default 2 | `DB_POOL_MAX` unset (client→PgBouncer, not a backend slot). Single shared `pgxpool` — `AccountRepo` reuses `TradingRepo.Pool()` (no second pool) |
+| xstockstrat-portfolio | Go | pool `:25061` | default 2 | `DB_POOL_MAX` unset |
+| xstockstrat-marketdata | Go | pool `:25061` | default 2 | `DB_POOL_MAX` unset |
+| xstockstrat-indicators | Python | pool `:25061` | default 2 | `DB_POOL_MAX` unset |
+| xstockstrat-ingest | Python | pool `:25061` | default 2 | `DB_POOL_MAX` unset |
+| xstockstrat-analysis | Python | pool `:25061` | default 2 | `DB_POOL_MAX` unset |
+| xstockstrat-ledger | Node | direct `:25060` | 2 | 1 query-pool conn (`DB_POOL_MAX=1`) + 1 dedicated LISTEN/NOTIFY conn (`EventNotifier`). Live `StreamEvents` subscribers share the single listener and never borrow from the query pool, so concurrent streams can't starve `AppendEvent`. |
+| xstockstrat-identity | Node | direct `:25060` | 2 | |
+| xstockstrat-config | Node | direct `:25060` | 2 | |
+| xstockstrat-notify | Node | direct `:25060` | 1 | Light DB use (alert history only) |
+| xstockstrat-ui | Next.js | direct `:25060` | 1 | config-ui audit route only |
+| **Direct backend total** | | | **8** | Real cluster connections held by the direct services (per environment) |
+| **Pooled (PgBouncer)** | | | **pool `size` (5)** | The six services above multiplex onto ≤ the pool size, regardless of their client-pool maxes |
+
+Effective backend usage per environment ≈ **8 direct + ≤5 pool = ~13**, leaving headroom under the
+~22-slot cluster even with both environments live. The six pooled rows no longer count 1:1 against the
+budget — that was the point of the PgBouncer split.
 
 ---
 

@@ -56,7 +56,7 @@ enforces (see `## Pointers`). Refresh by re-running `/context-constitution`.
 | What | Where |
 |---|---|
 | Env-var naming `<SERVICE>_ENDPOINT` (gRPC host:port), no `_URL`/`XSTOCKSTRAT_` prefix | root `CLAUDE.md` §Environment Variable Naming; `.do/app.yaml` |
-| DB connection-pool budget ≤ 20 total; per-service cap + `DB_POOL_MAX` | root `CLAUDE.md` §Connection Pool Budget; e.g. `internal/repository/pool.go:15-28` |
+| DB connection budget (~22 shared); direct services cap via `DB_POOL_MAX`, the six PgBouncer-pooled Go/Python services (`DB_PGBOUNCER`, `:25061`) leave it unset and don't count 1:1 | root `CLAUDE.md` §Connection Pool Budget; e.g. `internal/repository/pool.go:15-28` |
 | Enum-over-string + `_UNSPECIFIED = 0` sentinel; proto PR + `buf lint`/`buf breaking` | root `CLAUDE.md` §Proto Contract Governance; `.github/workflows/ci.yml` `proto-freshness` |
 | Config `WatchConfig`-at-startup, 90s snapshot gate before serving | `docs/patterns/config-startup.md`; e.g. `config.go:131-140` |
 | Migration naming `NNN_*.up/down.sql`, never edit an applied one | root `CLAUDE.md` §Database; `docs/patterns/database.md:24-29` |
