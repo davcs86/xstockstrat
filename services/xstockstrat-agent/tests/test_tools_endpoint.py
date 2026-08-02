@@ -31,6 +31,8 @@ def test_list_tools_returns_all_registered_tools():
         "manage_strategy",
         "get_strategy",
         "manage_formula",
+        "get_formula",
+        "list_formulas",
         "manage_signal_source",
         "set_strategy_live",
         "trigger_backfill",

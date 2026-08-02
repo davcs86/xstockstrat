@@ -16,7 +16,9 @@ Write `$FEATURE_DIR/design.md` using this exact structure, after the debate is u
 
 <The decided design. Each architectural claim cites recon.md path:line. This is the WHAT/HOW-AT-A-
 DESIGN-LEVEL that /sdd-spec turns into numbered steps — it must be concrete enough to plan against,
-but it is not itself the step list.>
+but it is not itself the step list. State how the change reaches its **consumer surface(s)** (the
+UI segment or Agent tool named in the product spec, C-14) — not just the backing service — or that
+it is internal-only.>
 
 ## Rejected Alternatives
 

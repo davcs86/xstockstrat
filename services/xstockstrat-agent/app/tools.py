@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Twenty tools:
+Twenty-two tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -11,7 +11,9 @@ Twenty tools:
   screen_symbols       — scans a symbol universe via gRPC ScreenSymbols (read-only)
   manage_strategy     — registers/updates/deactivates stored strategies (update = partial merge)
   get_strategy        — reads a stored strategy's full definition (read-only)
-  manage_formula      — registers/updates/deletes custom formulas in indicators
+  manage_formula      — registers/updates(partial merge)/soft-deletes custom formulas in indicators
+  get_formula         — reads one stored formula's full definition incl. `deleted` (read-only)
+  list_formulas       — lists formula definitions, soft-deleted excluded (read-only)
   manage_signal_source — registers/updates/deactivates signal sources in ingest
   set_strategy_live   — enables/disables live alert evaluation for a strategy
   trigger_backfill    — triggers an OHLCV history backfill via gRPC TriggerBackfill (admin-scoped)
@@ -519,46 +521,52 @@ def register_tools(server: MCPServer) -> None:
     @server.tool()
     async def manage_formula(
         operation: str,
-        name: str = "",
-        description: str = "",
-        source: str = "",
-        is_public: bool = False,
+        name: str | None = None,
+        description: str | None = None,
+        source: str | None = None,
+        is_public: bool | None = None,
         formula_id: str = "",
         author: str = "",
         formula_author_user_id: str = "",
         parameters: list[dict] | None = None,
+        outputs: list[dict] | None = None,
+        warmup_period: int | None = None,
     ) -> dict:
         """Register/update/delete a custom formula in xstockstrat-indicators.
         operation: 'register' | 'update' | 'delete'.
-        name/description/source/is_public: for register and update.
+        name/description/source/is_public: for register and update. On UPDATE these are
+            presence-detected — pass a field only if you want to change it (see UPDATE below).
         author: stored immutably on register.
         formula_id: required for update/delete.
         formula_author_user_id: required for update/delete; must match the formula's original
             author (the indicators backend returns PERMISSION_DENIED otherwise).
-        parameters: typed parameter definitions for register/update — a list of
+        parameters: typed parameter definitions — a list of
             {name, type, default, description, required, min, max} where type is one of
             'int'|'float'|'bool'|'string' and min/max apply to numeric params only. Values
             are read inside the formula via params["<name>"].
+        outputs: declared secondary output series — a list of {name, description}. Declaring an
+            output makes it addressable in strategy rules as "<ref>.<name>"; the implicit "value"
+            series is always available and must NOT be declared here. A formula can therefore be
+            genuinely multi-series (no more one-formula-per-series workaround).
+        warmup_period: bars of warm-up before this formula's outputs are valid (int ≥ 0).
 
-        UPDATE IS A FULL REPLACE (not a partial merge): every field you omit is sent as its
-            default and OVERWRITES the stored value — an omitted source is blanked, omitted
-            parameters are dropped, is_public silently resets to False. No read-back tool exists
-            (get_formula/list_formulas are not registered), so you cannot recover the current
-            definition: keep the full registration payload and resend ALL fields on every update.
-        DELETE IS A HARD DELETE with no reference check — any strategy still referencing the
-            formula will fail later at evaluation time. Treat delete as forbidden while any
-            strategy uses the formula.
+        UPDATE IS A PARTIAL MERGE (AIP-161): only the fields you actually pass are changed; every
+            field you omit is preserved. Passing is_public=false unpublishes; omitting is_public
+            leaves it as-is. `source` cannot be blanked. Use get_formula/list_formulas to read a
+            formula back before editing. (At least one field must be supplied to update.)
+        DELETE IS A SOFT DELETE: the formula is marked deleted (non-destructive), hidden from
+            list_formulas, and can no longer be updated, but strategies that already reference it
+            keep evaluating on its last-saved definition — and both their backtests
+            (BacktestResult.warnings) and live status (get_strategy → warnings) flag the deletion
+            to the user. You cannot bind a NEW strategy to a deleted formula.
         Returns per operation: register → {"formula_id": <str>}; update → the full stored formula
-            in camelCase; delete → {"success": <bool>}.
+            in camelCase (incl. `deleted`); delete → {"success": <bool>}.
 
         source: plain Python, executed in a subprocess sandbox (no filesystem/network access).
             Two dicts are already in scope — data (series input, e.g. data["close"], a list of
             floats) and params (validated typed scalars, e.g. params["period"]) — and the
             formula must assign its output to a `result` dict with a "value" key (the primary
-            series). Only "value" is usable through this tool: it does NOT send the RegisterFormula
-            `outputs` or `warmup_period` fields, so any additional keys you put in `result` are NOT
-            declared to the backend and are ignored (analysis falls back to just "value"). To build
-            a multi-series indicator, register one formula per series.
+            series) plus one key per declared `outputs` entry.
             Only imports in the `indicators.sandbox.allowed_imports` config key are permitted
             (default: numpy, pandas, math, statistics). Within those, at least these functions
             are available for building custom indicators:
@@ -575,17 +583,60 @@ def register_tools(server: MCPServer) -> None:
         formula: dict = {
             "formula_id": formula_id,
             "user_id": formula_author_user_id,
-            "name": name,
-            "description": description,
-            "source": source,
-            "is_public": is_public,
             "author": author,
+            "name": name or "",
+            "description": description or "",
+            "source": source or "",
+            "is_public": bool(is_public),
             "parameters": parameters or [],
+            "outputs": outputs or [],
+            "warmup_period": warmup_period or 0,
         }
+        if operation == "update":
+            # Derive the AIP-161 update_mask from the fields actually supplied (non-None), so an
+            # omitted field is preserved rather than wiped. Never fall back to a maskless full
+            # replace from the tool.
+            supplied = {
+                "name": name,
+                "description": description,
+                "source": source,
+                "is_public": is_public,
+                "parameters": parameters,
+                "outputs": outputs,
+                "warmup_period": warmup_period,
+            }
+            mask = [field for field, val in supplied.items() if val is not None]
+            if not mask:
+                raise RuntimeError("update requires at least one field to change")
+            formula["update_mask"] = mask
         try:
             return await client.manage_formula(operation=operation, formula=formula)
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="formula not found")) from e
+
+    @server.tool()
+    async def get_formula(formula_id: str) -> dict:
+        """Fetch one custom formula's stored definition from xstockstrat-indicators.
+        formula_id: required.
+        Returns the formula in camelCase incl. name, description, source, isPublic, parameters,
+            outputs, warmupPeriod, and `deleted` (true when soft-deleted). Use this for safe
+            read-modify-write: read the formula, change the fields you want, then call
+            manage_formula(operation='update', ...) with only those fields."""
+        try:
+            return await client.get_formula(formula_id)
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="formula not found")) from e
+
+    @server.tool()
+    async def list_formulas(author_filter: str = "", include_public: bool = True) -> dict:
+        """List custom formula definitions from xstockstrat-indicators.
+        author_filter: if non-empty, restrict to formulas authored by this user id.
+        include_public: also include public formulas regardless of author_filter (default true).
+        Soft-deleted formulas are excluded. Returns {"formulas": [<formula in camelCase>, ...]}."""
+        try:
+            return {"formulas": await client.list_formulas(author_filter, include_public)}
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
 
     @server.tool()
     async def manage_signal_source(

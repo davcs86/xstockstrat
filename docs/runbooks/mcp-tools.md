@@ -1,6 +1,6 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the twenty tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the twenty-two tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 ---
@@ -34,7 +34,7 @@ directly on port 9000.
 
 **Direct (local):** `http://localhost:9000`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same twenty tools' `name`,
+**Tool catalog (UI display).** `GET /api/tools` returns the same twenty-two tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
 capabilities (the same data documented below), never user data or credentials. It powers the
 `xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
@@ -523,13 +523,27 @@ Registers, updates, or deletes a custom formula definition in `xstockstrat-indic
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `operation` | `string` | Yes | `"register"`, `"update"`, or `"delete"` |
-| `name` | `string` | register/update | Formula name |
+| `name` | `string` | register | Formula name (on update, pass only to change it) |
 | `description` | `string` | No | Formula description |
-| `source` | `string` | register/update | Python formula source |
-| `is_public` | `bool` | No | Whether the formula is public (default `false`) |
+| `source` | `string` | register | Python formula source (on update, pass only to change it; cannot be blanked) |
+| `is_public` | `bool` | No | Whether the formula is public (register default `false`) |
+| `parameters` | `list` | No | Typed parameter definitions `{name, type, default, description, required, min, max}` |
+| `outputs` | `list` | No | Declared secondary output series `{name, description}`; addressable in strategy rules as `<ref>.<name>`. The implicit `value` series is always present and must not be declared. |
+| `warmup_period` | `int` | No | Bars of warm-up before the formula's outputs are valid |
 | `formula_id` | `string` | update/delete | Formula identifier |
 | `author` | `string` | register | Author, stored immutably on register |
 | `formula_author_user_id` | `string` | update/delete | Must match the formula's original `author` (else PERMISSION_DENIED) |
+
+**Update is a partial merge (AIP-161).** Only the fields you pass are changed; omitted fields are
+preserved. Pass `is_public=false` to unpublish; omit it to leave it unchanged. At least one field
+must be supplied. `source` cannot be blanked. Use `get_formula`/`list_formulas` to read a formula
+back before editing.
+
+**Delete is a soft delete.** The formula is marked `deleted` (non-destructive), hidden from
+`list_formulas`, and can no longer be updated, but strategies that already reference it keep
+evaluating on its last-saved definition — and both their backtests (`run_backtest` →
+`warnings`) and live status (`get_strategy` → `warnings`) flag the deletion to the user. You
+cannot bind a **new** strategy to a deleted formula (`ManageStrategy` returns `INVALID_ARGUMENT`).
 
 **Return**
 
@@ -537,12 +551,48 @@ Registers, updates, or deletes a custom formula definition in `xstockstrat-indic
 { "formula_id": "f-abc123" }
 ```
 
+register → `{"formula_id": …}`; update → the full stored formula in camelCase (incl. `deleted`);
+delete → `{"success": true}`.
+
 **Errors**
 
 | Condition | Error |
 |---|---|
 | `formula_author_user_id` ≠ author | `permission denied` (PERMISSION_DENIED) |
 | `update`/`delete` on unknown formula | `formula not found` (NOT_FOUND) |
+| `update` with no fields supplied | `update requires at least one field to change` |
+| `update` on a soft-deleted formula | `formula is deleted and cannot be updated` (FAILED_PRECONDITION) |
+
+---
+
+### `get_formula`
+
+Fetches one custom formula's stored definition from `xstockstrat-indicators`.
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `formula_id` | `string` | Yes | Formula identifier |
+
+**Return** — the formula in camelCase incl. `name`, `description`, `source`, `isPublic`,
+`parameters`, `outputs`, `warmupPeriod`, and `deleted` (true when soft-deleted). Use for safe
+read-modify-write: read, then `manage_formula(operation="update", …)` with only the changed fields.
+
+---
+
+### `list_formulas`
+
+Lists custom formula definitions from `xstockstrat-indicators`. Soft-deleted formulas are excluded.
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `author_filter` | `string` | No | If non-empty, restrict to formulas authored by this user id |
+| `include_public` | `bool` | No | Also include public formulas regardless of `author_filter` (default `true`) |
+
+**Return** — `{"formulas": [<formula in camelCase>, …]}`.
 
 ---
 

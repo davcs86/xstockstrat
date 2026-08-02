@@ -563,9 +563,7 @@ class TestAdditiveClientFns:
         mock_stub.ExecuteFormula = AsyncMock(return_value=resp)
         with patch("app.client.grpc") as mock_grpc:
             mock_grpc.aio.insecure_channel.return_value = _channel_cm()
-            with patch.object(
-                indicators_pb2_grpc, "IndicatorsServiceStub", return_value=mock_stub
-            ):
+            with patch.object(indicators_pb2_grpc, "IndicatorsServiceStub", return_value=mock_stub):
                 result = await client.execute_formula(
                     formula_source="result = {'value': 1.5}",
                     input_data={"close": [1, 2, 3]},
@@ -587,9 +585,7 @@ class TestAdditiveClientFns:
         mock_stub.ExecuteFormula = AsyncMock(return_value=resp)
         with patch("app.client.grpc") as mock_grpc:
             mock_grpc.aio.insecure_channel.return_value = _channel_cm()
-            with patch.object(
-                indicators_pb2_grpc, "IndicatorsServiceStub", return_value=mock_stub
-            ):
+            with patch.object(indicators_pb2_grpc, "IndicatorsServiceStub", return_value=mock_stub):
                 result = await client.execute_formula(formula_source="x")
         assert result["output"]["value"] is None  # NaN scrubbed
         assert result["output"]["ok"] == 2.0
@@ -630,8 +626,13 @@ class TestAdditiveClientFns:
         from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
 
         src = ingest_pb2.SignalSource(
-            slug="s", display_name="S", source_type="mediated_simple_email",
-            active=True, health=1, last_error="", signals_fed=42,
+            slug="s",
+            display_name="S",
+            source_type="mediated_simple_email",
+            active=True,
+            health=1,
+            last_error="",
+            signals_fed=42,
         )  # last_seen_at intentionally unset
         resp = ingest_pb2.ListSignalSourcesResponse(sources=[src])
         mock_stub = MagicMock()
@@ -656,8 +657,13 @@ class TestAdditiveClientFns:
             mock_grpc.aio.insecure_channel.return_value = _channel_cm()
             with patch.object(notify_pb2_grpc, "NotifyServiceStub", return_value=mock_stub):
                 await client.emit_alert(
-                    severity="warning", category="system", title="t", body="b",
-                    context={"k": "v"}, tags=["a", "b"], correlation_id="corr-1",
+                    severity="warning",
+                    category="system",
+                    title="t",
+                    body="b",
+                    context={"k": "v"},
+                    tags=["a", "b"],
+                    correlation_id="corr-1",
                 )
         req = mock_stub.EmitAlert.call_args.args[0]
         assert req.correlation_id == "corr-1"

@@ -27,7 +27,7 @@ Python 3.12 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
 
 ## MCP Tools
 
-The agent registers twenty tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
+The agent registers twenty-two tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
 reference):
 
 | Tool | Purpose |
@@ -42,6 +42,8 @@ reference):
 | `manage_strategy` | Register/update/deactivate stored strategies (`update` is a **partial merge** — feature 070) |
 | `get_strategy` | Read a stored strategy's full definition (read-only, feature 070) |
 | `manage_formula` | Register/update/delete custom formulas |
+| `get_formula` | Read one stored formula's full definition incl. `deleted` (read-only, feature 086) |
+| `list_formulas` | List formula definitions, soft-deleted excluded (read-only, feature 086) |
 | `manage_signal_source` | Register/update/deactivate signal sources |
 | `set_strategy_live` | Enable/disable continuous live evaluation + alerting for a strategy (feature 048) |
 | `trigger_backfill` | Trigger an OHLCV history backfill via xstockstrat-ingest (admin-scoped write, feature 066) |
