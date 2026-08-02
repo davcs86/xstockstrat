@@ -35,8 +35,11 @@ handling the two fields that live on the *request* (not the `SignalSource` resou
 - **deactivate** — unchanged (NOT_FOUND if missing).
 - **Credential gap closed**: the required check covers `authenticated_website` **and**
   `mediated_authenticated_website`.
-- Maskless update (no `update_mask`) → **full replace** for back-compat (the UI/other clients that send a
-  full payload), byte-for-byte with today — mirrors ManageStrategy's maskless path.
+- Maskless update (no `update_mask`) → **full replace** for back-compat, byte-for-byte with today —
+  mirrors ManageStrategy's maskless path. After the R2 fix (§6) no in-repo caller is maskless (agent,
+  UI, producer all send masks/register), so this path is retained only for any external client; the
+  merged-row credential check (incl. `mediated_authenticated_website`) is applied on **both** the masked
+  and maskless branches so AC-55 holds regardless.
 
 ### 3. ingest repo (`app/repositories/signal_sources.py`)
 - Add `get_source(slug)`; `insert_source(...)` (plain INSERT; on `UniqueViolationError` the servicer maps
@@ -57,7 +60,20 @@ handling the two fields that live on the *request* (not the `SignalSource` resou
   `credentials_ref` is a tool param; when supplied on update it joins the mask. Strip `credentials_ref`
   from responses (already done). Descriptor-parity test over the request builder (RC-1 antidote).
 
-### 6. same-PR docs
+### 6. config-ui sources page (`services/xstockstrat-ui/src/app/config-ui/sources/page.tsx`) — R2 fix
+- The sources page is a **maskless** `update` caller today (`handleSave` :205-225), so a display-name
+  edit that doesn't re-type the secret NULLs `credentials_ref` — the exact bug on the human surface
+  (C-10: fix every caller of the changed RPC, not just the agent). Fix: `handleSave` derives an
+  `updateMask` from the form fields it submits — always include display_name/source_type/
+  extractor_module/config_json, include `credentials_ref` **only when** the user typed a new secret
+  (`form.credentialsRef` truthy). So an omitted secret is preserved.
+- Move the live-toggle (`handleToggle` :195-206, currently `operation:'update'` + `active:true`,
+  maskless) to the new `reactivate` verb, so reactivation is decoupled from update on the UI path too
+  (RC-6 holds for every caller, not just masked ones).
+- Paired Playwright e2e (C-08): editing an `authenticated_website` source's display-name without a
+  secret preserves `has_credentials`; the toggle reactivates via the reactivate verb.
+
+### 7. same-PR docs
 - `docs/runbooks/mcp-tools.md` `manage_signal_source` section + the tool docstring: the honest verbs,
   ALREADY_EXISTS/NOT_FOUND, partial update, decoupled reactivate, the closed credential gap. `manage_signal_source`
   is **not** in the strat-lab skill (root CLAUDE.md lists only run_backtest/manage_strategy/trigger_backfill/
@@ -78,10 +94,15 @@ handling the two fields that live on the *request* (not the `SignalSource` resou
 
 ## Open Risks
 
-- [ ] Maskless update stays full-replace for non-agent callers; the agent tool always sends a mask on
-  update (derived), so the MCP surface never wipes. Documented in the docstring. Target: agent step.
-- [ ] Field/enum numbers (`update_mask=4`, `operation_enum=5`) verified next-free on `ManageSignalSourceRequest`;
-  re-verify against remote refs at /sdd-spec (ledger 081). Target: proto step.
+- [x] ~~Maskless UI update wipes credentials_ref~~ — **resolved by R2 fix (§6):** the config-ui sources
+  page now derives an `update_mask` and preserves an omitted secret. No in-repo maskless-update caller
+  remains; the maskless full-replace path is external-client-only back-compat.
+- [ ] Field/enum numbers (`update_mask=4`, `operation_enum=5`) verified next-free on `ManageSignalSourceRequest`
+  (fields 1-3 used); sibling 093 adds a `ResolveSourceCredential` **RPC**, not fields on this message — no
+  collision. Re-verify against remote refs at /sdd-spec (ledger 081). Target: proto step.
+- [ ] **Scope expanded** beyond the product-spec's Affected Services (agent+ingest+analysis) to include
+  `xstockstrat-ui` config-ui — per the user's established "fix every caller, don't defer" direction (086
+  precedent). Recorded in context.md.
 
 ## Constitution Rules Touched
 

@@ -1,7 +1,7 @@
 # Feature: fix-mcp-signal-source-verbs
 
 **Type**: bug
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `design-approved`
 **Development Branch**: `feature/fix-mcp-signal-source-verbs`
 **Source Report**: docs/reports/2026-08-01-mcp-tools-alignment-triage.md (F-6)
 **Severity**: SEV-2
@@ -15,6 +15,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-02 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the MCP-alignment triage report (F-6) |
+| 2026-08-02 | `draft` → `design-approved` | /sdd-design | 2-round debate; scope expanded to include config-ui per 086 precedent (fix every caller); recon.md + design.md written |
 
 ---
 
@@ -32,4 +33,4 @@ Split `manage_signal_source` register/update/deactivate into honest verbs (field
 
 ## Next Action
 
-`/sdd-design fix-mcp-signal-source-verbs` — recommended design depth (full) from triage; see context.md
+`/sdd-spec fix-mcp-signal-source-verbs` — generate implementation spec from the approved design
