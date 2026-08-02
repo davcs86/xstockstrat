@@ -1,6 +1,6 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the nineteen tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the twenty-two tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 ---
@@ -34,7 +34,7 @@ directly on port 9000.
 
 **Direct (local):** `http://localhost:9000`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same nineteen tools' `name`,
+**Tool catalog (UI display).** `GET /api/tools` returns the same twenty-two tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
 capabilities (the same data documented below), never user data or credentials. It powers the
 `xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
@@ -104,11 +104,21 @@ Lists active signal sources registered in `xstockstrat-ingest`. Enriches each so
       "display_name": "Unusual Whales",
       "source_type": "mediated_simple_email",
       "config_json": {},
-      "extractor_tool": null
+      "extractor_tool": null,
+      "active": true,
+      "health": "SOURCE_HEALTH_STATUS_HEALTHY",
+      "last_seen_at": "2026-08-02T12:00:00+00:00",
+      "last_error": "",
+      "signals_fed": 42
     }
   ]
 }
 ```
+
+Source-health fields (feature 083, surfaced by feature 087): `active` (bool), `health`
+(`SourceHealthStatus` enum **name**), `last_seen_at` (RFC3339, or `null` for a source that has never
+fed a signal), `last_error` (string), `signals_fed` (**int64 as a JSON number** in this projection —
+unlike the int64-as-string contract of `run_backtest`/`get_backfill_status`).
 
 `extractor_tool` values:
 
@@ -233,6 +243,9 @@ Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or
 | `body` | `string` | Yes | Alert body text |
 | `source_service` | `string` | No | Emitting service name (default `"xstockstrat-agent"`) |
 | `target_user_id` | `string` | No | Target user ID (default `""` = broadcast) |
+| `context` | `object` | No | Structured JSON context stored + fanned out with the alert (feature 087) |
+| `tags` | `string[]` | No | Tags for filtering/grouping (feature 087) |
+| `correlation_id` | `string` | No | Id to correlate related alerts (feature 087) |
 
 **Return**
 
@@ -677,6 +690,60 @@ or, in list mode:
 |---|---|
 | Unknown `job_id` | `backfill job not found` (NOT_FOUND) |
 | Unknown `status_filter` | tool `ValueError` enumerating accepted values |
+
+---
+
+### `cancel_backfill`
+
+Cancels a queued/running backfill job via ingest `CancelBackfill`. **Admin-scoped** (forwards
+`x-access-scope`) — unlike `trigger_backfill`, this RPC is checked server-side (feature 087).
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `job_id` | `string` | Yes | The job to cancel |
+
+**Return** — `{ "job": { … } }` (the updated `BackfillJob`, status `canceled`).
+
+**Errors**: unknown `job_id` → `backfill job not found` (NOT_FOUND); already-terminal job → server error.
+
+---
+
+### `test_formula`
+
+Dry-runs **inline** formula source in the indicators sandbox via `ExecuteFormula`, **registering
+nothing** (feature 087). **Read-only** — no admin scope; the subprocess sandbox is the boundary.
+Use before `manage_formula(operation="register", …)` to validate behavior.
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `source` | `string` | Yes | Python formula source (assign a `result` dict with a `value` key) |
+| `input_data` | `object` | No | Passed to the formula as `data` (e.g. `{"close": [1,2,3]}`) |
+| `input_params` | `object` | No | Parameter VALUES exposed as `params` |
+| `parameters` | `list` | No | Typed parameter DEFINITIONS to validate `input_params` for this run |
+| `timeout_ms` | `int` | No | `0` ⇒ configured sandbox timeout |
+
+**Return** — the full sandbox result: `success`, `output` (the result dict; **non-finite values such
+as `NaN`/`Infinity` are returned as `null`** so the projection never fails), `stdout`, `stderr`,
+`error`, `exit_reason`, `parameter_errors`, `execution_ms` (int64 as a JSON string).
+
+---
+
+### `list_strategies`
+
+Lists stored strategy definitions via analysis `ListStrategyDefinitions` (feature 087). **Read-only.**
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `include_inactive` | `bool` | No | Also include deactivated strategies (default `false`) |
+
+**Return** — `{ "strategies": [ <definition>, … ] }`. Each definition is **snake_case**, matching
+`get_strategy` (so a `list_strategies → get_strategy → manage_strategy` edit loop stays consistent).
 
 ---
 

@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Nineteen tools:
+Twenty-two tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -18,6 +18,9 @@ Nineteen tools:
   set_strategy_live   — enables/disables live alert evaluation for a strategy
   trigger_backfill    — triggers an OHLCV history backfill via gRPC TriggerBackfill (admin-scoped)
   get_backfill_status — checks a backfill job / lists recent jobs (read-only)
+  cancel_backfill     — cancels a queued/running backfill job (admin-scoped)
+  test_formula        — dry-runs inline formula source in the sandbox, registers nothing (read-only)
+  list_strategies     — lists stored strategy definitions (read-only)
   get_config          — reads a namespace's current config values, secrets redacted (read-only)
   list_config_keys    — lists a namespace's registered config keys, metadata only (read-only)
   set_config          — writes one non-secret config value (admin-scoped write)
@@ -268,6 +271,9 @@ def register_tools(server: MCPServer) -> None:
         body: str,
         source_service: str = "xstockstrat-agent",
         target_user_id: str = "",
+        context: dict | None = None,
+        tags: list[str] | None = None,
+        correlation_id: str = "",
     ) -> dict:
         """Emit an alert via xstockstrat-notify.
         severity: one of 'info', 'warning', 'error', 'critical' (case-insensitive). Any
@@ -276,6 +282,9 @@ def register_tools(server: MCPServer) -> None:
         title/body: stored and delivered verbatim with NO server-side validation — empty strings
             are accepted and delivered blank, so populate both.
         target_user_id: defaults to '' which BROADCASTS to all users; set it to target one user.
+        context: optional structured JSON object stored and fanned out with the alert.
+        tags: optional list of string tags for filtering/grouping.
+        correlation_id: optional id to correlate related alerts.
         Use for system-level alerts or alerts not tied to a specific ingested signal (ingest_signal
             already auto-alerts high-conviction signals).
         Returns {"alert_id": <str>}."""
@@ -286,6 +295,9 @@ def register_tools(server: MCPServer) -> None:
             body=body,
             source_service=source_service,
             target_user_id=target_user_id,
+            context=context,
+            tags=tags,
+            correlation_id=correlation_id,
         )
 
     # structured_output=False is forward-protection, not load-bearing today: for a bare `-> list`
@@ -754,6 +766,59 @@ def register_tools(server: MCPServer) -> None:
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="backfill job not found")) from e
+
+    @server.tool()
+    async def cancel_backfill(job_id: str) -> dict:
+        """Cancel a queued or running OHLCV backfill job in xstockstrat-ingest (admin-scoped).
+        job_id: the job to cancel (from trigger_backfill or get_backfill_status).
+        Use this to stop a paid backfill you started that is no longer wanted. A job that has
+            already completed/failed cannot be canceled.
+        Returns {"job": {...}} with the updated BackfillJob (status should be canceled)."""
+        try:
+            return await client.cancel_backfill(job_id)
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="backfill job not found")) from e
+
+    @server.tool()
+    async def test_formula(
+        source: str,
+        input_data: dict | None = None,
+        input_params: dict | None = None,
+        parameters: list[dict] | None = None,
+        timeout_ms: int = 0,
+    ) -> dict:
+        """Dry-run inline formula source in the sandbox WITHOUT registering it (read-only).
+        Use this to validate a formula's behavior before manage_formula(operation='register').
+        source: plain Python; assign the result to a `result` dict with a 'value' key. `data`
+            (series input, e.g. data['close']) and `params` (typed scalars) are in scope.
+        input_data: JSON object passed to the formula as `data` (e.g. {'close': [1,2,3]}).
+        input_params: parameter VALUES exposed as `params` (e.g. {'period': 14}).
+        parameters: optional typed parameter DEFINITIONS to validate input_params for this run.
+        timeout_ms: 0 = use the configured sandbox timeout.
+        Returns the full sandbox result: success, output (the result dict; NON-FINITE values such
+            as NaN/Infinity are returned as null), stdout, stderr, error, exit_reason,
+            parameter_errors, execution_ms (int64 as a JSON string)."""
+        try:
+            return await client.execute_formula(
+                formula_source=source,
+                input_data=input_data,
+                input_params=input_params,
+                parameters=parameters,
+                timeout_ms_override=timeout_ms,
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
+
+    @server.tool()
+    async def list_strategies(include_inactive: bool = False) -> dict:
+        """List stored strategy definitions from xstockstrat-analysis (read-only).
+        include_inactive: also include deactivated strategies (default false).
+        Returns {"strategies": [<definition>, ...]} — each definition is snake_case, matching
+            get_strategy (so a list → get → manage_strategy edit loop stays consistent)."""
+        try:
+            return {"strategies": await client.list_strategy_definitions(include_inactive)}
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e)) from e
 
     @server.tool()
     async def get_strategy(strategy_id: str) -> dict:

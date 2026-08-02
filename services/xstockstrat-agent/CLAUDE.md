@@ -27,7 +27,7 @@ Python 3.12 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
 
 ## MCP Tools
 
-The agent registers nineteen tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
+The agent registers twenty-two tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
 reference):
 
 | Tool | Purpose |
@@ -42,10 +42,15 @@ reference):
 | `manage_strategy` | Register/update/deactivate stored strategies (`update` is a **partial merge** — feature 070) |
 | `get_strategy` | Read a stored strategy's full definition (read-only, feature 070) |
 | `manage_formula` | Register/update/delete custom formulas |
+| `get_formula` | Read one stored formula's full definition incl. `deleted` (read-only, feature 086) |
+| `list_formulas` | List formula definitions, soft-deleted excluded (read-only, feature 086) |
 | `manage_signal_source` | Register/update/deactivate signal sources |
 | `set_strategy_live` | Enable/disable continuous live evaluation + alerting for a strategy (feature 048) |
 | `trigger_backfill` | Trigger an OHLCV history backfill via xstockstrat-ingest (admin-scoped write, feature 066) |
 | `get_backfill_status` | Check one backfill job or list recent jobs (read-only, feature 066) |
+| `cancel_backfill` | Cancel a queued/running backfill job (admin-scoped, feature 087) |
+| `test_formula` | Dry-run inline formula source in the sandbox, registers nothing (read-only, feature 087) |
+| `list_strategies` | List stored strategy definitions (read-only, feature 087) |
 | `get_config` | Read a namespace's current config values, secret values redacted (read-only, feature 073) |
 | `list_config_keys` | List a namespace's registered config keys, metadata only (read-only, feature 073) |
 | `set_config` | Write one non-secret config value (admin-scoped write, feature 073) |
