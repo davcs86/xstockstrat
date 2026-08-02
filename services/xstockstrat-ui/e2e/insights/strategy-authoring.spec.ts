@@ -374,5 +374,12 @@ test.describe('Strategies list — handoff fidelity (feature 083)', () => {
     // State vocabulary (never Live/Paper) — the mock carries active+liveEnabled and active-only defs.
     await expect(page.getByText('Active', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('Paused', { exact: true }).first()).toBeVisible();
+    // Analytics table (GetStrategyAnalytics per row): Signals 30d / Hit rate / Expectancy columns.
+    await expect(page.getByRole('columnheader', { name: 'Hit rate' })).toBeVisible();
+    await expect(page.getByRole('columnheader', { name: 'Expectancy' })).toBeVisible();
+    // Mock analytics: signals30d 42, hit rate 62%, expectancy +0.35.
+    const firstRow = page.getByRole('row').filter({ hasText: '62%' }).first();
+    await expect(firstRow).toContainText('42');
+    await expect(firstRow).toContainText('+0.35');
   });
 });

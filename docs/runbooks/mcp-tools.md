@@ -197,7 +197,7 @@ Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exc
 | `symbol` | `string` | Yes | Ticker symbol, e.g. `"NVDA"` |
 | `direction` | `string` | Yes | One of `"buy"`, `"sell"`, `"hold"`, `"watchlist"` |
 | `valid_from` | `string` | Yes | ISO 8601 datetime, e.g. `"2026-05-01T00:00:00Z"` |
-| `conviction` | `float` | No | Signal confidence, `0.0`–`1.0`. Ingest applies source default if absent. |
+| `conviction` | `float` | No | Signal confidence, `0.0`–`1.0`. Omit if unknown — ingest stores an absent (or `0.0`) value as unset (NULL) and reads it back as `0.0` meaning "unknown confidence" (invariant INGEST-4). **No source default is applied.** |
 | `valid_until` | `string` | No | ISO 8601 datetime — signal expiry |
 | `headline` | `string` | No | Short summary for display |
 | `raw_url` | `string` | No | Source URL for attribution |
@@ -213,8 +213,8 @@ Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exc
 
 | Condition | Error |
 |---|---|
-| Unknown `source` slug | `HTTP 400` from ingest (`INVALID_ARGUMENT`) |
-| `valid_from` missing | `HTTP 400` from ingest |
+| Unknown `source` slug | `invalid argument` (INVALID_ARGUMENT) from ingest |
+| `valid_from` missing | `invalid argument` (INVALID_ARGUMENT) from ingest |
 | Auto-alert emission fails | Warning logged; signal is already ingested — not rolled back |
 
 ---
@@ -227,7 +227,7 @@ Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
-| `severity` | `string` | Yes | Alert severity: `"info"`, `"warning"`, `"critical"` |
+| `severity` | `string` | Yes | Alert severity: `"info"`, `"warning"`, `"error"`, `"critical"` (unknown values coerce to `"info"`) |
 | `category` | `string` | Yes | Alert category, e.g. `"signal"`, `"system"` |
 | `title` | `string` | Yes | Short alert title |
 | `body` | `string` | Yes | Alert body text |
@@ -237,8 +237,11 @@ Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or
 **Return**
 
 ```json
-{ "success": true }
+{ "alert_id": "3f9a1c2e-7b0d-4e5a-9c1f-2a6b8d0e4f11" }
 ```
+
+Unknown `severity` strings are silently coerced to `"info"` (valid values: `info`, `warning`,
+`error`, `critical`); `title`/`body` are stored and delivered with no server-side validation.
 
 **Errors**
 
@@ -350,7 +353,7 @@ tool still **succeeds** — the backtest ran — and the summary gains an `attac
 
 | Condition | Error |
 |---|---|
-| Unknown `strategy_id` | `HTTP 400` from analysis |
+| Unknown `strategy_id` | `strategy not found` (NOT_FOUND) from analysis |
 | `start` after `end` | `ValueError` raised by the client before any RPC |
 | Window span over `analysis.backtest.max_range_days` | `INVALID_ARGUMENT` from analysis |
 | History too short to warm indicators before `start` | `BACKTEST_STATUS_INSUFFICIENT_DATA` result with `coverage_gaps` (not an RPC error) |
@@ -371,10 +374,14 @@ Scans an explicit universe of symbols via `xstockstrat-analysis` `ScreenSymbols`
 | `signal_sources` | `string[]` | No | Signal source names for the signal-blend kind |
 | `signal_weight` | `float` | No | Share of score from signals (default `0.0`) |
 | `technical_weight` | `float` | No | Share of score from technicals (default `1.0`) |
-| `min_conviction` | `float` | No | Minimum blended score to pass (default `0.0`) |
+| `min_conviction` | `float` | No | **Accepted on the wire but currently ignored by `ScreenSymbols`** — the screener never reads this field; pass/fail is decided by `criteria` (notably `hard_filter`), not a blended-score floor. Default `0.0`. |
 | `rank_limit` | `int` | No | Cap on returned results; `0` ⇒ analysis-side default (`analysis.screener.default_rank_limit`) |
 
-`kind` and `op` accept either the enum name (string) or a numeric value. The `component` field (for technical kinds) is not mapped from string input in this thin wrapper.
+`kind` and `op` accept either the enum name (string) or a numeric value. The `component` field
+(required by the technical kinds) is **not mapped** from string input in this thin wrapper, so
+`SCREEN_KIND_TECHNICAL_FORMULA` / `SCREEN_KIND_TECHNICAL_INDICATOR` criteria are **silently
+skipped** — only fundamental and signal kinds are effective today. An unknown fundamental
+`metric_name` is likewise skipped rather than rejected.
 
 **Return**
 

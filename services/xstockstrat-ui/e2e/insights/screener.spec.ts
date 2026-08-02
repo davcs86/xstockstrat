@@ -48,4 +48,19 @@ test.describe('Screener', () => {
     await expect(first).toContainText('58'); // RSI
     await expect(first.getByText('Held')).toBeVisible();
   });
+
+  test('the 10-column results table does not overflow the phone frame', async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await addAuthCookie(page);
+    await page.goto('/insights/screener');
+    await page.getByTestId('run-screen').click();
+    await expect(page.getByTestId('screen-results')).toBeVisible({ timeout: 10000 });
+
+    // The page body must not scroll horizontally — the wide table scrolls inside its own
+    // overflow-x container instead (regression guard for the raw-table overflow bug).
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBeLessThanOrEqual(1); // allow sub-pixel rounding
+  });
 });

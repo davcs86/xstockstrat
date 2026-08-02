@@ -7,20 +7,20 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 import respx
-from mcp.server import FastMCP
+from mcp.server.mcpserver import MCPServer
 
 from app import client
 from app.tools import _EXTRACTOR_TOOL_MAP, register_tools
 
 
-def _make_server() -> FastMCP:
-    server = FastMCP("test-agent")
+def _make_server() -> MCPServer:
+    server = MCPServer("test-agent")
     register_tools(server)
     return server
 
 
-def _tool_fn(server: FastMCP, name: str):
-    return server._tool_manager._tools[name].fn
+def _tool_fn(server: MCPServer, name: str):
+    return server._tool_manager.get_tool(name).fn
 
 
 # Shared source list used by many tests
@@ -318,7 +318,7 @@ class TestRunBacktestWindow:
         an un-usable one, so the window must appear in the published inputSchema."""
         server = _make_server()
         tools = await server.list_tools()
-        schema = next(t for t in tools if t.name == "run_backtest").inputSchema
+        schema = next(t for t in tools if t.name == "run_backtest").input_schema
         assert "start" in schema["properties"]
         assert "end" in schema["properties"]
         # optional — an agent that omits them still gets the rolling default
@@ -439,7 +439,8 @@ class TestRunBacktestAttachment:
         with patch.object(client, "run_backtest", AsyncMock(return_value=self._result())):
             server = _make_server()
             args = {"strategy_id": "sma", "symbols": ["A"]}
-            content = await server.call_tool("run_backtest", args)
+            result = await server.call_tool("run_backtest", args)
+            content = result.content
         assert isinstance(content[0], TextContent)
         assert isinstance(content[1], EmbeddedResource)
 

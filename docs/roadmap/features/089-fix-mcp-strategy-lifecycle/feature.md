@@ -1,0 +1,35 @@
+# Feature: fix-mcp-strategy-lifecycle
+
+**Type**: bug
+**Lifecycle Status**: `draft`
+**Development Branch**: `feature/fix-mcp-strategy-lifecycle`
+**Source Report**: docs/reports/2026-08-01-mcp-tools-alignment-triage.md (F-5, F-7)
+**Severity**: SEV-2
+**Created**: 2026-08-02
+**Last Updated**: 2026-08-02
+
+---
+
+## Status History
+
+| Date | Status | Updated by | Note |
+|---|---|---|---|
+| 2026-08-02 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from the MCP-alignment triage report (F-5, F-7) |
+
+---
+
+## Artifacts
+
+- [Product Spec](product-spec.md) — bug description and fix scope
+- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fix-mcp-strategy-lifecycle`_
+- [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Summary
+
+Make strategy lifecycle honest: ALREADY_EXISTS on duplicate register, a reactivate path, and a FAILED_PRECONDITION guard on set_strategy_live for inert (inactive / no-symbols) configs.
+
+## Next Action
+
+`/sdd-design fix-mcp-strategy-lifecycle` — recommended design depth (full) from triage; see context.md

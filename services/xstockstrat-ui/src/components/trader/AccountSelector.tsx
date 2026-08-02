@@ -9,13 +9,7 @@ import { BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
 import { CredentialStatus } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 
 function brokerLabel(brokerType: BrokerType): string {
   return brokerType === BrokerType.IBKR ? 'IBKR' : 'Alpaca';
@@ -40,7 +34,7 @@ export function AccountSelector() {
         value={selectedAccountId ?? ''}
         onValueChange={(id) => setSelectedAccountId(id || null)}
       >
-        <SelectTrigger className="w-[180px] h-8 text-xs">
+        <SelectTrigger className="w-[120px] sm:w-[180px] h-8 text-xs">
           <SelectValue placeholder="Select account" />
         </SelectTrigger>
         <SelectContent>
@@ -65,7 +59,15 @@ export function AccountSelector() {
 
       {selected && <CredentialStatusBadge status={selected.credentialStatus} />}
 
-      <Button variant="ghost" size="icon" className="h-8 w-8 relative" asChild aria-label="Manage accounts">
+      {/* Gear is desktop-only — on mobile accounts are reached via the nav → Accounts to keep the
+          header from overflowing the phone frame. */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="hidden sm:inline-flex h-8 w-8 relative"
+        asChild
+        aria-label="Manage accounts"
+      >
         <Link href="/trader/accounts">
           <Settings className="h-4 w-4" />
           {hasCredentialIssue && (

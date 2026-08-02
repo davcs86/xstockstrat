@@ -1,6 +1,6 @@
 ---
 name: backtest
-description: "Run and analyze strategy backtests on the xstockstrat MCP server — REQUIRES that server to be connected; without it this skill has nothing to call. Use when the user asks to backtest a strategy, sweep a parameter such as cooldown, reconfirm or reproduce the numbers in a strategy report, run a basket of symbols, or validate a strategy in-engine. Handles the three ways the naive path silently fails: the diagnostics payload blowing the tool-output token limit, a multi-symbol run compounding capital sequentially instead of as an independent basket, and a freshly-edited strategy returning zero trades because `manage_strategy update` replaced rather than merged its definition. Usage: `backtest <strategy_id> <symbols...> [--cooldown N] [--oracle FILE]`."
+description: "Run and analyze strategy backtests on the xstockstrat MCP server — REQUIRES that server to be connected; without it this skill has nothing to call. Use when the user asks to backtest a strategy, sweep a parameter such as cooldown, reconfirm or reproduce the numbers in a strategy report, run a basket of symbols, or validate a strategy in-engine. Handles the three ways the naive path silently fails: the diagnostics payload blowing the tool-output token limit, a multi-symbol run compounding capital sequentially instead of as an independent basket, and a freshly-edited strategy returning zero trades after an over-broad `clear_fields` erases its definition (`manage_strategy update` is a partial merge — an omitted field is preserved, and only `clear_fields` blanks one). Usage: `backtest <strategy_id> <symbols...> [--cooldown N] [--oracle FILE]`."
 argument-hint: <strategy_id> <symbols...> [--cooldown N] [--oracle FILE]
 allowed-tools: Read Write Bash(python3 *) Bash(ls *) Task AskUserQuestion
 disable-model-invocation: true
@@ -34,13 +34,16 @@ config** or a **parameter sweep** (e.g. a cooldown sweep). If the ask is "reconf
 "validate in-engine," treat the report's own numbers as the **oracle** (Phase 4).
 
 **Mutation guard (read before touching `manage_strategy`).** On this backend `manage_strategy
-update` is **replace semantics, not a partial merge** — sending only the field you want to change
-(e.g. `cooldown_days`) **wipes the strategy's components and rules**, and every later backtest
-returns 0 trades with null indicators (`NO_TRADE_REASON_ENTRY_NEVER_TRUE`). So: **every update must
-carry the full definition** (components + entry_rule + exit_rule + the parameter). If you mutate a
-strategy for a sweep, record its original definition first and restore it at the end. If the
-strategy is `live_enabled`, disable live for the duration of a parameter sweep and re-enable it at
-the end so it never evaluates at a config you are only testing.
+update` is a **partial merge (feature 070), not a full replace** — only the fields you actually pass
+are changed, and everything you omit (`components`, `entry_rule`, `exit_rule`, `display_name`) is
+preserved server-side. Tuning one parameter is therefore safe:
+`manage_strategy(operation="update", strategy_id="range_mr_v3", cooldown_days=45)` leaves the rest
+untouched. To **erase** a field deliberately, name it in `clear_fields` (e.g.
+`clear_fields=["exit_rule"]`) — an omitted field is preserved, not cleared. The server refuses an
+update that would empty `components` or blank a rule without naming it for erasure
+(`INVALID_ARGUMENT`). If you mutate a strategy for a sweep, still record its original definition and
+restore it at the end. If the strategy is `live_enabled`, disable live for the duration of a
+parameter sweep and re-enable it at the end so it never evaluates at a config you are only testing.
 
 ## Phase 1 — Ensure data coverage (backfill)
 
