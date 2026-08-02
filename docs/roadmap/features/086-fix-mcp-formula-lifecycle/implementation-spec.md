@@ -1,6 +1,6 @@
 # Implementation Spec: fix-mcp-formula-lifecycle
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-08-02
 **Feature**: `docs/roadmap/features/086-fix-mcp-formula-lifecycle/feature.md`
 **Total Steps**: 13
@@ -394,7 +394,7 @@ step numbers match the design's per-service pairing; no action._
 
 ### Step 13 — docs: same-PR MCP surface sync
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` + `xstockstrat-agent` + `plugins/strat-lab`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify (`manage_formula` docstring + new read-tool docstrings)

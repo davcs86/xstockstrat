@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Seventeen tools:
+Nineteen tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -11,7 +11,9 @@ Seventeen tools:
   screen_symbols       — scans a symbol universe via gRPC ScreenSymbols (read-only)
   manage_strategy     — registers/updates/deactivates stored strategies (update = partial merge)
   get_strategy        — reads a stored strategy's full definition (read-only)
-  manage_formula      — registers/updates/deletes custom formulas in indicators
+  manage_formula      — registers/updates(partial merge)/soft-deletes custom formulas in indicators
+  get_formula         — reads one stored formula's full definition incl. `deleted` (read-only)
+  list_formulas       — lists formula definitions, soft-deleted excluded (read-only)
   manage_signal_source — registers/updates/deactivates signal sources in ingest
   set_strategy_live   — enables/disables live alert evaluation for a strategy
   trigger_backfill    — triggers an OHLCV history backfill via gRPC TriggerBackfill (admin-scoped)
