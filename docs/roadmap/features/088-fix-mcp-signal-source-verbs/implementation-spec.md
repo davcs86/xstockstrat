@@ -125,7 +125,7 @@ then same-PR docs. No migration (servicer-side behavior only), no new pool, no c
 
 ### Step 5 — service: analysis producer ALREADY_EXISTS tolerance
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**: `services/xstockstrat-analysis/app/engine/fundsignal_loop.py` — modify
 **Reviewers**: `xstockstrat-analysis` owner — producer robustness
@@ -143,7 +143,7 @@ then same-PR docs. No migration (servicer-side behavior only), no new pool, no c
 
 ### Step 6 — test: analysis producer tolerance
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**: `services/xstockstrat-analysis/tests/test_fundsignal_loop.py` — modify (or the producer's test home)
 **Reviewers**: `xstockstrat-analysis` owner
