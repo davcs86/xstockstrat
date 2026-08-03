@@ -37,3 +37,17 @@
   (tool-doc/skill drift).
 - **Open forks for design:** held-position strategy attribution; watchlist→strategy cardinality across
   multiple watchlists; exact queue ranking-axis composition; deprecation horizon.
+
+## Session 2026-08-03 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready. Verdict: **PASS WITH WARNINGS** (no Floor breach, no blockers).
+- Ran the two review subagents to completion (criteria + overlap).
+- **Warnings (advisory, carried to /sdd-design):**
+  - Open Questions (P-03): 5 unresolved design forks — position attribution, watchlist→strategy cardinality across multiple watchlists, signal ranking-axis composition, deprecation horizon, shared-consumer parity trap. Owned by /sdd-design (matches launched-083 precedent of resolving forks in design).
+  - DB migration NNN numbering + cross-service run order deferred to /sdd-spec (C-07).
+  - Fixed in spec this session: `taken` is already populated from trading `ListOrders`; only `queue_share` is reserved `0.0` (Problem Statement + FR-7 + AC-5 tightened). Cosmetic FR ordering (FR-8/FR-9) and acceptance numbering (`6a`) corrected.
+- **Overlap findings:** no proto field-number / migration-NNN / config-key collision with any live feature.
+  - Next-free slots confirmed: portfolio migration **008**, analysis migration **010**, `portfolio.Watchlist` field **8**, `analysis.Opportunity` field **10**. `ScreenSymbolsRequest.signal_sources=3`/`signal_weight=4` retain numbers under the deprecation path; `StrategyAnalytics.taken=6`/`queue_share=7` already exist (populate only).
+  - 098 (`screener-watchlist-fidelity`, code-completed, UI-only) reworked `WatchlistReadiness.tsx`, `watchlists/page.tsx`, added `readinessRollup.ts` — three **rebase-only** UI-file overlaps, no hard merge-order row required. Design recon MUST re-ground on the post-098 components (spec's "UI-only useState('') join" description is now partly stale). `readinessRollup.ts` is a reuse candidate for FR-2/FR-6/FR-7.
+  - 099 (`watchlist-live-quotes`) is idea/backlog-blocked — historical context only.
+- Rebased branch onto origin/main-dev (02b22f8, includes 098) before review; pushed.

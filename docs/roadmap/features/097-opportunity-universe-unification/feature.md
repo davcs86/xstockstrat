@@ -1,6 +1,6 @@
 # Feature: opportunity-universe-unification
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/opportunity-universe-unification`
 **Created**: 2026-08-03
 **Last Updated**: 2026-08-03
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-03 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-03 | `draft` → `spec-ready` | /sdd-review | Product spec approved — PASS WITH WARNINGS (no blockers); 5 design forks routed to /sdd-design; no blocking overlap (098/099 UI-only, rebase-only) |
 
 ---
 
@@ -49,4 +50,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review opportunity-universe-unification product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design opportunity-universe-unification` — recon + adversarial design debate (resolve the 5 forks)

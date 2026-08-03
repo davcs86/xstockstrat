@@ -11,7 +11,8 @@ positions merely mutate a row's action tag and watchlisted symbols never enter t
 strategy binding and the snooze control are UI-only transient React state — snooze does not survive a
 reload, and its `symbol-source` key disagrees with the backend's per-symbol dedup, so a snooze silently
 stops applying when a different source wins for that symbol. Every queue row ships `strategy_id=""` and
-`passing/total=0/0`, so `GetStrategyAnalytics.taken`/`queue_share` are reserved `0.0` and readiness never
+`passing/total=0/0`, so `GetStrategyAnalytics.queue_share` is reserved `0.0` (its `taken` is already fed
+from the trading `ListOrders` edge, but nothing ties it back to a queue share) and readiness never
 appears on the queue. Separately, signals are double-usable — as a universe selector **and** as an input
 to a signal-weighted strategy's score — so the same signal can be counted twice.
 
@@ -62,17 +63,18 @@ picker is replaced by the persisted per-symbol binding. Shape change is delivere
 path (keep the old field readable), not a hard replace.
 
 FR-7. **Real per-strategy queue analytics.** With strategy attribution and a persisted `TAKEN` action,
-`GetStrategyAnalytics.taken` and `queue_share` stop being reserved `0.0` and reflect actual queue/taken
-data.
+`GetStrategyAnalytics.queue_share` stops being reserved `0.0` and reflects the strategy's real share of
+the queue; `taken` (already populated from trading `ListOrders`) is reconciled against queue-derived
+takes so the two read consistently.
 
-FR-9. **Exit recommendations are first-class and technical.** The queue surfaces exit-side rows
+FR-8. **Exit recommendations are first-class and technical.** The queue surfaces exit-side rows
 (`REDUCE`) for held positions from **two** signal-free sources: (a) the attributed strategy's `exit_rule`
 firing via the readiness kernel (new exit-trace path, FR-2), and (b) a sell-direction signal as an
 independent ranking axis (FR-3). `REDUCE` stays the single non-prescriptive tag — trim vs. full exit is
 the human's choice at the order ticket (unchanged from feature 083). A held symbol whose `exit_rule` is
 firing must appear even when no sell signal exists for it.
 
-FR-8. **All shared consumers updated in-PR.** Every consumer of the changed contracts is updated in the
+FR-9. **All shared consumers updated in-PR.** Every consumer of the changed contracts is updated in the
 same feature: the Opportunities page, the Watchlist editor (per-symbol strategy picker), the Strategy
 wizard (remove signal-weight controls), the exhaustive TS enum render maps (`opportunityShared.tsx`), and
 the agent MCP surface + `strat-lab` skill for `manage_strategy` / any watchlist tool (C-10 parity; see
@@ -161,14 +163,14 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 4. No signal is counted twice: with `signal_weight` retired from strategies, a signal affects a row's
    rank only via the queue's independent axis, and strategy readiness is unchanged by the presence/absence
    of a signal.
-5. `GetStrategyAnalytics.taken`/`queue_share` return non-zero real values for a strategy with taken
-   opportunities.
-6a. A held position whose attributed strategy's `exit_rule` is firing appears as a `REDUCE` row with real
+5. `GetStrategyAnalytics.queue_share` returns a non-zero real value for a strategy with queued
+   opportunities (and `taken` reads consistently with queue-derived takes).
+6. A held position whose attributed strategy's `exit_rule` is firing appears as a `REDUCE` row with real
    readiness, even with no sell signal present for that symbol.
-6. `buf breaking` passes: the Watchlist/opportunity/signal-field changes are deprecations, and every
+7. `buf breaking` passes: the Watchlist/opportunity/signal-field changes are deprecations, and every
    generated-stub consumer (TS exhaustive maps, agent request builders, `strat-lab` skill) builds/passes
    in the same PR.
-7. No new DB pool is introduced; the connection-pool budget table is unchanged (F-06).
+8. No new DB pool is introduced; the connection-pool budget table is unchanged (F-06).
 
 ## Open Questions
 
