@@ -174,21 +174,28 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Open Questions
 
-- [ ] **Position attribution (design fork).** Which strategy is a held position with no watchlist binding
-      attributed to for readiness — the strategy it was entered under (if recoverable from
-      trading/ledger), the user's `live_enabled` strategies, or shown unattributed until the user picks
-      one? Affects FR-1/FR-2 and the `queue_share` denominator.
-- [ ] **Watchlist→strategy cardinality.** One strategy per symbol (committed) — but may a symbol appear
-      under two watchlists with different strategies, and if so does the Universe emit two candidates or
-      merge them? Affects the FR-4 dedup key.
-- [ ] **Signal ranking axis composition.** With Option 2, how exactly does the queue compose the signal
-      axis with technical readiness for ranking (weighted sum, lexicographic, separate sort toggles)? Owns
-      the former `signal_weight` behavior.
-- [ ] **Deprecation horizon.** Do we keep the old bare-`symbols` Watchlist field and signal-blend fields
-      readable for one release only, or indefinitely? Coordinate with any in-flight watchlist/screener
-      features.
-- [ ] **Known trap — shared consumer parity (fails.md 2026-07-01 056/060, 2026-07-21 C-10(a/d), 2026-08-02
-      MCP/strat-lab F-12).** This feature changes producer contracts consumed in many places (TS exhaustive
-      enum maps, agent request builders, the `strat-lab` skill, a second position read path). Every shared
-      consumer must be updated and reachability/parity-tested in the **same** PR — this is the exact
-      "shipped the producer, forgot the consumer" shape that recurred three times.
+_All five forks were resolved in the design phase (5-round debate) — see `design.md` § Chosen Approach /
+§ Rejected Alternatives / § Open Risks. Any residual implementation detail is tracked as a design Open
+Risk (OR-A…OR-H) targeted at `/sdd-spec`, not left open here._
+
+- [x] **Position attribution.** RESOLVED — **watchlist-binding-first, else unattributed** (`strategy_id=""`,
+      no exit trace, `0/0`). Portfolio stores no position→strategy attribution (verified: `positions` has
+      no `strategy_id`; strategies are global), so "entered-under" would fabricate one (F-04). Unattributed
+      rows are excluded from the `queue_share` denominator. (`design.md` § Chosen Approach.)
+- [x] **Watchlist→strategy cardinality.** RESOLVED — one strategy per `(watchlist, symbol)`; the same
+      symbol under two watchlists with different strategies emits **two** candidates (distinct
+      `opportunity_key`s), no merge. (`design.md` § Chosen Approach.)
+- [x] **Signal ranking axis composition.** RESOLVED at the mechanism level — signals compose as an
+      **independent ranking axis** via a new scalar `analysis.opportunity.signal_rank_weight` (existing
+      `analysis.signals.source_weights` stays the screener's). The exact ORDER BY formula is design **OR-G**
+      for `/sdd-spec`.
+- [x] **Deprecation horizon.** RESOLVED / re-scoped — the only deprecated field is `portfolio.Watchlist.
+      symbols=5` (kept readable, deprecate-don't-delete). The signal-blend retirement does **not** touch
+      any `StrategyDefinition`/`ScreenSymbolsRequest` proto field (it retires the `RunBacktest.strategy_params`
+      *read*), so there is no signal-field deprecation horizon to coordinate. (`design.md` § Chosen Approach /
+      § Rejected Alternatives.)
+- [x] **Known trap — shared consumer parity (fails.md 056/060, C-10(a/d), MCP/strat-lab).** RESOLVED into
+      explicit same-PR steps: UI enum maps (`opportunityShared.tsx`), agent builders + `covers_every_proto_
+      field` parity tests, `strat-lab` skill + `mcp-tools.md`, `watchlistMock.ts`/098 e2e, and a new
+      persisted-row→`Opportunity` parity test (design **OR-F**). (`design.md` § Constitution Rules Touched
+      → C-10.)
