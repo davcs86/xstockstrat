@@ -106,3 +106,13 @@
     StrategyWizard `handleSubmit` wholesale `signalParams` rewrite (`:144–149`) → merge preserving
     `signal_params.symbols`. Agent: no watchlist tool exists → agent step is parity tests
     (`test_backtest_view.py:157` template) + strat-lab/mcp-tools doc reconciliation (F-12, same PR).
+
+## Session 2026-08-03 — sdd-review impl-spec (advisory)
+
+- Result: **0 failures, 4 warnings, 2 notes** (advisory — did not block). Overlap: CLEAN. No Floor breach. Every sampled path:line/field-number/migration-next-free resolved exactly; all 5 non-frontend service steps test-paired (C-08), migrations up+down correct (C-07), proto deprecation-only + buf breaking (C-09), red-before-green throughout (P-06), StrategyDefinition.signal_params left untouched (ANALYSIS-3).
+- Unresolved ⚠ / ℹ carried into execution:
+  - Step 5: `-coverpkg` excludes `service/`/`repository/` — the exact packages Step 4 edits; ≥40% is carried by other packages (mirrors real CI scoping, C-08 met in the letter only). [ ] unaddressed — reviewer's eye during execute.
+  - Steps 17 & 18: 6 files each (>5) — consider a thinner slice (fixture/mock/inventory edits). [ ] unaddressed.
+  - Step 12 cites `(F-04)` for "no portfolio strategy attribution" and Step 16 cites `(F-12)` for the strat-lab same-PR rule — both are mis-tags (F-04 = "never invent path/symbol"; no F-12 exists — Floor ends at F-11; the rule is a root CLAUDE.md rule). Obligations ARE discharged; label hygiene only. [ ] unaddressed — retag/drop.
+  - Step 1: `buf breaking` verification runs `--against .git#branch=feature/...` while the Reviewer note says "vs dev trunk"; equivalent at fork point, reconcile wording. [ ] unaddressed.
+- Overlap findings: no collision. Forward note (not a 097 blocker): feature 095 (draft) plans to append to `analysis.Opportunity`; once 097's fields 10/11 land, 095 must number 12+ — add a `095 → 097` merge-order row when 095 advances to /sdd-spec (052/053 precedent).
