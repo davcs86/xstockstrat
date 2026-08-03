@@ -73,6 +73,19 @@ class ConfigWatcher:
             return default
         return v.int_val or default
 
+    def get_int_present(self, key: str, default: int) -> int:
+        """Presence-aware int read (feature 097): returns the stored ``int_val`` whenever the
+        field is set — **including a legitimate 0** — else the default. Mirrors ``get_bool``'s
+        ``HasField`` pattern; use this (never ``get_int``) for keys where 0 is a meaningful
+        value, e.g. ``analysis.opportunity.refresh_hour_utc`` (0 = midnight UTC) which the
+        ``get_int`` zero-trap would otherwise swallow into the default."""
+        if self._snapshot is None:
+            return default
+        v = self._snapshot.values.get(key)
+        if v is None:
+            return default
+        return v.int_val if v.HasField("int_val") else default
+
     def get_bool(self, key: str, default: bool = False) -> bool:
         if self._snapshot is None:
             return default

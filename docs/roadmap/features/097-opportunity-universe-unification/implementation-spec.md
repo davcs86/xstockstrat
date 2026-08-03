@@ -419,7 +419,7 @@ cd services/xstockstrat-analysis && pytest tests/test_analysis_servicer.py --cov
 
 ### Step 12 — service: analysis materialized opportunities — Universe compute, pure-read ListOpportunities, real queue_share
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/opportunities.py` — create
@@ -471,7 +471,7 @@ grep -n "propagation_meta" services/xstockstrat-analysis/app/handlers/servicer.p
 
 ### Step 13 — test: analysis materialized ListOpportunities + queue_share + persisted-row parity (OR-F)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -692,6 +692,36 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm test:e2e -- strateg
 
 ## Deviation Log
 
+- **Steps 12–13 — committed together (one red-green cycle); `main.py` change is only the daily
+  loop.** Step 12's `OpportunitiesRepository` is constructed in `AnalysisServicer.__init__` from the
+  injected `db_pool` (like every other repo — Step 10's deviation), so the only `main.py` edit was
+  wiring the `run_opportunity_refresh_forever()` daily task under the existing `if db_pool` block.
+  Step 12 (compute + pure read + queue_share) and Step 13 (its tests) are one behavioral change and
+  were committed as a single cycle. **Disposition**: no scope change.
+- **Steps 12–13 — replaced the retired feature-083 signal-only `TestListOpportunities`.** The pre-097
+  `ListOpportunities` built a signal-only queue with `0/0`/`strategy_id=""`; its four tests asserted
+  exactly that and are now obsolete. They were replaced by `TestListOpportunitiesMaterialized` (AC-1/2/4/6,
+  ranking, cold-vs-stale, C-03 ListWatchlists propagation), `TestOpportunityRowParity` (OR-F descriptor
+  parity + teeth), and queue_share/taken tests on `TestGetStrategyAnalytics`. **RED verified** by
+  neutering `_row_to_opportunity`'s readiness to `0/0` (the retired stub): AC-1/AC-6/parity-populate
+  went red; restoring → green. **Disposition**: intended replacement of retired behavior.
+- **Steps 12–13 — single-file coverage command → CI-equivalent full-suite run** (same substitution as
+  Steps 9/11). Ran `pytest --cov=app --cov-fail-under=40` over all of `tests/`: **419 passed, 81.29%**
+  ≥ 40%. The `opportunities.py` repo's raw-SQL methods show low line-coverage (29%) because unit tests
+  use an in-memory `_FakeOppRepo` (no DB in the suite, same as `strategies.py`); the producer path is
+  covered end-to-end through the real `_compute_opportunities`. **Disposition**: CI-equivalent fallback.
+- **Step 12 — action model for non-signal candidates (P-03 documented, not a silent guess).** The
+  `OpportunityActionTag` enum has no HOLD/MONITOR tag. `_resolve_action_tag` therefore maps a *curated*
+  (watchlist/held) candidate with no actionable signal and no firing exit to `ENTER` (not held) or `ADD`
+  (held, a monitored holding); a *speculative* signal-only candidate with no actionable signal (e.g. a
+  sell with no position) returns `None` and is dropped — preserving the pre-097 "no row" behavior.
+  Held+attributed exit-firing → `REDUCE` (FR-8) takes priority. **Disposition**: documented action
+  policy within the existing enum; recorded here and in the analysis CLAUDE.md.
+- **Step 12 — one session date per compute for `valid_until` (OR-D).** `valid_until` is the newest bar
+  fetched across the whole compute + `valid_window_hours` (fallback `now` when no bars are fetched, e.g.
+  an all-unattributed Universe). A genuinely stale newest bar (halted symbol) yields an immediately-expired
+  row that recomputes on the next read — the accepted OR-B/OR-D residual. **Disposition**: matches the
+  design's "compute's session date + window"; residual documented.
 - **Step 10 — `app/main.py` needs no change (repo built in the servicer).** The step listed
   `app/main.py`, but repos are constructed inside `AnalysisServicer.__init__` from the injected
   `db_pool` (`self._opportunity_actions_repo = OpportunityActionsRepository(db_pool) if db_pool else

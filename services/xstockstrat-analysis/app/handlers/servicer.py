@@ -37,6 +37,7 @@ from app.config.watcher import ConfigWatcher
 from app.repositories.backtest_details import BacktestDetailsRepository
 from app.repositories.backtest_run_symbols import BacktestRunSymbolsRepository
 from app.repositories.backtest_runs import BacktestRunsRepository
+from app.repositories.opportunities import OpportunitiesRepository
 from app.repositories.opportunity_actions import OpportunityActionsRepository
 from app.repositories.strategies import StrategiesRepository
 from app.repositories.strategy_scores import StrategyScoresRepository
@@ -45,6 +46,7 @@ from app.services.cooldown import effective_cooldown_days, is_cooldown_active
 from app.services.evaluator import (
     FormulaExecutionError,
     StrategyEvaluator,
+    _empty_readiness,
     _validate_definition,
     align_indicator_points,
     referenced_refs,
@@ -165,6 +167,16 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # Persisted per-user opportunity dispositions (feature 097). Reuses db_pool (F-06);
         # None in the no-DB test path. Read back by ListOpportunities (Step 12).
         self._opportunity_actions_repo = OpportunityActionsRepository(db_pool) if db_pool else None
+        # Materialized per-user opportunity queue (feature 097). ListOpportunities is a pure read
+        # of this table; lazy compute-on-read + stale-while-revalidate + a daily refresh keep it
+        # fresh. Reuses db_pool (F-06); None in the no-DB test path.
+        self._opportunities_repo = OpportunitiesRepository(db_pool) if db_pool else None
+        # Per-user compute serialization (OR-A): a lazy asyncio.Lock so two tabs' cold reads
+        # don't double-compute; a set marks users with a background recompute already in flight
+        # (stale-while-revalidate) so a burst of stale reads kicks exactly one recompute.
+        # Single-process protection only (documented, like _recompute_locks).
+        self._opportunity_locks: dict[str, asyncio.Lock] = {}
+        self._opportunity_recomputing: set[str] = set()
         # Per-strategy recompute serialization (feature 065). asyncio.Lock is non-reentrant, so
         # a trigger already holding the lock calls only _recompute_headline_locked. Single-process
         # protection only (documented). Keyed by strategy_id, created lazily.
@@ -2008,55 +2020,45 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         return analysis_pb2.EvaluateReadinessResponse(readiness=readiness)
 
     async def ListOpportunities(self, request, context):
-        """Ranked opportunity queue for the Decide surface (feature 083). Aggregates the three
-        inputs analysis already terminates — active ingest signals, held portfolio positions,
-        and (per the design) the conviction it owns — with ZERO new edges. Ranking/dedup is
-        compute-on-read (no ranking table, no migration).
+        """Pure read of the materialized per-user opportunity queue (feature 097). The Universe
+        (active signals ∪ held positions ∪ watchlist ``(symbol, strategy)`` bindings) is computed
+        and persisted to ``analysis.opportunities`` by ``_compute_opportunities``; this RPC just
+        reads it back, LEFT JOIN ``opportunity_actions`` to drop DISMISS + active SNOOZE, ranked
+        by ``(1-w)·conviction + w·signal_axis`` (the independent signal axis — Option 2/OR-G).
 
-        Action tag is derived from real data only: ``direction × held`` —
-        ``buy & !held → ENTER``, ``buy & held → ADD``, ``sell & held → REDUCE``. TRIM/EXIT are
-        collapsed into the single non-prescriptive ``REDUCE`` (the human chooses at the ticket).
-
-        Conviction is the signal source's own real confidence (``ExternalSignal.conviction``) —
-        a defined, deterministic value, never a fabricated %. Per-condition readiness
-        (passing/total leaves) is surfaced separately via ``EvaluateReadiness`` on the
-        Signal-detail / Watchlist surfaces rather than synthesized onto every queue row, since
-        an external signal carries no strategy binding to evaluate here (design.md § 1)."""
+        Freshness (lazy compute-on-read + stale-while-revalidate — OR-A/OR-B):
+        - **Cold** (never materialized): compute **synchronously** under a per-user lock, then read.
+        - **Stale** (rows exist but all expired): serve the stale rows immediately and kick a
+          background recompute; the UI shows ``computed_at`` as "as of".
+        - **Fresh**: read and serve.
+        """
         propagation_meta = [
             (k, v)
             for k, v in context.invocation_metadata()
             if k in ("x-user-id", "x-access-scope", "x-trace-id")
         ]
-        metadata = dict(context.invocation_metadata())
-        user_id = metadata.get("x-user-id", "")
+        user_id = dict(context.invocation_metadata()).get("x-user-id", "")
 
-        signals = await self._drain_active_signals(propagation_meta)
-        held = await self._drain_held_symbols(user_id, propagation_meta)
+        if self._opportunities_repo is None:  # no-DB test path
+            return analysis_pb2.ListOpportunitiesResponse(page=common_pb2.PageResponse())
 
-        # Build one opportunity per actionable signal; keep the highest-conviction row per symbol.
-        best: dict[str, analysis_pb2.Opportunity] = {}
-        for sig in signals:
-            action = _action_for(sig.direction, sig.symbol in held)
-            if action is None:  # hold / watchlist / sell-not-held → not actionable
-                continue
-            opp = analysis_pb2.Opportunity(
-                symbol=sig.symbol,
-                action=action,
-                conviction=sig.conviction,
-                passing_conditions=0,
-                total_conditions=0,
-                thesis=sig.headline,
-                strategy_id="",
-                source=sig.source,
-                valid_until=sig.valid_until,
-            )
-            prev = best.get(sig.symbol)
-            if prev is None or opp.conviction > prev.conviction:
-                best[sig.symbol] = opp
-
-        ranked = sorted(best.values(), key=lambda o: o.conviction, reverse=True)
-        if request.min_conviction > 0:
-            ranked = [o for o in ranked if o.conviction >= request.min_conviction]
+        w = self._cfg.get_float("analysis.opportunity.signal_rank_weight", 0.3)
+        rows = await self._opportunities_repo.read(
+            user_id, request.min_conviction, w, include_expired=False
+        )
+        if not rows:
+            if await self._opportunities_repo.count_for_user(user_id) == 0:
+                # Cold read: bounded synchronous compute, then serve.
+                await self._materialize_opportunities(user_id, propagation_meta)
+                rows = await self._opportunities_repo.read(
+                    user_id, request.min_conviction, w, include_expired=False
+                )
+            else:
+                # All rows stale: serve stale now, revalidate in the background.
+                self._kick_opportunity_recompute(user_id, propagation_meta)
+                rows = await self._opportunities_repo.read(
+                    user_id, request.min_conviction, w, include_expired=True
+                )
 
         # Simple offset pagination (page_token = integer offset).
         page_size = request.page.page_size if request.page.page_size > 0 else _DEFAULT_OPP_PAGE_SIZE
@@ -2064,12 +2066,288 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             offset = int(request.page.page_token) if request.page.page_token else 0
         except ValueError:
             offset = 0
-        window = ranked[offset : offset + page_size]
-        next_token = str(offset + page_size) if offset + page_size < len(ranked) else ""
+        window = rows[offset : offset + page_size]
+        next_token = str(offset + page_size) if offset + page_size < len(rows) else ""
         return analysis_pb2.ListOpportunitiesResponse(
-            opportunities=window,
+            opportunities=[_row_to_opportunity(r) for r in window],
             page=common_pb2.PageResponse(next_page_token=next_token),
         )
+
+    # ── Materialized-queue compute (feature 097) ────────────────────────────────
+
+    def _opportunity_lock(self, user_id: str) -> "asyncio.Lock":
+        """Lazily-created per-user compute lock (OR-A). asyncio.Lock is non-reentrant."""
+        lock = self._opportunity_locks.get(user_id)
+        if lock is None:
+            lock = asyncio.Lock()
+            self._opportunity_locks[user_id] = lock
+        return lock
+
+    async def _materialize_opportunities(self, user_id: str, propagation_meta) -> None:
+        """Compute the user's Universe and replace their materialized rows, serialized per user.
+        Double-checks under the lock so a second waiter behind a cold read doesn't recompute."""
+        async with self._opportunity_lock(user_id):
+            if await self._opportunities_repo.count_for_user(user_id) > 0:
+                return  # another cold reader populated it while we waited
+            rows = await self._compute_opportunities(user_id, propagation_meta)
+            await self._opportunities_repo.replace_for_user(user_id, rows)
+
+    def _kick_opportunity_recompute(self, user_id: str, propagation_meta) -> None:
+        """Fire-and-forget background recompute (stale-while-revalidate). Guarded so a burst of
+        stale reads kicks exactly one recompute per user at a time."""
+        if user_id in self._opportunity_recomputing:
+            return
+        self._opportunity_recomputing.add(user_id)
+
+        async def _run():
+            try:
+                async with self._opportunity_lock(user_id):
+                    rows = await self._compute_opportunities(user_id, propagation_meta)
+                    await self._opportunities_repo.replace_for_user(user_id, rows)
+            except Exception as e:  # a recompute failure never takes down the loop/read
+                log.warning("opportunity recompute failed for user=%s: %s", user_id, e)
+            finally:
+                self._opportunity_recomputing.discard(user_id)
+
+        asyncio.get_event_loop().create_task(_run())
+
+    async def _compute_opportunities(self, user_id: str, propagation_meta) -> list[dict]:
+        """Build the user's opportunity Universe and return persistable row dicts (feature 097).
+
+        Universe = active signals (QuerySignals) ∪ held positions (ListPositions) ∪ watchlist
+        ``(symbol, strategy)`` bindings (ListWatchlists) — all over already-wired edges; the new
+        ``ListWatchlists`` call is a new method on the existing portfolio channel, not a new edge.
+
+        Attribution: a watchlist binding → its ``strategy_id`` (traced); everything else is
+        **unattributed** (``strategy_id=""``, no trace, 0/0) — held positions carry no portfolio
+        strategy, so none is fabricated (P-03). Readiness uses the entry-rule trace for entry
+        candidates and the **exit-rule trace** for held+attributed candidates (FR-8). The signal
+        contributes to a candidate exactly once, on the separate ``signal_axis`` — never folded
+        into readiness (FR-3/AC-4). Multiple origins for one ``(symbol, strategy)`` collapse into
+        a single row whose ``provenance`` lists them all (FR-4/AC-2).
+        """
+        signals = await self._drain_active_signals(propagation_meta)
+        held = await self._drain_held_symbols(user_id, propagation_meta)
+        bindings = await self._drain_watchlist_bindings(propagation_meta)
+
+        # Index the origins by normalized symbol.
+        watchlist_by_symbol: dict[str, set[str]] = {}
+        for sym, strat in bindings:
+            watchlist_by_symbol.setdefault(_normalize_symbol(sym), set()).add(strat)
+        signals_by_symbol: dict[str, list] = {}
+        for sig in signals:
+            signals_by_symbol.setdefault(_normalize_symbol(sig.symbol), []).append(sig)
+        held_norm = {_normalize_symbol(s) for s in held}
+
+        candidates: dict[tuple[str, str], dict] = {}
+
+        def _candidate(sym: str, strat: str) -> dict:
+            key = (sym, strat)
+            c = candidates.get(key)
+            if c is None:
+                c = {
+                    "symbol": sym,
+                    "strategy_id": strat,
+                    "provenance": [],  # ordered, de-duplicated
+                    "signal_axis": 0.0,
+                    "thesis": "",
+                    "is_watchlist": False,
+                    "is_held": False,
+                    "best_direction": "",
+                    "_best_sig_conv": -1.0,
+                }
+                candidates[key] = c
+            return c
+
+        def _add_provenance(c: dict, origin: str) -> None:
+            if origin and origin not in c["provenance"]:
+                c["provenance"].append(origin)
+
+        # 1. Watchlist bindings — each (symbol, strategy) is a ready-made candidate.
+        for sym, strats in watchlist_by_symbol.items():
+            for strat in strats:
+                c = _candidate(sym, strat)
+                c["is_watchlist"] = True
+                _add_provenance(c, "watchlist")
+
+        # 2. Held positions — attribute to each watchlist strategy for the symbol if any,
+        #    else an unattributed (symbol, "") candidate (no fabricated strategy).
+        for sym in held_norm:
+            strats = watchlist_by_symbol.get(sym)
+            targets = list(strats) if strats else [""]
+            for strat in targets:
+                c = _candidate(sym, strat)
+                c["is_held"] = True
+                _add_provenance(c, "position")
+
+        # 3. Signals — merge into every existing candidate for the symbol (collapse); if none
+        #    exists, stand alone as an unattributed (symbol, "") candidate.
+        for sym, sigs in signals_by_symbol.items():
+            targets = [k for k in candidates if k[0] == sym]
+            if not targets:
+                _candidate(sym, "")
+                targets = [(sym, "")]
+            for key in targets:
+                c = candidates[key]
+                for sig in sigs:
+                    _add_provenance(c, sig.source)
+                    c["signal_axis"] = max(c["signal_axis"], sig.conviction)
+                    if sig.conviction > c["_best_sig_conv"]:
+                        c["_best_sig_conv"] = sig.conviction
+                        c["best_direction"] = sig.direction
+                        if not c["thesis"]:
+                            c["thesis"] = sig.headline
+
+        # FR-1: rank watchlist/held (curated) ABOVE the max_universe_size cut so a curated
+        # candidate is never truncated; drop only the speculative signal-only tail.
+        max_universe = self._cfg.get_int("analysis.opportunity.max_universe_size", 100)
+        curated = [c for c in candidates.values() if c["is_watchlist"] or c["is_held"]]
+        speculative = [c for c in candidates.values() if not (c["is_watchlist"] or c["is_held"])]
+        speculative.sort(key=lambda c: c["signal_axis"], reverse=True)
+        budget = max(0, max_universe - len(curated))
+        selected = curated + speculative[:budget]
+
+        # Readiness + row assembly. Attributed candidates fetch bars once each and trace; the
+        # session date (for valid_until) is the newest bar seen across the whole compute.
+        evaluator = StrategyEvaluator(self._indicators, propagation_meta)
+        range_msg = _recent_range(_READINESS_LOOKBACK_DAYS)
+        strategy_defs: dict[str, object] = {}  # strategy_id → StrategyDefinition | None (cache)
+        session_end_seconds = 0
+        window_hours = self._cfg.get_int("analysis.opportunity.valid_window_hours", 24)
+
+        rows: list[dict] = []
+        for c in selected:
+            sym = c["symbol"]
+            strat = c["strategy_id"]
+            readiness = _empty_readiness(sym)
+            exit_fires = False
+
+            if strat:
+                definition = await self._load_strategy_definition(strat, strategy_defs)
+                if definition is not None:
+                    try:
+                        bars = await self._fetch_bars_paged(sym, range_msg, propagation_meta)
+                    except Exception as e:  # bar fetch is best-effort per symbol
+                        log.warning("_compute_opportunities: bars fetch failed for %s: %s", sym, e)
+                        bars = []
+                    if bars:
+                        newest = bars[-1].time.seconds
+                        session_end_seconds = max(session_end_seconds, newest)
+                    # Held + attributed → exit-rule trace (FR-8); else entry-rule trace.
+                    rule = "exit" if c["is_held"] else "entry"
+                    readiness = await evaluator.evaluate_conditions_traced(
+                        definition, bars, sym, rule=rule
+                    )
+                    if c["is_held"]:
+                        total = readiness["total_conditions"]
+                        exit_fires = total > 0 and readiness["passing_conditions"] == total
+
+            action = _resolve_action_tag(c, exit_fires)
+            if action is None:  # speculative sell-with-no-position → not actionable, drop
+                continue
+
+            rows.append(
+                {
+                    "opportunity_key": _opportunity_key(user_id, sym, strat),
+                    "symbol": sym,
+                    "strategy_id": strat,
+                    "action": int(action),
+                    "conviction": readiness["conviction"],
+                    "readiness_json": readiness,
+                    "signal_axis": c["signal_axis"],
+                    "provenance": c["provenance"],
+                    "thesis": c["thesis"],
+                }
+            )
+
+        # OR-D: one session date for the whole compute → uniform valid_until. Fall back to now
+        # when no bars were fetched (e.g. an all-unattributed Universe). The holiday/crypto
+        # mixed-calendar residual is accepted (revalidated on next read + the daily pass).
+        if session_end_seconds > 0:
+            session_end = datetime.fromtimestamp(session_end_seconds, tz=UTC)
+        else:
+            session_end = datetime.now(UTC)
+        valid_until = session_end + timedelta(hours=window_hours)
+        for r in rows:
+            r["valid_until"] = valid_until
+        return rows
+
+    async def _load_strategy_definition(self, strategy_id: str, cache: dict):
+        """Load + cache a StrategyDefinition for the compute (one DB read per distinct strategy).
+        Returns None (cached) when the strategy is missing — a dangling binding stays a candidate
+        but traces to 0/0 rather than fabricating readiness."""
+        if strategy_id in cache:
+            return cache[strategy_id]
+        definition = None
+        if self._strategies_repo is not None:
+            row = await self._strategies_repo.get_by_id(strategy_id)
+            if row is not None:
+                definition = _row_to_strategy_definition(row)
+        cache[strategy_id] = definition
+        return definition
+
+    async def _drain_watchlist_bindings(self, propagation_meta) -> list[tuple[str, str]]:
+        """Drain the user's watchlist ``(symbol, strategy_id)`` bindings across all watchlists
+        (paginated). Ownership is taken from the propagated ``x-user-id`` header server-side
+        (never from the wire). Best-effort: a portfolio failure yields no bindings.
+
+        Reads ``Watchlist.bindings`` (feature 097) and falls back to the deprecated flat
+        ``symbols`` mirror (unbound → ``strategy_id=""``) for old rows (FR-6)."""
+        if self._portfolio is None:
+            return []
+        out: list[tuple[str, str]] = []
+        page_token = ""
+        for _ in range(_MAX_DRAIN_PAGES):
+            try:
+                resp = await self._portfolio.ListWatchlists(
+                    portfolio_pb2.ListWatchlistsRequest(
+                        page=common_pb2.PageRequest(
+                            page_size=_BAR_PAGE_SIZE, page_token=page_token
+                        ),
+                    ),
+                    metadata=propagation_meta,
+                )
+            except grpc.RpcError as e:
+                log.warning("_compute_opportunities: ListWatchlists failed: %s", e)
+                return out
+            for wl in resp.watchlists:
+                if wl.bindings:
+                    out.extend((b.symbol, b.strategy_id) for b in wl.bindings)
+                else:  # legacy row: flat deprecated symbols mirror, unbound
+                    out.extend((s, "") for s in wl.symbols)
+            page_token = resp.page.next_page_token
+            if not page_token:
+                break
+        return out
+
+    async def run_opportunity_refresh_forever(self):
+        """Configured **daily** refresh pass (feature 097, OR-C) — a wall-clock refresh at
+        ``analysis.opportunity.refresh_hour_utc``, NOT market close (holiday/DST/early-close
+        drift is expected). Recomputes the OR-E known-user set (``opportunities`` ∪
+        ``opportunity_actions``); a watchlist-only user who never reads is never materialized here
+        (accepted — the live loop owns alerting). Call as a ``create_task`` on this coroutine.
+        """
+        if self._opportunities_repo is None:
+            return
+        while True:
+            hour = self._cfg.get_int_present("analysis.opportunity.refresh_hour_utc", 0)
+            await asyncio.sleep(_seconds_until_hour_utc(hour))
+            try:
+                user_ids = await self._opportunities_repo.distinct_user_ids()
+            except Exception as e:
+                log.warning("opportunity daily refresh: user enumeration failed: %s", e)
+                continue
+            for uid in user_ids:
+                # Background path: synthesize the propagation header from the user id so the
+                # per-user portfolio/ingest reads resolve ownership (C-03).
+                meta = [("x-user-id", uid)]
+                try:
+                    async with self._opportunity_lock(uid):
+                        rows = await self._compute_opportunities(uid, meta)
+                        await self._opportunities_repo.replace_for_user(uid, rows)
+                except Exception as e:  # one bad user never kills the pass
+                    log.warning("opportunity daily refresh failed for user=%s: %s", uid, e)
+                await asyncio.sleep(0)  # cooperative pacing point
 
     async def SetOpportunityAction(self, request, context):
         """Persist a per-user disposition (snooze/dismiss/take) for a queued opportunity
@@ -2165,14 +2443,16 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         expectancy / hit-rate / max-DD derive from persisted analysis.backtest_runs (win_rate +
         profit_factor — no per-trade column, no new migration); signals_30d from ingest
-        QuerySignals (30-day window); taken from the new analysis→trading ListOrders edge.
-        queue_share is reserved (0.0) — the current queue is signal-sourced and carries no
-        strategy attribution to divide by. C-03 headers propagate on every outbound call."""
+        QuerySignals (30-day window); taken from the analysis→trading ListOrders edge, reconciled
+        against queue-derived TAKE dispositions (FR-7). queue_share is now real (feature 097) —
+        the strategy's share of the user's valid materialized queue. C-03 headers propagate on
+        every outbound call."""
         propagation_meta = [
             (k, v)
             for k, v in context.invocation_metadata()
             if k in ("x-user-id", "x-access-scope", "x-trace-id")
         ]
+        user_id = dict(context.invocation_metadata()).get("x-user-id", "")
         strategy_id = request.strategy_id
 
         expectancy = 0.0
@@ -2212,6 +2492,17 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             except grpc.RpcError as e:
                 log.warning("GetStrategyAnalytics: ListOrders failed: %s", e)
 
+        # Real queue_share + taken reconciliation over the materialized queue (feature 097, FR-7).
+        queue_share = 0.0
+        if self._opportunities_repo is not None:
+            try:
+                queue_share = await self._opportunities_repo.queue_share(user_id, strategy_id)
+                # Reconcile the two "taken" sources so they read consistently: a TAKE recorded on
+                # the queue but not yet reflected as a filled order still counts.
+                taken = max(taken, await self._opportunities_repo.taken_count(user_id, strategy_id))
+            except Exception as e:  # analytics is read-only best-effort
+                log.warning("GetStrategyAnalytics: queue_share/taken reconcile failed: %s", e)
+
         return analysis_pb2.StrategyAnalytics(
             strategy_id=strategy_id,
             expectancy=expectancy,
@@ -2219,7 +2510,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             max_drawdown=max_drawdown,
             signals_30d=signals_30d,
             taken=taken,
-            queue_share=0.0,
+            queue_share=queue_share,
         )
 
 
@@ -2275,6 +2566,91 @@ def _action_for(direction: str, held: bool):
     if d == "sell" and held:
         return analysis_pb2.OPPORTUNITY_ACTION_TAG_REDUCE
     return None
+
+
+def _normalize_symbol(symbol: str) -> str:
+    """Single canonicalizer (feature 097) feeding every Universe drain and the opportunity_key —
+    uppercase + trim so `` aapl`` / ``AAPL`` collapse to one candidate/key."""
+    return (symbol or "").strip().upper()
+
+
+def _opportunity_key(user_id: str, symbol: str, strategy_id: str) -> str:
+    """Server-authoritative opaque key ``user|symbol_norm|strategy_id`` (feature 097). The action
+    is a stored annotation, NOT part of the key, so a snooze survives an ENTER→ADD flip. The
+    client echoes this verbatim to SetOpportunityAction and never derives it."""
+    return f"{user_id}|{_normalize_symbol(symbol)}|{strategy_id}"
+
+
+def _resolve_action_tag(candidate: dict, exit_fires: bool):
+    """Derive an OpportunityActionTag for a materialized candidate (feature 097), real data only.
+
+    Priority: (1) a held+attributed position whose exit_rule fires → REDUCE (FR-8a, signal-free);
+    (2) a signal's ``direction × held`` via ``_action_for`` (feature-083 semantics, FR-8b);
+    (3) a curated candidate with no actionable signal → ADD if held (a monitored holding), else
+    ENTER (a curated entry candidate). A *speculative* signal-only candidate with no actionable
+    signal (e.g. a sell with no position) returns None → the caller drops it (matches the
+    pre-097 behavior where such a signal produced no row)."""
+    held = candidate["is_held"]
+    if held and exit_fires:
+        return analysis_pb2.OPPORTUNITY_ACTION_TAG_REDUCE
+    if candidate["best_direction"]:
+        a = _action_for(candidate["best_direction"], held)
+        if a is not None:
+            return a
+    if candidate["is_watchlist"] or candidate["is_held"]:
+        return (
+            analysis_pb2.OPPORTUNITY_ACTION_TAG_ADD
+            if held
+            else analysis_pb2.OPPORTUNITY_ACTION_TAG_ENTER
+        )
+    return None
+
+
+def _primary_source(provenance: list[str]) -> str:
+    """The single ``Opportunity.source`` string (kept for back-compat) = the first signal-source
+    origin in ``provenance``, skipping the ``"watchlist"``/``"position"`` structural markers.
+    ``provenance`` carries the full origin list."""
+    for origin in provenance:
+        if origin not in ("watchlist", "position"):
+            return origin
+    return ""
+
+
+def _row_to_opportunity(row: dict) -> "analysis_pb2.Opportunity":
+    """Map a materialized ``analysis.opportunities`` row (LEFT JOIN read) to an ``Opportunity``
+    proto (feature 097). This is the producer↔reader↔UI contract point the OR-F descriptor-parity
+    test pins — every ``Opportunity`` field is populated here, so a newly-added proto field fails
+    the parity test until it is carried."""
+    readiness = row.get("readiness_json") or {}
+    provenance = list(row.get("provenance") or [])
+    opp = analysis_pb2.Opportunity(
+        symbol=row["symbol"],
+        action=int(row["action"]),
+        conviction=float(row.get("conviction") or 0.0),
+        passing_conditions=int(readiness.get("passing_conditions", 0)),
+        total_conditions=int(readiness.get("total_conditions", 0)),
+        thesis=row.get("thesis", ""),
+        strategy_id=row.get("strategy_id", ""),
+        source=_primary_source(provenance),
+        opportunity_key=row["opportunity_key"],
+        provenance=provenance,
+    )
+    valid_until = row.get("valid_until")
+    if valid_until is not None:
+        opp.valid_until.FromDatetime(valid_until)
+    return opp
+
+
+def _seconds_until_hour_utc(hour: int) -> float:
+    """Seconds from now until the next occurrence of ``hour``:00 UTC (feature 097 daily refresh).
+    Always returns a positive delay (a full day when we're already at/past the hour today), so the
+    refresh fires once per calendar day."""
+    hour = hour % 24
+    now = datetime.now(UTC)
+    target = now.replace(hour=hour, minute=0, second=0, microsecond=0)
+    if target <= now:
+        target = target + timedelta(days=1)
+    return (target - now).total_seconds()
 
 
 def _expectancy_from_metrics(win_rate: float, profit_factor: float) -> float:

@@ -196,3 +196,47 @@
 **Toolchain persisted for resume**: buf 1.69.0 + Go plugins in `$HOME/go/bin`; python3.12 grpcio-tools venv at `scratchpad/protogen-venv`; local `main-dev` ref for `buf breaking`; pnpm workspace installed; analysis `uv sync --extra dev` done.
 **Remaining**: 12 (materialized queue core) + 13 (read/queue_share/parity test) + 14-15 (Option-2 scoring retire + test) + 16 (agent parity + strat-lab/mcp-tools) + 17-19 (UI: snooze, binding editor, wizard).
 **Next**: /sdd-execute opportunity-universe-unification sequential  (resumes at Step 12)
+
+---
+
+## Session: Steps 12–13 (materialized queue core + tests) — 2026-08-03
+
+**Steps 12–13 done** (committed as one red-green cycle). `ListOpportunities` is now a **pure read**
+of the materialized `analysis.opportunities` (mig 011) LEFT JOIN `opportunity_actions` (mig 010).
+
+**Step 12 (`services/xstockstrat-analysis`)**:
+- New `app/repositories/opportunities.py` — `OpportunitiesRepository`: `replace_for_user` (txn
+  delete+bulk insert), `read(min_conviction, w, include_expired)` (rank `(1-w)·conviction + w·signal_axis`,
+  drops DISMISS + active SNOOZE via `COALESCE(action,0)` NULL-safe join), `count_for_user`, `has_fresh`,
+  `distinct_user_ids` (OR-E), `queue_share`, `taken_count`. Reuses db_pool (F-06).
+- `app/config/watcher.py` — added `get_int_present` (presence-aware, HasField — OR-C, honors `0`).
+- `servicer.py` — module helpers `_normalize_symbol`, `_opportunity_key` (`user|symbol_norm|strategy_id`,
+  action NOT in key), `_resolve_action_tag`, `_primary_source`, `_row_to_opportunity` (OR-F contract point),
+  `_seconds_until_hour_utc`. Rewrote `ListOpportunities` (pure read + cold synchronous compute under a
+  per-user `asyncio.Lock` + stale-while-revalidate background recompute). Added `_compute_opportunities`
+  (Universe = signals ∪ held ∪ watchlist bindings; watchlist-first-else-unattributed attribution;
+  entry-rule trace for entry candidates, `rule="exit"` trace for held+attributed → REDUCE on fire;
+  signal counted once on separate `signal_axis`; provenance collapse; curated ranked above
+  `max_universe_size`), `_load_strategy_definition`, `_drain_watchlist_bindings` (new `ListWatchlists`
+  call on the existing portfolio channel, carries `propagation_meta` — C-03), `run_opportunity_refresh_forever`
+  (daily pass at `refresh_hour_utc`). `GetStrategyAnalytics` — real `queue_share` + `taken` reconciled
+  against queue TAKEs (FR-7).
+- `app/main.py` — wired `run_opportunity_refresh_forever()` under `if db_pool`.
+- analysis `CLAUDE.md` — rewrote § Decide-surface RPCs (materialized model; removed "0/0"/"queue_share 0.0" notes).
+
+**Step 13 (`tests/test_analysis_servicer.py`)**: replaced the retired signal-only `TestListOpportunities`
+with `TestListOpportunitiesMaterialized` (AC-1/2/4/6, ranking, min_conviction, cold-vs-stale, C-03
+ListWatchlists propagation; in-memory `_FakeOppRepo` so the real compute runs), queue_share/taken tests
+on `TestGetStrategyAnalytics`, and `TestOpportunityRowParity` (OR-F descriptor parity + teeth + populate).
+
+**Verify**: `ruff check app/ tests/` clean; `ruff format --check` clean; full suite **419 passed, 81.29%**
+(≥40). **RED** verified by neutering `_row_to_opportunity` readiness to 0/0 → AC-1/AC-6/parity red; restore → green.
+
+**Deviations** (see Deviation Log): main.py = daily-loop wiring only; retired-test replacement; CI-equivalent
+full-suite coverage (opportunities.py raw SQL 29% — `_FakeOppRepo` in unit tests, producer path covered
+end-to-end); action model for non-signal candidates (curated ENTER/ADD, speculative sell-only dropped —
+P-03 documented); one session date per compute for valid_until (OR-D residual).
+
+**Progress**: 13 done / 19 total. **Remaining**: 14–15 (Option-2 backtest scoring retire + test),
+16 (agent parity + strat-lab/mcp-tools), 17–19 (UI: snooze, binding editor, wizard).
+**Next**: Step 14 — retire the signal blend from `RunBacktest.strategy_params` scoring (technical-only).
