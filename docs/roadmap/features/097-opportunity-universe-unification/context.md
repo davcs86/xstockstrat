@@ -113,6 +113,6 @@
 - Unresolved ⚠ / ℹ carried into execution:
   - Step 5: `-coverpkg` excludes `service/`/`repository/` — the exact packages Step 4 edits; ≥40% is carried by other packages (mirrors real CI scoping, C-08 met in the letter only). [ ] unaddressed — reviewer's eye during execute.
   - Steps 17 & 18: 6 files each (>5) — consider a thinner slice (fixture/mock/inventory edits). [ ] unaddressed.
-  - Step 12 cites `(F-04)` for "no portfolio strategy attribution" and Step 16 cites `(F-12)` for the strat-lab same-PR rule — both are mis-tags (F-04 = "never invent path/symbol"; no F-12 exists — Floor ends at F-11; the rule is a root CLAUDE.md rule). Obligations ARE discharged; label hygiene only. [ ] unaddressed — retag/drop.
-  - Step 1: `buf breaking` verification runs `--against .git#branch=feature/...` while the Reviewer note says "vs dev trunk"; equivalent at fork point, reconcile wording. [ ] unaddressed.
+  - Step 12 cited `(F-04)` for "no portfolio strategy attribution" and Step 16 cited `(F-12)` for the strat-lab same-PR rule — both mis-tags. [x] FIXED (pre-execute): Step 12 → `(P-03 — no silent guess)`; Step 16 → "root CLAUDE.md strat-lab same-PR rule (a repo rule, not a Floor ID)".
+  - Step 1: `buf breaking` ran `--against .git#branch=feature/...` (a self-compare that misses the change). [x] FIXED (pre-execute): now `--against .git#branch=main-dev,subdir=packages/proto` (matches the "vs dev trunk" reviewer note + CI convention).
 - Overlap findings: no collision. Forward note (not a 097 blocker): feature 095 (draft) plans to append to `analysis.Opportunity`; once 097's fields 10/11 land, 095 must number 12+ — add a `095 → 097` merge-order row when 095 advances to /sdd-spec (052/053 precedent).

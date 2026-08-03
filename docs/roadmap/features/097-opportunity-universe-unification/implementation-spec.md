@@ -106,7 +106,7 @@ register a new route.
 
 **Verification**:
 ```bash
-cd packages/proto && buf lint && buf breaking . --against ".git#branch=feature/opportunity-universe-unification"
+cd packages/proto && buf lint && buf breaking . --against ".git#branch=main-dev,subdir=packages/proto"
 ```
 Both pass — adding fields/messages/RPCs and marking `symbols = 5 [deprecated = true]` (field retained) is non-breaking.
 
@@ -447,7 +447,7 @@ cd services/xstockstrat-analysis && pytest tests/test_analysis_servicer.py --cov
 1. **`_normalize_symbol` helper** — one function (uppercase/trim) feeding every drain and the key. `opportunity_key = f"{user_id}|{_normalize_symbol(symbol)}|{strategy_id}"` (action is a stored annotation, **not** part of the key — a snooze survives an ENTER→ADD flip). Server-authoritative (client never derives it).
 2. **`OpportunitiesRepository(db_pool)`** (copy `backtest_runs.py` shape): `replace_for_user(user_id, rows)` (transactional delete+insert of that user's rows), `read_valid(user_id, min_conviction, snooze/dismiss join)` returning ranked rows, `distinct_user_ids()` (union of `opportunities` ∪ `opportunity_actions` — OR-E known-user set), and `mark_stale_users()`/a per-user `valid_until` check. Reuses the existing pool (F-06). Wire in `main.py`.
 3. **Universe compute** (`_compute_opportunities(user_id, propagation_meta)`): build candidates from `active signals (QuerySignals) ∪ held positions (ListPositions) ∪ watchlist (symbol, strategy) bindings (ListWatchlists)`. Rank watchlist+held **above** the `analysis.opportunity.max_universe_size` cut so curated candidates are never truncated (FR-1); drop only the speculative signal tail. For each candidate:
-   - **Attribution** (design R, OR resolution): watchlist binding → its `strategy_id`; else **unattributed** (`strategy_id=""`, no trace, 0/0). Held positions have no portfolio strategy attribution (F-04) → unattributed unless also a watchlist binding.
+   - **Attribution** (design R, OR resolution): watchlist binding → its `strategy_id`; else **unattributed** (`strategy_id=""`, no trace, 0/0). Held positions have no portfolio strategy attribution, so fabricating one is disallowed (P-03 — no silent guess) → unattributed unless also a watchlist binding.
    - **Readiness**: entry-rule trace for signal/watchlist entry candidates; **exit-rule trace** for held+attributed candidates (`evaluate_conditions_traced(..., rule="exit")` from Step 8) → FR-8. Store passing/total + conviction ordinal + per-leaf trace as `readiness_json`.
    - **Action**: reuse `_action_for` for signal-origin rows; a held symbol whose `exit_rule` fires → REDUCE even with no sell signal (FR-8).
    - **Signal axis (OR-G)**: `signal_axis` = normalized max signal conviction contributing to the row (0.0 when no signal origin). Store it; **do not** fold it into readiness (a signal is counted exactly once — FR-3/AC-4).
@@ -569,7 +569,7 @@ cd services/xstockstrat-analysis && pytest tests/test_analysis_servicer.py tests
 **Codebase Evidence**:
 - Unguarded builders (the RC-1 silent-drop trap): `_build_component` at `client.py:291`, `screen_symbols`→`ScreenSymbolsRequest` at `client.py:361–369`, `manage_strategy`→`StrategyDefinition` at `client.py:425–442`. `run_backtest` passes **no** signal params (recon).
 - Parity-test template: `services/xstockstrat-agent/tests/test_backtest_view.py:157` (`test_summary_key_set_covers_every_proto_field` — asserts the builder key set == `<Message>.DESCRIPTOR.fields_by_name` minus an explicit `_INTENTIONALLY_UNSET`/dropped set).
-- **ledger 2026-08-02 (RC-1)** + root CLAUDE.md strat-lab rule (F-12): a change to `run_backtest`'s scoring behavior must update the strat-lab skill in the **same** PR.
+- **ledger 2026-08-02 (RC-1)** + the root CLAUDE.md strat-lab same-PR rule (a repo rule, not a Floor ID): a change to `run_backtest`'s scoring behavior must update the strat-lab skill in the **same** PR.
 - Doc references: `docs/runbooks/mcp-tools.md:387–389` (`screen_symbols` signal params — **kept**, screener), `:464` (`manage_strategy` `signal_params` — **kept**, live-loop symbols), `:486` (signal_params changes the fingerprint). No **watchlist** MCP tool exists (recon) — no agent binding change for the Watchlist shape.
 
 **TDD**: `red-green required` — the parity tests are red against the current tree only if a proto field is unmapped; write them to pin the *current* field set with an explicit opt-out, so a future field fails closed. Include one deliberately-missing-field assertion to prove the guard has teeth.
