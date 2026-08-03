@@ -238,7 +238,7 @@ Confirm ≥ 40%. Note: the watchlist logic lives in `service/`/`repository/` (ex
 
 ### Step 6 — migration: analysis 010 opportunity_actions + 011 opportunities
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/010_opportunity_actions.up.sql` — create

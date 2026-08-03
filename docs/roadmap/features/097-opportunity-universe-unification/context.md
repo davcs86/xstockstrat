@@ -156,3 +156,8 @@
 - **TDD red→green**: temporarily disabled bindings-precedence in `requestBindings` → `TestBindings_{CreateGetRoundTrip,LegacyAddDoesNotClearStrategy,UpdateReplaces}` all FAIL (`no binding for "AAPL" in []`) → restored → all pass. `go test ./internal/service/ -race` ok; coverage total 53.1% ≥ 40%.
 - Files modified: `internal/service/watchlist_service_test.go`
 - Deviations: committed with Step 4 (atomic interface change) — Deviation Log.
+
+### Step 6 — migration: analysis 010 opportunity_actions + 011 opportunities [done]
+- `010_opportunity_actions` (PK (user_id, opportunity_key); action SMALLINT, snooze_until). `011_opportunities` materialized queue (readiness_json/signal_axis/provenance inline; PK (user_id, opportunity_key); idx on (user_id, valid_until)). 010→011 order (011's daily reader unions both). Reuses existing pool (F-06). Offline-verified up/down parity, next-free 010/011.
+- Files modified: `services/xstockstrat-analysis/migrations/010_opportunity_actions.{up,down}.sql`, `011_opportunities.{up,down}.sql`
+- Deviations: none.
