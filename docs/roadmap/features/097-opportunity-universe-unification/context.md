@@ -137,3 +137,10 @@
 - Added `008_watchlist_symbol_strategy.{up,down}.sql`: up ADDs `strategy_id TEXT NOT NULL DEFAULT ''`; down DROPs it. PK `(watchlist_id, symbol)` unchanged (one strategy per (list,symbol)). Verified offline (up/down parity, next-free 008).
 - Files modified: `services/xstockstrat-portfolio/migrations/008_watchlist_symbol_strategy.{up,down}.sql`
 - Deviations: none.
+
+## Session 2026-08-03 — sdd-execute (sequential) — session end
+**Steps this session**: 1, 2, 3 (done)
+**Progress**: 3 done / 19 total
+**Stopped at**: before Step 4 (portfolio Go binding write-path). Contract + schema foundation complete (proto, regenerated stubs, migration 008). Stopped ahead of the Step 4–5 Go service re-plumb + red-green TDD to give it a focused pass rather than rush it at the end of a long run.
+**Toolchain persisted for resume**: buf 1.69.0 + Go plugins in `$HOME/go/bin`; python3.12 grpcio-tools venv at `scratchpad/protogen-venv`; local `main-dev` ref created for `buf breaking`; pnpm workspace installed.
+**Next**: /sdd-execute opportunity-universe-unification sequential  (resumes at Step 4)
