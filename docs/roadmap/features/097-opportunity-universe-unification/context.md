@@ -188,3 +188,11 @@
 - **TDD red→green**: injected an early return into the handler (validation+upsert skipped) → all 5 fail → removed → 5 passed. ruff clean; full analysis suite 407 passed, 82.68% ≥ 40% (CI-equivalent — Deviation Log).
 - Files modified: `tests/test_analysis_servicer.py`
 - Deviations: main.py no-change; single-file coverage → full-suite — Deviation Log.
+
+## Session 2026-08-03 — sdd-execute (sequential) — session-end checkpoint (11/19)
+**Steps this session**: 1–11 (done)
+**Progress**: 11 done / 19 total
+**Stopped at**: before Step 12 (the core materialized-queue rewrite of ListOpportunities). Backend foundation complete: proto contract + stubs (1-2), portfolio binding write-path + test (3-5), analysis migrations 010/011 (6), config keys (7), evaluator exit-rule sibling + test (8-9), opportunity_actions repo + SetOpportunityAction RPC + test (10-11). Stopped ahead of Step 12 because it's the largest, most intricate step (universe assembly, pure-read + lazy/stale-while-revalidate, queue_share, new opportunities repo, OR-A/B/D/E/G) and warrants a focused pass.
+**Toolchain persisted for resume**: buf 1.69.0 + Go plugins in `$HOME/go/bin`; python3.12 grpcio-tools venv at `scratchpad/protogen-venv`; local `main-dev` ref for `buf breaking`; pnpm workspace installed; analysis `uv sync --extra dev` done.
+**Remaining**: 12 (materialized queue core) + 13 (read/queue_share/parity test) + 14-15 (Option-2 scoring retire + test) + 16 (agent parity + strat-lab/mcp-tools) + 17-19 (UI: snooze, binding editor, wizard).
+**Next**: /sdd-execute opportunity-universe-unification sequential  (resumes at Step 12)
