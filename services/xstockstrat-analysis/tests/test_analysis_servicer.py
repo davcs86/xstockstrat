@@ -9,6 +9,7 @@ import asyncio
 import inspect
 import json
 import math
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -3751,3 +3752,100 @@ class TestBacktestDeletedFormulaWarning:
         assert any("f-1" in w for w in result.warnings)
         # The deletion was captured on the warm-up prefetch's single fetch — no extra GetFormula.
         assert svc._indicators.GetFormula.await_count == 1
+
+
+# ─── feature 097: SetOpportunityAction ───────────────────────────────────────
+
+
+class _AbortError(Exception):
+    """Mimics grpc.aio context.abort raising to terminate the RPC."""
+
+    def __init__(self, code, details):
+        super().__init__(details)
+        self.code = code
+
+
+def _opp_ctx(user_id="user-1"):
+    ctx = MagicMock()
+    md = [("x-user-id", user_id)] if user_id is not None else []
+    ctx.invocation_metadata = MagicMock(return_value=md)
+
+    async def _abort(code, details):
+        raise _AbortError(code, details)
+
+    ctx.abort = _abort
+    return ctx
+
+
+@pytest.mark.asyncio
+async def test_set_opportunity_action_snooze_explicit():
+    svc = make_servicer()
+    svc._opportunity_actions_repo = AsyncMock()
+    ts = Timestamp()
+    ts.FromDatetime(datetime(2026, 8, 5, 12, 0, tzinfo=UTC))
+    req = analysis_pb2.SetOpportunityActionRequest(
+        opportunity_key="user-1|AAPL|strat-x",
+        action=analysis_pb2.OPPORTUNITY_ACTION_SNOOZE,
+        snooze_until=ts,
+    )
+    await svc.SetOpportunityAction(req, _opp_ctx("user-1"))
+    svc._opportunity_actions_repo.upsert.assert_awaited_once()
+    kw = svc._opportunity_actions_repo.upsert.await_args.kwargs
+    assert kw["user_id"] == "user-1"
+    assert kw["opportunity_key"] == "user-1|AAPL|strat-x"
+    assert kw["action"] == analysis_pb2.OPPORTUNITY_ACTION_SNOOZE
+    assert kw["snooze_until"] == datetime(2026, 8, 5, 12, 0, tzinfo=UTC)
+
+
+@pytest.mark.asyncio
+async def test_set_opportunity_action_snooze_defaults_hours():
+    svc = make_servicer()  # cfg.get_int returns default → snooze_default_hours = 24
+    svc._opportunity_actions_repo = AsyncMock()
+    req = analysis_pb2.SetOpportunityActionRequest(
+        opportunity_key="k", action=analysis_pb2.OPPORTUNITY_ACTION_SNOOZE
+    )
+    before = datetime.now(UTC)
+    await svc.SetOpportunityAction(req, _opp_ctx("u"))
+    su = svc._opportunity_actions_repo.upsert.await_args.kwargs["snooze_until"]
+    assert su is not None
+    assert 23.9 <= (su - before).total_seconds() / 3600 <= 24.1
+
+
+@pytest.mark.asyncio
+async def test_set_opportunity_action_missing_user_invalid():
+    svc = make_servicer()
+    svc._opportunity_actions_repo = AsyncMock()
+    req = analysis_pb2.SetOpportunityActionRequest(
+        opportunity_key="k", action=analysis_pb2.OPPORTUNITY_ACTION_DISMISS
+    )
+    with pytest.raises(_AbortError) as ei:
+        await svc.SetOpportunityAction(req, _opp_ctx(user_id=None))
+    assert ei.value.code == grpc.StatusCode.INVALID_ARGUMENT
+    svc._opportunity_actions_repo.upsert.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_set_opportunity_action_empty_key_invalid():
+    svc = make_servicer()
+    svc._opportunity_actions_repo = AsyncMock()
+    req = analysis_pb2.SetOpportunityActionRequest(
+        opportunity_key="", action=analysis_pb2.OPPORTUNITY_ACTION_TAKE
+    )
+    with pytest.raises(_AbortError) as ei:
+        await svc.SetOpportunityAction(req, _opp_ctx("u"))
+    assert ei.value.code == grpc.StatusCode.INVALID_ARGUMENT
+
+
+@pytest.mark.asyncio
+async def test_set_opportunity_action_dismiss_take_persist_enum():
+    for action in (
+        analysis_pb2.OPPORTUNITY_ACTION_DISMISS,
+        analysis_pb2.OPPORTUNITY_ACTION_TAKE,
+    ):
+        svc = make_servicer()
+        svc._opportunity_actions_repo = AsyncMock()
+        req = analysis_pb2.SetOpportunityActionRequest(opportunity_key="k", action=action)
+        await svc.SetOpportunityAction(req, _opp_ctx("u"))
+        kw = svc._opportunity_actions_repo.upsert.await_args.kwargs
+        assert kw["action"] == action
+        assert kw["snooze_until"] is None  # only SNOOZE sets a timestamp

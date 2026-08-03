@@ -16,7 +16,7 @@ import json
 import logging
 import math
 import uuid
-from datetime import UTC
+from datetime import UTC, datetime, timedelta
 
 import asyncpg
 import grpc
@@ -37,6 +37,7 @@ from app.config.watcher import ConfigWatcher
 from app.repositories.backtest_details import BacktestDetailsRepository
 from app.repositories.backtest_run_symbols import BacktestRunSymbolsRepository
 from app.repositories.backtest_runs import BacktestRunsRepository
+from app.repositories.opportunity_actions import OpportunityActionsRepository
 from app.repositories.strategies import StrategiesRepository
 from app.repositories.strategy_scores import StrategyScoresRepository
 from app.services import scoring, warmup
@@ -161,6 +162,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # buffers one cell per symbol on an OK run and flushes here; _recompute_headline reads
         # them back. None in the no-DB test path.
         self._backtest_run_symbols_repo = BacktestRunSymbolsRepository(db_pool) if db_pool else None
+        # Persisted per-user opportunity dispositions (feature 097). Reuses db_pool (F-06);
+        # None in the no-DB test path. Read back by ListOpportunities (Step 12).
+        self._opportunity_actions_repo = OpportunityActionsRepository(db_pool) if db_pool else None
         # Per-strategy recompute serialization (feature 065). asyncio.Lock is non-reentrant, so
         # a trigger already holding the lock calls only _recompute_headline_locked. Single-process
         # protection only (documented). Keyed by strategy_id, created lazily.
@@ -2066,6 +2070,41 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             opportunities=window,
             page=common_pb2.PageResponse(next_page_token=next_token),
         )
+
+    async def SetOpportunityAction(self, request, context):
+        """Persist a per-user disposition (snooze/dismiss/take) for a queued opportunity
+        (feature 097). ``user_id`` comes from the propagated ``x-user-id`` header; the
+        ``opportunity_key`` is the server-issued key the client echoes verbatim. Unlike the
+        best-effort background writes, this write is user-visible (the UI reports success), so a
+        DB failure surfaces as ``UNAVAILABLE`` rather than being swallowed."""
+        metadata = dict(context.invocation_metadata())
+        user_id = metadata.get("x-user-id", "")
+        if not user_id:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "missing user identity")
+        if not request.opportunity_key:
+            await context.abort(grpc.StatusCode.INVALID_ARGUMENT, "opportunity_key required")
+        if self._opportunity_actions_repo is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "opportunity store unavailable")
+
+        snooze_until = None
+        if request.action == analysis_pb2.OPPORTUNITY_ACTION_SNOOZE:
+            if request.HasField("snooze_until"):
+                snooze_until = request.snooze_until.ToDatetime(tzinfo=UTC)
+            else:
+                hours = self._cfg.get_int("analysis.opportunity.snooze_default_hours", 24)
+                snooze_until = datetime.now(UTC) + timedelta(hours=hours)
+
+        try:
+            await self._opportunity_actions_repo.upsert(
+                user_id=user_id,
+                opportunity_key=request.opportunity_key,
+                action=int(request.action),
+                snooze_until=snooze_until,
+            )
+        except Exception as e:  # noqa: BLE001 — surface any DB failure to the caller
+            log.warning("SetOpportunityAction upsert failed: %s", e)
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "failed to persist opportunity action")
+        return analysis_pb2.SetOpportunityActionResponse()
 
     async def _drain_active_signals(self, propagation_meta) -> list:
         """Drain all currently-active ingest signals (paginated). Best-effort: an ingest

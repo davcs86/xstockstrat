@@ -362,7 +362,7 @@ cd services/xstockstrat-analysis && pytest tests/test_evaluator_traced.py --cov=
 
 ### Step 10 — service: analysis opportunity_actions repo + SetOpportunityAction RPC
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/opportunity_actions.py` — create
@@ -393,7 +393,7 @@ cd services/xstockstrat-analysis && ruff check app/repositories/opportunity_acti
 
 ### Step 11 — test: analysis SetOpportunityAction + actions repo
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -692,6 +692,18 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm test:e2e -- strateg
 
 ## Deviation Log
 
+- **Step 10 — `app/main.py` needs no change (repo built in the servicer).** The step listed
+  `app/main.py`, but repos are constructed inside `AnalysisServicer.__init__` from the injected
+  `db_pool` (`self._opportunity_actions_repo = OpportunityActionsRepository(db_pool) if db_pool else
+  None`), and `main.py` already passes `db_pool` to the servicer. No `main.py` edit was needed for
+  Step 10 (a daily-refresh loop, if any, belongs to Step 12). Staged a subset of the step's Files
+  (F-08 permits fewer). Steps 10 (repo+RPC) and 11 (test) committed together (the servicer method and
+  its test are one red-green cycle). **Disposition**: no scope change.
+- **Step 11 — single-file coverage command → CI-equivalent full-suite run** (same substitution as
+  Step 9): `pytest tests/test_analysis_servicer.py --cov=app --cov-fail-under=40` measures the whole
+  `app` from one file. Ran `pytest --cov=app --cov-fail-under=40` over all of `tests/`: **407 passed,
+  82.68%** ≥ 40%; the new tests pass in isolation (`-k set_opportunity_action` → 5 passed).
+  **Disposition**: CI-equivalent fallback.
 - **Step 9 — single-file coverage command is unsatisfiable; used the CI-equivalent full-suite run.**
   The step's `**Verification**` runs `pytest tests/test_evaluator_traced.py --cov=app --cov-fail-under=40`
   — measuring coverage of the **entire** `app` package from **one** test file, which can only reach

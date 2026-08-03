@@ -177,3 +177,14 @@
 - **TDD red→green**: forced `rule_src = entry_rule` (exit selection off) → both exit tests FAIL (`1 == 0`, traced entry) → restored → 2 passed. Full analysis suite 402 passed, 82.79% ≥ 40% (CI-equivalent — see Deviation Log for the single-file coverage-command substitution).
 - Files modified: `tests/test_evaluator_traced.py`
 - Deviations: Step 9 coverage command (single-file → full-suite) — Deviation Log.
+
+### Step 10 — service: analysis opportunity_actions repo + SetOpportunityAction RPC [done]
+- Created `OpportunityActionsRepository` (`upsert` ON CONFLICT DO UPDATE; `list_for_user` → {key:{action,snooze_until}}) reusing the backtest_runs repo shape + existing pool (F-06). Servicer: `self._opportunity_actions_repo` built from db_pool; `SetOpportunityAction` handler extracts x-user-id, rejects empty user/opportunity_key with INVALID_ARGUMENT, defaults SNOOZE to now + `analysis.opportunity.snooze_default_hours` when no timestamp, upserts, and surfaces DB failure as UNAVAILABLE (not best-effort — user-visible). `main.py` unchanged (see Deviation Log).
+- Files modified: `app/repositories/opportunity_actions.py` (new), `app/handlers/servicer.py`
+- Verified: ruff check + format pass.
+
+### Step 11 — test: analysis SetOpportunityAction + actions repo [done]
+- 5 tests: SNOOZE explicit timestamp upserts it; SNOOZE without → now+24h default; missing x-user-id → INVALID_ARGUMENT (no upsert); empty opportunity_key → INVALID_ARGUMENT; DISMISS/TAKE persist their enum numbers with snooze_until None.
+- **TDD red→green**: injected an early return into the handler (validation+upsert skipped) → all 5 fail → removed → 5 passed. ruff clean; full analysis suite 407 passed, 82.68% ≥ 40% (CI-equivalent — Deviation Log).
+- Files modified: `tests/test_analysis_servicer.py`
+- Deviations: main.py no-change; single-file coverage → full-suite — Deviation Log.
