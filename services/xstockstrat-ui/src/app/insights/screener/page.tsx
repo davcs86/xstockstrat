@@ -7,7 +7,19 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { cn } from '@/components/ui/utils';
 import { useScreenSymbols } from '@/hooks/useScreenSymbols';
+import { useWatchlists, useCreateWatchlist, useAddWatchlistSymbols } from '@/hooks/useWatchlists';
+import { normalizeWeights } from '@/lib/screenWeights';
+import { formatLastRun } from '@/lib/formatLastRun';
+import { scoreColor } from '@/lib/scoreDisplay';
 import {
   Comparator,
   ScreenKind,
@@ -25,10 +37,18 @@ type CriterionRow = {
 
 const COMPARATOR_LABELS: Array<{ value: Comparator; label: string }> = [
   { value: Comparator.LT, label: '<' },
-  { value: Comparator.LTE, label: '<=' },
+  { value: Comparator.LTE, label: '≤' },
   { value: Comparator.GT, label: '>' },
-  { value: Comparator.GTE, label: '>=' },
+  { value: Comparator.GTE, label: '≥' },
 ];
+
+// Top-N default for the "Add top N to watchlist" action (feature 098, FR-6). A UI display constant,
+// not a WatchConfig key (Floor F-07 unaffected).
+const TOP_N = 5;
+
+function comparatorGlyph(op: Comparator): string {
+  return COMPARATOR_LABELS.find((c) => c.value === op)?.label ?? '?';
+}
 
 function newCriterion(i: number): CriterionRow {
   return {
@@ -43,13 +63,25 @@ function newCriterion(i: number): CriterionRow {
 
 export default function ScreenerPage() {
   const screen = useScreenSymbols();
+  const watchlists = useWatchlists();
+  const createWl = useCreateWatchlist();
+  const addSymbols = useAddWatchlistSymbols();
+
   const [symbolsText, setSymbolsText] = useState('AAPL MSFT GOOG');
   const [criteria, setCriteria] = useState<CriterionRow[]>([newCriterion(1)]);
+  // Last-run metadata (FR-4) — captured on scan success, rendered once from Date.now() at render
+  // (no live tick; see src/lib/formatLastRun.ts).
+  const [lastRun, setLastRun] = useState<{ at: Date; count: number } | null>(null);
+  // Save-as-watchlist inline name panel (FR-5) + add-top-N target (FR-6).
+  const [saveName, setSaveName] = useState('');
+  const [targetListId, setTargetListId] = useState('');
 
   const errorMessage =
     screen.error instanceof ConnectError
       ? screen.error.rawMessage
       : (screen.error?.message ?? null);
+
+  const shares = normalizeWeights(criteria.map((c) => c.weight));
 
   function addCriterion() {
     setCriteria((c) => [...c, newCriterion(c.length + 1)]);
@@ -64,21 +96,41 @@ export default function ScreenerPage() {
   function runScan() {
     const symbols = symbolsText.split(/[\s,]+/).filter(Boolean);
     if (symbols.length === 0) return;
-    screen.mutate({
-      symbols,
-      criteria: criteria.map((c) => ({
-        refName: c.refName,
-        kind: ScreenKind.FUNDAMENTAL,
-        metricName: c.metricName,
-        op: c.op,
-        threshold: c.threshold,
-        weight: c.weight,
-        hardFilter: c.hardFilter,
-      })),
-    });
+    screen.mutate(
+      {
+        symbols,
+        criteria: criteria.map((c) => ({
+          refName: c.refName,
+          kind: ScreenKind.FUNDAMENTAL,
+          metricName: c.metricName,
+          op: c.op,
+          threshold: c.threshold,
+          weight: c.weight,
+          hardFilter: c.hardFilter,
+        })),
+      },
+      { onSuccess: () => setLastRun({ at: new Date(), count: symbols.length }) },
+    );
   }
 
   const results = screen.data?.results ?? [];
+  const hasHardFilter = criteria.some((c) => c.hardFilter);
+  // "Save as watchlist" seeds the passing subset when a hard filter is active, else all results (FR-5).
+  const saveSymbols = (hasHardFilter ? results.filter((r) => r.passed) : results).map(
+    (r) => r.symbol,
+  );
+  const topNSymbols = results.slice(0, TOP_N).map((r) => r.symbol);
+
+  function handleSaveAsWatchlist() {
+    const name = saveName.trim();
+    if (!name || saveSymbols.length === 0) return;
+    createWl.mutate({ name, symbols: saveSymbols }, { onSuccess: () => setSaveName('') });
+  }
+
+  function handleAddTopN() {
+    if (!targetListId || topNSymbols.length === 0) return;
+    addSymbols.mutate({ watchlistId: targetListId, symbols: topNSymbols });
+  }
 
   return (
     <AppShell>
@@ -105,53 +157,122 @@ export default function ScreenerPage() {
               />
             </div>
 
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Criteria
+              </span>
+              <span className="text-xs text-muted-foreground">weights normalize to 1.0</span>
+            </div>
+
             <div className="space-y-2">
               {criteria.map((c, i) => (
-                <div key={i} className="flex flex-wrap items-end gap-2" data-testid="criterion-row">
-                  <Input
-                    aria-label="metric"
-                    className="w-40"
-                    value={c.metricName}
-                    onChange={(e) => updateCriterion(i, { metricName: e.target.value })}
-                  />
-                  <select
-                    aria-label="comparator"
-                    className="h-9 rounded-md border bg-background px-2 text-sm"
-                    value={c.op}
-                    onChange={(e) =>
-                      updateCriterion(i, { op: Number(e.target.value) as Comparator })
-                    }
-                  >
-                    {COMPARATOR_LABELS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                  <Input
-                    aria-label="threshold"
-                    type="number"
-                    className="w-28"
-                    value={c.threshold}
-                    onChange={(e) => updateCriterion(i, { threshold: Number(e.target.value) })}
-                  />
-                  <label className="flex items-center gap-1 text-sm">
-                    <input
-                      type="checkbox"
-                      aria-label="hard filter"
-                      checked={c.hardFilter}
-                      onChange={(e) => updateCriterion(i, { hardFilter: e.target.checked })}
+                <div
+                  key={i}
+                  className="rounded-md border border-border p-3 space-y-2"
+                  data-testid="criterion-row"
+                >
+                  {/* Readable grammar line (FR-3): <metric> <comparator> <threshold>, all editable. */}
+                  <div className="flex flex-wrap items-end gap-2">
+                    <Input
+                      aria-label="metric"
+                      className="w-40 font-mono"
+                      value={c.metricName}
+                      onChange={(e) => updateCriterion(i, { metricName: e.target.value })}
                     />
-                    hard
-                  </label>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    aria-label="remove criterion"
-                    onClick={() => removeCriterion(i)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                    <select
+                      aria-label="comparator"
+                      className="h-9 rounded-md border bg-background px-2 text-sm"
+                      value={c.op}
+                      onChange={(e) =>
+                        updateCriterion(i, { op: Number(e.target.value) as Comparator })
+                      }
+                    >
+                      {COMPARATOR_LABELS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                    <Input
+                      aria-label="threshold"
+                      type="number"
+                      className="w-28"
+                      value={c.threshold}
+                      onChange={(e) => updateCriterion(i, { threshold: Number(e.target.value) })}
+                    />
+                    {/* Hard/rank segmented toggle (FR-2) → hardFilter. */}
+                    <div className="inline-flex overflow-hidden rounded-md border border-border">
+                      <button
+                        type="button"
+                        aria-label="hard filter"
+                        aria-pressed={c.hardFilter}
+                        className={cn(
+                          'px-2.5 py-1.5 text-xs',
+                          c.hardFilter
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-background text-muted-foreground',
+                        )}
+                        onClick={() => updateCriterion(i, { hardFilter: true })}
+                      >
+                        hard
+                      </button>
+                      <button
+                        type="button"
+                        aria-label="rank only"
+                        aria-pressed={!c.hardFilter}
+                        className={cn(
+                          'px-2.5 py-1.5 text-xs',
+                          !c.hardFilter
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-background text-muted-foreground',
+                        )}
+                        onClick={() => updateCriterion(i, { hardFilter: false })}
+                      >
+                        rank
+                      </button>
+                    </div>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      aria-label="remove criterion"
+                      onClick={() => removeCriterion(i)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  {/* Preview of the grammar + normalized weight share (FR-1/FR-3). */}
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                    <span className="font-mono text-foreground">
+                      {c.metricName} {comparatorGlyph(c.op)} {c.threshold}
+                    </span>
+                    <label className="flex items-center gap-2">
+                      <span>weight</span>
+                      <input
+                        type="range"
+                        aria-label="weight slider"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        value={c.weight}
+                        onChange={(e) => updateCriterion(i, { weight: Number(e.target.value) })}
+                        className="w-28 accent-primary"
+                      />
+                      <Input
+                        aria-label="weight"
+                        type="number"
+                        min={0}
+                        max={1}
+                        step={0.05}
+                        className="w-20"
+                        value={c.weight}
+                        onChange={(e) => updateCriterion(i, { weight: Number(e.target.value) })}
+                      />
+                    </label>
+                    <span data-testid="weight-share" className="tabular-nums">
+                      {(shares[i] * 100).toFixed(0)}% of weight
+                    </span>
+                  </div>
                 </div>
               ))}
               <Button variant="default" size="sm" onClick={addCriterion}>
@@ -178,10 +299,66 @@ export default function ScreenerPage() {
         )}
 
         {!screen.isPending && results.length > 0 && (
-          <div className="text-sm text-muted-foreground" data-testid="candidates-summary">
-            <span className="font-medium text-foreground">Candidates</span> ·{' '}
-            {results.filter((r) => r.passed).length} of {results.length} passed the hard filters
-          </div>
+          <>
+            <div
+              className="mb-3 flex flex-wrap items-center justify-between gap-2"
+              data-testid="candidates-summary"
+            >
+              <div className="text-sm text-muted-foreground">
+                <span className="font-medium text-foreground">Candidates</span> ·{' '}
+                {results.filter((r) => r.passed).length} of {results.length} passed the hard filters
+                {lastRun && (
+                  <span data-testid="last-run" className="ml-2">
+                    · {formatLastRun(lastRun.at, Date.now())} · {lastRun.count} symbols
+                  </span>
+                )}
+              </div>
+
+              {/* Screener → watchlist actions (FR-5 / FR-6). */}
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  aria-label="new watchlist name"
+                  value={saveName}
+                  onChange={(e) => setSaveName(e.target.value)}
+                  placeholder="New list name"
+                  className="h-8 w-40"
+                />
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  data-testid="save-as-watchlist"
+                  onClick={handleSaveAsWatchlist}
+                  disabled={createWl.isPending || !saveName.trim() || saveSymbols.length === 0}
+                >
+                  Save {saveSymbols.length} as watchlist
+                </Button>
+                <Select value={targetListId} onValueChange={setTargetListId}>
+                  <SelectTrigger className="h-8 w-40" aria-label="Target watchlist">
+                    <SelectValue placeholder="Add top 5 to…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(watchlists.data?.watchlists ?? []).map((wl) => (
+                      <SelectItem key={wl.watchlistId} value={wl.watchlistId}>
+                        {wl.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  data-testid="add-top-n"
+                  onClick={handleAddTopN}
+                  disabled={addSymbols.isPending || !targetListId || topNSymbols.length === 0}
+                >
+                  Add top {topNSymbols.length}
+                </Button>
+              </div>
+            </div>
+            {createWl.error && (
+              <p className="mb-2 text-sm text-destructive">{(createWl.error as Error).message}</p>
+            )}
+          </>
         )}
 
         {!screen.isPending && results.length > 0 && (
@@ -213,12 +390,18 @@ export default function ScreenerPage() {
                       <tr key={r.symbol} className="border-b" data-testid="result-row">
                         <td className="p-3">{i + 1}</td>
                         <td className="p-3 font-mono font-medium">{r.symbol}</td>
-                        <td
-                          className={`p-3 font-mono tabular-nums font-semibold ${
-                            r.score >= 0.8 ? 'text-buy' : r.score >= 0.7 ? 'text-primary' : ''
-                          }`}
-                        >
-                          {r.score.toFixed(3)}
+                        <td className="p-3 font-mono tabular-nums font-semibold">
+                          {/* Colored strength dot via the canonical scoreColor helper (FR-7, DRY). */}
+                          <span className="inline-flex items-center gap-1.5">
+                            <span
+                              aria-hidden
+                              className={cn(
+                                'inline-block h-2 w-2 rounded-full bg-current',
+                                scoreColor(r.score),
+                              )}
+                            />
+                            <span className={scoreColor(r.score)}>{r.score.toFixed(3)}</span>
+                          </span>
                         </td>
                         <td className="p-3 font-mono tabular-nums">
                           {r.pe ? r.pe.toFixed(1) : '—'}
