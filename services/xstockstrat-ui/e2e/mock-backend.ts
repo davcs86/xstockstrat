@@ -49,7 +49,7 @@ export const TRADER_MOCK_PORT = 9091;
 export const INSIGHTS_MOCK_PORT = 9092;
 export const CONFIG_UI_MOCK_PORT = 9093;
 
-// feature 097 — per-symbol readiness bucket overrides for the watchlists rollup e2e. Keyed by
+// feature 098 — per-symbol readiness bucket overrides for the watchlists rollup e2e. Keyed by
 // dedicated symbols the rollup test creates (never AAPL/MSFT/… asserted by other specs), so the
 // default `symbolReadiness` (2/3 → "watching") is untouched for every other consumer. Fields spread
 // over the fixture in the `evaluateReadiness` handler.
@@ -501,7 +501,7 @@ export async function startMockBackend(): Promise<void> {
           return { opportunities: OPPORTUNITIES.filter((o) => o.conviction >= min) };
         },
         // feature 083 — traced condition readiness for the Signal-detail panel.
-        // feature 097 — per-symbol bucket overrides let the watchlists rollup e2e exercise all four
+        // feature 098 — per-symbol bucket overrides let the watchlists rollup e2e exercise all four
         // ready/watching/quiet/no-data states. `symbolReadiness` stays single-arg (the `.map` below
         // is an arrow, not point-free, so the array index is never passed as a second argument);
         // overrides are spread at this call site so the shared AAPL default is unchanged.

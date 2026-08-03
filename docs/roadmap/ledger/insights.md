@@ -549,7 +549,7 @@ reusing.
   *what they claim* (current-tense/active → fix regardless of original scope; negative-assertion
   test code → leave), not by whether the file was on the original list.
 
-### 2026-08-02 — 097-screener-watchlist-fidelity — design
+### 2026-08-02 — 098-screener-watchlist-fidelity — design
 - **Pattern**: When a design surface is **scoped by a single upstream choice** (readiness is evaluated
   against **one** strategy for the whole list), render that dimension as a **single caption** ("Evaluated
   against: `<strategy>`"), never a per-row column that repeats the identical value. A repeated column is
@@ -560,7 +560,7 @@ reusing.
   folding it into a real state (`quiet`), and reconcile the roll-up denominator against the **requested
   input set** (count absent symbols as `nodata`) so `sum === requested.length` holds even if a future
   producer drops rows — defends the count-parity invariant beyond the mock's current 1:1 guarantee.
-- **Evidence**: `docs/roadmap/features/097-screener-watchlist-fidelity/design.md` §§ 1, 4, Rejected
+- **Evidence**: `docs/roadmap/features/098-screener-watchlist-fidelity/design.md` §§ 1, 4, Rejected
   Alternatives; `services/xstockstrat-analysis/app/services/evaluator.py:191`,
   `app/handlers/servicer.py:1996-2003` (1:1 append + empty-readiness fallback);
   `services/xstockstrat-ui/src/components/insights/WatchlistReadiness.tsx:34-44` (083 no-fabricated-binding).

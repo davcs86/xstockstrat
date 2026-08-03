@@ -18,7 +18,7 @@ type WatchlistLike = {
 };
 
 /**
- * Detail pane for the selected watchlist (feature 097). Owns the symbol-chip CRUD, the
+ * Detail pane for the selected watchlist (feature 098). Owns the symbol-chip CRUD, the
  * "Build from screener" link, and the readiness overlay. The opportunity queue is polled once here
  * (a single poller for the selected list) and passed to WatchlistReadiness as an upper-cased set so
  * a watched name currently on the queue is marked "in queue" (FR-11) — the hook is called above any

@@ -2,7 +2,7 @@
 
 **Status**: `done`
 **Created**: 2026-08-02
-**Feature**: `docs/roadmap/features/097-screener-watchlist-fidelity/feature.md`
+**Feature**: `docs/roadmap/features/098-screener-watchlist-fidelity/feature.md`
 **Total Steps**: 6
 **Feature Branch**: `feature/screener-watchlist-fidelity`
 
@@ -22,7 +22,7 @@ master-detail, and (6) one e2e step covering the three UI steps against the cent
 Discover nav group (`navGroups.tsx:45-46`), so no new route and no `PLATFORM_SUBNAV` addition is
 needed (C-10(a)); Steps 3–5 land the change on that surface and Step 6 proves it. The deferred
 surface (live LAST / intraday CHG % / Quotes tab) points at the **named follow-up feature
-`098-watchlist-live-quotes`** (C-14 override recorded in `context.md`), not a vague "later".
+`099-watchlist-live-quotes`** (C-14 override recorded in `context.md`), not a vague "later".
 
 ## Step Dependencies
 
@@ -37,7 +37,7 @@ surface (live LAST / intraday CHG % / Quotes tab) points at the **named follow-u
   so the three UI `service` steps are proven by the single Playwright e2e step rather than paired
   coverage steps. Step 6's assertions are authored **red-first** against the pre-implementation tree.
 - **Deferred surface** — live LAST / CHG % / Quotes tab is out of scope here and tracked by the
-  named follow-up feature `098-watchlist-live-quotes`; Step 6 asserts the **absence** of those
+  named follow-up feature `099-watchlist-live-quotes`; Step 6 asserts the **absence** of those
   surfaces (AC-8).
 
 ---
@@ -238,7 +238,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm run build
 **Instructions**:
 1. **Screener (covers Steps 3–4):** assert (a) editing a criterion weight to ≠ 1 sends that weight on the wire (intercept `**/AnalysisService/ScreenSymbols` and assert the request `criteria[0].weight !== 1`); (b) the hard/rank toggle flips the sent `hardFilter`; (c) the last-run text `"last run … · N symbols"` renders after a scan; (d) "Save as watchlist" seeds a new list from results and "Add top-N" adds top-N to a chosen list (drive against `mockWatchlists`-style portfolio routes, reusing the watchlists spec's mock pattern or a shared helper).
 2. **Watchlists (covers Step 5):** assert master-detail selection (select a list → its detail + `symbol-list` shows), the rollup `"<N> ready · <N> watching · <N> quiet[· <N> no-data]"` whose counts **sum to the requested symbol count** (AC-6), the single **"Evaluated against: …"** caption (no per-row STRATEGY column), an AAPL row marked **"in queue"**, the **"Build from screener"** link resolves to `/insights/screener`, and **create auto-selects** the new list. Use a `bucketOverride` in `mock-backend.ts`'s `evaluateReadiness` to give distinct symbols distinct buckets (including a `{ passingConditions: 0, totalConditions: 0 }` → **no-data** symbol) so the rollup exercises all four buckets.
-3. **Deferred-surface guard (AC-8):** assert **no** LAST price, intraday CHG %, or Quotes tab UI is present on Watchlists (these belong to `098-watchlist-live-quotes`).
+3. **Deferred-surface guard (AC-8):** assert **no** LAST price, intraday CHG %, or Quotes tab UI is present on Watchlists (these belong to `099-watchlist-live-quotes`).
 4. **Mock discipline (C-12/C-13):** extend `mock-backend.ts` only with **already-defined** RPC fields (readiness `passingConditions`/`totalConditions`/`conditions`, opportunity `symbol`) — no invented fields. Keep `symbolReadiness` single-arg. Update `INVENTORY.md`: add `symbolReadiness` to the `e2e/fixtures/opportunities.ts` row and list `e2e/insights/watchlists.spec.ts` (readiness buckets) as a consumer.
 
 **Verification**:

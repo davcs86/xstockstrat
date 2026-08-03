@@ -1,4 +1,4 @@
-// Screener "last run" relative-time formatter (feature 097).
+// Screener "last run" relative-time formatter (feature 098).
 //
 // Pure and tick-free by design (R3): the screener passes `now = Date.now()` at render, so the label
 // freshens on any interaction without a `setInterval`. A perfectly idle post-scan page keeping a

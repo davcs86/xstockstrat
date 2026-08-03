@@ -3,7 +3,7 @@ import { addAuthCookie } from '../helpers/auth';
 import { mockWatchlists } from '../helpers/watchlistMock';
 
 // A controlled ScreenSymbols response (connect-JSON, camelCase) + capture of the sent request, so
-// the weight/hard-filter wire assertions (feature 097, FR-1/FR-2) don't depend on the global mock.
+// the weight/hard-filter wire assertions (feature 098, FR-1/FR-2) don't depend on the global mock.
 function mockScreen(page: Page, captured: { req?: Record<string, unknown> }) {
   return page.route('**/xstockstrat.analysis.v1.AnalysisService/ScreenSymbols', (route) => {
     captured.req = JSON.parse(route.request().postData() ?? '{}');
@@ -85,7 +85,7 @@ test.describe('Screener', () => {
     expect(overflow).toBeLessThanOrEqual(1); // allow sub-pixel rounding
   });
 
-  test('sends an edited criterion weight on the wire, not the hardcoded 1 (feature 097, FR-1)', async ({
+  test('sends an edited criterion weight on the wire, not the hardcoded 1 (feature 098, FR-1)', async ({
     page,
   }) => {
     await addAuthCookie(page);
@@ -104,7 +104,7 @@ test.describe('Screener', () => {
     expect(criteria[0].weight).not.toBe(1);
   });
 
-  test('the hard/rank toggle flips the sent hardFilter (feature 097, FR-2)', async ({ page }) => {
+  test('the hard/rank toggle flips the sent hardFilter (feature 098, FR-2)', async ({ page }) => {
     await addAuthCookie(page);
     const captured: { req?: Record<string, unknown> } = {};
     await mockScreen(page, captured);
@@ -119,7 +119,7 @@ test.describe('Screener', () => {
     expect(criteria[0].hardFilter).toBe(true);
   });
 
-  test('shows last-run metadata after a scan (feature 097, FR-4)', async ({ page }) => {
+  test('shows last-run metadata after a scan (feature 098, FR-4)', async ({ page }) => {
     await addAuthCookie(page);
     await mockScreen(page, {});
     await page.goto('/insights/screener');
@@ -132,7 +132,7 @@ test.describe('Screener', () => {
     await expect(lastRun).toContainText('3 symbols');
   });
 
-  test('Save as watchlist seeds a new list from the results (feature 097, FR-5)', async ({
+  test('Save as watchlist seeds a new list from the results (feature 098, FR-5)', async ({
     page,
   }) => {
     await addAuthCookie(page);
@@ -163,7 +163,7 @@ test.describe('Screener', () => {
     expect(createReq.symbols).toEqual(['AAA', 'BBB', 'CCC']);
   });
 
-  test('Add top-N adds the top-ranked symbols to a chosen list (feature 097, FR-6)', async ({
+  test('Add top-N adds the top-ranked symbols to a chosen list (feature 098, FR-6)', async ({
     page,
   }) => {
     await addAuthCookie(page);

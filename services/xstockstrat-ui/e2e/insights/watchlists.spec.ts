@@ -55,11 +55,11 @@ test.describe('Watchlists (insights)', () => {
     await expect(readiness.getByText('AAPL')).toBeVisible({ timeout: 5000 });
     // 2 of 3 conditions pass → "1 away" (readiness bar + blocking-condition row).
     await expect(readiness.getByText('1 away')).toBeVisible();
-    // AAPL is on the opportunity queue → marked "in queue" (feature 097, FR-11).
+    // AAPL is on the opportunity queue → marked "in queue" (feature 098, FR-11).
     await expect(readiness.getByTestId('in-queue')).toBeVisible();
   });
 
-  test('master-detail: selecting a list swaps the detail pane (feature 097)', async ({ page }) => {
+  test('master-detail: selecting a list swaps the detail pane (feature 098)', async ({ page }) => {
     await addAuthCookie(page);
     await mockWatchlists(page);
     await page.goto('/insights/watchlists');
@@ -87,7 +87,7 @@ test.describe('Watchlists (insights)', () => {
     );
   });
 
-  test('readiness rollup buckets sum to the requested symbol count (feature 097, AC-6)', async ({
+  test('readiness rollup buckets sum to the requested symbol count (feature 098, AC-6)', async ({
     page,
   }) => {
     await addAuthCookie(page);
@@ -120,7 +120,7 @@ test.describe('Watchlists (insights)', () => {
     await expect(readiness.getByText('no data')).toBeVisible();
   });
 
-  test('no LAST / CHG / Quotes livestream UI is present (feature 097, AC-8 — deferred to 098)', async ({
+  test('no LAST / CHG / Quotes livestream UI is present (feature 098, AC-8 — deferred to 099)', async ({
     page,
   }) => {
     await addAuthCookie(page);
@@ -130,7 +130,7 @@ test.describe('Watchlists (insights)', () => {
     await page.getByRole('button', { name: 'Create' }).click();
     await expect(page.getByRole('heading', { name: 'NoQuotes' })).toBeVisible({ timeout: 5000 });
 
-    // The live-quote surfaces (LAST/CHG columns, a Quotes tab) belong to 098-watchlist-live-quotes.
+    // The live-quote surfaces (LAST/CHG columns, a Quotes tab) belong to 099-watchlist-live-quotes.
     await expect(page.getByRole('columnheader', { name: 'LAST' })).toHaveCount(0);
     await expect(page.getByRole('columnheader', { name: /CHG/ })).toHaveCount(0);
     await expect(page.getByRole('tab', { name: 'Quotes' })).toHaveCount(0);

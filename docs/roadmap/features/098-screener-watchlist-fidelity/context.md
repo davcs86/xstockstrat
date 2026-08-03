@@ -1,8 +1,8 @@
 # Context: screener-watchlist-fidelity
 
-**Feature**: `docs/roadmap/features/097-screener-watchlist-fidelity/feature.md`
-**Product Spec**: `docs/roadmap/features/097-screener-watchlist-fidelity/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/097-screener-watchlist-fidelity/implementation-spec.md`
+**Feature**: `docs/roadmap/features/098-screener-watchlist-fidelity/feature.md`
+**Product Spec**: `docs/roadmap/features/098-screener-watchlist-fidelity/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/098-screener-watchlist-fidelity/implementation-spec.md`
 
 ---
 
@@ -17,7 +17,7 @@
   `Watchlist` CRUD RPCs. No proto/config/DB change is required.
 - **C-14 override (livestream deferral) — recorded:** the design handoff's LAST price column, intraday
   CHG % column, and Quotes tab require a streaming/realtime quote feed the platform does not expose.
-  These are split to a **named backlog follow-up feature, `098-watchlist-live-quotes`** (created in the
+  These are split to a **named backlog follow-up feature, `099-watchlist-live-quotes`** (created in the
   same session at `idea` status), satisfying the C-14 "named follow-up" requirement rather than a vague
   "later". The predefined screener universe picker is likewise out of scope (no constituent table).
 - **Open design fork logged** (product-spec Open Questions): readiness roll-ups are strategy-scoped to
@@ -74,7 +74,7 @@
     `symbolReadiness` fixture `opportunities.ts:58-84` (keep single-arg — `.map` passes index; spread overrides
     at call site); `STRATEGY_DEF_LIVE.displayName='Live Test Strategy'`; `INVENTORY.md:21` Opportunity-queue row
     omits `symbolReadiness` today → catalog it in step 6.
-- Deferred surface (LAST/CHG/Quotes) → named follow-up `098-watchlist-live-quotes` (C-14), asserted absent in step 6.
+- Deferred surface (LAST/CHG/Quotes) → named follow-up `099-watchlist-live-quotes` (C-14), asserted absent in step 6.
 
 ## Session 2026-08-02 — implementation (manual execute on harness branch)
 

@@ -1,4 +1,4 @@
-// Watchlist readiness roll-up helpers (feature 097).
+// Watchlist readiness roll-up helpers (feature 098).
 //
 // Readiness is the traced evaluation of a strategy's entry rule over a watchlist's symbols
 // (analysis EvaluateReadiness). These pure helpers bucket each symbol so the Watchlists detail can

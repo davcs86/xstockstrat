@@ -11,7 +11,7 @@
 
 | Date | Status | Updated by | Note |
 |---|---|---|---|
-| 2026-08-02 | — → `idea` | /sdd-story (097) | Backlog follow-up split from `097-screener-watchlist-fidelity`: the live-quote UI elements (LAST price, intraday CHG %, Quotes tab) require a streaming quote feed the platform does not yet expose. Parked at `idea` — not scheduled. |
+| 2026-08-02 | — → `idea` | /sdd-story (098) | Backlog follow-up split from `098-screener-watchlist-fidelity`: the live-quote UI elements (LAST price, intraday CHG %, Quotes tab) require a streaming quote feed the platform does not yet expose. Parked at `idea` — not scheduled. |
 
 ---
 
@@ -26,7 +26,7 @@
 ## Summary
 
 Add live-quote presentation to the Watchlists page — a LAST price column, an intraday CHG % column, and
-a "Quotes" tab — once the platform exposes a streaming/realtime quote feed. Split out of feature 097
+a "Quotes" tab — once the platform exposes a streaming/realtime quote feed. Split out of feature 098
 (`screener-watchlist-fidelity`), which delivered every **derivable** fidelity fix and explicitly
 deferred these livestream-dependent elements here (C-14 named follow-up).
 

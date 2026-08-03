@@ -86,7 +86,7 @@ FR-6.
 
 - **Live LAST price column, intraday CHG % column, and the Quotes tab** on Watchlists — these require a
   streaming/realtime quote feed the platform does not expose today. **Deferred to a named backlog
-  follow-up feature: `098-watchlist-live-quotes`** (created alongside this spec; C-14 override recorded
+  follow-up feature: `099-watchlist-live-quotes`** (created alongside this spec; C-14 override recorded
   in `context.md`).
 - A **predefined screener universe** picker ("S&P 500 · liquidity > $50M ADV" in the handoff). No
   universe/constituent table exists; free-text symbol entry is retained. Introducing a universe source

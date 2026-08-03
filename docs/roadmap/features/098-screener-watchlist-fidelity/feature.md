@@ -51,4 +51,4 @@ re-run /sdd-spec if the registry changes.)_
 
 Code-complete on `claude/ui-revamp-low-fidelity-ii5p1h`; PR open against `main`. On merge + promotion,
 CI flips this to `launched`. Backlog follow-up for the deferred livestream surfaces:
-`098-watchlist-live-quotes`.
+`099-watchlist-live-quotes`.

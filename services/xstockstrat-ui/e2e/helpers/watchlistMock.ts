@@ -3,7 +3,7 @@ import { type Page } from '@playwright/test';
 /**
  * Shared stateful in-memory mock of the PortfolioService watchlist RPCs (feature 058/097).
  *
- * The watchlists page (and, since feature 097, the screener's "Save as watchlist" / "Add top-N"
+ * The watchlists page (and, since feature 098, the screener's "Save as watchlist" / "Add top-N"
  * actions) drive React-Query invalidation after every mutation, so ListWatchlists must reflect the
  * latest state — a static fixture would not survive the create→add→remove→delete flow. Extracted
  * here so the screener and watchlists specs share one canonical mock (DRY guard rail) instead of two

@@ -18,9 +18,9 @@ skill).
 | Custom formulas | `FORMULA_RSI`, `FORMULA_MACD`, `FORMULAS` | `e2e/fixtures/formulas.ts` | `xstockstrat.indicators.v1.FormulaDefinition` (list row) | `e2e/insights/formulas.spec.ts`, `e2e/insights/strategy-authoring.spec.ts` |
 | Soft-deleted formula (086) | `FORMULA_DELETED` | `e2e/fixtures/formulas.ts` | `xstockstrat.indicators.v1.FormulaDefinition` (full, `deleted: true`) | `e2e/insights/formula-deletion.spec.ts` (GetFormula stub) |
 | Backtest coverage gaps | `insufficientDataResult`, `prefixGapRange`, `BACKTEST_GAP_{SYMBOL,BARS_HAVE,BARS_NEED}`, `BACKTEST_PREFIX_DAYS` | `e2e/fixtures/backtests.ts` | `xstockstrat.analysis.v1.CoverageGap` / `BacktestResult` | `e2e/mock-backend.ts` (`runBacktest` default branch), `e2e/insights/backtest-coverage.spec.ts` |
-| Opportunity queue | `OPPORTUNITIES` | `e2e/fixtures/opportunities.ts` | `xstockstrat.analysis.v1.Opportunity` | `e2e/mock-backend.ts` (`listOpportunities`), `e2e/insights/opportunities.spec.ts`, `e2e/insights/watchlists.spec.ts` (in-queue mark, feature 097) |
-| Symbol readiness | `symbolReadiness` (single-arg factory) | `e2e/fixtures/opportunities.ts` | `xstockstrat.analysis.v1.SymbolReadiness` | `e2e/mock-backend.ts` (`evaluateReadiness` — spreads `READINESS_BUCKET_OVERRIDE` over it; keep single-arg, the `.map` is an arrow), `e2e/insights/watchlists.spec.ts` (readiness rollup, feature 097) |
-| Watchlists (stateful mock) | `mockWatchlists`, `MockWatchlist` | `e2e/helpers/watchlistMock.ts` | `xstockstrat.portfolio.v1.Watchlist` CRUD RPCs | `e2e/insights/watchlists.spec.ts`, `e2e/insights/screener.spec.ts` (Save/Add-top-N, feature 097) |
+| Opportunity queue | `OPPORTUNITIES` | `e2e/fixtures/opportunities.ts` | `xstockstrat.analysis.v1.Opportunity` | `e2e/mock-backend.ts` (`listOpportunities`), `e2e/insights/opportunities.spec.ts`, `e2e/insights/watchlists.spec.ts` (in-queue mark, feature 098) |
+| Symbol readiness | `symbolReadiness` (single-arg factory) | `e2e/fixtures/opportunities.ts` | `xstockstrat.analysis.v1.SymbolReadiness` | `e2e/mock-backend.ts` (`evaluateReadiness` — spreads `READINESS_BUCKET_OVERRIDE` over it; keep single-arg, the `.map` is an arrow), `e2e/insights/watchlists.spec.ts` (readiness rollup, feature 098) |
+| Watchlists (stateful mock) | `mockWatchlists`, `MockWatchlist` | `e2e/helpers/watchlistMock.ts` | `xstockstrat.portfolio.v1.Watchlist` CRUD RPCs | `e2e/insights/watchlists.spec.ts`, `e2e/insights/screener.spec.ts` (Save/Add-top-N, feature 098) |
 | Positions | `POSITION_AAPL`, `POSITION_MSFT`, `POSITIONS`, `positionForSymbol` | `e2e/fixtures/positions.ts` | `xstockstrat.portfolio.v1.Position` | `e2e/mock-backend.ts` (`listPositions`, `getPosition`), `e2e/trader/{positions,position-detail,valuation-parity}.spec.ts` |
 | Orders (shared mock set) | `ORDER_FILLED`, `ORDER_WORKING`, `ORDERS`, `orderForId` | `e2e/fixtures/orders.ts` | `xstockstrat.trading.v1.Order` | `e2e/mock-backend.ts` (`listOrders`, `getOrder`), `e2e/trader/order-ticket.spec.ts` |
 
@@ -36,7 +36,7 @@ other meanings; don't rename without updating every listed site.
 | `strat-notfound-001` | `GetStrategyReport` throws NOT_FOUND (cleared grade, feature 065) | `e2e/mock-backend.ts` |
 | `strat-history-001` | Strategy with persisted score + backtest run history | `e2e/mock-backend.ts` |
 | `invalid_ref` | `ManageStrategy` throws INVALID_ARGUMENT (wizard error path) | `e2e/mock-backend.ts`, `e2e/insights/strategy-authoring.spec.ts` |
-| `READY1` / `WATCH1` / `QUIET1` / `NODATA1` | `evaluateReadiness` forces the ready / watching / quiet / no-data bucket for that symbol (feature 097 rollup e2e) — never AAPL/MSFT so other specs' default 2/3 shape is untouched | `e2e/mock-backend.ts` (`READINESS_BUCKET_OVERRIDE`), `e2e/insights/watchlists.spec.ts` |
+| `READY1` / `WATCH1` / `QUIET1` / `NODATA1` | `evaluateReadiness` forces the ready / watching / quiet / no-data bucket for that symbol (feature 098 rollup e2e) — never AAPL/MSFT so other specs' default 2/3 shape is untouched | `e2e/mock-backend.ts` (`READINESS_BUCKET_OVERRIDE`), `e2e/insights/watchlists.spec.ts` |
 
 ## Not yet centralized
 

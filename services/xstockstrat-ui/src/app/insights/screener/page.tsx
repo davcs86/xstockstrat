@@ -42,7 +42,7 @@ const COMPARATOR_LABELS: Array<{ value: Comparator; label: string }> = [
   { value: Comparator.GTE, label: '≥' },
 ];
 
-// Top-N default for the "Add top N to watchlist" action (feature 097, FR-6). A UI display constant,
+// Top-N default for the "Add top N to watchlist" action (feature 098, FR-6). A UI display constant,
 // not a WatchConfig key (Floor F-07 unaffected).
 const TOP_N = 5;
 

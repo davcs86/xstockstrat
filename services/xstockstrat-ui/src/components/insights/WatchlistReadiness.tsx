@@ -33,7 +33,7 @@ function blockingCondition(r: Readiness): string {
   return `${c.refName} ${c.fn} ${c.threshold.toFixed(2)}`;
 }
 
-/** Per-symbol state label: firing / N away / no data (an un-evaluable symbol, feature 097). */
+/** Per-symbol state label: firing / N away / no data (an un-evaluable symbol, feature 098). */
 function stateLabel(r: Readiness): string {
   if (!hasData(r)) return 'no data';
   if (isFiring(r)) return 'firing';
@@ -41,7 +41,7 @@ function stateLabel(r: Readiness): string {
 }
 
 /**
- * Per-watchlist readiness overlay (feature 083, enriched by feature 097). Readiness is
+ * Per-watchlist readiness overlay (feature 083, enriched by feature 098). Readiness is
  * strategy-scoped — the strategy is chosen explicitly (default none → no evaluation), never a
  * fabricated per-symbol binding. When chosen, EvaluateReadiness runs over the watchlist's symbols and
  * the view shows a ready/watching/quiet/no-data roll-up, a single "Evaluated against: <strategy>"

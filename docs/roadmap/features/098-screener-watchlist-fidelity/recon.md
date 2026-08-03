@@ -9,7 +9,7 @@
 
 Raise the Screener (`/insights/screener`) and Watchlists (`/insights/watchlists`) pages to the
 feature-083 high-fidelity design using only data/controls already derivable from existing RPCs. No
-proto/config/DB change. Livestream elements (LAST/CHG/Quotes) are deferred to `098-watchlist-live-quotes`.
+proto/config/DB change. Livestream elements (LAST/CHG/Quotes) are deferred to `099-watchlist-live-quotes`.
 
 ## Codebase Map
 

@@ -1,4 +1,4 @@
-// Screener criterion weight display helpers (feature 097).
+// Screener criterion weight display helpers (feature 098).
 //
 // The screener sends RAW weights on the wire — `ScreenCriterion.weight` — and the analysis scorer
 // normalizes them server-side. This helper is DISPLAY-ONLY: it turns the raw weights the trader

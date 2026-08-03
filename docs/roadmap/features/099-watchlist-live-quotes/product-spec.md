@@ -10,7 +10,7 @@
 The feature-083 Watchlists design shows, per symbol, a **LAST** price and an intraday **CHG %**, plus a
 **Quotes** tab alongside the Readiness tab. These require a streaming/realtime last-trade + change feed.
 The platform's `xstockstrat-marketdata` service stores OHLCV **bars** (historical/close), not a live
-last-trade/quote stream, and no service currently pushes realtime quotes to the UI. Feature 097 fixed
+last-trade/quote stream, and no service currently pushes realtime quotes to the UI. Feature 098 fixed
 every fidelity gap that could be derived from existing RPCs and deferred these here.
 
 ## User Story
@@ -29,14 +29,14 @@ the broker/Alpaca feed) that the `/insights` BFF can call. Options to evaluate w
 
 Until that backend exists, this feature is blocked.
 
-## Out of Scope (of the derivable feature 097)
+## Out of Scope (of the derivable feature 098)
 
-Everything here was deliberately excluded from 097 to keep 097 derivable-only. See
-`docs/roadmap/features/097-screener-watchlist-fidelity/product-spec.md` § Out of Scope and its
+Everything here was deliberately excluded from 098 to keep 098 derivable-only. See
+`docs/roadmap/features/098-screener-watchlist-fidelity/product-spec.md` § Out of Scope and its
 `context.md` C-14 override note.
 
 ## Open Questions
 
 - [ ] Snapshot-poll vs. server-stream for quote delivery, and the connection-budget impact.
 - [ ] Whether CHG % is vs. prior close (derivable once a live last exists) or vs. open.
-- [ ] Whether the Quotes tab reuses the readiness master-detail shell from 097 or is a separate view.
+- [ ] Whether the Quotes tab reuses the readiness master-detail shell from 098 or is a separate view.
