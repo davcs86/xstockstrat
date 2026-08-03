@@ -32,8 +32,8 @@ func NewWatchlistRepo(pool *pgxpool.Pool) *WatchlistRepo {
 	return &WatchlistRepo{pool: pool}
 }
 
-// Create inserts a new watchlist plus its (already normalized) symbols in one tx.
-func (r *WatchlistRepo) Create(ctx context.Context, userID, name, description string, symbols []string) (*portfoliov1.Watchlist, error) {
+// Create inserts a new watchlist plus its (already normalized) bindings in one tx.
+func (r *WatchlistRepo) Create(ctx context.Context, userID, name, description string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin: %w", err)
@@ -48,7 +48,7 @@ func (r *WatchlistRepo) Create(ctx context.Context, userID, name, description st
 	if err != nil {
 		return nil, fmt.Errorf("insert watchlist: %w", err)
 	}
-	if err := insertSymbolsTx(ctx, tx, id, symbols); err != nil {
+	if err := insertBindingsTx(ctx, tx, id, bindings); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -68,11 +68,12 @@ func (r *WatchlistRepo) GetByID(ctx context.Context, watchlistID string) (*portf
 		}
 		return nil, fmt.Errorf("get watchlist: %w", err)
 	}
-	syms, err := r.listSymbols(ctx, watchlistID)
+	binds, err := r.listBindings(ctx, watchlistID)
 	if err != nil {
 		return nil, err
 	}
-	wl.Symbols = syms
+	wl.Bindings = binds
+	wl.Symbols = bindingSymbols(binds) //nolint:staticcheck // SA1019: deprecated symbols mirror intentionally retained for old clients (feature 097)
 	return wl, nil
 }
 
@@ -105,13 +106,14 @@ func (r *WatchlistRepo) ListByUser(ctx context.Context, userID string, pageSize 
 	}
 	rows.Close()
 
-	// Hydrate symbols for the returned page.
+	// Hydrate bindings (and the flat symbols mirror) for the returned page.
 	for _, wl := range wls {
-		syms, err := r.listSymbols(ctx, wl.WatchlistId)
+		binds, err := r.listBindings(ctx, wl.WatchlistId)
 		if err != nil {
 			return nil, "", err
 		}
-		wl.Symbols = syms
+		wl.Bindings = binds
+		wl.Symbols = bindingSymbols(binds) //nolint:staticcheck // SA1019: deprecated symbols mirror intentionally retained for old clients (feature 097)
 	}
 
 	nextToken := ""
@@ -122,8 +124,8 @@ func (r *WatchlistRepo) ListByUser(ctx context.Context, userID string, pageSize 
 	return wls, nextToken, nil
 }
 
-// Update replaces name/description and the full symbol set (already normalized) in one tx.
-func (r *WatchlistRepo) Update(ctx context.Context, watchlistID, name, description string, symbols []string) (*portfoliov1.Watchlist, error) {
+// Update replaces name/description and the full binding set (already normalized) in one tx.
+func (r *WatchlistRepo) Update(ctx context.Context, watchlistID, name, description string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin: %w", err)
@@ -142,7 +144,7 @@ func (r *WatchlistRepo) Update(ctx context.Context, watchlistID, name, descripti
 	if _, err := tx.Exec(ctx, `DELETE FROM portfolio.watchlist_symbols WHERE watchlist_id = $1`, watchlistID); err != nil {
 		return nil, fmt.Errorf("clear symbols: %w", err)
 	}
-	if err := insertSymbolsTx(ctx, tx, watchlistID, symbols); err != nil {
+	if err := insertBindingsTx(ctx, tx, watchlistID, bindings); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -163,8 +165,10 @@ func (r *WatchlistRepo) Delete(ctx context.Context, watchlistID string) error {
 	return nil
 }
 
-// AddSymbols inserts the given (normalized) symbols, ignoring duplicates, and bumps updated_at.
-func (r *WatchlistRepo) AddSymbols(ctx context.Context, watchlistID string, symbols []string) (*portfoliov1.Watchlist, error) {
+// AddSymbols inserts the given (normalized) bindings, ignoring duplicate symbols
+// (ON CONFLICT DO NOTHING — an existing symbol keeps its stored strategy_id, so a
+// legacy flat add never clears a prior binding), and bumps updated_at.
+func (r *WatchlistRepo) AddSymbols(ctx context.Context, watchlistID string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin: %w", err)
@@ -174,7 +178,7 @@ func (r *WatchlistRepo) AddSymbols(ctx context.Context, watchlistID string, symb
 	if err := touchWatchlistTx(ctx, tx, watchlistID); err != nil {
 		return nil, err
 	}
-	if err := insertSymbolsTx(ctx, tx, watchlistID, symbols); err != nil {
+	if err := insertBindingsTx(ctx, tx, watchlistID, bindings); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -214,22 +218,34 @@ func (r *WatchlistRepo) CountByUser(ctx context.Context, userID string) (int, er
 	return n, err
 }
 
-func (r *WatchlistRepo) listSymbols(ctx context.Context, watchlistID string) ([]string, error) {
+func (r *WatchlistRepo) listBindings(ctx context.Context, watchlistID string) ([]*portfoliov1.WatchlistBinding, error) {
 	rows, err := r.pool.Query(ctx,
-		`SELECT symbol FROM portfolio.watchlist_symbols WHERE watchlist_id = $1 ORDER BY symbol ASC`, watchlistID)
+		`SELECT symbol, strategy_id FROM portfolio.watchlist_symbols WHERE watchlist_id = $1 ORDER BY symbol ASC`, watchlistID)
 	if err != nil {
-		return nil, fmt.Errorf("list symbols: %w", err)
+		return nil, fmt.Errorf("list bindings: %w", err)
 	}
 	defer rows.Close()
-	var syms []string
+	var binds []*portfoliov1.WatchlistBinding
 	for rows.Next() {
-		var s string
-		if err := rows.Scan(&s); err != nil {
-			return nil, fmt.Errorf("scan symbol: %w", err)
+		var symbol, strategyID string
+		if err := rows.Scan(&symbol, &strategyID); err != nil {
+			return nil, fmt.Errorf("scan binding: %w", err)
 		}
-		syms = append(syms, s)
+		binds = append(binds, &portfoliov1.WatchlistBinding{Symbol: symbol, StrategyId: strategyID})
 	}
-	return syms, rows.Err()
+	return binds, rows.Err()
+}
+
+// bindingSymbols flattens bindings to the deprecated symbols mirror (kept for old readers).
+func bindingSymbols(binds []*portfoliov1.WatchlistBinding) []string {
+	if len(binds) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(binds))
+	for _, b := range binds {
+		out = append(out, b.GetSymbol())
+	}
+	return out
 }
 
 // touchWatchlistTx bumps updated_at and verifies the row exists (ErrWatchlistNotFound otherwise).
@@ -244,14 +260,16 @@ func touchWatchlistTx(ctx context.Context, tx pgx.Tx, watchlistID string) error 
 	return nil
 }
 
-// insertSymbolsTx inserts symbols (already normalized), ignoring duplicates.
-func insertSymbolsTx(ctx context.Context, tx pgx.Tx, watchlistID string, symbols []string) error {
-	for _, s := range symbols {
+// insertBindingsTx inserts (symbol, strategy_id) bindings (already normalized),
+// ignoring duplicate symbols. ON CONFLICT DO NOTHING preserves an existing binding's
+// strategy_id — a legacy flat add (strategy_id="") never clears a prior binding (fails-080).
+func insertBindingsTx(ctx context.Context, tx pgx.Tx, watchlistID string, bindings []*portfoliov1.WatchlistBinding) error {
+	for _, b := range bindings {
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO portfolio.watchlist_symbols (watchlist_id, symbol)
-			 VALUES ($1, $2) ON CONFLICT (watchlist_id, symbol) DO NOTHING`,
-			watchlistID, s); err != nil {
-			return fmt.Errorf("insert symbol %q: %w", s, err)
+			`INSERT INTO portfolio.watchlist_symbols (watchlist_id, symbol, strategy_id)
+			 VALUES ($1, $2, $3) ON CONFLICT (watchlist_id, symbol) DO NOTHING`,
+			watchlistID, b.GetSymbol(), b.GetStrategyId()); err != nil {
+			return fmt.Errorf("insert binding %q: %w", b.GetSymbol(), err)
 		}
 	}
 	return nil

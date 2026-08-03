@@ -164,15 +164,24 @@ message ListPortfoliosResponse {
   repeated Portfolio portfolios = 1;
 }
 
+// A (symbol, strategy) binding — a ready-made Universe candidate (feature 097).
+message WatchlistBinding {
+  string symbol = 1;
+  string strategy_id = 2;  // "" = unbound (kept as a bare watched symbol)
+}
+
 // Watchlist (feature 058) — a mode-agnostic, user-owned named set of symbols.
 message Watchlist {
   string watchlist_id = 1;
   string user_id = 2;
   string name = 3;
   string description = 4;
-  repeated string symbols = 5;
+  // DEPRECATED (feature 097): the flat mirror of `bindings`, kept readable for old clients (FR-6).
+  repeated string symbols = 5 [deprecated = true];
   google.protobuf.Timestamp created_at = 6;
   google.protobuf.Timestamp updated_at = 7;
+  // Authoritative (symbol, strategy) shape (feature 097); when present it supersedes `symbols`.
+  repeated WatchlistBinding bindings = 8;
 }
 
 // user_id is intentionally absent from all request messages — ownership is taken
@@ -181,6 +190,8 @@ message CreateWatchlistRequest {
   string name = 1;
   string description = 2;
   repeated string symbols = 3;
+  // When present, authoritative (feature 097); legacy `symbols` remains accepted (unbound).
+  repeated WatchlistBinding bindings = 4;
 }
 message CreateWatchlistResponse {
   Watchlist watchlist = 1;
@@ -207,6 +218,8 @@ message UpdateWatchlistRequest {
   string name = 2;
   string description = 3;
   repeated string symbols = 4;
+  // When present, authoritative (feature 097); legacy `symbols` remains accepted (unbound).
+  repeated WatchlistBinding bindings = 5;
 }
 message UpdateWatchlistResponse {
   Watchlist watchlist = 1;
@@ -220,6 +233,8 @@ message DeleteWatchlistResponse {}
 message AddWatchlistSymbolsRequest {
   string watchlist_id = 1;
   repeated string symbols = 2;
+  // When present, authoritative (feature 097); legacy `symbols` remains accepted (unbound).
+  repeated WatchlistBinding bindings = 3;
 }
 message AddWatchlistSymbolsResponse {
   Watchlist watchlist = 1;

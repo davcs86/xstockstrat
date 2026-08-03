@@ -300,15 +300,31 @@ export interface ListPortfoliosResponse {
   portfolios: Portfolio[];
 }
 
+/** A (symbol, strategy) binding — a ready-made Universe candidate (feature 097). */
+export interface WatchlistBinding {
+  symbol: string;
+  /** "" = unbound (kept as a bare watched symbol) */
+  strategyId: string;
+}
+
 /** Watchlist (feature 058) — a mode-agnostic, user-owned named set of symbols. */
 export interface Watchlist {
   watchlistId: string;
   userId: string;
   name: string;
   description: string;
+  /**
+   * DEPRECATED (feature 097): the flat mirror of `bindings`, kept readable for old clients (FR-6).
+   *
+   * @deprecated
+   */
   symbols: string[];
   createdAt?: Date | undefined;
-  updatedAt?: Date | undefined;
+  updatedAt?:
+    | Date
+    | undefined;
+  /** Authoritative (symbol, strategy) shape (feature 097); when present it supersedes `symbols`. */
+  bindings: WatchlistBinding[];
 }
 
 /**
@@ -319,6 +335,8 @@ export interface CreateWatchlistRequest {
   name: string;
   description: string;
   symbols: string[];
+  /** When present, authoritative (feature 097); legacy `symbols` remains accepted (unbound). */
+  bindings: WatchlistBinding[];
 }
 
 export interface CreateWatchlistResponse {
@@ -348,6 +366,8 @@ export interface UpdateWatchlistRequest {
   name: string;
   description: string;
   symbols: string[];
+  /** When present, authoritative (feature 097); legacy `symbols` remains accepted (unbound). */
+  bindings: WatchlistBinding[];
 }
 
 export interface UpdateWatchlistResponse {
@@ -364,6 +384,8 @@ export interface DeleteWatchlistResponse {
 export interface AddWatchlistSymbolsRequest {
   watchlistId: string;
   symbols: string[];
+  /** When present, authoritative (feature 097); legacy `symbols` remains accepted (unbound). */
+  bindings: WatchlistBinding[];
 }
 
 export interface AddWatchlistSymbolsResponse {
@@ -2345,6 +2367,86 @@ export const ListPortfoliosResponse: MessageFns<ListPortfoliosResponse> = {
   },
 };
 
+function createBaseWatchlistBinding(): WatchlistBinding {
+  return { symbol: "", strategyId: "" };
+}
+
+export const WatchlistBinding: MessageFns<WatchlistBinding> = {
+  encode(message: WatchlistBinding, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.symbol !== "") {
+      writer.uint32(10).string(message.symbol);
+    }
+    if (message.strategyId !== "") {
+      writer.uint32(18).string(message.strategyId);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): WatchlistBinding {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseWatchlistBinding();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.strategyId = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): WatchlistBinding {
+    return {
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      strategyId: isSet(object.strategyId)
+        ? globalThis.String(object.strategyId)
+        : isSet(object.strategy_id)
+        ? globalThis.String(object.strategy_id)
+        : "",
+    };
+  },
+
+  toJSON(message: WatchlistBinding): unknown {
+    const obj: any = {};
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.strategyId !== "") {
+      obj.strategyId = message.strategyId;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<WatchlistBinding>, I>>(base?: I): WatchlistBinding {
+    return WatchlistBinding.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<WatchlistBinding>, I>>(object: I): WatchlistBinding {
+    const message = createBaseWatchlistBinding();
+    message.symbol = object.symbol ?? "";
+    message.strategyId = object.strategyId ?? "";
+    return message;
+  },
+};
+
 function createBaseWatchlist(): Watchlist {
   return {
     watchlistId: "",
@@ -2354,6 +2456,7 @@ function createBaseWatchlist(): Watchlist {
     symbols: [],
     createdAt: undefined,
     updatedAt: undefined,
+    bindings: [],
   };
 }
 
@@ -2379,6 +2482,9 @@ export const Watchlist: MessageFns<Watchlist> = {
     }
     if (message.updatedAt !== undefined) {
       Timestamp.encode(toTimestamp(message.updatedAt), writer.uint32(58).fork()).join();
+    }
+    for (const v of message.bindings) {
+      WatchlistBinding.encode(v!, writer.uint32(66).fork()).join();
     }
     return writer;
   },
@@ -2446,6 +2552,14 @@ export const Watchlist: MessageFns<Watchlist> = {
           message.updatedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
           continue;
         }
+        case 8: {
+          if (tag !== 66) {
+            break;
+          }
+
+          message.bindings.push(WatchlistBinding.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2480,6 +2594,9 @@ export const Watchlist: MessageFns<Watchlist> = {
         : isSet(object.updated_at)
         ? fromJsonTimestamp(object.updated_at)
         : undefined,
+      bindings: globalThis.Array.isArray(object?.bindings)
+        ? object.bindings.map((e: any) => WatchlistBinding.fromJSON(e))
+        : [],
     };
   },
 
@@ -2506,6 +2623,9 @@ export const Watchlist: MessageFns<Watchlist> = {
     if (message.updatedAt !== undefined) {
       obj.updatedAt = message.updatedAt.toISOString();
     }
+    if (message.bindings?.length) {
+      obj.bindings = message.bindings.map((e) => WatchlistBinding.toJSON(e));
+    }
     return obj;
   },
 
@@ -2521,12 +2641,13 @@ export const Watchlist: MessageFns<Watchlist> = {
     message.symbols = object.symbols?.map((e) => e) || [];
     message.createdAt = object.createdAt ?? undefined;
     message.updatedAt = object.updatedAt ?? undefined;
+    message.bindings = object.bindings?.map((e) => WatchlistBinding.fromPartial(e)) || [];
     return message;
   },
 };
 
 function createBaseCreateWatchlistRequest(): CreateWatchlistRequest {
-  return { name: "", description: "", symbols: [] };
+  return { name: "", description: "", symbols: [], bindings: [] };
 }
 
 export const CreateWatchlistRequest: MessageFns<CreateWatchlistRequest> = {
@@ -2539,6 +2660,9 @@ export const CreateWatchlistRequest: MessageFns<CreateWatchlistRequest> = {
     }
     for (const v of message.symbols) {
       writer.uint32(26).string(v!);
+    }
+    for (const v of message.bindings) {
+      WatchlistBinding.encode(v!, writer.uint32(34).fork()).join();
     }
     return writer;
   },
@@ -2574,6 +2698,14 @@ export const CreateWatchlistRequest: MessageFns<CreateWatchlistRequest> = {
           message.symbols.push(reader.string());
           continue;
         }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.bindings.push(WatchlistBinding.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2588,6 +2720,9 @@ export const CreateWatchlistRequest: MessageFns<CreateWatchlistRequest> = {
       name: isSet(object.name) ? globalThis.String(object.name) : "",
       description: isSet(object.description) ? globalThis.String(object.description) : "",
       symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+      bindings: globalThis.Array.isArray(object?.bindings)
+        ? object.bindings.map((e: any) => WatchlistBinding.fromJSON(e))
+        : [],
     };
   },
 
@@ -2602,6 +2737,9 @@ export const CreateWatchlistRequest: MessageFns<CreateWatchlistRequest> = {
     if (message.symbols?.length) {
       obj.symbols = message.symbols;
     }
+    if (message.bindings?.length) {
+      obj.bindings = message.bindings.map((e) => WatchlistBinding.toJSON(e));
+    }
     return obj;
   },
 
@@ -2613,6 +2751,7 @@ export const CreateWatchlistRequest: MessageFns<CreateWatchlistRequest> = {
     message.name = object.name ?? "";
     message.description = object.description ?? "";
     message.symbols = object.symbols?.map((e) => e) || [];
+    message.bindings = object.bindings?.map((e) => WatchlistBinding.fromPartial(e)) || [];
     return message;
   },
 };
@@ -2942,7 +3081,7 @@ export const ListWatchlistsResponse: MessageFns<ListWatchlistsResponse> = {
 };
 
 function createBaseUpdateWatchlistRequest(): UpdateWatchlistRequest {
-  return { watchlistId: "", name: "", description: "", symbols: [] };
+  return { watchlistId: "", name: "", description: "", symbols: [], bindings: [] };
 }
 
 export const UpdateWatchlistRequest: MessageFns<UpdateWatchlistRequest> = {
@@ -2958,6 +3097,9 @@ export const UpdateWatchlistRequest: MessageFns<UpdateWatchlistRequest> = {
     }
     for (const v of message.symbols) {
       writer.uint32(34).string(v!);
+    }
+    for (const v of message.bindings) {
+      WatchlistBinding.encode(v!, writer.uint32(42).fork()).join();
     }
     return writer;
   },
@@ -3001,6 +3143,14 @@ export const UpdateWatchlistRequest: MessageFns<UpdateWatchlistRequest> = {
           message.symbols.push(reader.string());
           continue;
         }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.bindings.push(WatchlistBinding.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3020,6 +3170,9 @@ export const UpdateWatchlistRequest: MessageFns<UpdateWatchlistRequest> = {
       name: isSet(object.name) ? globalThis.String(object.name) : "",
       description: isSet(object.description) ? globalThis.String(object.description) : "",
       symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+      bindings: globalThis.Array.isArray(object?.bindings)
+        ? object.bindings.map((e: any) => WatchlistBinding.fromJSON(e))
+        : [],
     };
   },
 
@@ -3037,6 +3190,9 @@ export const UpdateWatchlistRequest: MessageFns<UpdateWatchlistRequest> = {
     if (message.symbols?.length) {
       obj.symbols = message.symbols;
     }
+    if (message.bindings?.length) {
+      obj.bindings = message.bindings.map((e) => WatchlistBinding.toJSON(e));
+    }
     return obj;
   },
 
@@ -3049,6 +3205,7 @@ export const UpdateWatchlistRequest: MessageFns<UpdateWatchlistRequest> = {
     message.name = object.name ?? "";
     message.description = object.description ?? "";
     message.symbols = object.symbols?.map((e) => e) || [];
+    message.bindings = object.bindings?.map((e) => WatchlistBinding.fromPartial(e)) || [];
     return message;
   },
 };
@@ -3221,7 +3378,7 @@ export const DeleteWatchlistResponse: MessageFns<DeleteWatchlistResponse> = {
 };
 
 function createBaseAddWatchlistSymbolsRequest(): AddWatchlistSymbolsRequest {
-  return { watchlistId: "", symbols: [] };
+  return { watchlistId: "", symbols: [], bindings: [] };
 }
 
 export const AddWatchlistSymbolsRequest: MessageFns<AddWatchlistSymbolsRequest> = {
@@ -3231,6 +3388,9 @@ export const AddWatchlistSymbolsRequest: MessageFns<AddWatchlistSymbolsRequest> 
     }
     for (const v of message.symbols) {
       writer.uint32(18).string(v!);
+    }
+    for (const v of message.bindings) {
+      WatchlistBinding.encode(v!, writer.uint32(26).fork()).join();
     }
     return writer;
   },
@@ -3258,6 +3418,14 @@ export const AddWatchlistSymbolsRequest: MessageFns<AddWatchlistSymbolsRequest> 
           message.symbols.push(reader.string());
           continue;
         }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.bindings.push(WatchlistBinding.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -3275,6 +3443,9 @@ export const AddWatchlistSymbolsRequest: MessageFns<AddWatchlistSymbolsRequest> 
         ? globalThis.String(object.watchlist_id)
         : "",
       symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+      bindings: globalThis.Array.isArray(object?.bindings)
+        ? object.bindings.map((e: any) => WatchlistBinding.fromJSON(e))
+        : [],
     };
   },
 
@@ -3286,6 +3457,9 @@ export const AddWatchlistSymbolsRequest: MessageFns<AddWatchlistSymbolsRequest> 
     if (message.symbols?.length) {
       obj.symbols = message.symbols;
     }
+    if (message.bindings?.length) {
+      obj.bindings = message.bindings.map((e) => WatchlistBinding.toJSON(e));
+    }
     return obj;
   },
 
@@ -3296,6 +3470,7 @@ export const AddWatchlistSymbolsRequest: MessageFns<AddWatchlistSymbolsRequest> 
     const message = createBaseAddWatchlistSymbolsRequest();
     message.watchlistId = object.watchlistId ?? "";
     message.symbols = object.symbols?.map((e) => e) || [];
+    message.bindings = object.bindings?.map((e) => WatchlistBinding.fromPartial(e)) || [];
     return message;
   },
 };

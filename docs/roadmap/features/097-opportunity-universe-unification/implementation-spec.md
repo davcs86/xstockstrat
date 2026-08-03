@@ -1,6 +1,6 @@
 # Implementation Spec: opportunity-universe-unification
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-08-03
 **Feature**: `docs/roadmap/features/097-opportunity-universe-unification/feature.md`
 **Total Steps**: 19
@@ -50,7 +50,7 @@ register a new route.
 
 ### Step 1 — proto: Watchlist bindings, Opportunity stable-key + provenance, SetOpportunityAction RPC
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/portfolio/v1/portfolio.proto` — modify
@@ -114,7 +114,7 @@ Both pass — adding fields/messages/RPCs and marking `symbols = 5 [deprecated =
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/**` — modify (generated; do not hand-edit)
@@ -141,7 +141,7 @@ Empty diff after generation confirms committed stubs match the protos.
 
 ### Step 3 — migration: portfolio 008 — watchlist_symbols.strategy_id
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/migrations/008_watchlist_symbol_strategy.up.sql` — create
@@ -171,7 +171,7 @@ ls services/xstockstrat-portfolio/migrations/008_watchlist_symbol_strategy.up.sq
 
 ### Step 4 — service: portfolio watchlist binding write/read path
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/watchlist_repo.go` — modify
@@ -209,7 +209,7 @@ cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-down
 
 ### Step 5 — test: portfolio watchlist binding round-trip
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go` — modify
@@ -238,7 +238,7 @@ Confirm ≥ 40%. Note: the watchlist logic lives in `service/`/`repository/` (ex
 
 ### Step 6 — migration: analysis 010 opportunity_actions + 011 opportunities
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/010_opportunity_actions.up.sql` — create
@@ -270,7 +270,7 @@ ls services/xstockstrat-analysis/migrations/010_opportunity_actions.{up,down}.sq
 
 ### Step 7 — config: register analysis.opportunity.* keys + declare defaults
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify (config-key table)
@@ -307,7 +307,7 @@ All five keys appear in both the service table and the registered-keys log.
 
 ### Step 8 — service: analysis evaluator — additive exit-rule trace sibling
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/evaluator.py` — modify
@@ -336,7 +336,7 @@ cd services/xstockstrat-analysis && ruff check app/services/evaluator.py && ruff
 
 ### Step 9 — test: analysis evaluator exit-rule trace
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_evaluator_traced.py` — modify
@@ -362,7 +362,7 @@ cd services/xstockstrat-analysis && pytest tests/test_evaluator_traced.py --cov=
 
 ### Step 10 — service: analysis opportunity_actions repo + SetOpportunityAction RPC
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/opportunity_actions.py` — create
@@ -393,7 +393,7 @@ cd services/xstockstrat-analysis && ruff check app/repositories/opportunity_acti
 
 ### Step 11 — test: analysis SetOpportunityAction + actions repo
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -419,7 +419,7 @@ cd services/xstockstrat-analysis && pytest tests/test_analysis_servicer.py --cov
 
 ### Step 12 — service: analysis materialized opportunities — Universe compute, pure-read ListOpportunities, real queue_share
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/opportunities.py` — create
@@ -471,7 +471,7 @@ grep -n "propagation_meta" services/xstockstrat-analysis/app/handlers/servicer.p
 
 ### Step 13 — test: analysis materialized ListOpportunities + queue_share + persisted-row parity (OR-F)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -502,7 +502,7 @@ cd services/xstockstrat-analysis && pytest tests/test_analysis_servicer.py --cov
 
 ### Step 14 — service: retire the signal blend from RunBacktest.strategy_params scoring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -531,7 +531,7 @@ cd services/xstockstrat-analysis && ruff check app/handlers/servicer.py && ruff 
 
 ### Step 15 — test: backtest scoring is technical-only
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -557,7 +557,7 @@ cd services/xstockstrat-analysis && pytest tests/test_analysis_servicer.py tests
 
 ### Step 16 — test/docs: agent builder parity tests + strat-lab/mcp-tools reconciliation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify (or a new `tests/test_strategy_builders.py` — create)
@@ -589,7 +589,7 @@ grep -n "signal_weight\|technical-only\|feature 097" plugins/strat-lab/skills/ba
 
 ### Step 17 — service: UI Opportunities page — server-persisted snooze / dismiss / take
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx` — modify
@@ -626,7 +626,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm test:e2e -- opportunities
 
 ### Step 18 — service: UI Watchlist per-symbol strategy-binding editor
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/WatchlistDetail.tsx` — modify
@@ -663,7 +663,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm test:e2e -- watchlists
 
 ### Step 19 — service: UI Strategy wizard — remove signal-blend controls, preserve signal_params.symbols
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/StrategyWizard.tsx` — modify
@@ -692,4 +692,123 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm test:e2e -- strateg
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **Steps 17–19 — all three UI steps done, e2e green (opportunities 6, watchlists 5, strategy-authoring
+  17 = 28 relevant specs pass); lint + tsc + vitest clean.** Notable deviations:
+  - **Step 17 snooze/dismiss persistence proven via per-page `page.route()` isolation, not the shared
+    mock-backend.** Playwright runs `fullyParallel: true`, so a global mutable "hidden" set in
+    `mock-backend.ts` would pollute across parallel workers. Mirrored the `watchlistMock.ts` house
+    pattern: the spec intercepts `ListOpportunities` + `SetOpportunityAction` per-page (isolated state
+    that survives a reload). `mock-backend.ts` still gained a stateless `setOpportunityAction` so a
+    call resolves. Trap fixed: Connect-JSON encodes a request enum as its NAME string (not the number)
+    and `google.protobuf.Timestamp` as an RFC3339 string (not `{seconds,nanos}`) — the hand-built route
+    responses/handlers account for both.
+  - **Step 18 readiness is per-symbol via `useQueries`.** The whole-list `useState('')` picker was
+    replaced by an inline per-symbol strategy `Select`; symbols group by bound strategy and one
+    `EvaluateReadiness` runs per group. Unbound → *not evaluated* (P-03). Re-bind writes the FULL
+    binding set via `UpdateWatchlist` (replace) so no other symbol's `strategyId` resets (fails-080).
+    Added a defensive de-dupe of the render binding list (unique React keys) after a transient
+    duplicate-symbol render corrupted the DOM under rapid rebind+refetch. The 098 readiness e2e was
+    rewritten for the per-symbol model (the whole-list picker + "evaluated-against" caption are gone).
+  - **Step 19 preserves `signal_params` verbatim.** `handleSubmit` now carries `initial.signalParams`
+    through unchanged (holds the live-loop `signal_params.symbols` universe, ANALYSIS-3) instead of the
+    wholesale `{signal_sources,…}` rewrite that dropped `symbols`; a create with no prior signal_params
+    omits the key. The wizard dropped from 5 steps to 4 (Review is now step 4). The regression-guard
+    e2e uses an **underscore** strategy id (`strat_signal_universe`) because the wizard's id validator
+    (`[a-z0-9_]+`) rejects hyphens, which would block advancing past Step 1.
+  - **`page.route()` isolation is a deliberate deviation from the spec's "modify `mock-backend.ts` with
+    a stateful handler" instruction** — documented here rather than shipping a cross-worker pollution
+    hazard.
+- **Step 16 — no builder code change; the docs had no RunBacktest-blend claim to remove (only a
+  claim to add).** The three parity tests pin the *existing, unchanged* `_build_component` /
+  `manage_strategy` / `screen_symbols` builders (RC-1 fail-closed guard) — no client.py edit. Used
+  the `test_formula_builders.py` capture-the-request+`ListFields()` shape (stronger than a hand
+  literal) with `_INTENTIONALLY_UNSET = {active, live_enabled, warnings}` (StrategyDefinition),
+  `{evaluation_window}` (ScreenSymbolsRequest), `{}` (StrategyComponent); `test_guard_has_teeth`
+  is the teeth assertion. **No RunBacktest signal-blend claim existed** in `mcp-tools.md` or the
+  strat-lab SKILL (the signal refs there are all the *kept* `screen_symbols`/`manage_strategy`
+  params), so the doc reconcile was purely **additive** — a "backtest score is technical-only
+  (feature 097)" note in both, leaving the screener/`signal_params` rows intact. **No watchlist MCP
+  tool exists** (recon), so the C-14 agent surface has nothing to rebind — stated in the PR body.
+  Agent suite: 198 passed, 76.03%. **Disposition**: parity guards + additive doc reconcile.
+- **Steps 14–15 — also removed the now-dead `source_weights` config read in RunBacktest.** Retiring
+  the `_backtest_symbol` signal blend left the `analysis.signals.source_weights` read (`RunBacktest`
+  top) and its `_backtest_symbol` arg with no consumer, so both were removed to avoid an unused-var
+  (ruff F841). The screener keeps its **own** `source_weights` read + `combine_score`/`compute_signal_score`
+  use (untouched — design § Option 2). `StrategyDefinition.signal_params` + the 065 fingerprint are
+  untouched (ANALYSIS-3). Also updated the six pre-existing `TestTradeStartIndex` calls of
+  `_backtest_symbol` to the trimmed signature. **RED** verified by reintroducing a `signal_weight`-gated
+  QuerySignals fetch + conviction blend: `test_signal_params_do_not_change_the_score` and
+  `test_signal_weighted_run_does_not_query_signals` went red; restore → green. **Disposition**:
+  in-scope dead-code removal from making the score technical-only.
+- **Steps 12–13 — committed together (one red-green cycle); `main.py` change is only the daily
+  loop.** Step 12's `OpportunitiesRepository` is constructed in `AnalysisServicer.__init__` from the
+  injected `db_pool` (like every other repo — Step 10's deviation), so the only `main.py` edit was
+  wiring the `run_opportunity_refresh_forever()` daily task under the existing `if db_pool` block.
+  Step 12 (compute + pure read + queue_share) and Step 13 (its tests) are one behavioral change and
+  were committed as a single cycle. **Disposition**: no scope change.
+- **Steps 12–13 — replaced the retired feature-083 signal-only `TestListOpportunities`.** The pre-097
+  `ListOpportunities` built a signal-only queue with `0/0`/`strategy_id=""`; its four tests asserted
+  exactly that and are now obsolete. They were replaced by `TestListOpportunitiesMaterialized` (AC-1/2/4/6,
+  ranking, cold-vs-stale, C-03 ListWatchlists propagation), `TestOpportunityRowParity` (OR-F descriptor
+  parity + teeth), and queue_share/taken tests on `TestGetStrategyAnalytics`. **RED verified** by
+  neutering `_row_to_opportunity`'s readiness to `0/0` (the retired stub): AC-1/AC-6/parity-populate
+  went red; restoring → green. **Disposition**: intended replacement of retired behavior.
+- **Steps 12–13 — single-file coverage command → CI-equivalent full-suite run** (same substitution as
+  Steps 9/11). Ran `pytest --cov=app --cov-fail-under=40` over all of `tests/`: **419 passed, 81.29%**
+  ≥ 40%. The `opportunities.py` repo's raw-SQL methods show low line-coverage (29%) because unit tests
+  use an in-memory `_FakeOppRepo` (no DB in the suite, same as `strategies.py`); the producer path is
+  covered end-to-end through the real `_compute_opportunities`. **Disposition**: CI-equivalent fallback.
+- **Step 12 — action model for non-signal candidates (P-03 documented, not a silent guess).** The
+  `OpportunityActionTag` enum has no HOLD/MONITOR tag. `_resolve_action_tag` therefore maps a *curated*
+  (watchlist/held) candidate with no actionable signal and no firing exit to `ENTER` (not held) or `ADD`
+  (held, a monitored holding); a *speculative* signal-only candidate with no actionable signal (e.g. a
+  sell with no position) returns `None` and is dropped — preserving the pre-097 "no row" behavior.
+  Held+attributed exit-firing → `REDUCE` (FR-8) takes priority. **Disposition**: documented action
+  policy within the existing enum; recorded here and in the analysis CLAUDE.md.
+- **Step 12 — one session date per compute for `valid_until` (OR-D).** `valid_until` is the newest bar
+  fetched across the whole compute + `valid_window_hours` (fallback `now` when no bars are fetched, e.g.
+  an all-unattributed Universe). A genuinely stale newest bar (halted symbol) yields an immediately-expired
+  row that recomputes on the next read — the accepted OR-B/OR-D residual. **Disposition**: matches the
+  design's "compute's session date + window"; residual documented.
+- **Step 10 — `app/main.py` needs no change (repo built in the servicer).** The step listed
+  `app/main.py`, but repos are constructed inside `AnalysisServicer.__init__` from the injected
+  `db_pool` (`self._opportunity_actions_repo = OpportunityActionsRepository(db_pool) if db_pool else
+  None`), and `main.py` already passes `db_pool` to the servicer. No `main.py` edit was needed for
+  Step 10 (a daily-refresh loop, if any, belongs to Step 12). Staged a subset of the step's Files
+  (F-08 permits fewer). Steps 10 (repo+RPC) and 11 (test) committed together (the servicer method and
+  its test are one red-green cycle). **Disposition**: no scope change.
+- **Step 11 — single-file coverage command → CI-equivalent full-suite run** (same substitution as
+  Step 9): `pytest tests/test_analysis_servicer.py --cov=app --cov-fail-under=40` measures the whole
+  `app` from one file. Ran `pytest --cov=app --cov-fail-under=40` over all of `tests/`: **407 passed,
+  82.68%** ≥ 40%; the new tests pass in isolation (`-k set_opportunity_action` → 5 passed).
+  **Disposition**: CI-equivalent fallback.
+- **Step 9 — single-file coverage command is unsatisfiable; used the CI-equivalent full-suite run.**
+  The step's `**Verification**` runs `pytest tests/test_evaluator_traced.py --cov=app --cov-fail-under=40`
+  — measuring coverage of the **entire** `app` package from **one** test file, which can only reach
+  ~6% (a single file cannot cover 40% of the whole service). The `40%` gate is a whole-suite threshold
+  (analysis CI runs `pytest --cov=app --cov-fail-under=40` over all of `tests/`). Ran that instead:
+  **402 passed, 82.79%** ≥ 40%. The new exit tests pass in isolation too (`-k exit_rule` → 2 passed).
+  **Disposition**: CI-equivalent fallback — verification intent (suite ≥ 40% with the new behavior)
+  satisfied.
+- **Steps 4–5 — `portfolio_handler.go` needs no change; committed as one atomic cycle.** The step listed
+  `internal/handler/portfolio_handler.go` as a modify file, but both the Connect handlers and the gRPC
+  adapter forward `req.Msg`/`req` whole (`portfolio_handler.go:132-186`, `:269-317`), so the new
+  `bindings` field passes through with no edit. The handler was not touched (staged a subset of the
+  step's Files — F-08 permits fewer). Steps 4 (repo+service) and 5 (test) were committed **together**
+  because the `WatchlistStore` interface-signature change requires the matching test-double to compile
+  (Step 4 alone leaves the package uncompilable). **Disposition**: no scope change; both steps' Files +
+  spec/context staged.
+- **Steps 4–5 — SA1019 on the deprecated `symbols` mirror.** Marking `Watchlist.symbols=5
+  [deprecated=true]` (Step 1) makes every Go read of the intentionally-retained flat mirror a
+  staticcheck SA1019. The mirror is deliberately still populated for old clients (deprecate-don't-delete,
+  FR-6), so the 10 legitimate sites carry `//nolint:staticcheck` with an explanation. `golangci-lint
+  run` → 0 issues. **Disposition**: expected cost of the deprecation; localized to the two touched Go
+  files (no other current Go consumer reads `Watchlist.Symbols`).
+- **Step 1 — buf breaking verification command.** The step's `**Verification**` runs
+  `cd packages/proto && buf breaking . --against ".git#branch=main-dev,subdir=packages/proto"`, but that
+  `.git` resolves cwd-relative to `packages/proto/.git` (nonexistent). Ran the CI-equivalent form instead:
+  from repo root, `buf breaking packages/proto --against ".git#branch=main-dev,subdir=packages/proto"`
+  after `git branch -f main-dev origin/main-dev` (buf needs a local `main-dev` ref, matching
+  `scripts/buf-gen.sh`'s `git show-ref` guard). `buf lint` + `buf breaking` both passed (additive +
+  `symbols=5 [deprecated=true]` only). **Disposition**: CI-equivalent fallback — verification intent
+  (no breaking change vs dev trunk) unchanged.

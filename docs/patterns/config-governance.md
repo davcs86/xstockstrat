@@ -36,6 +36,18 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 097 — opportunity-universe-unification (`xstockstrat-analysis`)
+
+Config surface for the materialized opportunity queue (lazy compute-on-read + stale-while-revalidate + a daily refresh). `analysis.signals.source_weights` is **unchanged** (stays the screener's); the queue's independent signal ranking axis is the new scalar `analysis.opportunity.signal_rank_weight`.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.opportunity.max_universe_size` | int | `100` | Max candidates traced per compute; watchlist/held rank **above the cut** so a curated symbol is never truncated (FR-1). |
+| `analysis.opportunity.valid_window_hours` | int | `24` | `valid_until` = the compute's session date + this window. |
+| `analysis.opportunity.snooze_default_hours` | int | `24` | Default bounded "snooze until" when a SNOOZE carries no explicit timestamp. |
+| `analysis.opportunity.signal_rank_weight` | float | `0.3` | Weight `w ∈ [0,1]` of the signal axis in the queue ORDER BY (OR-G); `rank = (1−w)·conviction + w·signal_axis`. |
+| `analysis.opportunity.refresh_hour_utc` | int | `0` | Hour (UTC) of the configured **daily refresh** pass — a wall-clock refresh, **not** market close (holiday/DST/early-close drift expected). Read **presence-aware** (mirror `get_bool`'s `HasField`), never `get_int`, since `0` = midnight is legitimate and the zero-trap would swallow it. |
+
 ### feature 083 — opportunities-first UI revamp (`xstockstrat-portfolio`)
 
 The Exposure surface groups positions by factor. marketdata exposes no `sector`, so factor is

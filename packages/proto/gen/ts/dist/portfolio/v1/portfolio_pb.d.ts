@@ -451,6 +451,28 @@ export type ListPortfoliosResponse = Message<"xstockstrat.portfolio.v1.ListPortf
  */
 export declare const ListPortfoliosResponseSchema: GenMessage<ListPortfoliosResponse>;
 /**
+ * A (symbol, strategy) binding — a ready-made Universe candidate (feature 097).
+ *
+ * @generated from message xstockstrat.portfolio.v1.WatchlistBinding
+ */
+export type WatchlistBinding = Message<"xstockstrat.portfolio.v1.WatchlistBinding"> & {
+    /**
+     * @generated from field: string symbol = 1;
+     */
+    symbol: string;
+    /**
+     * "" = unbound (kept as a bare watched symbol)
+     *
+     * @generated from field: string strategy_id = 2;
+     */
+    strategyId: string;
+};
+/**
+ * Describes the message xstockstrat.portfolio.v1.WatchlistBinding.
+ * Use `create(WatchlistBindingSchema)` to create a new message.
+ */
+export declare const WatchlistBindingSchema: GenMessage<WatchlistBinding>;
+/**
  * Watchlist (feature 058) — a mode-agnostic, user-owned named set of symbols.
  *
  * @generated from message xstockstrat.portfolio.v1.Watchlist
@@ -473,7 +495,10 @@ export type Watchlist = Message<"xstockstrat.portfolio.v1.Watchlist"> & {
      */
     description: string;
     /**
-     * @generated from field: repeated string symbols = 5;
+     * DEPRECATED (feature 097): the flat mirror of `bindings`, kept readable for old clients (FR-6).
+     *
+     * @generated from field: repeated string symbols = 5 [deprecated = true];
+     * @deprecated
      */
     symbols: string[];
     /**
@@ -484,6 +509,12 @@ export type Watchlist = Message<"xstockstrat.portfolio.v1.Watchlist"> & {
      * @generated from field: google.protobuf.Timestamp updated_at = 7;
      */
     updatedAt?: Timestamp | undefined;
+    /**
+     * Authoritative (symbol, strategy) shape (feature 097); when present it supersedes `symbols`.
+     *
+     * @generated from field: repeated xstockstrat.portfolio.v1.WatchlistBinding bindings = 8;
+     */
+    bindings: WatchlistBinding[];
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.Watchlist.
@@ -509,6 +540,12 @@ export type CreateWatchlistRequest = Message<"xstockstrat.portfolio.v1.CreateWat
      * @generated from field: repeated string symbols = 3;
      */
     symbols: string[];
+    /**
+     * When present, authoritative (feature 097); legacy `symbols` remains accepted (unbound).
+     *
+     * @generated from field: repeated xstockstrat.portfolio.v1.WatchlistBinding bindings = 4;
+     */
+    bindings: WatchlistBinding[];
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.CreateWatchlistRequest.
@@ -611,6 +648,12 @@ export type UpdateWatchlistRequest = Message<"xstockstrat.portfolio.v1.UpdateWat
      * @generated from field: repeated string symbols = 4;
      */
     symbols: string[];
+    /**
+     * When present, authoritative (feature 097); legacy `symbols` remains accepted (unbound).
+     *
+     * @generated from field: repeated xstockstrat.portfolio.v1.WatchlistBinding bindings = 5;
+     */
+    bindings: WatchlistBinding[];
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.UpdateWatchlistRequest.
@@ -666,6 +709,12 @@ export type AddWatchlistSymbolsRequest = Message<"xstockstrat.portfolio.v1.AddWa
      * @generated from field: repeated string symbols = 2;
      */
     symbols: string[];
+    /**
+     * When present, authoritative (feature 097); legacy `symbols` remains accepted (unbound).
+     *
+     * @generated from field: repeated xstockstrat.portfolio.v1.WatchlistBinding bindings = 3;
+     */
+    bindings: WatchlistBinding[];
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest.

@@ -35,6 +35,8 @@ service AnalysisService {
   // Per-symbol live condition evaluation (traced): passing/soft/failing leaves +
   // distance-to-threshold. Feeds Signal-detail, Watchlist readiness, and the queue.
   rpc EvaluateReadiness(EvaluateReadinessRequest) returns (EvaluateReadinessResponse);
+  // Persist a per-user disposition (snooze/dismiss/take) against a server-issued opportunity_key (feature 097).
+  rpc SetOpportunityAction(SetOpportunityActionRequest) returns (SetOpportunityActionResponse);
   // Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share).
   rpc GetStrategyAnalytics(GetStrategyAnalyticsRequest) returns (StrategyAnalytics);
 }
@@ -444,6 +446,8 @@ message Opportunity {
   string strategy_id = 7;
   string source = 8;
   google.protobuf.Timestamp valid_until = 9;
+  string opportunity_key = 10;      // server-authoritative opaque key = user|symbol_norm|strategy_id (feature 097). Client echoes it verbatim to SetOpportunityAction, never derives it.
+  repeated string provenance = 11;  // contributing origins for a de-duplicated row (signal source(s) / "position" / "watchlist")
 }
 
 // One evaluated condition leaf from the traced evaluator (feature 083).
@@ -497,6 +501,23 @@ message EvaluateReadinessRequest {
 message EvaluateReadinessResponse {
   repeated SymbolReadiness readiness = 1;
 }
+
+// The persisted per-user disposition of a queued opportunity (feature 097). Closed set → enum (C-04).
+enum OpportunityAction {
+  OPPORTUNITY_ACTION_UNSPECIFIED = 0;
+  OPPORTUNITY_ACTION_SNOOZE = 1;   // hide until snooze_until (bounded)
+  OPPORTUNITY_ACTION_DISMISS = 2;  // hide indefinitely
+  OPPORTUNITY_ACTION_TAKE = 3;     // user acted on it (feeds queue_share/taken reconciliation)
+}
+
+// user_id is intentionally absent — taken from the propagated x-user-id header server-side
+// (match the ListOpportunitiesRequest convention), never from the wire.
+message SetOpportunityActionRequest {
+  string opportunity_key = 1;                  // the server-issued key, echoed verbatim
+  OpportunityAction action = 2;
+  google.protobuf.Timestamp snooze_until = 3;  // set only for SNOOZE; a bounded "snooze until"
+}
+message SetOpportunityActionResponse {}
 
 message GetStrategyAnalyticsRequest {
   string strategy_id = 1;

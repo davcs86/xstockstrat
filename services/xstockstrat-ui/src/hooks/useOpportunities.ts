@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { analysisClient } from '@/lib/browserClients/analysisClient';
+import { useInvalidatingMutation } from '@/hooks/useInvalidatingMutation';
+import type { OpportunityAction } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
 /**
  * feature 083 — Decide surface data hooks. All read-only queries against the insights BFF
@@ -17,6 +19,26 @@ export function useOpportunities(minConviction = 0) {
     queryFn: () => analysisClient.listOpportunities({ minConviction }),
     refetchInterval: 15_000,
   });
+}
+
+/**
+ * feature 097 — persist a per-user disposition (SNOOZE / DISMISS / TAKE) against the
+ * server-authoritative `opportunityKey`. On success it invalidates `['opportunities']` so the
+ * server-filtered read drops the row — the disposition survives reload and syncs across devices
+ * (FR-5, AC-3), unlike the transient client-side `Set` it replaces. `snoozeUntil` is optional;
+ * omit it to let the server apply its bounded `analysis.opportunity.snooze_default_hours` default.
+ */
+export interface SetOpportunityActionInput {
+  opportunityKey: string;
+  action: OpportunityAction;
+  snoozeUntil?: { seconds: bigint; nanos: number };
+}
+
+export function useSetOpportunityAction() {
+  return useInvalidatingMutation<SetOpportunityActionInput, unknown>(
+    (input) => analysisClient.setOpportunityAction(input),
+    [['opportunities']],
+  );
 }
 
 /** Per-symbol readiness (traced condition leaves) for a strategy. Enabled only with a strategy. */
