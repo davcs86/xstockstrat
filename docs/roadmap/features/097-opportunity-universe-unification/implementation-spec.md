@@ -557,7 +557,7 @@ cd services/xstockstrat-analysis && pytest tests/test_analysis_servicer.py tests
 
 ### Step 16 — test/docs: agent builder parity tests + strat-lab/mcp-tools reconciliation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify (or a new `tests/test_strategy_builders.py` — create)
@@ -692,6 +692,18 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm test:e2e -- strateg
 
 ## Deviation Log
 
+- **Step 16 — no builder code change; the docs had no RunBacktest-blend claim to remove (only a
+  claim to add).** The three parity tests pin the *existing, unchanged* `_build_component` /
+  `manage_strategy` / `screen_symbols` builders (RC-1 fail-closed guard) — no client.py edit. Used
+  the `test_formula_builders.py` capture-the-request+`ListFields()` shape (stronger than a hand
+  literal) with `_INTENTIONALLY_UNSET = {active, live_enabled, warnings}` (StrategyDefinition),
+  `{evaluation_window}` (ScreenSymbolsRequest), `{}` (StrategyComponent); `test_guard_has_teeth`
+  is the teeth assertion. **No RunBacktest signal-blend claim existed** in `mcp-tools.md` or the
+  strat-lab SKILL (the signal refs there are all the *kept* `screen_symbols`/`manage_strategy`
+  params), so the doc reconcile was purely **additive** — a "backtest score is technical-only
+  (feature 097)" note in both, leaving the screener/`signal_params` rows intact. **No watchlist MCP
+  tool exists** (recon), so the C-14 agent surface has nothing to rebind — stated in the PR body.
+  Agent suite: 198 passed, 76.03%. **Disposition**: parity guards + additive doc reconcile.
 - **Steps 14–15 — also removed the now-dead `source_weights` config read in RunBacktest.** Retiring
   the `_backtest_symbol` signal blend left the `analysis.signals.source_weights` read (`RunBacktest`
   top) and its `_backtest_symbol` arg with no consumer, so both were removed to avoid an unused-var

@@ -300,6 +300,14 @@ window is evaluated fully warm and no trade opens before `start`. Two consequenc
 Both bounds set with a span over `analysis.backtest.max_range_days` (default 730) is rejected with
 `INVALID_ARGUMENT` rather than silently clamped. A `start` after `end` is rejected client-side.
 
+**Scoring is technical-only (feature 097).** A strategy's backtest score comes from its technical
+rules alone — `run_backtest` sends no signal parameters, and the analysis service no longer blends
+newsletter `signal_sources`/`signal_weight` from `strategy_params` into a strategy's per-bar
+conviction. Under Option 2 a signal is a **universe + independent queue ranking axis** (surfaced by
+the Decide → Opportunities queue), never an input to a strategy's own score, so no signal is counted
+twice. This does **not** touch `screen_symbols`' signal-blend params (below — the screener still
+blends) or `manage_strategy`'s `signal_params` (the live-loop symbol universe).
+
 **Return**
 
 Two parts, as MCP **content blocks** (feature 072) — not a single JSON object:

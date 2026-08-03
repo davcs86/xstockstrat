@@ -266,3 +266,26 @@ P-03 documented); one session date per compute for valid_until (OR-D residual).
 reconciliation), 17–19 (UI: persisted snooze, watchlist binding editor, de-blended wizard).
 **Next**: Step 16 — `xstockstrat-agent` covers_every_proto_field parity tests + reconcile the retired
 blend in `plugins/strat-lab/skills/backtest/SKILL.md` + `docs/runbooks/mcp-tools.md`.
+
+---
+
+## Session: Step 16 (agent parity tests + strat-lab/mcp-tools reconciliation) — 2026-08-03
+
+**Step 16 done.** No `xstockstrat-agent` builder change (the design keeps `screen_symbols` signal
+params + `manage_strategy` `signal_params`; `run_backtest` sends no signal params):
+- New `services/xstockstrat-agent/tests/test_strategy_builders.py` — three `covers_every_proto_field`
+  parity tests (capture-request + `ListFields()`, the `test_formula_builders.py` shape) for
+  `manage_strategy`→StrategyDefinition (unset: active/live_enabled/warnings),
+  `screen_symbols`→ScreenSymbolsRequest (unset: evaluation_window), `_build_component`→StrategyComponent
+  (unset: none), plus a teeth assertion. Fail-closed against a future proto field (RC-1 guard).
+- Docs reconcile (additive — no false RunBacktest-blend claim existed): added "backtest score is
+  technical-only (feature 097)" notes to `plugins/strat-lab/skills/backtest/SKILL.md` (Phase 0) and
+  `docs/runbooks/mcp-tools.md` (`run_backtest`), leaving the screener/`signal_params` rows intact.
+- **No watchlist MCP tool exists** (recon) — nothing to rebind; note for the PR body.
+
+**Verify**: agent `ruff check tests/` clean; `pytest tests/ --cov=app` **198 passed, 76.03%** (≥40).
+
+**Progress**: 16 done / 19 total. **Remaining**: 17 (UI Opportunities page — server-persisted
+snooze/dismiss/take), 18 (watchlist binding editor), 19 (de-blended strategy wizard).
+**Next**: Step 17 — `xstockstrat-ui` Opportunities page wired to SetOpportunityAction + provenance/
+computed_at rendering + e2e.
