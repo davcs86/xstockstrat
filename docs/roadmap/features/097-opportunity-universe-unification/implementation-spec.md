@@ -141,7 +141,7 @@ Empty diff after generation confirms committed stubs match the protos.
 
 ### Step 3 — migration: portfolio 008 — watchlist_symbols.strategy_id
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/migrations/008_watchlist_symbol_strategy.up.sql` — create

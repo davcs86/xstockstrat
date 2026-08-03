@@ -132,3 +132,8 @@
 - Ran `./scripts/buf-gen.sh` (buf 1.69.0 + pinned Go plugins + TS plugins + python3.12/grpcio-tools 1.80.0). Regenerated Go/Python/TS stubs; 20 changed files, all under `analysis/v1` + `portfolio/v1` (diff limited to the two changed services, matching the CI proto-freshness check). Toolchain pinned to CI versions so stubs byte-match.
 - Files modified: `packages/proto/gen/**` (generated)
 - Deviations: none.
+
+### Step 3 — migration: portfolio 008 watchlist_symbols.strategy_id [done]
+- Added `008_watchlist_symbol_strategy.{up,down}.sql`: up ADDs `strategy_id TEXT NOT NULL DEFAULT ''`; down DROPs it. PK `(watchlist_id, symbol)` unchanged (one strategy per (list,symbol)). Verified offline (up/down parity, next-free 008).
+- Files modified: `services/xstockstrat-portfolio/migrations/008_watchlist_symbol_strategy.{up,down}.sql`
+- Deviations: none.
