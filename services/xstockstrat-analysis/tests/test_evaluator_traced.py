@@ -167,6 +167,55 @@ async def test_conviction_moves_when_leaf_flips():
     )
 
 
+# ---------------------------------------------------------------------------
+# (d) feature 097 — rule="exit" traces the exit_rule, default stays entry
+# ---------------------------------------------------------------------------
+
+
+async def _readiness_for_rule(definition, rule: str) -> dict:
+    closes = [120.0, 130.0, 150.0]
+    bars = [SimpleNamespace(close=c, timestamp=None) for c in closes]
+    points = [SimpleNamespace(value=c) for c in closes]
+    stub = AsyncMock()
+    stub.ComputeIndicator = AsyncMock(return_value=SimpleNamespace(result=points))
+    evaluator = StrategyEvaluator(stub, propagation_meta=())
+    return await evaluator.evaluate_conditions_traced(definition, bars, "AAPL", rule=rule)
+
+
+@pytest.mark.asyncio
+async def test_exit_rule_trace_selects_exit_leaves():
+    # entry: sma > 100 (PASS at last close 150); exit: sma < 50 (FAIL at 150).
+    definition = analysis_pb2.StrategyDefinition(
+        strategy_id="s",
+        display_name="S",
+        components=[_builtin(ref_name="sma")],
+        entry_rule=json.dumps({"op": "AND", "conditions": [{"fn": ">", "lhs": "sma", "rhs": 100}]}),
+        exit_rule=json.dumps({"op": "AND", "conditions": [{"fn": "<", "lhs": "sma", "rhs": 50}]}),
+    )
+    entry = await _readiness_for_rule(definition, "entry")  # default path unchanged
+    exit_ = await _readiness_for_rule(definition, "exit")
+
+    assert entry["total_conditions"] == 1 and entry["passing_conditions"] == 1
+    assert entry["conditions"][0]["fn"] == ">" and entry["conditions"][0]["threshold"] == 100.0
+
+    assert exit_["total_conditions"] == 1 and exit_["passing_conditions"] == 0
+    ec = exit_["conditions"][0]
+    assert ec["fn"] == "<" and ec["threshold"] == 50.0
+    assert ec["lhs_value"] == 150.0 and ec["state"] == FAIL
+
+
+@pytest.mark.asyncio
+async def test_empty_exit_rule_is_zero_of_zero():
+    definition = analysis_pb2.StrategyDefinition(
+        strategy_id="s",
+        components=[_builtin(ref_name="sma")],
+        entry_rule=json.dumps({"op": "AND", "conditions": [{"fn": ">", "lhs": "sma", "rhs": 100}]}),
+        # no exit_rule
+    )
+    r = await _readiness_for_rule(definition, "exit")
+    assert r["total_conditions"] == 0 and r["passing_conditions"] == 0 and r["conviction"] == 0.0
+
+
 @pytest.mark.asyncio
 async def test_no_bars_is_empty_readiness():
     stub = AsyncMock()

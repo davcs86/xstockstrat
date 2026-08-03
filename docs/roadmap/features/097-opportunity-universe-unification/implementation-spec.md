@@ -307,7 +307,7 @@ All five keys appear in both the service table and the registered-keys log.
 
 ### Step 8 — service: analysis evaluator — additive exit-rule trace sibling
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/evaluator.py` — modify
@@ -336,7 +336,7 @@ cd services/xstockstrat-analysis && ruff check app/services/evaluator.py && ruff
 
 ### Step 9 — test: analysis evaluator exit-rule trace
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_evaluator_traced.py` — modify
@@ -692,6 +692,14 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm test:e2e -- strateg
 
 ## Deviation Log
 
+- **Step 9 — single-file coverage command is unsatisfiable; used the CI-equivalent full-suite run.**
+  The step's `**Verification**` runs `pytest tests/test_evaluator_traced.py --cov=app --cov-fail-under=40`
+  — measuring coverage of the **entire** `app` package from **one** test file, which can only reach
+  ~6% (a single file cannot cover 40% of the whole service). The `40%` gate is a whole-suite threshold
+  (analysis CI runs `pytest --cov=app --cov-fail-under=40` over all of `tests/`). Ran that instead:
+  **402 passed, 82.79%** ≥ 40%. The new exit tests pass in isolation too (`-k exit_rule` → 2 passed).
+  **Disposition**: CI-equivalent fallback — verification intent (suite ≥ 40% with the new behavior)
+  satisfied.
 - **Steps 4–5 — `portfolio_handler.go` needs no change; committed as one atomic cycle.** The step listed
   `internal/handler/portfolio_handler.go` as a modify file, but both the Connect handlers and the gRPC
   adapter forward `req.Msg`/`req` whole (`portfolio_handler.go:132-186`, `:269-317`), so the new

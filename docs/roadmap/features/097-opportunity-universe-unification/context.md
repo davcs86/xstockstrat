@@ -166,3 +166,14 @@
 - Declared 5 keys (`max_universe_size`, `valid_window_hours`, `snooze_default_hours`, `signal_rank_weight`, `refresh_hour_utc`) in the analysis CLAUDE.md config table + the config-governance Per-Feature Registered Keys log (097 heading). OR-C: refresh_hour_utc documented presence-aware (not get_int) + labeled a daily refresh (not "market close"). OR-G: signal_rank_weight formula recorded. `analysis.signals.source_weights` left as the screener's (not re-purposed).
 - Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `docs/patterns/config-governance.md`
 - Deviations: none.
+
+### Step 8 — service: analysis evaluator exit-rule trace sibling [done]
+- Added keyword-only `rule: str = "entry"` to `evaluate_conditions_traced`; at the parse point it selects `definition.exit_rule` when `rule=="exit"`, else `entry_rule`. Everything else (component-series assembly, leaf iteration, `_readiness_from_evals`) shared/unchanged; default preserves every existing caller. `evaluate`/`evaluate_with_series`/`_eval_condition` bool contract untouched (live loop + frozen backtest).
+- Files modified: `app/services/evaluator.py`
+- Verified: ruff check + format-check pass.
+
+### Step 9 — test: analysis evaluator exit-rule trace [done]
+- Added `test_exit_rule_trace_selects_exit_leaves` (rule="exit" traces the exit_rule's `<` leaf FAIL vs entry's `>` leaf PASS) + `test_empty_exit_rule_is_zero_of_zero`. Existing traced tests unchanged.
+- **TDD red→green**: forced `rule_src = entry_rule` (exit selection off) → both exit tests FAIL (`1 == 0`, traced entry) → restored → 2 passed. Full analysis suite 402 passed, 82.79% ≥ 40% (CI-equivalent — see Deviation Log for the single-file coverage-command substitution).
+- Files modified: `tests/test_evaluator_traced.py`
+- Deviations: Step 9 coverage command (single-file → full-suite) — Deviation Log.
