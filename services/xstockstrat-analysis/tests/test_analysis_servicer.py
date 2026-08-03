@@ -714,6 +714,90 @@ class TestRunBacktestBackwardCompat:
 
 
 # ---------------------------------------------------------------------------
+# Technical-only backtest scoring (feature 097, Option 2 — Step 14/15)
+# ---------------------------------------------------------------------------
+
+
+class TestBacktestTechnicalOnly:
+    """The strategy backtest score is technical-only: a strategy_params signal blend no longer
+    affects the score, and RunBacktest no longer fetches signals. Red against the pre-097 tree,
+    where signal_weight>0 blended a signal_score into conviction and called QuerySignals."""
+
+    # 6 bars; fast=2, slow=3 → golden cross (entry) then death cross (exit): a real trade whose
+    # conviction a blend WOULD have moved.
+    _BARS = [(10, 11, 12, 13, 14, 9)]
+    _FAST = [9, 10, 12, 13, 9]
+    _SLOW = [11, 11, 11, 11]
+
+    def _svc(self):
+        svc = make_servicer()
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        svc._marketdata = MagicMock()
+        bars = [_bar(1000 + i, c) for i, c in enumerate(self._BARS[0])]
+        svc._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(page=_EOF_PAGE, bars=bars))
+        svc._indicators = MagicMock()
+        svc._indicators.ComputeIndicator = AsyncMock(
+            side_effect=[_points(self._FAST), _points(self._SLOW)]
+        )
+        # A QuerySignals spy — it must NOT be called from the backtest scoring path anymore.
+        svc._ingest = MagicMock()
+        svc._ingest.QuerySignals = AsyncMock(
+            return_value=SimpleNamespace(signals=[], page=_EOF_PAGE)
+        )
+        return svc
+
+    def _req(self, *, with_signals):
+        req = analysis_pb2.RunBacktestRequest(
+            strategy_id="s1", symbols=["AAPL"], initial_capital=100_000.0
+        )
+        params = {"fast_period": 2, "slow_period": 3}
+        if with_signals:
+            params.update({"signal_sources": ["uw"], "signal_weight": 0.8, "technical_weight": 0.2})
+        req.strategy_params.update(params)
+        req.range.CopyFrom(common_pb2.TimeRange())
+        return req
+
+    @pytest.mark.asyncio
+    async def test_signal_params_do_not_change_the_score(self):
+        """AC-4: a signal-weighted strategy_params produces the SAME result as one without it —
+        the blend no longer affects a strategy's internal score."""
+        r_plain = await self._svc().RunBacktest(self._req(with_signals=False), MagicMock())
+        r_signal = await self._svc().RunBacktest(self._req(with_signals=True), MagicMock())
+        assert r_plain.status == analysis_pb2.BACKTEST_STATUS_OK
+        assert r_signal.total_trades == r_plain.total_trades
+        assert abs(r_signal.total_return - r_plain.total_return) < 1e-12
+        assert abs(r_signal.sharpe_ratio - r_plain.sharpe_ratio) < 1e-12
+        assert abs(r_signal.max_drawdown - r_plain.max_drawdown) < 1e-12
+        # Per-bar conviction is the pure-technical mapping, identical either way.
+        plain_conv = [b.conviction for b in r_plain.diagnostics[0].bars]
+        signal_conv = [b.conviction for b in r_signal.diagnostics[0].bars]
+        assert plain_conv == signal_conv
+        assert all(b.signal_score == 0.0 for b in r_signal.diagnostics[0].bars)
+
+    @pytest.mark.asyncio
+    async def test_signal_weighted_run_does_not_query_signals(self):
+        """A signal-weighted strategy_params no longer triggers a QuerySignals call from the
+        backtest path (the fetch was removed with the blend)."""
+        svc = self._svc()
+        await svc.RunBacktest(self._req(with_signals=True), MagicMock())
+        assert svc._ingest.QuerySignals.await_count == 0
+
+    def test_screener_still_blends_via_scoring(self):
+        """FR-4: scoring.combine_score is retained (unused by RunBacktest now) and still used by
+        the screener — deleting it was rejected in design."""
+        from app.services import scoring
+        from app.services import screener as screener_module
+
+        # The blend function is intact and still blends when signals are weighted + present.
+        blended = scoring.combine_score(1.0, 0.2, 0.8, 0.2, signals_present=True)
+        pure_tech = scoring.combine_score(1.0, 0.2, 0.0, 1.0, signals_present=False)
+        assert blended != pure_tech
+        # And the screener path still references it (the retained consumer).
+        assert "combine_score" in inspect.getsource(screener_module)
+
+
+# ---------------------------------------------------------------------------
 # SetStrategyLive (feature 048)
 # ---------------------------------------------------------------------------
 
@@ -2749,14 +2833,10 @@ class TestTradeStartIndex:
             rng,
             fast_period=2,
             slow_period=slow,
-            signal_sources=[],
-            signal_weight=0.0,
-            technical_weight=1.0,
             min_conviction=0.0,
             initial_equity=100_000.0,
             commission=0.0,
             slippage=0.0,
-            source_weights={},
             warmup_prefix=warmup_prefix,
         )
 

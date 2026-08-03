@@ -240,3 +240,29 @@ P-03 documented); one session date per compute for valid_until (OR-D residual).
 **Progress**: 13 done / 19 total. **Remaining**: 14–15 (Option-2 backtest scoring retire + test),
 16 (agent parity + strat-lab/mcp-tools), 17–19 (UI: snooze, binding editor, wizard).
 **Next**: Step 14 — retire the signal blend from `RunBacktest.strategy_params` scoring (technical-only).
+
+---
+
+## Session: Steps 14–15 (technical-only backtest scoring) — 2026-08-03
+
+**Steps 14–15 done.** `RunBacktest`'s legacy SMA path (`_backtest_symbol`) is now **technical-only**:
+- Removed the `signal_sources`/`signal_weight`/`technical_weight` reads + weight normalization from
+  `strategy_params` (kept `min_conviction`, `fast_period`, `slow_period`); removed those args from the
+  `_backtest_symbol` signature + call; removed the QuerySignals fetch + `signals_map`; per-bar conviction
+  is now `tech_signal * 0.5 + 0.5` (the exact prior no-signal mapping), `signal_score = 0.0`. Removed the
+  now-dead `analysis.signals.source_weights` read at the top of `RunBacktest`.
+- **Kept** `scoring.compute_signal_score`/`combine_score` (screener still blends) and
+  `StrategyDefinition.signal_params` + the 065 fingerprint (ANALYSIS-3) — untouched.
+- Updated the six `TestTradeStartIndex` calls to the trimmed `_backtest_symbol` signature.
+- New `TestBacktestTechnicalOnly`: (AC-4) signal_params produce the same result as none;
+  (2) a signal-weighted run makes **no** QuerySignals call; (3) the screener still references
+  `combine_score`. **RED** verified by reintroducing a `signal_weight`-gated fetch+blend → both decisive
+  tests red; restore → green.
+
+**Verify**: `ruff check app/ tests/` clean; full suite **422 passed, 81.59%** (≥40). Committed on
+`feature/opportunity-universe-unification`.
+
+**Progress**: 15 done / 19 total. **Remaining**: 16 (agent builder parity tests + strat-lab/mcp-tools
+reconciliation), 17–19 (UI: persisted snooze, watchlist binding editor, de-blended wizard).
+**Next**: Step 16 — `xstockstrat-agent` covers_every_proto_field parity tests + reconcile the retired
+blend in `plugins/strat-lab/skills/backtest/SKILL.md` + `docs/runbooks/mcp-tools.md`.

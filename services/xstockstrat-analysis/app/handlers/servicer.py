@@ -285,16 +285,6 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         backtest_id = str(uuid.uuid4())
         commission = self._cfg.get_float("analysis.backtest.default_commission_pct", 0.001)
         slippage = self._cfg.get_float("analysis.backtest.default_slippage_pct", 0.0005)
-        _weights_raw = self._cfg.get_str("analysis.signals.source_weights", default="{}")
-        try:
-            source_weights = (
-                {k: max(0.0, min(1.0, float(v))) for k, v in json.loads(_weights_raw).items()}
-                if _weights_raw
-                else {}
-            )
-        except (ValueError, TypeError):
-            log.warning("analysis.signals.source_weights is not valid JSON — using empty weights")
-            source_weights = {}
 
         log.info(
             "running backtest id=%s strategy=%s symbols=%s",
@@ -332,16 +322,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
         fast_period = int(params.get("fast_period", 20))
         slow_period = int(params.get("slow_period", 50))
-        signal_sources = params.get("signal_sources", [])
-        signal_weight = float(params.get("signal_weight", 0.0))
-        technical_weight = float(params.get("technical_weight", 1.0))
         min_conviction = float(params.get("min_conviction", 0.0))
-
-        # Normalize weights so they sum to 1
-        total_weight = signal_weight + technical_weight
-        if total_weight > 0:
-            signal_weight /= total_weight
-            technical_weight /= total_weight
+        # feature 097 (Option 2): a strategy's backtest score is TECHNICAL-ONLY. The legacy
+        # `signal_sources`/`signal_weight`/`technical_weight` blend was retired here — a signal is
+        # no longer an input to a strategy's internal score; it is a universe + independent queue
+        # ranking axis (ListOpportunities). `scoring.compute_signal_score`/`combine_score` stay for
+        # the screener (ScreenSymbols), and `StrategyDefinition.signal_params` (live-loop symbol
+        # universe) + the 065 fingerprint are untouched (ANALYSIS-3).
 
         # Resolve strategy definition: inline takes precedence over strategy_id_ref (FR-7).
         # If neither is supplied, fall through to the legacy SMA-crossover path (FR-8).
@@ -447,14 +434,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         range_msg=request.range,
                         fast_period=fast_period,
                         slow_period=slow_period,
-                        signal_sources=signal_sources,
-                        signal_weight=signal_weight,
-                        technical_weight=technical_weight,
                         min_conviction=min_conviction,
                         initial_equity=equity,
                         commission=commission,
                         slippage=slippage,
-                        source_weights=source_weights,
                         propagation_meta=propagation_meta,
                         warmup_prefix=start_set,
                     )
@@ -754,14 +737,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         range_msg,
         fast_period,
         slow_period,
-        signal_sources,
-        signal_weight,
-        technical_weight,
         min_conviction,
         initial_equity,
         commission,
         slippage,
-        source_weights,
         propagation_meta=(),
         *,
         warmup_prefix: bool = False,
@@ -824,27 +803,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if v is not None
         }
 
-        # 3. Fetch newsletter signals if signal_sources specified
-        signals_map: dict[str, list] = {}
-        if signal_sources and signal_weight > 0:
-            try:
-                sig_resp = await self._ingest.QuerySignals(
-                    ingest_pb2.QuerySignalsRequest(
-                        symbol=symbol,
-                        active_window=range_msg,
-                    ),
-                    metadata=propagation_meta,
-                )
-                for sig in sig_resp.signals:
-                    if sig.source in signal_sources:
-                        key = sig.source
-                        if key not in signals_map:
-                            signals_map[key] = []
-                        signals_map[key].append(sig)
-            except grpc.RpcError as e:
-                log.warning(
-                    "QuerySignals failed for %s: %s — proceeding without signals", symbol, e
-                )
+        # feature 097 (Option 2): the backtest score is technical-only — no newsletter-signal
+        # fetch or blend here. A signal is a universe + queue ranking axis (ListOpportunities),
+        # never an input to a strategy's internal score. The QuerySignals fetch + signals_map that
+        # used to live here were removed with the blend.
 
         # feature 064: warm-up = first bar where BOTH SMAs are resolved (observed Option-C).
         warmup_bars = max(min(fast_values, default=n - 1), min(slow_values, default=n - 1))
@@ -915,20 +877,12 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             else:
                 tech_signal = 0.0
 
-            # Signal score from newsletter signals active on this bar's date
-            signal_score = scoring.compute_signal_score(
-                signals_map, bar, signal_sources, source_weights=source_weights
-            )
-
-            # Combined conviction (pure scoring module — identical to the screener, FR-4)
-            combined = scoring.combine_score(
-                tech_signal,
-                signal_score,
-                signal_weight,
-                technical_weight,
-                signals_present=bool(signals_map),
-            )
-            diags[i - trade_start_idx].signal_score = signal_score
+            # feature 097 (Option 2): technical-only conviction — the pure-technical mapping
+            # (-1→0, 0→0.5, +1→1) with no newsletter-signal blend. This is identical to the
+            # prior no-signal path (combine_score with signals_present=False), so a run that
+            # never weighted signals is byte-for-byte unchanged; only signal-weighted runs move.
+            combined = tech_signal * 0.5 + 0.5
+            diags[i - trade_start_idx].signal_score = 0.0
             diags[i - trade_start_idx].conviction = combined
             bar_action = (
                 analysis_pb2.BAR_ACTION_HOLD_LONG

@@ -502,7 +502,7 @@ cd services/xstockstrat-analysis && pytest tests/test_analysis_servicer.py --cov
 
 ### Step 14 — service: retire the signal blend from RunBacktest.strategy_params scoring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -531,7 +531,7 @@ cd services/xstockstrat-analysis && ruff check app/handlers/servicer.py && ruff 
 
 ### Step 15 — test: backtest scoring is technical-only
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -692,6 +692,16 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm test:e2e -- strateg
 
 ## Deviation Log
 
+- **Steps 14–15 — also removed the now-dead `source_weights` config read in RunBacktest.** Retiring
+  the `_backtest_symbol` signal blend left the `analysis.signals.source_weights` read (`RunBacktest`
+  top) and its `_backtest_symbol` arg with no consumer, so both were removed to avoid an unused-var
+  (ruff F841). The screener keeps its **own** `source_weights` read + `combine_score`/`compute_signal_score`
+  use (untouched — design § Option 2). `StrategyDefinition.signal_params` + the 065 fingerprint are
+  untouched (ANALYSIS-3). Also updated the six pre-existing `TestTradeStartIndex` calls of
+  `_backtest_symbol` to the trimmed signature. **RED** verified by reintroducing a `signal_weight`-gated
+  QuerySignals fetch + conviction blend: `test_signal_params_do_not_change_the_score` and
+  `test_signal_weighted_run_does_not_query_signals` went red; restore → green. **Disposition**:
+  in-scope dead-code removal from making the score technical-only.
 - **Steps 12–13 — committed together (one red-green cycle); `main.py` change is only the daily
   loop.** Step 12's `OpportunitiesRepository` is constructed in `AnalysisServicer.__init__` from the
   injected `db_pool` (like every other repo — Step 10's deviation), so the only `main.py` edit was
