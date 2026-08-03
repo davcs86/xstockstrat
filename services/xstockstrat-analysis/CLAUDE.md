@@ -183,6 +183,11 @@ Namespace: `analysis`
 | `analysis.fundsignal.sell_quantile` | float | `0.20` | Cross-sectional score quantile ≤ → `sell` |
 | `analysis.fundsignal.min_conviction_to_emit` | float | `0.0` | Drop symbols whose score is below this before emitting |
 | `analysis.fundsignal.valid_days` | int | `90` | Emitted signal validity window (`valid_until` = run date + this) |
+| `analysis.opportunity.max_universe_size` | int | `100` | Max candidates traced per opportunity compute (feature 097); watchlist/held rank **above the cut** so a curated symbol is never truncated — only the speculative signal tail is dropped (FR-1). |
+| `analysis.opportunity.valid_window_hours` | int | `24` | `valid_until` = the compute's session date + this window (feature 097). |
+| `analysis.opportunity.snooze_default_hours` | int | `24` | Default bounded "snooze until" when a SNOOZE carries no explicit timestamp (feature 097). |
+| `analysis.opportunity.signal_rank_weight` | float | `0.3` | Weight `w ∈ [0,1]` of the independent signal axis in the queue ORDER BY (feature 097, OR-G); `rank = (1−w)·conviction + w·signal_axis`. `analysis.signals.source_weights` stays the screener's — this is a new scalar, not a re-purpose. |
+| `analysis.opportunity.refresh_hour_utc` | int | `0` | Hour (UTC) of the **configured daily refresh** pass (feature 097) — a wall-clock refresh, **not** market close (holiday/DST/early-close drift is expected; a calendar-aligned refresh is a future feature). Read **presence-aware** (mirror `get_bool`'s `HasField`), never `get_int` — `0` = midnight is legitimate and the `get_int` zero-trap would swallow it. |
 
 ## Ledger Events Emitted
 

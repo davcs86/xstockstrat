@@ -270,7 +270,7 @@ ls services/xstockstrat-analysis/migrations/010_opportunity_actions.{up,down}.sq
 
 ### Step 7 — config: register analysis.opportunity.* keys + declare defaults
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify (config-key table)

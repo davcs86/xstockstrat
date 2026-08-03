@@ -161,3 +161,8 @@
 - `010_opportunity_actions` (PK (user_id, opportunity_key); action SMALLINT, snooze_until). `011_opportunities` materialized queue (readiness_json/signal_axis/provenance inline; PK (user_id, opportunity_key); idx on (user_id, valid_until)). 010→011 order (011's daily reader unions both). Reuses existing pool (F-06). Offline-verified up/down parity, next-free 010/011.
 - Files modified: `services/xstockstrat-analysis/migrations/010_opportunity_actions.{up,down}.sql`, `011_opportunities.{up,down}.sql`
 - Deviations: none.
+
+### Step 7 — config: register analysis.opportunity.* keys [done]
+- Declared 5 keys (`max_universe_size`, `valid_window_hours`, `snooze_default_hours`, `signal_rank_weight`, `refresh_hour_utc`) in the analysis CLAUDE.md config table + the config-governance Per-Feature Registered Keys log (097 heading). OR-C: refresh_hour_utc documented presence-aware (not get_int) + labeled a daily refresh (not "market close"). OR-G: signal_rank_weight formula recorded. `analysis.signals.source_weights` left as the screener's (not re-purposed).
+- Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `docs/patterns/config-governance.md`
+- Deviations: none.
