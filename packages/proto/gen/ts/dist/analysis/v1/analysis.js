@@ -5,8 +5,8 @@
 //   protoc               unknown
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.ConditionState = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.BacktestStatus = exports.protobufPackage = void 0;
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.GetStrategyAnalyticsRequest = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = void 0;
+exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.OpportunityAction = exports.ConditionState = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.BacktestStatus = exports.protobufPackage = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = void 0;
 exports.backtestStatusFromJSON = backtestStatusFromJSON;
 exports.backtestStatusToJSON = backtestStatusToJSON;
 exports.backtestStatusToNumber = backtestStatusToNumber;
@@ -37,6 +37,9 @@ exports.opportunityActionTagToNumber = opportunityActionTagToNumber;
 exports.conditionStateFromJSON = conditionStateFromJSON;
 exports.conditionStateToJSON = conditionStateToJSON;
 exports.conditionStateToNumber = conditionStateToNumber;
+exports.opportunityActionFromJSON = opportunityActionFromJSON;
+exports.opportunityActionToJSON = opportunityActionToJSON;
+exports.opportunityActionToNumber = opportunityActionToNumber;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
@@ -686,6 +689,68 @@ function conditionStateToNumber(object) {
         case ConditionState.CONDITION_STATE_FAIL:
             return 3;
         case ConditionState.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/** The persisted per-user disposition of a queued opportunity (feature 097). Closed set → enum (C-04). */
+var OpportunityAction;
+(function (OpportunityAction) {
+    OpportunityAction["OPPORTUNITY_ACTION_UNSPECIFIED"] = "OPPORTUNITY_ACTION_UNSPECIFIED";
+    /** OPPORTUNITY_ACTION_SNOOZE - hide until snooze_until (bounded) */
+    OpportunityAction["OPPORTUNITY_ACTION_SNOOZE"] = "OPPORTUNITY_ACTION_SNOOZE";
+    /** OPPORTUNITY_ACTION_DISMISS - hide indefinitely */
+    OpportunityAction["OPPORTUNITY_ACTION_DISMISS"] = "OPPORTUNITY_ACTION_DISMISS";
+    /** OPPORTUNITY_ACTION_TAKE - user acted on it (feeds queue_share/taken reconciliation) */
+    OpportunityAction["OPPORTUNITY_ACTION_TAKE"] = "OPPORTUNITY_ACTION_TAKE";
+    OpportunityAction["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(OpportunityAction || (exports.OpportunityAction = OpportunityAction = {}));
+function opportunityActionFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "OPPORTUNITY_ACTION_UNSPECIFIED":
+            return OpportunityAction.OPPORTUNITY_ACTION_UNSPECIFIED;
+        case 1:
+        case "OPPORTUNITY_ACTION_SNOOZE":
+            return OpportunityAction.OPPORTUNITY_ACTION_SNOOZE;
+        case 2:
+        case "OPPORTUNITY_ACTION_DISMISS":
+            return OpportunityAction.OPPORTUNITY_ACTION_DISMISS;
+        case 3:
+        case "OPPORTUNITY_ACTION_TAKE":
+            return OpportunityAction.OPPORTUNITY_ACTION_TAKE;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return OpportunityAction.UNRECOGNIZED;
+    }
+}
+function opportunityActionToJSON(object) {
+    switch (object) {
+        case OpportunityAction.OPPORTUNITY_ACTION_UNSPECIFIED:
+            return "OPPORTUNITY_ACTION_UNSPECIFIED";
+        case OpportunityAction.OPPORTUNITY_ACTION_SNOOZE:
+            return "OPPORTUNITY_ACTION_SNOOZE";
+        case OpportunityAction.OPPORTUNITY_ACTION_DISMISS:
+            return "OPPORTUNITY_ACTION_DISMISS";
+        case OpportunityAction.OPPORTUNITY_ACTION_TAKE:
+            return "OPPORTUNITY_ACTION_TAKE";
+        case OpportunityAction.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function opportunityActionToNumber(object) {
+    switch (object) {
+        case OpportunityAction.OPPORTUNITY_ACTION_UNSPECIFIED:
+            return 0;
+        case OpportunityAction.OPPORTUNITY_ACTION_SNOOZE:
+            return 1;
+        case OpportunityAction.OPPORTUNITY_ACTION_DISMISS:
+            return 2;
+        case OpportunityAction.OPPORTUNITY_ACTION_TAKE:
+            return 3;
+        case OpportunityAction.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -5169,6 +5234,8 @@ function createBaseOpportunity() {
         strategyId: "",
         source: "",
         validUntil: undefined,
+        opportunityKey: "",
+        provenance: [],
     };
 }
 exports.Opportunity = {
@@ -5199,6 +5266,12 @@ exports.Opportunity = {
         }
         if (message.validUntil !== undefined) {
             timestamp_1.Timestamp.encode(toTimestamp(message.validUntil), writer.uint32(74).fork()).join();
+        }
+        if (message.opportunityKey !== "") {
+            writer.uint32(82).string(message.opportunityKey);
+        }
+        for (const v of message.provenance) {
+            writer.uint32(90).string(v);
         }
         return writer;
     },
@@ -5272,6 +5345,20 @@ exports.Opportunity = {
                     message.validUntil = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 10: {
+                    if (tag !== 82) {
+                        break;
+                    }
+                    message.opportunityKey = reader.string();
+                    continue;
+                }
+                case 11: {
+                    if (tag !== 90) {
+                        break;
+                    }
+                    message.provenance.push(reader.string());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -5309,6 +5396,14 @@ exports.Opportunity = {
                 : isSet(object.valid_until)
                     ? fromJsonTimestamp(object.valid_until)
                     : undefined,
+            opportunityKey: isSet(object.opportunityKey)
+                ? globalThis.String(object.opportunityKey)
+                : isSet(object.opportunity_key)
+                    ? globalThis.String(object.opportunity_key)
+                    : "",
+            provenance: globalThis.Array.isArray(object?.provenance)
+                ? object.provenance.map((e) => globalThis.String(e))
+                : [],
         };
     },
     toJSON(message) {
@@ -5340,6 +5435,12 @@ exports.Opportunity = {
         if (message.validUntil !== undefined) {
             obj.validUntil = message.validUntil.toISOString();
         }
+        if (message.opportunityKey !== "") {
+            obj.opportunityKey = message.opportunityKey;
+        }
+        if (message.provenance?.length) {
+            obj.provenance = message.provenance;
+        }
         return obj;
     },
     create(base) {
@@ -5356,6 +5457,8 @@ exports.Opportunity = {
         message.strategyId = object.strategyId ?? "";
         message.source = object.source ?? "";
         message.validUntil = object.validUntil ?? undefined;
+        message.opportunityKey = object.opportunityKey ?? "";
+        message.provenance = object.provenance?.map((e) => e) || [];
         return message;
     },
 };
@@ -6065,6 +6168,136 @@ exports.EvaluateReadinessResponse = {
         return message;
     },
 };
+function createBaseSetOpportunityActionRequest() {
+    return { opportunityKey: "", action: OpportunityAction.OPPORTUNITY_ACTION_UNSPECIFIED, snoozeUntil: undefined };
+}
+exports.SetOpportunityActionRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.opportunityKey !== "") {
+            writer.uint32(10).string(message.opportunityKey);
+        }
+        if (message.action !== OpportunityAction.OPPORTUNITY_ACTION_UNSPECIFIED) {
+            writer.uint32(16).int32(opportunityActionToNumber(message.action));
+        }
+        if (message.snoozeUntil !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.snoozeUntil), writer.uint32(26).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSetOpportunityActionRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.opportunityKey = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.action = opportunityActionFromJSON(reader.int32());
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.snoozeUntil = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            opportunityKey: isSet(object.opportunityKey)
+                ? globalThis.String(object.opportunityKey)
+                : isSet(object.opportunity_key)
+                    ? globalThis.String(object.opportunity_key)
+                    : "",
+            action: isSet(object.action)
+                ? opportunityActionFromJSON(object.action)
+                : OpportunityAction.OPPORTUNITY_ACTION_UNSPECIFIED,
+            snoozeUntil: isSet(object.snoozeUntil)
+                ? fromJsonTimestamp(object.snoozeUntil)
+                : isSet(object.snooze_until)
+                    ? fromJsonTimestamp(object.snooze_until)
+                    : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.opportunityKey !== "") {
+            obj.opportunityKey = message.opportunityKey;
+        }
+        if (message.action !== OpportunityAction.OPPORTUNITY_ACTION_UNSPECIFIED) {
+            obj.action = opportunityActionToJSON(message.action);
+        }
+        if (message.snoozeUntil !== undefined) {
+            obj.snoozeUntil = message.snoozeUntil.toISOString();
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.SetOpportunityActionRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseSetOpportunityActionRequest();
+        message.opportunityKey = object.opportunityKey ?? "";
+        message.action = object.action ?? OpportunityAction.OPPORTUNITY_ACTION_UNSPECIFIED;
+        message.snoozeUntil = object.snoozeUntil ?? undefined;
+        return message;
+    },
+};
+function createBaseSetOpportunityActionResponse() {
+    return {};
+}
+exports.SetOpportunityActionResponse = {
+    encode(_, writer = new wire_1.BinaryWriter()) {
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseSetOpportunityActionResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(_) {
+        return {};
+    },
+    toJSON(_) {
+        const obj = {};
+        return obj;
+    },
+    create(base) {
+        return exports.SetOpportunityActionResponse.fromPartial(base ?? {});
+    },
+    fromPartial(_) {
+        const message = createBaseSetOpportunityActionResponse();
+        return message;
+    },
+};
 function createBaseGetStrategyAnalyticsRequest() {
     return { strategyId: "" };
 }
@@ -6265,6 +6498,16 @@ exports.AnalysisServiceService = {
         requestDeserialize: (value) => exports.EvaluateReadinessRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.EvaluateReadinessResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.EvaluateReadinessResponse.decode(value),
+    },
+    /** Persist a per-user disposition (snooze/dismiss/take) against a server-issued opportunity_key (feature 097). */
+    setOpportunityAction: {
+        path: "/xstockstrat.analysis.v1.AnalysisService/SetOpportunityAction",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.SetOpportunityActionRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.SetOpportunityActionRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.SetOpportunityActionResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.SetOpportunityActionResponse.decode(value),
     },
     /** Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share). */
     getStrategyAnalytics: {

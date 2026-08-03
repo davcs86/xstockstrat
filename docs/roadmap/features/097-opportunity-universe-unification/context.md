@@ -127,3 +127,8 @@
 - Verified: `buf lint` + `buf breaking` vs main-dev both pass (deprecation-only).
 - Files modified: `packages/proto/portfolio/v1/portfolio.proto`, `packages/proto/analysis/v1/analysis.proto`
 - Deviations: buf-breaking `.git` path corrected to repo-root form (CI-equivalent) — see Deviation Log.
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Ran `./scripts/buf-gen.sh` (buf 1.69.0 + pinned Go plugins + TS plugins + python3.12/grpcio-tools 1.80.0). Regenerated Go/Python/TS stubs; 20 changed files, all under `analysis/v1` + `portfolio/v1` (diff limited to the two changed services, matching the CI proto-freshness check). Toolchain pinned to CI versions so stubs byte-match.
+- Files modified: `packages/proto/gen/**` (generated)
+- Deviations: none.

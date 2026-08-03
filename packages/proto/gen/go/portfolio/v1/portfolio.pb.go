@@ -1174,23 +1174,81 @@ func (x *ListPortfoliosResponse) GetPortfolios() []*Portfolio {
 	return nil
 }
 
+// A (symbol, strategy) binding — a ready-made Universe candidate (feature 097).
+type WatchlistBinding struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
+	StrategyId    string                 `protobuf:"bytes,2,opt,name=strategy_id,json=strategyId,proto3" json:"strategy_id,omitempty"` // "" = unbound (kept as a bare watched symbol)
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WatchlistBinding) Reset() {
+	*x = WatchlistBinding{}
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WatchlistBinding) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchlistBinding) ProtoMessage() {}
+
+func (x *WatchlistBinding) ProtoReflect() protoreflect.Message {
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchlistBinding.ProtoReflect.Descriptor instead.
+func (*WatchlistBinding) Descriptor() ([]byte, []int) {
+	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *WatchlistBinding) GetSymbol() string {
+	if x != nil {
+		return x.Symbol
+	}
+	return ""
+}
+
+func (x *WatchlistBinding) GetStrategyId() string {
+	if x != nil {
+		return x.StrategyId
+	}
+	return ""
+}
+
 // Watchlist (feature 058) — a mode-agnostic, user-owned named set of symbols.
 type Watchlist struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	WatchlistId   string                 `protobuf:"bytes,1,opt,name=watchlist_id,json=watchlistId,proto3" json:"watchlist_id,omitempty"`
-	UserId        string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
-	Symbols       []string               `protobuf:"bytes,5,rep,name=symbols,proto3" json:"symbols,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	WatchlistId string                 `protobuf:"bytes,1,opt,name=watchlist_id,json=watchlistId,proto3" json:"watchlist_id,omitempty"`
+	UserId      string                 `protobuf:"bytes,2,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Name        string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Description string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
+	// DEPRECATED (feature 097): the flat mirror of `bindings`, kept readable for old clients (FR-6).
+	//
+	// Deprecated: Marked as deprecated in portfolio/v1/portfolio.proto.
+	Symbols   []string               `protobuf:"bytes,5,rep,name=symbols,proto3" json:"symbols,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	// Authoritative (symbol, strategy) shape (feature 097); when present it supersedes `symbols`.
+	Bindings      []*WatchlistBinding `protobuf:"bytes,8,rep,name=bindings,proto3" json:"bindings,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Watchlist) Reset() {
 	*x = Watchlist{}
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[13]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1202,7 +1260,7 @@ func (x *Watchlist) String() string {
 func (*Watchlist) ProtoMessage() {}
 
 func (x *Watchlist) ProtoReflect() protoreflect.Message {
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[13]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1215,7 +1273,7 @@ func (x *Watchlist) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Watchlist.ProtoReflect.Descriptor instead.
 func (*Watchlist) Descriptor() ([]byte, []int) {
-	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{13}
+	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *Watchlist) GetWatchlistId() string {
@@ -1246,6 +1304,7 @@ func (x *Watchlist) GetDescription() string {
 	return ""
 }
 
+// Deprecated: Marked as deprecated in portfolio/v1/portfolio.proto.
 func (x *Watchlist) GetSymbols() []string {
 	if x != nil {
 		return x.Symbols
@@ -1267,20 +1326,29 @@ func (x *Watchlist) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Watchlist) GetBindings() []*WatchlistBinding {
+	if x != nil {
+		return x.Bindings
+	}
+	return nil
+}
+
 // user_id is intentionally absent from all request messages — ownership is taken
 // from the propagated x-user-id header server-side (FR-2), never from the wire.
 type CreateWatchlistRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	Symbols       []string               `protobuf:"bytes,3,rep,name=symbols,proto3" json:"symbols,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	Symbols     []string               `protobuf:"bytes,3,rep,name=symbols,proto3" json:"symbols,omitempty"`
+	// When present, authoritative (feature 097); legacy `symbols` remains accepted (unbound).
+	Bindings      []*WatchlistBinding `protobuf:"bytes,4,rep,name=bindings,proto3" json:"bindings,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CreateWatchlistRequest) Reset() {
 	*x = CreateWatchlistRequest{}
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[14]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1292,7 +1360,7 @@ func (x *CreateWatchlistRequest) String() string {
 func (*CreateWatchlistRequest) ProtoMessage() {}
 
 func (x *CreateWatchlistRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[14]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1305,7 +1373,7 @@ func (x *CreateWatchlistRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateWatchlistRequest.ProtoReflect.Descriptor instead.
 func (*CreateWatchlistRequest) Descriptor() ([]byte, []int) {
-	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{14}
+	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *CreateWatchlistRequest) GetName() string {
@@ -1329,6 +1397,13 @@ func (x *CreateWatchlistRequest) GetSymbols() []string {
 	return nil
 }
 
+func (x *CreateWatchlistRequest) GetBindings() []*WatchlistBinding {
+	if x != nil {
+		return x.Bindings
+	}
+	return nil
+}
+
 type CreateWatchlistResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Watchlist     *Watchlist             `protobuf:"bytes,1,opt,name=watchlist,proto3" json:"watchlist,omitempty"`
@@ -1338,7 +1413,7 @@ type CreateWatchlistResponse struct {
 
 func (x *CreateWatchlistResponse) Reset() {
 	*x = CreateWatchlistResponse{}
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[15]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1350,7 +1425,7 @@ func (x *CreateWatchlistResponse) String() string {
 func (*CreateWatchlistResponse) ProtoMessage() {}
 
 func (x *CreateWatchlistResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[15]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1363,7 +1438,7 @@ func (x *CreateWatchlistResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateWatchlistResponse.ProtoReflect.Descriptor instead.
 func (*CreateWatchlistResponse) Descriptor() ([]byte, []int) {
-	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{15}
+	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *CreateWatchlistResponse) GetWatchlist() *Watchlist {
@@ -1382,7 +1457,7 @@ type GetWatchlistRequest struct {
 
 func (x *GetWatchlistRequest) Reset() {
 	*x = GetWatchlistRequest{}
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[16]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1394,7 +1469,7 @@ func (x *GetWatchlistRequest) String() string {
 func (*GetWatchlistRequest) ProtoMessage() {}
 
 func (x *GetWatchlistRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[16]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1407,7 +1482,7 @@ func (x *GetWatchlistRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWatchlistRequest.ProtoReflect.Descriptor instead.
 func (*GetWatchlistRequest) Descriptor() ([]byte, []int) {
-	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{16}
+	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *GetWatchlistRequest) GetWatchlistId() string {
@@ -1426,7 +1501,7 @@ type GetWatchlistResponse struct {
 
 func (x *GetWatchlistResponse) Reset() {
 	*x = GetWatchlistResponse{}
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[17]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1438,7 +1513,7 @@ func (x *GetWatchlistResponse) String() string {
 func (*GetWatchlistResponse) ProtoMessage() {}
 
 func (x *GetWatchlistResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[17]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1451,7 +1526,7 @@ func (x *GetWatchlistResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWatchlistResponse.ProtoReflect.Descriptor instead.
 func (*GetWatchlistResponse) Descriptor() ([]byte, []int) {
-	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{17}
+	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *GetWatchlistResponse) GetWatchlist() *Watchlist {
@@ -1470,7 +1545,7 @@ type ListWatchlistsRequest struct {
 
 func (x *ListWatchlistsRequest) Reset() {
 	*x = ListWatchlistsRequest{}
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[18]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1482,7 +1557,7 @@ func (x *ListWatchlistsRequest) String() string {
 func (*ListWatchlistsRequest) ProtoMessage() {}
 
 func (x *ListWatchlistsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[18]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1495,7 +1570,7 @@ func (x *ListWatchlistsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListWatchlistsRequest.ProtoReflect.Descriptor instead.
 func (*ListWatchlistsRequest) Descriptor() ([]byte, []int) {
-	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{18}
+	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ListWatchlistsRequest) GetPage() *v1.PageRequest {
@@ -1515,7 +1590,7 @@ type ListWatchlistsResponse struct {
 
 func (x *ListWatchlistsResponse) Reset() {
 	*x = ListWatchlistsResponse{}
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[19]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1527,7 +1602,7 @@ func (x *ListWatchlistsResponse) String() string {
 func (*ListWatchlistsResponse) ProtoMessage() {}
 
 func (x *ListWatchlistsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[19]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1540,7 +1615,7 @@ func (x *ListWatchlistsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListWatchlistsResponse.ProtoReflect.Descriptor instead.
 func (*ListWatchlistsResponse) Descriptor() ([]byte, []int) {
-	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{19}
+	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ListWatchlistsResponse) GetWatchlists() []*Watchlist {
@@ -1559,18 +1634,20 @@ func (x *ListWatchlistsResponse) GetPage() *v1.PageResponse {
 
 // Replace semantics for name/description/symbols per FR-1.
 type UpdateWatchlistRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	WatchlistId   string                 `protobuf:"bytes,1,opt,name=watchlist_id,json=watchlistId,proto3" json:"watchlist_id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	Symbols       []string               `protobuf:"bytes,4,rep,name=symbols,proto3" json:"symbols,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	WatchlistId string                 `protobuf:"bytes,1,opt,name=watchlist_id,json=watchlistId,proto3" json:"watchlist_id,omitempty"`
+	Name        string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Description string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	Symbols     []string               `protobuf:"bytes,4,rep,name=symbols,proto3" json:"symbols,omitempty"`
+	// When present, authoritative (feature 097); legacy `symbols` remains accepted (unbound).
+	Bindings      []*WatchlistBinding `protobuf:"bytes,5,rep,name=bindings,proto3" json:"bindings,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UpdateWatchlistRequest) Reset() {
 	*x = UpdateWatchlistRequest{}
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[20]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1582,7 +1659,7 @@ func (x *UpdateWatchlistRequest) String() string {
 func (*UpdateWatchlistRequest) ProtoMessage() {}
 
 func (x *UpdateWatchlistRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[20]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1595,7 +1672,7 @@ func (x *UpdateWatchlistRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateWatchlistRequest.ProtoReflect.Descriptor instead.
 func (*UpdateWatchlistRequest) Descriptor() ([]byte, []int) {
-	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{20}
+	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *UpdateWatchlistRequest) GetWatchlistId() string {
@@ -1626,6 +1703,13 @@ func (x *UpdateWatchlistRequest) GetSymbols() []string {
 	return nil
 }
 
+func (x *UpdateWatchlistRequest) GetBindings() []*WatchlistBinding {
+	if x != nil {
+		return x.Bindings
+	}
+	return nil
+}
+
 type UpdateWatchlistResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Watchlist     *Watchlist             `protobuf:"bytes,1,opt,name=watchlist,proto3" json:"watchlist,omitempty"`
@@ -1635,7 +1719,7 @@ type UpdateWatchlistResponse struct {
 
 func (x *UpdateWatchlistResponse) Reset() {
 	*x = UpdateWatchlistResponse{}
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[21]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1647,7 +1731,7 @@ func (x *UpdateWatchlistResponse) String() string {
 func (*UpdateWatchlistResponse) ProtoMessage() {}
 
 func (x *UpdateWatchlistResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[21]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1660,7 +1744,7 @@ func (x *UpdateWatchlistResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateWatchlistResponse.ProtoReflect.Descriptor instead.
 func (*UpdateWatchlistResponse) Descriptor() ([]byte, []int) {
-	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{21}
+	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *UpdateWatchlistResponse) GetWatchlist() *Watchlist {
@@ -1679,7 +1763,7 @@ type DeleteWatchlistRequest struct {
 
 func (x *DeleteWatchlistRequest) Reset() {
 	*x = DeleteWatchlistRequest{}
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[22]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1691,7 +1775,7 @@ func (x *DeleteWatchlistRequest) String() string {
 func (*DeleteWatchlistRequest) ProtoMessage() {}
 
 func (x *DeleteWatchlistRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[22]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1704,7 +1788,7 @@ func (x *DeleteWatchlistRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteWatchlistRequest.ProtoReflect.Descriptor instead.
 func (*DeleteWatchlistRequest) Descriptor() ([]byte, []int) {
-	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{22}
+	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *DeleteWatchlistRequest) GetWatchlistId() string {
@@ -1722,7 +1806,7 @@ type DeleteWatchlistResponse struct {
 
 func (x *DeleteWatchlistResponse) Reset() {
 	*x = DeleteWatchlistResponse{}
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[23]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1734,7 +1818,7 @@ func (x *DeleteWatchlistResponse) String() string {
 func (*DeleteWatchlistResponse) ProtoMessage() {}
 
 func (x *DeleteWatchlistResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[23]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1747,20 +1831,22 @@ func (x *DeleteWatchlistResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteWatchlistResponse.ProtoReflect.Descriptor instead.
 func (*DeleteWatchlistResponse) Descriptor() ([]byte, []int) {
-	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{23}
+	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{24}
 }
 
 type AddWatchlistSymbolsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	WatchlistId   string                 `protobuf:"bytes,1,opt,name=watchlist_id,json=watchlistId,proto3" json:"watchlist_id,omitempty"`
-	Symbols       []string               `protobuf:"bytes,2,rep,name=symbols,proto3" json:"symbols,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	WatchlistId string                 `protobuf:"bytes,1,opt,name=watchlist_id,json=watchlistId,proto3" json:"watchlist_id,omitempty"`
+	Symbols     []string               `protobuf:"bytes,2,rep,name=symbols,proto3" json:"symbols,omitempty"`
+	// When present, authoritative (feature 097); legacy `symbols` remains accepted (unbound).
+	Bindings      []*WatchlistBinding `protobuf:"bytes,3,rep,name=bindings,proto3" json:"bindings,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AddWatchlistSymbolsRequest) Reset() {
 	*x = AddWatchlistSymbolsRequest{}
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[24]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1772,7 +1858,7 @@ func (x *AddWatchlistSymbolsRequest) String() string {
 func (*AddWatchlistSymbolsRequest) ProtoMessage() {}
 
 func (x *AddWatchlistSymbolsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[24]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1785,7 +1871,7 @@ func (x *AddWatchlistSymbolsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddWatchlistSymbolsRequest.ProtoReflect.Descriptor instead.
 func (*AddWatchlistSymbolsRequest) Descriptor() ([]byte, []int) {
-	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{24}
+	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *AddWatchlistSymbolsRequest) GetWatchlistId() string {
@@ -1802,6 +1888,13 @@ func (x *AddWatchlistSymbolsRequest) GetSymbols() []string {
 	return nil
 }
 
+func (x *AddWatchlistSymbolsRequest) GetBindings() []*WatchlistBinding {
+	if x != nil {
+		return x.Bindings
+	}
+	return nil
+}
+
 type AddWatchlistSymbolsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Watchlist     *Watchlist             `protobuf:"bytes,1,opt,name=watchlist,proto3" json:"watchlist,omitempty"`
@@ -1811,7 +1904,7 @@ type AddWatchlistSymbolsResponse struct {
 
 func (x *AddWatchlistSymbolsResponse) Reset() {
 	*x = AddWatchlistSymbolsResponse{}
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[25]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1823,7 +1916,7 @@ func (x *AddWatchlistSymbolsResponse) String() string {
 func (*AddWatchlistSymbolsResponse) ProtoMessage() {}
 
 func (x *AddWatchlistSymbolsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[25]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1836,7 +1929,7 @@ func (x *AddWatchlistSymbolsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddWatchlistSymbolsResponse.ProtoReflect.Descriptor instead.
 func (*AddWatchlistSymbolsResponse) Descriptor() ([]byte, []int) {
-	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{25}
+	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *AddWatchlistSymbolsResponse) GetWatchlist() *Watchlist {
@@ -1856,7 +1949,7 @@ type RemoveWatchlistSymbolsRequest struct {
 
 func (x *RemoveWatchlistSymbolsRequest) Reset() {
 	*x = RemoveWatchlistSymbolsRequest{}
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[26]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1868,7 +1961,7 @@ func (x *RemoveWatchlistSymbolsRequest) String() string {
 func (*RemoveWatchlistSymbolsRequest) ProtoMessage() {}
 
 func (x *RemoveWatchlistSymbolsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[26]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1881,7 +1974,7 @@ func (x *RemoveWatchlistSymbolsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveWatchlistSymbolsRequest.ProtoReflect.Descriptor instead.
 func (*RemoveWatchlistSymbolsRequest) Descriptor() ([]byte, []int) {
-	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{26}
+	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *RemoveWatchlistSymbolsRequest) GetWatchlistId() string {
@@ -1907,7 +2000,7 @@ type RemoveWatchlistSymbolsResponse struct {
 
 func (x *RemoveWatchlistSymbolsResponse) Reset() {
 	*x = RemoveWatchlistSymbolsResponse{}
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[27]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1919,7 +2012,7 @@ func (x *RemoveWatchlistSymbolsResponse) String() string {
 func (*RemoveWatchlistSymbolsResponse) ProtoMessage() {}
 
 func (x *RemoveWatchlistSymbolsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_portfolio_v1_portfolio_proto_msgTypes[27]
+	mi := &file_portfolio_v1_portfolio_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1932,7 +2025,7 @@ func (x *RemoveWatchlistSymbolsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RemoveWatchlistSymbolsResponse.ProtoReflect.Descriptor instead.
 func (*RemoveWatchlistSymbolsResponse) Descriptor() ([]byte, []int) {
-	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{27}
+	return file_portfolio_v1_portfolio_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *RemoveWatchlistSymbolsResponse) GetWatchlist() *Watchlist {
@@ -2054,21 +2147,27 @@ const file_portfolio_v1_portfolio_proto_rawDesc = "" +
 	"\x16ListPortfoliosResponse\x12C\n" +
 	"\n" +
 	"portfolios\x18\x01 \x03(\v2#.xstockstrat.portfolio.v1.PortfolioR\n" +
-	"portfolios\"\x8d\x02\n" +
+	"portfolios\"K\n" +
+	"\x10WatchlistBinding\x12\x16\n" +
+	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12\x1f\n" +
+	"\vstrategy_id\x18\x02 \x01(\tR\n" +
+	"strategyId\"\xd9\x02\n" +
 	"\tWatchlist\x12!\n" +
 	"\fwatchlist_id\x18\x01 \x01(\tR\vwatchlistId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12 \n" +
-	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x18\n" +
-	"\asymbols\x18\x05 \x03(\tR\asymbols\x129\n" +
+	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x1c\n" +
+	"\asymbols\x18\x05 \x03(\tB\x02\x18\x01R\asymbols\x129\n" +
 	"\n" +
 	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"h\n" +
+	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12F\n" +
+	"\bbindings\x18\b \x03(\v2*.xstockstrat.portfolio.v1.WatchlistBindingR\bbindings\"\xb0\x01\n" +
 	"\x16CreateWatchlistRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x18\n" +
-	"\asymbols\x18\x03 \x03(\tR\asymbols\"\\\n" +
+	"\asymbols\x18\x03 \x03(\tR\asymbols\x12F\n" +
+	"\bbindings\x18\x04 \x03(\v2*.xstockstrat.portfolio.v1.WatchlistBindingR\bbindings\"\\\n" +
 	"\x17CreateWatchlistResponse\x12A\n" +
 	"\twatchlist\x18\x01 \x01(\v2#.xstockstrat.portfolio.v1.WatchlistR\twatchlist\"8\n" +
 	"\x13GetWatchlistRequest\x12!\n" +
@@ -2081,20 +2180,22 @@ const file_portfolio_v1_portfolio_proto_rawDesc = "" +
 	"\n" +
 	"watchlists\x18\x01 \x03(\v2#.xstockstrat.portfolio.v1.WatchlistR\n" +
 	"watchlists\x127\n" +
-	"\x04page\x18\x02 \x01(\v2#.xstockstrat.common.v1.PageResponseR\x04page\"\x8b\x01\n" +
+	"\x04page\x18\x02 \x01(\v2#.xstockstrat.common.v1.PageResponseR\x04page\"\xd3\x01\n" +
 	"\x16UpdateWatchlistRequest\x12!\n" +
 	"\fwatchlist_id\x18\x01 \x01(\tR\vwatchlistId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x18\n" +
-	"\asymbols\x18\x04 \x03(\tR\asymbols\"\\\n" +
+	"\asymbols\x18\x04 \x03(\tR\asymbols\x12F\n" +
+	"\bbindings\x18\x05 \x03(\v2*.xstockstrat.portfolio.v1.WatchlistBindingR\bbindings\"\\\n" +
 	"\x17UpdateWatchlistResponse\x12A\n" +
 	"\twatchlist\x18\x01 \x01(\v2#.xstockstrat.portfolio.v1.WatchlistR\twatchlist\";\n" +
 	"\x16DeleteWatchlistRequest\x12!\n" +
 	"\fwatchlist_id\x18\x01 \x01(\tR\vwatchlistId\"\x19\n" +
-	"\x17DeleteWatchlistResponse\"Y\n" +
+	"\x17DeleteWatchlistResponse\"\xa1\x01\n" +
 	"\x1aAddWatchlistSymbolsRequest\x12!\n" +
 	"\fwatchlist_id\x18\x01 \x01(\tR\vwatchlistId\x12\x18\n" +
-	"\asymbols\x18\x02 \x03(\tR\asymbols\"`\n" +
+	"\asymbols\x18\x02 \x03(\tR\asymbols\x12F\n" +
+	"\bbindings\x18\x03 \x03(\v2*.xstockstrat.portfolio.v1.WatchlistBindingR\bbindings\"`\n" +
 	"\x1bAddWatchlistSymbolsResponse\x12A\n" +
 	"\twatchlist\x18\x01 \x01(\v2#.xstockstrat.portfolio.v1.WatchlistR\twatchlist\"\\\n" +
 	"\x1dRemoveWatchlistSymbolsRequest\x12!\n" +
@@ -2140,7 +2241,7 @@ func file_portfolio_v1_portfolio_proto_rawDescGZIP() []byte {
 }
 
 var file_portfolio_v1_portfolio_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_portfolio_v1_portfolio_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
+var file_portfolio_v1_portfolio_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_portfolio_v1_portfolio_proto_goTypes = []any{
 	(PositionRiskFlag)(0),                  // 0: xstockstrat.portfolio.v1.PositionRiskFlag
 	(PositionSide)(0),                      // 1: xstockstrat.portfolio.v1.PositionSide
@@ -2157,91 +2258,96 @@ var file_portfolio_v1_portfolio_proto_goTypes = []any{
 	(*StreamPortfolioUpdatesRequest)(nil),  // 12: xstockstrat.portfolio.v1.StreamPortfolioUpdatesRequest
 	(*ListPortfoliosRequest)(nil),          // 13: xstockstrat.portfolio.v1.ListPortfoliosRequest
 	(*ListPortfoliosResponse)(nil),         // 14: xstockstrat.portfolio.v1.ListPortfoliosResponse
-	(*Watchlist)(nil),                      // 15: xstockstrat.portfolio.v1.Watchlist
-	(*CreateWatchlistRequest)(nil),         // 16: xstockstrat.portfolio.v1.CreateWatchlistRequest
-	(*CreateWatchlistResponse)(nil),        // 17: xstockstrat.portfolio.v1.CreateWatchlistResponse
-	(*GetWatchlistRequest)(nil),            // 18: xstockstrat.portfolio.v1.GetWatchlistRequest
-	(*GetWatchlistResponse)(nil),           // 19: xstockstrat.portfolio.v1.GetWatchlistResponse
-	(*ListWatchlistsRequest)(nil),          // 20: xstockstrat.portfolio.v1.ListWatchlistsRequest
-	(*ListWatchlistsResponse)(nil),         // 21: xstockstrat.portfolio.v1.ListWatchlistsResponse
-	(*UpdateWatchlistRequest)(nil),         // 22: xstockstrat.portfolio.v1.UpdateWatchlistRequest
-	(*UpdateWatchlistResponse)(nil),        // 23: xstockstrat.portfolio.v1.UpdateWatchlistResponse
-	(*DeleteWatchlistRequest)(nil),         // 24: xstockstrat.portfolio.v1.DeleteWatchlistRequest
-	(*DeleteWatchlistResponse)(nil),        // 25: xstockstrat.portfolio.v1.DeleteWatchlistResponse
-	(*AddWatchlistSymbolsRequest)(nil),     // 26: xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest
-	(*AddWatchlistSymbolsResponse)(nil),    // 27: xstockstrat.portfolio.v1.AddWatchlistSymbolsResponse
-	(*RemoveWatchlistSymbolsRequest)(nil),  // 28: xstockstrat.portfolio.v1.RemoveWatchlistSymbolsRequest
-	(*RemoveWatchlistSymbolsResponse)(nil), // 29: xstockstrat.portfolio.v1.RemoveWatchlistSymbolsResponse
-	(*timestamppb.Timestamp)(nil),          // 30: google.protobuf.Timestamp
-	(v1.TradingMode)(0),                    // 31: xstockstrat.common.v1.TradingMode
-	(*v1.TimeRange)(nil),                   // 32: xstockstrat.common.v1.TimeRange
-	(*v1.PageRequest)(nil),                 // 33: xstockstrat.common.v1.PageRequest
-	(*v1.PageResponse)(nil),                // 34: xstockstrat.common.v1.PageResponse
+	(*WatchlistBinding)(nil),               // 15: xstockstrat.portfolio.v1.WatchlistBinding
+	(*Watchlist)(nil),                      // 16: xstockstrat.portfolio.v1.Watchlist
+	(*CreateWatchlistRequest)(nil),         // 17: xstockstrat.portfolio.v1.CreateWatchlistRequest
+	(*CreateWatchlistResponse)(nil),        // 18: xstockstrat.portfolio.v1.CreateWatchlistResponse
+	(*GetWatchlistRequest)(nil),            // 19: xstockstrat.portfolio.v1.GetWatchlistRequest
+	(*GetWatchlistResponse)(nil),           // 20: xstockstrat.portfolio.v1.GetWatchlistResponse
+	(*ListWatchlistsRequest)(nil),          // 21: xstockstrat.portfolio.v1.ListWatchlistsRequest
+	(*ListWatchlistsResponse)(nil),         // 22: xstockstrat.portfolio.v1.ListWatchlistsResponse
+	(*UpdateWatchlistRequest)(nil),         // 23: xstockstrat.portfolio.v1.UpdateWatchlistRequest
+	(*UpdateWatchlistResponse)(nil),        // 24: xstockstrat.portfolio.v1.UpdateWatchlistResponse
+	(*DeleteWatchlistRequest)(nil),         // 25: xstockstrat.portfolio.v1.DeleteWatchlistRequest
+	(*DeleteWatchlistResponse)(nil),        // 26: xstockstrat.portfolio.v1.DeleteWatchlistResponse
+	(*AddWatchlistSymbolsRequest)(nil),     // 27: xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest
+	(*AddWatchlistSymbolsResponse)(nil),    // 28: xstockstrat.portfolio.v1.AddWatchlistSymbolsResponse
+	(*RemoveWatchlistSymbolsRequest)(nil),  // 29: xstockstrat.portfolio.v1.RemoveWatchlistSymbolsRequest
+	(*RemoveWatchlistSymbolsResponse)(nil), // 30: xstockstrat.portfolio.v1.RemoveWatchlistSymbolsResponse
+	(*timestamppb.Timestamp)(nil),          // 31: google.protobuf.Timestamp
+	(v1.TradingMode)(0),                    // 32: xstockstrat.common.v1.TradingMode
+	(*v1.TimeRange)(nil),                   // 33: xstockstrat.common.v1.TimeRange
+	(*v1.PageRequest)(nil),                 // 34: xstockstrat.common.v1.PageRequest
+	(*v1.PageResponse)(nil),                // 35: xstockstrat.common.v1.PageResponse
 }
 var file_portfolio_v1_portfolio_proto_depIdxs = []int32{
-	30, // 0: xstockstrat.portfolio.v1.Portfolio.updated_at:type_name -> google.protobuf.Timestamp
+	31, // 0: xstockstrat.portfolio.v1.Portfolio.updated_at:type_name -> google.protobuf.Timestamp
 	3,  // 1: xstockstrat.portfolio.v1.Portfolio.positions:type_name -> xstockstrat.portfolio.v1.Position
-	30, // 2: xstockstrat.portfolio.v1.Position.opened_at:type_name -> google.protobuf.Timestamp
-	31, // 3: xstockstrat.portfolio.v1.Position.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
+	31, // 2: xstockstrat.portfolio.v1.Position.opened_at:type_name -> google.protobuf.Timestamp
+	32, // 3: xstockstrat.portfolio.v1.Position.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
 	0,  // 4: xstockstrat.portfolio.v1.Position.flag:type_name -> xstockstrat.portfolio.v1.PositionRiskFlag
-	30, // 5: xstockstrat.portfolio.v1.PortfolioSnapshot.snapshot_time:type_name -> google.protobuf.Timestamp
-	31, // 6: xstockstrat.portfolio.v1.PortfolioSnapshot.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
-	32, // 7: xstockstrat.portfolio.v1.PnLResponse.range:type_name -> xstockstrat.common.v1.TimeRange
-	31, // 8: xstockstrat.portfolio.v1.GetPortfolioRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
-	31, // 9: xstockstrat.portfolio.v1.GetPositionRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
-	33, // 10: xstockstrat.portfolio.v1.ListPositionsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
-	31, // 11: xstockstrat.portfolio.v1.ListPositionsRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
+	31, // 5: xstockstrat.portfolio.v1.PortfolioSnapshot.snapshot_time:type_name -> google.protobuf.Timestamp
+	32, // 6: xstockstrat.portfolio.v1.PortfolioSnapshot.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
+	33, // 7: xstockstrat.portfolio.v1.PnLResponse.range:type_name -> xstockstrat.common.v1.TimeRange
+	32, // 8: xstockstrat.portfolio.v1.GetPortfolioRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
+	32, // 9: xstockstrat.portfolio.v1.GetPositionRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
+	34, // 10: xstockstrat.portfolio.v1.ListPositionsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
+	32, // 11: xstockstrat.portfolio.v1.ListPositionsRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
 	1,  // 12: xstockstrat.portfolio.v1.ListPositionsRequest.side:type_name -> xstockstrat.portfolio.v1.PositionSide
 	3,  // 13: xstockstrat.portfolio.v1.ListPositionsResponse.positions:type_name -> xstockstrat.portfolio.v1.Position
-	34, // 14: xstockstrat.portfolio.v1.ListPositionsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
-	32, // 15: xstockstrat.portfolio.v1.GetPnLRequest.range:type_name -> xstockstrat.common.v1.TimeRange
-	31, // 16: xstockstrat.portfolio.v1.GetPnLRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
-	30, // 17: xstockstrat.portfolio.v1.GetSnapshotRequest.at_time:type_name -> google.protobuf.Timestamp
-	31, // 18: xstockstrat.portfolio.v1.StreamPortfolioUpdatesRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
+	35, // 14: xstockstrat.portfolio.v1.ListPositionsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
+	33, // 15: xstockstrat.portfolio.v1.GetPnLRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	32, // 16: xstockstrat.portfolio.v1.GetPnLRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
+	31, // 17: xstockstrat.portfolio.v1.GetSnapshotRequest.at_time:type_name -> google.protobuf.Timestamp
+	32, // 18: xstockstrat.portfolio.v1.StreamPortfolioUpdatesRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
 	2,  // 19: xstockstrat.portfolio.v1.ListPortfoliosResponse.portfolios:type_name -> xstockstrat.portfolio.v1.Portfolio
-	30, // 20: xstockstrat.portfolio.v1.Watchlist.created_at:type_name -> google.protobuf.Timestamp
-	30, // 21: xstockstrat.portfolio.v1.Watchlist.updated_at:type_name -> google.protobuf.Timestamp
-	15, // 22: xstockstrat.portfolio.v1.CreateWatchlistResponse.watchlist:type_name -> xstockstrat.portfolio.v1.Watchlist
-	15, // 23: xstockstrat.portfolio.v1.GetWatchlistResponse.watchlist:type_name -> xstockstrat.portfolio.v1.Watchlist
-	33, // 24: xstockstrat.portfolio.v1.ListWatchlistsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
-	15, // 25: xstockstrat.portfolio.v1.ListWatchlistsResponse.watchlists:type_name -> xstockstrat.portfolio.v1.Watchlist
-	34, // 26: xstockstrat.portfolio.v1.ListWatchlistsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
-	15, // 27: xstockstrat.portfolio.v1.UpdateWatchlistResponse.watchlist:type_name -> xstockstrat.portfolio.v1.Watchlist
-	15, // 28: xstockstrat.portfolio.v1.AddWatchlistSymbolsResponse.watchlist:type_name -> xstockstrat.portfolio.v1.Watchlist
-	15, // 29: xstockstrat.portfolio.v1.RemoveWatchlistSymbolsResponse.watchlist:type_name -> xstockstrat.portfolio.v1.Watchlist
-	6,  // 30: xstockstrat.portfolio.v1.PortfolioService.GetPortfolio:input_type -> xstockstrat.portfolio.v1.GetPortfolioRequest
-	7,  // 31: xstockstrat.portfolio.v1.PortfolioService.GetPosition:input_type -> xstockstrat.portfolio.v1.GetPositionRequest
-	8,  // 32: xstockstrat.portfolio.v1.PortfolioService.ListPositions:input_type -> xstockstrat.portfolio.v1.ListPositionsRequest
-	10, // 33: xstockstrat.portfolio.v1.PortfolioService.GetPnL:input_type -> xstockstrat.portfolio.v1.GetPnLRequest
-	11, // 34: xstockstrat.portfolio.v1.PortfolioService.GetSnapshot:input_type -> xstockstrat.portfolio.v1.GetSnapshotRequest
-	12, // 35: xstockstrat.portfolio.v1.PortfolioService.StreamPortfolioUpdates:input_type -> xstockstrat.portfolio.v1.StreamPortfolioUpdatesRequest
-	13, // 36: xstockstrat.portfolio.v1.PortfolioService.ListPortfolios:input_type -> xstockstrat.portfolio.v1.ListPortfoliosRequest
-	16, // 37: xstockstrat.portfolio.v1.PortfolioService.CreateWatchlist:input_type -> xstockstrat.portfolio.v1.CreateWatchlistRequest
-	18, // 38: xstockstrat.portfolio.v1.PortfolioService.GetWatchlist:input_type -> xstockstrat.portfolio.v1.GetWatchlistRequest
-	20, // 39: xstockstrat.portfolio.v1.PortfolioService.ListWatchlists:input_type -> xstockstrat.portfolio.v1.ListWatchlistsRequest
-	22, // 40: xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlist:input_type -> xstockstrat.portfolio.v1.UpdateWatchlistRequest
-	24, // 41: xstockstrat.portfolio.v1.PortfolioService.DeleteWatchlist:input_type -> xstockstrat.portfolio.v1.DeleteWatchlistRequest
-	26, // 42: xstockstrat.portfolio.v1.PortfolioService.AddWatchlistSymbols:input_type -> xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest
-	28, // 43: xstockstrat.portfolio.v1.PortfolioService.RemoveWatchlistSymbols:input_type -> xstockstrat.portfolio.v1.RemoveWatchlistSymbolsRequest
-	2,  // 44: xstockstrat.portfolio.v1.PortfolioService.GetPortfolio:output_type -> xstockstrat.portfolio.v1.Portfolio
-	3,  // 45: xstockstrat.portfolio.v1.PortfolioService.GetPosition:output_type -> xstockstrat.portfolio.v1.Position
-	9,  // 46: xstockstrat.portfolio.v1.PortfolioService.ListPositions:output_type -> xstockstrat.portfolio.v1.ListPositionsResponse
-	5,  // 47: xstockstrat.portfolio.v1.PortfolioService.GetPnL:output_type -> xstockstrat.portfolio.v1.PnLResponse
-	4,  // 48: xstockstrat.portfolio.v1.PortfolioService.GetSnapshot:output_type -> xstockstrat.portfolio.v1.PortfolioSnapshot
-	4,  // 49: xstockstrat.portfolio.v1.PortfolioService.StreamPortfolioUpdates:output_type -> xstockstrat.portfolio.v1.PortfolioSnapshot
-	14, // 50: xstockstrat.portfolio.v1.PortfolioService.ListPortfolios:output_type -> xstockstrat.portfolio.v1.ListPortfoliosResponse
-	17, // 51: xstockstrat.portfolio.v1.PortfolioService.CreateWatchlist:output_type -> xstockstrat.portfolio.v1.CreateWatchlistResponse
-	19, // 52: xstockstrat.portfolio.v1.PortfolioService.GetWatchlist:output_type -> xstockstrat.portfolio.v1.GetWatchlistResponse
-	21, // 53: xstockstrat.portfolio.v1.PortfolioService.ListWatchlists:output_type -> xstockstrat.portfolio.v1.ListWatchlistsResponse
-	23, // 54: xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlist:output_type -> xstockstrat.portfolio.v1.UpdateWatchlistResponse
-	25, // 55: xstockstrat.portfolio.v1.PortfolioService.DeleteWatchlist:output_type -> xstockstrat.portfolio.v1.DeleteWatchlistResponse
-	27, // 56: xstockstrat.portfolio.v1.PortfolioService.AddWatchlistSymbols:output_type -> xstockstrat.portfolio.v1.AddWatchlistSymbolsResponse
-	29, // 57: xstockstrat.portfolio.v1.PortfolioService.RemoveWatchlistSymbols:output_type -> xstockstrat.portfolio.v1.RemoveWatchlistSymbolsResponse
-	44, // [44:58] is the sub-list for method output_type
-	30, // [30:44] is the sub-list for method input_type
-	30, // [30:30] is the sub-list for extension type_name
-	30, // [30:30] is the sub-list for extension extendee
-	0,  // [0:30] is the sub-list for field type_name
+	31, // 20: xstockstrat.portfolio.v1.Watchlist.created_at:type_name -> google.protobuf.Timestamp
+	31, // 21: xstockstrat.portfolio.v1.Watchlist.updated_at:type_name -> google.protobuf.Timestamp
+	15, // 22: xstockstrat.portfolio.v1.Watchlist.bindings:type_name -> xstockstrat.portfolio.v1.WatchlistBinding
+	15, // 23: xstockstrat.portfolio.v1.CreateWatchlistRequest.bindings:type_name -> xstockstrat.portfolio.v1.WatchlistBinding
+	16, // 24: xstockstrat.portfolio.v1.CreateWatchlistResponse.watchlist:type_name -> xstockstrat.portfolio.v1.Watchlist
+	16, // 25: xstockstrat.portfolio.v1.GetWatchlistResponse.watchlist:type_name -> xstockstrat.portfolio.v1.Watchlist
+	34, // 26: xstockstrat.portfolio.v1.ListWatchlistsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
+	16, // 27: xstockstrat.portfolio.v1.ListWatchlistsResponse.watchlists:type_name -> xstockstrat.portfolio.v1.Watchlist
+	35, // 28: xstockstrat.portfolio.v1.ListWatchlistsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
+	15, // 29: xstockstrat.portfolio.v1.UpdateWatchlistRequest.bindings:type_name -> xstockstrat.portfolio.v1.WatchlistBinding
+	16, // 30: xstockstrat.portfolio.v1.UpdateWatchlistResponse.watchlist:type_name -> xstockstrat.portfolio.v1.Watchlist
+	15, // 31: xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest.bindings:type_name -> xstockstrat.portfolio.v1.WatchlistBinding
+	16, // 32: xstockstrat.portfolio.v1.AddWatchlistSymbolsResponse.watchlist:type_name -> xstockstrat.portfolio.v1.Watchlist
+	16, // 33: xstockstrat.portfolio.v1.RemoveWatchlistSymbolsResponse.watchlist:type_name -> xstockstrat.portfolio.v1.Watchlist
+	6,  // 34: xstockstrat.portfolio.v1.PortfolioService.GetPortfolio:input_type -> xstockstrat.portfolio.v1.GetPortfolioRequest
+	7,  // 35: xstockstrat.portfolio.v1.PortfolioService.GetPosition:input_type -> xstockstrat.portfolio.v1.GetPositionRequest
+	8,  // 36: xstockstrat.portfolio.v1.PortfolioService.ListPositions:input_type -> xstockstrat.portfolio.v1.ListPositionsRequest
+	10, // 37: xstockstrat.portfolio.v1.PortfolioService.GetPnL:input_type -> xstockstrat.portfolio.v1.GetPnLRequest
+	11, // 38: xstockstrat.portfolio.v1.PortfolioService.GetSnapshot:input_type -> xstockstrat.portfolio.v1.GetSnapshotRequest
+	12, // 39: xstockstrat.portfolio.v1.PortfolioService.StreamPortfolioUpdates:input_type -> xstockstrat.portfolio.v1.StreamPortfolioUpdatesRequest
+	13, // 40: xstockstrat.portfolio.v1.PortfolioService.ListPortfolios:input_type -> xstockstrat.portfolio.v1.ListPortfoliosRequest
+	17, // 41: xstockstrat.portfolio.v1.PortfolioService.CreateWatchlist:input_type -> xstockstrat.portfolio.v1.CreateWatchlistRequest
+	19, // 42: xstockstrat.portfolio.v1.PortfolioService.GetWatchlist:input_type -> xstockstrat.portfolio.v1.GetWatchlistRequest
+	21, // 43: xstockstrat.portfolio.v1.PortfolioService.ListWatchlists:input_type -> xstockstrat.portfolio.v1.ListWatchlistsRequest
+	23, // 44: xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlist:input_type -> xstockstrat.portfolio.v1.UpdateWatchlistRequest
+	25, // 45: xstockstrat.portfolio.v1.PortfolioService.DeleteWatchlist:input_type -> xstockstrat.portfolio.v1.DeleteWatchlistRequest
+	27, // 46: xstockstrat.portfolio.v1.PortfolioService.AddWatchlistSymbols:input_type -> xstockstrat.portfolio.v1.AddWatchlistSymbolsRequest
+	29, // 47: xstockstrat.portfolio.v1.PortfolioService.RemoveWatchlistSymbols:input_type -> xstockstrat.portfolio.v1.RemoveWatchlistSymbolsRequest
+	2,  // 48: xstockstrat.portfolio.v1.PortfolioService.GetPortfolio:output_type -> xstockstrat.portfolio.v1.Portfolio
+	3,  // 49: xstockstrat.portfolio.v1.PortfolioService.GetPosition:output_type -> xstockstrat.portfolio.v1.Position
+	9,  // 50: xstockstrat.portfolio.v1.PortfolioService.ListPositions:output_type -> xstockstrat.portfolio.v1.ListPositionsResponse
+	5,  // 51: xstockstrat.portfolio.v1.PortfolioService.GetPnL:output_type -> xstockstrat.portfolio.v1.PnLResponse
+	4,  // 52: xstockstrat.portfolio.v1.PortfolioService.GetSnapshot:output_type -> xstockstrat.portfolio.v1.PortfolioSnapshot
+	4,  // 53: xstockstrat.portfolio.v1.PortfolioService.StreamPortfolioUpdates:output_type -> xstockstrat.portfolio.v1.PortfolioSnapshot
+	14, // 54: xstockstrat.portfolio.v1.PortfolioService.ListPortfolios:output_type -> xstockstrat.portfolio.v1.ListPortfoliosResponse
+	18, // 55: xstockstrat.portfolio.v1.PortfolioService.CreateWatchlist:output_type -> xstockstrat.portfolio.v1.CreateWatchlistResponse
+	20, // 56: xstockstrat.portfolio.v1.PortfolioService.GetWatchlist:output_type -> xstockstrat.portfolio.v1.GetWatchlistResponse
+	22, // 57: xstockstrat.portfolio.v1.PortfolioService.ListWatchlists:output_type -> xstockstrat.portfolio.v1.ListWatchlistsResponse
+	24, // 58: xstockstrat.portfolio.v1.PortfolioService.UpdateWatchlist:output_type -> xstockstrat.portfolio.v1.UpdateWatchlistResponse
+	26, // 59: xstockstrat.portfolio.v1.PortfolioService.DeleteWatchlist:output_type -> xstockstrat.portfolio.v1.DeleteWatchlistResponse
+	28, // 60: xstockstrat.portfolio.v1.PortfolioService.AddWatchlistSymbols:output_type -> xstockstrat.portfolio.v1.AddWatchlistSymbolsResponse
+	30, // 61: xstockstrat.portfolio.v1.PortfolioService.RemoveWatchlistSymbols:output_type -> xstockstrat.portfolio.v1.RemoveWatchlistSymbolsResponse
+	48, // [48:62] is the sub-list for method output_type
+	34, // [34:48] is the sub-list for method input_type
+	34, // [34:34] is the sub-list for extension type_name
+	34, // [34:34] is the sub-list for extension extendee
+	0,  // [0:34] is the sub-list for field type_name
 }
 
 func init() { file_portfolio_v1_portfolio_proto_init() }
@@ -2262,7 +2368,7 @@ func file_portfolio_v1_portfolio_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_portfolio_v1_portfolio_proto_rawDesc), len(file_portfolio_v1_portfolio_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   28,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

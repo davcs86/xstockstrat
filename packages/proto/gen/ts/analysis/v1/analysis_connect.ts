@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BacktestResult, EvaluateReadinessRequest, EvaluateReadinessResponse, FundamentalsScanSummary, GetBacktestRequest, GetStrategyAnalyticsRequest, GetStrategyReportRequest, GetStrategyRequest, ListBacktestsRequest, ListBacktestsResponse, ListOpportunitiesRequest, ListOpportunitiesResponse, ListStrategiesRequest, ListStrategiesResponse, ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse, ManageStrategyRequest, RunBacktestRequest, RunFundamentalsScanRequest, ScoreStrategyRequest, ScreenSymbolsRequest, ScreenSymbolsResponse, SetStrategyLiveRequest, SetStrategyLiveResponse, StrategyAnalytics, StrategyDefinition, StrategyReport, StrategyScore } from "./analysis_pb.js";
+import { BacktestResult, EvaluateReadinessRequest, EvaluateReadinessResponse, FundamentalsScanSummary, GetBacktestRequest, GetStrategyAnalyticsRequest, GetStrategyReportRequest, GetStrategyRequest, ListBacktestsRequest, ListBacktestsResponse, ListOpportunitiesRequest, ListOpportunitiesResponse, ListStrategiesRequest, ListStrategiesResponse, ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse, ManageStrategyRequest, RunBacktestRequest, RunFundamentalsScanRequest, ScoreStrategyRequest, ScreenSymbolsRequest, ScreenSymbolsResponse, SetOpportunityActionRequest, SetOpportunityActionResponse, SetStrategyLiveRequest, SetStrategyLiveResponse, StrategyAnalytics, StrategyDefinition, StrategyReport, StrategyScore } from "./analysis_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -153,6 +153,17 @@ export const AnalysisService = {
       name: "EvaluateReadiness",
       I: EvaluateReadinessRequest,
       O: EvaluateReadinessResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Persist a per-user disposition (snooze/dismiss/take) against a server-issued opportunity_key (feature 097).
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.SetOpportunityAction
+     */
+    setOpportunityAction: {
+      name: "SetOpportunityAction",
+      I: SetOpportunityActionRequest,
+      O: SetOpportunityActionResponse,
       kind: MethodKind.Unary,
     },
     /**

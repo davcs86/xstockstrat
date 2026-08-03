@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: portfolio/v1/portfolio.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.PortfolioServiceClient = exports.PortfolioServiceService = exports.RemoveWatchlistSymbolsResponse = exports.RemoveWatchlistSymbolsRequest = exports.AddWatchlistSymbolsResponse = exports.AddWatchlistSymbolsRequest = exports.DeleteWatchlistResponse = exports.DeleteWatchlistRequest = exports.UpdateWatchlistResponse = exports.UpdateWatchlistRequest = exports.ListWatchlistsResponse = exports.ListWatchlistsRequest = exports.GetWatchlistResponse = exports.GetWatchlistRequest = exports.CreateWatchlistResponse = exports.CreateWatchlistRequest = exports.Watchlist = exports.ListPortfoliosResponse = exports.ListPortfoliosRequest = exports.StreamPortfolioUpdatesRequest = exports.GetSnapshotRequest = exports.GetPnLRequest = exports.ListPositionsResponse = exports.ListPositionsRequest = exports.GetPositionRequest = exports.GetPortfolioRequest = exports.PnLResponse = exports.PortfolioSnapshot = exports.Position = exports.Portfolio = exports.PositionSide = exports.PositionRiskFlag = exports.protobufPackage = void 0;
+exports.PortfolioServiceClient = exports.PortfolioServiceService = exports.RemoveWatchlistSymbolsResponse = exports.RemoveWatchlistSymbolsRequest = exports.AddWatchlistSymbolsResponse = exports.AddWatchlistSymbolsRequest = exports.DeleteWatchlistResponse = exports.DeleteWatchlistRequest = exports.UpdateWatchlistResponse = exports.UpdateWatchlistRequest = exports.ListWatchlistsResponse = exports.ListWatchlistsRequest = exports.GetWatchlistResponse = exports.GetWatchlistRequest = exports.CreateWatchlistResponse = exports.CreateWatchlistRequest = exports.Watchlist = exports.WatchlistBinding = exports.ListPortfoliosResponse = exports.ListPortfoliosRequest = exports.StreamPortfolioUpdatesRequest = exports.GetSnapshotRequest = exports.GetPnLRequest = exports.ListPositionsResponse = exports.ListPositionsRequest = exports.GetPositionRequest = exports.GetPortfolioRequest = exports.PnLResponse = exports.PortfolioSnapshot = exports.Position = exports.Portfolio = exports.PositionSide = exports.PositionRiskFlag = exports.protobufPackage = void 0;
 exports.positionRiskFlagFromJSON = positionRiskFlagFromJSON;
 exports.positionRiskFlagToJSON = positionRiskFlagToJSON;
 exports.positionRiskFlagToNumber = positionRiskFlagToNumber;
@@ -1954,6 +1954,78 @@ exports.ListPortfoliosResponse = {
         return message;
     },
 };
+function createBaseWatchlistBinding() {
+    return { symbol: "", strategyId: "" };
+}
+exports.WatchlistBinding = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.symbol !== "") {
+            writer.uint32(10).string(message.symbol);
+        }
+        if (message.strategyId !== "") {
+            writer.uint32(18).string(message.strategyId);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseWatchlistBinding();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.strategyId = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            strategyId: isSet(object.strategyId)
+                ? globalThis.String(object.strategyId)
+                : isSet(object.strategy_id)
+                    ? globalThis.String(object.strategy_id)
+                    : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.strategyId !== "") {
+            obj.strategyId = message.strategyId;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.WatchlistBinding.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseWatchlistBinding();
+        message.symbol = object.symbol ?? "";
+        message.strategyId = object.strategyId ?? "";
+        return message;
+    },
+};
 function createBaseWatchlist() {
     return {
         watchlistId: "",
@@ -1963,6 +2035,7 @@ function createBaseWatchlist() {
         symbols: [],
         createdAt: undefined,
         updatedAt: undefined,
+        bindings: [],
     };
 }
 exports.Watchlist = {
@@ -1987,6 +2060,9 @@ exports.Watchlist = {
         }
         if (message.updatedAt !== undefined) {
             timestamp_1.Timestamp.encode(toTimestamp(message.updatedAt), writer.uint32(58).fork()).join();
+        }
+        for (const v of message.bindings) {
+            exports.WatchlistBinding.encode(v, writer.uint32(66).fork()).join();
         }
         return writer;
     },
@@ -2046,6 +2122,13 @@ exports.Watchlist = {
                     message.updatedAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
                     continue;
                 }
+                case 8: {
+                    if (tag !== 66) {
+                        break;
+                    }
+                    message.bindings.push(exports.WatchlistBinding.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -2079,6 +2162,9 @@ exports.Watchlist = {
                 : isSet(object.updated_at)
                     ? fromJsonTimestamp(object.updated_at)
                     : undefined,
+            bindings: globalThis.Array.isArray(object?.bindings)
+                ? object.bindings.map((e) => exports.WatchlistBinding.fromJSON(e))
+                : [],
         };
     },
     toJSON(message) {
@@ -2104,6 +2190,9 @@ exports.Watchlist = {
         if (message.updatedAt !== undefined) {
             obj.updatedAt = message.updatedAt.toISOString();
         }
+        if (message.bindings?.length) {
+            obj.bindings = message.bindings.map((e) => exports.WatchlistBinding.toJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -2118,11 +2207,12 @@ exports.Watchlist = {
         message.symbols = object.symbols?.map((e) => e) || [];
         message.createdAt = object.createdAt ?? undefined;
         message.updatedAt = object.updatedAt ?? undefined;
+        message.bindings = object.bindings?.map((e) => exports.WatchlistBinding.fromPartial(e)) || [];
         return message;
     },
 };
 function createBaseCreateWatchlistRequest() {
-    return { name: "", description: "", symbols: [] };
+    return { name: "", description: "", symbols: [], bindings: [] };
 }
 exports.CreateWatchlistRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -2134,6 +2224,9 @@ exports.CreateWatchlistRequest = {
         }
         for (const v of message.symbols) {
             writer.uint32(26).string(v);
+        }
+        for (const v of message.bindings) {
+            exports.WatchlistBinding.encode(v, writer.uint32(34).fork()).join();
         }
         return writer;
     },
@@ -2165,6 +2258,13 @@ exports.CreateWatchlistRequest = {
                     message.symbols.push(reader.string());
                     continue;
                 }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.bindings.push(exports.WatchlistBinding.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -2178,6 +2278,9 @@ exports.CreateWatchlistRequest = {
             name: isSet(object.name) ? globalThis.String(object.name) : "",
             description: isSet(object.description) ? globalThis.String(object.description) : "",
             symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+            bindings: globalThis.Array.isArray(object?.bindings)
+                ? object.bindings.map((e) => exports.WatchlistBinding.fromJSON(e))
+                : [],
         };
     },
     toJSON(message) {
@@ -2191,6 +2294,9 @@ exports.CreateWatchlistRequest = {
         if (message.symbols?.length) {
             obj.symbols = message.symbols;
         }
+        if (message.bindings?.length) {
+            obj.bindings = message.bindings.map((e) => exports.WatchlistBinding.toJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -2201,6 +2307,7 @@ exports.CreateWatchlistRequest = {
         message.name = object.name ?? "";
         message.description = object.description ?? "";
         message.symbols = object.symbols?.map((e) => e) || [];
+        message.bindings = object.bindings?.map((e) => exports.WatchlistBinding.fromPartial(e)) || [];
         return message;
     },
 };
@@ -2493,7 +2600,7 @@ exports.ListWatchlistsResponse = {
     },
 };
 function createBaseUpdateWatchlistRequest() {
-    return { watchlistId: "", name: "", description: "", symbols: [] };
+    return { watchlistId: "", name: "", description: "", symbols: [], bindings: [] };
 }
 exports.UpdateWatchlistRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -2508,6 +2615,9 @@ exports.UpdateWatchlistRequest = {
         }
         for (const v of message.symbols) {
             writer.uint32(34).string(v);
+        }
+        for (const v of message.bindings) {
+            exports.WatchlistBinding.encode(v, writer.uint32(42).fork()).join();
         }
         return writer;
     },
@@ -2546,6 +2656,13 @@ exports.UpdateWatchlistRequest = {
                     message.symbols.push(reader.string());
                     continue;
                 }
+                case 5: {
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.bindings.push(exports.WatchlistBinding.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -2564,6 +2681,9 @@ exports.UpdateWatchlistRequest = {
             name: isSet(object.name) ? globalThis.String(object.name) : "",
             description: isSet(object.description) ? globalThis.String(object.description) : "",
             symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+            bindings: globalThis.Array.isArray(object?.bindings)
+                ? object.bindings.map((e) => exports.WatchlistBinding.fromJSON(e))
+                : [],
         };
     },
     toJSON(message) {
@@ -2580,6 +2700,9 @@ exports.UpdateWatchlistRequest = {
         if (message.symbols?.length) {
             obj.symbols = message.symbols;
         }
+        if (message.bindings?.length) {
+            obj.bindings = message.bindings.map((e) => exports.WatchlistBinding.toJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -2591,6 +2714,7 @@ exports.UpdateWatchlistRequest = {
         message.name = object.name ?? "";
         message.description = object.description ?? "";
         message.symbols = object.symbols?.map((e) => e) || [];
+        message.bindings = object.bindings?.map((e) => exports.WatchlistBinding.fromPartial(e)) || [];
         return message;
     },
 };
@@ -2742,7 +2866,7 @@ exports.DeleteWatchlistResponse = {
     },
 };
 function createBaseAddWatchlistSymbolsRequest() {
-    return { watchlistId: "", symbols: [] };
+    return { watchlistId: "", symbols: [], bindings: [] };
 }
 exports.AddWatchlistSymbolsRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -2751,6 +2875,9 @@ exports.AddWatchlistSymbolsRequest = {
         }
         for (const v of message.symbols) {
             writer.uint32(18).string(v);
+        }
+        for (const v of message.bindings) {
+            exports.WatchlistBinding.encode(v, writer.uint32(26).fork()).join();
         }
         return writer;
     },
@@ -2775,6 +2902,13 @@ exports.AddWatchlistSymbolsRequest = {
                     message.symbols.push(reader.string());
                     continue;
                 }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.bindings.push(exports.WatchlistBinding.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -2791,6 +2925,9 @@ exports.AddWatchlistSymbolsRequest = {
                     ? globalThis.String(object.watchlist_id)
                     : "",
             symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+            bindings: globalThis.Array.isArray(object?.bindings)
+                ? object.bindings.map((e) => exports.WatchlistBinding.fromJSON(e))
+                : [],
         };
     },
     toJSON(message) {
@@ -2801,6 +2938,9 @@ exports.AddWatchlistSymbolsRequest = {
         if (message.symbols?.length) {
             obj.symbols = message.symbols;
         }
+        if (message.bindings?.length) {
+            obj.bindings = message.bindings.map((e) => exports.WatchlistBinding.toJSON(e));
+        }
         return obj;
     },
     create(base) {
@@ -2810,6 +2950,7 @@ exports.AddWatchlistSymbolsRequest = {
         const message = createBaseAddWatchlistSymbolsRequest();
         message.watchlistId = object.watchlistId ?? "";
         message.symbols = object.symbols?.map((e) => e) || [];
+        message.bindings = object.bindings?.map((e) => exports.WatchlistBinding.fromPartial(e)) || [];
         return message;
     },
 };

@@ -155,15 +155,28 @@ export interface ListPortfoliosRequest {
 export interface ListPortfoliosResponse {
     portfolios: Portfolio[];
 }
+/** A (symbol, strategy) binding — a ready-made Universe candidate (feature 097). */
+export interface WatchlistBinding {
+    symbol: string;
+    /** "" = unbound (kept as a bare watched symbol) */
+    strategyId: string;
+}
 /** Watchlist (feature 058) — a mode-agnostic, user-owned named set of symbols. */
 export interface Watchlist {
     watchlistId: string;
     userId: string;
     name: string;
     description: string;
+    /**
+     * DEPRECATED (feature 097): the flat mirror of `bindings`, kept readable for old clients (FR-6).
+     *
+     * @deprecated
+     */
     symbols: string[];
     createdAt?: Date | undefined;
     updatedAt?: Date | undefined;
+    /** Authoritative (symbol, strategy) shape (feature 097); when present it supersedes `symbols`. */
+    bindings: WatchlistBinding[];
 }
 /**
  * user_id is intentionally absent from all request messages — ownership is taken
@@ -173,6 +186,8 @@ export interface CreateWatchlistRequest {
     name: string;
     description: string;
     symbols: string[];
+    /** When present, authoritative (feature 097); legacy `symbols` remains accepted (unbound). */
+    bindings: WatchlistBinding[];
 }
 export interface CreateWatchlistResponse {
     watchlist?: Watchlist | undefined;
@@ -196,6 +211,8 @@ export interface UpdateWatchlistRequest {
     name: string;
     description: string;
     symbols: string[];
+    /** When present, authoritative (feature 097); legacy `symbols` remains accepted (unbound). */
+    bindings: WatchlistBinding[];
 }
 export interface UpdateWatchlistResponse {
     watchlist?: Watchlist | undefined;
@@ -208,6 +225,8 @@ export interface DeleteWatchlistResponse {
 export interface AddWatchlistSymbolsRequest {
     watchlistId: string;
     symbols: string[];
+    /** When present, authoritative (feature 097); legacy `symbols` remains accepted (unbound). */
+    bindings: WatchlistBinding[];
 }
 export interface AddWatchlistSymbolsResponse {
     watchlist?: Watchlist | undefined;
@@ -232,6 +251,7 @@ export declare const GetSnapshotRequest: MessageFns<GetSnapshotRequest>;
 export declare const StreamPortfolioUpdatesRequest: MessageFns<StreamPortfolioUpdatesRequest>;
 export declare const ListPortfoliosRequest: MessageFns<ListPortfoliosRequest>;
 export declare const ListPortfoliosResponse: MessageFns<ListPortfoliosResponse>;
+export declare const WatchlistBinding: MessageFns<WatchlistBinding>;
 export declare const Watchlist: MessageFns<Watchlist>;
 export declare const CreateWatchlistRequest: MessageFns<CreateWatchlistRequest>;
 export declare const CreateWatchlistResponse: MessageFns<CreateWatchlistResponse>;

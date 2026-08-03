@@ -114,7 +114,7 @@ Both pass — adding fields/messages/RPCs and marking `symbols = 5 [deprecated =
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/**` — modify (generated; do not hand-edit)

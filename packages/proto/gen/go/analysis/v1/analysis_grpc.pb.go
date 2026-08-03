@@ -33,6 +33,7 @@ const (
 	AnalysisService_RunFundamentalsScan_FullMethodName     = "/xstockstrat.analysis.v1.AnalysisService/RunFundamentalsScan"
 	AnalysisService_ListOpportunities_FullMethodName       = "/xstockstrat.analysis.v1.AnalysisService/ListOpportunities"
 	AnalysisService_EvaluateReadiness_FullMethodName       = "/xstockstrat.analysis.v1.AnalysisService/EvaluateReadiness"
+	AnalysisService_SetOpportunityAction_FullMethodName    = "/xstockstrat.analysis.v1.AnalysisService/SetOpportunityAction"
 	AnalysisService_GetStrategyAnalytics_FullMethodName    = "/xstockstrat.analysis.v1.AnalysisService/GetStrategyAnalytics"
 )
 
@@ -65,6 +66,8 @@ type AnalysisServiceClient interface {
 	// Per-symbol live condition evaluation (traced): passing/soft/failing leaves +
 	// distance-to-threshold. Feeds Signal-detail, Watchlist readiness, and the queue.
 	EvaluateReadiness(ctx context.Context, in *EvaluateReadinessRequest, opts ...grpc.CallOption) (*EvaluateReadinessResponse, error)
+	// Persist a per-user disposition (snooze/dismiss/take) against a server-issued opportunity_key (feature 097).
+	SetOpportunityAction(ctx context.Context, in *SetOpportunityActionRequest, opts ...grpc.CallOption) (*SetOpportunityActionResponse, error)
 	// Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share).
 	GetStrategyAnalytics(ctx context.Context, in *GetStrategyAnalyticsRequest, opts ...grpc.CallOption) (*StrategyAnalytics, error)
 }
@@ -217,6 +220,16 @@ func (c *analysisServiceClient) EvaluateReadiness(ctx context.Context, in *Evalu
 	return out, nil
 }
 
+func (c *analysisServiceClient) SetOpportunityAction(ctx context.Context, in *SetOpportunityActionRequest, opts ...grpc.CallOption) (*SetOpportunityActionResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetOpportunityActionResponse)
+	err := c.cc.Invoke(ctx, AnalysisService_SetOpportunityAction_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *analysisServiceClient) GetStrategyAnalytics(ctx context.Context, in *GetStrategyAnalyticsRequest, opts ...grpc.CallOption) (*StrategyAnalytics, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(StrategyAnalytics)
@@ -256,6 +269,8 @@ type AnalysisServiceServer interface {
 	// Per-symbol live condition evaluation (traced): passing/soft/failing leaves +
 	// distance-to-threshold. Feeds Signal-detail, Watchlist readiness, and the queue.
 	EvaluateReadiness(context.Context, *EvaluateReadinessRequest) (*EvaluateReadinessResponse, error)
+	// Persist a per-user disposition (snooze/dismiss/take) against a server-issued opportunity_key (feature 097).
+	SetOpportunityAction(context.Context, *SetOpportunityActionRequest) (*SetOpportunityActionResponse, error)
 	// Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share).
 	GetStrategyAnalytics(context.Context, *GetStrategyAnalyticsRequest) (*StrategyAnalytics, error)
 }
@@ -308,6 +323,9 @@ func (UnimplementedAnalysisServiceServer) ListOpportunities(context.Context, *Li
 }
 func (UnimplementedAnalysisServiceServer) EvaluateReadiness(context.Context, *EvaluateReadinessRequest) (*EvaluateReadinessResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method EvaluateReadiness not implemented")
+}
+func (UnimplementedAnalysisServiceServer) SetOpportunityAction(context.Context, *SetOpportunityActionRequest) (*SetOpportunityActionResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetOpportunityAction not implemented")
 }
 func (UnimplementedAnalysisServiceServer) GetStrategyAnalytics(context.Context, *GetStrategyAnalyticsRequest) (*StrategyAnalytics, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetStrategyAnalytics not implemented")
@@ -584,6 +602,24 @@ func _AnalysisService_EvaluateReadiness_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AnalysisService_SetOpportunityAction_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetOpportunityActionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AnalysisServiceServer).SetOpportunityAction(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AnalysisService_SetOpportunityAction_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AnalysisServiceServer).SetOpportunityAction(ctx, req.(*SetOpportunityActionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AnalysisService_GetStrategyAnalytics_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetStrategyAnalyticsRequest)
 	if err := dec(in); err != nil {
@@ -664,6 +700,10 @@ var AnalysisService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "EvaluateReadiness",
 			Handler:    _AnalysisService_EvaluateReadiness_Handler,
+		},
+		{
+			MethodName: "SetOpportunityAction",
+			Handler:    _AnalysisService_SetOpportunityAction_Handler,
 		},
 		{
 			MethodName: "GetStrategyAnalytics",

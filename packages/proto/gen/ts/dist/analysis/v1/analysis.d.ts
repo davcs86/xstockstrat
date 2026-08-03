@@ -139,6 +139,20 @@ export declare enum ConditionState {
 export declare function conditionStateFromJSON(object: any): ConditionState;
 export declare function conditionStateToJSON(object: ConditionState): string;
 export declare function conditionStateToNumber(object: ConditionState): number;
+/** The persisted per-user disposition of a queued opportunity (feature 097). Closed set → enum (C-04). */
+export declare enum OpportunityAction {
+    OPPORTUNITY_ACTION_UNSPECIFIED = "OPPORTUNITY_ACTION_UNSPECIFIED",
+    /** OPPORTUNITY_ACTION_SNOOZE - hide until snooze_until (bounded) */
+    OPPORTUNITY_ACTION_SNOOZE = "OPPORTUNITY_ACTION_SNOOZE",
+    /** OPPORTUNITY_ACTION_DISMISS - hide indefinitely */
+    OPPORTUNITY_ACTION_DISMISS = "OPPORTUNITY_ACTION_DISMISS",
+    /** OPPORTUNITY_ACTION_TAKE - user acted on it (feeds queue_share/taken reconciliation) */
+    OPPORTUNITY_ACTION_TAKE = "OPPORTUNITY_ACTION_TAKE",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function opportunityActionFromJSON(object: any): OpportunityAction;
+export declare function opportunityActionToJSON(object: OpportunityAction): string;
+export declare function opportunityActionToNumber(object: OpportunityAction): number;
 export interface RunBacktestRequest {
     strategyId: string;
     range?: TimeRange | undefined;
@@ -492,6 +506,10 @@ export interface Opportunity {
     strategyId: string;
     source: string;
     validUntil?: Date | undefined;
+    /** server-authoritative opaque key = user|symbol_norm|strategy_id (feature 097). Client echoes it verbatim to SetOpportunityAction, never derives it. */
+    opportunityKey: string;
+    /** contributing origins for a de-duplicated row (signal source(s) / "position" / "watchlist") */
+    provenance: string[];
 }
 /** One evaluated condition leaf from the traced evaluator (feature 083). */
 export interface ConditionEval {
@@ -546,6 +564,19 @@ export interface EvaluateReadinessRequest {
 export interface EvaluateReadinessResponse {
     readiness: SymbolReadiness[];
 }
+/**
+ * user_id is intentionally absent — taken from the propagated x-user-id header server-side
+ * (match the ListOpportunitiesRequest convention), never from the wire.
+ */
+export interface SetOpportunityActionRequest {
+    /** the server-issued key, echoed verbatim */
+    opportunityKey: string;
+    action: OpportunityAction;
+    /** set only for SNOOZE; a bounded "snooze until" */
+    snoozeUntil?: Date | undefined;
+}
+export interface SetOpportunityActionResponse {
+}
 export interface GetStrategyAnalyticsRequest {
     strategyId: string;
 }
@@ -591,6 +622,8 @@ export declare const ListOpportunitiesRequest: MessageFns<ListOpportunitiesReque
 export declare const ListOpportunitiesResponse: MessageFns<ListOpportunitiesResponse>;
 export declare const EvaluateReadinessRequest: MessageFns<EvaluateReadinessRequest>;
 export declare const EvaluateReadinessResponse: MessageFns<EvaluateReadinessResponse>;
+export declare const SetOpportunityActionRequest: MessageFns<SetOpportunityActionRequest>;
+export declare const SetOpportunityActionResponse: MessageFns<SetOpportunityActionResponse>;
 export declare const GetStrategyAnalyticsRequest: MessageFns<GetStrategyAnalyticsRequest>;
 export type AnalysisServiceService = typeof AnalysisServiceService;
 export declare const AnalysisServiceService: {
@@ -737,6 +770,16 @@ export declare const AnalysisServiceService: {
         readonly responseSerialize: (value: EvaluateReadinessResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => EvaluateReadinessResponse;
     };
+    /** Persist a per-user disposition (snooze/dismiss/take) against a server-issued opportunity_key (feature 097). */
+    readonly setOpportunityAction: {
+        readonly path: "/xstockstrat.analysis.v1.AnalysisService/SetOpportunityAction";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: SetOpportunityActionRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => SetOpportunityActionRequest;
+        readonly responseSerialize: (value: SetOpportunityActionResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => SetOpportunityActionResponse;
+    };
     /** Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share). */
     readonly getStrategyAnalytics: {
         readonly path: "/xstockstrat.analysis.v1.AnalysisService/GetStrategyAnalytics";
@@ -780,6 +823,8 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
      * distance-to-threshold. Feeds Signal-detail, Watchlist readiness, and the queue.
      */
     evaluateReadiness: handleUnaryCall<EvaluateReadinessRequest, EvaluateReadinessResponse>;
+    /** Persist a per-user disposition (snooze/dismiss/take) against a server-issued opportunity_key (feature 097). */
+    setOpportunityAction: handleUnaryCall<SetOpportunityActionRequest, SetOpportunityActionResponse>;
     /** Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share). */
     getStrategyAnalytics: handleUnaryCall<GetStrategyAnalyticsRequest, StrategyAnalytics>;
 }
@@ -843,6 +888,10 @@ export interface AnalysisServiceClient extends Client {
     evaluateReadiness(request: EvaluateReadinessRequest, callback: (error: ServiceError | null, response: EvaluateReadinessResponse) => void): ClientUnaryCall;
     evaluateReadiness(request: EvaluateReadinessRequest, metadata: Metadata, callback: (error: ServiceError | null, response: EvaluateReadinessResponse) => void): ClientUnaryCall;
     evaluateReadiness(request: EvaluateReadinessRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: EvaluateReadinessResponse) => void): ClientUnaryCall;
+    /** Persist a per-user disposition (snooze/dismiss/take) against a server-issued opportunity_key (feature 097). */
+    setOpportunityAction(request: SetOpportunityActionRequest, callback: (error: ServiceError | null, response: SetOpportunityActionResponse) => void): ClientUnaryCall;
+    setOpportunityAction(request: SetOpportunityActionRequest, metadata: Metadata, callback: (error: ServiceError | null, response: SetOpportunityActionResponse) => void): ClientUnaryCall;
+    setOpportunityAction(request: SetOpportunityActionRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: SetOpportunityActionResponse) => void): ClientUnaryCall;
     /** Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share). */
     getStrategyAnalytics(request: GetStrategyAnalyticsRequest, callback: (error: ServiceError | null, response: StrategyAnalytics) => void): ClientUnaryCall;
     getStrategyAnalytics(request: GetStrategyAnalyticsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: StrategyAnalytics) => void): ClientUnaryCall;
