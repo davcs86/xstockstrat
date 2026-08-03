@@ -81,9 +81,7 @@ async def _capture_screen_symbols_request():
         with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
             await client.screen_symbols(
                 symbols=["AAPL"],
-                criteria=[
-                    {"ref_name": "r", "kind": 1, "op": 1, "threshold": 1.0, "weight": 1.0}
-                ],
+                criteria=[{"ref_name": "r", "kind": 1, "op": 1, "threshold": 1.0, "weight": 1.0}],
                 signal_sources=["uw"],
                 signal_weight=0.4,
                 technical_weight=0.6,
