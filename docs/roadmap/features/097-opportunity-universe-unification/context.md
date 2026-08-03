@@ -51,3 +51,23 @@
   - 098 (`screener-watchlist-fidelity`, code-completed, UI-only) reworked `WatchlistReadiness.tsx`, `watchlists/page.tsx`, added `readinessRollup.ts` — three **rebase-only** UI-file overlaps, no hard merge-order row required. Design recon MUST re-ground on the post-098 components (spec's "UI-only useState('') join" description is now partly stale). `readinessRollup.ts` is a reuse candidate for FR-2/FR-6/FR-7.
   - 099 (`watchlist-live-quotes`) is idea/backlog-blocked — historical context only.
 - Rebased branch onto origin/main-dev (02b22f8, includes 098) before review; pushed.
+
+## Session 2026-08-03 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (services: proto, analysis, portfolio, ui, agent). Key reuse: evaluate_conditions_traced kernel, readinessRollup.ts, best-effort-write repo pattern, covers_every_proto_field parity template. Re-grounded UI on post-098 files.
+- Phase 1 Grilling: **5 rounds (full)**. No Floor breach. Chosen approach: **materialized `analysis.opportunities` table (mig 011) + lazy compute-on-read + stale-while-revalidate + daily refresh; ListOpportunities becomes a pure read.** Rejected: standing 60s producer loop (unbounded/starvation/user-invisible), event-push ledger subscription (new gated edge), in-memory memo (restart-fragile), readiness_cache table (superseded by inline readiness_json), wall-clock TTL.
+- **User design decisions across rounds:** R1 one sequenced feature + compute-on-read; R2 daily-timeframe simplification (dropped wall-clock TTL); R4 preferred DB-backed over in-memory; R5 **lazy + stale-while-revalidate, no standing loop**.
+- **Critical adversary catches (verified against code):** (1) `StrategyDefinition.signal_params` is the live-loop symbol universe (`live_loop.py:37-46`) + in the 065 fingerprint (`servicer.py:2556`) — must NOT be deprecated; retire the blend from `RunBacktest.strategy_params` only, keep `combine_score`+ScreenSymbolsRequest for the screener. (2) `analysis.strategies` has NO owner column — strategies are global; no global user-enumeration RPC → known-user set is lazy-seeded from own tables. (3) watchlist binding must re-plumb the WRITE path (request messages), not just the response, or a bare-`symbols` write resets `strategy_id=''` (fails-080). (4) server-authoritative opaque `opportunity_key` (client echoes, never derives) — RC-1 drift guard.
+- **Constitution rules touched:** C-04/C-05/C-07/C-09/C-10/C-13/C-14, P-03, F-01/F-06/F-07, ANALYSIS-3. All honored (see design.md).
+- **8 Open Risks (OR-A..OR-H)** carried to /sdd-spec — see design.md § Open Risks (cold-read behavior, stale-while-revalidate position-state invalidation, refresh_hour_utc zero-trap + calendar label, trading-date key source, known-user enumeration, persisted-row→proto parity test, signal_rank_weight formula, migration run-order + config defaults).
+- Status: spec-ready → design-approved.
+
+### Open Threads (target: /sdd-spec)
+- OR-A cold-read blocking-vs-async + in-flight guard — analysis read step.
+- OR-B closed-position invalidation / staleness bound — analysis read step.
+- OR-C refresh_hour_utc off get_int zero-trap; label as daily refresh not "market close" — config step.
+- OR-D trading-date key source (GetDataCoverage ref symbol) + calendar residual — analysis compute step.
+- OR-E known-user enumeration (own tables + lazy seed) — analysis loop step.
+- OR-F persisted-row→Opportunity proto parity test — analysis read step.
+- OR-G signal_rank_weight composition formula — analysis ranking step.
+- OR-H migration NNN run order + analysis CLAUDE.md config defaults — proto/migration steps.
