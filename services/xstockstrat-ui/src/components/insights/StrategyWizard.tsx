@@ -13,31 +13,16 @@ import {
   emptyComponent,
   type StrategyComponentDraft,
 } from '@/components/insights/ComponentEditor';
-import { useInsightsSignalSources } from '@/hooks/useInsightsSignalSources';
 import { useManageStrategy } from '@/hooks/useStrategyDefinitions';
 import { useFormulas } from '@/hooks/useFormulas';
 import { operandRefs, type FormulaOutputsMap } from '@/lib/strategyCatalog';
 
-const STEPS = ['Identity', 'Components', 'Rules', 'Signal Params', 'Review'] as const;
-
-type SignalParamsDraft = {
-  signalSources: string[];
-  signalWeight: number;
-  technicalWeight: number;
-  minConviction: number;
-};
+// feature 097: the "Signal Params" blend step was removed — a strategy's backtest score is
+// technical-only (Option 2), so the wizard no longer exposes signal-weight controls. Any existing
+// `signal_params` (the live-loop symbol universe, ANALYSIS-3) is preserved untouched on save.
+const STEPS = ['Identity', 'Components', 'Rules', 'Review'] as const;
 
 const STRATEGY_ID_RE = /^[a-z0-9_]+$/;
-
-function readNumber(obj: Record<string, unknown> | undefined, key: string, dflt: number): number {
-  const v = obj?.[key];
-  return typeof v === 'number' && Number.isFinite(v) ? v : dflt;
-}
-
-function readStringArray(obj: Record<string, unknown> | undefined, key: string): string[] {
-  const v = obj?.[key];
-  return Array.isArray(v) ? v.map(String) : [];
-}
 
 // Parse the cooldown-days input honestly w.r.t. proto explicit presence (feature 069):
 // blank → OMIT the field (server applies the platform default 31); "0" → explicit 0 (no cooldown);
@@ -62,10 +47,7 @@ interface StrategyWizardProps {
 export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardProps) {
   const [step, setStep] = useState(1);
   const { mutate, isPending, error: errorObj } = useManageStrategy();
-  const { sources } = useInsightsSignalSources();
   const { data: formulasData } = useFormulas({ includePublic: true, pageSize: 50 });
-
-  const initialSignal = initial?.signalParams as Record<string, unknown> | undefined;
 
   const [strategyId, setStrategyId] = useState(initial?.strategyId ?? '');
   const [displayName, setDisplayName] = useState(initial?.displayName ?? '');
@@ -85,12 +67,6 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
   );
   const [entryRule, setEntryRule] = useState(initial?.entryRule ?? '');
   const [exitRule, setExitRule] = useState(initial?.exitRule ?? '');
-  const [signal, setSignal] = useState<SignalParamsDraft>(() => ({
-    signalSources: readStringArray(initialSignal, 'signal_sources'),
-    signalWeight: readNumber(initialSignal, 'signal_weight', 0.5),
-    technicalWeight: readNumber(initialSignal, 'technical_weight', 0.5),
-    minConviction: readNumber(initialSignal, 'min_conviction', 0),
-  }));
 
   const serverError =
     errorObj instanceof ConnectError ? errorObj.rawMessage : (errorObj?.message ?? null);
@@ -102,7 +78,7 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
     if (m.includes('indicator') || m.includes('component') || m.includes('ref')) return 2;
     if (m.includes('strategy_id') || m.includes('display')) return 1;
     if (m.includes('cooldown')) return 1;
-    return 5;
+    return 4;
   }
 
   // Declared outputs per custom-formula id, so formula components expose their
@@ -141,12 +117,11 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
       components,
       entryRule,
       exitRule,
-      signalParams: {
-        signal_sources: signal.signalSources,
-        signal_weight: signal.signalWeight,
-        technical_weight: signal.technicalWeight,
-        min_conviction: signal.minConviction,
-      },
+      // feature 097: preserve any EXISTING signal_params verbatim — it holds the live-loop
+      // signal_params.symbols universe (ANALYSIS-3). A wholesale rewrite here would drop those
+      // symbols (the design's clobber). On a create with no prior signal_params, omit the key
+      // entirely — don't invent blend fields the technical-only score no longer uses.
+      ...(initial?.signalParams !== undefined ? { signalParams: initial.signalParams } : {}),
       // Presence-honest: blank omits the key (server default drives the gate); "0" sends cooldownDays: 0.
       ...(cd.valid && cd.value !== undefined ? { cooldownDays: cd.value } : {}),
     };
@@ -157,15 +132,6 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
       },
       { onSuccess: () => onSubmitDone?.(strategyId) },
     );
-  }
-
-  function toggleSource(slug: string) {
-    setSignal((s) => ({
-      ...s,
-      signalSources: s.signalSources.includes(slug)
-        ? s.signalSources.filter((x) => x !== slug)
-        : [...s.signalSources, slug],
-    }));
   }
 
   return (
@@ -283,68 +249,6 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
           )}
 
           {step === 4 && (
-            <div className="space-y-4">
-              <div>
-                <label className="mb-1 block text-xs text-muted-foreground">Signal sources</label>
-                <div className="flex flex-wrap gap-2">
-                  {sources.length === 0 && (
-                    <p className="text-xs text-muted-foreground">No live signal sources.</p>
-                  )}
-                  {sources.map((src) => (
-                    <button
-                      key={src.slug}
-                      type="button"
-                      onClick={() => toggleSource(src.slug)}
-                      className={cn(
-                        'rounded-full border px-3 py-1 text-xs',
-                        signal.signalSources.includes(src.slug)
-                          ? 'border-primary bg-primary text-primary-foreground'
-                          : 'border-border',
-                      )}
-                    >
-                      {src.displayName || src.slug}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">Signal weight</label>
-                  <Input
-                    type="number"
-                    value={signal.signalWeight}
-                    onChange={(e) =>
-                      setSignal((s) => ({ ...s, signalWeight: Number(e.target.value) }))
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">
-                    Technical weight
-                  </label>
-                  <Input
-                    type="number"
-                    value={signal.technicalWeight}
-                    onChange={(e) =>
-                      setSignal((s) => ({ ...s, technicalWeight: Number(e.target.value) }))
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="mb-1 block text-xs text-muted-foreground">Min conviction</label>
-                  <Input
-                    type="number"
-                    value={signal.minConviction}
-                    onChange={(e) =>
-                      setSignal((s) => ({ ...s, minConviction: Number(e.target.value) }))
-                    }
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {step === 5 && (
             <div className="space-y-3 text-sm">
               <div>
                 <span className="text-muted-foreground">Strategy ID:</span> {strategyId}
@@ -364,10 +268,6 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
               </div>
               <RuleSummary label="Entry rule" value={entryRule} />
               <RuleSummary label="Exit rule" value={exitRule} />
-              <div>
-                <span className="text-muted-foreground">Signal sources:</span>{' '}
-                {signal.signalSources.join(', ') || '(none)'}
-              </div>
 
               {serverError && (
                 <div className="rounded-md border border-destructive p-2">
@@ -399,12 +299,7 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
           Back
         </Button>
         <div className="flex gap-2">
-          {step === 4 && (
-            <Button type="button" variant="outline" onClick={() => setStep(5)}>
-              Skip
-            </Button>
-          )}
-          {step < 5 ? (
+          {step < 4 ? (
             <Button type="button" disabled={!canAdvance} onClick={() => setStep((s) => s + 1)}>
               Next
             </Button>

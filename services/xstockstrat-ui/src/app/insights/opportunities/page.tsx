@@ -12,10 +12,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { OpportunityActionTag } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import {
+  OpportunityActionTag,
+  OpportunityAction,
+} from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import type { Opportunity } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { OPPORTUNITY_ACTION, EnumBadge } from '@/lib/opportunityShared';
-import { useOpportunities } from '@/hooks/useOpportunities';
+import { useOpportunities, useSetOpportunityAction } from '@/hooks/useOpportunities';
 import { insightsPortfolioClient } from '@/lib/browserClients/insightsPortfolioClient';
 import { SectionRenderer } from '@/components/mobile/SectionRenderer';
 import type { Section } from '@/components/mobile/sections';
@@ -59,7 +62,10 @@ export default function OpportunitiesPage() {
   const [activeSources, setActiveSources] = useState<string[]>([]);
   const [actionFilter, setActionFilter] = useState<string>('any');
   const [sortKey, setSortKey] = useState<SortKey>('conviction');
-  const [snoozed, setSnoozed] = useState<Set<string>>(new Set());
+  // feature 097 — snooze/dismiss/take are now server-persisted (SetOpportunityAction). The read
+  // is filtered server-side, so acting on a row + invalidating drops it on the next fetch; no
+  // transient client-side `Set` (which lost state on reload / didn't sync across devices).
+  const setAction = useSetOpportunityAction();
 
   // Deployable = real broker buying power (summed across accounts). Best-effort: on any error the
   // stat renders "—" rather than a fabricated figure.
@@ -78,15 +84,16 @@ export default function OpportunitiesPage() {
     [opportunities],
   );
 
-  const key = (o: Opportunity) => `${o.symbol}-${o.source}`;
+  // Stable server-issued key (FR-4): survives an ENTER→ADD action flip, so a snooze/dismiss keyed
+  // on it is stable too. Replaces the old `${symbol}-${source}` key.
+  const key = (o: Opportunity) => o.opportunityKey;
 
   const rows = useMemo(() => {
     const filtered = opportunities.filter(
       (o) =>
         o.conviction >= minConviction &&
         (activeSources.length === 0 || activeSources.includes(o.source)) &&
-        (actionFilter === 'any' || String(o.action) === actionFilter) &&
-        !snoozed.has(key(o)),
+        (actionFilter === 'any' || String(o.action) === actionFilter),
     );
     const sorted = [...filtered];
     if (sortKey === 'conviction') {
@@ -97,7 +104,7 @@ export default function OpportunitiesPage() {
       );
     }
     return sorted;
-  }, [opportunities, minConviction, activeSources, actionFilter, sortKey, snoozed]);
+  }, [opportunities, minConviction, activeSources, actionFilter, sortKey]);
 
   // Stat-row values (handoff framing), all computed from real queue data.
   const expiringSoon = rows.filter((o) => {
@@ -114,7 +121,9 @@ export default function OpportunitiesPage() {
 
   const toggleSource = (s: string) =>
     setActiveSources((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
-  const snooze = (o: Opportunity) => setSnoozed((prev) => new Set(prev).add(key(o)));
+  // Persist a disposition against the stable server key; the invalidated read then drops the row.
+  const act = (o: Opportunity, action: OpportunityAction) =>
+    setAction.mutate({ opportunityKey: o.opportunityKey, action });
 
   const reviewHref = (o: Opportunity) =>
     o.strategyId
@@ -281,7 +290,14 @@ export default function OpportunitiesPage() {
             />
           ) : (
             rows.map((o) => (
-              <OpportunityCard key={key(o)} o={o} onSnooze={() => snooze(o)} href={reviewHref(o)} />
+              <OpportunityCard
+                key={key(o)}
+                o={o}
+                onSnooze={() => act(o, OpportunityAction.SNOOZE)}
+                onDismiss={() => act(o, OpportunityAction.DISMISS)}
+                onTake={() => act(o, OpportunityAction.TAKE)}
+                href={reviewHref(o)}
+              />
             ))
           )}
         </div>
@@ -294,10 +310,14 @@ function OpportunityCard({
   o,
   href,
   onSnooze,
+  onDismiss,
+  onTake,
 }: {
   o: Opportunity;
   href: string;
   onSnooze: () => void;
+  onDismiss: () => void;
+  onTake: () => void;
 }) {
   const conv = Math.round(o.conviction * 100);
   return (
@@ -342,11 +362,19 @@ function OpportunityCard({
           expires {expiresLabel(o.validUntil)}
         </span>
         <div className="flex gap-2">
-          <Button asChild size="sm">
+          <Button asChild size="sm" onClick={onTake}>
             <Link href={href}>Review &amp; add</Link>
           </Button>
           <Button size="sm" variant="outline" onClick={onSnooze} data-testid={`snooze-${o.symbol}`}>
             Snooze
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={onDismiss}
+            data-testid={`dismiss-${o.symbol}`}
+          >
+            Dismiss
           </Button>
         </div>
       </div>

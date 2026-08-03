@@ -500,6 +500,13 @@ export async function startMockBackend(): Promise<void> {
           const min = req.minConviction ?? 0;
           return { opportunities: OPPORTUNITIES.filter((o) => o.conviction >= min) };
         },
+        // feature 097 — the persisted-disposition RPC exists on the server so a call resolves.
+        // Stateful snooze/dismiss *persistence* is proven per-test via page.route isolation
+        // (opportunities.spec.ts) — the shared server can't hold per-test state under
+        // Playwright fullyParallel without cross-worker pollution (mirrors watchlistMock.ts).
+        async setOpportunityAction() {
+          return {};
+        },
         // feature 083 — traced condition readiness for the Signal-detail panel.
         // feature 098 — per-symbol bucket overrides let the watchlists rollup e2e exercise all four
         // ready/watching/quiet/no-data states. `symbolReadiness` stays single-arg (the `.map` below
@@ -745,6 +752,12 @@ export async function startMockBackend(): Promise<void> {
             // Feature 069: only this id carries a non-default cooldown (edit-prepopulation e2e);
             // every other id leaves cooldownDays unset so the "edit unset strategy" case stays honest.
             ...(req.strategyId === 'strat-cooldown-14' ? { cooldownDays: 14 } : {}),
+            // Feature 097: this id carries a signal_params symbol universe so the wizard's
+            // preserve-on-save regression guard (ANALYSIS-3) has real symbols to protect. The id
+            // is underscore-only so it passes the wizard's id validation and Next can advance.
+            ...(req.strategyId === 'strat_signal_universe'
+              ? { signalParams: { symbols: ['AAPL', 'MSFT'] } }
+              : {}),
           };
         },
       });

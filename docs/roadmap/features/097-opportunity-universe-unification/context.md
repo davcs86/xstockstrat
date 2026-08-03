@@ -289,3 +289,42 @@ params + `manage_strategy` `signal_params`; `run_backtest` sends no signal param
 snooze/dismiss/take), 18 (watchlist binding editor), 19 (de-blended strategy wizard).
 **Next**: Step 17 — `xstockstrat-ui` Opportunities page wired to SetOpportunityAction + provenance/
 computed_at rendering + e2e.
+
+---
+
+## Session: Steps 17–19 (UI: persisted dispositions, per-symbol bindings, de-blended wizard) — 2026-08-03
+
+**Steps 17–19 done — feature 097 is code-complete (19/19).** All UI e2e green.
+
+**Step 17 (Opportunities page — server-persisted snooze/dismiss/take)**:
+- `useOpportunities.ts` — `useSetOpportunityAction` (built on `useInvalidatingMutation`, invalidates
+  `['opportunities']`). `opportunities/page.tsx` — dropped the transient `snoozed` Set + `${symbol}-${source}`
+  key; row key is now `o.opportunityKey`; Snooze→SNOOZE, added Dismiss→DISMISS, "Review & add"→TAKE.
+- Fixture rows gained `opportunityKey`+`provenance`; `mock-backend.ts` gained a stateless
+  `setOpportunityAction`. **Persistence proven via per-page `page.route()` isolation** (fullyParallel
+  would pollute a shared-server set) — traps: Connect-JSON request enum = NAME string, Timestamp = RFC3339 string.
+
+**Step 18 (Watchlist per-symbol strategy-binding editor)**:
+- `useWatchlists.ts` — create/update/addSymbols accept `bindings` (`WatchlistBindingInput`).
+- `WatchlistDetail.tsx` — each symbol chip gets an inline strategy `Select`; re-bind writes the FULL
+  binding set via `UpdateWatchlist` (replace; no strategyId reset — fails-080). De-dupes the render
+  binding list for stable React keys.
+- `WatchlistReadiness.tsx` — dropped the whole-list picker; per-symbol evaluation via `useQueries`
+  (group by bound strategy → one `EvaluateReadiness` per group); unbound → not evaluated (P-03).
+- `watchlistMock.ts` — stores bindings + new `UpdateWatchlist` route; `watchlists.spec.ts` rewritten
+  for the per-symbol model. `MockBinding` added to INVENTORY.
+
+**Step 19 (Strategy wizard — remove blend controls, preserve signal_params.symbols)**:
+- `StrategyWizard.tsx` — removed the "Signal Params" step (5→4 steps) + all blend state/UI;
+  `handleSubmit` now carries `initial.signalParams` verbatim (preserves the ANALYSIS-3 live-loop
+  symbol universe) or omits the key on a create — no wholesale rewrite (the design's clobber).
+- `strategy-authoring.spec.ts` — updated the step flow (Review is step 4, no Skip) + a decisive
+  preserve-signal_params-on-save regression guard; `mock-backend.ts` getStrategy returns a
+  `strat_signal_universe` with `signal_params.symbols` (underscore id so it passes id validation).
+
+**Verify**: `pnpm lint` + `tsc --noEmit` clean; `pnpm test:unit` 55 passed; e2e (CI mode, chromium)
+opportunities 6 + watchlists 5 + strategy-authoring 17 all pass. Browser via
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium`, `CI=1`.
+
+**Progress**: 19 done / 19 total — **code-completed**. Next: run `/context-scrubber scan` (touched
+analysis CLAUDE.md + docs), then mark PR #861 ready-for-review.

@@ -589,7 +589,7 @@ grep -n "signal_weight\|technical-only\|feature 097" plugins/strat-lab/skills/ba
 
 ### Step 17 — service: UI Opportunities page — server-persisted snooze / dismiss / take
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx` — modify
@@ -626,7 +626,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm test:e2e -- opportunities
 
 ### Step 18 — service: UI Watchlist per-symbol strategy-binding editor
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/WatchlistDetail.tsx` — modify
@@ -663,7 +663,7 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm test:e2e -- watchlists
 
 ### Step 19 — service: UI Strategy wizard — remove signal-blend controls, preserve signal_params.symbols
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/StrategyWizard.tsx` — modify
@@ -692,6 +692,32 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm test:e2e -- strateg
 
 ## Deviation Log
 
+- **Steps 17–19 — all three UI steps done, e2e green (opportunities 6, watchlists 5, strategy-authoring
+  17 = 28 relevant specs pass); lint + tsc + vitest clean.** Notable deviations:
+  - **Step 17 snooze/dismiss persistence proven via per-page `page.route()` isolation, not the shared
+    mock-backend.** Playwright runs `fullyParallel: true`, so a global mutable "hidden" set in
+    `mock-backend.ts` would pollute across parallel workers. Mirrored the `watchlistMock.ts` house
+    pattern: the spec intercepts `ListOpportunities` + `SetOpportunityAction` per-page (isolated state
+    that survives a reload). `mock-backend.ts` still gained a stateless `setOpportunityAction` so a
+    call resolves. Trap fixed: Connect-JSON encodes a request enum as its NAME string (not the number)
+    and `google.protobuf.Timestamp` as an RFC3339 string (not `{seconds,nanos}`) — the hand-built route
+    responses/handlers account for both.
+  - **Step 18 readiness is per-symbol via `useQueries`.** The whole-list `useState('')` picker was
+    replaced by an inline per-symbol strategy `Select`; symbols group by bound strategy and one
+    `EvaluateReadiness` runs per group. Unbound → *not evaluated* (P-03). Re-bind writes the FULL
+    binding set via `UpdateWatchlist` (replace) so no other symbol's `strategyId` resets (fails-080).
+    Added a defensive de-dupe of the render binding list (unique React keys) after a transient
+    duplicate-symbol render corrupted the DOM under rapid rebind+refetch. The 098 readiness e2e was
+    rewritten for the per-symbol model (the whole-list picker + "evaluated-against" caption are gone).
+  - **Step 19 preserves `signal_params` verbatim.** `handleSubmit` now carries `initial.signalParams`
+    through unchanged (holds the live-loop `signal_params.symbols` universe, ANALYSIS-3) instead of the
+    wholesale `{signal_sources,…}` rewrite that dropped `symbols`; a create with no prior signal_params
+    omits the key. The wizard dropped from 5 steps to 4 (Review is now step 4). The regression-guard
+    e2e uses an **underscore** strategy id (`strat_signal_universe`) because the wizard's id validator
+    (`[a-z0-9_]+`) rejects hyphens, which would block advancing past Step 1.
+  - **`page.route()` isolation is a deliberate deviation from the spec's "modify `mock-backend.ts` with
+    a stateful handler" instruction** — documented here rather than shipping a cross-worker pollution
+    hazard.
 - **Step 16 — no builder code change; the docs had no RunBacktest-blend claim to remove (only a
   claim to add).** The three parity tests pin the *existing, unchanged* `_build_component` /
   `manage_strategy` / `screen_symbols` builders (RC-1 fail-closed guard) — no client.py edit. Used
