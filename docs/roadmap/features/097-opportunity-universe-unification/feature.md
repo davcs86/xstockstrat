@@ -1,6 +1,6 @@
 # Feature: opportunity-universe-unification
 
-**Lifecycle Status**: `design-approved`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/opportunity-universe-unification`
 **Created**: 2026-08-03
 **Last Updated**: 2026-08-03
@@ -14,6 +14,7 @@
 | 2026-08-03 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-03 | `draft` → `spec-ready` | /sdd-review | Product spec approved — PASS WITH WARNINGS (no blockers); 5 design forks routed to /sdd-design; no blocking overlap (098/099 UI-only, rebase-only) |
 | 2026-08-03 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + design.md written. Materialized opportunities (lazy + stale-while-revalidate + daily refresh); 8 Open Risks to /sdd-spec |
+| 2026-08-03 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 19 steps; all 8 Open Risks (OR-A…OR-H) resolved inline |
 
 ---
 
@@ -22,7 +23,7 @@
 - [Product Spec](product-spec.md) — requirements and governance
 - [Recon Dossier](recon.md) — grounded codebase map (design Phase 0)
 - [Design](design.md) — debated, approved architecture (design Phase 1)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec opportunity-universe-unification`_
+- [Implementation Spec](implementation-spec.md) — 19 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -53,4 +54,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec opportunity-universe-unification` — generate the implementation spec from the approved design (resolves the 8 Open Risks)
+`/sdd-review opportunity-universe-unification impl-spec` — validate the implementation spec, then `/sdd-execute opportunity-universe-unification`

@@ -71,3 +71,38 @@
 - OR-F persisted-row→Opportunity proto parity test — analysis read step.
 - OR-G signal_rank_weight composition formula — analysis ranking step.
 - OR-H migration NNN run order + analysis CLAUDE.md config defaults — proto/migration steps.
+
+## Session 2026-08-03 — sdd-spec
+
+- Generated implementation-spec.md with **19 steps**. Status → implementation-ready.
+- All 8 Open Risks resolved inline in the steps: OR-A synchronous cold compute + per-user in-flight
+  guard (Step 12), OR-B accepted staleness bound + `computed_at` "as of" (Step 12), OR-C
+  `refresh_hour_utc` presence-aware read (add `HasField('int_val')` accessor mirroring `get_bool`;
+  labeled *configured daily refresh*) (Steps 7+12), OR-D session date from the last fetched bar
+  (Step 12), OR-E known-user set = `distinct user_id in opportunities ∪ opportunity_actions`
+  (Step 12), OR-F persisted-row→`Opportunity` descriptor-parity test (Step 13), OR-G
+  `rank = (1−w)·conviction + w·signal_axis` with `w = analysis.opportunity.signal_rank_weight`
+  (Steps 7+12), OR-H portfolio mig **008**, analysis mig **010** (actions) + **011** (opportunities),
+  run order 010→011 (Step 6).
+- Key codebase findings (grounded):
+  - Next-free migrations confirmed by `ls`: portfolio **008** (last `007_watchlists`), analysis **010**
+    (last `009_strategy_cooldowns`); design uses 010 `opportunity_actions` + 011 `opportunities`.
+  - Proto next-frees confirmed by Read: `portfolio.Watchlist` field **8** (`symbols=5` → deprecate-in-place);
+    CRUD req binding fields 4/5/3 (Create/Update/Add); `analysis.Opportunity` fields **10/11**
+    (`opportunity_key`, `provenance`). New `OpportunityAction` enum (SNOOZE/DISMISS/TAKE) + `SetOpportunityAction`
+    RPC — distinct from the existing `OpportunityActionTag`.
+  - `ListOpportunities` (`servicer.py:2006`) becomes a pure read: today's `_drain_*`/`_action_for`/`0-0`
+    stubs (`:2032–2064`) deleted; `queue_share=0.0` (`:2183`) made real.
+  - Evaluator exit-rule sibling: `evaluate_conditions_traced` (`evaluator.py:171`) traces entry-only at
+    `:202–206`; add a `rule=` param (exit_rule already loads at `:158`) — additive-sibling (insights 2026-07-08).
+  - Signal-blend retirement is confined to `RunBacktest.strategy_params` (`servicer.py:319–328,813,903–914`);
+    `StrategyDefinition.signal_params` (live-loop universe + 065 fingerprint, ANALYSIS-3) and the screener's
+    `ScreenSymbolsRequest`/`combine_score` are **untouched** — so the *only* proto deprecation is
+    `portfolio.Watchlist.symbols=5` (product-spec's signal-field deprecation was overridden by the design).
+  - Portfolio write-path re-plumb (repo `insertSymbolsTx:248`/`listSymbols:217`, service `normalizeSymbols:1061`)
+    carries `(symbol, strategy_id)` so a bare-`symbols` write can't reset `strategy_id=''` (fails.md-080 trap).
+  - UI: transient snooze `${symbol}-${source}` (`opportunities/page.tsx:81`) → stable `opportunityKey`;
+    transient `useState('')` list-strategy picker (`WatchlistReadiness.tsx:60`) → persisted per-symbol binding;
+    StrategyWizard `handleSubmit` wholesale `signalParams` rewrite (`:144–149`) → merge preserving
+    `signal_params.symbols`. Agent: no watchlist tool exists → agent step is parity tests
+    (`test_backtest_view.py:157` template) + strat-lab/mcp-tools doc reconciliation (F-12, same PR).
