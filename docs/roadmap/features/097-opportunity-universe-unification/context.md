@@ -116,3 +116,14 @@
   - Step 12 cited `(F-04)` for "no portfolio strategy attribution" and Step 16 cited `(F-12)` for the strat-lab same-PR rule — both mis-tags. [x] FIXED (pre-execute): Step 12 → `(P-03 — no silent guess)`; Step 16 → "root CLAUDE.md strat-lab same-PR rule (a repo rule, not a Floor ID)".
   - Step 1: `buf breaking` ran `--against .git#branch=feature/...` (a self-compare that misses the change). [x] FIXED (pre-execute): now `--against .git#branch=main-dev,subdir=packages/proto` (matches the "vs dev trunk" reviewer note + CI convention).
 - Overlap findings: no collision. Forward note (not a 097 blocker): feature 095 (draft) plans to append to `analysis.Opportunity`; once 097's fields 10/11 land, 095 must number 12+ — add a `095 → 097` merge-order row when 095 advances to /sdd-spec (052/053 precedent).
+
+## Session 2026-08-03 — sdd-execute (sequential)
+
+- Mode: SEQUENTIAL on `feature/opportunity-universe-unification` (branched from merged main-dev 33ff5dc; PR #860 docs merged first per user). One commit per step, no per-step PRs, integration PR at end. User confirmed proceed.
+- Tooling setup (steps 1–19): go1.25 ✓ · golangci-lint ✓ v2.5.0 · protoc-gen-go ⬇ v1.36.11 · protoc-gen-go-grpc ⬇ v1.6.2 · protoc-gen-connect-go ⬇ v1.19.2 · buf ⬇ v1.69.0 (matches CI) · TS proto plugins ⬇ (pnpm) · python3.12 venv ⬇ grpcio-tools==1.80.0/protobuf 6.33.6 (scratchpad/protogen-venv) · uv ✓ · ruff ✓ · node 22 ✓ · pnpm 9.15.0 ✓.
+
+### Step 1 — proto: Watchlist bindings, Opportunity key+provenance, SetOpportunityAction [done]
+- portfolio.proto: added `WatchlistBinding{symbol,strategy_id}`; `Watchlist.symbols=5 [deprecated=true]` + `bindings=8`; `bindings` on CreateWatchlistRequest=4/UpdateWatchlistRequest=5/AddWatchlistSymbolsRequest=3. analysis.proto: `Opportunity.opportunity_key=10`/`provenance=11`; `OpportunityAction` enum; `SetOpportunityAction` RPC + req/resp. StrategyDefinition.signal_params + ScreenSymbolsRequest signal fields left untouched (ANALYSIS-3).
+- Verified: `buf lint` + `buf breaking` vs main-dev both pass (deprecation-only).
+- Files modified: `packages/proto/portfolio/v1/portfolio.proto`, `packages/proto/analysis/v1/analysis.proto`
+- Deviations: buf-breaking `.git` path corrected to repo-root form (CI-equivalent) — see Deviation Log.

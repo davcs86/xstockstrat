@@ -1,6 +1,6 @@
 # Implementation Spec: opportunity-universe-unification
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-08-03
 **Feature**: `docs/roadmap/features/097-opportunity-universe-unification/feature.md`
 **Total Steps**: 19
@@ -50,7 +50,7 @@ register a new route.
 
 ### Step 1 — proto: Watchlist bindings, Opportunity stable-key + provenance, SetOpportunityAction RPC
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/portfolio/v1/portfolio.proto` — modify
@@ -692,4 +692,11 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm test:e2e -- strateg
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **Step 1 — buf breaking verification command.** The step's `**Verification**` runs
+  `cd packages/proto && buf breaking . --against ".git#branch=main-dev,subdir=packages/proto"`, but that
+  `.git` resolves cwd-relative to `packages/proto/.git` (nonexistent). Ran the CI-equivalent form instead:
+  from repo root, `buf breaking packages/proto --against ".git#branch=main-dev,subdir=packages/proto"`
+  after `git branch -f main-dev origin/main-dev` (buf needs a local `main-dev` ref, matching
+  `scripts/buf-gen.sh`'s `git show-ref` guard). `buf lint` + `buf breaking` both passed (additive +
+  `symbols=5 [deprecated=true]` only). **Disposition**: CI-equivalent fallback — verification intent
+  (no breaking change vs dev trunk) unchanged.
