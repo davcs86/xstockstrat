@@ -171,7 +171,7 @@ ls services/xstockstrat-portfolio/migrations/008_watchlist_symbol_strategy.up.sq
 
 ### Step 4 — service: portfolio watchlist binding write/read path
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/watchlist_repo.go` — modify
@@ -209,7 +209,7 @@ cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-down
 
 ### Step 5 — test: portfolio watchlist binding round-trip
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/watchlist_service_test.go` — modify
@@ -692,6 +692,20 @@ cd services/xstockstrat-ui && pnpm run lint && pnpm test:e2e -- strateg
 
 ## Deviation Log
 
+- **Steps 4–5 — `portfolio_handler.go` needs no change; committed as one atomic cycle.** The step listed
+  `internal/handler/portfolio_handler.go` as a modify file, but both the Connect handlers and the gRPC
+  adapter forward `req.Msg`/`req` whole (`portfolio_handler.go:132-186`, `:269-317`), so the new
+  `bindings` field passes through with no edit. The handler was not touched (staged a subset of the
+  step's Files — F-08 permits fewer). Steps 4 (repo+service) and 5 (test) were committed **together**
+  because the `WatchlistStore` interface-signature change requires the matching test-double to compile
+  (Step 4 alone leaves the package uncompilable). **Disposition**: no scope change; both steps' Files +
+  spec/context staged.
+- **Steps 4–5 — SA1019 on the deprecated `symbols` mirror.** Marking `Watchlist.symbols=5
+  [deprecated=true]` (Step 1) makes every Go read of the intentionally-retained flat mirror a
+  staticcheck SA1019. The mirror is deliberately still populated for old clients (deprecate-don't-delete,
+  FR-6), so the 10 legitimate sites carry `//nolint:staticcheck` with an explanation. `golangci-lint
+  run` → 0 issues. **Disposition**: expected cost of the deprecation; localized to the two touched Go
+  files (no other current Go consumer reads `Watchlist.Symbols`).
 - **Step 1 — buf breaking verification command.** The step's `**Verification**` runs
   `cd packages/proto && buf breaking . --against ".git#branch=main-dev,subdir=packages/proto"`, but that
   `.git` resolves cwd-relative to `packages/proto/.git` (nonexistent). Ran the CI-equivalent form instead:

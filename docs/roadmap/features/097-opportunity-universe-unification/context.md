@@ -144,3 +144,15 @@
 **Stopped at**: before Step 4 (portfolio Go binding write-path). Contract + schema foundation complete (proto, regenerated stubs, migration 008). Stopped ahead of the Step 4–5 Go service re-plumb + red-green TDD to give it a focused pass rather than rush it at the end of a long run.
 **Toolchain persisted for resume**: buf 1.69.0 + Go plugins in `$HOME/go/bin`; python3.12 grpcio-tools venv at `scratchpad/protogen-venv`; local `main-dev` ref created for `buf breaking`; pnpm workspace installed.
 **Next**: /sdd-execute opportunity-universe-unification sequential  (resumes at Step 4)
+
+### Step 4 — service: portfolio watchlist binding write/read path [done]
+- Re-plumbed the write path to carry `(symbol, strategy_id)` pairs. `WatchlistStore.Create/Update/AddSymbols` now take `[]*WatchlistBinding`; new `normalizeBindings`/`requestBindings`/`bindingSymbols` helpers (bindings authoritative, legacy `symbols` → unbound fallback). Repo: `insertBindingsTx` (INSERT symbol+strategy_id ON CONFLICT DO NOTHING → existing binding's strategy_id preserved), `listBindings` (populate `Bindings` + flat `Symbols` mirror). `portfolio_handler.go` unchanged (forwards req whole — see Deviation Log).
+- Files modified: `internal/repository/watchlist_repo.go`, `internal/service/portfolio_service.go`
+- Verified: `golangci-lint run` → 0 issues (after `//nolint:staticcheck` on the deprecated-mirror reads — see Deviation Log).
+- Deviations: handler no-change; SA1019 nolint — Deviation Log.
+
+### Step 5 — test: portfolio watchlist binding round-trip [done]
+- Updated `fakeWatchlistStore` to the binding signatures (stores `Bindings`, mirrors `Symbols`); added 3 tests: binding create/get round-trip (strategy_id preserved), **fails-080 regression** (legacy flat add doesn't clear a prior binding), update-replaces-bindings. Existing 8 tests still pass.
+- **TDD red→green**: temporarily disabled bindings-precedence in `requestBindings` → `TestBindings_{CreateGetRoundTrip,LegacyAddDoesNotClearStrategy,UpdateReplaces}` all FAIL (`no binding for "AAPL" in []`) → restored → all pass. `go test ./internal/service/ -race` ok; coverage total 53.1% ≥ 40%.
+- Files modified: `internal/service/watchlist_service_test.go`
+- Deviations: committed with Step 4 (atomic interface change) — Deviation Log.
