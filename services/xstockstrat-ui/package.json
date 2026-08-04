@@ -43,7 +43,7 @@
     "jose": "^5.0.0",
     "lightweight-charts": "^4.2.0",
     "lucide-react": "^0.460.0",
-    "next": "^15.5.15",
+    "next": "^15.5.21",
     "pg": "^8.11.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
