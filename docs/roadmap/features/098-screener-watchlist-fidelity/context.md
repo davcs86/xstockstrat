@@ -97,3 +97,10 @@
 - **Teardown / context-scrubber:** the context-forge `/context-scrubber` skill is **not available** in
   this session (not in the skill registry). No `CLAUDE.md`/constitution/findings file was changed;
   `INVENTORY.md` (a test-data catalog) was updated in the same change set. Flagged in the PR body.
+
+## Session 2026-08-04 (CI: feature status automation)
+
+- Promotion PR #862 merged to main
+- Feature promoted and committed: 9713cb61c9b866d6420e142ac1cf20cf6059bf94
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-04

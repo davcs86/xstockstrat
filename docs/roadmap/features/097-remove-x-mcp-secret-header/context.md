@@ -326,3 +326,10 @@
   merge-conflict notice, and report the two items flagged in the PR body (live Docker smoke check,
   `/context-scrubber scan`) as outstanding for a reviewer with the right access.
 - Feature status remains `code-completed` until the PR merges.
+
+## Session 2026-08-04 (CI: feature status automation)
+
+- Promotion PR #862 merged to main
+- Feature promoted and committed: 9713cb61c9b866d6420e142ac1cf20cf6059bf94
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-04

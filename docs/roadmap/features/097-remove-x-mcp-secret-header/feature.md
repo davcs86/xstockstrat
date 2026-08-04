@@ -1,6 +1,8 @@
 # Feature: remove-x-mcp-secret-header
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 9713cb61c9b866d6420e142ac1cf20cf6059bf94
+**Launched date**: 2026-08-04
 **Development Branch**: `claude/remove-x-mcp-secret-header-icog9j` (harness-assigned; see context.md deviation note — this session runs the full SDD pipeline and lands the single integration PR from this branch instead of a separate `feature/remove-x-mcp-secret-header` branch)
 **Created**: 2026-08-02
 **Last Updated**: 2026-08-02
@@ -18,6 +20,7 @@
 | 2026-08-02 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (agent header removal + paired tests) |
 | 2026-08-02 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done; ready for integration PR |
 
+| 2026-08-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #862; committed 9713cb61c9b866d6420e142ac1cf20cf6059bf94 |
 ---
 
 ## Artifacts

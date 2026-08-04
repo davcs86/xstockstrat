@@ -328,3 +328,10 @@ opportunities 6 + watchlists 5 + strategy-authoring 17 all pass. Browser via
 
 **Progress**: 19 done / 19 total — **code-completed**. Next: run `/context-scrubber scan` (touched
 analysis CLAUDE.md + docs), then mark PR #861 ready-for-review.
+
+## Session 2026-08-04 (CI: feature status automation)
+
+- Promotion PR #862 merged to main
+- Feature promoted and committed: 9713cb61c9b866d6420e142ac1cf20cf6059bf94
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-04

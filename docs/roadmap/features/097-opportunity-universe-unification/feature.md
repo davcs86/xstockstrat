@@ -1,6 +1,8 @@
 # Feature: opportunity-universe-unification
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 9713cb61c9b866d6420e142ac1cf20cf6059bf94
+**Launched date**: 2026-08-04
 **Development Branch**: `feature/opportunity-universe-unification`
 **Created**: 2026-08-03
 **Last Updated**: 2026-08-03
@@ -18,6 +20,7 @@
 | 2026-08-03 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started on feature/opportunity-universe-unification (Step 1 proto done) |
 | 2026-08-03 | `in-progress` → `code-completed` | /sdd-execute | All 19 steps done + verified (analysis 419→422 passed 81%; agent 198 passed; UI lint+tsc+unit clean, e2e opportunities/watchlists/strategy-authoring green). PR #861. |
 
+| 2026-08-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #862; committed 9713cb61c9b866d6420e142ac1cf20cf6059bf94 |
 ---
 
 ## Artifacts

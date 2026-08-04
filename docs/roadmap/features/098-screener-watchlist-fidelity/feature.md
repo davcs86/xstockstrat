@@ -1,6 +1,8 @@
 # Feature: screener-watchlist-fidelity
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 9713cb61c9b866d6420e142ac1cf20cf6059bf94
+**Launched date**: 2026-08-04
 **Development Branch**: `feature/screener-watchlist-fidelity`
 **Created**: 2026-08-02
 **Last Updated**: 2026-08-02
@@ -16,6 +18,7 @@
 | 2026-08-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps (UI-only, xstockstrat-ui `/insights`): (1) src/lib helpers + DRY isFiring, (2) their vitest units, (3) Screener display, (4) Screener→watchlist actions, (5) Watchlists master-detail, (6) e2e. Every step cites grep-verified `path:line`; no proto/config/migration. |
 | 2026-08-02 | `implementation-ready` → `code-completed` | manual execute | All 6 steps implemented on the harness branch `claude/ui-revamp-low-fidelity-ii5p1h` (single-branch mandate; deviations logged in implementation-spec). Verified: `pnpm build`/`lint`/`test:coverage` pass (helpers 100%), 79 `e2e/insights` specs pass (14 new), DRY `check-duplication.sh services/xstockstrat-ui/src` = 0 clones. |
 
+| 2026-08-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #862; committed 9713cb61c9b866d6420e142ac1cf20cf6059bf94 |
 ---
 
 ## Artifacts
