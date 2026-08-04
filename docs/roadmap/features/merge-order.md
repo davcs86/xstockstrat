@@ -40,6 +40,7 @@ cannot open its final integration PR to `main-dev` until the feature in the
 | `fundamentals-scoring-model` | `fundamentals-data-source` | The scoring formula reads the fundamental metric fields (`pe_ratio`, `roe`, …) that feature 059 defines | No |
 | `fundamentals-data-source` | `watchlist-management` | **Config-migration ordering** (not a code dep): all three of 058/059/062 add a seed migration to the shared `services/xstockstrat-config/migrations/` dir. To avoid a `006` filename collision the numbers are pre-assigned 058→`006_watchlist_config`, 059→`007_marketdata_fmp`, 062→`008_analysis_fundsignal_keys`. golang-migrate applies in numeric order, so 059's `007` must merge **after** 058's `006`. Seeded namespaces are disjoint (`portfolio`/`marketdata`/`analysis`) — no key conflict, only file ordering | No |
 | `fundamentals-signal-producer` | `watchlist-management` | **Config-migration ordering**: 062's pre-assigned `008_analysis_fundsignal_keys` must merge after 058's `006` and 059's `007` in the shared config dir (see row above). Transitively covered by the existing 062→059 dep, but recorded explicitly because 058 is otherwise independent of 062 | No |
+| `broker-state-reconciliation` | `exactly-once-order-intent` | Reconciliation's periodic tick resolves the `UNKNOWN` order-intent state introduced by feature 101; the intent-record contract must exist first | No |
 
 **Screener initiative build order**: `058 watchlist-management` ∥ `059 fundamentals-data-source`
 (independent to *build*, but their `xstockstrat-config` seed migrations **merge** in number order
@@ -104,6 +105,34 @@ cache, and 062 reserves call-budget headroom (200/250) for 060's interactive sca
 >   Disjoint lines; 085 (code-completed) lands first and 094 rebases its two docstring edits onto it.
 
 ---
+
+**Live-Capital Safety program (added 2026-08-04 from an external risk review, cut down 2026-08-04
+after a feasibility re-check against this repo's actual code/infra):** the review was written as if
+unattended automated strategy-to-order execution already existed on this platform. It does not —
+`048-live-strategy-alert-engine` is alert-only, and the trader UI is the sole caller of
+`TradingService.PlaceOrder` — so most of the review's premise (kill switches for schedulers, canary
+rollout of automated strategies, crash/property-based test suites, a broker fault simulator, a
+dashboard, quarterly game days) was pre-building controls for a capability that isn't built and isn't
+roadmapped. Five items survived the re-check (a sixth, `102`, was briefly demoted and then revived once rescoped
+down — see its own `context.md`):
+- `023-position-sizing-engine` and `030-stop-loss-bracket-orders` (both pre-existing drafts, promoted
+  to `P0` priority rather than duplicated — `030` keeps its pre-existing hard dependency on `023`,
+  already listed elsewhere in this file if/when either is specced).
+- `100-account-trading-halt-and-kill-switch`, rescoped from a new state machine to hardening the
+  `platform.maintenance_mode` key already enforced in `trading.go:244`.
+- `101-exactly-once-order-intent`, rescoped to the trader UI's real place/replace/cancel flow.
+- `102-broker-state-reconciliation`, rescoped from a continuous engine + dashboard to a lightweight
+  periodic ticker inside `xstockstrat-trading` itself (depends on `101`, row above) — proof that the
+  right response to "this protects a capability that doesn't exist yet" is often to shrink a feature,
+  not always to demote it outright.
+
+The other seven drafted features (`103` broker simulator, `104` property tests, `105`
+crash-consistency, `106` market-data gate — folded into `023`, `107` canary rollout, `108` dashboard,
+`109` game day) are `demoted/canceled` — see each feature's own `context.md` for why, and revisit them
+if/when an automated strategy-to-order execution capability is actually proposed and approved.
+`/sdd-status` (no slug) lists every feature regardless of lifecycle status, including
+`demoted/canceled` ones, so this backlog stays discoverable without a separate tracking doc — the
+trigger to revisit each one is recorded in its own `context.md`.
 
 ## How to add an entry manually
 
