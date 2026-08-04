@@ -1,9 +1,10 @@
 # Feature: stop-loss-bracket-orders
 
 **Lifecycle Status**: `draft`
+**Priority**: `P0` — blocking live-capital expansion (Live-Capital Safety program, see context.md 2026-08-04)
 **Development Branch**: `feature/stop-loss-bracket-orders`
 **Created**: 2026-05-26
-**Last Updated**: 2026-05-26
+**Last Updated**: 2026-08-04
 
 ---
 
