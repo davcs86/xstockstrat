@@ -1,0 +1,38 @@
+name: Prod — tear down
+
+# Manual teardown of the production app to stop instance billing (see
+# "Production lifecycle" in docs/runbooks/infra-cost-reduction.md).
+#
+# This deletes ONLY the App Platform app. The managed Postgres cluster
+# 'xstockstrat' is a separate resource and is left untouched, so all data
+# survives. Bring prod back with the "Prod — bring up" workflow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Type 'destroy-prod' to confirm tearing down production"
+        required: true
+
+concurrency: prod-lifecycle
+
+jobs:
+  down:
+    if: ${{ inputs.confirm == 'destroy-prod' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DIGITALOCEAN_ACCESS_TOKEN }}
+
+      - name: Delete prod app
+        run: |
+          APP_ID=$(doctl apps list --format ID,Spec.Name --no-header \
+            | awk '$2=="xstockstrat-production"{print $1}')
+          if [ -z "$APP_ID" ]; then
+            echo "No xstockstrat-production app found — already down."
+            exit 0
+          fi
+          echo "Deleting prod app $APP_ID ..."
+          doctl apps delete "$APP_ID" --force
+          echo "Done. The managed Postgres cluster 'xstockstrat' was NOT touched — data is safe."
