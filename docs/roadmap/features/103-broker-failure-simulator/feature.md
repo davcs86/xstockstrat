@@ -1,6 +1,6 @@
 # Feature: broker-failure-simulator
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `demoted/canceled`
 **Development Branch**: `feature/broker-failure-simulator`
 **Created**: 2026-08-04
 **Last Updated**: 2026-08-04
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-04 | `idea` → `draft` | /sdd-story | Product spec generated from external live-capital-safety risk review |
+| 2026-08-04 | `draft` → `demoted/canceled` | feasibility re-check | See context.md — no CI service-container/DB infra exists to host this, and there is no automated order-placement path yet to justify chaos-level fault injection |
 
 ---
 

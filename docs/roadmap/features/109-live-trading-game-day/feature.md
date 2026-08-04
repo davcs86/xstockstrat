@@ -1,6 +1,6 @@
 # Feature: live-trading-game-day
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `demoted/canceled`
 **Development Branch**: `feature/live-trading-game-day`
 **Created**: 2026-08-04
 **Last Updated**: 2026-08-04
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-04 | `idea` → `draft` | /sdd-story | Product spec generated from external live-capital-safety risk review |
+| 2026-08-04 | `draft` → `demoted/canceled` | feasibility re-check | See context.md — a quarterly game day assumes an on-call rotation this solo-maintained project doesn't have; the valuable core becomes a manual pre-flight checklist instead |
 
 ---
 

@@ -20,3 +20,19 @@
   gate halts through it), and 107 (canary rollout enforces stage limits at the same gate). Per the
   review's suggested execution order, this and 101 (idempotent order intents) have no upstream
   dependency and can start first.
+
+## Session 2026-08-04T01:00:00Z — feasibility re-check (rescoped, not demoted)
+
+- The user pushed back on the mechanical translation and asked for a real feasibility check. Grepping
+  `services/xstockstrat-trading/internal/service/trading.go` found `platform.maintenance_mode` is
+  **already** read synchronously inside `PlaceOrder` (`trading.go:244`) — a real, already-enforced
+  kill switch, not a green-field gap. A doc/code key-name drift is already flagged in
+  `services/xstockstrat-trading/docs/context-constitution-findings.md:13`.
+- Kept in the backlog (unlike 102/103/104/105/106/107/108/109, which were demoted — see their
+  context.md files) because a halt is valuable regardless of whether order flow is human-initiated or
+  automated. But rewrote `product-spec.md` to reflect the real, much smaller scope: harden the
+  existing key into a richer enum, verify every handler checks it, audit via the existing ledger
+  event store (no new DB table, no new proto message — reusing the `insights.md` 2026-07-31 pattern of
+  append-only-store-instead-of-new-table). Dropped every *automatic* trigger (loss threshold,
+  drawdown, reconciliation, stale data) since those either depend on demoted features or on an
+  automated order-placement path this platform doesn't have yet.

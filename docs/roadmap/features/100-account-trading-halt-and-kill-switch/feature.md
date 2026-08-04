@@ -1,6 +1,8 @@
 # Feature: account-trading-halt-and-kill-switch
 
 **Lifecycle Status**: `draft`
+**Priority**: `P0` — blocking live-capital expansion; rescoped 2026-08-04 to hardening the
+`platform.maintenance_mode` key that already exists, not a green-field build (see context.md)
 **Development Branch**: `feature/account-trading-halt-and-kill-switch`
 **Created**: 2026-08-04
 **Last Updated**: 2026-08-04
@@ -12,6 +14,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-04 | `idea` → `draft` | /sdd-story | Product spec generated from external live-capital-safety risk review |
+| 2026-08-04 | `draft` (rescoped) | feasibility re-check | Scope cut from a new state machine/proto/DB to hardening the existing enforced kill switch; see context.md |
 
 ---
 
@@ -25,7 +28,7 @@
 
 ## Summary
 
-Introduces a server-authoritative account trading state (`ACTIVE` / `REDUCE_ONLY` / `HALTED` / `EMERGENCY_FLATTEN`) enforced inside `xstockstrat-trading` immediately before every broker order submission, so a single kill switch stops exposure-increasing orders from any caller — UI, agent, strategy engine, scheduled job, or internal RPC — with no administrative-scope override.
+Hardens the `platform.maintenance_mode` kill switch that already exists and is already enforced in `xstockstrat-trading` (`trading.go:244`) into an audited, richer state (`ACTIVE` / `REDUCE_ONLY` / `HALTED`) verified across every order-ingress handler, with transitions durably logged to the ledger — not a new state machine built from scratch.
 
 ## Reviewers
 

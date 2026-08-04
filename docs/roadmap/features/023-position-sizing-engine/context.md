@@ -50,3 +50,19 @@
   `docs/roadmap/features/100-account-trading-halt-and-kill-switch/` through
   `109-live-trading-game-day/`). This feature and 030 remain the two existing drafts the review said
   to accelerate rather than duplicate.
+
+## Session 2026-08-04T01:00:00Z — feasibility re-check (fold-in from demoted 106)
+
+- A feasibility re-check demoted `106-market-data-freshness-and-quality-gate` (see its context.md) as
+  disproportionate to build as a standalone service/proto surface right now. Its cheap, genuinely
+  valuable core survives as a recommendation for **this** feature's own implementation: when 023 builds
+  its real sizing engine, `ComputePositionSize` (or its replacement) should reject on a missing, zero,
+  negative, NaN, or stale price **as part of its own input validation** — reusing the live quote/equity
+  read that `checkPortfolioRisk` (`services/xstockstrat-trading/internal/service/trading.go:1288`)
+  already performs — rather than standing up a separate market-data-quality service. Note also that
+  `checkPortfolioRisk` is currently **deliberately fail-open** ("portfolio unavailability must not halt
+  trading," `trading.go:1288` comment) — 023's design should explicitly decide whether the new sizing
+  engine keeps that fail-open stance or flips to fail-closed per the review's recommendation; either is
+  defensible, but the current behavior is a considered prior choice, not an oversight, and reversing it
+  has a real cost on this single-instance-no-HA topology (a portfolio-service blip would then block all
+  new orders).

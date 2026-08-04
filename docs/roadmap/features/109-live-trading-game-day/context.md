@@ -13,3 +13,14 @@
 - Hard-depends on 103 (broker-failure-simulator) for fault injection, and is most useful once
   100/102/030 exist (there is little to halt/reconcile/protect during a rehearsal otherwise). Correctly
   last in the source review's suggested execution order ("Complete operational workflow").
+
+## Session 2026-08-04T01:00:00Z — feasibility re-check (demoted)
+
+- Its fault-injection dependency (103) is demoted, and a **quarterly, scheduled** game day assumes an
+  on-call rotation / multiple operators — this repo has a single maintainer (confirmed via `git log`
+  author list: one human author plus dependabot/CI bots, no `CODEOWNERS`). A recurring ceremony sized
+  for a team doesn't fit.
+- Demoted to `demoted/canceled` as a formal SDD feature. The genuinely valuable, cheap core — written
+  runbooks for the listed failure scenarios, walked through manually before any live-capital increase
+  — doesn't need a feature number; it can be added directly to `docs/runbooks/` once 100/030 land,
+  sized as a one-person checklist rather than a scheduled program.

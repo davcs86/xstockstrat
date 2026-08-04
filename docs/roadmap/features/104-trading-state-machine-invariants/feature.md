@@ -1,6 +1,6 @@
 # Feature: trading-state-machine-invariants
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `demoted/canceled`
 **Development Branch**: `feature/trading-state-machine-invariants`
 **Created**: 2026-08-04
 **Last Updated**: 2026-08-04
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-04 | `idea` → `draft` | /sdd-story | Product spec generated from external live-capital-safety risk review |
+| 2026-08-04 | `draft` → `demoted/canceled` | feasibility re-check | See context.md — needs a property-based testing library not used anywhere in the Go stack, to harden an autonomous order lifecycle that does not exist (all orders are human-placed) |
 
 ---
 

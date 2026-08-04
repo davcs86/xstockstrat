@@ -1,6 +1,6 @@
 # Feature: trading-crash-consistency
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `demoted/canceled`
 **Development Branch**: `feature/trading-crash-consistency`
 **Created**: 2026-08-04
 **Last Updated**: 2026-08-04
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-04 | `idea` → `draft` | /sdd-story | Product spec generated from external live-capital-safety risk review |
+| 2026-08-04 | `draft` → `demoted/canceled` | feasibility re-check | See context.md — CI has no ephemeral-Postgres/service-container setup today; this is new CI infrastructure, not just new tests, for a risk (crash mid-automated-order) that isn't live yet |
 
 ---
 

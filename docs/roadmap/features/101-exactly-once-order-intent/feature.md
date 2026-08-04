@@ -1,6 +1,9 @@
 # Feature: exactly-once-order-intent
 
 **Lifecycle Status**: `draft`
+**Priority**: `P1` — rescoped 2026-08-04 to the trader UI's real order flow, not hypothetical
+scheduler/agent callers (see context.md); not `P0` because the risk today is bounded by a human
+watching the UI, unlike an unattended caller
 **Development Branch**: `feature/exactly-once-order-intent`
 **Created**: 2026-08-04
 **Last Updated**: 2026-08-04
@@ -12,6 +15,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-04 | `idea` → `draft` | /sdd-story | Product spec generated from external live-capital-safety risk review |
+| 2026-08-04 | `draft` (rescoped) | feasibility re-check | Scope cut to the trader UI's real place/replace/cancel flow; `close`/`emergency-flatten` and automated `UNKNOWN` reconciliation deferred; see context.md |
 
 ---
 
@@ -25,7 +29,7 @@
 
 ## Summary
 
-Introduces a durable order-intent record in `xstockstrat-trading` (platform-generated intent ID, deterministic broker client-order ID, request hash, lifecycle state, retry/uncertainty tracking) so a logical order intent — place, replace, cancel, close, or emergency flatten — executes at most once despite network retries, timeouts, or service restarts.
+Introduces a durable order-intent record in `xstockstrat-trading` (platform-generated intent ID, deterministic broker client-order ID, request hash, lifecycle state, retry/uncertainty tracking) so the trader UI's place/replace/cancel calls — the only order flow that exists today — execute at most once despite network retries, timeouts, or a service restart on this single-instance, no-HA deployment.
 
 ## Reviewers
 

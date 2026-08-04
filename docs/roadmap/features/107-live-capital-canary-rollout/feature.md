@@ -1,6 +1,6 @@
 # Feature: live-capital-canary-rollout
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `demoted/canceled`
 **Development Branch**: `feature/live-capital-canary-rollout`
 **Created**: 2026-08-04
 **Last Updated**: 2026-08-04
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-04 | `idea` → `draft` | /sdd-story | Product spec generated from external live-capital-safety risk review |
+| 2026-08-04 | `draft` → `demoted/canceled` | feasibility re-check | See context.md — explicitly premature: stages the rollout of an automated strategy-to-order execution path that does not exist in this codebase and is not roadmapped |
 
 ---
 

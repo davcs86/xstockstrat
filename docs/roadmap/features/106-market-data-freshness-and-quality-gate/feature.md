@@ -1,6 +1,6 @@
 # Feature: market-data-freshness-and-quality-gate
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `demoted/canceled`
 **Development Branch**: `feature/market-data-freshness-and-quality-gate`
 **Created**: 2026-08-04
 **Last Updated**: 2026-08-04
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-04 | `idea` → `draft` | /sdd-story | Product spec generated from external live-capital-safety risk review |
+| 2026-08-04 | `draft` → `demoted/canceled` | feasibility re-check | See context.md — the valuable, cheap subset (reject sizing on a missing/stale/implausible quote) is folded into 023-position-sizing-engine's own scope instead of a standalone feature |
 
 ---
 

@@ -1,6 +1,6 @@
 # Feature: trading-safety-dashboard-slos
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `demoted/canceled`
 **Development Branch**: `feature/trading-safety-dashboard-slos`
 **Created**: 2026-08-04
 **Last Updated**: 2026-08-04
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-04 | `idea` → `draft` | /sdd-story | Product spec generated from external live-capital-safety risk review |
+| 2026-08-04 | `draft` → `demoted/canceled` | feasibility re-check | See context.md — the platform already has a Grafana Cloud/OTel dashboard mechanism (feature 033); a few new panels there are far cheaper than a new xstockstrat-ui page |
 
 ---
 
