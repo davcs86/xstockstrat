@@ -18,6 +18,9 @@ export const OPPORTUNITIES = [
     strategyId: 'strat-001',
     source: 'unusual_whales',
     validUntil: VALID_UNTIL,
+    // feature 097 — stable server-issued key (user|symbol_norm|strategy_id) + de-dup provenance.
+    opportunityKey: 'u1|AAPL|strat-001',
+    provenance: ['watchlist', 'unusual_whales'],
   },
   {
     symbol: 'MSFT',
@@ -29,6 +32,8 @@ export const OPPORTUNITIES = [
     strategyId: 'strat-001',
     source: 'marketwatch',
     validUntil: VALID_UNTIL,
+    opportunityKey: 'u1|MSFT|strat-001',
+    provenance: ['position', 'marketwatch'],
   },
   {
     symbol: 'TSLA',
@@ -40,6 +45,8 @@ export const OPPORTUNITIES = [
     strategyId: '',
     source: 'dividendology',
     validUntil: VALID_UNTIL,
+    opportunityKey: 'u1|TSLA|',
+    provenance: ['dividendology'],
   },
   {
     symbol: 'NVDA',
@@ -51,6 +58,8 @@ export const OPPORTUNITIES = [
     strategyId: '',
     source: 'unusual_whales',
     validUntil: VALID_UNTIL,
+    opportunityKey: 'u1|NVDA|',
+    provenance: ['unusual_whales'],
   },
 ];
 

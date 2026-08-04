@@ -519,3 +519,56 @@ reusing.
 - **Pattern**: To make a cross-service resource **safely deletable** without a reverse dependency edge, use **soft-delete + a surfaced `deleted` flag + run-time flagging at the existing consumer**, not a hard reference-checked delete that dials the consumer. Here indicators soft-deletes a formula (`deleted_at`, exposed as `FormulaDefinition.deleted`), keeps `get_by_id` deleted-agnostic so strategies already referencing it keep evaluating, and analysis — which already fetches each referenced formula via `GetFormula` at strategy-write (`_fetch_formula_outputs`) and at the backtest warmup prefetch (`_declared_formula_warmup`) — refuses *new* bindings to a deleted formula and appends a user-visible line to a new additive `BacktestResult.warnings` field. Zero new inter-service edges, zero new DB pool. The key move: a "soft delete" is only honest if the deleted state is **surfaced by every read path AND flagged in the run output** — otherwise it silently hides a hard-delete (the adversary's AC-dishonesty objection). Reuse the consumer's *existing* fetch site as the detection point rather than adding `deleted` to the hot-path RPC response (avoids a multi-call-site blast radius).
 - **Evidence**: `docs/roadmap/features/086-fix-mcp-formula-lifecycle/design.md` §§ Chosen Approach 2/4, Rejected Alternatives; analysis `_fetch_formula_outputs` (`servicer.py:194-201`), `_declared_formula_warmup` (`servicer.py:1151`); root CLAUDE.md dep graph (analysis→indicators already exists, reverse edge would cycle — ledger 2026-07-31 083).
 - **Rule it implies**: extends **C-10(b)** and **F-06** — for a deletable resource another service depends on, prefer soft-delete + surfaced flag + run-flag at the consumer's existing fetch site over a reverse referential-delete edge; and "soft delete" is not honest unless the deleted state is observable in reads and flagged in runs.
+
+### 2026-08-02 — 097-remove-x-mcp-secret-header — execute
+- **Pattern**: Writing a **removal feature's** replacement doc/comment text is easy to get subtly
+  wrong twice, both caught only at execute time, not spec time. First: when a step's own
+  `**Verification**` demands a hard zero-count of the removed vocabulary in a set of files, the
+  step's *Instructions* must not suggest replacement wording that re-quotes the removed term — even
+  in clearly-past-tense "feature N removed X" framing — because the literal string still trips the
+  grep. Prefer generic phrasing ("the header" / "its shared-secret header") over naming the removed
+  symbol, or the step verifies itself false the moment you follow its own suggested wording. Second:
+  a final repo-wide sweep (per the `079-remove-mcp-sse-transport` "hard-zero on symbols, reviewed
+  survivors on vocabulary" lesson) reliably surfaces **out-of-scope files no recon pass named** —
+  here a root `docs/context-constitution-findings.md` "Open questions" entry describing the
+  soon-to-be-false pre-removal behavior as current fact. Treat every sweep survivor as needing a
+  hand verdict, not a blanket pass/fail: a doc claim of current/active behavior gets fixed even if
+  outside the original file list (P-03 — a known false claim is never left alone because a file
+  wasn't named in advance); a **negative test assertion** using the removed literal as its
+  comparison target (`assert not any(k == "<removed-header>" ...)`) is the opposite of a stale
+  claim — it's the permanent anti-reintroduction guard — and is correctly left alone even though its
+  file isn't in any formal exemption list.
+- **Evidence**: `docs/roadmap/features/097-remove-x-mcp-secret-header/implementation-spec.md` §
+  Deviation Log, Step 3 and Step 5 entries; `docs/context-constitution-findings.md:37` (the
+  out-of-scope stale claim, fixed); `services/xstockstrat-agent/tests/test_client.py` (the
+  reviewed-and-accepted negative-assertion survivor); reinforces `docs/roadmap/ledger/fails.md`
+  2026-07-29 `079-remove-mcp-sse-transport`.
+- **Rule it implies**: extends the **P-03** removal-verification-gate lesson from `fails.md` 079 —
+  (a) at spec time, never let a step's own suggested replacement text reintroduce the literal string
+  its Verification greps for zero of; (b) at execute time, a final sweep's survivors are triaged by
+  *what they claim* (current-tense/active → fix regardless of original scope; negative-assertion
+  test code → leave), not by whether the file was on the original list.
+
+### 2026-08-02 — 098-screener-watchlist-fidelity — design
+- **Pattern**: When a design surface is **scoped by a single upstream choice** (readiness is evaluated
+  against **one** strategy for the whole list), render that dimension as a **single caption** ("Evaluated
+  against: `<strategy>`"), never a per-row column that repeats the identical value. A repeated column is
+  not merely noisy — it visually re-implies a **per-row binding that does not exist** (here a per-symbol
+  signal→strategy binding feature 083 explicitly forbids). Complement for derived roll-ups over a
+  producer that can return an **empty/degenerate** row: bucket the degenerate case as its own honest
+  state (`nodata` = `total_conditions==0`, the evaluator's per-symbol bar-fetch fallback) rather than
+  folding it into a real state (`quiet`), and reconcile the roll-up denominator against the **requested
+  input set** (count absent symbols as `nodata`) so `sum === requested.length` holds even if a future
+  producer drops rows — defends the count-parity invariant beyond the mock's current 1:1 guarantee.
+- **Evidence**: `docs/roadmap/features/098-screener-watchlist-fidelity/design.md` §§ 1, 4, Rejected
+  Alternatives; `services/xstockstrat-analysis/app/services/evaluator.py:191`,
+  `app/handlers/servicer.py:1996-2003` (1:1 append + empty-readiness fallback);
+  `services/xstockstrat-ui/src/components/insights/WatchlistReadiness.tsx:34-44` (083 no-fabricated-binding).
+- **Rule it implies**: extends **C-10(b)** — a UI dimension fixed by one upstream selection is a caption,
+  not a per-row column; and a derived count over a producer with a degenerate-row fallback needs both a
+  distinct bucket for the degenerate case and a denominator reconciled to the requested input set.
+
+### 2026-08-03 — opportunity-universe-unification — design
+- **Pattern**: When a read surface needs derived-but-expensive data and the service *cannot enumerate its consumers* (analysis has no per-user strategy owner column and no global user-list RPC), prefer **lazy-materialize-on-read + persist(`valid_until`) + stale-while-revalidate + a daily refresh** over a standing background producer loop. A standing loop that can only refresh users already present in its own tables buys freshness that is invisible to anyone not currently looking, grows unbounded without an eviction rule, and (see Evidence) cannot borrow `live_loop`'s cap as a fairness mechanism because that cap truncates rather than round-robins.
+- **Evidence**: `docs/roadmap/features/097-opportunity-universe-unification/design.md` § Rejected Alternatives; `services/xstockstrat-analysis/app/engine/live_loop.py:102-110` (SELECT with no ORDER BY + `processed >= max` return = truncation, not round-robin); `migrations/001_strategies.up.sql` (strategies are global, no `user_id`).
+- **Rule it implies**: a background materializer is only justified when it can enumerate the full consumer set independently of reads; otherwise lazy-on-read + TTL revalidate is the minimal shape (How-to-Act #2). Candidate design principle.

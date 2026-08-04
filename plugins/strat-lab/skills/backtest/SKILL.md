@@ -33,6 +33,14 @@ Establish, from the request: the `strategy_id`, the symbol list, and whether thi
 config** or a **parameter sweep** (e.g. a cooldown sweep). If the ask is "reconfirm the report" or
 "validate in-engine," treat the report's own numbers as the **oracle** (Phase 4).
 
+**A backtest score is technical-only (feature 097).** The number a `run_backtest` produces comes
+from the strategy's technical rules alone — there is no newsletter-signal blend in the backtest
+score (the old `signal_sources`/`signal_weight` blend in `strategy_params` was retired). Under
+Option 2 a signal is a **universe + independent ranking axis** on the Decide → Opportunities queue,
+never an input to a strategy's own score. So do not expect signal weighting to move backtest
+numbers, and do not add signal params to a `run_backtest`. (`manage_strategy`'s `signal_params` is a
+different thing — the live-loop symbol universe — and still matters for live evaluation.)
+
 **Mutation guard (read before touching `manage_strategy`).** On this backend `manage_strategy
 update` is a **partial merge (feature 070), not a full replace** — only the fields you actually pass
 are changed, and everything you omit (`components`, `entry_rule`, `exit_rule`, `display_name`) is

@@ -11,28 +11,29 @@ documented/CI-enforced rules (see `## Pointers`).
 
 | ID | Rule | Why | Evidence | Example (canonical `path:line`) |
 |---|---|---|---|---|
-| **PORTFOLIO-1** | **Broker valuation is authoritative: `enrichPositions` skips any position the broker already valued (`CurrentPrice > 0`) and only falls back to a marketdata mid-quote for un-valued rows.** All read paths must enrich this way. | Recomputing `mid*Qty` for a broker-valued position overwrites the broker's mark, so the figure stops reconciling with broker equity — the exact bug migration 005 fixed. | `internal/service/portfolio_service.go:261,280-288`; called `:308,330,351,820` | `internal/service/portfolio_service.go:280-288` |
-| **PORTFOLIO-2** | **`cost_basis` is stored as *total signed cost* (qty × avg), never per-share** — sells scale `CostBasis` proportionally while holding `AvgEntry`; sync writes `costBasis = qty * avgCost`. | The P&L math `MarketValue − CostBasis` and the winners/losers filter depend on it; storing per-share or recomputing at read time breaks unrealized P&L. | `portfolio_service.go:213-217`; `internal/repository/portfolio_repo.go:248` | `internal/repository/portfolio_repo.go:248` |
-| **PORTFOLIO-3** | **All ledger consumers go through one reconnect/resume helper that resumes from `lastSeq+1` in memory and treats `codes.Unavailable` as a benign close.** | Logging every close at ERROR trips alerting on routine GOAWAYs; resuming from 0 double-counts incremental order fills. (Instance of root PLAT-N3.) | `portfolio_service.go:112-129,135-160,165-170`; wired `:100,716,777` | `internal/service/portfolio_service.go:112-129` |
-| **PORTFOLIO-4** | **Ledger/balance sync payloads are parsed by hand-written JSON structs, not the proto type** — a producer field rename silently zeroes the field here. Match the emitter's JSON tags exactly. | `unrealized_pl`/`day_pnl` etc. and the `trading_mode` string form `"TRADING_MODE_LIVE"` are matched by tag/value; the producer is xstockstrat-trading. | `portfolio_service.go:173-182,691-711,764-772,199,440,485` | `internal/service/portfolio_service.go:691-711` |
+| **PORTFOLIO-1** | **Broker valuation is authoritative: `enrichPositions` skips any position the broker already valued (`CurrentPrice > 0`) and only falls back to a marketdata mid-quote for un-valued rows.** All read paths must enrich this way. | Recomputing `mid*Qty` for a broker-valued position overwrites the broker's mark, so the figure stops reconciling with broker equity — the exact bug migration 005 fixed. | `internal/service/portfolio_service.go:312-314` (`enrichPositions`, `CurrentPrice > 0` skip `:314`, comment `:308-311`); called `:445,467,488,957` | `internal/service/portfolio_service.go:312-314` |
+| **PORTFOLIO-2** | **`cost_basis` is stored as *total signed cost* (qty × avg), never per-share** — sells scale `CostBasis` proportionally while holding `AvgEntry`; sync writes `costBasis = qty * avgCost`. | The P&L math `MarketValue − CostBasis` and the winners/losers filter depend on it; storing per-share or recomputing at read time breaks unrealized P&L. | `portfolio_service.go:266-269` (`newCost = existing.CostBasis * (newQty / existing.Qty)`); `internal/repository/portfolio_repo.go:248` | `internal/repository/portfolio_repo.go:248` |
+| **PORTFOLIO-3** | **All ledger consumers go through one reconnect/resume helper that resumes from `lastSeq+1` in memory and treats `codes.Unavailable` as a benign close.** | Logging every close at ERROR trips alerting on routine GOAWAYs; resuming from 0 double-counts incremental order fills. (Instance of root PLAT-N3.) | `portfolio_service.go:156` (`consumeEventStream`), `:179` (`streamEventsFrom`), resume `lastSeq+1` `:159-166,181-182`, benign-close `isGracefulStreamClose` `:208-212` | `internal/service/portfolio_service.go:156-182` |
+| **PORTFOLIO-4** | **Ledger/balance sync payloads are parsed by hand-written JSON structs, not the proto type** — a producer field rename silently zeroes the field here. Match the emitter's JSON tags exactly. | `unrealized_pl`/`day_pnl` etc. and the `trading_mode` string form `"TRADING_MODE_LIVE"` are matched by tag/value; the producer is xstockstrat-trading. | `portfolio_service.go:216-223` (`orderFillPayload` struct + json tags), `TRADING_MODE_LIVE` match `:247,406` | `internal/service/portfolio_service.go:216-223` |
+| **PORTFOLIO-5** | **Resting-stop risk is learned by replaying trading's `order.filled` ledger events at boot — never a synchronous portfolio→trading call — and the risk fields compute on read off the broker-authoritative `CurrentPrice`.** | A direct portfolio→trading stop lookup would create a trading↔portfolio dependency cycle; stops therefore live in an in-memory `stopStore` (no portfolio migration) rebuilt from the ledger via the same full-history replay as positions. Extends PORTFOLIO-1's broker-valuation seam (feature 083). | `stopStore` `:55,70-89`; learned on fill `:252-253` via full-history replay `:177-178`; `enrichRisk:335` → `enrichPositionRisk:349` → `applyStopRisk:364`; risk fields `:368-370`; `portfolio_risk_test.go` | `internal/service/portfolio_service.go:349-370` |
 
 ## Gotchas & scars
 
-- **Three compute paths never got migrated to broker-authoritative valuation** (PORTFOLIO-1) — `GetPnL`, `broadcastSnapshot` equity, and `checkRiskLimits` still recompute from mid-quotes, so for broker-synced positions their numbers diverge from what `ListPositions`/`GetPortfolio` show. Recorded as a latent bug in findings; noted here so an agent doesn't copy the deviant loops. Evidence: `portfolio_service.go:366-371,564-571,602-612`.
+- **Three compute paths never got migrated to broker-authoritative valuation** (PORTFOLIO-1) — `GetPnL`, `broadcastSnapshot` equity, and `checkRiskLimits` still recompute from mid-quotes, so for broker-synced positions their numbers diverge from what `ListPositions`/`GetPortfolio` show. Recorded as a latent bug in findings; noted here so an agent doesn't copy the deviant loops. Evidence: `portfolio_service.go` `GetPnL:496`, `broadcastSnapshot:696`, `checkRiskLimits:731` (none call `enrichPositions`).
 
 ## Candidate rules (unverified)
 
 | Candidate | Why suspected | What would confirm it |
 |---|---|---|
-| `buildAccountPortfolio` passes empty `trading_mode`, mixing PAPER+LIVE rows for one account | `portfolio_service.go:811` single site | confirmation that an account_id never spans modes |
+| `buildAccountPortfolio` passes empty `trading_mode`, mixing PAPER+LIVE rows for one account | `portfolio_service.go:947` (`buildAccountPortfolio`) single site | confirmation that an account_id never spans modes |
 
 ## Pointers (already documented or CI-enforced — not restated here)
 
 | What | Where |
 |---|---|
-| pgxpool cap=2 / `DB_POOL_MAX` | `internal/repository/pool.go:15-28`; root pool budget |
-| Header propagation interceptor; `x-user-id` read from header for ownership | `internal/middleware/propagation.go:27-35`; `portfolio_service.go:869,951` (root PLAT-4/PLAT-5) |
-| gRPC keepalive on inter-service dials | `portfolio_service.go:57-61` (root PLAT-N3) |
+| pgxpool cap=2 / `DB_POOL_MAX`; PgBouncer exec-mode (root PLAT-7) | `internal/repository/pool.go:16-41` (`defaultMaxConns:16`, `QueryExecModeExec:37`); root pool budget |
+| Header propagation interceptor; `x-user-id` read from header for ownership | `internal/middleware/propagation.go:27-35` (root PLAT-4/PLAT-5) |
+| gRPC keepalive on inter-service dials | `portfolio_service.go:100` (`clientKeepAlive`, dials `:112-120`) (root PLAT-N3) |
 
 ---
 _Forged by [context-forge](https://github.com/davcs86/agent-plugins). It captures the

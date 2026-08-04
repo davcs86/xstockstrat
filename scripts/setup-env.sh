@@ -194,9 +194,9 @@ fi
 # ── MCP Agent Secret ───────────────────────────────────────────────────────────
 section "MCP Agent Secret (xstockstrat-agent)"
 
-info "Shared secret sent as x-mcp-secret header on all downstream HTTP calls from"
-info "xstockstrat-agent to xstockstrat-ingest, xstockstrat-notify, and xstockstrat-analysis."
-info "Leave empty to disable header enforcement (OAuth 2.1 edge auth is unaffected)."
+info "HMAC-signs the agent's stateless OAuth 2.1 txn blob. Not sent as an outbound header to"
+info "any other service — xstockstrat-ingest, xstockstrat-notify, and xstockstrat-analysis no"
+info "longer read this variable."
 info ""
 
 if [ "$USE_DEFAULTS" = true ]; then
@@ -206,7 +206,7 @@ else
   echo "Would you like to:"
   echo "  1) Generate a secure random secret automatically"
   echo "  2) Provide your own"
-  echo "  3) Skip (leave empty — header enforcement disabled)"
+  echo "  3) Skip (leave empty — OAuth login will fail)"
   echo ""
   echo -n "  → "
   read -r choice
@@ -218,11 +218,11 @@ else
     ;;
   3)
     MCP_AGENT_SECRET=""
-    warn "MCP_AGENT_SECRET left empty — x-mcp-secret header will not be sent."
+    warn "MCP_AGENT_SECRET left empty — OAuth 2.1 login will not work."
     ;;
   *)
     prompt_value MCP_AGENT_SECRET "" \
-      "Your MCP agent secret (must match value set in ingest, notify, and analysis)." \
+      "Your MCP agent secret (used only to sign the agent's OAuth login transactions)." \
       true
     ;;
   esac
@@ -288,8 +288,7 @@ echo "JWT_SECRET='$JWT_SECRET'" >>"$ENV_FILE"
 cat >>"$ENV_FILE" <<'EOF'
 
 # ── MCP Agent Secret (xstockstrat-agent) ───────────────────────────────
-# Shared secret sent as x-mcp-secret header to ingest, notify, and analysis.
-# Leave empty to disable header enforcement.
+# HMAC-signs the agent's stateless OAuth 2.1 txn blob. Not read by any other service.
 EOF
 
 [ -n "$MCP_AGENT_SECRET" ] && echo "MCP_AGENT_SECRET='$MCP_AGENT_SECRET'" >>"$ENV_FILE" ||
@@ -339,9 +338,9 @@ echo "✓ ALPACA_API_KEY        (market data feed)"
 echo "✓ ALPACA_API_SECRET     (market data feed)"
 echo "✓ JWT_SECRET            (authentication tokens)"
 if [ -n "$MCP_AGENT_SECRET" ]; then
-  echo "✓ MCP_AGENT_SECRET      (MCP agent downstream auth)"
+  echo "✓ MCP_AGENT_SECRET      (OAuth txn signing)"
 else
-  echo "- MCP_AGENT_SECRET      (empty — header enforcement disabled)"
+  echo "- MCP_AGENT_SECRET      (empty — OAuth login will fail)"
 fi
 if [ -n "$OTEL_EXPORTER_OTLP_ENDPOINT" ]; then
   echo "✓ OTEL_EXPORTER_OTLP_ENDPOINT (observability — optional)"

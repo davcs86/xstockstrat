@@ -1,73 +1,31 @@
 import { test, expect, type Page } from '@playwright/test';
 import { addAuthCookie } from '../helpers/auth';
+import { mockWatchlists } from '../helpers/watchlistMock';
 
-// Stateful in-memory mock of the PortfolioService watchlist RPCs. The page drives
-// React-Query invalidation after every mutation, so ListWatchlists must reflect the
-// latest state — a static fixture would not survive the create→add→remove→delete flow.
-type Watchlist = {
-  watchlistId: string;
-  userId: string;
-  name: string;
-  description: string;
-  symbols: string[];
-};
+/**
+ * Watchlists (insights) — feature 058/098, per-symbol `(symbol, strategy)` bindings by feature 097.
+ * The transient whole-list readiness strategy picker is replaced by an inline per-symbol strategy
+ * Select; readiness evaluates each symbol against its own bound strategy (unbound → not evaluated).
+ */
+async function createList(page: Page, name: string) {
+  await page.getByPlaceholder('e.g. Tech Large-Cap').fill(name);
+  await page.getByRole('button', { name: 'Create' }).click();
+  await expect(page.getByRole('heading', { name })).toBeVisible({ timeout: 5000 });
+}
 
-async function mockWatchlists(page: Page): Promise<void> {
-  const state: { lists: Watchlist[]; seq: number } = { lists: [], seq: 0 };
+async function addSymbols(page: Page, entry: string) {
+  await page.getByPlaceholder('Add symbols (e.g. AAPL MSFT)').fill(entry);
+  await page.getByRole('button', { name: 'Add' }).click();
+}
 
-  const norm = (syms: string[]): string[] => {
-    const out: string[] = [];
-    for (const s of syms) {
-      const u = (s ?? '').trim().toUpperCase();
-      if (u && !out.includes(u)) out.push(u);
-    }
-    return out;
-  };
-  const find = (id: string) => state.lists.find((w) => w.watchlistId === id);
-  const json = (route: Parameters<Parameters<Page['route']>[1]>[0], body: unknown) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
-
-  await page.route('**/xstockstrat.portfolio.v1.PortfolioService/ListWatchlists', (route) =>
-    json(route, { watchlists: state.lists, page: {} }),
-  );
-
-  await page.route('**/xstockstrat.portfolio.v1.PortfolioService/CreateWatchlist', (route) => {
-    const req = JSON.parse(route.request().postData() ?? '{}');
-    state.seq += 1;
-    const wl: Watchlist = {
-      watchlistId: `wl-${state.seq}`,
-      userId: 'test-user-001',
-      name: req.name ?? '',
-      description: req.description ?? '',
-      symbols: norm(req.symbols ?? []),
-    };
-    state.lists.push(wl);
-    return json(route, { watchlist: wl });
-  });
-
-  await page.route('**/xstockstrat.portfolio.v1.PortfolioService/AddWatchlistSymbols', (route) => {
-    const req = JSON.parse(route.request().postData() ?? '{}');
-    const wl = find(req.watchlistId);
-    if (wl) wl.symbols = norm([...wl.symbols, ...(req.symbols ?? [])]);
-    return json(route, { watchlist: wl });
-  });
-
-  await page.route(
-    '**/xstockstrat.portfolio.v1.PortfolioService/RemoveWatchlistSymbols',
-    (route) => {
-      const req = JSON.parse(route.request().postData() ?? '{}');
-      const wl = find(req.watchlistId);
-      const drop = norm(req.symbols ?? []);
-      if (wl) wl.symbols = wl.symbols.filter((s) => !drop.includes(s));
-      return json(route, { watchlist: wl });
-    },
-  );
-
-  await page.route('**/xstockstrat.portfolio.v1.PortfolioService/DeleteWatchlist', (route) => {
-    const req = JSON.parse(route.request().postData() ?? '{}');
-    state.lists = state.lists.filter((w) => w.watchlistId !== req.watchlistId);
-    return json(route, {});
-  });
+/** Bind a symbol's inline strategy Select to a strategy (persisted via UpdateWatchlist).
+ * Waits for the mutation+refetch round-trip (the trigger reflects the selection) before returning,
+ * so binding several symbols in a row can't send a stale binding set that resets an earlier one. */
+async function bindStrategy(page: Page, symbol: string, optionName = 'Live Test Strategy') {
+  const select = page.getByTestId(`binding-${symbol}`).getByLabel(`Strategy for ${symbol}`);
+  await select.click();
+  await page.getByRole('option', { name: optionName }).click();
+  await expect(select).toContainText(optionName, { timeout: 5000 });
 }
 
 test.describe('Watchlists (insights)', () => {
@@ -77,22 +35,17 @@ test.describe('Watchlists (insights)', () => {
     await page.goto('/insights/watchlists');
 
     await expect(page.getByRole('heading', { name: 'Watchlists' })).toBeVisible({ timeout: 5000 });
-
-    // Create.
-    await page.getByPlaceholder('e.g. Tech Large-Cap').fill('My List');
-    await page.getByRole('button', { name: 'Create' }).click();
-    await expect(page.getByRole('heading', { name: 'My List' })).toBeVisible({ timeout: 5000 });
+    await createList(page, 'My List');
 
     // Add two symbols (lowercase input proves server-side uppercase via the mock).
-    await page.getByPlaceholder('Add symbols (e.g. AAPL MSFT)').fill('aapl msft');
-    await page.getByRole('button', { name: 'Add' }).click();
-    await expect(page.getByText('AAPL', { exact: true })).toBeVisible({ timeout: 5000 });
-    await expect(page.getByText('MSFT', { exact: true })).toBeVisible({ timeout: 5000 });
+    await addSymbols(page, 'aapl msft');
+    await expect(page.getByTestId('binding-AAPL')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('binding-MSFT')).toBeVisible({ timeout: 5000 });
 
     // Remove one.
     await page.getByRole('button', { name: 'Remove AAPL' }).click();
-    await expect(page.getByText('AAPL', { exact: true })).toHaveCount(0, { timeout: 5000 });
-    await expect(page.getByText('MSFT', { exact: true })).toBeVisible();
+    await expect(page.getByTestId('binding-AAPL')).toHaveCount(0, { timeout: 5000 });
+    await expect(page.getByTestId('binding-MSFT')).toBeVisible();
 
     // Delete the list (confirm() auto-accepted).
     page.on('dialog', (d) => d.accept());
@@ -103,25 +56,92 @@ test.describe('Watchlists (insights)', () => {
     });
   });
 
-  test('per-watchlist readiness against a chosen strategy (feature 083)', async ({ page }) => {
+  test('per-symbol strategy binding drives that symbol’s readiness and persists (feature 097)', async ({
+    page,
+  }) => {
     await addAuthCookie(page);
     await mockWatchlists(page);
     await page.goto('/insights/watchlists');
 
-    await page.getByPlaceholder('e.g. Tech Large-Cap').fill('Ready List');
-    await page.getByRole('button', { name: 'Create' }).click();
-    await page.getByPlaceholder('Add symbols (e.g. AAPL MSFT)').fill('AAPL');
-    await page.getByRole('button', { name: 'Add' }).click();
+    await createList(page, 'Ready List');
+    await addSymbols(page, 'AAPL');
 
     const readiness = page.getByTestId('watchlist-readiness');
     await expect(readiness).toBeVisible({ timeout: 5000 });
+    // Unbound until a strategy is chosen — never a fabricated binding (P-03).
+    await expect(page.getByTestId('unbound-AAPL')).toBeVisible();
 
-    // Choose a strategy → EvaluateReadiness runs over the watchlist symbols.
-    await page.getByLabel('Readiness strategy').click();
-    await page.getByRole('option', { name: 'Live Test Strategy' }).click();
-
-    await expect(readiness.getByText('AAPL')).toBeVisible({ timeout: 5000 });
-    // 2 of 3 conditions pass → "1 away" (readiness bar + blocking-condition row).
+    // Bind AAPL to a strategy → EvaluateReadiness runs for AAPL against that strategy.
+    await bindStrategy(page, 'AAPL');
+    await expect(readiness.getByTestId('readiness-row-AAPL')).toBeVisible({ timeout: 5000 });
+    // 2 of 3 conditions pass → "1 away"; AAPL is on the opportunity queue → "in queue".
     await expect(readiness.getByText('1 away')).toBeVisible();
+    await expect(readiness.getByTestId('in-queue')).toBeVisible();
+
+    // The binding is persisted: a reload re-fetches it (the Select keeps its strategy, still evaluated).
+    await page.reload();
+    await expect(readiness.getByTestId('readiness-row-AAPL')).toBeVisible({ timeout: 8000 });
+    await expect(page.getByTestId('unbound-AAPL')).toHaveCount(0);
+  });
+
+  test('master-detail: selecting a list swaps the detail pane (feature 098)', async ({ page }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page);
+    await page.goto('/insights/watchlists');
+    await expect(page.getByRole('heading', { name: 'Watchlists' })).toBeVisible({ timeout: 5000 });
+
+    await createList(page, 'Alpha');
+    await createList(page, 'Beta'); // create auto-selects the newest
+
+    // The master column lists both; selecting Alpha swaps the detail heading back.
+    const master = page.getByTestId('watchlist-master');
+    await master.getByRole('button', { name: /Alpha/ }).click();
+    await expect(page.getByRole('heading', { name: 'Alpha' })).toBeVisible({ timeout: 5000 });
+
+    // "Build from screener" resolves to the registered same-segment route (C-10(a)).
+    await expect(page.getByTestId('build-from-screener')).toHaveAttribute(
+      'href',
+      '/insights/screener',
+    );
+  });
+
+  test('readiness rollup buckets sum to the bound symbol count (feature 098, AC-6)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page);
+    await page.goto('/insights/watchlists');
+
+    // One symbol per bucket (ready / watching / quiet / no-data) via the mock bucket overrides.
+    await createList(page, 'Buckets');
+    await addSymbols(page, 'READY1 WATCH1 QUIET1 NODATA1');
+    // Bind all four to the same strategy so they enter the readiness roll-up.
+    for (const sym of ['READY1', 'WATCH1', 'QUIET1', 'NODATA1']) {
+      await bindStrategy(page, sym);
+    }
+
+    const readiness = page.getByTestId('watchlist-readiness');
+    const rollup = readiness.getByTestId('readiness-rollup');
+    // 1 ready · 1 watching · 1 quiet · 1 no-data — the four counts sum to the 4 bound symbols.
+    await expect(rollup).toContainText('1 ready', { timeout: 5000 });
+    await expect(rollup).toContainText('1 watching');
+    await expect(rollup).toContainText('1 quiet');
+    await expect(rollup).toContainText('1 no-data');
+    // The un-evaluable symbol renders "no data", never "0 away".
+    await expect(readiness.getByText('no data')).toBeVisible();
+  });
+
+  test('no LAST / CHG / Quotes livestream UI is present (feature 098, AC-8 — deferred to 099)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page);
+    await page.goto('/insights/watchlists');
+    await createList(page, 'NoQuotes');
+
+    // The live-quote surfaces (LAST/CHG columns, a Quotes tab) belong to 099-watchlist-live-quotes.
+    await expect(page.getByRole('columnheader', { name: 'LAST' })).toHaveCount(0);
+    await expect(page.getByRole('columnheader', { name: /CHG/ })).toHaveCount(0);
+    await expect(page.getByRole('tab', { name: 'Quotes' })).toHaveCount(0);
   });
 });

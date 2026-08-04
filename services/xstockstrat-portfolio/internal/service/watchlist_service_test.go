@@ -36,10 +36,29 @@ func clone(wl *portfoliov1.Watchlist) *portfoliov1.Watchlist {
 	return proto.Clone(wl).(*portfoliov1.Watchlist)
 }
 
-func (f *fakeWatchlistStore) Create(_ context.Context, userID, name, description string, symbols []string) (*portfoliov1.Watchlist, error) {
+// fakeSymbols mirrors bindings to the flat symbols list (as the repo does).
+func fakeSymbols(binds []*portfoliov1.WatchlistBinding) []string {
+	if len(binds) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(binds))
+	for _, b := range binds {
+		out = append(out, b.GetSymbol())
+	}
+	return out
+}
+
+// setBindings stores bindings and keeps the flat symbols mirror in sync.
+func setBindings(wl *portfoliov1.Watchlist, binds []*portfoliov1.WatchlistBinding) {
+	wl.Bindings = binds
+	wl.Symbols = fakeSymbols(binds) //nolint:staticcheck // SA1019: deprecated symbols mirror intentionally retained for old clients (feature 097)
+}
+
+func (f *fakeWatchlistStore) Create(_ context.Context, userID, name, description string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error) {
 	f.seq++
 	id := fmt.Sprintf("wl-%d", f.seq)
-	wl := &portfoliov1.Watchlist{WatchlistId: id, UserId: userID, Name: name, Description: description, Symbols: append([]string{}, symbols...)}
+	wl := &portfoliov1.Watchlist{WatchlistId: id, UserId: userID, Name: name, Description: description}
+	setBindings(wl, append([]*portfoliov1.WatchlistBinding{}, bindings...))
 	f.byID[id] = wl
 	return clone(wl), nil
 }
@@ -62,12 +81,13 @@ func (f *fakeWatchlistStore) ListByUser(_ context.Context, userID string, _ int,
 	return out, "", nil
 }
 
-func (f *fakeWatchlistStore) Update(_ context.Context, watchlistID, name, description string, symbols []string) (*portfoliov1.Watchlist, error) {
+func (f *fakeWatchlistStore) Update(_ context.Context, watchlistID, name, description string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error) {
 	wl, ok := f.byID[watchlistID]
 	if !ok {
 		return nil, repository.ErrWatchlistNotFound
 	}
-	wl.Name, wl.Description, wl.Symbols = name, description, append([]string{}, symbols...)
+	wl.Name, wl.Description = name, description
+	setBindings(wl, append([]*portfoliov1.WatchlistBinding{}, bindings...))
 	return clone(wl), nil
 }
 
@@ -79,21 +99,23 @@ func (f *fakeWatchlistStore) Delete(_ context.Context, watchlistID string) error
 	return nil
 }
 
-func (f *fakeWatchlistStore) AddSymbols(_ context.Context, watchlistID string, symbols []string) (*portfoliov1.Watchlist, error) {
+func (f *fakeWatchlistStore) AddSymbols(_ context.Context, watchlistID string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error) {
 	wl, ok := f.byID[watchlistID]
 	if !ok {
 		return nil, repository.ErrWatchlistNotFound
 	}
 	seen := map[string]struct{}{}
-	for _, s := range wl.Symbols {
-		seen[s] = struct{}{}
+	for _, b := range wl.Bindings {
+		seen[b.GetSymbol()] = struct{}{}
 	}
-	for _, s := range symbols {
-		if _, dup := seen[s]; !dup {
-			wl.Symbols = append(wl.Symbols, s)
-			seen[s] = struct{}{}
+	// ON CONFLICT DO NOTHING: an existing symbol keeps its stored strategy_id (fails-080).
+	for _, b := range bindings {
+		if _, dup := seen[b.GetSymbol()]; !dup {
+			wl.Bindings = append(wl.Bindings, &portfoliov1.WatchlistBinding{Symbol: b.GetSymbol(), StrategyId: b.GetStrategyId()})
+			seen[b.GetSymbol()] = struct{}{}
 		}
 	}
+	wl.Symbols = fakeSymbols(wl.Bindings) //nolint:staticcheck // SA1019: deprecated symbols mirror intentionally retained for old clients (feature 097)
 	return clone(wl), nil
 }
 
@@ -106,13 +128,14 @@ func (f *fakeWatchlistStore) RemoveSymbols(_ context.Context, watchlistID string
 	for _, s := range symbols {
 		drop[s] = struct{}{}
 	}
-	kept := wl.Symbols[:0]
-	for _, s := range wl.Symbols {
-		if _, d := drop[s]; !d {
-			kept = append(kept, s)
+	kept := wl.Bindings[:0]
+	for _, b := range wl.Bindings {
+		if _, d := drop[b.GetSymbol()]; !d {
+			kept = append(kept, b)
 		}
 	}
-	wl.Symbols = kept
+	wl.Bindings = kept
+	wl.Symbols = fakeSymbols(wl.Bindings) //nolint:staticcheck // SA1019: deprecated symbols mirror intentionally retained for old clients (feature 097)
 	return clone(wl), nil
 }
 
@@ -204,14 +227,14 @@ func TestCreateGetRoundTrip_NormalizesSymbols(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if got := created.Watchlist.Symbols; len(got) != 2 || got[0] != "AAPL" || got[1] != "MSFT" {
+	if got := created.Watchlist.Symbols; len(got) != 2 || got[0] != "AAPL" || got[1] != "MSFT" { //nolint:staticcheck // SA1019: deprecated symbols mirror intentionally retained for old clients (feature 097)
 		t.Fatalf("symbols not normalized: %v", got)
 	}
 	got, err := svc.GetWatchlist(ctx, &portfoliov1.GetWatchlistRequest{WatchlistId: created.Watchlist.WatchlistId})
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if got.Watchlist.Name != "Tech" || len(got.Watchlist.Symbols) != 2 {
+	if got.Watchlist.Name != "Tech" || len(got.Watchlist.Symbols) != 2 { //nolint:staticcheck // SA1019: deprecated symbols mirror intentionally retained for old clients (feature 097)
 		t.Fatalf("round-trip mismatch: %+v", got.Watchlist)
 	}
 }
@@ -322,5 +345,103 @@ func TestLedgerFailure_NonFatal(t *testing.T) {
 	}
 	if ledger.calls == 0 {
 		t.Fatalf("expected ledger emit to be attempted")
+	}
+}
+
+// ─── feature 097: (symbol, strategy) bindings ────────────────────────────────
+
+func bindingFor(t *testing.T, wl *portfoliov1.Watchlist, symbol string) *portfoliov1.WatchlistBinding {
+	t.Helper()
+	for _, b := range wl.GetBindings() {
+		if b.GetSymbol() == symbol {
+			return b
+		}
+	}
+	t.Fatalf("no binding for %q in %v", symbol, wl.GetBindings())
+	return nil
+}
+
+// Create with bindings round-trips the strategy_id and mirrors the flat symbols list.
+func TestBindings_CreateGetRoundTrip(t *testing.T) {
+	svc := newSvc(newFakeStore(), wideCaps(), &fakeLedger{})
+	ctx := ctxWithUser(t, "userA")
+
+	created, err := svc.CreateWatchlist(ctx, &portfoliov1.CreateWatchlistRequest{
+		Name: "Bound",
+		Bindings: []*portfoliov1.WatchlistBinding{
+			{Symbol: "aapl", StrategyId: "strat-x"},
+			{Symbol: "MSFT"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	got, err := svc.GetWatchlist(ctx, &portfoliov1.GetWatchlistRequest{WatchlistId: created.Watchlist.WatchlistId})
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if b := bindingFor(t, got.Watchlist, "AAPL"); b.GetStrategyId() != "strat-x" {
+		t.Fatalf("AAPL strategy_id: got %q want strat-x", b.GetStrategyId())
+	}
+	if b := bindingFor(t, got.Watchlist, "MSFT"); b.GetStrategyId() != "" {
+		t.Fatalf("MSFT strategy_id: got %q want unbound", b.GetStrategyId())
+	}
+	if syms := got.Watchlist.GetSymbols(); len(syms) != 2 || syms[0] != "AAPL" || syms[1] != "MSFT" { //nolint:staticcheck // SA1019: deprecated symbols mirror intentionally retained for old clients (feature 097)
+		t.Fatalf("flat symbols mirror: got %v want [AAPL MSFT]", syms)
+	}
+}
+
+// fails-080 regression: a legacy flat `symbols` add must not clear a prior binding's strategy_id.
+func TestBindings_LegacyAddDoesNotClearStrategy(t *testing.T) {
+	svc := newSvc(newFakeStore(), wideCaps(), &fakeLedger{})
+	ctx := ctxWithUser(t, "userA")
+
+	created, err := svc.CreateWatchlist(ctx, &portfoliov1.CreateWatchlistRequest{Name: "L"})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	id := created.Watchlist.WatchlistId
+
+	if _, err := svc.AddWatchlistSymbols(ctx, &portfoliov1.AddWatchlistSymbolsRequest{
+		WatchlistId: id,
+		Bindings:    []*portfoliov1.WatchlistBinding{{Symbol: "AAPL", StrategyId: "strat-x"}},
+	}); err != nil {
+		t.Fatalf("add bound: %v", err)
+	}
+	// Legacy flat write of a different symbol must leave AAPL's binding intact.
+	after, err := svc.AddWatchlistSymbols(ctx, &portfoliov1.AddWatchlistSymbolsRequest{
+		WatchlistId: id, Symbols: []string{"MSFT"},
+	})
+	if err != nil {
+		t.Fatalf("add flat: %v", err)
+	}
+	if b := bindingFor(t, after.Watchlist, "AAPL"); b.GetStrategyId() != "strat-x" {
+		t.Fatalf("080-trap: AAPL strategy_id cleared by legacy add: got %q want strat-x", b.GetStrategyId())
+	}
+}
+
+// Update replaces the full binding set.
+func TestBindings_UpdateReplaces(t *testing.T) {
+	svc := newSvc(newFakeStore(), wideCaps(), &fakeLedger{})
+	ctx := ctxWithUser(t, "userA")
+
+	created, err := svc.CreateWatchlist(ctx, &portfoliov1.CreateWatchlistRequest{
+		Name: "R", Bindings: []*portfoliov1.WatchlistBinding{{Symbol: "AAPL", StrategyId: "strat-x"}},
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	updated, err := svc.UpdateWatchlist(ctx, &portfoliov1.UpdateWatchlistRequest{
+		WatchlistId: created.Watchlist.WatchlistId, Name: "R",
+		Bindings: []*portfoliov1.WatchlistBinding{{Symbol: "NVDA", StrategyId: "strat-y"}},
+	})
+	if err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if syms := updated.Watchlist.GetSymbols(); len(syms) != 1 || syms[0] != "NVDA" { //nolint:staticcheck // SA1019: deprecated symbols mirror intentionally retained for old clients (feature 097)
+		t.Fatalf("update replace: got %v want [NVDA]", syms)
+	}
+	if b := bindingFor(t, updated.Watchlist, "NVDA"); b.GetStrategyId() != "strat-y" {
+		t.Fatalf("NVDA strategy_id: got %q want strat-y", b.GetStrategyId())
 	}
 }

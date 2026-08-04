@@ -175,10 +175,16 @@ class StrategyEvaluator:
         symbol: str,
         signals_map: dict[str, list]
         | None = None,  # reserved (entry-rule leaves are component refs)
+        *,
+        rule: str = "entry",
     ) -> dict:
-        """Additive sibling (feature 083). Trace the ``entry_rule``'s condition leaves at the
-        LAST bar — each leaf's ``lhs_value``, ``threshold``, ``fn``, PASS/SOFT/FAIL ``state`` and
+        """Additive sibling (feature 083). Trace the ``entry_rule`` (default) or, with
+        ``rule="exit"`` (feature 097), the ``exit_rule`` condition leaves at the LAST bar —
+        each leaf's ``lhs_value``, ``threshold``, ``fn``, PASS/SOFT/FAIL ``state`` and
         normalized ``distance_to_threshold`` — plus a deterministic conviction ordinal.
+
+        ``rule`` selects which rule tree is traced (``"entry"`` for signal/watchlist candidates,
+        ``"exit"`` for held+attributed candidates); the default preserves every existing caller.
 
         Does NOT touch ``evaluate`` / ``evaluate_with_series`` / ``_eval_condition``'s bool
         contract — the live loop and the frozen backtest conviction depend on them
@@ -199,9 +205,10 @@ class StrategyEvaluator:
             component_series[comp.ref_name] = primary
             for series_name, series in series_map.items():
                 component_series[f"{comp.ref_name}.{series_name}"] = series
-        entry_rule = json.loads(definition.entry_rule) if definition.entry_rule else None
+        rule_src = definition.exit_rule if rule == "exit" else definition.entry_rule
+        parsed_rule = json.loads(rule_src) if rule_src else None
         last = len(bars) - 1
-        leaves = list(_iter_leaves(entry_rule)) if entry_rule else []
+        leaves = list(_iter_leaves(parsed_rule)) if parsed_rule else []
         evals = [_eval_leaf_traced(leaf, component_series, last) for leaf in leaves]
         return _readiness_from_evals(symbol, evals)
 

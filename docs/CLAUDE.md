@@ -38,6 +38,5 @@ Operational runbooks, one-time setup guides, implementation roadmap, and reusabl
 | Set up Alpaca API keys | `setup/alpaca.md` |
 | Create DO App Platform dev/prod apps | `setup/digitalocean.md` |
 | Wire OpenTelemetry to Grafana Cloud | `setup/grafana-cloud.md` |
-| Import and configure n8n workflows | `setup/n8n.md` |
 | See the full implementation plan and phase status | `roadmap/implementation-roadmap.md` |
 | Understand why a Phase 3–7 service was built a certain way | `roadmap/phase[3-7]-deviations.md` |

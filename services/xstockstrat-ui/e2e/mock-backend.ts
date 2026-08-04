@@ -49,6 +49,20 @@ export const TRADER_MOCK_PORT = 9091;
 export const INSIGHTS_MOCK_PORT = 9092;
 export const CONFIG_UI_MOCK_PORT = 9093;
 
+// feature 098 — per-symbol readiness bucket overrides for the watchlists rollup e2e. Keyed by
+// dedicated symbols the rollup test creates (never AAPL/MSFT/… asserted by other specs), so the
+// default `symbolReadiness` (2/3 → "watching") is untouched for every other consumer. Fields spread
+// over the fixture in the `evaluateReadiness` handler.
+const READINESS_BUCKET_OVERRIDE: Record<
+  string,
+  { passingConditions?: number; totalConditions?: number }
+> = {
+  READY1: { passingConditions: 3, totalConditions: 3 }, // ready (firing)
+  WATCH1: { passingConditions: 1, totalConditions: 3 }, // watching
+  QUIET1: { passingConditions: 0, totalConditions: 3 }, // quiet
+  NODATA1: { passingConditions: 0, totalConditions: 0 }, // no-data (un-evaluable)
+};
+
 let traderServer: http2.Http2Server | null = null;
 let insightsServer: http2.Http2Server | null = null;
 let configUiServer: http2.Http2Server | null = null;
@@ -486,9 +500,26 @@ export async function startMockBackend(): Promise<void> {
           const min = req.minConviction ?? 0;
           return { opportunities: OPPORTUNITIES.filter((o) => o.conviction >= min) };
         },
+        // feature 097 — the persisted-disposition RPC exists on the server so a call resolves.
+        // Stateful snooze/dismiss *persistence* is proven per-test via page.route isolation
+        // (opportunities.spec.ts) — the shared server can't hold per-test state under
+        // Playwright fullyParallel without cross-worker pollution (mirrors watchlistMock.ts).
+        async setOpportunityAction() {
+          return {};
+        },
         // feature 083 — traced condition readiness for the Signal-detail panel.
+        // feature 098 — per-symbol bucket overrides let the watchlists rollup e2e exercise all four
+        // ready/watching/quiet/no-data states. `symbolReadiness` stays single-arg (the `.map` below
+        // is an arrow, not point-free, so the array index is never passed as a second argument);
+        // overrides are spread at this call site so the shared AAPL default is unchanged.
         async evaluateReadiness(req) {
-          return { readiness: (req.symbols.length ? req.symbols : ['AAPL']).map(symbolReadiness) };
+          const syms = req.symbols.length ? req.symbols : ['AAPL'];
+          return {
+            readiness: syms.map((s) => ({
+              ...symbolReadiness(s),
+              ...(READINESS_BUCKET_OVERRIDE[s] ?? {}),
+            })),
+          };
         },
         // feature 083 — per-strategy analytics for the Engine → Strategies detail.
         async getStrategyAnalytics(req) {
@@ -721,6 +752,12 @@ export async function startMockBackend(): Promise<void> {
             // Feature 069: only this id carries a non-default cooldown (edit-prepopulation e2e);
             // every other id leaves cooldownDays unset so the "edit unset strategy" case stays honest.
             ...(req.strategyId === 'strat-cooldown-14' ? { cooldownDays: 14 } : {}),
+            // Feature 097: this id carries a signal_params symbol universe so the wizard's
+            // preserve-on-save regression guard (ANALYSIS-3) has real symbols to protect. The id
+            // is underscore-only so it passes the wizard's id validation and Next can advance.
+            ...(req.strategyId === 'strat_signal_universe'
+              ? { signalParams: { symbols: ['AAPL', 'MSFT'] } }
+              : {}),
           };
         },
       });

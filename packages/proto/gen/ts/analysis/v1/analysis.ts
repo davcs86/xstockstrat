@@ -708,6 +708,71 @@ export function conditionStateToNumber(object: ConditionState): number {
   }
 }
 
+/** The persisted per-user disposition of a queued opportunity (feature 097). Closed set → enum (C-04). */
+export enum OpportunityAction {
+  OPPORTUNITY_ACTION_UNSPECIFIED = "OPPORTUNITY_ACTION_UNSPECIFIED",
+  /** OPPORTUNITY_ACTION_SNOOZE - hide until snooze_until (bounded) */
+  OPPORTUNITY_ACTION_SNOOZE = "OPPORTUNITY_ACTION_SNOOZE",
+  /** OPPORTUNITY_ACTION_DISMISS - hide indefinitely */
+  OPPORTUNITY_ACTION_DISMISS = "OPPORTUNITY_ACTION_DISMISS",
+  /** OPPORTUNITY_ACTION_TAKE - user acted on it (feeds queue_share/taken reconciliation) */
+  OPPORTUNITY_ACTION_TAKE = "OPPORTUNITY_ACTION_TAKE",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function opportunityActionFromJSON(object: any): OpportunityAction {
+  switch (object) {
+    case 0:
+    case "OPPORTUNITY_ACTION_UNSPECIFIED":
+      return OpportunityAction.OPPORTUNITY_ACTION_UNSPECIFIED;
+    case 1:
+    case "OPPORTUNITY_ACTION_SNOOZE":
+      return OpportunityAction.OPPORTUNITY_ACTION_SNOOZE;
+    case 2:
+    case "OPPORTUNITY_ACTION_DISMISS":
+      return OpportunityAction.OPPORTUNITY_ACTION_DISMISS;
+    case 3:
+    case "OPPORTUNITY_ACTION_TAKE":
+      return OpportunityAction.OPPORTUNITY_ACTION_TAKE;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return OpportunityAction.UNRECOGNIZED;
+  }
+}
+
+export function opportunityActionToJSON(object: OpportunityAction): string {
+  switch (object) {
+    case OpportunityAction.OPPORTUNITY_ACTION_UNSPECIFIED:
+      return "OPPORTUNITY_ACTION_UNSPECIFIED";
+    case OpportunityAction.OPPORTUNITY_ACTION_SNOOZE:
+      return "OPPORTUNITY_ACTION_SNOOZE";
+    case OpportunityAction.OPPORTUNITY_ACTION_DISMISS:
+      return "OPPORTUNITY_ACTION_DISMISS";
+    case OpportunityAction.OPPORTUNITY_ACTION_TAKE:
+      return "OPPORTUNITY_ACTION_TAKE";
+    case OpportunityAction.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function opportunityActionToNumber(object: OpportunityAction): number {
+  switch (object) {
+    case OpportunityAction.OPPORTUNITY_ACTION_UNSPECIFIED:
+      return 0;
+    case OpportunityAction.OPPORTUNITY_ACTION_SNOOZE:
+      return 1;
+    case OpportunityAction.OPPORTUNITY_ACTION_DISMISS:
+      return 2;
+    case OpportunityAction.OPPORTUNITY_ACTION_TAKE:
+      return 3;
+    case OpportunityAction.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 export interface RunBacktestRequest {
   strategyId: string;
   range?: TimeRange | undefined;
@@ -1090,7 +1155,13 @@ export interface Opportunity {
   thesis: string;
   strategyId: string;
   source: string;
-  validUntil?: Date | undefined;
+  validUntil?:
+    | Date
+    | undefined;
+  /** server-authoritative opaque key = user|symbol_norm|strategy_id (feature 097). Client echoes it verbatim to SetOpportunityAction, never derives it. */
+  opportunityKey: string;
+  /** contributing origins for a de-duplicated row (signal source(s) / "position" / "watchlist") */
+  provenance: string[];
 }
 
 /** One evaluated condition leaf from the traced evaluator (feature 083). */
@@ -1151,6 +1222,21 @@ export interface EvaluateReadinessRequest {
 
 export interface EvaluateReadinessResponse {
   readiness: SymbolReadiness[];
+}
+
+/**
+ * user_id is intentionally absent — taken from the propagated x-user-id header server-side
+ * (match the ListOpportunitiesRequest convention), never from the wire.
+ */
+export interface SetOpportunityActionRequest {
+  /** the server-issued key, echoed verbatim */
+  opportunityKey: string;
+  action: OpportunityAction;
+  /** set only for SNOOZE; a bounded "snooze until" */
+  snoozeUntil?: Date | undefined;
+}
+
+export interface SetOpportunityActionResponse {
 }
 
 export interface GetStrategyAnalyticsRequest {
@@ -6056,6 +6142,8 @@ function createBaseOpportunity(): Opportunity {
     strategyId: "",
     source: "",
     validUntil: undefined,
+    opportunityKey: "",
+    provenance: [],
   };
 }
 
@@ -6087,6 +6175,12 @@ export const Opportunity: MessageFns<Opportunity> = {
     }
     if (message.validUntil !== undefined) {
       Timestamp.encode(toTimestamp(message.validUntil), writer.uint32(74).fork()).join();
+    }
+    if (message.opportunityKey !== "") {
+      writer.uint32(82).string(message.opportunityKey);
+    }
+    for (const v of message.provenance) {
+      writer.uint32(90).string(v!);
     }
     return writer;
   },
@@ -6170,6 +6264,22 @@ export const Opportunity: MessageFns<Opportunity> = {
           message.validUntil = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
           continue;
         }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          message.opportunityKey = reader.string();
+          continue;
+        }
+        case 11: {
+          if (tag !== 90) {
+            break;
+          }
+
+          message.provenance.push(reader.string());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -6208,6 +6318,14 @@ export const Opportunity: MessageFns<Opportunity> = {
         : isSet(object.valid_until)
         ? fromJsonTimestamp(object.valid_until)
         : undefined,
+      opportunityKey: isSet(object.opportunityKey)
+        ? globalThis.String(object.opportunityKey)
+        : isSet(object.opportunity_key)
+        ? globalThis.String(object.opportunity_key)
+        : "",
+      provenance: globalThis.Array.isArray(object?.provenance)
+        ? object.provenance.map((e: any) => globalThis.String(e))
+        : [],
     };
   },
 
@@ -6240,6 +6358,12 @@ export const Opportunity: MessageFns<Opportunity> = {
     if (message.validUntil !== undefined) {
       obj.validUntil = message.validUntil.toISOString();
     }
+    if (message.opportunityKey !== "") {
+      obj.opportunityKey = message.opportunityKey;
+    }
+    if (message.provenance?.length) {
+      obj.provenance = message.provenance;
+    }
     return obj;
   },
 
@@ -6257,6 +6381,8 @@ export const Opportunity: MessageFns<Opportunity> = {
     message.strategyId = object.strategyId ?? "";
     message.source = object.source ?? "";
     message.validUntil = object.validUntil ?? undefined;
+    message.opportunityKey = object.opportunityKey ?? "";
+    message.provenance = object.provenance?.map((e) => e) || [];
     return message;
   },
 };
@@ -7034,6 +7160,151 @@ export const EvaluateReadinessResponse: MessageFns<EvaluateReadinessResponse> = 
   },
 };
 
+function createBaseSetOpportunityActionRequest(): SetOpportunityActionRequest {
+  return { opportunityKey: "", action: OpportunityAction.OPPORTUNITY_ACTION_UNSPECIFIED, snoozeUntil: undefined };
+}
+
+export const SetOpportunityActionRequest: MessageFns<SetOpportunityActionRequest> = {
+  encode(message: SetOpportunityActionRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.opportunityKey !== "") {
+      writer.uint32(10).string(message.opportunityKey);
+    }
+    if (message.action !== OpportunityAction.OPPORTUNITY_ACTION_UNSPECIFIED) {
+      writer.uint32(16).int32(opportunityActionToNumber(message.action));
+    }
+    if (message.snoozeUntil !== undefined) {
+      Timestamp.encode(toTimestamp(message.snoozeUntil), writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetOpportunityActionRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSetOpportunityActionRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.opportunityKey = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.action = opportunityActionFromJSON(reader.int32());
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.snoozeUntil = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): SetOpportunityActionRequest {
+    return {
+      opportunityKey: isSet(object.opportunityKey)
+        ? globalThis.String(object.opportunityKey)
+        : isSet(object.opportunity_key)
+        ? globalThis.String(object.opportunity_key)
+        : "",
+      action: isSet(object.action)
+        ? opportunityActionFromJSON(object.action)
+        : OpportunityAction.OPPORTUNITY_ACTION_UNSPECIFIED,
+      snoozeUntil: isSet(object.snoozeUntil)
+        ? fromJsonTimestamp(object.snoozeUntil)
+        : isSet(object.snooze_until)
+        ? fromJsonTimestamp(object.snooze_until)
+        : undefined,
+    };
+  },
+
+  toJSON(message: SetOpportunityActionRequest): unknown {
+    const obj: any = {};
+    if (message.opportunityKey !== "") {
+      obj.opportunityKey = message.opportunityKey;
+    }
+    if (message.action !== OpportunityAction.OPPORTUNITY_ACTION_UNSPECIFIED) {
+      obj.action = opportunityActionToJSON(message.action);
+    }
+    if (message.snoozeUntil !== undefined) {
+      obj.snoozeUntil = message.snoozeUntil.toISOString();
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SetOpportunityActionRequest>, I>>(base?: I): SetOpportunityActionRequest {
+    return SetOpportunityActionRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SetOpportunityActionRequest>, I>>(object: I): SetOpportunityActionRequest {
+    const message = createBaseSetOpportunityActionRequest();
+    message.opportunityKey = object.opportunityKey ?? "";
+    message.action = object.action ?? OpportunityAction.OPPORTUNITY_ACTION_UNSPECIFIED;
+    message.snoozeUntil = object.snoozeUntil ?? undefined;
+    return message;
+  },
+};
+
+function createBaseSetOpportunityActionResponse(): SetOpportunityActionResponse {
+  return {};
+}
+
+export const SetOpportunityActionResponse: MessageFns<SetOpportunityActionResponse> = {
+  encode(_: SetOpportunityActionResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): SetOpportunityActionResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseSetOpportunityActionResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(_: any): SetOpportunityActionResponse {
+    return {};
+  },
+
+  toJSON(_: SetOpportunityActionResponse): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<SetOpportunityActionResponse>, I>>(base?: I): SetOpportunityActionResponse {
+    return SetOpportunityActionResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<SetOpportunityActionResponse>, I>>(_: I): SetOpportunityActionResponse {
+    const message = createBaseSetOpportunityActionResponse();
+    return message;
+  },
+};
+
 function createBaseGetStrategyAnalyticsRequest(): GetStrategyAnalyticsRequest {
   return { strategyId: "" };
 }
@@ -7260,6 +7531,18 @@ export const AnalysisServiceService = {
       Buffer.from(EvaluateReadinessResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): EvaluateReadinessResponse => EvaluateReadinessResponse.decode(value),
   },
+  /** Persist a per-user disposition (snooze/dismiss/take) against a server-issued opportunity_key (feature 097). */
+  setOpportunityAction: {
+    path: "/xstockstrat.analysis.v1.AnalysisService/SetOpportunityAction" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: SetOpportunityActionRequest): Buffer =>
+      Buffer.from(SetOpportunityActionRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): SetOpportunityActionRequest => SetOpportunityActionRequest.decode(value),
+    responseSerialize: (value: SetOpportunityActionResponse): Buffer =>
+      Buffer.from(SetOpportunityActionResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): SetOpportunityActionResponse => SetOpportunityActionResponse.decode(value),
+  },
   /** Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share). */
   getStrategyAnalytics: {
     path: "/xstockstrat.analysis.v1.AnalysisService/GetStrategyAnalytics" as const,
@@ -7305,6 +7588,8 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
    * distance-to-threshold. Feeds Signal-detail, Watchlist readiness, and the queue.
    */
   evaluateReadiness: handleUnaryCall<EvaluateReadinessRequest, EvaluateReadinessResponse>;
+  /** Persist a per-user disposition (snooze/dismiss/take) against a server-issued opportunity_key (feature 097). */
+  setOpportunityAction: handleUnaryCall<SetOpportunityActionRequest, SetOpportunityActionResponse>;
   /** Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share). */
   getStrategyAnalytics: handleUnaryCall<GetStrategyAnalyticsRequest, StrategyAnalytics>;
 }
@@ -7536,6 +7821,22 @@ export interface AnalysisServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: EvaluateReadinessResponse) => void,
+  ): ClientUnaryCall;
+  /** Persist a per-user disposition (snooze/dismiss/take) against a server-issued opportunity_key (feature 097). */
+  setOpportunityAction(
+    request: SetOpportunityActionRequest,
+    callback: (error: ServiceError | null, response: SetOpportunityActionResponse) => void,
+  ): ClientUnaryCall;
+  setOpportunityAction(
+    request: SetOpportunityActionRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: SetOpportunityActionResponse) => void,
+  ): ClientUnaryCall;
+  setOpportunityAction(
+    request: SetOpportunityActionRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: SetOpportunityActionResponse) => void,
   ): ClientUnaryCall;
   /** Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share). */
   getStrategyAnalytics(

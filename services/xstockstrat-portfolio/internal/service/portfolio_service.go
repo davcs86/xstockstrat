@@ -1040,12 +1040,12 @@ const (
 // WatchlistStore is the persistence surface the watchlist RPCs depend on. The
 // concrete implementation is *repository.WatchlistRepo; tests inject a stub.
 type WatchlistStore interface {
-	Create(ctx context.Context, userID, name, description string, symbols []string) (*portfoliov1.Watchlist, error)
+	Create(ctx context.Context, userID, name, description string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error)
 	GetByID(ctx context.Context, watchlistID string) (*portfoliov1.Watchlist, error)
 	ListByUser(ctx context.Context, userID string, pageSize int, pageToken string) ([]*portfoliov1.Watchlist, string, error)
-	Update(ctx context.Context, watchlistID, name, description string, symbols []string) (*portfoliov1.Watchlist, error)
+	Update(ctx context.Context, watchlistID, name, description string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error)
 	Delete(ctx context.Context, watchlistID string) error
-	AddSymbols(ctx context.Context, watchlistID string, symbols []string) (*portfoliov1.Watchlist, error)
+	AddSymbols(ctx context.Context, watchlistID string, bindings []*portfoliov1.WatchlistBinding) (*portfoliov1.Watchlist, error)
 	RemoveSymbols(ctx context.Context, watchlistID string, symbols []string) (*portfoliov1.Watchlist, error)
 	CountByUser(ctx context.Context, userID string) (int, error)
 }
@@ -1071,6 +1071,50 @@ func normalizeSymbols(in []string) []string {
 		}
 		seen[u] = struct{}{}
 		out = append(out, u)
+	}
+	return out
+}
+
+// normalizeBindings is the binding analog of normalizeSymbols: it uppercases/trims the
+// symbol, drops empties, and de-duplicates by symbol (first-seen wins, keeping that
+// occurrence's strategy_id), preserving first-seen order.
+func normalizeBindings(in []*portfoliov1.WatchlistBinding) []*portfoliov1.WatchlistBinding {
+	seen := make(map[string]struct{}, len(in))
+	out := make([]*portfoliov1.WatchlistBinding, 0, len(in))
+	for _, b := range in {
+		sym := strings.ToUpper(strings.TrimSpace(b.GetSymbol()))
+		if sym == "" {
+			continue
+		}
+		if _, dup := seen[sym]; dup {
+			continue
+		}
+		seen[sym] = struct{}{}
+		out = append(out, &portfoliov1.WatchlistBinding{Symbol: sym, StrategyId: strings.TrimSpace(b.GetStrategyId())})
+	}
+	return out
+}
+
+// requestBindings resolves the authoritative binding set for a write request: `bindings`
+// takes precedence (feature 097); an empty `bindings` falls back to the legacy flat
+// `symbols` mapped to unbound bindings (strategy_id=""). This is the write-path re-plumb
+// the fails-080 trap requires — a `bindings` write carries the strategy through.
+func requestBindings(bindings []*portfoliov1.WatchlistBinding, symbols []string) []*portfoliov1.WatchlistBinding {
+	if len(bindings) > 0 {
+		return normalizeBindings(bindings)
+	}
+	out := make([]*portfoliov1.WatchlistBinding, 0, len(symbols))
+	for _, s := range symbols {
+		out = append(out, &portfoliov1.WatchlistBinding{Symbol: s})
+	}
+	return normalizeBindings(out)
+}
+
+// bindingSymbols flattens bindings to their symbols (for cap counting / union math).
+func bindingSymbols(bindings []*portfoliov1.WatchlistBinding) []string {
+	out := make([]string, 0, len(bindings))
+	for _, b := range bindings {
+		out = append(out, b.GetSymbol())
 	}
 	return out
 }
@@ -1120,10 +1164,10 @@ func (s *PortfolioService) CreateWatchlist(ctx context.Context, req *portfoliov1
 	if strings.TrimSpace(req.GetName()) == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name required"))
 	}
-	symbols := normalizeSymbols(req.GetSymbols())
-	if len(symbols) > s.maxSymbolsPerList() {
+	bindings := requestBindings(req.GetBindings(), req.GetSymbols())
+	if len(bindings) > s.maxSymbolsPerList() {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("too many symbols: %d exceeds max %d", len(symbols), s.maxSymbolsPerList()))
+			fmt.Errorf("too many symbols: %d exceeds max %d", len(bindings), s.maxSymbolsPerList()))
 	}
 	count, err := s.watchlists.CountByUser(ctx, userID)
 	if err != nil {
@@ -1133,7 +1177,7 @@ func (s *PortfolioService) CreateWatchlist(ctx context.Context, req *portfoliov1
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("watchlist limit reached: %d", s.maxWatchlistsPerUser()))
 	}
-	wl, err := s.watchlists.Create(ctx, userID, req.GetName(), req.GetDescription(), symbols)
+	wl, err := s.watchlists.Create(ctx, userID, req.GetName(), req.GetDescription(), bindings)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -1190,12 +1234,12 @@ func (s *PortfolioService) UpdateWatchlist(ctx context.Context, req *portfoliov1
 	if strings.TrimSpace(req.GetName()) == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name required"))
 	}
-	symbols := normalizeSymbols(req.GetSymbols())
-	if len(symbols) > s.maxSymbolsPerList() {
+	bindings := requestBindings(req.GetBindings(), req.GetSymbols())
+	if len(bindings) > s.maxSymbolsPerList() {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("too many symbols: %d exceeds max %d", len(symbols), s.maxSymbolsPerList()))
+			fmt.Errorf("too many symbols: %d exceeds max %d", len(bindings), s.maxSymbolsPerList()))
 	}
-	wl, err := s.watchlists.Update(ctx, req.GetWatchlistId(), req.GetName(), req.GetDescription(), symbols)
+	wl, err := s.watchlists.Update(ctx, req.GetWatchlistId(), req.GetName(), req.GetDescription(), bindings)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -1233,9 +1277,9 @@ func (s *PortfolioService) AddWatchlistSymbols(ctx context.Context, req *portfol
 	if err != nil {
 		return nil, err
 	}
-	add := normalizeSymbols(req.GetSymbols())
-	// Resulting count = union of current + new (both normalized).
-	resulting := normalizeSymbols(append(append([]string{}, existing.Symbols...), add...))
+	add := requestBindings(req.GetBindings(), req.GetSymbols())
+	// Resulting count = union of current symbols + newly-added symbols (both normalized).
+	resulting := normalizeSymbols(append(append([]string{}, existing.Symbols...), bindingSymbols(add)...)) //nolint:staticcheck // SA1019: deprecated symbols mirror intentionally retained for old clients (feature 097)
 	if len(resulting) > s.maxSymbolsPerList() {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
 			fmt.Errorf("too many symbols: %d exceeds max %d", len(resulting), s.maxSymbolsPerList()))

@@ -40,7 +40,7 @@ Does not restate documented/CI-enforced rules (see `## Pointers`).
 
 | What | Where |
 |---|---|
-| pgxpool cap=2 / `DB_POOL_MAX` | `internal/repository/pool.go:15,23`; root pool budget |
+| pgxpool cap=2 / `DB_POOL_MAX`; PgBouncer exec-mode (root PLAT-7) | `internal/repository/pool.go:16,24` (`QueryExecModeExec:37`); root pool budget |
 | Header propagation interceptor | `internal/middleware/propagation.go` (root PLAT-4) |
 | Config Watcher 90s snapshot gate + reconnect | `internal/config/config.go:82-91,149-160` |
 | FMP gated live per-RPC by `marketdata.fmp.enabled` (re-read on every call, no restart needed since feature 082), held off the OHLCV `Registry` (FR-2) | `internal/service/marketdata_service.go:966`, `internal/source/source.go:57` |

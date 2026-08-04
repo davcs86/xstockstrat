@@ -71,15 +71,6 @@ The end-to-end connect flow:
    presented as `Authorization: Bearer <jwt>` on the root MCP endpoint; the agent rejects tokens whose `aud` does
    not match.
 
-### x-mcp-secret (downstream enforcement)
-`MCP_AGENT_SECRET` is a shared secret the agent sends as `x-mcp-secret` on every outbound webhook call to `xstockstrat-ingest`, `xstockstrat-notify`, and `xstockstrat-analysis`. Those services reject requests without the correct header when the secret is configured.
-
-| Env var | Services | Behavior when empty |
-|---|---|---|
-| `MCP_AGENT_SECRET` | agent, ingest, notify, analysis | Secret enforcement disabled — all webhook requests pass through |
-
-Set `MCP_AGENT_SECRET` to the same value across all four services. Generate with `openssl rand -hex 32`.
-
 ---
 
 ## Tools
@@ -238,7 +229,7 @@ Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exc
 
 ### `emit_alert`
 
-Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or notifications not tied to an ingested signal. Sends `x-mcp-secret`, **no** admin `x-access-scope`: `EmitAlert` is an internal-service-caller RPC that is intentionally **not** role-gated (feature 092) — its trust boundary is the private network plus the agent's OAuth edge, and every caller (agent + internal service loops) is unauthenticated at the RPC layer.
+Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or notifications not tied to an ingested signal. Sends no security metadata (no shared secret, no admin `x-access-scope`): `EmitAlert` is an internal-service-caller RPC that is intentionally **not** role-gated (feature 092) — its trust boundary is the private network plus the agent's OAuth edge, and every caller (agent + internal service loops) is unauthenticated at the RPC layer.
 
 **Parameters**
 
@@ -308,6 +299,14 @@ window is evaluated fully warm and no trade opens before `start`. Two consequenc
 
 Both bounds set with a span over `analysis.backtest.max_range_days` (default 730) is rejected with
 `INVALID_ARGUMENT` rather than silently clamped. A `start` after `end` is rejected client-side.
+
+**Scoring is technical-only (feature 097).** A strategy's backtest score comes from its technical
+rules alone — `run_backtest` sends no signal parameters, and the analysis service no longer blends
+newsletter `signal_sources`/`signal_weight` from `strategy_params` into a strategy's per-bar
+conviction. Under Option 2 a signal is a **universe + independent queue ranking axis** (surfaced by
+the Decide → Opportunities queue), never an input to a strategy's own score, so no signal is counted
+twice. This does **not** touch `screen_symbols`' signal-blend params (below — the screener still
+blends) or `manage_strategy`'s `signal_params` (the live-loop symbol universe).
 
 **Return**
 
@@ -385,7 +384,7 @@ tool still **succeeds** — the backtest ran — and the summary gains an `attac
 
 ### `screen_symbols`
 
-Scans an explicit universe of symbols via `xstockstrat-analysis` `ScreenSymbols` (feature 060) and returns ranked candidates. **Read-only** — sends `x-mcp-secret` and **no** admin `x-access-scope`. Symbols are passed explicitly; there is no watchlist resolution in this tool.
+Scans an explicit universe of symbols via `xstockstrat-analysis` `ScreenSymbols` (feature 060) and returns ranked candidates. **Read-only** — sends no admin `x-access-scope` (and no other security metadata). Symbols are passed explicitly; there is no watchlist resolution in this tool.
 
 **Parameters**
 
@@ -704,7 +703,7 @@ caller is rejected `PERMISSION_DENIED` ("admin scope required") rather than queu
 ### `get_backfill_status`
 
 Checks one backfill job or lists recent jobs via ingest `GetBackfillStatus` / `ListBackfillJobs`.
-**Read-only** — sends `x-mcp-secret` only, no admin scope.
+**Read-only** — sends no admin scope (and no other security metadata).
 
 **Parameters**
 

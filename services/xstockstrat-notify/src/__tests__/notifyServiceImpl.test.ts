@@ -164,9 +164,10 @@ describe('emitAlert', () => {
 
   // Feature 092 (F-11): EmitAlert is an INTERNAL-SERVICE-CALLER contract, not a role-gated RPC.
   // Its trust boundary is the private gRPC network plus the agent's OAuth 2.1 edge — every caller
-  // is internal/unauthenticated (analysis loops send no metadata; the agent sends only
-  // x-mcp-secret). This test PINS that contract: a call carrying NO scope/secret metadata must
-  // succeed and persist the alert. An admin gate here would break every current caller.
+  // is internal/unauthenticated (analysis loops send no metadata; the agent itself sends no
+  // distinguishing header since feature 097 removed its shared-secret header). This test PINS
+  // that contract: a call carrying NO scope/secret metadata must succeed and persist the alert.
+  // An admin gate here would break every current caller.
   // (Design decision recorded in the feature 092 design.md; adversary-ruled.)
   it('accepts an unauthenticated internal caller (no scope/secret metadata) and persists the alert', async () => {
     let capturedSql = '';

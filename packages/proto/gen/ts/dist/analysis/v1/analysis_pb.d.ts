@@ -1120,6 +1120,18 @@ export type Opportunity = Message<"xstockstrat.analysis.v1.Opportunity"> & {
      * @generated from field: google.protobuf.Timestamp valid_until = 9;
      */
     validUntil?: Timestamp | undefined;
+    /**
+     * server-authoritative opaque key = user|symbol_norm|strategy_id (feature 097). Client echoes it verbatim to SetOpportunityAction, never derives it.
+     *
+     * @generated from field: string opportunity_key = 10;
+     */
+    opportunityKey: string;
+    /**
+     * contributing origins for a de-duplicated row (signal source(s) / "position" / "watchlist")
+     *
+     * @generated from field: repeated string provenance = 11;
+     */
+    provenance: string[];
 };
 /**
  * Describes the message xstockstrat.analysis.v1.Opportunity.
@@ -1312,6 +1324,44 @@ export type EvaluateReadinessResponse = Message<"xstockstrat.analysis.v1.Evaluat
  * Use `create(EvaluateReadinessResponseSchema)` to create a new message.
  */
 export declare const EvaluateReadinessResponseSchema: GenMessage<EvaluateReadinessResponse>;
+/**
+ * user_id is intentionally absent — taken from the propagated x-user-id header server-side
+ * (match the ListOpportunitiesRequest convention), never from the wire.
+ *
+ * @generated from message xstockstrat.analysis.v1.SetOpportunityActionRequest
+ */
+export type SetOpportunityActionRequest = Message<"xstockstrat.analysis.v1.SetOpportunityActionRequest"> & {
+    /**
+     * the server-issued key, echoed verbatim
+     *
+     * @generated from field: string opportunity_key = 1;
+     */
+    opportunityKey: string;
+    /**
+     * @generated from field: xstockstrat.analysis.v1.OpportunityAction action = 2;
+     */
+    action: OpportunityAction;
+    /**
+     * set only for SNOOZE; a bounded "snooze until"
+     *
+     * @generated from field: google.protobuf.Timestamp snooze_until = 3;
+     */
+    snoozeUntil?: Timestamp | undefined;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.SetOpportunityActionRequest.
+ * Use `create(SetOpportunityActionRequestSchema)` to create a new message.
+ */
+export declare const SetOpportunityActionRequestSchema: GenMessage<SetOpportunityActionRequest>;
+/**
+ * @generated from message xstockstrat.analysis.v1.SetOpportunityActionResponse
+ */
+export type SetOpportunityActionResponse = Message<"xstockstrat.analysis.v1.SetOpportunityActionResponse"> & {};
+/**
+ * Describes the message xstockstrat.analysis.v1.SetOpportunityActionResponse.
+ * Use `create(SetOpportunityActionResponseSchema)` to create a new message.
+ */
+export declare const SetOpportunityActionResponseSchema: GenMessage<SetOpportunityActionResponse>;
 /**
  * @generated from message xstockstrat.analysis.v1.GetStrategyAnalyticsRequest
  */
@@ -1652,6 +1702,39 @@ export declare enum ConditionState {
  */
 export declare const ConditionStateSchema: GenEnum<ConditionState>;
 /**
+ * The persisted per-user disposition of a queued opportunity (feature 097). Closed set → enum (C-04).
+ *
+ * @generated from enum xstockstrat.analysis.v1.OpportunityAction
+ */
+export declare enum OpportunityAction {
+    /**
+     * @generated from enum value: OPPORTUNITY_ACTION_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * hide until snooze_until (bounded)
+     *
+     * @generated from enum value: OPPORTUNITY_ACTION_SNOOZE = 1;
+     */
+    SNOOZE = 1,
+    /**
+     * hide indefinitely
+     *
+     * @generated from enum value: OPPORTUNITY_ACTION_DISMISS = 2;
+     */
+    DISMISS = 2,
+    /**
+     * user acted on it (feeds queue_share/taken reconciliation)
+     *
+     * @generated from enum value: OPPORTUNITY_ACTION_TAKE = 3;
+     */
+    TAKE = 3
+}
+/**
+ * Describes the enum xstockstrat.analysis.v1.OpportunityAction.
+ */
+export declare const OpportunityActionSchema: GenEnum<OpportunityAction>;
+/**
  * @generated from service xstockstrat.analysis.v1.AnalysisService
  */
 export declare const AnalysisService: GenService<{
@@ -1783,6 +1866,16 @@ export declare const AnalysisService: GenService<{
         methodKind: "unary";
         input: typeof EvaluateReadinessRequestSchema;
         output: typeof EvaluateReadinessResponseSchema;
+    };
+    /**
+     * Persist a per-user disposition (snooze/dismiss/take) against a server-issued opportunity_key (feature 097).
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.SetOpportunityAction
+     */
+    setOpportunityAction: {
+        methodKind: "unary";
+        input: typeof SetOpportunityActionRequestSchema;
+        output: typeof SetOpportunityActionResponseSchema;
     };
     /**
      * Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share).

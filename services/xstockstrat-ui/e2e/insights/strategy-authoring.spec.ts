@@ -139,7 +139,7 @@ test.describe('Strategy authoring — UI', () => {
     await expect(page.getByRole('button', { name: 'New Strategy' })).toHaveCount(0);
   });
 
-  test('wizard gates Next per step and only submits on Step 5 (ACs 1, 11, 12)', async ({
+  test('wizard gates Next per step and only submits on the Review step (ACs 1, 11, 12)', async ({
     page,
   }) => {
     await addAdminCookie(page);
@@ -175,12 +175,10 @@ test.describe('Strategy authoring — UI', () => {
     await expect(next).toBeEnabled();
     await next.click();
 
-    // Step 4 — Signal Params is skippable (AC-12).
-    await expect(page.getByText('Step 4 — Signal Params')).toBeVisible();
-    await page.getByRole('button', { name: 'Skip' }).click();
-
-    // Step 5 — Review. Submit button appears (no submit happened before now, AC-1).
-    await expect(page.getByText('Step 5 — Review')).toBeVisible();
+    // feature 097: no "Signal Params" step — Rules → Step 4 Review directly. Submit appears now
+    // (no submit happened before, AC-1); a strategy's backtest score is technical-only.
+    await expect(page.getByText('Step 4 — Review')).toBeVisible();
+    await expect(page.getByText('Signal Params')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Create Strategy' })).toBeVisible();
   });
 
@@ -205,7 +203,6 @@ test.describe('Strategy authoring — UI', () => {
     await page.getByLabel('Exit rule JSON').fill('{"op":"or","conditions":[]}');
     await next.click();
 
-    await page.getByRole('button', { name: 'Skip' }).click();
     await page.getByRole('button', { name: 'Create Strategy' }).click();
 
     // The mock returns an InvalidArgument with a ref message → inline error + step link.
@@ -291,8 +288,8 @@ test.describe('Strategy authoring — re-entry cooldown (feature 069)', () => {
     await jsonButtons.nth(1).click();
     await page.getByLabel('Exit rule JSON').fill('{"op":"or","conditions":[]}');
     await next.click();
-    await page.getByRole('button', { name: 'Skip' }).click();
-    await expect(page.getByText('Step 5 — Review')).toBeVisible();
+    // feature 097: the "Signal Params" step is gone — Rules → Review directly.
+    await expect(page.getByText('Step 4 — Review')).toBeVisible();
   }
 
   test('create with a blank cooldown omits cooldownDays from the payload', async ({ page }) => {
@@ -353,12 +350,34 @@ test.describe('Strategy authoring — re-entry cooldown (feature 069)', () => {
     const next = page.getByRole('button', { name: 'Next', exact: true });
     await next.click(); // Step 2 (component pre-populated)
     await next.click(); // Step 3 (rules pre-populated)
-    await next.click(); // Step 4
-    await page.getByRole('button', { name: 'Skip' }).click();
+    await next.click(); // Step 4 (Review — feature 097: no Signal Params step)
     await page.getByRole('button', { name: 'Save Changes' }).click();
     await expect.poll(getCaptured).not.toBeNull();
     const def = getCaptured()!.definition as Record<string, unknown>;
     expect(def.cooldownDays).toBeUndefined();
+  });
+
+  // feature 097 — the decisive ANALYSIS-3 regression guard: editing a strategy that has
+  // signal_params.symbols and saving preserves those symbols (the wizard no longer rewrites
+  // signal_params wholesale, so the live-loop symbol universe is not clobbered).
+  test('editing a strategy preserves signal_params.symbols on save', async ({ page }) => {
+    await addAdminCookie(page);
+    await stubListFormulas(page);
+    const getCaptured = await captureManageStrategy(page);
+    // strat_signal_universe/edit → getStrategy returns signal_params: { symbols: ["AAPL","MSFT"] }.
+    await page.goto('/insights/strategies/strat_signal_universe/edit');
+    await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
+    // Change only the display name, then walk to Review and save.
+    await page.getByPlaceholder('SMA Crossover').fill('Universe Renamed');
+    const next = page.getByRole('button', { name: 'Next', exact: true });
+    await next.click(); // Step 2
+    await next.click(); // Step 3
+    await next.click(); // Step 4 Review
+    await page.getByRole('button', { name: 'Save Changes' }).click();
+    await expect.poll(getCaptured).not.toBeNull();
+    const def = getCaptured()!.definition as Record<string, unknown>;
+    const signalParams = def.signalParams as { symbols?: unknown } | undefined;
+    expect(signalParams?.symbols).toEqual(['AAPL', 'MSFT']);
   });
 });
 
