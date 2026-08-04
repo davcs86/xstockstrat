@@ -50,11 +50,13 @@ Postgres cluster `xstockstrat` is a separate resource and is never touched.
 `doctl apps create` does *not* inherit dashboard-set SECRET values the way
 `doctl apps update` does:
 
-`PROD_JWT_SECRET`, `PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY`, `ALPACA_API_KEY`,
-`ALPACA_API_SECRET`, `MCP_AGENT_SECRET`, plus `DIGITALOCEAN_ACCESS_TOKEN` and
-(optional) `DO_PROD_PROJECT_ID`. Injection is handled by
-`scripts/do-inject-prod-secrets.py`; a missing secret logs a warning and the
-component comes up with an unset value.
+`PROD_JWT_SECRET`, `PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY`, `PROD_ALPACA_API_KEY`,
+`PROD_ALPACA_API_SECRET`, `MCP_AGENT_SECRET`, plus `DIGITALOCEAN_ACCESS_TOKEN` and
+(optional) `DO_PROD_PROJECT_ID`. `PROD_FMP_API_KEY` is also optional — the FMP
+fundamentals pipeline is off by default (`marketdata.fmp.enabled=false`), so an
+unset key is a valid state. Injection is handled by
+`scripts/do-inject-prod-secrets.py`; a missing required secret logs a warning
+and the component comes up with an unset value.
 
 **Caveats:**
 

@@ -11,13 +11,17 @@ or the component comes up with an empty value. Since `.do/app.yaml` is checked
 into a public repo, those values live in GitHub Secrets and are injected here.
 
 Two injection styles:
-  * Placeholder secrets (JWT, broker key) already appear in the spec as
-    YOUR_PROD_* tokens — straight string replace (mirrors deploy.yml).
-  * SECRET envs with no placeholder (Alpaca keys, MCP agent secret) have a
-    `value:` line injected into their 3-line block.
+  * Placeholder secrets (JWT, broker key, Alpaca, FMP) already appear in the
+    spec as YOUR_PROD_* tokens — straight string replace, mirroring the
+    substitution in deploy.yml.
+  * SECRET envs with no placeholder (MCP agent secret) have a `value:` line
+    injected into their 3-line block.
 
-Any secret whose env var is empty/unset is left untouched, so the workflow
-degrades gracefully (DO treats it as an unset SECRET) and logs a warning.
+Any required secret whose env var is empty/unset is left untouched, so the
+workflow degrades gracefully (DO treats it as an unset SECRET) and logs a
+warning. FMP_API_KEY is optional — the FMP fundamentals pipeline is off by
+default (marketdata.fmp.enabled=false) — so its warning is suppressed when
+unset, matching deploy.yml.
 
 Reads the spec on stdin, writes the rendered spec to stdout.
 """
@@ -28,7 +32,20 @@ import sys
 # SECRET envs that have no YOUR_PROD_* placeholder in the spec and therefore
 # need a `value:` line injected into their block. Keyed by env var name read
 # from the process environment (populated from GitHub Secrets in CI).
-INJECT_KEYS = ("ALPACA_API_KEY", "ALPACA_API_SECRET", "MCP_AGENT_SECRET")
+INJECT_KEYS = ("MCP_AGENT_SECRET",)
+
+# Required placeholder token -> env var name, mirrors the substitution in
+# deploy.yml's prod path.
+PLACEHOLDER_KEYS = (
+    ("YOUR_PROD_JWT_SECRET", "JWT_SECRET"),
+    ("YOUR_PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY", "BROKER_ACCOUNTS_ENCRYPTION_KEY"),
+    ("YOUR_PROD_ALPACA_API_KEY", "ALPACA_API_KEY"),
+    ("YOUR_PROD_ALPACA_API_SECRET", "ALPACA_API_SECRET"),
+)
+
+# Optional placeholder token -> env var name. The FMP fundamentals pipeline is
+# off by default, so an unset key is a valid state — no warning if empty.
+OPTIONAL_PLACEHOLDER_KEYS = (("YOUR_PROD_FMP_API_KEY", "FMP_API_KEY"),)
 
 
 def inject_block(content, key, value):
@@ -54,19 +71,17 @@ def inject_block(content, key, value):
 def main():
     content = sys.stdin.read()
 
-    jwt = os.environ.get("JWT_SECRET", "")
-    if jwt:
-        content = content.replace("YOUR_PROD_JWT_SECRET", jwt)
-    else:
-        sys.stderr.write("warning: JWT_SECRET is empty\n")
+    for placeholder, env_key in PLACEHOLDER_KEYS:
+        value = os.environ.get(env_key, "")
+        if value:
+            content = content.replace(placeholder, value)
+        else:
+            sys.stderr.write("warning: %s is empty\n" % env_key)
 
-    broker = os.environ.get("BROKER_ACCOUNTS_ENCRYPTION_KEY", "")
-    if broker:
-        content = content.replace(
-            "YOUR_PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY", broker
-        )
-    else:
-        sys.stderr.write("warning: BROKER_ACCOUNTS_ENCRYPTION_KEY is empty\n")
+    for placeholder, env_key in OPTIONAL_PLACEHOLDER_KEYS:
+        value = os.environ.get(env_key, "")
+        if value:
+            content = content.replace(placeholder, value)
 
     for key in INJECT_KEYS:
         content = inject_block(content, key, os.environ.get(key, ""))
