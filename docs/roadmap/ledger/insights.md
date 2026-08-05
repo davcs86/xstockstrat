@@ -572,3 +572,88 @@ reusing.
 - **Pattern**: When a read surface needs derived-but-expensive data and the service *cannot enumerate its consumers* (analysis has no per-user strategy owner column and no global user-list RPC), prefer **lazy-materialize-on-read + persist(`valid_until`) + stale-while-revalidate + a daily refresh** over a standing background producer loop. A standing loop that can only refresh users already present in its own tables buys freshness that is invisible to anyone not currently looking, grows unbounded without an eviction rule, and (see Evidence) cannot borrow `live_loop`'s cap as a fairness mechanism because that cap truncates rather than round-robins.
 - **Evidence**: `docs/roadmap/features/097-opportunity-universe-unification/design.md` § Rejected Alternatives; `services/xstockstrat-analysis/app/engine/live_loop.py:102-110` (SELECT with no ORDER BY + `processed >= max` return = truncation, not round-robin); `migrations/001_strategies.up.sql` (strategies are global, no `user_id`).
 - **Rule it implies**: a background materializer is only justified when it can enumerate the full consumer set independently of reads; otherwise lazy-on-read + TTL revalidate is the minimal shape (How-to-Act #2). Candidate design principle.
+
+### 2026-08-05 — add-ikbr-account-support — reuse
+- **Pattern**: When a PRE_DEPLOY migrator job lacks a service's runtime secrets, seed env-var-derived default rows in application startup code, not in the migration.
+- **Evidence**: `docs/roadmap/features/001-add-ikbr-account-support/context.md:144,214,353-356`.
+- **Rule it implies**: Check whether the migrator job has the credentials a seed row needs before putting seed logic in a migration.
+
+### 2026-08-05 — add-ikbr-account-support — design
+- **Pattern**: Implementation-spec file/line citations can go stale between spec-generation and execute (proto evolves, tests evolve); execute steps should re-verify via grep instead of trusting the spec.
+- **Evidence**: `docs/roadmap/features/001-add-ikbr-account-support/context.md:174,272,188`.
+- **Rule it implies**: Treat implementation-spec file/line citations as a starting hint, always re-grep the live file before editing.
+
+### 2026-08-05 — broker-accounts-ui — reuse
+- **Pattern**: Radix UI `Select`/`SelectItem` rejects `value=""` at runtime (reserved for empty state); use a non-empty sentinel (e.g. `__all__`) mapped to `""` at the component boundary whenever a Select needs an "all/none" option.
+- **Evidence**: `docs/roadmap/features/002-broker-accounts-ui/context.md:154`, implementation-spec.md deviation log L908-911 (pruned; recoverable via git history).
+- **Rule it implies**: Use a non-empty sentinel and map to/from `""` at the component boundary for any Select needing an "all/none" option.
+
+### 2026-08-05 — broker-accounts-ui — reuse
+- **Pattern**: Playwright browser binary downloads can be blocked in a sandboxed environment; symlinking an already-present compatible version to the expected path plus an inert escape-hatch env var unblocks local E2E without touching CI.
+- **Evidence**: `docs/roadmap/features/002-broker-accounts-ui/context.md:138,154`.
+- **Rule it implies**: When bumping Playwright/browser versions, expect this workaround to recur in-session; don't try to fix CI's install path.
+
+### 2026-08-05 — broker-accounts-ui — design
+- **Pattern**: Adding a new Select/combobox to shared layout (e.g. a global header) can break Playwright strict-mode locators in unrelated, already-passing specs elsewhere on the same page.
+- **Evidence**: `docs/roadmap/features/002-broker-accounts-ui/context.md:141`, implementation-spec.md L906 (pruned; recoverable via git history).
+- **Rule it implies**: Treat any new interactive element added to shared layout as requiring a full-suite E2E re-run, not just tests for the new component.
+
+### 2026-08-05 — formula-management-ui — ordering
+- **Pattern**: Hold execution of a feature whose UI steps target a service another in-flight feature is consolidating/deleting, until that prerequisite merges.
+- **Evidence**: `docs/roadmap/features/003-formula-management-ui/context.md` session 2026-06-01 ("re-spec plan confirmed", "stream-2 reorder").
+- **Rule it implies**: Before `/sdd-execute` on a UI-touching step, check `merge-order.md` for any in-flight consolidation/refactor of the target service; wait rather than eat a second re-spec.
+
+### 2026-08-05 — formula-management-ui — design
+- **Pattern**: A BFF route overwrites a client-supplied ownership field (e.g. `author`) with the trusted server-side identity before forwarding to the backend RPC.
+- **Evidence**: `docs/roadmap/features/003-formula-management-ui/` implementation-spec.md Step 7, lines 559-599 (pruned; recoverable via git history).
+- **Rule it implies**: Any ownership/identity field accepted from a client request body must be overwritten server-side at the BFF layer, never trusted as-typed.
+
+### 2026-08-05 — frontend-reverse-proxy — design
+- **Pattern**: Unifying multiple Next.js apps behind one entry point favored path-based nginx proxy + `basePath` over subdomains/Traefik/`assetPrefix`-only, specifically to avoid DNS/TLS sprawl and keep internal links working. (Historical — this architecture was later superseded by feature 045's consolidated single Next.js UI.)
+- **Evidence**: `docs/roadmap/features/005-frontend-reverse-proxy/context.md` session 2026-05-11, decisions 1-3.
+- **Rule it implies**: When consolidating frontends, default to path-based routing + Next.js `basePath`, and document why subdomain routing was rejected (TLS/DNS cost) before considering it again.
+
+### 2026-08-05 — frontend-reverse-proxy — reuse
+- **Pattern**: New infra components (e.g. a reverse proxy) get their own `services/<name>/Dockerfile` rather than a repo-root `Dockerfile.<x>`, even when a spec suggests root placement.
+- **Evidence**: `docs/roadmap/features/005-frontend-reverse-proxy/` implementation-spec.md Deviation Log, Step 2 (pruned; recoverable via git history).
+- **Rule it implies**: Default new infra scaffolding to `services/<name>/` for consistency with existing service tooling/CI filters.
+
+### 2026-08-05 — do-nginx-integration — reuse
+- **Pattern**: Repo verification steps that assume mikefarah's `yq eval` syntax fail silently/wrong when the host has the Python jq-wrapper `yq` installed instead.
+- **Evidence**: `docs/roadmap/features/006-do-nginx-integration/` implementation-spec.md:363-371 Deviation Log; context.md Session 2026-05-18 00:00/00:01 (pruned; recoverable via git history).
+- **Rule it implies**: Prefer `python3 -c "import yaml; ..."` (already in this repo's toolchain) as the portable default for YAML spot-checks in impl-specs, or explicitly pin/verify which `yq` flavor is installed before writing verification commands.
+
+### 2026-08-05 — signal-source-weighting — design
+- **Pattern**: Structured (dict/JSON) config values can be delivered through the existing `value_type='string'` column plus `get_str()` + `json.loads()` in the consuming service, with clamping/defaulting done at read time — no proto or schema change needed.
+- **Evidence**: `docs/roadmap/features/007-signal-source-weighting/` product-spec.md FR-2/FR-4/FR-5; implementation-spec.md Step 2 (servicer.py `RunBacktest` read path); context.md 2026-05-23 session (pruned; recoverable via git history).
+- **Rule it implies**: When a feature needs a map/threshold-shaped config value, prefer this JSON-via-string pattern over a proto or DB change before considering alternatives.
+
+### 2026-08-05 — signal-source-registry — reuse
+- **Pattern**: A full `/sdd-spec` re-run (not just `/sdd-review`) caught a CHECK-constraint/extractor omission that the first spec pass and its review both missed.
+- **Evidence**: `docs/roadmap/features/008-signal-source-registry/context.md:51-61`.
+- **Rule it implies**: For specs with large enumerated value sets (e.g. 10-value CHECK constraints), re-run `/sdd-spec` once against the current state before execute, don't trust the first pass's enumeration completeness.
+
+### 2026-08-05 — trader-chart-panel — reuse
+- **Pattern**: A spec was written against a library's documented (newer) API before the dependency was actually installed; the installed version resolved to an older major with a different API surface.
+- **Evidence**: `docs/roadmap/features/014-trader-chart-panel/` implementation-spec.md L462, L672 — v5 `addSeries(CandlestickSeries,...)` spec'd, v4.2.3 `addCandlestickSeries()` shipped (pruned; recoverable via git history).
+- **Rule it implies**: When a spec step adds a new npm dependency, defer exact API-call instructions until after that dependency is actually installed (or pin the version and verify its API before drafting code).
+
+### 2026-08-05 — fix-grafana-otel-variables — design
+- **Pattern**: DO App Platform global `envs` cannot reference component-scoped vars, so any attribute needing per-service identity (e.g. `service.name`) must be derived in service code, not composed via env-var interpolation.
+- **Evidence**: `docs/roadmap/features/015-fix-grafana-otel-variables/context.md:17-27`.
+- **Rule it implies**: Prefer runtime derivation over cross-referencing global/component env vars on DO App Platform.
+
+### 2026-08-05 — fix-grafana-otel-variables — reuse
+- **Pattern**: `@opentelemetry/resources@2.x` drops the `Resource` class; `semantic-conventions@1.41+` renames constants and some renames point at a *different* attribute key, not just a renamed constant.
+- **Evidence**: `docs/roadmap/features/015-fix-grafana-otel-variables/` implementation-spec.md:607-610 (pruned; recoverable via git history).
+- **Rule it implies**: When bumping `@opentelemetry/*`, diff the actual emitted attribute key, not just the constant name, especially for cross-language consistency.
+
+### 2026-08-05 — config-ui-weight-validation — design
+- **Pattern**: When a capability needs to generalize to future keys/entities with similar constraints, prefer declaring the rule in the shared contract (proto field) over a client-side heuristic — even though the heuristic is less work now, it doesn't compound for future additions.
+- **Evidence**: `docs/roadmap/features/016-config-ui-weight-validation/context.md` Session 2026-06-01T00:01:00Z (Option A vs B resolution).
+- **Rule it implies**: At design/review time, when an open question is "detect via heuristic vs. declare in contract," default to the contract declaration unless the heuristic is proven to be a one-off.
+
+### 2026-08-05 — config-ui-weight-validation — ordering
+- **Pattern**: A feature whose implementation step targets a service directory owned by an in-flight consolidation/rewrite feature (e.g. 045) should wait for that feature to merge before speccing file paths, not spec against the soon-to-be-deleted path and re-spec later.
+- **Evidence**: `docs/roadmap/features/016-config-ui-weight-validation/context.md` Session 2026-06-01 (W3 decision) + Session 2026-06-04 (actual re-spec of Steps 5-6 from `xstockstrat-config-ui` to `xstockstrat-ui`).
+- **Rule it implies**: At `/sdd-spec` time, check `merge-order.md` and in-flight feature statuses for the target service directory; if a consolidation feature is `draft`/`in-progress` and targets the same directory, flag it for re-spec-after-merge rather than speccing now.
