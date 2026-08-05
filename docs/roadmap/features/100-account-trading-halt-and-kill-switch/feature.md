@@ -1,6 +1,6 @@
 # Feature: account-trading-halt-and-kill-switch
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Priority**: `P0` — blocking live-capital expansion; rescoped 2026-08-04 to hardening the
 `platform.maintenance_mode` key that already exists, not a green-field build (see context.md)
 **Development Branch**: `feature/account-trading-halt-and-kill-switch`
@@ -15,6 +15,7 @@
 |---|---|---|---|
 | 2026-08-04 | `idea` → `draft` | /sdd-story | Product spec generated from external live-capital-safety risk review |
 | 2026-08-04 | `draft` (rescoped) | feasibility re-check | Scope cut from a new state machine/proto/DB to hardening the existing enforced kill switch; see context.md |
+| 2026-08-05 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
 
 ---
 
@@ -47,4 +48,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review account-trading-halt-and-kill-switch product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design account-trading-halt-and-kill-switch` — product spec approved; run recon + design debate

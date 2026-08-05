@@ -1,6 +1,6 @@
 # Feature: exactly-once-order-intent
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Priority**: `P1` — rescoped 2026-08-04 to the trader UI's real order flow, not hypothetical
 scheduler/agent callers (see context.md); not `P0` because the risk today is bounded by a human
 watching the UI, unlike an unattended caller
@@ -16,6 +16,7 @@ watching the UI, unlike an unattended caller
 |---|---|---|---|
 | 2026-08-04 | `idea` → `draft` | /sdd-story | Product spec generated from external live-capital-safety risk review |
 | 2026-08-04 | `draft` (rescoped) | feasibility re-check | Scope cut to the trader UI's real place/replace/cancel flow; `close`/`emergency-flatten` and automated `UNKNOWN` reconciliation deferred; see context.md |
+| 2026-08-05 | `draft` → `spec-ready` | /sdd-review | Product spec approved after 3 review rounds (2 warnings) |
 
 ---
 
@@ -45,4 +46,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review exactly-once-order-intent product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design exactly-once-order-intent` — product spec approved; run recon + design debate

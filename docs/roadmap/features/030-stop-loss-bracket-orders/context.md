@@ -48,3 +48,17 @@
 - New backlog features created from the same review: 100–109 (see
   `docs/roadmap/features/100-account-trading-halt-and-kill-switch/` through
   `109-live-trading-game-day/`).
+
+## Session 2026-08-05T00:00:00Z — sdd-review product-spec (2 rounds)
+
+- Round 1 FAIL: missing `## Consumer Surface(s)` section (C-14) — the sole blocker. Fixed: added the
+  section (CRITICAL alert via the existing `AlertStream.tsx`; bracket order IDs on the position detail
+  view), plus addressed several advisory warnings in the same pass — flagged the missing
+  `trading.proto` OCA/bracket fields, the `Position.stop_price` reconciliation need, the partial-fill
+  gap, and OrderType scope, all as named `/sdd-design` questions rather than silently resolved.
+- Round 2: **PASS WITH WARNINGS** (3 advisory warnings: FR-1's unbounded "immediately" vs. the P0
+  safety review's max-unprotected-interval requirement, no AC for the IBKR-paper bracket path, no AC
+  for partial-fill reconciliation). Status: `draft` → `spec-ready`.
+- Warnings carried forward for `/sdd-design`: bound FR-1's protection window explicitly
+  (config-driven); confirm IBKR paper-mode OCA support; add partial-fill reconciliation as a named
+  design decision, not just a deferred Open Question.

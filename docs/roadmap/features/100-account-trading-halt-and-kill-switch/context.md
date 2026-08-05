@@ -36,3 +36,16 @@
   append-only-store-instead-of-new-table). Dropped every *automatic* trigger (loss threshold,
   drawdown, reconciliation, stale data) since those either depend on demoted features or on an
   automated order-placement path this platform doesn't have yet.
+
+## Session 2026-08-05T00:00:00Z — sdd-review product-spec (2 rounds)
+
+- Round 1 FAIL: (1) the Problem Statement/FR-1 doc-drift claim was stale —
+  `services/xstockstrat-trading/CLAUDE.md:63` already documents `platform.maintenance_mode` correctly;
+  the cited findings-doc entry is dated 2026-07-24 and no longer reflects trunk. (2) C-3 trading-domain
+  gap: no statement of whether the halt states are scoped per `trading_mode` (paper/live). Fixed:
+  rewrote the Problem Statement/FR-1 to a verification-only step (do not rename a working key on stale
+  evidence), and added explicit per-`trading_mode` config-seeding guidance (independent paper/live halt
+  rows, not `trading_mode='all'`) so an operator can halt live without freezing paper testing.
+- Round 2: **PASS WITH WARNINGS** (3 advisory: `platform.*` 2-segment key format is an inherited,
+  pre-existing exception not new debt; 3 Open Questions correctly deferred to `/sdd-design`; C-4 order
+  type coverage not explicitly stated). Status: `draft` → `spec-ready`.

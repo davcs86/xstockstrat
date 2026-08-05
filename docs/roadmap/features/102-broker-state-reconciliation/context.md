@@ -48,3 +48,15 @@
   to most of the demoted items (102's original scope included), but it over-applied here — the *cheap*
   version of a control can still be worth building now even when the *expensive* version should wait.
   Re-scope before demoting, not just demote.
+
+## Session 2026-08-05T00:00:00Z — sdd-review product-spec (2 rounds)
+
+- Round 1 FAIL: C-5 trading-domain blocker — FR-2's mismatch taxonomy never distinguished a routine
+  `ORDER_STATUS_PARTIALLY_FILLED` order from a genuine quantity-discrepancy mismatch, risking a false
+  `REDUCE_ONLY` halt on every ordinary partial fill (directly counter to the feature's own "self-heal
+  benign cases" goal). Fixed: FR-2 now states a partial fill is not itself a mismatch — only a
+  post-propagation-delay quantity disagreement counts.
+- Round 2: **PASS WITH WARNINGS** (4 advisory: state both `BrokerType`s explicitly in scope, define
+  the "unprotected/impossible" bucket, state how `ORDER_STATUS_FILLED` interacts with the open-orders
+  comparison, add a `## Dependencies` section). Fixed the `## Dependencies` section (100, 101) and
+  folded the remaining three into Open Questions in the same pass. Status: `draft` → `spec-ready`.

@@ -1,6 +1,6 @@
 # Feature: broker-state-reconciliation
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Priority**: `P1` — revived 2026-08-04 after user pushback on the demotion; rescoped to a lightweight
 periodic ticker inside `xstockstrat-trading` reusing its existing broker client, not a new engine or
 dashboard (see context.md)
@@ -17,6 +17,7 @@ dashboard (see context.md)
 | 2026-08-04 | `idea` → `draft` | /sdd-story | Product spec generated from external live-capital-safety risk review |
 | 2026-08-04 | `draft` → `demoted/canceled` | feasibility re-check | See context.md — depends on 101 and on an automated execution path that does not exist; a human reviewing every order via the trader UI is today's de facto reconciliation |
 | 2026-08-04 | `demoted/canceled` → `draft` | user review | Revived, rescoped down to a lightweight periodic check — cheap enough for a solo maintainer even without automated execution; see context.md |
+| 2026-08-05 | `draft` → `spec-ready` | /sdd-review | Product spec approved after 2 review rounds (4 warnings) |
 
 ---
 
@@ -47,4 +48,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review broker-state-reconciliation product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design broker-state-reconciliation` — product spec approved; run recon + design debate
