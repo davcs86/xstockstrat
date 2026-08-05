@@ -66,3 +66,25 @@
   defensible, but the current behavior is a considered prior choice, not an oversight, and reversing it
   has a real cost on this single-instance-no-HA topology (a portfolio-service blip would then block all
   new orders).
+
+## Session 2026-08-05T00:00:00Z — sdd-review product-spec (3 rounds)
+
+- Round 1 FAIL: (1) missing `## Consumer Surface(s)` section (C-14); (2) `trading.risk.max_concentration_pct`
+  duplicated the existing warn-only `trading.risk.max_position_pct` (`trading.go:1288-1326`) without
+  reconciliation (C-10); (3) unresolved Open Questions. Fixed: added the Consumer Surface(s) section
+  (`/trader` order flow), named the reconciliation as an explicit `/sdd-design` question rather than
+  silently leaving two overlapping risk knobs, stated the `qty<=0` auto-size convention, corrected the
+  FR-6 agent-tool-call claim (no agent order-placement tool exists today), added OrderType/AC
+  clarifications.
+- Round 2 FAIL: two internal contradictions — FR-2's `confidence_multiplier` was undefined for
+  confidence < 0.5 (half the valid input domain); FR-7 required returning the sizing decision "in the
+  order-placement response" while Proto Contract Changes claimed no proto changes were needed (verified
+  false — `Order` has no dollar-risk field). Fixed: `confidence_multiplier = confidence` (linear
+  identity across the full 0.0–1.0 domain); FR-7 scoped down to quantity/stop-price via the existing
+  unchanged `Order.qty`/`Order.stop_price` fields, dollar risk and inputs log-only in V1 (genuinely no
+  proto change needed).
+- Round 3: **PASS WITH WARNINGS** (3 advisory: FR-5/FR-6 don't state the interaction between
+  `qty<=0` auto-sizing and STOP/STOP_LIMIT/TRAILING_STOP orders with an unset trigger price; FR-7's
+  reuse of `Order.stop_price` for a computed, non-broker-real risk value overloads a field whose only
+  current semantics is "the real working broker stop" — flag for `/sdd-design`; cosmetic unchecked
+  boxes). Status: `draft` → `spec-ready`.

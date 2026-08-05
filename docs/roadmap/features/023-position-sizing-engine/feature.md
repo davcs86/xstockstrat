@@ -1,6 +1,6 @@
 # Feature: position-sizing-engine
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Priority**: `P0` — blocking live-capital expansion (Live-Capital Safety program, see context.md 2026-08-04)
 **Development Branch**: `feature/position-sizing-engine`
 **Created**: 2026-05-26
@@ -13,6 +13,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-26 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-05 | `draft` → `spec-ready` | /sdd-review | Product spec approved after 3 review rounds (3 warnings) |
 
 ---
 
@@ -43,4 +44,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review position-sizing-engine product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design position-sizing-engine` — product spec approved; run recon + design debate
