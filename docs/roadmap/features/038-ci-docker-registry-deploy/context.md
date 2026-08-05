@@ -1,139 +1,29 @@
-# Context: ci-docker-registry-deploy
+# Context: ci-docker-registry-deploy  (archived 2026-08-05)
 
-**Feature**: `docs/roadmap/features/038-ci-docker-registry-deploy/feature.md`
-**Product Spec**: `docs/roadmap/features/038-ci-docker-registry-deploy/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/038-ci-docker-registry-deploy/implementation-spec.md`
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-08-05 — /sdd-archiver
 
-## Session 2026-05-26T00:00:00Z — sdd-story
+**What**: Shipped as designed for CI-side build/push (all 15 services, GHA layer cache, SHA+floating tags), but the registry choice made in design (DOCR) only partially survived launch: DOCR's basic-plan 5-repo cap forced Step 3 to migrate just 5 of 15 services at merge time, and three days post-launch the whole platform was migrated off DOCR to GHCR entirely (context.md 2026-05-29). The feature's real end-state is "GHCR-backed CI build+push," not the DOCR design it was reviewed and approved against.
+**Why (irrecoverable rationale)**: DOCR was picked pre-implementation for "native DO App Platform auth, zero credential wiring" (product-spec.md L95, context.md 2026-05-26T00:03). Nobody checked the DOCR basic-plan repo-count limit before committing to it in design/spec — the constraint only surfaced during Step 3 execution.
+**Rejected alternatives**:
+- Option A, CI build-validation only (no push/registry) — lost to Option B (build+push+DO pulls prebuilt) because the goal was eliminating DO's build-timeout/flaky-install failures, not just catching errors earlier (context.md 2026-05-26T00:00).
+- Path-filtered builds (only changed services) — deferred/rejected for launch because the existing `changes` filter job "is not working correctly"; all 15 services build unconditionally instead (product-spec FR-1, context.md 2026-05-26 sdd-spec session).
+- PR-triggered docker-build runs — rejected per explicit user request; job restricted to push-to-main/main-dev only, diverging from the reviewed impl-spec which called for PR builds (no push) to gate merges (implementation-spec.md Deviation Log, Step 1; context.md 2026-05-26T00:02, Step 1 note).
+**Scars & gotchas**:
+- DOCR basic plan hard-caps at 5 repositories — discovered only at Step 3 execution, not in design/review; forced an ad-hoc selection heuristic (top-5 services by pnpm lockfile package count: insights=117, trader=117, config-ui=114, identity=93, notify=93) rather than a principled choice (context.md Step 3 session, 2026-05-26T00:09).
+- GHCR packages must be manually flipped to public on GitHub after the first CI push, or DO App Platform cannot pull them without credentials (context.md 2026-05-29).
 
-- Created feature.md (status: draft), product-spec.md, context.md from user story.
-- Origin of feature: exploration session comparing Option A (CI build validation only) vs Option B (CI build + push to registry, DO deploys pre-built images). User chose Option B.
-- Key open questions captured in product-spec.md: registry choice (DOCR vs ghcr.io), stale image handling strategy for path-filtered builds, and PR build scope.
-- No proto, schema, or config changes — Platform Lead review role assigned.
-
-## Session 2026-05-26T00:01:00Z — product-spec update
-
-- Resolved stale image handling: per-service floating `latest-dev`/`latest` tags (FR-9). App specs reference floating tags; no SHA injection needed in deploy workflow.
-- Resolved build matrix strategy: build only changed services using existing `changes` filter; shared-file changes trigger all services of the affected language group.
-- Resolved local dev workflow: dual `build:` + `image:` in docker-compose.yml. `docker compose pull` fetches CI image; `docker compose build` builds locally. Both usable by `docker compose up`.
-- One open question remains: registry choice (DOCR vs ghcr.io).
-
-## Session 2026-05-26T00:04:00Z — sdd-review product-spec
-
-- Product spec approved. Status: draft → spec-ready.
-- Warnings: (1) Affected Services mixes file paths with service names — advisory; (2) 003 and 018 both modify docker-compose.yml/.do/ files — 020 must merge before both.
-- Two spec failures resolved before approval: FR-5/FR-9 contradiction fixed by aligning to industry standard SHA-pinned deploys; FR-1 updated to build all 14 services (changes filter deferred).
-- Overlap findings: no FAIL-level conflicts; merge order advisory noted.
-
-## Session 2026-05-26T00:03:00Z — registry decision
-
-- Registry choice resolved: DOCR. `DIGITALOCEAN_ACCESS_TOKEN` already exists in repo secrets (used by deploy workflows). CI uses `digitalocean/action-doctl@v2` + `doctl registry login` — no new secrets. DO App Platform pulls from DOCR with zero additional credential configuration.
-- No open questions remain. Ready for `/sdd-spec ci-docker-registry-deploy`.
-
-## Session 2026-05-26T00:05:00Z — sdd-spec
-
-- Generated implementation-spec.md with 5 steps. Status → implementation-ready.
-- Key codebase findings:
-  - The `changes` job in `.github/workflows/ci.yml` already has a `dockerfiles` filter at L63 that matches `**/Dockerfile*` — the new `docker-build` job can use this filter in its `if:` guard.
-  - `DIGITALOCEAN_ACCESS_TOKEN` is already a repo secret (confirmed at `.github/workflows/deploy.yml` L28) — `doctl registry login` reuses it; no new credential secret needed for CI registry auth.
-  - Both app specs have 15 `dockerfile_path` service entries (14 product-spec services + `xstockstrat-agent` at L210) plus 1 `db-migrator` job entry (L452) — the db-migrator is excluded from registry migration per FR-8.
-  - `docker-compose.yml` has 16 `build:` entries (15 services + db-migrator at L82); db-migrator does not need an `image:` field.
-  - The reusable `deploy.yml` uses a `sed` substitution for `YOUR_GITHUB_ORG` at L31 — the SHA and registry-name substitution follows the same pattern in Step 2.
-  - New GitHub Actions secret `DO_REGISTRY_NAME` is required (the DOCR registry slug). Must be added to Steps 1, 2, and 5, and documented in `docs/setup/digitalocean.md`.
-  - `xstockstrat-agent` is present in both app specs but absent from the product spec's 14-service list. Implementation includes it in Steps 1 and 3 to avoid a `dockerfile_path` entry left in the app specs after migration.
-
-## Session 2026-05-26T00:06:00Z — sdd-review impl-spec
-
-- Implementation spec reviewed (Mode B — advisory). Result: 0 failures, 0 warnings after fixes applied.
-- Fix 1: Step 1 `if:` condition was missing the push-branch short-circuit. Without it, only path-filtered matrix entries would run on push to main-dev/main, violating FR-1 (build all 15 services unconditionally on push). Fixed by prepending `(github.event_name == 'push' && (github.ref == 'refs/heads/main-dev' || github.ref == 'refs/heads/main')) ||` to the `if:` expression.
-- Fix 2: Step 4 `**Files**` was missing `.env.example` — the Instructions mention adding `DO_REGISTRY_NAME=xstockstrat` to `.env.example` but the file was not listed. Fixed by adding `- \`.env.example\` — modify (add DO_REGISTRY_NAME)` to the Files list.
-- Overlap check: no FAIL-level conflicts. Merge order advisory confirmed: 038 must merge before 003 and 018 (both touch docker-compose.yml and .do/ files).
-- Trading domain checks: skipped (non-trading feature).
-- Step ordering: no test steps needed (CI workflow — no service coverage threshold applies).
-
-### Step 5 — docs: Update DigitalOcean setup guide [done]
-- Added Step 4.5 (Create a DOCR Container Registry) between Steps 4 and 5 with `doctl registry create` command, plan-limit note, and DO App Platform native auth explanation.
-- Updated Step 5 and Step 6 with prerequisites noting CI must push images before `doctl apps create`.
-- Updated Step 9 secrets table to add `DO_REGISTRY_NAME` row (used by ci docker-build, deploy-dev, deploy-prod).
-- Added two troubleshooting entries: "Deploy fails with image not found" and "`docker compose pull` fails with unauthorized".
-- Files modified: `docs/setup/digitalocean.md`
-- Deviations: none
-
-## Session 2026-05-26T00:11:00Z — sdd-execute
-**Steps this session**: [5]
-**Progress**: 5 done / 5 total
-**Status**: `code-completed` — all steps done; open integration PR `feature/ci-docker-registry-deploy` → `main-dev`
-**Merge order gate**: 038 must merge before 003 and 018 (both touch docker-compose.yml and .do/ files) — confirmed from merge-order.md
-
-### Step 4 — service: Add image field to docker-compose.yml [done]
-- Added `image:` field alongside `build:` block for all 15 app services in `docker-compose.yml`. Image format: `registry.digitalocean.com/${DO_REGISTRY_NAME:-xstockstrat}/<service>:latest-dev`. db-migrator excluded per FR-8.
-- Added `DO_REGISTRY_NAME=xstockstrat` to `.env.example` with usage comment; added `DO_REGISTRY_NAME` to GitHub Secrets table in `.env.example`.
-- Files modified: `docker-compose.yml`, `.env.example`
-- Deviations: none
-
-## Session 2026-05-26T00:10:00Z — sdd-execute
-**Steps this session**: [4]
-**Progress**: 4 done / 5 total
-**Stopped at**: Step 4 (complete — awaiting merge before continuing)
-**Next**: /sdd-execute ci-docker-registry-deploy next
-
-## Session 2026-05-26T00:02:00Z — priority escalation
-
-- Confirmed this is the highest-priority active feature. The current DO-based Dockerfile builds have two active failures: (1) build timeouts — cold pnpm install + pnpm build exceeds DO's build time limit, especially for Next.js frontends; (2) flaky installs — cold npm registry hits on DO egress cause retries that exhaust the timeout budget. Both 018 and 003 are blocked from reaching production until this is resolved.
-- Problem Statement in product-spec.md updated to document both failure modes explicitly.
-
-### Step 1 — ci: Add docker-build job to CI workflow [done]
-- Inserted `docker-build` job in `.github/workflows/ci.yml` after `dockerfile-lint` (L519), before `shell-lint` (L520). 15-service matrix, push=true always, tags with short SHA + floating tag.
-- Files modified: `.github/workflows/ci.yml`
-- Deviations: Job restricted to push events on main-dev/main only (no PR builds) — user-requested change from spec's unconditional trigger.
-
-## Session 2026-05-26T00:07:00Z — sdd-execute
-**Steps this session**: [1]
-**Progress**: 1 done / 5 total
-**Stopped at**: Step 1 (complete — awaiting merge before continuing)
-**Next**: /sdd-execute ci-docker-registry-deploy next
-
-### Step 3 — service: Migrate app specs from dockerfile_path to image references [done]
-- Migrated 5 services (trader, insights, config-ui, identity, notify) from github:+dockerfile_path: to image: DOCR blocks in both .do/app.dev.yaml and .do/app.yaml. 10 backend services + nginx unchanged. Services selected by pnpm lockfile package count (top 5: insights=117, trader=117, config-ui=114, identity=93, notify=93).
-- Files modified: `.do/app.dev.yaml`, `.do/app.yaml`
-- Deviations: Only 5 of 15 services migrated (DOCR basic plan 5-repo limit); ci.yml matrix stays at 15 services (accepted limitation — 10 non-selected jobs will fail at DOCR quota).
-
-## Session 2026-05-26T00:09:00Z — sdd-execute
-**Steps this session**: [3]
-**Progress**: 3 done / 5 total
-**Stopped at**: Step 3 (complete — awaiting merge before continuing)
-**Next**: /sdd-execute ci-docker-registry-deploy next
-
-### Step 2 — service: Update deploy workflows to inject SHA image tags [done]
-- Added `image_tag` input and `DO_REGISTRY_NAME` secret to `deploy.yml` reusable workflow; replaced single-sed substitution step with three-substitution step covering `YOUR_GITHUB_ORG`, `YOUR_IMAGE_TAG`, and `YOUR_REGISTRY_NAME`.
-- Added `prepare` job to both `deploy-dev.yml` and `deploy-prod.yml` to compute 7-char short SHA; updated `deploy` job in each to depend on `prepare` and pass `image_tag` and `DO_REGISTRY_NAME`.
-- Files modified: `.github/workflows/deploy.yml`, `.github/workflows/deploy-dev.yml`, `.github/workflows/deploy-prod.yml`
-- Deviations: none
-
-## Session 2026-05-26T00:08:00Z — sdd-execute
-**Steps this session**: [2]
-**Progress**: 2 done / 5 total
-**Stopped at**: Step 2 (complete — awaiting merge before continuing)
-**Next**: /sdd-execute ci-docker-registry-deploy next
-
-## Session 2026-05-27 (CI: feature status automation)
-
-- Promotion PR #375 merged to main
-- Feature promoted and committed: 790d855782d7581455619911aa86fdaf627376b4
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-05-27
-
-## Session 2026-05-29 — DOCR → GHCR migration
-
-- Completed migration of all 15 services from DOCR to GHCR.
-- **Before:** 10 services used `ghcr_push: true`, 5 services (identity, notify, trader, insights, config-ui) used `push: true` (DOCR). The DOCR 5-repo basic plan limit was the constraint.
-- **After:** All 15 services push to `ghcr.io/davcs86/xstockstrat/<service>` via GHCR. No DOCR dependency remaining.
-- `DO_REGISTRY_NAME` GitHub secret is no longer needed; removed from all workflows.
-- `DIGITALOCEAN_ACCESS_TOKEN` retained for `doctl apps update` in deploy workflows.
-- App specs (`.do/app.yaml`, `.do/app.dev.yaml`): all 5 previously-DOCR services now use `registry_type: GHCR`, `registry: YOUR_GITHUB_ORG` (substituted to `davcs86` by deploy workflow sed), `repository: xstockstrat/<service>` — same format as the existing 10 GHCR services.
-- `docker-compose.yml`: all 15 image refs updated from `registry.digitalocean.com/...` to `ghcr.io/davcs86/xstockstrat/...`.
-- Docs updated: `docs/setup/digitalocean.md`, `docs/launch-pdfs/infra-ci.md`, `.claude/skills/digitalocean-setup/SKILL.md`.
-- Step 4.5 in setup guide updated from "Create DOCR registry" to "Make GHCR packages public".
-- Packages must be set to public on GitHub after first CI push for DO App Platform to pull without credentials.
+**Permanent deviations (shipped contradicts design/spec)**:
+- design/impl-spec said DOCR registry with SHA-pinned deploy tags for all 15 services -> shipped 5-of-15 partial DOCR migration at launch, then full GHCR migration for all 15 three days later -> because DOCR's 5-repo basic-plan limit made the original registry choice unworkable at scale (context.md 2026-05-26T00:09, 2026-05-29).
+- impl-spec said `docker-build` runs on both push and pull_request (build-only, no push, on PRs) -> shipped push-only trigger (main-dev/main), no PR builds -> because the user explicitly requested it, overriding the reviewed spec (implementation-spec.md Deviation Log, Step 1).
+- product-spec's Affected Services list enumerated only 14 services, omitting `xstockstrat-agent` -> `/sdd-spec` silently expanded scope to include `xstockstrat-agent` as a 15th service in the CI matrix and app-spec migration (Steps 1 and 3) -> because both `.do/app*.yaml` already carried an agent `dockerfile_path` entry, and leaving it un-migrated would strand a stale entry after the DOCR/GHCR cutover (context.md 2026-05-26T00:05, L45). This scope decision is invisible in shipped code — `ci.yml`, app specs, and `docker-compose.yml` all just show agent present, indistinguishable from ordinary scope creep without this rationale.
+**Permanent deviations**: none
+**Cross-feature signal**:
+- 038 was declared "highest-priority active feature" (context.md Session 2026-05-26T00:02) not merely because of the merge-order file conflict, but because features 003 and 018 were *actively blocked from reaching production* by DO's build timeouts (cold pnpm install/build exceeding DO's build-time limit, worst for Next.js frontends) and flaky cold npm-registry installs on DO egress exhausting the retry budget — 038 was the unblocking fix, not just a predecessor. This rationale existed only in context.md prose (product-spec.md's Problem Statement documents the failure modes generically without naming 003/018).
+- The merge-order gate itself was also confirmed real: 038 had to land before 003 and 018 since all touch `docker-compose.yml`/`.do/` files (context.md 2026-05-26 sdd-review session, 2026-05-26T00:11 execute session).
+**Deferred follow-ons**: FR-1's path-filtered (changed-service-only) build matrix remains deferred pending a fix to the `changes` filter job.
+**Ledger entries written**: insights.md (1), fails.md (2) — see the 2026-08-05 entries.
+**Runtime-invariant recommendations (→ /context-constitution)**: - none
+**Pruned artifacts**: product-spec.md, implementation-spec.md — last present at f5abed5.

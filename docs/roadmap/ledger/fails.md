@@ -364,3 +364,112 @@ ambiguity is logged here).
 - **Mistake**: `xstockstrat-agent` accumulated ruff violations because it's absent from the CI lint matrix, risking scope creep when later steps touched the same files.
 - **Evidence**: `docs/roadmap/features/047-strategy-engine/context.md:193-232`.
 - **Rule it implies**: When editing a file in a non-CI-linted service, fix only the lines you touch; do not "clean up" pre-existing drift as a side effect.
+### 2026-08-05 — make-repo-public-secure — assumption
+- **Mistake**: Feature reached `launched` while product-spec AC-5 (`SECURITY.md` required) was never satisfied — no correcting session recorded it as a gap.
+- **Evidence**: `docs/roadmap/features/004-make-repo-public-secure/` product-spec.md AC-5; implementation-spec.md Deviation Log, Step 6 (pruned; recoverable via git history).
+- **Rule it implies**: `/sdd-execute`'s completion path should cross-check acceptance criteria against actually-created files before the feature is allowed to flip to `code-completed`.
+
+### 2026-08-05 — make-repo-public-secure — config
+- **Mistake**: A later implementation step (Step 11) was absorbed/canceled, and a spec'd secret name (`GITHUB_TOKEN` → `GH_PAT_SCAN`, Step 7) was swapped, mid-execution via ad hoc adjustment rounds instead of re-running `/sdd-spec`, leaving `implementation-spec.md` contradicting the shipped `ci.yml` with no in-code comment explaining the swap.
+- **Evidence**: `docs/roadmap/features/004-make-repo-public-secure/` implementation-spec.md Step 7 L475 vs `.github/workflows/ci.yml:671,676`; Step 10/11 order (L578-668); context.md 2026-05-11T02:15:00Z session (pruned; recoverable via git history).
+- **Rule it implies**: If execute-time changes cancel/merge a planned step or swap a spec'd credential/config value, re-run `/sdd-spec` (or manually clean the doc) and leave an in-repo comment for secret substitutions before marking the feature complete.
+
+### 2026-08-05 — agent-mcp-server — assumption
+- **Mistake**: The implementation spec assumed the lowlevel `mcp.server.Server` class supports a `.tool()` decorator; only `FastMCP` does — caught only at Step 10 unit-test writing.
+- **Evidence**: `docs/roadmap/features/009-agent-mcp-server/context.md:245,266`.
+- **Rule it implies**: When a design references a specific SDK/class, verify its exact API in the recon/design phase, not at first use during execute.
+
+### 2026-08-05 — remove-n8n-references — duplication
+- **Mistake**: The spec assumed one router file per service; execute found a second, unimported, orphaned copy of the same router in 3+ services.
+- **Evidence**: `docs/roadmap/features/011-remove-n8n-references/context.md` 2026-05-18T00:00:00Z, T02:00:00Z.
+- **Rule it implies**: Grep for near-duplicate/orphaned router or handler files before writing the impl-spec for a cleanup/removal feature.
+
+### 2026-08-05 — remove-n8n-references — assumption
+- **Mistake**: `product-spec.md` FR-1 and FR-2 disagreed on notify's `list-alerts` behavior; shipped code followed a decision recorded only in `context.md`, not a spec correction.
+- **Evidence**: `docs/roadmap/features/011-remove-n8n-references/product-spec.md:39` vs `:60` (pruned; recoverable via git history); context.md 2026-05-18T01:00:00Z, T06:00:00Z.
+- **Rule it implies**: Flag intra-spec contradictions (two FRs disagreeing on the same endpoint's behavior) during `/sdd-review`, not leave them to be silently resolved at execute time.
+
+### 2026-08-05 — remove-n8n-references — assumption
+- **Mistake**: `/sdd-spec` ran while `feature.md` was still `draft` (the product-spec review gate had never completed); execution proceeded on "implicit confirmation" with no record in `feature.md`'s Status History.
+- **Evidence**: `docs/roadmap/features/011-remove-n8n-references/context.md:175`.
+- **Rule it implies**: Skills that require a prior gate must hard-block (not proceed on implicit invocation) when `feature.md` status doesn't match the precondition, and any override must be logged in Status History, not just context.md prose.
+
+### 2026-08-05 — wire-fe-auth — assumption
+- **Mistake**: The spec assumed indicators made outbound ingest calls per the service registry; the servicer had zero stubs — the spec was stale versus the actual Phase-3 code.
+- **Evidence**: `docs/roadmap/features/012-wire-fe-auth/` implementation-spec.md L828-832 (pruned; recoverable via git history).
+- **Rule it implies**: Verify a spec's cross-service call assumptions against the actual servicer code, not just the service registry doc, before relying on them.
+
+### 2026-08-05 — wire-fe-auth — config
+- **Mistake**: Adding a second base to `@/*` TypeScript path aliases silently double-prefixes imports; the breakage surfaces only at build time, not at edit time.
+- **Evidence**: `docs/roadmap/features/012-wire-fe-auth/` implementation-spec.md L813-821 (pruned; recoverable via git history).
+- **Rule it implies**: When adding a second base directory to an existing path alias, run a full build immediately, don't rely on editor-time resolution to catch a double-prefix collision.
+
+### 2026-08-05 — phase-2-data-layer — scope-creep
+- **Mistake**: A user-requested "also fix X" (SourceRegistry) was implemented directly mid-session instead of routed through `/sdd-story`.
+- **Evidence**: `docs/roadmap/features/013-phase-2-data-layer/context.md` 2026-05-20 "SourceRegistry implemented (scope expansion — skipped SDD flow)".
+- **Rule it implies**: Even a small opportunistic in-session fix must get its own `/sdd-story` pass or be explicitly logged as a sanctioned deviation.
+
+### 2026-08-05 — phase-2-data-layer — assumption
+- **Mistake**: A broker-API field name (`avgPrice`) was inferred (not confirmed against a live endpoint) and shipped with a caveat buried in `implementation-spec.md`; the unit test mocks the same guessed field name, so it structurally cannot detect a wrong guess.
+- **Evidence**: `docs/roadmap/features/013-phase-2-data-layer/` implementation-spec.md:109 (pruned; recoverable via git history); `services/xstockstrat-trading/internal/broker/ibkr.go:281`; `ibkr_test.go:99`.
+- **Rule it implies**: When a step's code is written against an inferred (not spec-confirmed) external API field name, the caveat must be promoted into context.md or a tracked follow-up — not left only in implementation-spec.md — since spec files get deleted on archive and a hand-rolled mock test gives false confidence.
+
+### 2026-08-05 — agent-mcp-oauth — scope-creep
+- **Mistake**: A feature was carved out and deferred without noting its infra dependencies explicitly, making it harder for a later re-spec to find them.
+- **Evidence**: `docs/roadmap/features/018-agent-mcp-oauth/context.md:12-14,44-52`.
+- **Rule it implies**: When deferring a carved-out feature, note its infra dependencies explicitly in context.md so a later re-spec finds them fast.
+
+### 2026-08-05 — agent-mcp-oauth — assumption
+- **Mistake**: A reviewer flagged a specific design ambiguity (FR-9's two-token conflation) with a concrete recommendation; the impl-spec built a different, simpler shape with no documented rationale for departing from the review.
+- **Evidence**: `docs/roadmap/features/018-agent-mcp-oauth/context.md:21`; implementation-spec.md:185-197 (pruned; recoverable via git history).
+- **Rule it implies**: When an impl-spec diverges from a prior review's explicit recommendation, record why in context.md at spec time, not leave it implicit.
+
+### 2026-08-05 — ci-docker-registry-deploy — assumption
+- **Mistake**: A container registry (DOCR) was chosen purely for auth convenience without checking its repo-count limit against the actual 15-service fleet.
+- **Evidence**: `docs/roadmap/features/038-ci-docker-registry-deploy/` product-spec.md L95 vs implementation-spec.md Step 3 (5/15) vs context.md 2026-05-29 (pruned; recoverable via git history).
+- **Rule it implies**: For any "pick a managed registry" decision affecting N services, recon must check plan/quota limits against N before locking in the choice.
+
+### 2026-08-05 — ci-docker-registry-deploy — scope-creep
+- **Mistake**: The product-spec's Affected Services list omitted a service (`xstockstrat-agent`) that was already present in the target config files (`.do/app*.yaml`), so `/sdd-spec` silently widened scope to cover it with no visibility back into the approved spec.
+- **Evidence**: `docs/roadmap/features/038-ci-docker-registry-deploy/context.md` 2026-05-26T00:05 (L45) vs product-spec.md 14-service list (pruned; recoverable via git history).
+- **Rule it implies**: When `/sdd-spec` finds an entity in target files that the product-spec's Affected list omits, flag it back to the spec (or note it explicitly) rather than quietly absorbing it.
+
+### 2026-08-05 — client-api-pattern — assumption
+- **Mistake**: A `/sdd-story` re-story pass did not re-diff the assumed codebase state against current main-dev.
+- **Evidence**: `docs/roadmap/features/044-client-api-pattern/context.md` 2026-05-30T00:00:00Z.
+- **Rule it implies**: A re-story pass on an existing feature must re-diff the codebase, not just accept the prior story's assumptions.
+
+### 2026-08-05 — client-api-pattern — assumption
+- **Mistake**: An unsafe type cast was justified inline with "no current caller reads this," with no comment explaining the reasoning at the cast site.
+- **Evidence**: `services/xstockstrat-ui/src/lib/identity.ts:19`.
+- **Rule it implies**: Any unsafe cast justified by "no current caller" reasoning must carry an inline comment stating that reasoning, since it silently becomes wrong the moment a new caller appears.
+
+### 2026-08-05 — client-api-pattern — scope-creep
+- **Mistake**: A core FR's chosen library was dropped mid-execution without a Deviation Log entry, surviving only as an unexplained fact in the final pattern doc.
+- **Evidence**: `docs/roadmap/features/044-client-api-pattern/` product-spec.md FR-1 vs. context.md Steps 4-6 (pruned; recoverable via git history).
+- **Rule it implies**: When a spec names a specific library for a core FR, the step that "completes" that FR should grep for an actual import of it before marking done, and any silent abandonment must get a Deviation Log entry.
+
+### 2026-08-05 — ui-consolidation-nextjs — header
+- **Mistake**: `docs/patterns/nextjs-frontends.md` was left describing the pre-consolidation basePath/nginx BFF-key convention after feature 045 shipped the opposite.
+- **Evidence**: `docs/patterns/nextjs-frontends.md:3,25,289-297` vs `services/xstockstrat-ui/src/lib/traderBff.ts:157-159`.
+- **Rule it implies**: A consolidation/architecture-change feature must update the shared pattern doc, not only the affected service's own CLAUDE.md.
+
+### 2026-08-05 — ui-consolidation-nextjs — assumption
+- **Mistake**: Moving an existing flat single-basePath app into a nested route-group segment broke (a) relative component imports (`./ui/*` → `../ui/*`), (b) hardcoded same-app absolute cross-page imports (`@/app/page` → `@/app/trader/page`), and (c) hardcoded top-level navigation hrefs inside shell/nav components — not just shared-lib imports, and not just import statements.
+- **Evidence**: `docs/roadmap/features/045-ui-consolidation-nextjs/context.md:111,112,113,114`.
+- **Rule it implies**: Any future nesting/consolidation of an existing app must grep for relative imports crossing the new directory boundary, absolute imports pointing at the old top-level page path, AND hardcoded `href`/nav-link literals in shell/layout components that assumed a flat top-level path.
+
+### 2026-08-05 — live-strategy-alert-engine — header
+- **Mistake**: Near-miss — nearly forwarded a blanket admin `x-access-scope` from an unauthenticated-for-admin entry point (agent SSE `validate_api_key`).
+- **Evidence**: `docs/roadmap/features/048-live-strategy-alert-engine/context.md:89-92`.
+- **Rule it implies**: Verify the upstream entry point actually authenticates the elevated privilege level before forwarding it — a near-miss here is a real risk elsewhere.
+
+### 2026-08-05 — live-strategy-alert-engine — assumption
+- **Mistake**: Adding a new proto/DB field (`live_enabled`) without updating the row-to-proto mapper (`_row_to_strategy_definition`) in lockstep — the bug was only caught by writing tests, not by type-checking.
+- **Evidence**: `docs/roadmap/features/048-live-strategy-alert-engine/context.md:137-139`.
+- **Rule it implies**: When adding a field to a response proto backed by a DB row, grep every row-to-proto mapper function for that message and update all call sites in the same step, before writing tests.
+
+### 2026-08-05 — live-strategy-alert-engine — assumption
+- **Mistake**: The spec assumed protobuf-es v2 Struct field introspection (`context?.fields?.<key>?.stringVal`) was safe for client-side filtering; shipped code abandoned it for tag-string filtering instead.
+- **Evidence**: `docs/roadmap/features/048-live-strategy-alert-engine/context.md:166,174,180-181`.
+- **Rule it implies**: Prefer tag/string-based filtering over protobuf-es v2 Struct field introspection in TS clients; don't spec Struct field access as the primary filter mechanism.
