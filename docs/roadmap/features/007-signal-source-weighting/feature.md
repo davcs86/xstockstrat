@@ -6,6 +6,7 @@
 **Development Branch**: `feature/signal-source-weighting`
 **Created**: 2026-05-16
 **Last Updated**: 2026-05-24
+**Archived**: 2026-08-05
 
 ---
 
@@ -18,14 +19,14 @@
 | 2026-05-23 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 4 steps |
 | 2026-05-23 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete — config migration created |
 | 2026-05-24 | `in-progress` → `code-completed` | /sdd-execute | All 4 steps complete |
+| 2026-08-05 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 2 specs |
 
 | 2026-05-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #321; committed 75c8866a31dc4cce892192f7e4ce469add7345e1 |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver 2026-08-05; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

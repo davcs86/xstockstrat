@@ -275,3 +275,68 @@ ambiguity is logged here).
 - **Mistake**: The agent's MCP surface (`tools.py` docstrings), its human runbook (`docs/runbooks/mcp-tools.md`), and the `strat-lab` skill are hand-written prose with almost no executable link to the code they describe, so they silently drift from `app/client.py` + the protos. A full manual audit (report `docs/reports/2026-08-01-mcp-tools-alignment-triage.md`, 13 confirmed findings) was needed to catch it — e.g. feature 070 made `manage_strategy update` a partial merge but the sibling `strat-lab` skill kept teaching the pre-070 full-replace footgun for a whole release cycle (F-12), and `emit_alert`'s documented `{"success": true}` return never matched the real `{"alert_id": …}` (F-12). Same root cause (RC-1) as the hand-written dict→proto request builders that silently drop new proto fields (`RegisterFormulaRequest.outputs/warmup_period` F-3, `EmitAlertRequest.context/tags` F-10).
 - **Evidence**: report `docs/reports/2026-08-01-mcp-tools-alignment-triage.md` (RC-1 + meta-cause; F-2/F-3/F-4/F-9/F-10/F-12/F-13); `services/xstockstrat-agent/tests/test_tools_endpoint.py` (only two substring asserts guard the entire tool surface); the one tool that did NOT drift, `run_backtest`, is the descriptor-parity-tested one (`tests/test_backtest_view.py::test_summary_key_set_covers_every_proto_field`).
 - **Rule it implies**: a hand-maintained projection or tool-doc that mirrors a proto/contract must be pinned by an executable parity/contract test (mirror `test_backtest_view.py`), and a same-PR rule change to a tool (e.g. feature 070) must update every surface that describes it (docstring + runbook + strat-lab skill) in that PR. Candidate binding rule — extend **C-10** (parity across all surfaces) to tool docs + request/response builders.
+
+### 2026-08-05 — add-ikbr-account-support — assumption
+- **Mistake**: A documented "follow-up" gap (missing `user_id` in the `account.positions.synced` payload, noted at spec time) was left unfixed and surfaced weeks later as a production bug ("positions out of sync") requiring a dedicated fix session.
+- **Evidence**: `docs/roadmap/features/001-add-ikbr-account-support/context.md:145` (original note) and `:402-413` (2026-06-09 fix session).
+- **Rule it implies**: A "trivial follow-up" touching a payload consumed by user-facing reconciliation should be fixed before launch, not deferred, since silent placeholder values (`user_id="default"`) fail invisibly.
+
+### 2026-08-05 — add-ikbr-account-support — scope-creep
+- **Mistake**: `ListPortfolios` cross-account aggregation was cut mid-implementation ("outside Step 17 scope") without updating or flagging the acceptance criterion (FR-27/AC7) it violated; the shipped code looks correct in isolation but silently fails the documented spec.
+- **Evidence**: `docs/roadmap/features/001-add-ikbr-account-support/context.md:384`; implementation-spec.md:1298-1300 Deviation Log (pruned; recoverable via git history).
+- **Rule it implies**: When an implementation step narrows scope from what an FR/AC promises, either update the AC or block launch — don't let it ship as an undocumented gap.
+
+### 2026-08-05 — broker-accounts-ui — assumption
+- **Mistake**: `implementation-spec.md` prescribed forwarding `trading_mode` into a portfolio API call whose backing proto request had no such field, discovered only during execution.
+- **Evidence**: `docs/roadmap/features/002-broker-accounts-ui/` implementation-spec.md L888-891 (pruned; recoverable via git history), `portfolio.proto:109`.
+- **Rule it implies**: `/sdd-spec` should grep the actual proto message fields before prescribing request parameters, not just reuse a sibling endpoint's query-string shape.
+
+### 2026-08-05 — formula-management-ui — assumption
+- **Mistake**: FR-13/OQ-1 assumed an HTTP-header identity mechanism and HTTP transport, both superseded by concurrent platform-wide migrations (044 client-api-pattern, gRPC-only) before this feature executed.
+- **Evidence**: `docs/roadmap/features/003-formula-management-ui/context.md` session 2026-06-01 ("FR-13 corrected").
+- **Rule it implies**: When a feature spans multiple sessions/streams, re-verify its spec's transport/infra assumptions against any concurrent platform-wide migration before executing, not just at spec-write time.
+
+### 2026-08-05 — frontend-reverse-proxy — assumption
+- **Mistake**: The implementation spec assumed Docker was available for `nginx -t`/`docker build`/`docker compose` verification; the execute sandbox had none, so 3 of 6 steps shipped with only structural (non-runtime) checks.
+- **Evidence**: `docs/roadmap/features/005-frontend-reverse-proxy/` implementation-spec.md Deviation Log Steps 1, 2, 6; context.md sessions 2026-05-11 and 2026-05-12 (pruned; recoverable via git history).
+- **Rule it implies**: Infra-feature implementation specs must include a non-Docker structural fallback check, not rely solely on Docker-dependent verification commands the execute sandbox may lack.
+
+### 2026-08-05 — frontend-reverse-proxy — assumption
+- **Mistake**: A small, unrelated `basePath` change on config-ui was the first build attempt in a while, and it exposed dormant breakage (missing dep, removed library export) that had nothing to do with this feature.
+- **Evidence**: `docs/roadmap/features/005-frontend-reverse-proxy/context.md` session 2026-05-12 (late); implementation-spec.md Deviation Log Step 5 (pruned; recoverable via git history).
+- **Rule it implies**: Budget for a service's first build-in-a-while to surface unrelated dormant breakage; treat the fix as legitimate in-scope unblocking, not scope creep to reject.
+
+### 2026-08-05 — do-nginx-integration — assumption
+- **Mistake**: The implementation spec for a feature depending on another in-flight feature's branch (005) trusted that sibling feature's *spec text* as ground truth for what was actually committed, instead of re-checking the real file.
+- **Evidence**: `docs/roadmap/features/006-do-nginx-integration/` implementation-spec.md:373-376 ("Feature 005 committed a minimal Dockerfile with CMD (not ENTRYPOINT)... Without these changes the entrypoint script would exist but never be invoked"); context.md Session 2026-05-18 00:02 (pruned; recoverable via git history).
+- **Rule it implies**: When Step N depends on artifacts from a sibling in-progress feature, re-grep the actual current file at execute time, not just cite the sibling's implementation-spec.
+
+### 2026-08-05 — do-nginx-integration — config
+- **Mistake**: Unscoped `envsubst` in an nginx entrypoint substitutes nginx's own `$host`/`$remote_addr`/`$scheme` runtime variables to empty strings, breaking the config at startup.
+- **Evidence**: `docs/roadmap/features/006-do-nginx-integration/` implementation-spec.md:378-381 (pruned; recoverable via git history).
+- **Rule it implies**: Any `envsubst`-templated nginx (or similar) config must pass an explicit variable-name allowlist, never bare `envsubst`.
+
+### 2026-08-05 — signal-source-weighting — duplication
+- **Mistake**: Generated proto stubs required `grpcio>=1.80.0` while `uv.lock` across three Python services (analysis, indicators, ingest) was still pinned to `1.78.0`, only surfacing as a hard `RuntimeError` when a test suite happened to import the stubs — not caught by CI or codegen freshness checks.
+- **Evidence**: `docs/roadmap/features/007-signal-source-weighting/` implementation-spec.md Deviation Log (Step 4, lines 385-397); context.md 2026-05-24 session (pruned; recoverable via git history).
+- **Rule it implies**: When bumping/regenerating proto plugins or stubs, cross-check the minimum grpcio version they require against every Python service's `uv.lock`, not just the service being touched.
+
+### 2026-08-05 — signal-source-registry — assumption
+- **Mistake**: Mediated source types were dropped from the migration CHECK constraint, `validate_config_json`, and the noop extractor artifact — twice (once pre-execute, once again during Step 8) — because they were added to one FR but not propagated to sibling spec sections.
+- **Evidence**: `docs/roadmap/features/008-signal-source-registry/context.md:55-61,151-153`.
+- **Rule it implies**: When a spec defines a value enum with variant subsets (e.g. base + mediated), explicitly cross-check every downstream artifact (migration, validators, extractor stubs, tests) against the full enum list before marking the step done.
+
+### 2026-08-05 — trader-chart-panel — assumption
+- **Mistake**: An impl-spec review caught that `mock-backend.ts` needed a new env-derived endpoint mocked, but missed that `playwright.config.ts`'s `webServer.env` needed the same var added — the gap surfaced only during Step 5 execution.
+- **Evidence**: `docs/roadmap/features/014-trader-chart-panel/context.md` L38-42 (review) vs L95 (execute-time fix).
+- **Rule it implies**: When a review flags a missing mock/env wiring in one test-support file, also check sibling test-support files (playwright config, docker-compose, etc.) that mirror the same env var.
+
+### 2026-08-05 — fix-grafana-otel-variables — assumption
+- **Mistake**: A markdown-status-parsing CI step used non-portable/unanchored grep+sed (unescaped `**`, wrong PR-number pattern, unscoped `sed -i` insert) and silently failed to flip feature status on promotion.
+- **Evidence**: `docs/roadmap/features/015-fix-grafana-otel-variables/context.md:146-154`.
+- **Rule it implies**: CI scripts parsing `feature.md` must be tested against the real merge-commit message format and use anchored (`sed -n`/`awk`-scoped) edits, never a blind whole-file `sed -i`.
+
+### 2026-08-05 — config-ui-weight-validation — assumption
+- **Mistake**: Assumed a DB column named `value_type` already carries the semantic type needed for a new feature (validation bounds), when it actually stores an unrelated storage type (`string`/`int`/`float`/…).
+- **Evidence**: `docs/roadmap/features/016-config-ui-weight-validation/context.md` Session 2026-06-01T00:02:00Z (sdd-spec finding); implementation-spec.md Step 3 Codebase Evidence (pruned; recoverable via git history).
+- **Rule it implies**: Before reusing an existing column/field for new semantics, grep its write-site to confirm what it actually encodes today — a matching name is not proof of matching meaning.

@@ -6,6 +6,7 @@
 **Development Branch**: `feature/trader-chart-panel`
 **Created**: 2026-05-20
 **Last Updated**: 2026-05-24
+**Archived**: 2026-08-05
 
 ---
 
@@ -18,14 +19,14 @@
 | 2026-05-20 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
 | 2026-05-24 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done — lightweight-charts dependency added |
 | 2026-05-24 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done |
+| 2026-08-05 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 2 specs |
 
 | 2026-05-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #341; committed e991fcb52eeda41985c6403983a2b20cb6f9a04b |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver 2026-08-05; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
