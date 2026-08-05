@@ -136,10 +136,17 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
   `trading.go:287` passes `req.ClientOrderId` straight to the broker, which today is always the
   proto zero-value (empty string). This feature introduces the platform's first client-side
   idempotency key from scratch — no existing generator to interoperate with or migrate.
-- [ ] How is the deterministic client-order-id derived, given Alpaca/IBKR client-order-id length/
-  charset limits, and which `BrokerType` values (ALPACA, IBKR — the only two values besides
-  `_UNSPECIFIED`, `packages/proto/common/v1/common.proto`) are in scope? **Decide at `/sdd-design`.**
-- [ ] Does this feature's behavior differ under `TRADING_MODE=paper` vs `live`? Likely not — a
+- [x] Which `BrokerType` values are in scope for the intent/dedup mechanism? **Resolved: both.**
+  `BrokerType` has exactly two real values besides `_UNSPECIFIED` (`BROKER_TYPE_ALPACA`,
+  `BROKER_TYPE_IBKR` — `packages/proto/common/v1/common.proto`), and this feature covers both; neither
+  is out of scope. The intent record's `broker account/environment` field (FR-1) already carries
+  whichever broker the order targets.
+- [x] Does this feature's behavior differ under `TRADING_MODE=paper` vs `live`? **Resolved: no.** A
   `BrokerAccount`'s paper/live-ness is fixed at the deployment/account level
-  (`packages/proto/trading/v1/trading.proto:172`, `is_paper`), not chosen per request — but
-  `/sdd-design` should state this explicitly rather than leave it silent.
+  (`packages/proto/trading/v1/trading.proto:172`, `is_paper`), not chosen per request, so the
+  intent/dedup mechanism behaves identically in both — nothing in FR-1..FR-6 branches on trading mode.
+
+_Deferred to `/sdd-design` (implementation detail, not a product blocker):_
+- How is the deterministic client-order-id actually derived (hash function, length truncation, charset
+  sanitization) given Alpaca's and IBKR's differing client-order-id length/charset limits? Broker scope
+  is resolved above; only the derivation algorithm itself is left open.

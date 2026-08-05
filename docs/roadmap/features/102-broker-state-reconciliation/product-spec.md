@@ -128,8 +128,23 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 4. An `UNKNOWN` order intent from `101` is resolved against broker truth by this same tick.
 5. The `/trader` view shows reconciliation recency and current status.
 
+## Dependencies
+
+- `feature/exactly-once-order-intent` (101) — FR-6/AC-4 resolve 101's `UNKNOWN` order-intent state
+  against broker truth; the intent-record contract must exist first (already tracked in
+  `docs/roadmap/features/merge-order.md:43`).
+- `feature/account-trading-halt-and-kill-switch` (100) — FR-4/AC-3 halt exposure-increasing trading via
+  100's `REDUCE_ONLY`/`HALTED` kill switch; the richer state must exist first.
+
 ## Open Questions
 
+- [ ] What does the "unprotected/impossible state" bucket (FR-2) mean concretely — an example or two
+  would sharpen this beyond a placeholder category. **Decide at `/sdd-design`.**
+- [ ] State explicitly that both `BROKER_TYPE_ALPACA` and `BROKER_TYPE_IBKR` are in scope for the
+  reconciliation ticker (currently only implied via file references to `alpaca.go`/`ibkr.go`).
+- [ ] How does a fully `ORDER_STATUS_FILLED` order interact with the open-orders comparison (it drops
+  out of "open orders" but its effect is caught, if at all, via the position-side quantity-discrepancy
+  bucket) — state this explicitly rather than leaving it implicit. **Decide at `/sdd-design`.**
 - [ ] Does the reconciliation ticker belong in `xstockstrat-trading` alone, or does it also need a
   cheap positions/cash check against `xstockstrat-portfolio`? Lean toward trading-only for this pass
   (it's the service with broker credentials); flag at `/sdd-design` if portfolio drift turns out to be
