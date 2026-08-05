@@ -23,7 +23,7 @@ func newPool(ctx context.Context, connStr string) (*pgxpool.Pool, error) {
 	}
 	cfg.MaxConns = defaultMaxConns
 	if v := os.Getenv("DB_POOL_MAX"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+		if n, err := strconv.ParseInt(v, 10, 32); err == nil && n > 0 {
 			cfg.MaxConns = int32(n)
 		}
 	}
