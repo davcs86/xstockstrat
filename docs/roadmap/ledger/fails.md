@@ -340,3 +340,27 @@ ambiguity is logged here).
 - **Mistake**: Assumed a DB column named `value_type` already carries the semantic type needed for a new feature (validation bounds), when it actually stores an unrelated storage type (`string`/`int`/`float`/…).
 - **Evidence**: `docs/roadmap/features/016-config-ui-weight-validation/context.md` Session 2026-06-01T00:02:00Z (sdd-spec finding); implementation-spec.md Step 3 Codebase Evidence (pruned; recoverable via git history).
 - **Rule it implies**: Before reusing an existing column/field for new semantics, grep its write-site to confirm what it actually encodes today — a matching name is not proof of matching meaning.
+### 2026-08-05 — unified-login-page — assumption
+- **Mistake**: `/sdd-spec` generated a concrete implementation spec against an assumed post-dependency codebase state while the dependency feature (045) was still in-flight, producing a spec invalidated by the time execution started.
+- **Evidence**: `docs/roadmap/features/019-unified-login-page/context.md:56-57,76-80`.
+- **Rule it implies**: For features with a hard merge-order dependency, prefer re-running `/sdd-spec` (not just merging main-dev) immediately before `/sdd-execute` if significant time has passed since spec-ready.
+
+### 2026-08-05 — mpt-portfolio-optimization — assumption
+- **Mistake**: Nearly treated an ordinal/conviction score (analysis service's 0–1 signal confidence) as if it were a cardinal expected-return estimate suitable as an optimizer input.
+- **Evidence**: `docs/roadmap/features/028-mpt-portfolio-optimization/product-spec.md:16,30-31` (pruned; recoverable via git history).
+- **Rule it implies**: Before feeding any existing service's score/metric into a new quantitative model, verify its units and semantics match what the model requires — an ordinal ranking is not a cardinal estimate, even on the same 0–1 scale.
+
+### 2026-08-05 — upgrade-nextjs15 — assumption
+- **Mistake**: The spec cited a file for modification that a concurrently-merging feature (044) had already deleted, discovered only at execute time.
+- **Evidence**: `docs/roadmap/features/041-upgrade-nextjs15/` implementation-spec.md Deviation Log Step 2; context.md Session 2026-05-30 (4-feature parallel batch) (pruned; recoverable via git history).
+- **Rule it implies**: For features spec'd as part of a parallel batch off main-dev, re-verify cited file paths still exist immediately before executing each step, not just at spec time.
+
+### 2026-08-05 — align-frontend-e2e-bff-mocks — duplication
+- **Mistake**: `mock-backend.ts` in two separate frontends (trader, insights) independently used the wrong field name `accountId` instead of the actual proto field `id` on `BrokerAccount`, undetected until full suite runs.
+- **Evidence**: `docs/roadmap/features/046-align-frontend-e2e-bff-mocks/context.md:92-93,109-111`.
+- **Rule it implies**: When copying mock-backend scaffolding between frontends, diff mock response shapes against the proto message definition, not against the sibling mock file.
+
+### 2026-08-05 — strategy-engine — scope-creep
+- **Mistake**: `xstockstrat-agent` accumulated ruff violations because it's absent from the CI lint matrix, risking scope creep when later steps touched the same files.
+- **Evidence**: `docs/roadmap/features/047-strategy-engine/context.md:193-232`.
+- **Rule it implies**: When editing a file in a non-CI-linted service, fix only the lines you touch; do not "clean up" pre-existing drift as a side effect.
