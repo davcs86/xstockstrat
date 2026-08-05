@@ -657,3 +657,67 @@ reusing.
 - **Pattern**: A feature whose implementation step targets a service directory owned by an in-flight consolidation/rewrite feature (e.g. 045) should wait for that feature to merge before speccing file paths, not spec against the soon-to-be-deleted path and re-spec later.
 - **Evidence**: `docs/roadmap/features/016-config-ui-weight-validation/context.md` Session 2026-06-01 (W3 decision) + Session 2026-06-04 (actual re-spec of Steps 5-6 from `xstockstrat-config-ui` to `xstockstrat-ui`).
 - **Rule it implies**: At `/sdd-spec` time, check `merge-order.md` and in-flight feature statuses for the target service directory; if a consolidation feature is `draft`/`in-progress` and targets the same directory, flag it for re-spec-after-merge rather than speccing now.
+### 2026-08-05 — unified-login-page — assumption
+- **Pattern**: An implementation spec written before a prerequisite feature (045) fully landed assumed a structure that main-dev no longer matched by execution time, forcing a mid-execution re-spec.
+- **Evidence**: `docs/roadmap/features/019-unified-login-page/context.md:76-80`.
+- **Rule it implies**: When a feature's spec has a hard "must follow feature X being launched" dependency, re-verify the actual landed structure of X at execute-time (not just at spec-time) before trusting the spec's file list.
+
+### 2026-08-05 — unified-login-page — reuse
+- **Pattern**: Next.js auto-redirects a trailing-slash path (e.g. `/config-ui/` → `/config-ui`, 308) before custom middleware auth logic runs, breaking status/location assertions that assume the auth redirect fires first.
+- **Evidence**: `docs/roadmap/features/019-unified-login-page/context.md:135-137`.
+- **Rule it implies**: E2E assertions on middleware redirects must use the canonical (non-trailing-slash) path, or account for an intermediate 308.
+
+### 2026-08-05 — crypto-exchange-integration — design
+- **Pattern**: A proposed feature was demoted at the `idea` stage, before drafting a product-spec, purely by checking new-domain microstructure compatibility (session model, liquidity concentration, signal-integrity, regulatory regime) against existing architectural assumptions.
+- **Evidence**: `docs/roadmap/features/027-crypto-exchange-integration/product-spec.md:20-44` (pruned; recoverable via git history).
+- **Rule it implies**: For any proposal to add a new asset class/domain, run a microstructure-compatibility check against current session/liquidity/signal assumptions before writing a full product-spec — a fast idea-stage kill is cheaper than a spec-ready rejection.
+
+### 2026-08-05 — mpt-portfolio-optimization — design
+- **Pattern**: When a feature's core inputs require estimating a value that is structurally unknowable in advance (e.g. expected forward returns), reject the approach at idea stage rather than building it and discovering estimation instability empirically.
+- **Evidence**: `docs/roadmap/features/028-mpt-portfolio-optimization/product-spec.md:21-25` (pruned; recoverable via git history).
+- **Rule it implies**: Before designing an optimizer/model feature, name its required inputs explicitly and check whether a reliable estimator exists today — if not, demote or descope to a proxy that doesn't need it (risk parity, equal-weight+cap, etc.).
+
+### 2026-08-05 — options-trading-support — design
+- **Pattern**: A proposed feature was recognized at idea stage as belonging to a distinct platform domain (options data model, pricing, broker semantics) rather than an additive extension of the existing equity stack, and demoted before any spec/design investment.
+- **Evidence**: `docs/roadmap/features/034-options-trading-support/product-spec.md:19-34`, `feature.md:14` (pruned; recoverable via git history).
+- **Rule it implies**: When evaluating a new-capability idea, explicitly check whether it's an extension of the current domain model or a distinct domain requiring its own data model/pricing/broker semantics — recognizing adjacent-domain scope creep before speccing is cheap; discovering it mid-spec is not.
+
+### 2026-08-05 — sec-filing-sentiment — design
+- **Pattern**: A feature was demoted at the `idea` stage, before `/sdd-story` produced a full draft, based purely on a documented cost/benefit writeup in product-spec.md.
+- **Evidence**: `docs/roadmap/features/035-sec-filing-sentiment/feature.md:12-14`, product-spec.md:19-34 (pruned; recoverable via git history).
+- **Rule it implies**: For data-source ideas, write the "why not worth building" timing/signal-quality analysis before investing in design — a text-only demotion at idea stage is valid and cheap.
+
+### 2026-08-05 — portfolio-rebalancing — design
+- **Pattern**: An idea borrowed from a different portfolio paradigm (passive/static-target allocation) was checked against this system's actual model (signal-conviction sizing) before any spec/design investment, and rejected because the two paradigms produce opposite trade decisions on the same data (trim winners vs. follow conviction).
+- **Evidence**: `docs/roadmap/features/036-portfolio-rebalancing/product-spec.md:20-24` (pruned; recoverable via git history).
+- **Rule it implies**: Before speccing an idea imported from a different domain/paradigm (passive investing, other codebases, generic "best practice"), explicitly check whether this system's core allocation/decision model is compatible — a mechanism that's standard elsewhere can be actively harmful here.
+
+### 2026-08-05 — upgrade-nextjs15 — reuse
+- **Pattern**: Next.js 15's `PageProps` async-params TypeScript constraint applies to client components too; use `React.use(params)`, not `await`, there.
+- **Evidence**: `docs/roadmap/features/041-upgrade-nextjs15/` implementation-spec.md Deviation Log Step 2; context.md Step 5 (config-ui) (pruned; recoverable via git history).
+- **Rule it implies**: When migrating to Next 15 async props, grep ALL `params`/`searchParams` type usages including `'use client'` files, not just server components/route handlers.
+
+### 2026-08-05 — upgrade-nextjs15 — design
+- **Pattern**: Keep test-mocking exclusively in the E2E harness (`connectNodeAdapter + http2.createServer` for a real gRPC/H2C mock), never branch production client code for tests.
+- **Evidence**: `docs/roadmap/features/041-upgrade-nextjs15/` implementation-spec.md Deviation Log Steps 3&6; `docs/patterns/nextjs-frontends.md` §4 (pruned; recoverable via git history).
+- **Rule it implies**: Reject any PR step that adds `httpOverride`/test-only env branches to a production `connectClients.ts`.
+
+### 2026-08-05 — align-frontend-e2e-bff-mocks — reuse
+- **Pattern**: Frontend e2e mock updates were verified with static grep/import checks in one step, then the actual full-suite run in the next step caught a proto-field bug the static check missed.
+- **Evidence**: `docs/roadmap/features/046-align-frontend-e2e-bff-mocks/context.md:109-111` (Step 4 vs Step 5, `xstockstrat-insights`).
+- **Rule it implies**: When adding/modifying a mock-backend handler for a frontend e2e suite, verification must include running the affected suite, not just confirming the import/registration exists.
+
+### 2026-08-05 — align-frontend-e2e-bff-mocks — design
+- **Pattern**: protobuf-es JSON codec serializes enums as string names and BigInt fields as strings, not numbers — test assertions and mock stub shapes written by spec-writing without checking generated proto types get this wrong.
+- **Evidence**: `docs/roadmap/features/046-align-frontend-e2e-bff-mocks/context.md:94,105`.
+- **Rule it implies**: Before writing e2e assertions or mock RPC return shapes against connect-web/protobuf-es data, grep the actual generated `_pb` types rather than assuming field types.
+
+### 2026-08-05 — strategy-engine — design
+- **Pattern**: After a dependent feature (048) is built, the platform owner asked to retrofit an already-shipped, code-completed feature's auth gate to match — even post-launch.
+- **Evidence**: `docs/roadmap/features/047-strategy-engine/context.md:272-286`.
+- **Rule it implies**: When two features share a runtime component reused across a boundary (evaluator, auth gate), design review should ask whether the later feature's contract should retroactively replace the earlier one's, not just extend it.
+
+### 2026-08-05 — strategy-engine — ordering
+- **Pattern**: Services referenced a peer via `os.environ.get("X_ENDPOINT", ...)` in code without the var ever being added to `docker-compose.yml` or `.do/app*.yaml`.
+- **Evidence**: `docs/roadmap/features/047-strategy-engine/context.md:74-78`.
+- **Rule it implies**: Whenever a step adds/uses a new outbound `_ENDPOINT` var, grep all three deployment surfaces explicitly — don't infer wiring from code presence.

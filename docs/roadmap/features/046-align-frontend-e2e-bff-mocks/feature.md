@@ -6,6 +6,7 @@
 **Development Branch**: `feature/align-frontend-e2e-bff-mocks`
 **Created**: 2026-05-31
 **Last Updated**: 2026-06-01
+**Archived**: 2026-08-05
 
 ---
 
@@ -18,14 +19,14 @@
 | 2026-06-01 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps. |
 | 2026-06-01 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done — streamAlerts added to trader mock. |
 | 2026-06-01 | `in-progress` → `code-completed` | /sdd-execute | All 8 steps done — all three frontend e2e suites pass CI (trader 36/36, insights 22/22, config-ui 31/31). |
+| 2026-08-05 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 2 specs |
 
 | 2026-06-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #523; committed edf803cb8942cee14abc604d1ed95c11b79d8445 |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver 2026-08-05; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

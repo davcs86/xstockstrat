@@ -4,6 +4,7 @@
 **Development Branch**: _none — demoted before implementation_
 **Created**: 2026-05-26
 **Last Updated**: 2026-05-26
+**Archived**: 2026-08-05
 
 ---
 
@@ -12,12 +13,13 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-26 | `idea` → `demoted/canceled` | brainstorming | Demoted at idea stage — see rationale in product-spec.md |
+| 2026-08-05 | `demoted/canceled` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(0); pruned 1 specs |
 
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — demotion rationale
+- Product Spec — pruned by /sdd-archiver 2026-08-05; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — decision log
 
 ---
