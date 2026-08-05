@@ -35,6 +35,12 @@ records.
 FR-2. Classify each mismatch into a small, honest set: benign propagation delay (broker hasn't caught
 up yet — retry next tick), quantity discrepancy, unknown broker order (exists at broker, not in
 platform), missing broker order (exists in platform, not at broker), or unprotected/impossible state.
+**A broker order in `ORDER_STATUS_PARTIALLY_FILLED` is not, by itself, a mismatch** — it's a routine,
+expected intermediate state (`packages/proto/trading/v1/trading.proto:73`). "Quantity discrepancy"
+means the platform's expected remaining quantity disagrees with the broker's reported remaining
+quantity *after* the propagation-delay window (FR-2's first bucket) has elapsed — not that the order
+is merely partially filled. This distinction is what keeps FR-4's halt-on-discrepancy from firing on
+every routine partial fill.
 
 FR-3. Self-heal only propagation-delay-class mismatches automatically (they resolve themselves within
 a tick or two by definition). Every other mismatch class is recorded, never silently corrected.
@@ -68,6 +74,10 @@ this feature.
 
 - `xstockstrat-trading` — owns the ticker, the broker-vs-platform comparison, and the ledger writes.
 - `xstockstrat-notify` — mismatch alerting (existing `EmitAlert`, no change needed).
+- `xstockstrat-portfolio` — FR-1 compares against `xstockstrat-portfolio`'s own position records, a
+  read dependency (no write access assumed).
+- `xstockstrat-ui` — the `/trader` account/positions view surfaces reconciliation recency and status
+  (see Consumer Surface(s)).
 
 ## Consumer Surface(s)
 
@@ -83,6 +93,12 @@ _Constitution **C-14**._
 
 - [ ] Likely none — the reconciliation status can ride on an existing `GetPortfolio`/order-status RPC
   response as an added field, rather than a new RPC. Confirm at `/sdd-design`.
+- **Parity note (C-10(b)):** FR-1 reconciles both orders (`trading.GetOrder`/`ListOrders`) and
+  positions (`portfolio.GetPortfolio`/`ListPositions`/`ListPortfolios`) — two separate RPC families.
+  `/sdd-design` must state which read path(s) carry the reconciliation-status field(s) — e.g. an
+  order-side field on `Order` and a position-side field on `Position` — rather than adding it to only
+  one and leaving the other inconsistent (this exact trap is recorded in
+  `docs/roadmap/ledger/fails.md`, 2026-07-01).
 
 ## Config Key Changes
 
@@ -120,3 +136,9 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
   a real, separate risk.
 - [ ] Exact tick interval — balance "catches drift promptly" against "extra broker API calls on a
   free/low-tier Alpaca/IBKR plan." Flag for `/sdd-design`.
+- [ ] `xstockstrat-trading` already runs two other broker-polling loops (`pollFills`,
+  `trading.risk` config key `trading.fill_poller.interval_ms`, and `syncPositions`,
+  `trading.position_sync.interval_ms` — both documented in `services/xstockstrat-trading/CLAUDE.md`).
+  Is this feature's ticker a genuinely distinct concern from those two, or should it fold into one of
+  them (and if distinct, where does it live in the codebase — same file or a new one)? **Decide at
+  `/sdd-design`.**
