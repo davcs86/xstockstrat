@@ -1,57 +1,22 @@
-# Context: agent-mcp-oauth
+# Context: agent-mcp-oauth  (archived 2026-08-05)
 
-**Feature**: `docs/roadmap/features/018-agent-mcp-oauth/feature.md`
-**Product Spec**: `docs/roadmap/features/018-agent-mcp-oauth/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/018-agent-mcp-oauth/implementation-spec.md`
+**Feature**: ./feature.md
+**Status**: demoted/canceled — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-08-05 — /sdd-archiver
 
-## Session 2026-05-25T01:20:00Z — sdd-story
+**What**: This feature designed OAuth 2.0 Authorization Code + PKCE endpoints for `xstockstrat-agent` so Claude.ai's "Connect apps" could authenticate without raw API keys in URLs, and got as far as a reviewed 7-step implementation spec — but was never executed. It was superseded before any code landed and its reusable design decisions were folded into feature 049 as full OAuth 2.1 (context.md session 2026-06-06).
+**Why (irrecoverable rationale)**: Spawned mid-execution of 009-agent-mcp-server (Step 9) when an operator asked how MCP auth works; the `?api_key=` fallback was a quick patch pushed onto that PR, while OAuth was deliberately carved out as a separate feature rather than scope-creeping 009 (context.md:12-14, 2026-05-25 sdd-story session).
+**Rejected alternatives**:
+- Unified login page shared across all frontends — deferred to 019-unified-login-page to keep scope to the OAuth flow itself (context.md:23, OQ-1).
+- Redis/DB-backed authorization-code store — rejected for an in-memory module-level singleton dict, safe only because `instance_count: 1`; flagged as needing revisit if the agent ever scales out (context.md:24, OQ-2).
+**Scars & gotchas**:
+None from execution — never ran. Two design-time gotchas: (1) by /sdd-spec time (2026-05-25) identity had no login UI at all, forcing the agent to serve its own login form and POST to identity's HTTP endpoint (context.md:30-32) — invalidated by feature 045 before implementation started. (2) The product-spec review (context.md:21, 2026-05-25 sdd-review session) warned FR-9 conflated two distinct tokens — the short-lived credential identity would hand back on a redirect to an agent callback vs. the separate OAuth code the agent issues to its client — and recommended clarifying via a `/oauth/callback` two-hop relay. What actually got spec'd diverged from that guidance: implementation-spec.md Step 2 (lines 185-197) has identity's `AuthenticateUser` return an `access_token` synchronously inside the agent's own `POST /oauth/authorize` handler (no redirect-relay hop at all), then immediately calls `CreateApiKey` in the same request. The review's suggested shape was never built — a case where reviewer guidance was flagged but the impl-spec author chose a simpler single-hop design instead, without a recorded reason why.
 
-- Created feature.md (status: draft), product-spec.md, context.md from user story.
-- Context: spawned from 009-agent-mcp-server execution. During Step 9 (claude_mcp_config.json), operator asked how MCP auth works. Identified that query-param (?api_key=) covers Claude Desktop but OAuth 2.0 is the correct path for Claude.ai remote MCP connections.
-- The ?api_key= fallback was added to main.py in the same session (pushed onto Step 9 PR #347).
-- OAuth 2.0 is a meaningful separate feature — kept out of 009 scope deliberately.
-- Key design decision: use PKCE (S256) Authorization Code flow; access token IS the xstockstrat API key (no separate token store); in-memory code store (safe at instance_count: 1).
-- Open question: identity login UI may be needed for the redirect flow — to be resolved at /sdd-spec time.
-
-## Session 2026-05-25 — sdd-review product-spec
-
-- Product spec approved. Status: draft → spec-ready.
-- Warnings: FR-9 flow description slightly ambiguous — "authorization code" from identity is not the same token as the OAuth code the agent issues to the client. impl-spec should clarify that identity redirects to an agent callback URL (e.g. `/oauth/callback`) with a short-lived identity credential; agent then issues the OAuth code to the client's redirect_uri.
-- Overlap findings: none (formula-management-ui is the only active concurrent feature; touches xstockstrat-indicators and xstockstrat-insights — no overlap).
-- OQ-1 resolved: minimal server-rendered GET /login form in xstockstrat-identity scoped into this feature (FR-9). Unified login page deferred to follow-up feature 019-unified-login-page.
-- OQ-2 resolved: module-level singleton dict for authorization code store. Safe for instance_count: 1.
-
-## Session 2026-05-25T00:00:00Z — sdd-spec
-
-- Generated implementation-spec.md with 7 steps. Status → implementation-ready.
-- Key codebase findings:
-  - `xstockstrat-identity` has NO login form/OAuth UI: `src/index.ts` serves only Connect-RPC
-    and `/health`. The agent's `GET /oauth/authorize` must serve its own minimal HTML login form
-    and POST to identity's `AuthenticateUser` Connect-RPC HTTP endpoint (port 8058).
-  - `IDENTITY_HTTP_ENDPOINT` is absent from the agent's environment in `docker-compose.yml`
-    (lines 515–524) and both DO spec files — must be added as a new env var in Step 2.
-  - `AuthCode` dataclass needs an `api_key` field: the API key returned by `CreateApiKey` in the
-    authorize POST handler must be stored in the code store and retrieved in the token endpoint
-    (avoids a second identity round-trip at token exchange time).
-  - nginx `agent_backend` upstream already exists (line 39); new OAuth paths added as two
-    location blocks: `= /.well-known/oauth-authorization-server` at root and
-    `/agent/oauth/` proxied to agent's `/oauth/`.
-  - `AGENT_PUBLIC_URL` is a new env var needed in the metadata document to build absolute
-    `authorization_endpoint` and `token_endpoint` URLs.
-
-## Session 2026-06-06 — superseded / folded into 049
-
-- Per user decision, this feature is **merged into `049-unify-admin-auth-gates` (Part B)** and re-specced
-  as **full MCP OAuth 2.1** (RFC 8414 + RFC 9728 metadata, RFC 7591 Dynamic Client Registration,
-  mandatory PKCE/S256, exact redirect-URI match, login delegated to `xstockstrat-ui` `/auth/oauth-login`,
-  identity over gRPC). Status: `implementation-ready` → `demoted/canceled`.
-- **The 7-step implementation-spec.md here is RETIRED — do not execute.** It is stale post-045: it assumes
-  nginx (`nginx.conf` deleted), HTTP/Connect-RPC `80xx` ports + `IDENTITY_HTTP_ENDPOINT` (removed; backends
-  are gRPC-only), and separate trader/insights/config-ui services (consolidated into `xstockstrat-ui`).
-- Reusable design decisions carried forward into 049 Part B: PKCE S256 auth-code flow; access token = the
-  `xss_` identity API key (no separate token store); in-memory single-use ≤60s code store
-  (instance_count:1). New in 049: RFC 9728 protected-resource metadata, RFC 7591 DCR, exact redirect
-  matching (OAuth 2.1), and gRPC-only identity calls replacing the stale HTTP approach.
-- Authoritative spec going forward: `docs/roadmap/features/049-unify-admin-auth-gates/product-spec.md`.
+**Permanent deviations**: none — nothing shipped.
+**Cross-feature signal**: A fully-reviewed, implementation-ready spec can go stale from unrelated platform migrations (045's nginx/HTTP-port removal) before execution. Reusable pieces (PKCE S256, access-token-is-the-API-key, in-memory ≤60s code store) survived into 049 Part B; transport-layer assumptions (nginx, `IDENTITY_HTTP_ENDPOINT`, 80xx) did not.
+**Deferred follow-ons**: Full MCP OAuth 2.1 → 049-unify-admin-auth-gates Part B. Unified login page → 019-unified-login-page. Redis/DB code store → not yet scheduled.
+**Failure post-mortem**: Not a design failure — overtaken by scope consolidation. Root cause: spec predated 045's nginx removal/gRPC-only migration; by 2026-06-06 its core assumptions no longer existed (context.md:50-52). Missed signal: ~6-week gap between spec-ready and execution let a major migration land unnoticed — no automated staleness check exists between "implementation-ready" and execution start.
+**Ledger entries written**: insights.md (1), fails.md (2) — see the 2026-08-05 entries.
+**Runtime-invariant recommendations (→ /context-constitution)**: - none
+**Pruned artifacts**: product-spec.md, implementation-spec.md — last present at f5abed5.

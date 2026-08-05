@@ -721,3 +721,97 @@ reusing.
 - **Pattern**: Services referenced a peer via `os.environ.get("X_ENDPOINT", ...)` in code without the var ever being added to `docker-compose.yml` or `.do/app*.yaml`.
 - **Evidence**: `docs/roadmap/features/047-strategy-engine/context.md:74-78`.
 - **Rule it implies**: Whenever a step adds/uses a new outbound `_ENDPOINT` var, grep all three deployment surfaces explicitly — don't infer wiring from code presence.
+### 2026-08-05 — make-repo-public-secure — reuse
+- **Pattern**: When adding a committable file matched by an earlier broad `.gitignore` pattern, a later wildcard ignore (e.g. `**/.env.*`) can re-shadow the negation; both root and `**/`-prefixed carve-outs are needed.
+- **Evidence**: `docs/roadmap/features/004-make-repo-public-secure/` implementation-spec.md Deviation Log, Step 5 (pruned; recoverable via git history).
+- **Rule it implies**: Verify new gitignore carve-outs with `git check-ignore -v`, not by inspection.
+
+### 2026-08-05 — make-repo-public-secure — design
+- **Pattern**: For a not-yet-live/public repo, prefer `${VAR:?err}`/explicit runtime error over a hardcoded fallback secret string, even when the spec asked for a fallback.
+- **Evidence**: `docs/roadmap/features/004-make-repo-public-secure/` implementation-spec.md Deviation Log, Step 1 (pruned; recoverable via git history).
+- **Rule it implies**: When hardening secrets pre-launch, default to fail-fast; only add graceful fallback once real users depend on the default path.
+
+### 2026-08-05 — agent-mcp-server — design
+- **Pattern**: A behavior threshold (alert conviction cutoff) went through 3 storage choices (hardcode → env var → config service) within one feature before landing on config service.
+- **Evidence**: `docs/roadmap/features/009-agent-mcp-server/context.md:180-201`.
+- **Rule it implies**: For any tunable business threshold, decide config-service-vs-env-var against the project's config-governance rule at design time, not during execute.
+
+### 2026-08-05 — agent-mcp-server — ordering
+- **Pattern**: An explicitly Out-of-Scope item (service-side secret enforcement) was pulled in-scope mid-execute "at operator request," adding permanent middleware to three unrelated services never named in the original feature boundary.
+- **Evidence**: `docs/roadmap/features/009-agent-mcp-server/context.md:81-90`.
+- **Rule it implies**: A mid-flight Out-of-Scope reversal that touches services outside the original Affected Services list should trigger a fresh `/sdd-review` of the widened scope, not just an implementation-spec patch.
+
+### 2026-08-05 — remove-n8n-references — ordering
+- **Pattern**: A "rename" story became a selective-deletion feature only after a per-endpoint caller audit forced by impl-spec review — most endpoints turned out to have zero real callers.
+- **Evidence**: `docs/roadmap/features/011-remove-n8n-references/context.md` 2026-05-18T01:00:00Z.
+- **Rule it implies**: Don't accept a "rename" framing for legacy-integration cleanup until every endpoint's actual caller set is verified.
+
+### 2026-08-05 — remove-n8n-references — reuse
+- **Pattern**: A legacy endpoint (`score-strategy`) was deleted rather than renamed because an identical Connect-RPC path already existed at the same shape.
+- **Evidence**: `docs/roadmap/features/011-remove-n8n-references/context.md` 2026-05-18T01:00:00Z.
+- **Rule it implies**: Check for an existing equivalent RPC before preserving a legacy shim during a rename/cleanup pass.
+
+### 2026-08-05 — wire-fe-auth — reuse
+- **Pattern**: `middleware.ts` and other Edge-runtime code must never import modules that pull in `@connectrpc/connect-node`; inline the needed constant instead.
+- **Evidence**: `docs/roadmap/features/012-wire-fe-auth/` implementation-spec.md L803-811 (pruned; recoverable via git history).
+- **Rule it implies**: Grep Edge-runtime entry points for transitive imports of Node-only gRPC transport packages before adding a new shared import.
+
+### 2026-08-05 — wire-fe-auth — reuse
+- **Pattern**: Extract gRPC request-scoped context (headers/trace IDs) before `asyncio.create_task`; never read it after the parent RPC has returned.
+- **Evidence**: `docs/roadmap/features/012-wire-fe-auth/` implementation-spec.md L834-837 (pruned; recoverable via git history).
+- **Rule it implies**: Any fire-and-forget async task spawned from an RPC handler must capture request-scoped context synchronously before the task is created, not read it lazily inside the task.
+
+### 2026-08-05 — phase-2-data-layer — design
+- **Pattern**: Combined multi-pass event processing (complete-fills then orphaned-partial-fills) assumed a broker-enforced invariant (no simultaneous long+short) instead of sorting by timestamp.
+- **Evidence**: `docs/roadmap/features/013-phase-2-data-layer/context.md` 2026-05-20 "partially-filled-then-canceled" session; implementation-spec.md Step 5 test 7 note (pruned; recoverable via git history).
+- **Rule it implies**: When pass-ordering substitutes for chronological correctness, explicitly document the domain invariant it relies on and flag it if provider-specific (e.g. IBKR Hedged mode).
+
+### 2026-08-05 — agent-mcp-oauth — design
+- **Pattern**: A dormant `implementation-ready` spec (never executed, carved out and deferred) can go stale against the current codebase and CLAUDE.md by the time it's picked back up.
+- **Evidence**: `docs/roadmap/features/018-agent-mcp-oauth/feature.md:8-13`; context.md:44-52.
+- **Rule it implies**: Re-verify a dormant `implementation-ready` spec's environment assumptions against current CLAUDE.md before executing, don't assume it's still accurate.
+
+### 2026-08-05 — ml-price-prediction — design
+- **Pattern**: A feature idea was demoted immediately at brainstorming, before an `/sdd-story` draft, once structural (not tooling) objections were identified — avoiding any spec/design/code investment.
+- **Evidence**: `docs/roadmap/features/024-ml-price-prediction/feature.md:14`, product-spec.md:18-33 (pruned; recoverable via git history).
+- **Rule it implies**: When an idea's core premise is structurally unsound (no fixable-by-engineering edge, unbounded ongoing operational cost, or unrecoverable auditability), write the rejection rationale directly and demote at idea stage rather than running it through spec-ready/design-approved first.
+
+### 2026-08-05 — realtime-tick-streaming — design
+- **Pattern**: An idea was demoted at the idea stage (before draft/design) by explicitly weighing "decision value to the strategy pipeline" against "engineering cost" — including vendor-side constraints (Alpaca feed rate limits) that would make the naive implementation operationally fragile — rather than defaulting to build because the underlying data was already available.
+- **Evidence**: `docs/roadmap/features/025-realtime-tick-streaming/product-spec.md:18-39`, feature.md:31 (pruned; recoverable via git history).
+- **Rule it implies**: For UI/latency-improvement proposals, first ask whether any human-facing action actually changes at the proposed latency, and whether the upstream vendor feed can even support the proposed fan-out; if not, and the platform's decisions are made by an automated pipeline (not human real-time execution), demote at idea stage rather than proceeding to design.
+
+### 2026-08-05 — social-copy-trading — design
+- **Pattern**: Ideas with dominant non-engineering blockers (regulatory classification as investment advice, a core architectural assumption like single-tenancy, or an inherent abuse/gaming surface requiring ongoing monitoring) were demoted at the `idea` stage without spending a draft/design cycle.
+- **Evidence**: `docs/roadmap/features/026-social-copy-trading/feature.md:14`, product-spec.md:20-42 (pruned; recoverable via git history).
+- **Rule it implies**: When a feature idea's primary blocker is legal/regulatory classification, contradicts a stated platform-wide architectural invariant (e.g. single-tenancy), or has a structural abuse surface needing dedicated ops infrastructure, route it to a demotion rationale before running `/sdd-design`, rather than spending Phase 0/1 effort.
+
+### 2026-08-05 — multi-broker-smart-routing — design
+- **Pattern**: Institutional-style optimizations (e.g. smart order routing) can be rejected at idea stage via a simple dollar-value cost/benefit estimate before any design work, when the existing single-provider path already delivers most of the benefit (e.g. IBKR SmartRouting) and the premise itself (comparable quotes across structurally different execution models) doesn't hold.
+- **Evidence**: `docs/roadmap/features/037-multi-broker-smart-routing/product-spec.md:20-33` (pruned; recoverable via git history).
+- **Rule it implies**: When a proposed feature imports an "institutional practice," first size the expected benefit at this platform's actual scale and verify the underlying comparison is valid before greenlighting design.
+
+### 2026-08-05 — ci-docker-registry-deploy — ordering
+- **Pattern**: A container-registry choice baked into design/spec hit an undocumented plan quota only during execution, forcing partial rollout then a full re-migration days later.
+- **Evidence**: `docs/roadmap/features/038-ci-docker-registry-deploy/context.md` Step 3 (2026-05-26T00:09), 2026-05-29 GHCR migration.
+- **Rule it implies**: Verify managed-service plan quotas against actual fleet size during `/sdd-design` recon, before `/sdd-spec` locks it in.
+
+### 2026-08-05 — client-api-pattern — reuse
+- **Pattern**: Use `Parameters<typeof client.method>[0]` for Connect-RPC mutation typing since protobuf-es v2 dropped `PartialMessage<T>`.
+- **Evidence**: `docs/roadmap/features/044-client-api-pattern/` implementation-spec.md Steps 4-6 (pruned; recoverable via git history).
+- **Rule it implies**: When protobuf-es major versions change generated helper types, grep for the removed type across the codebase before assuming an established pattern still compiles.
+
+### 2026-08-05 — client-api-pattern — design
+- **Pattern**: Verify a third-party API surface/version by grep or an install-check, not by familiarity with an older version.
+- **Evidence**: `docs/roadmap/features/044-client-api-pattern/` implementation-spec.md Steps 6-7 (pruned; recoverable via git history).
+- **Rule it implies**: Before writing code against a third-party library's API, confirm the installed version's actual exports/signatures rather than relying on remembered API shape.
+
+### 2026-08-05 — ui-consolidation-nextjs — design
+- **Pattern**: `/sdd-review impl-spec` caught a BFF handler-map/basePath-removal mismatch before any code was written.
+- **Evidence**: `docs/roadmap/features/045-ui-consolidation-nextjs/context.md:91-94`.
+- **Rule it implies**: When a feature removes a `basePath`/proxy that stripped a path prefix, re-verify every handler-map/route-key convention that assumed it during impl-spec review.
+
+### 2026-08-05 — live-strategy-alert-engine — ordering
+- **Pattern**: A feature branched from a not-yet-merged prerequisite should re-verify against the prerequisite's delivered code (including post-merge refactors) at multiple checkpoints, not just once at execute start.
+- **Evidence**: `docs/roadmap/features/048-live-strategy-alert-engine/context.md:79-96` (evaluator path/servicer shape diverged), `context.md:209-214` (048 later re-merged 047's admin-gate refactor, reconciling an interim divergence).
+- **Rule it implies**: Gate a dependent feature's execute loop with a targeted re-spec against the prerequisite's exact changed files, and re-check again if the prerequisite keeps evolving before the dependent feature ships.

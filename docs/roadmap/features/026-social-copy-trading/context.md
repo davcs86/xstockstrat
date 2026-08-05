@@ -1,12 +1,18 @@
-# Context: social-copy-trading
+# Context: social-copy-trading  (archived 2026-08-05)
 
-**Feature**: `docs/roadmap/features/026-social-copy-trading/feature.md`
-**Product Spec**: `docs/roadmap/features/026-social-copy-trading/product-spec.md`
+**Feature**: ./feature.md
+**Status**: demoted/canceled — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-08-05 — /sdd-archiver
 
-## Session 2026-05-26T00:00:00Z — brainstorming
-
-- Idea surfaced during platform brainstorming session.
-- Demoted at idea stage without entering draft. Rationale documented in product-spec.md.
-- Key decision: regulatory obligations (RIA registration, FINRA, SEC Marketing Rule) make this non-viable at current stage. Architecture is also single-tenant by design — multi-tenancy is a prerequisite, not a co-feature. Revisit only after 12+ months of live profitable trading and legal counsel engagement.
+**What**: An idea to add a social/copy-trading layer (publish strategies, auto-mirror trades) was demoted at the idea stage itself — never reached draft/spec-ready, never got a recon.md, design.md, or implementation-spec.md (product-spec.md:1-53, feature.md:1-35).
+**Why (irrecoverable rationale)**: Rejected not on technical grounds but on four compounding factors. (1) Publishing performance to attract followers plus auto-copying trades constitutes investment advice (SEC RIA registration, FINRA, GIPS/SEC Marketing Rule disclosures) — compliance burden would exceed the whole platform's engineering effort (product-spec.md:20-26). (2) The codebase is single-tenant by construction (`x-user-id` is a trace header, not a partition key) so this isn't additive — it's a full re-architecture across all 14 services, row-level security on every table, etc. (product-spec.md:28-36). (3) Judged premature: the core autonomous signal pipeline itself hasn't proven profitable live yet, so layering social trust on top of an unvalidated engine was seen as compounding risk onto other people's money (product-spec.md:38-39). (4) Abuse/gaming surface: copy-trading platforms attract strategy gaming (inflated paper returns, survivorship bias in published strategies, front-running by strategy publishers) — preventing this needs ongoing monitoring infrastructure and operational burden, independent of the compliance and architecture concerns (product-spec.md:41-42).
+**Rejected alternatives**: none recorded — idea was rejected outright before any alternative architecture was proposed (context.md:8-12).
+**Scars & gotchas**: n/a — no execute or post-launch session occurred; demoted at brainstorming (context.md:8-12).
+**Permanent deviations**: none — nothing shipped.
+**Cross-feature signal**: `x-user-id` being a trace/propagation header rather than a tenant-partition key (per root CLAUDE.md § Header Propagation) is called out here explicitly as a load-bearing architectural assumption that blocks any multi-tenant feature — worth remembering the next time a multi-user feature is proposed, since it isn't stated as a constraint anywhere else (product-spec.md:29).
+**Deferred follow-ons**: Reconsider only if: (1) 12+ months of live profitable trading with an auditable track record, (2) legal counsel confirms a compliant path (e.g., technology-provider framing with disclaimers), (3) a dedicated compliance team exists, (4) multi-tenancy is built as its own prerequisite feature first — not bundled in (product-spec.md:44-49, context.md:12).
+**Failure post-mortem**: Root cause: idea was conceived by analogy to consumer copy-trading platforms (eToro, ZuluTrade) without first checking regulatory classification, the codebase's single-tenant assumption, or the abuse-surface implications of publishing performance for followers. Missed signal: none needed to be "missed" — all four blockers were identified immediately during the same brainstorming session that raised the idea, so it never advanced past `idea` (context.md:8-12, feature.md:14).
+**Ledger entries written**: insights.md (1), fails.md (0) — see the 2026-08-05 entries.
+**Runtime-invariant recommendations (→ /context-constitution)**: - none (the `x-user-id`-is-a-trace-header-not-a-partition-key fact is already documented as PLAT-level in root CLAUDE.md § Header Propagation; no new invariant to route)
+**Pruned artifacts**: product-spec.md — last present at f5abed5.

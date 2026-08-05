@@ -6,6 +6,7 @@
 **Development Branch**: `feature/agent-mcp-server`
 **Created**: 2026-05-16
 **Last Updated**: 2026-05-25
+**Archived**: 2026-08-05
 
 ---
 
@@ -20,14 +21,14 @@
 | 2026-05-22 | `implementation-ready` → `implementation-ready` | /sdd-spec (re-run) | Implementation spec regenerated with 13 steps — added extract_email_content and extract_website_content tools, extractor_tool enrichment, CONFIG_ENDPOINT for credential resolution, pymupdf dep |
 | 2026-05-24 | `implementation-ready` → `in-progress` | /sdd-execute Step 1 | Service scaffold created — pyproject.toml, Dockerfile, uv.lock, app package structure |
 | 2026-05-25 | `in-progress` → `code-completed` | /sdd-execute Step 13 | All 13 steps complete; integration PR opened to main-dev |
+| 2026-08-05 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 2 specs |
 
 | 2026-05-25 | `code-completed` → `launched` | CI workflow | Promoted via PR #352; committed 16bc098f11328c718fa567c97cf48670b95332da |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — 13 steps
+- Product Spec — pruned by /sdd-archiver 2026-08-05; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

@@ -6,6 +6,7 @@
 **Development Branch**: `feature/ui-consolidation-nextjs`
 **Created**: 2026-05-29
 **Last Updated**: 2026-06-02
+**Archived**: 2026-08-05
 
 ---
 
@@ -20,14 +21,14 @@
 | 2026-06-01 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 | 2026-06-01 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done — xstockstrat-ui service created, build passes |
 | 2026-06-02 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done — service consolidated, e2e suite passes |
+| 2026-08-05 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(2); pruned 2 specs |
 
 | 2026-06-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #523; committed edf803cb8942cee14abc604d1ed95c11b79d8445 |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver 2026-08-05; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

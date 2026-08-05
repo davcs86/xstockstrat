@@ -11,6 +11,7 @@
 > spec here is **retired as stale** — it predates feature 045 and assumes nginx + HTTP/Connect-RPC
 > `80xx` ports + `IDENTITY_HTTP_ENDPOINT`, all of which were removed. Do not execute it. See
 > `docs/roadmap/features/049-unify-admin-auth-gates/product-spec.md` (Part B).
+**Archived**: 2026-08-05
 
 ---
 
@@ -22,13 +23,13 @@
 | 2026-05-25 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning) |
 | 2026-05-25 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 7 steps |
 | 2026-06-06 | `implementation-ready` → `demoted/canceled` | re-spec (user) | Superseded — folded into `049-unify-admin-auth-gates` Part B as full MCP OAuth 2.1. Impl spec retired as stale (assumed nginx + HTTP `80xx` ports removed by 045). Never executed. |
+| 2026-08-05 | `demoted/canceled` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(2); pruned 2 specs |
 
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver 2026-08-05; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

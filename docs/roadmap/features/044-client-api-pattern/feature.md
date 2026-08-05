@@ -19,13 +19,14 @@
 | 2026-06-01 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps. |
 | 2026-06-01 | `implementation-ready` → `code-completed` | /sdd-execute | All 11 steps done — SWR replaced, hooks created, any eliminated, CLAUDE.md and pattern doc updated. |
 | 2026-06-04 | `code-completed` → `launched` | Manual | Feature marked as launched. |
+| 2026-08-05 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(3); pruned 2 specs |
+**Archived**: 2026-08-05
 
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver 2026-08-05; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
