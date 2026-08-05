@@ -671,6 +671,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GH_PAT_SCAN }}
 
       - name: Gitleaks — scan working tree
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT_SCAN }}
