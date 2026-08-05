@@ -17,7 +17,7 @@ updates:
     directory: /
     target-branch: main-dev
     schedule:
-      interval: weekly
+      interval: daily
     open-pull-requests-limit: 0
 
   # Python services (pip ecosystem covers uv lockfiles)
@@ -25,21 +25,21 @@ updates:
     directory: /services/xstockstrat-indicators
     target-branch: main-dev
     schedule:
-      interval: weekly
+      interval: daily
     open-pull-requests-limit: 0
 
   - package-ecosystem: pip
     directory: /services/xstockstrat-ingest
     target-branch: main-dev
     schedule:
-      interval: weekly
+      interval: daily
     open-pull-requests-limit: 0
 
   - package-ecosystem: pip
     directory: /services/xstockstrat-analysis
     target-branch: main-dev
     schedule:
-      interval: weekly
+      interval: daily
     open-pull-requests-limit: 0
 
   # Go services
@@ -47,21 +47,21 @@ updates:
     directory: /services/xstockstrat-trading
     target-branch: main-dev
     schedule:
-      interval: weekly
+      interval: daily
     open-pull-requests-limit: 0
 
   - package-ecosystem: gomod
     directory: /services/xstockstrat-marketdata
     target-branch: main-dev
     schedule:
-      interval: weekly
+      interval: daily
     open-pull-requests-limit: 0
 
   - package-ecosystem: gomod
     directory: /services/xstockstrat-portfolio
     target-branch: main-dev
     schedule:
-      interval: weekly
+      interval: daily
     open-pull-requests-limit: 0
 
   # GitHub Actions
@@ -69,5 +69,5 @@ updates:
     directory: /
     target-branch: main-dev
     schedule:
-      interval: weekly
+      interval: daily
     open-pull-requests-limit: 0
