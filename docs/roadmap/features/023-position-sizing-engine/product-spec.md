@@ -15,12 +15,16 @@ As a trader, I want the platform to automatically compute a safe order quantity 
 ## Functional Requirements
 
 FR-1. The trading service must expose an internal `ComputePositionSize` function (not a new gRPC RPC in V1) that takes: symbol, signal confidence (0.0–1.0), ATR (14-period, sourced from marketdata or indicators), and returns: recommended quantity (integer shares), dollar risk, and stop price.
-FR-2. Position size formula: `quantity = floor((equity × max_risk_pct × confidence_multiplier) / (atr_multiplier × ATR))` where `confidence_multiplier` scales linearly from 0.5 (confidence=0.5) to 1.0 (confidence=1.0).
+FR-2. Position size formula: `quantity = floor((equity × max_risk_pct × confidence_multiplier) / (atr_multiplier × ATR))` where `confidence_multiplier = confidence`, defined across the full valid input domain (FR-1, confidence 0.0–1.0) — a linear identity function, not a separate floored/clamped mapping. This is consistent with (and, extended below 0.5, simplifies) the originally-stated "0.5 (confidence=0.5) to 1.0 (confidence=1.0)" anchor points: a lower-confidence signal gets a proportionally smaller size all the way down to 0, rather than being floored at the confidence=0.5 size — flooring would mean a barely-there 0.1-confidence signal sizes identically to a solid 0.5-confidence one, defeating the purpose of confidence-scaling.
 FR-3. A portfolio concentration cap must apply: the computed position's value (quantity × current_price) must not exceed `max_concentration_pct` of current equity. If it would, quantity is reduced to meet the cap.
 FR-4. All sizing parameters must be configurable via config keys with no restart required.
 FR-5. When an order is submitted to the trading service without an explicit quantity, `ComputePositionSize` is called automatically and the computed quantity is used. `PlaceOrderRequest.qty` (`packages/proto/trading/v1/trading.proto:85`) is a non-`optional` proto3 `double`, so the platform has no wire-level presence tracking for "unset" — the convention is: `qty <= 0` (unset, zero, or negative) means "no explicit quantity, auto-size me"; `qty > 0` means override mode (FR-6).
-FR-6. When an explicit quantity is provided (`qty > 0`, see FR-5), it is used as-is (override mode) — sizing logic is bypassed. This preserves backward compatibility with the trader UI's existing order flow, which today always sends an explicit `qty` (`services/xstockstrat-ui/src/lib/traderBff.ts:28`) — the only caller of `PlaceOrder` in the repo; the agent MCP server has no order-placement tool (`services/xstockstrat-agent/app/tools.py` — confirmed no `PlaceOrder`/`place_order` reference).
-FR-7. The computed quantity, dollar risk, stop price, and the values of each input parameter must be logged at INFO level for every sized order, and returned in the order-placement response so the caller (trader UI, agent tool) can display why an order was sized as it was — see Consumer Surface(s).
+FR-6. When an explicit quantity is provided (`qty > 0`, see FR-5), it is used as-is (override mode) — sizing logic is bypassed. This preserves backward compatibility with the trader UI's existing order flow, which today always sends an explicit, required `qty`
+  (`services/xstockstrat-ui/src/components/trader/OrderForm.tsx:60,75,147-154`), forwarded unmodified
+  by the BFF (`services/xstockstrat-ui/src/lib/traderBff.ts:28`) — the only caller of `PlaceOrder` in
+  the repo; the agent MCP server has no order-placement tool (`services/xstockstrat-agent/app/tools.py`
+  — confirmed no `PlaceOrder`/`place_order` reference).
+FR-7. The computed quantity, dollar risk, stop price, and the values of each input parameter must be logged at INFO level for every sized order. The computed quantity and stop price are visible to the caller for free via the existing, unchanged `Order.qty`/`Order.stop_price` response fields (`packages/proto/trading/v1/trading.proto:39,42` — no proto change needed, consistent with the "no proto changes required in V1" scope below); dollar risk and the individual input parameters (ATR, confidence, multipliers) are logged only in V1, not returned in the RPC response — see Consumer Surface(s) for what the trader UI can and cannot show without a proto change.
 FR-8. In paper trading mode (dev), the logic runs identically but against paper account equity from the portfolio service.
 
 ## Out of Scope
@@ -29,16 +33,19 @@ FR-8. In paper trading mode (dev), the logic runs identically but against paper 
 - Per-symbol sizing overrides
 - Portfolio-level risk (correlation-adjusted sizing across open positions)
 - Stop-loss order placement (this feature only computes size; stop order submission is a separate feature)
-- Existing `OrderType` handling (MARKET/LIMIT/STOP/STOP_LIMIT/TRAILING_STOP) is unaffected — the "stop
-  price" this feature computes (FR-1/FR-2) is a risk-sizing output only, never submitted to the broker
-  as an actual `ORDER_TYPE_STOP`/`STOP_LIMIT` order (`packages/proto/trading/v1/trading.proto:86,98-102`)
+- Existing `OrderType` handling (MARKET/LIMIT/STOP/STOP_LIMIT/TRAILING_STOP, the enum at
+  `packages/proto/trading/v1/trading.proto:61-67`) is unaffected — the "stop price" this feature
+  computes (FR-1/FR-2) is a risk-sizing output only, never submitted to the broker as an actual
+  `ORDER_TYPE_STOP`/`STOP_LIMIT` order (`PlaceOrderRequest.stop_price`, `trading.proto:87`)
+- Broker-agnostic: sizing runs before broker submission and does not vary by `BrokerType` — applies
+  identically whether the resulting order routes to `BROKER_TYPE_ALPACA` or `BROKER_TYPE_IBKR`
 
 ## Affected Services
 
 Exact service names from CLAUDE.md Service Registry:
 - `xstockstrat-trading` — `ComputePositionSize` logic, order submission path modification
 - `xstockstrat-portfolio` — queried for current account equity and open position values
-- `xstockstrat-marketdata` — queried for current ATR (or sourced from `xstockstrat-indicators` — TBD at impl-spec)
+- `xstockstrat-marketdata` — queried for current ATR (or sourced from `xstockstrat-indicators` — TBD at impl-spec), and for current price via `GetLatestQuote` (`packages/proto/marketdata/v1/marketdata.proto:23`), needed by FR-3's concentration cap (`quantity × current_price`)
 - `xstockstrat-config` — new config keys for sizing parameters
 - `xstockstrat-ui` — the `/trader` order-placement flow surfaces the computed sizing decision (see
   Consumer Surface(s))
@@ -48,9 +55,12 @@ Exact service names from CLAUDE.md Service Registry:
 _Constitution **C-14**._
 
 - [x] **UI** — the `/trader` segment's order-placement flow (order form / confirmation) must display
-  the computed quantity, dollar risk, and stop price returned per FR-7 before/at submission, so a
-  trader can see why an automated order was sized as it was — not just from a service log. This is
-  the only live caller of `PlaceOrder` today (`services/xstockstrat-ui/src/lib/traderBff.ts:28`).
+  the computed quantity and stop price returned per FR-7 (both already visible via the existing,
+  unchanged `Order.qty`/`Order.stop_price` response fields — no proto change) before/at submission, so
+  a trader can see why an automated order was sized as it was — not just from a service log. Dollar
+  risk and the individual input parameters (ATR, confidence, multipliers) are V1 log-only, not shown in
+  the UI; a V2 that wants them displayed would need the proto addition noted in Proto Contract Changes.
+  This is the only live caller of `PlaceOrder` today (`services/xstockstrat-ui/src/lib/traderBff.ts:28`).
   Exact component/placement is an `/sdd-spec` detail.
 - [ ] **Agent** — no order-placement tool exists today (`services/xstockstrat-agent/app/tools.py`);
   N/A until one is added.
@@ -58,8 +68,11 @@ _Constitution **C-14**._
 
 ## Proto Contract Changes
 
-- [ ] No proto changes required in V1 (internal function; no new gRPC RPCs)
-- Note: a `ComputePositionSize` RPC may be warranted in V2 to expose sizing to the agent as a tool
+- [ ] No proto changes required in V1 (internal function; no new gRPC RPCs). The trader UI shows
+  computed quantity and stop price via the existing, unchanged `Order.qty`/`Order.stop_price` fields
+  (FR-7); dollar risk and the individual sizing inputs are log-only in V1, not on the wire.
+- Note: a `ComputePositionSize` RPC, and/or a dollar-risk field on `Order`, may be warranted in V2 to
+  expose full sizing rationale to the agent as a tool and/or the UI beyond quantity/stop price.
 
 ## Config Key Changes
 
