@@ -54,14 +54,18 @@ is N/A: `xstockstrat-agent` has no order-placement tool today (confirmed absent,
 **Status**: `pending`
 **Service**: `xstockstrat-config`
 **Files**:
-- `services/xstockstrat-config/migrations/011_trading_risk_sizing.up.sql` — create
-- `services/xstockstrat-config/migrations/011_trading_risk_sizing.down.sql` — create
+- `services/xstockstrat-config/migrations/012_trading_risk_sizing.up.sql` — create
+- `services/xstockstrat-config/migrations/012_trading_risk_sizing.down.sql` — create
 
 **Reviewers**: DBA — migration NNN numbering, up+down pair present; `xstockstrat-config` owner —
 config key naming, environment/trading_mode scoping
 
 **Codebase Evidence**:
-- Last migration confirmed via `ls services/xstockstrat-config/migrations/ | sort`: `010_config_audit_insert_trigger.{up,down}.sql` → next is `011`.
+- Last migration confirmed via `ls services/xstockstrat-config/migrations/ | sort`: `010_config_audit_insert_trigger.{up,down}.sql` → next was `011`, but `011_platform_trading_state` is
+  already pre-assigned to feature `100-account-trading-halt-and-kill-switch` (specced first,
+  `docs/roadmap/features/merge-order.md`), so this migration is pre-assigned `012` per that entry.
+  Re-verify against the live tree at execute time per **C-07** — if `100` has not yet landed `011`
+  when this step executes, confirm `012` is still the correct next number before writing the files.
 - Pattern to follow (per-env `dev`+`production`, `trading_mode='all'`, `ON CONFLICT ... DO NOTHING`):
   `services/xstockstrat-config/migrations/008_analysis_fundsignal_keys.up.sql:1-30` (recon.md's named
   reuse target) and its `.down.sql` (`DELETE FROM config.config_values WHERE namespace = 'analysis' AND key LIKE 'fundsignal.%'`).
@@ -76,14 +80,14 @@ config key naming, environment/trading_mode scoping
 paired Step 2 doc entry and by CI's real apply/rollback at deploy)`
 
 **Instructions**:
-1. Create `011_trading_risk_sizing.up.sql` inserting 8 rows (4 keys × 2 environments, `trading_mode='all'`
+1. Create `012_trading_risk_sizing.up.sql` inserting 8 rows (4 keys × 2 environments, `trading_mode='all'`
    for every row — no paper/live split, matching the product spec):
    - `('trading', 'risk.max_risk_per_trade_pct', 'float', '0.02', 'Fraction of equity to risk per trade (auto-sized orders only)', '0.02', 'xstockstrat-trading', 'dev', 'all')` (and the `production` twin)
    - `('trading', 'risk.atr_multiplier', 'float', '1.5', 'Stop distance as a multiple of ATR(14)', '1.5', 'xstockstrat-trading', 'dev', 'all')` (and `production`)
    - `('trading', 'risk.max_concentration_pct', 'float', '0.10', 'Max fraction of equity in any single auto-sized position (enforcing cap)', '0.10', 'xstockstrat-trading', 'dev', 'all')` (and `production`)
    - `('trading', 'risk.sizing_enabled', 'bool', 'true', 'Master gate for automatic position sizing; false rejects orders submitted without an explicit qty', 'true', 'xstockstrat-trading', 'dev', 'all')` (and `production`)
    - End with `ON CONFLICT (namespace, key, environment, trading_mode) DO NOTHING;` matching `008`'s exact clause.
-2. Create `011_trading_risk_sizing.down.sql`:
+2. Create `012_trading_risk_sizing.down.sql`:
    `DELETE FROM config.config_values WHERE namespace = 'trading' AND key LIKE 'risk.max_risk_per_trade_pct' OR (namespace = 'trading' AND key IN ('risk.atr_multiplier', 'risk.max_concentration_pct', 'risk.sizing_enabled'));`
    — simpler and safer as four explicit `key IN (...)` values (not a `LIKE` prefix, since
    `risk.max_position_pct` — the pre-existing, untouched key — must never match): use
@@ -91,7 +95,7 @@ paired Step 2 doc entry and by CI's real apply/rollback at deploy)`
 
 **Verification**:
 ```bash
-ls services/xstockstrat-config/migrations/011_trading_risk_sizing.up.sql services/xstockstrat-config/migrations/011_trading_risk_sizing.down.sql
+ls services/xstockstrat-config/migrations/012_trading_risk_sizing.up.sql services/xstockstrat-config/migrations/012_trading_risk_sizing.down.sql
 ```
 Read both files: confirm every `INSERT` in `.up.sql` (8 rows) is reversible by the single `DELETE ...
 key IN (...)` in `.down.sql`, and that `risk.max_position_pct` never appears in either file (the
