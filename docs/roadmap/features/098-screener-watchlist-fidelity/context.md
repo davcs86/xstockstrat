@@ -1,106 +1,81 @@
-# Context: screener-watchlist-fidelity
+# Context: screener-watchlist-fidelity  (archived 2026-08-06)
 
-**Feature**: `docs/roadmap/features/098-screener-watchlist-fidelity/feature.md`
-**Product Spec**: `docs/roadmap/features/098-screener-watchlist-fidelity/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/098-screener-watchlist-fidelity/implementation-spec.md`
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-08-06 — /sdd-archiver
 
-## Session 2026-08-02 — sdd-story
+**What**: Raised Screener and Watchlists to the feature-083 design's fidelity using only
+already-wire-available RPC fields (`ScreenCriterion.weight`/`hard_filter`, `ScreenResult.score`,
+`EvaluateReadiness`, `ListOpportunities`, portfolio `Watchlist` CRUD) — a pure UI/presentation
+change with zero proto/config/DB delta. LAST price, intraday CHG%, and the Quotes tab were split to
+`099-watchlist-live-quotes` because they need a streaming quote feed the platform doesn't expose.
 
-- Created feature.md (status: draft), product-spec.md, context.md from the user request to fix
-  low-fidelity gaps in the Screener and Watchlists pages left by feature 083.
-- **Scope decision (derivable-only):** verified against `packages/proto/analysis/v1/analysis.proto`
-  and `packages/proto/portfolio/v1/portfolio.proto` that every proposed surface reads an
-  already-existing field/RPC — `ScreenCriterion.weight`/`hard_filter`, `ScreenResult.score`,
-  `EvaluateReadiness`/`SymbolReadiness`/`ConditionEval`, `ListOpportunities`, and the portfolio
-  `Watchlist` CRUD RPCs. No proto/config/DB change is required.
-- **C-14 override (livestream deferral) — recorded:** the design handoff's LAST price column, intraday
-  CHG % column, and Quotes tab require a streaming/realtime quote feed the platform does not expose.
-  These are split to a **named backlog follow-up feature, `099-watchlist-live-quotes`** (created in the
-  same session at `idea` status), satisfying the C-14 "named follow-up" requirement rather than a vague
-  "later". The predefined screener universe picker is likewise out of scope (no constituent table).
-- **Open design fork logged** (product-spec Open Questions): readiness roll-ups are strategy-scoped to
-  honor feature 083's "never a fabricated signal→strategy binding" rule; the sidebar per-list count and
-  STRATEGY column reflect the explicitly chosen strategy. To be confirmed in /sdd-design.
-- Reviewer: `xstockstrat-ui` (service owner) only — UI-only change deriving from existing RPCs.
+**Why (irrecoverable rationale)**: The two design forks that most needed a human call — "does
+readiness get a per-row STRATEGY column or a single caption" and "how does an un-evaluable symbol
+get bucketed" — were resolved by treating a UI dimension bound to one upstream selection as visually
+dishonest if repeated per row (it re-implies a per-symbol signal→strategy binding feature 083
+explicitly forbids), and by giving degenerate producer output (`total_conditions==0`) its own bucket
+(`nodata`) rather than folding it into a real state (`quiet`), reconciled against the *requested*
+symbol set rather than the response array so the sum invariant survives a future producer that drops
+rows. This reasoning is already fully inlined in `docs/roadmap/ledger/insights.md`, 2026-08-02 —
+098-screener-watchlist-fidelity — design.
 
-## Session 2026-08-02 — sdd-design
+**Rejected alternatives** (not already inlined in the ledger entry above):
+- Radix `Slider` primitive for the weight control — rejected: none exists in `src/components/ui/`;
+  adding a dependency for one control violates minimalism; native range + bound numeric input covers
+  both affordance and Playwright-fillability (range inputs are not reliably `fill`-able).
+- Parameterizing the shared `symbolReadiness(symbol, overrides)` e2e fixture — rejected: it breaks
+  the existing point-free `.map(symbolReadiness)` call site in `e2e/mock-backend.ts` (`.map` passes
+  the array index as the fixture's 2nd arg) and risks the 083 signal-detail specs; overrides are
+  spread at the call site instead. A future test author reaching for fixture parameterization to get
+  per-symbol variation would reintroduce this exact break.
+- Live relative-time tick (`setInterval`) for "last run Nm ago" — rejected as speculative
+  scaffolding; renders once from `Date.now()` at render time instead.
+- Persisted per-list default strategy (to show "N ready" on every master row without a picker) —
+  rejected not only because it needs a new DB column (out of scope), but because it would itself
+  re-encode a per-list strategy binding at the list level — the same forbidden fabricated
+  signal→strategy binding pattern the caption-vs-column fork was resolved to avoid at the row level.
 
-- Phase 0 Recon: wrote recon.md (service: xstockstrat-ui). Key reuse patterns: `scoreColor`
-  (`scoreDisplay.ts:14`, replaces inlined thresholds), `CONDITION_STATE`/`EnumBadge`
-  (`opportunityShared.tsx`), extend `WatchlistReadiness` in place, `useInvalidatingMutation` hooks.
-  Key not-found: **no `Slider` primitive** (→ native range + numeric input), **no `Tabs`** (only the
-  deferred Quotes tab needed it), no weight-normalization helper (→ new `src/lib` helper).
-- Phase 1 Grilling: 2 rounds (quick + 1 user-requested extra). Chosen approach: `src/lib`-first pure
-  helpers (`screenWeights`, `readinessRollup` with a 4th `nodata` bucket, `formatLastRun`) + Screener
-  weight/hard-rank/last-run/score-dot + Save/Add-to-watchlist actions + Watchlists master-detail (one
-  new `WatchlistDetail.tsx`, `useOpportunities` lifted there for in-queue, strategy shown as a caption).
-  Rejected: Radix Slider, per-row STRATEGY column, folding total==0 into quiet, parameterizing the shared
-  `symbolReadiness` fixture, a live relative-time tick, a persisted per-list default strategy.
-- **User decisions:** (1) FR-10 → single "Evaluated against: `<strategy>`" caption, not a per-row
-  column (product-spec FR-10/AC-6 wording updated to match). (2) Requested one extra debate round.
-- Constitution rules touched: C-10(a) (cross-links resolve; no new route), C-10(b) (one read path;
-  requested-symbol-set parity denominator), C-12/C-13 (reuse centralized mock + `symbolReadiness`
-  fixture kept single-arg), P-03/F-04 (all cited symbols grep-verified). Floor breaches: none.
-- **Open Threads (from design Open Risks):** R1 producer-1:1 (mitigated by symbol-set denominator +
-  AC-6 e2e); R2 in-queue case normalization (uppercase both sides); R3 last-run no-tick staleness
-  (by design, documented); R4 master/detail e2e selectors + create auto-select must be preserved.
-- Status: draft → design-approved.
+**Accepted known limitations (deliberate, not oversights)**:
+- Symbol-notation gap: the in-queue membership check's `.toUpperCase()` only normalizes case, not
+  notation variants (e.g. `BRK.B` vs `BRK-B`) — accepted because "both current sources are upper-case
+  canonical."
+- Best-effort polling/pagination gap on the "in queue" mark (FR-11): `ListOpportunities` is
+  user-scoped and polled (15s interval), so a watchlist symbol only shows in-queue if it appears in
+  the *currently fetched* opportunity page — a symbol can be an active opportunity and still not
+  show in-queue due to poll timing/pagination; accepted, not a defect. Not documented anywhere in
+  shipped code (`WatchlistDetail.tsx` only documents an unrelated hook-ordering constraint).
 
-## Session 2026-08-02 — sdd-spec
+**Scars & gotchas**:
+- Create-then-auto-select race in a master-detail UI: setting `selectedId` directly inside
+  `useCreateWatchlist.onSuccess` raced the `ListWatchlists` refetch — a reconcile effect (reset
+  selection to first item when the current selection isn't present) saw the brand-new id as absent
+  and clobbered it back to the first list. Only caught by the master-detail e2e. Fixed via a
+  `pendingSelectRef` that only commits the new id once it actually appears in the refetched list —
+  a generically reusable pattern for any "create → auto-select" flow on invalidate-and-refetch
+  mutations.
+- `COMPARATOR_LABELS` stays a partial array, not an exhaustive `Record<Comparator, string>`
+  (`Comparator` has `UNSPECIFIED(0)`/`BETWEEN(5)`; an exhaustive map fails `tsc`) — a recurrence of
+  an already-logged trap (`fails.md` 2026-07-21), not new.
 
-- Generated implementation-spec.md with **6 steps**. Status → implementation-ready. UI-only
-  (`xstockstrat-ui` `/insights`); no proto/config/migration/new service. Reviewer snapshot is the
-  single `xstockstrat-ui` (service owner) row (all steps are `service`/`test` on one service).
-- Step shape: (1) `src/lib/{screenWeights,readinessRollup,formatLastRun}.ts` + delete `WatchlistReadiness`'s
-  local `isFiring` in favor of the helper (DRY); (2) vitest units (red-first, `src/lib` 40% scope);
-  (3) Screener display (weight range+number, hard/rank two-Button toggle, grammar, last-run, `scoreColor` dot);
-  (4) Screener→watchlist Save/Add-top-N via existing `useCreateWatchlist`/`useAddWatchlistSymbols`;
-  (5) Watchlists master-detail (new `WatchlistDetail.tsx`, `useOpportunities` lifted for in-queue,
-  `rollupReadiness` caption + nodata bucket, single "Evaluated against" caption); (6) e2e extending
-  `screener.spec.ts`/`watchlists.spec.ts`/`mock-backend.ts` (bucket overrides only) + `INVENTORY.md`.
-- Key codebase findings (all grep-verified for C-01):
-  - Screener `weight: 1` hardcode at `screener/page.tsx:40` (sent raw at `:76`); bare `hard` checkbox `:138-146`;
-    partial `COMPARATOR_LABELS` `:26-31` (no exhaustive `Record<Comparator>` — `UNSPECIFIED`/`BETWEEN` would break tsc);
-    inlined score ternary `:216-219` → replace with `scoreColor` (`src/lib/scoreDisplay.ts:14`).
-  - `WatchlistReadiness.tsx` local `isFiring` `:17-18`, strategy picker `:59` (aria "Readiness strategy"),
-    `readyCount` headline `:46`, returns null on empty `:48`; extend in place, one `useReadiness` read path (C-10(b)).
-  - Watchlist hooks `useWatchlists.ts:10/21/53`; `useOpportunities.ts:14`; `insightsPortfolioClient` present.
-  - No `Slider`/`Switch` primitive → native range + numeric input, two-Button toggle (recon Risks).
-  - Nav: `/insights/{screener,watchlists}` already registered in Discover group `navGroups.tsx:45-46`
-    (C-10(a), no new route); `BASE_PATH_INSIGHTS` `basepath.ts:2` → plain `/insights/screener` href.
-  - Central mock: `evaluateReadiness` `mock-backend.ts:490-492`, `listOpportunities` `:485-488`; shared
-    `symbolReadiness` fixture `opportunities.ts:58-84` (keep single-arg — `.map` passes index; spread overrides
-    at call site); `STRATEGY_DEF_LIVE.displayName='Live Test Strategy'`; `INVENTORY.md:21` Opportunity-queue row
-    omits `symbolReadiness` today → catalog it in step 6.
-- Deferred surface (LAST/CHG/Quotes) → named follow-up `099-watchlist-live-quotes` (C-14), asserted absent in step 6.
+**Permanent deviations**: none architectural — shipped matches design's chosen approach; only
+execution-shape changes (single-branch execution, Steps 3+4 merged into one page rewrite,
+`watchlistMock` helper extraction). **Harness-branch anomaly**: product-spec.md recorded that at
+execution time "the repo's live default branch is `main` (no `main-dev` exists in this checkout)" —
+directly contradicting root CLAUDE.md's "Harness Default Branch" rule — and was the stated cause for
+this feature being executed single-branch with a PR to `main` instead of the normal per-step
+`/sdd-execute` flow into `main-dev`. This was an environment anomaly at execution time, not a mistake
+by this feature; not ledger-worthy as a mistake, but recorded here since it's otherwise
+unrecoverable once `product-spec.md` is pruned.
 
-## Session 2026-08-02 — implementation (manual execute on harness branch)
+**Cross-feature signal**: none beyond what's already ledgered.
 
-- Implemented all 6 steps directly on `claude/ui-revamp-low-fidelity-ii5p1h` (harness single-branch
-  mandate — no per-step feature branches/PRs). Status → code-completed.
-- **Files created:** `src/lib/{screenWeights,readinessRollup,formatLastRun}.ts` (+ `.test.ts` each),
-  `src/components/insights/WatchlistDetail.tsx`, `e2e/helpers/watchlistMock.ts`.
-- **Files modified:** `src/app/insights/screener/page.tsx` (weight range+number control, hard/rank
-  segmented toggle, criterion grammar + normalized-share caption, last-run metadata, `scoreColor`
-  dot, Save-as-watchlist + Add-top-N actions), `src/app/insights/watchlists/page.tsx` (master-detail
-  + `pendingSelectRef` create-auto-select), `src/components/insights/WatchlistReadiness.tsx` (import
-  `isFiring`; 4-bucket rollup; "Evaluated against" caption; no-data row; `inQueue` prop),
-  `e2e/insights/{screener,watchlists}.spec.ts` (+14 tests), `e2e/mock-backend.ts`
-  (`READINESS_BUCKET_OVERRIDE` + arrow `.map`), `e2e/fixtures/INVENTORY.md`.
-- **Deviations (see implementation-spec Deviation Log):** single-branch execution; Steps 3+4 in one
-  page rewrite; shared `watchlistMock` helper extracted; create-auto-select race fixed via
-  `pendingSelectRef` (caught by the master-detail e2e).
-- **Verification:** build ✓, lint ✓ (only pre-existing `strategies/[id]` warning), unit 55/55
-  (`screenWeights`/`readinessRollup`/`formatLastRun` 100%), `e2e/insights` 79/79, DRY UI-src 0 clones.
-- **Teardown / context-scrubber:** the context-forge `/context-scrubber` skill is **not available** in
-  this session (not in the skill registry). No `CLAUDE.md`/constitution/findings file was changed;
-  `INVENTORY.md` (a test-data catalog) was updated in the same change set. Flagged in the PR body.
+**Deferred follow-ons**: `099-watchlist-live-quotes` — named backlog feature for LAST price,
+intraday CHG%, and the Quotes tab (needs a streaming/realtime quote feed the platform doesn't expose
+today). Created 2026-08-02 alongside this feature's product-spec, status `idea`.
 
-## Session 2026-08-04 (CI: feature status automation)
-
-- Promotion PR #862 merged to main
-- Feature promoted and committed: 9713cb61c9b866d6420e142ac1cf20cf6059bf94
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-08-04
+**Ledger entries written**: insights.md (1), fails.md (0) — see the 2026-08-06 entry.
+**Runtime-invariant recommendations (→ /context-constitution)**: none.
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at
+`fe278020abe1e4b0c128a7a2207fd46596d8a9e8`.
