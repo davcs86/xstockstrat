@@ -175,3 +175,36 @@
   - `positionColumns`/`scanPositionRow` in `xstockstrat-portfolio` already structurally solves C-10(b)
     parity across `GetPosition`/`ListPositions`/`ListPositionsByAccount` — extending that one constant
     keeps all three read paths in sync automatically (Step 20).
+
+## Session 2026-08-06T05:00:00Z — sdd-review impl-spec (advisory)
+
+- Result: 0 blockers, 4 warnings, 4 notes (advisory — did not block; no Floor `F-*` risk found).
+  Unusually strong evidence-citation accuracy across all 23 steps and 4 services.
+- Overlap scan: real same-function collision confirmed — 030 is a fourth party in the
+  `PlaceOrder`/`ReplaceOrder`/`CancelOrder` insertion-point overlap with 100/101/023. Recorded in
+  `merge-order.md` (030 executes last, rebases against all three). Migration numbering (`005`
+  trading, `013` config, `009` portfolio), config keys, and the one proto field addition
+  (`Position.stop_order_id=20`/`take_profit_order_id=21`) all independently re-verified clean.
+- **Fixed directly** (unambiguous mechanical corrections, no design judgment involved):
+  - Step 23: `**Files**`/Verification targeted the wrong e2e spec — `positions.spec.ts` (the
+    disjoint list-page spec) instead of `position-detail.spec.ts` (the actual single-Position
+    detail-page spec that exercises the `getPosition` mock / sidebar this step modifies). Corrected
+    throughout Step 23's Files, Instructions, and Verification.
+  - Step 9: two internal mis-citations said "Step 15" where the config migration seeding
+    `trading.risk.max_unprotected_seconds`/`bracket_orders_enabled` is actually Step 16 (Step 15 is
+    the trading `CLAUDE.md` docs step). Corrected both references.
+  - Step 18: Codebase Evidence cited `portfolio.proto:76` for `exit_rule = 19`; actual line is `75`
+    (off-by-one, no functional impact — field text/number was already correct). Corrected.
+  - `## Step Dependencies` overview (top of spec): systematic +1 step-number drift from "Steps 6-7
+    (IBKR)" onward, apparently from Step 6 (the Alpaca test step) being inserted after the overview
+    was drafted without updating it. Individual steps' own cross-references were all correct — only
+    this summary section had drifted. Corrected all seven affected bullets (IBKR layer 7-8 not 6-7;
+    state machine core Step 9 not 8; watchdog Step 11 not 10; leg cancellation Step 13 not 12;
+    proto Step 18 not 17; portfolio consumer Step 20 not 19; UI Step 23 not 22; cross-feature dep on
+    023 cites Steps 9/11/13 not 8/10/12).
+- Unresolved ✗ / ⚠ carried into execution (advisory, low-risk, no fix applied):
+  - Step 4: no immediately-following or Step-Dependencies-referenced test step (Step 5, next, is
+    also `service`). TDD marked N/A ("interface/type declaration only") and is transitively covered
+    by Steps 6/8 — literal B3 trigger, low risk. — [ ] unaddressed
+- Overlap findings: same-function collision with 100/101/023 (see above, now tracked in
+  `merge-order.md`).

@@ -64,15 +64,15 @@ assignments. Re-verify at execute time per C-07 in case a newer feature has sinc
 
 ## Step Dependencies
 
-- Step 2 (repository) must land before Steps 8/10/12 (state machine, watchdog/halt, cancellation), which call its new methods.
-- Steps 4-5 (Alpaca broker layer) and Steps 6-7 (IBKR broker layer) must both land before Step 8 (state machine core dispatches to both).
-- Step 8 must land before Step 9 (its paired test), Step 10 (watchdog reads `order_brackets` Step 8 writes), and Step 12 (leg cancellation reads the same rows).
-- Step 10 must land before Step 11 (its paired test) and Step 12 (`ReplaceOrder`'s halt gate and `CancelOrder`'s leg-aware cancellation both build on `isAccountHalted`/`submitOrder`).
-- Step 17 (proto) must land before Step 18 (proto-gen is folded into Step 17's verification) and Step 19 (portfolio service reads the generated Go fields).
-- Step 19 depends on Step 8/10 (trading must emit the new `order.bracket_updated` ledger event those steps introduce) — see Step 19's Codebase Evidence.
-- **External, cross-feature**: Steps 8, 10, 12 depend on feature 023's `PlaceOrder` rewrite landing first (per `docs/roadmap/features/023-position-sizing-engine/implementation-spec.md` Step 8) for the `stopPrice`/`currentPrice` values `ComputePositionSize` computes. If 023 has not yet merged when this feature executes, these three steps are blocked — do not fabricate a placeholder `ComputePositionSize` call.
-- Step 22 (UI) has no hard backend ordering dependency for compilation (it reads pre-existing-shape fields once Step 17/18 land), but should land after Step 18 so the fields actually populate in a real environment.
-- Not part of this spec, named per Constitution C-14: none — both consumer surfaces (CRITICAL alert via the existing `AlertStream.tsx`; bracket IDs on the position-detail view) are covered by Steps 12-13 and 22-23 respectively; no surface is deferred.
+- Step 2 (repository) must land before Steps 9/11/13 (state machine, watchdog/halt, cancellation), which call its new methods.
+- Steps 4-5 (Alpaca broker layer) and Steps 7-8 (IBKR broker layer) must both land before Step 9 (state machine core dispatches to both).
+- Step 9 must land before Step 10 (its paired test), Step 11 (watchdog reads `order_brackets` Step 9 writes), and Step 13 (leg cancellation reads the same rows).
+- Step 11 must land before Step 12 (its paired test) and Step 13 (`ReplaceOrder`'s halt gate and `CancelOrder`'s leg-aware cancellation both build on `isAccountHalted`/`submitOrder`).
+- Step 18 (proto) must land before Step 19 (portfolio service reads the generated Go fields) — `buf-gen` is folded into Step 18's own verification, not a separate step.
+- Step 20 depends on Step 9/11 (trading must emit the new `order.bracket_updated` ledger event those steps introduce) — see Step 20's Codebase Evidence.
+- **External, cross-feature**: Steps 9, 11, 13 depend on feature 023's `PlaceOrder` rewrite landing first (per `docs/roadmap/features/023-position-sizing-engine/implementation-spec.md` Step 8) for the `stopPrice`/`currentPrice` values `ComputePositionSize` computes. If 023 has not yet merged when this feature executes, these three steps are blocked — do not fabricate a placeholder `ComputePositionSize` call.
+- Step 23 (UI) has no hard backend ordering dependency for compilation (it reads pre-existing-shape fields once Step 18/19 land), but should land after Step 18 so the fields actually populate in a real environment.
+- Not part of this spec, named per Constitution C-14: none — both consumer surfaces (CRITICAL alert via the existing `AlertStream.tsx`; bracket IDs on the position-detail view) are covered by Steps 13-14 and 23 respectively; no surface is deferred.
 
 ---
 
@@ -619,11 +619,11 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 - Config-read idiom to reuse: `s.cfgW.GetBool("trading.risk.max_position_pct", ...)`-style calls at
   `trading.go:1292` → for this feature: `s.cfgW.GetBool("trading.risk.bracket_orders_enabled", true)`,
   `s.cfgW.GetFloat("trading.risk.take_profit_rr_multiple", 2.0)`,
-  `s.cfgW.GetInt("trading.risk.max_unprotected_seconds", 30)` (keys seeded in Step 15; **the 30-second
+  `s.cfgW.GetInt("trading.risk.max_unprotected_seconds", 30)` (keys seeded in Step 16; **the 30-second
   default is a provisional placeholder** — `design.md`'s Open Risk explicitly leaves this a
   product/ops decision, "not pinned by this design"; the P0 safety review's own example was 5 seconds,
   which this spec judges too tight for IBKR's conid-resolution + 2-call submission path — confirm with
-  the user/ops before the production flag (Step 15) is ever flipped `true`).
+  the user/ops before the production flag (Step 16) is ever flipped `true`).
 - `BrokerType` dispatch precedent: `commonv1.BrokerType(accountEntry.brokerType)` already resolved on
   the constructed `order` (023's unchanged order-construction block; current `trading.go:301`).
 - `broker.OrderRequest`/`Broker` extensions from Steps 4-7.
@@ -1174,7 +1174,7 @@ grep -n "feature 030 — stop-loss-bracket-orders" docs/patterns/config-governan
 `xstockstrat-portfolio` owner — field consumed correctly
 
 **Codebase Evidence**:
-- Current highest field on `Position` is `exit_rule = 19` (`packages/proto/portfolio/v1/portfolio.proto:76`) — confirmed no other in-flight feature claims 20/21 (`recon.md`'s field-number check; no `merge-order.md` row names `portfolio.proto` field collisions for this range).
+- Current highest field on `Position` is `exit_rule = 19` (`packages/proto/portfolio/v1/portfolio.proto:75`) — confirmed no other in-flight feature claims 20/21 (`recon.md`'s field-number check; no `merge-order.md` row names `portfolio.proto` field collisions for this range).
 - `product-spec.md`'s Proto Contract Changes section (additive, non-breaking) and its reconciliation
   note: the existing `stop_price` (field 14, feature 083, ledger-derived, in-memory-only estimate) and
   the new `stop_order_id`/`take_profit_order_id` (persisted, broker-confirmed) are **deliberately
@@ -1410,9 +1410,12 @@ grep -n "order.bracket_updated\|stop_order_id" services/xstockstrat-portfolio/CL
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
 - `services/xstockstrat-ui/e2e/fixtures/positions.ts` — modify
 - `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` — modify
-- `services/xstockstrat-ui/e2e/trader/positions.spec.ts` — modify (or create if no existing spec
-  covers the position-detail page — confirm via `find services/xstockstrat-ui/e2e/trader -iname
-  "*position*"` at execute time)
+- `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify (`/sdd-review` impl-spec
+  confirmed via `find services/xstockstrat-ui/e2e/trader -iname "*position*"`, 2026-08-06: this is
+  the dedicated single-Position detail-page spec — `test.describe('Single Position page', ...)` —
+  that exercises the `getPosition` mock and `page.tsx` sidebar this step modifies.
+  `positions.spec.ts` is the disjoint **list**-page spec — `'Positions — Exposure risk'` — and is not
+  the correct target)
 
 **Reviewers**: `xstockstrat-ui` owner — trading UI correctness, config mutation safety (N/A here — no
 config mutation), no secret values rendered
@@ -1452,18 +1455,18 @@ item 2)**:
    its doc comment — extending this to the em-dash bracket-ID fallback too is a natural, zero-cost
    reuse of that existing intent).
 3. Update `INVENTORY.md`'s `POSITION_AAPL`/`POSITION_MSFT` catalog row(s) to note the two new fields.
-4. In the position-detail e2e spec (path confirmed at execute time per Files above), add an assertion
-   that the AAPL detail page renders `bracket-stop-aapl-1` and `bracket-tp-aapl-1` under "Risk & exit",
-   and that the MSFT detail page renders the em-dash fallback for both.
+4. In `e2e/trader/position-detail.spec.ts`, add an assertion that the AAPL detail page renders
+   `bracket-stop-aapl-1` and `bracket-tp-aapl-1` under "Risk & exit", and that the MSFT detail page
+   renders the em-dash fallback for both.
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run lint
-cd services/xstockstrat-ui && pnpm test:e2e e2e/trader/positions.spec.ts
+cd services/xstockstrat-ui && pnpm test:e2e e2e/trader/position-detail.spec.ts
 ```
 Test-data inventory (C-12): fixtures reused per Codebase Evidence above (`grep -n "POSITION_AAPL"
-services/xstockstrat-ui/e2e/trader/positions.spec.ts` confirms the import, not an inline literal);
-`INVENTORY.md` updated in this same step per Instruction 3.
+services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` confirms the import, not an inline
+literal); `INVENTORY.md` updated in this same step per Instruction 3.
 
 ---
 
