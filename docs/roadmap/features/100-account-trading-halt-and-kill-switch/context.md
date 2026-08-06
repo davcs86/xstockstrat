@@ -156,3 +156,33 @@
   - Reviewers snapshot narrowed from the original story-time table: dropped `xstockstrat-agent`
     owner and Platform Lead (neither surface is touched by the chosen design), added DBA (the new
     migration step).
+
+## Session 2026-08-06T02:00:00Z — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 5 warnings, 2 notes (advisory — did not block; no Floor `F-*` risk found).
+  Every `path:line` evidence citation across all 13 steps spot-checked as accurate.
+- Overlap scan: clean. Migration `011`, config key `platform.trading_state` confirmed unique
+  against trunk and all in-flight `implementation-ready`/`in-progress` features. One WARN-level
+  textual (not semantic) file collision on `services/xstockstrat-ui/e2e/mock-backend.ts` against
+  `096-position-and-order-detail-pages` (disjoint mock blocks — `config-ui listKeys()` vs
+  `PortfolioService`) — trivial rebase, no merge-order entry needed. Pre-existing
+  `merge-order.md:46` dependency (102 blocked on 100) reconfirmed, no update needed.
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 4: Verification prose garbled around the 40% coverage-threshold statement — cosmetic
+    only, meets the letter of the criterion. — [ ] unaddressed
+  - Step 7: primary Instructions path inserts a duplicate `mode := s.resolveTradingMode(...)`
+    short-variable declaration in the same scope as the existing `trading.go:271` line — will
+    fail `go build ./...` (the step's own Verification command) as literally written. The
+    step's only-buildable "hoist and reuse the existing call" option is offered as a footnote,
+    not the primary instruction — execute should make that the default. — [ ] unaddressed
+  - Step 8: ships a self-acknowledged dead/mislabeled test block
+    (`TestCheckTradingStateForPlaceOrder_Active_NeverCallsPortfolio`) requiring execute-time
+    cleanup, and defers direct unit-test coverage of `checkTradingStateForPlaceOrder`'s
+    REDUCE_ONLY branch to an unresolved execute-time judgment call — against AC-2's "verified by
+    a test per handler" requirement (C-08/P-06 adjacent). — [ ] unaddressed
+  - Step 13 / cross-cutting: product-spec.md's FR-5 and Acceptance Criteria #4 still require a
+    ledger-event audit trail (`AppendEvent`/`QueryEvents`) — a legitimate design.md Round 5
+    decision dropped that mechanism entirely in favor of `config.config_audit`-only, but no step
+    corrects FR-5/AC-4's stale text to match. A future reader of product-spec.md would believe
+    ledger-event audit is a requirement this feature satisfies. — [ ] unaddressed
+- Overlap findings: none blocking (see above).
