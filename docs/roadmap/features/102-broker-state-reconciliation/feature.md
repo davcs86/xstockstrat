@@ -1,12 +1,12 @@
 # Feature: broker-state-reconciliation
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `design-approved`
 **Priority**: `P1` — revived 2026-08-04 after user pushback on the demotion; rescoped to a lightweight
 periodic ticker inside `xstockstrat-trading` reusing its existing broker client, not a new engine or
 dashboard (see context.md)
 **Development Branch**: `feature/broker-state-reconciliation`
 **Created**: 2026-08-04
-**Last Updated**: 2026-08-04
+**Last Updated**: 2026-08-06
 
 ---
 
@@ -17,12 +17,16 @@ dashboard (see context.md)
 | 2026-08-04 | `idea` → `draft` | /sdd-story | Product spec generated from external live-capital-safety risk review |
 | 2026-08-04 | `draft` → `demoted/canceled` | feasibility re-check | See context.md — depends on 101 and on an automated execution path that does not exist; a human reviewing every order via the trader UI is today's de facto reconciliation |
 | 2026-08-04 | `demoted/canceled` → `draft` | user review | Revived, rescoped down to a lightweight periodic check — cheap enough for a solo maintainer even without automated execution; see context.md |
+| 2026-08-05 | `draft` → `spec-ready` | /sdd-review | Product spec approved after 2 review rounds (4 warnings) |
+| 2026-08-06 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved with noted open risks; recon.md + design.md written; FR-4/AC-3/AC-5 amended (user-approved) |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon](recon.md) — grounded codebase dossier
+- [Design](design.md) — debated, approved architecture
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec broker-state-reconciliation`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -42,9 +46,12 @@ re-run /sdd-spec if the registry changes.)_
 |---|---|
 | `xstockstrat-trading` owner | Order execution correctness, broker API safety, fill detection, position limit enforcement |
 | `xstockstrat-portfolio` owner | P&L calculation accuracy, position snapshot consistency, concurrent write safety |
+| `xstockstrat-config` owner | New internal-caller authz surface (`x-internal-caller`), `SetConfig` write-path/audit-trail changes — added at `/sdd-design` |
 | `xstockstrat-ui` owner | Trading UI correctness, no direct DB access |
 | Platform Lead | Cross-service architecture, inter-service dependency graph correctness |
 
 ## Next Action
 
-`/sdd-review broker-state-reconciliation product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec broker-state-reconciliation` — design approved; generate implementation spec (coordinate
+with 030's and 101's actual implementation status first — see recon.md's 3-way unimplemented-dependency
+note)

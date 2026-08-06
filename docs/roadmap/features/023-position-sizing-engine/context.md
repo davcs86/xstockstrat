@@ -66,3 +66,83 @@
   defensible, but the current behavior is a considered prior choice, not an oversight, and reversing it
   has a real cost on this single-instance-no-HA topology (a portfolio-service blip would then block all
   new orders).
+
+## Session 2026-08-05T00:00:00Z — sdd-review product-spec (3 rounds)
+
+- Round 1 FAIL: (1) missing `## Consumer Surface(s)` section (C-14); (2) `trading.risk.max_concentration_pct`
+  duplicated the existing warn-only `trading.risk.max_position_pct` (`trading.go:1288-1326`) without
+  reconciliation (C-10); (3) unresolved Open Questions. Fixed: added the Consumer Surface(s) section
+  (`/trader` order flow), named the reconciliation as an explicit `/sdd-design` question rather than
+  silently leaving two overlapping risk knobs, stated the `qty<=0` auto-size convention, corrected the
+  FR-6 agent-tool-call claim (no agent order-placement tool exists today), added OrderType/AC
+  clarifications.
+- Round 2 FAIL: two internal contradictions — FR-2's `confidence_multiplier` was undefined for
+  confidence < 0.5 (half the valid input domain); FR-7 required returning the sizing decision "in the
+  order-placement response" while Proto Contract Changes claimed no proto changes were needed (verified
+  false — `Order` has no dollar-risk field). Fixed: `confidence_multiplier = confidence` (linear
+  identity across the full 0.0–1.0 domain); FR-7 scoped down to quantity/stop-price via the existing
+  unchanged `Order.qty`/`Order.stop_price` fields, dollar risk and inputs log-only in V1 (genuinely no
+  proto change needed).
+- Round 3: **PASS WITH WARNINGS** (3 advisory: FR-5/FR-6 don't state the interaction between
+  `qty<=0` auto-sizing and STOP/STOP_LIMIT/TRAILING_STOP orders with an unset trigger price; FR-7's
+  reuse of `Order.stop_price` for a computed, non-broker-real risk value overloads a field whose only
+  current semantics is "the real working broker stop" — flag for `/sdd-design`; cosmetic unchecked
+  boxes). Status: `draft` → `spec-ready`.
+
+## Session 2026-08-05T00:00:00Z — sdd-design (full mode, 5 rounds)
+
+- Phase 0 Recon: wrote `recon.md` (services: trading, portfolio, marketdata, config, ui). Found a
+  new blocker recon flagged that the product-spec review hadn't caught: the served gRPC handler
+  (`internal/handler/trading.go:35-37`) rejects `qty<=0` before the service layer runs — FR-5's
+  auto-size trigger was unreachable as speced. Also found two divergent portfolio equity sources, no
+  true ATR anywhere in the codebase, no current-price field on `Quote`, and no existing
+  trading→marketdata client.
+- Round 1: proposer/adversary found the design sound on TRADING-1 (verified: deleting the handler
+  gate is safe) but flagged 3 real gaps: an unspecified quantity write-back path (safety-critical —
+  the computed quantity could silently never reach the broker or the approval-threshold check), the
+  equity source being $0 for a flat account, and the warn-only `max_position_pct` check structurally
+  unable to fire for auto-sized orders.
+- Round 2: resolved all round-1 gaps (mutate `req.Qty` in place; unify `checkPortfolioRisk` and
+  `ComputePositionSize` onto one `ListPortfolios` equity call, reordering `checkPortfolioRisk` to run
+  after sizing). Self-flagged a new risk: `PlaceOrderRequest` has no `confidence` field, so every
+  auto-sized order would hardcode `confidence=1.0`.
+- Round 3: fixed 2 of 3 round-2 objections (the handler-gate deletion had dropped out of the
+  restated design; the "both marketdata RPCs fail empty-but-valid" claim was verified FALSE for
+  `GetLatestQuote` — real error, not empty response — risking a nil-pointer panic). Resolved
+  confidence by hardcoding `1.0`, flagged as a prominent Open Risk rather than a footnote — the
+  adversary's follow-up called this insufficient (C-11/P-03: a genuine design fork decided
+  unilaterally rather than raised).
+- **User override (via a screenshot, not the AskUserQuestion tool)**: explicitly chose "add the
+  confidence field to the proto now" over hardcoding 1.0 or shipping unwired — expanding V1 scope
+  past the product-spec's original "no proto changes" line, because it makes FR-2 actually reachable.
+- Round 4: added `optional double confidence = 16` to `PlaceOrderRequest` (per the repo's own
+  `optional`-for-meaningful-zero precedent, `insights.md` 2026-07-24). The adversary found this
+  shipped as a vague C-14 deferral ("a future feature would add a real caller") and pointed out the
+  design never named the one already-wired candidate, `ExternalSignal.conviction`.
+- **User decision**: expand scope further — wire a real value into `confidence` within this same
+  feature.
+- A dedicated recon pass corrected a factual error before round 5 ran: the natural UI wiring point
+  is actually `Opportunity.conviction` (already fetched/rendered on the signal-detail page), not
+  `ExternalSignal.conviction` (never surfaced in the UI at all, would need new plumbing).
+- Round 5 (mode cap): proposed wiring `Opportunity.conviction` through `SignalOrderTicket` →
+  `OrderForm`, with qty made optional on **all three** `OrderForm` render sites. The final adversary
+  pass (APPROVE WITH NOTED OPEN RISKS, no Floor breach) found 3 real problems: (1) `/insights` is an
+  unnamed C-14 consumer surface; (2) `Opportunity.conviction` is explicitly documented in its own
+  proto comment as "a deterministic ordinal... **NOT a probability**" — a genuine semantic mismatch
+  with what `confidence` needs, `ExternalSignal.conviction` being the actual correct source; (3)
+  making qty optional globally would silently max-risk-auto-size orders on the plain `/trader` form
+  with zero UI indication.
+- **Final user decision at the round-5 gate**: drop all UI wiring from 023's scope; ship
+  backend-only (rounds 1-4's design, confidence field defaults to 1.0, correctly consumed but
+  unpopulated by any caller in this feature). Created **named follow-up feature**
+  `110-wire-signal-confidence-to-position-sizing` (satisfying C-14's requirement that a deferred
+  surface point at a named feature, not a vague "later") to carry the real `ExternalSignal.conviction`
+  plumbing and the scoped (signal-ticket-only) blank-qty UI affordance.
+- Chosen approach: backend-only `ComputePositionSize`, wired into a reordered `PlaceOrder`, with the
+  handler-gate deletion, unified equity source, fail-closed error handling, true Wilder ATR, and the
+  `confidence` proto field (unpopulated in this feature). Rejected: hardcoded confidence, UI wiring in
+  this feature, global qty-optionality, indicators-routed ATR, fail-open sizing.
+- Constitution rules touched: C-01, C-05, C-08/P-06, C-09, C-10, C-11, C-14, P-01, P-02, P-03, P-04,
+  F-11 (all honored — see design.md § Constitution Rules Touched). No unresolved Floor breach across
+  any of the 5 rounds.
+- Status: `spec-ready` → `design-approved`.
