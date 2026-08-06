@@ -146,3 +146,28 @@
   F-11 (all honored — see design.md § Constitution Rules Touched). No unresolved Floor breach across
   any of the 5 rounds.
 - Status: `spec-ready` → `design-approved`.
+
+## Session 2026-08-06T18:34:00Z — sdd-spec
+
+- Generated implementation-spec.md with 12 steps. Status → implementation-ready.
+- Key codebase findings (beyond what recon.md/design.md already captured):
+  - `resolveAccount` (`trading.go:188-209`) never returns the resolved account ID on its single-broker
+    convenience path (`brokerPoolEntry` has no account-id field) — `ComputePositionSize`'s
+    `ListPortfolios(AccountId: ...)` equity lookup needs a concrete ID even when the caller leaves
+    `PlaceOrderRequest.account_id` empty. Resolved by widening `resolveAccount`'s signature to
+    `(string, brokerPoolEntry, error)` (Step 6) — a minimal, necessary corollary of the equity-unification
+    design, not scope creep, since without it the single-account convenience path can't be sized.
+  - `GetBars`' `ORDER BY time ASC LIMIT` semantics resolve design.md's Open Risk item: an unbounded
+    request (page size only) returns the **oldest** N bars in the default (wide) lookback window, not
+    the most recent — reliably getting the latest 15 daily bars requires an explicit tight `Range`
+    (45 calendar days back) with a `PageSize` (40) comfortably above the expected in-window bar count.
+  - `OrderSide` direction was not addressed by design.md's pseudocode: stop price must be
+    `currentPrice - stopDistance` for BUY (long), `currentPrice + stopDistance` for SELL (short) —
+    resolved from `OrderSide` enum semantics (`trading.proto:55-58`), flagged explicitly in the spec's
+    Codebase Evidence for `/sdd-review impl-spec` to check.
+  - The Step 5/9 Go unit tests land in `internal/service`, a package excluded from this service's CI
+    Go coverage `COVERPKGS` computation (spec-template.md's exclusion list) — noted explicitly per
+    spec-template's instruction rather than claiming a coverage percentage that doesn't apply.
+  - `services/xstockstrat-marketdata/cmd/server/main_test.go:33-46`
+    (`TestNewFundamentalsSource_AlwaysNonNil`) is the citable precedent for both the zero-value
+    `*config.Watcher` safety and the "construction canary" test pattern reused in Steps 5/7.
