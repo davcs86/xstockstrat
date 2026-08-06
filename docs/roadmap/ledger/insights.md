@@ -572,3 +572,26 @@ reusing.
 - **Pattern**: When a read surface needs derived-but-expensive data and the service *cannot enumerate its consumers* (analysis has no per-user strategy owner column and no global user-list RPC), prefer **lazy-materialize-on-read + persist(`valid_until`) + stale-while-revalidate + a daily refresh** over a standing background producer loop. A standing loop that can only refresh users already present in its own tables buys freshness that is invisible to anyone not currently looking, grows unbounded without an eviction rule, and (see Evidence) cannot borrow `live_loop`'s cap as a fairness mechanism because that cap truncates rather than round-robins.
 - **Evidence**: `docs/roadmap/features/097-opportunity-universe-unification/design.md` § Rejected Alternatives; `services/xstockstrat-analysis/app/engine/live_loop.py:102-110` (SELECT with no ORDER BY + `processed >= max` return = truncation, not round-robin); `migrations/001_strategies.up.sql` (strategies are global, no `user_id`).
 - **Rule it implies**: a background materializer is only justified when it can enumerate the full consumer set independently of reads; otherwise lazy-on-read + TTL revalidate is the minimal shape (How-to-Act #2). Candidate design principle.
+
+### 2026-08-06 — 030-stop-loss-bracket-orders — design
+- **Pattern**: A safety-critical in-process flag (an automated account halt, a kill switch) proposed as
+  a bare `map[string]bool` was caught across two design rounds for the same root cause: process-local
+  state silently evaporates on the routine event this platform's CI/CD triggers on every merge — a
+  redeploy — not just on a hypothetical multi-replica race. The fix each time was the same: this
+  codebase already has the *exact* precedent for "a per-account status that must survive a restart" —
+  `xstockstrat-trading`'s `credential_status` column (`migrations/004_broker_accounts_credential_status.up.sql`),
+  hydrated into an in-memory map at `LoadBrokerPool` boot (`trading.go:127,155-157`). Reuse that shape
+  (persisted column + boot-time hydration) for any new per-account safety state instead of inventing a
+  bare map — but reuse the *mechanics*, not just the description: the precedent's own dual-write
+  releases its mutex *before* the DB call and does not hold a lock across a Postgres round-trip
+  (`validateAndRecordCredential`, `trading.go:1072-1090`). A superficial "follows the same pattern"
+  claim that skips this detail reintroduces an unbounded-lock-hold liveness risk on the very read path
+  (`PlaceOrder`) the halt is meant to protect.
+- **Evidence**: `docs/roadmap/features/030-stop-loss-bracket-orders/design.md` § Chosen Approach
+  ("Halt.") + § Rejected Alternatives ("Hold the halt mutex across the DB write"); 5-round design
+  debate, round-4 and round-5 adversary findings.
+- **Rule it implies**: extends **P-03** — when reusing an existing persistence pattern for new
+  safety-critical state, verify the precedent's actual concurrency mechanics (lock scope, write
+  ordering, rollback-on-failure direction), not just its surface shape (a column + a boot hydrate). A
+  described pattern and its real mechanics can silently diverge, and the diverging detail is often the
+  one that matters most under failure.

@@ -1,6 +1,6 @@
 # Feature: stop-loss-bracket-orders
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `design-approved`
 **Priority**: `P0` — blocking live-capital expansion (Live-Capital Safety program, see context.md 2026-08-04)
 **Development Branch**: `feature/stop-loss-bracket-orders`
 **Created**: 2026-05-26
@@ -14,12 +14,15 @@
 |---|---|---|---|
 | 2026-05-26 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-05 | `draft` → `spec-ready` | /sdd-review | Product spec approved after 2 review rounds (3 warnings) |
+| 2026-08-06 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full — hard cap) and approved with noted open risks; recon.md + design.md written |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon](recon.md) — grounded codebase dossier
+- [Design](design.md) — debated, approved architecture
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec stop-loss-bracket-orders`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -42,4 +45,6 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design stop-loss-bracket-orders` — product spec approved; run recon + design debate
+`/sdd-spec stop-loss-bracket-orders` — design approved; generate implementation spec (do not run
+until feature 023 reaches `implementation-ready` with real line numbers — see recon.md's hard
+sequencing blocker)
