@@ -123,3 +123,36 @@
   C-10(a) (shared gate function avoids per-handler copy-paste), C-10(b) (parity across `PlaceOrder`/
   `ReplaceOrder`), C-11, C-14, P-01, P-02, P-03, P-04, F-11. No Floor breach across any of the 5 rounds.
 - Status: `spec-ready` → `design-approved`.
+
+## Session 2026-08-06T01:00:00Z — sdd-spec
+
+- Generated `implementation-spec.md` with 13 steps. Status → `implementation-ready`.
+- Key codebase findings (beyond what `recon.md`/`design.md` already captured):
+  - `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go`'s `GetPosition`
+    (lines 44-53) confirmed to map **every** `h.svc.GetPosition` error to `connect.CodeNotFound`
+    unconditionally — this, not just `scanPositionRow`'s missing `ErrNoRows` branch, is the actual
+    fix site the REDUCE_ONLY fail-closed design depends on. Step 5 fixes both: a new
+    `ErrPositionNotFound` sentinel (mirroring `ErrWatchlistNotFound`) plus a
+    `classifyGetPositionError` helper in the handler.
+  - Confirmed design.md's Open Risk 3 (feature 096 UI regression) directly: `usePosition`'s only
+    consumer, `trader/positions/[symbol]/page.tsx:149-151`, renders `error.message` generically with
+    no status-code branch — the `NotFound`→`Internal` reclassification for genuine backend failures
+    is safe. No separate verification step was needed; cited as Codebase Evidence in Step 5 instead.
+  - Neither `023-position-sizing-engine` nor `030-stop-loss-bracket-orders` has landed a migration
+    yet (both still `design-approved`, confirmed via `feature.md` status + no migration files on
+    either branch) — `services/xstockstrat-config/migrations/` still tops out at `010`, so `011` is
+    the correct next number as of this session, but Step 2 instructs execute-time re-verification
+    against the live tree (both dimensions of the 3-way contention design.md flagged).
+  - `config.Watcher` (trading service) has no exported snapshot setter, so a cross-package unit test
+    cannot inject `ACTIVE`/`REDUCE_ONLY` into a fake `Watcher` — Step 8's test design works around
+    this by testing the pure helpers (`parseTradingState`, `isExposureIncreasing`,
+    `isReplaceRiskReducing`) independently of `cfgW`, and proving only the fail-closed-on-unset-key
+    wiring through the zero-value `Watcher` (which always yields its `GetString` default). Flagged an
+    open cleanup item in Step 8's Instructions for execute to resolve (a not-fully-clean first-draft
+    test case name/structure).
+  - No proto step needed (confirmed no proto changes per design.md); no ledger-event step needed
+    (design.md's final round dropped the WatchConfig-subscriber ledger-emit mechanism entirely — the
+    audit trail is `config.config_audit` only, already existing, no new cross-service edge).
+  - Reviewers snapshot narrowed from the original story-time table: dropped `xstockstrat-agent`
+    owner and Platform Lead (neither surface is touched by the chosen design), added DBA (the new
+    migration step).
