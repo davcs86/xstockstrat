@@ -6,6 +6,7 @@
 **Development Branch**: `feature/fundamentals-data-source`
 **Created**: 2026-06-26
 **Last Updated**: 2026-06-29
+**Archived**: 2026-08-06
 
 ---
 
@@ -17,14 +18,14 @@
 | 2026-06-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning: OQ-059-a-impl FMP endpoint paths deferred to /sdd-spec — non-blocking) |
 | 2026-06-27 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps; OQ-059-a-impl resolved (hybrid quote/ratios-ttm/profile under config base_url) |
 | 2026-06-29 | `implementation-ready` → `code-completed` | /sdd-execute | All 11 steps done on `feature/fundamentals-data-source` (stacked on 058); integration PR → 058 |
+| 2026-08-06 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(3)/fails(1); pruned 2 specs |
 
 | 2026-06-29 | `code-completed` → `launched` | CI workflow | Promoted via PR #729; committed e8742e4e4f4dd88cbbc6ed85151784c4434d4885 |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — 11 numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

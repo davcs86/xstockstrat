@@ -6,6 +6,7 @@
 **Development Branch**: `feature/fundamentals-signal-producer`
 **Created**: 2026-06-26
 **Last Updated**: 2026-06-29
+**Archived**: 2026-08-06
 
 ---
 
@@ -18,14 +19,14 @@
 | 2026-06-27 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
 | 2026-06-27 | `implementation-ready` | /sdd-review (impl-spec) | Resolved the ingest source_type open item (user decision): added Step 13 — additive ingest migration `006_signal_source_type_derived` adds a `derived` source_type; producer registers with `source_type='derived'` + `app.extractors.noop`. Now 13 steps. Config migration renumbered 006→008 (config-006 collision; see merge-order.md) |
 | 2026-06-29 | `implementation-ready` → `code-completed` | /sdd-execute | All 13 steps implemented on `feature/fundamentals-signal-producer` (stacked on `feature/fundamentals-scoring-model`). Producer loop + `RunFundamentalsScan` RPC + migrations + config seed + ingest `derived` source_type (fail-closed validation). 125 analysis tests pass (65% cov); 29 ingest signal_sources tests pass. Universe used the `explicit` fallback (058 `ListWatchlists` is user-scoped). |
+| 2026-08-06 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(5)/fails(3); pruned 2 specs |
 
 | 2026-06-29 | `code-completed` → `launched` | CI workflow | Promoted via PR #729; committed e8742e4e4f4dd88cbbc6ed85151784c4434d4885 |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — 13 numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

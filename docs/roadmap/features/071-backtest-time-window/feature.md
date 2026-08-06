@@ -7,6 +7,7 @@
 harness-assigned `claude/features-070-071-rnbkqo` branch this session)
 **Created**: 2026-07-26
 **Last Updated**: 2026-07-26
+**Archived**: 2026-08-06
 
 ---
 
@@ -20,16 +21,14 @@ harness-assigned `claude/features-070-071-rnbkqo` branch this session)
 | 2026-07-26 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, quick+1 Floor round) and approved; recon.md + design.md written. R1 BLOCKED on F-07; resolved by deriving the prefix from declared params |
 | 2026-07-27 | `design-approved` → `in-progress` | implementation | Steps 1–8 of 8 implemented (warm-up sizing, paged GetBars, `trade_start_idx`, prefix wiring, agent `start`/`end`, parity/determinism suite, docs, UI e2e + C-12 fixture) |
 | 2026-07-27 | `in-progress` → `code-completed` | implementation | OQ-1 resolved by user: **keep fail-loud** (AC-4a as designed). No code change followed. CI green on PR #792 — all 28 checks incl. Frontend E2E |
+| 2026-08-06 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(0); pruned 3 specs |
 
 | 2026-07-28 | `code-completed` → `launched` | CI workflow | Promoted via PR #797; committed 67bf345b917b05b869fc67cacff5d74365ba86b8 |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Recon Dossier](recon.md) — grounded codebase map, patterns to reuse, 8 risks
-- [Design](design.md) — chosen approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec backtest-time-window`_
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

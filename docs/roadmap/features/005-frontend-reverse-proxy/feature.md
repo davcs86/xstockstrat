@@ -6,6 +6,7 @@
 **Last Updated**: 2026-05-12
 **Committed to main**: 08e1418
 **Launched date**: 2026-05-12
+**Archived**: 2026-08-05
 
 ---
 
@@ -18,13 +19,13 @@
 | 2026-05-11 | `implementation-ready` (unchanged) | /sdd-review | Impl-spec review PASS — all 6 steps PASS quality checks, valid DAG, 3 WARN overlaps (advisory) |
 | 2026-05-11 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (nginx.conf) complete — verification deferred to Step 6 (env limitation) |
 | 2026-05-12 | `code-completed` → `launched` | CI workflow | Promoted to main; committed 08e1418 |
+| 2026-08-05 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(2); pruned 2 specs |
 
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — 6 steps, all with codebase evidence
+- Product Spec — pruned by /sdd-archiver 2026-08-05; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

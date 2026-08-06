@@ -6,6 +6,7 @@
 **Development Branch**: `feature/screener-watchlist-fidelity`
 **Created**: 2026-08-02
 **Last Updated**: 2026-08-02
+**Archived**: 2026-08-06
 
 ---
 
@@ -19,6 +20,7 @@
 | 2026-08-02 | `implementation-ready` → `code-completed` | manual execute | All 6 steps implemented on the harness branch `claude/ui-revamp-low-fidelity-ii5p1h` (single-branch mandate; deviations logged in implementation-spec). Verified: `pnpm build`/`lint`/`test:coverage` pass (helpers 100%), 79 `e2e/insights` specs pass (14 new), DRY `check-duplication.sh services/xstockstrat-ui/src` = 0 clones. |
 
 | 2026-08-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #862; committed 9713cb61c9b866d6420e142ac1cf20cf6059bf94 |
+| 2026-08-06 | `launched` (unchanged) | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(0); pruned 4 specs (product-spec.md, recon.md, design.md, implementation-spec.md) |
 ---
 
 ## Artifacts

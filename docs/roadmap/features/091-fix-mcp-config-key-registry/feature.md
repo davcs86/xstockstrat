@@ -9,6 +9,7 @@
 **Severity**: SEV-3
 **Created**: 2026-08-02
 **Last Updated**: 2026-08-02
+**Archived**: 2026-08-06
 
 ---
 
@@ -20,16 +21,14 @@
 | 2026-08-02 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. Single-table (no registry): migration 010 AFTER INSERT audit trigger + mode-exact existence gate + additive `create_key`. AC-3 unset-half reinterpreted (design-gate resolution). |
 | 2026-08-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps (proto → proto-gen → migration 010 → config service+test → agent service+test → docs). |
 | 2026-08-02 | `implementation-ready` → `code-completed` | /sdd-execute | All 8 steps implemented on feature branch. Migration verified on live Postgres (create audited once, no double-fire on update). Config 37/37 tests (RED demonstrated), agent 141 tests + descriptor-parity guard (RED demonstrated). One PR into main-dev. |
+| 2026-08-06 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 4 specs |
 
 | 2026-08-02 | `code-completed` → `launched` | CI workflow | Promoted via PR #844; committed a76237080a282abac145b7f88a6044869132ba5f |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Recon](recon.md) — grounded codebase dossier (config + agent)
-- [Design](design.md) — approved single-table architecture (2-round debate)
-- [Implementation Spec](implementation-spec.md) — 8 numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

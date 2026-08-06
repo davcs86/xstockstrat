@@ -4,6 +4,7 @@
 **Development Branch**: `feature/live-capital-canary-rollout`
 **Created**: 2026-08-04
 **Last Updated**: 2026-08-04
+**Archived**: 2026-08-06
 
 ---
 
@@ -13,13 +14,13 @@
 |---|---|---|---|
 | 2026-08-04 | `idea` → `draft` | /sdd-story | Product spec generated from external live-capital-safety risk review |
 | 2026-08-04 | `draft` → `demoted/canceled` | feasibility re-check | See context.md — explicitly premature: stages the rollout of an automated strategy-to-order execution path that does not exist in this codebase and is not roadmapped |
+| 2026-08-06 | `demoted/canceled` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(0)/fails(1); pruned 1 specs |
 
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec live-capital-canary-rollout`_
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

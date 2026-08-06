@@ -6,6 +6,7 @@
 **Development Branch**: `feature/strategy-creation-flow`
 **Created**: 2026-06-06
 **Last Updated**: 2026-06-06
+**Archived**: 2026-08-06
 
 ---
 
@@ -18,14 +19,14 @@
 | 2026-06-06 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps |
 | 2026-06-06 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (insights BFF proxy) complete |
 | 2026-06-06 | `in-progress` → `code-completed` | /sdd-execute | All 11 steps done; E2E green (chromium+firefox) |
+| 2026-08-06 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 2 specs |
 
 | 2026-06-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #620; committed edc530f9dbc08bb9f523f556bd2d243a6ea20ace |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — 11 numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

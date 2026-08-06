@@ -6,6 +6,7 @@
 **Development Branch**: `feature/upgrade-nextjs15`
 **Created**: 2026-05-27
 **Last Updated**: 2026-05-31
+**Archived**: 2026-08-05
 
 ---
 
@@ -19,14 +20,14 @@
 | 2026-05-31 | product-spec retroactive review | /sdd-review | All 5 open questions resolved; product spec approved. Status unchanged (already implementation-ready). |
 | 2026-05-31 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete — insights package.json and pnpm-lock.yaml updated |
 | 2026-05-31 | `in-progress` → `code-completed` | /sdd-execute | All 7 steps done; E2E mock backends refactored to real gRPC/H2C; trader E2E aligned |
+| 2026-08-05 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 2 specs |
 
 | 2026-06-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #620; committed edc530f9dbc08bb9f523f556bd2d243a6ea20ace |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — 7 steps, generated 2026-05-31
+- Product Spec — pruned by /sdd-archiver 2026-08-05; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

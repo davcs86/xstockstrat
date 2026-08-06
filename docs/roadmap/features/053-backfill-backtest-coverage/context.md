@@ -1,121 +1,76 @@
-# Context: backfill-backtest-coverage
+# Context: backfill-backtest-coverage  (archived 2026-08-06)
 
-**Feature**: `docs/roadmap/features/053-backfill-backtest-coverage/feature.md`
-**Product Spec**: `docs/roadmap/features/053-backfill-backtest-coverage/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/053-backfill-backtest-coverage/implementation-spec.md`
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-08-06 — /sdd-archiver
 
-## Session 2026-06-08 — sdd-story
+**What**: Closed the backfill↔backtest blind spot by adding a `GetDataCoverage` read-query RPC on
+marketdata, replacing analysis's silent flat-equity no-op with a structured
+`BACKTEST_STATUS_INSUFFICIENT_DATA` + `coverage_gaps` result, and introducing a shared
+`common.v1.Timeframe` enum (additive, deprecated-string-alongside) meant to reconcile the
+`"1d"`/`"1Day"` vocabulary mismatch. The UI got a "backfill this range" action wired through the
+existing `TriggerBackfill` RPC. In hindsight the timeframe fix was narrower than its own FR-4
+promised: it fixed the **read** path (`analysis`'s `GetBars` call sites) but not the **write** path
+(`ingest.TriggerBackfill`'s persistence of the raw string) — see Permanent deviations below.
 
-- Created feature.md (status: draft), product-spec.md, context.md from user story.
-- P1 of a three-bucket backfill-hardening initiative (P0 = `durable-observable-backfills`,
-  P1 here, P2 = `resumable-chunked-backfills`).
-- Story grounded in a code audit:
-  - `services/xstockstrat-analysis/app/handlers/servicer.py:268` fetches bars via `GetBars` with
-    `timeframe="1Day"`; on `len(bars) < slow_period + 2` it returns `[], initial_equity,
-    [initial_equity]` (silent flat-equity no-op, only a log.warning).
-  - The historical-backfill runbook and `TriggerBackfill` examples use `"1d"` — a vocabulary
-    mismatch with the backtest path's `"1Day"`.
-  - No coverage/gap query RPC exists on marketdata today.
-- Depends on nothing in P0 for the contract, but the `GetDataCoverage` primitive defined here is a
-  prerequisite for P2's "fill only the gaps" mode.
+**Why (irrecoverable rationale)**: `RunBacktest` was deliberately made to return a soft structured
+result (`status` + `coverage_gaps`) rather than a gRPC error specifically so partial multi-symbol
+backtests (some symbols covered, others not) still return usable per-symbol results instead of
+failing the whole call. UI scope was reversed mid-spec-review from explicitly "out of scope" to
+in-scope (FR-6) by direct user directive tied to an external tracking item ("053-Q4").
 
-## Session 2026-06-08 — sdd-review product-spec
+**Rejected alternatives**:
+- Hard gRPC error on insufficient data — lost because it would fail an entire multi-symbol backtest
+  even when only some symbols lacked coverage.
+- Auto-triggering a backfill from inside `RunBacktest` — rejected because it would hide cost/latency
+  from the caller; the RPC only reports the gap, never fetches silently.
+- A `v2` proto for the insufficient-data shape — rejected in favor of additive fields on the
+  existing `BacktestResult`, keeping the change non-breaking.
 
-- Product spec approved. Status: draft → spec-ready.
-- All structural criteria passed; gate initially failed only on criterion 9 (unchecked Open
-  Questions). Resolved all 4 via /sdd-review decisions:
-  - Timeframe normalization: shared `Timeframe` proto enum in common/v1. This is a BREAKING proto
-    change → approval gate elevated to 2 owners + Platform Lead + one-release deprecation cycle.
-    Reviewers table updated to add Platform Lead.
-  - Insufficient-data: RunBacktest returns a soft structured result (status + coverage_gap), not an error.
-  - FR-5 agent tool: deferred (out of scope; thin follow-up).
-  - UI one-click backfill: out of scope (separate UI feature consuming this contract).
-- Trading domain checks: skipped (non-trading feature).
-- Overlap findings: shares marketdata with 052/054 (advisory WARN). No FAIL-level overlap.
+**Scars & gotchas**:
+- Marking existing proto `timeframe` string fields `[deprecated = true]` made `golangci-lint`'s
+  staticcheck (SA1019) fail on marketdata Go code that legitimately still reads those fields during
+  the one-release deprecation window. Fix was targeted `//nolint:staticcheck` annotations with a
+  deprecation-window reason — not ripping out the still-needed readers early.
+- Playwright e2e for the gap-message/backfill-action flow could not run locally: Next.js dev-server
+  cold-compile exceeded the harness's 10s hard timeout on `page.goto`. Fell back to `tsc --noEmit` +
+  `pnpm run lint` as a CI-equivalent gate; the spec + mock-backend changes were written and
+  committed regardless.
+- Sequential stack on 052 required a re-spec gate before the step loop: `ingest.BackfillJob`'s
+  highest field moved from 11→12 because 052 (the stacked base) had already added
+  `failed_symbols=11` — field numbers computed at `/sdd-spec` time were stale by execute time.
 
-## Session 2026-06-08 — scope revision (user)
+**Permanent deviations**: FR-4 said the `timeframe` vocabulary migration covered "the backfill and
+`GetBars` paths" so `"1d"` (backfill) and `"1Day"` (backtest) "MUST no longer be able to silently
+miss each other." Shipped: only `analysis`'s `GetBars` call sites were fixed; `xstockstrat-ingest`'s
+`TriggerBackfill` continued to persist `request.timeframe` **raw**, uncanonicalized. Because this
+feature's own new "backfill this range" UI action (FR-6) sends only `timeframeEnum` with no string,
+every UI-created backfill row this feature itself shipped landed with `timeframe=''` in the DB — the
+exact class of silent mismatch this feature was built to eliminate. Undetected until feature
+`080-fix-backfill-timeframe-enum` traced it (root-caused at
+`services/xstockstrat-ingest/app/handlers/servicer.py:153,161,284`; full account in
+`docs/roadmap/ledger/fails.md`, 2026-07-29 — 080-fix-backfill-timeframe-enum — assumption). Because:
+Step 7 of the implementation spec scoped the timeframe fix narrowly to the read-side `GetBars`
+calls, with no producer+reader sweep across the write path this same feature introduced.
 
-- User directive: 053-Q4 must be IN scope. Reversed the earlier "UI out of scope" decision.
-- Added FR-6: xstockstrat-ui backtest view renders the insufficient-data message and a "backfill
-  this range" action that issues TriggerBackfill via the BFF chain (frontend-auth.md, header
-  propagation). Confirms job_id after trigger.
-- Live job-progress display kept as a soft follow-up (depends on P0 052 for reliable bars_total/status).
-- Affected services: xstockstrat-ui promoted from downstream-consumer to in-scope implementer.
-- Reviewers: added xstockstrat-ui owner (frontend service → Playwright E2E required at impl-spec).
-- Scope note: feature now spans backend (marketdata + analysis proto/service) AND frontend (ui).
-  Larger than P1's original backend-only footprint — flagged for the user. Status stays spec-ready.
+**Cross-feature signal**: This feature is the origin case for the "absence claim not grep-verified"
+and "producer/reader/untyped 3-pass sweep" lessons later generalized by 080 (see
+`docs/roadmap/ledger/fails.md` and `insights.md`, both 2026-07-29/2026-07-30 entries) — a
+deprecated-field migration that touches only producers (or only the read half) leaves
+readers/writers elsewhere silently mismatched, and stayed hidden here because staging evidence came
+from **agent**-created jobs (which send both fields) rather than the **UI**-created jobs this
+feature itself shipped.
 
-## Session 2026-06-09 — sdd-spec
+**Deferred follow-ons**:
+- FR-5 (expose `GetDataCoverage` to the MCP agent as a tool) — explicitly deferred at sdd-review
+  2026-06-08, still not implemented by any later feature as of this archival.
+- Live progress display of a triggered backfill job in the UI's "backfill this range" panel —
+  deferred because it needed P0 (`durable-observable-backfills`, i.e. 052) for reliable
+  `bars_total`/status; 052 has since merged, so this soft follow-up may now be unblocked.
 
-- Generated implementation-spec.md with 12 steps. Status → implementation-ready.
-- Key codebase findings:
-  - **`TriggerBackfill` lives on IngestService, not marketdata.** FR-6's "TriggerBackfill RPC"
-    target is `packages/proto/ingest/v1/ingest.proto:12` (`IngestService.TriggerBackfill`), which
-    fans out to marketdata's `BackfillBars` (`services/xstockstrat-ingest/app/handlers/servicer.py:84`).
-    The UI step calls ingest's `TriggerBackfill` via the existing `ingestClient`.
-  - **Timeframe mismatch is real and load-bearing.** Analysis queries `GetBars` with
-    `timeframe="1Day"` (`services/xstockstrat-analysis/app/handlers/servicer.py:271,292,302,474`);
-    backfill + `ingest.backfill.default_timeframe` use `"1d"`; DB stores the literal string in
-    `marketdata.ohlcv.timeframe` (migration comment says canonical is `'1m','5m','1h','1d'`). Fix =
-    new `internal/timeframe/` normalizer in marketdata + analysis sending `"1d"`/`TIMEFRAME_1DAY`.
-  - **No new index migration / no DB schema change.** `marketdata.ohlcv` PRIMARY KEY is
-    `(symbol, timeframe, time)` (`migrations/001_marketdata_hypertables.up.sql:20`) — already
-    supports the MIN/MAX/COUNT coverage scan. Matches the product-spec Database Changes box.
-  - **Timeframe enum migration is additive in this feature (no v2).** Per `proto-versioning.md`,
-    add `common.v1.Timeframe` enum + `timeframe_enum` fields alongside the existing string fields
-    marked `[deprecated = true]`; the breaking string removal is deferred to a future release.
-    `buf breaking` passes this feature's steps.
-  - **No new env vars / ports.** UI→ingest uses the already-wired `INGEST_ENDPOINT` (present in
-    docker-compose.yml:452 and both DO app specs at line 411 in the ui block).
-  - **Coverage threshold met via `internal/timeframe/`** (not CI-excluded), since the DB query +
-    service/handler wiring sit in excluded packages (`repository/`,`service/`,`handler/`).
-  - Insufficient-data no-op confirmed at `servicer.py:277-281` and `:478-480` (returns fabricated
-    flat equity with only a log.warning) — replaced by structured `BACKTEST_STATUS_INSUFFICIENT_DATA`
-    + `coverage_gaps`.
-- Reviewers snapshot in feature.md already matched the per-step reviewer set (Proto Reviewer,
-  Platform Lead, marketdata owner, analysis owner, ui owner) — left as the canonical snapshot.
-
-## Session 2026-06-09 — sdd-execute (sequential, stacked on 052)
-
-Branch `feature/backfill-backtest-coverage` cut from `feature/durable-observable-backfills` (052),
-not main-dev, per the user-confirmed stacked strategy. Same environment fallbacks as 052
-(host proto toolchain pinned to CI versions; throwaway postgres:16 for migrations; per-feature
-integration PR). Breaking `Timeframe` enum migration requires Platform Lead approval — user obtains it.
-
-### Re-spec gate (§5.3) — applied before the step loop
-- Validated proto field numbers against the stacked base (052 merged in). Only drift: ingest
-  `BackfillJob` highest field is now 11 (052 added `failed_symbols=11`), so Step 1's `timeframe_enum`
-  was re-spec'd from field 11 → **12** (matches merge-order.md). marketdata GetBars/BackfillBars/
-  StreamBars requests (timeframe_enum=5) and `Bar` (timeframe_enum=12) are unaffected by 052.
-  analysis `BacktestResult` (status=12, coverage_gaps=13) and common `Timeframe` enum unaffected.
-- Committed as respec(backfill-backtest-coverage).
-
-### Steps 1-12 — execution summary [done]
-- Step 1-2 proto+regen: common.v1.Timeframe enum; marketdata GetDataCoverage RPC + Coverage messages
-  + timeframe_enum deprecation pairs (GetBars/BackfillBars/StreamBars=5, Bar=12); analysis
-  BacktestStatus enum + CoverageGap + BacktestResult.status=12/coverage_gaps=13; ingest
-  timeframe_enum (BackfillJob=12 [respec], TriggerBackfillRequest=5). buf lint+breaking pass.
-- Step 3-6 marketdata Go: internal/timeframe normalizer (ToCanonical/FromString/Resolve + ComputeGaps)
-  + repo GetCoverage + service/handler GetDataCoverage wiring + timeframe_test.go. go test cov 66.9%,
-  golangci-lint 0 issues. Deprecation made staticcheck flag existing string reads → //nolint:staticcheck
-  on intentional deprecation-window reads (deviation logged).
-- Step 7-8 analysis: _InsufficientData sentinel → structured BACKTEST_STATUS_INSUFFICIENT_DATA +
-  coverage_gaps (no more fake flat equity); GetBars timeframe "1Day"→"1d"+enum (the load-bearing fix).
-  pytest 94 passed, cov 60.4%.
-- Step 9-11 UI: BFF triggerBackfill; useTriggerBackfill hook; insufficient-data panel + "Backfill this
-  range" action on the strategy page; e2e spec + mock-backend (runBacktest INSUFFICIENT_DATA on 9092,
-  triggerBackfill jobId on 9093). tsc --noEmit + lint clean. Playwright attempted; cold-compile exceeds
-  the 10s local timeout → tsc+lint CI-equivalent fallback (deviation logged).
-- Step 12 docs: historical-backfill.md timeframe note; marketdata + analysis CLAUDE.md.
-
-All 12 steps done → code-completed. merge-order: 053 must merge after 052 (Resolved: No) AND requires
-Platform Lead approval for the breaking Timeframe enum — user obtains both before the integration PR merges.
-
-## Session 2026-06-09 (CI: feature status automation)
-
-- Promotion PR #649 merged to main
-- Feature promoted and committed: 0b503103817c8d8d2089c057a10db12fb7a098a5
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-06-09
+**Ledger entries written**: insights.md (2), fails.md (0 — this feature's own defect is already
+recorded under 080's 2026-07-29 entry) — see the 2026-08-06 entries.
+**Runtime-invariant recommendations (→ /context-constitution)**: none.
+**Pruned artifacts**: product-spec.md, implementation-spec.md — last present at
+`fe278020abe1e4b0c128a7a2207fd46596d8a9e8`.

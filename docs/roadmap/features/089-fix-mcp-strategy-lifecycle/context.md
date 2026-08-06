@@ -1,39 +1,22 @@
-# Context Log: fix-mcp-strategy-lifecycle
+# Context: fix-mcp-strategy-lifecycle  (archived 2026-08-06)
 
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-08-06 — /sdd-archiver
 
-## Session 2026-08-02 (/sdd-triage --from-report)
-
-- Routed from the MCP-alignment triage report: docs/reports/2026-08-01-mcp-tools-alignment-triage.md
-- Findings bundled into this feature: F-5, F-7
-- Severity: SEV-2 (max across bundled findings)
-- Routed to SDD path (Track C)
-- Created: feature.md, product-spec.md, context.md
-- Affected services: xstockstrat-analysis, xstockstrat-agent
-- Root cause(s) from the report: RC-6
-- Recommended design depth: full → `/sdd-design fix-mcp-strategy-lifecycle` (rationale: possible proto enum (STRATEGY_OPERATION_REACTIVATE) + ≥2 services)
-- Development branch: feature/fix-mcp-strategy-lifecycle
-- Bundling rationale: the report's cross-finding notes tie these findings to one surface/root
-  cause, so they land as one feature (one PR-able change) rather than artificially-split dirs.
-  The full per-finding fix plan (verified 2026-08-02, one read-only investigator per finding)
-  lives in the source report; consult it during /sdd-design and /sdd-spec.
-
----
-
-## Session 2026-08-02 — sdd-design
-
-- Recon (analysis + agent) + design debate (2 rounds equivalent: draft design + adversary grill).
-- Adversary fixes folded: (1) extract a shared `strategy_symbols` firing-predicate helper (live_loop + SetStrategyLive — no C-10 drift); (2) REACTIVATE re-validates the stored definition (AC-4, no inert reactivation); (3) register uses a `get_by_id` pre-check AND a `UniqueViolationError` catch (atomic — no TOCTOU INTERNAL leak); (4) name the TestManageStrategy + TestSetStrategyLive fixture updates (add get_by_id mocks).
-- Chosen: STRATEGY_OPERATION_REACTIVATE=4 (additive); repo.reactivate; register ALREADY_EXISTS; SetStrategyLive enable-preconditions (active + shared strategy_symbols) → FAILED_PRECONDITION, disable always allowed; live-loop predicate unchanged; agent reactivate op + honest set_strategy_live docstring; same-PR docs (mcp-tools.md + strat-lab skill if it covers these verbs).
-- Cross-feature: 086/087/088/089 all touch agent client.py/tools.py/mcp-tools.md/strat-lab skill — merge-order reconciliation noted.
-- Constitution: C-04, C-08/P-06, C-09, C-10, F-01/F-06/F-07 (none). Floor breaches: none.
-- Status: → design-approved.
-
-## Session 2026-08-02 (CI: feature status automation)
-
-- Promotion PR #844 merged to main
-- Feature promoted and committed: a76237080a282abac145b7f88a6044869132ba5f
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-08-02
+**What**: Strategy lifecycle went from dishonest to honest: duplicate `register` now returns `ALREADY_EXISTS` instead of a raw `INTERNAL` crash, a `REACTIVATE` op was added so deactivation is no longer permanent, and `set_strategy_live` now gates *enable* on `active=TRUE` + non-empty `signal_params.symbols` (returning `FAILED_PRECONDITION`), while *disable* stays unconditionally allowed. The live-loop consumer predicate itself was deliberately left untouched — the fix is entirely on the input side (design.md:1-11,44-46).
+**Why (irrecoverable rationale)**: `FAILED_PRECONDITION` was picked over a `SetStrategyLiveResponse.warnings` proto field specifically because the acceptance criteria demanded a *hard* rejection of inert-enable, and `FAILED_PRECONDITION` needed zero proto change (design.md:68-69). `REACTIVATE` was made an explicit verb (not a register-upsert) to mirror feature 088's `ManageSignalSource` pattern and keep `register` strict (design.md:11,66-67).
+**Rejected alternatives**:
+- Register upsert-on-inactive — lost: overloads register, keeps it non-strict (design.md:66-67).
+- `SetStrategyLiveResponse.warnings` — lost: AC required hard rejection, not a soft warning (design.md:68-69).
+- `get_by_id` pre-check alone on register (no violation catch) — lost: TOCTOU-vulnerable; shipped uses both pre-check + `UniqueViolationError` catch (design.md:70-71).
+- Bare `active=TRUE` flip for reactivate (no re-validation) — lost: would pass preconditions but error every live cycle if the definition references a deleted formula, violating AC-4 (design.md:74-76).
+- Auto-clear `live_enabled` on deactivate — out of scope; enable-time precondition already makes the inert case unreachable going forward (design.md:77-78).
+**Scars & gotchas**: None recorded — context.md has no execute-phase `## Session` entry; it jumps straight from design-approved (2026-08-02) to CI promotion (context.md:25-39). Implementation-spec's Deviation Log is empty (implementation-spec.md:108-110): all 7 steps landed exactly as designed, no red-flags surfaced in review.
+**Permanent deviations**: recon.md originally recommended **replicating** the live-loop's `_symbols_for` logic inside `SetStrategyLive` (recon.md:36) -> the design-debate adversary round overrode this to **extract a shared module-level `strategy_symbols()` helper** instead -> because two copies of the firing-predicate contract would drift under C-10 (design.md:21-25). This is real: recon and design disagree, and only the debate log explains why the shared-helper approach won.
+**Cross-feature signal**: Features 086/087/088/089 all touch the same agent surface (`client.py`, `tools.py`, `mcp-tools.md`, strat-lab skill) — required explicit merge-order reconciliation (context.md:30).
+**Deferred follow-ons**: none (open risk about pre-existing inert-live strategies was explicitly accepted, not deferred — design.md:82-84).
+**Ledger entries written**: insights.md (2), fails.md (1) — see the 2026-08-06 entries.
+**Runtime-invariant recommendations (→ /context-constitution)**: - Candidate for `xstockstrat-analysis` service docs: the live-loop firing-symbol contract has exactly one source of truth, `strategy_symbols()` in `app/engine/live_loop.py`, shared by both the live loop and `SetStrategyLive`'s precondition check — do not reimplement it at a new call site (design.md:21-25).
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at f871138.

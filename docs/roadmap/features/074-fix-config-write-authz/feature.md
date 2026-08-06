@@ -12,6 +12,7 @@ context.md § Deviations)
 **Severity**: SEV-1
 **Created**: 2026-07-28
 **Last Updated**: 2026-07-29
+**Archived**: 2026-08-06
 
 ---
 
@@ -24,16 +25,14 @@ context.md § Deviations)
 | 2026-07-29 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. No Floor breach. Surfaced a verified defect: config's unit runner executes zero assertions — runner repair folded in (C-08). |
 | 2026-07-29 | `design-approved` → `implementation-ready` | /sdd-spec | implementation-spec.md written — 7 steps. |
 | 2026-07-29 | `implementation-ready` → `code-completed` | /sdd-execute | All 7 steps complete. Red-before-green proven at both layers. AC #4/#5 (dev smoke) outstanding — no dev access from this session. |
+| 2026-08-06 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 4 specs |
 
 | 2026-07-29 | `code-completed` → `launched` | CI workflow | Promoted via PR #812; committed 0eae638104744992c61c8a1ac4bd8cbaac10862b |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Recon](recon.md) — grounded codebase dossier (Phase 0)
-- [Design](design.md) — debated architecture, rejected alternatives, open risks (Phase 1)
-- [Implementation Spec](implementation-spec.md) — 7 numbered steps with evidence and verification
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

@@ -6,6 +6,7 @@
 **Development Branch**: `feature/opportunity-universe-unification`
 **Created**: 2026-08-03
 **Last Updated**: 2026-08-03
+**Archived**: 2026-08-06
 
 ---
 
@@ -19,16 +20,14 @@
 | 2026-08-03 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 19 steps; all 8 Open Risks (OR-A…OR-H) resolved inline |
 | 2026-08-03 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started on feature/opportunity-universe-unification (Step 1 proto done) |
 | 2026-08-03 | `in-progress` → `code-completed` | /sdd-execute | All 19 steps done + verified (analysis 419→422 passed 81%; agent 198 passed; UI lint+tsc+unit clean, e2e opportunities/watchlists/strategy-authoring green). PR #861. |
+| 2026-08-06 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 4 specs |
 
 | 2026-08-04 | `code-completed` → `launched` | CI workflow | Promoted via PR #862; committed 9713cb61c9b866d6420e142ac1cf20cf6059bf94 |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Recon Dossier](recon.md) — grounded codebase map (design Phase 0)
-- [Design](design.md) — debated, approved architecture (design Phase 1)
-- [Implementation Spec](implementation-spec.md) — 19 numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

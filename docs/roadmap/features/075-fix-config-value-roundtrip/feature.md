@@ -11,6 +11,7 @@ code recon, same adaptation as features 067 and 074
 **Severity**: SEV-2
 **Created**: 2026-07-29
 **Last Updated**: 2026-07-29
+**Archived**: 2026-08-06
 
 ---
 
@@ -20,13 +21,14 @@ code recon, same adaptation as features 067 and 074
 |---|---|---|---|
 | 2026-07-29 | `bug-reported` → `draft` | /sdd-triage | Two defects surfaced by `/sdd-review` of feature 073 and confirmed directly in code; split out rather than bundled, following the 073→074 precedent. |
 | 2026-07-29 | `draft` → `code-completed` | direct fix | Both defects fixed with a real-wire test suite; red-before-green proven (6 fail → 26/26). Backfill of already-corrupted rows (AC-5) outstanding. |
+| 2026-08-06 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 1 specs |
 
 | 2026-07-29 | `code-completed` → `launched` | CI workflow | Promoted via PR #812; committed 0eae638104744992c61c8a1ac4bd8cbaac10862b |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

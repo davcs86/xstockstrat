@@ -1,32 +1,18 @@
-# Context: market-data-freshness-and-quality-gate
+# Context: market-data-freshness-and-quality-gate  (archived 2026-08-06)
 
-**Feature**: `docs/roadmap/features/106-market-data-freshness-and-quality-gate/feature.md`
-**Product Spec**: `docs/roadmap/features/106-market-data-freshness-and-quality-gate/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/106-market-data-freshness-and-quality-gate/implementation-spec.md`
+**Feature**: ./feature.md
+**Status**: demoted/canceled — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-08-06 — /sdd-archiver
 
-## Session 2026-08-04T00:00:00Z — sdd-story
-
-- Created feature.md (status: draft), product-spec.md, context.md from an external live-capital
-  safety risk review. P1 item 9 ("market-data safety gate").
-- Depends on `xstockstrat-marketdata` observability into quote age/session status/corporate actions
-  already existing or being extended. Feeds 100 (account-trading-halt-and-kill-switch) as an
-  automatic-halt trigger when staleness becomes account-wide, and coexists at the same order-path
-  enforcement point as the feature-023 position-sizing engine.
-
-## Session 2026-08-04T01:00:00Z — feasibility re-check (demoted, folded into 023)
-
-- Feasibility re-check concluded most of this feature's scope (a standalone service-level gate with
-  its own proto surface, config namespace, and DB snapshot table) is disproportionate given the actual
-  need: `xstockstrat-trading`'s existing `checkPortfolioRisk`
-  (`services/xstockstrat-trading/internal/service/trading.go:1288`) already reads a live quote/equity
-  value at order time and is the natural place for a cheap price-sanity guard (reject on missing/
-  stale/zero/negative/NaN price) to live, once 023's real sizing engine replaces today's advisory-only
-  check.
-- Demoted as a standalone feature to `demoted/canceled`. Recorded as a fold-in recommendation in
-  `023-position-sizing-engine/context.md`: 023's implementation should reject sizing on a bad quote as
-  part of its own input validation, rather than standing up a separate gate/service. The broader
-  asks (spread limits, corporate-action detection, independent-reference divergence, persisted
-  per-decision market-data snapshots) remain legitimate future work but are premature relative to
-  023/030 landing first.
+**What**: A product spec proposed a standalone market-data quality gate (new proto rejection-reason enum, new config namespace, new DB snapshot table) to block exposure-increasing orders on stale/missing/implausible quotes. It never reached design or implementation — canceled the session after story creation, before `/sdd-design` ran (context.md:9-32; no recon.md/design.md/implementation-spec.md were ever produced).
+**Why (irrecoverable rationale)**: A feasibility re-check found `xstockstrat-trading`'s existing `checkPortfolioRisk` (`services/xstockstrat-trading/internal/service/trading.go:1288`) already reads a live quote/equity value at order time and is the natural place for a cheap price-sanity guard, once feature 023's real sizing engine replaces today's advisory-only check — making a full standalone service-level gate disproportionate to the actual near-term need (context.md:20-26).
+**Rejected alternatives**: - Standalone service-level gate with its own proto surface, config namespace, and DB snapshot table — lost because it was disproportionate: the cheap, high-value subset (reject on missing/stale/zero/negative/NaN price) fits inside an already-existing order-time check rather than requiring new infrastructure (context.md:20-26).
+**Scars & gotchas**: none — feature never entered execute phase.
+**Permanent deviations**: n/a — nothing shipped under this feature.
+**Cross-feature signal**: - The cheap subset was explicitly folded into `023-position-sizing-engine`'s scope via a recommendation recorded in that feature's own context.md (context.md:26-29) — demonstrates the pattern of demoting a standalone feature by redirecting its minimal viable value into an existing in-flight feature's context.md, rather than deleting the need outright.
+**Deferred follow-ons**: - Spread limits, corporate-action detection, independent-reference price divergence, and persisted per-decision market-data snapshots remain legitimate future work, deferred as premature until 023 (position-sizing engine) and 030 land first (context.md:29-32).
+**Failure post-mortem**: - Root cause: the product spec was generated directly from an external live-capital-safety risk review (P1 item 9) without first checking whether an existing enforcement point (`checkPortfolioRisk`) already covered the cheap, high-value part of the ask — scoping a full new service surface before verifying that. Missed signal: no recon (`/sdd-design` Phase 0) had run yet when the standalone scope was drafted; the feasibility re-check that caught this happened only one hour later, before further investment (context.md:9-26).
+**Ledger entries written**: insights.md (1), fails.md (1) — see the 2026-08-06 entries.
+**Runtime-invariant recommendations (→ /context-constitution)**: - none
+**Pruned artifacts**: product-spec.md — last present at f871138.

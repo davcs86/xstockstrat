@@ -11,6 +11,7 @@ precedent as features 067/074)
 **Severity**: SEV-2
 **Created**: 2026-07-30
 **Last Updated**: 2026-07-30
+**Archived**: 2026-08-06
 
 ---
 
@@ -25,16 +26,14 @@ precedent as features 067/074)
 | 2026-07-30 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (sequential mode) — extracted `newFundamentalsSource`, always constructed at boot. |
 | 2026-07-30 | `in-progress` (unchanged) | /sdd-execute | Step 2 done (sequential mode) — canary + live-toggle-no-restart tests, nil-source test comment updated. |
 | 2026-07-30 | `in-progress` → `code-completed` | /sdd-execute | Step 3 done (sequential mode) — corrected both doc surfaces (CLAUDE.md + context-constitution.md). All 3 steps done. |
+| 2026-08-06 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(0)/fails(0); pruned 4 specs |
 
 | 2026-07-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #825; committed 3b437fd2dce0e243249bdb4b64edd8ad9a029562 |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Recon](recon.md) — grounded codebase dossier (xstockstrat-marketdata)
-- [Design](design.md) — debated, approved architecture (2 rounds, quick)
-- [Implementation Spec](implementation-spec.md) — 4 steps: main.go extraction + service.go comment,
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
   paired test proof (canary + live-toggle), doc corrections (CLAUDE.md + context-constitution.md)
 - [Context Log](context.md) — session history, decisions, deviations
 

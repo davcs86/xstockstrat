@@ -6,6 +6,7 @@
 **Development Branch**: `feature/phase-2-data-layer`
 **Created**: 2026-05-19
 **Last Updated**: 2026-05-21
+**Archived**: 2026-08-05
 
 ---
 
@@ -19,14 +20,14 @@
 | 2026-05-20 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 2 steps |
 | 2026-05-21 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete — BrokerOrder.FilledAvgPrice added; both GetOrder implementations updated |
 | 2026-05-21 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done — trading fill price root cause fixed; portfolio GetPnL ledger query implemented |
+| 2026-08-05 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(2); pruned 2 specs |
 
 | 2026-05-22 | `code-completed` → `launched` | CI workflow | Promoted via PR #290; committed 1ff20d531e007cc519788dc50af97b4317cfc381 |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver 2026-08-05; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
