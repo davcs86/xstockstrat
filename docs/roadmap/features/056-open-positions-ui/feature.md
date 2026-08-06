@@ -6,6 +6,7 @@
 **Development Branch**: `feature/open-positions-ui`
 **Created**: 2026-06-10
 **Last Updated**: 2026-06-11
+**Archived**: 2026-08-06
 
 ---
 
@@ -20,14 +21,14 @@
 | 2026-06-11 | re-review (status retained at `implementation-ready`) | /sdd-review | Formal product-spec re-run (skill-invoked) confirming the earlier inline review. PASS, no blocking failures. Corrected the product spec's stale `trade.filled` → `order.filled`/`order.partially_filled` to match verified codebase. Overlap WARN: 055 + 057 also touch `xstockstrat-ui` (coordinate merge order; recorded at impl-spec review) |
 | 2026-06-11 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode (after 055 merged). merge-order 056→055 flipped to Resolved:Yes. Up-front confirm + Step-3 decision: forward `req.AccountId`. Step 1 (proto `symbol`/`side` + `PositionSide` enum) done |
 | 2026-06-12 | `in-progress` → `code-completed` | /sdd-execute | All 9 steps done (stacked PRs #681–#689). Deviations: host codegen fallback (Step 2), dynamic SQL builder + account_id fix (Step 3), sideOf co-located with test (Step 4), e2e mock-infra + CI-equivalent verification (Step 7) |
+| 2026-08-06 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(0); pruned 2 specs |
 
 | 2026-06-12 | `code-completed` → `launched` | CI workflow | Promoted via PR #694; committed f516e7aee1d11461d78a4540a94463a7a101df2f |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — 9 numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

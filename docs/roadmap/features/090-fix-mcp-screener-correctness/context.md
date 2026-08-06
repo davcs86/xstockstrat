@@ -1,59 +1,24 @@
-# Context Log: fix-mcp-screener-correctness
+# Context: fix-mcp-screener-correctness  (archived 2026-08-06)
 
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-08-06 — /sdd-archiver
 
-## Session 2026-08-02 (/sdd-triage --from-report)
-
-- Routed from the MCP-alignment triage report: docs/reports/2026-08-01-mcp-tools-alignment-triage.md
-- Findings bundled into this feature: F-4
-- Severity: SEV-3 (max across bundled findings)
-- Routed to SDD path (Track C)
-- Created: feature.md, product-spec.md, context.md
-- Affected services: xstockstrat-agent, xstockstrat-analysis
-- Root cause(s) from the report: RC-1, RC-4
-- Recommended design depth: full → `/sdd-design fix-mcp-screener-correctness` (rationale: ≥2 services (agent projection + analysis screener))
-- Development branch: feature/fix-mcp-screener-correctness
-- Bundling rationale: the report's cross-finding notes tie these findings to one surface/root
-  cause, so they land as one feature (one PR-able change) rather than artificially-split dirs.
-  The full per-finding fix plan (verified 2026-08-02, one read-only investigator per finding)
-  lives in the source report; consult it during /sdd-design and /sdd-spec.
-
----
-
-## Session 2026-08-02 — sdd-design
-- Recon + adversary grill. Fixes folded: (a) min_conviction filters on scoring.buy_threshold(mc) (FR-4 parity — r.score is a normalized relative conviction, not absolute); (b) unknown-metric union check kept, residual documented (open metric absent universe-wide also raises); (e) agent gap-projection test rewrite named; (f) _build_component inherits ValueError-on-unknown-kind. (c)/(d) verified sound.
-- Chosen: shared _build_component; screen_symbols maps component + projects {symbol,timeframe,bars_have,bars_need}; screener gaps-before-truncation, buy_threshold(min_conviction) floor, unknown-metric ValueError; servicer ValueError→INVALID_ARGUMENT; same-PR docs.
-- Constitution: C-08/P-06, C-10; no proto/migration/config. Floor breaches: none.
-- Status: → design-approved. (Part of 086-094 cohort — merge-order note already present.)
-
----
-
-## Session 2026-08-02 — sdd-execute (implementation)
-- agent `app/client.py`: extracted module-level `_build_component(c)` (shared by manage_strategy
-  + screen_symbols); screen_symbols now maps `component=_build_component(c["component"])` for
-  technical criteria and projects coverage_gaps as `{symbol, timeframe (common_pb2.Timeframe.Name),
-  bars_have, bars_need}` with int64 bars as JSON strings. manage_strategy refactored to reuse the
-  helper (removed its inline component loop).
-- analysis `app/services/screener.py` `screen()`: coverage_gaps computed from the FULL sorted list
-  BEFORE min_conviction + rank_limit truncation (AC-4); min_conviction honored as a hard floor via
-  `scoring.buy_threshold(mc)` (AC-2, FR-4 parity); new `_validate_fundamental_metrics` raises
-  ValueError on an unknown fundamental metric_name when fundamentals are available.
-- analysis `app/handlers/servicer.py` `ScreenSymbols`: added `except ValueError` →
-  `context.abort(INVALID_ARGUMENT, str(e))`.
-- Tests (RED-first): test_screener.py +3 (min_conviction floor, gaps-survive-truncation,
-  unknown-metric ValueError); test_analysis_servicer.py +1 (unknown-metric → INVALID_ARGUMENT);
-  test_client.py rewritten coverage_gaps assertion for the new projection + a technical-component
-  mapping assertion.
-- Docs (C-10 same-PR): tools.py screen_symbols docstring, docs/runbooks/mcp-tools.md screen_symbols
-  section + errors table. strat-lab plugin does not describe screen_symbols → no skill change.
-- Verified: analysis 384 passed (coverage 82.8%), agent 138 passed (coverage 68.7%), ruff clean.
-- No proto/migration/config change. Status: → code-completed.
-
-## Session 2026-08-02 (CI: feature status automation)
-
-- Promotion PR #844 merged to main
-- Feature promoted and committed: a76237080a282abac145b7f88a6044869132ba5f
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-08-02
+**What**: `screen_symbols` shipped with a thin agent wrapper that silently dropped technical criteria and gap detail, plus a screener that ignored `min_conviction`, silently skipped unknown fundamental metric names, and computed `coverage_gaps` after rank truncation (dropping any INSUFFICIENT_DATA symbol below the cut). The fix made all five behaviors honest rather than removing any surface (context.md Session 2026-08-02 execute).
+**Why (irrecoverable rationale)**: `min_conviction` could not be a raw `score >= min_conviction` filter because `r.score` is min-max **normalized** relative conviction in [0,1], not an absolute probability — a raw floor would silently break on different universes and contradict the screener's FR-4 backtest-parity claim. The design instead reused the backtest's own `scoring.buy_threshold(mc)` transform so the field has one platform-wide meaning (design.md:23-30). The AC-2 illustration ("0.9/0.3 → only 0.9") isn't literally realizable by min-max normalization on a 2-symbol universe, so the paired test needed ≥3 symbols (design.md:29-30).
+**Rejected alternatives**:
+- `min_conviction` as a non-filtering `passed` flag — lost: AC-2 requires the low-score symbol absent from results (design.md:49-50).
+- Removing `min_conviction` entirely — lost: cheap to honor correctly vs. a breaking proto removal (design.md:51-52).
+- Validating `metric_name` only against the closed `_FUNDAMENTAL_FIELDS` set — lost: would reject legitimate open `extra_metrics`; union-with-fetched-keys check chosen instead (design.md:53-54).
+- Computing `coverage_gaps` in the servicer after projection — lost: the screener owns the ranked list, fix belongs at the source (design.md:55-56).
+**Scars & gotchas**:
+- The extracted `_build_component` helper inherits `manage_strategy`'s `ValueError` on an unknown `kind`, surfacing as a client-side MCP tool error *before* the gRPC call is even made — an easy thing to miss when reusing the helper elsewhere (design.md:67-68, context.md execute session).
+- Unknown-metric validation only fires when fundamentals are actually fetched — a typo against absent data is silently unvalidated, since there's no universe to check the name against (design.md:61-62).
+- Reused the int64-as-JSON-string wire convention from `run_backtest`'s `bars_have`/`bars_need` for the new gap projection rather than inventing a new encoding (recon.md:27).
+**Permanent deviations**: none — context.md's execute session (lines 33-52) tracks the chosen design point-for-point (shared `_build_component`, gaps-before-truncation, `buy_threshold(mc)` floor, unknown-metric `ValueError`→`INVALID_ARGUMENT`).
+**Cross-feature signal**: - This bug and its sibling triage findings (F-1..F-N in the same report) were deliberately bundled into single-feature-per-shared-root-cause dirs rather than split 1:1 with findings, to keep the PR surface coherent (context.md Session 1, "Bundling rationale").
+**Deferred follow-ons**: - Documented residual: an open `extra_metrics` name absent from every scanned symbol in a given scan raises `INVALID_ARGUMENT` indistinguishable from a genuine typo — accepted as "honest" rather than fixed further (design.md:34-37, 63-64).
+**Ledger entries written**: insights.md (1), fails.md (1) — see the 2026-08-06 entries.
+**Runtime-invariant recommendations (→ /context-constitution)**: - none
+**Pruned artifacts**: product-spec.md, recon.md, design.md — last present at f871138.

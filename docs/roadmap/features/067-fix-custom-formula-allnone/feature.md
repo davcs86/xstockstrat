@@ -9,6 +9,7 @@
 **Severity**: SEV-2
 **Created**: 2026-07-21
 **Last Updated**: 2026-07-21
+**Archived**: 2026-08-06
 
 ---
 
@@ -21,6 +22,7 @@
 | 2026-07-21 | `design-approved` (re-debated) | /sdd-design | Re-opened at user request; rounds 2–3 landed on **Option A** — proto enum `NO_TRADE_REASON_FORMULA_ERROR` + shared UI surface + all-failed-status guard. Scope grew to analysis + proto + ui. design.md rewritten. |
 | 2026-07-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps |
 | 2026-07-21 | `implementation-ready` → `code-completed` | /sdd-execute (sequential) | All 9 steps executed & verified; 3 deviations logged (D-1 MessageToDict-NaN, D-2 test corrected, D-3 UI e2e CI-equivalent fallback). Pushed as a single PR. |
+| 2026-08-06 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(3)/fails(0); pruned 4 specs |
 
 | 2026-07-21 | `code-completed` → `launched` | CI workflow | Promoted via PR #767; committed 52adaa26702553f9d51f3cf458479a9b7729f930 |
 ---
@@ -37,10 +39,7 @@
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Recon Dossier](recon.md) — grounded codebase map, confirmed root cause, patterns to reuse
-- [Design](design.md) — debated & approved architecture, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

@@ -6,6 +6,7 @@
 **Last Updated**: 2026-05-21
 **Committed to main**: 5342a70
 **Launched date**: 2026-05-21
+**Archived**: 2026-08-05
 
 ---
 
@@ -21,13 +22,13 @@
 | 2026-05-21 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete — xstockstrat-trading Go telemetry updated |
 | 2026-05-21 | `in-progress` → `code-completed` | /sdd-execute | Step 9 complete — all 9 steps done |
 | 2026-05-21 | `code-completed` → `launched` | CI workflow (manual fallback) | Promoted via PR #281; committed 5342a70 to main |
+| 2026-08-05 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 2 specs |
 
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — 9 steps, regenerated for Path B (runtime derivation)
+- Product Spec — pruned by /sdd-archiver 2026-08-05; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

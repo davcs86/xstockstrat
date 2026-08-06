@@ -7,6 +7,7 @@
 **Committed to main**: 6dbc75e
 **Launched date**: 2026-05-18
 **Note**: Product spec revised 2026-05-18 — scope expanded from rename-only to selective deletion; Track A services (config, ledger, identity, trading, indicators) lose webhook layer entirely; Track B services (ingest, notify, analysis) keep surviving endpoints with path rename.
+**Archived**: 2026-08-05
 
 ---
 
@@ -20,13 +21,13 @@
 | 2026-05-18 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 completed (xstockstrat-config webhook removal) |
 | 2026-05-18 | `in-progress` → `code-completed` | /sdd-execute | All 16 steps completed; ready for integration PR |
 | 2026-05-18 | `code-completed` → `launched` | production promotion | Merged to main via commit 6dbc75e; now live in production |
+| 2026-08-05 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(3); pruned 2 specs |
 
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — 16 steps, generated 2026-05-18
+- Product Spec — pruned by /sdd-archiver 2026-08-05; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

@@ -6,6 +6,7 @@
 **Last Updated**: 2026-05-12
 **Committed to main**: 89e07ef
 **Launched date**: 2026-05-11
+**Archived**: 2026-08-05
 
 ---
 
@@ -24,13 +25,13 @@
 | 2026-05-11 | `code-completed` → Final PR | /sdd-execute | Integration PR #157 created: feature/make-repo-public-secure → main-dev |
 | 2026-05-11 | `code-completed` (unchanged) | /sdd-execute | GH_PAT_SCAN token wired into secret-scan job (trufflehog + gitleaks) |
 | 2026-05-11 | `code-completed` → `launched` | /promote | PR #157 promoted to production via promotion PR #158 (`release: promote main-dev to main (2026-05-11)`) |
+| 2026-08-05 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(2); pruned 2 specs |
 
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver 2026-08-05; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

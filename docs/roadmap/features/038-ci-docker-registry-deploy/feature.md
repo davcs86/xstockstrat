@@ -6,6 +6,7 @@
 **Development Branch**: `feature/ci-docker-registry-deploy`
 **Created**: 2026-05-26
 **Last Updated**: 2026-05-26
+**Archived**: 2026-08-05
 
 ---
 
@@ -18,14 +19,14 @@
 | 2026-05-26 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
 | 2026-05-26 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done — docker-build job added to ci.yml |
 | 2026-05-26 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done — open integration PR to main-dev |
+| 2026-08-05 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(2); pruned 2 specs |
 
 | 2026-05-27 | `code-completed` → `launched` | CI workflow | Promoted via PR #375; committed 790d855782d7581455619911aa86fdaf627376b4 |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver 2026-08-05; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

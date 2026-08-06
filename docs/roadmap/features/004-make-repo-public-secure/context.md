@@ -1,79 +1,29 @@
-# Context: make-repo-public-secure
+# Context: make-repo-public-secure  (archived 2026-08-05)
 
-**Feature**: `docs/roadmap/features/004-make-repo-public-secure/feature.md`
-**Product Spec**: `docs/roadmap/features/004-make-repo-public-secure/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/004-make-repo-public-secure/implementation-spec.md`
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-08-05 — /sdd-archiver
 
-## Session 2026-05-10T00:00:00Z — sdd-story
-
-- Created feature.md (status: draft), product-spec.md, context.md from user story.
-
-## Session 2026-05-10T00:01:00Z — sdd-review product-spec
-
-- Product spec approved. Status: draft → spec-ready.
-- Warnings: Affected Services uses collective reference ("All services under services/") rather than exact named list — advisory only; /sdd-spec will enumerate exact service names.
-- Overlap findings: broker-accounts-ui (code-completed) and formula-management-ui (implementation-ready) share service dirs — low conflict risk (no shared config keys, proto fields, or DB migrations). No merge-order entry required.
-- Administrative: NNN collision with 003-formula-management-ui — recommend renaming this directory to 004-make-repo-public-secure.
-- OQ resolutions recorded: trufflehog + gitleaks for CI; audit-first history purge; PR merge is the visibility gate.
-
-## Session 2026-05-11T00:00:00Z — manual edits (pre-execute)
-
-- Cleaned up `.env.example`: added local-dev-only comment on DATABASE_URL; added "GitHub Repository Secrets" comment block listing all 4 required secrets (DIGITALOCEAN_ACCESS_TOKEN, DO_DEV_APP_ID, DO_PROD_APP_ID, BUF_TOKEN) with pointer to digitalocean.md Step 9.
-- Fixed `docs/setup/digitalocean.md` Step 9: added missing BUF_TOKEN to the secrets table; added "Obtaining a BUF_TOKEN" subsection.
-- Updated implementation-spec.md Step 9 instructions: git history audit now explicitly covers `main` and `main-dev` via `git fetch --all` before `git log --all`; added `devpassword` to the pattern list; force-push step after filter-repo covers all branches.
-
-## Session 2026-05-10T00:02:00Z — sdd-spec
-
-- Generated implementation-spec.md with 9 steps. Status → implementation-ready.
-
-## Session 2026-05-11T00:01:00Z — sdd-story (product-spec update)
-
-- Added FR-9: create `.env.development` with local-dev defaults (including `APP_URL=http://localhost`), safe to commit.
-- Added FR-10: create `.env.production` documenting production variable structure; wire `APP_URL` from DO App Platform built-in (`${APP_URL}`) into frontend services in `.do/app.yaml` and `.do/app.dev.yaml`.
-- Updated Affected Services to explicitly list `.do/app.yaml`, `.do/app.dev.yaml`, and the three frontend services.
-- Updated Acceptance Criteria (items 9 and 10).
-- Implementation spec is now **stale** — run `/sdd-spec make-repo-public-secure` to regenerate with the new steps added for FR-9/FR-10.
-
-## Session 2026-05-11T00:02:00Z — sdd-review product-spec (re-review after FR-9/FR-10 update)
-
-- Product spec re-review: PASS. Status remains `in-progress` (Step 1 already complete).
-- Warnings (advisory): (1) Affected Services uses collective "All services under services/" — acceptable for cross-cutting audit; (2) AC8 is qualitative; (3) broker-accounts-ui and formula-management-ui share frontend service names — low conflict risk, no shared source files.
-- Overlap findings: no config key, proto, or migration collisions. No merge-order entry required.
-- Next: `/sdd-spec make-repo-public-secure` to regenerate implementation spec preserving Step 1 `done` status and adding steps for FR-9/FR-10.
-
-## Session 2026-05-11T00:03:00Z — sdd-spec (re-spec for FR-9/FR-10)
-
-- Regenerated implementation-spec.md with 11 steps (up from 9). Status remains `in-progress`.
-
-## Session 2026-05-11T01:11:00Z — sdd-execute ALL-DONE PATH
-
-**Boot**: Loaded authoritative spec from `origin/feature/make-repo-public-secure` (HEAD = latest Step 10 commit). Feature status: `code-completed` (Steps 1–10 done, Step 11 skipped).
-
-**Merge-order gate**: Checked `docs/roadmap/features/merge-order.md` — no blocking entry for `make-repo-public-secure`. Proceed without warning.
-
-**Branch sync**: Checked out `feature/make-repo-public-secure`; pulled origin (already up to date).
-
-**Integration PR**: Created PR #157 targeting `main-dev` with comprehensive summary, all 10 completed steps listed, full deviation log, and test plan checklist.
-
-### Session summary
-**All steps complete** — Feature ready for merge.
-**Integration PR**: [#157](https://github.com/davcs86/xstockstrat/pull/157)
-**Next**: Merge PR #157 into `main-dev` when CI passes and reviewers approve. Repository is then ready for public release on GitHub.
-
-## Session 2026-05-11T02:15:00Z — sdd-execute GH_PAT_SCAN token update
-
-**Task**: Update CI.yml to use GH_PAT_SCAN secret in place of GITHUB_TOKEN for secret-scan job.
-
-**Changes**:
-- Updated `.github/workflows/ci.yml` secret-scan job: both trufflehog and gitleaks steps now use `${{ secrets.GH_PAT_SCAN }}` instead of `${{ secrets.GITHUB_TOKEN }}`
-- Allows authenticated API calls for improved detection capabilities
-- Requires GH_PAT_SCAN to be configured in GitHub repository secrets (Settings → Secrets and variables → Actions)
-
-**Files modified**: `.github/workflows/ci.yml`, `docs/roadmap/features/004-make-repo-public-secure/feature.md`, `docs/roadmap/features/004-make-repo-public-secure/context.md`
-
-### Session summary
-**Task**: Wired GH_PAT_SCAN token into secret-scan CI job
-**Method**: Pushed via MCP GitHub API (bypassed harness git-proxy HTTP 403 issue)
-**Status**: All files successfully pushed to feature/make-repo-public-secure
+**What**: Repo-wide secret/credential hardening for going public, but the FR-9/FR-10 local-env work shipped as a materially different design than planned: a single `.env.local` file loaded by all 13 docker-compose services plus an `APPLICATION_ENV` discriminator, not the originally spec'd `.env.development`/`.env.production` pair (context.md 2026-05-11T01:11:00Z session; implementation-spec.md Deviation Log, Step 10).
+**Why (irrecoverable rationale)**: Next.js does not auto-load `.env.development` inside a Docker container built with `NODE_ENV=production`, so the FR-9 file as spec'd would silently be ignored in the one place (containers) local dev actually runs — only discoverable by testing the actual load behavior, not by reading the spec (implementation-spec.md Deviation Log, Step 10, reason #1).
+**Rejected alternatives**:
+- `.env.development` + `.env.production` two-file split (FR-9/FR-10 as spec'd) — lost because it isn't loaded by Next.js under Docker's production `NODE_ENV`, and DO app specs already fully own prod config, making a committed `.env.production` redundant (Step 10 Deviation Log, point 9: Step 11 "skipped").
+- `${VAR:-default}` fallback syntax for docker-compose secrets (Step 1 as spec'd) — lost because user explicitly wanted fail-fast with no fallback given repo not yet public/rolled out (Deviation Log, Step 1).
+- Full templated `SECURITY.md`/verbose `CONTRIBUTING.md` — lost because user judged the generic template not worth landing; CONTRIBUTING.md was slimmed to point at `docs/setup/getting-started.md` instead of duplicating it (Deviation Log, Step 6).
+**Scars & gotchas**:
+- `.gitignore` wildcard ordering trap: a later `**/.env.*` pattern silently overrides an earlier `!.env.development` negation — needed a *second*, symmetric `!**/.env.*` carve-out to actually un-ignore the file; verified only via `git check-ignore` exit code (Deviation Log, Step 5).
+- Harness git-proxy hit an HTTP 403 pushing to the feature branch; had to push via the GitHub MCP API instead (context.md 2026-05-11T02:15:00Z session).
+**Permanent deviations**:
+- design said create `.env.development` + `.env.production` (FR-9/FR-10) -> shipped a single `.env.local` wired into every service's `env_file` + `APPLICATION_ENV` env-discriminator, Step 11 fully absorbed/skipped -> because the two-file split didn't survive contact with how Next.js and Docker actually load env files (Deviation Log, Step 10).
+- design said wrap prod docker-compose secrets in `${VAR:-default}` -> shipped `${VAR:?error}` fail-fast -> because the repo wasn't live yet and user wanted no silent fallback (Deviation Log, Step 1).
+- product-spec AC-5 required `SECURITY.md` at repo root -> it was never created -> user judged the template not worth landing (Deviation Log, Step 6); feature still reached `launched` with this AC unmet.
+- `.up.sql` migration files on `main-dev` are documented elsewhere as immutable, but a comment-only edit to `002_seed_admin.up.sql` shipped anyway with explicit user sign-off (Deviation Log, Step 9).
+- implementation-spec.md Step 7 (L475) spec'd the secret-scan job's trufflehog/gitleaks steps with `GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}` -> shipped `GITHUB_TOKEN: ${{ secrets.GH_PAT_SCAN }}` in both steps (`.github/workflows/ci.yml:671,676`) -> because a later session judged a PAT gives "authenticated API calls for improved detection capabilities" over the default token (context.md 2026-05-11T02:15:00Z session, L65-79). This requires `GH_PAT_SCAN` to be manually provisioned in repo secrets (Settings → Secrets → Actions) — nothing else creates or documents it, and `ci.yml` carries no comment explaining the swap, so a future maintainer seeing `GH_PAT_SCAN` fail/expire has no in-repo pointer to why it exists or what to do.
+**Cross-feature signal**: Mid-flight `adjust:` rounds during execute can silently absorb/cancel a later spec'd step (Step 11), or swap a spec'd secret/token (Step 7's GH_PAT_SCAN), without a re-run of `/sdd-spec` — the impl-spec file still shows Step 11 duplicated/contradictory content and Step 7 pointing at the wrong token, a sign the spec doc and shipped reality diverged and were never reconciled.
+**Deferred follow-ons**:
+- `SECURITY.md` still does not exist despite AC-5; add with real contact details when someone owns it.
+- No CI-visible pointer that `GH_PAT_SCAN` (not the default `GITHUB_TOKEN`) must exist as a repo secret for the secret-scan job to run; if it's ever revoked/missing, this history explains why.
+**Ledger entries written**: insights.md (2), fails.md (2) — see the 2026-08-05 entries.
+**Runtime-invariant recommendations (→ /context-constitution)**: - none
+**Pruned artifacts**: product-spec.md, implementation-spec.md — last present at f5abed5.

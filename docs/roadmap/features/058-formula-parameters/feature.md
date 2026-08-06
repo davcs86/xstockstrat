@@ -6,6 +6,7 @@
 **Development Branch**: `feature/formula-parameters`
 **Created**: 2026-06-08
 **Last Updated**: 2026-06-08
+**Archived**: 2026-08-06
 
 ---
 
@@ -19,14 +20,14 @@
 | 2026-06-08 | `implementation-ready` (re-run) | /sdd-spec | Re-verified all 14 steps' codebase evidence against current tree; no drift, spec unchanged |
 | 2026-06-08 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run started; Steps 1–2 (proto + stub regen) done on `claude/sdd-execute-formula-params-gy0lgo` |
 | 2026-06-08 | `in-progress` → `code-completed` | /sdd-execute | All 14 steps done (proto, migration, indicators engine+tests, analysis evaluator+test, agent+tests, UI, docs); ready for integration PR → main-dev |
+| 2026-08-06 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(0); pruned 2 specs |
 
 | 2026-06-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #641; committed 1fb6f613ead4b2ed4316d24c9af680dc88c7d4e8 |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

@@ -647,3 +647,15 @@ Nocturne design handoff (screenshot 02 = Signal detail; Exposure grammar for the
   (only SDD + a few skills are listed). Did a manual grounded reconcile instead — updated the ui
   `CLAUDE.md` "Decide screens" bullet (Signal-detail two-column + header enrichment) and added a
   "Single-position detail" bullet.
+
+## Session 2026-08-06 — design-handoff pruned (human decision, extras gate)
+
+- Per explicit user instruction, deleted `design-handoff/` (the human-provided visual handoff:
+  `README.md`, `source-map.md`, 12 `screenshots/*.png`, and `xstockstrat UI.dc.html`) rather than
+  keeping or relocating it. This is the Phase 4b "extras gate" decision from `/sdd-archiver` for
+  this feature's one non-standard artifact — recorded here since the feature itself has not yet
+  completed the archiver's verify gate (still pending re-synthesis as of this date).
+- Before deletion, recorded the SHA-256 checksum of the sole HTML artifact so its integrity can be
+  verified if ever restored from git history:
+  - `xstockstrat UI.dc.html` — `cf8b9806a2e258657a46292aa863100354b2402a5833330ebe7d85dabe25a63d`
+- The directory is recoverable via `git show <pre-deletion-SHA>:docs/roadmap/features/083-ui-revamp-opportunities-first/design-handoff/` — this session's parent commit.

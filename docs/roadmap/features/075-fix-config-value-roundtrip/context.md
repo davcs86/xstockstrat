@@ -1,62 +1,21 @@
-# Context Log: fix-config-value-roundtrip
+# Context: fix-config-value-roundtrip  (archived 2026-08-06)
 
-Append-only. Each session appends a new ## Session entry.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-08-06 — /sdd-archiver
 
-## Session 2026-07-29 — triage (split out of feature 073's review)
-
-- Both defects were surfaced by `/sdd-review 073 product-spec` and then **confirmed directly in the
-  code** this session (not taken on the reviewer's word).
-- Split into their own bug feature rather than bundled into 073, following the precedent set when
-  074 (`fix-config-write-authz`) was split out of 073's FR-7 for the same reason: they are
-  pre-existing defects, independent of whether 073 ever ships, and 073 is merely the first consumer
-  to depend on them being correct.
-- Severity SEV-2, not SEV-1: defect 1 corrupts config values written through the UI (data
-  correctness, no trading halt); defect 2 is latent — it has no consumer today because `/config-ui`
-  happens to read `isSecret` from `ListKeys` instead of the snapshot.
-- Relationship to 073: **073's FR-1 redaction cannot be implemented correctly until defect 2 is
-  fixed.** 073 must consume this fix, not reimplement it.
-
-## Session 2026-07-29 — fix implemented
-
-Both defects fixed in `services/xstockstrat-config/src/grpc/configServiceImpl.ts`:
-
-- **Defect 1** — `setConfig` now stores `extractValueData(value)` (the bare scalar) instead of
-  `JSON.stringify(value)`, and `inferValueType` accepts **both** the camelCase wire shape and the
-  snake_case DB shape, so int/float/bool writes are typed correctly instead of all landing as
-  `'string'`.
-- **Defect 2** — `buildConfigValue` now carries `is_secret` from the DB row, and
-  `toProtoSnapPayload` carries it onto the wire as `isSecret`. `GetConfig`/`WatchConfig` now report
-  secrets truthfully.
-
-New test file `src/__tests__/configValueRoundtrip.test.ts`. The write cases run over a **real gRPC
-connection** so the request is the genuine ts-proto camelCase wire shape — a hand-built snake_case
-request is exactly what let this bug hide (and is already logged as a false-confidence trap in the
-service's findings doc).
-
-**Red-before-green:** 6 failures with the fix reverted → 26/26 with it. Coverage rose 51.7% → 67.4%
-lines. Lint 0 errors.
-
-### Incidental fix — feature 074 shipped a lint failure
-
-The DRY rails 074 added to `.eslintrc.json` fire on `src/__tests__/**`, and 074's own new test file
-inlined `'x-access-scope'`/`'x-user-id'`/`0x04`. I ran `pnpm lint` after 074's step 2 but not after
-step 3 created the test, so 13 lint errors were committed. Both test files now import the constants
-from `authz.ts`. Caught here rather than in CI.
-
-### AC-5 / backfill — NOT resolved
-
-Rows already written through the broken `SetConfig` still hold `{"stringVal":…}` blobs. No data
-migration ships with this fix, because the number of affected rows cannot be determined from the
-repo — it needs a look at real dev/prod data. The fix stops new corruption; it does not repair
-existing rows. **This is the outstanding item on this feature**, recorded rather than silently
-skipped: a `SELECT key, value_data FROM config.config_values WHERE value_data LIKE '{%Val%}'` on
-each environment will size it.
-
-## Session 2026-07-29 (CI: feature status automation)
-
-- Promotion PR #812 merged to main
-- Feature promoted and committed: 0eae638104744992c61c8a1ac4bd8cbaac10862b
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-07-29
+**What**: Shipped a fix for two `xstockstrat-config` defects — `SetConfig` was storing the whole serialized `ConfigValue` message instead of the bare scalar, and `is_secret` was silently dropped on every read path — both blocking feature 073's redaction work. Fixed with a real-gRPC test suite (context.md:33-39); the backfill of already-corrupted rows was explicitly left undone.
+**Why (irrecoverable rationale)**: Split into its own bug feature (not bundled into 073) because both defects are pre-existing and independent of whether 073 ships — 073 is just the first consumer that needs them correct (context.md:11-14, same precedent as feature 074 splitting off 073's FR-7). SEV-2 not SEV-1: defect 1 corrupts UI writes but causes no trading halt; defect 2 was latent because `/config-ui` happened to read `isSecret` from `ListKeys` rather than the snapshot, masking it without anyone recording the workaround (context.md:15-17, product-spec.md:39-41).
+**Rejected alternatives**: - Backfill via data migration or tolerant reader for already-corrupted rows — deferred rather than chosen: row count "cannot be determined from the repo," needs real dev/prod data (context.md:48-55, product-spec.md:83-85). Left as a documented manual `SELECT ... LIKE '{%Val%}'` query instead.
+**Scars & gotchas**:
+- A hand-built snake_case test request would have hidden this exact bug (ts-proto wire shape is camelCase); the new test suite deliberately runs writes over a real gRPC connection to force the genuine wire shape — already logged as a false-confidence trap in the service's own findings doc (context.md:33-36).
+- Feature 074's new DRY eslint rails (firing on `src/__tests__/**`) caught 13 lint errors in *074's own* test file because lint wasn't re-run after 074's step 3 added it — caught incidentally while fixing this feature, not by CI (context.md:41-46).
+**Permanent deviations**: none — no recon.md/design.md exists for this feature (implemented as a direct fix, bypassing full SDD design phase per its bug-fix framing).
+**Cross-feature signal**: A UI-level workaround (`/config-ui` reading `isSecret` from `ListKeys`) silently absorbed a backend defect for an unknown period without ever being flagged — worth watching for elsewhere: silent workarounds hide real defects until a new consumer trusts the "wrong" path.
+**Deferred follow-ons**:
+- AC-5 backfill of already-corrupted `config.config_values` rows, sized via `SELECT key, value_data FROM config.config_values WHERE value_data LIKE '{%Val%}'` per environment (feature.md:57-59).
+- `trading_mode` snake/camel scoping collapse — same root cause family, explicitly out of scope here (product-spec.md:76-78).
+**Ledger entries written**: insights.md (1), fails.md (1) — see the 2026-08-06 entries.
+**Runtime-invariant recommendations (→ /context-constitution)**: - none
+**Pruned artifacts**: product-spec.md — last present at f871138.

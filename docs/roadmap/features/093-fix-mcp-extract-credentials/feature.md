@@ -9,6 +9,7 @@
 **Severity**: SEV-2
 **Created**: 2026-08-02
 **Last Updated**: 2026-08-02
+**Archived**: 2026-08-06
 
 ---
 
@@ -20,16 +21,14 @@
 | 2026-08-02 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, full). Chosen: option (c) — env-scope + typed-projection fix for the legitimate reads (alert_threshold, OAuth); extract-tool credentials made loudly unsupported (raise) rather than a plaintext-config antipattern. AC-3 (radical resolver) deferred; AC-4 reinterpreted. |
 | 2026-08-02 | `implementation-ready` → `code-completed` | /sdd-execute | All 3 steps: get_config_value env+typed-projection+non-swallow (O1 RED demonstrated); extract tools raise RuntimeError when credentials required; alert/OAuth env-scoped best-effort; docs. Agent 146 tests, coverage 71%. One PR into main-dev. |
 | 2026-08-02 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 3 steps (atomic agent-only service step + paired RED-first test step + same-PR docs). No proto/migration/new config key. |
+| 2026-08-06 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(0); pruned 4 specs |
 
 | 2026-08-02 | `code-completed` → `launched` | CI workflow | Promoted via PR #844; committed a76237080a282abac145b7f88a6044869132ba5f |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — bug description and fix scope
-- [Recon](recon.md) — grounded codebase dossier (agent + ingest + config)
-- [Design](design.md) — approved option-(c) architecture (2-round debate)
-- [Implementation Spec](implementation-spec.md) — 3 numbered steps with codebase-grounded evidence
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

@@ -6,6 +6,7 @@
 **Launched date**: 2026-05-19
 **Created**: 2026-05-18
 **Last Updated**: 2026-05-21
+**Archived**: 2026-08-05
 
 ---
 
@@ -19,13 +20,13 @@
 | 2026-05-18 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 complete — jose added to all three frontends |
 | 2026-05-19 | `in-progress` → `code-completed` | /sdd-execute | Step 16 complete — all 16 steps done, all 10 backend service test suites pass |
 | 2026-05-19 | `code-completed` → `launched` | /promote | Promoted to production via PR #250 (commit fb84473) |
+| 2026-08-05 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(2); pruned 2 specs |
 
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — 16 steps, updated 2026-05-18
+- Product Spec — pruned by /sdd-archiver 2026-08-05; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

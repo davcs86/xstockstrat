@@ -6,6 +6,7 @@
 **Last Updated**: 2026-05-18
 **Committed to main**: 4ed76c3
 **Launched date**: 2026-05-18
+**Archived**: 2026-08-05
 
 ---
 
@@ -19,13 +20,13 @@
 | 2026-05-18 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done: added xstockstrat-nginx service (http_port: 80) to .do/app.dev.yaml; removed http_port from trader, insights, config-ui. |
 | 2026-05-18 | `in-progress` → `code-completed` | /sdd-execute | All 4 steps done. Step 4: added Nginx Reverse Proxy section to CLAUDE.md and Nginx config row to Key File Paths Reference table. |
 | 2026-05-18 | `code-completed` → `launched` | production promotion | Merged to main via commit 4ed76c3; now live in production |
+| 2026-08-05 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(2); pruned 2 specs |
 
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — 4 steps with concrete DO app spec changes and docker-entrypoint.sh script
+- Product Spec — pruned by /sdd-archiver 2026-08-05; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

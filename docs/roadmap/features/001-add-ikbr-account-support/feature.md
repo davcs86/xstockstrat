@@ -6,6 +6,7 @@
 **Last Updated**: 2026-05-12
 **Committed to main**: 95860d0
 **Launched date**: 2026-05-12
+**Archived**: 2026-08-05
 
 ---
 
@@ -23,13 +24,13 @@
 | 2026-05-07 | `in-progress` → `code-completed` | /sdd-execute | Step 18 complete: all 18 steps done |
 | 2026-05-07 | `code-completed` | /sdd-execute | Merged to main-dev via PR #97 (commit 95860d0) |
 | 2026-05-12 | `code-completed` → `launched` | production promotion | Promoted to main via multiple release PRs; now live in production |
+| 2026-08-05 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(2); pruned 2 specs |
 
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — 18 steps; generated 2026-05-02
+- Product Spec — pruned by /sdd-archiver 2026-08-05; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

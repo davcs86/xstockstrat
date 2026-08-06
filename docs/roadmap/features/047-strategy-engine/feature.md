@@ -6,6 +6,7 @@
 **Development Branch**: `feature/strategy-engine`
 **Created**: 2026-06-01
 **Last Updated**: 2026-06-05
+**Archived**: 2026-08-05
 
 ---
 
@@ -20,14 +21,14 @@
 | 2026-06-04 | `implementation-ready` (re-spec) | /sdd-spec | Implementation spec refreshed with updated codebase evidence: INGEST_ENDPOINT absent from analysis docker-compose/DO specs added to Step 4; IDENTITY_ENDPOINT and IDENTITY_ENDPOINT absence confirmed fresh; claude_mcp_config.json does not enumerate tool names (Step 10 corrected); line number references updated from live codebase reads. |
 | 2026-06-05 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Step 1 — proto messages/RPCs added to analysis.proto; buf lint + breaking clean). |
 | 2026-06-05 | `in-progress` → `code-completed` | /sdd-execute | All 14 steps done (stacked per-step PRs #566–#579). analysis 83 tests / 53.69% cov, agent 31 tests / 57.77% cov; buf+codegen clean; migration up/down verified. |
+| 2026-08-05 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 2 specs |
 
 | 2026-06-06 | `code-completed` → `launched` | CI workflow | Promoted via PR #599; committed a7201b02bb2b035e48f96aba634594c605d2de56 |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver 2026-08-05; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
