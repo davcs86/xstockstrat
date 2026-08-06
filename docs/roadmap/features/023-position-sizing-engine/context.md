@@ -146,3 +146,63 @@
   F-11 (all honored — see design.md § Constitution Rules Touched). No unresolved Floor breach across
   any of the 5 rounds.
 - Status: `spec-ready` → `design-approved`.
+
+## Session 2026-08-06T18:34:00Z — sdd-spec
+
+- Generated implementation-spec.md with 12 steps. Status → implementation-ready.
+- Key codebase findings (beyond what recon.md/design.md already captured):
+  - `resolveAccount` (`trading.go:188-209`) never returns the resolved account ID on its single-broker
+    convenience path (`brokerPoolEntry` has no account-id field) — `ComputePositionSize`'s
+    `ListPortfolios(AccountId: ...)` equity lookup needs a concrete ID even when the caller leaves
+    `PlaceOrderRequest.account_id` empty. Resolved by widening `resolveAccount`'s signature to
+    `(string, brokerPoolEntry, error)` (Step 6) — a minimal, necessary corollary of the equity-unification
+    design, not scope creep, since without it the single-account convenience path can't be sized.
+  - `GetBars`' `ORDER BY time ASC LIMIT` semantics resolve design.md's Open Risk item: an unbounded
+    request (page size only) returns the **oldest** N bars in the default (wide) lookback window, not
+    the most recent — reliably getting the latest 15 daily bars requires an explicit tight `Range`
+    (45 calendar days back) with a `PageSize` (40) comfortably above the expected in-window bar count.
+  - `OrderSide` direction was not addressed by design.md's pseudocode: stop price must be
+    `currentPrice - stopDistance` for BUY (long), `currentPrice + stopDistance` for SELL (short) —
+    resolved from `OrderSide` enum semantics (`trading.proto:55-58`), flagged explicitly in the spec's
+    Codebase Evidence for `/sdd-review impl-spec` to check.
+  - The Step 5/9 Go unit tests land in `internal/service`, a package excluded from this service's CI
+    Go coverage `COVERPKGS` computation (spec-template.md's exclusion list) — noted explicitly per
+    spec-template's instruction rather than claiming a coverage percentage that doesn't apply.
+  - `services/xstockstrat-marketdata/cmd/server/main_test.go:33-46`
+    (`TestNewFundamentalsSource_AlwaysNonNil`) is the citable precedent for both the zero-value
+    `*config.Watcher` safety and the "construction canary" test pattern reused in Steps 5/7.
+
+## Session 2026-08-06T04:00:00Z — sdd-review impl-spec (advisory)
+
+- Result: 0 blockers, 2 warnings, 5 notes (advisory — did not block; no Floor `F-*` risk found).
+  Essentially every `path:line` citation across all 12 steps verified exact against the codebase.
+- **Deviation Log note (P-03)**: Step 6's implemented `ComputePositionSize` signature silently
+  diverges from design.md's user-approved pseudocode (`design.md:53`) — it drops the `mode
+  commonv1.TradingMode` parameter and reorders the return values (spec: `qty, dollarRisk,
+  stopPrice, err`; design: `sizedQty, stopPrice, dollarRisk, err`). Internally self-consistent
+  with Step 8's usage, and `mode` is genuinely unused by the `GetBars`/`GetLatestQuote`/
+  `ListPortfolios` calls this function makes, so functionally low-risk — but unlike the
+  `resolveAccount` widening (which the spec explicitly justified), this departure from the
+  approved design was never surfaced anywhere until this review caught it. Recording here per
+  P-03 ("no silent deviation"); no code change needed unless a future caller actually needs
+  `mode`-dependent sizing behavior.
+- Overlap scan: **real collisions found**, both now recorded in `docs/roadmap/features/merge-order.md`:
+  - Migration `011` collision with `100-account-trading-halt-and-kill-switch` (both independently
+    claimed `011` off a `010` tip). Resolved: 100 keeps `011_platform_trading_state` (specced
+    first), this feature renumbered to `012_trading_risk_sizing` throughout Step 1 — files,
+    instructions, and verification all updated in this session.
+  - Same-function overlap: this feature is a third party in the `trading.go` `PlaceOrder`
+    insertion-point collision already tracked for 100↔101 (Step 8's sizing gate claims the same
+    `resolveAccount`→`checkPortfolioRisk` slot); also independently widens `resolveAccount`'s
+    signature (Step 6, omitting the `CancelOrder` call site that 101's spec already covers), and
+    edits `checkPortfolioRisk`'s body/line span that 100's Step 7 anchors to by line number.
+    Revised program build order (confirmed 2026-08-06): 100 → 101 → 023 → 030 → 102 — this
+    feature executes after both 100 and 101 and rebases against their landed `trading.go`,
+    including reusing 101's more complete `resolveAccount` call-site coverage.
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 3: `**Files**` lists `packages/proto/gen/{go,python,ts}/trading/v1/` as directories, not
+    exact file paths — structurally inherent to proto codegen regeneration, not a real defect. — [ ] unaddressed
+  - Step 6: `ComputePositionSize` signature divergence from design.md — see Deviation Log note
+    above; no code change required unless `mode` becomes load-bearing later. — [ ] unaddressed
+- Overlap findings: migration `011`→`012` renumbering applied directly to this spec (see above);
+  trading.go 3-way collision recorded in merge-order.md (see above).

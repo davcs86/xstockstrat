@@ -160,3 +160,65 @@
   addresses authz self-assertion directly — a documented gap in Constitution coverage, not proof of
   safety, carried forward as context for a possible future Constitution update.
 - Status: `spec-ready` → `design-approved`.
+
+## Session 2026-08-06T01:00:00Z — sdd-spec
+
+- Generated `implementation-spec.md` with 25 steps covering `packages/proto`, `xstockstrat-trading`,
+  `xstockstrat-config`, and `xstockstrat-ui`. Status → `implementation-ready`.
+- `recon.md` covered `xstockstrat-trading`/`xstockstrat-portfolio`/`xstockstrat-ui` in depth but not
+  `xstockstrat-config` at all (design.md's internal-caller mechanism needs it) — did full inline
+  discovery on `xstockstrat-config` (`authz.ts`, `configServiceImpl.ts`, `001_config_tables.up.sql`,
+  `002_config_environment.up.sql`, `010_config_audit_insert_trigger.up.sql`) myself rather than
+  spawning a subagent (no `Task` tool available in this session — did the discovery directly per the
+  skill's inline-discovery fallback).
+- Key codebase findings beyond `design.md`/`recon.md`:
+  - **IBKR never sends a client/customer order tag on `SubmitOrder`** (`internal/broker/ibkr.go:116-156`
+    builds its request body with no `ClientOrderID`/`cOID` key at all, confirmed by direct grep) —
+    deeper than `design.md`'s Open Risk #2 (which only questioned the *response* field name). FR-6's
+    broker-side `ListOrders`-scan fallback is therefore **Alpaca-only**; IBKR's `UNKNOWN` intents can
+    only resolve via the `order_intent.late_response_conflict` ledger-event path. Extending IBKR's
+    `SubmitOrder` to forward a nonce is named as an explicit out-of-scope follow-up, not silently
+    absorbed into this feature.
+  - **`101`'s own `implementation-spec.md` never actually emits `order_intent.late_response_conflict`**
+    anywhere in its Instructions (only named in a forward-reference dependency note, `:55`) — grepped
+    the whole file to confirm. Step 21 states this gap explicitly rather than assuming the event will
+    exist; if `101` lands without fixing this, Step 21's Instruction 2a's "first check" branch can
+    never match and only the Alpaca-only fallback (2b) or the no-write branch (2c) are live.
+  - **`LedgerService.QueryEvents.event_type` is a single exact-match filter**
+    (`packages/proto/ledger/v1/ledger.proto:56`), not a prefix filter — `design.md`'s UI section
+    implies filtering by "the `reconciliation.`/`order_intent.` event-type prefixes" server-side,
+    which the RPC cannot do. Step 24 fetches by `stream_key` alone and filters client-side, mirroring
+    `usePositionLineage.ts`'s existing shape.
+  - Confirmed via `merge-order.md`/ledger cross-check: `100` claims `xstockstrat-config` migration
+    `011_platform_trading_state`, `023` was renumbered to `012_trading_risk_sizing` in the same
+    directory (both `implementation-ready`, unimplemented) — this feature's own config migration
+    (`caller_identity`) claims `013_config_caller_identity`, contested and explicitly flagged for a
+    live `ls` re-check at execute time (all three ahead of `102` in the `100 → 101 → 023 → 030 → 102`
+    build order).
+  - `xstockstrat-trading` migrations: confirmed `004_broker_accounts_credential_status` is the real
+    last file on disk today; this feature's migration claims `007_broker_accounts_halt_source`,
+    following `030`'s planned `005` and `101`'s planned `006` (both unimplemented, per
+    `merge-order.md:44`).
+  - `packages/proto/trading/v1/trading.proto`'s `BrokerAccount` message real highest field is
+    `credential_checked_at = 8` — this feature claims fields 9-12 (`halted`/`halted_at`/`halt_reason`/
+    `halt_source`), resolving `merge-order.md:47`'s contested row (`030` never claims a proto surface
+    for its own halt columns — DB-only per its own `design.md`).
+  - `xstockstrat-portfolio`'s `GetPosition` account-scoping gap (found by `recon.md`) is routed around
+    via `ListPositions(account_id=...)` throughout the reconciliation poller, per `design.md`'s
+    decision — no portfolio-service code changes in this spec.
+- Reviewers snapshot finalized: added DBA, Proto Reviewer, and Security explicitly (present in the
+  registry's step-category matrix but not itemized in the original product-spec table); kept
+  Platform Lead (new `trading → config` outbound edge) and `xstockstrat-portfolio` owner (an active
+  new `ListPositions` caller, even though no portfolio-service code changes in this spec).
+
+## Session 2026-08-06T00:00:00Z — cross-feature coordination pass (post-/sdd-spec)
+
+- Found and fixed a real migration-number collision the automated overlap scan missed: this feature's
+  Step 6 (`xstockstrat-config`'s `caller_identity` audit column) independently claimed `013`, the same
+  number `030`'s own `implementation-spec.md` (Step 16) had already claimed for
+  `013_trading_risk_bracket` — 030's claim was never cross-referenced when this step was specced.
+  Renumbered this feature's migration to `014_config_caller_identity`; `merge-order.md` updated with
+  the collision row.
+- User confirmed `trading.reconciliation.systemic_threshold_pct` default stays **0.5** (50% of
+  registered accounts erroring/unprotected in one tick) — the threshold for escalating from 030's
+  per-account halt mechanism to 100's platform-wide gate via this feature's internal-caller authz path.

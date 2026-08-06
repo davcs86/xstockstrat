@@ -119,3 +119,99 @@
   F-06, F-11 (all honored — see design.md § Constitution Rules Touched). No Floor breach across any
   of the 5 rounds.
 - Status: `spec-ready` → `design-approved`.
+
+## Session 2026-08-06T00:00:00Z — sdd-spec
+
+- Generated `implementation-spec.md` with 23 steps. Status → `implementation-ready`.
+- **Sequencing check passed**: feature 023 reached `implementation-ready` (real `implementation-spec.md`
+  with concrete `PlaceOrder`/`ComputePositionSize` statement order) before this spec was written,
+  satisfying `recon.md`'s hard sequencing blocker. Features 100 and 101 are *also*
+  `implementation-ready` and independently rewrite the same `trading.go` regions
+  (`PlaceOrder`/`resolveAccount`/`ReplaceOrder`/`CancelOrder`) — every trading-service step in this
+  spec is grounded against the *current* (pre-100/101/023) tree plus each sibling spec's planned
+  statement order, and is explicitly marked for mandatory re-verification/rebase at execute time,
+  matching the same convention 023's own Step 8 and `merge-order.md` already use for this identical
+  collision zone. This spec does not itself add a `merge-order.md` row — that overlap-scan is
+  `/sdd-review`'s job at the next gate.
+- **Key finding — corrects a `design.md` assumption**: `design.md` assumed IBKR's OCA linkage uses a
+  client-set `OCAGroup` string field. Verified (web research; `interactivebrokers.com` blocks direct
+  fetch with HTTP 403, corroborated across independent secondary sources — IBKR's own "How to Code an
+  OCA/Bracket Order in the Web API" articles, and a third-party generated API client's field reference)
+  that the real IBKR Client Portal Web API has **no such client-settable field** — OCA grouping is done
+  by submitting the linked orders together in one `POST /iserver/account/{accountId}/orders` call as a
+  JSON array, each order carrying `isSingleGroup: true`; the server assigns the group ID. Bracket
+  parent/child linkage uses `parentId` on the child equal to the parent's own client-set `cOID`. Also
+  found: the current `internal/broker/ibkr.go` `SubmitOrder` never sends a `cOID` at all — a real,
+  necessary fix (Step 7) with no prior bug report, found only because this feature needs it. Recorded
+  as Step 7's Codebase Evidence with full citations; **not yet added to `insights.md`/`fails.md`** —
+  propose an `insights.md` (design) entry at `/sdd-execute` integration time once Step 7 actually lands
+  and is verified against a real IBKR paper account (this session could not execute or observe live
+  IBKR behavior, only read published API documentation).
+- **Design decision made at spec time** (resolves `design.md`'s "trading.proto bracket/OCA field shape
+  is not yet resolved" Open Risk): **no changes to `trading.proto`** — `bracket_stop_price`, leg order
+  IDs, and bracket state live only in a new internal `trading.order_brackets` table (Step 1) + Go
+  struct, never on the gRPC-facing `Order`/`PlaceOrderRequest` messages. Both fill-confirmed hook sites
+  (PlaceOrder's immediate-fill path and `pollFills`) read this table by `order_id`, resolving
+  `design.md`'s "poller-based hook site can't access the in-process computed stop-price" risk.
+- **Cross-feature dependency surfaced, not silently patched**: 023's planned `ComputePositionSize`
+  signature (`implementation-spec.md` Step 6) does not return the resolved current price this
+  feature's take-profit formula needs. Step 9 documents this as a required, minimal, additive widening
+  of 023's return signature (a 4th return value) to be made *during this feature's own execution*
+  (after 023 has already landed), not by editing 023's spec file directly — 023's own artifacts are out
+  of this feature's ownership.
+- **Config migration number**: `013_trading_risk_bracket` — confirmed by directly reading feature
+  100's (`011_platform_trading_state`) and feature 023's (`012_trading_risk_sizing`) own
+  `implementation-spec.md` files, superseding `recon.md`'s stale `011` guess.
+- **Production-flag deviation carried forward**: `trading.risk.bracket_orders_enabled` seeds `false` in
+  production (Step 16), per `design.md`'s named override of the product spec's literal `true` default.
+- Key codebase findings:
+  - `trading.orders` is a hypertable with composite PK `(order_id, created_at)` — no FK target exists
+    for `order_brackets.order_id`; used a plain indexed column instead (no cross-hypertable FK
+    precedent anywhere in this service).
+  - `internal/repository` and `internal/service` are both excluded from the Go coverage `COVERPKGS`
+    computation, and no repository-layer test exists anywhere in `xstockstrat-trading` today — Step 3
+    names this explicitly rather than inventing a speculative DB-test harness (C-13's "materializes
+    lazily" rule).
+  - `positionColumns`/`scanPositionRow` in `xstockstrat-portfolio` already structurally solves C-10(b)
+    parity across `GetPosition`/`ListPositions`/`ListPositionsByAccount` — extending that one constant
+    keeps all three read paths in sync automatically (Step 20).
+
+## Session 2026-08-06T05:00:00Z — sdd-review impl-spec (advisory)
+
+- Result: 0 blockers, 4 warnings, 4 notes (advisory — did not block; no Floor `F-*` risk found).
+  Unusually strong evidence-citation accuracy across all 23 steps and 4 services.
+- Overlap scan: real same-function collision confirmed — 030 is a fourth party in the
+  `PlaceOrder`/`ReplaceOrder`/`CancelOrder` insertion-point overlap with 100/101/023. Recorded in
+  `merge-order.md` (030 executes last, rebases against all three). Migration numbering (`005`
+  trading, `013` config, `009` portfolio), config keys, and the one proto field addition
+  (`Position.stop_order_id=20`/`take_profit_order_id=21`) all independently re-verified clean.
+- **Fixed directly** (unambiguous mechanical corrections, no design judgment involved):
+  - Step 23: `**Files**`/Verification targeted the wrong e2e spec — `positions.spec.ts` (the
+    disjoint list-page spec) instead of `position-detail.spec.ts` (the actual single-Position
+    detail-page spec that exercises the `getPosition` mock / sidebar this step modifies). Corrected
+    throughout Step 23's Files, Instructions, and Verification.
+  - Step 9: two internal mis-citations said "Step 15" where the config migration seeding
+    `trading.risk.max_unprotected_seconds`/`bracket_orders_enabled` is actually Step 16 (Step 15 is
+    the trading `CLAUDE.md` docs step). Corrected both references.
+  - Step 18: Codebase Evidence cited `portfolio.proto:76` for `exit_rule = 19`; actual line is `75`
+    (off-by-one, no functional impact — field text/number was already correct). Corrected.
+  - `## Step Dependencies` overview (top of spec): systematic +1 step-number drift from "Steps 6-7
+    (IBKR)" onward, apparently from Step 6 (the Alpaca test step) being inserted after the overview
+    was drafted without updating it. Individual steps' own cross-references were all correct — only
+    this summary section had drifted. Corrected all seven affected bullets (IBKR layer 7-8 not 6-7;
+    state machine core Step 9 not 8; watchdog Step 11 not 10; leg cancellation Step 13 not 12;
+    proto Step 18 not 17; portfolio consumer Step 20 not 19; UI Step 23 not 22; cross-feature dep on
+    023 cites Steps 9/11/13 not 8/10/12).
+- Unresolved ✗ / ⚠ carried into execution (advisory, low-risk, no fix applied):
+  - Step 4: no immediately-following or Step-Dependencies-referenced test step (Step 5, next, is
+    also `service`). TDD marked N/A ("interface/type declaration only") and is transitively covered
+    by Steps 6/8 — literal B3 trigger, low risk. — [ ] unaddressed
+- Overlap findings: same-function collision with 100/101/023 (see above, now tracked in
+  `merge-order.md`).
+
+## Session 2026-08-06T00:00:00Z — cross-feature coordination pass (post-/sdd-spec)
+
+- User confirmed `trading.risk.max_unprotected_seconds` default stays **30s** (the implementation-spec's
+  own judgment call, not the P0 review's 5s example — accepted as more realistic for IBKR's
+  conid-resolution + 2-call submission path). No longer a provisional placeholder; `implementation-spec.md`
+  Step 8's Codebase Evidence updated to reflect the confirmation.

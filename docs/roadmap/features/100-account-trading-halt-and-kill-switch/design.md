@@ -129,10 +129,16 @@ C-04 targets will exist, and a proto enum (mirroring `TradingMode`'s shape) shou
   exists in this feature's scope; that's 030's separate mechanism). If any future ledger event for this
   key is ever added (e.g. once 102/107 need one), use `trading_state:{trading_mode}` or reuse the
   ledger's existing `config:{namespace}` convention — never `{account}`.
-- [ ] **Automated-trigger authz path is unbuilt** — 102's reconciliation ticker and 107's canary
-  rollback both already reference this gate in their own product-specs but cannot write to it via
-  `SetConfig`'s ADMIN-only gate. Each must design its own internal-caller authz path when it lands;
-  this is a real, named gap this feature does not close.
+- [x] **Automated-trigger authz path — resolved by 102's design, 2026-08-06.**
+  `102-broker-state-reconciliation`'s `design.md` (§ "Internal-caller authz for `platform.trading_state`")
+  and `implementation-spec.md` (Steps 4-8) built the internal-caller path this feature left open: a new,
+  structurally separate `x-internal-caller` gRPC metadata field (never overloading `x-access-scope`'s
+  human-role bitmap) plus a hardcoded `{callerID, namespace, key, allowedTargetValues}` allow-list in
+  `services/xstockstrat-config/src/grpc/authz.ts`, direction-restricted so an automated caller can only
+  move `platform.trading_state` toward restriction, never back toward `ACTIVE`. `107`'s canary rollback
+  (if revived) should extend 102's allow-list with its own `callerID` entry rather than building a
+  parallel mechanism — this is now the named platform convention for internal-caller config writes.
+  This feature (100) does not itself implement the mechanism; 102 does, at its own `/sdd-execute` time.
 - [ ] **Config migration number is 3-way contested** — `xstockstrat-config` currently tops out at
   `010_config_audit_insert_trigger`; features 023, 030, and 100 are all in-flight and need a new
   migration off that number. Whichever merges first claims the next number; the others renumber at

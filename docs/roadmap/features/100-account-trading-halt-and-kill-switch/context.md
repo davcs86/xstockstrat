@@ -123,3 +123,66 @@
   C-10(a) (shared gate function avoids per-handler copy-paste), C-10(b) (parity across `PlaceOrder`/
   `ReplaceOrder`), C-11, C-14, P-01, P-02, P-03, P-04, F-11. No Floor breach across any of the 5 rounds.
 - Status: `spec-ready` → `design-approved`.
+
+## Session 2026-08-06T01:00:00Z — sdd-spec
+
+- Generated `implementation-spec.md` with 13 steps. Status → `implementation-ready`.
+- Key codebase findings (beyond what `recon.md`/`design.md` already captured):
+  - `services/xstockstrat-portfolio/internal/handler/portfolio_handler.go`'s `GetPosition`
+    (lines 44-53) confirmed to map **every** `h.svc.GetPosition` error to `connect.CodeNotFound`
+    unconditionally — this, not just `scanPositionRow`'s missing `ErrNoRows` branch, is the actual
+    fix site the REDUCE_ONLY fail-closed design depends on. Step 5 fixes both: a new
+    `ErrPositionNotFound` sentinel (mirroring `ErrWatchlistNotFound`) plus a
+    `classifyGetPositionError` helper in the handler.
+  - Confirmed design.md's Open Risk 3 (feature 096 UI regression) directly: `usePosition`'s only
+    consumer, `trader/positions/[symbol]/page.tsx:149-151`, renders `error.message` generically with
+    no status-code branch — the `NotFound`→`Internal` reclassification for genuine backend failures
+    is safe. No separate verification step was needed; cited as Codebase Evidence in Step 5 instead.
+  - Neither `023-position-sizing-engine` nor `030-stop-loss-bracket-orders` has landed a migration
+    yet (both still `design-approved`, confirmed via `feature.md` status + no migration files on
+    either branch) — `services/xstockstrat-config/migrations/` still tops out at `010`, so `011` is
+    the correct next number as of this session, but Step 2 instructs execute-time re-verification
+    against the live tree (both dimensions of the 3-way contention design.md flagged).
+  - `config.Watcher` (trading service) has no exported snapshot setter, so a cross-package unit test
+    cannot inject `ACTIVE`/`REDUCE_ONLY` into a fake `Watcher` — Step 8's test design works around
+    this by testing the pure helpers (`parseTradingState`, `isExposureIncreasing`,
+    `isReplaceRiskReducing`) independently of `cfgW`, and proving only the fail-closed-on-unset-key
+    wiring through the zero-value `Watcher` (which always yields its `GetString` default). Flagged an
+    open cleanup item in Step 8's Instructions for execute to resolve (a not-fully-clean first-draft
+    test case name/structure).
+  - No proto step needed (confirmed no proto changes per design.md); no ledger-event step needed
+    (design.md's final round dropped the WatchConfig-subscriber ledger-emit mechanism entirely — the
+    audit trail is `config.config_audit` only, already existing, no new cross-service edge).
+  - Reviewers snapshot narrowed from the original story-time table: dropped `xstockstrat-agent`
+    owner and Platform Lead (neither surface is touched by the chosen design), added DBA (the new
+    migration step).
+
+## Session 2026-08-06T02:00:00Z — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 5 warnings, 2 notes (advisory — did not block; no Floor `F-*` risk found).
+  Every `path:line` evidence citation across all 13 steps spot-checked as accurate.
+- Overlap scan: clean. Migration `011`, config key `platform.trading_state` confirmed unique
+  against trunk and all in-flight `implementation-ready`/`in-progress` features. One WARN-level
+  textual (not semantic) file collision on `services/xstockstrat-ui/e2e/mock-backend.ts` against
+  `096-position-and-order-detail-pages` (disjoint mock blocks — `config-ui listKeys()` vs
+  `PortfolioService`) — trivial rebase, no merge-order entry needed. Pre-existing
+  `merge-order.md:46` dependency (102 blocked on 100) reconfirmed, no update needed.
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 4: Verification prose garbled around the 40% coverage-threshold statement — cosmetic
+    only, meets the letter of the criterion. — [ ] unaddressed
+  - Step 7: primary Instructions path inserts a duplicate `mode := s.resolveTradingMode(...)`
+    short-variable declaration in the same scope as the existing `trading.go:271` line — will
+    fail `go build ./...` (the step's own Verification command) as literally written. The
+    step's only-buildable "hoist and reuse the existing call" option is offered as a footnote,
+    not the primary instruction — execute should make that the default. — [ ] unaddressed
+  - Step 8: ships a self-acknowledged dead/mislabeled test block
+    (`TestCheckTradingStateForPlaceOrder_Active_NeverCallsPortfolio`) requiring execute-time
+    cleanup, and defers direct unit-test coverage of `checkTradingStateForPlaceOrder`'s
+    REDUCE_ONLY branch to an unresolved execute-time judgment call — against AC-2's "verified by
+    a test per handler" requirement (C-08/P-06 adjacent). — [ ] unaddressed
+  - Step 13 / cross-cutting: product-spec.md's FR-5 and Acceptance Criteria #4 still require a
+    ledger-event audit trail (`AppendEvent`/`QueryEvents`) — a legitimate design.md Round 5
+    decision dropped that mechanism entirely in favor of `config.config_audit`-only, but no step
+    corrects FR-5/AC-4's stale text to match. A future reader of product-spec.md would believe
+    ledger-event audit is a requirement this feature satisfies. — [ ] unaddressed
+- Overlap findings: none blocking (see above).
