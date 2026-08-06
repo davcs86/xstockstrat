@@ -205,3 +205,34 @@
     `004_broker_accounts_credential_status` — `005_broker_accounts_halted` (feature `030`) has not
     landed yet, so Step 3 is blocked until it does (per `merge-order.md`'s pre-assignment); Step 3's
     Instructions re-state the C-07 `ls`-before-write requirement explicitly.
+
+## Session 2026-08-06T03:00:00Z — sdd-review impl-spec (advisory)
+
+- Result: 2 FAIL-level findings, 3 warnings (advisory — did not block; no Floor `F-*` risk found).
+  60+ `path:line` citations spot-checked, nearly all accurate.
+- Overlap scan: **real same-function collision found** with `100-account-trading-halt-and-kill-switch`
+  (both `implementation-ready`). Both specs insert new logic into the identical `PlaceOrder`,
+  `ReplaceOrder`, `CancelOrder`, and `resolveAccount` bodies in
+  `services/xstockstrat-trading/internal/service/trading.go` at overlapping/adjacent insertion
+  points — a manual-merge risk, not a disjoint textual rebase. Recorded a new blocking row in
+  `docs/roadmap/features/merge-order.md` (101 blocked on 100, consistent with this program's
+  100→101 build order). No migration/proto/config-key collisions — `006_order_intents`,
+  `Order.intent_state=21`, and both new config keys confirmed unique against trunk and all
+  in-flight features. Also flagged (not this feature's to fix): `096-position-and-order-detail-pages`'s
+  `feature.md` is stale (`implementation-ready`) — its code is already merged to trunk.
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 7: Evidence claims `GetOrder` returns `(nil, nil)` on not-found and that `GetIntentByID`
+    "follows the same idiom" — actually `GetOrder` (`trading_repo.go:82-95`) returns
+    `(nil, pgx.ErrNoRows)` on not-found, never special-cased. `GetIntentByID`'s actual not-found
+    contract should be decided deliberately at execute time, not by this false analogy (**C-01**). — [ ] unaddressed
+  - Step 11: `resolveAccount`'s single-account-fallback bug fix (a real behavior change, per the
+    step's own TDD note) has no paired test step anywhere in the spec — Verification is only
+    `go build` + lint, and no later step's Step Dependencies claims it. Add a test step or fold
+    coverage into Step 15 (**C-08**/**P-06**). — [ ] unaddressed
+  - Step 2: `**Files**` uses wildcards for generated proto stubs rather than exact paths — minor,
+    defensible for codegen-output steps. — [ ] unaddressed
+  - Step 11: minor param-position description ("6th, after `repo *repository.TradingRepo`") doesn't
+    cleanly reconcile with the current 5-param signature — low-impact. — [ ] unaddressed
+  - Step 16: `integration-test.sh` Verification is a `grep` sanity check, not an executed pass/fail
+    — self-disclosed as never CI-wired, not overclaimed. — [ ] unaddressed
+- Overlap findings: same-function collision with `100` (see above, now tracked in `merge-order.md`).
