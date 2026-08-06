@@ -1,6 +1,6 @@
 # Feature: position-sizing-engine
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `design-approved`
 **Priority**: `P0` — blocking live-capital expansion (Live-Capital Safety program, see context.md 2026-08-04)
 **Development Branch**: `feature/position-sizing-engine`
 **Created**: 2026-05-26
@@ -14,12 +14,15 @@
 |---|---|---|---|
 | 2026-05-26 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-05 | `draft` → `spec-ready` | /sdd-review | Product spec approved after 3 review rounds (3 warnings) |
+| 2026-08-05 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + design.md written; UI confidence-wiring split into named follow-up 110 |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon](recon.md) — grounded codebase dossier
+- [Design](design.md) — debated, approved architecture
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec position-sizing-engine`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -44,4 +47,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design position-sizing-engine` — product spec approved; run recon + design debate
+`/sdd-spec position-sizing-engine` — design approved; generate implementation spec
