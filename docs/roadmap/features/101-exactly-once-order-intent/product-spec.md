@@ -30,7 +30,10 @@ record: a platform intent ID, a broker client-order ID deterministically derived
 hash, lifecycle state, broker account/environment, first/latest broker response, and an uncertainty
 flag. Scope is the three commands the trader UI actually issues today — not `close`/`emergency-flatten`
 command types with no real caller yet (those are added when a caller exists, likely alongside a
-rescoped `030`/`100`).
+rescoped `030`/`100`). `PlaceOrder`'s intent ID is seeded from the client-supplied nonce (see Consumer
+Surface(s)) since a deliberate duplicate order must not be silently collapsed with a lost-response
+retry; `ReplaceOrder`/`CancelOrder` target an already-identified `order_id` and may derive their intent
+ID server-side from request content (exact derivation at `/sdd-design`/`/sdd-spec`).
 
 FR-2. Repeating the same intent (same ID, same request hash — e.g. the UI retries a request whose
 response was lost) returns the existing result instead of resubmitting to the broker.
@@ -63,16 +66,26 @@ logical command (e.g. the UI resubmitting after a network blip).
 
 - `xstockstrat-trading` — owns the order-intent record and the idempotent place/replace/cancel
   handlers.
-- `xstockstrat-ui` — the `/trader` existing orders view renders the new `UNKNOWN` display state (see
-  Consumer Surface(s)).
+- `xstockstrat-ui` — the `/trader` existing orders view renders the new `UNKNOWN` display state, and
+  the `/trader` Place Order flow generates and reuses a stable client-side idempotency nonce across
+  retries of the same logical action (see Consumer Surface(s)).
 
 ## Consumer Surface(s)
 
 _Constitution **C-14**._
 
-- [x] **UI** — `xstockstrat-ui` `/trader` existing orders view: an order in the `UNKNOWN` state must
-  render distinctly (not silently `working` or `failed`) — a display-state addition to the existing
-  orders surface, not a new page.
+- [x] **UI** — `xstockstrat-ui` `/trader`:
+  1. Existing orders view: an order in the `UNKNOWN` state must render distinctly (not silently
+     `working` or `failed`) — a display-state addition to the existing orders surface, not a new page.
+  2. **Place Order flow (scope expanded 2026-08-06 — see context.md; user-approved override of the
+     original Consumer Surface(s), Constitution C-14):** the client generates a stable nonce per
+     logical place-order action (e.g., on form open / first submit attempt) and reuses the *same*
+     nonce on every retry of that same action (network retry, double-click, resubmit-after-timeout),
+     via the existing-but-currently-unused `PlaceOrderRequest.client_order_id` field. Without this, the
+     server cannot distinguish "same logical action, retried" from "a brand new call," and FR-2's
+     dedup guarantee cannot hold for `PlaceOrder` — the original spec's UI scope covered only the
+     `UNKNOWN` display change, which is insufficient for FR-1/FR-2 as written. `ReplaceOrder`/
+     `CancelOrder` do not need a UI-generated nonce (see FR-1's per-command-type derivation note).
 - [ ] **Agent**
 - [ ] **None**
 

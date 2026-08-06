@@ -45,3 +45,36 @@
 - Warnings carried forward (advisory, not blocking): xstockstrat-ui/orders-view file-level overlap
   with feature 096 to re-check at impl-spec (from the overlap scan, non-blocking); AC-1..AC-4 are
   qualitative correctness statements rather than quantitative thresholds.
+
+## Session 2026-08-06T00:00:00Z — sdd-design (full mode, in progress)
+
+- Phase 0 Recon: wrote `recon.md` (services: trading, ui). Confirmed zero idempotency layer exists
+  today (a retry mints a fresh UUID and resubmits); confirmed timeout and genuine rejection are
+  currently conflated (`ORDER_STATUS_REJECTED` either way); confirmed IBKR's broker client sends no
+  client-order-id at all (platform-side dedup is the *only* dedup mechanism for IBKR, not a backstop);
+  confirmed no insert-or-return-existing persistence pattern and no `ErrNotFound`-style sentinel exist
+  anywhere in this service. Found a real migration-number collision with feature 030 (both want `005`
+  in the shared `xstockstrat-trading/migrations/` dir) and confirmed `merge-order.md` had no
+  pre-assignment row for it.
+- Fixed the migration collision directly (not deferred to the design debate): added a `merge-order.md`
+  pre-assignment row following the existing 058/059/062 precedent — 030 → `005_broker_accounts_halted`,
+  101 → `006_order_intents` (committed separately from the design debate).
+- Round 1: proposer's approach — new `order_intents` table, unique-constraint + in-process keyed-mutex
+  concurrency, orthogonal `IntentState` field (not `ORDER_STATUS_UNKNOWN`) on `Order`, migration `006`.
+  Adversary found no Floor breach, but two severe objections: (1) **C-14** — FR-1/FR-2's core dedup
+  guarantee for `PlaceOrder` has no defined mechanism without the trader UI generating and reusing a
+  client-side nonce across retries, which was outside the original product-spec's Consumer Surface(s);
+  (2) **P-03** — the in-process mutex's sole justification ("`instance_count: 1` → no cross-instance
+  coordination needed") is unverified against DO App Platform's actual rolling-deploy mechanics, and is
+  likely false exactly during a redeploy — the failure window this feature exists to protect. Also
+  found the UI fix names only 1 of 5 real call sites needing updates, `isWorking()` never cross-checks
+  the new orthogonal intent state, `CancelOrder`'s existing fail-open path doesn't specify a resulting
+  intent state, no eviction on the mutex map, and no optimistic-concurrency guard on terminal-state
+  writes.
+- **User directive**: "expand UI scope" — resolves objection (1). `product-spec.md`'s Consumer
+  Surface(s) (C-14) amended to add the Place Order flow's client-nonce generation/reuse as a named,
+  user-approved scope expansion (not a silent one); FR-1 updated to state the per-command-type intent-ID
+  derivation split (client-nonce-seeded for Place, server-derived for Replace/Cancel).
+  Round 2 will fold this decision in plus a resolution for objection (2) (P-03 deploy-overlap risk —
+  adversary's suggested DB-native staleness/lease alternative, which also composes with 102's
+  reconciliation ticker) and the remaining minor objections.
