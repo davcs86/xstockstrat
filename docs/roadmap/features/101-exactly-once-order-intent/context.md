@@ -75,6 +75,93 @@
   Surface(s) (C-14) amended to add the Place Order flow's client-nonce generation/reuse as a named,
   user-approved scope expansion (not a silent one); FR-1 updated to state the per-command-type intent-ID
   derivation split (client-nonce-seeded for Place, server-derived for Replace/Cancel).
-  Round 2 will fold this decision in plus a resolution for objection (2) (P-03 deploy-overlap risk —
-  adversary's suggested DB-native staleness/lease alternative, which also composes with 102's
-  reconciliation ticker) and the remaining minor objections.
+- Round 2: replaced the in-process mutex entirely with pure DB-only concurrency — `INSERT ... ON
+  CONFLICT (intent_id) DO NOTHING RETURNING *`, staleness-gated reclaim (`UPDATE ... WHERE
+  state='pending' AND updated_at < threshold`), optimistic-CAS terminal write. Verified: no fact in
+  this repo confirms or refutes DO App Platform's rolling-deploy overlap behavior, so the design
+  removes the dependency on that fact entirely rather than defending the mutex on an unverified claim.
+  Adversary confirmed the Postgres row-lock mechanism is real (`EvalPlanQual` re-evaluation under READ
+  COMMITTED) but found: `CancelOrder`'s `UNKNOWN` intent was recorded but never wired into the UI
+  (reopening FR-4's hidden-ambiguity problem on the cancel path); no precedence rule existed for which
+  intent's state wins when an order has multiple intents; the global `stale_pending_seconds` threshold
+  was coupled to a *live*, operator-adjustable config key (`trading.broker.timeout_ms`) with no
+  protection against drift; a 3rd un-specced "still processing" rejection code was added without
+  updating Consumer Surface(s); mandatory `client_order_id` would break 2 test files (one silently,
+  via a false-positive grep match on the maintenance-mode negative test); migration/config doc prose
+  was stale.
+- **User directive**: "run round 3" (default continuation after a NEEDS WORK verdict).
+- Round 3: added an explicit no-transaction-spans-the-broker-call invariant; added `order_id` +
+  `LEFT JOIN LATERAL` cross-intent precedence ("latest `updated_at` across all intents for this
+  `order_id` wins") to `GetOrder`/`ListOrders`, structurally wiring `CancelOrder`'s `UNKNOWN` into the
+  UI; derived the staleness threshold live from `trading.broker.timeout_ms` (floor-clamped multiplier
+  ≥1.5) instead of a static default, closing the drift risk; collapsed the 3rd rejection code into the
+  uniform `FailedPrecondition` path; fixed the 2 broken test files + `api-smoke.spec.ts` in the same
+  PR; corrected the stale migration/config prose. Adversary found the staleness reclaim only fires as a
+  *side effect of a retry* — an unretried crash leaves a `PENDING` intent stuck forever, silently
+  defeating FR-4 for exactly the unattended-crash scenario product-spec's own Problem Statement names.
+- Round 4: added `StartOrderIntentSweeper` (mirrors `StartFillPoller`'s ticker+`ctx.Done()` shape) to
+  proactively reclaim stale `PENDING` intents independent of any retry; write-handlers now set
+  `IntentState` on their own returned `Order` (not only via a later `GetOrder`); narrowed the
+  transaction-boundary rule to "never spans the broker call" (not "never at all"), permitting the
+  intent-insert + provisional order-row insert to share one short transaction, closing an orphaned-
+  intent crash window; deduped the IBKR-timeout literal into one named constant; documented the
+  stream/poll `IntentState` eventual-consistency caveat. Adversary found the `sweep_interval_ms`
+  default (30000ms) was described as "well under" the threshold floor (15000ms) while actually being
+  double it; the sweep's batch SQL was never concretely written out; sweep-driven transitions had no
+  ledger audit trail unlike every other transition in this service; the bundled-transaction branch and
+  a late-broker-response-vs-sweep race were left implicit.
+- **User directive**: "run round 5 (final)" (5-round default cap).
+- Round 5: fixed the interval-arithmetic error (default corrected to 5000ms, matching
+  `trading.fill_poller.interval_ms`'s existing precedent); wrote the concrete select-then-loop sweep
+  SQL (SELECT up to 100 stale ids, loop the reactive path's exact single-row reclaim statement);
+  answered the late-broker-response race explicitly (accepted limitation — the real response lives only
+  in the `order_intent.late_response_conflict` ledger event until demoted-102 lands, per FR-5's own
+  deferral); stated the bundled-transaction branch explicitly (order-row insert only on the intent-
+  insert's "row returned" branch); confirmed sweep visibility is poll-only, justified against the UI's
+  existing 5s `refetchInterval`. Final adversary verdict: **APPROVE (with documented Open Risks)** — no
+  Floor breach — but flagged 2 new gaps: no index/retention strategy for `order_intents`, and a ledger-
+  audit asymmetry (only the sweep's reclaim was specified to emit an event, not the reactive path's own
+  identical reclaim).
+- **User directive**: "override gate to 7 rounds" — extends the debate past the default 5-round cap
+  (permitted per the design skill's hard constraints: the user may always opt into more rounds).
+- Round 6: added a partial index (`ON order_intents (updated_at) WHERE state=<PENDING>`, matching the
+  sweep's exact query predicate) to migration `006`; stated a resolved no-retention-needed position
+  (later reframed, see round 7); renamed the sweep's ledger event to an actor-neutral
+  `order_intent.reclaimed_unknown` (trigger: reactive/sweep payload field) emitted from *both* the
+  reactive and sweep reclaim paths, closing the audit asymmetry; confirmed `order_intents.state` is a
+  `SMALLINT` mapped to a proto enum (not a raw string), per this service's `credential_status`
+  convention. Adversary found this confirmation exposed a real bug: every SQL fragment across rounds
+  1-6 used string literals (`'pending'`) against what's now confirmed to be a `SMALLINT` column — this
+  would fail at migration-apply/query-parse time, not just be cosmetic shorthand. Also found the
+  "no retention needed" position rested on an ungrounded volume estimate ("thousands-per-year") that
+  appears nowhere in product-spec.md or recon.md.
+- Round 7 (final, extended cap): restated every SQL fragment using named integer constants
+  (`IntentStatePending=1` etc., mirroring migration `004`'s enum-mapping-comment convention) instead of
+  string literals, with `state` set explicitly on every INSERT rather than relying on the column
+  `DEFAULT`; reframed retention as an explicit bounded v1 decision with a stated revisit trigger
+  (~500,000 rows) and a named remediation path (hypertable conversion, noting the composite-PK
+  requirement). Final adversary pass found one more genuinely new, purely mechanical gap: `PlaceOrder`'s
+  intent row would leave `order_id` `NULL` until the terminal write, but `PlaceOrder` already eagerly
+  creates a visible `trading.orders` row *before* the broker call — so a crash-then-sweep-reclaimed
+  `PlaceOrder` intent could never join back to its already-visible order via the LATERAL join, silently
+  defeating FR-4 for the feature's own centermost scenario. The adversary explicitly characterized this
+  as "a one-line, mechanical change" needing no further round; the orchestrator applied the fix directly
+  in `design.md` (populate `order_id` at insert time for all command types, including `PlaceOrder`,
+  reusing the `orderID` already minted before the broker call) rather than spawning an 8th round,
+  consistent with the synthesizer's mediation role once no further genuine disagreement remained.
+- Chosen approach: `trading.order_intents` table (migration `006_order_intents`), pure DB-only
+  concurrency (`INSERT ... ON CONFLICT DO NOTHING RETURNING` + staleness-gated reclaim + optimistic-CAS
+  terminal write, no in-process mutex), orthogonal `IntentState` field on `Order` (not
+  `ORDER_STATUS_UNKNOWN`), `order_id`-keyed `LEFT JOIN LATERAL` cross-intent precedence, staleness
+  threshold derived live from the broker timeout with a floor-clamped multiplier, a proactive sweep
+  goroutine mirroring `StartFillPoller`'s shape for the unattended-crash case, a client-nonce-seeded
+  `PlaceOrder` intent ID (Consumer Surface(s) expanded, user-approved) with server-derived
+  Replace/Cancel intent IDs, uniform `codes.FailedPrecondition` rejection, and a two-event ledger
+  audit taxonomy (`order_intent.reclaimed_unknown` / `order_intent.late_response_conflict`). Rejected:
+  in-process mutex, `ORDER_STATUS_UNKNOWN` on the existing enum, content-hash Place intent IDs, a 3rd
+  rejection code, a single unified ledger event, day-one hypertable conversion, and a blind-overwrite
+  terminal write.
+- Constitution rules touched: C-01, C-04, C-05, C-07, C-08, C-10(a), C-10(b), C-11, C-14, P-01, P-02,
+  P-03, P-04, F-11 (all honored — see design.md § Constitution Rules Touched). No Floor breach across
+  any of the 7 rounds.
+- Status: `spec-ready` → `design-approved`.
