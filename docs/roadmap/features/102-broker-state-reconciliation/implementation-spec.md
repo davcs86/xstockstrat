@@ -374,8 +374,8 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage
 **Status**: `pending`
 **Service**: `xstockstrat-config`
 **Files**:
-- `services/xstockstrat-config/migrations/013_config_caller_identity.up.sql` — create
-- `services/xstockstrat-config/migrations/013_config_caller_identity.down.sql` — create
+- `services/xstockstrat-config/migrations/014_config_caller_identity.up.sql` — create
+- `services/xstockstrat-config/migrations/014_config_caller_identity.down.sql` — create
 
 **Reviewers**: DBA; `xstockstrat-config` owner
 
@@ -384,10 +384,13 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage
   `ls services/xstockstrat-config/migrations/`).
 - **insights.md 2026-08-06** (100-account-trading-halt-and-kill-switch) confirms `100` claims
   `011_platform_trading_state`, and `023` was renumbered to `012_trading_risk_sizing` in the same
-  migrations directory (both `implementation-ready`, unimplemented). This step claims **`013`** as
-  the next number after both. Per **C-07**, re-run `ls services/xstockstrat-config/migrations/`
-  immediately before this step executes — if `100`'s `011` and `023`'s `012` are not both present on
-  disk yet, the build order (`100 → 101 → 023 → 030 → 102`) was not followed; block and escalate
+  migrations directory (both `implementation-ready`, unimplemented). **Corrected 2026-08-06**: `030`'s
+  own `implementation-spec.md` (Step 16) independently claims `013_trading_risk_bracket` in this same
+  directory — a real collision this step's original `013` claim missed (030's claim wasn't
+  cross-referenced when this step was first specced). This step claims **`014`** as the next number
+  after all three. Per **C-07**, re-run `ls services/xstockstrat-config/migrations/` immediately
+  before this step executes — if `100`'s `011`, `023`'s `012`, and `030`'s `013` are not all present
+  on disk yet, the build order (`100 → 101 → 023 → 030 → 102`) was not followed; block and escalate
   rather than silently renumbering.
 - `config.config_values`'s live schema: `001_config_tables.up.sql:6-21` (base table, no
   `environment`/`trading_mode` yet) evolved by `002_config_environment.up.sql:5-13` (adds
@@ -408,9 +411,9 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage
 **TDD**: `N/A (migration)`
 
 **Instructions**:
-1. Create `013_config_caller_identity.up.sql`:
+1. Create `014_config_caller_identity.up.sql`:
    ```sql
-   -- Migration: 013_config_caller_identity.sql
+   -- Migration: 014_config_caller_identity.sql
    -- Service: xstockstrat-config
    -- Feature 102 (broker-state-reconciliation): a free-text author/reason alone can't distinguish
    -- "an operator clicked Save" from "the reconciliation poller escalated" for incident review
@@ -454,7 +457,7 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage
    END;
    $$;
    ```
-2. Create `013_config_caller_identity.down.sql`:
+2. Create `014_config_caller_identity.down.sql`:
    ```sql
    CREATE OR REPLACE FUNCTION config.audit_config_change()
    RETURNS trigger LANGUAGE plpgsql AS $$
@@ -483,10 +486,10 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage
 
 **Verification**:
 ```bash
-ls services/xstockstrat-config/migrations/013_config_caller_identity.up.sql \
-   services/xstockstrat-config/migrations/013_config_caller_identity.down.sql
+ls services/xstockstrat-config/migrations/014_config_caller_identity.up.sql \
+   services/xstockstrat-config/migrations/014_config_caller_identity.down.sql
 ```
-Read both files: confirm the `.down.sql` restores both trigger functions to their pre-`013` bodies
+Read both files: confirm the `.down.sql` restores both trigger functions to their pre-`014` bodies
 (matching `002_config_environment.up.sql`'s and `010_config_audit_insert_trigger.up.sql`'s real text)
 and drops both new columns. Offline check only — no live database.
 

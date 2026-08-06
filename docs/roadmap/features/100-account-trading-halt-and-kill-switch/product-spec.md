@@ -128,10 +128,11 @@ pattern used for other per-mode keys before finalizing.
 
 Branch to create: `feature/account-trading-halt-and-kill-switch` (branch from `main-dev`)
 Approval gates required (per docs/runbooks/feature-workflow.md):
-- [x] 1 service owner approval (non-breaking proto or config change) — sufficient if `/sdd-design`
-  picks the "extend existing key" path; **re-verify against root `CLAUDE.md` § Approval Flow's "New
-  config key: owner + config team" rule if `/sdd-design` instead picks the parallel-key
-  (`platform.trading_state`) path** (see Config Key Changes).
+- [ ] 1 service owner approval (non-breaking proto or config change) — **resolved 2026-08-06**:
+  `/sdd-design` picked the parallel-key (`platform.trading_state`) path, not "extend existing key" —
+  per root `CLAUDE.md` § Approval Flow's "New config key" rule, this requires the gate below instead.
+- [x] Service owner + config team approval (new config key) — the applicable gate, per the resolved
+  parallel-key decision (`design.md` § Chosen Approach).
 - [ ] 2 service owners + platform lead (breaking proto change)
 - [ ] DBA review + service owner (schema migration) — not applicable, no schema change
 
