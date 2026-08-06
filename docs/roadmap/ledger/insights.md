@@ -1193,3 +1193,78 @@ reusing.
 - **Pattern**: This platform's authz headers (`x-user-id`/`x-access-scope`/`x-trace-id`) carry exactly one trust shape today — a value the external edge injects once after authenticating a real human, then internal services only ever *forward*, never *originate*. A design round proposed reusing `x-access-scope`'s bitmask for a background service to *self-assert* an elevated scope on its own outbound call (no inbound request to forward from) — this looks like a small, natural extension of an existing mechanism, but it's actually a different trust primitive: the check becomes "does this (namespace,key) tuple allow the bit," not "did a real authenticated actor grant this," and since the check has no caller-identity component, *any* code path in the calling service's binary — not just the intended automated caller — can construct the same header. The fix that survived adversarial review was a structurally separate channel (a distinct metadata field + a hardcoded `{caller, resource, allowed-target-values}` allow-list), explicit about trusting network position (the same trust anchor every other backend RPC on this platform already relies on) rather than silently piggybacking on the human-role bitmap.
 - **Evidence**: `docs/roadmap/features/102-broker-state-reconciliation/design.md` § "Internal-caller authz for `platform.trading_state`" and § Rejected Alternatives ("Reusing `x-access-scope`'s user-role bitmap for a service self-assertion"); `docs/roadmap/features/102-broker-state-reconciliation/context.md` § Session 2026-08-06, round 2→3.
 - **Rule it implies**: when a background/automated process needs to write somewhere normally gated to human operators, do not extend the human-role header — introduce a distinct, purpose-built channel with its own caller-identity check and (for anything safety-critical) a direction/value restriction, so the human-authz path and the service-self-assertion path stay separately auditable and separately revocable. Candidate design principle for a future Constitution pass on internal-caller authz patterns generally.
+
+### 2026-08-06 — backfill-backtest-coverage — design
+- **Pattern**: For an RPC that operates over multiple independent items in one call (e.g. a multi-symbol backtest), return a soft structured per-item status (`status` enum + per-item diagnostic messages) instead of a hard gRPC error when some items succeed and others don't — preserves partial results for callers instead of failing the whole call.
+- **Evidence**: `docs/roadmap/features/053-backfill-backtest-coverage/product-spec.md` Resolved Decisions "Insufficient-data signaling" (pruned by this archival).
+- **Rule it implies**: When a request fans out per-item internally, prefer a soft aggregate status + per-item detail over an all-or-nothing error.
+
+### 2026-08-06 — backfill-backtest-coverage — reuse
+- **Pattern**: Marking a proto field `[deprecated = true]` during a one-release deprecation cycle causes `golangci-lint`'s staticcheck (SA1019) to flag every remaining legitimate read of that field in the service that still must support it during the window. Suppress with a scoped `//nolint:staticcheck` + reason comment on the intentional reads rather than prematurely deleting the still-needed reader code.
+- **Evidence**: `docs/roadmap/features/053-backfill-backtest-coverage/implementation-spec.md` Deviation Log, Steps 1/3–6 (pruned by this archival); pattern re-used implicitly by 080's readers-sweep (see 2026-07-29 — 080-fix-backfill-timeframe-enum — reuse, above).
+- **Rule it implies**: Deprecation-cycle PRs that mark a field `deprecated = true` should proactively run the linter and expect/handle SA1019 on intentional in-window readers, not treat it as a surprise blocker.
+
+### 2026-08-06 — backtest-debug-info — design
+- **Pattern**: An "always-included, no opt-in" response-shape decision (vs. a request-gated flag) is not free — it forces a companion resource-bounding contract change (here, a global range cap applied to *every* caller of the RPC, not just the new feature's consumers) that must be scoped and reviewed as part of the same feature, not treated as independent.
+- **Evidence**: `docs/roadmap/features/064-backtest-debug-info/product-spec.md` FR-4b (pruned by this archival) / `context.md` session "2026-07-08 — spec refinement" (OQ-2 resolution); `docs/patterns/config-governance.md:90`.
+- **Rule it implies**: when a design makes a response field always-included rather than opt-in, explicitly re-check the RPC's existing size/latency contract for *all* callers, not just the new one.
+
+### 2026-08-06 — fix-backfill-timeframe-enum — design
+- **Pattern**: When adversarial design review discovers that a reported defect is one instance of a broader producer-family bug spanning multiple services, fix the whole family in one feature rather than splitting it by severity or type — this codebase's history already shows splitting a defect family leads to only part of it getting fixed.
+- **Evidence**: `docs/roadmap/features/080-fix-backfill-timeframe-enum/design.md` § Rejected Alternatives, last row ("Split into two features... this family has already demonstrated that failure mode four times"); `product-spec.md` § marketdata (both pruned by this archival).
+- **Rule it implies**: at a design gate, when scope-widening is proposed for a defect family, treat "split it to ship the urgent part faster" as the higher-risk option by default in this codebase, not the safer one.
+
+### 2026-08-06 — fix-backfill-timeframe-enum — design
+- **Pattern**: An irreversible data-merging migration (e.g. collapsing duplicate-spelling rows like `'1Day'`/`'1d'`) should write its own remediation log table *before* the merge/delete runs, so `.down.sql` can be a faithful reverse instead of the no-op a merge would otherwise force, and so post-hoc audits of what was collapsed remain possible.
+- **Evidence**: `docs/roadmap/features/080-fix-backfill-timeframe-enum/context.md` § Decisions ("The FR-14 migration carries a remediation log..."); `services/xstockstrat-marketdata/migrations/003_canonicalize_ohlcv_timeframe.{up,down}.sql`.
+- **Rule it implies**: any migration that merges/deletes rows to resolve a duplicate-spelling collision should default to a remediation-log pattern, not a bare no-op `.down.sql`.
+
+### 2026-08-06 — fix-backfill-timeframe-enum — design
+- **Pattern**: A migration against a table with a live concurrent writer (e.g. a poller inserting rows every ~60s) needs its own idempotent re-check (e.g. `WHERE NOT EXISTS` inside the `UPDATE`) in addition to any pre-flight quiesce step — a delete-then-update migration that only diffs whole-table counts can have a canonical row committed *between* its delete and update branches, reintroducing the exact PK violation the migration exists to avoid. A quiesce alone depends on an operator remembering a manual step and doesn't close the race window.
+- **Evidence**: `docs/roadmap/features/080-fix-backfill-timeframe-enum/implementation-spec.md` § Step 5 Codebase Evidence "Concurrency precondition" (pruned by this archival); `context.md` round-1 review note W9.
+- **Rule it implies**: any migration touching a table with a live writer must pair its pre-flight quiesce with an independent idempotent guard inside the write statement itself.
+
+### 2026-08-06 — fix-backfill-timeframe-enum — reuse
+- **Pattern**: In this repo's Playwright setup, `page.reload()` is unreliable for asserting a *specific* follow-up network request against a component with a multi-request mount cascade (races completed before/after the assertion's `waitForRequest` unpredictably). A deterministic UI interaction that triggers exactly the request under test (e.g. clicking a timeframe button) is the more reliable substitute, and still proves the same thing.
+- **Evidence**: `docs/roadmap/features/080-fix-backfill-timeframe-enum/context.md` § Session — Step 8; `services/xstockstrat-ui/e2e/trader/chart-panel.spec.ts`.
+- **Rule it implies**: when an e2e assertion needs to observe a specific outbound request tied to a mount cascade, prefer a targeted interaction over `page.reload()`.
+
+### 2026-08-06 — qa-capability — design
+- **Pattern**: When splitting write authority between an advisory subagent and a write-capable skill (P-01), enforce the boundary with a runtime check against **live state** (e.g. any `feature.md` at `in-progress` + its current step's `**Files**`), not with prose policy alone — this is what makes the actor-authority rule falsifiable rather than aspirational.
+- **Evidence**: `docs/roadmap/features/081-qa-capability/context.md:16-19` ("The interlock, not the prose, enforces P-01").
+- **Rule it implies**: any future P-01-style read/write split should ship a boot-time or pre-write interlock keyed off live orchestration state, not just an `allowed-tools` declaration.
+
+### 2026-08-06 — qa-capability — design
+- **Pattern**: For a write-capable tool/skill whose job is authoring test files across many services, express the write boundary as a **file-pattern allowlist** (`**/*_test.go`, `**/*.test.ts`, `**/__tests__/**`, `**/tests/test_*.py`), not a directory denylist (`never edit src/, app/, internal/`) — a directory denylist blocks the core job wherever a language's test files live inside the runtime directory tree.
+- **Evidence**: `docs/roadmap/features/081-qa-capability/context.md:30-31`; `product-spec.md:34-36` (pruned by this archival).
+- **Rule it implies**: when scoping a write boundary for any tool that must write test code, enumerate the language's actual test-file locations first — don't assume tests live outside the source tree.
+
+### 2026-08-06 — qa-capability — ordering
+- **Pattern**: When a feature both deletes a referenced resource and repoints its references, do both in the **same commit**, not deletion-then-repoint across a sequence — an intermediate commit where the delete has landed but a reference hasn't yet is a red CI window for any validator that greps for the reference.
+- **Evidence**: `docs/roadmap/features/081-qa-capability/context.md:169-170` (design.md:55, pruned by this archival).
+- **Rule it implies**: when a step description says "delete X" and another step says "update references to X," collapse them into one step/commit.
+
+### 2026-08-06 — ui-revamp-opportunities-first — ordering
+- **Pattern**: When a user's explicit scope directive contradicts the design's own recommended slicing (e.g. "do it all in one feature, no phased migration"), that must trigger an immediate, in-place **product-spec governance refresh** (scope / proto-DB-config gates / Reviewers) and a re-run of `/sdd-review product-spec` *before* `/sdd-execute` — not just a note left in `design.md`. Otherwise the originally-marked-N/A gates (breaking-proto approval, config-key approval, DB-migration approval) stay silently inactive even though the work now requires them.
+- **Evidence**: `docs/roadmap/features/083-ui-revamp-opportunities-first/context.md` 2026-07-31 sdd-design session ("DECISION — user scope override" + "Governance consequence").
+- **Rule it implies**: extends **C-11** — a recorded user scope-override is not itself sufficient; the artifacts whose "no change" claims it invalidates must be refreshed and re-reviewed in the same design phase, before spec generation.
+
+### 2026-08-06 — ui-revamp-opportunities-first — design
+- **Pattern**: A "matches the handoff" fidelity sign-off based on content/screenshot comparison can miss layout overflow entirely — two independent overflow causes (an unwrapped raw `<table>`, and additive fixed-width header chrome) surfaced only once a scripted per-route `scrollWidth <= clientWidth` sweep at a phone viewport was added, after two separate rounds of "eyeballed" review had already signed off.
+- **Evidence**: `docs/roadmap/features/083-ui-revamp-opportunities-first/context.md` "Screener mobile responsiveness fix" and "phone-frame overflow sweep (all screens)" sessions; `services/xstockstrat-ui/e2e/mobile-overflow.spec.ts`.
+- **Rule it implies**: for any UI feature claiming visual/handoff fidelity, gate the claim with an automated per-route horizontal-overflow assertion at the target mobile viewport, not a screenshot/content diff alone.
+
+### 2026-08-06 — ui-revamp-opportunities-first — reuse
+- **Pattern**: at UI-polish stage, when a spec calls for a new near-duplicate primitive (e.g. a `CardError`), check whether an existing primitive + variant already covers it (`CardNotice variant="error"` + `QueryStateMessages`) before adding one — avoids tripping the DRY guard rail on cosmetic-stage work. Extract a shared formatter/component the moment a second screen needs the same presentation logic, not after a third repeats it.
+- **Evidence**: `docs/roadmap/features/083-ui-revamp-opportunities-first/context.md` Steps 29-30 session and the "Handoff-fidelity pass — E: Portfolio (Book) rebuild" / "E screens 3-8" sessions.
+- **Rule it implies**: reinforces the DRY guard rail — check for an existing primitive/variant match before adding a new one even at late-stage polish steps.
+
+### 2026-08-06 — ui-revamp-opportunities-first — reuse
+- **Pattern**: reusing a segment-scoped component (e.g. a trader-only form) inside a different segment's route requires checking whether that segment's layout provides every context provider the component silently depends on — it may not. The FR-6 order ticket reused the trader-only `OrderForm.tsx` on an `insights/market/[symbol]` route, but the insights layout only provides React Query, not `AccountContext`; the ticket had to explicitly wrap `AccountProvider`.
+- **Evidence**: `docs/roadmap/features/083-ui-revamp-opportunities-first/context.md:391-400`, Step 26 session.
+- **Rule it implies**: before reusing a component across segments, check the receiving segment's layout for every context provider the component depends on; wrap explicitly if missing, don't assume parity across segments.
+
+### 2026-08-06 — screener-watchlist-fidelity — reuse
+- **Pattern**: In a master-detail UI where create-then-select relies on an invalidate-and-refetch mutation, do not set the new selection directly in the mutation's `onSuccess` if a reconcile effect also runs on the refetched list (e.g. "reset selection to first item when the current selection isn't present"). The reconcile effect can win the race and clobber the just-created selection before the refetch lands. Defer the selection through a ref that only commits once the new id is observed in the refetched set.
+- **Evidence**: `docs/roadmap/features/098-screener-watchlist-fidelity/implementation-spec.md:265-269` (Deviation Log, pruned by this archival); `services/xstockstrat-ui/src/app/insights/watchlists/page.tsx` (`pendingSelectRef`).
+- **Rule it implies**: for any "create → auto-select" flow built on invalidate+refetch mutations, defer the post-create selection assignment until the refetched collection actually contains the new id — never set it synchronously in `onSuccess` if a reconcile/default-selection effect also runs on that same collection.

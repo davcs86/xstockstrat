@@ -6,6 +6,7 @@
 **Development Branch**: `feature/backfill-backtest-coverage`
 **Created**: 2026-06-08
 **Last Updated**: 2026-06-09
+**Archived**: 2026-08-06
 
 **Priority Bucket**: P1 — Close the backfill↔backtest loop (2 of 3 in the backfill-hardening initiative)
 
@@ -23,6 +24,7 @@
 | 2026-06-09 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps done; marketdata go test cov 66.9%, analysis pytest 94 passed (cov 60.4%), UI tsc+lint clean. Breaking `Timeframe` enum — Platform Lead approval required before merge |
 
 | 2026-06-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #649; committed 0b503103817c8d8d2089c057a10db12fb7a098a5 |
+| 2026-08-06 | `launched` (unchanged) | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(0); pruned 2 specs (product-spec.md, implementation-spec.md) |
 ---
 
 ## Artifacts
