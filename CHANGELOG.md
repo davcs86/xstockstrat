@@ -28,6 +28,21 @@ Each entry corresponds to one `main-dev → main` PR merge.
 - fix-mcp-server-input-validation: Two small independent server guards: ingest range-validates conviction to INVALID_ARGUMENT (not INTERNAL/silent NULL), and notify rejects empty title/body (INVALID_ARGUMENT).
 
 ### Summary
+-2 commits, 1 feature merges since last promotion.
+
+---
+
+## 2026-08-06
+
+### Features
+- phase7-observability: Completes the pending Phase 7 implementation roadmap item: activates the OTel SDK already stubbed in every service, routes telemetry to Grafana Cloud via the OTLP collector, and delivers service health, latency, and signal pipeline throughput dashboards — providing operational visibility before live capital is at risk.
+- fmp-key-to-secret-env: Feature 059 routed the FMP API key through `xstockstrat-config` as
+- fix-listkeys-wire-encoding: `ConfigService.ListKeys` built its response with **snake_case** field names and **numeric** enums,
+- fix-config-scope-resolution: `ConfigService` resolved **every** request to the `('dev', 'all')` scope, whatever the caller asked
+- mcp-python-sdk-v2-upgrade: Upgrade `xstockstrat-agent` from the Python `mcp` SDK v1.27.1 to v2.0.0 (released 2026-07-28),
+- fix-mcp-server-input-validation: Two small independent server guards: ingest range-validates conviction to INVALID_ARGUMENT (not INTERNAL/silent NULL), and notify rejects empty title/body (INVALID_ARGUMENT).
+
+### Summary
 5 commits, 0 feature merges since last promotion.
 
 ---
