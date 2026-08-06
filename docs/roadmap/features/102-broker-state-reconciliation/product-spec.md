@@ -45,13 +45,26 @@ every routine partial fill.
 FR-3. Self-heal only propagation-delay-class mismatches automatically (they resolve themselves within
 a tick or two by definition). Every other mismatch class is recorded, never silently corrected.
 
-FR-4. For a mismatch that isn't self-healing, halt exposure-increasing trading via the rescoped `100`
-kill switch (`REDUCE_ONLY`, not `HALTED`, unless the mismatch is severe — decide the exact mapping at
-`/sdd-design`) and emit an alert via the existing `xstockstrat-notify` `EmitAlert`.
+FR-4. For a mismatch that isn't self-healing, halt exposure-increasing trading and emit an alert via the
+existing `xstockstrat-notify` `EmitAlert`. **Halt-routing amended 2026-08-06 (user-approved override of
+the original "via the rescoped `100`" wording — see context.md):** an *ordinary, per-account* finding
+(quantity-discrepancy, unknown-broker-order, missing-broker-order) halts via the rescoped `030`'s
+per-account mechanism (`trading.broker_accounts.halted`), the same automated-circuit-breaker axis 030
+already owns for this account — not the platform-wide `100` gate. Only a genuinely *systemic* finding
+(reconciliation itself cannot establish trust in broker truth broadly — e.g. broker/portfolio calls
+failing across a threshold share of accounts in one tick) escalates to `100`'s platform-wide
+`platform.trading_state` (`REDUCE_ONLY`, not `HALTED`, unless severe — exact mapping decided at
+`/sdd-design`), via a new internal-caller authz mechanism `/sdd-design` must define (not a raw
+`SetConfig` call — that RPC is unconditionally human-operator-gated with no service-to-service bypass,
+confirmed by `100`'s own recon).
 
 FR-5. Every correction and every unresolved mismatch is written as a ledger event (reusing the existing
-append-only `AppendEvent` RPC, `stream_key = "reconciliation:{account}"`) — what was found, what (if
-anything) was changed, and which tick found it. No new database table.
+append-only `AppendEvent` RPC, `stream_key = "account:{account_id}"` — corrected 2026-08-06 from an
+ungrounded `"reconciliation:{account}"` guess to the codebase's real existing account-scoped stream-key
+convention, see context.md) — what was found, what (if anything) was changed, and which tick found it.
+**Database Changes amended 2026-08-06**: FR-4's halt-routing needs `030`'s planned per-account columns
+(plus a discriminator distinguishing 030's own bracket-failure halts from 102's reconciliation halts) —
+no longer strictly "no new database table," see Database Changes section below.
 
 FR-6. This same tick resolves an `UNKNOWN` order intent from the rescoped `101` against the broker's
 own order list — the one piece of "automated `UNKNOWN` resolution" `101`'s spec explicitly deferred to
@@ -107,8 +120,11 @@ _Constitution **C-14**._
 
 ## Database Changes
 
-- [x] No schema changes — reconciliation results are ledger events (existing `AppendEvent`), not a new
-  table.
+- [ ] DB migration — **amended 2026-08-06** (was "no schema changes"): FR-4's halt-routing reuses `030`'s
+  planned per-account `trading.broker_accounts.halted`/`halted_at`/`halt_reason` columns plus a new
+  discriminator distinguishing which feature triggered the halt; exact shape (proto enum vs. app-level
+  closed string set) decided at `/sdd-design`. Migration number contested against `030`/`101`'s
+  already-claimed numbers — pre-assign in `merge-order.md` before `/sdd-spec`.
 
 ## Feature Workflow Notes
 
@@ -116,25 +132,34 @@ Branch to create: `feature/broker-state-reconciliation` (branch from `main-dev`)
 Approval gates required (per docs/runbooks/feature-workflow.md):
 - [x] 1 service owner approval (non-breaking proto or config change)
 - [ ] 2 service owners + platform lead (breaking proto change)
-- [ ] DBA review + service owner (schema migration) — not applicable, no schema change
+- [x] DBA review + service owner (schema migration) — **amended 2026-08-06**, was "not applicable"
 
 ## Acceptance Criteria
 
 1. Placing an order directly through the broker's own dashboard is detected within one tick interval
    and recorded as a ledger event.
 2. A benign propagation-delay mismatch resolves itself within a tick or two without operator action.
-3. A quantity/unknown/missing-order mismatch halts exposure-increasing trading (via rescoped `100`) and
+3. A quantity/unknown/missing-order mismatch halts exposure-increasing trading — **amended 2026-08-06**:
+   via the rescoped `030`'s per-account mechanism for an ordinary, per-account finding, or via the
+   rescoped `100`'s platform-wide kill switch only for a genuinely systemic finding (see FR-4) — and
    alerts, rather than being silently corrected.
 4. An `UNKNOWN` order intent from `101` is resolved against broker truth by this same tick.
-5. The `/trader` view shows reconciliation recency and current status.
+5. The `/trader` view shows reconciliation recency and current status, deriving one coherent
+   restriction display across whichever mechanism (030's per-account halt or 100's platform-wide state)
+   is currently active — not multiple independent badges an operator must reconcile by eye.
 
 ## Dependencies
 
 - `feature/exactly-once-order-intent` (101) — FR-6/AC-4 resolve 101's `UNKNOWN` order-intent state
   against broker truth; the intent-record contract must exist first (already tracked in
   `docs/roadmap/features/merge-order.md:43`).
-- `feature/account-trading-halt-and-kill-switch` (100) — FR-4/AC-3 halt exposure-increasing trading via
-  100's `REDUCE_ONLY`/`HALTED` kill switch; the richer state must exist first.
+- `feature/account-trading-halt-and-kill-switch` (100) — FR-4's rare systemic-escalation path uses
+  100's platform-wide `platform.trading_state`; the richer state and 102's internal-caller authz path
+  into it must exist first.
+- `feature/stop-loss-bracket-orders` (030) — **added 2026-08-06**: FR-4's ordinary, per-account halt
+  path reuses 030's planned `trading.broker_accounts.halted`/`halted_at`/`halt_reason` columns (the
+  same automated, per-account circuit-breaker axis 030 already owns) rather than inventing a parallel
+  mechanism; the columns (and any discriminator) must exist first.
 
 ## Open Questions
 
