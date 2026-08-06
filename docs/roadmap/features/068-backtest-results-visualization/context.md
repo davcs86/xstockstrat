@@ -1,148 +1,27 @@
-# Context: backtest-results-visualization
+# Context: backtest-results-visualization  (archived 2026-08-06)
 
-**Feature**: `docs/roadmap/features/068-backtest-results-visualization/feature.md`
-**Product Spec**: `docs/roadmap/features/068-backtest-results-visualization/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/068-backtest-results-visualization/implementation-spec.md`
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-08-06 — /sdd-archiver
 
-## Session 2026-07-21 — sdd-story
-
-- Created feature.md (status: draft), product-spec.md, context.md from user story.
-- Working branch note: this session runs on the harness-assigned branch
-  `claude/backtest-results-visualization-ljhyyj` (re-based onto `origin/main-dev` per root
-  CLAUDE.md § Harness Default Branch); it plays the role of the feature branch for this feature
-  and PRs into `main-dev`.
-- Grounding findings from codebase recon (pre-story):
-  - `ListBacktests` (analysis proto) persists **summary rows only**; proto comment confirms
-    "the full trades/diagnostics live only on the latest in-memory result".
-  - Strategy detail page (`services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx`)
-    already renders metrics grid, a trade-ordinal equity curve (trades only, x-axis = trade #),
-    `BacktestDiagnostics`, and a read-only Past Runs table — rows are not openable.
-  - Relevant ledger fails noted in product-spec Open Questions: C-10(a) nav reachability,
-    C-10(b) multi-path parity, C-10(d) exhaustive TS enum maps.
-
-## Session 2026-07-21 — sdd-review product-spec
-
-- Product spec approved. Status: draft → spec-ready.
-- Warnings: none (initial round FAILed on unchecked Open Questions; resolved in-spec:
-  full detail incl. diagnostics persisted; retention = 20 runs/strategy count-based,
-  eviction never trims `backtest_runs` summaries; migration pre-assigned `008_*`;
-  config default 20 declared).
-- Overlap findings: CLEAN. Constraints recorded: migration number must be `008` (065's
-  `007_backtest_run_symbols` is on the baseline); reuse `BacktestDiagnostics.tsx` (067);
-  no merge-order row needed.
-- Reviewer note carried to design: `INSUFFICIENT_DATA` runs get no persisted detail
-  (permanent FR-6 state) — confirm intentional at design.
-
-## Session 2026-07-21 — sdd-design
-
-- Phase 0 Recon: wrote recon.md (services: analysis, ui, proto; key reuse patterns:
-  `_persist_backtest_run` best-effort wrapper + `backtest_runs.py` repo shape; BFF `forward()`
-  + `useBacktestHistory` hook shape; `_build_bar_diagnostic` single builder).
-- Phase 1 Grilling: 1 round (quick). Chosen approach: persist OK runs' full `BacktestResult`
-  as serialized-proto BYTEA in `analysis.backtest_details` (migration 008, FK→backtest_runs,
-  explicit completed_at, insert-time eviction clamped ≥1); additive proto
-  `GetBacktest` RPC + `BacktestResult.initial_capital=15` + `BarDiagnostic.equity=15`;
-  DB-only read path; in-page historical view reusing the single result seam; per-symbol
-  time-aligned equity curve (normalized % default for multi-symbol) with nearest-bar trade
-  markers; `src/lib/equityCurve.ts` + `src/lib/protoTime.ts`. Rejected: memory-first read,
-  JSONB, normalized rows, no-FK table, new route, trades-cumulative fallback, aggregate curve,
-  summary-sourced metrics grid (full list in design.md).
-- Adversary objections: 12 raised, all accepted with fixes folded into design.md (notably
-  DB-only reads killing 3 staleness/collision bugs; FK for existence parity; normalized
-  multi-symbol rendering; seam-clear on fresh run). Objection 12c (no-detail rows show empty
-  state only, no summary-sourced grid) decided in favor of AC-5 single render path — P-03
-  recorded here rather than silently assumed.
-- Constitution rules touched: C-01, C-04, C-05, C-07, C-08, C-09, C-10(a/b), P-03, P-06,
-  F-01, F-06, F-07. Floor breaches: none.
-- Approval: standing authorization — the initiating user instruction directed the full SDD
-  pipeline through implementation in this autonomous session (recorded per P-04/C-11).
-- Status: spec-ready → design-approved.
-
-### Open Threads
-
-- BYTEA↔proto wire-compat coupling — guard at proto step (buf breaking note). Target: step 1.
-- Insert+evict not transactional (≤1 extra row transiently) — re-check at analysis step.
-- No "has detail" flag on `BacktestRunSummary` (discover-on-open UX) — post-launch only.
-
-## Session 2026-07-21 — sdd-spec
-
-- Generated implementation-spec.md with 12 steps. Status → implementation-ready.
-- Key codebase findings (all recon.md anchors re-verified live before writing):
-  - Migration number confirmed **008** (`ls services/xstockstrat-analysis/migrations/` →
-    007_backtest_run_symbols is last); parent-table + index precedent in `006_backtest_runs.up.sql`.
-  - Proto insert points verified free: `BacktestResult` highest field 14 (`analysis.proto:70`),
-    `BarDiagnostic` highest 14 (`:120`); single-line request-message precedent
-    `GetStrategyReportRequest` at `:198`; CI buf invocation confirmed at
-    `.github/workflows/ci.yml:103-120` (`buf lint packages/proto/` + `buf breaking . --against`).
-  - **Design refinement (recorded, not silent — P-03)**: design.md said per-bar equity is "wired
-    through the single shared builder `_build_bar_diagnostic`", but that builder runs BEFORE the
-    simulation loop computes equity (diags are pre-built; the loop mutates `diags[i].action`,
-    `servicer.py:737-738,886`). The spec instead stamps `diags[i].equity = daily_equity[i]` in the
-    shared finalize pass `_finalize_symbol_diagnostics` (`servicer.py:1516-1530`, called by both
-    engine paths after the forced-close patch) — same single-shared-assembly intent (ledger
-    insights 2026-07-09), physically possible ordering. Step 4 carries the rationale.
-  - `GetBacktest` no-DB path: repo None → abort NOT_FOUND with the single FR-6 message (precedent:
-    `ListBacktests` returns empty when repo None, `servicer.py:1255-1256`).
-  - UI: `forward()` registration anchor `insightsBff.ts:39`; `useBacktestHistory`/`useStrategyReport`
-    hook shapes confirmed in `src/hooks/useStrategies.ts` (NOT_FOUND-aware retry via
-    `isNotFoundError`); page seams live at `page.tsx:95-98` (onSuccess), `:103` (result seam),
-    `:109-116` (trade-ordinal derivation to delete), `:364-398` (chart block to replace),
-    `:429-471` (Past Runs rows); mock backend `AnalysisService` object at `mock-backend.ts:396+`
-    with `bt-hist-2`/`bt-hist-1` fixtures; `xstockstrat-ui` scripts confirmed
-    (`test:coverage` = vitest, `test:e2e` = playwright, `lint` = next lint).
-  - Reviewers snapshot finalized in feature.md: analysis owner, ui owner, Proto Reviewer, DBA.
-- Step layout: 1 proto → 2 proto-gen (+frontend build check per ledger trap) → 3 migration 008 →
-  4/5 analysis engine capture + tests → 6/7 detail repo/persist/evict/GetBacktest + tests (incl.
-  AC-4 parity) → 8/9 UI lib derivation + unit tests → 10/11 UI wiring + e2e → 12 config-key docs
-  (C-05).
-
-## Session 2026-07-21 — sdd-execute (start)
-
-- Impl-spec advisory review: PASS WITH WARNINGS (no blockers, no Floor risk). Overlap: CLEAN.
-  Executor guidance carried in (not spec edits — F-09): run `buf breaking` from
-  `packages/proto` with `subdir=packages/proto` on the against ref; concrete
-  `migrate ... down 1` for the Step-3 reversibility check; keep `context.abort(NOT_FOUND)`
-  outside the bare `except` in `GetBacktest`; stale `:83-93` anchor in Step 10 evidence noted
-  (real anchor `:26-34`).
-- **Execution mode deviation (recorded, not silent — P-03)**: steps run as sequential commits
-  on the harness-assigned branch `claude/backtest-results-visualization-ljhyyj` (feature-branch
-  role, see sdd-story entry), one commit per verified step (F-05), single final PR into
-  `main-dev`. Per-step sub-branch PRs are not used: the harness forbids pushing branches other
-  than the assigned one. F-02/F-03 honored (no direct push to main-dev/main; the one PR targets
-  main-dev as the integration PR of the feature-branch-role branch).
-- Environment: no Docker → codegen toolchain provisioned on host per
-  `docs/runbooks/codegen-toolchain-host-setup.md`; empty-diff baseline validated before any
-  proto edit. Local Postgres 16 (no TimescaleDB ext) provisioned; analysis migrations 001–007
-  applied via golang-migrate with the script's `analysis_schema_migrations` tracking-table
-  convention (TimescaleDB not needed by analysis migrations).
-
-## Session 2026-07-21 — sdd-execute (completion)
-
-- All 12 steps executed and verified; status → code-completed. Per-step commits on
-  `claude/backtest-results-visualization-ljhyyj` (see Deviation Log D-1..D-3 in
-  implementation-spec.md).
-- Verification summary:
-  - proto: buf lint + buf breaking clean (run from packages/proto with subdir form);
-    stub regen confined to analysis/v1; frontend build green (ledger-trap paired check).
-  - migration 008: up → down 1 → re-up clean on local Postgres 16 (golang-migrate,
-    script-convention tracking table); FK + eviction index confirmed.
-  - analysis: 252 tests passed, coverage 79.6% (≥40); ruff clean. TDD red proven before
-    steps 4 and 6. AC-4 parity test in place.
-  - ui: vitest 25 passed (equityCurve/protoTime at 100% stmts); next build + lint clean;
-    e2e CI-mode (build+start) 18/18 passed incl. the 3 new feature tests. Local dev-mode
-    first-compile timeouts on the file's first two tests are a pre-existing sandbox
-    artifact (playwright.config.ts comments) — D-3.
-  - config docs: key declared in service CLAUDE.md + root CLAUDE.md (C-05).
-- Open Threads status: BYTEA wire-compat guard → comment added above BacktestResult +
-  buf breaking (closed); non-transactional insert+evict → accepted risk documented in repo
-  docstring + migration comment (closed); "has detail" flag on summaries → deferred
-  post-launch (unchanged).
-
-## Session 2026-07-24 (CI: feature status automation)
-
-- Promotion PR #783 merged to main
-- Feature promoted and committed: 026bbf512990c5b63986d3c7449351638c1b8993
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-07-24
+**What**: Shipped as designed — Past Runs rows became clickable, backed by a new `analysis.backtest_details` BYTEA table (migration 008) and an additive `GetBacktest` RPC, with a DB-only read path and a per-symbol time-aligned equity chart replacing the old trade-ordinal chart. All 12 spec steps landed with green tests (analysis 252/79.6%, ui vitest 25, e2e 18/18 CI-mode) — no scope was cut (feature.md:21, context.md:126-137).
+**Why (irrecoverable rationale)**: Store-what-you-serve BYTEA was chosen because this payload has exactly one consumer (the RPC that returns it verbatim) — no SQL ever queries inside it, so JSONB's structure and normalized rows' mapping code buy nothing (design.md:104-114). DB-only reads (not memory-first) were chosen specifically to kill three restart-dependent semantics at once: the in-memory dict stores INSUFFICIENT results unconditionally, collides on strategy_id keys, and never evicts (design.md:106-108, 50-54).
+**Rejected alternatives**:
+- Memory-first `GetBacktest` — lost: saves ~1ms but inherits 3 restart-dependent bugs (design.md:106-108)
+- JSONB — lost: `MessageToDict` raises on NaN/Inf and `profit_factor` was *believed* legitimately `inf` (design.md:109-111) — belief later proven wrong by feature 072 (fails.md:61-79)
+- Normalized rows (per-trade/per-bar tables) — lost: pure read-back payload no query inspects; row-mapping code both ways buys nothing given the double size bound (≤504 bars/symbol × ≤20 runs/strategy) (design.md:112-114)
+- No-FK detail table — lost: orphaned detail row could silently occupy a retention slot (design.md:115-116)
+- New route for run detail — lost: triggers C-10(a) nav-reachability burden for no FR benefit (design.md:117-118)
+- Trades-cumulative equity fallback / run-level aggregate curve — lost: near-dead code path / mathematically impossible given sequential symbol compounding (design.md:119-123)
+- Summary-sourced metrics grid for no-detail rows — lost: would create a second metrics render path; the Past Runs row already displays the summary metrics (design.md:124-125, 157-158; adversary objection 12c, context.md:55-56)
+**Scars & gotchas**:
+- No Docker/TimescaleDB locally; migration 008 verified via golang-migrate directly (up→down→re-up) since analysis migrations don't need the Timescale extension (implementation-spec.md:522-526, D-2)
+- Local Playwright (`next dev`) timed out on the first two tests on first-compile latency — sandbox artifact, not a bug; authoritative signal was CI-mode (18/18) (implementation-spec.md:527-531, D-3)
+- Per-step sub-branch PRs skipped (harness forbids pushing non-assigned branches); one PR carried all 12 step commits (implementation-spec.md:518-521, D-1)
+**Permanent deviations**: design said per-bar equity is "wired through the single shared builder `_build_bar_diagnostic`" -> shipped as a stamp in the separate shared finalize pass `_finalize_symbol_diagnostics` -> because the builder runs before the simulation loop computes equity; finalize was the first point both engine paths have equity available (context.md:79-85).
+**Cross-feature signal**: This feature's design-time claim "`profit_factor` is legitimately `inf` on no-loss runs" was false (producer clamps to 999.0) and was inherited unverified by feature 072 three rounds later, nearly shipping a wrong `"Infinity"` contract into shared docs (fails.md:61-83). Already captured there.
+**Deferred follow-ons**: - `BacktestRunSummary` has no "has detail" flag; UI discovers legacy/evicted rows only on open (NOT_FOUND). Deferred post-launch only if users report confusion (design.md:135-137, context.md:67).
+**Ledger entries written**: insights.md (1), fails.md (0) — see the 2026-08-06 entries.
+**Runtime-invariant recommendations (→ /context-constitution)**: - none
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at f871138.

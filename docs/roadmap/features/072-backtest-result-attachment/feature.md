@@ -6,6 +6,7 @@
 **Development Branch**: `feature/backtest-result-attachment`
 **Created**: 2026-07-26
 **Last Updated**: 2026-07-27
+**Archived**: 2026-08-06
 
 ---
 
@@ -17,6 +18,7 @@
 | 2026-07-26 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS with 4 warnings, all addressed). No blockers, no Floor breach |
 | 2026-07-27 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick; adversary verdict NEEDS WORK, no Floor breach, all objections resolved) and approved; recon.md + design.md written. OQ-1 → EmbeddedResource; OQ-2 → single compact-JSON TextResourceContents (CSV rejected on verified fidelity failure); OQ-3 → moot (no resource registered); OQ-4 → `mcp>=1.27.1` |
 | 2026-07-27 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps (2 service+test pairs + 1 docs). Product-spec AC-1 rewording and stale line citations applied |
+| 2026-08-06 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 4 specs |
 
 | 2026-07-27 | `implementation-ready` (unchanged) | /sdd-design r2 | Second grilling round on the approved design: gzip'd `BlobResourceContents` swap **proposed and rejected** (it inverts this feature's own failure-asymmetry rule; measured 103 KB not the 53 KB assumed; needs two unobserved behaviors to pay off). Chosen approach unchanged. Three corrections adopted — measured sizes replace estimates, AC-1 test bound `8_000` → `3_000`, `mtime=0` reproducibility limit recorded |
 | 2026-07-27 | `implementation-ready` (unchanged) | /sdd-design r3 | Third round: content-trimming measured and **rejected** (a 0-trade run keeps 0/2520 bars). Design unchanged again. Seven corrections — `profit_factor: "Infinity"` is unreachable (producer clamps); `structured_output=False` is a no-op for bare `list` so its guard test was inert; AC-1 bound re-aimed at marginal cost (gaps are not INSUFFICIENT-only); descriptor-parity guard; fixed `attachments_error` string; `quote()` the id; stale CI note. New `fails.md` entry rather than rewriting append-only ledger |
@@ -28,10 +30,7 @@
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Recon Dossier](recon.md) — grounded codebase map, patterns to reuse, 10 risks
-- [Design](design.md) — chosen approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — 5 numbered steps with verified codebase evidence
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

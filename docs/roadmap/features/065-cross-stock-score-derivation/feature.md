@@ -6,6 +6,7 @@
 **Development Branch**: `feature/cross-stock-score-derivation`
 **Created**: 2026-07-12
 **Last Updated**: 2026-07-13
+**Archived**: 2026-08-06
 
 ---
 
@@ -20,16 +21,14 @@
 | 2026-07-13 | `implementation-ready` (unchanged) | /sdd-spec | Amended to 14 steps — user-directed test-infra scope addition (FR-10: UI vitest seed + agent/UI CI wiring) |
 | 2026-07-13 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (proto additive fields); sequential run, single-PR (user-directed) on branch claude/cross-stock-score-derivation-94k11z |
 | 2026-07-13 | `in-progress` → `code-completed` | /sdd-execute | All 14 steps done; verified locally (analysis 220 tests/77%, agent 54/61%, ui vitest 100% + tsc/lint clean, proto buf lint/breaking, migration 007 reversible). Integration PR → main-dev next. |
+| 2026-08-06 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(0)/fails(1); pruned 4 specs |
 
 | 2026-07-21 | `code-completed` → `launched` | CI workflow | Promoted via PR #767; committed 52adaa26702553f9d51f3cf458479a9b7729f930 |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Recon Dossier](recon.md) — grounded codebase map (design phase 0)
-- [Design](design.md) — debated, approved architecture (design phase 1)
-- [Implementation Spec](implementation-spec.md) — 14 numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

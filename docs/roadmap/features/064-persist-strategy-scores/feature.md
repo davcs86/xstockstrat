@@ -6,6 +6,7 @@
 **Development Branch**: `feature/persist-strategy-scores`
 **Created**: 2026-07-03
 **Last Updated**: 2026-07-03
+**Archived**: 2026-08-06
 
 ---
 
@@ -19,16 +20,14 @@
 | 2026-07-03 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 6 steps |
 | 2026-07-03 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (migration 005_strategy_scores) done |
 | 2026-07-03 | `in-progress` → `code-completed` | /sdd-execute | All 6 steps done (152 tests pass, 67.63% cov); integration PR #742 |
+| 2026-08-06 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(3)/fails(0); pruned 4 specs |
 
 | 2026-07-12 | `code-completed` → `launched` | CI workflow | Promoted via PR #759; committed 6fab9e323637aa00e0ad5fc09bb68a1ab6c5a529 |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Recon](recon.md) — grounded codebase dossier (Phase 0)
-- [Design](design.md) — debated & approved architecture (Phase 1)
-- [Implementation Spec](implementation-spec.md) — 6 numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

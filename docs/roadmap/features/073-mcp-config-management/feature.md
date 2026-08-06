@@ -6,6 +6,7 @@
 **Development Branch**: `feature/mcp-config-management`
 **Created**: 2026-07-28
 **Last Updated**: 2026-07-28
+**Archived**: 2026-08-06
 
 ---
 
@@ -17,16 +18,14 @@
 | 2026-07-29 | `draft` → `spec-ready` | /sdd-review | PASS WITH WARNINGS on the third pass. Passes 1-2 FAILED; their four blockers were resolved by features 074/075/076/077 plus two user decisions (set_config rejects is_secret keys; Streamable HTTP only). |
 | 2026-07-29 | `spec-ready` → `design-approved` | /sdd-design | 1 round (quick). 14 adversary objections; the transport gate was redesigned after the adversary showed the obvious check accepts SSE on both transports. No Floor breach. |
 | 2026-07-29 | `design-approved` → `code-completed` | /sdd-execute | Three tools + claims plumbing + scope port implemented; 124/124 agent tests pass, ruff clean, context-map OK. |
+| 2026-08-06 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(2); pruned 3 specs |
 
 | 2026-07-29 | `code-completed` → `launched` | CI workflow | Promoted via PR #812; committed 0eae638104744992c61c8a1ac4bd8cbaac10862b |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Recon](recon.md) — grounded dossier (Phase 0)
-- [Design](design.md) — chosen approach, rejected alternatives, open risks (Phase 1)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec mcp-config-management`_
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

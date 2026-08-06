@@ -8,6 +8,7 @@
 **Last Updated**: 2026-06-09
 
 **Priority Bucket**: P0 — Make backfills trustworthy (1 of 3 in the backfill-hardening initiative)
+**Archived**: 2026-08-06
 
 ---
 
@@ -20,14 +21,14 @@
 | 2026-06-08 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
 | 2026-06-09 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential stacked run started; Steps 1–2 (proto + regen) done |
 | 2026-06-09 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps done; ingest pytest 108 passed (cov 69.5%), marketdata go test ok + golangci-lint 0 issues |
+| 2026-08-06 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(3)/fails(2); pruned 2 specs |
 
 | 2026-06-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #649; committed 0b503103817c8d8d2089c057a10db12fb7a098a5 |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md)
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
