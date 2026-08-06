@@ -121,3 +121,42 @@
   flipped from "no schema changes" to "DB migration" with the DBA-review approval gate checked; AC-5
   amended to require one coherent derived restriction display, not multiple independent badges;
   `030` added as a real `## Dependencies` entry (not just an informal axis note).
+- Round 3: replaced `x-access-scope` reuse with a new, structurally separate `x-internal-caller`
+  metadata field + a hardcoded `{callerID, namespace, key}` allow-list in `authz.ts`, additive alongside
+  `hasAdminAccessScope`; registered `"system:reconciliation-poller"` as a documented author-sentinel
+  convention (C-10(c), the exact rule `fails.md` 2026-07-01 produced); made `HaltSource` a real proto
+  enum instead of an app-validated string (greenfield field, no legacy-string excuse unlike 100's
+  deferred `trading_state`); claimed `BrokerAccount` fields 9-12 explicitly, flagged for a
+  `merge-order.md` pre-assignment against 030; added an explicit `accountId` query param to IBKR's
+  planned `ListOrders` call (flagged as unverified, a distinct risk from the client-order-id field-name
+  risk); spelled out FR-6's CAS resolution branches (Completed/Rejected/no-write-stays-Unknown).
+  Adversary found no Floor breach but two final, concrete, mechanical gaps: (a) the internal-caller
+  check authorized ANY value on the allow-listed key, not just an escalating one — a bug or compromised
+  caller could silently clear a human-set `HALTED` back to `ACTIVE`, the single most dangerous
+  direction for a live-capital kill switch; (b) the new `caller_identity` audit column was added to the
+  schema and both trigger functions but never actually wired into `setConfig`'s own `INSERT`/`ON
+  CONFLICT DO UPDATE SET` write path — verified directly against `config_tables.up.sql`'s real trigger
+  bodies — so the column would stay `NULL` forever despite the schema/trigger work being correct.
+  Adversary explicitly recommended folding both fixes in directly (no round 4 needed), the same
+  resolution path 101's round-7 adversary took — orchestrator did so: added `allowedTargetValues`
+  (direction-restricted, e.g. `REDUCE_ONLY`/`HALTED` only, never `ACTIVE`) to the allow-list check, and
+  named the exact `configServiceImpl.ts` bound-parameter addition needed for both the `INSERT` column
+  list and the `ON CONFLICT` `SET` clause.
+- Chosen approach: new `StartReconciliationPoller` mirroring the existing poller shape; `Broker.
+  ListOrders()` added to the shared interface (externally verified both brokers support bulk listing,
+  making AC-1 literally true); mismatch classification with an explicit propagation-delay grace window
+  and no-event self-heal; halt-split (ordinary per-account → 030's columns + a new `HaltSource`
+  discriminator, rare systemic → 100's platform gate via a new `x-internal-caller` authz channel,
+  direction-restricted to escalation only); FR-6 checks 101's `late_response_conflict` event first,
+  falls back to a `ListOrders` scan, writes a new anticipated-by-101 CAS; ledger stream key
+  `account:{account_id}` (corrected from an ungrounded guess); UI reuses existing `QueryEvents`, no new
+  proto field needed for the surface itself. Rejected: a brand-new parallel halt mechanism dodging both
+  030 and 100; reusing `x-access-scope` for service self-assertion; escalating every ordinary finding to
+  100's platform gate; folding `caller_identity` into free-text `author` instead of a structural column;
+  an unbounded-authority (non-direction-restricted) internal-caller check.
+- Constitution rules touched: C-01, C-04, C-05, C-07, C-08, C-10(a), C-10(b), C-10(c), C-11, C-14, P-01,
+  P-02, P-03, P-04, F-11 (all honored — see design.md § Constitution Rules Touched). No Floor breach
+  across any of the 3 rounds; the adversary explicitly confirmed no Floor item in the Constitution
+  addresses authz self-assertion directly — a documented gap in Constitution coverage, not proof of
+  safety, carried forward as context for a possible future Constitution update.
+- Status: `spec-ready` → `design-approved`.
