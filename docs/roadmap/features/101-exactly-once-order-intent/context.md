@@ -165,3 +165,43 @@
   P-03, P-04, F-11 (all honored — see design.md § Constitution Rules Touched). No Floor breach across
   any of the 7 rounds.
 - Status: `spec-ready` → `design-approved`.
+
+## Session 2026-08-06T02:00:00Z — sdd-spec
+
+- Generated implementation-spec.md with 20 steps. Status → implementation-ready.
+- Key codebase findings (discovery beyond what recon.md/design.md already covered):
+  - **New gap found and fixed in-spec**: `resolveAccount` (`internal/service/trading.go:188-209`)
+    discards the resolved account ID on its single-registered-account fallback path (the
+    `len(s.brokers) == 1` loop never captures the map key), so `order.AccountId` — and therefore this
+    feature's `order_intents.broker_account_id` (`NOT NULL`) — could be empty on that path even though
+    a real account was used. Step 11 changes `resolveAccount`'s signature to also return the resolved
+    ID, mirroring `AccountRepository`'s existing interface-based DI shape for the new
+    `OrderIntentRepository` (also introduced in Step 11/Step 7).
+  - Confirmed via grep: **`internal/repository` has zero existing `*_test.go` files** and no DB-mocking
+    library (`pgxmock`/`sqlmock`/`testcontainers`) exists anywhere in this Go monorepo — there is no
+    in-repo precedent for a DB-backed unit test at the repository layer. Combined with the coverage
+    formula's package exclusion (`cmd|handler|repository|telemetry|service` —
+    `.claude/skills/sdd-spec/reference/spec-template.md`), the spec routes the real behavioral proof of
+    the insert-or-return-existing dedup mechanism through a fully unit-tested pure decision function
+    (`classifyIntentLookup`, Step 9/10, zero DB dependency, mirrors `alpacaStatusToProto`'s existing
+    shape) plus a new `scripts/integration-test.sh` section (Step 16) exercising the real RPCs.
+  - Confirmed via `TestSubmitOrder_TrailingStopAndClientOrderID` (`internal/broker/alpaca_test.go:137`):
+    Alpaca's client-order-id plumbing already exists and needs no change; only IBKR
+    (`internal/broker/ibkr.go:116-169`) needs new plumbing. The exact IBKR JSON field name (`cOID`,
+    IBKR's Client Portal Web API field) is written into Step 5 as the best-available candidate but
+    flagged explicitly as **unverified against this repo** — design.md's Open Risk #1 is carried
+    forward as an execute-time verification requirement, not silently assumed.
+  - Confirmed via full read of `PlaceOrder`'s broker-error branch (`trading.go:343-352`): the fix for
+    FR-4's "timeout, never FAILED" is a genuine behavior change (detect `context.DeadlineExceeded`/
+    `net.Error.Timeout()` and leave `order.Status` untouched + intent `PENDING` for reclaim, instead of
+    the current unconditional `order.Status = ORDER_STATUS_REJECTED` on **any** broker-call error) —
+    written out precisely in Step 12 Instruction 6 since design.md specified the architecture
+    (orthogonal `IntentState`) but not this exact branch-level code change.
+  - Confirmed via grep: zero hits for `clientOrderId`/`client_order_id` anywhere under
+    `services/xstockstrat-ui/src` or `e2e` — Step 19's Place Order nonce is genuinely new code with no
+    existing pattern to reuse, and `traderBff.ts`'s `placeOrder` (`:28-34`) already spreads `{ ...req
+    }` unmodified, so no BFF change is required to carry it through.
+  - `services/xstockstrat-trading/migrations/`: confirmed highest file on disk is still
+    `004_broker_accounts_credential_status` — `005_broker_accounts_halted` (feature `030`) has not
+    landed yet, so Step 3 is blocked until it does (per `merge-order.md`'s pre-assignment); Step 3's
+    Instructions re-state the C-07 `ls`-before-write requirement explicitly.
