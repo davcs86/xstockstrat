@@ -6,6 +6,7 @@
 **Development Branch**: `feature/ui-revamp-opportunities-first`
 **Created**: 2026-07-31
 **Last Updated**: 2026-07-31
+**Archived**: 2026-08-06
 
 ---
 
@@ -20,6 +21,7 @@
 | 2026-07-31 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 31 steps. Grep-resolved the design Open Risks: factor grouping **requires** `portfolio.exposure.factor_map` (marketdata `Fundamentals` proto has no `sector`); expectancy is **derivable** from `backtest_runs` `win_rate`+`profit_factor` (no analysis migration); portfolio resting-stops held **in-memory** via `ConsumeOrderFills` replay (no portfolio migration); only ingest migration **008** needed; new `analysis→trading` `TRADING_ENDPOINT` edge confirmed absent in all three deployment files. |
 
 | 2026-08-01 | `code-completed` → `launched` | CI workflow | Promoted via PR #834; committed 37a7f5269454eadb810c4303d5100063e4f35eed |
+| 2026-08-06 | `launched` (unchanged) | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(4)/fails(3); pruned 4 specs (product-spec.md, recon.md, design.md, implementation-spec.md). `design-handoff/` extra was already deleted 2026-08-06 per a prior human decision (recorded in the Archive Synthesis) |
 ---
 
 ## Artifacts

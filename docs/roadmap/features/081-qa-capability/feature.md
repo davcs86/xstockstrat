@@ -6,6 +6,7 @@
 **Development Branch**: `feature/qa-capability`
 **Created**: 2026-07-29
 **Last Updated**: 2026-07-29
+**Archived**: 2026-08-06
 
 ---
 
@@ -18,6 +19,7 @@
 | 2026-07-29 | `design-approved` → `code-completed` | direct implementation | Implemented as 3 atomic commits per the user-approved plan, **bypassing `/sdd-spec` and `/sdd-execute`** — see context.md § pipeline deviation. All 13 acceptance criteria in product-spec.md verified; PR #811 open against `main-dev`, rebased past #810 |
 
 | 2026-07-30 | `code-completed` → `launched` | CI workflow | Promoted via PR #825; committed 3b437fd2dce0e243249bdb4b64edd8ad9a029562 |
+| 2026-08-06 | `launched` (unchanged) | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(3)/fails(0, +1 amended: fails.md:173 resolution inlined); pruned 3 specs (product-spec.md, recon.md, design.md) |
 ---
 
 ## Artifacts

@@ -170,7 +170,11 @@ ambiguity is logged here).
   serializer contract) and 2026-07-29 (074, a suite that never executed) are the prior two.
 - **Evidence**: `docs/roadmap/features/067-fix-custom-formula-allnone/context.md:20`;
   `074-fix-config-write-authz/feature.md:7`; same in `075`–`078`; `docs/CLAUDE.md:15`.
-  Resolution in `081-qa-capability/design.md` § Floor breach.
+  Resolution: FR-5 rewritten — `sdd-qa defect` writes `docs/reports/<ISO-date>-<slug>-defect.md`;
+  `/sdd-triage` gained a `--from-report <path>` entry point, skipping T-1's `gh issue view`. Breach
+  cleared by re-scoping to the path six prior features already used by hand, not waived — F-11 does
+  not block. (081-qa-capability/context.md 2026-07-29 session, "sdd-design" block — design.md itself
+  was pruned by /sdd-archiver on 2026-08-06.)
 - **Rule it implies**: **exercise the producer, not its advertised state.** A capability flag,
   a config value, a docs claim, or an API's own metadata is a *claim*; the endpoint's response is
   the *contract*. Before designing on a capability, run it once — or cite a recorded run. Promotion
@@ -643,3 +647,28 @@ ambiguity is logged here).
 - **Mistake**: A feature's story cited upstream instrumentation features (100–107) by number as its data source without re-verifying, at spec/feasibility time, that those features were still scoped to emit that telemetry — several had been demoted/rescoped by the time of the recheck.
 - **Evidence**: docs/roadmap/features/108-trading-safety-dashboard-slos/context.md session 2026-08-04T01:00:00Z; product-spec.md:98-100
 - **Rule it implies**: when a feature's FRs depend on named upstream feature numbers, /sdd-design Phase 0 recon must check each cited dependency's current `feature.md` lifecycle status, not assume the roadmap-order description still holds.
+
+### 2026-08-06 — backtest-debug-info — assumption
+- **Mistake**: Code assumed a proto field named `bar.timestamp` existed on `marketdata_pb2.Bar` for years (six call sites in `xstockstrat-analysis`'s `servicer.py`); the real field is `bar.time`. The bug was invisible because every test built bars with `MagicMock`, which returns a truthy value for *any* attribute access instead of raising `AttributeError` on a nonexistent field — so the type-mismatch never surfaced until this feature mandated real `Bar` proto fixtures for a diagnostics test.
+- **Evidence**: `docs/roadmap/features/064-backtest-debug-info/context.md` session "2026-07-09 — sdd-spec" ("Confirmed the latent bar.timestamp bug..."), "Steps 8–11" (fix + real-fixture test).
+- **Rule it implies**: `MagicMock`-based proto stand-ins can hide wrong-attribute-name bugs indefinitely; any step that reads/asserts on proto field values should use a real message instance, not a `MagicMock`, in the same step it's introduced.
+
+### 2026-08-06 — fix-backfill-timeframe-enum — migration
+- **Mistake**: A step authoring a DB migration (`003_canonicalize_ohlcv_timeframe`) was marked `blocked` on the reasoning that F-05 requires the migration to be executed against a live database in the authoring session to count as verified — this environment had neither `migrate` nor a running Docker daemon. Left uncorrected, this would have permanently stranded the feature: `/sdd-execute` never flips `feature.md` to `code-completed` while a step stays `blocked`, `/promote` harvests only `code-completed` features, and the execute loop's ALL-DONE path would still open the integration PR while the feature sat unshippable in `main-dev`. The user challenged the premise directly; a repo-precedent check (`008-signal-source-registry` step 3 marked `done` on identical review-based verification, no live-DB round trip evidenced) showed the bar had no support anywhere else in this repo's actual practice. Retracted; the step was completed via SQL review against DDL facts, matching `008`'s precedent, with the DBA + service-owner sign-off gate (the actual safety net) left unchanged.
+- **Evidence**: `docs/roadmap/features/080-fix-backfill-timeframe-enum/context.md` § "Session 2026-07-30 — step 5 unblocked (user-directed correction)"; `docs/roadmap/features/008-signal-source-registry/implementation-spec.md` step 3.
+- **Rule it implies**: F-05 does not require a live database in the authoring session to mark a migration step verified — a documented SQL review against the DDL facts (PK, hypertable/partitioning column, compression status) is this repo's actual, precedented bar. Before marking any migration step `blocked` for lack of a runnable environment, check for repo precedent first — and weigh the severe downstream consequence (the feature can never reach `code-completed`) before applying a stricter bar than the repo has ever actually enforced. Strong candidate for promotion to a binding note near **F-05** in the Constitution, since the mis-application nearly stranded a shipped feature.
+
+### 2026-08-06 — ui-revamp-opportunities-first — assumption
+- **Mistake**: A "matches the handoff" fidelity sign-off was made via content-only review, which missed that the Screener's results table was a raw `<table>` (not the shared `<Table>` component that wraps `overflow-auto`) and overflowed the phone viewport, clipping a column. The same mistake pattern recurred immediately after in a different form — the shared header itself (fixed-width `AccountSelector` + a newly added Copilot toggle button) also overflowed the phone frame by 101px on all three `/trader/*` pages, undetected until a dedicated scripted sweep was added.
+- **Evidence**: `docs/roadmap/features/083-ui-revamp-opportunities-first/context.md` "Screener mobile responsiveness fix" + "phone-frame overflow sweep (all screens)" sessions; `services/xstockstrat-ui/e2e/mobile-overflow.spec.ts`.
+- **Rule it implies**: a "fidelity matches handoff" claim on any UI feature must be backed by an automated mobile-overflow assertion across every route, added at the same step the fidelity claim is made — not deferred to a later sweep.
+
+### 2026-08-06 — ui-revamp-opportunities-first — assumption
+- **Mistake**: The Strategies screen's header/stat-tile "N active" count double-counted paused strategies, because it was not using the same `active && live_enabled` derivation the per-row State badge used — a status derived from two independent boolean fields was computed separately on three rendering surfaces (header, stat tile, per-row badges) and drifted apart silently. Fixed by aligning all three surfaces on one derivation.
+- **Evidence**: `docs/roadmap/features/083-ui-revamp-opportunities-first/context.md:571-579`, "Handoff-fidelity — second review pass" session.
+- **Rule it implies**: a status derived from more than one independent field must be centralized in one place (a shared selector/helper), never recomputed per rendering surface — recomputing invites silent drift between surfaces.
+
+### 2026-08-06 — ui-revamp-opportunities-first — assumption
+- **Mistake**: Assumed the Playwright e2e **global-setup preflight** chromium launch would honor the same `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` override already used by the chromium *project* config in `playwright.config.ts` — it didn't, silently failing e2e only in environments (sandboxes) where the pinned Playwright browser build differs from the pre-installed one (a no-op in CI, where the pinned build matches).
+- **Evidence**: `docs/roadmap/features/083-ui-revamp-opportunities-first/context.md` 2026-08-02 session ("Test-infra fix (needed to run e2e in this sandbox)"); `services/xstockstrat-ui/e2e/global-setup.ts`.
+- **Rule it implies**: when a test-runner config exposes an env-var override in more than one place (project config + global setup/preflight), verify both paths honor it together — a partial override is a silent, environment-dependent test failure, not a loud one.
