@@ -6,6 +6,7 @@
 **Development Branch**: `feature/remove-mcp-sse-transport`
 **Created**: 2026-07-29
 **Last Updated**: 2026-07-29
+**Archived**: 2026-08-06
 
 ---
 
@@ -18,16 +19,14 @@
 | 2026-07-29 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written. Adversary returned NEEDS WORK with 10 objections, no Floor breach; 8 adopted, 1 adopted with a different remedy, 1 rejected. AC-5 restated in product-spec.md — the single-tier grep gate was unsatisfiable. |
 | 2026-07-29 | `implementation-ready` → `code-completed` | /sdd-execute | All 8 steps done in one PR. Agent 137 pass / 68% cov, ingest 134, analysis 351; ruff + uv lock clean in all three. AC-5 tier 1 = 0 rows (from a 14-row baseline); tier 2 fully enumerated. 3 deviations logged. |
 | 2026-07-29 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps (2 red-green cycles + client config + deployment + comment-only servicers + docs/AC-5 sweep). |
+| 2026-08-06 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(0)/fails(1); pruned 4 specs |
 
 | 2026-07-29 | `code-completed` → `launched` | CI workflow | Promoted via PR #812; committed 0eae638104744992c61c8a1ac4bd8cbaac10862b |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Recon Dossier](recon.md) — grounded codebase map, patterns to reuse, risks
-- [Design](design.md) — chosen approach, rejected alternatives, open risks
-- [Implementation Spec](implementation-spec.md) — 8 numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

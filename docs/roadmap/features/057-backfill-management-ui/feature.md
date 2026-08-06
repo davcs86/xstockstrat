@@ -6,6 +6,7 @@
 **Development Branch**: `feature/backfill-management-ui`
 **Created**: 2026-06-10
 **Last Updated**: 2026-06-11
+**Archived**: 2026-08-06
 
 ---
 
@@ -20,14 +21,14 @@
 | 2026-06-11 | re-review (status retained at `implementation-ready`) | /sdd-review | Formal product-spec re-run (skill-invoked) confirming the earlier inline review. PASS, no blocking failures; trading-domain checks skipped (non-trading). Synced Config Key section to the registered `marketdata.backfill.max_delete_days`. Overlap WARN: 055 + 056 also touch `xstockstrat-ui` (coordinate merge order) |
 | 2026-06-12 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential mode (055 + 056 merged; 057 shares no files with them). Re-spec gate: all 14 steps' evidence validates against current main-dev — no re-spec. User directive: run all steps but **one final PR** (commit per step to the feature branch, no per-step PRs). Step 1 (proto) done |
 | 2026-06-12 | `in-progress` → `code-completed` | /sdd-execute | All 14 steps done + committed to `feature/backfill-management-ui`. Backend (proto/codegen/ingest cancel+filter/marketdata scoped delete) lint+test green; UI (BFF/clients/hooks/page/nav) tsc+eslint+prettier clean. Deviations: Step 6 testability refactor (user-approved Option A); Step 13 E2E full green run deferred to CI (container can't complete dev-mode E2E — statically clean, harness-executed with fixes applied). Ready for the single integration PR → main-dev |
+| 2026-08-06 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(2)/fails(2); pruned 2 specs |
 
 | 2026-06-12 | `code-completed` → `launched` | CI workflow | Promoted via PR #694; committed f516e7aee1d11461d78a4540a94463a7a101df2f |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — 14 numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

@@ -473,3 +473,173 @@ ambiguity is logged here).
 - **Mistake**: The spec assumed protobuf-es v2 Struct field introspection (`context?.fields?.<key>?.stringVal`) was safe for client-side filtering; shipped code abandoned it for tag-string filtering instead.
 - **Evidence**: `docs/roadmap/features/048-live-strategy-alert-engine/context.md:166,174,180-181`.
 - **Rule it implies**: Prefer tag/string-based filtering over protobuf-es v2 Struct field introspection in TS clients; don't spec Struct field access as the primary filter mechanism.
+
+### 2026-08-06 — unify-admin-auth-gates — assumption
+- **Mistake**: a pre-login-created signed blob (`txn`) plus a client-suppliable flag was initially proposed to carry post-login identity, which is forgeable.
+- **Evidence**: context.md "sdd-review impl-spec" session flagging it; fixed in "resolve callback-handoff advisory" session.
+- **Rule it implies**: never trust a blob signed before authentication to carry identity established after — always re-derive identity from a fresh, validated credential at point of use.
+
+### 2026-08-06 — strategy-creation-flow — assumption
+- **Mistake**: `dispatchConnect` in `insightsBff.ts` let a leaked `application/grpc+proto` content-type collapse real backend error messages into generic "HTTP 400", undetected until deep in E2E authoring.
+- **Evidence**: context.md:123-126.
+- **Rule it implies**: Audit other BFF `dispatch*` helpers (trader, config-ui) for the same content-type/error-passthrough leak before relying on their error messages in new UI.
+
+### 2026-08-06 — auth2-authorized-apps-ui — assumption
+- **Mistake**: First /sdd-spec pass for a feature extending a prior feature's shared token-mint code assumed the existing column/behavior was sufficient without reading the actual insert statement — missed that client_id was never persisted, which would have silently broken the new feature (empty list) post-launch.
+- **Evidence**: context.md:109-115, implementation-spec.md:34-42
+- **Rule it implies**: when a new feature reads data written by another feature's shared write path, read that write path's exact INSERT/UPDATE columns at spec time, not just the schema.
+
+### 2026-08-06 — durable-observable-backfills — migration
+- **Mistake**: Product spec assumed the next migration NNN without listing the actual migrations directory, guessing wrong.
+- **Evidence**: context.md sdd-spec session; implementation-spec.md Step 3 Codebase Evidence.
+- **Rule it implies**: Always `ls migrations/` before writing a migration number into any spec.
+
+### 2026-08-06 — durable-observable-backfills — assumption
+- **Mistake**: Tests manipulated a private internal dict directly instead of the public interface, forcing a full rewrite when internals changed.
+- **Evidence**: context.md sdd-spec session; implementation-spec.md Step 10.
+- **Rule it implies**: Tests should drive behavior through the public/repo interface, not private attributes, so internal refactors don't break test suites.
+
+### 2026-08-06 — orders-management-ui — assumption
+- **Mistake**: A hand-rolled positional-arg WHERE-clause builder (`trading_repo.go` `ListOrders`) had one branch silently missing its arg-index increment; went unnoticed until a later feature extended the function (context.md:59-61).
+- **Evidence**: context.md:59-61, 130-133, 160-161.
+- **Rule it implies**: Before extending any positional-arg dynamic query builder, verify every existing branch increments its counter — don't assume prior branches are correct.
+
+### 2026-08-06 — orders-management-ui — assumption
+- **Mistake**: Product-spec FR-2 grounding asserted `ListOrders` "already supports ... `range`" without confirming the field was actually applied server-side; it was accepted by the proto message but never read by the handler, making the assumed-existing filter a silent no-op until caught mid-implementation.
+- **Evidence**: product-spec.md:26-29; implementation-spec.md:413-417.
+- **Rule it implies**: When a spec claims an RPC "already supports" a filter/field as grounding for scoping later work as UI-only, verify the field is actually consumed by the service logic (not just present on the proto message) before scoping downstream steps as backend-complete.
+
+### 2026-08-06 — backfill-management-ui — assumption
+- **Mistake**: implementing a spec-offered option (DB re-read) without checking it against the existing test suite first, breaking 2 unrelated passing tests.
+- **Evidence**: implementation-spec.md:657-661.
+- **Rule it implies**: when a spec offers multiple valid implementation branches, run the existing suite before committing to one.
+
+### 2026-08-06 — backfill-management-ui — assumption
+- **Mistake**: expecting a full local Playwright green run against `pnpm dev` for a brand-new route; the 10s/test timeout can't survive cold-compile.
+- **Evidence**: implementation-spec.md:672-676.
+- **Rule it implies**: for new-page E2E, verify statically (tsc/lint/prettier + one diagnosed run) locally and defer the full green run to CI's prebuilt server.
+
+### 2026-08-06 — watchlist-management — assumption
+- **Mistake**: pinned `@playwright/test` expects a browser build (chrome-headless-shell) not present in the base image; required an uncommitted local override to run E2E.
+- **Evidence**: context.md 2026-06-29 Step 9 Env note.
+- **Rule it implies**: fix the base image or document the workaround centrally so it isn't rediscovered per-feature.
+
+### 2026-08-06 — fundamentals-data-source — assumption
+- **Mistake**: Assumed an existing alert-emission helper was severity-agnostic; it was hardcoded to one severity, discovered only during Step 8 execution, requiring a new helper mid-implementation.
+- **Evidence**: context.md:54-56 (sdd-review impl-spec advisory), context.md:85-86 (execute session).
+- **Rule it implies**: Before reusing a helper for a new call site with different parameters (severity, type, etc.), read its full signature/body — don't assume it parameterizes what the new use case needs.
+
+### 2026-08-06 — fundamentals-signal-producer — config
+- **Mistake**: a config validator defaulted to fail-open for unrecognized categorical values instead of an explicit allow-list.
+- **Evidence**: context.md:109-118.
+- **Rule it implies**: new `validate_*` functions over categorical inputs must be fail-closed from the start.
+
+### 2026-08-06 — fundamentals-signal-producer — assumption
+- **Mistake**: an "additive CHECK is low-risk because validation already lags the schema" justification (context.md:97-102) was invalidated by a later, unrelated hardening (fail-open→fail-closed fix, context.md:109-118) in the same feature, but the original reasoning was never re-flagged as stale.
+- **Evidence**: context.md:97-102 vs 109-118.
+- **Rule it implies**: when a later step in the same feature removes the premise behind an earlier risk sign-off, add a note that the sign-off's rationale no longer holds.
+
+### 2026-08-06 — fundamentals-signal-producer — migration
+- **Mistake**: concurrent features targeting the same shared numbered-migration directory collided on "next," caught only at impl-spec review.
+- **Evidence**: context.md:84-85.
+- **Rule it implies**: reserve/announce next-free shared migration numbers at design time.
+
+### 2026-08-06 — cross-stock-score-derivation — assumption
+- **Mistake**: an SDD interactive design gate carried forward an unconfirmed "working steer" (exclude zero-trade cells) as if it were user-approved; the gate had actually failed to deliver/record the real decision, only caught when re-asked in a later round (opposite answer).
+- **Evidence**: context.md:105-111.
+- **Rule it implies**: after any interactive gate, verify the recorded decision against an explicit user utterance before treating a "steer" as confirmed — don't let debate momentum stand in for sign-off.
+
+### 2026-08-06 — trigger-backfill-mcp-tool — assumption
+- **Mistake**: A shared discovery doc (`mcp-tools.md`) was missing a section for a prior tool (`set_strategy_live`, feature-048); this feature added its own sections but left the older gap in place.
+- **Evidence**: context.md:86-88 (066).
+- **Rule it implies**: When touching a shared discovery surface, either fix an unrelated pre-existing gap found there or explicitly flag it as a follow-on — don't silently carry it forward again.
+
+### 2026-08-06 — backtest-result-attachment — assumption
+- **Mistake**: three review rounds each fixed only the flagged line, leaving an adjacent identical construct broken.
+- **Evidence**: context.md:535-554
+- **Rule it implies**: When a code review flags one defective line, grep for structurally identical sibling instances in the same file/PR before closing the review round — don't fix only the named occurrence.
+
+### 2026-08-06 — mcp-config-management — duplication
+- **Mistake**: spec fix edited one clause but left a sibling clause stating the old false claim.
+- **Evidence**: context.md:274-278.
+- **Rule it implies**: grep the whole doc for the corrected term.
+
+### 2026-08-06 — mcp-config-management — assumption
+- **Mistake**: an agent stated an unverified technical claim ("SSE requires an in-memory session map") as fact to justify a design decision to the user; only a later recon pass against the installed SDK found it false.
+- **Evidence**: recon.md:19-48.
+- **Rule it implies**: before citing an SDK/library constraint as justification for a design decision, verify it against the installed source, not memory or a prior session's unchecked claim.
+
+### 2026-08-06 — fix-config-write-authz — assumption
+- **Mistake**: SEV-1 fix auto-promoted to `launched` while its own flagged outstanding smoke-test AC was never run.
+- **Evidence**: context.md:230-235,247-251; feature.md:59-62,28.
+- **Rule it implies**: human must confirm outstanding manual ACs before merging a SEV-1 promotion PR.
+
+### 2026-08-06 — fix-config-value-roundtrip — duplication
+- **Mistake**: A prior feature's new lint rule (DRY rails on `src/__tests__/**`) fired on that same feature's own new test file, but lint wasn't re-run after the later step that added the file, so the failure shipped and was only caught incidentally by an unrelated later feature.
+- **Evidence**: docs/roadmap/features/075-fix-config-value-roundtrip/context.md:41-46
+- **Rule it implies**: Re-run lint after every step that adds new files, not just after steps that touch config/rules — a rule added mid-feature can invalidate files created later in the same feature.
+
+### 2026-08-06 — remove-mcp-sse-transport — assumption
+- **Mistake**: `/sdd-review`'s `feature-overlap` subagent read the local git reflog rather than `origin/main-dev` and reported a false blocking merge-order dependency on an already-merged feature.
+- **Evidence**: `docs/roadmap/features/079-remove-mcp-sse-transport/context.md:85-91`.
+- **Rule it implies**: `feature-overlap` (and any subagent reasoning about merge/branch state) must check the remote ref, not local reflog, before asserting an ordering constraint.
+
+### 2026-08-06 — fix-mcp-strategy-lifecycle — duplication
+- **Mistake**: recon.md recommended replicating a consumer's firing-predicate logic (`_symbols_for`) into a new call site instead of extracting it.
+- **Evidence**: recon.md:36 vs design.md:21-25
+- **Rule it implies**: when recon proposes replicating existing logic into a new code path, treat it as a draft suggestion to be challenged in the design debate for DRY/C-10 risk, not a foregone conclusion.
+
+### 2026-08-06 — fix-mcp-screener-correctness — assumption
+- **Mistake**: `coverage_gaps` (a diagnostic derived from the full ranked list) was computed *after* rank/floor truncation, silently dropping entries a caller needed to see.
+- **Evidence**: recon.md:17 ("bug — gaps after truncation"), design.md:19-22.
+- **Rule it implies**: compute any diagnostic/summary/gap-detail output from the full result set before applying limit/filter truncation, not after.
+
+### 2026-08-06 — fix-mcp-config-key-registry — assumption
+- **Mistake**: TS servicer code reading a proto field by its snake_case proto name instead of ts-proto's camelCase silently no-ops (`undefined`, no error).
+- **Evidence**: `setConfigAuthz.test.ts:173-178`; fix reads `call.request.createKey ?? call.request.create_key`.
+- **Rule it implies**: any new scalar/bool field in a TS-consumed proto request must be read via camelCase (or `??` both) and proven with a wire-level loopback test.
+
+### 2026-08-06 — fix-mcp-writepath-authz — assumption
+- **Mistake**: Teardown's mandatory `/context-scrubber scan` was skipped for a launch that edited `context-constitution.md`/CLAUDE.md files, because the context-forge plugin was unavailable in the execute session — noted in the PR but not blocked on.
+- **Evidence**: context.md:148-149.
+- **Rule it implies**: if context-forge is unavailable when Teardown applies, treat it as a blocking gap to resolve (e.g. a follow-up scan), not a note-and-proceed — plugin absence isn't grounds to skip a mandated gate silently.
+
+### 2026-08-06 — opportunity-universe-unification — assumption
+- **Mistake**: UI mock/fixture authors writing Connect-RPC request bodies by hand assumed proto-JSON numeric/native encodings (enum as number, timestamp as epoch) and had to correct to NAME-string enums and RFC3339 timestamp strings.
+- **Evidence**: `docs/roadmap/features/097-opportunity-universe-unification/context.md:305`.
+- **Rule it implies**: when hand-authoring Connect-JSON request fixtures, enums and well-known types must match `protojson` conventions (enum=NAME string, `Timestamp`=RFC3339 string), not raw proto-binary shapes — verify against a real client call before trusting a mock.
+
+### 2026-08-06 — remove-x-mcp-secret-header — assumption
+- **Mistake**: Execute-time steps assumed Docker daemon and the context-forge plugin would be available in the sandboxed execution environment; both were absent, forcing on-the-spot substitutions (docker compose config; manual grep) flagged for a later human/CI pass.
+- **Evidence**: context.md:227-235 (Docker daemon), context.md:303-315 (context-scrubber plugin); reinforces existing `fails.md:300` Docker-unavailable family (now a 4th+ recurrence).
+- **Rule it implies**: Infra/doc-touching implementation specs should name a non-daemon/non-plugin fallback check up front, not discover the gap at execute time — and record substituted evidence explicitly as "not a live-boot proof" rather than silently treating it as equivalent.
+
+### 2026-08-06 — broker-failure-simulator — assumption
+- **Mistake**: A product spec (and feature number) was allocated for chaos-testing infrastructure whose core justification (automated order execution) didn't exist yet in the platform, and whose CI prerequisite (DB service containers) was also absent — both discoverable at story time.
+- **Evidence**: docs/roadmap/features/103-broker-failure-simulator/product-spec.md:9-14; context.md:19-24
+- **Rule it implies**: Before `/sdd-story` commits an external-review item to spec-ready, grep for the prerequisite runtime/CI capability the story assumes exists; if absent, file it as a dependency-blocked idea rather than a draft spec.
+
+### 2026-08-06 — trading-state-machine-invariants — scope-creep
+- **Mistake**: Spec'd hardening/test infrastructure (property-based tests, and separately the feature-103 simulator) for an order-execution path that is still 100% human-initiated, with no unattended caller yet needing the invariant depth proposed.
+- **Evidence**: docs/roadmap/features/104-trading-state-machine-invariants/context.md:22-24; feature.md:15
+- **Rule it implies**: Before speccing invariant/property-based test suites for a subsystem, confirm the subsystem actually has the concurrency/autonomy profile (multiple unattended callers) that makes example-based tests insufficient — otherwise defer until that capability exists.
+
+### 2026-08-06 — trading-crash-consistency — assumption
+- **Mistake**: Product spec for a CI-heavy test suite (crash injection across 3 services) was written without first checking whether CI had the prerequisite infrastructure (ephemeral Postgres/service containers) — a gap already documented in a sibling feature's context.md.
+- **Evidence**: docs/roadmap/features/105-trading-crash-consistency/context.md:16-24 (feasibility re-check found the gap same-day, citing 103's context.md as prior knowledge)
+- **Rule it implies**: Before `/sdd-story` scopes a CI-infrastructure-dependent test suite, check sibling/dependency features' context.md for known infra gaps — a feasibility check belongs before product-spec drafting, not after.
+
+### 2026-08-06 — market-data-freshness-and-quality-gate — scope-creep
+- **Mistake**: Product spec born from an external risk-review checklist item proposed a full new service surface (proto+config+DB) before checking whether an existing code path already covered the cheap, high-value part of the requirement.
+- **Evidence**: docs/roadmap/features/106-market-data-freshness-and-quality-gate/context.md:20-26
+- **Rule it implies**: Before scoping new infrastructure from an externally-sourced requirement, do a quick grep for an existing enforcement/hook point that could absorb the minimal viable version first.
+
+### 2026-08-06 — live-capital-canary-rollout — scope-creep
+- **Mistake**: /sdd-story drafted a full product spec for a safety-control/rollout mechanism whose target capability (automated strategy-to-order execution) does not exist and isn't roadmapped, sourced directly from an external risk-review checklist item rather than a verified codebase gap.
+- **Evidence**: docs/roadmap/features/107-live-capital-canary-rollout/context.md:18-26
+- **Rule it implies**: When a product spec originates from an external review/list item, /sdd-story (or the gate before /sdd-design) must confirm the capability the control would govern already exists or is actively roadmapped before drafting FRs — a one-line feasibility check, not a full design debate.
+
+### 2026-08-06 — trading-safety-dashboard-slos — assumption
+- **Mistake**: A feature's story cited upstream instrumentation features (100–107) by number as its data source without re-verifying, at spec/feasibility time, that those features were still scoped to emit that telemetry — several had been demoted/rescoped by the time of the recheck.
+- **Evidence**: docs/roadmap/features/108-trading-safety-dashboard-slos/context.md session 2026-08-04T01:00:00Z; product-spec.md:98-100
+- **Rule it implies**: when a feature's FRs depend on named upstream feature numbers, /sdd-design Phase 0 recon must check each cited dependency's current `feature.md` lifecycle status, not assume the roadmap-order description still holds.

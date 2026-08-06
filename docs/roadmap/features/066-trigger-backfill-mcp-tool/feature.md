@@ -6,6 +6,7 @@
 **Development Branch**: `feature/trigger-backfill-mcp-tool`
 **Created**: 2026-07-20
 **Last Updated**: 2026-07-20
+**Archived**: 2026-08-06
 
 ---
 
@@ -19,16 +20,14 @@
 | 2026-07-20 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 5 steps |
 | 2026-07-20 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Step 1) |
 | 2026-07-20 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done; integration rides PR #769 (recorded branch deviation) |
+| 2026-08-06 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(4)/fails(1); pruned 4 specs |
 
 | 2026-07-21 | `code-completed` → `launched` | CI workflow | Promoted via PR #767; committed 52adaa26702553f9d51f3cf458479a9b7729f930 |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Recon Dossier](recon.md) — grounded codebase facts (Phase 0)
-- [Design](design.md) — debated architecture (Phase 1, approved)
-- [Implementation Spec](implementation-spec.md) — 5 numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

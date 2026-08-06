@@ -6,6 +6,7 @@
 **Development Branch**: `feature/auth2-authorized-apps-ui`
 **Created**: 2026-06-07
 **Last Updated**: 2026-06-07
+**Archived**: 2026-08-06
 
 ---
 
@@ -22,14 +23,14 @@
 | 2026-06-07 | `implementation-ready` (review fixes) | /sdd-review impl-spec | Applied non-B3 advisory fixes: buf-breaking base → main-dev; split 8-file UI step into Step 6 (BFF) + Step 7 (page/nav), drop providers.tsx; explicit 049 OAuth-test regression guard; last_used_at labeled "last refreshed". Steps 9 → 10 |
 | 2026-06-07 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential run started (stacked per-step PRs). Step 1 (proto RPCs/message) done |
 | 2026-06-08 | `in-progress` → `code-completed` | /sdd-execute | All 10 steps done (PRs #623–#631 stacked → feature branch). Deviations: host proto toolchain, throwaway-PG migration test, AgentUrlContext (Option B), playwright env + e2e tsc/lint fallback |
+| 2026-08-06 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 2 specs |
 
 | 2026-06-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #641; committed 1fb6f613ead4b2ed4316d24c9af680dc88c7d4e8 |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — 10 numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

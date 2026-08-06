@@ -6,6 +6,7 @@
 **Development Branch**: `feature/backtest-results-visualization`
 **Created**: 2026-07-21
 **Last Updated**: 2026-07-21
+**Archived**: 2026-08-06
 
 ---
 
@@ -19,16 +20,14 @@
 | 2026-07-21 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps |
 | 2026-07-21 | `implementation-ready` → `in-progress` | /sdd-execute | Execution started; impl-spec advisory review PASS WITH WARNINGS (no Floor risk) |
 | 2026-07-21 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps done and verified (analysis 252 tests, vitest 25, e2e 18/18 CI-mode, buf clean, migration up/down) |
+| 2026-08-06 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(0); pruned 4 specs |
 
 | 2026-07-24 | `code-completed` → `launched` | CI workflow | Promoted via PR #783; committed 026bbf512990c5b63986d3c7449351638c1b8993 |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Recon Dossier](recon.md) — grounded codebase facts (Phase 0)
-- [Design](design.md) — debated, approved architecture (Phase 1)
-- [Implementation Spec](implementation-spec.md) — 12 numbered steps with codebase evidence
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

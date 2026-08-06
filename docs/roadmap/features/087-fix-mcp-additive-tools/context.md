@@ -1,39 +1,26 @@
-# Context Log: fix-mcp-additive-tools
+# Context: fix-mcp-additive-tools  (archived 2026-08-06)
 
-Append-only. Each session appends a new ## Session entry. Never delete or edit prior entries.
+**Feature**: ./feature.md
+**Status**: launched — archived by /sdd-archiver; verbose specs pruned (recoverable via git history).
 
----
+## Archive Synthesis — 2026-08-06 — /sdd-archiver
 
-## Session 2026-08-02 (/sdd-triage --from-report)
-
-- Routed from the MCP-alignment triage report: docs/reports/2026-08-01-mcp-tools-alignment-triage.md
-- Findings bundled into this feature: F-10 (test_formula, cancel_backfill, list_strategies, source-health passthrough, emit_alert context/tags/correlation_id)
-- Severity: SEV-2 (max across bundled findings)
-- Routed to SDD path (Track C)
-- Created: feature.md, product-spec.md, context.md
-- Affected services: xstockstrat-agent
-- Root cause(s) from the report: RC-1
-- Recommended design depth: quick → `/sdd-design fix-mcp-additive-tools quick` (rationale: agent-only, additive, no proto/migration; single service)
-- Development branch: feature/fix-mcp-additive-tools
-- Bundling rationale: the report's cross-finding notes tie these findings to one surface/root
-  cause, so they land as one feature (one PR-able change) rather than artificially-split dirs.
-  The full per-finding fix plan (verified 2026-08-02, one read-only investigator per finding)
-  lives in the source report; consult it during /sdd-design and /sdd-spec.
-
----
-
-## Session 2026-08-02 — sdd-design + sdd-execute (agent-only, all 5 steps)
-
-- Quick design (1 round). Adversary caught 4 real issues, all folded in: (1) test_formula MessageToDict crashes on NaN/Inf output (median case for unvalidated source, ledger 2026-07-21) → scrub the output Struct in-place before projection + defensive try/except; (2) `active` opt-out dishonest → surfaced it, parity opt-out shrunk to {extractor_module}; (3) last_seen_at needs HasField or reports epoch → gated; (4) list_strategies casing → preserving_proto_field_name=True (snake_case, matches get_strategy).
-- Implementation: extracted `_build_formula_parameter` to module level (DRY, shared by manage_formula + execute_formula); added `execute_formula` (inline, read-only, scrub+wrap), `cancel_backfill` (admin), `_scrub_struct_nonfinite`, `_ts_to_iso`, `_SOURCE_HEALTH_NAME`; extended list_signal_sources projection (active+health+last_seen_at+last_error+signals_fed), emit_alert (context/tags/correlation_id); snake_case list_strategy_definitions. 3 new tools (test_formula/cancel_backfill/list_strategies) + emit_alert params. Catalog 17→20 on this branch (pre-086; +2 from 086 reconciles at merge).
-- Tests: 6 client tests incl. NaN-scrub RED; descriptor-parity over list_signal_sources projection; 4 tool tests; catalog 17→20; updated the exact-args emit_alert test. 149 agent tests, ruff clean, 70% cov.
-- Docs: mcp-tools.md sections (cancel_backfill/test_formula/list_strategies) + list_signal_sources health fields + emit_alert params; counts 17→20 across mcp-tools.md/CLAUDE.md/tools.py.
-- Note: branched from main-dev, so this branch's baseline is the pre-086 client/tools; 086 (PR #843) and 087 both edit the tool catalog + counts, so a small merge reconciliation is expected per merge-order.
-- Status: draft → code-completed.
-
-## Session 2026-08-02 (CI: feature status automation)
-
-- Promotion PR #844 merged to main
-- Feature promoted and committed: a76237080a282abac145b7f88a6044869132ba5f
-- Status updated: `code-completed` → `launched`
-- Launched date: 2026-08-02
+**What**: Five backend capabilities that already existed over gRPC (`ExecuteFormula` inline dry-run, `CancelBackfill`, `ListStrategyDefinitions`, `SignalSource` health fields, `EmitAlertRequest` extras) got thin, additive MCP surfaces in `xstockstrat-agent` with zero backend/proto change — closing report F-10 from the 2026-08-01 MCP-alignment triage (context.md:9-21).
+**Why (irrecoverable rationale)**: The fixes were scoped tightly to "reachable-but-unsurfaced" RPCs to keep this a same-PR, no-approval-chain change (product-spec.md:49-51); `get_formula`/`list_formulas` reads were deliberately split into sibling feature 086 so they'd pair with the `manage_formula` update fix rather than bloat this one (product-spec.md:67-68). For `list_signal_sources`, `SourceHealthStatus` is projected as the enum **name**, not the int, because it's "stable, human-readable for the model" — an explicit tradeoff flagged as an open risk, not a settled fact: "if a consumer needs the int, revisit" (design.md:62-63). This forward-looking caveat is unrecoverable from shipped code/docs (`docs/runbooks/mcp-tools.md:109-110` states the choice but not the rationale or the revisit trigger).
+**Rejected alternatives**:
+- `test_formula` accepting a `formula_id` — lost because `get_formula`/`manage_formula` already cover saved formulas; the value is specifically the *inline unsaved-source* dry-run (design.md:52-53).
+- `cancel_backfill` as read-only (no admin scope) — lost because `CancelBackfill` is server-side admin-gated and mutates a paid job (design.md:54-55).
+- Descriptor-parity test on tool output instead of the client projection — lost because the tool intentionally strips `has_credentials`; the "no field silently dropped" invariant belongs on the mapping layer, not the tool (design.md:56-58).
+- Opting `active` out of the `list_signal_sources` parity test alongside `extractor_module` — lost: adversary called this dishonest (silently dropping a field the report flagged), so `active` was surfaced instead and the opt-out set shrank to `{extractor_module}` only (design.md:33-37,43-45; context.md:27).
+**Scars & gotchas**:
+- `ExecuteFormula`'s sandbox path (`indicators/app/services/sandbox.py`) does not scrub non-finite values, so an unvalidated inline dry-run commonly returns `NaN`/`Inf` in `output`, and `MessageToDict` raises `ValueError` on it — a *new* code path hitting the same P-03 class already ledgered from 2026-07-21, discovered here specifically because dry-run-on-unvalidated-source is the one call site where non-finite output is expected, not exceptional (design.md:19-24).
+- `signals_fed` (int64) is emitted as a JSON **number** in this manual projection, diverging from the int64-as-JSON-string contract `run_backtest`/`get_backfill_status` follow via standard `MessageToDict` — accepted as consistent with this tool's pre-existing manual-projection pattern, but flagged so a model doesn't assume the string contract (design.md:64-67).
+- Branching from `main-dev` meant this branch's baseline was pre-086; both 086 and 087 edit the same tool catalog + tool-count strings, producing an expected small merge reconciliation (context.md:31).
+**Permanent deviations**: none — adversary fixes were folded into the design before implementation; no shipped/design divergence found in context.md.
+**Cross-feature signal**: - Multiple SDD features spawned from one triage report (086, 087, 091, 092, 093) land in parallel and several touch the same shared counters (agent tool catalog count, `mcp-tools.md`/`CLAUDE.md` tool-count strings) — expect and plan for merge-order reconciliation rather than treating it as a bug (context.md:31; insights.md 2026-08-02 entries for 086/091/092/093 confirm this is a recurring shape across the batch).
+**Deferred follow-ons**:
+- `get_formula`/`list_formulas` reads — routed to feature 086 (formula-lifecycle), already launched per ledger.
+- `SourceHealthStatus` enum-name-vs-int choice in the `list_signal_sources` projection — revisit if any consumer needs the raw int (design.md:62-63).
+**Ledger entries written**: insights.md (2), fails.md (0) — see the 2026-08-06 entries.
+**Runtime-invariant recommendations (→ /context-constitution)**: - none
+**Pruned artifacts**: product-spec.md, recon.md, design.md, implementation-spec.md — last present at f871138.

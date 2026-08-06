@@ -8,6 +8,7 @@
 **Last Updated**: 2026-06-09
 
 **Priority Bucket**: P2 — Scale & resumability (3 of 3 in the backfill-hardening initiative)
+**Archived**: 2026-08-06
 
 ---
 
@@ -20,14 +21,14 @@
 | 2026-06-09 | `spec-ready` → `implementation-ready` | /sdd-spec | Implementation spec generated with 9 steps. Flagged hard prerequisite: 052 (backfill_jobs table + concurrency gate) and 053 (GetDataCoverage RPC) are NOT yet on main-dev; re-run /sdd-spec after they merge. Confirmed marketdata OHLCV write is an idempotent upsert (resume-safe). |
 | 2026-06-09 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential stacked run (on 053). Re-spec vs stacked base: BackfillJob chunks_total/completed=13/14 (052+053 took 11/12), TriggerBackfillRequest fill_mode=6 (053 took 5), ingest migration=004 (052 took 003), config migration=005 (052 added none). GetDataCoverage + backfill_jobs now present. |
 | 2026-06-09 | `in-progress` → `code-completed` | /sdd-execute | All steps done; ingest pytest 121 passed (cov 74%), migrations 004/005 verified on throwaway pg. User-approved full chunked rewrite of 052's exec model. Stacked after 053+052. |
+| 2026-08-06 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(0); pruned 2 specs |
 
 | 2026-06-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #649; committed 0b503103817c8d8d2089c057a10db12fb7a098a5 |
 ---
 
 ## Artifacts
 
-- [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — 9 steps; gated on features 052 + 053
+- Product Spec — pruned by /sdd-archiver 2026-08-06; see [Context Log](context.md) Archive Synthesis
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

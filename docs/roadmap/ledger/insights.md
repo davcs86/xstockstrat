@@ -815,3 +815,353 @@ reusing.
 - **Pattern**: A feature branched from a not-yet-merged prerequisite should re-verify against the prerequisite's delivered code (including post-merge refactors) at multiple checkpoints, not just once at execute start.
 - **Evidence**: `docs/roadmap/features/048-live-strategy-alert-engine/context.md:79-96` (evaluator path/servicer shape diverged), `context.md:209-214` (048 later re-merged 047's admin-gate refactor, reconciling an interim divergence).
 - **Rule it implies**: Gate a dependent feature's execute loop with a targeted re-spec against the prerequisite's exact changed files, and re-check again if the prerequisite keeps evolving before the dependent feature ships.
+
+### 2026-08-06 — unify-admin-auth-gates — design
+- **Pattern**: cross-service auth-model unification (x-access-scope admin bit) rolled out service-by-service with documented exceptions rather than forced uniformity.
+- **Evidence**: feature.md Session 2026-06-05; context.md sdd-spec session.
+- **Rule it implies**: unify auth models incrementally per service; document deliberate exceptions instead of erasing genuine differences (e.g. ownership checks).
+
+### 2026-08-06 — unify-admin-auth-gates — design
+- **Pattern**: An older feature's design (018) silently assumed a removed architecture (nginx, HTTP port 80xx) after feature 045 removed it; re-grounding via recon caught it before build.
+- **Evidence**: context.md 're-spec: merge 018' session, 2026-06-06.
+- **Rule it implies**: Before resuming/absorbing a dormant spec, re-verify its architecture premises against current main-dev, especially post-removal features.
+
+### 2026-08-06 — unify-admin-auth-gates — design
+- **Pattern**: an edge-auth handoff was initially over-engineered around a (wrong) cross-origin assumption; confirming actual same-origin DO ingress enabled a simpler, non-forgeable session-cookie handoff.
+- **Evidence**: context.md "resolve callback-handoff advisory" session.
+- **Rule it implies**: verify real deployment topology (origin/routing) before designing cross-service trust handoffs.
+
+### 2026-08-06 — strategy-creation-flow — reuse
+- **Pattern**: When a BFF proxy (`*Bff.ts`) forwards gRPC errors to the browser, verify the real Connect/gRPC error message survives — not just a generic HTTP status — by writing an E2E test that triggers a real backend validation failure, not just a mocked one.
+- **Evidence**: context.md:114-128 (dispatchConnect content-type leak found only via AC-13 test).
+- **Rule it implies**: New BFF proxy methods should include at least one E2E case that asserts on the *message text* of a downstream validation error, not just the status code.
+
+### 2026-08-06 — auth2-authorized-apps-ui — reuse
+- **Pattern**: A Next.js server component/layout with no dynamic API calls gets statically prerendered at build time; reading a runtime-only env var (set at deploy, not build) there bakes in a stale/empty value.
+- **Evidence**: context.md:278-287 (auth2-authorized-apps-ui post-merge fix, accounts/layout.tsx)
+- **Rule it implies**: any server component reading a runtime-only env var must set `export const dynamic = 'force-dynamic'`; verify e2e doesn't set the same var at build time (which would mask the bug).
+
+### 2026-08-06 — durable-observable-backfills — ordering
+- **Pattern**: When stacking sequential features that share a proto message, use one integration PR per feature (not per-step stacked PRs) because proto source + generated stubs must commit together.
+- **Evidence**: context.md session 2026-06-09.
+- **Rule it implies**: For proto-touching stacked features, default PR granularity to per-feature, not per-step.
+
+### 2026-08-06 — durable-observable-backfills — design
+- **Pattern**: When a spec finds documented-but-inert config keys promising trust-critical behavior (retries/alerts), default to implementing them over removing them.
+- **Evidence**: product-spec.md Problem Statement + Resolved Decisions.
+- **Rule it implies**: Treat "docs promise X but code doesn't do X" as a correctness bug, not a docs cleanup.
+
+### 2026-08-06 — durable-observable-backfills — design
+- **Pattern**: Put a derived estimate (e.g. expected bar count) in the service that owns the source-of-truth computation, not the consumer.
+- **Evidence**: product-spec.md Resolved Decisions "bars_total source".
+- **Rule it implies**: Don't duplicate domain calculations (e.g. market calendars) across services for one field.
+
+### 2026-08-06 — resumable-chunked-backfills — ordering
+- **Pattern**: When a feature is intentionally branch-stacked on unmerged prerequisite features, proto field numbers/migration NNNs computed at `/sdd-spec` time go stale by execute time.
+- **Evidence**: context.md:76-81 (chunks_total 11→13, fill_mode 5→6, ingest migration 003→004).
+- **Rule it implies**: Stacked features must run an explicit re-spec/re-ground gate against the actual stacked base immediately before the execute step loop, not rely on the original `/sdd-spec` grounding.
+
+### 2026-08-06 — orders-management-ui — ordering
+- **Pattern**: In `/sdd-execute sequential` mode, when a step's isolated change breaks the build or exposes a spec-grounding gap (e.g., widening a shared repo function's signature, or discovering a proto field the spec assumed was already wired isn't), the resolved fix was to update the call site / wire the missing backend logic immediately in the same step rather than deferring — done three times here (Steps 4, 5-pagination, and 9, all user-approved "Option A") (context.md:135-136, 193-194; implementation-spec.md:413-417).
+- **Evidence**: context.md:135-136, 193-194; implementation-spec.md:413-417.
+- **Rule it implies**: When a sequential-mode step's local change breaks compilation or reveals an incomplete spec-grounding claim, fix it in-step and log it as a deviation rather than leaving the build red or shipping a UI no-op.
+
+### 2026-08-06 — orders-management-ui — reuse
+- **Pattern**: When a proto's `PageRequest` is token-based (no offset field) but a spec assumes offset/limit, implement `page_token` as an opaque numeric offset that mirrors an existing sibling service's established convention (`xstockstrat-portfolio`'s `ListPositions`) instead of inventing a new pagination scheme (implementation-spec.md:397).
+- **Evidence**: implementation-spec.md:397 (Deviation Log, Step 5).
+- **Rule it implies**: Before designing pagination for a new `ListX` RPC, check whether a sibling service already established a token convention on the same `PageRequest`/`PageResponse` shape, and reuse it rather than diverging.
+
+### 2026-08-06 — open-positions-ui — design
+- **Pattern**: A product-spec event/field name (`trade.filled`) that doesn't exist in the codebase survived one review layer and was only caught by an independent formal re-review.
+- **Evidence**: context.md:47-51 (sdd-spec catch), context.md:80-84 (sdd-review re-catch)
+- **Rule it implies**: When a spec cites an event/RPC/field name, grep-confirm the literal emitter string exists before treating it as ground truth, even after an earlier session already "verified" it.
+
+### 2026-08-06 — backfill-management-ui — reuse
+- **Pattern**: when service logic depends on concrete/un-mockable repo or config types, extract pure guard/builder functions before writing unit tests rather than deferring coverage to E2E.
+- **Evidence**: implementation-spec.md:663-670 (Step 6 deviation, marketdata `resolveDeletePlan`/`buildDeleteBarsQuery`).
+- **Rule it implies**: when unit tests can't reach new logic due to unmockable types, refactor for testability (user-approved) instead of shipping untested guards.
+
+### 2026-08-06 — backfill-management-ui — reuse
+- **Pattern**: for scoped destructive-delete RPCs, unit-test the SQL builder directly to assert the mandatory predicate is always present and always the first bound param.
+- **Evidence**: implementation-spec.md:669 (`TestBuildDeleteBarsQuery`, 4 variants).
+- **Rule it implies**: destructive delete code needs a "predicate always present" builder-level test as the actual safety net, not just service-level mocks.
+
+### 2026-08-06 — formula-parameters — design
+- **Pattern**: When adding a new semantic category of data to an existing "everything in one generic struct" contract, give it a wholly separate new field/namespace instead of overloading the existing one.
+- **Evidence**: `input_params`/`params` kept separate from `input_data`/`data` by explicit user decision (context.md:37-54).
+- **Rule it implies**: Don't conflate distinct data categories into a shared map/struct just because one already exists — the extra field is cheap; the ambiguity isn't.
+
+### 2026-08-06 — formula-parameters — reuse
+- **Pattern**: Repeated protobuf message fields can't be `json.dumps`'d for JSONB storage.
+- **Evidence**: implementation-spec.md:619-623 (Step 7 Deviation Log).
+- **Rule it implies**: When persisting proto message lists to JSONB, always `MessageToDict` on write / `json_format.ParseDict` on read — never pass proto objects to `json.dumps`.
+
+### 2026-08-06 — watchlist-management — reuse
+- **Pattern**: narrow `.proto` edits can still trigger `buf-gen` to rewrite unrelated WKT files (comment-only refresh).
+- **Evidence**: implementation-spec.md Deviation Log Step 2.
+- **Rule it implies**: commit incidental WKT diffs rather than reverting; `proto-freshness` CI expects them.
+
+### 2026-08-06 — watchlist-management — ordering
+- **Pattern**: pre-assign ascending migration numbers across an entire multi-feature initiative at design time when they share a migration dir/slot, record in merge-order.md.
+- **Evidence**: context.md 2026-06-27 impl-spec review.
+- **Rule it implies**: don't resolve migration-number collisions reactively per-PR when siblings are known upfront.
+
+### 2026-08-06 — fundamentals-data-source — reuse
+- **Pattern**: Config service's `WatchConfig` snapshot map is keyed by the raw `key` column value with no namespace prefix prepended — seed migrations must store the full dotted key the consuming service reads, not a namespace-relative fragment.
+- **Evidence**: implementation-spec.md:449-458, context.md:73-77 (fundamentals-data-source Step 5 deviation).
+- **Rule it implies**: Before writing a config seed migration, verify against `configServiceImpl.ts` how the snapshot key is constructed — never assume namespace+key are concatenated at read time.
+
+### 2026-08-06 — fundamentals-data-source — reuse
+- **Pattern**: Adding a new data-provider integration alongside an existing provider-specific interface (e.g. OHLCV `DataSourceClient`/Alpaca) works cleanly as a sibling interface + sibling package, held as its own service field rather than registered in the existing registry — keeps the existing provider path provably untouched.
+- **Evidence**: product-spec.md FR-2; implementation-spec.md Step 6 (source.go:14-20 untouched, `internal/fmp/` new package).
+- **Rule it implies**: When a new provider's shape differs from an existing interface, don't force-fit it — add a parallel interface and verify via `git diff` on the untouched files.
+
+### 2026-08-06 — fundamentals-data-source — reuse
+- **Pattern**: When a Go service needs unit tests to drive state held in an unexported concrete type (e.g. `*config.Watcher`'s snapshot), splitting the service's dependency on it into small local interfaces (fields typed as interfaces, not the concrete struct) gives the `_test` package a seam to inject fixtures without a live config stream or DB.
+- **Evidence**: implementation-spec.md:460-465, context.md:88-90 (fundamentals-data-source Step 8, `fundamentalsConfig`/`fundamentalsRepo` interfaces).
+- **Rule it implies**: Before wiring a new feature's logic directly to an existing unexported concrete dependency, check whether its test package can inject state; if not, introduce a small local interface seam rather than deferring the problem to integration-only testing.
+
+### 2026-08-06 — screener-engine — design
+- **Pattern**: When a new capability must never regress an existing critical path (backtest), extract the shared math into a pure module with byte-for-byte frozen-value tests *and* keep the full pre-existing suite green, rather than relying on a single before/after diff test that may not be runnable in the execute environment.
+- **Evidence**: docs/roadmap/features/060-screener-engine/implementation-spec.md:519-527; context.md Session 2026-06-29 Step 6.
+- **Rule it implies**: For an isolation-critical extraction, pair a frozen-value golden test on the extracted pure functions with "full existing suite passes unchanged" as the regression proof, not just one or the other.
+
+### 2026-08-06 — screener-agent-tool — reuse
+- **Pattern**: Agent tool count is asserted in 4 separate docs (agent CLAUDE.md, docs/runbooks/mcp-tools.md, docs/runbooks/CLAUDE.md index, tools.py docstring); they had already drifted independently before this feature touched any of them.
+- **Evidence**: implementation-spec.md:300-304, context.md:54-56.
+- **Rule it implies**: any feature adding/removing an agent tool must grep all four locations for stale counts, not just the file it's editing.
+
+### 2026-08-06 — screener-agent-tool — design
+- **Pattern**: A product-spec draft referenced a plausible-but-nonexistent helper (`_admin_metadata()`); sdd-review caught it against real code before implementation-ready.
+- **Evidence**: context.md:27-28.
+- **Rule it implies**: sdd-review's verification-against-code step is load-bearing for specs written before the implementer greps the target file — keep it mandatory even on `quick`/thin features.
+
+### 2026-08-06 — fundamentals-signal-producer — reuse
+- **Pattern**: synthetic/derived signal producers on a budget-capped external API must read only via the owning service's cache RPC and reserve part of the daily cap for interactive callers.
+- **Evidence**: context.md:16-19.
+- **Rule it implies**: enforce with a "no direct API import" test guard.
+
+### 2026-08-06 — fundamentals-signal-producer — design
+- **Pattern**: prefer a reusable generic CHECK/enum value (`derived`) over a single-purpose literal when future similar producers are foreseeable.
+- **Evidence**: context.md:89-92.
+- **Rule it implies**: extend CHECK allow-lists generically, not per-feature.
+
+### 2026-08-06 — fundamentals-signal-producer — design
+- **Pattern**: when a callee RPC lacks a uniqueness constraint, the idempotency guard belongs in the caller's own state table keyed on its natural key.
+- **Evidence**: context.md:52-56.
+- **Rule it implies**: Design the idempotency key/guard at the state-owning caller layer, not by relying on the callee's uniqueness constraints, when the callee RPC has none.
+
+### 2026-08-06 — fundamentals-signal-producer — ordering
+- **Pattern**: when two features touch overlapping domain, record the deliberate scope split in context.md at story time — it lives nowhere else.
+- **Evidence**: context.md:12-15.
+- **Rule it implies**: Document scope-split decisions between overlapping-domain features in context.md at story time, since no other artifact captures it.
+
+### 2026-08-06 — fundamentals-signal-producer — design
+- **Pattern**: when an enhancement is deferred specifically for a paid/higher API tier, record the tier-gating reason explicitly — it won't survive in shipped code.
+- **Evidence**: product-spec.md:70,156-157.
+- **Rule it implies**: When deferring an enhancement specifically for a paid/higher API tier, record the tier-gating rationale explicitly in the spec, since it won't survive in shipped code.
+
+### 2026-08-06 — fundamentals-scoring-model — reuse
+- **Pattern**: When an RPC-based resource-creation path (e.g. `RegisterFormula`) mints a random ID with no uniqueness constraint, and a feature needs that resource pre-populated at startup, add an idempotent startup seeding hook using a deterministic ID (UUIDv5 from a fixed namespace+name) plus a repo `upsert` (`ON CONFLICT ... DO UPDATE`) rather than calling the creation RPC/insert on every boot.
+- **Evidence**: implementation-spec.md:59-63, 76-82; context.md:50-58.
+- **Rule it implies**: Before seeding any resource at startup, grep for an existing uniqueness constraint/upsert path; if absent, build one rather than re-inserting on restart.
+
+### 2026-08-06 — persist-strategy-scores — design
+- **Pattern**: a best-effort write (FR-7-style) paired with a read path hitting the same store risks a false success ack on next read.
+- **Evidence**: design.md:12-16, 85-87.
+- **Rule it implies**: keep reads served from the in-memory/already-acked state (write-through), not the just-written durable store, unless the write is confirmed synchronous.
+
+### 2026-08-06 — persist-strategy-scores — reuse
+- **Pattern**: DOUBLE PRECISION columns silently accept NaN/Infinity; JSONB columns reject them and fail the write.
+- **Evidence**: design.md:109-112; context.md:85-87.
+- **Rule it implies**: scope `math.isfinite`-style guards to the JSONB-bound fields only, not scalar float columns — an asymmetric guard here is correct, not a bug.
+
+### 2026-08-06 — persist-strategy-scores — reuse
+- **Pattern**: an AsyncMock `fetchrow` whose return value simply echoes its input never exercises decode logic (e.g. `_to_dict`'s JSONB-string parsing), so decode bugs pass silently.
+- **Evidence**: design.md:72-73, context.md:43.
+- **Rule it implies**: any repo test mocking asyncpg over JSONB/serialized columns must assert the decode function against a literal serialized (string) row, never a mock-echoed dict.
+
+### 2026-08-06 — trigger-backfill-mcp-tool — design
+- **Pattern**: An explicit user "build X now" instruction can stand in as recorded P-04 sign-off for a quick-mode design gate when no contested tradeoff survives adversarial synthesis.
+- **Evidence**: context.md:61-65 (066).
+- **Rule it implies**: Record such standing approvals inline in context.md instead of re-prompting; only prompt when a real unresolved tradeoff remains.
+
+### 2026-08-06 — trigger-backfill-mcp-tool — design
+- **Pattern**: Phase 0 Recon undercounted required docs-discovery surfaces (found 4 of 5); the mandated Phase 1 adversarial round is what caught the missing one (`historical-backfill.md`), not recon itself.
+- **Evidence**: design.md:72, context.md:53 (066).
+- **Rule it implies**: Treat recon's discovery-surface list as provisional, not final — the adversarial round is a required backstop for doc-surface completeness, so don't skip or shortcut it even in quick mode.
+
+### 2026-08-06 — trigger-backfill-mcp-tool — reuse
+- **Pattern**: `MessageToDict` renders proto int64 fields as strings.
+- **Evidence**: context.md:127-128 (066).
+- **Rule it implies**: Assert string values for int64 fields in MessageToDict-based tests.
+
+### 2026-08-06 — trigger-backfill-mcp-tool — design
+- **Pattern**: When an adversarial design round rejects the low-effort version of a fix (partial refactor / fallback), it can still be recorded as a contingency to fall back to if execution hits trouble, rather than discarded outright.
+- **Evidence**: design.md:86-88, context.md:116-121 (066).
+- **Rule it implies**: If the full/harder approach ships cleanly, no separate action needed — but note in context.md when a contingency was available and unused, so the reasoning isn't lost once design.md is pruned.
+
+### 2026-08-06 — fix-custom-formula-allnone — design
+- **Pattern**: When a per-symbol/per-item loop gains a new failure path, any pre-existing aggregate status gate keyed only on the old failure signals must be widened, or an all-failed run silently reports OK and persists a spurious score.
+- **Evidence**: implementation-spec.md:73-81 (feature-053 regression caught in design round 3).
+- **Rule it implies**: when adding a new exception/skip branch to an aggregation loop, grep every downstream boolean gate derived from the old accumulators before declaring the change complete.
+
+### 2026-08-06 — fix-custom-formula-allnone — reuse
+- **Pattern**: Playwright's `webServer`-managed `next build && next start` can exceed sandbox wall-clock; pre-building with `pnpm build` + `pnpm start` + `reuseExistingServer` gets a real pass instead of a timeout.
+- **Evidence**: implementation-spec.md D-3 (context.md:139-141).
+- **Rule it implies**: for slow-sandbox e2e runs, pre-build+pre-start the server rather than trusting the in-band `webServer` block.
+
+### 2026-08-06 — fix-custom-formula-allnone — design
+- **Pattern**: Don't consolidate two superficially-similar helpers whose failure contracts differ (one truncates, one raises) just because they look duplicative — the divergence is the point, and merging adds hot-path blast radius.
+- **Evidence**: design.md:140-142.
+- **Rule it implies**: before proposing a DRY refactor of two similar-looking helpers, diff their failure/edge-case semantics, not just their shape.
+
+### 2026-08-06 — backtest-results-visualization — design
+- **Pattern**: For a historical/persisted-result read path, prefer DB-only reads over an existing in-memory cache built for a different purpose (unconditional writes for all statuses, key collisions, no eviction) — the cache's shortcuts become correctness bugs once repurposed as a read source.
+- **Evidence**: design.md:50-54, 106-108 (analysis `self._backtests` dict rejected as `GetBacktest` source)
+- **Rule it implies**: Before reusing an in-memory structure as a new read path, audit its write-time invariants against the new read contract.
+
+### 2026-08-06 — strategy-reentry-cooldown — reuse
+- **Pattern**: Before adding a workaround for a suspected protobuf "presence bug" (e.g. post-construction assignment to dodge `field=None`), verify current constructor semantics — Python protobuf already omits `None` kwargs for optional fields correctly.
+- **Evidence**: design.md:154-155; context.md:325-329
+- **Rule it implies**: verify the decoder/codegen contract before working around it (reinforces P-03).
+
+### 2026-08-06 — strategy-reentry-cooldown — reuse
+- **Pattern**: When host tooling lacks CI's exact binaries (golang-migrate, full Playwright build), a scoped fallback (throwaway `initdb` cluster; `tsc`+lint+manual dev-mode drive) still catches real bugs pre-merge if logged explicitly as a Deviation Log entry, not silently skipped.
+- **Evidence**: context.md:252-257, 347-350 (D1/D2)
+- **Rule it implies**: an unavailable CI tool requires a documented equivalent-fallback, never silent skip.
+
+### 2026-08-06 — strategy-partial-update — design
+- **Pattern**: When adding merge/patch semantics to an existing write RPC, audit every caller that constructs the request payload — a client that fabricates full defaults from `None`/empty Python values defeats a server-side partial-merge fix even after the server is correct.
+- **Evidence**: `services/xstockstrat-agent/app/tools.py:338-344` (pre-fix); design.md §4; context.md session 2026-07-26 (steps 3-6)
+- **Rule it implies**: a "fix the server merge" design must trace every payload-building caller for silent-default fabrication before declaring the bug fixed.
+
+### 2026-08-06 — strategy-partial-update — reuse
+- **Pattern**: `AsyncMock`-based repo fakes make `HasField()` on a mocked proto request return truthy by default, so a new proto-presence branch (e.g. FieldMask detection) silently takes the wrong path in every pre-existing test until the fake is replaced with a real proto.
+- **Evidence**: context.md:170-171 (test_analysis_servicer.py `_update_req`)
+- **Rule it implies**: when adding `HasField`/presence-gated branching to an RPC, replace `MagicMock`/`AsyncMock` request fakes with real proto instances in the same step, not after.
+
+### 2026-08-06 — backtest-time-window — design
+- **Pattern**: A debated design's own stated invariant can still contain an arithmetic bug; writing the edge-case test (k>0) before landing plumbing catches what a "looks right" read of the design misses.
+- **Evidence**: context.md:173-200.
+- **Rule it implies**: when a design's worked example has multiple claims that must jointly hold, test the edge case the design text glosses over before trusting plumbing.
+
+### 2026-08-06 — backtest-result-attachment — reuse
+- **Pattern**: use a fixed user-facing error string, not `str(e)`, when an exception repr could embed a large/sensitive payload.
+- **Evidence**: context.md:461-465
+- **Rule it implies**: When an exception's string representation could embed a large or sensitive payload, always return a fixed generic user-facing error string instead of `str(e)`.
+
+### 2026-08-06 — mcp-config-management — design
+- **Pattern**: a "verify, don't reimplement" FR forced code-tracing during review, surfacing two live prod defects unrelated to the reviewed feature.
+- **Evidence**: context.md:117-141.
+- **Rule it implies**: when a spec claims an existing mechanism "already does X," trace the actual code path.
+
+### 2026-08-06 — mcp-config-management — design
+- **Pattern**: gating by "request looks authorized" can be true on a transport meant to be denied; only code-path unreachability is safe.
+- **Evidence**: design.md:40-49, context.md:298-303.
+- **Rule it implies**: gate via unreachability, not runtime introspection.
+
+### 2026-08-06 — fix-config-write-authz — design
+- **Pattern**: cited "platform precedent" doc was backwards from the code it described.
+- **Evidence**: `header-propagation.md:36-37` vs `servicer.py:207-220`.
+- **Rule it implies**: verify cited cross-service precedent against code directly.
+
+### 2026-08-06 — fix-config-value-roundtrip — reuse
+- **Pattern**: When a bug stems from wire-format field-casing mismatches (camelCase ts-proto vs snake_case DB/proto-descriptor), a hand-built test request can accidentally use the "wrong" (but bug-compatible) shape and mask the defect; route such tests over a real gRPC connection to force genuine wire shape.
+- **Evidence**: docs/roadmap/features/075-fix-config-value-roundtrip/context.md:33-36
+- **Rule it implies**: For any bug involving field-name casing between wire and storage layers, write the regression test against a live client call, not a hand-constructed request object.
+
+### 2026-08-06 — fix-mcp-formula-lifecycle — design
+- **Pattern**: When a partial-update tool already uses a None-sentinel (omitted=unchanged) mechanism, don't add a separate `clear_fields` escape hatch for explicit erasure — every field's "clear" is already expressible via its falsy value ([]/""/0/false), and any field needing erasure protection is covered by the existing erasure guard regardless of how the clear was expressed.
+- **Evidence**: docs/roadmap/features/086-fix-mcp-formula-lifecycle/context.md:47 (deviation from design.md:46).
+- **Rule it implies**: extends the CF-N4 litmus — a "deliberate erasure" param is speculative scaffolding when the sentinel mechanism already covers it; drop it.
+
+### 2026-08-06 — fix-mcp-additive-tools — ordering
+- **Pattern**: When several SDD features are spawned from one triage/audit report, they commonly edit the same shared counter files (tool catalogs, doc tool-counts) in parallel; expect a small merge reconciliation rather than treating divergent counts as a defect.
+- **Evidence**: context.md:31 (087 vs 086 catalog); insights.md 2026-08-02 entries for sibling features 086/091/092/093 from the same report.
+- **Rule it implies**: when triaging a multi-finding report into several features, note shared-file touchpoints in each feature's context.md up front and check merge-order.md before opening the final PR.
+
+### 2026-08-06 — fix-mcp-additive-tools — design
+- **Pattern**: When a manual (non-standard) enum/int projection choice is made for model-readability reasons, its rationale and revisit trigger get lost the moment the design doc is deleted unless restated as a code comment or docstring caveat, not just an "Open Risk" bullet.
+- **Evidence**: design.md:62-63 (enum name over int, "if a consumer needs the int, revisit"); docs/runbooks/mcp-tools.md:109-110 states the choice but not why.
+- **Rule it implies**: when a design.md "Open Risk" documents a deliberate tradeoff with a future revisit condition, carry that condition into a code comment/docstring at the decision site, not only the design doc, so it survives archival.
+
+### 2026-08-06 — fix-mcp-signal-source-verbs — design
+- **Pattern**: when one RPC's blind-upsert is split into honest AIP-161 verbs (register/update/mask/reactivate), grep for sibling RPCs with the same shape (single "operation" string dispatch over one upsert) — feature-070's fix did not propagate to this RPC and sat as a live bug until a separate triage report caught it.
+- **Evidence**: docs/roadmap/features/088-fix-mcp-signal-source-verbs/recon.md:75-76 (RC-2).
+- **Rule it implies**: after any verb-split fix, search the repo for structurally identical RPCs and file them as follow-on bugs rather than assuming the pattern generalized.
+
+### 2026-08-06 — fix-mcp-signal-source-verbs — design
+- **Pattern**: the adversarial design round (not the product-spec) discovered that config-ui was itself reproducing the exact bug on the human-facing surface — a maskless caller invisible to the original triage.
+- **Evidence**: context.md:28 (R2 finding), design.md §6.
+- **Rule it implies**: when fixing a shared-mutation-RPC bug, explicitly enumerate *every* caller (UI, agent, internal producers) during design, not just the ones named in product-spec Affected Services.
+
+### 2026-08-06 — fix-mcp-signal-source-verbs — design
+- **Pattern**: converting upsert-style register to strict `ALREADY_EXISTS` breaks any internal "ensure registered on startup" caller unless it's taught to tolerate that specific code.
+- **Evidence**: recon.md:68-72; design.md §4 (fundsignal_loop `_ensure_source_registered`).
+- **Rule it implies**: before strictening any register verb, grep for internal callers with idempotent-registration retry/try-except patterns and add narrow (not blanket) exception handling for the new ALREADY_EXISTS contract.
+
+### 2026-08-06 — fix-mcp-strategy-lifecycle — ordering
+- **Pattern**: several concurrent features (086-089) all edited the agent's `client.py`/`tools.py`/`mcp-tools.md`/strat-lab skill; each required explicit merge-order awareness noted in context.md rather than discovery at merge time.
+- **Evidence**: context.md:30
+- **Rule it implies**: when a feature touches the MCP agent's shared client/tools/docs surface, check other in-flight features touching the same files and record merge-order in context.md during design, not at PR time.
+
+### 2026-08-06 — fix-mcp-strategy-lifecycle — design
+- **Pattern**: reactivation was shipped as its own enum verb (mirroring feature 088's `ManageSignalSource`) with an existence-check + atomic-catch pair for register, rather than an upsert.
+- **Evidence**: design.md:11,66-67,70-71
+- **Rule it implies**: for "bring back a soft-deleted/deactivated row" bugs, prefer an explicit reactivate verb + `ALREADY_EXISTS` existence-check-plus-unique-violation-catch pair over overloading the create/register verb.
+
+### 2026-08-06 — fix-mcp-screener-correctness — reuse
+- **Pattern**: when adding a threshold/filter over a model's output score, reuse the platform's existing normalization transform (`scoring.buy_threshold`) rather than comparing the raw score value.
+- **Evidence**: design.md:23-30, context.md execute session.
+- **Rule it implies**: any new score-based filter must locate and reuse the canonical score-transform helper, not assume raw score is comparable across contexts.
+
+### 2026-08-06 — fix-mcp-config-key-registry — design
+- **Pattern**: a TOCTOU existence-check-then-upsert race was left unlocked because `ON CONFLICT DO UPDATE` demotes the loser to a benign UPDATE.
+- **Evidence**: design.md "Open Risks — Concurrency (accepted)"; `configServiceImpl.ts` (context.md 2026-08-02).
+- **Rule it implies**: before locking a check-then-write race, verify whether the write's own conflict handling already makes the worst case harmless; document the accepted-risk reasoning since the code carries no trace of it.
+
+### 2026-08-06 — fix-mcp-config-key-registry — design
+- **Pattern**: when a fix narrows a proposed AC to only the write path, record *per-surface* rationale (boot safety vs. UX) even when both surfaces keep identical observable behavior (empty-return) — otherwise a later agent sees only uniform behavior and cannot tell it was chosen, not missed.
+- **Evidence**: design.md:65-70 vs recon.md:74.
+- **Rule it implies**: a design that narrows recon's recommended scope must state the rejected scope and its per-surface reason in context.md/design.md, not just the accepted scope.
+
+### 2026-08-06 — fix-mcp-writepath-authz — reuse
+- **Pattern**: Switching a Node test suite from lazy try/catch/strip-types execution to compile-first (`tsc && node --test dist/...`) can surface a real, previously-silent type error immediately upon switching.
+- **Evidence**: context.md:131-132 (notify Step 3).
+- **Rule it implies**: expect (and welcome) latent-bug failures when applying the 074 compile-first-harness fix elsewhere.
+
+### 2026-08-06 — fix-mcp-extract-credentials — design
+- **Pattern**: For a config/read call sitting **after** a commit or **outside** a narrow try-block (post-commit best-effort reads, registration side-reads), use broad `except Exception` rather than a narrow transport-only catch — a non-transport error there must not fail the already-completed primary operation.
+- **Evidence**: design.md:39-43,86-87; implementation-spec.md:140-144,148-152; context.md:134-137 (O2)
+- **Rule it implies**: when adding error handling to a best-effort/post-commit read, classify it explicitly as best-effort (broad catch + logged default) vs. must-surface (narrow catch + re-raise) — don't default to narrow.
+
+### 2026-08-06 — opportunity-universe-unification — reuse
+- **Pattern**: When Playwright e2e tests assert server-persisted mutation state against an in-process mock backend, use per-page `page.route()` isolation rather than a shared mock-server instance, because `fullyParallel` runs pollute shared state across specs.
+- **Evidence**: `docs/roadmap/features/097-opportunity-universe-unification/context.md:305`.
+- **Rule it implies**: stateful mock-backend fixtures backing parallel e2e specs must be request-scoped (per-page route handlers), not module-level singletons.
+
+### 2026-08-06 — broker-failure-simulator — design
+- **Pattern**: When a feature story originates from an external review (not internal backlog), run a lightweight feasibility re-check immediately after `/sdd-story` — reusing a prior feature's re-check method (context.md:19) — verifying prerequisite infra (CI service containers) and prerequisite production behavior (e.g., an automated code path the safety feature would protect) actually exist, before spending `/sdd-design` effort.
+- **Evidence**: docs/roadmap/features/103-broker-failure-simulator/context.md:17-26 (and referenced 102 context.md)
+- **Rule it implies**: For infra-heavy or safety-net test-tooling features sourced from external reviews, add a feasibility check-before-design step; demote early if a hard prerequisite (CI DB containers, an automated execution path) is absent.
+
+### 2026-08-06 — trading-state-machine-invariants — design
+- **Pattern**: A lightweight feasibility re-check right after `/sdd-story` (before investing in `/sdd-design`) caught a spec built on two facts the story text didn't verify: missing tooling in-stack and a nonexistent capability (autonomous order flow) to harden.
+- **Evidence**: docs/roadmap/features/104-trading-state-machine-invariants/context.md:17-24
+- **Rule it implies**: When a product spec originates from an external review/checklist rather than in-repo need, verify its premises against the current codebase (existing tooling, existing callers) before running `/sdd-design`, not during it.
+
+### 2026-08-06 — market-data-freshness-and-quality-gate — design
+- **Pattern**: When a feasibility check shows a proposed feature's valuable subset already fits an existing enforcement point, demote the standalone feature and record the fold-in as a recommendation in the *target* feature's context.md rather than losing the requirement.
+- **Evidence**: docs/roadmap/features/106-market-data-freshness-and-quality-gate/context.md:26-29 (folded into 023-position-sizing-engine/context.md)
+- **Rule it implies**: On demotion, always write the salvaged scope into the absorbing feature's context.md before archiving.
+
+### 2026-08-06 — trading-safety-dashboard-slos — reuse
+- **Pattern**: Before speccing a new `xstockstrat-ui` page for operator-facing metrics/SLOs, check whether the existing Grafana Cloud/OTel dashboard mechanism (`packages/otel/dashboards/`, feature 033) can host it as new panels instead — far cheaper than a new UI surface.
+- **Evidence**: docs/roadmap/features/108-trading-safety-dashboard-slos/context.md session 2026-08-04T01:00:00Z
+- **Rule it implies**: /sdd-design for any new ops-facing dashboard page must explicitly compare "new UI page" vs "extend existing Grafana/OTel dashboards" before choosing.
+
+### 2026-08-06 — live-trading-game-day — design
+- **Pattern**: A product spec adapted from an external best-practice/risk-review source (team-oriented ops cadence: on-call rotations, scheduled ceremonies) can be structurally unworkable for a solo-maintainer repo even when technically sound.
+- **Evidence**: docs/roadmap/features/109-live-trading-game-day/context.md:17-22 — demoted within an hour of story creation once checked against `git log` author list / absence of `CODEOWNERS`.
+- **Rule it implies**: When `/sdd-story` derives a spec from an external checklist/review, explicitly check the proposed operating cadence (rotations, multi-person ceremonies) against this repo's actual maintainer count before advancing past draft.
