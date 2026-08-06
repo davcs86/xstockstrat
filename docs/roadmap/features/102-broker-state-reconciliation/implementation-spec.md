@@ -1338,8 +1338,8 @@ internal-caller call
 
 **Instructions**:
 1. Define a threshold config key `trading.reconciliation.systemic_threshold_pct` (float, default
-   `0.5` — half or more of registered accounts erroring/unprotected in one tick), read via
-   `s.cfgW.GetFloat`.
+   `0.5` — half or more of registered accounts erroring/unprotected in one tick, **confirmed by the
+   user 2026-08-06**, see context.md), read via `s.cfgW.GetFloat`.
 2. In `reconcileTick` (Step 17), after the per-account loop, if the systemic-count / total-account-
    count for the tick meets or exceeds the threshold, call:
    ```go

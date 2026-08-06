@@ -208,3 +208,10 @@
     by Steps 6/8 — literal B3 trigger, low risk. — [ ] unaddressed
 - Overlap findings: same-function collision with 100/101/023 (see above, now tracked in
   `merge-order.md`).
+
+## Session 2026-08-06T00:00:00Z — cross-feature coordination pass (post-/sdd-spec)
+
+- User confirmed `trading.risk.max_unprotected_seconds` default stays **30s** (the implementation-spec's
+  own judgment call, not the P0 review's 5s example — accepted as more realistic for IBKR's
+  conid-resolution + 2-call submission path). No longer a provisional placeholder; `implementation-spec.md`
+  Step 8's Codebase Evidence updated to reflect the confirmation.

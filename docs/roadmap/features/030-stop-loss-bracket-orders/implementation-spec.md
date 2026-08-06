@@ -619,11 +619,10 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 - Config-read idiom to reuse: `s.cfgW.GetBool("trading.risk.max_position_pct", ...)`-style calls at
   `trading.go:1292` → for this feature: `s.cfgW.GetBool("trading.risk.bracket_orders_enabled", true)`,
   `s.cfgW.GetFloat("trading.risk.take_profit_rr_multiple", 2.0)`,
-  `s.cfgW.GetInt("trading.risk.max_unprotected_seconds", 30)` (keys seeded in Step 16; **the 30-second
-  default is a provisional placeholder** — `design.md`'s Open Risk explicitly leaves this a
-  product/ops decision, "not pinned by this design"; the P0 safety review's own example was 5 seconds,
-  which this spec judges too tight for IBKR's conid-resolution + 2-call submission path — confirm with
-  the user/ops before the production flag (Step 16) is ever flipped `true`).
+  `s.cfgW.GetInt("trading.risk.max_unprotected_seconds", 30)` (keys seeded in Step 16). **30 seconds
+  confirmed by the user 2026-08-06** (see context.md) — the P0 safety review's own example was 5
+  seconds, but this spec's judgment that 5s is too tight for IBKR's conid-resolution + 2-call
+  submission path was accepted; this is no longer a provisional placeholder.
 - `BrokerType` dispatch precedent: `commonv1.BrokerType(accountEntry.brokerType)` already resolved on
   the constructed `order` (023's unchanged order-construction block; current `trading.go:301`).
 - `broker.OrderRequest`/`Broker` extensions from Steps 4-7.

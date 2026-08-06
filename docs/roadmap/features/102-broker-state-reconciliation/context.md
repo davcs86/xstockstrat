@@ -210,3 +210,15 @@
   registry's step-category matrix but not itemized in the original product-spec table); kept
   Platform Lead (new `trading → config` outbound edge) and `xstockstrat-portfolio` owner (an active
   new `ListPositions` caller, even though no portfolio-service code changes in this spec).
+
+## Session 2026-08-06T00:00:00Z — cross-feature coordination pass (post-/sdd-spec)
+
+- Found and fixed a real migration-number collision the automated overlap scan missed: this feature's
+  Step 6 (`xstockstrat-config`'s `caller_identity` audit column) independently claimed `013`, the same
+  number `030`'s own `implementation-spec.md` (Step 16) had already claimed for
+  `013_trading_risk_bracket` — 030's claim was never cross-referenced when this step was specced.
+  Renumbered this feature's migration to `014_config_caller_identity`; `merge-order.md` updated with
+  the collision row.
+- User confirmed `trading.reconciliation.systemic_threshold_pct` default stays **0.5** (50% of
+  registered accounts erroring/unprotected in one tick) — the threshold for escalating from 030's
+  per-account halt mechanism to 100's platform-wide gate via this feature's internal-caller authz path.
