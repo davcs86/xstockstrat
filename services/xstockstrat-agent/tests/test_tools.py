@@ -24,6 +24,38 @@ def _tool_fn(server: MCPServer, name: str):
     return server._tool_manager.get_tool(name).fn
 
 
+class TestCallerIdentityHelpers:
+    """Direct coverage of the shared claims primitive (feature 111) — both
+    _caller_access_scope and _caller_user_id depend on it, so it is tested directly rather than
+    only transitively through one consumer (Constitution C-10)."""
+
+    def test_require_claims_raises_without_claims(self):
+        from app import tools as tools_mod
+
+        with pytest.raises(RuntimeError, match="Streamable HTTP"):
+            tools_mod._require_claims(_ctx(None), "emit_alert")
+
+    def test_caller_user_id_happy_path(self):
+        from app import tools as tools_mod
+
+        assert tools_mod._caller_user_id(_ctx(ADMIN), "emit_alert") == "u-1"
+
+    def test_caller_user_id_raises_on_empty_user_id(self):
+        from app import tools as tools_mod
+
+        claims = {"user_id": "", "email": "x@y.z", "roles": ["trader"], "aud": "http://x"}
+        with pytest.raises(RuntimeError):
+            tools_mod._caller_user_id(_ctx(claims), "emit_alert")
+
+    def test_caller_access_scope_still_raises_without_claims(self):
+        """Regression: the Step 1 refactor of _caller_access_scope onto _require_claims must not
+        change its observable raise behavior."""
+        from app import tools as tools_mod
+
+        with pytest.raises(RuntimeError, match="Streamable HTTP"):
+            tools_mod._caller_access_scope(_ctx(None), "manage_strategy")
+
+
 # Shared source list used by many tests
 _SOURCES = [
     {

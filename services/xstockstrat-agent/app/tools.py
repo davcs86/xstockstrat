@@ -74,14 +74,13 @@ def _claims_from_context(ctx: Context) -> dict | None:
     return claims if isinstance(claims, dict) else None
 
 
-def _caller_access_scope(ctx: Context, tool: str) -> int:
-    """Derive the REAL caller's ``x-access-scope`` from their verified claims.
+def _require_claims(ctx: Context, tool: str) -> dict:
+    """Materialize and validate the caller's claims, raising if absent.
 
-    Feature 073 introduced this for ``set_config``; feature 092 generalized it to every management
-    write tool (``manage_strategy``, ``manage_signal_source``, ``set_strategy_live``,
-    ``trigger_backfill``) so admin is *verified by the backend gate*, not asserted via a hardcoded
-    scope. Raises when no verified claims are present (the Streamable HTTP transport authenticates
-    the tool call itself; the legacy SSE transport that didn't was removed by feature 079)."""
+    Single choke point for "no verified claims on this request" — both
+    ``_caller_access_scope`` (role-derived ``x-access-scope``) and ``_caller_user_id``
+    (identity for ``emit_alert``/``manage_formula``) go through this so the raise condition
+    and message live in exactly one place."""
     claims = _claims_from_context(ctx)
     if claims is None:
         raise RuntimeError(
@@ -90,7 +89,37 @@ def _caller_access_scope(ctx: Context, tool: str) -> int:
             "caller's role cannot be established. (The legacy SSE transport, which never "
             "authenticated individual tool calls, was removed by feature 079.)"
         )
+    return claims
+
+
+def _caller_access_scope(ctx: Context, tool: str) -> int:
+    """Derive the REAL caller's ``x-access-scope`` from their verified claims.
+
+    Feature 073 introduced this for ``set_config``; feature 092 generalized it to every management
+    write tool (``manage_strategy``, ``manage_signal_source``, ``set_strategy_live``,
+    ``trigger_backfill``) so admin is *verified by the backend gate*, not asserted via a hardcoded
+    scope. Raises when no verified claims are present (the Streamable HTTP transport authenticates
+    the tool call itself; the legacy SSE transport that didn't was removed by feature 079)."""
+    claims = _require_claims(ctx, tool)
     return roles_to_access_scope(claims.get("roles"))
+
+
+def _caller_user_id(ctx: Context, tool: str) -> str:
+    """Derive the REAL caller's own user id from their verified claims, raising if empty.
+
+    A thin wrapper over ``_require_claims`` for tools (``emit_alert``, ``manage_formula``)
+    that need the caller's own identity rather than their access scope. Raises rather than
+    returning "" on a falsy claims user_id: notify's EmitAlertRequest.target_user_id == ""
+    means BROADCAST (packages/proto/notify/v1/notify.proto:34), so silently returning "" here
+    would make a caller who explicitly chose not to broadcast broadcast anyway."""
+    claims = _require_claims(ctx, tool)
+    user_id = claims.get("user_id")
+    if not user_id:
+        raise RuntimeError(
+            f"{tool} requires the caller's verified claims to carry a non-empty user_id, "
+            "but none was present. Refusing rather than deriving an empty identity."
+        )
+    return user_id
 
 
 def _grpc_error_message(exc: grpc.aio.AioRpcError, not_found: str = "not found") -> str:
