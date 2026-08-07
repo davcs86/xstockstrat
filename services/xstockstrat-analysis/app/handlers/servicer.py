@@ -1050,6 +1050,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             definition.cooldown_days if definition.HasField("cooldown_days") else None,
             self._cfg.get_int("analysis.strategy.default_cooldown_days", 31),
         )
+        # Exit cooldown (feature 116) — minimum holding period. Ephemeral per-RunBacktest state
+        # (FR-5/FR-7), symmetric to the re-entry cooldown above. get_int_present (not get_int) —
+        # a configured 0 is a legitimate, meaningful default and must not be zero-trapped.
+        exit_cooldown_days = effective_cooldown_days(
+            definition.exit_cooldown_days if definition.HasField("exit_cooldown_days") else None,
+            self._cfg.get_int_present("analysis.strategy.default_exit_cooldown_days", 0),
+        )
         last_exit_time = None
 
         for i in range(max(1, trade_start_idx), n):
@@ -1078,7 +1085,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     entry_time = bar.time
                     equity -= cost
                     bar_action = analysis_pb2.BAR_ACTION_ENTER_LONG
-            elif position > 0.0 and decision.exit:
+            elif (
+                position > 0.0
+                and decision.exit
+                and not is_cooldown_active(
+                    entry_time.ToDatetime(tzinfo=UTC) if entry_time is not None else None,
+                    bar.time.ToDatetime(tzinfo=UTC),
+                    exit_cooldown_days,
+                )
+            ):
                 fill_price = price * (1 - slippage)
                 proceeds = position * fill_price * (1 - commission)
                 pnl = proceeds - (position * entry_price * (1 + commission))

@@ -36,6 +36,9 @@ def make_servicer() -> AnalysisServicer:
     cfg.get_float = MagicMock(side_effect=lambda key, default=0.0: default)
     cfg.get_str = MagicMock(side_effect=lambda key, default="": default)
     cfg.get_int = MagicMock(side_effect=lambda key, default=0: default)
+    # feature 116: get_int_present (not get_int) is used for exit_cooldown_days' platform
+    # default, since a configured 0 is meaningful and must not be zero-trapped.
+    cfg.get_int_present = MagicMock(side_effect=lambda key, default: default)
     return AnalysisServicer(
         cfg,
         marketdata_channel=MagicMock(),
@@ -2529,6 +2532,50 @@ class TestBacktestCooldown:
         )
         result = await svc.ManageStrategy(req, context=_admin_ctx())
         assert result.strategy_id == "sma_x"
+
+    @pytest.mark.asyncio
+    async def test_exit_platform_default_zero_is_a_noop(self):
+        """AC-2: exit_cooldown_days unset (platform default 0) behaves exactly as before."""
+        svc = make_servicer()
+        decisions = _decisions(40, entries=(1,), exits=(2,))
+        definition = _valid_definition()  # exit_cooldown_days unset → default 0
+        trades, _, _, _ = await _run_evaluated(svc, definition, decisions, 40)
+        assert len(trades) == 1
+        assert trades[0].exit_time.seconds == _cooldown_bar(100.0, 2).time.seconds
+
+    @pytest.mark.asyncio
+    async def test_exit_suppressed_while_min_hold_active(self):
+        """An exit signal inside the minimum-hold window is gated; the next one fires."""
+        svc = make_servicer()
+        definition = _valid_definition()
+        definition.exit_cooldown_days = 5
+        # entry@1, exit signal@2 (1 day after entry — inside the 5-day min hold, gated),
+        # exit signal@10 (9 days after entry — window elapsed, fires).
+        decisions = _decisions(40, entries=(1,), exits=(2, 10))
+        trades, _, _, _ = await _run_evaluated(svc, definition, decisions, 40)
+        assert len(trades) == 1
+        assert trades[0].exit_time.seconds == _cooldown_bar(100.0, 10).time.seconds
+
+    @pytest.mark.asyncio
+    async def test_exit_allowed_once_min_hold_elapses(self):
+        """An exit signal exactly at the minimum-hold boundary fires (half-open window)."""
+        svc = make_servicer()
+        definition = _valid_definition()
+        definition.exit_cooldown_days = 5
+        # entry@1, exit signal@6 — exactly 5 days after entry, the boundary is allowed.
+        decisions = _decisions(40, entries=(1,), exits=(6,))
+        trades, _, _, _ = await _run_evaluated(svc, definition, decisions, 40)
+        assert len(trades) == 1
+        assert trades[0].exit_time.seconds == _cooldown_bar(100.0, 6).time.seconds
+
+    def test_fingerprint_changes_with_exit_cooldown_days(self):
+        """AC-9 (FR-9): differing exit_cooldown_days yield different fingerprints."""
+        from app.handlers.servicer import _definition_fingerprint
+
+        base = {"entry_rule": "x"}
+        assert _definition_fingerprint(base) != _definition_fingerprint(
+            {**base, "exit_cooldown_days": 14}
+        )
 
 
 # ---------------------------------------------------------------------------

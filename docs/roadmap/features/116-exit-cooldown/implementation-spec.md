@@ -304,7 +304,7 @@ ruff check . && ruff format --check .
 
 ### Step 6 — service: backtest engine exit-cooldown gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -369,7 +369,7 @@ exit-side red/green pair.)
 
 ### Step 7 — test: paired with Step 6
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -1460,6 +1460,35 @@ cd packages/proto && buf lint && buf breaking --against ".git#branch=feature/exi
 ---
 
 ## Deviation Log
+### Deviation: Step 6 — service: backtest engine exit-cooldown gate
+**Spec said**: gate the exit branch with
+`is_cooldown_active(entry_time, bar.time.ToDatetime(tzinfo=UTC), exit_cooldown_days)`, treating
+`entry_time` as already a Python `datetime` (mirroring how `last_exit_time` is used at the
+entry-side gate).
+**Actual**: `entry_time` is actually a raw `google.protobuf.Timestamp` at this point in the
+function (`entry_time = bar.time`, not `.ToDatetime(...)`) — unlike `last_exit_time`, which the
+existing code explicitly converts (`last_exit_time = bar.time.ToDatetime(tzinfo=UTC)`). Passing
+the raw Timestamp into `is_cooldown_active` crashed with `AttributeError: tzinfo` inside
+`_require_aware`. Fixed by converting at the call site:
+`entry_time.ToDatetime(tzinfo=UTC) if entry_time is not None else None` — `entry_time` itself is
+left untouched everywhere else in the function (it is still needed as a raw `Timestamp` for
+`entry_ts.CopyFrom(entry_time)` later).
+**Reason**: the spec's Codebase Evidence cited `entry_time` as already ephemeral/tracked but did
+not verify its exact Python type at the exit-branch call site — a `path:line` citation confirmed
+the variable's existence and lifecycle, not its type. Caught immediately by the paired test's RED
+run turning into a crash instead of a clean pass/fail on the assertion.
+
+### Deviation: Step 7 — test: paired with Step 6
+**Spec said**: the new tests reuse the existing `make_servicer()` helper unchanged.
+**Actual**: added `cfg.get_int_present = MagicMock(side_effect=lambda key, default: default)` to
+`make_servicer()` (`tests/test_analysis_servicer.py`), alongside the existing `get_float`/
+`get_str`/`get_int` stubs.
+**Reason**: `make_servicer()`'s mock `cfg` only stubbed `get_int`/`get_float`/`get_str` — it
+predates `get_int_present` (introduced by feature 097). Without stubbing it, `self._cfg.
+get_int_present(...)` returned an unconfigured `MagicMock`, and `timedelta(days=MagicMock)`
+raised `TypeError`. In scope: `make_servicer()` lives in `tests/test_analysis_servicer.py`,
+already this step's own `**Files**` entry.
+
 
 ### Deviation: Step 1 — proto: add `exit_cooldown_days` field
 **Spec said**: `buf breaking --against ".git#branch=feature/exit-cooldown"`

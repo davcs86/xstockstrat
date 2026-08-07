@@ -382,3 +382,26 @@ overwrite the manually-seeded `_last_state[key]` back to `False`, breaking all t
 Verification claims these tests "must stay green... reproduces byte-for-byte" — that claim needs
 re-checking against this scenario when Step 10 is reached; likely fix is seeding
 `loop._replayed.add(key)` alongside `loop._last_state[key] = True` in each test's setup.
+
+### Step 6 — service: backtest engine exit-cooldown gate [done]
+- Added `exit_cooldown_days` resolution (via `get_int_present`, not `get_int`) alongside the
+  existing `cooldown_days` resolution; gated the exit-fill branch with `is_cooldown_active`
+  anchored on `entry_time`.
+- Real bug caught by the RED run: `entry_time` at this point is a raw proto `Timestamp`, not a
+  `datetime` (unlike `last_exit_time`, which the existing code explicitly converts) — fixed with
+  a call-site `.ToDatetime(tzinfo=UTC)` conversion, `entry_time` itself left untouched elsewhere
+  in the function (still needed as a raw Timestamp for the Trade proto). See Deviation Log.
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: see Deviation Log ("Step 6").
+
+### Step 7 — test: paired with Step 6 [done]
+- Added 4 tests to `TestBacktestCooldown`: platform-default-zero-is-a-noop, suppressed-while-
+  min-hold-active, allowed-once-elapsed (half-open boundary), fingerprint-changes.
+- TDD: RED confirmed on `test_exit_suppressed_while_min_hold_active` (the one assertion that
+  actually depends on the new gate — the other 3 new tests happen to produce the same result
+  gated or ungated, which is expected and still valid coverage, not a red-N/A situation for the
+  step as a whole). GREEN after Step 6 (with one test-infra fix along the way — `make_servicer()`
+  didn't stub `get_int_present`, causing a `TypeError` on `timedelta(days=MagicMock)`; added the
+  stub). Final: 438/438 full suite, 82% coverage, ruff clean.
+- Files modified: `services/xstockstrat-analysis/tests/test_analysis_servicer.py`
+- Deviations: see Deviation Log ("Step 7").
