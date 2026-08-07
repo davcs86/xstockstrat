@@ -58,7 +58,7 @@ func main() {
 
 	// Block until config snapshot received — required before accepting traffic.
 	slog.Info("connecting to config service", "endpoint", cfg.ConfigEndpoint)
-	cfgWatcher, err := config.NewWatcher(cfg.ConfigEndpoint, "trading")
+	cfgWatcher, err := config.NewWatcher(cfg.ConfigEndpoint, "trading", cfg.ApplicationEnv, cfg.TradingMode)
 	if err != nil {
 		slog.Error("config watcher init failed", "error", err)
 		os.Exit(1)
