@@ -378,7 +378,7 @@ unchanged in behavior.
 
 ### Step 5 — service: `EnvModeSwitcher` gating (`config-ui/page.tsx`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/page.tsx` — modify
@@ -451,7 +451,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 6 — test: `env-mode-switcher.spec.ts` rewrite
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/config-ui/env-mode-switcher.spec.ts` — modify

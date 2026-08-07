@@ -213,3 +213,17 @@ Tooling setup (steps 1-8, all `xstockstrat-ui`): node ✓ v22.22.2 · pnpm ✓ 9
   `services/xstockstrat-ui/e2e/config-ui/api-smoke.spec.ts`,
   `services/xstockstrat-ui/playwright.config.ts`
 - Deviations: none
+
+### Step 5 — service: `EnvModeSwitcher` gating (`config-ui/page.tsx`) [done]
+- TDD cycle run test-first: wrote Step 6's rewritten tests, `git stash`'d Step 5's `page.tsx`
+  change to capture RED against the pre-Step-5 tree — both rewritten tests failed for the right
+  reason (`production` still resolved as a link, count 1 not 0), the 4 unaffected tests passed.
+  Restored Step 5's change (`git stash pop`), re-ran — 7/7 passed (green). `pnpm run lint` clean.
+- Files modified: `services/xstockstrat-ui/src/app/config-ui/page.tsx`
+- Deviations: none
+
+### Step 6 — test: `env-mode-switcher.spec.ts` rewrite [done]
+- Built alongside Step 5 for TDD test-first ordering (see Step 5 entry for the red/green run via
+  `git stash`).
+- Files modified: `services/xstockstrat-ui/e2e/config-ui/env-mode-switcher.spec.ts`
+- Deviations: none
