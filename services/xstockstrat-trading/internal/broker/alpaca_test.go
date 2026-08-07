@@ -459,3 +459,100 @@ func TestReplaceOrder_Alpaca(t *testing.T) {
 		t.Errorf("expected status new, got %s", order.Status)
 	}
 }
+
+// TestSubmitOrder_BracketAttachesAtomically (feature 030): a non-zero BracketStopPrice
+// requests an Alpaca-native bracket order, attached at entry submission.
+func TestSubmitOrder_BracketAttachesAtomically(t *testing.T) {
+	var gotBody map[string]interface{}
+
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(broker.AlpacaOrder{
+			ID:     "alpaca-order-bracket-1",
+			Status: "new",
+			Legs: []struct {
+				ID   string `json:"id"`
+				Type string `json:"type"`
+			}{
+				{ID: "leg-stop-1", Type: "stop"},
+				{ID: "leg-tp-1", Type: "limit"},
+			},
+		})
+	})
+	defer srv.Close()
+
+	c := broker.NewClient(broker.ClientConfig{
+		APIKey: "test-key", APISecret: "test-secret", PaperURL: srv.URL, Paper: true,
+	})
+
+	order, err := c.SubmitOrder(context.Background(), broker.OrderRequest{
+		Symbol: "AAPL", Side: "buy", OrderType: "market", Qty: 10,
+		BracketStopPrice: 178.0, BracketTakeProfitPrice: 210.0,
+	})
+	if err != nil {
+		t.Fatalf("SubmitOrder failed: %v", err)
+	}
+
+	orderClass, _ := gotBody["order_class"].(string)
+	if orderClass != "bracket" {
+		t.Errorf("expected order_class \"bracket\", got %v", gotBody["order_class"])
+	}
+	stopLoss, _ := gotBody["stop_loss"].(map[string]interface{})
+	if stopLoss == nil || stopLoss["stop_price"] != "178" {
+		t.Errorf("expected stop_loss.stop_price \"178\", got %v", gotBody["stop_loss"])
+	}
+	takeProfit, _ := gotBody["take_profit"].(map[string]interface{})
+	if takeProfit == nil || takeProfit["limit_price"] != "210" {
+		t.Errorf("expected take_profit.limit_price \"210\", got %v", gotBody["take_profit"])
+	}
+	if order.StopLegOrderID != "leg-stop-1" {
+		t.Errorf("expected StopLegOrderID leg-stop-1, got %s", order.StopLegOrderID)
+	}
+	if order.TakeProfitLegOrderID != "leg-tp-1" {
+		t.Errorf("expected TakeProfitLegOrderID leg-tp-1, got %s", order.TakeProfitLegOrderID)
+	}
+}
+
+// TestSubmitOrder_BracketWithNoTakeProfit confirms take_profit is omitted from the
+// request JSON (omitempty) when BracketTakeProfitPrice is 0, and no legs are parsed
+// from a response that carries none.
+func TestSubmitOrder_BracketWithNoTakeProfit(t *testing.T) {
+	var gotBody map[string]interface{}
+
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(broker.AlpacaOrder{ID: "alpaca-order-bracket-2", Status: "new"})
+	})
+	defer srv.Close()
+
+	c := broker.NewClient(broker.ClientConfig{
+		APIKey: "test-key", APISecret: "test-secret", PaperURL: srv.URL, Paper: true,
+	})
+
+	order, err := c.SubmitOrder(context.Background(), broker.OrderRequest{
+		Symbol: "AAPL", Side: "buy", OrderType: "market", Qty: 10, BracketStopPrice: 178.0,
+	})
+	if err != nil {
+		t.Fatalf("SubmitOrder failed: %v", err)
+	}
+	if _, ok := gotBody["take_profit"]; ok {
+		t.Errorf("take_profit should be omitted when BracketTakeProfitPrice is 0, got %v", gotBody["take_profit"])
+	}
+	if order.StopLegOrderID != "" || order.TakeProfitLegOrderID != "" {
+		t.Errorf("expected no leg IDs when response has no legs, got stop=%s tp=%s", order.StopLegOrderID, order.TakeProfitLegOrderID)
+	}
+}
+
+// TestSubmitBracketLegs_AlpacaUnsupported confirms Alpaca's bracket attaches at entry
+// submission, never via a follow-up SubmitBracketLegs call.
+func TestSubmitBracketLegs_AlpacaUnsupported(t *testing.T) {
+	c := broker.NewClient(broker.ClientConfig{APIKey: "test-key", APISecret: "test-secret", PaperURL: "http://unused", Paper: true})
+	_, err := c.SubmitBracketLegs(context.Background(), "brk-1", "coid-1", broker.BracketLegsRequest{
+		Symbol: "AAPL", Side: "sell", Qty: 10, StopPrice: 178.0,
+	})
+	if err == nil {
+		t.Fatal("expected a non-nil error, got nil")
+	}
+}

@@ -64,7 +64,7 @@ func TestNewTradingService_MarketDataClientNonNil(t *testing.T) {
 		PortfolioEndpoint:  "localhost:0",
 		MarketDataEndpoint: "localhost:0",
 	}
-	svc, err := NewTradingService(cfg, &config.Watcher{}, nil, nil, nil, "")
+	svc, err := NewTradingService(cfg, &config.Watcher{}, nil, nil, nil, nil, "")
 	if err != nil {
 		t.Fatalf("NewTradingService returned error: %v", err)
 	}

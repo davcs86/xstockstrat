@@ -80,6 +80,9 @@ type TradingService struct {
 	// field added here (Step 9) so order_intent.go's sweeper compiles; NewTradingService's
 	// constructor parameter and main.go wiring land in Step 11.
 	orderIntentRepo repository.OrderIntentRepository
+	// bracketRepo persists the per-order bracket (stop-loss/take-profit) state machine
+	// (feature 030).
+	bracketRepo repository.BracketRepository
 	// In-memory order store for active fan-out and fill polling.
 	// Orders are also written to DB on every state change.
 	orders map[string]*tradingv1.Order
@@ -110,6 +113,7 @@ func NewTradingService(
 	accountRepo repository.AccountRepository,
 	repo *repository.TradingRepo,
 	orderIntentRepo repository.OrderIntentRepository,
+	bracketRepo repository.BracketRepository,
 	encKey string,
 ) (*TradingService, error) {
 	ledgerConn, err := grpc.NewClient(cfg.LedgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
@@ -140,6 +144,7 @@ func NewTradingService(
 		marketdata:       marketdatav1.NewMarketDataServiceClient(marketdataConn),
 		repo:             repo,
 		orderIntentRepo:  orderIntentRepo,
+		bracketRepo:      bracketRepo,
 		orders:           make(map[string]*tradingv1.Order),
 		subs:             make(map[string]chan *tradingv1.Order),
 		credStatus:       make(map[string]int32),

@@ -88,11 +88,23 @@ type AlpacaOrder struct {
 	StopPrice      string `json:"stop_price"`
 	CreatedAt      string `json:"created_at"`
 	UpdatedAt      string `json:"updated_at"`
+	// Legs carries a bracket order's child (stop-loss/take-profit) order IDs on the
+	// entry order's own submit response (feature 030).
+	Legs []struct {
+		ID   string `json:"id"`
+		Type string `json:"type"` // "stop", "limit"
+	} `json:"legs"`
 }
 
 // SubmitOrder places an order via POST /v2/orders.
 // Returns the normalized broker order including the broker-assigned order ID.
 func (c *Client) SubmitOrder(ctx context.Context, req OrderRequest) (*BrokerOrder, error) {
+	type stopLossLeg struct {
+		StopPrice string `json:"stop_price"`
+	}
+	type takeProfitLeg struct {
+		LimitPrice string `json:"limit_price"`
+	}
 	alpacaReq := struct {
 		Symbol        string `json:"symbol"`
 		Qty           string `json:"qty"`
@@ -104,6 +116,12 @@ func (c *Client) SubmitOrder(ctx context.Context, req OrderRequest) (*BrokerOrde
 		TrailPrice    string `json:"trail_price,omitempty"`
 		TrailPercent  string `json:"trail_percent,omitempty"`
 		ClientOrderID string `json:"client_order_id,omitempty"`
+		// OrderClass/StopLoss/TakeProfit request an Alpaca-native bracket order
+		// (feature 030) — distinct from the plain top-level StopPrice above, which
+		// carries a STOP/STOP_LIMIT entry's own real broker-trigger price.
+		OrderClass string         `json:"order_class,omitempty"`
+		StopLoss   *stopLossLeg   `json:"stop_loss,omitempty"`
+		TakeProfit *takeProfitLeg `json:"take_profit,omitempty"`
 	}{
 		Symbol:        req.Symbol,
 		Qty:           strconv.FormatFloat(req.Qty, 'f', -1, 64),
@@ -124,6 +142,13 @@ func (c *Client) SubmitOrder(ctx context.Context, req OrderRequest) (*BrokerOrde
 	}
 	if req.TrailPercent != 0 {
 		alpacaReq.TrailPercent = strconv.FormatFloat(req.TrailPercent, 'f', -1, 64)
+	}
+	if req.BracketStopPrice != 0 {
+		alpacaReq.OrderClass = "bracket"
+		alpacaReq.StopLoss = &stopLossLeg{StopPrice: strconv.FormatFloat(req.BracketStopPrice, 'f', -1, 64)}
+		if req.BracketTakeProfitPrice != 0 {
+			alpacaReq.TakeProfit = &takeProfitLeg{LimitPrice: strconv.FormatFloat(req.BracketTakeProfitPrice, 'f', -1, 64)}
+		}
 	}
 
 	body, err := json.Marshal(alpacaReq)
@@ -171,7 +196,18 @@ func (c *Client) SubmitOrder(ctx context.Context, req OrderRequest) (*BrokerOrde
 	if alpacaResp.FilledQty != "" {
 		filledQty, _ = strconv.ParseFloat(alpacaResp.FilledQty, 64)
 	}
-	return &BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status, FilledQty: filledQty, FilledAvgPrice: filledAvgPrice}, nil
+	out := &BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status, FilledQty: filledQty, FilledAvgPrice: filledAvgPrice}
+	// A bracket order's response nests its child (stop-loss/take-profit) leg IDs under
+	// "legs" on the same entry order object (feature 030).
+	for _, leg := range alpacaResp.Legs {
+		switch leg.Type {
+		case "stop":
+			out.StopLegOrderID = leg.ID
+		case "limit":
+			out.TakeProfitLegOrderID = leg.ID
+		}
+	}
+	return out, nil
 }
 
 // CancelOrder cancels a broker order via DELETE /v2/orders/{order_id}.
@@ -434,6 +470,13 @@ func (c *Client) ValidateCredentials(ctx context.Context) error {
 func (c *Client) setAuthHeaders(req *http.Request) {
 	req.Header.Set("APCA-API-KEY-ID", c.cfg.APIKey)
 	req.Header.Set("APCA-API-SECRET-KEY", c.cfg.APISecret)
+}
+
+// SubmitBracketLegs is unsupported for Alpaca — its bracket attaches atomically at
+// entry submission (see SubmitOrder's order_class/stop_loss/take_profit fields), not
+// as a follow-up call (feature 030).
+func (c *Client) SubmitBracketLegs(ctx context.Context, parentBrokerOrderID, parentClientOrderID string, legs BracketLegsRequest) (*BracketLegsResponse, error) {
+	return nil, fmt.Errorf("alpaca: bracket legs attach atomically at order submission; SubmitBracketLegs is not supported")
 }
 
 var _ Broker = (*Client)(nil)
