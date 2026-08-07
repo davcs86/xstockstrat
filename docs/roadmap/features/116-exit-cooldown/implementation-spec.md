@@ -527,7 +527,7 @@ ruff check . && ruff format --check .
 
 ### Step 10 — service: live-loop shared transition core + entry-cooldown state + replay
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/live_loop.py` — modify
@@ -694,7 +694,7 @@ parity tests.)
 
 ### Step 11 — test: paired with Step 10 (the three required tests + parity)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_live_loop.py` — modify
@@ -1523,3 +1523,75 @@ gate). Migration 012 had not yet been applied to any real database (still on a f
 never merged) when this was caught, so revising it is not an F-01 violation — only an already-
 `main-dev`-committed migration is immutable. Ledger-worthy: see the `insights.md`/`fails.md`
 write-up planned for this feature's archival.
+
+### Deviation: Step 10 — service: live-loop shared transition core + entry-cooldown state + replay
+**Spec said**: `_replay_state(bars, decisions, cooldown_days, exit_cooldown_days)` folds
+`_apply_transition` starting unconditionally from `(False, None, None)` for any key reached for
+the first time since restart.
+**Actual**: added two optional keyword parameters, `initial_entry_time` / `initial_last_exit_at`
+(both default `None`), and start the fold from those instead of a hardcoded `None, None`. The
+`_eval_pair` call site seeds them from `self._last_entry_at.get(key)` /
+`self._last_exit_at.get(key)` — i.e. whatever `hydrate_cooldowns()` already loaded (or a prior
+cycle already resolved) for this key — before the replay runs.
+**Reason**: an unconditional blank fold silently regresses an already-known anchor back to `None`
+whenever the replay window itself shows no crossing — the common case for a short/empty replay
+window (a restart moments after boot, before `_LOOKBACK_DAYS` worth of bars accumulate any
+transition) or a real transition that predates the 365-day lookback entirely. Concretely: a pair
+hydrated with a real `last_exit_at` from the DB would have that anchor wiped back to `None` on the
+very first `_eval_pair` call after restart, re-opening the re-entry-cooldown gate a full cycle
+early. Caught while implementing (not surfaced by design.md or any of the 6 design-debate rounds,
+which described the fold only in terms of the replay window's own bars, never in terms of what the
+loop already knows going in). `in_position` itself is *not* seeded this way and still always starts
+`False` — only the durable timestamp anchors have a pre-restart source of truth to protect;
+`in_position` is exactly the restart-durability gap bar-replay exists to close. Confirmed via
+`test_replay_seeded_steady_state_emits_no_alert` (Step 11) and the general fold-equivalence proof
+in `test_replay_state_matches_sequential_apply_transition`.
+
+### Deviation: Step 10/11 — pre-existing `TestLiveEvaluationLoopCooldown` tests broke under replay
+**Spec said**: Step 10/11 only add new code/tests; the existing `TestLiveEvaluationLoopCooldown`
+class (feature 069) is untouched.
+**Actual**: 4 of those pre-existing tests required fixes once `_eval_pair`'s replay-then-read block
+landed:
+- `test_entry_suppressed_inside_cooldown_window` — assertion `assert key not in loop._last_state`
+  no longer holds, because replay now explicitly writes `_last_state[key]` for any first-seen key
+  (even a no-op replay writes `False`). Changed to `assert loop._last_state.get(key) is False`
+  (same behavior under test — suppression — asserted the way the new code actually expresses it).
+- `test_exit_persists_cooldown_via_repo`, `test_exit_persists_even_when_alert_throttled` — each
+  manually set `loop._last_state[key] = True` without seeding `loop._replayed`, so on the next
+  `_eval_pair` call the (empty, single-mock-bar) replay window would run and reset `in_position`
+  back to `False` before the exit branch could fire. Fixed by seeding `loop._replayed.add(key)` in
+  each test (simulating "already resolved this cycle," which is what the test's manual `_last_state`
+  seed was already trying to represent).
+- `test_write_cooldown_failure_never_propagates` — same root cause as the two above, but this one
+  was a **false-positive green**: it passed even before the fix, because the reset-to-`False`
+  meant the exit branch (and thus `upsert_exit`, the very call the test claims to exercise) never
+  ran at all — the test was asserting "no exception propagates" against code that was never
+  reached. Fixed with the same `_replayed.add(key)` seed, and added a new
+  `repo.upsert_exit.assert_awaited_once()` assertion so a future regression that silently
+  short-circuits the exit branch again fails loudly instead of passing vacuously.
+- All three of the above also needed `loop._last_entry_at[key]` seeded to a time before the test's
+  bar — without it, the new skip-until-known guard (Step 10) correctly treats the pair as gated
+  (entry anchor unresolved) even with `_replayed` seeded, which is new-and-correct behavior these
+  069-era tests had no way to anticipate.
+**Reason**: none of these are spec defects — Step 10's replay mechanism is new, cross-cutting
+state-machine behavior that the 069-era tests' hand-seeded mock state didn't account for. Caught by
+running the full `test_live_loop.py` suite (not just the new class) immediately after Step 10's
+implementation, per this session's TDD-gate discipline. The false-positive-green case in
+`test_write_cooldown_failure_never_propagates` is the more general, ledger-worthy lesson: seeding
+mock state that mimics an old code path's *outcome* (here, `_last_state[key] = True`) instead of the
+state the *new* code path actually needs to reach the same outcome can leave a test silently
+exercising nothing — see `docs/roadmap/ledger/fails.md` ("2026-08-07 — exit-cooldown —
+test-infra").
+
+### Deviation: Step 10 — `_make_loop()` missing `get_int_present` stub
+**Spec said**: `_make_loop()` (`tests/test_live_loop.py`) needs no change for Step 10/11 beyond
+adding the new test class.
+**Actual**: added `cfg.get_int_present = MagicMock(side_effect=lambda key, default: default)` to
+`_make_loop()`, the same fix Step 7 already made to `make_servicer()` in
+`tests/test_analysis_servicer.py`.
+**Reason**: identical root cause to the Step 7 deviation above — `_make_loop()`'s mock `cfg`
+predates `get_int_present` (feature 097) and only stubbed `get_int`/`get_float`/`get_str`. Once
+`_eval_pair` started calling `self._cfg.get_int_present("analysis.strategy.default_exit_cooldown_days",
+0)` (Step 10), the unconfigured `MagicMock` return value hit `timedelta(days=MagicMock)` inside
+`effective_cooldown_days` → `TypeError`, exactly as it did in Step 7. In scope: `_make_loop()` lives
+in `tests/test_live_loop.py`, already Step 11's own `**Files**` entry.

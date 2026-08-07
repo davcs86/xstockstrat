@@ -747,3 +747,27 @@ ambiguity is logged here).
   UPDATE branch of an upsert; the INSERT branch is a different code path with different
   constraints and needs its own check. Same family as the 2026-07-29 (080) "absence claim"
   pattern, applied to schema constraints instead of code assumptions.
+
+### 2026-08-07 — exit-cooldown — test-infra
+- **Mistake**: Adding a new cross-cutting state-machine mechanism (bar-replay-on-first-seen-key)
+  to an already-tested class silently turned one existing, passing test
+  (`test_write_cooldown_failure_never_propagates`) into a false-positive green: the test
+  hand-seeded `loop._last_state[key] = True` to represent "already in position" without also
+  seeding the new `_replayed` set, so the new replay step ran on an empty bar window, reset
+  `in_position` back to `False`, and the exit branch the test claimed to exercise (`upsert_exit`,
+  the write-failure path under test) never ran at all. The test still asserted "no exception
+  propagates," which trivially held for code that was never reached — it kept passing while
+  testing nothing.
+- **Evidence**: `docs/roadmap/features/116-exit-cooldown/implementation-spec.md` Deviation Log,
+  "Step 10/11" ("pre-existing `TestLiveEvaluationLoopCooldown` tests broke under replay");
+  `services/xstockstrat-analysis/tests/test_live_loop.py::TestLiveEvaluationLoopCooldown::test_write_cooldown_failure_never_propagates`
+  (fix added `repo.upsert_exit.assert_awaited_once()`).
+- **Rule it implies**: when a test seeds mock/fixture state to represent an *outcome* of a prior
+  code path (e.g. `_last_state[key] = True` standing in for "replay already resolved this key"),
+  adding new state-producing machinery upstream of that outcome (a replay step, a hydration step)
+  can silently short-circuit the path the test exists to cover. A test whose seeded state
+  represents an outcome rather than a cause is fragile to exactly this kind of change — prefer
+  seeding the actual precondition state (here, `_replayed.add(key)`) so new upstream logic can't
+  quietly bypass the assertion, and add a positive "the thing under test actually ran"
+  assertion (a mock call-count check) alongside any negative "no exception" assertion so a
+  silent bypass fails loudly instead of passing vacuously.

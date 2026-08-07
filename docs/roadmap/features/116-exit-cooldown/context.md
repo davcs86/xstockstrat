@@ -427,3 +427,56 @@ re-checking against this scenario when Step 10 is reached; likely fix is seeding
   no deviation.
 - Files modified: `services/xstockstrat-analysis/tests/test_analysis_servicer.py`
 - Deviations: none
+
+### Step 10 — service: live-loop shared transition core + entry-cooldown state + replay [done]
+- Added module-level `_apply_transition` (the single shared edge-triggered core for both
+  `_eval_pair` and `_replay_state`) and `_replay_state` (folds `_apply_transition` over a key's
+  historical bars on first-seen-since-restart). `__init__` gained `_last_entry_at`, `_replayed`,
+  `_logged_unresolved`. `hydrate_cooldowns` now also loads `last_entry_at` (tolerant `.get`, not
+  `r[...]`, for pre-116 row shapes). `_eval_pair` rewritten: replay-then-read (never read-then-
+  replay) → `_apply_transition` → on `trigger is None`, a once-per-key diagnostic log if the pair
+  is known-open with an unresolved entry anchor, else silent return (steady state or a gated
+  attempt); on a real trigger, write the matching durable anchor (`_write_cooldown` for exit,
+  new `_write_entry_cooldown` for entry) before the existing alert-throttle block.
+- **Real correctness gap found and fixed, beyond the literal spec text**: `_replay_state` must
+  seed its fold from the caller's already-known `last_exit_at`/`last_entry_at` anchors
+  (`initial_entry_time`/`initial_last_exit_at` params), not an unconditional `(False, None,
+  None)` — an unconditional blank fold would silently regress a real hydrated anchor back to
+  `None` whenever the replay window shows no crossing (short/empty window right after boot, or a
+  transition older than the 365-day lookback). Not caught by any of the 6 design-debate rounds.
+  See Deviation Log ("Step 10").
+- **4 pre-existing `TestLiveEvaluationLoopCooldown` tests broke or became false-positive greens**
+  once replay landed — 1 assertion rewrite, 2 needed `loop._replayed.add(key)` seeded, 1 of those
+  two (`test_write_cooldown_failure_never_propagates`) was silently exercising nothing before the
+  fix and gained a new `assert_awaited_once()` to prove real coverage; all 3 also needed
+  `loop._last_entry_at[key]` seeded once the skip-until-known guard correctly started gating on
+  it. All 4 are legitimate consequences of new cross-cutting state-machine behavior, not spec
+  defects. See Deviation Log ("Step 10/11").
+- `_make_loop()` was missing the `get_int_present` stub (same root cause as Step 7's
+  `make_servicer()` fix) — added it. See Deviation Log ("Step 10").
+- Files modified: `services/xstockstrat-analysis/app/engine/live_loop.py`
+- Deviations: see Deviation Log ("Step 10", "Step 10/11").
+
+### Step 11 — test: paired with Step 10 (the three required tests + parity) [done]
+- Added `TestLiveEvaluationLoopExitCooldown` (8 tests): min-hold suppression/elapse, the three
+  design.md-required tests (`test_exit_suppressed_when_entry_time_unresolved`,
+  `test_exit_fires_once_entry_time_resolves`,
+  `test_unresolved_entry_time_does_not_suppress_reentry_gate`), the fold-equivalence parity test
+  (`test_replay_state_matches_sequential_apply_transition`), and two replay-specific tests
+  (`test_replay_seeded_steady_state_emits_no_alert`, `test_replay_only_runs_once_per_key`).
+- TDD: written against the pre-Step-10 tree conceptually (Step 10 was implemented first per this
+  session's flow, then all 22 tests in `test_live_loop.py` — 14 pre-existing + 8 new — confirmed
+  GREEN together in one run); the 4 pre-existing-test fixes from Step 10's deviation were what
+  made the full file green, not an issue in the 8 new tests themselves, which passed on first run.
+- Added the required guard-site code comment in `live_loop.py`'s `_eval_pair` (the `trigger is
+  None` branch) naming the three required tests by name, per the Step 11 Verification
+  instruction and the file's own Files-list note (comment-only edit, added after Step 11's test
+  names existed).
+- Verification: `uv run pytest tests/test_live_loop.py -v` → 22/22 passed. Full suite:
+  `uv run pytest --cov=app --cov-fail-under=40` → 450/450 passed, 82.02% coverage (well above the
+  40% gate). `ruff check .` and `ruff format --check .` both clean.
+- Files modified: `services/xstockstrat-analysis/tests/test_live_loop.py`,
+  `services/xstockstrat-analysis/app/engine/live_loop.py` (comment-only)
+- Deviations: see Deviation Log ("Step 10", "Step 10/11") — Step 11's own instructions were
+  followed as written; the deviations above surfaced during Step 10 but are jointly attributed
+  since Step 11 is what exposed them via full-suite verification.
