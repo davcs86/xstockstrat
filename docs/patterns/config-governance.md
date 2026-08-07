@@ -33,9 +33,36 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 3. Approval: service owner + config team (see `docs/runbooks/approval-flow.md`).
 4. Add a row to the "Per-Feature Registered Keys" log below.
 
+## Author-sentinel conventions
+
+A `SetConfigRequest.author` (or equivalent write-attribution field) written by an automated
+process, not a human operator, uses a `system:<process>` sentinel so an investigator can
+distinguish "an operator clicked Save" from "an automated process wrote this" in the audit log —
+without this convention, both look identical (fails.md 2026-07-01).
+
+| Sentinel | Service | Writer |
+|---|---|---|
+| `system` | `xstockstrat-indicators` | The seeded fundamentals-scoring formula (`app/formulas/fundamentals_value_quality.py`), documented here retroactively per feature 102 |
+| `system:reconciliation-poller` | `xstockstrat-trading` → `xstockstrat-config` | The broker-state-reconciliation poller's rare systemic escalation of `platform.trading_state` (feature 102) — paired with the structural `x-internal-caller`/`caller_identity` mechanism (see `services/xstockstrat-config/CLAUDE.md`), not a free-text convention alone |
+
 ## Per-Feature Registered Keys
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
+
+### feature 102 — broker-state-reconciliation (`xstockstrat-trading`)
+
+A lightweight periodic ticker (`StartReconciliationPoller`/`reconcileTick`) compares open orders/
+positions against broker truth, self-heals benign propagation-delay drift, and halts on a genuine
+mismatch (reusing feature 030's per-account halt mechanism, `HaltSource_HALT_SOURCE_RECONCILIATION`)
+or escalates to feature 100's platform-wide `platform.trading_state=REDUCE_ONLY` on a rare systemic
+finding. Both keys follow 101's own established "no config-service seed migration" pattern — read
+live via `s.cfgW.GetFloat`/`GetInt` with the default supplied in Go code.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `trading.reconciliation.interval_ms` | float | `60000` | Interval for the reconciliation poller (`reconcileTick`). Read live on every cycle. |
+| `trading.reconciliation.grace_ticks` | int | `1` | Consecutive ticks a mismatch must persist before it's a real finding (not a benign propagation delay). |
+| `trading.reconciliation.systemic_threshold_pct` | float | `0.5` | Share of accounts erroring/unprotected in one tick that escalates to `platform.trading_state=REDUCE_ONLY`. |
 
 ### feature 030 — stop-loss-bracket-orders (`xstockstrat-trading`, `xstockstrat-config`)
 
