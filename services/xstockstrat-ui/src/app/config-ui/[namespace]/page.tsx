@@ -100,14 +100,19 @@ export default function NamespacePage({ params, searchParams }: Props) {
       return; // no SetConfig call when a required reason is missing
     }
     setValidationError(null);
+    // Target the row's own registered scope, not the page's viewed (env, mode) filter: a key
+    // registered only as trading_mode='all' still shows up while viewing a specific mode (the
+    // ListKeys query matches exact-mode OR 'all'), but setConfig's existence gate is exact-scope
+    // only — sending the viewed mode for an 'all' row gets refused NOT_FOUND. meta carries the
+    // scope ListKeys actually reported for this row, so Save always writes the row that exists.
     setConfigMutate(
       {
         namespace,
         key,
         value: { value: { case: 'stringVal', value: String(editValue) } },
         reason: editReason.trim() || 'Updated via config-ui',
-        environment: envToProto(env),
-        tradingMode: modeToProto(mode),
+        environment: meta?.environment ?? envToProto(env),
+        tradingMode: meta?.tradingMode ?? modeToProto(mode),
       },
       {
         onSuccess: () => {

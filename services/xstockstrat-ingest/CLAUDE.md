@@ -51,8 +51,16 @@ that it queued paid jobs for any caller.)
 - Migration: `migrations/001_newsletter_signals.up.sql`
 - Table `ingest.signal_sources` — source registry; **migration `008_signal_source_health`** (feature
   083) adds `health`/`last_seen_at`/`last_error`/`signals_fed`. `IngestSignal` bumps
-  `last_seen_at`+`signals_fed` (best-effort); `ListSignalSources` derives LIVE/STALE/DOWN health on
+  `last_seen_at`+`signals_fed` (best-effort) on a fresh signal, or `last_seen_at` only (via
+  `touch_source_last_seen`) on a dedup hit; `ListSignalSources` derives LIVE/STALE/DOWN health on
   read from `last_seen_at` freshness (`signal_sources.derive_health_status`).
+- Table `ingest.signal_dedup_keys` — plain (non-hypertable) side table,
+  `PRIMARY KEY (source, symbol, direction)`; `IngestSignal` atomically claims a row per submission
+  (`INSERT ... ON CONFLICT ... DO UPDATE ... WHERE claimed_at < NOW() - dedup_window_hours OR
+  conviction/valid_until differ ... RETURNING signal_id`) inside its first explicit asyncpg
+  transaction. A claim miss (`WHERE` false) means the submission is a duplicate; the response
+  carries `deduplicated=true` and the existing `signal_id`. Migration:
+  `migrations/009_signal_dedup_keys.up.sql` (feature 111).
 - Table: `ingest.backfill_jobs` — durable backfill job state (plain table, **not** a hypertable);
   replaces the former in-memory `self._jobs` dict. Persists status, progress (`bars_processed` /
   `bars_total`), `failed_symbols`, and timestamps so jobs survive a restart. On startup the servicer
@@ -81,6 +89,7 @@ Namespace: `ingest`
 | `ingest.backfill.chunk_max_bars` | int | `200000` | Max estimated bars per backfill chunk (planner cap, feature 054) |
 | `ingest.backfill.chunk_window_days` | int | `90` | Time-window size (days) the chunk planner splits a range into |
 | `ingest.backfill.max_concurrent_chunks` | int | `3` | Max chunks of one job fetched in parallel |
+| `ingest.signals.dedup_window_hours` | int | `24` | Window within which a matching (source, symbol, direction, conviction, valid_until) signal is treated as a duplicate of the existing `ingest.signal_dedup_keys` claim (feature 111) |
 
 ## Ledger Events Emitted
 

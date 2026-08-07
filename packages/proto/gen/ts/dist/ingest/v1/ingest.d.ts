@@ -149,6 +149,12 @@ export interface IngestSignalRequest {
 }
 export interface IngestSignalResponse {
     signalId: number;
+    /**
+     * True when this submission matched an existing signal within the dedup window
+     * (ingest.signals.dedup_window_hours) on (source, symbol, direction, conviction,
+     * valid_until); signal_id is then the EXISTING signal's id, not a newly-inserted one.
+     */
+    deduplicated: boolean;
 }
 export interface QuerySignalsRequest {
     /** optional filter */
