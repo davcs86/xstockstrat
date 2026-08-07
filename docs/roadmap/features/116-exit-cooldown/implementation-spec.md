@@ -99,7 +99,7 @@ Both must pass — this is a non-breaking additive field (new optional field, no
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/analysis/v1/` — modify (generated)

@@ -318,3 +318,16 @@ Next: Step 1.
 - Deviations: command-syntax fix only (see Deviation Log) — the spec'd `buf breaking` invocation
   needed the repo-root `.git` + `subdir=packages/proto` form to actually run from
   `packages/proto/`; no change to what was verified.
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Ran `./scripts/buf-gen.sh` (host toolchain, provisioned during tooling setup). Only
+  `analysis/v1/*` generated files changed (8 files: Go, Python, TS + TS dist); field confirmed
+  present in all three language targets.
+- Files modified: `packages/proto/gen/go/analysis/v1/analysis.pb.go`,
+  `packages/proto/gen/python/analysis/v1/analysis_pb2.py`,
+  `packages/proto/gen/ts/analysis/v1/analysis.ts`,
+  `packages/proto/gen/ts/analysis/v1/analysis_pb.ts`,
+  `packages/proto/gen/ts/dist/analysis/v1/{analysis.d.ts,analysis.js,analysis_pb.d.ts,analysis_pb.js}`
+- Deviations: none (sequential mode's one-commit-per-step convention keeps this a separate
+  commit from Step 1, rather than literally bundled into "the same commit" as the spec's
+  Instructions phrase assumed for default-mode PRs — not a content deviation).
