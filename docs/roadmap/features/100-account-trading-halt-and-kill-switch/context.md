@@ -222,3 +222,10 @@ a merge event). Recorded here since it diverges from `reference/sequential-mode.
   Verified offline: 4 INSERT rows in `.up`, single matching `DELETE` in `.down` scoped to
   `namespace='platform' AND key='trading_state'`. TDD: N/A (migration — offline verification).
   Deviations: none.
+- Steps 3+4 [done] (TDD pair) — Wrote `tradingStateValidation.test.ts` first (6 cases, loopback
+  gRPC harness mirroring `setConfigAuthz.test.ts`). RED: 2/6 failed (`rejects an invalid literal`,
+  `rejects an empty string` — both expected a gRPC error but got a successful INSERT, the right
+  failure reason). Implemented the guard in `configServiceImpl.ts` between the author-resolution
+  block (ends :313) and the existence gate (starts :315). GREEN: 6/6 pass. Full suite: 43/43 pass,
+  71.06% coverage (>> 40% threshold). Lint: 0 errors (73 pre-existing `any` warnings, none new).
+  Deviations: none.

@@ -180,7 +180,7 @@ ls services/xstockstrat-config/migrations/011_platform_trading_state.up.sql \
 
 ### Step 3 — service: write-time validation for `platform.trading_state` in `xstockstrat-config`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -237,7 +237,7 @@ grep -n "trading_state" src/grpc/configServiceImpl.ts
 
 ### Step 4 — test: `platform.trading_state` write-time validation over a real gRPC loopback
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/tradingStateValidation.test.ts` — create

@@ -312,6 +312,22 @@ export class ConfigServiceImpl {
       return;
     }
 
+    // Feature 100: platform.trading_state is a closed 3-literal string enum (C-04 deferred to
+    // a future proto enum once a second consumer exists — see design.md). Reject any write
+    // outside the known literals so a stale/typo'd caller can't mint a value the trading-side
+    // gate would otherwise read as an unrecognized-hence-HALTED string with no server-side signal.
+    if (namespace === 'platform' && key === 'trading_state') {
+      const raw = value?.string_val ?? value?.stringVal ?? '';
+      const ALLOWED = ['ACTIVE', 'REDUCE_ONLY', 'HALTED'];
+      if (!ALLOWED.includes(raw)) {
+        callback({
+          code: 3, // INVALID_ARGUMENT
+          message: `platform.trading_state must be one of ${ALLOWED.join(', ')} (got: ${JSON.stringify(raw)})`,
+        });
+        return;
+      }
+    }
+
     // Feature 091: existence gate. A write to a not-yet-registered (namespace,key,env,mode)
     // scope is refused with NOT_FOUND unless the caller explicitly opts in with create_key —
     // so a typo can't silently mint an orphan row no service reads. The SELECT is scoped
