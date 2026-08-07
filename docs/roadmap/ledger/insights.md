@@ -1273,3 +1273,22 @@ reusing.
 - **Pattern**: Extends the 2026-07-27 "a mock that echoes a request field back tests nothing" entry with its inverse failure mode: a dedup mock that makes its response **genuinely depend on** a request field (via an in-memory map, to prove the field is honored) must not let that dependency change a value another spec in the same suite hard-asserts as a literal. `startMockBackend()` runs once for the whole Playwright run (`e2e/global-setup.ts`), so a mock's in-memory state is shared/persistent across every spec file and worker, not reset per test — a counter-based id scheme introduced to prove dedup silently made an unrelated spec's hard-coded assertion depend on cross-file execution order.
 - **Evidence**: `services/xstockstrat-ui/e2e/mock-backend.ts` `placeOrder` (feature 101, Step 20) — the dedup `Map` stores the full response object keyed by `clientOrderId`, but the non-repeat-call `orderId` stays the fixed `'mock-order-001'` literal that `order-form.spec.ts` asserts.
 - **Rule it implies**: when adding request-dependent branching to a shared mock handler, grep the whole e2e suite for hard-coded literals of that handler's current response *before* changing how those values are generated — a dedup/branching proof needs a distinguishing side channel (a map, a call count) but must not change the steady-state response value(s) other specs already depend on.
+
+### 2026-08-07 — stop-loss-bracket-orders — design
+- **Pattern**: `design.md` assumed IBKR's OCA (One-Cancels-All) bracket linkage uses a client-settable
+  `OCAGroup` string field, by analogy with the pattern most broker APIs use. IBKR's real Client Portal
+  Web API has no such field — grouping is done by submitting the linked legs together as a JSON array
+  to `POST /iserver/account/{id}/orders`, each with `isSingleGroup: true`; parent/child linkage is via
+  `parentId` on the child equal to the parent's own client-set `cOID`. Found only by going back to
+  primary/near-primary sources (IBKR's own "How to Code an OCA/Bracket Order" articles, corroborated
+  against a third-party generated API client's field reference) instead of trusting the by-analogy
+  assumption through to implementation. **Caveat**: this was verified against published API
+  documentation only — this feature's execution could not exercise a live IBKR paper account, so the
+  mechanism is unverified against real broker behavior as of this entry.
+- **Evidence**: `docs/roadmap/features/030-stop-loss-bracket-orders/implementation-spec.md` Step 7's
+  Codebase Evidence and Deviation Log entry; `services/xstockstrat-trading/internal/broker/ibkr.go`
+  `SubmitBracketLegs`.
+- **Rule it implies**: for any broker-API integration design decision that assumes "it probably works
+  like every other broker" without an explicit citation, treat that assumption as unverified and
+  re-confirm it against the specific broker's own documentation before implementation — a plausible,
+  common-pattern guess is not evidence.

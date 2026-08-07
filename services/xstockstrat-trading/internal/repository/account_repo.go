@@ -29,6 +29,12 @@ type BrokerAccountRecord struct {
 	CredentialCheckedAt *time.Time // nil until first validation
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
+	// Halted / HaltedAt / HaltReason are the persisted automated per-account halt
+	// (feature 030), mirroring the CredentialStatus persisted-column + boot-hydrate
+	// precedent above.
+	Halted     bool
+	HaltedAt   *time.Time
+	HaltReason string
 }
 
 // AccountRepository defines CRUD operations for broker_accounts.
@@ -42,6 +48,11 @@ type AccountRepository interface {
 	UpdateCredentials(ctx context.Context, id string, credentialsEnc []byte) error
 	// UpdateCredentialStatus records the outcome of a credential validation.
 	UpdateCredentialStatus(ctx context.Context, id string, status int32, checkedAt time.Time) error
+	// UpdateHaltStatus persists an automated per-account halt (feature 030). Mirrors
+	// UpdateCredentialStatus's shape — best-effort from the caller's perspective; the
+	// caller (isAccountHalted's dual-write) does not roll back its in-memory state on
+	// a persistence failure (fail-safe: stay halted, retry the write later).
+	UpdateHaltStatus(ctx context.Context, id string, halted bool, reason string, haltedAt *time.Time) error
 }
 
 type pgAccountRepo struct {
@@ -74,7 +85,8 @@ func (r *pgAccountRepo) CreateBrokerAccount(ctx context.Context, rec *BrokerAcco
 func (r *pgAccountRepo) ListBrokerAccounts(ctx context.Context, userID string) ([]*BrokerAccountRecord, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, display_name, broker_type, is_paper, is_active, user_id,
-		       credentials_enc, credential_status, credential_checked_at, created_at, updated_at
+		       credentials_enc, credential_status, credential_checked_at, created_at, updated_at,
+		       halted, halted_at, COALESCE(halt_reason, '')
 		FROM trading.broker_accounts
 		WHERE user_id = $1
 		ORDER BY created_at ASC
@@ -89,7 +101,8 @@ func (r *pgAccountRepo) ListBrokerAccounts(ctx context.Context, userID string) (
 func (r *pgAccountRepo) GetBrokerAccount(ctx context.Context, id string) (*BrokerAccountRecord, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, display_name, broker_type, is_paper, is_active, user_id,
-		       credentials_enc, credential_status, credential_checked_at, created_at, updated_at
+		       credentials_enc, credential_status, credential_checked_at, created_at, updated_at,
+		       halted, halted_at, COALESCE(halt_reason, '')
 		FROM trading.broker_accounts
 		WHERE id = $1
 	`, id)
@@ -112,7 +125,8 @@ func (r *pgAccountRepo) DeactivateBrokerAccount(ctx context.Context, id string) 
 func (r *pgAccountRepo) ListActiveBrokerAccounts(ctx context.Context) ([]*BrokerAccountRecord, error) {
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, display_name, broker_type, is_paper, is_active, user_id,
-		       credentials_enc, credential_status, credential_checked_at, created_at, updated_at
+		       credentials_enc, credential_status, credential_checked_at, created_at, updated_at,
+		       halted, halted_at, COALESCE(halt_reason, '')
 		FROM trading.broker_accounts
 		WHERE is_active = TRUE
 		ORDER BY created_at ASC
@@ -145,6 +159,16 @@ func (r *pgAccountRepo) UpdateCredentialStatus(ctx context.Context, id string, s
 	return err
 }
 
+// UpdateHaltStatus persists an automated per-account halt (feature 030).
+func (r *pgAccountRepo) UpdateHaltStatus(ctx context.Context, id string, halted bool, reason string, haltedAt *time.Time) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE trading.broker_accounts
+		SET halted = $2, halt_reason = $3, halted_at = $4
+		WHERE id = $1
+	`, id, halted, reason, haltedAt)
+	return err
+}
+
 // ── scan helpers ──────────────────────────────────────────────────────────────
 
 type rowScanner interface {
@@ -158,6 +182,7 @@ func scanBrokerAccount(row rowScanner) (*BrokerAccountRecord, error) {
 		&rec.IsPaper, &rec.IsActive, &rec.UserID,
 		&rec.CredentialsEnc, &rec.CredentialStatus, &rec.CredentialCheckedAt,
 		&rec.CreatedAt, &rec.UpdatedAt,
+		&rec.Halted, &rec.HaltedAt, &rec.HaltReason,
 	)
 	if err != nil {
 		return nil, err

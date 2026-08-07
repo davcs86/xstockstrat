@@ -179,6 +179,63 @@ func (c *IBKRClient) SubmitOrder(ctx context.Context, req OrderRequest) (*Broker
 	return &BrokerOrder{BrokerOrderID: replies[0].OrderID, Status: replies[0].OrderStatus}, nil
 }
 
+// SubmitBracketLegs submits a stop-loss + optional take-profit leg as a linked pair
+// (feature 030). IBKR's Client Portal Web API has no client-settable OCA group name
+// field — grouping is done by submitting the linked orders together in one call, each
+// carrying isSingleGroup: true; the server assigns the OCA group ID. Parent/child
+// linkage uses parentId on each child, set to the parent (entry) order's own cOID.
+func (c *IBKRClient) SubmitBracketLegs(ctx context.Context, parentBrokerOrderID, parentClientOrderID string, legs BracketLegsRequest) (*BracketLegsResponse, error) {
+	conid, err := c.resolveConid(ctx, legs.Symbol)
+	if err != nil {
+		return nil, fmt.Errorf("ibkr SubmitBracketLegs: %w", err)
+	}
+	orders := []map[string]interface{}{
+		{
+			"conid": conid, "orderType": "STP", "side": strings.ToUpper(legs.Side),
+			"quantity": legs.Qty, "tif": strings.ToUpper(legs.TimeInForce), "ticker": legs.Symbol,
+			"auxPrice": legs.StopPrice, "parentId": parentClientOrderID, "isSingleGroup": true,
+		},
+	}
+	if legs.TakeProfitPrice != 0 {
+		orders = append(orders, map[string]interface{}{
+			"conid": conid, "orderType": "LMT", "side": strings.ToUpper(legs.Side),
+			"quantity": legs.Qty, "tif": strings.ToUpper(legs.TimeInForce), "ticker": legs.Symbol,
+			"price": legs.TakeProfitPrice, "parentId": parentClientOrderID, "isSingleGroup": true,
+		})
+	}
+	payload, err := json.Marshal(map[string]interface{}{"orders": orders})
+	if err != nil {
+		return nil, fmt.Errorf("ibkr SubmitBracketLegs: marshal: %w", err)
+	}
+	endpoint := fmt.Sprintf("%s/iserver/account/%s/orders", c.baseURL, c.ibkrAccountID)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("ibkr SubmitBracketLegs: build request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", c.signRequest(http.MethodPost, endpoint))
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("ibkr SubmitBracketLegs: http: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("ibkr SubmitBracketLegs: status %d: %s", resp.StatusCode, respBody)
+	}
+	var replies []struct {
+		OrderID string `json:"order_id"`
+	}
+	if err := json.Unmarshal(respBody, &replies); err != nil || len(replies) == 0 {
+		return nil, fmt.Errorf("ibkr SubmitBracketLegs: parse response: %w", err)
+	}
+	out := &BracketLegsResponse{StopLegOrderID: replies[0].OrderID}
+	if len(replies) > 1 {
+		out.TakeProfitLegOrderID = replies[1].OrderID
+	}
+	return out, nil
+}
+
 // CancelOrder cancels an order via DELETE /v1/api/iserver/account/{accountID}/order/{orderId}.
 func (c *IBKRClient) CancelOrder(ctx context.Context, brokerOrderID string) error {
 	endpoint := fmt.Sprintf("%s/iserver/account/%s/order/%s", c.baseURL, c.ibkrAccountID, brokerOrderID)

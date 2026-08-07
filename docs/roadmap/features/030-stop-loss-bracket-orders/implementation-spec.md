@@ -1,6 +1,6 @@
 # Implementation Spec: stop-loss-bracket-orders
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-08-06
 **Feature**: `docs/roadmap/features/030-stop-loss-bracket-orders/feature.md`
 **Total Steps**: 23
@@ -78,7 +78,7 @@ assignments. Re-verify at execute time per C-07 in case a newer feature has sinc
 
 ### Step 1 — migration: `xstockstrat-trading` halt columns + `order_brackets` table
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/migrations/005_broker_accounts_halted.up.sql` — create
@@ -151,7 +151,7 @@ Read both files: confirm the `.down.sql` drops exactly what the `.up.sql` create
 
 ### Step 2 — service: `BracketRepository` + `AccountRepository` halt methods
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/bracket_repo.go` — create
@@ -235,7 +235,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 3 — test: repository build/lint proof
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/bracket_repo.go` — no new file (verification-only step)
@@ -259,7 +259,7 @@ cd services/xstockstrat-trading && GOWORK=off go vet ./internal/repository/...
 
 ### Step 4 — service: `broker.Broker` interface + `OrderRequest`/`BrokerOrder` bracket fields
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/broker.go` — modify
@@ -330,7 +330,7 @@ Trading-domain constraint (broker coverage): this step declares the shared surfa
 
 ### Step 5 — service: Alpaca native bracket submission
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/alpaca.go` — modify
@@ -400,7 +400,7 @@ Out-of-Scope note; this step does not change type-dispatch, only the request pay
 
 ### Step 6 — test: Alpaca bracket submission unit test
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/alpaca_test.go` — modify
@@ -432,7 +432,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 7 — service: IBKR bracket-leg submission (`SubmitBracketLegs`) + `cOID` fix
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/ibkr.go` — modify
@@ -545,7 +545,7 @@ Trading-domain constraint (broker coverage): this step is IBKR-only; Alpaca's `S
 
 ### Step 8 — test: IBKR bracket-leg submission unit test
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/ibkr_test.go` — modify
@@ -580,7 +580,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 9 — service: bracket state machine core (`order_brackets` creation + fill-confirmed hooks)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -697,7 +697,7 @@ Trading-domain constraints:
 
 ### Step 10 — test: bracket state machine unit tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_bracket_test.go` — create
@@ -758,7 +758,7 @@ citation) — the functional test run above is the required proof.
 
 ### Step 11 — service: protection-window watchdog + flatten + persisted halt gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -872,7 +872,7 @@ routing is unaffected, so a flatten in paper mode never reaches a live broker an
 
 ### Step 12 — test: watchdog / flatten / halt unit tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_bracket_test.go` — modify (created in Step 10)
@@ -921,7 +921,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 13 — service: bracket-leg cancellation on signal-driven close + CRITICAL alert
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -973,7 +973,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 14 — test: leg cancellation + CRITICAL alert unit tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_bracket_test.go` — modify (created in Step 10)
@@ -1012,7 +1012,7 @@ functional test run above (Steps 10, 12, 14 combined) is the required proof for 
 
 ### Step 15 — docs: update `xstockstrat-trading/CLAUDE.md`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/CLAUDE.md` — modify
@@ -1047,7 +1047,7 @@ Confirm all five strings appear.
 
 ### Step 16 — migration: `xstockstrat-config` seed `trading.risk.bracket*`/`max_unprotected_seconds`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/013_trading_risk_bracket.up.sql` — create
@@ -1121,7 +1121,7 @@ and that `trading.risk.max_position_pct`/`trading.risk.max_risk_per_trade_pct`/`
 
 ### Step 17 — docs: register the new keys in the Per-Feature Registered Keys log
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns/`
 **Files**:
 - `docs/patterns/config-governance.md` — modify
@@ -1161,7 +1161,7 @@ grep -n "feature 030 — stop-loss-bracket-orders" docs/patterns/config-governan
 
 ### Step 18 — proto: `Position` gains `stop_order_id`/`take_profit_order_id`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/portfolio/v1/portfolio.proto` — modify
@@ -1212,7 +1212,7 @@ git diff --stat packages/proto/gen/
 
 ### Step 19 — migration: `xstockstrat-portfolio` `stop_order_id`/`take_profit_order_id` columns
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/migrations/009_bracket_order_ids.up.sql` — create
@@ -1257,7 +1257,7 @@ ls services/xstockstrat-portfolio/migrations/009_bracket_order_ids.up.sql servic
 
 ### Step 20 — service: `positionColumns`/`scanPositionRow` + `ConsumeBracketUpdates` consumer
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go` — modify
@@ -1329,7 +1329,7 @@ cd services/xstockstrat-portfolio && GOWORK=off golangci-lint run --modules-down
 
 ### Step 21 — test: portfolio bracket-consumer + repo tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/service/portfolio_bracket_test.go` — create
@@ -1373,7 +1373,7 @@ functional test run is the required proof.
 
 ### Step 22 — docs: update `xstockstrat-portfolio/CLAUDE.md`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/CLAUDE.md` — modify
@@ -1403,7 +1403,7 @@ grep -n "order.bracket_updated\|stop_order_id" services/xstockstrat-portfolio/CL
 
 ### Step 23 — service + test: position-detail sidebar + e2e coverage
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
@@ -1472,3 +1472,91 @@ literal); `INVENTORY.md` updated in this same step per Instruction 3.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **Step 7 — IBKR bracket mechanism corrected against `design.md`'s wrong assumption**: `design.md`
+  assumed a client-settable `OCAGroup` string field on IBKR orders. IBKR's real Client Portal Web
+  API has no such field — grouping is done by submitting the linked legs together as an array to
+  `POST /iserver/account/{id}/orders`, each with `isSingleGroup: true`, with the child's `parentId`
+  set to the parent's own `cOID`. `SubmitBracketLegs` implements this corrected mechanism; Alpaca's
+  `SubmitBracketLegs` is an explicit unsupported no-op (Alpaca attaches brackets atomically at entry
+  `SubmitOrder` instead — Step 5).
+- **Step 5 — `GetOrder` also extended to parse `legs`**, beyond the spec's literal instructions for
+  `SubmitOrder`: Alpaca brackets can fill asynchronously, so the leg order IDs a caller needs
+  (`StopLegOrderID`/`TakeProfitLegOrderID`) may only be known from a later poll, not the initial
+  `SubmitOrder` response. Necessary for `maybeSubmitBracket`'s Alpaca path (Step 9) to record leg
+  IDs reliably.
+- **Steps 8/14 — no duplicate tests for cases an existing test already covers**: `TestSubmitOrder_
+  IBKR_ClientOrderIDForwarded` (pre-existing, from feature 101) already proves IBKR forwards `cOID`
+  when set, so Step 8 did not add a second `TestSubmitOrder_IBKRSendsCOID`. Similarly,
+  `TestMaybeSubmitBracket_IBKRFailureTransitionsFailedAndAlerts` (Step 10) already covers the
+  failure→alert path Step 14's `TestMaybeSubmitBracket_FailurePathEmitsCriticalAlert` would have
+  duplicated — not added a second time.
+- **Step 9 — `submitOrder` extraction, real signature diverges from `design.md`'s literal 6-param
+  sketch**: `design.md` predates features 101/023 actually landing, so it couldn't anticipate their
+  real shape. `PlaceOrder`'s approval-decision + broker-submission logic was extracted into a
+  reusable `submitOrder(ctx, req, accountEntry, mode, resolvedAccountID, orderID, requiresApproval,
+  requestHashHex, needSizing, sizedStopPrice, entryPriceProxy)` (11 params) so `flattenAndHalt`
+  (Step 11) reuses the same dedup/ledger/timeout/bracket-submission machinery any normal order gets.
+  The 11-param shape is forced by 101's dedup hash needing to be pre-sizing (101's own correctness
+  requirement) plus 023's sizing outputs threading through to the broker request.
+- **Step 9/10 — `bracketOrdersEnabled bool` hoisted as an explicit `maybeSubmitBracket` parameter**:
+  `config.Watcher` has no exported snapshot setter (established limitation from features 100/101/
+  023), so a live `cfgW.GetBool` read inside `maybeSubmitBracket` would make the "bracket orders
+  disabled" test case untestable against a hand-constructed service (a zero-value `Watcher` always
+  returns the code default, `true`). Callers pass `s.cfgW.GetBool("trading.risk.bracket_orders_
+  enabled", true)` explicitly. Mirrors 023's `needSizing`/`sizingEnabled` hoisting and 101's
+  `computeStaleThreshold` extraction — same pattern, same root cause, third occurrence in this
+  codebase.
+- **Step 9/10 — `computeTakeProfitPriceFromRR` extracted as a pure package-level function**: the
+  same `config.Watcher` constraint made the `take_profit_rr_multiple=0` ("no take-profit leg")
+  case untestable via the live service. `computeTakeProfitPrice` (method) is now a thin wrapper
+  around the pure, directly-unit-tested `computeTakeProfitPriceFromRR(side, stopPrice,
+  entryPriceProxy, rr float64) float64`.
+- **Step 9 — `pollFills` dedup gate widened for partial-fill resizing**: changed from `if newStatus
+  == order.Status { continue }` to `if newStatus == order.Status && order.FilledQty == brokerOrder.
+  FilledQty { continue }` so a second `PARTIALLY_FILLED` poll with a larger cumulative filled qty is
+  no longer skipped — required for `TestPollFills_PartialFillResizesActiveBracket` (Step 10) to
+  reach `maybeSubmitBracket`'s resize path on each incremental fill, not just the first partial.
+- **Step 11 — `ReplaceOrder`'s halt gate placed *before* `checkTradingStateForReplace`**, not after
+  (both orderings satisfy the product requirement, since either gate alone blocks a halted
+  account): a zero-value `config.Watcher`'s fail-closed HALTED default (`parseTradingState`) would
+  otherwise mask the halt gate in any test using a bare `&config.Watcher{}`, since the trading-state
+  gate would always fire first and short-circuit before the halt check ran. Reordering also matches
+  "gate as early as possible" intent — `order.AccountId` is already known from the persisted order,
+  so there's no reason to wait for the trading-state resolution first.
+- **Step 12 — `CancelOrder`/`flattenAndHalt` full-round-trip testing blocked by `TradingRepo` being
+  a concrete type, not an interface**: `s.repo.UpsertOrder` panics with a nil-pointer dereference on
+  a hand-constructed `&TradingService{}` in tests. For `CancelOrder`, worked around with a
+  `recover()`-wrapped inner function that still lets assertions on broker-call side effects run
+  (they occur *before* the panic point). This workaround does **not** extend to `flattenAndHalt`'s
+  full retry-loop (`TestFlattenAndHalt_SucceedsOnFirstRetry`/`_ExhaustsRetriesThenHalts`/
+  `TestStartBracketProtectionWatchdog_OneSlowFlattenDoesNotBlockOthers`), because `s.repo.
+  UpsertOrder` fires *before* the broker call inside `submitOrder`, so the panic happens before any
+  observable broker-call assertion. This is an accepted, explicitly-documented test gap (code
+  comment in `trading_bracket_test.go`), citing this service's own Step 3 precedent ("no
+  repository-layer test exists anywhere in this service today") and `design.md`'s own accepted
+  "true broker nondeterminism" test gap — `design.md`'s test-scope assumption did not anticipate
+  this constraint; this is a genuine execute-time discovery, not a shortcut.
+- **Step 10 — test-infra fixes surfaced while building `trading_bracket_test.go`**: `fakeNotify
+  Client.EmitAlert` initially used `...interface{}` instead of `...grpc.CallOption`, which would
+  have silently broken interface satisfaction (Go method-name shadowing masks a promoted embedded-
+  interface method) — fixed to the correct `grpc.CallOption` type. `TestMaybeSubmitBracket_
+  IBKRSubmitsFollowUpLegs` initially panicked (nil `s.ledger`, since `createBracket`'s success path
+  fires `go s.emitLedgerEvent(...)` unconditionally, and a `recover()` in the calling test goroutine
+  cannot catch an async goroutine panic — it crashes the whole test binary, surfacing in an
+  unrelated later test) — fixed by adding a `fakeLedgerClient` and setting it on every hand-
+  constructed `TradingService` that reaches an emit-ledger-event call site.
+- **Step 20 — `positionColumns`/`scanPositionRow` use `COALESCE(..., '')` in the SELECT rather than
+  `sql.NullString`**: this file has no existing `sql.NullString`/`COALESCE` precedent to follow (the
+  spec's Instruction 1 asked to grep for one). `COALESCE`-in-SQL lets `scanPositionRow` use plain
+  `string` locals, matching the "empty = no active bracket" contract on `Position` directly, and
+  mirrors `xstockstrat-trading`'s own `COALESCE(halt_reason, '')` pattern (`account_repo.go`,
+  feature 030 Step 2) — a cross-service precedent, not an invented one.
+- **Step 20/22 — `xstockstrat-portfolio`'s `go.mod`/`go.sum` grpc/protobuf/x-net pins were stale**
+  against `packages/proto/go.mod`'s already-bumped versions (prior Dependabot commit `d1f504d`,
+  predating this feature; this stacked branch chain — 100→101→023→030 — never touched
+  `xstockstrat-portfolio` before Step 19). Surfaced only now because this is the first time this
+  session's branch chain builds/lints this module. The mandated `golangci-lint run
+  --modules-download-mode=mod` verification command synced `go.mod`/`go.sum` to the versions
+  `packages/proto` already required — confirmed via diff to be a pure, mechanical version sync
+  (no unrelated dependency changes), not a deliberate scope-expanding bump.

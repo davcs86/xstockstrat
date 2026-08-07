@@ -1,10 +1,10 @@
 # Feature: stop-loss-bracket-orders
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `code-completed`
 **Priority**: `P0` — blocking live-capital expansion (Live-Capital Safety program, see context.md 2026-08-04)
 **Development Branch**: `feature/stop-loss-bracket-orders`
 **Created**: 2026-05-26
-**Last Updated**: 2026-08-06
+**Last Updated**: 2026-08-07
 
 ---
 
@@ -16,6 +16,7 @@
 | 2026-08-05 | `draft` → `spec-ready` | /sdd-review | Product spec approved after 2 review rounds (3 warnings) |
 | 2026-08-06 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full — hard cap) and approved with noted open risks; recon.md + design.md written |
 | 2026-08-06 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 23 steps |
+| 2026-08-07 | `implementation-ready` → `code-completed` | /sdd-execute (sequential) | All 23 steps done. Stacked-branch build (per user directive) on top of `feature/position-sizing-engine` (feature 023, itself stacked on 101 on 100) — integration PR targets that branch, not `main-dev` |
 
 ---
 
@@ -51,4 +52,5 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review stop-loss-bracket-orders impl-spec` — validate implementation spec, then `/sdd-execute stop-loss-bracket-orders`
+[PR #882](https://github.com/davcs86/xstockstrat/pull/882) is open against
+`feature/position-sizing-engine` (stacked-branch strategy) — drive to green.

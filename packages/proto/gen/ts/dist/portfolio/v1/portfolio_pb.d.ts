@@ -160,6 +160,19 @@ export type Position = Message<"xstockstrat.portfolio.v1.Position"> & {
      * @generated from field: string exit_rule = 19;
      */
     exitRule: string;
+    /**
+     * Broker order IDs for the resting protective bracket legs (feature 030 —
+     * stop-loss-bracket-orders), sourced from trading's order.bracket_updated ledger
+     * events. "" when the position has no active bracket (manual entry, bracket
+     * disabled, or bracket not yet confirmed ACTIVE).
+     *
+     * @generated from field: string stop_order_id = 20;
+     */
+    stopOrderId: string;
+    /**
+     * @generated from field: string take_profit_order_id = 21;
+     */
+    takeProfitOrderId: string;
 };
 /**
  * Describes the message xstockstrat.portfolio.v1.Position.

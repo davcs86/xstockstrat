@@ -119,6 +119,120 @@ func TestSubmitOrder_IBKR_ClientOrderIDForwarded(t *testing.T) {
 	}
 }
 
+// TestSubmitBracketLegs_SubmitsSingleGroupArray (feature 030): the stop-loss + take-profit
+// legs must be submitted together as a JSON array, each carrying isSingleGroup: true and
+// parentId equal to the parent order's cOID — IBKR has no client-settable OCA group field.
+func TestSubmitBracketLegs_SubmitsSingleGroupArray(t *testing.T) {
+	const wantConid = int64(265598)
+	var gotOrders []interface{}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/iserver/secdef/search":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+				{"conid": wantConid, "description": "AAPL"},
+			})
+		case "/iserver/account/U1234567/orders":
+			var payload map[string]interface{}
+			_ = json.NewDecoder(r.Body).Decode(&payload)
+			gotOrders, _ = payload["orders"].([]interface{})
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+				{"order_id": "ibkr-stop-1"},
+				{"order_id": "ibkr-tp-1"},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := broker.NewIBKRClient(broker.IBKRConfig{BaseURL: srv.URL, IBKRAccountID: "U1234567"})
+
+	resp, err := c.SubmitBracketLegs(context.Background(), "brk-1", "parent-coid-1", broker.BracketLegsRequest{
+		Symbol: "AAPL", Side: "sell", Qty: 10, StopPrice: 178.0, TakeProfitPrice: 210.0, TimeInForce: "day",
+	})
+	if err != nil {
+		t.Fatalf("SubmitBracketLegs failed: %v", err)
+	}
+	if len(gotOrders) != 2 {
+		t.Fatalf("expected 2 orders in the array, got %d", len(gotOrders))
+	}
+	stopLeg := gotOrders[0].(map[string]interface{})
+	if stopLeg["isSingleGroup"] != true {
+		t.Errorf("expected isSingleGroup=true on the stop leg, got %v", stopLeg["isSingleGroup"])
+	}
+	if stopLeg["parentId"] != "parent-coid-1" {
+		t.Errorf("expected parentId=parent-coid-1 on the stop leg, got %v", stopLeg["parentId"])
+	}
+	if stopLeg["orderType"] != "STP" {
+		t.Errorf("expected orderType=STP on the stop leg, got %v", stopLeg["orderType"])
+	}
+	if stopLeg["auxPrice"] != float64(178.0) {
+		t.Errorf("expected auxPrice=178 on the stop leg, got %v", stopLeg["auxPrice"])
+	}
+	tpLeg := gotOrders[1].(map[string]interface{})
+	if tpLeg["orderType"] != "LMT" {
+		t.Errorf("expected orderType=LMT on the take-profit leg, got %v", tpLeg["orderType"])
+	}
+	if tpLeg["price"] != float64(210.0) {
+		t.Errorf("expected price=210 on the take-profit leg, got %v", tpLeg["price"])
+	}
+	if tpLeg["isSingleGroup"] != true {
+		t.Errorf("expected isSingleGroup=true on the take-profit leg, got %v", tpLeg["isSingleGroup"])
+	}
+	if resp.StopLegOrderID != "ibkr-stop-1" {
+		t.Errorf("expected StopLegOrderID=ibkr-stop-1, got %s", resp.StopLegOrderID)
+	}
+	if resp.TakeProfitLegOrderID != "ibkr-tp-1" {
+		t.Errorf("expected TakeProfitLegOrderID=ibkr-tp-1, got %s", resp.TakeProfitLegOrderID)
+	}
+}
+
+// TestSubmitBracketLegs_NoTakeProfitSendsOneOrder confirms only the stop leg is sent
+// when TakeProfitPrice is 0.
+func TestSubmitBracketLegs_NoTakeProfitSendsOneOrder(t *testing.T) {
+	const wantConid = int64(265598)
+	var gotOrders []interface{}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/iserver/secdef/search":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+				{"conid": wantConid, "description": "AAPL"},
+			})
+		case "/iserver/account/U1234567/orders":
+			var payload map[string]interface{}
+			_ = json.NewDecoder(r.Body).Decode(&payload)
+			gotOrders, _ = payload["orders"].([]interface{})
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+				{"order_id": "ibkr-stop-2"},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := broker.NewIBKRClient(broker.IBKRConfig{BaseURL: srv.URL, IBKRAccountID: "U1234567"})
+
+	resp, err := c.SubmitBracketLegs(context.Background(), "brk-2", "parent-coid-2", broker.BracketLegsRequest{
+		Symbol: "AAPL", Side: "sell", Qty: 10, StopPrice: 178.0, TimeInForce: "day",
+	})
+	if err != nil {
+		t.Fatalf("SubmitBracketLegs failed: %v", err)
+	}
+	if len(gotOrders) != 1 {
+		t.Fatalf("expected 1 order in the array, got %d", len(gotOrders))
+	}
+	if resp.TakeProfitLegOrderID != "" {
+		t.Errorf("expected no TakeProfitLegOrderID, got %s", resp.TakeProfitLegOrderID)
+	}
+}
+
 func TestSubmitOrder_IBKRConidNotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/iserver/secdef/search" {

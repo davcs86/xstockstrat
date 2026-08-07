@@ -86,8 +86,11 @@ func main() {
 	// Order-intent repository — shares the TradingRepo pool, no second connection (F-06).
 	orderIntentRepo := repository.NewOrderIntentRepo(repo.Pool())
 
+	// Bracket repository — shares the TradingRepo pool, no second connection (F-06, feature 030).
+	bracketRepo := repository.NewBracketRepo(repo.Pool())
+
 	// Wire service layer.
-	svc, err := service.NewTradingService(cfg, cfgWatcher, accountRepo, repo, orderIntentRepo, cfg.BrokerAccountsEncryptionKey)
+	svc, err := service.NewTradingService(cfg, cfgWatcher, accountRepo, repo, orderIntentRepo, bracketRepo, cfg.BrokerAccountsEncryptionKey)
 	if err != nil {
 		slog.Error("service init failed", "error", err)
 		os.Exit(1)
@@ -113,6 +116,9 @@ func main() {
 	go svc.StartCredentialHealthPoller(ctx)
 	// Start order-intent sweeper — proactively reclaims orphaned PENDING intents (feature 101).
 	go svc.StartOrderIntentSweeper(ctx)
+	// Start bracket protection watchdog — flattens+halts on an unconfirmed bracket
+	// past its protection window (feature 030).
+	go svc.StartBracketProtectionWatchdog(ctx)
 
 	// gRPC server.
 	grpcHdl := handler.NewTradingHandler(svc)
