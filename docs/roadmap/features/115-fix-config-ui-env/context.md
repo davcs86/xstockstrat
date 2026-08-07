@@ -89,3 +89,33 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   analogy (not directly confirmed against generated stubs) — to be confirmed at `/sdd-spec`/execute
   time; `tsc` will fail loudly if wrong, so this cannot ship silently incorrect.
 - Status: spec-ready → design-approved.
+
+## Session 2026-08-07 — sdd-spec
+
+- Generated implementation-spec.md with 8 steps. Status → implementation-ready.
+- Steps 1-4 (BFF layer, the load-bearing enforcement): `src/lib/deploymentEnv.ts`
+  (`getNativeConfigEnv`/`isNativeConfigEnvironment`) + its vitest unit test, the guard wired into
+  `configUiBff.ts`'s `setConfig` handler (`Code.FailedPrecondition` after the existing
+  `requireAdminScope`), and an e2e smoke test in `api-smoke.spec.ts` proving the guard rejects a
+  mismatched-environment write with HTTP 400. Steps 5-8 (UI presentation, the two named consumer
+  surfaces): `EnvModeSwitcher` badge-gating in `config-ui/page.tsx` + rewritten
+  `env-mode-switcher.spec.ts` assertions, and a Server-wrapper/Client-child split of
+  `[namespace]/page.tsx` into a new `NamespaceEditor.tsx` (banner + disabled Save) + new
+  `env-gate.spec.ts`.
+- Key codebase findings during additional verification (beyond recon.md):
+  - Confirmed the browser never calls `xstockstrat-config` directly — `useSetConfig.ts` posts to
+    `/config-ui/api` (`browserClients/configClient.ts`), which resolves to
+    `src/lib/configUiBff.ts`'s `dispatchConnect`. The BFF guard's only viable landing site is
+    `configUiBff.ts`'s `setConfig` handler (`:17-28`), matching design.md exactly.
+  - Resolved design.md's Open Risk #2 (unverified `Environment.UNSPECIFIED` member naming):
+    confirmed via `useConfigKeys.ts:11-18`'s live `Environment.PRODUCTION`/`Environment.DEV` and
+    sibling `TradingMode.UNSPECIFIED` usage — protobuf-es strips the `ENVIRONMENT_`/`TRADING_MODE_`
+    prefix as assumed; `deploymentEnv.ts`'s `Environment.UNSPECIFIED` reference is correct as
+    written, not just inferred by analogy.
+  - `api-smoke.spec.ts` already has **three** inline `SetConfig` payload-shape literals (lines
+    144-151, 158-165, 176-183), not two as design.md's citation named — Step 4 centralizes all
+    three into the new `e2e/fixtures/configKeys.ts` `setConfigPayload()` factory alongside the new
+    4th (env-mismatch) test, per C-12.
+  - `playwright.config.ts`'s `webServer.env` block is confirmed at lines 148-187 (not 159-185 as
+    recon.md approximated) — `APPLICATION_ENV: 'development'` is added there in Step 4; Steps 6 and
+    8 depend on it for a deterministic native scope in CI.
