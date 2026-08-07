@@ -1,6 +1,6 @@
 # Implementation Spec: account-trading-halt-and-kill-switch
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-08-06
 **Feature**: `docs/roadmap/features/100-account-trading-halt-and-kill-switch/feature.md`
 **Total Steps**: 13
@@ -1034,7 +1034,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -- e2e/config-ui/reason-capture.spec
 
 ### Step 11 — docs: `xstockstrat-trading` CLAUDE.md — document `platform.trading_state`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/CLAUDE.md` — modify
@@ -1066,7 +1066,7 @@ grep -n "platform.trading_state" services/xstockstrat-trading/CLAUDE.md
 
 ### Step 12 — docs: `docs/patterns/config-governance.md` — global key table + Per-Feature Registered Keys log
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/patterns/config-governance.md` — modify
@@ -1110,7 +1110,7 @@ grep -n "platform.trading_state" docs/patterns/config-governance.md
 
 ### Step 13 — docs: correct product-spec.md's approval-gate checkbox (design.md Open Risk)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/roadmap/features/100-account-trading-halt-and-kill-switch/product-spec.md` — modify

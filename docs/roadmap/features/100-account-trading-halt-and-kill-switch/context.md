@@ -284,3 +284,23 @@ a merge event). Recorded here since it diverges from `reference/sequential-mode.
     invalidated, not a real result) — re-ran synchronously after popping the stash to get a valid
     GREEN. No incorrect result was recorded; flagging so a future session recognizes the same
     "No tests found" signature as a stash race, not a real failure.
+- Step 11 [done] — Added the `platform.trading_state` row to
+  `xstockstrat-trading/CLAUDE.md`'s Config Keys Consumed table, immediately after
+  `platform.maintenance_mode`. TDD: N/A (docs-only). Deviations: none.
+- Step 12 [done] — Added the `platform.trading_state` row to `config-governance.md`'s Global
+  Config Keys table, and a new `### feature 100` entry at the top of the Per-Feature Registered
+  Keys log (newest-first, confirmed against the existing 097→083→069 descending order). TDD: N/A
+  (docs-only). Deviations: none.
+- Step 13 [done] — **No edit needed**: `product-spec.md`'s approval-gate checkbox was already in
+  the target corrected state (`[x] Service owner + config team approval...`) — evidently already
+  fixed by an earlier commit (`c36aafd`, "cross-feature coordination fixes" for 023/030/100/101/102,
+  landed on `main-dev` before this session started). Verified the step's own grep command already
+  passes. TDD: N/A (docs-only, no-op). Deviations: none — the spec's own Codebase Evidence was
+  gathered before that coordination commit landed; re-verification at execute time (per Constitution
+  C-07) caught the drift and correctly avoided a redundant/conflicting edit.
+
+**All 13 steps done.** Feature lifecycle: `code-completed`. Reusable pattern for the ledger: the
+`config.Watcher`-zero-value-fail-closed testing technique (Step 8) — when a live-config watcher has
+no exported snapshot setter, its zero value's `GetString`/`GetBool` defaults are still directly
+testable and prove the fail-closed default deterministically without a real config service. Not yet
+promoted to `insights.md` — will fold into the archiver's synthesis pass if it recurs in 101/023/030.
