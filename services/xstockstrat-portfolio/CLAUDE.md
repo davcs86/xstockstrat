@@ -49,7 +49,11 @@ Namespace: `portfolio`
 | `portfolio.watchlist.max_per_user` | int | `50` | Max watchlists a single user may own (feature 058) |
 | `portfolio.watchlist.max_symbols_per_list` | int | `500` | Max symbols allowed in one watchlist (feature 058) |
 | `portfolio.exposure.factor_map` | string (JSON) | `"{}"` | JSON object mapping symbol → factor name for the Exposure screen's factor grouping (feature 083). marketdata exposes no sector, so this operator-defined map is the factor source; unmapped symbols group as "Unclassified". Read via `Watcher.FactorMap()`; invalid JSON → empty map. |
-| `platform.ledger_endpoint` | string | — | Ledger address |
+
+> `platform.ledger_endpoint` was removed from this table by the 2026-08-07 config audit — no code
+> in this service reads it via the config watcher. The ledger address is the `LEDGER_ENDPOINT` env
+> var (see Environment Variables below), matching `xstockstrat-trading`'s own findings log
+> (`docs/context-constitution-findings.md:14`), which flagged the same stale row.
 
 ## Ledger Events Consumed
 
