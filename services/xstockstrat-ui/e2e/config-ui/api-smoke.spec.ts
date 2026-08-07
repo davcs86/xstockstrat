@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { addAuthCookie, addAdminCookie } from '../helpers/auth';
+import { setConfigPayload } from '../fixtures/configKeys';
 
 /**
  * BFF smoke tests for the Connect-RPC gateway in xstockstrat-config-ui.
@@ -141,28 +142,18 @@ test.describe('POST /api/config — inline edit save flow', () => {
     // Admin cookie: config writes require the ADMIN scope bit (feature 074).
     await addAdminCookie(page);
     await page.goto('/auth/login');
-    const { status } = await callBff(page, SET_CONFIG_BFF, {
-      namespace: 'platform',
-      key: 'platform.log_level',
-      value: { value: { case: 'stringVal', value: 'debug' } },
-      reason: 'Updated via config-ui',
-      environment: 1,
-      tradingMode: 0,
-    });
+    const { status } = await callBff(page, SET_CONFIG_BFF, setConfigPayload());
     expect(status).toBe(200);
   });
 
   test('SetConfig does not return an error field on success', async ({ page }) => {
     await addAdminCookie(page);
     await page.goto('/auth/login');
-    const { status, body } = await callBff(page, SET_CONFIG_BFF, {
-      namespace: 'platform',
-      key: 'platform.log_level',
-      value: { value: { case: 'stringVal', value: 'warn' } },
-      reason: 'Updated via config-ui',
-      environment: 1,
-      tradingMode: 0,
-    });
+    const { status, body } = await callBff(
+      page,
+      SET_CONFIG_BFF,
+      setConfigPayload({ value: { value: { case: 'stringVal', value: 'warn' } } }),
+    );
     expect(status).toBe(200);
     expect(body).not.toHaveProperty('error');
   });
@@ -173,16 +164,33 @@ test.describe('POST /api/config — inline edit save flow', () => {
     // platform.maintenance_mode or the trading.approval.* thresholds).
     await addAuthCookie(page);
     await page.goto('/auth/login');
-    const { status, body } = await callBff(page, SET_CONFIG_BFF, {
-      namespace: 'platform',
-      key: 'platform.maintenance_mode',
-      value: { value: { case: 'boolVal', value: true } },
-      reason: 'should be rejected',
-      environment: 1,
-      tradingMode: 0,
-    });
+    const { status, body } = await callBff(
+      page,
+      SET_CONFIG_BFF,
+      setConfigPayload({
+        key: 'platform.maintenance_mode',
+        value: { value: { case: 'boolVal', value: true } },
+        reason: 'should be rejected',
+      }),
+    );
     expect(status).not.toBe(200);
     expect(JSON.stringify(body).toLowerCase()).toContain('permission');
+  });
+
+  test('SetConfig is rejected for a non-native environment (FailedPrecondition → 400)', async ({
+    page,
+  }) => {
+    // webServer.env sets APPLICATION_ENV=development (native scope = dev = Environment.DEV = 1).
+    // environment: 2 (PRODUCTION) is the non-native scope for this deployment.
+    await addAdminCookie(page);
+    await page.goto('/auth/login');
+    const { status, body } = await callBff(
+      page,
+      SET_CONFIG_BFF,
+      setConfigPayload({ environment: 2 }),
+    );
+    expect(status).toBe(400);
+    expect(JSON.stringify(body).toLowerCase()).toContain('native environment');
   });
 });
 
