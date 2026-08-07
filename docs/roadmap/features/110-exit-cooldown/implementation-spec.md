@@ -698,6 +698,10 @@ parity tests.)
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_live_loop.py` — modify
+- `services/xstockstrat-analysis/app/engine/live_loop.py` — modify (comment-only: the
+  Verification's final instruction adds a code comment at the guard site referencing this
+  step's test names by name, so it must land after those names are decided here, not in Step
+  10 where the guard code itself is written — sdd-review impl-spec, 2026-08-07)
 
 **Reviewers**: `xstockstrat-analysis` (service owner).
 
@@ -1254,7 +1258,9 @@ Connect-RPC call safety.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-ui && pnpm exec tsc --noEmit
+cd services/xstockstrat-ui
+pnpm exec tsc --noEmit
+pnpm run lint
 grep -n "exitCooldownDays\|parseExitCooldownDays" src/components/insights/StrategyWizard.tsx
 ```
 
@@ -1319,6 +1325,7 @@ grep -n "exitCooldownDays\|parseExitCooldownDays" src/components/insights/Strate
 ```bash
 cd services/xstockstrat-ui
 pnpm exec tsc --noEmit
+pnpm run lint
 grep -n "strat-exit-cooldown-7" e2e/mock-backend.ts e2e/fixtures/INVENTORY.md e2e/insights/strategy-authoring.spec.ts
 pnpm test:e2e -- e2e/insights/strategy-authoring.spec.ts
 ```

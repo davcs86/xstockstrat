@@ -140,7 +140,9 @@ Next: `/sdd-spec exit-cooldown` — generate the implementation spec from the ap
     adding a code comment to `live_loop.py` (the guard site) — an **F-08** risk if executed
     literally (staging a file outside the step's declared Files section). Fix: move the comment
     instruction into Step 10 (where the guard is actually written), or add `live_loop.py` to Step
-    11's Files. — [ ] unaddressed
+    11's Files. — [x] fixed: added `services/xstockstrat-analysis/app/engine/live_loop.py`
+    (comment-only) to Step 11's `**Files**`, with a note explaining why it belongs in this step
+    (the comment references Step 11's test names, which don't exist until this step).
   - Step 10: the skip-until-known guard is spec'd inside the pure `_apply_transition` function
     rather than literally inside `_eval_pair`'s `elif in_position and latest.exit:` block as
     design.md's round-5 "finalized" snippet shows. Functionally equivalent (isolation from the
@@ -152,7 +154,8 @@ Next: `/sdd-spec exit-cooldown` — generate the implementation spec from the ap
     resolves at discovery time. — [ ] unaddressed
   - Steps 17/18: neither includes `pnpm run lint` in its own or paired Verification (only present
     later, in the non-paired Step 21) — a strict per-step B2 lint-gate gap, caught before the final
-    gate but not per-step compliant. — [ ] unaddressed
+    gate but not per-step compliant. — [x] fixed: added `pnpm run lint` to both steps'
+    `**Verification**` blocks.
   - Step 2: `**Files**` lists three generated-output directories rather than exact files — standard
     practice for codegen steps, not a real defect. — [x] not applicable (accepted as idiomatic)
   - Step 12: own `ruff check` scoped to `entry_backfill.py` only, not the full service — functionally
@@ -164,6 +167,16 @@ Next: `/sdd-spec exit-cooldown` — generate the implementation spec from the ap
 
 Next: resolve the Step 11 Files/Verification mismatch (and ideally the Step 17/18 lint gap) before
 `/sdd-execute exit-cooldown`, or proceed and let `/sdd-execute` surface them per C-02.
+
+## Session 2026-08-07T02:15:00Z — impl-spec fixes (user-directed, before execute)
+
+- User chose to fix the Blocker + the Step 17/18 lint gap directly in `implementation-spec.md`
+  before starting `/sdd-execute` (rather than proceed as-is or defer). Both applied and checked
+  off above. Remaining unaddressed items (Step 10's guard-placement note and the `latest =
+  decisions[-1]` retention ambiguity) are advisory-only and left for `/sdd-execute` to surface at
+  Step 10's discovery/confirmation checkpoint per C-02 — they don't block starting execution.
+
+Next: `/sdd-execute exit-cooldown`.
 
 ## Session 2026-08-07T01:00:00Z — sdd-spec
 
