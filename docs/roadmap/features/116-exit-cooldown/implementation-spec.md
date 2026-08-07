@@ -183,7 +183,7 @@ COLUMN` in down (offline, no-DB check per the migration-step verification rule);
 
 ### Step 4 — service: generalize `cooldown.py` + dual-purpose `strategy_cooldowns.py`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/cooldown.py` — modify
@@ -251,7 +251,7 @@ confirm `live_loop.py` no longer calls the bare `.upsert(` (only `.upsert_exit(`
 
 ### Step 5 — test: paired with Step 4
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_strategy_cooldowns_repo.py` — create
@@ -1470,3 +1470,27 @@ repository." `scripts/buf-gen.sh:41` already establishes the correct invocation 
 `.git` + `subdir=packages/proto`) for exactly this reason; used the same form. `buf lint` and
 `buf breaking` both pass clean with the corrected command — this is a command-syntax fix, not a
 change to what the step verifies.
+
+### Deviation: Step 4 — service: generalize `cooldown.py` + dual-purpose `strategy_cooldowns.py`
+**Spec said**: `upsert_entry` INSERTs `(strategy_id, symbol, last_entry_at)` only, "touching only
+the `last_entry_at` column" (design.md § Chosen Approach).
+**Actual**: also expanded migration **012** (Step 3, already `done` at the time this was found)
+to `ALTER TABLE analysis.strategy_cooldowns ALTER COLUMN last_exit_at DROP NOT NULL` (and the
+inverse `SET NOT NULL` in `.down.sql`), and updated `strategy_cooldowns.py`'s module docstring to
+document both columns as nullable.
+**Reason**: migration `009`'s `last_exit_at TIMESTAMPTZ NOT NULL` was a safe invariant when the
+only writer (`upsert`/now `upsert_exit`) always supplied a real timestamp on INSERT. `upsert_entry`
+(this step) can INSERT a brand-new row for a pair that has **never exited** — an entry-first
+upsert, e.g. from the boot-time backfill (Step 12) or a live entry on a pair with no prior exit
+history — and PostgreSQL rejects an INSERT that omits a NOT NULL column with no DEFAULT. This
+was not caught by any of the 6 design-debate rounds (design.md's `upsert_entry` description
+assumed UPDATE-only semantics and never traced the INSERT branch against the column's
+constraint). Rejected fixing it by supplying a sentinel `last_exit_at` value on insert instead —
+a fake timestamp would be silently misread as a real anchor by `is_cooldown_active`, which is
+strictly worse than relaxing a constraint that was never semantically required (a pair that has
+never exited legitimately has no `last_exit_at`, exactly mirroring the already-established
+"NULL anchor = never gated" semantics `is_cooldown_active` already implements for the entry-side
+gate). Migration 012 had not yet been applied to any real database (still on a feature branch,
+never merged) when this was caught, so revising it is not an F-01 violation — only an already-
+`main-dev`-committed migration is immutable. Ledger-worthy: see the `insights.md`/`fails.md`
+write-up planned for this feature's archival.

@@ -238,8 +238,8 @@ class TestLiveEvaluationLoopCooldown:
         loop._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=[_bar_at(bar_dt)]))
 
         await loop._eval_pair(defn, "AAPL", throttle=0)
-        repo.upsert.assert_awaited_once()
-        args = repo.upsert.await_args.args
+        repo.upsert_exit.assert_awaited_once()
+        args = repo.upsert_exit.await_args.args
         assert args[0] == "s1" and args[1] == "AAPL" and args[2] == bar_dt
 
     @pytest.mark.asyncio
@@ -256,13 +256,13 @@ class TestLiveEvaluationLoopCooldown:
 
         await loop._eval_pair(defn, "AAPL", throttle=10_000)
         loop._notify.EmitAlert.assert_not_called()  # alert throttled
-        repo.upsert.assert_awaited_once()  # but the cooldown still persisted
+        repo.upsert_exit.assert_awaited_once()  # but the cooldown still persisted
 
     @pytest.mark.asyncio
     async def test_write_cooldown_failure_never_propagates(self):
         """FR-8 best-effort: a DB write failure is swallowed and state still advances."""
         repo = AsyncMock()
-        repo.upsert = AsyncMock(side_effect=RuntimeError("db down"))
+        repo.upsert_exit = AsyncMock(side_effect=RuntimeError("db down"))
         loop = _make_loop(cooldowns_repo=repo)
         defn = analysis_pb2.StrategyDefinition(strategy_id="s1")
         loop._last_state[("s1", "AAPL")] = True

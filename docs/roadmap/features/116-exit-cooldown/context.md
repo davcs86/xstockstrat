@@ -338,3 +338,47 @@ Next: Step 1.
   exact inverse `DROP COLUMN`; migration 009 confirmed untouched (F-01).
 - Files modified: `services/xstockstrat-analysis/migrations/012_strategy_cooldowns_last_entry_at.{up,down}.sql`
 - Deviations: none
+
+### Step 4 — service: generalize `cooldown.py` + dual-purpose `strategy_cooldowns.py` [done]
+- Renamed `is_cooldown_active`'s parameter `last_exit_at` → `gate_start_at`; generalized both
+  module docstrings (`cooldown.py`, `strategy_cooldowns.py`) to describe both consumers. Renamed
+  `upsert` → `upsert_exit`; added `upsert_entry`; `list_all()` now selects both timestamps.
+  Updated `live_loop.py`'s one call site (`upsert` → `upsert_exit`).
+- **Real bug caught mid-implementation** (not by the 6-round design debate): `upsert_entry`'s
+  INSERT would have violated migration 009's `last_exit_at NOT NULL` constraint for any pair
+  entering for the first time with no prior exit. Fixed by expanding migration 012 (Step 3,
+  already committed) to also `DROP NOT NULL` on `last_exit_at` — recorded as a Deviation Log
+  entry and a `fails.md` write-up (2026-08-07, "exit-cooldown — design"). Not an F-01 violation:
+  migration 012 was never applied to any real database (feature-branch only).
+- TDD: RED confirmed first (4 failures: `AttributeError: no attribute 'upsert_exit'`/
+  `'upsert_entry'` on the two new repo tests; `repo.upsert_exit` never-awaited on the two
+  live-loop tests already renamed by Step 5) against the pre-implementation tree, then GREEN
+  after the production changes (26/26 relevant tests, 434/434 full suite, 82% coverage, ruff
+  clean).
+- Files modified: `services/xstockstrat-analysis/app/services/cooldown.py`,
+  `services/xstockstrat-analysis/app/repositories/strategy_cooldowns.py`,
+  `services/xstockstrat-analysis/app/engine/live_loop.py`,
+  `services/xstockstrat-analysis/migrations/012_strategy_cooldowns_last_entry_at.{up,down}.sql`
+  (F-08 note: touching the migration files from within Step 4 is outside Step 4's own `**Files**`
+  list — justified as the minimal in-scope fix for the schema bug found while implementing this
+  step, per Phase 3 point 5; recorded explicitly rather than silently expanding scope).
+- Deviations: see Deviation Log ("Step 4").
+
+### Step 5 — test: paired with Step 4 [done]
+- Created `test_strategy_cooldowns_repo.py` (3 tests: `upsert_exit`/`upsert_entry` SQL+bind-arg
+  assertions, `list_all` returns both timestamps). Updated `test_live_loop.py`'s 3 `repo.upsert`
+  references to `repo.upsert_exit`.
+- Files modified: `services/xstockstrat-analysis/tests/test_strategy_cooldowns_repo.py`,
+  `services/xstockstrat-analysis/tests/test_live_loop.py`
+- Deviations: none beyond Step 4's (shared red/green cycle).
+
+**Forward-looking risk noted for Step 10**: the three pre-existing `TestLiveEvaluationLoopCooldown`
+tests (`test_exit_persists_cooldown_via_repo`, `test_exit_persists_even_when_alert_throttled`,
+`test_write_cooldown_failure_never_propagates`) construct their scenario by directly setting
+`loop._last_state[key] = True` without touching a `_replayed` tracking set. Once Step 10 adds the
+`if key not in self._replayed: run replay` guard, these tests' single-bar `GetBars` mock means
+`bars[:-1]` is empty — replay would run (key not yet in the not-yet-existing `_replayed`) and
+overwrite the manually-seeded `_last_state[key]` back to `False`, breaking all three. Step 10's own
+Verification claims these tests "must stay green... reproduces byte-for-byte" — that claim needs
+re-checking against this scenario when Step 10 is reached; likely fix is seeding
+`loop._replayed.add(key)` alongside `loop._last_state[key] = True` in each test's setup.

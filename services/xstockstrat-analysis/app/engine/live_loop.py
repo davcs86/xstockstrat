@@ -238,6 +238,6 @@ class LiveEvaluationLoop:
         if self._cooldowns_repo is None:
             return
         try:
-            await self._cooldowns_repo.upsert(key[0], key[1], ts)
+            await self._cooldowns_repo.upsert_exit(key[0], key[1], ts)
         except Exception as e:
             log.warning("live_loop: cooldown write failed: %s", e)
