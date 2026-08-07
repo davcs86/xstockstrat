@@ -131,11 +131,31 @@ export async function startMockBackend(): Promise<void> {
   };
 
   // ── Port 9091 — Trader segment ──────────────────────────────────────────
+  // placeOrderIntents: an in-memory map keyed by clientOrderId, genuinely exercising
+  // dedup (feature 101) rather than just echoing the field back — a repeat call with a
+  // clientOrderId already seen in this test run returns the SAME stored response, not a
+  // freshly-built one (see docs/roadmap/ledger/insights.md 2026-07-27: "a mock that echoes
+  // a request field back as its response cannot distinguish a correct consumer from an
+  // incorrect one"). The orderId itself stays the fixed 'mock-order-001' literal that
+  // order-form.spec.ts hard-asserts — startMockBackend() runs once for the whole Playwright
+  // run (global-setup.ts), so this map is shared/persistent across every spec file and
+  // worker; a counter-based id would make that assertion depend on cross-file run order.
+  const placeOrderIntents = new Map<
+    string,
+    { orderId: string; status: number; tradingMode: number }
+  >();
   const traderHandler = connectNodeAdapter({
     routes(router) {
       router.service(TradingService, {
-        async placeOrder() {
-          return { orderId: 'mock-order-001', status: 3, tradingMode: 1 };
+        async placeOrder(req) {
+          const clientOrderId = req.clientOrderId;
+          const stored = clientOrderId ? placeOrderIntents.get(clientOrderId) : undefined;
+          if (stored) {
+            return stored;
+          }
+          const resp = { orderId: 'mock-order-001', status: 3, tradingMode: 1 };
+          if (clientOrderId) placeOrderIntents.set(clientOrderId, resp);
+          return resp;
         },
         async cancelOrder() {
           // Order-ticket page Cancel action (feature 096). Specs that need a specific

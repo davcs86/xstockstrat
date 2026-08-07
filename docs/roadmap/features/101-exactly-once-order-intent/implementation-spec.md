@@ -1,6 +1,6 @@
 # Implementation Spec: exactly-once-order-intent
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-08-06
 **Feature**: `docs/roadmap/features/101-exactly-once-order-intent/feature.md`
 **Total Steps**: 20
@@ -60,7 +60,7 @@ not confirmed by any file in this repository.
 
 ### Step 1 — proto: add `IntentState` enum and `Order.intent_state` field
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/trading/v1/trading.proto` — modify
@@ -114,7 +114,7 @@ rows as of this spec).
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/trading/v1/*` — generate (checked-in codegen output)
@@ -142,7 +142,7 @@ Confirm the diff contains only the new `IntentState` enum and `Order.intent_stat
 
 ### Step 3 — migration: `006_order_intents`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/migrations/006_order_intents.up.sql` — create
@@ -214,7 +214,7 @@ implicitly with the table, so no explicit `DROP INDEX` is required). Do not star
 
 ### Step 4 — config: register the two new keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/CLAUDE.md` — modify (Config Keys Consumed table)
@@ -260,7 +260,7 @@ Confirm both keys appear in both files with matching defaults, and the key names
 
 ### Step 5 — service: broker client-order-id derivation + IBKR plumbing
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/clientorderid.go` — create
@@ -328,7 +328,7 @@ truncation, which design.md did not specify.
 
 ### Step 6 — test: broker client-order-id plumbing
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/clientorderid_test.go` — create
@@ -371,7 +371,7 @@ Confirm ≥40% and both new tests pass.
 
 ### Step 7 — service: `OrderIntentRepository` + `GetOrder`/`ListOrders` LATERAL join
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/order_intent_repo.go` — create
@@ -492,7 +492,7 @@ No coverage command here — see Step 8.
 
 ### Step 8 — test: repository package (coverage-excluded — build/lint only)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/order_intent_repo.go` — no additional changes (verification-only step)
@@ -531,7 +531,7 @@ cd services/xstockstrat-trading && GOWORK=off go vet ./internal/repository/...
 
 ### Step 9 — service: pure decision helpers + `StartOrderIntentSweeper`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/order_intent.go` — create
@@ -606,7 +606,7 @@ GOWORK=off go build ./...
 
 ### Step 10 — test: pure decision helpers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/order_intent_test.go` — create
@@ -645,7 +645,7 @@ All new tests pass; no coverage threshold applies to this package (Step 8's cite
 
 ### Step 11 — service: DI wiring (`orderIntentRepo` field + `resolveAccount` fix + `main.go`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -690,7 +690,7 @@ Confirm all 3 `resolveAccount` call sites compile against the new 3-return signa
 
 ### Step 12 — service: `PlaceOrder` dedup rewrite
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -778,7 +778,7 @@ Confirm all 3 `resolveAccount` call sites compile against the new 3-return signa
 
 ### Step 13 — service: `ReplaceOrder` dedup rewrite
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -818,7 +818,7 @@ Confirm all 3 `resolveAccount` call sites compile against the new 3-return signa
 
 ### Step 14 — service: `CancelOrder` dedup rewrite (fail-open semantics preserved)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -861,7 +861,7 @@ Confirm all 3 `resolveAccount` call sites compile against the new 3-return signa
 
 ### Step 15 — test: write-handler unit coverage (excluded package — targeted assertions)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_helpers_test.go` — modify
@@ -897,7 +897,7 @@ cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/... -ra
 
 ### Step 16 — test: `scripts/integration-test.sh` — fix broken sections + new dedup section
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `scripts/integration-test.sh` — modify
@@ -946,7 +946,7 @@ comments already describe its role.
 
 ### Step 17 — service: `xstockstrat-ui` — `IntentState` render map + prop threading
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/orderShared.tsx` — modify
@@ -1007,7 +1007,7 @@ later would fail this build — the C-10(a/d) compile-time guard the design requ
 
 ### Step 18 — service: wire `intentState` through the 4 call sites + `isWorking()` gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/OrderBook.tsx` — modify
@@ -1047,7 +1047,7 @@ cd services/xstockstrat-ui && pnpm exec tsc --noEmit
 
 ### Step 19 — service: Place Order client nonce (Consumer Surface — Place Order flow)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/OrderForm.tsx` — modify
@@ -1099,7 +1099,7 @@ Behavioral proof (nonce reused across a retry, rotated after success) is Step 20
 
 ### Step 20 — test: `xstockstrat-ui` e2e — fixtures, `mock-backend.ts`, `api-smoke.spec.ts`, new assertions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/orders.ts` — modify
@@ -1158,6 +1158,31 @@ cd services/xstockstrat-ui && pnpm test:e2e -- trader/order-ticket.spec.ts trade
 ```
 (add `trader/order-intent.spec.ts` to the invocation if created as a separate file). No coverage
 threshold applies to `xstockstrat-ui` (spec-template's coverage table: "n/a — use `pnpm test:e2e`").
+
+**Execution notes**:
+- Instruction 4 landed as a new `e2e/trader/order-intent.spec.ts` (Instruction 4's own fallback) —
+  `order-ticket.spec.ts`'s existing scope is the working/filled contrast, not intent-state uncertainty;
+  a separate file keeps that distinction legible. Registered in `INVENTORY.md`'s orders row.
+- Instruction 3's dedup map had to store the *whole* mocked response (`{orderId, status, tradingMode}`),
+  not just an `orderId` string, and the id itself stays the fixed `'mock-order-001'` literal —
+  `order-form.spec.ts` hard-asserts that exact string, and `startMockBackend()` runs once for the whole
+  Playwright run (`global-setup.ts`), so the map (and any id-generation scheme) is shared/persistent
+  across every spec file and worker for the run's lifetime. A counter-based id would have made that
+  assertion depend on cross-file execution order. `Map.get()`'s `| undefined` return also required an
+  explicit `stored` local (not returned directly) to satisfy `tsc` against the generated `PlaceOrder`
+  handler's `MessageInit<Order>` return type — caught by the Next.js dev-server type-check build itself.
+  Also documented in the ledger (2026-08-07 addendum to the 2026-07-27 entry): a dedup mock must persist
+  the *stored response*, not synthesize a new deterministic-looking id per call, when any consumer
+  elsewhere in the suite hard-asserts the original literal.
+- Instruction 5 landed as a new `order-form.spec.ts` test (`clientOrderId nonce is reused on a failed
+  resubmit, rotated after success`) using `page.route()` to intercept `PlaceOrder` directly (rather than
+  reading the Step-3 map, which isn't exposed to the browser) and recording each request's
+  `clientOrderId` from `postDataJSON()` — asserts the id is unchanged across a failed retry and rotates
+  after a successful placement.
+- `api-smoke.spec.ts:75`'s POST body now sends a fixed `clientOrderId: 'e2e-smoke-place-order-001'`
+  rather than a randomly generated one — the smoke test only asserts response shape (`orderId`/`status`
+  presence and type), so a fixed literal is simpler and equally correct; no assertion depends on
+  uniqueness within this file.
 
 ---
 

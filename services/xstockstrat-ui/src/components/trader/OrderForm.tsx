@@ -62,6 +62,13 @@ export function OrderForm({ mode, initialSymbol }: OrderFormProps) {
   const [stopPrice, setStopPrice] = useState('');
   const [message, setMessage] = useState('');
   const [isErrorMsg, setIsErrorMsg] = useState(false);
+  // Client-side idempotency nonce (feature 101, FR-1/FR-2): a stable ID per logical
+  // place-order action, generated once when the form opens and reused across retries of
+  // that same action (a network retry, a double-click, or the operator clicking "Place
+  // Order" again after seeing an error) so the server can dedup. Rotated only after a
+  // successful placement — a failed attempt must keep the same nonce so a resubmit is
+  // recognized as the same logical action, not a new one.
+  const [clientOrderId, setClientOrderId] = useState(() => crypto.randomUUID());
   const { mutate: placeOrder, isPending } = usePlaceOrder();
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -77,6 +84,7 @@ export function OrderForm({ mode, initialSymbol }: OrderFormProps) {
         stopPrice: stopPrice ? parseFloat(stopPrice) : 0,
         tradingMode: mode === 'live' ? PbTradingMode.LIVE : PbTradingMode.PAPER,
         accountId: selectedAccountId ?? '',
+        clientOrderId,
       },
       {
         onSuccess: (order) => {
@@ -86,6 +94,7 @@ export function OrderForm({ mode, initialSymbol }: OrderFormProps) {
           setQty('');
           setLimitPrice('');
           setStopPrice('');
+          setClientOrderId(crypto.randomUUID());
         },
         onError: (err) => {
           setIsErrorMsg(true);

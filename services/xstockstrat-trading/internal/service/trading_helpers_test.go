@@ -1,11 +1,33 @@
 package service
 
 import (
+	"context"
 	"testing"
+
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	tradingv1 "github.com/xstockstrat/contracts/gen/go/trading/v1"
+	"github.com/xstockstrat/trading/internal/config"
 )
+
+// TestPlaceOrder_RequiresClientOrderId proves the mandatory-nonce guard (feature 101,
+// FR-1) runs before any dependency call — reachable with a bare TradingService{} because
+// the guard is checked before resolveAccount/orderIntentRepo/repo are ever touched.
+func TestPlaceOrder_RequiresClientOrderId(t *testing.T) {
+	s := &TradingService{cfgW: &config.Watcher{}}
+	_, err := s.PlaceOrder(context.Background(), &tradingv1.PlaceOrderRequest{
+		Symbol: "AAPL", Side: tradingv1.OrderSide_ORDER_SIDE_BUY, Qty: 1,
+		ClientOrderId: "",
+	})
+	if err == nil {
+		t.Fatal("expected an error for a missing client_order_id")
+	}
+	if grpcstatus.Code(err) != codes.InvalidArgument {
+		t.Errorf("got code %v, want InvalidArgument", grpcstatus.Code(err))
+	}
+}
 
 func TestAlpacaStatusToProto(t *testing.T) {
 	tests := []struct {

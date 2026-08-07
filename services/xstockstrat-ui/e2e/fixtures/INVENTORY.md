@@ -22,7 +22,7 @@ skill).
 | Symbol readiness | `symbolReadiness` (single-arg factory) | `e2e/fixtures/opportunities.ts` | `xstockstrat.analysis.v1.SymbolReadiness` | `e2e/mock-backend.ts` (`evaluateReadiness` — spreads `READINESS_BUCKET_OVERRIDE` over it; keep single-arg, the `.map` is an arrow), `e2e/insights/watchlists.spec.ts` (readiness rollup, feature 098) |
 | Watchlists (stateful mock) | `mockWatchlists`, `MockWatchlist`, `MockBinding` (per-symbol `(symbol, strategyId)` bindings + `UpdateWatchlist` route, feature 097) | `e2e/helpers/watchlistMock.ts` | `xstockstrat.portfolio.v1.Watchlist` CRUD RPCs | `e2e/insights/watchlists.spec.ts`, `e2e/insights/screener.spec.ts` (Save/Add-top-N, feature 098) |
 | Positions | `POSITION_AAPL`, `POSITION_MSFT`, `POSITIONS`, `positionForSymbol` | `e2e/fixtures/positions.ts` | `xstockstrat.portfolio.v1.Position` | `e2e/mock-backend.ts` (`listPositions`, `getPosition`), `e2e/trader/{positions,position-detail,valuation-parity}.spec.ts` |
-| Orders (shared mock set) | `ORDER_FILLED`, `ORDER_WORKING`, `ORDERS`, `orderForId` | `e2e/fixtures/orders.ts` | `xstockstrat.trading.v1.Order` | `e2e/mock-backend.ts` (`listOrders`, `getOrder`), `e2e/trader/order-ticket.spec.ts` |
+| Orders (shared mock set) | `ORDER_FILLED`, `ORDER_WORKING`, `ORDER_UNKNOWN_INTENT` (`intentState=4/UNKNOWN`, feature 101), `ORDERS`, `orderForId` | `e2e/fixtures/orders.ts` | `xstockstrat.trading.v1.Order` | `e2e/mock-backend.ts` (`listOrders`, `getOrder`), `e2e/trader/{order-ticket,order-intent}.spec.ts` |
 
 ## Recurring sentinel ids (stay inline, but are reserved)
 

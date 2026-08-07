@@ -51,8 +51,33 @@ export const ORDER_WORKING = {
   tradingMode: 1, // PAPER
 };
 
+/**
+ * A working order whose platform-side command outcome is unknown (feature 101,
+ * intentState 4=UNKNOWN per trading.proto's IntentState enum: UNSPECIFIED=0/PENDING=1/
+ * COMPLETED=2/REJECTED=3/UNKNOWN=4) — the ticket page must render `IntentStateBadge`'s
+ * "Uncertain — verify with broker" text distinctly from OrderStatus.
+ */
+export const ORDER_UNKNOWN_INTENT = {
+  orderId: 'mock-order-003',
+  symbol: 'MSFT',
+  side: 1, // BUY
+  orderType: 1, // MARKET
+  status: 1, // NEW
+  qty: 3,
+  filledQty: 0,
+  limitPrice: 0,
+  stopPrice: 0,
+  filledAvgPrice: 0,
+  timeInForce: 'day',
+  strategyId: 'momentum-breakout-v4',
+  accountId: BROKER_ACCOUNT_ALPACA.id,
+  brokerOrderId: 'brk-msft-0003',
+  tradingMode: 1, // PAPER
+  intentState: 4, // UNKNOWN
+};
+
 /** The orders the mock ListOrders returns (Orders list / per-symbol Orders & fills). */
-export const ORDERS = [ORDER_FILLED, ORDER_WORKING];
+export const ORDERS = [ORDER_FILLED, ORDER_WORKING, ORDER_UNKNOWN_INTENT];
 
 /** Lookup used by the mock GetOrder handler; defaults to the filled order. */
 export function orderForId(orderId: string | undefined) {

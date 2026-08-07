@@ -39,6 +39,11 @@ type IBKRClient struct {
 	httpClient        *http.Client
 }
 
+// IBKRRequestTimeout is IBKR's hardcoded HTTP client timeout (a confirmed pre-existing
+// bug — see docs/context-constitution-findings.md — this feature does not fix it, only
+// names it so design.md's staleness-threshold formula has one source of truth).
+const IBKRRequestTimeout = 10 * time.Second
+
 func NewIBKRClient(cfg IBKRConfig) *IBKRClient {
 	base := cfg.BaseURL
 	if base == "" {
@@ -52,7 +57,7 @@ func NewIBKRClient(cfg IBKRConfig) *IBKRClient {
 		accessTokenSecret: cfg.AccessTokenSecret,
 		ibkrAccountID:     cfg.IBKRAccountID,
 		isPaper:           cfg.IsPaper,
-		httpClient:        &http.Client{Timeout: 10 * time.Second},
+		httpClient:        &http.Client{Timeout: IBKRRequestTimeout},
 	}
 }
 
@@ -132,6 +137,11 @@ func (c *IBKRClient) SubmitOrder(ctx context.Context, req OrderRequest) (*Broker
 	}
 	if req.StopPrice != 0 {
 		body["auxPrice"] = req.StopPrice
+	}
+	if req.ClientOrderID != "" {
+		// cOID is IBKR's Client Portal Web API customer-order-id field (confirmed against
+		// IBKR's public docs at execute time — feature 101 design.md Open Risk #1, resolved).
+		body["cOID"] = req.ClientOrderID
 	}
 
 	payload, err := json.Marshal(map[string]interface{}{"orders": []interface{}{body}})

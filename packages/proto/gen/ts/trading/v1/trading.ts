@@ -329,6 +329,84 @@ export function credentialStatusToNumber(object: CredentialStatus): number {
   }
 }
 
+/**
+ * IntentState is the platform's own knowledge of whether a PlaceOrder/ReplaceOrder/
+ * CancelOrder command actually reached the broker — orthogonal to OrderStatus (an order
+ * can be NEW and also UNKNOWN simultaneously). See docs/roadmap/features/101-exactly-once-order-intent/design.md.
+ */
+export enum IntentState {
+  INTENT_STATE_UNSPECIFIED = "INTENT_STATE_UNSPECIFIED",
+  /** INTENT_STATE_PENDING - intent recorded, broker call not yet resolved */
+  INTENT_STATE_PENDING = "INTENT_STATE_PENDING",
+  /** INTENT_STATE_COMPLETED - broker call resolved (accepted or a definite rejection) */
+  INTENT_STATE_COMPLETED = "INTENT_STATE_COMPLETED",
+  /** INTENT_STATE_REJECTED - definite, synchronous broker rejection (not a timeout) */
+  INTENT_STATE_REJECTED = "INTENT_STATE_REJECTED",
+  /** INTENT_STATE_UNKNOWN - broker outcome unknown — never retried automatically (FR-5) */
+  INTENT_STATE_UNKNOWN = "INTENT_STATE_UNKNOWN",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function intentStateFromJSON(object: any): IntentState {
+  switch (object) {
+    case 0:
+    case "INTENT_STATE_UNSPECIFIED":
+      return IntentState.INTENT_STATE_UNSPECIFIED;
+    case 1:
+    case "INTENT_STATE_PENDING":
+      return IntentState.INTENT_STATE_PENDING;
+    case 2:
+    case "INTENT_STATE_COMPLETED":
+      return IntentState.INTENT_STATE_COMPLETED;
+    case 3:
+    case "INTENT_STATE_REJECTED":
+      return IntentState.INTENT_STATE_REJECTED;
+    case 4:
+    case "INTENT_STATE_UNKNOWN":
+      return IntentState.INTENT_STATE_UNKNOWN;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return IntentState.UNRECOGNIZED;
+  }
+}
+
+export function intentStateToJSON(object: IntentState): string {
+  switch (object) {
+    case IntentState.INTENT_STATE_UNSPECIFIED:
+      return "INTENT_STATE_UNSPECIFIED";
+    case IntentState.INTENT_STATE_PENDING:
+      return "INTENT_STATE_PENDING";
+    case IntentState.INTENT_STATE_COMPLETED:
+      return "INTENT_STATE_COMPLETED";
+    case IntentState.INTENT_STATE_REJECTED:
+      return "INTENT_STATE_REJECTED";
+    case IntentState.INTENT_STATE_UNKNOWN:
+      return "INTENT_STATE_UNKNOWN";
+    case IntentState.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function intentStateToNumber(object: IntentState): number {
+  switch (object) {
+    case IntentState.INTENT_STATE_UNSPECIFIED:
+      return 0;
+    case IntentState.INTENT_STATE_PENDING:
+      return 1;
+    case IntentState.INTENT_STATE_COMPLETED:
+      return 2;
+    case IntentState.INTENT_STATE_REJECTED:
+      return 3;
+    case IntentState.INTENT_STATE_UNKNOWN:
+      return 4;
+    case IntentState.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 export interface Order {
   orderId: string;
   clientOrderId: string;
@@ -351,6 +429,8 @@ export interface Order {
   brokerOrderId: string;
   accountId: string;
   brokerType: BrokerType;
+  /** intent_state is set by every write path and read via a cross-intent LATERAL join on other reads; see design.md. */
+  intentState: IntentState;
 }
 
 export interface PlaceOrderRequest {
@@ -363,6 +443,11 @@ export interface PlaceOrderRequest {
   timeInForce: string;
   strategyId: string;
   userId: string;
+  /**
+   * client_order_id is required: a stable client-generated nonce reused across retries of
+   * the same logical place-order action (see the /trader Place Order form's nonce generator).
+   * Empty is rejected with InvalidArgument. Used as the order-intent dedup key (feature 101).
+   */
   clientOrderId: string;
   requiresApproval: boolean;
   /** If UNSPECIFIED, the service uses trading.broker.paper config key to determine mode. */
@@ -537,6 +622,7 @@ function createBaseOrder(): Order {
     brokerOrderId: "",
     accountId: "",
     brokerType: BrokerType.BROKER_TYPE_UNSPECIFIED,
+    intentState: IntentState.INTENT_STATE_UNSPECIFIED,
   };
 }
 
@@ -601,6 +687,9 @@ export const Order: MessageFns<Order> = {
     }
     if (message.brokerType !== BrokerType.BROKER_TYPE_UNSPECIFIED) {
       writer.uint32(160).int32(brokerTypeToNumber(message.brokerType));
+    }
+    if (message.intentState !== IntentState.INTENT_STATE_UNSPECIFIED) {
+      writer.uint32(168).int32(intentStateToNumber(message.intentState));
     }
     return writer;
   },
@@ -772,6 +861,14 @@ export const Order: MessageFns<Order> = {
           message.brokerType = brokerTypeFromJSON(reader.int32());
           continue;
         }
+        case 21: {
+          if (tag !== 168) {
+            break;
+          }
+
+          message.intentState = intentStateFromJSON(reader.int32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -867,6 +964,11 @@ export const Order: MessageFns<Order> = {
         : isSet(object.broker_type)
         ? brokerTypeFromJSON(object.broker_type)
         : BrokerType.BROKER_TYPE_UNSPECIFIED,
+      intentState: isSet(object.intentState)
+        ? intentStateFromJSON(object.intentState)
+        : isSet(object.intent_state)
+        ? intentStateFromJSON(object.intent_state)
+        : IntentState.INTENT_STATE_UNSPECIFIED,
     };
   },
 
@@ -932,6 +1034,9 @@ export const Order: MessageFns<Order> = {
     if (message.brokerType !== BrokerType.BROKER_TYPE_UNSPECIFIED) {
       obj.brokerType = brokerTypeToJSON(message.brokerType);
     }
+    if (message.intentState !== IntentState.INTENT_STATE_UNSPECIFIED) {
+      obj.intentState = intentStateToJSON(message.intentState);
+    }
     return obj;
   },
 
@@ -960,6 +1065,7 @@ export const Order: MessageFns<Order> = {
     message.brokerOrderId = object.brokerOrderId ?? "";
     message.accountId = object.accountId ?? "";
     message.brokerType = object.brokerType ?? BrokerType.BROKER_TYPE_UNSPECIFIED;
+    message.intentState = object.intentState ?? IntentState.INTENT_STATE_UNSPECIFIED;
     return message;
   },
 };

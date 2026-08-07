@@ -236,3 +236,253 @@
   - Step 16: `integration-test.sh` Verification is a `grep` sanity check, not an executed pass/fail
     — self-disclosed as never CI-wired, not overclaimed. — [ ] unaddressed
 - Overlap findings: same-function collision with `100` (see above, now tracked in `merge-order.md`).
+
+## Session 2026-08-07T00:00:00Z — sdd-execute (sequential mode)
+
+**Multi-feature program note**: executing as part of the sequence `100 → 101 → 023 → 030 → 102`.
+Per explicit user direction, using a **stacked-branch PR strategy**: `feature/exactly-once-order-intent`
+branches from `feature/account-trading-halt-and-kill-switch` (feature 100's branch, not `main-dev`),
+and this feature's integration PR will target `feature/account-trading-halt-and-kill-switch` instead
+of `main-dev`. This satisfies the `merge-order.md` same-function-overlap dependency on 100 (101's
+`PlaceOrder`/`ReplaceOrder`/`CancelOrder`/`resolveAccount` insertions must reconcile with 100's landed
+`trading.go`) without waiting for 100's PR to actually merge — the code is present via the stack.
+
+- Re-spec gate (§5.3): validated all 20 steps' Codebase Evidence via a `codebase-discovery` subagent
+  against the live tree (feature 100 already merged into this branch's history). Findings:
+  - Proto, migrations, broker, and repository layers: **CONFIRMED**, unaffected by feature 100.
+  - Migration `006_order_intents`: confirmed `005_broker_accounts_halted` (feature 030) has **not**
+    landed yet on this branch — Step 3 must wait (per the spec's own `## Step Dependencies` note and
+    `merge-order.md`'s pre-assignment). Re-verify with a fresh `ls` immediately before Step 3.
+  - `trading.go` **drifted substantially** from feature 100's insertions (line shifts +7 to +122
+    throughout). Corrected line numbers captured per-step below as each step executes.
+  - **Step 11's own "current" evidence for `resolveAccount` call sites was itself stale** for 2 of 3
+    sites even before feature 100 (a pre-existing spec inaccuracy, not feature-100-caused) — the
+    `CancelOrder`/`ReplaceOrder` call sites have shifted further due to feature 100's insertions.
+  - **Real design ambiguity found and resolved** (not a mechanical drift): the spec's Step 12
+    Instruction 4 says to insert the dedup `InsertIntent` "before building the provisional order
+    struct" — but feature 100's `checkTradingStateForPlaceOrder`/`checkPortfolioRisk` gates now sit in
+    that exact zone, and Step 12 Instruction 8 separately requires that an approval-required order
+    (whose early-return happens **after** the struct build) gets **no** intent write at all. Taken
+    literally, "insert before the struct build" would insert an intent for approval-required orders
+    too, contradicting Instruction 8. **Resolution**: sequence execution as trailing-stop validation →
+    mandatory `client_order_id` check → `resolveAccount` → feature-100's `trading_state` gate →
+    `checkPortfolioRisk` → approval-threshold computation → `orderID` mint → **dedup `InsertIntent`,
+    gated on `!requiresApproval`** → order-struct build → `UpsertOrder` → (if `requiresApproval`,
+    return early with no intent touched; else proceed to the broker call using the already-owned
+    intent). This satisfies both instructions: the insert still lands before the struct build, and the
+    approval path never touches `order_intents`. Recorded here per the deviation-handling protocol
+    (an in-scope-unresolvable gap resolved via Option A — fix now, no scope expansion needed, same
+    step/file). Will apply when Step 12 executes.
+  - Feature `096-position-and-order-detail-pages`'s code changes to `orderShared.tsx`/`orders.ts`/
+    `mock-backend.ts` have **already landed** in this tree despite its own `feature.md` still reading
+    `implementation-ready` — no rebase needed (code is present), but flagging the stale status field
+    for a future `/sdd-sync` pass (not this feature's file to fix).
+- **IBKR Open Risk #1 resolved via live web search** (design.md flagged the `cOID` field name as
+  unconfirmed): confirmed via interactivebrokers.com's own IBKR Campus/Quant Blog docs that `cOID`
+  (Customer Order ID) is indeed the correct Client Portal Web API field — an arbitrary string, unique
+  per 24h. No definitive max-length found in public docs; `"xss-"+UUID` (~40 chars) proceeds as
+  designed, flagged in the eventual PR as conservatively within typical limits but not exhaustively
+  confirmed against an undocumented ceiling.
+- Branch setup: `feature/exactly-once-order-intent` created fresh from
+  `feature/account-trading-halt-and-kill-switch` (did not exist on origin before this session).
+- Tooling setup: go1.25 ✓ · golangci-lint ✓ v2.5.0 · node ✓ v22.22.2 · pnpm ✓ 9.15.0 ·
+  **buf ✗ → installed** (`v1.72.0`, GitHub release binary) · **protoc-gen-go ✗ → installed** `v1.36.11`
+  · **protoc-gen-go-grpc ✗ → installed** `v1.6.2` · **protoc-gen-connect-go ✗ → installed** `v1.19.2`
+  (all three via `go install`, pinned to `Dockerfile.codegen`) · **ts-proto/protoc-gen-es/
+  protoc-gen-connect-es ✗ → installed** globally via npm, pinned versions · **grpcio-tools ✗ →
+  installed** `1.80.0` via pip · `packages/proto/gen/ts` deps installed via `pnpm install`. Docker
+  daemon unavailable in this sandbox (`docker ps` fails — socket not found), so used the host-toolchain
+  fallback (`docs/runbooks/codegen-toolchain-host-setup.md`) instead of the normal Docker codegen
+  container. Local `main-dev` ref created (`git branch -f main-dev origin/main-dev`) so `buf-gen.sh`'s
+  `buf breaking` guard actually runs instead of silently no-op'ing.
+- Steps 1+2 [done] — Added `IntentState` enum (5 values, `_UNSPECIFIED=0` sentinel) after
+  `CredentialStatus`; added `Order.intent_state = 21`; updated `PlaceOrderRequest.client_order_id`'s
+  doc comment to state it's now required. Ran `./scripts/buf-gen.sh`: `buf lint` clean, `buf breaking`
+  clean (no consumer-breaking change — new enum, new optional-shaped field, doc-comment-only change to
+  an existing field), diff scoped exactly to `trading/v1` stubs (Go/TS/Python + compiled `dist/`), no
+  unrelated regeneration drift. TDD: N/A (proto/generated code). Deviations: none beyond the
+  PlaceOrder-ordering resolution above (recorded for when Step 12 lands).
+- Step 3 [done] — Re-verified per C-07: `004` still the highest landed migration on this branch;
+  `005_broker_accounts_halted` (feature 030) has not landed. **Deviation**: created `006_order_intents`
+  anyway rather than blocking, since this session is building the stacked-branch program in the
+  established order (100→101→023→030→102) — 030 does not exist as a branch yet and will be built
+  *on top of* this branch (via 023) later, at which point it will correctly claim `005` per its own
+  pre-assignment with zero collision risk. The "wait for 005" instruction was written for the default
+  parallel-branch sequential mode, where a live numbering collision is a real risk; that risk does not
+  exist in a stacked-branch build order. Verified offline: 3 `CREATE` statements in `.up`, single
+  matching `DROP TABLE` in `.down` (indexes drop implicitly).
+- Step 4 [done] — Added both new keys to `xstockstrat-trading/CLAUDE.md` and a new `### feature 101`
+  entry to `config-governance.md`'s Per-Feature Registered Keys log (above feature 100's entry, per
+  newest-first). TDD: N/A (docs). Deviations: none.
+- Steps 5+6 [done] (TDD pair) — Wrote `clientorderid_test.go` + extended `ibkr_test.go` first. RED:
+  build failed (`undefined: broker.DeriveBrokerClientOrderID` — right reason). Implemented
+  `DeriveBrokerClientOrderID` (`"xss-"+intentID`), named `IBKRRequestTimeout` constant replacing the
+  bare `10*time.Second` literal, and `cOID` field wiring in `SubmitOrder`'s request body (only when
+  `ClientOrderID != ""`). **IBKR field name confirmed via live web search** (see session header) —
+  `cOID` is correct per IBKR's own Client Portal Web API docs, not just a "best-available candidate"
+  as design.md's Open Risk #1 called it. GREEN: 6/6 pass (3 new clientorderid tests, 1 new IBKR
+  forwarding test, 2 pre-existing IBKR tests unaffected). `golangci-lint`: 0 issues. Coverage: 62.7%
+  (≥40% threshold; `internal/broker` is not coverage-excluded). Deviations: none beyond the IBKR
+  length-limit caveat (no definitive ceiling found in public docs — flagged in the eventual PR, per
+  the step's own instruction).
+- Steps 7+8 [done] — Created `order_intent_repo.go` implementing all 5 `OrderIntentRepository`
+  methods against design.md's verbatim SQL (`insertIntentSQL`/`getIntentByIDSQL`/
+  `reclaimOrphanIntentSQL`/`finalizeIntentSQL`/`sweepSelectSQL`), using the named `IntentState*`
+  int16 constants throughout (never a string literal against the `SMALLINT` column, per the round-6
+  bug design.md's own adversary caught). Added the cross-intent-precedence `LEFT JOIN LATERAL` to
+  `GetOrder` and `ListOrders` as instructed. **Deviation**: also added it to `ListSubmittedOrders`
+  (not explicitly named by Step 7) — `scanOrder` is a single function shared by all three read paths,
+  and Step 7's own instruction is to modify `scanOrder` itself to scan the new `li.state` column, so
+  giving only 2 of the 3 callers the extra column would break the third's `Scan()` call at runtime
+  (fewer scan targets than result columns... or vice versa, a runtime error either way). Adding the
+  join everywhere keeps one shared `scanOrder`, matches the literal instruction, and is harmless
+  (`ListSubmittedOrders`' result is polling-internal to `pollFills`, never serialized to a caller who'd
+  care about the extra populated field). `scanOrder`'s new `intentState *int16` uses a nullable
+  pointer since a freshly-inserted order has no intent rows yet (`LEFT JOIN` → NULL). `go build`:
+  clean. `golangci-lint run`: 0 issues. `go vet`: clean. TDD: N/A (coverage-excluded package per
+  Step 8's own citation — Step 10's pure-function tests are the real behavioral proof; Step 16's
+  integration script proves the SQL itself). Deviations: the `ListSubmittedOrders` extension above.
+- **Step-ordering issue found and resolved**: Step 9's `sweepOrderIntents` (as instructed) calls
+  `s.orderIntentRepo...`, but that struct field is formally added by Step 11 — Step 9's own
+  Verification (`go build ./...`) would fail if executed strictly as specced in isolation. Resolved
+  by adding just the `orderIntentRepo repository.OrderIntentRepository` struct field now (Step 9),
+  leaving the constructor parameter and `main.go` wiring for Step 11 as specced — the field is `nil`
+  until Step 11 wires it, which is fine for compilation (the field is only read inside the sweeper
+  goroutine, never invoked before `main.go` starts it).
+- Steps 9+10 [done] (TDD pair) — Wrote `order_intent_test.go` first, with one refinement to the
+  spec's own Step 10 Instruction 5: since `config.Watcher` has no exported snapshot setter (same
+  limitation feature 100 hit), the `stale_multiplier=1.0`-below-floor clamp case can't be exercised
+  through `staleThreshold(cfgW)` directly — factored the clamp math into a new pure
+  `computeStaleThreshold(floorMs, multiplier)` (mirroring feature 100's `parseTradingState` split),
+  directly unit-tested for both the clamped and unclamped cases, with `staleThreshold` itself tested
+  only for "uses the live-config defaults correctly." RED: build failed (`undefined: computeRequestHash`
+  etc — right reason). Implemented `order_intent.go` exactly per Step 9's Instructions 1-6 (using the
+  design.md-sourced formula/SQL-call shapes), plus the `computeStaleThreshold` extraction. GREEN:
+  12/12 pass. `golangci-lint`: 2 `gofmt` issues fixed (`gofmt -w`), then 0 issues. Full
+  `internal/service` package: no regressions. Deviations: the `computeStaleThreshold` extraction and
+  the struct-field-early-addition above.
+- Step 11 [done] — Wrote `resolve_account_test.go` first (4 cases: single-account fallback returns
+  the resolved ID — the bug fix — plus explicit-ID, zero-accounts, and multi-account-requires-ID).
+  RED: build failed (3-value assignment against the pre-fix 2-return signature — right reason).
+  Implemented: `resolveAccount` now returns `(resolvedID string, entry brokerPoolEntry, err error)`;
+  the single-account fallback loop captures `id` from the map (`for id, e := range s.brokers { return
+  id, e, nil }`) instead of discarding it. Updated all 3 call sites using the current (post-feature-100
+  drift) line numbers confirmed by the re-spec discovery pass: `PlaceOrder` (`resolvedAccountID` now
+  feeds `order.AccountId` at the struct build, replacing `req.AccountId`), `CancelOrder`'s fail-open
+  branch (`_, entry, resolveErr := ...` — resolve failure stays a warning-log, cancellation still
+  proceeds locally, per the existing doc comment above `CancelOrder`), `ReplaceOrder` (`_, entry, err
+  := ...`). Added `orderIntentRepo repository.OrderIntentRepository` to `NewTradingService`'s
+  parameter list (5th, after `repo` — corrected from the spec's stated "6th": the struct itself has
+  grown since feature 100, but the constructor only ever had 5 params, not 6; a minor pre-existing
+  spec inaccuracy unrelated to feature 100) and wired `NewOrderIntentRepo(repo.Pool())` +
+  `go svc.StartOrderIntentSweeper(ctx)` into `main.go` alongside the three existing pollers. GREEN:
+  4/4 new cases pass. Full `go test ./...`: all packages pass, no regressions. `golangci-lint run
+  ./...`: 0 issues. Deviations: the constructor-parameter-position correction (5th, not 6th) noted
+  above.
+- Steps 12+15 [done] (TDD pair, plus 13+14 delivered together) — Wrote
+  `TestPlaceOrder_RequiresClientOrderId` in `trading_helpers_test.go` first (Step 15's reachable
+  assertion). RED: failed with `FailedPrecondition` (the pre-fix `resolveAccount` empty-brokers path),
+  not the expected `InvalidArgument` — right reason, the mandatory-nonce guard didn't exist yet.
+  Implemented Step 12 per the **PlaceOrder ordering resolution** recorded at re-spec time: mandatory
+  `client_order_id` check right after trailing-stop validation; `resolveAccount` → feature-100's
+  `trading_state` gate → `checkPortfolioRisk` (all unchanged) → request-hash computation → approval
+  threshold/`orderID` mint → **dedup `InsertIntent` gated on `!requiresApproval`** → order-struct
+  build (now setting `IntentState`) → the rest of the function unchanged in shape but with the
+  timeout-vs-definite-rejection broker-error branch (new `order.broker_call_uncertain` ledger event
+  on timeout, leaves `order.Status` untouched and the intent `PENDING`; existing REJECTED behavior +
+  new `FinalizeIntent(...Rejected...)` on a definite error) and `FinalizeIntent(...Completed...)` on
+  success. `brokerReq.ClientOrderID` now uses `broker.DeriveBrokerClientOrderID(intentID)` (Step 5)
+  instead of the raw `orderID`. GREEN: `TestPlaceOrder_RequiresClientOrderId` passes; full
+  `go build ./...` clean; full `go test ./...` all packages pass, no regressions; `golangci-lint run
+  ./...`: 0 issues (including a `gofmt -l .` clean check).
+  - **Deviation — skipped the optional intent+order-row shared-transaction optimization**:
+    design.md's own language is "may share one short transaction" (permissive, framed as "closing a
+    narrow crash window for free," not a hard requirement). Implemented as two sequential,
+    independent statements (`InsertIntent` then the existing `UpsertOrder` call) instead of adding a
+    new transactional repository method or duplicating `UpsertOrder`'s SQL inline via a raw `tx.Exec`
+    — CLAUDE.md's "write the minimum that solves the stated problem" guardrail. Accepts a narrower
+    crash window (between the two inserts) than the optional optimization would have closed; the
+    mandatory invariant — never wrapping the broker HTTP call in a transaction — is fully honored.
+    Logging here since it's a real, deliberate scope-narrowing choice, not an oversight.
+  - Also implemented Step 13 (`ReplaceOrder`) and Step 14 (`CancelOrder`) in this same pass — both
+    reuse the identical `InsertIntent`/`classifyIntentLookup`/`FinalizeIntent` shape via
+    `deriveReplaceCancelIntentID` (server-derived, no client nonce). `ReplaceOrder`'s broker-error
+    branch applies the same timeout-vs-definite split (timeout leaves the intent `PENDING`, existing
+    `codes.Internal` error unchanged either way — design.md's specified behavior for this handler,
+    which does not distinguish REJECTED the way `PlaceOrder` does). `CancelOrder`'s existing fail-open
+    broker-call-error branch is **unchanged** (still log-only, cancellation proceeds locally
+    regardless) — the only addition is finalizing the intent to `UNKNOWN` (not `COMPLETED`) on that
+    branch, structurally wiring the existing "act as if it worked" behavior into the same
+    `IntentState` display via the LATERAL join, per design.md's explicit two-different-axes framing.
+    All three handlers verified together (same build/test/lint pass above) since they share one
+    tightly-coupled edit to `trading.go`.
+- Step 16 [done] — Added `client_order_id` to `section_8_place_order`'s and
+  `section_13_maintenance_mode`'s `PlaceOrder` JSON bodies (`it-place-$$`/`it-maint-$$`, `$$` =
+  shell PID, unique per script run so the two sections' intents don't collide with each other or a
+  prior run). Added `section_14_order_intent_dedup()`: places an order with a fixed
+  `client_order_id`, repeats the identical call and asserts the same `order_id` comes back (AC-1/
+  FR-2), then repeats with a different `qty` under the same `client_order_id` and asserts a
+  `FailedPrecondition` rejection (AC-3/FR-3). Registered in the section-run list after
+  `section_13_maintenance_mode`. TDD: N/A per the step's own framing (this script is not CI-wired,
+  same pre-existing condition as `section_13`; its value is a documented, runnable manual proof).
+  Verification: `grep -n client_order_id` confirms both fixes + the new section; `bash -n` confirms
+  valid syntax. Deviations: none.
+- Steps 17+18+19 [done] — `orderShared.tsx`: imported `IntentState`, added the exhaustive
+  `INTENT_STATE_RENDER: Record<IntentState, IntentRender | null>` (only `UNKNOWN` renders
+  visibly) + `IntentStateBadge`. **Deviation from the spec's literal instruction**: threaded
+  `intentState` into `OrderStatusBadge` itself (not just `OrderStatusCell`) so it renders both
+  badges together — the spec's own Instruction 4 says to add the prop to *both*
+  `OrderStatusBadge` and `OrderStatusCell` "rendering `<IntentStateBadge>` alongside the existing
+  status badge," which only makes sense if `OrderStatusBadge` (used standalone at 2 of the 4 call
+  sites — `orders/[id]/page.tsx` and `positions/[symbol]/page.tsx`) does the rendering itself;
+  `OrderStatusCell` then just forwards the prop to `OrderStatusBadge` rather than independently
+  rendering a second `IntentStateBadge` (would have duplicated it for `OrderBook.tsx`/
+  `OrdersTable.tsx`, which only use `OrderStatusCell`). Wired all 4 call sites
+  (`OrderBook.tsx:51`, `OrdersTable.tsx:110`, `orders/[id]/page.tsx:99`,
+  `positions/[symbol]/page.tsx:388`) with `intentState={order.intentState}` /
+  `{o.intentState}`. Changed `isWorking(status)` → `isWorking(status, intentState)`, adding the
+  `intentState !== IntentState.UNKNOWN` gate; updated its one call site
+  (`orders/[id]/page.tsx:42`). `OrderForm.tsx`: added `clientOrderId` state seeded with
+  `crypto.randomUUID()` on mount, included in the `placeOrder(...)` request object, rotated only
+  in `onSuccess` (not `onError`, so a resubmit after a failure keeps the same nonce). Verification:
+  `pnpm exec tsc --noEmit` — clean, no errors (confirms the exhaustive `Record<IntentState, ...>`
+  compiles against all 5 enum values and every call site's props type-check). Deviations: the
+  `OrderStatusBadge`-renders-both-badges restructuring noted above.
+- Step 20 [done] — Added `ORDER_UNKNOWN_INTENT` (`mock-order-003`, MSFT, `intentState: 4 // UNKNOWN`)
+  to `e2e/fixtures/orders.ts` + the shared `ORDERS` array; updated `INVENTORY.md`'s orders row.
+  Extended `mock-backend.ts`'s `placeOrder` handler with a `clientOrderId`-keyed `Map` that returns
+  the previously-stored response object on a repeat call. **Deviation from the spec's literal
+  Instruction 3** ("returns the same `orderId` as before"): the id itself stays the fixed
+  `'mock-order-001'` literal for every non-repeat call rather than a freshly-minted one, because
+  `order-form.spec.ts` hard-asserts that exact string and `startMockBackend()` runs once for the
+  *entire* Playwright run (`global-setup.ts` `globalSetup`) — the mock server's in-memory state,
+  including this map, is shared/persistent across every spec file and worker for the run's
+  lifetime, not reset per test. A counter-based id (my first attempt) would have made
+  `order-form.spec.ts`'s hard-coded assertion depend on cross-file/cross-worker execution order —
+  caught before committing by reasoning through `global-setup.ts` and re-reading
+  `order-form.spec.ts` in full. The map still genuinely branches on `clientOrderId` (dedup is real —
+  a repeat call returns the stored response object, not a freshly-built one) per the 2026-07-27
+  ledger entry's requirement; only the *value* of the non-repeat-call id stayed fixed. Also hit and
+  fixed a real `tsc` error the Next.js dev-server build caught: `Map.get()` returns `T | undefined`,
+  which isn't assignable to the generated `PlaceOrder` handler's `MessageInit<Order>` return type —
+  fixed with an explicit `stored` local instead of returning `.get()` directly. Fixed
+  `api-smoke.spec.ts:75` to include a fixed `clientOrderId: 'e2e-smoke-place-order-001'` in the
+  PlaceOrder POST body (Instruction 2). Landed Instruction 4 as a new `e2e/trader/order-intent.spec.ts`
+  (registered in `INVENTORY.md`) rather than extending `order-ticket.spec.ts`, whose existing scope
+  (working/filled contrast) is a different axis from intent-state uncertainty — two cases: the
+  "Uncertain — verify with broker" text is visible for `mock-order-003` and absent for
+  `mock-order-001`. Landed Instruction 5 as a new `order-form.spec.ts` test using `page.route()` to
+  intercept `PlaceOrder` and read each request's `clientOrderId` from `postDataJSON()` (the Step-3
+  map isn't reachable from the browser) — asserts the nonce is unchanged across a failed resubmit and
+  rotates after a successful placement. Verification: `pnpm test:e2e -- trader/order-ticket.spec.ts
+  trader/api-smoke.spec.ts trader/order-form.spec.ts trader/order-intent.spec.ts` — 21/21 pass; full
+  `pnpm test:e2e -- trader/` (62 tests, the whole trader segment) also run to confirm no regression
+  from the shared `mock-backend.ts` edit — 62/62 pass. `pnpm exec tsc --noEmit` and `pnpm lint` both
+  clean (lint's one warning, `insights/strategies/[id]/page.tsx:483` `jsx-a11y/role-supports-aria-
+  props`, pre-exists this change and is out of scope).
+
+**Feature 101 — all 20 steps done.** Marked `code-completed` in `feature.md`. Opened
+[PR #880](https://github.com/davcs86/xstockstrat/pull/880) targeting
+`feature/account-trading-halt-and-kill-switch` (stacked-branch strategy — see the user's explicit
+directive logged earlier in this file) and subscribed to its PR activity. Proceeding to feature 023
+(position-sizing-engine) per the user's 100→101→023→030→102 sequence.

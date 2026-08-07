@@ -5,7 +5,7 @@
 //   protoc               unknown
 // source: trading/v1/trading.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.TradingServiceClient = exports.TradingServiceService = exports.DeregisterBrokerAccountResponse = exports.DeregisterBrokerAccountRequest = exports.ListBrokerAccountsResponse = exports.ListBrokerAccountsRequest = exports.GetTradingEnvironmentResponse = exports.GetTradingEnvironmentRequest = exports.UpdateBrokerAccountCredentialsResponse = exports.UpdateBrokerAccountCredentialsRequest = exports.RegisterBrokerAccountResponse = exports.RegisterBrokerAccountRequest = exports.BrokerAccount = exports.ReplaceOrderRequest = exports.StreamOrderUpdatesRequest = exports.ListOrdersResponse = exports.ListOrdersRequest = exports.GetOrderRequest = exports.CancelOrderResponse = exports.CancelOrderRequest = exports.PlaceOrderRequest = exports.Order = exports.CredentialStatus = exports.OrderStatus = exports.OrderType = exports.OrderSide = exports.protobufPackage = void 0;
+exports.TradingServiceClient = exports.TradingServiceService = exports.DeregisterBrokerAccountResponse = exports.DeregisterBrokerAccountRequest = exports.ListBrokerAccountsResponse = exports.ListBrokerAccountsRequest = exports.GetTradingEnvironmentResponse = exports.GetTradingEnvironmentRequest = exports.UpdateBrokerAccountCredentialsResponse = exports.UpdateBrokerAccountCredentialsRequest = exports.RegisterBrokerAccountResponse = exports.RegisterBrokerAccountRequest = exports.BrokerAccount = exports.ReplaceOrderRequest = exports.StreamOrderUpdatesRequest = exports.ListOrdersResponse = exports.ListOrdersRequest = exports.GetOrderRequest = exports.CancelOrderResponse = exports.CancelOrderRequest = exports.PlaceOrderRequest = exports.Order = exports.IntentState = exports.CredentialStatus = exports.OrderStatus = exports.OrderType = exports.OrderSide = exports.protobufPackage = void 0;
 exports.orderSideFromJSON = orderSideFromJSON;
 exports.orderSideToJSON = orderSideToJSON;
 exports.orderSideToNumber = orderSideToNumber;
@@ -18,6 +18,9 @@ exports.orderStatusToNumber = orderStatusToNumber;
 exports.credentialStatusFromJSON = credentialStatusFromJSON;
 exports.credentialStatusToJSON = credentialStatusToJSON;
 exports.credentialStatusToNumber = credentialStatusToNumber;
+exports.intentStateFromJSON = intentStateFromJSON;
+exports.intentStateToJSON = intentStateToJSON;
+exports.intentStateToNumber = intentStateToNumber;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
@@ -304,6 +307,81 @@ function credentialStatusToNumber(object) {
             return -1;
     }
 }
+/**
+ * IntentState is the platform's own knowledge of whether a PlaceOrder/ReplaceOrder/
+ * CancelOrder command actually reached the broker — orthogonal to OrderStatus (an order
+ * can be NEW and also UNKNOWN simultaneously). See docs/roadmap/features/101-exactly-once-order-intent/design.md.
+ */
+var IntentState;
+(function (IntentState) {
+    IntentState["INTENT_STATE_UNSPECIFIED"] = "INTENT_STATE_UNSPECIFIED";
+    /** INTENT_STATE_PENDING - intent recorded, broker call not yet resolved */
+    IntentState["INTENT_STATE_PENDING"] = "INTENT_STATE_PENDING";
+    /** INTENT_STATE_COMPLETED - broker call resolved (accepted or a definite rejection) */
+    IntentState["INTENT_STATE_COMPLETED"] = "INTENT_STATE_COMPLETED";
+    /** INTENT_STATE_REJECTED - definite, synchronous broker rejection (not a timeout) */
+    IntentState["INTENT_STATE_REJECTED"] = "INTENT_STATE_REJECTED";
+    /** INTENT_STATE_UNKNOWN - broker outcome unknown — never retried automatically (FR-5) */
+    IntentState["INTENT_STATE_UNKNOWN"] = "INTENT_STATE_UNKNOWN";
+    IntentState["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(IntentState || (exports.IntentState = IntentState = {}));
+function intentStateFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "INTENT_STATE_UNSPECIFIED":
+            return IntentState.INTENT_STATE_UNSPECIFIED;
+        case 1:
+        case "INTENT_STATE_PENDING":
+            return IntentState.INTENT_STATE_PENDING;
+        case 2:
+        case "INTENT_STATE_COMPLETED":
+            return IntentState.INTENT_STATE_COMPLETED;
+        case 3:
+        case "INTENT_STATE_REJECTED":
+            return IntentState.INTENT_STATE_REJECTED;
+        case 4:
+        case "INTENT_STATE_UNKNOWN":
+            return IntentState.INTENT_STATE_UNKNOWN;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return IntentState.UNRECOGNIZED;
+    }
+}
+function intentStateToJSON(object) {
+    switch (object) {
+        case IntentState.INTENT_STATE_UNSPECIFIED:
+            return "INTENT_STATE_UNSPECIFIED";
+        case IntentState.INTENT_STATE_PENDING:
+            return "INTENT_STATE_PENDING";
+        case IntentState.INTENT_STATE_COMPLETED:
+            return "INTENT_STATE_COMPLETED";
+        case IntentState.INTENT_STATE_REJECTED:
+            return "INTENT_STATE_REJECTED";
+        case IntentState.INTENT_STATE_UNKNOWN:
+            return "INTENT_STATE_UNKNOWN";
+        case IntentState.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function intentStateToNumber(object) {
+    switch (object) {
+        case IntentState.INTENT_STATE_UNSPECIFIED:
+            return 0;
+        case IntentState.INTENT_STATE_PENDING:
+            return 1;
+        case IntentState.INTENT_STATE_COMPLETED:
+            return 2;
+        case IntentState.INTENT_STATE_REJECTED:
+            return 3;
+        case IntentState.INTENT_STATE_UNKNOWN:
+            return 4;
+        case IntentState.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
 function createBaseOrder() {
     return {
         orderId: "",
@@ -326,6 +404,7 @@ function createBaseOrder() {
         brokerOrderId: "",
         accountId: "",
         brokerType: common_1.BrokerType.BROKER_TYPE_UNSPECIFIED,
+        intentState: IntentState.INTENT_STATE_UNSPECIFIED,
     };
 }
 exports.Order = {
@@ -389,6 +468,9 @@ exports.Order = {
         }
         if (message.brokerType !== common_1.BrokerType.BROKER_TYPE_UNSPECIFIED) {
             writer.uint32(160).int32((0, common_1.brokerTypeToNumber)(message.brokerType));
+        }
+        if (message.intentState !== IntentState.INTENT_STATE_UNSPECIFIED) {
+            writer.uint32(168).int32(intentStateToNumber(message.intentState));
         }
         return writer;
     },
@@ -539,6 +621,13 @@ exports.Order = {
                     message.brokerType = (0, common_1.brokerTypeFromJSON)(reader.int32());
                     continue;
                 }
+                case 21: {
+                    if (tag !== 168) {
+                        break;
+                    }
+                    message.intentState = intentStateFromJSON(reader.int32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -633,6 +722,11 @@ exports.Order = {
                 : isSet(object.broker_type)
                     ? (0, common_1.brokerTypeFromJSON)(object.broker_type)
                     : common_1.BrokerType.BROKER_TYPE_UNSPECIFIED,
+            intentState: isSet(object.intentState)
+                ? intentStateFromJSON(object.intentState)
+                : isSet(object.intent_state)
+                    ? intentStateFromJSON(object.intent_state)
+                    : IntentState.INTENT_STATE_UNSPECIFIED,
         };
     },
     toJSON(message) {
@@ -697,6 +791,9 @@ exports.Order = {
         if (message.brokerType !== common_1.BrokerType.BROKER_TYPE_UNSPECIFIED) {
             obj.brokerType = (0, common_1.brokerTypeToJSON)(message.brokerType);
         }
+        if (message.intentState !== IntentState.INTENT_STATE_UNSPECIFIED) {
+            obj.intentState = intentStateToJSON(message.intentState);
+        }
         return obj;
     },
     create(base) {
@@ -724,6 +821,7 @@ exports.Order = {
         message.brokerOrderId = object.brokerOrderId ?? "";
         message.accountId = object.accountId ?? "";
         message.brokerType = object.brokerType ?? common_1.BrokerType.BROKER_TYPE_UNSPECIFIED;
+        message.intentState = object.intentState ?? IntentState.INTENT_STATE_UNSPECIFIED;
         return message;
     },
 };

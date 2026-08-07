@@ -78,14 +78,26 @@ func (r *TradingRepo) UpsertOrder(ctx context.Context, o *tradingv1.Order) error
 	return err
 }
 
+// intentLateralJoinSQL surfaces cross-intent precedence on an order read (design.md §
+// Cross-intent precedence): the intent row with the latest updated_at across all intents
+// sharing that order_id determines the single intent_state shown on that Order. A
+// read-time query, not a second write path — adds zero writes beyond order_intents itself.
+const intentLateralJoinSQL = `
+	LEFT JOIN LATERAL (
+	    SELECT state, updated_at FROM trading.order_intents
+	    WHERE order_id = trading.orders.order_id
+	    ORDER BY updated_at DESC LIMIT 1
+	) li ON true`
+
 // GetOrder fetches a single order by order_id. Returns nil if not found.
 func (r *TradingRepo) GetOrder(ctx context.Context, orderID string) (*tradingv1.Order, error) {
 	row := r.pool.QueryRow(ctx, `
 		SELECT order_id, client_order_id, broker_order_id, symbol, side, order_type,
 		       status, qty, filled_qty, limit_price, stop_price, filled_avg_price,
 		       time_in_force, strategy_id, user_id, trading_mode, created_at, updated_at,
-		       account_id, broker_type
+		       account_id, broker_type, li.state
 		FROM trading.orders
+		`+intentLateralJoinSQL+`
 		WHERE order_id = $1
 		ORDER BY created_at DESC
 		LIMIT 1
@@ -111,8 +123,9 @@ func (r *TradingRepo) ListOrders(
 		SELECT order_id, client_order_id, broker_order_id, symbol, side, order_type,
 		       status, qty, filled_qty, limit_price, stop_price, filled_avg_price,
 		       time_in_force, strategy_id, user_id, trading_mode, created_at, updated_at,
-		       account_id, broker_type
+		       account_id, broker_type, li.state
 		FROM trading.orders
+		` + intentLateralJoinSQL + `
 		WHERE 1=1
 	`
 	args := []interface{}{}
@@ -196,8 +209,9 @@ func (r *TradingRepo) ListSubmittedOrders(ctx context.Context) ([]*tradingv1.Ord
 		SELECT order_id, client_order_id, broker_order_id, symbol, side, order_type,
 		       status, qty, filled_qty, limit_price, stop_price, filled_avg_price,
 		       time_in_force, strategy_id, user_id, trading_mode, created_at, updated_at,
-		       account_id, broker_type
+		       account_id, broker_type, li.state
 		FROM trading.orders
+		`+intentLateralJoinSQL+`
 		WHERE status IN ('new', 'partially_filled')
 		  AND broker_order_id IS NOT NULL
 		  AND broker_order_id != ''
@@ -234,6 +248,7 @@ func scanOrder(row scanner) (*tradingv1.Order, error) {
 		createdAt, updatedAt                  time.Time
 		accountID                             string
 		brokerType                            int32
+		intentState                           *int16 // NULL when the order has no intents yet
 	)
 	err := row.Scan(
 		&orderID, &clientOrderID, &brokerOrderID,
@@ -241,7 +256,7 @@ func scanOrder(row scanner) (*tradingv1.Order, error) {
 		&qty, &filledQty, &limitPrice, &stopPrice, &filledAvgPrice,
 		&timeInForce, &strategyID, &userID, &mode,
 		&createdAt, &updatedAt,
-		&accountID, &brokerType,
+		&accountID, &brokerType, &intentState,
 	)
 	if err != nil {
 		return nil, err
@@ -265,6 +280,9 @@ func scanOrder(row scanner) (*tradingv1.Order, error) {
 		UpdatedAt:     timestamppb.New(updatedAt),
 		AccountId:     accountID,
 		BrokerType:    commonv1.BrokerType(brokerType),
+	}
+	if intentState != nil {
+		o.IntentState = tradingv1.IntentState(*intentState)
 	}
 	if limitPrice != nil {
 		o.LimitPrice = *limitPrice

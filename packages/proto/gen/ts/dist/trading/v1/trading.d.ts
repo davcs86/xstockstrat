@@ -55,6 +55,26 @@ export declare enum CredentialStatus {
 export declare function credentialStatusFromJSON(object: any): CredentialStatus;
 export declare function credentialStatusToJSON(object: CredentialStatus): string;
 export declare function credentialStatusToNumber(object: CredentialStatus): number;
+/**
+ * IntentState is the platform's own knowledge of whether a PlaceOrder/ReplaceOrder/
+ * CancelOrder command actually reached the broker — orthogonal to OrderStatus (an order
+ * can be NEW and also UNKNOWN simultaneously). See docs/roadmap/features/101-exactly-once-order-intent/design.md.
+ */
+export declare enum IntentState {
+    INTENT_STATE_UNSPECIFIED = "INTENT_STATE_UNSPECIFIED",
+    /** INTENT_STATE_PENDING - intent recorded, broker call not yet resolved */
+    INTENT_STATE_PENDING = "INTENT_STATE_PENDING",
+    /** INTENT_STATE_COMPLETED - broker call resolved (accepted or a definite rejection) */
+    INTENT_STATE_COMPLETED = "INTENT_STATE_COMPLETED",
+    /** INTENT_STATE_REJECTED - definite, synchronous broker rejection (not a timeout) */
+    INTENT_STATE_REJECTED = "INTENT_STATE_REJECTED",
+    /** INTENT_STATE_UNKNOWN - broker outcome unknown — never retried automatically (FR-5) */
+    INTENT_STATE_UNKNOWN = "INTENT_STATE_UNKNOWN",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function intentStateFromJSON(object: any): IntentState;
+export declare function intentStateToJSON(object: IntentState): string;
+export declare function intentStateToNumber(object: IntentState): number;
 export interface Order {
     orderId: string;
     clientOrderId: string;
@@ -77,6 +97,8 @@ export interface Order {
     brokerOrderId: string;
     accountId: string;
     brokerType: BrokerType;
+    /** intent_state is set by every write path and read via a cross-intent LATERAL join on other reads; see design.md. */
+    intentState: IntentState;
 }
 export interface PlaceOrderRequest {
     symbol: string;
@@ -88,6 +110,11 @@ export interface PlaceOrderRequest {
     timeInForce: string;
     strategyId: string;
     userId: string;
+    /**
+     * client_order_id is required: a stable client-generated nonce reused across retries of
+     * the same logical place-order action (see the /trader Place Order form's nonce generator).
+     * Empty is rejected with InvalidArgument. Used as the order-intent dedup key (feature 101).
+     */
     clientOrderId: string;
     requiresApproval: boolean;
     /** If UNSPECIFIED, the service uses trading.broker.paper config key to determine mode. */
