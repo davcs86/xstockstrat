@@ -712,3 +712,10 @@ Operator directed to proceed. Counter reset; continuing to Steps 19-21 (backend,
 - Deviations: see Deviation Log ("Step 21").
 
 ## All 21 implementation steps done. Feature ready for the merge-order gate + integration PR (§5.6).
+
+## Session 2026-08-07 (CI: feature status automation)
+
+- Promotion PR #896 merged to main
+- Feature promoted and committed: e9d8d9144fb228568b3d71d088ad0d4e26bd0c24
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-07

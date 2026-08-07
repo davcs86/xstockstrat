@@ -391,3 +391,10 @@
   the design phase (2026-08-07, "watchlist-screen-improvements — design"), so no duplicate entry
   needed here; this session's execution confirmed the pattern works as designed with no further
   generalization to add.
+
+## Session 2026-08-07 (CI: feature status automation)
+
+- Promotion PR #896 merged to main
+- Feature promoted and committed: e9d8d9144fb228568b3d71d088ad0d4e26bd0c24
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-07

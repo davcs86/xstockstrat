@@ -1,6 +1,8 @@
 # Feature: watchlist-screen-improvements
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: e9d8d9144fb228568b3d71d088ad0d4e26bd0c24
+**Launched date**: 2026-08-07
 **Development Branch**: `claude/watchlist-screen-improvements-9qf5vq` (harness-assigned session
 branch — overrides the `feature/<slug>` convention per root `CLAUDE.md` § Harness Default Branch;
 this branch bases on and integrates directly into `main-dev`, same as `sdd-execute` sequential
@@ -23,6 +25,7 @@ mode's own integration-PR target)
 | 2026-08-07 | `implementation-ready` → `in-progress` | /sdd-execute (Step 1) | Step 1 done: `BindingRowControls` relocated into `WatchlistReadiness.tsx`, chip row deleted from `WatchlistDetail.tsx`. Red (3 e2e tests) → green (7/7 `watchlists.spec.ts` pass) confirmed. |
 | 2026-08-07 | `in-progress` → `code-completed` | /sdd-execute (Steps 2-9) | All 9 steps done: relocated controls (1/2), add-time picker (3/4), key-remount + inline rename (5/6), two-layer concurrency guard (7/8/9). Final e2e run: 10/10 `watchlists.spec.ts` tests pass (57.0s). `pnpm run lint` + `pnpm exec tsc --noEmit` clean throughout. No `merge-order.md` entry for this feature — proceeding to the integration PR. |
 
+| 2026-08-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #896; committed e9d8d9144fb228568b3d71d088ad0d4e26bd0c24 |
 ---
 
 ## Artifacts

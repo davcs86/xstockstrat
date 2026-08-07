@@ -1,7 +1,9 @@
 # Feature: fix-config-ui-env
 
 **Type**: bug
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: e9d8d9144fb228568b3d71d088ad0d4e26bd0c24
+**Launched date**: 2026-08-07
 **Development Branch**: `feature/fix-config-ui-env`
 **GitHub Issue**: docs/reports/2026-08-07-config-ui-cross-environment-toggle-defect.md (GitHub Issues disabled on this repo — see `docs/CLAUDE.md`)
 **Severity**: SEV-2
@@ -22,6 +24,7 @@
 | 2026-08-07 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (first step of execution) |
 | 2026-08-07 | `in-progress` → `code-completed` | /sdd-execute | All 8 steps done; no merge-order.md blockers; opening the single integration PR to `main-dev` |
 
+| 2026-08-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #896; committed e9d8d9144fb228568b3d71d088ad0d4e26bd0c24 |
 ---
 
 ## Artifacts

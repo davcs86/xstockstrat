@@ -262,3 +262,10 @@ Tooling setup (steps 1-8, all `xstockstrat-ui`): node ✓ v22.22.2 · pnpm ✓ 9
   `e2e/config-ui` regression pass — 41/41).
 - Files modified: `services/xstockstrat-ui/e2e/config-ui/env-gate.spec.ts`
 - Deviations: none
+
+## Session 2026-08-07 (CI: feature status automation)
+
+- Promotion PR #896 merged to main
+- Feature promoted and committed: e9d8d9144fb228568b3d71d088ad0d4e26bd0c24
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-07
