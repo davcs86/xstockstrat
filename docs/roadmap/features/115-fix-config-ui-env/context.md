@@ -162,3 +162,15 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   ambiguous "(all imports except `use`, the ... helpers, and the JSX)" instruction wording to state
   plainly that the helpers/`handleSave`/JSX all move over unchanged.
 - No other step required re-specing — Steps 1-6, 8 all validated clean against the post-merge tree.
+
+Tooling setup (steps 1-8, all `xstockstrat-ui`): node ✓ v22.22.2 · pnpm ✓ 9.15.0 · `pnpm install --frozen-lockfile` ✓ · chromium ✓ (pre-provisioned, `/opt/pw-browsers/chromium`).
+
+### Step 1 — service: native-scope helper (`src/lib/deploymentEnv.ts`) [done]
+- Created `deploymentEnv.ts` per spec. TDD cycle run in test-first order per Step 2's note (spans
+  both steps, per `tdd-gate.md` — red/green captured together, each step's own file committed
+  separately): red — `pnpm run test:unit -- deploymentEnv.test.ts` failed with `Cannot find module
+  './deploymentEnv'` (right reason — missing implementation, not a typo); green — same command, 7/7
+  new tests passed after implementation landed. `pnpm run lint` clean (one pre-existing unrelated
+  warning in `insights/strategies/[id]/page.tsx`, not touched by this step).
+- Files modified: `services/xstockstrat-ui/src/lib/deploymentEnv.ts`
+- Deviations: none

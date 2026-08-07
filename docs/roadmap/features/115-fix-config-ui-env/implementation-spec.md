@@ -49,7 +49,7 @@ for its data model, not because recon or design found a code path there needing 
 
 ### Step 1 — service: native-scope helper (`src/lib/deploymentEnv.ts`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/deploymentEnv.ts` — create
