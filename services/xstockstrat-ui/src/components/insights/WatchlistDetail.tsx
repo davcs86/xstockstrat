@@ -64,6 +64,11 @@ export function WatchlistDetail({
   const [addStrategyId, setAddStrategyId] = useState(UNBOUND);
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameDraft, setNameDraft] = useState(watchlist.name);
+  // Layer 1 of the concurrency guard (design.md §5) — disables every in-pane control while any of
+  // this component's own mutations is in flight, closing all 4 write-pairings (rebind/rebind,
+  // rebind/rename, rebind/remove, rename/remove). Layer 2 (Step 8) covers the cross-instance case.
+  const writeInFlight =
+    addSymbols.isPending || removeSymbols.isPending || updateWatchlist.isPending;
 
   const inQueue = new Set((oppData?.opportunities ?? []).map((o) => o.symbol.toUpperCase()));
 
@@ -141,6 +146,7 @@ export function WatchlistDetail({
               }}
               aria-label="Watchlist name"
               className="h-8 max-w-xs font-semibold"
+              disabled={writeInFlight}
             />
           ) : (
             <div className="flex items-center gap-1.5">
@@ -152,6 +158,7 @@ export function WatchlistDetail({
                   setNameDraft(watchlist.name);
                   setIsEditingName(true);
                 }}
+                disabled={writeInFlight}
               >
                 <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
               </button>
@@ -189,8 +196,9 @@ export function WatchlistDetail({
           onKeyDown={(e) => e.key === 'Enter' && handleAddSymbol()}
           placeholder="Add symbols (e.g. AAPL MSFT)"
           className="max-w-xs"
+          disabled={writeInFlight}
         />
-        <Select value={addStrategyId} onValueChange={setAddStrategyId}>
+        <Select value={addStrategyId} onValueChange={setAddStrategyId} disabled={writeInFlight}>
           <SelectTrigger className="h-9 w-40 text-xs" aria-label="Strategy for new symbols">
             <SelectValue placeholder="Unbound" />
           </SelectTrigger>
@@ -203,7 +211,7 @@ export function WatchlistDetail({
             ))}
           </SelectContent>
         </Select>
-        <Button size="sm" variant="default" onClick={handleAddSymbol}>
+        <Button size="sm" variant="default" onClick={handleAddSymbol} disabled={writeInFlight}>
           Add
         </Button>
       </div>
@@ -216,6 +224,7 @@ export function WatchlistDetail({
           removeSymbols.mutate({ watchlistId: watchlist.watchlistId, symbols: [symbol] })
         }
         onRebindSymbol={setBinding}
+        disabled={writeInFlight}
       />
     </div>
   );

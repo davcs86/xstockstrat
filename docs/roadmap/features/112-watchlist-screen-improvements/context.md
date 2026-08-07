@@ -336,3 +336,58 @@
   `{ exact: true }` (4 occurrences).
 - TDD: verified together with Step 5's red→green cycle (see Step 5's entry above).
 - Files modified: `services/xstockstrat-ui/e2e/insights/watchlists.spec.ts`.
+
+### Step 7 — Concurrency guard, Layer 1 — intra-pane `writeInFlight` [done]
+- Added `const writeInFlight = addSymbols.isPending || removeSymbols.isPending ||
+  updateWatchlist.isPending;` and threaded `disabled={writeInFlight}` to: the rename
+  toggle-button/edit-mode `Input`, the add-row `Input`/`Select`/`Add` `Button`, and
+  `<WatchlistReadiness disabled={writeInFlight} .../>` (which forwards it into every
+  `BindingRowControls`).
+- TDD note: implemented Steps 7 and 8 together in the working tree before writing Step 9's test
+  (an ordering mistake — realized mid-session and corrected before marking either step `done`, see
+  Step 9's entry for the actual red-before-green procedure used to fix it). `pnpm run lint` +
+  `pnpm exec tsc --noEmit` clean; a full-suite sanity run (9/9, 1.6m) confirmed no regression before
+  the red-before-green correction.
+- Files modified: `services/xstockstrat-ui/src/components/insights/WatchlistDetail.tsx`.
+
+### Step 8 — Concurrency guard, Layer 2 — cross-instance `mutationKey` + `useIsMutating` [done]
+- `useInvalidatingMutation.ts`: added optional third param `options?: { mutationKey?: QueryKey }`,
+  forwarded into `useMutation`. `useWatchlists.ts`: added exported `WATCHLIST_WRITE_KEY = 
+  ['watchlist-write']` next to `WATCHLISTS_KEY`; passed `{ mutationKey: WATCHLIST_WRITE_KEY }` to
+  `useAddWatchlistSymbols`/`useRemoveWatchlistSymbols`/`useUpdateWatchlist` (not `useCreateWatchlist`/
+  `useDeleteWatchlist`); widened `useWatchlists`'s declared return type to add `isFetching: boolean`.
+  `page.tsx`: `const anyWatchlistWriteInFlight = useIsMutating({ mutationKey: WATCHLIST_WRITE_KEY })
+  > 0 || isFetching;`, wired to `disabled={anyWatchlistWriteInFlight}` on the master-list buttons +
+  `disabled:pointer-events-none disabled:opacity-50` (matching `button.tsx`'s own convention).
+- TDD: see Step 9's entry (verified together).
+- Files modified: `services/xstockstrat-ui/src/hooks/useInvalidatingMutation.ts`,
+  `services/xstockstrat-ui/src/hooks/useWatchlists.ts`,
+  `services/xstockstrat-ui/src/app/insights/watchlists/page.tsx`.
+
+### Step 9 — New e2e case for the concurrency guard (Layers 1 and 2) [done]
+- New test: register a delayed `UpdateWatchlist` route override (a `Promise` released manually,
+  not a fixed timer) after `mockWatchlists(page)`, trigger a rebind, and while the write is held
+  assert the add-row `Input`/`Remove` button (Layer 1) AND the master-list's *other* watchlist
+  button (Layer 2) are all disabled; release the response, assert all re-enable.
+- **TDD correction mid-session**: Steps 7 and 8's code had already been written (in parallel, while
+  waiting on an earlier background e2e run) before this test was authored — the reverse of the
+  mandated order. Fixed properly rather than skipping the gate: `git stash push` on Steps 7/8's 4
+  files, ran this test alone against the stashed-out (pre-Step-7/8) tree → confirmed genuine RED
+  (`toBeDisabled()` failed, add-row stayed enabled — the guard doesn't exist yet). `git stash pop`
+  to restore Steps 7/8's code, re-ran the full suite → GREEN (10/10 pass, 57.0s). `pnpm run lint` +
+  `pnpm exec tsc --noEmit` clean.
+- Files modified: `services/xstockstrat-ui/e2e/insights/watchlists.spec.ts`.
+
+## Session 2026-08-07T14:00:00Z — sdd-execute ALL-DONE
+
+- All 9 steps done. Feature lifecycle: `in-progress` → `code-completed`. Final verification: 10/10
+  `watchlists.spec.ts` e2e tests pass (57.0s); `pnpm run lint` and `pnpm exec tsc --noEmit` clean
+  across every step. No `docs/roadmap/features/merge-order.md` entry for this feature (confirmed —
+  no blocking dependency). Proceeding to the ALL-DONE integration PR
+  (`claude/watchlist-screen-improvements-9qf5vq` → `main-dev`).
+- Reusable pattern worth a ledger entry: the two-layer concurrency guard (Layer 1 `writeInFlight`
+  local boolean + Layer 2 `mutationKey`/`useIsMutating` ancestor check) for a `key`-remounted
+  detail component that owns writes — already logged in `docs/roadmap/ledger/insights.md` during
+  the design phase (2026-08-07, "watchlist-screen-improvements — design"), so no duplicate entry
+  needed here; this session's execution confirmed the pattern works as designed with no further
+  generalization to add.

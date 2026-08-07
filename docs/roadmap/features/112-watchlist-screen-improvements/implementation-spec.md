@@ -1,6 +1,6 @@
 # Implementation Spec: watchlist-screen-improvements
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-08-07
 **Feature**: `docs/roadmap/features/112-watchlist-screen-improvements/feature.md`
 **Total Steps**: 9
@@ -550,7 +550,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 7 — service: Concurrency guard, Layer 1 — intra-pane `writeInFlight`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/WatchlistDetail.tsx` — modify
@@ -593,7 +593,7 @@ Behavioral proof is Step 9.
 
 ### Step 8 — service: Concurrency guard, Layer 2 — cross-instance `mutationKey` + `useIsMutating`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/hooks/useInvalidatingMutation.ts` — modify
@@ -706,7 +706,7 @@ catches. Behavioral proof is Step 9.
 
 ### Step 9 — test: New e2e case for the concurrency guard (Layers 1 and 2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/watchlists.spec.ts` — modify
