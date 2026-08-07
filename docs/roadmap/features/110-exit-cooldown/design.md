@@ -1,8 +1,8 @@
 # Design: exit-cooldown
 
 **Created**: 2026-08-07
-**Rounds**: 4 (full; termination: approved pending final user gate)
-**Approved by**: user @ 2026-08-07 (pending)
+**Rounds**: 5 (full; termination: approved)
+**Approved by**: user @ 2026-08-07
 **Grounded in**: recon.md
 
 ---
@@ -147,6 +147,36 @@ blocking-backfill reversion, is what actually delivers the user's round-2 requir
 every position regardless of age") without reintroducing the boot-latency cost that motivated making
 backfill non-blocking in the first place.
 
+**Exact placement (round 5, finalized)** — a single combined guard as the first statement inside the
+`elif in_position and latest.exit:` block (`live_loop.py:169`), not two stacked early-returns (which
+would create a second insertion point a future edit could land between, and duplicate the dict
+lookup):
+
+```python
+elif in_position and latest.exit:
+    last_entry_at = self._last_entry_at.get(key)
+    if last_entry_at is None or is_cooldown_active(last_entry_at, current_bar_dt, exit_cooldown_days):
+        if last_entry_at is None:
+            self._log_unresolved_entry_at(key)  # required, throttled — see below
+        return
+    trigger, new_state = "exit", False
+    ...
+```
+
+Because the guard lives inside the `elif`, `in_position` is already guaranteed `True` by the branch
+condition — no separate `in_position` check is needed, and this placement makes it mechanically
+impossible for the guard to intercept the sibling `if not in_position and latest.entry:` branch
+(`:163`), which is anchored on the different dict `_last_exit_at` and is untouched by this fix.
+
+**Required diagnostic (round 5, promoted from "recommended"):** an unresolved `last_entry_at` is a
+designed, *unbounded* skip — a pathologically-unresolvable pair (recon's Open Risks: unusual order
+history `_infer_open_entry_time` can't parse) is correctly skipped every cycle forever, by design
+(correctness-over-availability, per the user's round-2 requirement). Per `fails.md` 2026-07-29
+(079-remove-mcp-sse-transport): "a graceful-skip guard must never be silent." A throttled
+`log.warning` (once per key on first-seen-unresolved, reusing the existing per-key throttle shape at
+`_last_alert_ts`, `:178-186` — never one line per 60s eval cycle forever) is **required**, not
+optional, so an operator can diagnose a permanently-stuck pair instead of it degrading silently.
+
 **Agent (`xstockstrat-agent`)** — `manage_strategy` (`app/tools.py:442-563`) gains
 `exit_cooldown_days: int | None = None`, added to the `supplied` dict (`:521-529`) and the
 `clear_fields` mechanism unchanged (feature 070's partial-update fix is not touched, only extended).
@@ -220,10 +250,16 @@ product-spec).
 - [ ] **The "skip exit-cooldown eval while `in_position=True` and `last_entry_at is None`" fix is a
   new branch with no type-level guard against regression** — if a future edit to `_eval_pair` reorders
   the replay-then-read sequence, or adds a second `.get(key, False)`-style default read, the
-  "structurally impossible" guarantee this design relies on could silently regress. Mitigated by the
-  dedicated call-site test (zero-alerts-on-replay-seeded-cycle) but not eliminated. **Action**: keep
-  that test in CI, non-skippable, and reference it directly in a code comment at the `_eval_pair`
-  ordering site so a future editor sees the constraint before breaking it.
+  "structurally impossible" guarantee this design relies on could silently regress. Mitigated (round
+  5) by **three required paired tests**, non-skippable in CI: (a) suppression — `in_position=True`,
+  `_last_entry_at` absent, an exit decision that would otherwise fire → zero alert/ledger/state-change;
+  (b) resolution — same pair once `_last_entry_at` becomes known and the cooldown has elapsed → exit
+  fires normally; (c) **isolation** — the sibling entry/re-entry-cooldown branch (anchored on
+  `_last_exit_at`, `:163-167`) is unaffected by this guard, proving the round-4 concern ("does this
+  accidentally suppress the RE-ENTRY gate") stays closed even if the `if`/`elif` structure is later
+  refactored. **Action**: all three land in the same PR as the guard; reference them directly in a
+  code comment at the `_eval_pair` guard site so a future editor sees the constraint before breaking
+  it.
 - [ ] **Backfill's `filled_qty`/`updated_at`-based entry-time reconstruction assumes single-lot,
   round-trip order history** — a strategy pair with unusual real-world order patterns (manual partial
   adds/trims outside the strategy's own signals, multiple simultaneous lots) is not modeled; the
@@ -263,14 +299,16 @@ product-spec).
 
 ## Rounds
 
-4 rounds (full mode). Round 1 (proto/config/gate-module/migration-shape/backtest wiring, all
-unchallenged) surfaced the `_last_state` restart-durability gap as the one unresolved fork. Round 2
-(bar-replay mechanism) closed the common case but left a >365-day-position gap the user explicitly
-required closed. Round 3 (boot-time Order-based backfill + shared `_apply_transition` core) designed
-the mechanism; the adversary found one correctness bug (FILLED-only order filter) and two process
-gaps (call-site alert-suppression proof, boot-latency). Round 4 closed all three, and its own
-adversary pass found one remaining real gap (the async-backfill race against an unknown
-`last_entry_at`) with a precise, small fix (skip-until-known in the live-loop caller) — no further
-architectural rework needed. Termination: synthesized and presented for final user approval after
-round 4 (mandated minimum 2 rounds exceeded; the round-4 fix is mechanical/undisputed, not a fresh
-fork requiring a fifth debate round).
+5 rounds (full mode, the full 5-round cap). Round 1 (proto/config/gate-module/migration-shape/
+backtest wiring, all unchallenged) surfaced the `_last_state` restart-durability gap as the one
+unresolved fork. Round 2 (bar-replay mechanism) closed the common case but left a >365-day-position
+gap the user explicitly required closed — user steered: adopt a real fix, do not accept the gap.
+Round 3 (boot-time Order-based backfill + shared `_apply_transition` core) designed the mechanism;
+the adversary found one correctness bug (FILLED-only order filter) and two process gaps (call-site
+alert-suppression proof, boot-latency). Round 4 closed all three, and its own adversary pass found
+one remaining real gap (the async-backfill race against an unknown `last_entry_at`) with a precise,
+small fix (skip-until-known in the live-loop caller). Round 5 (user-requested final verification)
+formalized the exact guard placement, and its adversary pass promoted two "recommended" items to
+required (a throttled diagnostic log, a third isolation test) plus one 3-line implementation
+tightening (a single combined guard condition instead of two stacked early-returns) — no new fork,
+no architectural rework. **Verdict: APPROVABLE**, approved by the user after round 5.
