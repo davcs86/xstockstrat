@@ -2,10 +2,13 @@ package service
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
+	"net"
 	"strconv"
 	"sync"
 	"time"
@@ -16,11 +19,14 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 	grpcstatus "google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
+	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
 	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
+	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
 	tradingv1 "github.com/xstockstrat/contracts/gen/go/trading/v1"
@@ -29,6 +35,13 @@ import (
 	"github.com/xstockstrat/trading/internal/middleware"
 	"github.com/xstockstrat/trading/internal/repository"
 )
+
+// configSetConfigForwarder is the seam TradingService.escalateSystemic calls through — see the
+// TradingService.configSetter field doc comment for why this exists. *config.Watcher's real
+// SetConfig method already matches this signature exactly.
+type configSetConfigForwarder interface {
+	SetConfig(ctx context.Context, callerID string, req *configv1.SetConfigRequest) (*configv1.SetConfigResponse, error)
+}
 
 // brokerPoolEntry holds a broker client and its type tag for a registered account.
 type brokerPoolEntry struct {
@@ -58,6 +71,14 @@ type ibkrCreds struct {
 type TradingService struct {
 	cfg  *config.Config
 	cfgW *config.Watcher
+	// configSetter is the narrow seam escalateSystemic calls through instead of cfgW.SetConfig
+	// directly (feature 102). *config.Watcher satisfies it in production. config.Watcher's
+	// underlying gRPC client field is unexported (package config), so a test in this package
+	// has no way to construct a *config.Watcher around a fake client — extracting this
+	// interface lets a test substitute a fake without touching the config package, the same
+	// hoisting-for-testability approach this codebase has used repeatedly (030/023/101's own
+	// config-value hoists), applied here to a client dependency instead of a config value.
+	configSetter configSetConfigForwarder
 	// Multi-broker pool: key is account_id.
 	brokers     map[string]brokerPoolEntry
 	brokersMu   sync.RWMutex
@@ -67,8 +88,17 @@ type TradingService struct {
 	notify      notifyv1.NotifyServiceClient
 	// portfolio is used for pre-trade risk checks (non-blocking on failure).
 	portfolio portfoliov1.PortfolioServiceClient
+	// marketdata is used by ComputePositionSize for ATR bars and current price.
+	marketdata marketdatav1.MarketDataServiceClient
 	// repo persists orders to trading.orders hypertable.
 	repo *repository.TradingRepo
+	// orderIntentRepo is the insert-or-return-existing dedup store (feature 101). Struct
+	// field added here (Step 9) so order_intent.go's sweeper compiles; NewTradingService's
+	// constructor parameter and main.go wiring land in Step 11.
+	orderIntentRepo repository.OrderIntentRepository
+	// bracketRepo persists the per-order bracket (stop-loss/take-profit) state machine
+	// (feature 030).
+	bracketRepo repository.BracketRepository
 	// In-memory order store for active fan-out and fill polling.
 	// Orders are also written to DB on every state change.
 	orders map[string]*tradingv1.Order
@@ -84,6 +114,23 @@ type TradingService struct {
 	// to once per credSkipLogInterval per account. Accessed only from the single
 	// position-sync poller goroutine (syncPositions), so it needs no lock.
 	credSkipLoggedAt map[string]time.Time
+	// halted / haltReasons track each account's persisted automated halt (feature 030).
+	// Seeded from the DB in LoadBrokerPool. Mirrors credStatus/credStatusMu's shape.
+	halted      map[string]bool
+	haltReasons map[string]string
+	haltedMu    sync.Mutex
+	// flattenInFlight dedups the protection-window watchdog's per-bracket flatten
+	// goroutines — a slow flatten must not be re-triggered by the next tick.
+	flattenInFlight   map[string]bool
+	flattenInFlightMu sync.Mutex
+	// reconcileCandidates tracks how many consecutive ticks a candidate mismatch has been
+	// observed (feature 102), keyed by "accountID:order:orderID" or "accountID:pos:symbol".
+	// Cleared once resolved (no longer observed on a later tick) or once it crosses the
+	// grace window and becomes a real finding. reconcileTick runs on a single poller
+	// goroutine, but this is guarded by its own mutex anyway per design.md's instruction
+	// (defensive — a future caller from another goroutine must not silently race).
+	reconcileCandidates   map[string]int
+	reconcileCandidatesMu sync.Mutex
 }
 
 // clientKeepAlive prevents silent connection drops on idle inter-service links.
@@ -98,6 +145,8 @@ func NewTradingService(
 	cfgW *config.Watcher,
 	accountRepo repository.AccountRepository,
 	repo *repository.TradingRepo,
+	orderIntentRepo repository.OrderIntentRepository,
+	bracketRepo repository.BracketRepository,
 	encKey string,
 ) (*TradingService, error) {
 	ledgerConn, err := grpc.NewClient(cfg.LedgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
@@ -112,20 +161,32 @@ func NewTradingService(
 	if err != nil {
 		return nil, fmt.Errorf("dial portfolio: %w", err)
 	}
+	marketdataConn, err := grpc.NewClient(cfg.MarketDataEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	if err != nil {
+		return nil, fmt.Errorf("dial marketdata: %w", err)
+	}
 	return &TradingService{
-		cfg:              cfg,
-		cfgW:             cfgW,
-		brokers:          make(map[string]brokerPoolEntry),
-		accountRepo:      accountRepo,
-		encKey:           encKey,
-		ledger:           ledgerv1.NewLedgerServiceClient(ledgerConn),
-		notify:           notifyv1.NewNotifyServiceClient(notifyConn),
-		portfolio:        portfoliov1.NewPortfolioServiceClient(portfolioConn),
-		repo:             repo,
-		orders:           make(map[string]*tradingv1.Order),
-		subs:             make(map[string]chan *tradingv1.Order),
-		credStatus:       make(map[string]int32),
-		credSkipLoggedAt: make(map[string]time.Time),
+		cfg:                 cfg,
+		cfgW:                cfgW,
+		configSetter:        cfgW,
+		brokers:             make(map[string]brokerPoolEntry),
+		accountRepo:         accountRepo,
+		encKey:              encKey,
+		ledger:              ledgerv1.NewLedgerServiceClient(ledgerConn),
+		notify:              notifyv1.NewNotifyServiceClient(notifyConn),
+		portfolio:           portfoliov1.NewPortfolioServiceClient(portfolioConn),
+		marketdata:          marketdatav1.NewMarketDataServiceClient(marketdataConn),
+		repo:                repo,
+		orderIntentRepo:     orderIntentRepo,
+		bracketRepo:         bracketRepo,
+		orders:              make(map[string]*tradingv1.Order),
+		subs:                make(map[string]chan *tradingv1.Order),
+		credStatus:          make(map[string]int32),
+		credSkipLoggedAt:    make(map[string]time.Time),
+		halted:              make(map[string]bool),
+		haltReasons:         make(map[string]string),
+		flattenInFlight:     make(map[string]bool),
+		reconcileCandidates: make(map[string]int),
 	}, nil
 }
 
@@ -155,6 +216,13 @@ func (s *TradingService) LoadBrokerPool(ctx context.Context) error {
 		s.credStatusMu.Lock()
 		s.credStatus[rec.ID] = rec.CredentialStatus
 		s.credStatusMu.Unlock()
+		// Hydrate the persisted automated halt (feature 030) — a routine redeploy must
+		// never silently un-halt an account whose failure condition might still be
+		// present (design.md round 5's caught regression).
+		s.haltedMu.Lock()
+		s.halted[rec.ID] = rec.Halted
+		s.haltReasons[rec.ID] = rec.HaltReason
+		s.haltedMu.Unlock()
 		slog.Info("LoadBrokerPool: loaded account", "account_id", rec.ID, "broker_type", rec.BrokerType, "is_paper", rec.IsPaper)
 	}
 	return nil
@@ -183,29 +251,32 @@ func (s *TradingService) LoadInflightOrders(ctx context.Context) error {
 	return nil
 }
 
-// resolveAccount returns the broker pool entry for the given accountID.
-// If accountID is empty and exactly one broker is registered, that one is returned.
-func (s *TradingService) resolveAccount(accountID string) (brokerPoolEntry, error) {
+// resolveAccount returns the resolved account ID and broker pool entry for the given
+// accountID. If accountID is empty and exactly one broker is registered, that one is
+// returned. The resolved ID is returned explicitly (feature 101) — the previous 2-return
+// signature discarded it on this fallback path, leaving order.AccountId (and now
+// order_intents.broker_account_id, NOT NULL) empty even though a real account was used.
+func (s *TradingService) resolveAccount(accountID string) (resolvedID string, entry brokerPoolEntry, err error) {
 	s.brokersMu.RLock()
 	defer s.brokersMu.RUnlock()
 
 	if accountID != "" {
-		entry, ok := s.brokers[accountID]
+		e, ok := s.brokers[accountID]
 		if !ok {
-			return brokerPoolEntry{}, grpcstatus.Errorf(codes.NotFound, "broker account %q not found in pool", accountID)
+			return "", brokerPoolEntry{}, grpcstatus.Errorf(codes.NotFound, "broker account %q not found in pool", accountID)
 		}
-		return entry, nil
+		return accountID, e, nil
 	}
 
 	if len(s.brokers) == 1 {
-		for _, entry := range s.brokers {
-			return entry, nil
+		for id, e := range s.brokers {
+			return id, e, nil
 		}
 	}
 	if len(s.brokers) == 0 {
-		return brokerPoolEntry{}, grpcstatus.Errorf(codes.FailedPrecondition, "no broker accounts registered; call RegisterBrokerAccount first")
+		return "", brokerPoolEntry{}, grpcstatus.Errorf(codes.FailedPrecondition, "no broker accounts registered; call RegisterBrokerAccount first")
 	}
-	return brokerPoolEntry{}, grpcstatus.Errorf(codes.InvalidArgument, "multiple broker accounts registered; account_id is required")
+	return "", brokerPoolEntry{}, grpcstatus.Errorf(codes.InvalidArgument, "multiple broker accounts registered; account_id is required")
 }
 
 // SubscribeOrderUpdates registers a subscriber channel for order update broadcasts.
@@ -258,17 +329,105 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 			"trail_price/trail_percent are only valid for trailing_stop orders")
 	}
 
+	// client_order_id is now mandatory (feature 101, FR-1): a stable client-generated
+	// nonce reused across retries of the same logical place-order action, and this
+	// order's intent ID for dedup purposes.
+	if req.ClientOrderId == "" {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "client_order_id is required")
+	}
+
 	// Resolve broker account.
-	accountEntry, err := s.resolveAccount(req.AccountId)
+	resolvedAccountID, accountEntry, err := s.resolveAccount(req.AccountId)
 	if err != nil {
 		return nil, err
 	}
 
-	// Non-blocking portfolio risk check: log warnings but never block order placement.
-	s.checkPortfolioRisk(ctx, req)
-
 	// Resolve trading mode: request field takes precedence; fall back to live config, then env.
 	mode := s.resolveTradingMode(req.TradingMode)
+
+	// Persisted per-account automated halt (feature 030) — gates right after the
+	// account is resolved, mirroring the trading_state gate immediately below.
+	// ReplaceOrder gets the identical gate (no reduce-only carve-out); CancelOrder is
+	// deliberately never gated (the operator's sole remaining manual de-risk tool).
+	if s.isAccountHalted(resolvedAccountID) {
+		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "account is halted: %s", s.haltReason(resolvedAccountID))
+	}
+
+	// platform.trading_state gate (feature 100): HALTED blocks outright; REDUCE_ONLY
+	// blocks only exposure-increasing orders (verified via PortfolioService.GetPosition).
+	// Independent of and parallel to platform.maintenance_mode below.
+	if err := s.checkTradingStateForPlaceOrder(ctx, accountEntry.userID, req.Symbol, mode, req.Side); err != nil {
+		return nil, err
+	}
+
+	// Compute the request-content hash (feature 101, FR-3) — the dedup mechanism's
+	// content-identity check, independent of the client_order_id nonce itself. Deliberately
+	// computed BEFORE position sizing (feature 023) mutates req.Qty below: the hash must
+	// reflect the caller's original request so a genuine retry of the same logical action
+	// always matches, even if market data has since moved and would size differently.
+	hashDigest, err := placeOrderRequestHash(req)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "compute request hash: %v", err)
+	}
+	requestHashHex := hex.EncodeToString(hashDigest)
+
+	// Position sizing (feature 023): qty <= 0 means "auto-size this order" — the
+	// sizing_enabled master gate rejects that up front if sizing is disabled (AC-4).
+	sizingEnabled := s.cfgW.GetBool("trading.risk.sizing_enabled", true)
+	needSizing := req.Qty <= 0
+	if needSizing && !sizingEnabled {
+		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "position sizing is disabled; an explicit qty is required")
+	}
+
+	// Hoisted from checkPortfolioRisk's own internal guard so sizing and the warn-only
+	// risk check can share one equity lookup instead of each fetching it independently.
+	needRiskCheck := req.UserId != "" && s.cfgW.GetFloat("trading.risk.max_position_pct", 0.05) > 0
+	var equity float64
+	var equityErr error
+	if needSizing || needRiskCheck {
+		equity, equityErr = s.resolveAccountEquity(ctx, resolvedAccountID)
+	}
+
+	// sizedStopPrice is the informational stop computed by ComputePositionSize (feature
+	// 023) — set on the order below only for MARKET/LIMIT auto-sized orders; never a real
+	// broker-submitted STOP/STOP_LIMIT/TRAILING_STOP trigger. entryPriceProxy (feature 030)
+	// is the bracket take-profit formula's entry-price estimate.
+	var sizedStopPrice, entryPriceProxy float64
+	if needSizing {
+		// Fail-closed (design.md § Chosen Approach) — unlike checkPortfolioRisk below,
+		// missing/zero equity aborts the order rather than just skipping a warning.
+		if equityErr != nil || equity <= 0 {
+			return nil, grpcstatus.Errorf(codes.FailedPrecondition, "cannot auto-size order: equity unavailable: %v", equityErr)
+		}
+		confidence := 1.0
+		if req.Confidence != nil {
+			confidence = *req.Confidence
+		}
+		if confidence < 0.0 || confidence > 1.0 {
+			return nil, grpcstatus.Errorf(codes.InvalidArgument, "confidence must be in [0.0, 1.0], got %v", confidence)
+		}
+		sizedQty, _, computedStopPrice, computedCurrentPrice, sizeErr := s.ComputePositionSize(ctx, req, equity, confidence)
+		if sizeErr != nil {
+			return nil, sizeErr
+		}
+		// Mutate req.Qty in place — load-bearing: buildBrokerRequest(req) and the approval
+		// threshold check below both read req.Qty after this point.
+		req.Qty = sizedQty
+		sizedStopPrice = computedStopPrice
+		// Prefer the LIMIT order's own limit price over the fetched current price as the
+		// entry-price proxy (feature 030) — a closer estimate of the actual fill price.
+		entryPriceProxy = computedCurrentPrice
+		if req.OrderType == tradingv1.OrderType_ORDER_TYPE_LIMIT {
+			entryPriceProxy = req.LimitPrice
+		}
+	}
+
+	// Non-blocking portfolio risk check: log warnings but never block order placement. Runs
+	// after sizing so it evaluates the real (possibly auto-sized) req.Qty — fixes the
+	// pre-existing bug where this structurally could never fire for auto-sized orders.
+	if needRiskCheck {
+		s.checkPortfolioRisk(ctx, req, mode, equity, equityErr)
+	}
 
 	// Check approval thresholds from live config.
 	approvalQtyThreshold := s.cfgW.GetFloat("trading.approval.require_above_qty", 500)
@@ -277,9 +436,95 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		(req.LimitPrice > 0 && req.Qty*req.LimitPrice > approvalNotionalThreshold)
 
 	orderID := uuid.New().String()
+
+	return s.submitOrder(ctx, req, accountEntry, mode, resolvedAccountID, orderID, requiresApproval,
+		requestHashHex, needSizing, sizedStopPrice, entryPriceProxy)
+}
+
+// submitOrder is PlaceOrder's approval-decision-and-broker-submission seam, extracted
+// (feature 030) so flattenAndHalt can reuse the exact same safety machinery — order
+// intent dedup, ledger events, timeout-vs-definite-rejection handling, bracket
+// submission — that any other order gets, rather than a parallel ad hoc broker call.
+//
+// Deviation from design.md's literal 6-parameter signature: requestHashHex/needSizing/
+// sizedStopPrice/entryPriceProxy are also threaded through explicitly. design.md
+// predates features 101 (order-intent dedup) and 023 (position sizing) actually
+// landing on this branch, so it could not have anticipated their real shape. The
+// request hash in particular MUST be the caller's pre-sizing computation (see
+// PlaceOrder's own comment on why) — recomputing it here against the (possibly
+// already-mutated) req would defeat that guarantee. flattenAndHalt calls this with
+// needSizing=false (a flatten order always carries an explicit qty, never triggers
+// bracket submission) and a freshly-computed requestHashHex over the flatten request
+// (self-consistent: a flatten is never itself a candidate for the sizing-hash-order
+// subtlety, since it's never auto-sized).
+func (s *TradingService) submitOrder(
+	ctx context.Context,
+	req *tradingv1.PlaceOrderRequest,
+	accountEntry brokerPoolEntry,
+	mode commonv1.TradingMode,
+	resolvedAccountID string,
+	orderID string,
+	requiresApproval bool,
+	requestHashHex string,
+	needSizing bool,
+	sizedStopPrice, entryPriceProxy float64,
+) (*tradingv1.Order, error) {
+	intentID := req.ClientOrderId
+
 	orderStatus := tradingv1.OrderStatus_ORDER_STATUS_NEW
 	if requiresApproval {
 		orderStatus = tradingv1.OrderStatus_ORDER_STATUS_PENDING_APPROVAL
+	}
+
+	// Dedup insert (feature 101): gated on !requiresApproval. An approval-required
+	// order has no broker call yet at all — it is not part of this feature's dedup
+	// surface (FR-1..FR-6 concern the broker call, which the approval path defers
+	// indefinitely) — so it deliberately touches no order_intents row. This also
+	// satisfies "insert before building the provisional order struct" (still true when
+	// it does run) without an approval-required order acquiring an intent it should
+	// never have.
+	ownsIntent := true
+	var intentState tradingv1.IntentState
+	if !requiresApproval {
+		ok, err := s.orderIntentRepo.InsertIntent(ctx, &repository.OrderIntentRecord{
+			IntentID: intentID, OrderID: orderID, RequestHash: requestHashHex,
+			BrokerAccountID: resolvedAccountID,
+		})
+		if err != nil {
+			return nil, grpcstatus.Errorf(codes.Internal, "insert order intent: %v", err)
+		}
+		if !ok {
+			existing, getErr := s.orderIntentRepo.GetIntentByID(ctx, intentID)
+			if getErr != nil || existing == nil {
+				return nil, grpcstatus.Errorf(codes.Internal, "load existing order intent: %v", getErr)
+			}
+			action, isStale := classifyIntentLookup(existing, requestHashHex, time.Now(), staleThreshold(s.cfgW))
+			switch action {
+			case intentActionRejectHashMismatch:
+				return nil, grpcstatus.Errorf(codes.FailedPrecondition,
+					"client_order_id %q was already used with different order content", intentID)
+			case intentActionReturnStored:
+				var stored tradingv1.Order
+				if err := proto.Unmarshal(existing.LatestResponse, &stored); err != nil {
+					return nil, grpcstatus.Errorf(codes.Internal, "unmarshal stored intent response: %v", err)
+				}
+				return &stored, nil
+			case intentActionRejectUnknown:
+				return nil, grpcstatus.Errorf(codes.FailedPrecondition,
+					"order intent %q outcome is unknown; verify with the broker before retrying", intentID)
+			default: // intentActionRejectPending
+				if isStale {
+					// Best-effort — the caller cannot and need not distinguish "not yet
+					// stale" from "just reclaimed" (design.md § Concurrency).
+					_, _, _ = s.orderIntentRepo.ReclaimOrphanIntent(ctx, intentID, existing.UpdatedAt.Add(staleThreshold(s.cfgW)))
+				}
+				return nil, grpcstatus.Errorf(codes.FailedPrecondition,
+					"order intent %q is still pending", intentID)
+			}
+		}
+		intentState = tradingv1.IntentState_INTENT_STATE_PENDING
+	} else {
+		ownsIntent = false
 	}
 
 	order := &tradingv1.Order{
@@ -297,10 +542,18 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		StrategyId:    req.StrategyId,
 		UserId:        req.UserId,
 		TradingMode:   mode,
-		AccountId:     req.AccountId,
+		AccountId:     resolvedAccountID,
 		BrokerType:    commonv1.BrokerType(accountEntry.brokerType),
 		CreatedAt:     timestamppb.New(time.Now()),
 		UpdatedAt:     timestamppb.New(time.Now()),
+		IntentState:   intentState,
+	}
+	// Informational stop price for auto-sized MARKET/LIMIT orders only (feature 023) — this
+	// is never submitted to the broker as a real STOP/STOP_LIMIT/TRAILING_STOP trigger
+	// (product-spec's Out-of-Scope note); every other order type and every override-mode
+	// (explicit-qty) order keeps req.StopPrice, the real broker-trigger price, untouched.
+	if needSizing && (req.OrderType == tradingv1.OrderType_ORDER_TYPE_MARKET || req.OrderType == tradingv1.OrderType_ORDER_TYPE_LIMIT) {
+		order.StopPrice = sizedStopPrice
 	}
 
 	s.mu.Lock()
@@ -335,18 +588,49 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 
 	// Submit to broker.
 	brokerReq := s.buildBrokerRequest(req)
-	// Forward our order ID as the broker client_order_id so a retried submission
-	// (trading.order.max_retries) is de-duplicated by the broker instead of placing
-	// a second order.
-	brokerReq.ClientOrderID = orderID
+	// Forward the derived broker client-order-id (feature 101) instead of the raw
+	// platform order ID, so a retried submission is de-duplicated by the broker too —
+	// IBKR's only dedup mechanism (it has no server-side idempotency of its own).
+	brokerReq.ClientOrderID = broker.DeriveBrokerClientOrderID(intentID)
+	// Alpaca-native bracket attach (feature 030): strictly safer than post-fill
+	// submission — no fill→stop gap. IBKR does not accept these fields on SubmitOrder
+	// (no order_class field exists in its request shape); its legs go through
+	// maybeSubmitBracket's SubmitBracketLegs follow-up call after the fill is confirmed.
+	bracketOrdersEnabled := needSizing && sizedStopPrice > 0 && s.cfgW.GetBool("trading.risk.bracket_orders_enabled", true)
+	if bracketOrdersEnabled && commonv1.BrokerType(accountEntry.brokerType) == commonv1.BrokerType_BROKER_TYPE_ALPACA {
+		brokerReq.BracketStopPrice = sizedStopPrice
+		brokerReq.BracketTakeProfitPrice = s.computeTakeProfitPrice(order.Side, sizedStopPrice, entryPriceProxy)
+	}
 	brokerOrder, err := accountEntry.client.SubmitOrder(ctx, brokerReq)
 	if err != nil {
+		var netErr net.Error
+		isTimeout := errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout())
+		if isTimeout {
+			// Uncertain outcome (feature 101, FR-4): leave order.Status at its
+			// pre-broker-call value and the intent PENDING for reclaim — do not
+			// unconditionally mark REJECTED, which would conflate "definitely
+			// rejected" with "we don't know what happened."
+			_ = s.repo.UpsertOrder(context.Background(), order)
+			go s.emitLedgerEvent(context.Background(), "order.broker_call_uncertain", orderID, map[string]interface{}{
+				"order_id": orderID, "intent_id": intentID, "error": err.Error(),
+			})
+			slog.Warn("broker call uncertain (timeout)", "order_id", orderID, "intent_id", intentID, "error", err)
+			return order, fmt.Errorf("broker submission failed: %w", err)
+		}
+		// Definite, synchronous rejection — existing behavior unchanged.
 		order.Status = tradingv1.OrderStatus_ORDER_STATUS_REJECTED
 		order.UpdatedAt = timestamppb.New(time.Now())
 		go s.emitLedgerEvent(context.Background(), "order.broker_rejected", orderID, map[string]interface{}{
 			"order_id": orderID, "error": err.Error(), "trading_mode": mode.String(),
 		})
 		_ = s.repo.UpsertOrder(context.Background(), order)
+		if ownsIntent {
+			if marshaled, mErr := proto.Marshal(order); mErr == nil {
+				if fErr := s.orderIntentRepo.FinalizeIntent(context.Background(), intentID, orderID, repository.IntentStateRejected, marshaled); fErr != nil {
+					slog.Warn("finalize order intent (rejected) failed", "intent_id", intentID, "error", fErr)
+				}
+			}
+		}
 		slog.Error("broker rejected order", "order_id", orderID, "error", err)
 		return nil, fmt.Errorf("broker submission failed: %w", err)
 	}
@@ -368,10 +652,31 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 	if order.Status == tradingv1.OrderStatus_ORDER_STATUS_FILLED && order.FilledQty == 0 {
 		order.FilledQty = order.Qty
 	}
+	order.IntentState = tradingv1.IntentState_INTENT_STATE_COMPLETED
+
+	// Bracket submission (feature 030) — only once a fill is confirmed (a resting,
+	// unfilled LIMIT entry has nothing to protect yet; the fill poller's own hook
+	// handles that case when the fill is later detected). entryProxy prefers the real
+	// average fill price over the pre-fill estimate once it's known.
+	if order.FilledQty > 0 {
+		entryProxy := entryPriceProxy
+		if order.FilledAvgPrice > 0 {
+			entryProxy = order.FilledAvgPrice
+		}
+		s.maybeSubmitBracket(context.Background(), order, accountEntry, brokerOrder, order.StopPrice, entryProxy,
+			s.cfgW.GetBool("trading.risk.bracket_orders_enabled", true))
+	}
 
 	// Persist updated order with broker fields.
 	if err := s.repo.UpsertOrder(context.Background(), order); err != nil {
 		slog.Warn("db upsert after broker submit failed", "order_id", orderID, "error", err)
+	}
+	if ownsIntent {
+		if marshaled, mErr := proto.Marshal(order); mErr == nil {
+			if fErr := s.orderIntentRepo.FinalizeIntent(context.Background(), intentID, orderID, repository.IntentStateCompleted, marshaled); fErr != nil {
+				slog.Warn("finalize order intent (completed) failed", "intent_id", intentID, "error", fErr)
+			}
+		}
 	}
 
 	go s.emitLedgerEvent(context.Background(), "order.broker_submitted", orderID, map[string]interface{}{
@@ -384,6 +689,9 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 	return order, nil
 }
 
+// CancelOrder is deliberately NOT gated by platform.trading_state (feature 100) — mirrors
+// feature 030's identical decision on its own per-account halt: cancellation is the
+// operator's sole remaining manual de-risk tool and must work even when trading is halted.
 func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelOrderRequest) (*tradingv1.CancelOrderResponse, error) {
 	s.mu.Lock()
 	order, ok := s.orders[req.OrderId]
@@ -400,23 +708,112 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 		s.mu.Unlock()
 	}
 
-	// Cancel at broker if we have a broker order ID.
+	// Dedup insert (feature 101): server-derived intent ID (a content-identical cancel
+	// on the same order is safe to collapse — no client nonce needed).
+	intentID, requestHashHex, err := deriveReplaceCancelIntentID(req)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "derive order intent: %v", err)
+	}
+	ok2, err := s.orderIntentRepo.InsertIntent(ctx, &repository.OrderIntentRecord{
+		IntentID: intentID, OrderID: req.OrderId, RequestHash: requestHashHex,
+		BrokerAccountID: order.AccountId,
+	})
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "insert order intent: %v", err)
+	}
+	if !ok2 {
+		existing, getErr := s.orderIntentRepo.GetIntentByID(ctx, intentID)
+		if getErr != nil || existing == nil {
+			return nil, grpcstatus.Errorf(codes.Internal, "load existing order intent: %v", getErr)
+		}
+		action, isStale := classifyIntentLookup(existing, requestHashHex, time.Now(), staleThreshold(s.cfgW))
+		switch action {
+		case intentActionRejectHashMismatch:
+			return nil, grpcstatus.Errorf(codes.FailedPrecondition,
+				"cancel on order %s was already attempted with different content", req.OrderId)
+		case intentActionReturnStored:
+			var stored tradingv1.Order
+			if err := proto.Unmarshal(existing.LatestResponse, &stored); err != nil {
+				return nil, grpcstatus.Errorf(codes.Internal, "unmarshal stored intent response: %v", err)
+			}
+			return &tradingv1.CancelOrderResponse{Success: true, Order: &stored}, nil
+		case intentActionRejectUnknown:
+			return nil, grpcstatus.Errorf(codes.FailedPrecondition,
+				"cancel intent for order %s outcome is unknown; verify with the broker before retrying", req.OrderId)
+		default: // intentActionRejectPending
+			if isStale {
+				_, _, _ = s.orderIntentRepo.ReclaimOrphanIntent(ctx, intentID, existing.UpdatedAt.Add(staleThreshold(s.cfgW)))
+			}
+			return nil, grpcstatus.Errorf(codes.FailedPrecondition,
+				"cancel on order %s is still pending", req.OrderId)
+		}
+	}
+	order.IntentState = tradingv1.IntentState_INTENT_STATE_PENDING
+
+	// Cancel at broker if we have a broker order ID. This branch's existing fail-open
+	// behavior (log-only, cancellation proceeds locally regardless) is deliberately
+	// UNCHANGED by this feature — "mark canceled locally regardless of broker response"
+	// is a distinct, pre-existing decision (design.md § Cross-intent precedence).
+	finalIntentState := repository.IntentStateCompleted
+	var resolvedEntry brokerPoolEntry
+	var haveEntry bool
 	if order.BrokerOrderId != "" {
-		entry, resolveErr := s.resolveAccount(order.AccountId)
+		_, entry, resolveErr := s.resolveAccount(order.AccountId)
 		if resolveErr != nil {
 			slog.Warn("cancel: could not resolve broker account", "order_id", req.OrderId, "account_id", order.AccountId, "error", resolveErr)
+			// A broker-call failure doesn't support the certainty CONFIRMED (Completed)
+			// would assert — the cancel intent goes to UNKNOWN, not CONFIRMED (design.md).
+			finalIntentState = repository.IntentStateUnknown
 		} else {
+			resolvedEntry, haveEntry = entry, true
 			if err := entry.client.CancelOrder(ctx, order.BrokerOrderId); err != nil {
 				slog.Warn("broker cancel failed", "order_id", req.OrderId, "broker_order_id", order.BrokerOrderId, "error", err)
 				// Continue with internal cancellation — broker may have already filled/canceled.
+				finalIntentState = repository.IntentStateUnknown
 			}
+		}
+	}
+
+	// Bracket-leg cancellation on signal-driven close (feature 030, OQ-2): best-effort
+	// — log failures, never block the close. Cancelling an already-filled leg is a
+	// broker no-op (Alpaca returns 422 for an already-filled order, already tolerated
+	// above); pollFills detecting a leg fill on an already-CANCELED bracket row is
+	// likewise a no-op (maybeSubmitBracket's own status-branch guard).
+	if haveEntry {
+		if bracket, bErr := s.bracketRepo.GetBracketByOrderID(ctx, req.OrderId); bErr != nil {
+			slog.Warn("cancel: bracket lookup failed", "order_id", req.OrderId, "error", bErr)
+		} else if bracket != nil && bracket.Status == bracketStatusActive {
+			if bracket.StopLegOrderID != "" {
+				if err := resolvedEntry.client.CancelOrder(ctx, bracket.StopLegOrderID); err != nil {
+					slog.Warn("cancel: bracket stop leg cancel failed", "order_id", req.OrderId, "leg_id", bracket.StopLegOrderID, "error", err)
+				}
+			}
+			if bracket.TakeProfitLegOrderID != "" {
+				if err := resolvedEntry.client.CancelOrder(ctx, bracket.TakeProfitLegOrderID); err != nil {
+					slog.Warn("cancel: bracket take-profit leg cancel failed", "order_id", req.OrderId, "leg_id", bracket.TakeProfitLegOrderID, "error", err)
+				}
+			}
+			if uErr := s.bracketRepo.UpdateBracketStatus(ctx, bracket.ID, bracketStatusCanceled, bracket.StopLegOrderID, bracket.TakeProfitLegOrderID, ""); uErr != nil {
+				slog.Warn("cancel: update bracket status failed", "order_id", req.OrderId, "error", uErr)
+			}
+			go s.emitLedgerEvent(context.Background(), "order.bracket_updated", req.OrderId, bracketUpdatedPayload(order, "", ""))
 		}
 	}
 
 	order.Status = tradingv1.OrderStatus_ORDER_STATUS_CANCELED
 	order.UpdatedAt = timestamppb.New(time.Now())
+	if finalIntentState == repository.IntentStateUnknown {
+		order.IntentState = tradingv1.IntentState_INTENT_STATE_UNKNOWN
+	} else {
+		order.IntentState = tradingv1.IntentState_INTENT_STATE_COMPLETED
+	}
 
 	_ = s.repo.UpsertOrder(ctx, order)
+	if marshaled, mErr := proto.Marshal(order); mErr == nil {
+		if fErr := s.orderIntentRepo.FinalizeIntent(context.Background(), intentID, req.OrderId, finalIntentState, marshaled); fErr != nil {
+			slog.Warn("finalize cancel intent failed", "intent_id", intentID, "error", fErr)
+		}
+	}
 
 	go s.emitLedgerEvent(context.Background(), "order.canceled", req.OrderId, map[string]interface{}{
 		"order_id": req.OrderId, "user_id": req.UserId,
@@ -457,15 +854,73 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 			"order %s is not replaceable in status %s", req.OrderId, order.Status)
 	}
 
+	// Persisted per-account automated halt (feature 030) — identical gate to
+	// PlaceOrder's, no reduce-only carve-out (design.md's explicit rejection: no such
+	// precedent exists anywhere in this service). Placed ahead of the trading_state
+	// gate below (order.AccountId is already known from the persisted order — no need
+	// to wait for resolveAccount).
+	if s.isAccountHalted(order.AccountId) {
+		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "account is halted: %s", s.haltReason(order.AccountId))
+	}
+
+	// platform.trading_state gate (feature 100): mirrors PlaceOrder's gate — HALTED
+	// blocks outright; REDUCE_ONLY blocks only size-increasing replaces.
+	if err := s.checkTradingStateForReplace(order, req); err != nil {
+		return nil, err
+	}
+
 	if order.BrokerOrderId == "" {
 		return nil, grpcstatus.Errorf(codes.FailedPrecondition,
 			"order %s has no broker order id yet; cannot replace", req.OrderId)
 	}
 
-	entry, err := s.resolveAccount(order.AccountId)
+	_, entry, err := s.resolveAccount(order.AccountId)
 	if err != nil {
 		return nil, err
 	}
+
+	// Dedup insert (feature 101): server-derived intent ID (a content-identical replace
+	// on the same order is safe to collapse — no client nonce needed, unlike PlaceOrder).
+	intentID, requestHashHex, err := deriveReplaceCancelIntentID(req)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "derive order intent: %v", err)
+	}
+	ownsIntent := true
+	ok2, err := s.orderIntentRepo.InsertIntent(ctx, &repository.OrderIntentRecord{
+		IntentID: intentID, OrderID: req.OrderId, RequestHash: requestHashHex,
+		BrokerAccountID: order.AccountId,
+	})
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "insert order intent: %v", err)
+	}
+	if !ok2 {
+		existing, getErr := s.orderIntentRepo.GetIntentByID(ctx, intentID)
+		if getErr != nil || existing == nil {
+			return nil, grpcstatus.Errorf(codes.Internal, "load existing order intent: %v", getErr)
+		}
+		action, isStale := classifyIntentLookup(existing, requestHashHex, time.Now(), staleThreshold(s.cfgW))
+		switch action {
+		case intentActionRejectHashMismatch:
+			return nil, grpcstatus.Errorf(codes.FailedPrecondition,
+				"replace on order %s was already attempted with different content", req.OrderId)
+		case intentActionReturnStored:
+			var stored tradingv1.Order
+			if err := proto.Unmarshal(existing.LatestResponse, &stored); err != nil {
+				return nil, grpcstatus.Errorf(codes.Internal, "unmarshal stored intent response: %v", err)
+			}
+			return &stored, nil
+		case intentActionRejectUnknown:
+			return nil, grpcstatus.Errorf(codes.FailedPrecondition,
+				"replace intent for order %s outcome is unknown; verify with the broker before retrying", req.OrderId)
+		default: // intentActionRejectPending
+			if isStale {
+				_, _, _ = s.orderIntentRepo.ReclaimOrphanIntent(ctx, intentID, existing.UpdatedAt.Add(staleThreshold(s.cfgW)))
+			}
+			return nil, grpcstatus.Errorf(codes.FailedPrecondition,
+				"replace on order %s is still pending", req.OrderId)
+		}
+	}
+	order.IntentState = tradingv1.IntentState_INTENT_STATE_PENDING
 
 	// Only the changed fields are sent to the broker (zero/empty = leave unchanged).
 	brokerReq := broker.OrderRequest{
@@ -476,6 +931,17 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 		TimeInForce: req.TimeInForce,
 	}
 	if _, replaceErr := entry.client.ReplaceOrder(ctx, order.BrokerOrderId, brokerReq); replaceErr != nil {
+		var netErr net.Error
+		isTimeout := errors.Is(replaceErr, context.DeadlineExceeded) || (errors.As(replaceErr, &netErr) && netErr.Timeout())
+		if !isTimeout && ownsIntent {
+			if marshaled, mErr := proto.Marshal(order); mErr == nil {
+				if fErr := s.orderIntentRepo.FinalizeIntent(context.Background(), intentID, req.OrderId, repository.IntentStateRejected, marshaled); fErr != nil {
+					slog.Warn("finalize replace intent (rejected) failed", "intent_id", intentID, "error", fErr)
+				}
+			}
+		}
+		// Timeout leaves the intent PENDING for reclaim — existing codes.Internal error
+		// returned unchanged either way (this branch's RPC-level behavior is preserved).
 		return nil, grpcstatus.Errorf(codes.Internal, "broker replace failed: %v", replaceErr)
 	}
 
@@ -492,8 +958,16 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 		order.TimeInForce = req.TimeInForce
 	}
 	order.UpdatedAt = timestamppb.New(time.Now())
+	order.IntentState = tradingv1.IntentState_INTENT_STATE_COMPLETED
 
 	_ = s.repo.UpsertOrder(ctx, order)
+	if ownsIntent {
+		if marshaled, mErr := proto.Marshal(order); mErr == nil {
+			if fErr := s.orderIntentRepo.FinalizeIntent(context.Background(), intentID, req.OrderId, repository.IntentStateCompleted, marshaled); fErr != nil {
+				slog.Warn("finalize replace intent (completed) failed", "intent_id", intentID, "error", fErr)
+			}
+		}
+	}
 
 	go s.emitLedgerEvent(context.Background(), "order.replaced", req.OrderId, map[string]interface{}{
 		"order_id": req.OrderId, "user_id": req.UserId,
@@ -707,7 +1181,11 @@ func (s *TradingService) pollFills(ctx context.Context) {
 		if newStatus == tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED {
 			continue
 		}
-		if newStatus == order.Status {
+		// A same-status repeat is normally a no-op poll tick — except a repeated
+		// PARTIALLY_FILLED with a larger FilledQty (feature 030: a second partial fill
+		// on the same order), which must still be processed so an ACTIVE IBKR bracket
+		// gets resized on every fill delta, not just the first.
+		if newStatus == order.Status && order.FilledQty == brokerOrder.FilledQty {
 			continue
 		}
 
@@ -738,6 +1216,11 @@ func (s *TradingService) pollFills(ctx context.Context) {
 			go s.emitFillAlert(context.Background(), order)
 			slog.Info("order filled", "order_id", order.OrderId, "symbol", order.Symbol,
 				"qty", order.Qty, "fill_price", order.FilledAvgPrice)
+			// Fill detected asynchronously (feature 030) — order.StopPrice is only ever
+			// nonzero here for an auto-sized MARKET/LIMIT entry (023's construction); a
+			// no-op for every other order (see maybeSubmitBracket's own guard).
+			s.maybeSubmitBracket(context.Background(), order, entry, brokerOrder, order.StopPrice, order.FilledAvgPrice,
+				s.cfgW.GetBool("trading.risk.bracket_orders_enabled", true))
 
 		case tradingv1.OrderStatus_ORDER_STATUS_PARTIALLY_FILLED:
 			go s.emitLedgerEvent(context.Background(), "order.partially_filled", order.OrderId, map[string]interface{}{
@@ -746,6 +1229,10 @@ func (s *TradingService) pollFills(ctx context.Context) {
 				"user_id": order.UserId, "trading_mode": order.TradingMode.String(),
 				"account_id": order.AccountId,
 			})
+			// First partial fill creates the bracket; a later partial fill on an
+			// already-ACTIVE IBKR bracket resizes it (maybeSubmitBracket's own dispatch).
+			s.maybeSubmitBracket(context.Background(), order, entry, brokerOrder, order.StopPrice, order.FilledAvgPrice,
+				s.cfgW.GetBool("trading.risk.bracket_orders_enabled", true))
 
 		case tradingv1.OrderStatus_ORDER_STATUS_CANCELED:
 			go s.emitLedgerEvent(context.Background(), "order.canceled", order.OrderId, map[string]interface{}{
@@ -755,6 +1242,406 @@ func (s *TradingService) pollFills(ctx context.Context) {
 		case tradingv1.OrderStatus_ORDER_STATUS_REJECTED:
 			go s.emitLedgerEvent(context.Background(), "order.rejected", order.OrderId, map[string]interface{}{
 				"order_id": order.OrderId, "symbol": order.Symbol,
+			})
+		}
+	}
+}
+
+// Mismatch classes emitted on reconciliation.mismatch_found (feature 102). An internal
+// ledger-payload string tag, not a wire/proto type — the taxonomy is closed within this
+// feature's own scope.
+const (
+	mismatchClassUnknownBrokerOrder  = "unknown_broker_order"
+	mismatchClassQuantityDiscrepancy = "quantity_discrepancy"
+	mismatchClassMissingBrokerOrder  = "missing_broker_order"
+)
+
+// isTerminalOrderStatus mirrors pollFills' own terminal-status set (see its candidate
+// collection above).
+func isTerminalOrderStatus(status tradingv1.OrderStatus) bool {
+	switch status {
+	case tradingv1.OrderStatus_ORDER_STATUS_FILLED,
+		tradingv1.OrderStatus_ORDER_STATUS_CANCELED,
+		tradingv1.OrderStatus_ORDER_STATUS_REJECTED,
+		tradingv1.OrderStatus_ORDER_STATUS_EXPIRED:
+		return true
+	}
+	return false
+}
+
+// StartReconciliationPoller periodically compares open orders/positions against broker truth
+// (feature 102 — broker-state-reconciliation). Mirrors StartFillPoller's exact
+// ticker+ctx.Done()+live-config-reread shape.
+func (s *TradingService) StartReconciliationPoller(ctx context.Context) {
+	const defaultIntervalMs = 60000.0
+	currentInterval := time.Duration(defaultIntervalMs) * time.Millisecond
+	ticker := time.NewTicker(currentInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.reconcileTick(ctx, int(s.cfgW.GetInt("trading.reconciliation.grace_ticks", 1)),
+				s.cfgW.GetFloat("trading.reconciliation.systemic_threshold_pct", 0.5))
+			intervalMs := s.cfgW.GetFloat("trading.reconciliation.interval_ms", defaultIntervalMs)
+			if intervalMs > 0 {
+				newInterval := time.Duration(intervalMs) * time.Millisecond
+				if newInterval != currentInterval {
+					currentInterval = newInterval
+					ticker.Reset(currentInterval)
+				}
+			}
+		}
+	}
+}
+
+// recordReconciliationCandidate increments the consecutive-tick counter for a candidate
+// mismatch and reports whether it has now crossed the grace window (1+graceTicks
+// observations) and become a real finding. A real finding is cleared immediately, so a
+// persisting mismatch starts a fresh episode on its next occurrence rather than re-firing
+// every tick indefinitely.
+func (s *TradingService) recordReconciliationCandidate(key string, graceTicks int) bool {
+	s.reconcileCandidatesMu.Lock()
+	defer s.reconcileCandidatesMu.Unlock()
+	s.reconcileCandidates[key]++
+	if s.reconcileCandidates[key] >= 1+graceTicks {
+		delete(s.reconcileCandidates, key)
+		return true
+	}
+	return false
+}
+
+// clearReconciliationCandidate drops a candidate no longer observed this tick — the
+// propagation delay passed and the mismatch resolved on its own (self-heal; no ledger event,
+// no halt, per design.md).
+func (s *TradingService) clearReconciliationCandidate(key string) {
+	s.reconcileCandidatesMu.Lock()
+	delete(s.reconcileCandidates, key)
+	s.reconcileCandidatesMu.Unlock()
+}
+
+// emitReconciliationFinding records a real (past-grace-window) mismatch: a ledger event, a
+// CRITICAL alert, and the ordinary per-account halt (feature 030's mechanism, reused — no
+// SetConfig/authz call for this common case; that is Step 19's rare systemic escalation).
+func (s *TradingService) emitReconciliationFinding(ctx context.Context, accountID, mismatchClass, orderID string, expected, brokerReported float64) {
+	s.emitLedgerEvent(ctx, "reconciliation.mismatch_found", fmt.Sprintf("account:%s", accountID), map[string]interface{}{
+		"mismatch_class":  mismatchClass,
+		"order_id":        orderID,
+		"expected":        expected,
+		"broker_reported": brokerReported,
+		"tick_at":         time.Now().UnixMilli(),
+	})
+	s.haltAccount(ctx, accountID, fmt.Sprintf("%s: %s", mismatchClass, orderID), int32(tradingv1.HaltSource_HALT_SOURCE_RECONCILIATION))
+	_, err := s.notify.EmitAlert(ctx, &notifyv1.EmitAlertRequest{
+		Severity:      notifyv1.AlertSeverity_ALERT_SEVERITY_CRITICAL,
+		Category:      "reconciliation",
+		Title:         fmt.Sprintf("Broker state mismatch: %s", mismatchClass),
+		Body:          fmt.Sprintf("Account %s: %s (%s) — expected %.4f, broker reported %.4f", accountID, mismatchClass, orderID, expected, brokerReported),
+		SourceService: "xstockstrat-trading",
+	})
+	if err != nil {
+		slog.Warn("reconciliation: emit alert failed", "account_id", accountID, "mismatch_class", mismatchClass, "error", err)
+	}
+}
+
+// reconcileTick compares each registered account's open orders and positions against broker
+// truth (feature 102). Returns the number of accounts that errored this tick (systemicCount)
+// out of the total registered accounts (totalAccounts) — Step 19's systemic-escalation trigger
+// reads these.
+//
+// Deviation from design.md's literal "Qty - FilledQty on both sides" plan: broker.BrokerOrder
+// (the ListOrders/GetOrder result shape) carries only a cumulative FilledQty, not a total
+// order Qty — there is nothing to derive a broker-side "remaining" quantity from. The
+// quantity-discrepancy check below compares FilledQty directly (platform vs. broker-reported),
+// the only remaining-quantity-adjacent figure ListOrders actually returns.
+//
+// The "unprotected/impossible" bucket (an order/position under an account ID not present in
+// s.brokers at all) is not implemented: every Broker client is constructed scoped to one
+// account's own credentials (ibkrAccountID / the Alpaca key pair), so a ListOrders/GetPositions
+// call can only ever return records for that same account — there is no code path by which a
+// call scoped to account A could surface a record under a different, unregistered account B.
+// This bucket is architecturally unreachable given this feature's broker-client design, not a
+// skipped implementation; a genuine per-step finding, not a silent gap.
+// graceTicks is hoisted as an explicit parameter (not read live via s.cfgW inside this
+// function) — config.Watcher has no exported snapshot setter (an established limitation in
+// this service; see 030/023/101's own identical hoisting of a config-read value for the same
+// reason), so a live read here would make the "grace window not yet crossed" test case
+// untestable against a hand-constructed service. The one real caller (StartReconciliationPoller)
+// still reads the live config value and passes it in.
+func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, systemicThresholdPct float64) (systemicCount, totalAccounts int) {
+	s.brokersMu.RLock()
+	brokerMap := make(map[string]brokerPoolEntry, len(s.brokers))
+	for id, e := range s.brokers {
+		brokerMap[id] = e
+	}
+	s.brokersMu.RUnlock()
+
+	s.credStatusMu.Lock()
+	credStatus := make(map[string]int32, len(s.credStatus))
+	for id, st := range s.credStatus {
+		credStatus[id] = st
+	}
+	s.credStatusMu.Unlock()
+
+	timeout := s.brokerCallTimeout()
+	totalAccounts = len(brokerMap)
+
+	for accountID, entry := range brokerMap {
+		if credentialsKnownInvalid(credStatus[accountID]) {
+			continue
+		}
+
+		listCtx, cancel := context.WithTimeout(ctx, timeout)
+		brokerOrders, err := entry.client.ListOrders(listCtx)
+		cancel()
+		if err != nil {
+			slog.Warn("reconcileTick: ListOrders failed", "account_id", accountID, "error", err)
+			systemicCount++
+			continue
+		}
+		brokerByID := make(map[string]broker.BrokerOrder, len(brokerOrders))
+		for _, bo := range brokerOrders {
+			brokerByID[bo.BrokerOrderID] = bo
+		}
+
+		s.mu.Lock()
+		var acctOrders []*tradingv1.Order
+		for _, o := range s.orders {
+			if o.AccountId == accountID && o.BrokerOrderId != "" {
+				acctOrders = append(acctOrders, o)
+			}
+		}
+		s.mu.Unlock()
+
+		knownBrokerIDs := make(map[string]bool, len(acctOrders))
+		for _, o := range acctOrders {
+			knownBrokerIDs[o.BrokerOrderId] = true
+			bo, found := brokerByID[o.BrokerOrderId]
+			if !found {
+				if isTerminalOrderStatus(o.Status) {
+					continue // already reconciled to a terminal state; not a live mismatch
+				}
+				key := accountID + ":order:" + o.OrderId
+				if s.recordReconciliationCandidate(key, graceTicks) {
+					s.emitReconciliationFinding(ctx, accountID, mismatchClassMissingBrokerOrder, o.OrderId, o.Qty-o.FilledQty, 0)
+				}
+				continue
+			}
+			// A quantity discrepancy is a genuine post-grace-window disagreement, never a
+			// bare PARTIALLY_FILLED status alone (FR-2) — the grace window below is exactly
+			// that carve-out: a fresh disagreement must persist across ticks before it counts.
+			key := accountID + ":order:" + o.OrderId
+			if bo.FilledQty != o.FilledQty {
+				if s.recordReconciliationCandidate(key, graceTicks) {
+					s.emitReconciliationFinding(ctx, accountID, mismatchClassQuantityDiscrepancy, o.OrderId, o.FilledQty, bo.FilledQty)
+				}
+			} else {
+				s.clearReconciliationCandidate(key)
+			}
+		}
+		for boID, bo := range brokerByID {
+			if knownBrokerIDs[boID] {
+				continue
+			}
+			// An order the broker knows about that the platform has no record of at all —
+			// detected regardless of fill state (AC-1), the primary reason ListOrders exists.
+			key := accountID + ":order:" + boID
+			if s.recordReconciliationCandidate(key, graceTicks) {
+				s.emitReconciliationFinding(ctx, accountID, mismatchClassUnknownBrokerOrder, boID, 0, bo.FilledQty)
+			}
+		}
+
+		// Position-side comparison: catches a fully FILLED order's resulting position
+		// disagreeing with the broker's own position — FILLED orders already dropped out of
+		// the order-side loop above (the same terminal-status convention pollFills uses).
+		posCtx, posCancel := context.WithTimeout(ctx, timeout)
+		brokerPositions, posErr := entry.client.GetPositions(posCtx)
+		posCancel()
+		if posErr != nil {
+			slog.Warn("reconcileTick: GetPositions failed", "account_id", accountID, "error", posErr)
+			systemicCount++
+			continue
+		}
+		tradingMode := commonv1.TradingMode_TRADING_MODE_PAPER
+		if !entry.client.IsPaper() {
+			tradingMode = commonv1.TradingMode_TRADING_MODE_LIVE
+		}
+		listPosCtx, listPosCancel := context.WithTimeout(ctx, timeout)
+		platformPositions, ppErr := s.portfolio.ListPositions(listPosCtx, &portfoliov1.ListPositionsRequest{
+			UserId: entry.userID, AccountId: &accountID, TradingMode: tradingMode,
+			Page: &commonv1.PageRequest{PageSize: 500},
+		})
+		listPosCancel()
+		if ppErr != nil {
+			slog.Warn("reconcileTick: portfolio ListPositions failed", "account_id", accountID, "error", ppErr)
+			continue // not counted toward systemic — the broker side of this account is fine
+		}
+		platformBySymbol := make(map[string]float64, len(platformPositions.Positions))
+		for _, p := range platformPositions.Positions {
+			platformBySymbol[p.Symbol] = p.Qty
+		}
+		for _, bp := range brokerPositions {
+			key := accountID + ":pos:" + bp.Symbol
+			platformQty := platformBySymbol[bp.Symbol]
+			if platformQty != bp.Quantity {
+				if s.recordReconciliationCandidate(key, graceTicks) {
+					s.emitReconciliationFinding(ctx, accountID, mismatchClassQuantityDiscrepancy, bp.Symbol, platformQty, bp.Quantity)
+				}
+			} else {
+				s.clearReconciliationCandidate(key)
+			}
+		}
+
+		// FR-6: resolve 101's own deferred "who resolves an UNKNOWN order intent" question,
+		// reusing this tick's already-fetched ListOrders result (brokerOrders) — not a second
+		// broker round-trip.
+		s.resolveUnknownIntents(ctx, accountID, entry, brokerOrders)
+	}
+
+	// Rare, genuinely systemic finding: half or more (default threshold) of registered
+	// accounts errored/unreachable this tick — escalate platform-wide via the internal-caller
+	// authz channel (Steps 4-8), rather than routing through 030's per-account halt (Step 17's
+	// ordinary path above). Never called for an ordinary per-account finding.
+	if totalAccounts > 0 && float64(systemicCount)/float64(totalAccounts) >= systemicThresholdPct {
+		s.escalateSystemic(ctx, systemicCount, totalAccounts)
+	}
+
+	return systemicCount, totalAccounts
+}
+
+// escalateSystemic sets platform.trading_state=REDUCE_ONLY via the internal-caller authz
+// channel (feature 102's own trading -> config edge, Step 13) and pages an operator — a
+// config value must never silently change with no alert. Environment is set from this
+// deployment's own s.cfg.ApplicationEnv; TradingMode is deliberately left UNSPECIFIED
+// (resolves server-side to trading_mode='all') — a systemic broker-communication breakdown is
+// by definition platform-wide, not scoped to one trading mode, so REDUCE_ONLY must apply to
+// both paper and live simultaneously.
+func (s *TradingService) escalateSystemic(ctx context.Context, systemicCount, totalAccounts int) {
+	env := commonv1.Environment_ENVIRONMENT_DEV
+	if s.cfg.ApplicationEnv == "production" {
+		env = commonv1.Environment_ENVIRONMENT_PRODUCTION
+	}
+	_, err := s.configSetter.SetConfig(ctx, "trading-reconciliation-poller", &configv1.SetConfigRequest{
+		Namespace:   "platform",
+		Key:         "trading_state",
+		Value:       &configv1.ConfigValue{Value: &configv1.ConfigValue_StringVal{StringVal: "REDUCE_ONLY"}},
+		Reason:      fmt.Sprintf("reconciliation: %d/%d accounts unreachable/unprotected this tick", systemicCount, totalAccounts),
+		Author:      "system:reconciliation-poller",
+		Environment: env,
+	})
+	if err != nil {
+		slog.Warn("systemic escalation SetConfig failed", "error", err, "systemic_count", systemicCount, "total_accounts", totalAccounts)
+	}
+
+	_, alertErr := s.notify.EmitAlert(ctx, &notifyv1.EmitAlertRequest{
+		Severity:      notifyv1.AlertSeverity_ALERT_SEVERITY_CRITICAL,
+		Category:      "reconciliation",
+		Title:         "Systemic broker-reconciliation failure — trading reduced to REDUCE_ONLY",
+		Body:          fmt.Sprintf("%d of %d registered accounts were unreachable/unprotected this reconciliation tick.", systemicCount, totalAccounts),
+		SourceService: "xstockstrat-trading",
+	})
+	if alertErr != nil {
+		slog.Warn("systemic escalation alert failed", "error", alertErr)
+	}
+}
+
+// resolveUnknownIntents implements FR-6: resolve 101's UNKNOWN-state order intents against
+// broker truth (feature 102). For each UNKNOWN intent on this account:
+//  1. First check the ledger for an order_intent.late_response_conflict event at stream key
+//     order:{order_id} — resolves via the real recorded outcome. NOTE: 101's own
+//     implementation-spec.md never actually emits this event anywhere in its Instructions (only
+//     named in a forward-reference dependency note) — confirmed by direct grep of this
+//     service's tree, zero hits for "late_response_conflict". This branch can therefore never
+//     match today; it is left in place, not removed, because it is cheap, correct once 101 gains
+//     an emit site, and documents the intended two-source design rather than silently degrading
+//     to fallback-only. A one-time WARN fires if a full sweep finds zero such events ever
+//     recorded, signaling the upstream gap needs fixing in 101, not 102.
+//  2. Fallback (Alpaca only — IBKR's SubmitOrder never sends a customer-order tag, so
+//     BrokerOrder.ClientOrderID is always "" for IBKR, see Steps 9/11): scan this tick's
+//     already-fetched ListOrders result for a ClientOrderID matching the intent's derived nonce.
+//  3. Genuinely inconclusive: no write this tick — never guess an outcome (FR-3).
+func (s *TradingService) resolveUnknownIntents(ctx context.Context, accountID string, entry brokerPoolEntry, brokerOrders []broker.BrokerOrder) {
+	if s.orderIntentRepo == nil {
+		return
+	}
+	unknownIntents, err := s.orderIntentRepo.ListUnknownForAccount(ctx, accountID)
+	if err != nil {
+		slog.Warn("resolveUnknownIntents: ListUnknownForAccount failed", "account_id", accountID, "error", err)
+		return
+	}
+	if len(unknownIntents) == 0 {
+		return
+	}
+
+	byClientOrderID := make(map[string]broker.BrokerOrder, len(brokerOrders))
+	for _, bo := range brokerOrders {
+		if bo.ClientOrderID != "" {
+			byClientOrderID[bo.ClientOrderID] = bo
+		}
+	}
+	isAlpaca := commonv1.BrokerType(entry.brokerType) == commonv1.BrokerType_BROKER_TYPE_ALPACA
+
+	for _, intent := range unknownIntents {
+		// 2a. First check: a late-broker-response conflict event, if 101 ever emits one.
+		events, qerr := s.ledger.QueryEvents(ctx, &ledgerv1.QueryEventsRequest{
+			StreamKey: fmt.Sprintf("order:%s", intent.OrderID),
+			EventType: "order_intent.late_response_conflict",
+		})
+		if qerr != nil {
+			slog.Warn("resolveUnknownIntents: QueryEvents failed", "intent_id", intent.IntentID, "error", qerr)
+		} else if len(events.Events) > 0 {
+			payload := events.Events[0].Payload.AsMap()
+			outcome, _ := payload["outcome"].(string)
+			var newState int16
+			switch outcome {
+			case "rejected":
+				newState = repository.IntentStateRejected
+			case "completed":
+				newState = repository.IntentStateCompleted
+			default:
+				continue // an unrecognized outcome literal is not a basis for a guess
+			}
+			responseJSON, _ := json.Marshal(payload)
+			resolved, rerr := s.orderIntentRepo.ResolveUnknownIntent(ctx, intent.IntentID, newState, responseJSON)
+			if rerr != nil {
+				slog.Warn("resolveUnknownIntents: ResolveUnknownIntent failed", "intent_id", intent.IntentID, "error", rerr)
+				continue
+			}
+			if resolved {
+				s.emitLedgerEvent(ctx, "order_intent.resolved_by_reconciliation", fmt.Sprintf("order:%s", intent.OrderID), map[string]interface{}{
+					"intent_id": intent.IntentID, "order_id": intent.OrderID, "resolved_via": "late_response_conflict",
+				})
+			}
+			continue
+		}
+
+		// 2b. Fallback: Alpaca-only broker-side scan by the derived client-order-id nonce.
+		if !isAlpaca {
+			continue // IBKR never carries a client-order-id to match against (2c: no write)
+		}
+		bo, found := byClientOrderID[broker.DeriveBrokerClientOrderID(intent.IntentID)]
+		if !found {
+			continue // 2c: genuinely inconclusive this tick — retried next tick, no guess
+		}
+		status := alpacaStatusToProto(bo.Status)
+		var newState int16
+		switch status {
+		case tradingv1.OrderStatus_ORDER_STATUS_REJECTED:
+			newState = repository.IntentStateRejected
+		case tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED:
+			continue // an unrecognized/transient broker status is not a basis for a guess
+		default:
+			newState = repository.IntentStateCompleted
+		}
+		resolved, rerr := s.orderIntentRepo.ResolveUnknownIntent(ctx, intent.IntentID, newState, nil)
+		if rerr != nil {
+			slog.Warn("resolveUnknownIntents: ResolveUnknownIntent failed", "intent_id", intent.IntentID, "error", rerr)
+			continue
+		}
+		if resolved {
+			s.emitLedgerEvent(ctx, "order_intent.resolved_by_reconciliation", fmt.Sprintf("order:%s", intent.OrderID), map[string]interface{}{
+				"intent_id": intent.IntentID, "order_id": intent.OrderID, "resolved_via": "alpaca_list_orders_fallback",
 			})
 		}
 	}
@@ -1154,6 +2041,193 @@ func (s *TradingService) checkCredentialHealth(ctx context.Context) {
 	wg.Wait()
 }
 
+// ── Per-account automated halt (feature 030) ────────────────────────────────────
+
+// isAccountHalted reports whether the given account has an active automated halt.
+func (s *TradingService) isAccountHalted(accountID string) bool {
+	s.haltedMu.Lock()
+	defer s.haltedMu.Unlock()
+	return s.halted[accountID]
+}
+
+// haltReason returns the last-recorded reason for an account's halt (empty if none).
+func (s *TradingService) haltReason(accountID string) string {
+	s.haltedMu.Lock()
+	defer s.haltedMu.Unlock()
+	return s.haltReasons[accountID]
+}
+
+// haltAccount sets the in-memory halt flag first, releases the mutex, then issues the
+// bounded DB write — round-5-corrected ordering (design.md): never hold the mutex
+// across the DB round-trip, and never roll back the in-memory flag on a write
+// failure (fail-safe — the halt itself must never be undone by a persistence
+// hiccup; this differs from validateAndRecordCredential's own rollback-on-failure,
+// which is a deliberate, different choice for that unrelated concern).
+func (s *TradingService) haltAccount(ctx context.Context, accountID, reason string, haltSource int32) {
+	now := time.Now().UTC()
+	s.haltedMu.Lock()
+	s.halted[accountID] = true
+	s.haltReasons[accountID] = reason
+	s.haltedMu.Unlock()
+
+	dbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	if err := s.accountRepo.UpdateHaltStatus(dbCtx, accountID, true, reason, &now, haltSource); err != nil {
+		slog.Warn("haltAccount: persist halt failed", "account_id", accountID, "error", err)
+	}
+
+	_, err := s.notify.EmitAlert(ctx, &notifyv1.EmitAlertRequest{
+		Severity:      notifyv1.AlertSeverity_ALERT_SEVERITY_CRITICAL,
+		Category:      "halt",
+		Title:         fmt.Sprintf("Account halted: %s", accountID),
+		Body:          fmt.Sprintf("Account %s was automatically halted: %s", accountID, reason),
+		SourceService: "xstockstrat-trading",
+	})
+	if err != nil {
+		slog.Warn("haltAccount: emit alert failed", "account_id", accountID, "error", err)
+	}
+	slog.Error("account halted", "account_id", accountID, "reason", reason)
+}
+
+// flattenAndHalt closes the given bracket's underlying position at market (the
+// protection window expired with no confirmed bracket) and, if that fails after
+// exhausting retries, halts the account. Reuses PlaceOrder's own submission path
+// (submitOrder) so the flatten gets the exact same broker-safety machinery as any
+// other order.
+func (s *TradingService) flattenAndHalt(ctx context.Context, bracket *repository.OrderBracketRecord) {
+	s.brokersMu.RLock()
+	accountEntry, ok := s.brokers[bracket.AccountID]
+	s.brokersMu.RUnlock()
+	if !ok {
+		slog.Warn("flattenAndHalt: no broker for account", "account_id", bracket.AccountID, "order_id", bracket.OrderID)
+		return
+	}
+
+	s.mu.Lock()
+	order, orderOK := s.orders[bracket.OrderID]
+	s.mu.Unlock()
+	if !orderOK {
+		slog.Warn("flattenAndHalt: entry order not found", "order_id", bracket.OrderID)
+		return
+	}
+
+	posCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	position, err := s.portfolio.GetPosition(posCtx, &portfoliov1.GetPositionRequest{
+		UserId: order.UserId, Symbol: order.Symbol, TradingMode: order.TradingMode,
+	})
+	cancel()
+	if err != nil || position == nil || position.Qty == 0 {
+		slog.Warn("flattenAndHalt: no open position to flatten", "account_id", bracket.AccountID, "symbol", order.Symbol, "error", err)
+		return
+	}
+
+	flattenSide := tradingv1.OrderSide_ORDER_SIDE_SELL
+	if position.Qty < 0 {
+		flattenSide = tradingv1.OrderSide_ORDER_SIDE_BUY
+	}
+	qty := position.Qty
+	if qty < 0 {
+		qty = -qty
+	}
+
+	// Minted once per protection-gap-expiry episode, reused on every retry — preserves
+	// the platform's broker-side dedup contract (design.md).
+	clientOrderID := uuid.New().String()
+	flattenOrderID := uuid.New().String()
+	flattenReq := &tradingv1.PlaceOrderRequest{
+		Symbol: order.Symbol, Side: flattenSide, OrderType: tradingv1.OrderType_ORDER_TYPE_MARKET,
+		Qty: qty, TimeInForce: "day", AccountId: bracket.AccountID, ClientOrderId: clientOrderID,
+		TradingMode: order.TradingMode,
+	}
+	mode := s.resolveTradingMode(order.TradingMode)
+
+	// A flatten order is never auto-sized (it always carries an explicit qty), so
+	// needSizing/sizedStopPrice/entryPriceProxy are all zero-valued — matches
+	// maybeSubmitBracket's own no-op-when-stopPrice<=0 guard, so no new bracket is
+	// ever opened on a position-closing flatten order.
+	hashDigest, hashErr := placeOrderRequestHash(flattenReq)
+	if hashErr != nil {
+		slog.Warn("flattenAndHalt: compute request hash failed", "order_id", bracket.OrderID, "error", hashErr)
+		return
+	}
+	requestHashHex := hex.EncodeToString(hashDigest)
+
+	maxRetries := int(s.cfgW.GetFloat("trading.order.max_retries", 3))
+	retryDelay := time.Duration(s.cfgW.GetFloat("trading.order.retry_delay_ms", 500)) * time.Millisecond
+
+	var lastErr error
+	for attempt := 0; attempt <= maxRetries; attempt++ {
+		if attempt > 0 {
+			time.Sleep(retryDelay)
+		}
+		_, lastErr = s.submitOrder(ctx, flattenReq, accountEntry, mode, bracket.AccountID, flattenOrderID, false,
+			requestHashHex, false, 0, 0)
+		if lastErr == nil {
+			if uerr := s.bracketRepo.UpdateBracketStatus(ctx, bracket.ID, bracketStatusCanceled, bracket.StopLegOrderID, bracket.TakeProfitLegOrderID, ""); uerr != nil {
+				slog.Warn("flattenAndHalt: update bracket status failed", "order_id", bracket.OrderID, "error", uerr)
+			}
+			slog.Info("flattenAndHalt: position flattened", "account_id", bracket.AccountID, "symbol", order.Symbol, "attempt", attempt)
+			return
+		}
+		slog.Warn("flattenAndHalt: flatten attempt failed", "account_id", bracket.AccountID, "symbol", order.Symbol, "attempt", attempt, "error", lastErr)
+	}
+
+	s.haltAccount(context.Background(), bracket.AccountID,
+		fmt.Sprintf("flatten failed after protection window expiry: order %s: %v", bracket.OrderID, lastErr),
+		int32(tradingv1.HaltSource_HALT_SOURCE_BRACKET_PROTECTION))
+}
+
+// StartBracketProtectionWatchdog periodically scans for brackets whose protection
+// window has expired (non-ACTIVE, non-terminal rows past protection_deadline) and
+// flattens the underlying position. Piggybacks on the fill poller's own tick
+// (trading.fill_poller.interval_ms) — no separate cadence config key, per design.md.
+func (s *TradingService) StartBracketProtectionWatchdog(ctx context.Context) {
+	for {
+		intervalMs := s.cfgW.GetFloat("trading.fill_poller.interval_ms", 5000)
+		wait := time.Duration(intervalMs) * time.Millisecond
+		if wait <= 0 {
+			wait = 5 * time.Second
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+			s.checkBracketProtection(ctx)
+		}
+	}
+}
+
+// checkBracketProtection is StartBracketProtectionWatchdog's per-tick body: a bounded
+// scan for expired brackets, then one detached goroutine per row so a slow flatten on
+// one account never blocks the next tick's scan or another account's flatten.
+func (s *TradingService) checkBracketProtection(ctx context.Context) {
+	scanCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	expired, err := s.bracketRepo.ListExpiredProtection(scanCtx, time.Now())
+	cancel()
+	if err != nil {
+		slog.Warn("checkBracketProtection: scan failed", "error", err)
+		return
+	}
+	for _, bracket := range expired {
+		s.flattenInFlightMu.Lock()
+		if s.flattenInFlight[bracket.ID] {
+			s.flattenInFlightMu.Unlock()
+			continue
+		}
+		s.flattenInFlight[bracket.ID] = true
+		s.flattenInFlightMu.Unlock()
+
+		go func(b *repository.OrderBracketRecord) {
+			defer func() {
+				s.flattenInFlightMu.Lock()
+				delete(s.flattenInFlight, b.ID)
+				s.flattenInFlightMu.Unlock()
+			}()
+			s.flattenAndHalt(context.Background(), b)
+		}(bracket)
+	}
+}
+
 // ListBrokerAccountsSvc returns all broker accounts for the given user.
 func (s *TradingService) ListBrokerAccountsSvc(ctx context.Context, userID string) ([]*tradingv1.BrokerAccount, error) {
 	recs, err := s.accountRepo.ListBrokerAccounts(ctx, userID)
@@ -1181,6 +2255,12 @@ func recordToProtoAccount(r *repository.BrokerAccountRecord) *tradingv1.BrokerAc
 	}
 	if r.CredentialCheckedAt != nil {
 		acct.CredentialCheckedAt = timestamppb.New(*r.CredentialCheckedAt)
+	}
+	acct.Halted = r.Halted
+	acct.HaltReason = r.HaltReason
+	acct.HaltSource = tradingv1.HaltSource(r.HaltSource)
+	if r.HaltedAt != nil {
+		acct.HaltedAt = timestamppb.New(*r.HaltedAt)
 	}
 	return acct
 }
@@ -1285,7 +2365,17 @@ func (s *TradingService) instantiateBrokerLocked(rec *repository.BrokerAccountRe
 // checkPortfolioRisk makes a non-blocking GetPortfolio call to validate position
 // concentration limits before placing an order. Warnings are logged but never
 // block order placement — portfolio unavailability must not halt trading.
-func (s *TradingService) checkPortfolioRisk(ctx context.Context, req *tradingv1.PlaceOrderRequest) {
+// checkPortfolioRisk is non-blocking (warn-only) — it logs when an order's notional exceeds
+// trading.risk.max_position_pct but never rejects. Unlike ComputePositionSize (feature 023,
+// fail-closed by design.md's explicit choice), this pre-existing check stays fail-open:
+// "portfolio unavailability must not halt trading" on this single-instance, no-HA topology.
+// equity/equityErr are now passed in (feature 023) rather than fetched here, so this and
+// ComputePositionSize share one ListPortfolios call per PlaceOrder — fixing the pre-existing
+// two-equity-sources bug (fails.md 2026-07-01 C-10(b)): this used to call GetPortfolio
+// (position-value-summed, $0 for a flat funded account) while ComputePositionSize's sibling
+// call uses ListPortfolios (the real account equity), so a flat account's order could silently
+// bypass this check.
+func (s *TradingService) checkPortfolioRisk(ctx context.Context, req *tradingv1.PlaceOrderRequest, mode commonv1.TradingMode, equity float64, equityErr error) {
 	if req.UserId == "" {
 		return
 	}
@@ -1294,34 +2384,484 @@ func (s *TradingService) checkPortfolioRisk(ctx context.Context, req *tradingv1.
 		return
 	}
 
-	riskCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-
-	portfolio, err := s.portfolio.GetPortfolio(riskCtx, &portfoliov1.GetPortfolioRequest{
-		UserId:      req.UserId,
-		TradingMode: req.TradingMode,
-	})
-	if err != nil {
-		slog.Warn("portfolio risk check skipped", "user_id", req.UserId, "error", err)
+	if equityErr != nil {
+		slog.Warn("portfolio risk check skipped", "user_id", req.UserId, "error", equityErr)
 		return
 	}
 
-	if portfolio.Equity <= 0 {
+	if equity <= 0 {
 		return
 	}
 
 	orderNotional := req.Qty * req.LimitPrice
 	if orderNotional > 0 {
-		pct := orderNotional / portfolio.Equity
+		pct := orderNotional / equity
 		if pct > maxPositionPct {
 			slog.Warn("order exceeds max_position_pct threshold",
 				"order_id_pending", req.Symbol,
 				"order_notional", orderNotional,
-				"portfolio_equity", portfolio.Equity,
+				"portfolio_equity", equity,
 				"pct", pct,
 				"max_pct", maxPositionPct,
+				"trading_mode", mode.String(),
 			)
 		}
+	}
+}
+
+// resolveAccountEquity fetches the given account's real equity via ListPortfolios (not
+// GetPortfolio — see checkPortfolioRisk's comment above for why). Shared by
+// checkPortfolioRisk and ComputePositionSize so both risk checks agree on one number per
+// PlaceOrder call.
+func (s *TradingService) resolveAccountEquity(ctx context.Context, accountID string) (float64, error) {
+	eqCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	resp, err := s.portfolio.ListPortfolios(eqCtx, &portfoliov1.ListPortfoliosRequest{AccountId: &accountID})
+	if err != nil {
+		return 0, fmt.Errorf("list portfolios: %w", err)
+	}
+	if len(resp.Portfolios) == 0 {
+		return 0, fmt.Errorf("no portfolio found for account %q", accountID)
+	}
+	return resp.Portfolios[0].Equity, nil
+}
+
+// wilderATR computes Wilder's true-range Average True Range over the given period from a
+// chronologically-ascending (oldest-first) slice of bars. Requires len(bars) >= period+1 (the
+// first true range needs a previous close, so period bars of TR need period+1 bars of price
+// data).
+func wilderATR(bars []*marketdatav1.Bar, period int) (float64, error) {
+	if len(bars) < period+1 {
+		return 0, fmt.Errorf("wilderATR: need at least %d bars, got %d", period+1, len(bars))
+	}
+
+	trueRange := func(high, low, prevClose float64) float64 {
+		tr := high - low
+		if v := math.Abs(high - prevClose); v > tr {
+			tr = v
+		}
+		if v := math.Abs(low - prevClose); v > tr {
+			tr = v
+		}
+		return tr
+	}
+
+	// First ATR = simple mean of the first `period` true ranges.
+	sum := 0.0
+	for i := 1; i <= period; i++ {
+		sum += trueRange(bars[i].High, bars[i].Low, bars[i-1].Close)
+	}
+	atr := sum / float64(period)
+
+	// Subsequent bars use Wilder's smoothing: ATR_i = ((prevATR * (period-1)) + TR_i) / period.
+	for i := period + 1; i < len(bars); i++ {
+		tr := trueRange(bars[i].High, bars[i].Low, bars[i-1].Close)
+		atr = ((atr * float64(period-1)) + tr) / float64(period)
+	}
+	return atr, nil
+}
+
+// ComputePositionSize computes an auto-sized order's quantity, dollar risk, and informational
+// stop price (feature 023) from account equity, ATR(14)-derived stop distance, signal
+// confidence, and a portfolio concentration cap. Fail-closed by design (unlike
+// checkPortfolioRisk above): any error or insufficient-data condition returns a non-nil error
+// and no quantity — this is the enforcing counterpart to that warn-only check.
+func (s *TradingService) ComputePositionSize(ctx context.Context, req *tradingv1.PlaceOrderRequest, equity, confidence float64) (qty float64, dollarRisk float64, stopPrice float64, currentPrice float64, err error) {
+	// Belt-and-suspenders: PlaceOrder already fail-closes on equity<=0 before calling this
+	// (its equityErr/equity<=0 check ahead of ComputePositionSize), but ComputePositionSize
+	// is a public method other callers could invoke directly — it must not silently size to
+	// a zero-quantity result for a non-positive equity input.
+	if equity <= 0 {
+		return 0, 0, 0, 0, grpcstatus.Errorf(codes.FailedPrecondition, "cannot size position: equity must be positive, got %v", equity)
+	}
+
+	mdCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	now := time.Now()
+	barsResp, err := s.marketdata.GetBars(mdCtx, &marketdatav1.GetBarsRequest{
+		Symbol: req.Symbol,
+		Range: &commonv1.TimeRange{
+			Start: timestamppb.New(now.Add(-45 * 24 * time.Hour)),
+			End:   timestamppb.New(now),
+		},
+		Page:          &commonv1.PageRequest{PageSize: 40},
+		TimeframeEnum: commonv1.Timeframe_TIMEFRAME_1DAY,
+	})
+	if err != nil {
+		return 0, 0, 0, 0, grpcstatus.Errorf(codes.FailedPrecondition, "fetch bars for %s: %v", req.Symbol, err)
+	}
+	if len(barsResp.Bars) < 15 {
+		return 0, 0, 0, 0, grpcstatus.Errorf(codes.FailedPrecondition,
+			"insufficient bar history for %s: got %d bars, need at least 15", req.Symbol, len(barsResp.Bars))
+	}
+	// Bars are returned chronological ascending (oldest first); take the most recent 15.
+	recentBars := barsResp.Bars[len(barsResp.Bars)-15:]
+	atr, err := wilderATR(recentBars, 14)
+	if err != nil {
+		return 0, 0, 0, 0, grpcstatus.Errorf(codes.FailedPrecondition, "compute ATR for %s: %v", req.Symbol, err)
+	}
+
+	quote, err := s.marketdata.GetLatestQuote(mdCtx, &marketdatav1.GetLatestQuoteRequest{Symbol: req.Symbol})
+	if err != nil {
+		return 0, 0, 0, 0, grpcstatus.Errorf(codes.FailedPrecondition, "fetch quote for %s: %v", req.Symbol, err)
+	}
+	switch {
+	case quote.AskPrice > 0 && quote.BidPrice > 0:
+		currentPrice = (quote.AskPrice + quote.BidPrice) / 2
+	case quote.AskPrice > 0:
+		currentPrice = quote.AskPrice
+	case quote.BidPrice > 0:
+		currentPrice = quote.BidPrice
+	default:
+		return 0, 0, 0, 0, grpcstatus.Errorf(codes.FailedPrecondition, "no usable quote price for %s", req.Symbol)
+	}
+
+	maxRiskPct := s.cfgW.GetFloat("trading.risk.max_risk_per_trade_pct", 0.02)
+	atrMultiplier := s.cfgW.GetFloat("trading.risk.atr_multiplier", 1.5)
+	maxConcentrationPct := s.cfgW.GetFloat("trading.risk.max_concentration_pct", 0.10)
+
+	dollarRiskBudget := equity * maxRiskPct * confidence
+	stopDistance := atrMultiplier * atr
+	if stopDistance <= 0 {
+		return 0, 0, 0, 0, grpcstatus.Errorf(codes.FailedPrecondition, "computed stop distance for %s is non-positive", req.Symbol)
+	}
+	rawQty := math.Floor(dollarRiskBudget / stopDistance)
+
+	finalQty := rawQty
+	if finalQty*currentPrice > equity*maxConcentrationPct {
+		finalQty = math.Floor(equity * maxConcentrationPct / currentPrice)
+	}
+
+	// Direction-aware stop: BUY (long) stops below current price, SELL (short) stops above.
+	if req.Side == tradingv1.OrderSide_ORDER_SIDE_SELL {
+		stopPrice = currentPrice + stopDistance
+	} else {
+		stopPrice = currentPrice - stopDistance
+	}
+	dollarRisk = finalQty * stopDistance
+
+	slog.Info("computed position size",
+		"symbol", req.Symbol, "sized_qty", finalQty, "stop_price", stopPrice, "dollar_risk", dollarRisk,
+		"equity", equity, "confidence", confidence,
+		"max_risk_per_trade_pct", maxRiskPct, "atr_multiplier", atrMultiplier, "max_concentration_pct", maxConcentrationPct,
+	)
+
+	return finalQty, dollarRisk, stopPrice, currentPrice, nil
+}
+
+// ── Bracket state machine (feature 030) ─────────────────────────────────────────
+
+// bracketStatus values match trading.order_brackets' status SMALLINT encoding
+// (migration 005) and design.md's state diagram: NONE→SUBMITTING→PENDING_VERIFY→
+// ACTIVE→CANCELING→CANCELED, with a FAILED terminal on any submission error.
+const (
+	bracketStatusNone int32 = iota
+	bracketStatusSubmitting
+	bracketStatusPendingVerify //nolint:unused // reserved for a future broker-readback verification step; not written by this feature's first cut
+	bracketStatusActive
+	bracketStatusCanceling
+	bracketStatusCanceled
+	bracketStatusFailed
+)
+
+// oppositeSide returns the broker side string that closes (never extends) a position
+// opened with the given entry side — "sell" to close a long, "buy" to close a short.
+func oppositeSide(s tradingv1.OrderSide) string {
+	if s == tradingv1.OrderSide_ORDER_SIDE_SELL {
+		return "buy"
+	}
+	return "sell"
+}
+
+// computeTakeProfitPriceFromRR is the pure core of FR-2's take-profit formula
+// (extracted, like feature 101's computeStaleThreshold, so it's directly
+// unit-testable across every rr value — config.Watcher has no exported snapshot
+// setter, so a live s.cfgW read can only ever be tested against its code default).
+// Direction-aware off side: BUY (long) profits above entry, SELL (short) profits
+// below. rr<=0 disables the leg (returns 0).
+func computeTakeProfitPriceFromRR(side tradingv1.OrderSide, stopPrice, entryPriceProxy, rr float64) float64 {
+	if rr <= 0 {
+		return 0
+	}
+	if side == tradingv1.OrderSide_ORDER_SIDE_SELL {
+		return entryPriceProxy - (stopPrice-entryPriceProxy)*rr
+	}
+	return entryPriceProxy + (entryPriceProxy-stopPrice)*rr
+}
+
+// computeTakeProfitPrice reads the live trading.risk.take_profit_rr_multiple config
+// key and delegates to computeTakeProfitPriceFromRR. Shared by the entry-submission
+// call site (Alpaca's atomic attach needs it before the fill is even known) and
+// maybeSubmitBracket (recomputes the same deterministic value from the same
+// inputs — pure given a fixed rr, safe to call twice).
+func (s *TradingService) computeTakeProfitPrice(side tradingv1.OrderSide, stopPrice, entryPriceProxy float64) float64 {
+	rr := s.cfgW.GetFloat("trading.risk.take_profit_rr_multiple", 2.0)
+	return computeTakeProfitPriceFromRR(side, stopPrice, entryPriceProxy, rr)
+}
+
+// bracketUpdatedPayload builds the order.bracket_updated ledger event payload (Step 9
+// Instruction 6). An empty stopLegID/takeProfitLegID means "cleared" — portfolio's
+// consumer (Step 20) treats an empty string as null-out, not "leave unchanged".
+func bracketUpdatedPayload(order *tradingv1.Order, stopLegID, takeProfitLegID string) map[string]interface{} {
+	return map[string]interface{}{
+		"user_id": order.UserId, "account_id": order.AccountId, "symbol": order.Symbol,
+		"trading_mode":  order.TradingMode.String(),
+		"stop_order_id": stopLegID, "take_profit_order_id": takeProfitLegID,
+	}
+}
+
+// emitBracketFailureAlert pages the operator immediately on any bracket-submission
+// failure (FR-6) — the position filled but is not protected. Body always includes the
+// order ID (never empty, per notify's non-empty-body validation).
+func (s *TradingService) emitBracketFailureAlert(ctx context.Context, order *tradingv1.Order, reason string) {
+	_, err := s.notify.EmitAlert(ctx, &notifyv1.EmitAlertRequest{
+		Severity: notifyv1.AlertSeverity_ALERT_SEVERITY_CRITICAL,
+		Category: "bracket",
+		Title:    fmt.Sprintf("Bracket order failed: %s %s x%.2f", order.Side.String(), order.Symbol, order.Qty),
+		Body: fmt.Sprintf("Order %s (%s %s qty %.2f, intended stop %.4f): %s",
+			order.OrderId, order.Side.String(), order.Symbol, order.Qty, order.StopPrice, reason),
+		SourceService: "xstockstrat-trading",
+		TargetUserId:  order.UserId,
+	})
+	if err != nil {
+		slog.Warn("emit bracket failure alert failed", "order_id", order.OrderId, "error", err)
+	}
+}
+
+// maybeSubmitBracket creates (or, for an IBKR position that fills incrementally,
+// resizes) a stop-loss/take-profit bracket for an auto-sized MARKET/LIMIT entry order
+// once a fill is confirmed (feature 030). No-op when stopPrice<=0 — order.StopPrice
+// is only ever nonzero here for an auto-sized MARKET/LIMIT entry (023's order
+// construction); a real STOP/STOP_LIMIT broker-trigger price is never mistaken for
+// this, since those order types never reach this call site (see the two call sites'
+// own order-type guard) — or when bracket orders are disabled.
+//
+// bracketOrdersEnabled is resolved by the caller (trading.risk.bracket_orders_enabled)
+// rather than read internally — a deliberate deviation, mirroring 023's needSizing/
+// sizingEnabled hoisting and 101's computeStaleThreshold extraction: config.Watcher
+// has no exported snapshot setter, so hoisting the read is what makes the disabled
+// branch (TestMaybeSubmitBracket_BracketOrdersDisabled) actually testable.
+func (s *TradingService) maybeSubmitBracket(ctx context.Context, order *tradingv1.Order, accountEntry brokerPoolEntry, brokerOrder *broker.BrokerOrder, stopPrice, entryPriceProxy float64, bracketOrdersEnabled bool) {
+	if stopPrice <= 0 || !bracketOrdersEnabled {
+		return
+	}
+
+	existing, err := s.bracketRepo.GetBracketByOrderID(ctx, order.OrderId)
+	if err != nil {
+		slog.Warn("bracket lookup failed", "order_id", order.OrderId, "error", err)
+		return
+	}
+
+	takeProfitPrice := s.computeTakeProfitPrice(order.Side, stopPrice, entryPriceProxy)
+	deadline := time.Now().Add(time.Duration(s.cfgW.GetInt("trading.risk.max_unprotected_seconds", 30)) * time.Second)
+
+	switch {
+	case existing == nil:
+		s.createBracket(ctx, order, accountEntry, brokerOrder, stopPrice, takeProfitPrice, deadline)
+	case existing.Status == bracketStatusActive &&
+		commonv1.BrokerType(accountEntry.brokerType) == commonv1.BrokerType_BROKER_TYPE_IBKR:
+		// Partial-fill resize (design.md's "explicitly resized on each subsequent
+		// partial-fill delta") — IBKR only; Alpaca's native bracket resizes itself and
+		// is only ever read back via GetOrder, never re-submitted.
+		s.resizeBracket(ctx, order, accountEntry, existing, stopPrice, takeProfitPrice, deadline)
+	default:
+		// Already SUBMITTING/PENDING_VERIFY/CANCELING/FAILED/CANCELED, or an Alpaca
+		// ACTIVE bracket — nothing further to do at this hook.
+	}
+}
+
+// createBracket is maybeSubmitBracket's fresh-bracket path: persist the row first
+// (SUBMITTING), then dispatch by broker. A row-creation failure is itself a
+// bracket-submission failure per FR-6's literal wording and must page the operator.
+func (s *TradingService) createBracket(ctx context.Context, order *tradingv1.Order, accountEntry brokerPoolEntry, brokerOrder *broker.BrokerOrder, stopPrice, takeProfitPrice float64, deadline time.Time) {
+	rec := &repository.OrderBracketRecord{
+		OrderID: order.OrderId, AccountID: order.AccountId, BrokerType: int32(order.BrokerType),
+		Status: bracketStatusSubmitting, BracketStopPrice: stopPrice,
+		BracketTakeProfitPrice: &takeProfitPrice, ProtectionDeadline: deadline,
+	}
+	if err := s.bracketRepo.CreateBracket(ctx, rec); err != nil {
+		slog.Warn("create bracket failed", "order_id", order.OrderId, "error", err)
+		go s.emitBracketFailureAlert(context.Background(), order, fmt.Sprintf("bracket row creation failed: %v", err))
+		return
+	}
+
+	switch commonv1.BrokerType(accountEntry.brokerType) {
+	case commonv1.BrokerType_BROKER_TYPE_ALPACA:
+		// Bracket already attached atomically at entry SubmitOrder (PlaceOrder's own
+		// broker-submission statement) — just record the leg IDs the broker returned.
+		if err := s.bracketRepo.UpdateBracketStatus(ctx, rec.ID, bracketStatusActive, brokerOrder.StopLegOrderID, brokerOrder.TakeProfitLegOrderID, ""); err != nil {
+			slog.Warn("update bracket status failed", "order_id", order.OrderId, "error", err)
+		}
+		go s.emitLedgerEvent(context.Background(), "order.bracket_updated", order.OrderId,
+			bracketUpdatedPayload(order, brokerOrder.StopLegOrderID, brokerOrder.TakeProfitLegOrderID))
+	case commonv1.BrokerType_BROKER_TYPE_IBKR:
+		resp, err := accountEntry.client.SubmitBracketLegs(ctx, order.BrokerOrderId, order.ClientOrderId, broker.BracketLegsRequest{
+			Symbol: order.Symbol, Side: oppositeSide(order.Side), Qty: order.FilledQty,
+			StopPrice: stopPrice, TakeProfitPrice: takeProfitPrice, TimeInForce: "day",
+		})
+		if err != nil {
+			if uerr := s.bracketRepo.UpdateBracketStatus(ctx, rec.ID, bracketStatusFailed, "", "", err.Error()); uerr != nil {
+				slog.Warn("update bracket status (failed) failed", "order_id", order.OrderId, "error", uerr)
+			}
+			go s.emitBracketFailureAlert(context.Background(), order, fmt.Sprintf("bracket leg submission failed: %v", err))
+			return
+		}
+		if err := s.bracketRepo.UpdateBracketStatus(ctx, rec.ID, bracketStatusActive, resp.StopLegOrderID, resp.TakeProfitLegOrderID, ""); err != nil {
+			slog.Warn("update bracket status failed", "order_id", order.OrderId, "error", err)
+		}
+		go s.emitLedgerEvent(context.Background(), "order.bracket_updated", order.OrderId,
+			bracketUpdatedPayload(order, resp.StopLegOrderID, resp.TakeProfitLegOrderID))
+	}
+}
+
+// resizeBracket is maybeSubmitBracket's IBKR partial-fill-resize path (design.md:
+// "re-armed... at every transition that leaves ACTIVE, not just the initial one"):
+// cancel both existing legs (best-effort), resubmit with the new cumulative filled
+// quantity, and re-arm protection_deadline at this transition too.
+func (s *TradingService) resizeBracket(ctx context.Context, order *tradingv1.Order, accountEntry brokerPoolEntry, existing *repository.OrderBracketRecord, stopPrice, takeProfitPrice float64, deadline time.Time) {
+	if err := s.bracketRepo.UpdateBracketStatus(ctx, existing.ID, bracketStatusCanceling, existing.StopLegOrderID, existing.TakeProfitLegOrderID, ""); err != nil {
+		slog.Warn("update bracket status (canceling) failed", "order_id", order.OrderId, "error", err)
+	}
+	if existing.StopLegOrderID != "" {
+		if err := accountEntry.client.CancelOrder(ctx, existing.StopLegOrderID); err != nil {
+			slog.Warn("cancel stop leg failed during resize", "order_id", order.OrderId, "leg_id", existing.StopLegOrderID, "error", err)
+		}
+	}
+	if existing.TakeProfitLegOrderID != "" {
+		if err := accountEntry.client.CancelOrder(ctx, existing.TakeProfitLegOrderID); err != nil {
+			slog.Warn("cancel take-profit leg failed during resize", "order_id", order.OrderId, "leg_id", existing.TakeProfitLegOrderID, "error", err)
+		}
+	}
+	if err := s.bracketRepo.UpdateBracketStatus(ctx, existing.ID, bracketStatusSubmitting, "", "", ""); err != nil {
+		slog.Warn("update bracket status (submitting, resize) failed", "order_id", order.OrderId, "error", err)
+	}
+	if err := s.bracketRepo.ReArmProtection(ctx, existing.ID, deadline); err != nil {
+		slog.Warn("rearm protection failed during resize", "order_id", order.OrderId, "error", err)
+	}
+
+	resp, err := accountEntry.client.SubmitBracketLegs(ctx, order.BrokerOrderId, order.ClientOrderId, broker.BracketLegsRequest{
+		Symbol: order.Symbol, Side: oppositeSide(order.Side), Qty: order.FilledQty,
+		StopPrice: stopPrice, TakeProfitPrice: takeProfitPrice, TimeInForce: "day",
+	})
+	if err != nil {
+		if uerr := s.bracketRepo.UpdateBracketStatus(ctx, existing.ID, bracketStatusFailed, "", "", err.Error()); uerr != nil {
+			slog.Warn("update bracket status (failed, resize) failed", "order_id", order.OrderId, "error", uerr)
+		}
+		go s.emitBracketFailureAlert(context.Background(), order, fmt.Sprintf("bracket resize failed: %v", err))
+		return
+	}
+	if err := s.bracketRepo.UpdateBracketStatus(ctx, existing.ID, bracketStatusActive, resp.StopLegOrderID, resp.TakeProfitLegOrderID, ""); err != nil {
+		slog.Warn("update bracket status (active, resize) failed", "order_id", order.OrderId, "error", err)
+	}
+	go s.emitLedgerEvent(context.Background(), "order.bracket_updated", order.OrderId,
+		bracketUpdatedPayload(order, resp.StopLegOrderID, resp.TakeProfitLegOrderID))
+}
+
+// tradingState is the richer platform.trading_state enum (feature 100), independent of
+// and parallel to platform.maintenance_mode.
+type tradingState int
+
+const (
+	tradingStateActive tradingState = iota
+	tradingStateReduceOnly
+	tradingStateHalted
+)
+
+// parseTradingState maps the raw config string to a tradingState. Unrecognized or empty
+// values fail to HALTED — the maximally conservative state — per design.md § Chosen Approach.
+func parseTradingState(raw string) tradingState {
+	switch raw {
+	case "ACTIVE":
+		return tradingStateActive
+	case "REDUCE_ONLY":
+		return tradingStateReduceOnly
+	default: // "HALTED", "", or any unrecognized literal
+		return tradingStateHalted
+	}
+}
+
+// currentTradingState reads platform.trading_state live. The GetString default of "HALTED"
+// (not "ACTIVE") means an unseeded/unreachable key fails closed, matching parseTradingState's
+// own fail-closed default for an unrecognized value.
+func (s *TradingService) currentTradingState() tradingState {
+	return parseTradingState(s.cfgW.GetString("platform.trading_state", "HALTED"))
+}
+
+// isExposureIncreasing reports whether an order on the given side increases net exposure
+// given the account's existing position qty in that symbol (0 = flat). A flat account
+// increasing in either direction; a long position increases only on BUY; a short position
+// increases only on SELL.
+func isExposureIncreasing(side tradingv1.OrderSide, existingQty float64) bool {
+	switch {
+	case existingQty == 0:
+		return true
+	case existingQty > 0:
+		return side == tradingv1.OrderSide_ORDER_SIDE_BUY
+	default:
+		return side == tradingv1.OrderSide_ORDER_SIDE_SELL
+	}
+}
+
+// isReplaceRiskReducing reports whether a ReplaceOrder request is safe under REDUCE_ONLY:
+// requestedQty == 0 means "leave qty unchanged" (trading.go:482's existing convention) —
+// never exposure-increasing. Otherwise safe only when the new qty is <= the current qty.
+func isReplaceRiskReducing(currentQty, requestedQty float64) bool {
+	if requestedQty == 0 {
+		return true
+	}
+	return requestedQty <= currentQty
+}
+
+// checkTradingStateForPlaceOrder blocks PlaceOrder when platform.trading_state is HALTED,
+// or when it is REDUCE_ONLY and the order would increase exposure. REDUCE_ONLY fails
+// closed on any GetPosition error (not just NotFound) — this gate is the enforcement
+// point, not an advisory warning (design.md § Chosen Approach, a deliberate divergence
+// from checkPortfolioRisk's fail-open philosophy).
+func (s *TradingService) checkTradingStateForPlaceOrder(ctx context.Context, userID, symbol string, mode commonv1.TradingMode, side tradingv1.OrderSide) error {
+	switch s.currentTradingState() {
+	case tradingStateActive:
+		return nil
+	case tradingStateHalted:
+		return grpcstatus.Errorf(codes.FailedPrecondition, "trading halted: platform.trading_state=HALTED")
+	default: // REDUCE_ONLY
+		posCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+		pos, err := s.portfolio.GetPosition(posCtx, &portfoliov1.GetPositionRequest{
+			UserId: userID, Symbol: symbol, TradingMode: mode,
+		})
+		if err != nil {
+			if grpcstatus.Code(err) == codes.NotFound {
+				return grpcstatus.Errorf(codes.FailedPrecondition,
+					"trading reduce-only: no existing position in %s; order would increase exposure", symbol)
+			}
+			return grpcstatus.Errorf(codes.Unavailable,
+				"trading reduce-only: unable to verify risk-reducing status for %s: %v", symbol, err)
+		}
+		if isExposureIncreasing(side, pos.Qty) {
+			return grpcstatus.Errorf(codes.FailedPrecondition,
+				"trading reduce-only: order for %s would increase exposure", symbol)
+		}
+		return nil
+	}
+}
+
+// checkTradingStateForReplace mirrors checkTradingStateForPlaceOrder for ReplaceOrder,
+// using a pure local qty comparison instead of a GetPosition call (the order's own current
+// qty is already loaded — no cross-service call needed).
+func (s *TradingService) checkTradingStateForReplace(order *tradingv1.Order, req *tradingv1.ReplaceOrderRequest) error {
+	switch s.currentTradingState() {
+	case tradingStateActive:
+		return nil
+	case tradingStateHalted:
+		return grpcstatus.Errorf(codes.FailedPrecondition, "trading halted: platform.trading_state=HALTED")
+	default: // REDUCE_ONLY
+		if !isReplaceRiskReducing(order.Qty, req.Qty) {
+			return grpcstatus.Errorf(codes.FailedPrecondition,
+				"trading reduce-only: replace on order %s would increase size", req.OrderId)
+		}
+		return nil
 	}
 }
 

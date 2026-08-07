@@ -31,6 +31,10 @@ export const POSITION_AAPL = {
   factor: 'Tech',
   flag: 3, // POSITION_RISK_FLAG_STOP_NEAR
   exitRule: 'Stop @ $178.00',
+  // feature 030 — resting bracket leg order IDs, sourced from trading's order.bracket_updated
+  // ledger event. POSITION_MSFT omits these to exercise the em-dash "no active bracket" fallback.
+  stopOrderId: 'ord-stop-778',
+  takeProfitOrderId: 'ord-tp-779',
 };
 
 /** Short position with no risk metadata → Position page renders the em-dash / no-stop fallbacks. */

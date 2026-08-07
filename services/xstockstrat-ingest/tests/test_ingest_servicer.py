@@ -24,6 +24,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import IngestServicer, job_row_to_proto
 from tests._helpers import job_row as _job_row
+from tests._helpers import transaction_conn
 from tests.conftest import _ctx  # feature 092 (C-13): centralized admin/no-admin context builder
 
 
@@ -36,6 +37,7 @@ def make_servicer(
     max_concurrent_chunks: int = 5,
     chunk_window_days: int = 400,
     chunk_max_bars: int = 10_000_000,
+    dedup_window_hours: int = 24,
 ) -> IngestServicer:
     """Return an IngestServicer with fully mocked dependencies.
 
@@ -51,6 +53,7 @@ def make_servicer(
     cfg.backfill_max_concurrent_chunks = max_concurrent_chunks
     cfg.backfill_chunk_window_days = chunk_window_days
     cfg.backfill_chunk_max_bars = chunk_max_bars
+    cfg.dedup_window_hours = dedup_window_hours
     marketdata_ch = MagicMock()
     ledger_ch = MagicMock()
     svc = IngestServicer(cfg, marketdata_ch, ledger_ch, db_pool=db)
@@ -668,19 +671,26 @@ class TestIngestSignal:
     @pytest.mark.asyncio
     async def test_success_inserts_and_returns_id(self):
         svc = make_servicer()
-        svc._db = MagicMock()
-        svc._db.fetchrow = AsyncMock(return_value={"id": 42})
+        db, conn = transaction_conn(
+            db_fetchrow_side_effect=[{"slug": "unusual_whales"}],
+            conn_fetchrow_side_effect=[{"id": 42}, {"signal_id": 42}],
+        )
+        svc._db = db
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
 
         resp = await svc.IngestSignal(self._make_signal_req(), context=MagicMock())
         assert resp.signal_id == 42
+        assert resp.deduplicated is False
 
     @pytest.mark.asyncio
     async def test_success_with_valid_until(self):
         svc = make_servicer()
-        svc._db = MagicMock()
-        svc._db.fetchrow = AsyncMock(return_value={"id": 99})
+        db, conn = transaction_conn(
+            db_fetchrow_side_effect=[{"slug": "unusual_whales"}],
+            conn_fetchrow_side_effect=[{"id": 99}, {"signal_id": 99}],
+        )
+        svc._db = db
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
 
@@ -688,15 +698,36 @@ class TestIngestSignal:
             self._make_signal_req(has_valid_until=True), context=MagicMock()
         )
         assert resp.signal_id == 99
+        assert resp.deduplicated is False
 
     @pytest.mark.asyncio
     async def test_db_error_aborts(self):
+        """A failure in the primary newsletter_signals INSERT aborts and records the error."""
         svc = make_servicer()
-        svc._db = MagicMock()
-        # First fetchrow = registry lookup (returns valid row), second = INSERT raises
-        svc._db.fetchrow = AsyncMock(
-            side_effect=[{"slug": "unusual_whales"}, Exception("db failure")]
+        # registry lookup succeeds; the INSERT (first conn.fetchrow call) raises
+        db, conn = transaction_conn(
+            db_fetchrow_side_effect=[{"slug": "unusual_whales"}],
+            conn_fetchrow_side_effect=[Exception("db failure")],
         )
+        svc._db = db
+        context = MagicMock()
+        context.abort = AsyncMock(side_effect=Exception("aborted"))
+
+        with pytest.raises(Exception, match="aborted"):
+            await svc.IngestSignal(self._make_signal_req(), context)
+
+        context.abort.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_db_error_aborts_on_claim_failure(self):
+        """A failure in the dedup claim statement (second conn.fetchrow call) also aborts and
+        records the error — not just a failure in the primary insert."""
+        svc = make_servicer()
+        db, conn = transaction_conn(
+            db_fetchrow_side_effect=[{"slug": "unusual_whales"}],
+            conn_fetchrow_side_effect=[{"id": 1}, Exception("claim failure")],
+        )
+        svc._db = db
         context = MagicMock()
         context.abort = AsyncMock(side_effect=Exception("aborted"))
 
@@ -709,13 +740,188 @@ class TestIngestSignal:
     async def test_ledger_error_is_swallowed(self):
         """Ledger failures should log a warning but not abort the RPC."""
         svc = make_servicer()
-        svc._db = MagicMock()
-        svc._db.fetchrow = AsyncMock(return_value={"id": 7})
+        db, conn = transaction_conn(
+            db_fetchrow_side_effect=[{"slug": "unusual_whales"}],
+            conn_fetchrow_side_effect=[{"id": 7}, {"signal_id": 7}],
+        )
+        svc._db = db
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(side_effect=Exception("ledger down"))
 
         resp = await svc.IngestSignal(self._make_signal_req(), context=MagicMock())
         assert resp.signal_id == 7
+        assert resp.deduplicated is False
+
+    # ── Dedup (feature 111) ──────────────────────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_dedup_hit_returns_existing_id_and_deduplicated_flag(self):
+        """A within-window resubmission with an identical natural key + conviction/valid_until
+        returns the EXISTING signal_id with deduplicated=true — not the fresh candidate id."""
+        svc = make_servicer()
+        db, conn = transaction_conn(
+            # candidate insert lands id=55, but the claim's WHERE is false (not expired, no
+            # conviction/valid_until change) -> conn.fetchrow #2 returns None -> _DuplicateSignal
+            db_fetchrow_side_effect=[{"slug": "unusual_whales"}, {"signal_id": 42}],
+            conn_fetchrow_side_effect=[{"id": 55}, None],
+        )
+        svc._db = db
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+
+        resp = await svc.IngestSignal(self._make_signal_req(), context=MagicMock())
+        assert resp.deduplicated is True
+        assert resp.signal_id == 42
+
+    @pytest.mark.asyncio
+    async def test_dedup_hit_does_not_reach_generic_error_handler(self):
+        """Pins the rollback-path correctness risk: a duplicate must be handled by the
+        `except _DuplicateSignal:` branch, never fall through to the generic error handler
+        (which would call context.abort/mark_source_error and misreport the RPC as failed)."""
+        svc = make_servicer()
+        db, conn = transaction_conn(
+            db_fetchrow_side_effect=[{"slug": "unusual_whales"}, {"signal_id": 42}],
+            conn_fetchrow_side_effect=[{"id": 55}, None],
+        )
+        svc._db = db
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+        context = MagicMock()
+        context.abort = AsyncMock(side_effect=Exception("aborted"))
+
+        with patch("app.handlers.servicer.mark_source_error", new=AsyncMock()) as mock_error:
+            resp = await svc.IngestSignal(self._make_signal_req(), context)
+
+        assert resp.deduplicated is True
+        context.abort.assert_not_called()
+        mock_error.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_dedup_hit_skips_mark_source_fed_and_ledger_event(self):
+        svc = make_servicer()
+        db, conn = transaction_conn(
+            db_fetchrow_side_effect=[{"slug": "unusual_whales"}, {"signal_id": 42}],
+            conn_fetchrow_side_effect=[{"id": 55}, None],
+        )
+        svc._db = db
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+
+        with patch("app.handlers.servicer.mark_source_fed", new=AsyncMock()) as mock_fed:
+            resp = await svc.IngestSignal(self._make_signal_req(), context=MagicMock())
+
+        assert resp.deduplicated is True
+        mock_fed.assert_not_called()
+        svc._ledger.AppendEvent.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_dedup_hit_touches_last_seen_only(self):
+        svc = make_servicer()
+        db, conn = transaction_conn(
+            db_fetchrow_side_effect=[{"slug": "unusual_whales"}, {"signal_id": 42}],
+            conn_fetchrow_side_effect=[{"id": 55}, None],
+        )
+        svc._db = db
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+
+        with (
+            patch("app.handlers.servicer.mark_source_fed", new=AsyncMock()) as mock_fed,
+            patch("app.handlers.servicer.touch_source_last_seen", new=AsyncMock()) as mock_touch,
+        ):
+            resp = await svc.IngestSignal(self._make_signal_req(), context=MagicMock())
+
+        assert resp.deduplicated is True
+        mock_fed.assert_not_called()
+        mock_touch.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_fresh_submission_outside_window_inserts_and_refreshes_claim(self):
+        """The claim's WHERE fires (window expired) -> RETURNING yields a row -> treated as
+        fresh, not a duplicate."""
+        svc = make_servicer()
+        db, conn = transaction_conn(
+            db_fetchrow_side_effect=[{"slug": "unusual_whales"}],
+            conn_fetchrow_side_effect=[{"id": 55}, {"signal_id": 55}],
+        )
+        svc._db = db
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+
+        resp = await svc.IngestSignal(self._make_signal_req(), context=MagicMock())
+        assert resp.deduplicated is False
+        assert resp.signal_id == 55
+
+    @pytest.mark.asyncio
+    async def test_fresh_submission_different_conviction_inserts_new_row(self):
+        """Same shape as the window-expiry case — the claim SQL's IS DISTINCT FROM branch is
+        exercised the same way in this mocked unit test (the WHERE evaluation itself is a
+        Postgres-side concern; the servicer only branches on RETURNING having a row or not)."""
+        svc = make_servicer()
+        db, conn = transaction_conn(
+            db_fetchrow_side_effect=[{"slug": "unusual_whales"}],
+            conn_fetchrow_side_effect=[{"id": 56}, {"signal_id": 56}],
+        )
+        svc._db = db
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+
+        req = self._make_signal_req()
+        req.signal.conviction = 0.95  # differs from a hypothetically-claimed 0.8
+        resp = await svc.IngestSignal(req, context=MagicMock())
+        assert resp.deduplicated is False
+        assert resp.signal_id == 56
+
+    @pytest.mark.asyncio
+    async def test_fresh_submission_different_valid_until_inserts_new_row(self):
+        svc = make_servicer()
+        db, conn = transaction_conn(
+            db_fetchrow_side_effect=[{"slug": "unusual_whales"}],
+            conn_fetchrow_side_effect=[{"id": 57}, {"signal_id": 57}],
+        )
+        svc._db = db
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+
+        resp = await svc.IngestSignal(
+            self._make_signal_req(has_valid_until=True), context=MagicMock()
+        )
+        assert resp.deduplicated is False
+        assert resp.signal_id == 57
+
+    @pytest.mark.asyncio
+    async def test_fresh_submission_different_direction_inserts_new_row(self):
+        """The natural key itself differs (direction) — never a duplicate of a different key's
+        claim (AC-2's 'different direction' clause)."""
+        svc = make_servicer()
+        db, conn = transaction_conn(
+            db_fetchrow_side_effect=[{"slug": "unusual_whales"}],
+            conn_fetchrow_side_effect=[{"id": 58}, {"signal_id": 58}],
+        )
+        svc._db = db
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+
+        resp = await svc.IngestSignal(self._make_signal_req(direction="sell"), context=MagicMock())
+        assert resp.deduplicated is False
+        assert resp.signal_id == 58
+
+    @pytest.mark.asyncio
+    async def test_dedup_window_hours_read_from_config(self):
+        """self._cfg.dedup_window_hours flows into the claim statement's window parameter."""
+        svc = make_servicer(dedup_window_hours=6)
+        db, conn = transaction_conn(
+            db_fetchrow_side_effect=[{"slug": "unusual_whales"}],
+            conn_fetchrow_side_effect=[{"id": 60}, {"signal_id": 60}],
+        )
+        svc._db = db
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
+
+        await svc.IngestSignal(self._make_signal_req(), context=MagicMock())
+
+        claim_call_args = conn.fetchrow.call_args_list[1]
+        assert claim_call_args.args[-1] == 6
 
 
 # ---------------------------------------------------------------------------
@@ -835,6 +1041,9 @@ class TestConfigWatcherGetters:
     def test_backfill_max_concurrent_jobs_default(self):
         assert _StubWatcher().backfill_max_concurrent_jobs == 3
 
+    def test_dedup_window_hours_default(self):
+        assert _StubWatcher().dedup_window_hours == 24
+
     def test_backfill_retry_on_failure_default(self):
         assert _StubWatcher().backfill_retry_on_failure is True
 
@@ -890,9 +1099,11 @@ class TestIngestSignalRegistryValidation:
     @pytest.mark.asyncio
     async def test_proceeds_when_source_registered(self):
         svc = make_servicer()
-        svc._db = MagicMock()
-        # First fetchrow = registry lookup (returns slug row), second = INSERT signal
-        svc._db.fetchrow = AsyncMock(side_effect=[{"slug": "unusual_whales"}, {"id": 42}])
+        db, conn = transaction_conn(
+            db_fetchrow_side_effect=[{"slug": "unusual_whales"}],
+            conn_fetchrow_side_effect=[{"id": 42}, {"signal_id": 42}],
+        )
+        svc._db = db
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
 
@@ -928,9 +1139,11 @@ class TestIngestSignalConvictionValidation:
 
     def _servicer_full_happy_path(self):
         svc = make_servicer()
-        svc._db = MagicMock()
-        # registry lookup returns a slug row, then the INSERT returns an id
-        svc._db.fetchrow = AsyncMock(side_effect=[{"slug": "unusual_whales"}, {"id": 42}])
+        db, conn = transaction_conn(
+            db_fetchrow_side_effect=[{"slug": "unusual_whales"}],
+            conn_fetchrow_side_effect=[{"id": 42}, {"signal_id": 42}],
+        )
+        svc._db = db
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         return svc

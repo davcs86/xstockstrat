@@ -62,6 +62,7 @@ export default function NamespacePage({ params, searchParams }: Props) {
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [editReason, setEditReason] = useState('');
 
   const {
     data: keysData,
@@ -94,6 +95,10 @@ export default function NamespacePage({ params, searchParams }: Props) {
         return; // FR-6: no SetConfig call when validation fails
       }
     }
+    if (key === 'platform.trading_state' && !editReason.trim()) {
+      setValidationError('A reason is required when changing platform.trading_state');
+      return; // no SetConfig call when a required reason is missing
+    }
     setValidationError(null);
     // Target the row's own registered scope, not the page's viewed (env, mode) filter: a key
     // registered only as trading_mode='all' still shows up while viewing a specific mode (the
@@ -105,7 +110,7 @@ export default function NamespacePage({ params, searchParams }: Props) {
         namespace,
         key,
         value: { value: { case: 'stringVal', value: String(editValue) } },
-        reason: 'Updated via config-ui',
+        reason: editReason.trim() || 'Updated via config-ui',
         environment: meta?.environment ?? envToProto(env),
         tradingMode: meta?.tradingMode ?? modeToProto(mode),
       },
@@ -113,6 +118,7 @@ export default function NamespacePage({ params, searchParams }: Props) {
         onSuccess: () => {
           setEditingKey(null);
           setValidationError(null);
+          setEditReason('');
         },
       },
     );
@@ -182,6 +188,12 @@ export default function NamespacePage({ params, searchParams }: Props) {
                             }}
                             autoFocus
                           />
+                          <Input
+                            className="h-7 text-xs w-40 mt-1"
+                            value={editReason}
+                            onChange={(e) => setEditReason(e.target.value)}
+                            placeholder="Reason for this change"
+                          />
                           {validationError && editingKey === k.key && (
                             <p className="text-destructive text-xs mt-0.5">{validationError}</p>
                           )}
@@ -204,6 +216,7 @@ export default function NamespacePage({ params, searchParams }: Props) {
                             onClick={() => {
                               setEditingKey(k.key);
                               setEditValue(k.defaultValue);
+                              setEditReason('');
                             }}
                             className="h-7 px-2 text-xs text-primary hover:text-primary"
                           >

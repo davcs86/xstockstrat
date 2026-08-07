@@ -183,7 +183,7 @@ async def ingest_signal(
             ingest_pb2.IngestSignalRequest(signal=signal),
             metadata=_metadata(),
         )
-    return {"signal_id": resp.signal_id}
+    return {"signal_id": resp.signal_id, "deduplicated": resp.deduplicated}
 
 
 async def emit_alert(

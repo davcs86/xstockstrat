@@ -329,6 +329,145 @@ export function credentialStatusToNumber(object: CredentialStatus): number {
   }
 }
 
+/**
+ * IntentState is the platform's own knowledge of whether a PlaceOrder/ReplaceOrder/
+ * CancelOrder command actually reached the broker — orthogonal to OrderStatus (an order
+ * can be NEW and also UNKNOWN simultaneously). See docs/roadmap/features/101-exactly-once-order-intent/design.md.
+ */
+export enum IntentState {
+  INTENT_STATE_UNSPECIFIED = "INTENT_STATE_UNSPECIFIED",
+  /** INTENT_STATE_PENDING - intent recorded, broker call not yet resolved */
+  INTENT_STATE_PENDING = "INTENT_STATE_PENDING",
+  /** INTENT_STATE_COMPLETED - broker call resolved (accepted or a definite rejection) */
+  INTENT_STATE_COMPLETED = "INTENT_STATE_COMPLETED",
+  /** INTENT_STATE_REJECTED - definite, synchronous broker rejection (not a timeout) */
+  INTENT_STATE_REJECTED = "INTENT_STATE_REJECTED",
+  /** INTENT_STATE_UNKNOWN - broker outcome unknown — never retried automatically (FR-5) */
+  INTENT_STATE_UNKNOWN = "INTENT_STATE_UNKNOWN",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function intentStateFromJSON(object: any): IntentState {
+  switch (object) {
+    case 0:
+    case "INTENT_STATE_UNSPECIFIED":
+      return IntentState.INTENT_STATE_UNSPECIFIED;
+    case 1:
+    case "INTENT_STATE_PENDING":
+      return IntentState.INTENT_STATE_PENDING;
+    case 2:
+    case "INTENT_STATE_COMPLETED":
+      return IntentState.INTENT_STATE_COMPLETED;
+    case 3:
+    case "INTENT_STATE_REJECTED":
+      return IntentState.INTENT_STATE_REJECTED;
+    case 4:
+    case "INTENT_STATE_UNKNOWN":
+      return IntentState.INTENT_STATE_UNKNOWN;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return IntentState.UNRECOGNIZED;
+  }
+}
+
+export function intentStateToJSON(object: IntentState): string {
+  switch (object) {
+    case IntentState.INTENT_STATE_UNSPECIFIED:
+      return "INTENT_STATE_UNSPECIFIED";
+    case IntentState.INTENT_STATE_PENDING:
+      return "INTENT_STATE_PENDING";
+    case IntentState.INTENT_STATE_COMPLETED:
+      return "INTENT_STATE_COMPLETED";
+    case IntentState.INTENT_STATE_REJECTED:
+      return "INTENT_STATE_REJECTED";
+    case IntentState.INTENT_STATE_UNKNOWN:
+      return "INTENT_STATE_UNKNOWN";
+    case IntentState.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function intentStateToNumber(object: IntentState): number {
+  switch (object) {
+    case IntentState.INTENT_STATE_UNSPECIFIED:
+      return 0;
+    case IntentState.INTENT_STATE_PENDING:
+      return 1;
+    case IntentState.INTENT_STATE_COMPLETED:
+      return 2;
+    case IntentState.INTENT_STATE_REJECTED:
+      return 3;
+    case IntentState.INTENT_STATE_UNKNOWN:
+      return 4;
+    case IntentState.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
+/**
+ * HaltSource distinguishes which automated mechanism halted an account — 030's
+ * bracket-protection flatten failure vs. 102's broker-state-reconciliation mismatch — so an
+ * operator (and the /trader UI) can tell which one fired without guessing from halt_reason's
+ * free text alone.
+ */
+export enum HaltSource {
+  HALT_SOURCE_UNSPECIFIED = "HALT_SOURCE_UNSPECIFIED",
+  /** HALT_SOURCE_BRACKET_PROTECTION - 030 */
+  HALT_SOURCE_BRACKET_PROTECTION = "HALT_SOURCE_BRACKET_PROTECTION",
+  /** HALT_SOURCE_RECONCILIATION - 102 */
+  HALT_SOURCE_RECONCILIATION = "HALT_SOURCE_RECONCILIATION",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function haltSourceFromJSON(object: any): HaltSource {
+  switch (object) {
+    case 0:
+    case "HALT_SOURCE_UNSPECIFIED":
+      return HaltSource.HALT_SOURCE_UNSPECIFIED;
+    case 1:
+    case "HALT_SOURCE_BRACKET_PROTECTION":
+      return HaltSource.HALT_SOURCE_BRACKET_PROTECTION;
+    case 2:
+    case "HALT_SOURCE_RECONCILIATION":
+      return HaltSource.HALT_SOURCE_RECONCILIATION;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return HaltSource.UNRECOGNIZED;
+  }
+}
+
+export function haltSourceToJSON(object: HaltSource): string {
+  switch (object) {
+    case HaltSource.HALT_SOURCE_UNSPECIFIED:
+      return "HALT_SOURCE_UNSPECIFIED";
+    case HaltSource.HALT_SOURCE_BRACKET_PROTECTION:
+      return "HALT_SOURCE_BRACKET_PROTECTION";
+    case HaltSource.HALT_SOURCE_RECONCILIATION:
+      return "HALT_SOURCE_RECONCILIATION";
+    case HaltSource.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function haltSourceToNumber(object: HaltSource): number {
+  switch (object) {
+    case HaltSource.HALT_SOURCE_UNSPECIFIED:
+      return 0;
+    case HaltSource.HALT_SOURCE_BRACKET_PROTECTION:
+      return 1;
+    case HaltSource.HALT_SOURCE_RECONCILIATION:
+      return 2;
+    case HaltSource.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 export interface Order {
   orderId: string;
   clientOrderId: string;
@@ -351,6 +490,8 @@ export interface Order {
   brokerOrderId: string;
   accountId: string;
   brokerType: BrokerType;
+  /** intent_state is set by every write path and read via a cross-intent LATERAL join on other reads; see design.md. */
+  intentState: IntentState;
 }
 
 export interface PlaceOrderRequest {
@@ -363,6 +504,11 @@ export interface PlaceOrderRequest {
   timeInForce: string;
   strategyId: string;
   userId: string;
+  /**
+   * client_order_id is required: a stable client-generated nonce reused across retries of
+   * the same logical place-order action (see the /trader Place Order form's nonce generator).
+   * Empty is rejected with InvalidArgument. Used as the order-intent dedup key (feature 101).
+   */
   clientOrderId: string;
   requiresApproval: boolean;
   /** If UNSPECIFIED, the service uses trading.broker.paper config key to determine mode. */
@@ -379,6 +525,11 @@ export interface PlaceOrderRequest {
    */
   trailPrice: number;
   trailPercent: number;
+  /**
+   * Signal confidence 0.0-1.0 for automatic position sizing (see ComputePositionSize). Unset →
+   * confidence=1.0 (full size); explicit 0.0 → size to zero; out-of-range → InvalidArgument.
+   */
+  confidence?: number | undefined;
 }
 
 export interface CancelOrderRequest {
@@ -452,7 +603,19 @@ export interface BrokerAccount {
   /** credential_status is the result of the most recent credential validation. */
   credentialStatus: CredentialStatus;
   /** credential_checked_at is when credential_status was last refreshed. */
-  credentialCheckedAt?: Date | undefined;
+  credentialCheckedAt?:
+    | Date
+    | undefined;
+  /**
+   * halted / halted_at / halt_reason / halt_source (feature 030 + 102): whether this account is
+   * currently halted by an automated safety mechanism, when, why, and which mechanism. False/unset
+   * means no automated halt is in effect; an operator may still have separately deactivated the
+   * account (is_active).
+   */
+  halted: boolean;
+  haltedAt?: Date | undefined;
+  haltReason: string;
+  haltSource: HaltSource;
 }
 
 export interface RegisterBrokerAccountRequest {
@@ -537,6 +700,7 @@ function createBaseOrder(): Order {
     brokerOrderId: "",
     accountId: "",
     brokerType: BrokerType.BROKER_TYPE_UNSPECIFIED,
+    intentState: IntentState.INTENT_STATE_UNSPECIFIED,
   };
 }
 
@@ -601,6 +765,9 @@ export const Order: MessageFns<Order> = {
     }
     if (message.brokerType !== BrokerType.BROKER_TYPE_UNSPECIFIED) {
       writer.uint32(160).int32(brokerTypeToNumber(message.brokerType));
+    }
+    if (message.intentState !== IntentState.INTENT_STATE_UNSPECIFIED) {
+      writer.uint32(168).int32(intentStateToNumber(message.intentState));
     }
     return writer;
   },
@@ -772,6 +939,14 @@ export const Order: MessageFns<Order> = {
           message.brokerType = brokerTypeFromJSON(reader.int32());
           continue;
         }
+        case 21: {
+          if (tag !== 168) {
+            break;
+          }
+
+          message.intentState = intentStateFromJSON(reader.int32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -867,6 +1042,11 @@ export const Order: MessageFns<Order> = {
         : isSet(object.broker_type)
         ? brokerTypeFromJSON(object.broker_type)
         : BrokerType.BROKER_TYPE_UNSPECIFIED,
+      intentState: isSet(object.intentState)
+        ? intentStateFromJSON(object.intentState)
+        : isSet(object.intent_state)
+        ? intentStateFromJSON(object.intent_state)
+        : IntentState.INTENT_STATE_UNSPECIFIED,
     };
   },
 
@@ -932,6 +1112,9 @@ export const Order: MessageFns<Order> = {
     if (message.brokerType !== BrokerType.BROKER_TYPE_UNSPECIFIED) {
       obj.brokerType = brokerTypeToJSON(message.brokerType);
     }
+    if (message.intentState !== IntentState.INTENT_STATE_UNSPECIFIED) {
+      obj.intentState = intentStateToJSON(message.intentState);
+    }
     return obj;
   },
 
@@ -960,6 +1143,7 @@ export const Order: MessageFns<Order> = {
     message.brokerOrderId = object.brokerOrderId ?? "";
     message.accountId = object.accountId ?? "";
     message.brokerType = object.brokerType ?? BrokerType.BROKER_TYPE_UNSPECIFIED;
+    message.intentState = object.intentState ?? IntentState.INTENT_STATE_UNSPECIFIED;
     return message;
   },
 };
@@ -981,6 +1165,7 @@ function createBasePlaceOrderRequest(): PlaceOrderRequest {
     accountId: "",
     trailPrice: 0,
     trailPercent: 0,
+    confidence: undefined,
   };
 }
 
@@ -1030,6 +1215,9 @@ export const PlaceOrderRequest: MessageFns<PlaceOrderRequest> = {
     }
     if (message.trailPercent !== 0) {
       writer.uint32(121).double(message.trailPercent);
+    }
+    if (message.confidence !== undefined) {
+      writer.uint32(129).double(message.confidence);
     }
     return writer;
   },
@@ -1161,6 +1349,14 @@ export const PlaceOrderRequest: MessageFns<PlaceOrderRequest> = {
           message.trailPercent = reader.double();
           continue;
         }
+        case 16: {
+          if (tag !== 129) {
+            break;
+          }
+
+          message.confidence = reader.double();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1235,6 +1431,7 @@ export const PlaceOrderRequest: MessageFns<PlaceOrderRequest> = {
         : isSet(object.trail_percent)
         ? globalThis.Number(object.trail_percent)
         : 0,
+      confidence: isSet(object.confidence) ? globalThis.Number(object.confidence) : undefined,
     };
   },
 
@@ -1285,6 +1482,9 @@ export const PlaceOrderRequest: MessageFns<PlaceOrderRequest> = {
     if (message.trailPercent !== 0) {
       obj.trailPercent = message.trailPercent;
     }
+    if (message.confidence !== undefined) {
+      obj.confidence = message.confidence;
+    }
     return obj;
   },
 
@@ -1308,6 +1508,7 @@ export const PlaceOrderRequest: MessageFns<PlaceOrderRequest> = {
     message.accountId = object.accountId ?? "";
     message.trailPrice = object.trailPrice ?? 0;
     message.trailPercent = object.trailPercent ?? 0;
+    message.confidence = object.confidence ?? undefined;
     return message;
   },
 };
@@ -2135,6 +2336,10 @@ function createBaseBrokerAccount(): BrokerAccount {
     isActive: false,
     credentialStatus: CredentialStatus.CREDENTIAL_STATUS_UNSPECIFIED,
     credentialCheckedAt: undefined,
+    halted: false,
+    haltedAt: undefined,
+    haltReason: "",
+    haltSource: HaltSource.HALT_SOURCE_UNSPECIFIED,
   };
 }
 
@@ -2163,6 +2368,18 @@ export const BrokerAccount: MessageFns<BrokerAccount> = {
     }
     if (message.credentialCheckedAt !== undefined) {
       Timestamp.encode(toTimestamp(message.credentialCheckedAt), writer.uint32(66).fork()).join();
+    }
+    if (message.halted !== false) {
+      writer.uint32(72).bool(message.halted);
+    }
+    if (message.haltedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.haltedAt), writer.uint32(82).fork()).join();
+    }
+    if (message.haltReason !== "") {
+      writer.uint32(90).string(message.haltReason);
+    }
+    if (message.haltSource !== HaltSource.HALT_SOURCE_UNSPECIFIED) {
+      writer.uint32(96).int32(haltSourceToNumber(message.haltSource));
     }
     return writer;
   },
@@ -2238,6 +2455,38 @@ export const BrokerAccount: MessageFns<BrokerAccount> = {
           message.credentialCheckedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
           continue;
         }
+        case 9: {
+          if (tag !== 72) {
+            break;
+          }
+
+          message.halted = reader.bool();
+          continue;
+        }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          message.haltedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 11: {
+          if (tag !== 90) {
+            break;
+          }
+
+          message.haltReason = reader.string();
+          continue;
+        }
+        case 12: {
+          if (tag !== 96) {
+            break;
+          }
+
+          message.haltSource = haltSourceFromJSON(reader.int32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2285,6 +2534,22 @@ export const BrokerAccount: MessageFns<BrokerAccount> = {
         : isSet(object.credential_checked_at)
         ? fromJsonTimestamp(object.credential_checked_at)
         : undefined,
+      halted: isSet(object.halted) ? globalThis.Boolean(object.halted) : false,
+      haltedAt: isSet(object.haltedAt)
+        ? fromJsonTimestamp(object.haltedAt)
+        : isSet(object.halted_at)
+        ? fromJsonTimestamp(object.halted_at)
+        : undefined,
+      haltReason: isSet(object.haltReason)
+        ? globalThis.String(object.haltReason)
+        : isSet(object.halt_reason)
+        ? globalThis.String(object.halt_reason)
+        : "",
+      haltSource: isSet(object.haltSource)
+        ? haltSourceFromJSON(object.haltSource)
+        : isSet(object.halt_source)
+        ? haltSourceFromJSON(object.halt_source)
+        : HaltSource.HALT_SOURCE_UNSPECIFIED,
     };
   },
 
@@ -2314,6 +2579,18 @@ export const BrokerAccount: MessageFns<BrokerAccount> = {
     if (message.credentialCheckedAt !== undefined) {
       obj.credentialCheckedAt = message.credentialCheckedAt.toISOString();
     }
+    if (message.halted !== false) {
+      obj.halted = message.halted;
+    }
+    if (message.haltedAt !== undefined) {
+      obj.haltedAt = message.haltedAt.toISOString();
+    }
+    if (message.haltReason !== "") {
+      obj.haltReason = message.haltReason;
+    }
+    if (message.haltSource !== HaltSource.HALT_SOURCE_UNSPECIFIED) {
+      obj.haltSource = haltSourceToJSON(message.haltSource);
+    }
     return obj;
   },
 
@@ -2330,6 +2607,10 @@ export const BrokerAccount: MessageFns<BrokerAccount> = {
     message.isActive = object.isActive ?? false;
     message.credentialStatus = object.credentialStatus ?? CredentialStatus.CREDENTIAL_STATUS_UNSPECIFIED;
     message.credentialCheckedAt = object.credentialCheckedAt ?? undefined;
+    message.halted = object.halted ?? false;
+    message.haltedAt = object.haltedAt ?? undefined;
+    message.haltReason = object.haltReason ?? "";
+    message.haltSource = object.haltSource ?? HaltSource.HALT_SOURCE_UNSPECIFIED;
     return message;
   },
 };

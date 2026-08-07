@@ -20,14 +20,22 @@ import { useWatchlists, useCreateWatchlist, useAddWatchlistSymbols } from '@/hoo
 import { normalizeWeights } from '@/lib/screenWeights';
 import { formatLastRun } from '@/lib/formatLastRun';
 import { scoreColor } from '@/lib/scoreDisplay';
+import { BUILTIN_INDICATORS } from '@/lib/strategyCatalog';
 import {
   Comparator,
+  ComponentKind,
   ScreenKind,
   ScreenResultStatus,
 } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
 type CriterionRow = {
   refName: string;
+  // FUNDAMENTAL (a marketdata fundamentals field/extra_metric, e.g. "pe_ratio") or
+  // TECHNICAL_INDICATOR (a built-in indicator computed from bars, e.g. "RSI"). Bug fix: previously
+  // every criterion was sent as FUNDAMENTAL regardless of what the user picked, so an indicator name
+  // like "rsi" never matched a fundamental field, was silently skipped server-side, and — because a
+  // skipped criterion never fails a hard filter — a comparison like "rsi < 30" always read as passed.
+  kind: ScreenKind.FUNDAMENTAL | ScreenKind.TECHNICAL_INDICATOR;
   metricName: string;
   op: Comparator;
   threshold: number;
@@ -42,6 +50,11 @@ const COMPARATOR_LABELS: Array<{ value: Comparator; label: string }> = [
   { value: Comparator.GTE, label: '≥' },
 ];
 
+const KIND_OPTIONS: Array<{ value: CriterionRow['kind']; label: string }> = [
+  { value: ScreenKind.FUNDAMENTAL, label: 'Fundamental' },
+  { value: ScreenKind.TECHNICAL_INDICATOR, label: 'Technical indicator' },
+];
+
 // Top-N default for the "Add top N to watchlist" action (feature 098, FR-6). A UI display constant,
 // not a WatchConfig key (Floor F-07 unaffected).
 const TOP_N = 5;
@@ -53,6 +66,7 @@ function comparatorGlyph(op: Comparator): string {
 function newCriterion(i: number): CriterionRow {
   return {
     refName: `c${i}`,
+    kind: ScreenKind.FUNDAMENTAL,
     metricName: 'pe_ratio',
     op: Comparator.LT,
     threshold: 20,
@@ -99,15 +113,29 @@ export default function ScreenerPage() {
     screen.mutate(
       {
         symbols,
-        criteria: criteria.map((c) => ({
-          refName: c.refName,
-          kind: ScreenKind.FUNDAMENTAL,
-          metricName: c.metricName,
-          op: c.op,
-          threshold: c.threshold,
-          weight: c.weight,
-          hardFilter: c.hardFilter,
-        })),
+        criteria: criteria.map((c) => {
+          const base = {
+            refName: c.refName,
+            kind: c.kind,
+            op: c.op,
+            threshold: c.threshold,
+            weight: c.weight,
+            hardFilter: c.hardFilter,
+          };
+          if (c.kind === ScreenKind.TECHNICAL_INDICATOR) {
+            // Route through `component` (not `metricName`) so the engine actually computes the
+            // indicator from bars — a bare metric_name only resolves fundamentals fields.
+            return {
+              ...base,
+              component: {
+                refName: c.refName,
+                kind: ComponentKind.BUILTIN_INDICATOR,
+                indicator: c.metricName.toUpperCase(),
+              },
+            };
+          }
+          return { ...base, metricName: c.metricName };
+        }),
       },
       { onSuccess: () => setLastRun({ at: new Date(), count: symbols.length }) },
     );
@@ -171,14 +199,53 @@ export default function ScreenerPage() {
                   className="rounded-md border border-border p-3 space-y-2"
                   data-testid="criterion-row"
                 >
-                  {/* Readable grammar line (FR-3): <metric> <comparator> <threshold>, all editable. */}
+                  {/* Readable grammar line (FR-3): <kind> <metric> <comparator> <threshold>, all
+                      editable. `kind` decides whether `metric` resolves against fundamentals
+                      (metricName) or is computed from bars (component.indicator) — see the
+                      CriterionRow.kind comment above for why this distinction matters. */}
                   <div className="flex flex-wrap items-end gap-2">
-                    <Input
-                      aria-label="metric"
-                      className="w-40 font-mono"
-                      value={c.metricName}
-                      onChange={(e) => updateCriterion(i, { metricName: e.target.value })}
-                    />
+                    <select
+                      aria-label="kind"
+                      className="h-9 rounded-md border bg-background px-2 text-sm"
+                      value={c.kind}
+                      onChange={(e) => {
+                        const kind = Number(e.target.value) as CriterionRow['kind'];
+                        // Reset to a valid default for the new kind so a leftover fundamentals
+                        // field name (e.g. "pe_ratio") isn't sent as a bogus indicator name.
+                        const metricName =
+                          kind === ScreenKind.TECHNICAL_INDICATOR
+                            ? BUILTIN_INDICATORS[0].name
+                            : 'pe_ratio';
+                        updateCriterion(i, { kind, metricName });
+                      }}
+                    >
+                      {KIND_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>
+                          {o.label}
+                        </option>
+                      ))}
+                    </select>
+                    {c.kind === ScreenKind.TECHNICAL_INDICATOR ? (
+                      <select
+                        aria-label="metric"
+                        className="h-9 rounded-md border bg-background px-2 text-sm font-mono"
+                        value={c.metricName}
+                        onChange={(e) => updateCriterion(i, { metricName: e.target.value })}
+                      >
+                        {BUILTIN_INDICATORS.map((ind) => (
+                          <option key={ind.name} value={ind.name}>
+                            {ind.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Input
+                        aria-label="metric"
+                        className="w-40 font-mono"
+                        value={c.metricName}
+                        onChange={(e) => updateCriterion(i, { metricName: e.target.value })}
+                      />
+                    )}
                     <select
                       aria-label="comparator"
                       className="h-9 rounded-md border bg-background px-2 text-sm"

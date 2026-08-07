@@ -897,6 +897,60 @@ func (s *PortfolioService) processPositionSync(ctx context.Context, event *ledge
 	}
 }
 
+// bracketUpdatePayload is the expected shape of the order.bracket_updated event payload
+// (emitted by trading's maybeSubmitBracket/CancelOrder — feature 030). An empty
+// StopOrderID/TakeProfitOrderID means "cleared" (bracket canceled or the leg was never
+// created), not "leave the existing value alone" — see processBracketUpdate.
+type bracketUpdatePayload struct {
+	UserID            string `json:"user_id"`
+	AccountID         string `json:"account_id"`
+	Symbol            string `json:"symbol"`
+	TradingMode       string `json:"trading_mode"`
+	StopOrderID       string `json:"stop_order_id"`
+	TakeProfitOrderID string `json:"take_profit_order_id"`
+}
+
+// ConsumeBracketUpdates subscribes to ledger StreamEvents filtered on "order.bracket_updated"
+// and persists the resting bracket leg order IDs onto the matching position row.
+func (s *PortfolioService) ConsumeBracketUpdates(ctx context.Context) {
+	s.consumeEventStream(ctx, "bracket update", "order.bracket_updated", s.processBracketUpdate)
+}
+
+func (s *PortfolioService) processBracketUpdate(ctx context.Context, event *ledgerv1.LedgerEvent) {
+	upd, err := parseBracketUpdatePayload(event.Payload)
+	if err != nil {
+		slog.Warn("parse bracket update payload", "error", err)
+		return
+	}
+	if upd.AccountID == "" || upd.Symbol == "" {
+		return
+	}
+	if err := s.repo.UpdatePositionBracket(ctx, upd.UserID, upd.Symbol, upd.TradingMode, upd.AccountID, upd.StopOrderID, upd.TakeProfitOrderID); err != nil {
+		slog.Warn("update position bracket failed", "symbol", upd.Symbol, "error", err)
+	}
+}
+
+// parseBracketUpdatePayload extracts the JSON-marshal/unmarshal step out of
+// processBracketUpdate as a pure function so it can be unit-tested without a live DB —
+// PortfolioService.repo is a concrete *repository.PortfolioRepo (not an interface), the
+// same constraint xstockstrat-trading's TradingRepo has (see that service's Step 3/12
+// precedent), so a full round-trip through UpdatePositionBracket cannot be exercised
+// against a hand-constructed service in a unit test.
+func parseBracketUpdatePayload(payload *structpb.Struct) (bracketUpdatePayload, error) {
+	if payload == nil {
+		return bracketUpdatePayload{}, fmt.Errorf("nil payload")
+	}
+	raw, err := payload.MarshalJSON()
+	if err != nil {
+		return bracketUpdatePayload{}, err
+	}
+	var upd bracketUpdatePayload
+	if err := json.Unmarshal(raw, &upd); err != nil {
+		return bracketUpdatePayload{}, err
+	}
+	return upd, nil
+}
+
 // balanceSyncPayload is the expected shape of the account.balance.synced event payload.
 type balanceSyncPayload struct {
 	AccountID   string  `json:"account_id"`

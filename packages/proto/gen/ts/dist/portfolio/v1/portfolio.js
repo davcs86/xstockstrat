@@ -408,6 +408,8 @@ function createBasePosition() {
         factor: "",
         flag: PositionRiskFlag.POSITION_RISK_FLAG_UNSPECIFIED,
         exitRule: "",
+        stopOrderId: "",
+        takeProfitOrderId: "",
     };
 }
 exports.Position = {
@@ -468,6 +470,12 @@ exports.Position = {
         }
         if (message.exitRule !== "") {
             writer.uint32(154).string(message.exitRule);
+        }
+        if (message.stopOrderId !== "") {
+            writer.uint32(162).string(message.stopOrderId);
+        }
+        if (message.takeProfitOrderId !== "") {
+            writer.uint32(170).string(message.takeProfitOrderId);
         }
         return writer;
     },
@@ -611,6 +619,20 @@ exports.Position = {
                     message.exitRule = reader.string();
                     continue;
                 }
+                case 20: {
+                    if (tag !== 162) {
+                        break;
+                    }
+                    message.stopOrderId = reader.string();
+                    continue;
+                }
+                case 21: {
+                    if (tag !== 170) {
+                        break;
+                    }
+                    message.takeProfitOrderId = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -702,6 +724,16 @@ exports.Position = {
                 : isSet(object.exit_rule)
                     ? globalThis.String(object.exit_rule)
                     : "",
+            stopOrderId: isSet(object.stopOrderId)
+                ? globalThis.String(object.stopOrderId)
+                : isSet(object.stop_order_id)
+                    ? globalThis.String(object.stop_order_id)
+                    : "",
+            takeProfitOrderId: isSet(object.takeProfitOrderId)
+                ? globalThis.String(object.takeProfitOrderId)
+                : isSet(object.take_profit_order_id)
+                    ? globalThis.String(object.take_profit_order_id)
+                    : "",
         };
     },
     toJSON(message) {
@@ -763,6 +795,12 @@ exports.Position = {
         if (message.exitRule !== "") {
             obj.exitRule = message.exitRule;
         }
+        if (message.stopOrderId !== "") {
+            obj.stopOrderId = message.stopOrderId;
+        }
+        if (message.takeProfitOrderId !== "") {
+            obj.takeProfitOrderId = message.takeProfitOrderId;
+        }
         return obj;
     },
     create(base) {
@@ -789,6 +827,8 @@ exports.Position = {
         message.factor = object.factor ?? "";
         message.flag = object.flag ?? PositionRiskFlag.POSITION_RISK_FLAG_UNSPECIFIED;
         message.exitRule = object.exitRule ?? "";
+        message.stopOrderId = object.stopOrderId ?? "";
+        message.takeProfitOrderId = object.takeProfitOrderId ?? "";
         return message;
     },
 };
