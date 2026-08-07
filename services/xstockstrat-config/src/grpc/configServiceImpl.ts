@@ -392,7 +392,7 @@ export class ConfigServiceImpl {
     const mode = resolveMode(requestMode(call.request));
     try {
       const result = await this.pool.query(
-        `SELECT key, description, default_value, is_secret, consuming_service, environment, trading_mode
+        `SELECT key, description, default_value, value_data, is_secret, consuming_service, environment, trading_mode
          FROM config.config_values
          WHERE namespace = $1 AND environment = $2 AND (trading_mode = $3 OR trading_mode = 'all')`,
         [call.request.namespace, env, mode]
@@ -420,6 +420,12 @@ export class ConfigServiceImpl {
             key: r.key,
             description: r.description ?? '',
             defaultValue: r.default_value ?? '',
+            // CONFIG-2: default_value is seed metadata only, never the live value — this is
+            // the row's actual value_data, what SetConfig writes and WatchConfig/GetConfig
+            // serve. config-ui's "Value" column and edit-prefill must read this, not defaultValue,
+            // or a save always appears to silently revert (the DB write succeeds; the display
+            // just keeps showing the unrelated seed default).
+            currentValue: r.value_data ?? '',
             isSecret: r.is_secret === true,
             consumingService: r.consuming_service ?? '',
             environment:

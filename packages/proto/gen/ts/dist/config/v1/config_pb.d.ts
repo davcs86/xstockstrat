@@ -314,6 +314,9 @@ export type ConfigKeyMeta = Message<"xstockstrat.config.v1.ConfigKeyMeta"> & {
      */
     description: string;
     /**
+     * The declared/seed default for this key — metadata only (CONFIG-2: runtime resolution
+     * never reads this column). Does NOT track live edits; use current_value for that.
+     *
      * @generated from field: string default_value = 3;
      */
     defaultValue: string;
@@ -339,6 +342,13 @@ export type ConfigKeyMeta = Message<"xstockstrat.config.v1.ConfigKeyMeta"> & {
      * @generated from field: xstockstrat.config.v1.ValidationRule validation = 8;
      */
     validation?: ValidationRule | undefined;
+    /**
+     * The row's live value_data — what SetConfig writes and WatchConfig/GetConfig serve.
+     * This is what a config-ui "Value" column must display and prefill for editing.
+     *
+     * @generated from field: string current_value = 9;
+     */
+    currentValue: string;
 };
 /**
  * Describes the message xstockstrat.config.v1.ConfigKeyMeta.

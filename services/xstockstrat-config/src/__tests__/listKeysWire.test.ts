@@ -31,6 +31,7 @@ describe('ListKeys over a real gRPC connection', () => {
         key: 'secret.example.api_key',
         description: 'a secret key',
         default_value: 'placeholder',
+        value_data: 'secret://vault/example-api-key',
         is_secret: true,
         consuming_service: 'xstockstrat-marketdata',
         environment: 'production',
@@ -40,6 +41,7 @@ describe('ListKeys over a real gRPC connection', () => {
         key: 'analysis.signals.source_weights',
         description: 'weights',
         default_value: '{}',
+        value_data: '{"example_source": 0.5}',
         is_secret: false,
         consuming_service: 'xstockstrat-analysis',
         environment: 'dev',
@@ -90,6 +92,15 @@ describe('ListKeys over a real gRPC connection', () => {
     const secret = res.keys.find((k: any) => k.key === 'secret.example.api_key');
     assert.equal(secret.defaultValue, 'placeholder');
     assert.equal(secret.consumingService, 'xstockstrat-marketdata');
+  });
+
+  it('reports currentValue from value_data, distinct from the defaultValue seed metadata', async () => {
+    // Regression: currentValue used to be absent entirely, so config-ui had no way to show
+    // (or re-edit) a key's live value — only its never-updated seed default (CONFIG-2).
+    const res = await listKeys();
+    const plain = res.keys.find((k: any) => k.key === 'analysis.signals.source_weights');
+    assert.equal(plain.currentValue, '{"example_source": 0.5}');
+    assert.notEqual(plain.currentValue, plain.defaultValue);
   });
 
   it('encodes environment and tradingMode as real enum values, not UNRECOGNIZED', async () => {

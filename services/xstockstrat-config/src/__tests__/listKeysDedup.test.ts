@@ -51,6 +51,7 @@ describe('ListKeys de-dup when a key has both an all-scope and a mode-exact row'
     key: 'marketdata.fmp.enabled',
     description: 'Master gate for the FMP fundamentals source; off by default',
     default_value: 'false',
+    value_data: 'false',
     is_secret: false,
     consuming_service: 'xstockstrat-marketdata',
     environment: 'dev',
@@ -59,6 +60,7 @@ describe('ListKeys de-dup when a key has both an all-scope and a mode-exact row'
   const modeExactRow = {
     ...allRow,
     default_value: 'true',
+    value_data: 'true',
     trading_mode: 'paper',
   };
 
@@ -83,6 +85,7 @@ describe('ListKeys de-dup when a key has both an all-scope and a mode-exact row'
         const res = await listKeys(client);
         const match = res.keys.find((k: any) => k.key === 'marketdata.fmp.enabled');
         assert.equal(match.defaultValue, 'true', 'the mode-exact row must win over the all-scope row');
+        assert.equal(match.currentValue, 'true', 'currentValue must come from the same winning row');
         assert.equal(match.tradingMode, 'TRADING_MODE_PAPER');
       } finally {
         client.close();

@@ -24,6 +24,7 @@ skill).
 | Positions | `POSITION_AAPL` (`stopOrderId`/`takeProfitOrderId` set, feature 030), `POSITION_MSFT` (both omitted — exercises the em-dash "no active bracket" fallback), `POSITIONS`, `positionForSymbol` | `e2e/fixtures/positions.ts` | `xstockstrat.portfolio.v1.Position` | `e2e/mock-backend.ts` (`listPositions`, `getPosition`), `e2e/trader/{positions,position-detail,valuation-parity}.spec.ts` |
 | Orders (shared mock set) | `ORDER_FILLED`, `ORDER_WORKING`, `ORDER_UNKNOWN_INTENT` (`intentState=4/UNKNOWN`, feature 101), `ORDERS`, `orderForId` | `e2e/fixtures/orders.ts` | `xstockstrat.trading.v1.Order` | `e2e/mock-backend.ts` (`listOrders`, `getOrder`), `e2e/trader/{order-ticket,order-intent}.spec.ts` |
 | Config key SetConfig payload | `setConfigPayload` | `e2e/fixtures/configKeys.ts` | `xstockstrat.config.v1.SetConfigRequest` | `e2e/config-ui/api-smoke.spec.ts` |
+| Config key ListKeys metadata rows | `CONFIG_KEY_FIXTURES` | `e2e/fixtures/configKeys.ts` | `xstockstrat.config.v1.ConfigKeyMeta` | `e2e/mock-backend.ts` (`ConfigService.listKeys` — spreads each row + computes `currentValue` from a `configValueOverrides` map that `setConfig` writes into, so a save is visible to the next `listKeys` the same way `value_data` vs. `default_value` works on the real service), `e2e/config-ui/{api-smoke,value-persists-after-save,reason-capture,env-gate}.spec.ts` |
 
 ## Recurring sentinel ids (stay inline, but are reserved)
 

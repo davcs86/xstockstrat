@@ -1311,6 +1311,7 @@ function createBaseConfigKeyMeta() {
         environment: common_1.Environment.ENVIRONMENT_UNSPECIFIED,
         tradingMode: common_1.TradingMode.TRADING_MODE_UNSPECIFIED,
         validation: undefined,
+        currentValue: "",
     };
 }
 exports.ConfigKeyMeta = {
@@ -1338,6 +1339,9 @@ exports.ConfigKeyMeta = {
         }
         if (message.validation !== undefined) {
             exports.ValidationRule.encode(message.validation, writer.uint32(66).fork()).join();
+        }
+        if (message.currentValue !== "") {
+            writer.uint32(74).string(message.currentValue);
         }
         return writer;
     },
@@ -1404,6 +1408,13 @@ exports.ConfigKeyMeta = {
                     message.validation = exports.ValidationRule.decode(reader, reader.uint32());
                     continue;
                 }
+                case 9: {
+                    if (tag !== 74) {
+                        break;
+                    }
+                    message.currentValue = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1440,6 +1451,11 @@ exports.ConfigKeyMeta = {
                     ? (0, common_1.tradingModeFromJSON)(object.trading_mode)
                     : common_1.TradingMode.TRADING_MODE_UNSPECIFIED,
             validation: isSet(object.validation) ? exports.ValidationRule.fromJSON(object.validation) : undefined,
+            currentValue: isSet(object.currentValue)
+                ? globalThis.String(object.currentValue)
+                : isSet(object.current_value)
+                    ? globalThis.String(object.current_value)
+                    : "",
         };
     },
     toJSON(message) {
@@ -1468,6 +1484,9 @@ exports.ConfigKeyMeta = {
         if (message.validation !== undefined) {
             obj.validation = exports.ValidationRule.toJSON(message.validation);
         }
+        if (message.currentValue !== "") {
+            obj.currentValue = message.currentValue;
+        }
         return obj;
     },
     create(base) {
@@ -1485,6 +1504,7 @@ exports.ConfigKeyMeta = {
         message.validation = (object.validation !== undefined && object.validation !== null)
             ? exports.ValidationRule.fromPartial(object.validation)
             : undefined;
+        message.currentValue = object.currentValue ?? "";
         return message;
     },
 };
