@@ -116,3 +116,24 @@
   - Not trading-domain-relevant (no `BrokerType`/`TRADING_MODE`/broker/order-type hits) — the
     `reference/step-constraints.md` §A trading-domain table does not apply; only §B (lint gate,
     C-12 test-data reuse) applies to each `service`/`test` step.
+
+## Session 2026-08-07T00:40:00Z — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 4 warnings, 3 notes (advisory — did not block). Overlap: CLEAN (no active
+  feature collides; `096-position-and-order-detail-pages` shares `xstockstrat-ui` but disjoint
+  files, no merge risk). No Floor (`F-*`) risk found in any of the 9 steps; every `path:line`
+  citation in the spec was independently re-verified against the live files.
+- Unresolved ✗ / ⚠ carried into execution:
+  - Steps 2, 4, 6, 9: Verification sections state no explicit coverage-threshold assertion (literal
+    B2 criterion) — this is the established, repo-wide Playwright-e2e-vs-vitest-unit split (coverage
+    gating applies only to the vitest unit layer scoped to `src/lib/**`), not a defect unique to this
+    spec — [x] accepted as-is, no action needed.
+  - Step 2: viewport citation says `playwright.config.ts` contains "1280×720" — the value is correct
+    in substance (inherited from `devices['Desktop Chrome']`) but not a literal string match —
+    cosmetic — [x] accepted as-is, no action needed.
+  - Step 8: the `['watchlist-write']` mutationKey literal repeats 4× across `useWatchlists.ts`/
+    `page.tsx`; the file already has a `WATCHLISTS_KEY` shared-constant precedent one line above.
+    A named constant (e.g. `WATCHLIST_WRITE_KEY`) would better match the file's own DRY convention.
+    Below jscpd's typical detection threshold (not expected to trip CI) — [ ] optional, implementer's
+    call at Step 8 execution time; not required to close.
+- Overlap findings: none.
