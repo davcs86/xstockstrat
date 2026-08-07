@@ -778,16 +778,54 @@ class TestManageFormulaTool:
             client, "manage_formula", AsyncMock(return_value={"formula_id": "f-1"})
         ) as m:
             await _tool_fn(server, "manage_formula")(
-                operation="register", name="rsi2", source="x = 1"
+                ctx=_ctx(ADMIN), operation="register", name="rsi2", source="x = 1"
             )
             await _tool_fn(server, "manage_formula")(
+                ctx=_ctx(ADMIN),
                 operation="delete",
                 formula_id="f-1",
-                formula_author_user_id="u1",
             )
         assert m.call_count == 2
         assert m.call_args_list[0].kwargs["operation"] == "register"
         assert m.call_args_list[1].kwargs["operation"] == "delete"
+
+    @pytest.mark.asyncio
+    async def test_register_derives_author_and_user_id_from_claims(self):
+        """Ownership is derived from the caller's own verified claims (feature 111) — there is no
+        author/formula_author_user_id parameter to assert a different identity."""
+        server = _make_server()
+        with patch.object(
+            client, "manage_formula", AsyncMock(return_value={"formula_id": "f-3"})
+        ) as m:
+            await _tool_fn(server, "manage_formula")(
+                ctx=_ctx(ADMIN), operation="register", name="rsi4", source="x = 1"
+            )
+        formula = m.call_args.kwargs["formula"]
+        assert formula["author"] == "u-1"
+        assert formula["user_id"] == "u-1"
+
+    @pytest.mark.asyncio
+    async def test_rejects_caller_supplied_author_and_user_id(self):
+        server = _make_server()
+        with pytest.raises(TypeError):
+            await _tool_fn(server, "manage_formula")(
+                ctx=_ctx(ADMIN), operation="register", name="x", source="y = 1", author="system"
+            )
+        with pytest.raises(TypeError):
+            await _tool_fn(server, "manage_formula")(
+                ctx=_ctx(ADMIN),
+                operation="delete",
+                formula_id="f-1",
+                formula_author_user_id="u1",
+            )
+
+    @pytest.mark.asyncio
+    async def test_refuses_without_verified_claims(self):
+        server = _make_server()
+        with pytest.raises(RuntimeError, match="Streamable HTTP"):
+            await _tool_fn(server, "manage_formula")(
+                ctx=_ctx(None), operation="register", name="x", source="y = 1"
+            )
 
     @pytest.mark.asyncio
     async def test_register_carries_parameter_definitions(self):
@@ -796,6 +834,7 @@ class TestManageFormulaTool:
             client, "manage_formula", AsyncMock(return_value={"formula_id": "f-2"})
         ) as m:
             await _tool_fn(server, "manage_formula")(
+                ctx=_ctx(ADMIN),
                 operation="register",
                 name="rsi3",
                 source="result = params['period']",
@@ -1265,9 +1304,9 @@ class TestFormulaPartialUpdateTool:
             client, "manage_formula", AsyncMock(return_value={"formulaId": "f-1"})
         ) as m:
             await _tool_fn(server, "manage_formula")(
+                ctx=_ctx(ADMIN),
                 operation="update",
                 formula_id="f-1",
-                formula_author_user_id="u1",
                 description="tweak",
             )
         formula = m.call_args.kwargs["formula"]
@@ -1281,9 +1320,9 @@ class TestFormulaPartialUpdateTool:
             client, "manage_formula", AsyncMock(return_value={"formulaId": "f-1"})
         ) as m:
             await _tool_fn(server, "manage_formula")(
+                ctx=_ctx(ADMIN),
                 operation="update",
                 formula_id="f-1",
-                formula_author_user_id="u1",
                 is_public=False,
             )
         assert m.call_args.kwargs["formula"]["update_mask"] == ["is_public"]
@@ -1295,9 +1334,9 @@ class TestFormulaPartialUpdateTool:
             client, "manage_formula", AsyncMock(return_value={"formulaId": "f-1"})
         ) as m:
             await _tool_fn(server, "manage_formula")(
+                ctx=_ctx(ADMIN),
                 operation="update",
                 formula_id="f-1",
-                formula_author_user_id="u1",
                 description="only this",
             )
         assert "is_public" not in m.call_args.kwargs["formula"]["update_mask"]
@@ -1307,7 +1346,7 @@ class TestFormulaPartialUpdateTool:
         server = _make_server()
         with pytest.raises(RuntimeError, match="at least one field"):
             await _tool_fn(server, "manage_formula")(
-                operation="update", formula_id="f-1", formula_author_user_id="u1"
+                ctx=_ctx(ADMIN), operation="update", formula_id="f-1"
             )
 
 

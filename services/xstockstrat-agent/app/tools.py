@@ -597,14 +597,13 @@ def register_tools(server: MCPServer) -> None:
 
     @server.tool()
     async def manage_formula(
+        ctx: Context,
         operation: str,
         name: str | None = None,
         description: str | None = None,
         source: str | None = None,
         is_public: bool | None = None,
         formula_id: str = "",
-        author: str = "",
-        formula_author_user_id: str = "",
         parameters: list[dict] | None = None,
         outputs: list[dict] | None = None,
         warmup_period: int | None = None,
@@ -613,10 +612,12 @@ def register_tools(server: MCPServer) -> None:
         operation: 'register' | 'update' | 'delete'.
         name/description/source/is_public: for register and update. On UPDATE these are
             presence-detected — pass a field only if you want to change it (see UPDATE below).
-        author: stored immutably on register.
         formula_id: required for update/delete.
-        formula_author_user_id: required for update/delete; must match the formula's original
-            author (the indicators backend returns PERMISSION_DENIED otherwise).
+        Ownership is always derived from the OAuth-authenticated caller's own verified identity —
+            there is no author/formula_author_user_id parameter. On register, the caller becomes
+            the formula's author. On update/delete, the caller's own identity is checked against
+            the formula's stored author (PERMISSION_DENIED on mismatch) — you cannot assert
+            someone else's ownership.
         parameters: typed parameter definitions — a list of
             {name, type, default, description, required, min, max} where type is one of
             'int'|'float'|'bool'|'string' and min/max apply to numeric params only. Values
@@ -657,10 +658,11 @@ def register_tools(server: MCPServer) -> None:
                 mean = s.rolling(params["period"]).mean()
                 std = s.rolling(params["period"]).std()
                 result = {"value": ((s - mean) / std).tolist()}"""
+        user_id = _caller_user_id(ctx, "manage_formula")
         formula: dict = {
             "formula_id": formula_id,
-            "user_id": formula_author_user_id,
-            "author": author,
+            "user_id": user_id,
+            "author": user_id,
             "name": name or "",
             "description": description or "",
             "source": source or "",
