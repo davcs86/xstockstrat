@@ -15,6 +15,14 @@ Issues are disabled on this repo, so this report is the audit trail per
 - **Missing docs: none.** Every config key actually read anywhere in the codebase (Go, Python, or
   Node) is documented in its owning service's `CLAUDE.md`. Zero "read in code but undeclared"
   instances across all 11 services — doc coverage of *real* usage is complete.
+- **No-op reads: 2 of ~64 "live" keys checked.** A key can be declared, seeded or not, and *read*
+  — and still have zero effect if the fetched value is discarded, or feeds a branch whose outcomes
+  are identical. A second read-only sweep traced every confirmed-read key from its `Get*` call
+  site to its actual point of use (not just confirming the call exists) across all 11 services.
+  Only 2 turned out to be genuine no-ops: `portfolio.risk.max_drawdown_pct` (already
+  known — read then discarded) and `analysis.fundsignal.universe_source` (newly found — F-10). The
+  other ~62 keys checked out as genuinely wired to real behavior (a branch, a persisted value, an
+  outbound request parameter, or a rejection).
 - **Unused/stale: real, and larger than any one service's own findings log shows.** 8 keys are
   seeded in the config-service DB and documented, but never read by any service (dead seeds). A
   further 9 keys are documented as config but have no DB seed *and* no code reader at all —
@@ -42,6 +50,7 @@ Issues are disabled on this repo, so this report is the audit trail per
 | **RC-4** | A key is read in code with a graceful fallback default, but was never added to the config service's seed data (governance rule 7), so it's invisible to `list_config_keys`/the config UI and can't be changed without a manual DB insert. Sometimes intentional and documented as such (features 101/102); mostly just unflagged. | `portfolio.risk.max_drawdown_pct`/`concentration_limit_pct`/`exposure.factor_map`, `agent.oauth.registration_enabled`/`allowed_redirect_uris`, `identity.jwt.access_ttl_seconds`/`refresh_ttl_seconds`, 5 of `ingest`'s 8 documented keys, all of `trading.reconciliation.*`/`order_intent.*`, most of `analysis`'s feature-097/069/068/065/064/060 keys |
 | **RC-5** | A config value is read every cycle but its result is discarded before use — reads as wired, has zero effect. | `portfolio.risk.max_drawdown_pct` (`_ = maxDrawdownPct // drawdown requires historical P&L tracking`) |
 | **RC-6** | A config-shaped, env-tunable value bypasses config governance entirely — no config key, no env var, no documented exception (contrast with `xstockstrat-indicators`' `MAX_PARAMETERS`/`MAX_OUTPUTS`, which *are* documented as intentional hardcodes). | `xstockstrat-identity`'s OAuth authorization-code TTL (hardcoded SQL `interval '60 seconds'`) |
+| **RC-7** | A config key is read and genuinely branched on, but a dependency the branch needs was never built, so the branches collapse to identical behavior — the read looks live (it's called, it's compared) but the decision it's meant to drive doesn't yet exist. Different from RC-5 (discard) and RC-1 (never read at all) — this one requires tracing the value past the branch to its actual output to catch. | `analysis.fundsignal.universe_source` (`watchlists`/`both` silently fall back to `explicit` pending an unbuilt global-portfolio RPC) |
 
 ## Findings
 
@@ -144,38 +153,72 @@ delete the three orphaned properties in both files — same fix, two services, n
 required. Not fixed in this pass (it's a source-code change, out of scope for a docs-only pass);
 route as a small Track B/C fix.
 
+### F-10 (SEV-3) — `analysis.fundsignal.universe_source` is a no-op for 2 of its 3 documented values
+A follow-up sweep traced every confirmed-*read* key (not just its `Get*` call site, but all the
+way to its actual point of use) across all 11 services to catch keys that are read but functionally
+inert. `analysis.fundsignal.universe_source` (`app/engine/fundsignal_loop.py:209-218`, documented
+values `watchlists`/`explicit`/`both`) is read and does branch — but the `watchlists` and `both`
+branches currently return the **exact same list** as the `explicit` branch; only a log line
+differs. Per the code's own comment (`fundsignal_loop.py:206-207`), the watchlist-union path is
+"pending a global portfolio RPC" that doesn't exist yet, so it silently falls back to the explicit
+CSV regardless of which value an operator sets. This is a known, in-code-documented limitation, not
+a hidden bug — but the config key's own doc row (`services/xstockstrat-analysis/CLAUDE.md`) doesn't
+say so, so an operator setting `watchlists` today gets no error and no effect.
+**Recommendation:** either implement the pending watchlist-union RPC call, or note in CLAUDE.md
+that `watchlists`/`both` are currently equivalent to `explicit` until that RPC lands. Not fixed in
+this pass — implementing the RPC is a feature, and the doc note is a small edit better paired with
+whichever fix is chosen. This is the only newly-discovered no-op among the ~62 confirmed-read keys
+checked in the follow-up sweep — every other read key in every other service was traced to a real
+behavioral effect (a branch, a persisted value, an outbound request parameter, or a rejection).
+
+### F-11 (SEV-4) — `xstockstrat-ingest`'s own findings log had gone stale in the *opposite* direction — fixed in this pass
+`services/xstockstrat-ingest/docs/context-constitution-findings.md:11` claimed CLAUDE.md documents
+9 `ingest.signals.*` config keys, none read anywhere. This is now stale in the good direction: the
+service's `CLAUDE.md` has since been trimmed to document only one `ingest.signals.*` key,
+`dedup_window_hours`, and feature 111 (migration `009_signal_dedup_keys.up.sql`) wired it into the
+duplicate-signal claim query's `WHERE` clause — it genuinely gates whether a matching signal is
+treated as a duplicate. The findings-log row never got updated to reflect that the code caught up.
+**Fixed:** corrected the row to record the current, verified state.
+
 ## Full key inventory
 
-Status legend: **live** = seeded (or intentionally unseeded per the per-feature log) and read;
-**dead seed** = seeded + documented but never read; **doc-only** = documented, no seed, no code
-reader; **unseeded** = documented + read + working fallback, but no DB seed row; **discarded** =
-read but result unused.
+Status legend: **live** = seeded (or intentionally unseeded per the per-feature log), read, and
+confirmed to actually change behavior; **dead seed** = seeded + documented but never read;
+**doc-only** = documented, no seed, no code reader; **unseeded** = documented + read + working
+fallback, but no DB seed row; **noop** = read, but the fetched value never changes behavior
+(discarded, or all branches equivalent) — the third failure mode, distinct from dead seed/doc-only.
+
+Every key marked **live** below was independently traced from its `Get*`/`get_*` call site to its
+actual point of use in a dedicated follow-up sweep (not just confirmed to be *called* — confirmed
+to *matter*): a real branch, a persisted/returned value, an outbound request parameter, or a
+rejection. Only the two rows marked **noop** failed that trace.
 
 | Service | Key | Status | Note |
 |---|---|---|---|
 | *(root)* | `platform.maintenance_mode`, `platform.log_level`, `platform.trading_state` | live | — |
 | *(root)* | `platform.ledger_endpoint`, `platform.config_endpoint`, `platform.otel.enabled`, `platform.otel.endpoint`, `platform.otel.sample_rate` | doc-only → **removed** | F-1 |
-| trading | 24 keys incl. `approval.*`, `risk.*` (7), `order.*`, `fill_poller.*`, `reconciliation.*` (3, unseeded/live), `order_intent.*` (2, unseeded/live), `broker.*`, `position_sync.*`, `credential_health.*` | live | all documented, all read |
+| trading | 25 keys incl. `approval.*`, `risk.*` (7), `order.*`, `fill_poller.*`, `reconciliation.*` (3, unseeded/live), `order_intent.*` (2, unseeded/live), `broker.*`, `position_sync.*`, `credential_health.*` | live, all traced | all documented, all read, all confirmed to gate real behavior |
 | trading | `trading.risk.daily_loss_limit` | dead seed | self-flagged in CLAUDE.md |
-| portfolio | `snapshot.interval_minutes`, `watchlist.max_per_user`, `watchlist.max_symbols_per_list` | live | — |
-| portfolio | `risk.concentration_limit_pct`, `exposure.factor_map` | unseeded, live | RC-4 |
-| portfolio | `risk.max_drawdown_pct` | unseeded, **discarded** | F-8 |
-| marketdata | `backfill.batch_size`, `fmp.*` (5), `alpaca.adjustment`, `backfill.max_delete_days` | live | — |
+| portfolio | `snapshot.interval_minutes`, `watchlist.max_per_user`, `watchlist.max_symbols_per_list` | live, traced | — |
+| portfolio | `risk.concentration_limit_pct`, `exposure.factor_map` | unseeded, live, traced | RC-4 |
+| portfolio | `risk.max_drawdown_pct` | unseeded, **noop (discarded)** | F-8 |
+| marketdata | `backfill.batch_size`, `fmp.*` (5), `alpaca.adjustment`, `backfill.max_delete_days` | live, traced (all 8) | — |
 | marketdata | `alpaca.paper` | dead seed | F-5, not previously logged |
 | marketdata | `retention.quotes_days`, `retention.ohlcv_years` | doc-only | self-flagged |
-| indicators | `sandbox.timeout_ms`, `sandbox.memory_bytes`, `sandbox.allowed_imports` | live | — |
+| indicators | `sandbox.timeout_ms`, `sandbox.memory_bytes`, `sandbox.allowed_imports` | live, traced to real subprocess enforcement (`RLIMIT_DATA`, `subprocess.run(timeout=)`, `__import__` override) | — |
 | indicators | `sandbox.max_concurrent` | doc-only | self-flagged |
-| ingest | `backfill.max_concurrent_jobs`, `retry_on_failure`, `max_retry_attempts`, `chunk_*` (3), `signals.dedup_window_hours` | unseeded except the 3 chunk keys; all live | RC-4 |
+| ingest | `backfill.max_concurrent_jobs`, `retry_on_failure`, `max_retry_attempts`, `chunk_*` (3), `signals.dedup_window_hours` | unseeded except the 3 chunk keys; all live, traced | RC-4; F-11 (dedup_window_hours doc fix) |
 | ingest | `backfill.default_timeframe` | doc-only | self-flagged; code hardcodes `"1d"` directly instead |
-| analysis | 34 of 36 documented keys (`backtest.*`, `scoring.*`, `strategy.*`, `signals.*`, `engine.*`, `screener.*`, `fundsignal.*` ×12, `opportunity.*` ×5) | live (mostly unseeded per RC-4 except `backtest.max_duration_seconds`, `signals.source_weights`, `fundsignal.*`) | — |
+| analysis | 33 of 36 documented keys (`backtest.*`, `scoring.*`, `strategy.*`, `signals.*`, `engine.*`, `screener.*`, `fundsignal.*` ×11 of 12, `opportunity.*` ×5) | live, traced (mostly unseeded per RC-4 except `backtest.max_duration_seconds`, `signals.source_weights`, `fundsignal.*`) | — |
 | analysis | `backtest.max_duration_seconds` | dead seed | F-4, not previously logged |
+| analysis | `fundsignal.universe_source` | **noop (2 of 3 values)** | F-10, newly found |
 | ledger | `stream.notify_enabled` | dead seed | F-6, not previously logged |
 | ledger | `retention.years`, `compression.after_days` | doc-only | self-flagged |
-| identity | `jwt.access_ttl_seconds`, `jwt.refresh_ttl_seconds` | unseeded, live | RC-4 |
+| identity | `jwt.access_ttl_seconds`, `jwt.refresh_ttl_seconds` | unseeded, live, traced to `jwt.sign`/DB `expires_at` | RC-4 |
 | identity | *(OAuth auth-code TTL — not a config key at all)* | hardcoded | F-7 |
 | notify | `stream.max_subscribers`, `alert.retention_days`, `alert.max_body_bytes` | doc-only | self-flagged (all 3) |
-| agent | `signal.alert_threshold` | live | — |
-| agent | `oauth.registration_enabled`, `oauth.allowed_redirect_uris` | unseeded, live | RC-4, best-effort read w/ fallback |
+| agent | `signal.alert_threshold` | live, traced (gates `emit_alert` call) | — |
+| agent | `oauth.registration_enabled`, `oauth.allowed_redirect_uris` | unseeded, live, traced (both genuinely reject/403 on violation) | RC-4, best-effort read w/ fallback |
 | config, ui | — | — | `xstockstrat-config` is the registry itself; `xstockstrat-ui` consumes no `platform.*`/service keys, only env vars + the config-ui BFF |
 
 ## Fixed in this pass (docs-only — no behavior change)
@@ -187,6 +230,9 @@ read but result unused.
 - **F-3** — `services/xstockstrat-trading/docs/context-constitution-findings.md`: corrected the
   `trading.order.max_retries`/`retry_delay_ms` row from "read by nobody" to the actual
   `flattenAndHalt`-only scope.
+- **F-11** — `services/xstockstrat-ingest/docs/context-constitution-findings.md`: corrected the
+  stale "9 dead `ingest.signals.*` keys" row — CLAUDE.md now documents only `dedup_window_hours`,
+  and feature 111 wired it in; the row was never updated to match.
 
 ## Suggested routing
 
@@ -194,11 +240,13 @@ read but result unused.
   `client_id`, delete orphaned properties in ingest + analysis watchers).
 - **Track C or a config-rollout decision per finding (wire vs. delete — a product call):** F-4
   (`analysis.backtest.max_duration_seconds`), F-5 (`marketdata.alpaca.paper`), F-6
-  (`ledger.stream.notify_enabled`), F-7 (identity OAuth TTL), and the pre-existing self-flagged
-  doc-only keys (`trading.risk.daily_loss_limit`, `marketdata.retention.*`,
-  `indicators.sandbox.max_concurrent`, `ingest.backfill.default_timeframe`,
-  `ledger.retention.*`/`compression.*`, `notify.*` ×3) — each needs an owner decision to implement
-  the enforcement or delete the key + docs, per `docs/runbooks/config-rollout.md`.
+  (`ledger.stream.notify_enabled`), F-7 (identity OAuth TTL), F-10
+  (`analysis.fundsignal.universe_source` — implement the pending watchlist-union RPC, or document
+  the current no-op), and the pre-existing self-flagged doc-only keys
+  (`trading.risk.daily_loss_limit`, `marketdata.retention.*`, `indicators.sandbox.max_concurrent`,
+  `ingest.backfill.default_timeframe`, `ledger.retention.*`/`compression.*`, `notify.*` ×3) — each
+  needs an owner decision to implement the enforcement or delete the key + docs, per
+  `docs/runbooks/config-rollout.md`.
 - **Optional cleanup, no urgency:** seed the RC-4 unseeded-but-read keys into the config DB so
   they're visible in the config UI / `list_config_keys` — not a defect, but closes the governance
   gap against rule 7 for keys that aren't already documented as intentionally seed-free (101, 102).

@@ -8,7 +8,7 @@ also recorded at the root.
 
 | What the docs say | What the code does | Evidence | Suggested action |
 |---|---|---|---|
-| CLAUDE.md documents 9 `ingest.signals.*` config keys (per-source enabled, default_window_days, default_conviction, dedup_window_hours) | None are read anywhere | `CLAUDE.md` config table (grep zero in `app/`) | Wire them or delete |
+| **Updated 2026-08-07**: this row previously claimed CLAUDE.md documents 9 `ingest.signals.*` config keys (per-source enabled, default_window_days, default_conviction, dedup_window_hours), none read anywhere | Stale — CLAUDE.md now documents only one `ingest.signals.*` key, `dedup_window_hours`, and it *is* read and genuinely enforced: bound as `$7` in the dedup claim query's `WHERE` clause (feature 111, migration `009_signal_dedup_keys.up.sql`), gating whether a matching signal is treated as a duplicate | `CLAUDE.md:92` vs `servicer.py:779-804` (claim query), `app/config/watcher.py:163-164` | Resolved — row kept for history, not an open action |
 | `ingest.backfill.default_timeframe` documented | No reader; servicer falls back to `"1d"` literally | `CLAUDE.md` config table vs `servicer.py:64` | Remove the key |
 | CLAUDE.md "Ledger Events Emitted" lists `ingest.data.normalized`; `NormalizeRawData` docstring says "into ledger events" | Handler only counts rows; no ledger `AppendEvent`, no persistence | `CLAUDE.md` vs `servicer.py:599-611` | Implement or correct |
 
