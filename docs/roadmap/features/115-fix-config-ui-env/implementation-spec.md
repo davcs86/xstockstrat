@@ -517,7 +517,7 @@ pass after Step 5; confirm the four unaffected tests still pass unchanged.
 
 ### Step 7 — service: namespace edit page split (Server wrapper + `NamespaceEditor.tsx`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/[namespace]/page.tsx` — modify (becomes a thin Server
@@ -617,7 +617,7 @@ inside `NamespaceEditor.tsx`, no `use()` hook removed from a context that still 
 
 ### Step 8 — test: namespace editor gate coverage (`env-gate.spec.ts`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/config-ui/env-gate.spec.ts` — create

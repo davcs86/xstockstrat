@@ -227,3 +227,38 @@ Tooling setup (steps 1-8, all `xstockstrat-ui`): node ✓ v22.22.2 · pnpm ✓ 9
   `git stash`).
 - Files modified: `services/xstockstrat-ui/e2e/config-ui/env-mode-switcher.spec.ts`
 - Deviations: none
+
+### Step 7 — service: namespace edit page split (Server wrapper + `NamespaceEditor.tsx`) [done]
+- Phase 1 Discovery re-confirmed the re-spec'd Codebase Evidence at execute time, including
+  `config-ui/layout.tsx:10-15` (`ConfigUILayout` wraps children in `<Providers>`, itself a Client
+  Component — confirms the Server-wrapper → Client-child split is safe beneath the existing
+  boundary): no drift since the `04e1890` re-spec commit.
+- TDD cycle run test-first, spanning Steps 7+8 per `tdd-gate.md`: wrote Step 8's
+  `env-gate.spec.ts` first and ran it against the pre-Step-7 tree — the non-native-scope test
+  failed for the right reason (`getByText(/native environment is/i)` — element not found, no
+  banner exists yet); the native-env test passed trivially (dev already had no gate). Implemented
+  Step 7 (created `NamespaceEditor.tsx` as the current `page.tsx` body moved verbatim + the four
+  sanctioned changes; replaced `page.tsx` with the thin Server Component wrapper); diffed the new
+  `NamespaceEditor.tsx` against the pre-Step-7 `page.tsx` body to confirm the move was truly
+  verbatim (only the four spec'd deltas: `use` import dropped, `Props`/signature swapped to plain
+  props + `isNativeEnv`, warning banner inserted, `!isNativeEnv` appended to Save's `disabled`
+  clause). Re-ran `env-gate.spec.ts` — 3/3 passed (green, including SSR warmup). Then ran the full
+  `e2e/config-ui` suite (41 tests) for a regression check — all 41 passed, no breakage in
+  `env-mode-switcher`, `api-smoke`, `namespace-nav`, `reason-capture`, or `sources`.
+- Verification: `pnpm run lint` clean (same pre-existing unrelated warning in
+  `insights/strategies/[id]/page.tsx`); `pnpm build` succeeded — 39/39 static pages generated,
+  `/config-ui/[namespace]` compiles as a dynamic Server Component route with no
+  Server/Client-boundary error (confirms no `process.env` read inside `NamespaceEditor.tsx` and no
+  `use()` hook left dangling).
+- Playwright environment note (same as Steps 3/5): ran with
+  `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome` and
+  `CI=true` — documented CI-equivalent invocation, not a spec deviation.
+- Files modified: `services/xstockstrat-ui/src/app/config-ui/[namespace]/page.tsx`,
+  `services/xstockstrat-ui/src/app/config-ui/[namespace]/NamespaceEditor.tsx`
+- Deviations: none
+
+### Step 8 — test: namespace editor gate coverage (`env-gate.spec.ts`) [done]
+- Built test-first for TDD ordering (see Step 7 entry for the red/green run and the full
+  `e2e/config-ui` regression pass — 41/41).
+- Files modified: `services/xstockstrat-ui/e2e/config-ui/env-gate.spec.ts`
+- Deviations: none
