@@ -356,6 +356,56 @@ func (c *IBKRClient) GetOrder(ctx context.Context, brokerOrderID string) (*Broke
 	return &BrokerOrder{BrokerOrderID: o.OrderID, Status: o.Status, FilledQty: o.FilledQty, FilledAvgPrice: o.AvgPrice}, nil
 }
 
+// ListOrders fetches every order currently known to IBKR for this account via
+// GET /iserver/account/orders?accountId={id} (feature 102). Reuses GetOrder's exact endpoint
+// and response shape, minus the single-order orderId filter — an explicit accountId query
+// param is required here (GetOrder relies on orderId alone to implicitly scope its single
+// result; a bulk call has nothing else scoping it under a Client Portal session that can span
+// multiple sub-accounts). ClientOrderID is deliberately left unpopulated: IBKR's SubmitOrder
+// (see SubmitOrder above) never sends a customer-order tag, so there is nothing for the broker
+// to echo back here.
+func (c *IBKRClient) ListOrders(ctx context.Context) ([]BrokerOrder, error) {
+	endpoint := fmt.Sprintf("%s/iserver/account/orders", c.baseURL)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("ibkr ListOrders: build request: %w", err)
+	}
+	q := httpReq.URL.Query()
+	q.Set("accountId", c.ibkrAccountID)
+	httpReq.URL.RawQuery = q.Encode()
+	httpReq.Header.Set("Authorization", c.signRequest(http.MethodGet, endpoint))
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("ibkr ListOrders: http: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ibkr ListOrders: status %d: %s", resp.StatusCode, respBody)
+	}
+
+	var result struct {
+		Orders []struct {
+			OrderID   string  `json:"orderId"`
+			Status    string  `json:"status"`
+			AvgPrice  float64 `json:"avgPrice"`
+			FilledQty float64 `json:"filledQuantity"`
+		} `json:"orders"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("ibkr ListOrders: parse response: %w", err)
+	}
+	orders := make([]BrokerOrder, 0, len(result.Orders))
+	for _, o := range result.Orders {
+		orders = append(orders, BrokerOrder{
+			BrokerOrderID: o.OrderID, Status: o.Status, FilledQty: o.FilledQty, FilledAvgPrice: o.AvgPrice,
+		})
+	}
+	return orders, nil
+}
+
 // GetPositions fetches all open positions via GET /v1/api/portfolio/{accountID}/positions/0.
 func (c *IBKRClient) GetPositions(ctx context.Context) ([]BrokerPosition, error) {
 	endpoint := fmt.Sprintf("%s/portfolio/%s/positions/0", c.baseURL, c.ibkrAccountID)

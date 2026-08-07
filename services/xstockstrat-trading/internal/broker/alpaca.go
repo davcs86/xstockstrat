@@ -352,6 +352,55 @@ func (c *Client) GetOrder(ctx context.Context, brokerOrderID string) (*BrokerOrd
 	return out, nil
 }
 
+// ListOrders fetches every order currently known to Alpaca for this account via
+// GET /v2/orders (feature 102). status=all so a just-filled or just-canceled order (which
+// dropped out of the default open-only view) is still detectable within one reconciliation
+// tick; limit=500 matches this platform's other bulk-list pagination ceiling
+// (marketdata's GetBars default page size).
+func (c *Client) ListOrders(ctx context.Context) ([]BrokerOrder, error) {
+	endpoint := fmt.Sprintf("%s/v2/orders?status=all&limit=500", c.baseURL())
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+	c.setAuthHeaders(httpReq)
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("list orders: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("alpaca list orders error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var alpacaOrders []AlpacaOrder
+	if err := json.Unmarshal(respBody, &alpacaOrders); err != nil {
+		return nil, fmt.Errorf("decode list orders response: %w", err)
+	}
+	orders := make([]BrokerOrder, 0, len(alpacaOrders))
+	for _, o := range alpacaOrders {
+		var filledAvgPrice float64
+		if o.FilledAvgPrice != "" {
+			filledAvgPrice, _ = strconv.ParseFloat(o.FilledAvgPrice, 64)
+		}
+		var filledQty float64
+		if o.FilledQty != "" {
+			filledQty, _ = strconv.ParseFloat(o.FilledQty, 64)
+		}
+		orders = append(orders, BrokerOrder{
+			BrokerOrderID: o.ID, ClientOrderID: o.ClientOrderID, Status: o.Status,
+			FilledQty: filledQty, FilledAvgPrice: filledAvgPrice,
+		})
+	}
+	return orders, nil
+}
+
 // GetPositions fetches all open positions via GET /v2/positions.
 func (c *Client) GetPositions(ctx context.Context) ([]BrokerPosition, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL()+"/v2/positions", nil)

@@ -21,6 +21,11 @@ type BrokerOrder struct {
 	// child order IDs on the same submit response (Alpaca only; empty otherwise).
 	StopLegOrderID       string
 	TakeProfitLegOrderID string
+	// ClientOrderID is the broker's echo of the client-supplied order nonce, when the broker
+	// supports/returns one. Populated for Alpaca (its API always echoes client_order_id); left empty
+	// for IBKR, which is never sent a customer-order tag on submission (feature 102 — see
+	// implementation-spec.md's Execution Summary for the confirmed gap).
+	ClientOrderID string
 }
 
 // BrokerPosition is a normalized position snapshot from a broker.
@@ -74,6 +79,11 @@ type Broker interface {
 	// its bracket attaches via OrderRequest.BracketStopPrice/BracketTakeProfitPrice on
 	// the original SubmitOrder instead.
 	SubmitBracketLegs(ctx context.Context, parentBrokerOrderID, parentClientOrderID string, legs BracketLegsRequest) (*BracketLegsResponse, error)
+	// ListOrders returns every order currently known to the broker for this account (feature 102 —
+	// broker-state-reconciliation). Unlike GetOrder, this is a single bulk call, not a per-order
+	// fetch — it is the detection primitive that makes "an order placed directly through the
+	// broker's own dashboard" detectable within one reconciliation tick regardless of fill state.
+	ListOrders(ctx context.Context) ([]BrokerOrder, error)
 	GetPositions(ctx context.Context) ([]BrokerPosition, error)
 	// GetAccount returns a normalized account-balance snapshot (cash, buying
 	// power, equity, and previous-close equity for day-P&L derivation).

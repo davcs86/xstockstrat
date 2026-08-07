@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 
@@ -554,5 +555,73 @@ func TestSubmitBracketLegs_AlpacaUnsupported(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected a non-nil error, got nil")
+	}
+}
+
+func TestAlpacaListOrders_ParsesMultipleStatuses(t *testing.T) {
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]broker.AlpacaOrder{
+			{ID: "o-1", ClientOrderID: "coid-1", Status: "filled", FilledQty: "10", FilledAvgPrice: "150.00"},
+			{ID: "o-2", ClientOrderID: "coid-2", Status: "new"},
+			{ID: "o-3", ClientOrderID: "coid-3", Status: "partially_filled", FilledQty: "5"},
+		})
+	})
+	defer srv.Close()
+
+	c := broker.NewClient(broker.ClientConfig{APIKey: "k", APISecret: "s", PaperURL: srv.URL, Paper: true})
+	orders, err := c.ListOrders(context.Background())
+	if err != nil {
+		t.Fatalf("ListOrders failed: %v", err)
+	}
+	if len(orders) != 3 {
+		t.Fatalf("expected 3 orders, got %d", len(orders))
+	}
+	for i, wantCOID := range []string{"coid-1", "coid-2", "coid-3"} {
+		if orders[i].ClientOrderID != wantCOID {
+			t.Errorf("order %d: ClientOrderID = %q, want %q", i, orders[i].ClientOrderID, wantCOID)
+		}
+	}
+}
+
+func TestAlpacaListOrders_QueryParams(t *testing.T) {
+	var gotQuery string
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode([]broker.AlpacaOrder{})
+	})
+	defer srv.Close()
+
+	c := broker.NewClient(broker.ClientConfig{APIKey: "k", APISecret: "s", PaperURL: srv.URL, Paper: true})
+	if _, err := c.ListOrders(context.Background()); err != nil {
+		t.Fatalf("ListOrders failed: %v", err)
+	}
+	q, err := url.ParseQuery(gotQuery)
+	if err != nil {
+		t.Fatalf("parse query: %v", err)
+	}
+	if q.Get("status") != "all" {
+		t.Errorf("status = %q, want %q", q.Get("status"), "all")
+	}
+	if q.Get("limit") != "500" {
+		t.Errorf("limit = %q, want %q", q.Get("limit"), "500")
+	}
+}
+
+func TestAlpacaListOrders_HTTPError(t *testing.T) {
+	srv := makeTestServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"message":"boom"}`))
+	})
+	defer srv.Close()
+
+	c := broker.NewClient(broker.ClientConfig{APIKey: "k", APISecret: "s", PaperURL: srv.URL, Paper: true})
+	orders, err := c.ListOrders(context.Background())
+	if err == nil {
+		t.Fatal("expected a non-nil error")
+	}
+	if len(orders) != 0 {
+		t.Errorf("expected an empty/nil slice on error, got %d orders", len(orders))
 	}
 }

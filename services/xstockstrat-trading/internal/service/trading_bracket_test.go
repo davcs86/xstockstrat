@@ -76,6 +76,12 @@ func (f *fakeBroker) SubmitBracketLegs(ctx context.Context, parentBrokerOrderID,
 	panic("fakeBroker.SubmitBracketLegs not implemented")
 }
 
+// ListOrders (feature 102) — not exercised by any of this file's bracket-state-machine
+// tests, so it panics like every other unused method on this fake.
+func (f *fakeBroker) ListOrders(ctx context.Context) ([]broker.BrokerOrder, error) {
+	panic("fakeBroker.ListOrders not implemented")
+}
+
 var _ broker.Broker = (*fakeBroker)(nil)
 
 // fakeBracketRepo implements repository.BracketRepository with an in-memory map,
