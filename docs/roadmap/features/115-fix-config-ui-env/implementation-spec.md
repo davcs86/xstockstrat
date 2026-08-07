@@ -527,13 +527,20 @@ pass after Step 5; confirm the four unaffected tests still pass unchanged.
 
 **Reviewers**: Service Owner (xstockstrat-ui) — "config mutation safety, environment scope correctness, Connect-RPC call safety"
 
-**Codebase Evidence**:
+**Codebase Evidence** *(re-spec\'d 2026-08-07 — original citations drifted when an unrelated fix,
+`config-ui-duplicate-keys-defect`, landed on `main-dev` and shifted this file by ~5 lines; content
+pattern match is unaffected)*:
 - Current file (Client Component, `'use client'` at line 1, `use(params)`/`use(searchParams)` at
-  lines 58-59): `services/xstockstrat-ui/src/app/config-ui/[namespace]/page.tsx:1-60`.
+  lines 57-58): `services/xstockstrat-ui/src/app/config-ui/[namespace]/page.tsx:1-60`.
 - Existing `Props` type (`params`/`searchParams` as `Promise<...>`):
-  `services/xstockstrat-ui/src/app/config-ui/[namespace]/page.tsx:53-56`.
-- Save button's current `disabled` clause (pure additive OR target):
-  `services/xstockstrat-ui/src/app/config-ui/[namespace]/page.tsx:227`
+  `services/xstockstrat-ui/src/app/config-ui/[namespace]/page.tsx:51-54`.
+- `handleSave` (lines 89-125) now resolves `environment`/`tradingMode` from
+  `meta?.environment ?? envToProto(env)` / `meta?.tradingMode ?? modeToProto(mode)` (added by the
+  upstream fix above, unrelated to feature 115) rather than the raw `envToProto(env)`/`modeToProto(mode)`
+  this step's evidence originally cited — this logic moves into `NamespaceEditor.tsx` unchanged as
+  part of "the current page.tsx's full body"; no instruction below depends on its exact form.
+- Save button's current `disabled` clause (pure additive OR target, unchanged content, new line
+  number): `services/xstockstrat-ui/src/app/config-ui/[namespace]/page.tsx:232`
   (`disabled={saving || (editingKey === k.key && !!validationError)}`).
 - Server-wrapper → Client-child split is safe beneath the existing Client Component boundary:
   `services/xstockstrat-ui/src/app/config-ui/layout.tsx:10-15` (`ConfigUILayout` wraps children in
@@ -543,8 +550,10 @@ pass after Step 5; confirm the four unaffected tests still pass unchanged.
 
 **Instructions**:
 1. Create `services/xstockstrat-ui/src/app/config-ui/[namespace]/NamespaceEditor.tsx` containing the
-   current `page.tsx`'s full body (all imports except `use`, the `envToProto`/`modeToProto`/
-   `errMessage`/`validateFloatMap` helpers, and the JSX), with these changes:
+   current `page.tsx`'s full body moved verbatim — every import (except `use`, dropped per below),
+   the `envToProto`/`modeToProto`/`errMessage`/`validateFloatMap` helpers, `handleSave` (including
+   its current `meta?.environment`/`meta?.tradingMode` fallback logic, unchanged), and the JSX — with
+   these changes on top:
    - `'use client';` stays at the top.
    - `import { useState, use } from 'react';` → `import { useState } from 'react';` (no longer
      needed once `namespace`/`env`/`mode` arrive as resolved props).

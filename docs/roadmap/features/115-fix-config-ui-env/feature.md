@@ -18,6 +18,7 @@
 | 2026-08-07 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning) |
 | 2026-08-07 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, quick mode) and approved; recon.md + design.md written |
 | 2026-08-07 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps |
+| 2026-08-07 | `implementation-ready` (unchanged) | /sdd-execute (re-spec gate) | Step 7 re-spec'd: `[namespace]/page.tsx` shifted ~5 lines from an unrelated upstream fix (`config-ui-duplicate-keys-defect`); corrected Codebase Evidence citations, clarified ambiguous move-instruction wording. No design change — content pattern matches were unaffected. |
 
 ---
 

@@ -136,9 +136,29 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     `Props` type citation (`page.tsx:53-56`) off — actual `51-54`. — [x] resolved.
   - Step 7: instruction wording "(all imports except `use`, the ... helpers, and the JSX)" is
     ambiguous — intent (confirmed by rest of step) is the helpers/JSX carry over unchanged, not
-    excluded. — [ ] unaddressed — clarify at Step 7 execution time, not a blocker.
+    excluded. — [x] resolved (re-spec'd at the sdd-execute re-spec gate below).
   - Cross-cutting: MODE-axis deferral's C-14 "named follow-up" framing has no actual follow-up
     feature number — already debated and user-approved in `design.md`/this file's design session;
     surfaced again here for visibility only. — [ ] unaddressed — accepted deferral, no action.
 - Overlap findings: `e2e/fixtures/INVENTORY.md` shared with `096-position-and-order-detail-pages`
   (additive rows in each, no semantic clash).
+
+## Session 2026-08-07 — sdd-execute sequential (re-spec gate, §5.3)
+
+- Merged current `origin/main-dev` into `feature/fix-config-ui-env` (`git merge -X ours
+  origin/main-dev`) before validating the spec — main-dev had moved 40+ commits since this branch
+  was cut (features 111/dedup, MCP authz fixes, and an unrelated `config-ui-duplicate-keys-defect`
+  fix that touched `[namespace]/page.tsx` directly).
+- Validated every step's `**Codebase Evidence**` against the post-merge tree. Only Step 7 was
+  affected: the duplicate-keys fix added a `meta?.environment ?? envToProto(env)` /
+  `meta?.tradingMode ?? modeToProto(mode)` fallback inside `handleSave` and shifted the file by ~5
+  lines. The change is orthogonal to feature 115 — `handleSave` still moves into
+  `NamespaceEditor.tsx` unchanged as part of "the current page.tsx's full body," and the Save
+  button's `disabled` clause the step modifies matches by exact content, not a hardcoded line
+  number, so no design change was needed.
+- Re-spec'd Step 7 (directive: none, single-feature run → blocker → user confirmed re-spec):
+  corrected the `**Codebase Evidence**` line citations to the current file, noted the
+  `meta?.environment` addition explicitly so a future reader isn't surprised by it, and rewrote the
+  ambiguous "(all imports except `use`, the ... helpers, and the JSX)" instruction wording to state
+  plainly that the helpers/`handleSave`/JSX all move over unchanged.
+- No other step required re-specing — Steps 1-6, 8 all validated clean against the post-merge tree.
