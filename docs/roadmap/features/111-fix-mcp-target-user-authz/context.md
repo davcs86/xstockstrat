@@ -121,3 +121,11 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   absence-of-evidence; (2) `broadcast` becoming required breaks any external MCP client caller
   currently omitting it — accepted tradeoff, blast radius on real (non-test, non-`ingest_signal`)
   callers not exhaustively enumerable from recon.
+
+## Session 2026-08-07 (post-merge)
+
+- PR #886 merged into `main-dev` (squash merge, commit `647988f`). Branch was one commit behind
+  `main-dev` at merge time (unrelated `fix-screener-technical-criteria`, PR #888) — merged main-dev
+  in, reran the full test suite (208 passing, unaffected), pushed, then merged.
+- Feature stays `code-completed` — `launched` is stamped by `/promote` when this rides the next
+  main-dev → main promotion, not by this main-dev merge.
