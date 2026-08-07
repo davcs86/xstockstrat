@@ -1194,7 +1194,7 @@ Confirm all five insertion points above are present.
 
 ### Step 17 — service: `StrategyWizard.tsx` exit-cooldown field
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/StrategyWizard.tsx` — modify
@@ -1278,7 +1278,7 @@ grep -n "exitCooldownDays\|parseExitCooldownDays" src/components/insights/Strate
 
 ### Step 18 — test: paired with Step 17
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/strategy-authoring.spec.ts` — modify
@@ -1611,3 +1611,22 @@ carried over rather than a proven necessity for this specific module graph; top-
 simpler, pass `ruff check` clean with no suppression comment, and match this module's own stated
 constraint ("imported ONLY by main.py, never by live_loop.py") without needing runtime deferral to
 enforce it. Purely a style choice — no behavior difference; `ruff check`/`ruff format` both clean.
+
+### Deviation: Step 18 — test: paired with Step 17
+**Spec said**: "reusing the same `captureManageStrategy`/`fillToReview` helpers extended with an
+`exitCooldown` parameter" — silent on exactly how a `test.describe('...(feature 069)', ...)`
+block's local functions become visible to a separate, later `test.describe('...(feature 116)',
+...)` block.
+**Actual**: hoisted both functions from local (defined inside the feature-069 `test.describe`
+callback) to module scope, placed directly after the existing module-scope `stubListFormulas`,
+and added `exitCooldown: string = ''` as `fillToReview`'s 5th parameter (default value keeps all
+4 pre-existing feature-069 call sites — none of which pass a 5th argument — behaviorally
+unchanged).
+**Reason**: a function defined inside one `test.describe(..., () => {...})` callback is a local
+closure of that callback, not reachable from a sibling `test.describe` block — "reuse" requires a
+shared scope, and this file's own established pattern for cross-block-shared test setup is
+already module-scope (`stubListFormulas`, used by every block in the file). Hoisting these two
+functions to the same scope, rather than duplicating them inside the new feature-116 block, keeps
+the file consistent with its own existing convention and avoids introducing near-duplicate helpers
+the DRY guard rail (jscpd) would otherwise flag. No behavior change to any pre-existing test —
+confirmed by the full 23/23 pass including all 5 pre-existing feature-069 cases unchanged.

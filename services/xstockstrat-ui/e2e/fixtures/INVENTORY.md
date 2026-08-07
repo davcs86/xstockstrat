@@ -38,6 +38,7 @@ other meanings; don't rename without updating every listed site.
 | `strat-history-001` | Strategy with persisted score + backtest run history | `e2e/mock-backend.ts` |
 | `invalid_ref` | `ManageStrategy` throws INVALID_ARGUMENT (wizard error path) | `e2e/mock-backend.ts`, `e2e/insights/strategy-authoring.spec.ts` |
 | `READY1` / `WATCH1` / `QUIET1` / `NODATA1` | `evaluateReadiness` forces the ready / watching / quiet / no-data bucket for that symbol (feature 098 rollup e2e) — never AAPL/MSFT so other specs' default 2/3 shape is untouched | `e2e/mock-backend.ts` (`READINESS_BUCKET_OVERRIDE`), `e2e/insights/watchlists.spec.ts` |
+| `strat-exit-cooldown-7` | `GetStrategy` returns a non-default `exitCooldownDays: 7` (edit-prepopulation e2e, feature 116) | `e2e/mock-backend.ts`, `e2e/insights/strategy-authoring.spec.ts` |
 
 ## Not yet centralized
 

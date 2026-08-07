@@ -611,3 +611,64 @@ review warnings, no deviations. Operator directed to proceed. Counter reset; con
 - Files modified: `docs/runbooks/mcp-tools.md`,
   `plugins/strat-lab/skills/backtest/SKILL.md`
 - Deviations: none.
+
+### Checkpoint — step 16 (surface: backend → ui boundary)
+Sequential-mode §5.5b checkpoint report printed to the operator (surface-boundary trigger: Step
+17's Service is `xstockstrat-ui`, differing from Step 16's `backend`). Accountability: no
+out-of-scope changes, no open items, no unaddressed warnings, no deviations. Operator directed
+to proceed. Counter reset; continuing to Step 17.
+
+### Step 17 — service: `StrategyWizard.tsx` exit-cooldown field [done]
+- Added `parseExitCooldownDays` (mirrors `parseCooldownDays` exactly, error message says "exit
+  cooldown days"), `exitCooldownDaysRaw` state (presence-honest seed from
+  `initial?.exitCooldownDays`), `exitCooldownParsed` wired into the `step === 1` `canAdvance`
+  gate, a `cd2` parse + presence-honest spread in `handleSubmit`, and a new "Exit cooldown
+  (days)" JSX field block directly after the existing "Re-entry cooldown (days)" block —
+  `placeholder="0 (default)"` (not "31 (default)") since the exit-side platform default is 0
+  (Step 8), not 31.
+- Discovery (codebase-discovery subagent) confirmed zero drift on all 6 checked items —
+  `StrategyDefinitionInit`'s type already derives `exitCooldownDays` automatically from the
+  regenerated proto schema (no hand-written type edit needed), and the BFF/`insightsBff.ts`
+  `manageStrategy` handler is a verbatim pass-through (no intermediate-layer change needed).
+- Verification: `pnpm exec tsc --noEmit` clean, `pnpm run lint` clean (one pre-existing warning
+  in an unrelated file), `grep -n "exitCooldownDays|parseExitCooldownDays"` confirms 6
+  occurrences across the wizard.
+- Files modified: `services/xstockstrat-ui/src/components/insights/StrategyWizard.tsx`
+- Deviations: none.
+
+### Step 18 — test: paired with Step 17 [done]
+- Moved `captureManageStrategy` and `fillToReview` from local functions inside the feature-069
+  `test.describe` block to module scope (alongside the existing module-scope `stubListFormulas`)
+  so the new feature-116 `test.describe` block can share them without duplication, per Step 18's
+  own instruction to "reuse the same helpers ... extended with a parameter" — a `test.describe`
+  callback's local functions aren't visible to a sibling `test.describe`, so sharing required
+  hoisting, not just parameter extension. `fillToReview` gained an `exitCooldown: string = ''`
+  5th parameter (default preserves all 4 pre-existing feature-069 call sites unchanged) that
+  fills the `'0 (default)'` placeholder when non-blank.
+- Added `test.describe('Strategy authoring — exit cooldown (feature 116)', ...)` directly after
+  the feature-069 block's real closing `});` (confirmed by discovery at the block's actual end,
+  not the spec's originally-cited-then-corrected line), with the 5 specified cases mirroring the
+  feature-069 block's own 5 cases exactly (blank-omits, explicit-0, negative-blocks-step-1,
+  edit-prepopulates via the new `strat-exit-cooldown-7` sentinel, unrelated-edit-preserves-unset).
+- Added the `strat-exit-cooldown-7` sentinel conditional to `mock-backend.ts`'s `getStrategy`
+  handler (mirroring `strat-cooldown-14`'s shape exactly) and a new INVENTORY.md row for it —
+  did NOT backfill the pre-existing `strat-cooldown-14` gap (out of this step's scope, per the
+  spec's own explicit instruction).
+- TDD: RED→GREEN cycle folded into the discovery-then-implement flow (the new tests didn't
+  exist before this step, so there's no separate pre-Step-17 RED capture — matches this
+  session's established pattern for a paired-test step written after its service step).
+  Confirmed GREEN: `pnpm exec tsc --noEmit` clean, `pnpm run lint` clean (one pre-existing
+  unrelated warning), full `strategy-authoring.spec.ts` run → 23/23 passed (18 pre-existing +
+  5 new), including the SSR pre-warm setup test.
+- **Environment note (not a deviation, no code change)**: the first local e2e attempt(s) hit
+  Playwright's SSR-warmup setup test timing out (10s default, then even 60s) — this sandbox's
+  `pnpm dev` cold-compiles ~600-900 modules per route serially and the 22-route warmup sweep
+  took ~53s end-to-end on a cold server. Not a regression from this step's changes (confirmed:
+  the same warmup test times out identically with zero code changes, purely a cold-start
+  artifact of this remote sandbox). Worked around locally with `PLAYWRIGHT_CHROMIUM_EXECUTABLE_
+  PATH=/opt/pw-browsers/chromium` (the same fix `fails.md` 2026-08-06 already documents for
+  this sandbox's pinned-vs-installed Chromium mismatch) plus `--timeout=180000` for this one
+  verification run; CI is unaffected (E2E_PREBUILT skips the cold dev-server compile).
+- Files modified: `services/xstockstrat-ui/e2e/insights/strategy-authoring.spec.ts`,
+  `services/xstockstrat-ui/e2e/mock-backend.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
+- Deviations: see Deviation Log ("Step 18").
