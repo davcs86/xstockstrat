@@ -189,3 +189,24 @@
   untouched).
 - Status: `implementation-ready` → `code-completed`.
 - **Next**: open the integration PR from `claude/ingest-signal-dedup-ehhgy6` to `main-dev`.
+- PR #887 opened against `main-dev`. `Secret scan (trufflehog)` reported a false positive
+  (case-insensitive `lob` substring matches inside `globalThis`/`_globals` protobuf-codegen
+  boilerplate, not an actual credential — confirmed via direct diff inspection, no Lob-key-shaped
+  string anywhere in the diff, and the same job passes cleanly on other recent PRs untouched by a
+  proto regen). Posted findings as a PR comment rather than silently ignoring or unilaterally
+  changing the shared secret-scan CI config. All other 31 checks green.
+
+## Session 2026-08-07 — merge-conflict resolution
+
+- `main-dev` advanced two commits after this PR opened (#888 screener-criteria fix, #886
+  MCP-tool-authz fix) and both touched `services/xstockstrat-agent/app/tools.py`; GitHub reported
+  `mergeable_state: behind`. Fetched `origin/main-dev` and ran `git merge origin/main-dev
+  --no-edit` on the branch — resolved automatically via git's `ort` strategy with **no textual
+  conflicts** (`tools.py`, `tests/test_tools.py`, `docs/runbooks/mcp-tools.md` all auto-merged
+  cleanly; the two PRs touched disjoint regions of each shared file). Confirmed the dedup
+  auto-alert-suppression logic and the `deduplicated` doc content both survived intact post-merge.
+- Re-ran full verification after the merge: `xstockstrat-agent` 211/211 tests pass (up from
+  201 — main-dev's #886 added its own tests), `xstockstrat-ingest` 179/179 unaffected, `ruff
+  check`/`format --check` clean on both, `buf lint`/`buf breaking` clean with an empty generated-
+  stub diff (proto untouched by the merge), `jscpd` clean. Pushed the merge commit
+  (`0530ae7..1d54cc5`).
