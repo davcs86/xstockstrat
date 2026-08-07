@@ -473,6 +473,7 @@ gate.
 | `exit_rule` | `string` | No | JSON-encoded condition tree |
 | `signal_params` | `object` | No | Optional signal-weighting params |
 | `cooldown_days` | `int` | No | Per-symbol re-entry cooldown in calendar days. Omit → platform default (31); `0` → no cooldown; negative rejected |
+| `exit_cooldown_days` | `int` | No | Per-symbol minimum holding period in calendar days before `exit_rule` may fire a sell. Omit → platform default (0, no minimum hold); `0` → no minimum hold (current behavior); negative rejected |
 | `clear_fields` | `string[]` | No | Field names to **erase** on `update`, e.g. `["exit_rule"]`. The only way to blank a rule or revert `cooldown_days` to the platform default |
 
 **Return**
@@ -487,15 +488,16 @@ gate.
 |---|---|
 | Invalid definition (unknown indicator, bad rule JSON, undefined ref_name) | `invalid argument` (INVALID_ARGUMENT) |
 | Negative `cooldown_days` | `invalid argument` (INVALID_ARGUMENT) |
+| Negative `exit_cooldown_days` | `invalid argument` (INVALID_ARGUMENT) |
 | `update` with no fields and no `clear_fields` | `ValueError` raised client-side, before any RPC |
 | An `update` that would empty `components` or blank a rule without naming it for erasure | `invalid argument` (INVALID_ARGUMENT) — the server refuses; the message names `update_mask` as the escape hatch |
 | `update`/`deactivate`/`reactivate` on unknown strategy | `strategy not found` (NOT_FOUND) |
 | `register` on an existing strategy_id (active or deactivated) | `strategy already exists` (ALREADY_EXISTS) |
 
 **Effect on the derived grade.** Changing a scoring-relevant field (`components`, rules,
-`cooldown_days`, `signal_params`) changes the strategy's definition fingerprint, so its derived
-grade is cleared until a fresh backtest supplies new evidence. A rename does **not** — the
-fingerprint excludes `display_name`.
+`cooldown_days`, `exit_cooldown_days`, `signal_params`) changes the strategy's definition
+fingerprint, so its derived grade is cleared until a fresh backtest supplies new evidence. A
+rename does **not** — the fingerprint excludes `display_name`.
 
 ---
 
@@ -530,7 +532,9 @@ directly:
 ```
 
 `cooldown_days` is omitted when unset (platform default applies) and present when explicitly set —
-including an explicit `0`, which means "no cooldown".
+including an explicit `0`, which means "no cooldown". `exit_cooldown_days` follows the same
+presence rule — omitted when unset, present (including an explicit `0`, "no minimum hold") when
+explicitly set.
 
 **Errors**
 

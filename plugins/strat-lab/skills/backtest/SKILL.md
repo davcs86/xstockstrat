@@ -52,6 +52,9 @@ update that would empty `components` or blank a rule without naming it for erasu
 (`INVALID_ARGUMENT`). If you mutate a strategy for a sweep, still record its original definition and
 restore it at the end. If the strategy is `live_enabled`, disable live for the duration of a
 parameter sweep and re-enable it at the end so it never evaluates at a config you are only testing.
+`exit_cooldown_days` (the minimum-holding-period sibling to `cooldown_days`) behaves identically
+under this partial-merge contract — send only it to change it, and use `clear_fields` to revert it
+to the platform default.
 
 ## Phase 1 — Ensure data coverage (backfill)
 

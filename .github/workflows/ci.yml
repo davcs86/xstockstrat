@@ -669,7 +669,14 @@ jobs:
           path: ./
           base: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
           head: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
-          extra_args: --only-verified
+          # --exclude-detectors=Lob: the Lob (lob.com print/mail API) detector's key-shape regex
+          # (test|live)_<35 alnum/underscore chars> false-positives on our long, descriptive
+          # snake_case pytest test names (e.g. test_exit_fires_once_entry_time_resolves) and gets
+          # spuriously "verified" — confirmed locally: same commit range scores verified_secrets:4
+          # with the Lob detector active and verified_secrets:0 with it excluded, chunks/bytes
+          # scanned unchanged. xstockstrat has no Lob integration, so disabling this one detector
+          # costs no real coverage. PR #898 (feature 116-exit-cooldown) hit this first.
+          extra_args: --only-verified --exclude-detectors=Lob
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT_SCAN }}
 

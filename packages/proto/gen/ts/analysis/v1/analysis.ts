@@ -1008,6 +1008,15 @@ export interface StrategyDefinition {
    * by GetStrategy; empty elsewhere.
    */
   warnings: string[];
+  /**
+   * Per-strategy minimum holding period in calendar days before exit_rule may fire a sell
+   * (feature 116 — exit cooldown; mirrors cooldown_days but gates the exit transition).
+   * optional = explicit presence: unset → platform default
+   * (analysis.strategy.default_exit_cooldown_days); explicit 0 → no minimum hold (exit
+   * permitted immediately, current behavior); negative → rejected at write time
+   * (INVALID_ARGUMENT).
+   */
+  exitCooldownDays?: number | undefined;
 }
 
 export interface ManageStrategyRequest {
@@ -1027,7 +1036,8 @@ export interface ManageStrategyRequest {
    *   absent   → FULL REPLACE: byte-for-byte the pre-070 behavior, so existing clients (the
    *              StrategyWizard, which always sends a complete definition) are unaffected.
    *
-   * Allowed paths: display_name, components, entry_rule, exit_rule, signal_params, cooldown_days.
+   * Allowed paths: display_name, components, entry_rule, exit_rule, signal_params, cooldown_days,
+   * exit_cooldown_days.
    * strategy_id/active/live_enabled are column-authoritative and rejected with INVALID_ARGUMENT.
    */
   updateMask?: string[] | undefined;
@@ -4256,6 +4266,7 @@ function createBaseStrategyDefinition(): StrategyDefinition {
     liveEnabled: false,
     cooldownDays: undefined,
     warnings: [],
+    exitCooldownDays: undefined,
   };
 }
 
@@ -4290,6 +4301,9 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
     }
     for (const v of message.warnings) {
       writer.uint32(82).string(v!);
+    }
+    if (message.exitCooldownDays !== undefined) {
+      writer.uint32(88).int32(message.exitCooldownDays);
     }
     return writer;
   },
@@ -4381,6 +4395,14 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
           message.warnings.push(reader.string());
           continue;
         }
+        case 11: {
+          if (tag !== 88) {
+            break;
+          }
+
+          message.exitCooldownDays = reader.int32();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -4434,6 +4456,11 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
       warnings: globalThis.Array.isArray(object?.warnings)
         ? object.warnings.map((e: any) => globalThis.String(e))
         : [],
+      exitCooldownDays: isSet(object.exitCooldownDays)
+        ? globalThis.Number(object.exitCooldownDays)
+        : isSet(object.exit_cooldown_days)
+        ? globalThis.Number(object.exit_cooldown_days)
+        : undefined,
     };
   },
 
@@ -4469,6 +4496,9 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
     if (message.warnings?.length) {
       obj.warnings = message.warnings;
     }
+    if (message.exitCooldownDays !== undefined) {
+      obj.exitCooldownDays = Math.round(message.exitCooldownDays);
+    }
     return obj;
   },
 
@@ -4487,6 +4517,7 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
     message.liveEnabled = object.liveEnabled ?? false;
     message.cooldownDays = object.cooldownDays ?? undefined;
     message.warnings = object.warnings?.map((e) => e) || [];
+    message.exitCooldownDays = object.exitCooldownDays ?? undefined;
     return message;
   },
 };

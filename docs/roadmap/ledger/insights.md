@@ -1269,43 +1269,12 @@ reusing.
 - **Evidence**: `docs/roadmap/features/098-screener-watchlist-fidelity/implementation-spec.md:265-269` (Deviation Log, pruned by this archival); `services/xstockstrat-ui/src/app/insights/watchlists/page.tsx` (`pendingSelectRef`).
 - **Rule it implies**: for any "create → auto-select" flow built on invalidate+refetch mutations, defer the post-create selection assignment until the refetched collection actually contains the new id — never set it synchronously in `onSuccess` if a reconcile/default-selection effect also runs on that same collection.
 
-### 2026-08-07 — exactly-once-order-intent — design
-- **Pattern**: Extends the 2026-07-27 "a mock that echoes a request field back tests nothing" entry with its inverse failure mode: a dedup mock that makes its response **genuinely depend on** a request field (via an in-memory map, to prove the field is honored) must not let that dependency change a value another spec in the same suite hard-asserts as a literal. `startMockBackend()` runs once for the whole Playwright run (`e2e/global-setup.ts`), so a mock's in-memory state is shared/persistent across every spec file and worker, not reset per test — a counter-based id scheme introduced to prove dedup silently made an unrelated spec's hard-coded assertion depend on cross-file execution order.
-- **Evidence**: `services/xstockstrat-ui/e2e/mock-backend.ts` `placeOrder` (feature 101, Step 20) — the dedup `Map` stores the full response object keyed by `clientOrderId`, but the non-repeat-call `orderId` stays the fixed `'mock-order-001'` literal that `order-form.spec.ts` asserts.
-- **Rule it implies**: when adding request-dependent branching to a shared mock handler, grep the whole e2e suite for hard-coded literals of that handler's current response *before* changing how those values are generated — a dedup/branching proof needs a distinguishing side channel (a map, a call count) but must not change the steady-state response value(s) other specs already depend on.
+### 2026-08-07 — exit-cooldown — design
+- **Pattern**: An entry-side gate on an edge-triggered state machine (feature 069's re-entry cooldown: `if not in_position and latest.entry:`) is naturally reachable after a restart even when the restart-state default is wrong, because "not in position" is exactly the default. A gate on the *opposite* transition (this feature's exit-side cooldown: `elif in_position and latest.exit:`) is NOT — if the durable "am I in position" state defaults to `False` post-restart, the exit branch becomes permanently unreachable for a genuinely-open pair, silently disabling both the gate and the transition's alert. This asymmetry is invisible until a second gate is added on the transition the first one didn't cover; feature 069 never needed to solve it because its gate was on the "safe by default" side.
+- **Evidence**: `docs/roadmap/features/116-exit-cooldown/design.md` § Chosen Approach ("Live loop — bar-replay for the common case"), rounds 1-2 of the design debate (`context.md` 2026-08-07 sdd-design session).
+- **Rule it implies**: before adding a gate to the "unsafe by default" side of an edge-triggered restart-state machine (i.e. the branch that requires `in_position`/similar to be `True` to even run), verify the state it reads is actually durable across a restart — an entry-side precedent gating the opposite transition is not evidence the state is durable, only that its own gate didn't need it to be.
 
-### 2026-08-07 — stop-loss-bracket-orders — design
-- **Pattern**: `design.md` assumed IBKR's OCA (One-Cancels-All) bracket linkage uses a client-settable
-  `OCAGroup` string field, by analogy with the pattern most broker APIs use. IBKR's real Client Portal
-  Web API has no such field — grouping is done by submitting the linked legs together as a JSON array
-  to `POST /iserver/account/{id}/orders`, each with `isSingleGroup: true`; parent/child linkage is via
-  `parentId` on the child equal to the parent's own client-set `cOID`. Found only by going back to
-  primary/near-primary sources (IBKR's own "How to Code an OCA/Bracket Order" articles, corroborated
-  against a third-party generated API client's field reference) instead of trusting the by-analogy
-  assumption through to implementation. **Caveat**: this was verified against published API
-  documentation only — this feature's execution could not exercise a live IBKR paper account, so the
-  mechanism is unverified against real broker behavior as of this entry.
-- **Evidence**: `docs/roadmap/features/030-stop-loss-bracket-orders/implementation-spec.md` Step 7's
-  Codebase Evidence and Deviation Log entry; `services/xstockstrat-trading/internal/broker/ibkr.go`
-  `SubmitBracketLegs`.
-- **Rule it implies**: for any broker-API integration design decision that assumes "it probably works
-  like every other broker" without an explicit citation, treat that assumption as unverified and
-  re-confirm it against the specific broker's own documentation before implementation — a plausible,
-  common-pattern guess is not evidence.
-
-### 2026-08-07 — fix-mcp-target-user-authz — design
-- **Pattern**: When closing an authz-shaped defect by removing a caller-suppliable identity
-  parameter, prefer a **required parameter with no default** over both (a) silently keeping the old
-  permissive default and (b) silently hard-flipping to a new restrictive default. Both silent
-  options fail *quietly* — an omitted argument keeps working but does something the caller didn't
-  ask for (either re-shipping the vulnerability's shape, or narrowing behavior for a legitimate
-  caller recon couldn't rule out). A required parameter with no default fails *loud* (a schema/type
-  error) at the exact call sites that need to state their intent explicitly, closing the same hole
-  without silently changing anyone's observed behavior.
-- **Evidence**: `docs/roadmap/features/111-fix-mcp-target-user-authz/design.md` § Rejected
-  Alternatives ("Hard-flip `emit_alert`'s default..." rejected in round 2 in favor of `broadcast:
-  bool` required, no default); `context.md` § Session 2026-08-07 — sdd-design.
-- **Rule it implies**: when a design round is choosing between two silent defaults for a
-  behavior-changing parameter, check whether a required (no-default) parameter closes the same gap
-  — it usually does, at zero extra implementation cost, and turns an unverifiable-blast-radius
-  question into a caught-at-call-site error instead of a guess either way.
+### 2026-08-07 — exit-cooldown — reuse
+- **Pattern**: When a live-state-reconstruction problem needs to attribute an event to a strategy/owner, check which of the platform's own domain objects actually carries that attribution before designing a backfill — `portfolio.Position` (broker holdings) has no `strategy_id`, but `trading.Order` (the order that created the position) does, because attribution happens at order-placement time, not at position-valuation time. The same "can't attribute a position to a strategy" limitation the codebase already declined to fabricate for feature 083 (`services/xstockstrat-analysis/CLAUDE.md`'s Decide-surface RPCs, "held positions carry no portfolio strategy, so none is fabricated (P-03)") does NOT extend to orders — reaching one layer further back in the data model found real, non-fabricated attribution where the more obvious lookup (the position itself) had none.
+- **Evidence**: `docs/roadmap/features/116-exit-cooldown/design.md` § Chosen Approach ("Live loop — boot-time backfill"); `packages/proto/portfolio/v1/portfolio.proto:43-73` (no `strategy_id`) vs. `packages/proto/trading/v1/trading.proto:47` (`Order.strategy_id`); rounds 2-3 of the design debate.
+- **Rule it implies**: when P-03 blocks fabricating an attribution from one domain object, check the object one layer upstream/downstream in the data flow (the order that created a position, the signal that created an order, etc.) before accepting the gap — the attribution may exist there even when it's absent at the layer that seemed most direct.

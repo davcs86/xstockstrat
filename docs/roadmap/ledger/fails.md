@@ -285,6 +285,32 @@ ambiguity is logged here).
 - **Evidence**: `docs/roadmap/features/023-position-sizing-engine/design.md` § Rejected Alternatives ("Wire `Opportunity.conviction`... rejected after round 5's adversary found this to be a genuine semantic mismatch"); `docs/roadmap/features/023-position-sizing-engine/context.md` § Session 2026-08-05 — sdd-design, round 5.
 - **Rule it implies**: extends **C-01**/**P-03** — when wiring a value across a semantic boundary (a UI-visible field into a risk/sizing input), read the *candidate* field's own doc comment for what it claims to represent, not just its name, range, and convenient availability. A field that is already fetched, already rendered, and numerically in-range is exactly the shape a wrong-but-plausible substitution takes — the doc comment is the fastest disqualifying check and should run before proposing the wiring, not after.
 
+### 2026-08-07 — fix-config-ui-env — assumption
+- **Mistake**: Design round 1 proposed gating a cross-environment config-write bug by hiding the
+  triggering `<Link>` in the discoverable UI (`EnvModeSwitcher`), leaving the actual mutation path
+  (`[namespace]/page.tsx`'s `SetConfig` call) completely unguarded and reachable via direct URL,
+  bookmark, or a stale open tab — a second recurrence of the 2026-07-01 (063) pattern this ledger
+  already promoted to **C-10(c)** ("a resource that must not be mutated needs an RPC/write-path
+  guard, not just a read-only UI"), caught only by round-1's adversary re-reading the product spec's
+  own Consumer Surface section, which explicitly named the write-path file the proposal had excluded.
+  A follow-on round then proposed the correct guard's comparison as an unconditional exact-match
+  reject of the proto zero-value (`Environment.UNSPECIFIED`) — plausible in isolation, but wrong: the
+  backend's own `resolveEnv`/`ENV_MAP` already treats `UNSPECIFIED` as equivalent to `DEV` (a
+  documented platform convention, PROTO-3), so a raw exact-match guard would have silently rejected a
+  legitimate write on a dev-native deployment. Caught only because round 3's adversary re-read the
+  backend's actual resolution code instead of reasoning about the enum in the abstract.
+- **Evidence**: `docs/roadmap/features/115-fix-config-ui-env/design.md` § Rejected Alternatives
+  (switcher-only fix; unconditional `UNSPECIFIED` rejection); `context.md` § sdd-design session
+  (round 1 and round 3 findings); `services/xstockstrat-config/src/grpc/configServiceImpl.ts:22,87-92`
+  (`ENV_MAP`/`resolveEnv`).
+- **Rule it implies**: reinforces **C-10(c)** with a second real instance — when a design proposes
+  gating a mutation via UI presentation alone, check whether the product spec's own Consumer Surface
+  or Reproduction Steps name the actual write call site, and route the guard there first. Extends
+  **P-03** to enum sentinels specifically: before writing a guard's comparison against a proto
+  zero-value (`*_UNSPECIFIED = 0`), grep the value's *existing* resolution/consumption code (a
+  `resolveX`/`*_MAP` function) rather than assuming "unset" should mean "reject" — a zero-value's
+  platform-wide meaning is a producer contract, not a guess.
+
 ### 2026-08-06 — 100-account-trading-halt-and-kill-switch — config
 - **Mistake**: A design round 1 proposal widened the existing `platform.maintenance_mode` config key's `value_type` in place (bool → string) to carry a richer `ACTIVE`/`REDUCE_ONLY`/`HALTED` enum, reasoning it avoided a parallel key and reused the already-enforced gate. Direct code verification of `config.Watcher`'s typed getters found this to be a confirmed fail-open bug, not a hypothetical one: a `GetBool` call against a `ConfigValue` whose oneof is now populated as `string_val` (not `bool_val`) hits the proto3 oneof's documented zero-value-on-mismatch semantics and silently returns `false` — during any rollout window where old (bool-reading) and new (string-writing) code coexist, the kill switch itself goes dark exactly when a halt is in effect. Caught only because the adversary read the getter's implementation, not just its call site.
 - **Evidence**: `docs/roadmap/features/100-account-trading-halt-and-kill-switch/design.md` § Rejected Alternatives ("widen `platform.maintenance_mode` in place — rejected, round 1: confirmed fail-open via `Watcher.GetBool` oneof zero-value semantics"); `docs/roadmap/features/100-account-trading-halt-and-kill-switch/context.md` § Session 2026-08-06 — sdd-design, round 1.
@@ -692,3 +718,56 @@ ambiguity is logged here).
 - **Mistake**: Assumed the Playwright e2e **global-setup preflight** chromium launch would honor the same `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` override already used by the chromium *project* config in `playwright.config.ts` — it didn't, silently failing e2e only in environments (sandboxes) where the pinned Playwright browser build differs from the pre-installed one (a no-op in CI, where the pinned build matches).
 - **Evidence**: `docs/roadmap/features/083-ui-revamp-opportunities-first/context.md` 2026-08-02 session ("Test-infra fix (needed to run e2e in this sandbox)"); `services/xstockstrat-ui/e2e/global-setup.ts`.
 - **Rule it implies**: when a test-runner config exposes an env-var override in more than one place (project config + global setup/preflight), verify both paths honor it together — a partial override is a silent, environment-dependent test failure, not a loud one.
+
+### 2026-08-07 — watchlist-screen-improvements — design
+- **Mistake**: An un-keyed master-detail component with per-piece local state (a strategy picker's selected value, an inline-rename draft) silently carries that state across a list-item switch, because switching selection re-renders the same component instance rather than remounting it. The design debate rediscovered this same leak twice for two different pieces of local state, each time patched with its own hand-rolled `key`-scoped wrapper subcomponent, before recognizing the pattern and closing the whole class in one step (`key={selected.id}` on the parent).
+- **Evidence**: `docs/roadmap/features/110-watchlist-screen-improvements/design.md` § Chosen Approach point 4, § Rejected Alternatives (per-piece-of-state keyed subcomponents); `docs/roadmap/features/110-watchlist-screen-improvements/context.md` sdd-design session (rounds 3-5 summary).
+- **Rule it implies**: when designing a master-detail UI where the detail pane holds any local state (an in-progress edit, a picker selection, a draft), key the detail component on the selected item's id from the start — don't wait for the leak to surface once per state variable. Verify the remount's cost against the app's actual query `staleTime`/cache config before assuming a whole-component key is too expensive; a componentized fix for each symptom is a sign the systemic fix (the outer key) was skipped.
+
+### 2026-08-07 — exit-cooldown — design
+- **Mistake**: A 6-round adversarial design debate specified a new upsert method
+  (`upsert_entry`) that INSERTs a subset of a table's columns ("touching only the `last_entry_at`
+  column") without ever tracing that INSERT against the table's actual `NOT NULL` constraints on
+  the OTHER columns. `analysis.strategy_cooldowns.last_exit_at` was `NOT NULL` (migration 009,
+  safe when the only writer always supplied a real timestamp) — `upsert_entry` can now INSERT a
+  brand-new row for a pair that has never exited (a boot-time backfill, or a live entry with no
+  prior exit history), which PostgreSQL rejects outright. Six rounds of architectural debate
+  (bar-replay windows, boot-time backfill races, alert suppression) never surfaced this because
+  the debate operated entirely at the design-prose level ("touching only X column") without
+  re-deriving the actual `INSERT` statement's full column list against the schema.
+- **Evidence**: `docs/roadmap/features/116-exit-cooldown/implementation-spec.md` Deviation Log,
+  "Step 4"; `services/xstockstrat-analysis/migrations/009_strategy_cooldowns.up.sql:9`
+  (`last_exit_at TIMESTAMPTZ NOT NULL`); `012_strategy_cooldowns_last_entry_at.up.sql` (added
+  `ALTER COLUMN last_exit_at DROP NOT NULL` mid-Step-4, not part of the original migration
+  design).
+- **Rule it implies**: when a design adds a new writer (upsert/insert method) to an EXISTING
+  table, verify its full `INSERT` column list against every `NOT NULL`/`CHECK` constraint on that
+  table — not just the column the writer is described as "touching" — before the design debate
+  concludes. A design-prose description of "the SQL only changes column X" is a claim about the
+  UPDATE branch of an upsert; the INSERT branch is a different code path with different
+  constraints and needs its own check. Same family as the 2026-07-29 (080) "absence claim"
+  pattern, applied to schema constraints instead of code assumptions.
+
+### 2026-08-07 — exit-cooldown — test-infra
+- **Mistake**: Adding a new cross-cutting state-machine mechanism (bar-replay-on-first-seen-key)
+  to an already-tested class silently turned one existing, passing test
+  (`test_write_cooldown_failure_never_propagates`) into a false-positive green: the test
+  hand-seeded `loop._last_state[key] = True` to represent "already in position" without also
+  seeding the new `_replayed` set, so the new replay step ran on an empty bar window, reset
+  `in_position` back to `False`, and the exit branch the test claimed to exercise (`upsert_exit`,
+  the write-failure path under test) never ran at all. The test still asserted "no exception
+  propagates," which trivially held for code that was never reached — it kept passing while
+  testing nothing.
+- **Evidence**: `docs/roadmap/features/116-exit-cooldown/implementation-spec.md` Deviation Log,
+  "Step 10/11" ("pre-existing `TestLiveEvaluationLoopCooldown` tests broke under replay");
+  `services/xstockstrat-analysis/tests/test_live_loop.py::TestLiveEvaluationLoopCooldown::test_write_cooldown_failure_never_propagates`
+  (fix added `repo.upsert_exit.assert_awaited_once()`).
+- **Rule it implies**: when a test seeds mock/fixture state to represent an *outcome* of a prior
+  code path (e.g. `_last_state[key] = True` standing in for "replay already resolved this key"),
+  adding new state-producing machinery upstream of that outcome (a replay step, a hydration step)
+  can silently short-circuit the path the test exists to cover. A test whose seeded state
+  represents an outcome rather than a cause is fragile to exactly this kind of change — prefer
+  seeding the actual precondition state (here, `_replayed.add(key)`) so new upstream logic can't
+  quietly bypass the assertion, and add a positive "the thing under test actually ran"
+  assertion (a mock call-count check) alongside any negative "no exception" assertion so a
+  silent bypass fails loudly instead of passing vacuously.

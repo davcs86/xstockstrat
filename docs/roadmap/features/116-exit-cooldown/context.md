@@ -1,0 +1,714 @@
+# Context: exit-cooldown
+
+**Feature**: `docs/roadmap/features/116-exit-cooldown/feature.md`
+**Product Spec**: `docs/roadmap/features/116-exit-cooldown/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/116-exit-cooldown/implementation-spec.md`
+
+---
+
+## Session 2026-08-07T00:00:00Z — sdd-story
+
+- Created feature.md (status: draft), product-spec.md, context.md from user story.
+- User explicitly requested "run full design cycle" — `/sdd-design exit-cooldown` should run in
+  **full** (multi-round) mode, not `quick`.
+- Strong precedent identified: feature 069 (`strategy-reentry-cooldown`, archived) shipped the
+  symmetric entry-side gate (`cooldown_days` on `StrategyDefinition`, `app/services/cooldown.py`
+  pure gate functions, `analysis.strategy_cooldowns` durable table, `manage_strategy` MCP param,
+  `StrategyWizard` UI field). This feature mirrors that shape for the exit side. Read during story:
+  - `services/xstockstrat-analysis/app/services/cooldown.py` (pure `effective_cooldown_days` /
+    `is_cooldown_active` gate, tz-aware, no DB/proto imports)
+  - `services/xstockstrat-analysis/app/repositories/strategy_cooldowns.py` +
+    `migrations/009_strategy_cooldowns.up.sql` (durable `(strategy_id, symbol) → last_exit_at`)
+  - `services/xstockstrat-analysis/app/handlers/servicer.py:1046-1105` (backtest gate call sites),
+    `:2854-2858` (`_MASKABLE_PATHS`)
+  - `services/xstockstrat-analysis/app/engine/live_loop.py:60-83,151-243` (live-loop gate,
+    `hydrate_cooldowns`, `_write_cooldown`)
+  - `services/xstockstrat-agent/app/tools.py:449-537` (`manage_strategy` partial-update pattern,
+    feature 070 "send only what's supplied" fix — must not regress)
+  - `services/xstockstrat-ui/src/components/insights/StrategyWizard.tsx:27-206`
+    (`parseCooldownDays`, presence-honest blank/`"0"` handling)
+  - Confirmed via grep: the live loop currently tracks only a boolean `_last_state` (in-position),
+    **no entry timestamp** — durable entry-time tracking for the exit-cooldown gate is new, not a
+    reuse of an existing field.
+- Ledger `fails.md` reviewed for relevant traps: 056 (C-10(b), every read/mapper path must carry a
+  field forward), 070 (partial-update regression risk), 069's own archive synthesis (mid-design
+  renumbering collision — this feature is 110, no adjacent in-flight numbering conflict observed at
+  story time). Flagged as an Open Question / known trap in product-spec.md.
+- Consumer surface (C-14): **UI** `/insights` (`StrategyWizard.tsx` Step 1, no new nav registration
+  needed — reuses the existing wizard route) + **Agent** (`manage_strategy` tool).
+
+Next: `/sdd-review exit-cooldown product-spec`, then `/sdd-design exit-cooldown` (full mode, per
+explicit user request).
+
+## Session 2026-08-07T00:15:00Z — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings:
+  - Open Questions section has 4 unresolved `- [ ]` items — all appropriately scoped to
+    `/sdd-design`, not story-time ambiguities. `/sdd-design` must resolve all four before
+    `implementation-ready`.
+  - Ledger citation imprecision fixed in product-spec.md: the "mapper-lockstep" trap is correctly
+    in `fails.md` (2026-08-05, live-strategy-alert-engine); the `manage_strategy` partial-update
+    pattern actually lives in `insights.md` (2026-07-26, 2026-08-06), not `fails.md` — corrected.
+- Overlap findings: CLEAN. Next migration NNN = `012` (last is `011_opportunities`), next proto
+  field number = `11` (fields 1-10 in use, `cooldown_days`=9, `warnings`=10) — both currently
+  unclaimed. Low-risk shared-file note: `xstockstrat-agent/app/tools.py` is also touched by
+  `085-mcp-python-sdk-v2-upgrade` (code-completed) — no key/field/migration overlap, re-check at
+  impl-spec time if 085 hasn't landed. `analysis.strategy_cooldowns` table (069/070 precedent) is
+  trunk context only, not a live collision.
+- Additional design-phase note from review: `_definition_fingerprint` (servicer.py:2928-2944) is
+  opt-OUT (`_FINGERPRINT_EXCLUDED_KEYS`), so FR-9 is likely satisfied automatically once the new
+  field round-trips through `definition_json` — design should confirm the new field is never added
+  to that exclusion set.
+
+## Session 2026-08-07T00:30:00Z — sdd-design
+
+- Phase 0 Recon: wrote `recon.md` (services: xstockstrat-analysis, xstockstrat-agent,
+  xstockstrat-ui, packages/proto; key reuse patterns: `cooldown.py`'s pure gate functions reused
+  verbatim for the exit side; `StrategyCooldownsRepository`/`analysis.strategy_cooldowns` extended
+  rather than duplicated). Three `codebase-discovery` subagents ran in parallel per affected
+  service. Key finding: the live loop tracks no entry timestamp at all today (only a boolean
+  `_last_state`) — more implementation surface than feature 069's symmetric entry-side gate needed.
+
+- Phase 1 Grilling: **6 rounds** (full mode; the user explicitly overrode the standard 5-round cap
+  for a 6th completeness-audit round). Chosen approach: reuse `cooldown.py` (renamed
+  direction-neutral parameter), extend `analysis.strategy_cooldowns` with `last_entry_at` (migration
+  `012`), a shared `_apply_transition`/`_replay_state` free-function core so live-loop and
+  restart-replay parity is structural (not test-maintained), a bounded 365-day bar-replay for the
+  common restart case, and — per explicit user steering — a boot-time-only `entry_backfill.py`
+  module that reconstructs entry time for positions older than the replay window from
+  `xstockstrat-trading`'s `ListOrders` (real `strategy_id` attribution), never `xstockstrat-portfolio`
+  (`Position` has no `strategy_id` — would have repeated the exact fabrication feature 083 already
+  declined). A "skip-until-known" guard in `_eval_pair` closes the one remaining async-backfill race
+  the user required closed, backed by a required throttled diagnostic log and 3 required paired
+  tests (suppression/resolution/isolation).
+
+  **Rejected**: inferring `_last_state` from last-entry/last-exit timestamp recency (undecidable for
+  the deploy-day cohort); a new `entry_cooldown.py` sibling module (unnecessary — `cooldown.py`'s
+  gate math is direction-agnostic); backfilling from `portfolio.Position` (no strategy attribution,
+  would fabricate a link); widening `_LOOKBACK_DAYS` instead of an Order-based backfill (doesn't
+  eliminate the gap, just shrinks it); accepting the >365-day-position gap as documented (user
+  explicitly overrode this after round 2); making the boot backfill fully blocking (reintroduces the
+  startup-latency problem the async design solves).
+
+  **Key mid-debate steer**: after round 2 left a documented gap for positions held >365 days at
+  deploy time, the user explicitly required a real fix ("do not accept the gap") rather than a
+  narrowed acceptance criterion — this drove rounds 3-4's Order-based backfill design and round 4's
+  discovery of the async-backfill race, which round 5 closed with the skip-until-known guard.
+
+  **Round 6** (user-directed, beyond the standard cap): a completeness/consistency audit of the
+  final document — re-verified 8+ citations fresh against live files (all held), then closed 3
+  copy-edit-level gaps: `recon.md`'s Recommended Scope was stale relative to rounds 3-6 (amended to
+  11 steps covering `entry_backfill.py`/`main.py` wiring, the second config key, and the guard/tests);
+  a citation overstated `metadata=()` as "explicit" when the actual precedent relies on an implicit
+  default (corrected); product-spec Open Question 4 (does the gate suppress the alert too?) was
+  resolved by the control flow but never stated explicitly (added to design.md — yes, both,
+  unconditionally, symmetric with the existing entry-side gate).
+
+- Constitution rules touched: C-01, C-05, C-07, C-08, C-09 (at spec/execute time), C-10(b), C-13,
+  C-14, F-01, F-06. No Floor breach in any round.
+
+- Ledger: wrote 2 `insights.md` entries (2026-08-07, `exit-cooldown`) — (1) the asymmetry between an
+  entry-side gate (naturally reachable regardless of a restart-state default) and an exit-side gate
+  (unreachable if the restart-state default is wrong), a generalizable lesson for any future feature
+  gating a *later* transition in an edge-triggered state machine; (2) when P-03 blocks fabricating an
+  attribution from one domain object (`portfolio.Position` has no `strategy_id`), check one layer
+  upstream in the data flow (`trading.Order` does) before accepting the gap.
+
+- All 4 product-spec Open Questions closed by the design: field name `exit_cooldown_days` (settled
+  round 1); durable-state shape = extend `analysis.strategy_cooldowns`, not a new table (round 1);
+  known trap (C-10(b) mapper lockstep) — enumerated explicitly in design.md's Chosen Approach, not
+  left to "mirrors `cooldown_days`" assertion; alert-suppression symmetry — closed round 6 (both
+  transition and alert suppressed together, unconditionally).
+
+- Status: `spec-ready` → `design-approved`. User approved design.md explicitly.
+
+Next: `/sdd-spec exit-cooldown` — generate the implementation spec from the approved design.
+
+## Session 2026-08-07T02:00:00Z — sdd-review impl-spec (advisory)
+
+- Result: 1 failure (Blocker), 6 warnings (advisory — did not block). Overlap scan: CLEAN (no other
+  in-flight feature touches `StrategyDefinition`'s proto fields, this service's migrations dir, or
+  the two new config keys; `096-position-and-order-detail-pages` is the only other
+  `implementation-ready` feature and is frontend-only, no file/resource overlap).
+- All 6 design.md decisions named for verification are present as concrete steps — no dropped
+  design decision (proto field 11, `cooldown.py` reuse, migration 012, shared
+  `_apply_transition`/`_replay_state` core, `entry_backfill.py`, skip-until-known guard + required
+  diagnostic + 3 required paired tests).
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 11: `**Files**` lists only `tests/test_live_loop.py`, but `**Verification**` instructs
+    adding a code comment to `live_loop.py` (the guard site) — an **F-08** risk if executed
+    literally (staging a file outside the step's declared Files section). Fix: move the comment
+    instruction into Step 10 (where the guard is actually written), or add `live_loop.py` to Step
+    11's Files. — [x] fixed: added `services/xstockstrat-analysis/app/engine/live_loop.py`
+    (comment-only) to Step 11's `**Files**`, with a note explaining why it belongs in this step
+    (the comment references Step 11's test names, which don't exist until this step).
+  - Step 10: the skip-until-known guard is spec'd inside the pure `_apply_transition` function
+    rather than literally inside `_eval_pair`'s `elif in_position and latest.exit:` block as
+    design.md's round-5 "finalized" snippet shows. Functionally equivalent (isolation from the
+    entry/re-entry branch holds structurally either way, and the 3 required tests catch a
+    regression), but a literal deviation from a decision marked "finalized" — record a
+    `## Deviation Log` note at execute time rather than silently diverging. — [ ] unaddressed
+  - Step 10: the replacement code block doesn't explicitly show `latest = decisions[-1]` being
+    retained even though `latest` is used later in the same snippet — minor ambiguity, likely
+    resolves at discovery time. — [ ] unaddressed
+  - Steps 17/18: neither includes `pnpm run lint` in its own or paired Verification (only present
+    later, in the non-paired Step 21) — a strict per-step B2 lint-gate gap, caught before the final
+    gate but not per-step compliant. — [x] fixed: added `pnpm run lint` to both steps'
+    `**Verification**` blocks.
+  - Step 2: `**Files**` lists three generated-output directories rather than exact files — standard
+    practice for codegen steps, not a real defect. — [x] not applicable (accepted as idiomatic)
+  - Step 12: own `ruff check` scoped to `entry_backfill.py` only, not the full service — functionally
+    fine, full lint runs in paired Step 13. — [x] not applicable (no functional gap)
+  - Step 13 (B2b, advisory): no test explicitly named against `ORDER_STATUS_PARTIALLY_FILLED`; the
+    canceled-with-partial-fill test substitutes for it under the deliberately-unfiltered-status
+    design. — [x] not applicable (design is intentionally unfiltered)
+- Overlap findings: none (CLEAN).
+
+Next: resolve the Step 11 Files/Verification mismatch (and ideally the Step 17/18 lint gap) before
+`/sdd-execute exit-cooldown`, or proceed and let `/sdd-execute` surface them per C-02.
+
+## Session 2026-08-07T02:15:00Z — impl-spec fixes (user-directed, before execute)
+
+- User chose to fix the Blocker + the Step 17/18 lint gap directly in `implementation-spec.md`
+  before starting `/sdd-execute` (rather than proceed as-is or defer). Both applied and checked
+  off above. Remaining unaddressed items (Step 10's guard-placement note and the `latest =
+  decisions[-1]` retention ambiguity) are advisory-only and left for `/sdd-execute` to surface at
+  Step 10's discovery/confirmation checkpoint per C-02 — they don't block starting execution.
+
+Next: `/sdd-execute exit-cooldown`.
+
+## Session 2026-08-07T01:00:00Z — sdd-spec
+
+- Generated implementation-spec.md with 21 steps. Status → implementation-ready. `recon.md` +
+  `design.md` were both present, so discovery reused recon's Codebase Map directly and only
+  supplemented it with fresh Read/Grep evidence for detail below the dossier's altitude
+  (exact code bodies of `cooldown.py`, `strategy_cooldowns.py`, `live_loop.py` (full,
+  244 lines), `evaluator.py`'s validation precedent, `screener.py`'s semaphore pattern,
+  `fundsignal_loop.py`'s boot-task/no-metadata pattern, `main.py`'s boot-task wiring,
+  `config/watcher.py`'s `get_int_present`, the `trading.proto`/`trading.go` fields the
+  boot-time backfill reads, `test_live_loop.py`/`test_analysis_servicer.py`'s existing test
+  templates, the agent's `tools.py`/`client.py`/three test files, and the UI's
+  `StrategyWizard.tsx`/`mock-backend.ts`/e2e spec/`INVENTORY.md`).
+- Key codebase findings beyond recon.md/design.md:
+  - `services/xstockstrat-agent/tests/test_strategy_builders.py:96-102` — a **descriptor-
+    parity test** (`test_manage_strategy_definition_covers_every_proto_field`) will go RED the
+    moment Step 2's regenerated `StrategyDefinition` proto lands `exit_cooldown_days`, until
+    both `client.py`'s builder (Step 14) AND the test's own fixture (Step 15) carry the new
+    field — this is the RC-1 antidote `insights.md` 2026-08-02 documents, confirmed live in
+    this repo rather than assumed by analogy.
+  - No dedicated `StrategyCooldownsRepository` unit test file exists today (confirmed via
+    `Glob`/`Grep`) despite sibling repos (`strategy_scores`, `backtest_runs`,
+    `backtest_details`, `backtest_run_symbols`) each having one — Step 5 creates
+    `test_strategy_cooldowns_repo.py` for the first time, closing this pre-existing gap as a
+    side effect of touching the file (not scope creep — C-08 requires the new
+    `upsert_entry`/renamed `upsert_exit` methods to be tested regardless).
+  - Confirmed `ListOrdersRequest` carries a `symbol` field (proto field 7) in addition to
+    `strategy_id` — `app/engine/entry_backfill.py` can call `ListOrders(strategy_id=...,
+    symbol=...)` per pair (one RPC per live pair, semaphore-bounded), not one unfiltered call
+    per strategy requiring local grouping.
+  - Interpreted one design.md ambiguity explicitly in the spec (Step 12): the boot-time
+    backfill, upon finding a pair currently non-flat via real Order history, must set BOTH
+    `live_loop._last_state[key] = True` AND `_last_entry_at[key] = <inferred>` together — not
+    `_last_entry_at` alone — because `_last_state` for a position held longer than the 365-day
+    bar-replay window can never otherwise become `True` (replay only detects an entry
+    *crossing* within its fetched window; it cannot infer "already in position at the window's
+    start"). Without this, the exit branch would stay permanently unreachable for exactly the
+    >365-day-position cohort the design's round-2 user steering required covered. Flagged
+    explicitly in the step's Instructions (not silently assumed) since design.md's prose
+    describes the race-condition fix but not this specific write-back detail in code form.
+- No new feature-number/proto-field/migration-NNN collisions found at spec time (re-confirmed
+  `011_opportunities` is still the last migration and field 11 is still free).
+
+Next: `/sdd-review exit-cooldown impl-spec` — validate implementation spec, then
+`/sdd-execute exit-cooldown`.
+
+## Session 2026-08-07T03:00:00Z — sdd-execute (sequential) — feature-number collision
+
+- User approved running `/sdd-execute exit-cooldown sequential` per its normal branch model
+  (`feature/exit-cooldown`, created from the session's `claude/exit-cooldown-feature-g8sbts`
+  branch since `main-dev` did not yet have this feature's SDD docs — PR #894, the docs-only
+  design-phase PR, was still unmerged).
+- §5.3 re-spec gate step 1 (`git merge -X ours origin/main-dev` into `feature/exit-cooldown`)
+  surfaced a real feature-number collision: `main-dev` has independently landed a different,
+  unrelated feature also numbered `110` — `110-wire-signal-confidence-to-position-sizing`
+  (merged) — while this feature (`110-exit-cooldown`) was still unmerged. Per
+  `docs/runbooks/feature-workflow.md` § Feature Numbering's documented collision-resolution
+  procedure (same one used historically for the `020`/`052` and `080`/`081` collisions), the
+  later-to-merge feature is renumbered.
+- **Resolution** (user-approved): `git mv docs/roadmap/features/110-exit-cooldown
+  docs/roadmap/features/116-exit-cooldown` — max NNN on trunk after the merge is `115`
+  (`115-fix-config-ui-env`), so `116` is the next free number. Fixed every self-referential
+  path (`context.md`, `implementation-spec.md`'s `**Feature**` line) and the two
+  `docs/roadmap/ledger/insights.md` evidence citations written during the design phase (not
+  yet merged to `main-dev`, so this is a pre-merge correction, not a rewrite of established
+  trunk history). **No content collision**: re-verified the actual implementation artifacts
+  (proto field `11` on `StrategyDefinition`, migration `012` for
+  `services/xstockstrat-analysis/migrations/`, both new config keys) are all still free on the
+  post-merge trunk — only the feature *directory number* collided, nothing this feature
+  actually builds.
+- Branch/PR names are unaffected (they use the slug `exit-cooldown`, not the number, per
+  `docs/roadmap/features/CLAUDE.md`).
+
+Next: continue the sequential step loop (Step 1).
+
+## Session 2026-08-07T03:15:00Z — sdd-execute (sequential) — re-spec gate (§5.3)
+
+- §5.3 step 2 (read-only validation): spawned 3 parallel `codebase-discovery` agents (one per
+  affected service) to re-run every step's `**Codebase Evidence**` against the post-merge tree.
+  Result: no step blocked, all target code exists and is functionally unchanged. Most drift was
+  pure line-number shift (2-50 lines, one outlier ~1547 lines in `trading.go`) from unrelated
+  features that landed on `main-dev` since this spec was written — content/shape identical, not
+  re-spec'd (Phase 1 Discovery will re-locate current positions at each step naturally).
+- Directive = **none** (no re-spec directive was given for this single-feature run), so per
+  §5.3 step 3, any real mismatch required a blocker + user decision rather than a silent edit.
+  User chose targeted re-spec. **3 real evidence corrections applied** (edited directly in
+  `implementation-spec.md`, the sanctioned pre-loop exception per §5.3 step 5):
+  1. **Step 15**: spec attributed two tests to a class `TestManageStrategyUpdateMask` in
+     `test_tools.py` that does not exist there (that class name exists only in `test_client.py`).
+     Corrected to the actual class, `TestManageStrategyPartialUpdate` (`test_tools.py:1182`),
+     with corrected line numbers for both tests. Tests themselves are real and unchanged.
+  2. **Step 18**: spec's insertion point ("after the feature-069 describe block, `:256-358`")
+     was wrong — that block's actual closing `});` is at `:382`; a later, unrelated feature 097
+     test was added inside it at `:360-381`. Corrected the insertion point to after `:382`, with
+     an explicit warning that `:358` would land the new block mid-existing-block.
+  3. **Step 18**: spec claimed `strat-cooldown-14` "is registered in" `INVENTORY.md`'s
+     "Recurring sentinel ids" table — false; grep confirms zero cooldown-related rows there
+     (feature 069 apparently never backfilled it). Corrected Instruction 2 to add
+     `strat-exit-cooldown-7` as a new row (not "mirroring" a nonexistent one) and explicitly
+     scoped backfilling `strat-cooldown-14` as feature 069's gap, out of this step.
+- **Consistency fix (mechanical consequence of the 110→116 renumbering, not a new re-spec
+  judgment call)**: 13 in-spec code-comment/prose references to "feature 110" — several destined
+  to land verbatim as comments in `cooldown.py`, `live_loop.py`, `servicer.py`,
+  `entry_backfill.py`, and `CLAUDE.md` — corrected to "feature 116" so the number future readers
+  grep for actually matches this feature's directory.
+- No other steps required correction. `feature.md` status history row added (status unchanged,
+  `implementation-ready`).
+
+Next: continue the sequential step loop (Step 1) — up-front confirm (§5.4), then tooling setup
+(§5.4b).
+
+## Session 2026-08-07T03:30:00Z — sdd-execute (sequential) — tooling setup (§5.4b)
+
+Tooling setup (all 21 pending steps): buf ⬇ 1.72.0 (go-install fallback — GitHub release
+binary download failed, likely proxy) · protoc-gen-go ⬇ v1.36.11 · protoc-gen-go-grpc ⬇ v1.6.2 ·
+protoc-gen-connect-go ⬇ v1.19.2 · ts-proto/protoc-gen-es/protoc-gen-connect-es ⬇ (pinned) ·
+grpcio-tools ⬇ 1.80.0 · Node 22.22.2 ✓ · pnpm 9.15.0 ✓ · Python 3.11.15 (system; `uv sync`
+manages the service's own pinned env) · uv ✓ 0.8.17 · ruff ✓ 0.15.8 (both analysis + agent,
+via uv) · pytest ✓ 9.0.3 (both) · Playwright Chromium ✓ (pre-provisioned, not reinstalled) ·
+Go 1.25.0 ✓ (toolchain auto-fetch; not actually needed by any step in this feature — no Go
+service is modified, only read via an existing gRPC edge).
+
+Validated the host codegen toolchain **before touching any `.proto` file**, per
+`docs/runbooks/codegen-toolchain-host-setup.md` Step 5: created a local `main-dev` ref (`git
+branch -f main-dev origin/main-dev`, avoiding the silent-no-op guard), ran `./scripts/buf-gen.sh`
+(buf lint ✓, buf breaking against main-dev ✓, Go/Python/TS stub generation ✓), then confirmed
+`git diff --stat packages/proto/gen/` is **empty** — the host toolchain reproduces the committed
+stubs byte-for-byte. Step 1 (adding `exit_cooldown_days`) is now safe to run.
+
+No blockers.
+
+Next: Step 1.
+
+### Step 1 — proto: add `exit_cooldown_days` field [done]
+- Added `optional int32 exit_cooldown_days = 11` to `StrategyDefinition`; updated
+  `ManageStrategyRequest.update_mask`'s allowed-paths comment. `buf lint` and `buf breaking`
+  (against `feature/exit-cooldown`) both pass clean.
+- Files modified: `packages/proto/analysis/v1/analysis.proto`
+- Deviations: command-syntax fix only (see Deviation Log) — the spec'd `buf breaking` invocation
+  needed the repo-root `.git` + `subdir=packages/proto` form to actually run from
+  `packages/proto/`; no change to what was verified.
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Ran `./scripts/buf-gen.sh` (host toolchain, provisioned during tooling setup). Only
+  `analysis/v1/*` generated files changed (8 files: Go, Python, TS + TS dist); field confirmed
+  present in all three language targets.
+- Files modified: `packages/proto/gen/go/analysis/v1/analysis.pb.go`,
+  `packages/proto/gen/python/analysis/v1/analysis_pb2.py`,
+  `packages/proto/gen/ts/analysis/v1/analysis.ts`,
+  `packages/proto/gen/ts/analysis/v1/analysis_pb.ts`,
+  `packages/proto/gen/ts/dist/analysis/v1/{analysis.d.ts,analysis.js,analysis_pb.d.ts,analysis_pb.js}`
+- Deviations: none (sequential mode's one-commit-per-step convention keeps this a separate
+  commit from Step 1, rather than literally bundled into "the same commit" as the spec's
+  Instructions phrase assumed for default-mode PRs — not a content deviation).
+
+### Step 3 — migration: `012_strategy_cooldowns_last_entry_at` [done]
+- Created the up/down pair adding a nullable `last_entry_at` column to
+  `analysis.strategy_cooldowns`. Verified offline (no DB started): single `ADD COLUMN` has an
+  exact inverse `DROP COLUMN`; migration 009 confirmed untouched (F-01).
+- Files modified: `services/xstockstrat-analysis/migrations/012_strategy_cooldowns_last_entry_at.{up,down}.sql`
+- Deviations: none
+
+### Step 4 — service: generalize `cooldown.py` + dual-purpose `strategy_cooldowns.py` [done]
+- Renamed `is_cooldown_active`'s parameter `last_exit_at` → `gate_start_at`; generalized both
+  module docstrings (`cooldown.py`, `strategy_cooldowns.py`) to describe both consumers. Renamed
+  `upsert` → `upsert_exit`; added `upsert_entry`; `list_all()` now selects both timestamps.
+  Updated `live_loop.py`'s one call site (`upsert` → `upsert_exit`).
+- **Real bug caught mid-implementation** (not by the 6-round design debate): `upsert_entry`'s
+  INSERT would have violated migration 009's `last_exit_at NOT NULL` constraint for any pair
+  entering for the first time with no prior exit. Fixed by expanding migration 012 (Step 3,
+  already committed) to also `DROP NOT NULL` on `last_exit_at` — recorded as a Deviation Log
+  entry and a `fails.md` write-up (2026-08-07, "exit-cooldown — design"). Not an F-01 violation:
+  migration 012 was never applied to any real database (feature-branch only).
+- TDD: RED confirmed first (4 failures: `AttributeError: no attribute 'upsert_exit'`/
+  `'upsert_entry'` on the two new repo tests; `repo.upsert_exit` never-awaited on the two
+  live-loop tests already renamed by Step 5) against the pre-implementation tree, then GREEN
+  after the production changes (26/26 relevant tests, 434/434 full suite, 82% coverage, ruff
+  clean).
+- Files modified: `services/xstockstrat-analysis/app/services/cooldown.py`,
+  `services/xstockstrat-analysis/app/repositories/strategy_cooldowns.py`,
+  `services/xstockstrat-analysis/app/engine/live_loop.py`,
+  `services/xstockstrat-analysis/migrations/012_strategy_cooldowns_last_entry_at.{up,down}.sql`
+  (F-08 note: touching the migration files from within Step 4 is outside Step 4's own `**Files**`
+  list — justified as the minimal in-scope fix for the schema bug found while implementing this
+  step, per Phase 3 point 5; recorded explicitly rather than silently expanding scope).
+- Deviations: see Deviation Log ("Step 4").
+
+### Step 5 — test: paired with Step 4 [done]
+- Created `test_strategy_cooldowns_repo.py` (3 tests: `upsert_exit`/`upsert_entry` SQL+bind-arg
+  assertions, `list_all` returns both timestamps). Updated `test_live_loop.py`'s 3 `repo.upsert`
+  references to `repo.upsert_exit`.
+- Files modified: `services/xstockstrat-analysis/tests/test_strategy_cooldowns_repo.py`,
+  `services/xstockstrat-analysis/tests/test_live_loop.py`
+- Deviations: none beyond Step 4's (shared red/green cycle).
+
+**Forward-looking risk noted for Step 10**: the three pre-existing `TestLiveEvaluationLoopCooldown`
+tests (`test_exit_persists_cooldown_via_repo`, `test_exit_persists_even_when_alert_throttled`,
+`test_write_cooldown_failure_never_propagates`) construct their scenario by directly setting
+`loop._last_state[key] = True` without touching a `_replayed` tracking set. Once Step 10 adds the
+`if key not in self._replayed: run replay` guard, these tests' single-bar `GetBars` mock means
+`bars[:-1]` is empty — replay would run (key not yet in the not-yet-existing `_replayed`) and
+overwrite the manually-seeded `_last_state[key]` back to `False`, breaking all three. Step 10's own
+Verification claims these tests "must stay green... reproduces byte-for-byte" — that claim needs
+re-checking against this scenario when Step 10 is reached; likely fix is seeding
+`loop._replayed.add(key)` alongside `loop._last_state[key] = True` in each test's setup.
+
+### Step 6 — service: backtest engine exit-cooldown gate [done]
+- Added `exit_cooldown_days` resolution (via `get_int_present`, not `get_int`) alongside the
+  existing `cooldown_days` resolution; gated the exit-fill branch with `is_cooldown_active`
+  anchored on `entry_time`.
+- Real bug caught by the RED run: `entry_time` at this point is a raw proto `Timestamp`, not a
+  `datetime` (unlike `last_exit_time`, which the existing code explicitly converts) — fixed with
+  a call-site `.ToDatetime(tzinfo=UTC)` conversion, `entry_time` itself left untouched elsewhere
+  in the function (still needed as a raw Timestamp for the Trade proto). See Deviation Log.
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: see Deviation Log ("Step 6").
+
+### Step 7 — test: paired with Step 6 [done]
+- Added 4 tests to `TestBacktestCooldown`: platform-default-zero-is-a-noop, suppressed-while-
+  min-hold-active, allowed-once-elapsed (half-open boundary), fingerprint-changes.
+- TDD: RED confirmed on `test_exit_suppressed_while_min_hold_active` (the one assertion that
+  actually depends on the new gate — the other 3 new tests happen to produce the same result
+  gated or ungated, which is expected and still valid coverage, not a red-N/A situation for the
+  step as a whole). GREEN after Step 6 (with one test-infra fix along the way — `make_servicer()`
+  didn't stub `get_int_present`, causing a `TypeError` on `timedelta(days=MagicMock)`; added the
+  stub). Final: 438/438 full suite, 82% coverage, ruff clean.
+- Files modified: `services/xstockstrat-analysis/tests/test_analysis_servicer.py`
+- Deviations: see Deviation Log ("Step 7").
+
+### Step 8 — service: write-time validation, maskable paths, config doc [done]
+- Added the mirror negative-value check to `evaluator.py`'s `_validate_definition`; added
+  `exit_cooldown_days` to `servicer.py`'s `_MASKABLE_PATHS`; added the config-key row to
+  `CLAUDE.md`. `_FINGERPRINT_EXCLUDED_KEYS` deliberately left unchanged (Step 7 already proved
+  inclusion by omission).
+- Files modified: `services/xstockstrat-analysis/app/services/evaluator.py`,
+  `services/xstockstrat-analysis/app/handlers/servicer.py`,
+  `services/xstockstrat-analysis/CLAUDE.md`
+- Deviations: none
+
+### Step 9 — test: paired with Step 8 [done]
+- Added 4 tests: 2 validation (`test_manage_strategy_rejects_negative_exit_cooldown`,
+  `test_manage_strategy_accepts_zero_exit_cooldown`) mirroring the `cooldown_days` templates
+  exactly; 2 maskable-paths (`test_exit_cooldown_only_update_preserves_components_and_rules`,
+  `test_exit_cooldown_days_can_be_cleared_back_to_platform_default`) mirroring their `cooldown_days`
+  counterparts.
+- All 218 tests in `test_analysis_servicer.py` pass; full suite 442/442, 82% coverage, ruff clean.
+  Steps 8/9 were straightforward mirrors of an already-proven pattern — no red/green surprise,
+  no deviation.
+- Files modified: `services/xstockstrat-analysis/tests/test_analysis_servicer.py`
+- Deviations: none
+
+### Step 10 — service: live-loop shared transition core + entry-cooldown state + replay [done]
+- Added module-level `_apply_transition` (the single shared edge-triggered core for both
+  `_eval_pair` and `_replay_state`) and `_replay_state` (folds `_apply_transition` over a key's
+  historical bars on first-seen-since-restart). `__init__` gained `_last_entry_at`, `_replayed`,
+  `_logged_unresolved`. `hydrate_cooldowns` now also loads `last_entry_at` (tolerant `.get`, not
+  `r[...]`, for pre-116 row shapes). `_eval_pair` rewritten: replay-then-read (never read-then-
+  replay) → `_apply_transition` → on `trigger is None`, a once-per-key diagnostic log if the pair
+  is known-open with an unresolved entry anchor, else silent return (steady state or a gated
+  attempt); on a real trigger, write the matching durable anchor (`_write_cooldown` for exit,
+  new `_write_entry_cooldown` for entry) before the existing alert-throttle block.
+- **Real correctness gap found and fixed, beyond the literal spec text**: `_replay_state` must
+  seed its fold from the caller's already-known `last_exit_at`/`last_entry_at` anchors
+  (`initial_entry_time`/`initial_last_exit_at` params), not an unconditional `(False, None,
+  None)` — an unconditional blank fold would silently regress a real hydrated anchor back to
+  `None` whenever the replay window shows no crossing (short/empty window right after boot, or a
+  transition older than the 365-day lookback). Not caught by any of the 6 design-debate rounds.
+  See Deviation Log ("Step 10").
+- **4 pre-existing `TestLiveEvaluationLoopCooldown` tests broke or became false-positive greens**
+  once replay landed — 1 assertion rewrite, 2 needed `loop._replayed.add(key)` seeded, 1 of those
+  two (`test_write_cooldown_failure_never_propagates`) was silently exercising nothing before the
+  fix and gained a new `assert_awaited_once()` to prove real coverage; all 3 also needed
+  `loop._last_entry_at[key]` seeded once the skip-until-known guard correctly started gating on
+  it. All 4 are legitimate consequences of new cross-cutting state-machine behavior, not spec
+  defects. See Deviation Log ("Step 10/11").
+- `_make_loop()` was missing the `get_int_present` stub (same root cause as Step 7's
+  `make_servicer()` fix) — added it. See Deviation Log ("Step 10").
+- Files modified: `services/xstockstrat-analysis/app/engine/live_loop.py`
+- Deviations: see Deviation Log ("Step 10", "Step 10/11").
+
+### Step 11 — test: paired with Step 10 (the three required tests + parity) [done]
+- Added `TestLiveEvaluationLoopExitCooldown` (8 tests): min-hold suppression/elapse, the three
+  design.md-required tests (`test_exit_suppressed_when_entry_time_unresolved`,
+  `test_exit_fires_once_entry_time_resolves`,
+  `test_unresolved_entry_time_does_not_suppress_reentry_gate`), the fold-equivalence parity test
+  (`test_replay_state_matches_sequential_apply_transition`), and two replay-specific tests
+  (`test_replay_seeded_steady_state_emits_no_alert`, `test_replay_only_runs_once_per_key`).
+- TDD: written against the pre-Step-10 tree conceptually (Step 10 was implemented first per this
+  session's flow, then all 22 tests in `test_live_loop.py` — 14 pre-existing + 8 new — confirmed
+  GREEN together in one run); the 4 pre-existing-test fixes from Step 10's deviation were what
+  made the full file green, not an issue in the 8 new tests themselves, which passed on first run.
+- Added the required guard-site code comment in `live_loop.py`'s `_eval_pair` (the `trigger is
+  None` branch) naming the three required tests by name, per the Step 11 Verification
+  instruction and the file's own Files-list note (comment-only edit, added after Step 11's test
+  names existed).
+- Verification: `uv run pytest tests/test_live_loop.py -v` → 22/22 passed. Full suite:
+  `uv run pytest --cov=app --cov-fail-under=40` → 450/450 passed, 82.02% coverage (well above the
+  40% gate). `ruff check .` and `ruff format --check .` both clean.
+- Files modified: `services/xstockstrat-analysis/tests/test_live_loop.py`,
+  `services/xstockstrat-analysis/app/engine/live_loop.py` (comment-only)
+- Deviations: see Deviation Log ("Step 10", "Step 10/11") — Step 11's own instructions were
+  followed as written; the deviations above surfaced during Step 10 but are jointly attributed
+  since Step 11 is what exposed them via full-suite verification.
+
+### Checkpoint — steps 1–11 (surface: backend)
+Sequential-mode §5.5b checkpoint report printed to the operator covering the full run so far
+(no checkpoint had fired earlier in this session's execution). Accountability: no out-of-scope
+changes, no unresolved open items, no unaddressed review warnings, 6 deviations (see Deviation
+Log). Operator directed to proceed (consistent with this session's sustained "continue"
+authorization). Counter reset; continuing to Step 12.
+
+### Step 12 — service: boot-time Order-based entry-time backfill [done]
+- Created `app/engine/entry_backfill.py`: pure `_infer_open_entry_time(orders)` (walks a running
+  signed balance over BUY/SELL fills sorted by `updated_at`, records the last 0→nonzero crossing
+  time, returns `None` if currently flat) + `run_once(live_loop, db_pool, trading_stub,
+  cfg_watcher)` (semaphore-bounded `ListOrders(strategy_id, symbol)` fan-out over every live pair
+  still missing `_last_entry_at`, seeds `live_loop._last_state`/`_last_entry_at` +
+  `_write_entry_cooldown` on a resolved open position, per-pair failures logged and skipped).
+- Wired into `main.py`: a new non-blocking `asyncio.get_event_loop().create_task(...)` right
+  after `live_loop.run_forever()` is scheduled and before the fundsignal-loop section, passing
+  `servicer._trading` (the existing feature-083 analysis→trading edge — no new channel/pool).
+- Added the `analysis.strategy.max_concurrent_entry_backfill` (int, default 4) config-key row to
+  CLAUDE.md, plus a docs-accuracy addition to the Dependencies table's `xstockstrat-trading` row
+  noting the new (same-edge) `ListOrders(strategy_id, symbol)` boot-time use.
+- Discovery (codebase-discovery subagent) confirmed the spec's Codebase Evidence content/shape is
+  fully intact on the current tree; only citation line numbers had drifted (unrelated commits
+  landed in `servicer.py`, `trading.proto`, `trading.go` since the spec was written) — no re-spec
+  needed, implemented directly against current line numbers.
+- Minor deviation from the spec's literal code block: used top-level imports
+  (`from app.engine.live_loop import strategy_symbols`, `from app.handlers.servicer import
+  _row_to_strategy_definition`) instead of the spec's function-local deferred imports with `#
+  noqa: PLC0415` — confirmed no import cycle exists (`servicer.py` does not import `live_loop.py`
+  or `entry_backfill.py`), so the deferred-import workaround the spec used (presumably a
+  defensive habit, not a proven necessity) wasn't needed; simpler top-level imports pass `ruff
+  check` clean with no noqa required. The spec's own inline NOTE had already corrected the
+  `_row_to_strategy_definition` import source from `live_loop` to `servicer` — this deviation is
+  the same correction applied consistently, plus dropping the now-unnecessary deferral.
+- Verification: `grep -n "entry_backfill" app/main.py` ✓, `grep -n
+  "max_concurrent_entry_backfill" CLAUDE.md` ✓, `ruff check app/engine/entry_backfill.py app/
+  main.py` clean, `ruff format --check` clean, full suite `uv run pytest -q` → 450/450 passed
+  (no new tests yet — paired tests are Step 13).
+- Files modified: `services/xstockstrat-analysis/app/engine/entry_backfill.py` (new),
+  `services/xstockstrat-analysis/app/main.py`, `services/xstockstrat-analysis/CLAUDE.md`
+- Deviations: see Deviation Log ("Step 12").
+
+### Step 13 — test: paired with Step 12 [done]
+- Created `tests/test_entry_backfill.py` with the 9 specified tests: `TestInferOpenEntryTime`
+  (single round trip, flat-after-round-trip, multi-crossing re-arm — Open Risk 3 — zero-fill
+  skip, CANCELED-partial-fill counting — proves `status` stays unfiltered) and `TestRunOnce`
+  (seed+persist, skip-when-already-known, per-pair RPC-failure isolation, no-op without a
+  trading stub). Discovery (codebase-discovery subagent) confirmed no prior test in this repo
+  builds a real `trading_pb2.Order` with a real `Timestamp` — synthesized the `_order()` helper
+  from the closest analogs (`test_live_loop.py`'s `_bar_at`, `test_analysis_servicer.py`'s
+  standalone `Timestamp().FromDatetime(...)`). Used the spec's suggested lightweight
+  `SimpleNamespace(_last_state, _last_entry_at, _write_entry_cooldown=AsyncMock())` stand-in for
+  `live_loop` in the `run_once` tests rather than a full `LiveEvaluationLoop` instance — simpler,
+  and `run_once` only touches those 3 members.
+- TDD: all 9 tests passed on first run against the already-implemented Step 12 code (no
+  red/fix cycle needed — matches this session's established pattern for a paired-test step that
+  follows its service step, e.g. Step 11's note).
+- Verification: `uv run pytest tests/test_entry_backfill.py -v` → 9/9 passed. Full suite:
+  459/459 passed, 82.21% coverage, ruff clean.
+- Files modified: `services/xstockstrat-analysis/tests/test_entry_backfill.py` (new)
+- Deviations: none.
+
+### Checkpoint — steps 12–13 (surface: backend → agent boundary)
+Sequential-mode §5.5b checkpoint report printed to the operator (surface-boundary trigger: Step
+14 shifts from `backend` to `agent`). Accountability: no out-of-scope changes, no unresolved
+open items (all 3 design.md Open Risks now have a landed disposition), no unaddressed review
+warnings, 1 deviation (Step 12 import style). Operator directed to proceed. Counter reset;
+continuing to Step 14 on the `agent` surface.
+
+### Step 14 — service: `manage_strategy`/`get_strategy` MCP tool + client builder [done]
+- Added `exit_cooldown_days: int | None = None` to `manage_strategy`'s signature (directly
+  after `cooldown_days`), the `supplied` dict entry, the docstring's field description and its
+  "changing any scoring-relevant field" note, and `get_strategy`'s docstring field list — all in
+  `tools.py`. Added `exit_cooldown_days=definition.get("exit_cooldown_days")` to `client.py`'s
+  `pb_def` construction (directly after `cooldown_days=...`) — same presence-safe bare-`.get()`
+  pattern feature 069 already established.
+- Discovery (codebase-discovery subagent) confirmed all 7 pieces of Codebase Evidence are intact
+  content-wise; only line numbers had drifted (the `manage_strategy` tool moved ~39 lines later
+  than the spec's original citation). No re-spec needed.
+- Noted (not a functional issue): Step 14's own Codebase Evidence prose says "Step 16 updates
+  the test's fixture" — this is an editorial slip; the actual fixture update is Step 15's own
+  Instruction 5 (`test_strategy_builders.py`'s `_capture_manage_strategy_request`), which Step
+  15's Codebase Evidence correctly attributes. Step 16 is docs-only (`mcp-tools.md` +
+  `strat-lab` skill). Not worth a Deviation Log entry — Step 15's text is already correct and is
+  what actually governs the next step.
+- TDD: confirmed RED as expected — `test_manage_strategy_definition_covers_every_proto_field`
+  (the descriptor-parity test) fails after this step alone, because the proto now has
+  `exit_cooldown_days` but the test's fixture doesn't supply it yet (so `ListFields()` never
+  sets it) — exactly what Step 14's own TDD note and Step 15's Codebase Evidence both predict.
+  Full suite: 210 passed, 1 failed (the expected RED), ruff clean.
+- Files modified: `services/xstockstrat-agent/app/tools.py`,
+  `services/xstockstrat-agent/app/client.py`
+- Deviations: none.
+
+### Step 15 — test: paired with Step 14 [done]
+- Added `test_forwards_exit_cooldown_days` (sibling to `test_forwards_cooldown_days`,
+  `test_tools.py`); `test_exit_cooldown_only_update_sends_only_exit_cooldown` +
+  `test_explicit_zero_exit_cooldown_still_survives` in `TestManageStrategyPartialUpdate`
+  (`test_tools.py`); `test_exit_cooldown_days_round_trips_presence`
+  (`TestManageStrategyClient`, `test_client.py`); `test_exit_cooldown_days_reaches_the_wire_
+  under_its_own_mask` (`TestManageStrategyUpdateMask`, `test_client.py`) — all direct mirrors
+  of the `cooldown_days` templates the spec cited, content/shape confirmed unchanged by
+  discovery. Updated `_capture_manage_strategy_request`'s fixture (`test_strategy_builders.py`)
+  to add `"exit_cooldown_days": 3` alongside `"cooldown_days": 5` — the change that actually
+  turns the descriptor-parity test GREEN.
+- TDD: RED confirmed at the end of Step 14 (`test_manage_strategy_definition_covers_every_
+  proto_field` failing, 210 passed / 1 failed). GREEN after this step's fixture change: full
+  suite `tests/test_tools.py tests/test_client.py tests/test_strategy_builders.py` → 127/127
+  passed; whole-service suite → 216/216 passed, 77.32% coverage, ruff clean.
+- Files modified: `services/xstockstrat-agent/tests/test_tools.py`,
+  `services/xstockstrat-agent/tests/test_client.py`,
+  `services/xstockstrat-agent/tests/test_strategy_builders.py`
+- Deviations: none.
+
+### Checkpoint — steps 14–15 (surface: agent → backend boundary)
+Sequential-mode §5.5b checkpoint report printed to the operator (surface-boundary trigger: Step
+16's Service is `docs/runbooks/`, which classifies as `backend`, differing from Step 15's
+`agent`). Accountability: no out-of-scope changes, no unresolved open items, no unaddressed
+review warnings, no deviations. Operator directed to proceed. Counter reset; continuing to Step
+16.
+
+### Step 16 — docs: `mcp-tools.md` + `strat-lab` skill [done]
+- All 5 insertion points landed exactly as spec'd: `manage_strategy`'s parameter table row,
+  the Errors table's negative-value row, the "Effect on the derived grade" field list,
+  `get_strategy`'s presence sentence (all in `docs/runbooks/mcp-tools.md`), and the mutation-
+  guard sentence in `plugins/strat-lab/skills/backtest/SKILL.md` (same PR as Steps 14/15 per
+  root CLAUDE.md's rule).
+- TDD: N/A (docs). Verification: `grep -n "exit_cooldown_days"` confirms all 5 locations.
+- Files modified: `docs/runbooks/mcp-tools.md`,
+  `plugins/strat-lab/skills/backtest/SKILL.md`
+- Deviations: none.
+
+### Checkpoint — step 16 (surface: backend → ui boundary)
+Sequential-mode §5.5b checkpoint report printed to the operator (surface-boundary trigger: Step
+17's Service is `xstockstrat-ui`, differing from Step 16's `backend`). Accountability: no
+out-of-scope changes, no open items, no unaddressed warnings, no deviations. Operator directed
+to proceed. Counter reset; continuing to Step 17.
+
+### Step 17 — service: `StrategyWizard.tsx` exit-cooldown field [done]
+- Added `parseExitCooldownDays` (mirrors `parseCooldownDays` exactly, error message says "exit
+  cooldown days"), `exitCooldownDaysRaw` state (presence-honest seed from
+  `initial?.exitCooldownDays`), `exitCooldownParsed` wired into the `step === 1` `canAdvance`
+  gate, a `cd2` parse + presence-honest spread in `handleSubmit`, and a new "Exit cooldown
+  (days)" JSX field block directly after the existing "Re-entry cooldown (days)" block —
+  `placeholder="0 (default)"` (not "31 (default)") since the exit-side platform default is 0
+  (Step 8), not 31.
+- Discovery (codebase-discovery subagent) confirmed zero drift on all 6 checked items —
+  `StrategyDefinitionInit`'s type already derives `exitCooldownDays` automatically from the
+  regenerated proto schema (no hand-written type edit needed), and the BFF/`insightsBff.ts`
+  `manageStrategy` handler is a verbatim pass-through (no intermediate-layer change needed).
+- Verification: `pnpm exec tsc --noEmit` clean, `pnpm run lint` clean (one pre-existing warning
+  in an unrelated file), `grep -n "exitCooldownDays|parseExitCooldownDays"` confirms 6
+  occurrences across the wizard.
+- Files modified: `services/xstockstrat-ui/src/components/insights/StrategyWizard.tsx`
+- Deviations: none.
+
+### Step 18 — test: paired with Step 17 [done]
+- Moved `captureManageStrategy` and `fillToReview` from local functions inside the feature-069
+  `test.describe` block to module scope (alongside the existing module-scope `stubListFormulas`)
+  so the new feature-116 `test.describe` block can share them without duplication, per Step 18's
+  own instruction to "reuse the same helpers ... extended with a parameter" — a `test.describe`
+  callback's local functions aren't visible to a sibling `test.describe`, so sharing required
+  hoisting, not just parameter extension. `fillToReview` gained an `exitCooldown: string = ''`
+  5th parameter (default preserves all 4 pre-existing feature-069 call sites unchanged) that
+  fills the `'0 (default)'` placeholder when non-blank.
+- Added `test.describe('Strategy authoring — exit cooldown (feature 116)', ...)` directly after
+  the feature-069 block's real closing `});` (confirmed by discovery at the block's actual end,
+  not the spec's originally-cited-then-corrected line), with the 5 specified cases mirroring the
+  feature-069 block's own 5 cases exactly (blank-omits, explicit-0, negative-blocks-step-1,
+  edit-prepopulates via the new `strat-exit-cooldown-7` sentinel, unrelated-edit-preserves-unset).
+- Added the `strat-exit-cooldown-7` sentinel conditional to `mock-backend.ts`'s `getStrategy`
+  handler (mirroring `strat-cooldown-14`'s shape exactly) and a new INVENTORY.md row for it —
+  did NOT backfill the pre-existing `strat-cooldown-14` gap (out of this step's scope, per the
+  spec's own explicit instruction).
+- TDD: RED→GREEN cycle folded into the discovery-then-implement flow (the new tests didn't
+  exist before this step, so there's no separate pre-Step-17 RED capture — matches this
+  session's established pattern for a paired-test step written after its service step).
+  Confirmed GREEN: `pnpm exec tsc --noEmit` clean, `pnpm run lint` clean (one pre-existing
+  unrelated warning), full `strategy-authoring.spec.ts` run → 23/23 passed (18 pre-existing +
+  5 new), including the SSR pre-warm setup test.
+- **Environment note (not a deviation, no code change)**: the first local e2e attempt(s) hit
+  Playwright's SSR-warmup setup test timing out (10s default, then even 60s) — this sandbox's
+  `pnpm dev` cold-compiles ~600-900 modules per route serially and the 22-route warmup sweep
+  took ~53s end-to-end on a cold server. Not a regression from this step's changes (confirmed:
+  the same warmup test times out identically with zero code changes, purely a cold-start
+  artifact of this remote sandbox). Worked around locally with `PLAYWRIGHT_CHROMIUM_EXECUTABLE_
+  PATH=/opt/pw-browsers/chromium` (the same fix `fails.md` 2026-08-06 already documents for
+  this sandbox's pinned-vs-installed Chromium mismatch) plus `--timeout=180000` for this one
+  verification run; CI is unaffected (E2E_PREBUILT skips the cold dev-server compile).
+- Files modified: `services/xstockstrat-ui/e2e/insights/strategy-authoring.spec.ts`,
+  `services/xstockstrat-ui/e2e/mock-backend.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
+- Deviations: see Deviation Log ("Step 18").
+
+### Checkpoint — steps 17–18 (surface: ui → backend boundary)
+Sequential-mode §5.5b checkpoint report printed to the operator (surface-boundary trigger: Step
+19's Service is `xstockstrat-analysis`, differing from Step 17/18's `ui`). Accountability: no
+out-of-scope changes, no open items, no unaddressed warnings, 1 deviation (Step 18 hoisting).
+Operator directed to proceed. Counter reset; continuing to Steps 19-21 (backend, final steps).
+
+### Step 19 — test: cross-cutting fingerprint/parity confirmation sweep [done]
+- Verification-only, no source changes. Re-ran the full `xstockstrat-analysis` suite fresh:
+  459/459 passed, 82.21% coverage, `ruff check`/`ruff format --check` both clean. FR-9
+  (fingerprint participation) already proven by Step 7's
+  `test_fingerprint_changes_with_exit_cooldown_days`; FR-4 (backtest/live parity) already proven
+  structurally by Step 11's `test_replay_state_matches_sequential_apply_transition` (one shared
+  `_apply_transition` core, not two hand-synchronized copies) — this step confirms no cross-step
+  interaction broke either.
+- Deviations: none.
+
+### Step 20 — docs: file the pre-existing `max_strategies_per_cycle` starvation defect [done]
+- Created `docs/reports/2026-08-07-exit-cooldown-max-strategies-per-cycle-starvation.md`
+  following the `docs/reports/` defect-report convention (modeled on
+  `2026-08-07-watchconfig-scope-omission-defect.md`'s filed-only shape): symptom, root cause
+  (`_run_cycle`'s unordered `SELECT` + no-rotation early-return at the cap,
+  `live_loop.py:185-206`), SEV-2, confirms it predates feature 116 (equally affects the
+  feature-069 re-entry gate) and was discovered during 116's design debate, not introduced by
+  it. Filed only — no fix attempted, per design.md's explicit instruction. Routes via
+  `/sdd-triage --from-report` for a future fix track.
+- Deviations: none.
+
+### Step 21 — test: final full-suite regression run [done]
+- `xstockstrat-analysis`: 459/459 passed, 82.21% coverage, ruff clean.
+- `xstockstrat-agent`: 216/216 passed, 77.32% coverage, ruff clean.
+- `xstockstrat-ui`: `tsc --noEmit` clean, `pnpm run lint` clean (one pre-existing unrelated
+  warning); the e2e run was already confirmed in Step 18 (23/23 passed).
+- `packages/proto`: `buf lint` clean; `buf breaking` run against `main-dev` (not the spec'd
+  `feature/exit-cooldown` self-comparison, which is a no-op — see Deviation Log) — clean, no
+  breaking changes across the feature's one proto field addition.
+- No cross-step regressions found across all four affected surfaces.
+- Deviations: see Deviation Log ("Step 21").
+
+## All 21 implementation steps done. Feature ready for the merge-order gate + integration PR (§5.6).

@@ -124,6 +124,15 @@ async def serve():
         asyncio.get_event_loop().create_task(live_loop.run_forever())
         log.info("live evaluation loop started")
 
+        # ── Boot-time entry-time backfill for exit-cooldown (feature 116) ────────
+        # Non-blocking — runs concurrently with run_forever(), never delays server start.
+        from app.engine.entry_backfill import run_once as backfill_entry_times
+
+        asyncio.get_event_loop().create_task(
+            backfill_entry_times(live_loop, db_pool, servicer._trading, cfg_watcher)
+        )
+        log.info("entry-time backfill task started")
+
         # ── Fundamentals signal producer (feature 062) ───────────────────
         from app.engine.fundsignal_loop import FundamentalsSignalLoop
 

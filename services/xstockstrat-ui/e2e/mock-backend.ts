@@ -799,6 +799,9 @@ export async function startMockBackend(): Promise<void> {
             // Feature 069: only this id carries a non-default cooldown (edit-prepopulation e2e);
             // every other id leaves cooldownDays unset so the "edit unset strategy" case stays honest.
             ...(req.strategyId === 'strat-cooldown-14' ? { cooldownDays: 14 } : {}),
+            // Feature 116: only this id carries a non-default exit cooldown (edit-prepopulation e2e);
+            // every other id leaves exitCooldownDays unset so the "edit unset strategy" case stays honest.
+            ...(req.strategyId === 'strat-exit-cooldown-7' ? { exitCooldownDays: 7 } : {}),
             // Feature 097: this id carries a signal_params symbol universe so the wizard's
             // preserve-on-save regression guard (ANALYSIS-3) has real symbols to protect. The id
             // is underscore-only so it passes the wizard's id validation and Next can advance.

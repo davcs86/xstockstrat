@@ -353,6 +353,11 @@ def _validate_definition(definition, formula_outputs: dict | None = None) -> Non
     if definition.HasField("cooldown_days") and definition.cooldown_days < 0:
         raise ValueError("cooldown_days must be >= 0")
 
+    # Exit cooldown (feature 116, FR-2): a negative value is rejected at write time. Unset
+    # never triggers this (no HasField); an explicit 0 (no minimum hold) passes.
+    if definition.HasField("exit_cooldown_days") and definition.exit_cooldown_days < 0:
+        raise ValueError("exit_cooldown_days must be >= 0")
+
     # Validate rule JSON parsability and ref_name references
     for rule_name, rule_json in [
         ("entry_rule", definition.entry_rule),

@@ -2068,9 +2068,16 @@ type StrategyDefinition struct {
 	// references a formula that has been soft-deleted — the strategy still evaluates (live and in
 	// backtests) using the formula's last-saved definition, but the deletion is flagged. Populated
 	// by GetStrategy; empty elsewhere.
-	Warnings      []string `protobuf:"bytes,10,rep,name=warnings,proto3" json:"warnings,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Warnings []string `protobuf:"bytes,10,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	// Per-strategy minimum holding period in calendar days before exit_rule may fire a sell
+	// (feature 116 — exit cooldown; mirrors cooldown_days but gates the exit transition).
+	// optional = explicit presence: unset → platform default
+	// (analysis.strategy.default_exit_cooldown_days); explicit 0 → no minimum hold (exit
+	// permitted immediately, current behavior); negative → rejected at write time
+	// (INVALID_ARGUMENT).
+	ExitCooldownDays *int32 `protobuf:"varint,11,opt,name=exit_cooldown_days,json=exitCooldownDays,proto3,oneof" json:"exit_cooldown_days,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *StrategyDefinition) Reset() {
@@ -2173,6 +2180,13 @@ func (x *StrategyDefinition) GetWarnings() []string {
 	return nil
 }
 
+func (x *StrategyDefinition) GetExitCooldownDays() int32 {
+	if x != nil && x.ExitCooldownDays != nil {
+		return *x.ExitCooldownDays
+	}
+	return 0
+}
+
 type ManageStrategyRequest struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	Operation  StrategyOperation      `protobuf:"varint,1,opt,name=operation,proto3,enum=xstockstrat.analysis.v1.StrategyOperation" json:"operation,omitempty"`
@@ -2188,7 +2202,8 @@ type ManageStrategyRequest struct {
 	//	absent   → FULL REPLACE: byte-for-byte the pre-070 behavior, so existing clients (the
 	//	           StrategyWizard, which always sends a complete definition) are unaffected.
 	//
-	// Allowed paths: display_name, components, entry_rule, exit_rule, signal_params, cooldown_days.
+	// Allowed paths: display_name, components, entry_rule, exit_rule, signal_params, cooldown_days,
+	// exit_cooldown_days.
 	// strategy_id/active/live_enabled are column-authoritative and rejected with INVALID_ARGUMENT.
 	UpdateMask    *fieldmaskpb.FieldMask `protobuf:"bytes,3,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -3926,7 +3941,7 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x06params\x18\x05 \x03(\v26.xstockstrat.analysis.v1.StrategyComponent.ParamsEntryR\x06params\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\"\xb1\x03\n" +
+	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\"\xfb\x03\n" +
 	"\x12StrategyDefinition\x12\x1f\n" +
 	"\vstrategy_id\x18\x01 \x01(\tR\n" +
 	"strategyId\x12!\n" +
@@ -3942,8 +3957,10 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\flive_enabled\x18\b \x01(\bR\vliveEnabled\x12(\n" +
 	"\rcooldown_days\x18\t \x01(\x05H\x00R\fcooldownDays\x88\x01\x01\x12\x1a\n" +
 	"\bwarnings\x18\n" +
-	" \x03(\tR\bwarningsB\x10\n" +
-	"\x0e_cooldown_days\"\xeb\x01\n" +
+	" \x03(\tR\bwarnings\x121\n" +
+	"\x12exit_cooldown_days\x18\v \x01(\x05H\x01R\x10exitCooldownDays\x88\x01\x01B\x10\n" +
+	"\x0e_cooldown_daysB\x15\n" +
+	"\x13_exit_cooldown_days\"\xeb\x01\n" +
 	"\x15ManageStrategyRequest\x12H\n" +
 	"\toperation\x18\x01 \x01(\x0e2*.xstockstrat.analysis.v1.StrategyOperationR\toperation\x12K\n" +
 	"\n" +
