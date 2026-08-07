@@ -83,8 +83,11 @@ func main() {
 	accountRepo := repository.NewAccountRepo(repo.Pool())
 	slog.Info("account repository initialized")
 
+	// Order-intent repository — shares the TradingRepo pool, no second connection (F-06).
+	orderIntentRepo := repository.NewOrderIntentRepo(repo.Pool())
+
 	// Wire service layer.
-	svc, err := service.NewTradingService(cfg, cfgWatcher, accountRepo, repo, cfg.BrokerAccountsEncryptionKey)
+	svc, err := service.NewTradingService(cfg, cfgWatcher, accountRepo, repo, orderIntentRepo, cfg.BrokerAccountsEncryptionKey)
 	if err != nil {
 		slog.Error("service init failed", "error", err)
 		os.Exit(1)
@@ -108,6 +111,8 @@ func main() {
 	go svc.StartPositionSyncPoller(ctx)
 	// Start credential health poller — flags accounts whose API secrets stopped working.
 	go svc.StartCredentialHealthPoller(ctx)
+	// Start order-intent sweeper — proactively reclaims orphaned PENDING intents (feature 101).
+	go svc.StartOrderIntentSweeper(ctx)
 
 	// gRPC server.
 	grpcHdl := handler.NewTradingHandler(svc)

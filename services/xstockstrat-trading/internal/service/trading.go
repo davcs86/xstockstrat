@@ -102,6 +102,7 @@ func NewTradingService(
 	cfgW *config.Watcher,
 	accountRepo repository.AccountRepository,
 	repo *repository.TradingRepo,
+	orderIntentRepo repository.OrderIntentRepository,
 	encKey string,
 ) (*TradingService, error) {
 	ledgerConn, err := grpc.NewClient(cfg.LedgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
@@ -126,6 +127,7 @@ func NewTradingService(
 		notify:           notifyv1.NewNotifyServiceClient(notifyConn),
 		portfolio:        portfoliov1.NewPortfolioServiceClient(portfolioConn),
 		repo:             repo,
+		orderIntentRepo:  orderIntentRepo,
 		orders:           make(map[string]*tradingv1.Order),
 		subs:             make(map[string]chan *tradingv1.Order),
 		credStatus:       make(map[string]int32),
@@ -187,29 +189,32 @@ func (s *TradingService) LoadInflightOrders(ctx context.Context) error {
 	return nil
 }
 
-// resolveAccount returns the broker pool entry for the given accountID.
-// If accountID is empty and exactly one broker is registered, that one is returned.
-func (s *TradingService) resolveAccount(accountID string) (brokerPoolEntry, error) {
+// resolveAccount returns the resolved account ID and broker pool entry for the given
+// accountID. If accountID is empty and exactly one broker is registered, that one is
+// returned. The resolved ID is returned explicitly (feature 101) — the previous 2-return
+// signature discarded it on this fallback path, leaving order.AccountId (and now
+// order_intents.broker_account_id, NOT NULL) empty even though a real account was used.
+func (s *TradingService) resolveAccount(accountID string) (resolvedID string, entry brokerPoolEntry, err error) {
 	s.brokersMu.RLock()
 	defer s.brokersMu.RUnlock()
 
 	if accountID != "" {
-		entry, ok := s.brokers[accountID]
+		e, ok := s.brokers[accountID]
 		if !ok {
-			return brokerPoolEntry{}, grpcstatus.Errorf(codes.NotFound, "broker account %q not found in pool", accountID)
+			return "", brokerPoolEntry{}, grpcstatus.Errorf(codes.NotFound, "broker account %q not found in pool", accountID)
 		}
-		return entry, nil
+		return accountID, e, nil
 	}
 
 	if len(s.brokers) == 1 {
-		for _, entry := range s.brokers {
-			return entry, nil
+		for id, e := range s.brokers {
+			return id, e, nil
 		}
 	}
 	if len(s.brokers) == 0 {
-		return brokerPoolEntry{}, grpcstatus.Errorf(codes.FailedPrecondition, "no broker accounts registered; call RegisterBrokerAccount first")
+		return "", brokerPoolEntry{}, grpcstatus.Errorf(codes.FailedPrecondition, "no broker accounts registered; call RegisterBrokerAccount first")
 	}
-	return brokerPoolEntry{}, grpcstatus.Errorf(codes.InvalidArgument, "multiple broker accounts registered; account_id is required")
+	return "", brokerPoolEntry{}, grpcstatus.Errorf(codes.InvalidArgument, "multiple broker accounts registered; account_id is required")
 }
 
 // SubscribeOrderUpdates registers a subscriber channel for order update broadcasts.
@@ -263,7 +268,7 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 	}
 
 	// Resolve broker account.
-	accountEntry, err := s.resolveAccount(req.AccountId)
+	resolvedAccountID, accountEntry, err := s.resolveAccount(req.AccountId)
 	if err != nil {
 		return nil, err
 	}
@@ -308,7 +313,7 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		StrategyId:    req.StrategyId,
 		UserId:        req.UserId,
 		TradingMode:   mode,
-		AccountId:     req.AccountId,
+		AccountId:     resolvedAccountID,
 		BrokerType:    commonv1.BrokerType(accountEntry.brokerType),
 		CreatedAt:     timestamppb.New(time.Now()),
 		UpdatedAt:     timestamppb.New(time.Now()),
@@ -416,7 +421,7 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 
 	// Cancel at broker if we have a broker order ID.
 	if order.BrokerOrderId != "" {
-		entry, resolveErr := s.resolveAccount(order.AccountId)
+		_, entry, resolveErr := s.resolveAccount(order.AccountId)
 		if resolveErr != nil {
 			slog.Warn("cancel: could not resolve broker account", "order_id", req.OrderId, "account_id", order.AccountId, "error", resolveErr)
 		} else {
@@ -482,7 +487,7 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 			"order %s has no broker order id yet; cannot replace", req.OrderId)
 	}
 
-	entry, err := s.resolveAccount(order.AccountId)
+	_, entry, err := s.resolveAccount(order.AccountId)
 	if err != nil {
 		return nil, err
 	}

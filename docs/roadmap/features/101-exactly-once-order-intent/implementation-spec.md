@@ -645,7 +645,7 @@ All new tests pass; no coverage threshold applies to this package (Step 8's cite
 
 ### Step 11 — service: DI wiring (`orderIntentRepo` field + `resolveAccount` fix + `main.go`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify

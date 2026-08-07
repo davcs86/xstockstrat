@@ -361,3 +361,21 @@ of `main-dev`. This satisfies the `merge-order.md` same-function-overlap depende
   12/12 pass. `golangci-lint`: 2 `gofmt` issues fixed (`gofmt -w`), then 0 issues. Full
   `internal/service` package: no regressions. Deviations: the `computeStaleThreshold` extraction and
   the struct-field-early-addition above.
+- Step 11 [done] — Wrote `resolve_account_test.go` first (4 cases: single-account fallback returns
+  the resolved ID — the bug fix — plus explicit-ID, zero-accounts, and multi-account-requires-ID).
+  RED: build failed (3-value assignment against the pre-fix 2-return signature — right reason).
+  Implemented: `resolveAccount` now returns `(resolvedID string, entry brokerPoolEntry, err error)`;
+  the single-account fallback loop captures `id` from the map (`for id, e := range s.brokers { return
+  id, e, nil }`) instead of discarding it. Updated all 3 call sites using the current (post-feature-100
+  drift) line numbers confirmed by the re-spec discovery pass: `PlaceOrder` (`resolvedAccountID` now
+  feeds `order.AccountId` at the struct build, replacing `req.AccountId`), `CancelOrder`'s fail-open
+  branch (`_, entry, resolveErr := ...` — resolve failure stays a warning-log, cancellation still
+  proceeds locally, per the existing doc comment above `CancelOrder`), `ReplaceOrder` (`_, entry, err
+  := ...`). Added `orderIntentRepo repository.OrderIntentRepository` to `NewTradingService`'s
+  parameter list (5th, after `repo` — corrected from the spec's stated "6th": the struct itself has
+  grown since feature 100, but the constructor only ever had 5 params, not 6; a minor pre-existing
+  spec inaccuracy unrelated to feature 100) and wired `NewOrderIntentRepo(repo.Pool())` +
+  `go svc.StartOrderIntentSweeper(ctx)` into `main.go` alongside the three existing pollers. GREEN:
+  4/4 new cases pass. Full `go test ./...`: all packages pass, no regressions. `golangci-lint run
+  ./...`: 0 issues. Deviations: the constructor-parameter-position correction (5th, not 6th) noted
+  above.
