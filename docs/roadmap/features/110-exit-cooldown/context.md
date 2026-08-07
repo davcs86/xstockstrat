@@ -124,3 +124,88 @@ explicit user request).
 - Status: `spec-ready` → `design-approved`. User approved design.md explicitly.
 
 Next: `/sdd-spec exit-cooldown` — generate the implementation spec from the approved design.
+
+## Session 2026-08-07T02:00:00Z — sdd-review impl-spec (advisory)
+
+- Result: 1 failure (Blocker), 6 warnings (advisory — did not block). Overlap scan: CLEAN (no other
+  in-flight feature touches `StrategyDefinition`'s proto fields, this service's migrations dir, or
+  the two new config keys; `096-position-and-order-detail-pages` is the only other
+  `implementation-ready` feature and is frontend-only, no file/resource overlap).
+- All 6 design.md decisions named for verification are present as concrete steps — no dropped
+  design decision (proto field 11, `cooldown.py` reuse, migration 012, shared
+  `_apply_transition`/`_replay_state` core, `entry_backfill.py`, skip-until-known guard + required
+  diagnostic + 3 required paired tests).
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 11: `**Files**` lists only `tests/test_live_loop.py`, but `**Verification**` instructs
+    adding a code comment to `live_loop.py` (the guard site) — an **F-08** risk if executed
+    literally (staging a file outside the step's declared Files section). Fix: move the comment
+    instruction into Step 10 (where the guard is actually written), or add `live_loop.py` to Step
+    11's Files. — [ ] unaddressed
+  - Step 10: the skip-until-known guard is spec'd inside the pure `_apply_transition` function
+    rather than literally inside `_eval_pair`'s `elif in_position and latest.exit:` block as
+    design.md's round-5 "finalized" snippet shows. Functionally equivalent (isolation from the
+    entry/re-entry branch holds structurally either way, and the 3 required tests catch a
+    regression), but a literal deviation from a decision marked "finalized" — record a
+    `## Deviation Log` note at execute time rather than silently diverging. — [ ] unaddressed
+  - Step 10: the replacement code block doesn't explicitly show `latest = decisions[-1]` being
+    retained even though `latest` is used later in the same snippet — minor ambiguity, likely
+    resolves at discovery time. — [ ] unaddressed
+  - Steps 17/18: neither includes `pnpm run lint` in its own or paired Verification (only present
+    later, in the non-paired Step 21) — a strict per-step B2 lint-gate gap, caught before the final
+    gate but not per-step compliant. — [ ] unaddressed
+  - Step 2: `**Files**` lists three generated-output directories rather than exact files — standard
+    practice for codegen steps, not a real defect. — [x] not applicable (accepted as idiomatic)
+  - Step 12: own `ruff check` scoped to `entry_backfill.py` only, not the full service — functionally
+    fine, full lint runs in paired Step 13. — [x] not applicable (no functional gap)
+  - Step 13 (B2b, advisory): no test explicitly named against `ORDER_STATUS_PARTIALLY_FILLED`; the
+    canceled-with-partial-fill test substitutes for it under the deliberately-unfiltered-status
+    design. — [x] not applicable (design is intentionally unfiltered)
+- Overlap findings: none (CLEAN).
+
+Next: resolve the Step 11 Files/Verification mismatch (and ideally the Step 17/18 lint gap) before
+`/sdd-execute exit-cooldown`, or proceed and let `/sdd-execute` surface them per C-02.
+
+## Session 2026-08-07T01:00:00Z — sdd-spec
+
+- Generated implementation-spec.md with 21 steps. Status → implementation-ready. `recon.md` +
+  `design.md` were both present, so discovery reused recon's Codebase Map directly and only
+  supplemented it with fresh Read/Grep evidence for detail below the dossier's altitude
+  (exact code bodies of `cooldown.py`, `strategy_cooldowns.py`, `live_loop.py` (full,
+  244 lines), `evaluator.py`'s validation precedent, `screener.py`'s semaphore pattern,
+  `fundsignal_loop.py`'s boot-task/no-metadata pattern, `main.py`'s boot-task wiring,
+  `config/watcher.py`'s `get_int_present`, the `trading.proto`/`trading.go` fields the
+  boot-time backfill reads, `test_live_loop.py`/`test_analysis_servicer.py`'s existing test
+  templates, the agent's `tools.py`/`client.py`/three test files, and the UI's
+  `StrategyWizard.tsx`/`mock-backend.ts`/e2e spec/`INVENTORY.md`).
+- Key codebase findings beyond recon.md/design.md:
+  - `services/xstockstrat-agent/tests/test_strategy_builders.py:96-102` — a **descriptor-
+    parity test** (`test_manage_strategy_definition_covers_every_proto_field`) will go RED the
+    moment Step 2's regenerated `StrategyDefinition` proto lands `exit_cooldown_days`, until
+    both `client.py`'s builder (Step 14) AND the test's own fixture (Step 15) carry the new
+    field — this is the RC-1 antidote `insights.md` 2026-08-02 documents, confirmed live in
+    this repo rather than assumed by analogy.
+  - No dedicated `StrategyCooldownsRepository` unit test file exists today (confirmed via
+    `Glob`/`Grep`) despite sibling repos (`strategy_scores`, `backtest_runs`,
+    `backtest_details`, `backtest_run_symbols`) each having one — Step 5 creates
+    `test_strategy_cooldowns_repo.py` for the first time, closing this pre-existing gap as a
+    side effect of touching the file (not scope creep — C-08 requires the new
+    `upsert_entry`/renamed `upsert_exit` methods to be tested regardless).
+  - Confirmed `ListOrdersRequest` carries a `symbol` field (proto field 7) in addition to
+    `strategy_id` — `app/engine/entry_backfill.py` can call `ListOrders(strategy_id=...,
+    symbol=...)` per pair (one RPC per live pair, semaphore-bounded), not one unfiltered call
+    per strategy requiring local grouping.
+  - Interpreted one design.md ambiguity explicitly in the spec (Step 12): the boot-time
+    backfill, upon finding a pair currently non-flat via real Order history, must set BOTH
+    `live_loop._last_state[key] = True` AND `_last_entry_at[key] = <inferred>` together — not
+    `_last_entry_at` alone — because `_last_state` for a position held longer than the 365-day
+    bar-replay window can never otherwise become `True` (replay only detects an entry
+    *crossing* within its fetched window; it cannot infer "already in position at the window's
+    start"). Without this, the exit branch would stay permanently unreachable for exactly the
+    >365-day-position cohort the design's round-2 user steering required covered. Flagged
+    explicitly in the step's Instructions (not silently assumed) since design.md's prose
+    describes the race-condition fix but not this specific write-back detail in code form.
+- No new feature-number/proto-field/migration-NNN collisions found at spec time (re-confirmed
+  `011_opportunities` is still the last migration and field 11 is still free).
+
+Next: `/sdd-review exit-cooldown impl-spec` — validate implementation spec, then
+`/sdd-execute exit-cooldown`.
