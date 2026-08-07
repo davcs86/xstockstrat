@@ -188,6 +188,12 @@ func (r *PortfolioRepo) CountPositions(ctx context.Context, userID string, mode 
 	return count, err
 }
 
+// ErrPositionNotFound is returned when a position row does not exist — mirrors
+// ErrWatchlistNotFound (watchlist_repo.go:17). Lets GetPosition's Connect handler
+// distinguish "no position" (NotFound) from a genuine backend failure (Internal),
+// which scanPositionRow could not do before (feature 100).
+var ErrPositionNotFound = errors.New("position not found")
+
 type pgxRow interface {
 	Scan(dest ...any) error
 }
@@ -202,6 +208,9 @@ func scanPositionRow(row pgxRow) (*portfoliov1.Position, error) {
 	)
 	if err := row.Scan(&symbol, &qty, &avgEntry, &costBasis, &openedAt, &modeStr, &accountID,
 		&currentPrice, &marketValue, &unrealizedPnl, &unrealizedPnlPct, &dayPnl, &dayPnlPct); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrPositionNotFound
+		}
 		return nil, fmt.Errorf("scan position: %w", err)
 	}
 	return &portfoliov1.Position{

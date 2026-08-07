@@ -229,3 +229,22 @@ a merge event). Recorded here since it diverges from `reference/sequential-mode.
   block (ends :313) and the existence gate (starts :315). GREEN: 6/6 pass. Full suite: 43/43 pass,
   71.06% coverage (>> 40% threshold). Lint: 0 errors (73 pre-existing `any` warnings, none new).
   Deviations: none.
+- **Environment note (applies to all Go steps from here on)**: this sandbox's `proxy.golang.org`
+  access cannot resolve the exact pinned dependency versions in `go.mod` for any of the three Go
+  services (confirmed identically on `xstockstrat-portfolio`, `xstockstrat-trading`, and
+  `xstockstrat-marketdata`, unrelated to this feature's changes — `go build ./...` fails with
+  "missing go.sum entry" even on an unmodified checkout). CI's own `go mod download` step is
+  expected to succeed against the real committed `go.mod`/`go.sum` with full network access.
+  Workaround used for local verification only: transient `go mod tidy` to resolve+test, then
+  `git checkout -- go.mod go.sum` before every commit — no dependency-version change ships in any
+  commit. Logged once here rather than repeating per step.
+- Steps 5+6 [done] (TDD pair) — Wrote `portfolio_repo_test.go` + `portfolio_handler_test.go` first.
+  RED: both packages failed to **build** (`undefined: ErrPositionNotFound` /
+  `undefined: classifyGetPositionError`) — correct failure reason (symbols don't exist yet).
+  Implemented: `ErrPositionNotFound` sentinel added to `portfolio_repo.go` (not `watchlist_repo.go`
+  — the spec's own Instructions say "immediately before `type pgxRow interface`", i.e. in
+  `portfolio_repo.go`; caught and corrected a mis-read during execution before committing).
+  `scanPositionRow` now returns it on `pgx.ErrNoRows`. `classifyGetPositionError` added to
+  `portfolio_handler.go` (new `internal/repository` import), `GetPosition` now uses it instead of
+  a hardcoded `connect.CodeNotFound`. GREEN: 5/5 pass. `golangci-lint run`: 0 issues. Deviations:
+  none (the file-placement correction was caught before commit, not a shipped defect).

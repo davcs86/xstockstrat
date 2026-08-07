@@ -279,7 +279,7 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage
 
 ### Step 5 — service: `ErrPositionNotFound` sentinel + `GetPosition` error-code fix in `xstockstrat-portfolio`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go` — modify
@@ -370,7 +370,7 @@ grep -n "ErrPositionNotFound" internal/repository/portfolio_repo.go internal/han
 
 ### Step 6 — test: `ErrPositionNotFound` sentinel + classification, no DB required
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo_test.go` — create
