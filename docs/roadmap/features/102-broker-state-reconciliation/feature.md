@@ -1,12 +1,12 @@
 # Feature: broker-state-reconciliation
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `code-completed`
 **Priority**: `P1` — revived 2026-08-04 after user pushback on the demotion; rescoped to a lightweight
 periodic ticker inside `xstockstrat-trading` reusing its existing broker client, not a new engine or
 dashboard (see context.md)
 **Development Branch**: `feature/broker-state-reconciliation`
 **Created**: 2026-08-04
-**Last Updated**: 2026-08-06
+**Last Updated**: 2026-08-07
 
 ---
 
@@ -20,6 +20,7 @@ dashboard (see context.md)
 | 2026-08-05 | `draft` → `spec-ready` | /sdd-review | Product spec approved after 2 review rounds (4 warnings) |
 | 2026-08-06 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved with noted open risks; recon.md + design.md written; FR-4/AC-3/AC-5 amended (user-approved) |
 | 2026-08-06 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 25 steps; discovered and surfaced two new risks beyond design.md (IBKR never sends a client-order tag on SubmitOrder — FR-6's broker-side scan fallback is Alpaca-only; QueryEvents.event_type is exact-match only, not a prefix filter) |
+| 2026-08-07 | `implementation-ready` → `code-completed` | /sdd-execute | All 25 steps executed as the final feature in the stacked 100→101→023→030→102 chain; PR opened targeting `feature/stop-loss-bracket-orders` (030's branch). Full deviation detail in implementation-spec.md's Deviation Log |
 
 ---
 
@@ -56,7 +57,5 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review broker-state-reconciliation impl-spec` — validate implementation spec, then
-`/sdd-execute broker-state-reconciliation` (coordinate with 030's, 100's, and 101's actual
-implementation status first — this spec was written against their planned, not-yet-landed contracts;
-re-verify at execute time per merge-order.md's `100 → 101 → 023 → 030 → 102` build order)
+Code-complete. PR opened targeting `feature/stop-loss-bracket-orders` (030's branch, the top of the
+stacked 100→101→023→030→102 chain) — see PR link in context.md. Awaiting CI + merge in stack order.

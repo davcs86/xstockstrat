@@ -1,6 +1,6 @@
 # Implementation Spec: broker-state-reconciliation
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-08-06
 **Feature**: `docs/roadmap/features/102-broker-state-reconciliation/feature.md`
 **Total Steps**: 25
@@ -84,7 +84,7 @@ channel); (8) FR-6's `UNKNOWN`-intent resolution (calls into step 3's `ListOrder
 
 ### Step 1 — proto: `HaltSource` enum + `BrokerAccount` fields 9-12
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/trading/v1/trading.proto` — modify
@@ -148,7 +148,7 @@ grep -n "HaltSource\|halted\|halt_reason\|halt_source" trading/v1/trading.proto
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/trading/v1/` — regenerate (do not hand-edit)
@@ -178,7 +178,7 @@ GOWORK=off go build ./... # from packages/proto/gen/go — confirm HaltSource/ne
 
 ### Step 3 — migration: `xstockstrat-trading` `halt_source` column
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/migrations/007_broker_accounts_halt_source.up.sql` — create
@@ -236,7 +236,7 @@ database or run `migrate` (offline check per `reference/spec-template.md`).
 
 ### Step 4 — service: `xstockstrat-config` internal-caller authz channel
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/authz.ts` — modify
@@ -323,7 +323,7 @@ grep -n "HEADER_INTERNAL_CALLER\|hasInternalCallerAuthority\|INTERNAL_CALLER_ALL
 
 ### Step 5 — test: internal-caller authz unit tests (direction-restriction negative test)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/internalCallerAuthz.test.ts` — create
@@ -371,7 +371,7 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage
 
 ### Step 6 — migration: `xstockstrat-config` `caller_identity` audit column
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/014_config_caller_identity.up.sql` — create
@@ -497,7 +497,7 @@ and drops both new columns. Offline check only — no live database.
 
 ### Step 7 — service: wire internal-caller authz + `caller_identity` into `setConfig`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -592,7 +592,7 @@ grep -n "HEADER_INTERNAL_CALLER\|hasInternalCallerAuthority\|caller_identity\|ca
 
 ### Step 8 — test: internal-caller `SetConfig` loopback (accept/reject + `caller_identity` persisted)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/internalCallerSetConfig.test.ts` — create
@@ -642,7 +642,7 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage
 
 ### Step 9 — service: `Broker.ListOrders` interface + `BrokerOrder.ClientOrderID`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/broker.go` — modify
@@ -693,7 +693,7 @@ grep -n "ListOrders\|ClientOrderID" internal/broker/broker.go
 
 ### Step 10 — service: Alpaca `ListOrders`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/alpaca.go` — modify
@@ -774,7 +774,7 @@ GOWORK=off go build ./...
 
 ### Step 11 — service: IBKR `ListOrders` (account-scoped)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/ibkr.go` — modify
@@ -870,7 +870,7 @@ in Steps 10-11 — no third broker exists in this codebase.
 
 ### Step 12 — test: `ListOrders` unit tests (Alpaca + IBKR, incl. account-scoping)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/alpaca_test.go` — modify or create
@@ -924,7 +924,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 13 — service: `config.Watcher` outbound `SetConfig` passthrough
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/config/config.go` — modify
@@ -985,7 +985,7 @@ the scenario `docs/patterns/header-propagation.md`'s entry-point-only auth model
 
 ### Step 14 — test: `Watcher.SetConfig` passthrough
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/config/config_test.go` — modify or create
@@ -1020,7 +1020,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 15 — service: halt-source plumbing (extends 030's planned halt mechanism)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/account_repo.go` — modify
@@ -1095,7 +1095,7 @@ grep -n "HaltSource\|haltSource" internal/repository/account_repo.go internal/se
 
 ### Step 16 — test: halt-source plumbing
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_reconciliation_test.go` — create
@@ -1133,7 +1133,7 @@ package note).
 
 ### Step 17 — service: `StartReconciliationPoller` + mismatch classification + self-heal + ordinary halt
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -1254,7 +1254,7 @@ regardless of which broker implementation is behind it, no broker-specific branc
 
 ### Step 18 — test: reconciliation classification + halt-write pure-logic tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_reconciliation_test.go` — modify (created in
@@ -1313,7 +1313,7 @@ New logic is in the coverage-excluded `internal/service` package — no coverage
 
 ### Step 19 — service: systemic escalation via `platform.trading_state`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -1376,7 +1376,7 @@ per-call-site.
 
 ### Step 20 — test: systemic escalation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_reconciliation_test.go` — modify
@@ -1408,7 +1408,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 21 — service: FR-6 — resolve 101's `UNKNOWN` order intents
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -1499,7 +1499,7 @@ grep -n "IntentStateUnknown\|late_response_conflict\|resolved_by_reconciliation"
 
 ### Step 22 — test: FR-6 `UNKNOWN`-intent resolution
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_reconciliation_test.go` — modify
@@ -1537,7 +1537,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 23 — docs: config-governance, CLAUDE.md updates, merge-order.md field-claim
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/patterns/config-governance.md` — modify
@@ -1619,7 +1619,7 @@ grep -n "BrokerAccount.*9-12\|field 9\|field 12" docs/roadmap/features/merge-ord
 
 ### Step 24 — service (UI): `/trader/positions` reconciliation status + halt display
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/hooks/useReconciliationStatus.ts` — create
@@ -1725,7 +1725,7 @@ grep -n "useReconciliationStatus\|formatLastRun\|halted\|haltSource" src/app/tra
 
 ### Step 25 — test (UI e2e): reconciliation status + halt display
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify
@@ -1791,3 +1791,38 @@ cd services/xstockstrat-ui && pnpm test:e2e -- positions-reconciliation
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **Step 13/17** — `config.Watcher`'s outbound `SetConfig` call is unreachable from `package
+  service`'s tests (unexported `client` field on `Watcher`, no test seam). Extracted a narrow
+  `configSetConfigForwarder` interface (`SetConfig(ctx, namespace, key, value, reason) error`) and
+  a swappable `TradingService.configSetter` field defaulting to the real `cfgW`, letting
+  `trading_reconciliation_test.go` inject a `fakeConfigSetter`. A new sub-class of the config-read
+  testability limitation hit repeatedly this session (100/101/023/030 each hoisted config *read*
+  values as explicit params) — this is the outbound *write* call, not a read value.
+- **Step 17** — the spec's "unprotected/impossible" mismatch bucket (an order/position under an
+  account ID absent from `s.brokers`) is architecturally unreachable: every `Broker` client is
+  scoped to one account's own credentials, so no code path can surface a record under an
+  unregistered account. Documented in `reconcileTick`'s doc comment and a named NOTE in the test
+  file rather than fabricating an unreachable test path.
+- **Step 17** — `BrokerOrder` carries only cumulative `FilledQty`, no total `Qty` field. The
+  quantity-discrepancy comparison uses `FilledQty` directly (platform vs. broker-reported) rather
+  than design.md's literal "remaining quantity" plan, which assumed a field the struct doesn't have.
+- **Step 24** — design.md's UI-section assumption that `QueryEvents` returns most-recent-first is
+  backwards: the real handler (`ledgerServiceImpl.ts`) is `ORDER BY recorded_at ASC` (oldest-first).
+  `useReconciliationStatus.ts` indexes from the end of the returned array instead of the front.
+- **Steps 16/17** — two test-fake naming/signature collisions with 030's own hand-written fakes in
+  the shared `internal/service` test package: `fakeOrderIntentRepo` (030's, unconfigurable)
+  collided with a new fake needed here — renamed to `fakeReconciliationOrderIntentRepo`.
+  `fakeBroker.ListOrders` and `fakeAccountRepo.UpdateHaltStatus`'s new param required mechanical
+  follow-through fixes in 030's own `trading_bracket_test.go` — not a step in this spec (030
+  predates 102), included as unavoidable fallout of a shared-interface extension.
+- **Step 25** — two fixes beyond the spec's literal Instructions, found by running the suite rather
+  than trusting the placeholder code: (1) `getByText('Exposure')` needed `.first()` — a strict-mode
+  violation, since the breadcrumb, nav link, and heading all contain "Exposure" text; (2) the
+  spec's `ConfigService.GetConfig` mock example used the `{value: {case, value}}` runtime init
+  shape (correct for server-side `create()`-style handler returns, e.g. `mock-backend.ts`'s own
+  `getConfig`), but a `page.route()`-fulfilled raw JSON body is parsed browser-side by `fromJson()`,
+  which expects the flattened standard proto3 JSON oneof form (e.g. `{stringVal: 'REDUCE_ONLY'}`).
+  The wrapped shape silently failed to parse, leaving `platformTradingState.data` `undefined`
+  forever — confirmed via the failing test's trace network capture; fixed in
+  `e2e/trader/positions-reconciliation.spec.ts`.

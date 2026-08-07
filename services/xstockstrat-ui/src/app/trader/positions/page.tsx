@@ -1,19 +1,24 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
+import { useQuery } from '@tanstack/react-query';
 import type { JsonObject } from '@bufbuild/protobuf';
 import { AppShell } from '@/components/trader/AppShell';
 import { useAccountContext } from '@/context/AccountContext';
 import { usePositions } from '@/hooks/usePortfolio';
-import { POSITION_RISK_FLAG, EnumBadge } from '@/lib/opportunityShared';
+import { useReconciliationStatus } from '@/hooks/useReconciliationStatus';
+import { POSITION_RISK_FLAG, EnumBadge, type EnumRender } from '@/lib/opportunityShared';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { StatTile } from '@/components/shared/StatTile';
 import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
+import { formatLastRun } from '@/lib/formatLastRun';
 import { usePositionLineage } from '@/hooks/usePositionLineage';
 import { openR, fmtR, sideLabel, isExitFlag } from '@/lib/positionRisk';
+import { traderConfigClient } from '@/lib/browserClients/traderConfigClient';
 import { PositionSide } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import type { Position } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
+import { HaltSource } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -38,8 +43,17 @@ import {
 type TradingMode = 'paper' | 'live';
 type PnlFilter = 'all' | 'winners' | 'losers';
 
+// Halt-source labels for the amended AC-5 per-account halt badge (feature 102) — mirrors
+// opportunityShared.tsx's exhaustive Record<Enum, EnumRender> discipline (Constitution C-04/
+// C-10(a)); kept local since HaltSource is a trading-domain enum, not an opportunity one.
+const HALT_SOURCE: Record<HaltSource, EnumRender> = {
+  [HaltSource.UNSPECIFIED]: { label: '—', role: 'secondary' },
+  [HaltSource.BRACKET_PROTECTION]: { label: 'Bracket protection', role: 'paper' },
+  [HaltSource.RECONCILIATION]: { label: 'Reconciliation', role: 'sell' },
+};
+
 export default function PositionsPage() {
-  const { selectedAccountId, environmentMode } = useAccountContext();
+  const { selectedAccountId, environmentMode, accounts } = useAccountContext();
   // Trading mode is fixed by the deployment environment — not user-selectable.
   const mode: TradingMode = environmentMode ?? 'paper';
   const [symbol, setSymbol] = useState('');
@@ -104,6 +118,24 @@ export default function PositionsPage() {
     mode,
   );
 
+  // Feature 102 — reconciliation status + halt display (Constitution C-14 consumer surface).
+  const reconciliationStatus = useReconciliationStatus(selectedAccountId);
+  const selectedAccount = accounts.find((a) => a.id === selectedAccountId) ?? null;
+  // Platform-wide trading_state, checked first (rare) — amended AC-5's "one coherent
+  // restriction display" derives from whichever mechanism is currently active, never both.
+  const platformTradingState = useQuery({
+    queryKey: ['platform-trading-state'],
+    queryFn: async () => {
+      const resp = await traderConfigClient.getConfig({ namespace: 'platform' });
+      return resp.values['trading_state']?.value.case === 'stringVal'
+        ? resp.values['trading_state'].value.value
+        : null;
+    },
+    refetchInterval: 30_000,
+  });
+  const platformRestricted =
+    platformTradingState.data === 'REDUCE_ONLY' || platformTradingState.data === 'HALTED';
+
   return (
     <AppShell>
       <div className="p-4 sm:p-6 space-y-4">
@@ -114,6 +146,31 @@ export default function PositionsPage() {
               What each position is risking and what would trigger an exit — your broker has the
               P&amp;L.
             </p>
+            {/* Renders nothing for the healthy, unrestricted case (CredentialStatusBadge's
+                own "no noise when healthy" principle). */}
+            {reconciliationStatus.data?.lastReconciledAt &&
+              !reconciliationStatus.data.hasUnresolvedMismatch &&
+              !platformRestricted &&
+              !selectedAccount?.halted && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {formatLastRun(reconciliationStatus.data.lastReconciledAt, Date.now())}
+                </p>
+              )}
+            {platformRestricted ? (
+              <Badge variant="destructive" className="mt-1.5 gap-1">
+                Trading {platformTradingState.data === 'HALTED' ? 'halted' : 'reduce-only'}{' '}
+                platform-wide
+              </Badge>
+            ) : (
+              selectedAccount?.halted && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs">
+                  <span className="font-medium text-destructive">
+                    Account halted: {selectedAccount.haltReason}
+                  </span>
+                  <EnumBadge render={HALT_SOURCE[selectedAccount.haltSource]} />
+                </div>
+              )
+            )}
           </div>
           {exitFlagCount > 0 && (
             <Button asChild variant="outline" size="sm">

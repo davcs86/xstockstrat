@@ -24,8 +24,14 @@ export const ADMIN_SCOPE = 0x04;
 export const HEADER_ACCESS_SCOPE = 'x-access-scope';
 export const HEADER_USER_ID = 'x-user-id';
 
-/** Read a single metadata value, or '' when absent. */
-function first(md: Metadata | undefined, key: string): string {
+/**
+ * Read a single metadata value, or '' when absent. Exported (feature 102) so
+ * `configServiceImpl.ts` can resolve the raw `x-internal-caller` value for
+ * `caller_identity` persistence — mirrors `userIdFrom`'s existing wrapper for `x-user-id`,
+ * but `x-internal-caller` has no dedicated wrapper of its own since
+ * `hasInternalCallerAuthority` already consumes it internally.
+ */
+export function first(md: Metadata | undefined, key: string): string {
   if (!md) return '';
   return (md.get(key)[0] as string) ?? '';
 }
@@ -61,3 +67,53 @@ export const MISSING_AUTHOR_ERROR = {
   code: status.INVALID_ARGUMENT,
   message: 'author required: set request.author or propagate x-user-id',
 };
+
+/**
+ * Internal-caller channel for a background/automated process to write a normally
+ * human-operator-gated key without extending x-access-scope's user-role bitmap (which only ever
+ * carries a value *forwarded* from a real authenticated human — see docs/patterns/
+ * header-propagation.md). Structurally separate: a distinct metadata field, a hardcoded
+ * {callerID, namespace, key, allowedTargetValues} allow-list, and — critically — a
+ * direction restriction so a caller can only ever move a value *toward* restriction, never
+ * back toward an unrestricted state (feature 102).
+ */
+export const HEADER_INTERNAL_CALLER = 'x-internal-caller';
+
+interface InternalCallerGrant {
+  callerID: string;
+  namespace: string;
+  key: string;
+  /** The only values this caller may write to (namespace, key) — never the unrestricted value. */
+  allowedTargetValues: ReadonlyArray<string>;
+}
+
+const INTERNAL_CALLER_ALLOWLIST: ReadonlyArray<InternalCallerGrant> = [
+  {
+    callerID: 'trading-reconciliation-poller',
+    namespace: 'platform',
+    key: 'trading_state',
+    allowedTargetValues: ['REDUCE_ONLY', 'HALTED'], // never 'ACTIVE' — escalation only
+  },
+];
+
+/**
+ * True when the propagated internal-caller identity is allow-listed to write targetValue at
+ * (namespace, key). Fails closed: an absent header, an unlisted callerID, or a targetValue
+ * outside that caller's allowed set all return false.
+ */
+export function hasInternalCallerAuthority(
+  md: Metadata | undefined,
+  namespace: string,
+  key: string,
+  targetValue: string,
+): boolean {
+  const callerID = first(md, HEADER_INTERNAL_CALLER);
+  if (!callerID) return false;
+  return INTERNAL_CALLER_ALLOWLIST.some(
+    (grant) =>
+      grant.callerID === callerID &&
+      grant.namespace === namespace &&
+      grant.key === key &&
+      grant.allowedTargetValues.includes(targetValue),
+  );
+}

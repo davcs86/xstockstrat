@@ -339,3 +339,69 @@ func TestReplaceOrder_IBKR(t *testing.T) {
 		t.Errorf("expected status Submitted, got %s", o.Status)
 	}
 }
+
+func TestIBKRListOrders_AccountScoping(t *testing.T) {
+	var gotAccountID string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAccountID = r.URL.Query().Get("accountId")
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"orders": []map[string]interface{}{}})
+	}))
+	defer srv.Close()
+
+	c := broker.NewIBKRClient(broker.IBKRConfig{BaseURL: srv.URL, IBKRAccountID: "U1234567"})
+	if _, err := c.ListOrders(context.Background()); err != nil {
+		t.Fatalf("ListOrders failed: %v", err)
+	}
+	if gotAccountID != "U1234567" {
+		t.Errorf("expected accountId=U1234567 on the request, got %q", gotAccountID)
+	}
+}
+
+func TestIBKRListOrders_ParsesMultipleOrders(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"orders": []map[string]interface{}{
+				{"orderId": "ibkr-ord-1", "status": "Filled", "avgPrice": 82.25, "filledQuantity": 10.0},
+				{"orderId": "ibkr-ord-2", "status": "Submitted", "avgPrice": 0.0, "filledQuantity": 0.0},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	c := broker.NewIBKRClient(broker.IBKRConfig{BaseURL: srv.URL, IBKRAccountID: "U1234567"})
+	orders, err := c.ListOrders(context.Background())
+	if err != nil {
+		t.Fatalf("ListOrders failed: %v", err)
+	}
+	if len(orders) != 2 {
+		t.Fatalf("expected 2 orders (proves the single-match orderId filter was dropped), got %d", len(orders))
+	}
+	if orders[0].BrokerOrderID != "ibkr-ord-1" || orders[1].BrokerOrderID != "ibkr-ord-2" {
+		t.Errorf("unexpected order IDs: %+v", orders)
+	}
+}
+
+func TestIBKRListOrders_ClientOrderIDAlwaysEmpty(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"orders": []map[string]interface{}{
+				{"orderId": "ibkr-ord-1", "status": "Filled", "avgPrice": 82.25, "filledQuantity": 10.0},
+			},
+		})
+	}))
+	defer srv.Close()
+
+	c := broker.NewIBKRClient(broker.IBKRConfig{BaseURL: srv.URL, IBKRAccountID: "U1234567"})
+	orders, err := c.ListOrders(context.Background())
+	if err != nil {
+		t.Fatalf("ListOrders failed: %v", err)
+	}
+	for _, o := range orders {
+		if o.ClientOrderID != "" {
+			t.Errorf("expected ClientOrderID to always be empty for IBKR (never sent on submit), got %q", o.ClientOrderID)
+		}
+	}
+}

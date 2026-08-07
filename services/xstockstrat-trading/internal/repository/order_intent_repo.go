@@ -48,6 +48,17 @@ type OrderIntentRepository interface {
 	// SweepStalePending returns up to limit PENDING intents older than staleBefore, for
 	// StartOrderIntentSweeper (internal/service/order_intent.go).
 	SweepStalePending(ctx context.Context, staleBefore time.Time, limit int) ([]*OrderIntentRecord, error)
+	// ListUnknownForAccount returns every UNKNOWN-state intent for one broker account
+	// (feature 102 — FR-6, resolves 101's own deferred "who resolves an UNKNOWN order
+	// intent" question).
+	ListUnknownForAccount(ctx context.Context, brokerAccountID string) ([]*OrderIntentRecord, error)
+	// ResolveUnknownIntent CAS-transitions an UNKNOWN intent to a definite outcome
+	// (IntentStateCompleted or IntentStateRejected) once broker truth is known (feature 102).
+	// Guarded on state=Unknown, mirroring FinalizeIntent's own state-guard CAS pattern
+	// (design.md § Late-broker-response race) applied to the UNKNOWN->definite transition
+	// instead of Pending->definite. resolved=false means the row was no longer UNKNOWN when
+	// this ran (already resolved by a concurrent caller) — a safe no-op, not an error.
+	ResolveUnknownIntent(ctx context.Context, intentID string, newState int16, response []byte) (resolved bool, err error)
 }
 
 type pgOrderIntentRepo struct {
@@ -173,4 +184,48 @@ func (r *pgOrderIntentRepo) SweepStalePending(ctx context.Context, staleBefore t
 		out = append(out, &rec)
 	}
 	return out, rows.Err()
+}
+
+const listUnknownForAccountSQL = `
+SELECT intent_id, order_id, request_hash, state, broker_account_id,
+       first_response, latest_response, created_at, updated_at
+FROM trading.order_intents
+WHERE broker_account_id = $1 AND state = $2`
+
+func (r *pgOrderIntentRepo) ListUnknownForAccount(ctx context.Context, brokerAccountID string) ([]*OrderIntentRecord, error) {
+	rows, err := r.pool.Query(ctx, listUnknownForAccountSQL, brokerAccountID, IntentStateUnknown)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*OrderIntentRecord
+	for rows.Next() {
+		var rec OrderIntentRecord
+		if err := rows.Scan(&rec.IntentID, &rec.OrderID, &rec.RequestHash, &rec.State, &rec.BrokerAccountID,
+			&rec.FirstResponse, &rec.LatestResponse, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, &rec)
+	}
+	return out, rows.Err()
+}
+
+const resolveUnknownIntentSQL = `
+UPDATE trading.order_intents
+SET state = $1, latest_response = $2, updated_at = now()
+WHERE intent_id = $3 AND state = $4
+RETURNING intent_id`
+
+func (r *pgOrderIntentRepo) ResolveUnknownIntent(ctx context.Context, intentID string, newState int16, response []byte) (bool, error) {
+	row := r.pool.QueryRow(ctx, resolveUnknownIntentSQL, newState, response, intentID, IntentStateUnknown)
+	var discard string
+	err := row.Scan(&discard)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }

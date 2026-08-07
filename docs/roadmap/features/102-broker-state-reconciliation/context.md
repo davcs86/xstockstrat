@@ -222,3 +222,64 @@
 - User confirmed `trading.reconciliation.systemic_threshold_pct` default stays **0.5** (50% of
   registered accounts erroring/unprotected in one tick) — the threshold for escalating from 030's
   per-account halt mechanism to 100's platform-wide gate via this feature's internal-caller authz path.
+
+## Session 2026-08-07T00:00:00Z — /sdd-execute (all 25 steps, final feature in the stacked chain)
+
+Executed as the last link of the 100→101→023→030→102 stacked-branch chain (100/101/023/030 all
+landed as real code during this session before this feature's steps were re-verified against them).
+All 25 implementation-spec.md steps done; full TDD red/green discipline followed throughout.
+
+**Deviations beyond what implementation-spec.md's Instructions literally specified:**
+
+- **`config.Watcher`'s unexported `client` field blocks fake gRPC injection from package
+  `service`** — a new sub-class of the config-read testability limitation hit repeatedly across
+  this session's earlier features (100/101/023/030 each hoisted config-read values as explicit
+  function params; this is a *different* limitation — the outbound `SetConfig` call itself, not a
+  config value). Fixed by extracting a narrow `configSetConfigForwarder` interface and a
+  swappable `TradingService.configSetter` field (defaults to the real `cfgW`), letting
+  `trading_reconciliation_test.go` inject a `fakeConfigSetter` without touching `config.Watcher`.
+- **The "unprotected/impossible" mismatch bucket is architecturally unreachable** — an
+  order/position under an account ID absent from `s.brokers` cannot occur, because every `Broker`
+  client is scoped to one account's own credentials; no code path can surface a record under an
+  unregistered account. Documented in `reconcileTick`'s own doc comment and a named NOTE in
+  `trading_reconciliation_test.go` rather than fabricating an unreachable test path.
+- **`BrokerOrder` carries only cumulative `FilledQty`, no total `Qty`** — the quantity-discrepancy
+  comparison uses `FilledQty` directly (platform vs. broker-reported) rather than design.md's
+  literal "remaining quantity" plan, which assumed a field that doesn't exist on the struct.
+- **Ledger event ordering was backwards from design.md's UI-section assumption** —
+  `ledgerServiceImpl.ts`'s real `QueryEvents` handler is `ORDER BY recorded_at ASC` (oldest-first),
+  not most-recent-first. `useReconciliationStatus.ts` indexes from the end of the returned array
+  instead of the front.
+- **Two test-fake naming/signature collisions with 030's own hand-written fakes** in the shared
+  `internal/service` test package: `fakeOrderIntentRepo` (030's own, unconfigurable) collided with
+  a new fake needed here — renamed the new one to `fakeReconciliationOrderIntentRepo`.
+  `fakeBroker.ListOrders` and `fakeAccountRepo.UpdateHaltStatus`'s new param required mechanical
+  follow-through fixes in `trading_bracket_test.go` (030's file) each time a shared interface grew
+  — explicitly not a step in this spec, since 030 predates 102 and its own fakes can't anticipate
+  102's interface extensions.
+- **Step 25's UI e2e test needed two additional fixes beyond the spec's literal instructions**,
+  both discovered by actually running the suite rather than trusting the spec's placeholder code:
+  1. A `getByText('Exposure')` locator without `.first()` hit Playwright's strict-mode violation
+     (breadcrumb + nav link + heading all contain "Exposure" text) — added `.first()`.
+  2. The spec's own Instruction 2 implied mocking `ConfigService.GetConfig`'s response using the
+     `{value: {case: 'stringVal', value: ...}}` runtime init shape (the shape correct for
+     server-side `create()`-style handler returns, e.g. `mock-backend.ts`'s own `getConfig`
+     handler). A `page.route()`-fulfilled raw JSON body bypasses the server entirely and is parsed
+     browser-side by `fromJson()`, which expects the flattened standard proto3 JSON oneof form
+     (the member's own field name directly, e.g. `{stringVal: 'REDUCE_ONLY'}`) — the wrapped shape
+     silently failed to parse, leaving `platformTradingState.data` `undefined` forever. Confirmed
+     via the failing test's trace network capture, fixed in
+     `e2e/trader/positions-reconciliation.spec.ts`.
+- **Squash-merge stacking mechanics** (post-code, pre-PR-merge): per the user's explicit
+  "merge the PRs when they are green, in the right order" direction, PRs merge sequentially
+  100→101→023→030→102. Since GitHub does not auto-retarget a stacked PR's base when the base
+  branch merges without also being deleted, each downstream PR was manually retargeted
+  (`update_pull_request` `base: main-dev`) and then `git merge origin/main-dev` (not rebase) into
+  its head branch to reconcile the squash-created commit against the branch's own pre-squash
+  ancestry — conflicts in files both features touched (`trading.go`, `config-governance.md`)
+  resolved by taking "ours" (the feature branch's already-fully-integrated content), verified
+  byte-identical to the pre-merge state before committing.
+
+**Teardown note**: this session's `context-scrubber` (context-forge plugin) skill was not available
+to run the mandated scoped scan over the touched `CLAUDE.md`/`config-governance.md` files —
+flagging per CLAUDE.md's fallback instruction rather than skipping silently (same note as 030's PR).

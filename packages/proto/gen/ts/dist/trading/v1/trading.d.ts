@@ -75,6 +75,23 @@ export declare enum IntentState {
 export declare function intentStateFromJSON(object: any): IntentState;
 export declare function intentStateToJSON(object: IntentState): string;
 export declare function intentStateToNumber(object: IntentState): number;
+/**
+ * HaltSource distinguishes which automated mechanism halted an account — 030's
+ * bracket-protection flatten failure vs. 102's broker-state-reconciliation mismatch — so an
+ * operator (and the /trader UI) can tell which one fired without guessing from halt_reason's
+ * free text alone.
+ */
+export declare enum HaltSource {
+    HALT_SOURCE_UNSPECIFIED = "HALT_SOURCE_UNSPECIFIED",
+    /** HALT_SOURCE_BRACKET_PROTECTION - 030 */
+    HALT_SOURCE_BRACKET_PROTECTION = "HALT_SOURCE_BRACKET_PROTECTION",
+    /** HALT_SOURCE_RECONCILIATION - 102 */
+    HALT_SOURCE_RECONCILIATION = "HALT_SOURCE_RECONCILIATION",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function haltSourceFromJSON(object: any): HaltSource;
+export declare function haltSourceToJSON(object: HaltSource): string;
+export declare function haltSourceToNumber(object: HaltSource): number;
 export interface Order {
     orderId: string;
     clientOrderId: string;
@@ -200,6 +217,16 @@ export interface BrokerAccount {
     credentialStatus: CredentialStatus;
     /** credential_checked_at is when credential_status was last refreshed. */
     credentialCheckedAt?: Date | undefined;
+    /**
+     * halted / halted_at / halt_reason / halt_source (feature 030 + 102): whether this account is
+     * currently halted by an automated safety mechanism, when, why, and which mechanism. False/unset
+     * means no automated halt is in effect; an operator may still have separately deactivated the
+     * account (is_active).
+     */
+    halted: boolean;
+    haltedAt?: Date | undefined;
+    haltReason: string;
+    haltSource: HaltSource;
 }
 export interface RegisterBrokerAccountRequest {
     displayName: string;

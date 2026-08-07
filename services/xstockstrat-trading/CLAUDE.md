@@ -81,6 +81,9 @@ All config values are served by **xstockstrat-config** namespace `trading`.
 | `trading.risk.bracket_orders_enabled` | bool | `true` dev/staging, **`false` production** | Master gate for automatic stop-loss/take-profit bracket orders on auto-sized entries; `false` in production pending feature 103 (broker-failure-simulator) or a documented manual paper verification |
 | `trading.risk.take_profit_rr_multiple` | float | `2.0` | Reward-to-risk multiple for the take-profit leg; `0` disables the take-profit leg (stop-loss only) |
 | `trading.risk.max_unprotected_seconds` | int | `30` | Provisional default — max seconds an auto-sized position may go without a confirmed bracket before an automatic flatten+halt |
+| `trading.reconciliation.interval_ms` | float | `60000` | Interval for the broker-state-reconciliation poller (`reconcileTick`). Read live on every cycle. |
+| `trading.reconciliation.grace_ticks` | int | `1` | Consecutive ticks a mismatch must persist before it's a real finding (not a benign propagation delay). |
+| `trading.reconciliation.systemic_threshold_pct` | float | `0.5` | Share of accounts erroring/unprotected in one tick that escalates to `platform.trading_state=REDUCE_ONLY`. |
 
 `trading.broker.timeout_ms` also bounds each broker REST call made by `syncPositions` (an explicit
 per-call `context` deadline, matching the credential-health poller), so a black-holed connection can
@@ -120,6 +123,8 @@ Orders requiring approval (above configured thresholds) are placed in `ORDER_STA
 | `account.positions.synced` | `account:{account_id}` | Periodic broker position snapshot (poller); carries `user_id` + `account_id`, each position's broker mark-to-market valuation (`current_price`/`market_value`/`unrealized_pl`/`unrealized_plpc`), and its intraday/today's P&L (`day_pnl`/`day_pnl_pct`, from Alpaca `unrealized_intraday_pl`/`unrealized_intraday_plpc`) |
 | `account.balance.synced` | `account:{account_id}` | Periodic broker balance snapshot (poller): cash, buying power, equity, last_equity |
 | `order.bracket_updated` | `order:{order_id}` | Bracket leg order IDs assigned/cleared (feature 030) — consumed by `xstockstrat-portfolio` to populate `Position.stop_order_id`/`take_profit_order_id` |
+| `reconciliation.mismatch_found` | `account:{account_id}` | Non-propagation-delay mismatch found by the reconciliation poller (feature 102) |
+| `order_intent.resolved_by_reconciliation` | `order:{order_id}` | A `101` `UNKNOWN` order intent resolved against broker truth by the reconciliation poller (feature 102) |
 
 ## Order Replace (`ReplaceOrder`)
 
@@ -161,6 +166,28 @@ order settles to its true terminal state (`expired` or `filled`). It must **not*
 `CANCELED` — doing so previously froze the order in a wrong terminal state, after which the poller
 stopped and never captured the eventual `expired` (UI showed CANCELED while the broker showed
 expired).
+
+## Broker State Reconciliation
+
+`StartReconciliationPoller`/`reconcileTick` (feature 102) periodically compares open orders and
+positions against broker truth via `Broker.ListOrders()`/`GetPositions()`, independent of the
+fill poller — it is the only path that detects an order placed directly through the broker's own
+dashboard, regardless of fill state. A candidate mismatch (unknown broker order, quantity
+discrepancy, or missing broker order) must persist across `1 + trading.reconciliation.grace_ticks`
+consecutive ticks before it becomes a real finding — a routine partial fill or propagation delay
+resolves on its own with no ledger event and no halt (self-heal). A real finding emits
+`reconciliation.mismatch_found`, a CRITICAL alert, and routes to the **ordinary, per-account**
+halt (`HaltSource_HALT_SOURCE_RECONCILIATION`, reusing feature 030's `broker_accounts.halted`
+mechanism). Only a **rare, systemic** finding — `trading.reconciliation.systemic_threshold_pct`
+or more of registered accounts erroring/unreachable in one tick — escalates platform-wide to
+`platform.trading_state=REDUCE_ONLY` via `xstockstrat-config`'s internal-caller authz channel
+(`x-internal-caller`, distinct from the human-role `x-access-scope` header; see
+`services/xstockstrat-config/CLAUDE.md`). The same tick also resolves feature 101's `UNKNOWN`
+order intents against broker truth (FR-6) — a ledger `order_intent.late_response_conflict` event
+first (not yet emitted by 101 today, see the code comment on `resolveUnknownIntents`), falling
+back to a broker-side scan by the derived client-order-id nonce for **Alpaca accounts only** (IBKR
+never sends a customer-order tag on submission, so its `ListOrders` results never carry one to
+match against) — a genuinely inconclusive intent is retried next tick, never guessed.
 
 ## Position & Balance Sync Observability
 

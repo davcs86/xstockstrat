@@ -183,6 +183,16 @@ enum IntentState {
   INTENT_STATE_UNKNOWN = 4;    // broker outcome unknown — never retried automatically (FR-5)
 }
 
+// HaltSource distinguishes which automated mechanism halted an account — 030's
+// bracket-protection flatten failure vs. 102's broker-state-reconciliation mismatch — so an
+// operator (and the /trader UI) can tell which one fired without guessing from halt_reason's
+// free text alone.
+enum HaltSource {
+  HALT_SOURCE_UNSPECIFIED = 0;
+  HALT_SOURCE_BRACKET_PROTECTION = 1;  // 030
+  HALT_SOURCE_RECONCILIATION = 2;       // 102
+}
+
 // BrokerAccount is a registered broker account (credentials never returned).
 message BrokerAccount {
   string id = 1;
@@ -196,6 +206,14 @@ message BrokerAccount {
   CredentialStatus credential_status = 7;
   // credential_checked_at is when credential_status was last refreshed.
   google.protobuf.Timestamp credential_checked_at = 8;
+  // halted / halted_at / halt_reason / halt_source (feature 030 + 102): whether this account is
+  // currently halted by an automated safety mechanism, when, why, and which mechanism. False/unset
+  // means no automated halt is in effect; an operator may still have separately deactivated the
+  // account (is_active).
+  bool halted = 9;
+  google.protobuf.Timestamp halted_at = 10;
+  string halt_reason = 11;
+  HaltSource halt_source = 12;
 }
 
 message RegisterBrokerAccountRequest {

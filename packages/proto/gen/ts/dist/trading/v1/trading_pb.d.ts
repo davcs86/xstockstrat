@@ -422,6 +422,27 @@ export type BrokerAccount = Message<"xstockstrat.trading.v1.BrokerAccount"> & {
      * @generated from field: google.protobuf.Timestamp credential_checked_at = 8;
      */
     credentialCheckedAt?: Timestamp | undefined;
+    /**
+     * halted / halted_at / halt_reason / halt_source (feature 030 + 102): whether this account is
+     * currently halted by an automated safety mechanism, when, why, and which mechanism. False/unset
+     * means no automated halt is in effect; an operator may still have separately deactivated the
+     * account (is_active).
+     *
+     * @generated from field: bool halted = 9;
+     */
+    halted: boolean;
+    /**
+     * @generated from field: google.protobuf.Timestamp halted_at = 10;
+     */
+    haltedAt?: Timestamp | undefined;
+    /**
+     * @generated from field: string halt_reason = 11;
+     */
+    haltReason: string;
+    /**
+     * @generated from field: xstockstrat.trading.v1.HaltSource halt_source = 12;
+     */
+    haltSource: HaltSource;
 };
 /**
  * Describes the message xstockstrat.trading.v1.BrokerAccount.
@@ -761,6 +782,36 @@ export declare enum IntentState {
  * Describes the enum xstockstrat.trading.v1.IntentState.
  */
 export declare const IntentStateSchema: GenEnum<IntentState>;
+/**
+ * HaltSource distinguishes which automated mechanism halted an account — 030's
+ * bracket-protection flatten failure vs. 102's broker-state-reconciliation mismatch — so an
+ * operator (and the /trader UI) can tell which one fired without guessing from halt_reason's
+ * free text alone.
+ *
+ * @generated from enum xstockstrat.trading.v1.HaltSource
+ */
+export declare enum HaltSource {
+    /**
+     * @generated from enum value: HALT_SOURCE_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * 030
+     *
+     * @generated from enum value: HALT_SOURCE_BRACKET_PROTECTION = 1;
+     */
+    BRACKET_PROTECTION = 1,
+    /**
+     * 102
+     *
+     * @generated from enum value: HALT_SOURCE_RECONCILIATION = 2;
+     */
+    RECONCILIATION = 2
+}
+/**
+ * Describes the enum xstockstrat.trading.v1.HaltSource.
+ */
+export declare const HaltSourceSchema: GenEnum<HaltSource>;
 /**
  * @generated from service xstockstrat.trading.v1.TradingService
  */

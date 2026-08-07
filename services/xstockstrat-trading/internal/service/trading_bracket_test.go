@@ -76,6 +76,12 @@ func (f *fakeBroker) SubmitBracketLegs(ctx context.Context, parentBrokerOrderID,
 	panic("fakeBroker.SubmitBracketLegs not implemented")
 }
 
+// ListOrders (feature 102) — not exercised by any of this file's bracket-state-machine
+// tests, so it panics like every other unused method on this fake.
+func (f *fakeBroker) ListOrders(ctx context.Context) ([]broker.BrokerOrder, error) {
+	panic("fakeBroker.ListOrders not implemented")
+}
+
 var _ broker.Broker = (*fakeBroker)(nil)
 
 // fakeBracketRepo implements repository.BracketRepository with an in-memory map,
@@ -460,13 +466,13 @@ func TestPollFills_PartialFillResizesActiveBracket(t *testing.T) {
 // tests need).
 type fakeAccountRepo struct {
 	repository.AccountRepository
-	updateHaltStatusFn func(ctx context.Context, id string, halted bool, reason string, haltedAt *time.Time) error
+	updateHaltStatusFn func(ctx context.Context, id string, halted bool, reason string, haltedAt *time.Time, haltSource int32) error
 	listActiveFn       func(ctx context.Context) ([]*repository.BrokerAccountRecord, error)
 }
 
-func (f *fakeAccountRepo) UpdateHaltStatus(ctx context.Context, id string, halted bool, reason string, haltedAt *time.Time) error {
+func (f *fakeAccountRepo) UpdateHaltStatus(ctx context.Context, id string, halted bool, reason string, haltedAt *time.Time, haltSource int32) error {
 	if f.updateHaltStatusFn != nil {
-		return f.updateHaltStatusFn(ctx, id, halted, reason, haltedAt)
+		return f.updateHaltStatusFn(ctx, id, halted, reason, haltedAt, haltSource)
 	}
 	return nil
 }
@@ -567,7 +573,7 @@ func TestIsAccountHalted_GateBlocksPlaceOrderAndReplaceOrder(t *testing.T) {
 func TestHaltAccount_SetsInMemoryBeforeReleasingMutexThenWritesDB(t *testing.T) {
 	dbCalled := make(chan struct{})
 	unblock := make(chan struct{})
-	accounts := &fakeAccountRepo{updateHaltStatusFn: func(ctx context.Context, id string, halted bool, reason string, haltedAt *time.Time) error {
+	accounts := &fakeAccountRepo{updateHaltStatusFn: func(ctx context.Context, id string, halted bool, reason string, haltedAt *time.Time, haltSource int32) error {
 		close(dbCalled)
 		<-unblock
 		return nil
@@ -579,7 +585,7 @@ func TestHaltAccount_SetsInMemoryBeforeReleasingMutexThenWritesDB(t *testing.T) 
 
 	done := make(chan struct{})
 	go func() {
-		svc.haltAccount(context.Background(), "acct-1", "test reason")
+		svc.haltAccount(context.Background(), "acct-1", "test reason", int32(tradingv1.HaltSource_HALT_SOURCE_BRACKET_PROTECTION))
 		close(done)
 	}()
 
@@ -598,14 +604,14 @@ func TestHaltAccount_SetsInMemoryBeforeReleasingMutexThenWritesDB(t *testing.T) 
 // TestHaltAccount_DBWriteFailureDoesNotRollBack: fail-safe — a persistence hiccup
 // must never undo the halt itself.
 func TestHaltAccount_DBWriteFailureDoesNotRollBack(t *testing.T) {
-	accounts := &fakeAccountRepo{updateHaltStatusFn: func(ctx context.Context, id string, halted bool, reason string, haltedAt *time.Time) error {
+	accounts := &fakeAccountRepo{updateHaltStatusFn: func(ctx context.Context, id string, halted bool, reason string, haltedAt *time.Time, haltSource int32) error {
 		return fmt.Errorf("db unavailable")
 	}}
 	svc := &TradingService{
 		cfgW: &config.Watcher{}, accountRepo: accounts, notify: &fakeNotifyClient{},
 		halted: map[string]bool{}, haltReasons: map[string]string{},
 	}
-	svc.haltAccount(context.Background(), "acct-1", "test reason")
+	svc.haltAccount(context.Background(), "acct-1", "test reason", int32(tradingv1.HaltSource_HALT_SOURCE_BRACKET_PROTECTION))
 	if !svc.isAccountHalted("acct-1") {
 		t.Error("expected isAccountHalted to remain true despite the DB write failure")
 	}
