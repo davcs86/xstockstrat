@@ -247,8 +247,10 @@ def register_tools(server: MCPServer) -> None:
         SIDE EFFECT: on success this tool AUTO-EMITS an alert when conviction is present and >= the
             agent.signal.alert_threshold config value (default 0.6); an alert failure does not fail
             the ingest. Do NOT also call emit_alert for the same signal, or you will double-alert.
-        Returns {"signal_id": <int>} on success; raises on unknown source slug
-        (INVALID_ARGUMENT)."""
+        Returns {"signal_id": <int>, "deduplicated": <bool>} on success — deduplicated=true means
+            this submission matched an existing signal within the dedup window and no new row was
+            inserted (the auto-alert above is suppressed in that case); raises on unknown source
+            slug (INVALID_ARGUMENT)."""
         result = await client.ingest_signal(
             source=source,
             symbol=symbol,
@@ -275,7 +277,11 @@ def register_tools(server: MCPServer) -> None:
         except Exception as e:
             log.warning("alert-threshold read failed, using default: %s", e)
             alert_threshold = _ALERT_THRESHOLD_DEFAULT
-        if conviction is not None and conviction >= alert_threshold:
+        if (
+            not result.get("deduplicated")
+            and conviction is not None
+            and conviction >= alert_threshold
+        ):
             try:
                 alert_title = headline if headline else f"{direction.upper()} {symbol} via {source}"
                 alert_body = f"Signal ingested: {direction} {symbol} (conviction {conviction:.2f})"

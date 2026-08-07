@@ -95,3 +95,97 @@
   caller-layer insight and the hypertable-unique-index constraint were both already in
   `insights.md`/informed this design; nothing new to append).
 - Status: `draft` → `design-approved`.
+
+## Session 2026-08-07 — sdd-spec
+
+- Generated implementation-spec.md with 14 steps. Status → implementation-ready.
+- Key codebase findings:
+  - `design.md`'s illustrative code snippet names the config-watcher attribute
+    `self._config.dedup_window_hours`, but the real attribute set by
+    `IngestServicer.__init__` (`servicer.py:171`) is `self._cfg` — Step 6 instructs the real
+    attribute name, not the design snippet's placeholder.
+  - `services/xstockstrat-ingest/tests/_helpers.py` (already the shared-fixture home for this
+    service per its own docstring) gets a new `async with self._db.acquire()`-mock helper in
+    Step 7, reusing the async-context-manager idiom already live at
+    `services/xstockstrat-agent/tests/test_client.py:71-75` (`_channel_cm`).
+  - Confirmed live precedent for the `async with self._db.acquire() as conn,
+    conn.transaction():` idiom already exists in this repo —
+    `services/xstockstrat-analysis/app/repositories/opportunities.py:48`
+    (`OpportunitiesRepository.replace_for_user`) — so this is not a novel pattern for the
+    codebase, only for `xstockstrat-ingest` specifically (confirmed zero prior use there).
+  - Migration `009_signal_dedup_keys` confirmed as the next free number (last file
+    `008_signal_source_health.{up,down}.sql`); schema `ingest` already exists
+    (`migrations/000_schema.up.sql`), so no `CREATE SCHEMA` needed in the new migration.
+  - `services/xstockstrat-ingest/CLAUDE.md`'s `## Config Keys Consumed` table currently has no
+    `ingest.signals.*` namespace at all (the historical dead keys were fully removed) — Step 12
+    reintroduces the namespace with exactly the one wired key, not the old 9-key placeholder set.
+
+## Session 2026-08-07 — manual execute (all 14 steps, on the harness branch)
+
+- **Branch-topology deviation, disclosed up front (matches the ledger's 2026-07-30
+  082-fix-fmp-config-boot-only entry — a harness-assigned session branch diverging from the SDD
+  `**Development Branch**`)**: this session's harness task explicitly assigned
+  `claude/ingest-signal-dedup-ehhgy6` as the branch to develop and push on, with instructions to
+  never push to a different branch without explicit permission. `/sdd-execute`'s normal flow
+  (per-step branches off `feature/ingest-signal-dedup`, step PRs, then a final integration PR)
+  would require creating and pushing `feature/ingest-signal-dedup` and
+  `feature/ingest-signal-dedup/step-N` branches — a conflict with that constraint. Root
+  `CLAUDE.md` § Branch Strategy independently confirms `claude/*` branches are PR'd directly into
+  `main-dev`, never used as a feature base. Resolution: implemented all 14 steps directly on
+  `claude/ingest-signal-dedup-ehhgy6` in this single session, following `implementation-spec.md`'s
+  instructions step-for-step (including each step's red-before-green verification where
+  applicable), rather than running `/sdd-execute`'s per-step-branch automation. `feature.md`'s
+  `**Development Branch**` field is left as `feature/ingest-signal-dedup` for SDD-doc consistency,
+  but the actual code landed on the harness branch — the integration PR source is
+  `claude/ingest-signal-dedup-ehhgy6`, not that field.
+- Steps 1–2 (proto + codegen): added `IngestSignalResponse.deduplicated`. Toolchain unavailable
+  via the normal Docker path in this sandbox (no docker daemon) — provisioned the host toolchain
+  per `docs/runbooks/codegen-toolchain-host-setup.md` (buf 1.72.0, the three pinned Go plugins,
+  the three pinned TS plugins, `grpcio-tools==1.80.0`), validated an **empty diff** against the
+  committed stubs on the unmodified proto first (toolchain-drift check), then re-ran with the
+  real change. `buf lint` and `buf breaking --against main-dev` both pass; generated-stub diff
+  scoped to `ingest/v1/` only across Go/Python/TS, `deduplicated` field confirmed present and
+  round-trippable in all three.
+- Step 3 (migration `009_signal_dedup_keys`): written exactly per `implementation-spec.md`;
+  confirmed collision-free against all 43 remote branches (already checked at design time).
+- Steps 4–5 (config getter + test): `ConfigWatcher.dedup_window_hours` added; test passes.
+- Steps 6–7 (the core handler rewrite + tests) — the largest step. Rewrote `IngestSignal`'s
+  persist block per `design.md`'s sentinel-exception transaction pattern, using the real
+  `self._cfg` attribute (not the design doc's `self._config` placeholder, per Step 6's own
+  Codebase Evidence correction). Confirmed red-before-green: the 4 pre-existing tests failed
+  against the rewritten handler (old `svc._db.fetchrow`-direct mocking shape incompatible with
+  the new `acquire()`/`transaction()` call shape) before being rewritten. Added the
+  `transaction_conn` helper to `tests/_helpers.py` per design.md's resolved mocking risk. All 10
+  new test cases from `design.md` § Test Plan pass. **Wider blast radius than the spec's
+  Codebase Evidence anticipated**: two more pre-existing tests outside `TestIngestSignal`
+  (`TestIngestSignalRegistryValidation::test_proceeds_when_source_registered`,
+  `TestIngestSignalConvictionValidation::_servicer_full_happy_path`) plus
+  `test_source_health.py::test_ingest_signal_bumps_fed_count` also used the old mocking shape and
+  needed the same rewrite — recorded in `implementation-spec.md`'s Deviation Log.
+- Steps 8–9 (agent `client.ingest_signal`): `deduplicated` surfaced in the returned dict; new
+  `TestIngestSignalClient` test added (first-ever unit test of this function, confirmed absent
+  beforehand).
+- Steps 10–11 (agent `ingest_signal` tool): alert guard now reads `result.get("deduplicated")`;
+  docstring updated; 3 tests added/updated (suppression, non-suppression regression guard,
+  payload shape).
+- Steps 12–14 (docs): `services/xstockstrat-ingest/CLAUDE.md` (config key + new table row, plus a
+  one-sentence correction to the adjacent `signal_sources` bullet describing the new
+  `touch_source_last_seen` path), `docs/runbooks/mcp-tools.md` (return shape + intro sentence +
+  errors row), and `context-constitution-findings.md`'s stale "Dedup key" row removed (the
+  adjacent "9 dead config keys" row, a different already-resolved claim, left untouched).
+- **Verification (all steps)**: `xstockstrat-ingest` 179/179 tests pass (`pytest --cov=app
+  --cov-fail-under=40`, 76.5% actual, was 169/169 at 76.8% baseline before this session — the
+  ingest test *count* grew by 10 net-new + 3 renamed-not-net-new); `xstockstrat-agent` 201/201
+  tests pass (77.1% actual, was ~198 before — net +3 new tests); `ruff check`/`ruff format
+  --check` clean on both services; `buf lint`/`buf breaking` clean.
+- Constitution rules honored: C-01 (every instruction cited real path:line), C-05 (config key
+  naming), C-07 (migration numbering, collision-checked), C-08 (every service step paired with a
+  test step), C-09 (buf lint/breaking run), C-10 (deduplicated surfaced consistently — agent tool
+  response, docstring, mcp-tools.md; the second real IngestSignal caller,
+  `xstockstrat-analysis`'s `fundsignal_loop.py`, reviewed at design time and confirmed to need no
+  change), C-14 (Agent consumer surface reached in this feature, not deferred), F-05 (verification
+  passed before each logical commit unit), F-07 (no hardcoded config value), F-08/F-09 (stayed
+  within the spec's Files sections; only step Status fields flipped, Instructions/Evidence
+  untouched).
+- Status: `implementation-ready` → `code-completed`.
+- **Next**: open the integration PR from `claude/ingest-signal-dedup-ehhgy6` to `main-dev`.

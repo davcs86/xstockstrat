@@ -247,7 +247,9 @@ async def test_ingest_signal_calls_grpc():
 @pytest.mark.asyncio
 async def test_ingest_signal_auto_alert_above_threshold():
     """ingest_signal auto-emits alert when conviction >= threshold."""
-    mock_ingest = AsyncMock(return_value={"signal_id": 7})
+    # deduplicated=False set explicitly (feature 111) — proves the alert guard reads the key
+    # rather than accidentally over-suppressing on a missing key.
+    mock_ingest = AsyncMock(return_value={"signal_id": 7, "deduplicated": False})
     mock_alert = AsyncMock(return_value={"alert_id": "a1"})
     mock_config = AsyncMock(return_value="0.6")
     with (
@@ -268,6 +270,49 @@ async def test_ingest_signal_auto_alert_above_threshold():
     kw = mock_config.await_args.kwargs
     assert kw["namespace"] == "agent"
     assert kw["environment"] in ("dev", "production")
+
+
+@pytest.mark.asyncio
+async def test_ingest_signal_suppresses_alert_when_deduplicated():
+    """feature 111 (FR-4/AC-3): a deduplicated submission must NOT emit a duplicate alert,
+    even when conviction is above the threshold."""
+    mock_ingest = AsyncMock(return_value={"signal_id": 7, "deduplicated": True})
+    mock_alert = AsyncMock(return_value={"alert_id": "a1"})
+    mock_config = AsyncMock(return_value="0.6")
+    with (
+        patch.object(client, "ingest_signal", mock_ingest),
+        patch.object(client, "emit_alert", mock_alert),
+        patch.object(client, "get_config_value", mock_config),
+    ):
+        server = _make_server()
+        result = await _tool_fn(server, "ingest_signal")(
+            source="unusual_whales",
+            symbol="NVDA",
+            direction="buy",
+            valid_from="2026-05-01T00:00:00Z",
+            conviction=0.8,
+        )
+    assert result["deduplicated"] is True
+    mock_alert.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_ingest_signal_returns_deduplicated_field_in_payload():
+    """The tool's returned dict includes the deduplicated key end-to-end (feature 111)."""
+    mock_ingest = AsyncMock(return_value={"signal_id": 42, "deduplicated": False})
+    mock_config = AsyncMock(return_value=None)
+    with (
+        patch.object(client, "ingest_signal", mock_ingest),
+        patch.object(client, "get_config_value", mock_config),
+    ):
+        server = _make_server()
+        result = await _tool_fn(server, "ingest_signal")(
+            source="unusual_whales",
+            symbol="NVDA",
+            direction="buy",
+            valid_from="2026-05-01T00:00:00Z",
+        )
+    assert result == {"signal_id": 42, "deduplicated": False}
 
 
 @pytest.mark.asyncio
