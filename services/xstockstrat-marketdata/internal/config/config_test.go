@@ -5,6 +5,7 @@ import (
 	"sync"
 	"testing"
 
+	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
 )
 
@@ -203,5 +204,41 @@ func TestLoadFromEnv_FMPAPIKeyDefaultsEmpty(t *testing.T) {
 	cfg := LoadFromEnv()
 	if cfg.FMPAPIKey != "" {
 		t.Errorf("FMPAPIKey = %q, want empty when unset", cfg.FMPAPIKey)
+	}
+}
+
+// TestResolveEnvironment / TestResolveTradingMode guard the WatchConfig scope-omission fix:
+// NewWatcher must resolve this deployment's own APPLICATION_ENV/TRADING_MODE into the proto
+// scope it subscribes with, instead of leaving the request at its zero-value (dev/unspecified).
+func TestResolveEnvironment(t *testing.T) {
+	tests := []struct {
+		in   string
+		want commonv1.Environment
+	}{
+		{"production", commonv1.Environment_ENVIRONMENT_PRODUCTION},
+		{"development", commonv1.Environment_ENVIRONMENT_DEV},
+		{"", commonv1.Environment_ENVIRONMENT_DEV},
+		{"staging", commonv1.Environment_ENVIRONMENT_DEV},
+	}
+	for _, tt := range tests {
+		if got := resolveEnvironment(tt.in); got != tt.want {
+			t.Errorf("resolveEnvironment(%q) = %v, want %v", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestResolveTradingMode(t *testing.T) {
+	tests := []struct {
+		in   string
+		want commonv1.TradingMode
+	}{
+		{"live", commonv1.TradingMode_TRADING_MODE_LIVE},
+		{"paper", commonv1.TradingMode_TRADING_MODE_PAPER},
+		{"", commonv1.TradingMode_TRADING_MODE_PAPER},
+	}
+	for _, tt := range tests {
+		if got := resolveTradingMode(tt.in); got != tt.want {
+			t.Errorf("resolveTradingMode(%q) = %v, want %v", tt.in, got, tt.want)
+		}
 	}
 }

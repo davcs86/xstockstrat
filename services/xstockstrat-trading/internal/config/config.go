@@ -13,6 +13,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 
+	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
 )
 
@@ -66,8 +67,10 @@ func getEnvBool(key string, fallback bool) bool {
 
 // Watcher subscribes to xstockstrat-config WatchConfig stream.
 type Watcher struct {
-	namespace string
-	client    configv1.ConfigServiceClient
+	namespace   string
+	client      configv1.ConfigServiceClient
+	environment commonv1.Environment
+	tradingMode commonv1.TradingMode
 
 	mu       sync.RWMutex
 	snapshot map[string]*configv1.ConfigValue
@@ -75,19 +78,44 @@ type Watcher struct {
 	once     sync.Once
 }
 
-func NewWatcher(endpoint, namespace string) (*Watcher, error) {
+// NewWatcher dials the config service and starts the background watch loop.
+// applicationEnv/tradingMode are this deployment's own resolved scope (Config.ApplicationEnv /
+// Config.TradingMode) — passed on every WatchConfig request so the server serves this
+// deployment's config rows instead of the zero-value dev/all default.
+func NewWatcher(endpoint, namespace, applicationEnv, tradingMode string) (*Watcher, error) {
 	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("dial config service: %w", err)
 	}
 	w := &Watcher{
-		namespace: namespace,
-		client:    configv1.NewConfigServiceClient(conn),
-		ready:     make(chan struct{}),
-		snapshot:  make(map[string]*configv1.ConfigValue),
+		namespace:   namespace,
+		client:      configv1.NewConfigServiceClient(conn),
+		ready:       make(chan struct{}),
+		snapshot:    make(map[string]*configv1.ConfigValue),
+		environment: resolveEnvironment(applicationEnv),
+		tradingMode: resolveTradingMode(tradingMode),
 	}
 	go w.watchLoop()
 	return w, nil
+}
+
+// resolveEnvironment maps Config.ApplicationEnv ("development" | "production") to the proto
+// Environment enum. Anything other than "production" resolves to dev, matching the default in
+// LoadFromEnv.
+func resolveEnvironment(applicationEnv string) commonv1.Environment {
+	if applicationEnv == "production" {
+		return commonv1.Environment_ENVIRONMENT_PRODUCTION
+	}
+	return commonv1.Environment_ENVIRONMENT_DEV
+}
+
+// resolveTradingMode maps Config.TradingMode ("paper" | "live") to the proto TradingMode enum.
+// Anything other than "live" resolves to paper, matching the default in LoadFromEnv.
+func resolveTradingMode(tradingMode string) commonv1.TradingMode {
+	if tradingMode == "live" {
+		return commonv1.TradingMode_TRADING_MODE_LIVE
+	}
+	return commonv1.TradingMode_TRADING_MODE_PAPER
 }
 
 func (w *Watcher) watchLoop() {
@@ -105,8 +133,10 @@ func (w *Watcher) watchLoop() {
 
 func (w *Watcher) stream() error {
 	req := &configv1.WatchConfigRequest{
-		Namespace: w.namespace,
-		ClientId:  fmt.Sprintf("go-trading-%d", os.Getpid()),
+		Namespace:   w.namespace,
+		ClientId:    fmt.Sprintf("go-trading-%d", os.Getpid()),
+		Environment: w.environment,
+		TradingMode: w.tradingMode,
 	}
 	stream, err := w.client.WatchConfig(context.Background(), req)
 	if err != nil {

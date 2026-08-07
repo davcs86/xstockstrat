@@ -43,7 +43,7 @@ func main() {
 
 	cfg := config.LoadFromEnv()
 
-	cfgWatcher, err := config.NewWatcher(cfg.ConfigEndpoint, "portfolio")
+	cfgWatcher, err := config.NewWatcher(cfg.ConfigEndpoint, "portfolio", cfg.ApplicationEnv, cfg.TradingMode)
 	if err != nil {
 		slog.Error("config watcher failed", "error", err)
 		os.Exit(1)
