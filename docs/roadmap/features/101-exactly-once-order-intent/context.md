@@ -302,3 +302,26 @@ of `main-dev`. This satisfies the `merge-order.md` same-function-overlap depende
   an existing field), diff scoped exactly to `trading/v1` stubs (Go/TS/Python + compiled `dist/`), no
   unrelated regeneration drift. TDD: N/A (proto/generated code). Deviations: none beyond the
   PlaceOrder-ordering resolution above (recorded for when Step 12 lands).
+- Step 3 [done] — Re-verified per C-07: `004` still the highest landed migration on this branch;
+  `005_broker_accounts_halted` (feature 030) has not landed. **Deviation**: created `006_order_intents`
+  anyway rather than blocking, since this session is building the stacked-branch program in the
+  established order (100→101→023→030→102) — 030 does not exist as a branch yet and will be built
+  *on top of* this branch (via 023) later, at which point it will correctly claim `005` per its own
+  pre-assignment with zero collision risk. The "wait for 005" instruction was written for the default
+  parallel-branch sequential mode, where a live numbering collision is a real risk; that risk does not
+  exist in a stacked-branch build order. Verified offline: 3 `CREATE` statements in `.up`, single
+  matching `DROP TABLE` in `.down` (indexes drop implicitly).
+- Step 4 [done] — Added both new keys to `xstockstrat-trading/CLAUDE.md` and a new `### feature 101`
+  entry to `config-governance.md`'s Per-Feature Registered Keys log (above feature 100's entry, per
+  newest-first). TDD: N/A (docs). Deviations: none.
+- Steps 5+6 [done] (TDD pair) — Wrote `clientorderid_test.go` + extended `ibkr_test.go` first. RED:
+  build failed (`undefined: broker.DeriveBrokerClientOrderID` — right reason). Implemented
+  `DeriveBrokerClientOrderID` (`"xss-"+intentID`), named `IBKRRequestTimeout` constant replacing the
+  bare `10*time.Second` literal, and `cOID` field wiring in `SubmitOrder`'s request body (only when
+  `ClientOrderID != ""`). **IBKR field name confirmed via live web search** (see session header) —
+  `cOID` is correct per IBKR's own Client Portal Web API docs, not just a "best-available candidate"
+  as design.md's Open Risk #1 called it. GREEN: 6/6 pass (3 new clientorderid tests, 1 new IBKR
+  forwarding test, 2 pre-existing IBKR tests unaffected). `golangci-lint`: 0 issues. Coverage: 62.7%
+  (≥40% threshold; `internal/broker` is not coverage-excluded). Deviations: none beyond the IBKR
+  length-limit caveat (no definitive ceiling found in public docs — flagged in the eventual PR, per
+  the step's own instruction).

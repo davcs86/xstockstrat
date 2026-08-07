@@ -142,7 +142,7 @@ Confirm the diff contains only the new `IntentState` enum and `Order.intent_stat
 
 ### Step 3 — migration: `006_order_intents`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/migrations/006_order_intents.up.sql` — create
@@ -214,7 +214,7 @@ implicitly with the table, so no explicit `DROP INDEX` is required). Do not star
 
 ### Step 4 — config: register the two new keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/CLAUDE.md` — modify (Config Keys Consumed table)
@@ -260,7 +260,7 @@ Confirm both keys appear in both files with matching defaults, and the key names
 
 ### Step 5 — service: broker client-order-id derivation + IBKR plumbing
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/clientorderid.go` — create
@@ -328,7 +328,7 @@ truncation, which design.md did not specify.
 
 ### Step 6 — test: broker client-order-id plumbing
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/broker/clientorderid_test.go` — create

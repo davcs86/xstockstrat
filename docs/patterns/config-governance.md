@@ -37,6 +37,18 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 101 — exactly-once-order-intent (`xstockstrat-trading`)
+
+Durable order-intent dedup + `UNKNOWN` uncertainty tracking for `PlaceOrder`/`ReplaceOrder`/
+`CancelOrder`. Both keys follow the established local precedent of every other `trading.*` key
+today: read live via `s.cfgW.GetFloat`/`GetInt` with the default supplied in Go code, no
+config-service seed migration.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `trading.order_intent.stale_multiplier` | float | `3.0` | Multiplier applied to `max(live trading.broker.timeout_ms, IBKRRequestTimeout)` to derive the PENDING-intent staleness threshold; floor-clamped in code to ≥1.5. |
+| `trading.order_intent.sweep_interval_ms` | int | `5000` | Interval for `StartOrderIntentSweeper`'s proactive orphaned-`PENDING`-intent reclaim loop. |
+
 ### feature 100 — account-trading-halt-and-kill-switch (`xstockstrat-trading`, `xstockstrat-config`)
 
 A new parallel config key, independent of the existing `platform.maintenance_mode` boolean

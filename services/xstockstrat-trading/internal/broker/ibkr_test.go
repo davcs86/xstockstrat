@@ -69,6 +69,56 @@ func TestSubmitOrder_IBKRResolvesConid(t *testing.T) {
 	}
 }
 
+func TestSubmitOrder_IBKR_ClientOrderIDForwarded(t *testing.T) {
+	const wantConid = int64(265598)
+	var gotCOID string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/iserver/secdef/search":
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+				{"conid": wantConid, "description": "AAPL"},
+			})
+		case "/iserver/account/U1234567/orders":
+			var payload map[string]interface{}
+			_ = json.NewDecoder(r.Body).Decode(&payload)
+			orders, _ := payload["orders"].([]interface{})
+			ord := orders[0].(map[string]interface{})
+			if v, ok := ord["cOID"].(string); ok {
+				gotCOID = v
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode([]map[string]interface{}{
+				{"order_id": "ibkr-ord-99", "order_status": "PreSubmitted"},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	c := broker.NewIBKRClient(broker.IBKRConfig{
+		BaseURL:       srv.URL,
+		IBKRAccountID: "U1234567",
+	})
+
+	_, err := c.SubmitOrder(context.Background(), broker.OrderRequest{
+		Symbol:        "AAPL",
+		Side:          "buy",
+		OrderType:     "market",
+		Qty:           10,
+		TimeInForce:   "day",
+		ClientOrderID: "xss-test-intent",
+	})
+	if err != nil {
+		t.Fatalf("SubmitOrder failed: %v", err)
+	}
+	if gotCOID != "xss-test-intent" {
+		t.Errorf("expected cOID %q forwarded to IBKR, got %q", "xss-test-intent", gotCOID)
+	}
+}
+
 func TestSubmitOrder_IBKRConidNotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/iserver/secdef/search" {
