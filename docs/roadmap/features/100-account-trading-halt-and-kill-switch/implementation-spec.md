@@ -1,6 +1,6 @@
 # Implementation Spec: account-trading-halt-and-kill-switch
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-08-06
 **Feature**: `docs/roadmap/features/100-account-trading-halt-and-kill-switch/feature.md`
 **Total Steps**: 13
@@ -64,7 +64,7 @@ and 107.
 
 ### Step 1 — docs: Re-verify FR-1 (no code change) and retire the stale findings-doc row
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` (repo-wide) + `services/xstockstrat-trading/docs/`
 **Files**:
 - `services/xstockstrat-trading/docs/context-constitution-findings.md` — modify (row 13 only)

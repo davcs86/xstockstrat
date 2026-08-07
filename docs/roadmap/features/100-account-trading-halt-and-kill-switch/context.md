@@ -186,3 +186,33 @@
     corrects FR-5/AC-4's stale text to match. A future reader of product-spec.md would believe
     ledger-event audit is a requirement this feature satisfies. — [ ] unaddressed
 - Overlap findings: none blocking (see above).
+
+## Session 2026-08-07T00:00:00Z — sdd-execute (sequential mode)
+
+**Multi-feature program note**: executing as part of the sequence `100 → 101 → 023 → 030 → 102`
+(matches `merge-order.md`'s established build order). Per explicit user direction, using a
+**stacked-branch PR strategy** instead of sequential-mode's default (each feature branches from
+`main-dev`, integration PR targets `main-dev`): `feature/account-trading-halt-and-kill-switch`
+branches from `main-dev` (this feature is first in the chain, so no deviation here), but each
+downstream feature (101, 023, 030, 102) will branch from the *previous* feature's branch and its
+integration PR will target the *previous* feature's branch, not `main-dev` directly. This avoids
+blocking each feature's start on the previous one's PR actually merging (the `merge-order.md`
+same-function-overlap dependencies are satisfied by the stacked branch containing the code, not by
+a merge event). Recorded here since it diverges from `reference/sequential-mode.md` §5.6's default.
+
+- Re-spec gate (§5.3): validated all 13 steps' Codebase Evidence against the live tree via a
+  `codebase-discovery` subagent. 12/13 steps confirmed with exact line-anchors (including Step 7,
+  the most load-bearing). Step 2's cross-branch migration-`011` collision check required a
+  follow-up `git ls-remote --heads origin` — confirmed no other in-flight feature branch
+  (`exactly-once-order-intent`, `position-sizing-engine`, `stop-loss-bracket-orders`,
+  `broker-state-reconciliation`) exists yet, so `011` is free. No re-spec needed (directive: none,
+  no mismatches found).
+- Branch setup: `feature/account-trading-halt-and-kill-switch` created fresh from `origin/main-dev`
+  (did not exist on origin before this session).
+- Tooling setup: go1.25 ✓ · golangci-lint ✓ v2.5.0 · node ✓ v22.22.2 · pnpm ✓ 9.15.0 · uv ✓ 0.8.17 ·
+  `pnpm install --frozen-lockfile` run in `xstockstrat-config` and `xstockstrat-ui`; `go mod
+  download` run in `xstockstrat-portfolio` and `xstockstrat-trading`.
+- Step 1 [done] — Re-verified FR-1: `trading.go:244` reads only `platform.maintenance_mode`,
+  `CLAUDE.md:63` already documents it correctly. Retired the stale
+  `context-constitution-findings.md:13` row (marked resolved, kept for history per the step's own
+  instruction not to delete it). TDD: N/A (docs-only). Deviations: none.
