@@ -102,7 +102,7 @@ grep -c "platform.maintenance_mode" services/xstockstrat-trading/internal/servic
 
 ### Step 2 — migration: seed `platform.trading_state` per-`trading_mode` in `xstockstrat-config`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/011_platform_trading_state.up.sql` — create (NNN

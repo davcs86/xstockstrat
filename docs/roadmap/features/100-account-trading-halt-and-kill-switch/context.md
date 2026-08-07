@@ -216,3 +216,9 @@ a merge event). Recorded here since it diverges from `reference/sequential-mode.
   `CLAUDE.md:63` already documents it correctly. Retired the stale
   `context-constitution-findings.md:13` row (marked resolved, kept for history per the step's own
   instruction not to delete it). TDD: N/A (docs-only). Deviations: none.
+- Step 2 [done] — Created `011_platform_trading_state.{up,down}.sql` seeding four rows
+  (dev/paper, dev/live, production/paper, production/live, all `ACTIVE`). Re-verified `010` is
+  still the highest landed NNN and no sibling feature branch claimed `011` first — confirmed clean.
+  Verified offline: 4 INSERT rows in `.up`, single matching `DELETE` in `.down` scoped to
+  `namespace='platform' AND key='trading_state'`. TDD: N/A (migration — offline verification).
+  Deviations: none.
