@@ -9,7 +9,7 @@
 On the Screener page (`/insights/screener`), a criterion with kind "Fundamental" requires the user
 to hand-type a metric name into a free-text field (pre-seeded with `pe_ratio`). The backend
 (`xstockstrat-analysis`) already restricts fundamental metric names to a fixed set of 11 known
-fields and only rejects an unrecognized name *after* the scan has run against fetched fundamentals
+fields and only rejects an unrecognized name *after* fundamentals have been fetched for the scan
 — so a typo (e.g. `pe_ration`) silently reaches the server and fails late instead of being
 prevented at entry time. The sibling "Technical indicator" kind on the same page already avoids
 this problem: its metric field is a real `<select>` backed by a static frontend catalog.
@@ -43,9 +43,10 @@ now-invalid `metricName` selected; the row should fall back to the catalog's fir
 existing seeded default) the same way the Technical indicator field already resets/initializes today.
 
 FR-5. No backend or proto change: `ScreenCriterion.metric_name` stays a plain `string` wire field.
-The frontend catalog only narrows what the *UI* offers; it does not change server-side validation
-(`_validate_fundamental_metrics` in `screener.py` keeps enforcing the same 11-field set it enforces
-today).
+The frontend catalog only narrows what the *UI* offers; it does not change server-side validation.
+`_validate_fundamental_metrics` in `screener.py` today accepts the 11 `_FUNDAMENTAL_FIELDS` names
+*plus* any `extra_metrics` key present on the fetched batch — this UI change only narrows what a
+user can *pick*; it does not narrow (and is not required to narrow) what the backend accepts.
 
 ## Out of Scope
 

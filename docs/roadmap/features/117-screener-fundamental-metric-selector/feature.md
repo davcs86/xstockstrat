@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-07 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-07 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning: FR-5 wording corrected re: `extra_metrics` union; overlap scan clean) |
 
 ---
 
@@ -37,4 +38,4 @@ matching the existing select-driven pattern used for the Technical indicator fie
 
 ## Next Action
 
-`/sdd-review screener-fundamental-metric-selector product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design screener-fundamental-metric-selector quick` — recon + design debate
