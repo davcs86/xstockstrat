@@ -255,6 +255,24 @@ export async function startMockBackend(): Promise<void> {
               page: { nextPageToken: '' },
             };
           }
+          // feature 102 — reconciliation status for /trader/positions (useReconciliationStatus).
+          // Default branch: one healthy tick, no mismatch. Overridden per-test via page.route()
+          // for the mismatch/halt scenarios (positions-reconciliation.spec.ts).
+          if (req.streamKey?.startsWith('account:')) {
+            return {
+              events: [
+                {
+                  eventId: 'evt-reconciliation-001',
+                  eventType: 'reconciliation.mismatch_found',
+                  streamKey: req.streamKey,
+                  sourceService: 'xstockstrat-trading',
+                  payload: { mismatch_class: 'quantity_discrepancy', tick_at: Date.now() },
+                  sequence: BigInt(1),
+                },
+              ],
+              page: { nextPageToken: '' },
+            };
+          }
           return {
             events: [
               {
@@ -872,6 +890,20 @@ export async function startMockBackend(): Promise<void> {
         },
         async setConfig() {
           return {};
+        },
+        // feature 102 — trader/positions reads platform.trading_state via traderConfigClient
+        // (unified across the CONFIG_ENDPOINT port; see playwright.config.ts). Default: ACTIVE
+        // (no platform-wide restriction) so the existing suite's happy-path assertions are
+        // unaffected. Overridden per-test via page.route() for the REDUCE_ONLY/HALTED cases
+        // (positions-reconciliation.spec.ts).
+        async getConfig() {
+          return {
+            namespace: 'platform',
+            version: '1',
+            values: {
+              trading_state: { value: { case: 'stringVal', value: 'ACTIVE' } },
+            },
+          };
         },
       });
 
