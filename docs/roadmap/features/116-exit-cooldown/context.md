@@ -480,3 +480,44 @@ re-checking against this scenario when Step 10 is reached; likely fix is seeding
 - Deviations: see Deviation Log ("Step 10", "Step 10/11") — Step 11's own instructions were
   followed as written; the deviations above surfaced during Step 10 but are jointly attributed
   since Step 11 is what exposed them via full-suite verification.
+
+### Checkpoint — steps 1–11 (surface: backend)
+Sequential-mode §5.5b checkpoint report printed to the operator covering the full run so far
+(no checkpoint had fired earlier in this session's execution). Accountability: no out-of-scope
+changes, no unresolved open items, no unaddressed review warnings, 6 deviations (see Deviation
+Log). Operator directed to proceed (consistent with this session's sustained "continue"
+authorization). Counter reset; continuing to Step 12.
+
+### Step 12 — service: boot-time Order-based entry-time backfill [done]
+- Created `app/engine/entry_backfill.py`: pure `_infer_open_entry_time(orders)` (walks a running
+  signed balance over BUY/SELL fills sorted by `updated_at`, records the last 0→nonzero crossing
+  time, returns `None` if currently flat) + `run_once(live_loop, db_pool, trading_stub,
+  cfg_watcher)` (semaphore-bounded `ListOrders(strategy_id, symbol)` fan-out over every live pair
+  still missing `_last_entry_at`, seeds `live_loop._last_state`/`_last_entry_at` +
+  `_write_entry_cooldown` on a resolved open position, per-pair failures logged and skipped).
+- Wired into `main.py`: a new non-blocking `asyncio.get_event_loop().create_task(...)` right
+  after `live_loop.run_forever()` is scheduled and before the fundsignal-loop section, passing
+  `servicer._trading` (the existing feature-083 analysis→trading edge — no new channel/pool).
+- Added the `analysis.strategy.max_concurrent_entry_backfill` (int, default 4) config-key row to
+  CLAUDE.md, plus a docs-accuracy addition to the Dependencies table's `xstockstrat-trading` row
+  noting the new (same-edge) `ListOrders(strategy_id, symbol)` boot-time use.
+- Discovery (codebase-discovery subagent) confirmed the spec's Codebase Evidence content/shape is
+  fully intact on the current tree; only citation line numbers had drifted (unrelated commits
+  landed in `servicer.py`, `trading.proto`, `trading.go` since the spec was written) — no re-spec
+  needed, implemented directly against current line numbers.
+- Minor deviation from the spec's literal code block: used top-level imports
+  (`from app.engine.live_loop import strategy_symbols`, `from app.handlers.servicer import
+  _row_to_strategy_definition`) instead of the spec's function-local deferred imports with `#
+  noqa: PLC0415` — confirmed no import cycle exists (`servicer.py` does not import `live_loop.py`
+  or `entry_backfill.py`), so the deferred-import workaround the spec used (presumably a
+  defensive habit, not a proven necessity) wasn't needed; simpler top-level imports pass `ruff
+  check` clean with no noqa required. The spec's own inline NOTE had already corrected the
+  `_row_to_strategy_definition` import source from `live_loop` to `servicer` — this deviation is
+  the same correction applied consistently, plus dropping the now-unnecessary deferral.
+- Verification: `grep -n "entry_backfill" app/main.py` ✓, `grep -n
+  "max_concurrent_entry_backfill" CLAUDE.md` ✓, `ruff check app/engine/entry_backfill.py app/
+  main.py` clean, `ruff format --check` clean, full suite `uv run pytest -q` → 450/450 passed
+  (no new tests yet — paired tests are Step 13).
+- Files modified: `services/xstockstrat-analysis/app/engine/entry_backfill.py` (new),
+  `services/xstockstrat-analysis/app/main.py`, `services/xstockstrat-analysis/CLAUDE.md`
+- Deviations: see Deviation Log ("Step 12").

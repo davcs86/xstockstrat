@@ -771,7 +771,7 @@ directly in a code comment... so a future editor sees the constraint before brea
 
 ### Step 12 — service: boot-time Order-based entry-time backfill
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/entry_backfill.py` — create
@@ -1595,3 +1595,19 @@ predates `get_int_present` (feature 097) and only stubbed `get_int`/`get_float`/
 0)` (Step 10), the unconfigured `MagicMock` return value hit `timedelta(days=MagicMock)` inside
 `effective_cooldown_days` → `TypeError`, exactly as it did in Step 7. In scope: `_make_loop()` lives
 in `tests/test_live_loop.py`, already Step 11's own `**Files**` entry.
+
+### Deviation: Step 12 — service: boot-time Order-based entry-time backfill
+**Spec said**: `entry_backfill.py`'s `run_once` imports `strategy_symbols` and
+`_row_to_strategy_definition` as function-local deferred imports inside `run_once` (each with a
+`# noqa: PLC0415`), per the spec's literal code block — with an inline NOTE already correcting the
+`_row_to_strategy_definition` import source from `app.engine.live_loop` to `app.handlers.servicer`.
+**Actual**: both imported at module top level instead (`from app.engine.live_loop import
+strategy_symbols`; `from app.handlers.servicer import _row_to_strategy_definition`), no deferral,
+no `noqa` needed.
+**Reason**: verified no import cycle exists — `servicer.py` does not import `live_loop.py` or
+`entry_backfill.py`, and `live_loop.py` does not import `entry_backfill.py` (confirmed by grep
+before writing the file). The spec's deferred-import pattern appears to be a defensive habit
+carried over rather than a proven necessity for this specific module graph; top-level imports are
+simpler, pass `ruff check` clean with no suppression comment, and match this module's own stated
+constraint ("imported ONLY by main.py, never by live_loop.py") without needing runtime deferral to
+enforce it. Purely a style choice — no behavior difference; `ruff check`/`ruff format` both clean.
