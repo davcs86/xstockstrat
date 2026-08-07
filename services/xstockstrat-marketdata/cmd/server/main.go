@@ -49,7 +49,7 @@ func main() {
 	cfg := config.LoadFromEnv()
 
 	// WatchConfig subscription — required before accepting traffic
-	cfgWatcher, err := config.NewWatcher(cfg.ConfigEndpoint, "marketdata")
+	cfgWatcher, err := config.NewWatcher(cfg.ConfigEndpoint, "marketdata", cfg.ApplicationEnv, cfg.TradingMode)
 	if err != nil {
 		slog.Error("config watcher failed", "error", err)
 		os.Exit(1)
