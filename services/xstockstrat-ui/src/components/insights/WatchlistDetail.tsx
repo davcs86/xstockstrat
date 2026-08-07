@@ -5,9 +5,18 @@ import { Trash2, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   useAddWatchlistSymbols,
   useRemoveWatchlistSymbols,
   useUpdateWatchlist,
+  UNBOUND,
+  toApiStrategyId,
   type WatchlistBindingInput,
 } from '@/hooks/useWatchlists';
 import { useStrategyDefinitions } from '@/hooks/useStrategyDefinitions';
@@ -49,8 +58,10 @@ export function WatchlistDetail({
   // Only live-enabled strategies are offered for a NEW binding — `active` alone (the fetch
   // default) also admits paused/never-enabled/test strategies. An already-bound strategy that
   // is no longer live stays visible (labeled) so its existing binding doesn't appear to vanish.
+  const liveStrategies = allStrategies.filter((s) => s.liveEnabled);
   const { data: oppData } = useOpportunities();
   const [symbolInput, setSymbolInput] = useState('');
+  const [addStrategyId, setAddStrategyId] = useState(UNBOUND);
 
   const inQueue = new Set((oppData?.opportunities ?? []).map((o) => o.symbol.toUpperCase()));
 
@@ -64,11 +75,16 @@ export function WatchlistDetail({
   function handleAddSymbol() {
     const raw = symbolInput.trim();
     if (!raw) return;
-    // Allow comma/space-separated entry; server uppercases + de-dupes. Added unbound.
+    // Allow comma/space-separated entry; server uppercases + de-dupes.
     const symbols = raw.split(/[\s,]+/).filter(Boolean);
     if (symbols.length === 0) return;
+    const strategyId = toApiStrategyId(addStrategyId);
     addSymbols.mutate(
-      { watchlistId: watchlist.watchlistId, symbols },
+      {
+        watchlistId: watchlist.watchlistId,
+        symbols,
+        bindings: symbols.map((s) => ({ symbol: s, strategyId })),
+      },
       { onSuccess: () => setSymbolInput('') },
     );
   }
@@ -125,6 +141,19 @@ export function WatchlistDetail({
           placeholder="Add symbols (e.g. AAPL MSFT)"
           className="max-w-xs"
         />
+        <Select value={addStrategyId} onValueChange={setAddStrategyId}>
+          <SelectTrigger className="h-9 w-40 text-xs" aria-label="Strategy for new symbols">
+            <SelectValue placeholder="Unbound" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={UNBOUND}>Unbound</SelectItem>
+            {liveStrategies.map((s) => (
+              <SelectItem key={s.strategyId} value={s.strategyId}>
+                {s.displayName || s.strategyId}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Button size="sm" variant="default" onClick={handleAddSymbol}>
           Add
         </Button>

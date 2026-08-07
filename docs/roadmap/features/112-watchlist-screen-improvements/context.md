@@ -288,3 +288,26 @@
   fixture run against pre-Step-1 code, then re-run for GREEN after Step 1 landed — see Step 1's
   entry above for the actual run output: 3 failed → 7/7 passed, 54.8s).
 - Files modified: `services/xstockstrat-ui/e2e/insights/watchlists.spec.ts`.
+
+### Step 3 — Add-time strategy picker (FR-3) [done]
+- Restored `liveStrategies` + `UNBOUND`/`toApiStrategyId` + `Select` imports in
+  `WatchlistDetail.tsx` (deferred by Step 1 — see implementation-spec.md Deviation Log). Added
+  `addStrategyId` state, the add-time `Select` (`aria-label="Strategy for new symbols"`, sourced
+  from `liveStrategies` — never `allStrategies`, matching the "only live-enabled for a NEW binding"
+  rule). `handleAddSymbol` now builds `bindings` from `toApiStrategyId(addStrategyId)`.
+  `addStrategyId` is intentionally not reset in `onSuccess` (design.md §3 — a repeat add to the same
+  watchlist keeps the active choice; only the Step 5 remount resets it).
+- Deviation: see implementation-spec.md Deviation Log (Step 3/4) — the new e2e test's first
+  watchlist name (`'Add-Time List'`) collided with Playwright's substring accessible-name matching
+  on the "Add" button; renamed to `'Picker List'`.
+- TDD: red (Step 4's test, written first, failed waiting for `getByLabel('Strategy for new
+  symbols')` — didn't exist yet) → green (8/8 `watchlists.spec.ts` tests pass, 48.5s, after the list
+  name fix). `pnpm run lint` and `pnpm exec tsc --noEmit` both clean.
+- Files modified: `services/xstockstrat-ui/src/components/insights/WatchlistDetail.tsx`.
+
+### Step 4 — New e2e case for the add-time strategy picker (FR-3, AC-2) [done]
+- New test: bound add (choose a strategy, add a symbol, assert it lands as an evaluated
+  `readiness-row-${symbol}` with `unbound-${symbol}` absent) + explicit-unbound add (reset the
+  picker to "Unbound", assert `unbound-${symbol}`).
+- TDD: verified together with Step 3's red→green cycle (see Step 3's entry above).
+- Files modified: `services/xstockstrat-ui/e2e/insights/watchlists.spec.ts`.

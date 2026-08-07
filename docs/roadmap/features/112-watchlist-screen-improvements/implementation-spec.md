@@ -321,7 +321,7 @@ strategies" test); the new width/visibility assertions pass.
 
 ### Step 3 — service: Add-time strategy picker (FR-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/WatchlistDetail.tsx` — modify
@@ -405,7 +405,7 @@ Behavioral proof is Step 4.
 
 ### Step 4 — test: New e2e case for the add-time strategy picker (FR-3, AC-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/watchlists.spec.ts` — modify
@@ -766,3 +766,13 @@ cd services/xstockstrat-ui && pnpm test:e2e -- e2e/insights/watchlists.spec.ts
   No behavior change; TDD gate: red (3 e2e tests failing on `readiness-row-*`'s missing `Strategy
   for <symbol>`/`Remove <symbol>` controls) → green (all 7 tests in `watchlists.spec.ts` pass,
   54.8s) confirmed before this step was marked `done`.
+
+### Step 3/4 (2026-08-07)
+- **Disposition**: minor, mechanical — caught by the actual test run, fixed immediately.
+- Step 4's Instructions didn't specify a watchlist name for the new e2e case; the first attempt used
+  `'Add-Time List'`, which collides with `page.getByRole('button', { name: 'Add' })` (Playwright's
+  default substring accessible-name matching resolved 3 elements: the master-list's own
+  "Add-Time List" selector button, "Delete Add-Time List", and the actual "Add" button) — a genuine
+  RED failure from a bad fixture choice, not a code bug. Renamed the list to `'Picker List'` (no
+  substring overlap with any button label in this suite) and re-ran; 8/8 passed (48.5s). No spec
+  text edited — the name was never prescribed, only implied by convention.
