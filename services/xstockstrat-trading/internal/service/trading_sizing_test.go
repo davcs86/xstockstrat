@@ -84,7 +84,7 @@ func TestComputePositionSize_NormalCase(t *testing.T) {
 		marketdata: &fakeMarketDataClient{bars: flatBars(15), quote: &marketdatav1.Quote{AskPrice: 10, BidPrice: 10}},
 	}
 	req := &tradingv1.PlaceOrderRequest{Symbol: "TEST", Side: tradingv1.OrderSide_ORDER_SIDE_BUY}
-	qty, _, _, err := svc.ComputePositionSize(context.Background(), req, 10000, 1.0)
+	qty, _, _, _, err := svc.ComputePositionSize(context.Background(), req, 10000, 1.0)
 	if err != nil {
 		t.Fatalf("ComputePositionSize returned error: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestComputePositionSize_ConcentrationCapTriggered(t *testing.T) {
 		marketdata: &fakeMarketDataClient{bars: flatBars(15), quote: &marketdatav1.Quote{AskPrice: 200, BidPrice: 200}},
 	}
 	req := &tradingv1.PlaceOrderRequest{Symbol: "TEST", Side: tradingv1.OrderSide_ORDER_SIDE_BUY}
-	qty, _, _, err := svc.ComputePositionSize(context.Background(), req, 10000, 1.0)
+	qty, _, _, _, err := svc.ComputePositionSize(context.Background(), req, 10000, 1.0)
 	if err != nil {
 		t.Fatalf("ComputePositionSize returned error: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestComputePositionSize_ConfidenceHalfScaling(t *testing.T) {
 		marketdata: &fakeMarketDataClient{bars: flatBars(15), quote: &marketdatav1.Quote{AskPrice: 10, BidPrice: 10}},
 	}
 	req := &tradingv1.PlaceOrderRequest{Symbol: "TEST", Side: tradingv1.OrderSide_ORDER_SIDE_BUY}
-	qty, _, _, err := svc.ComputePositionSize(context.Background(), req, 10000, 0.5)
+	qty, _, _, _, err := svc.ComputePositionSize(context.Background(), req, 10000, 0.5)
 	if err != nil {
 		t.Fatalf("ComputePositionSize returned error: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestComputePositionSize_InsufficientBars(t *testing.T) {
 		marketdata: &fakeMarketDataClient{bars: flatBars(10), quote: &marketdatav1.Quote{AskPrice: 10, BidPrice: 10}},
 	}
 	req := &tradingv1.PlaceOrderRequest{Symbol: "TEST", Side: tradingv1.OrderSide_ORDER_SIDE_BUY}
-	_, _, _, err := svc.ComputePositionSize(context.Background(), req, 10000, 1.0)
+	_, _, _, _, err := svc.ComputePositionSize(context.Background(), req, 10000, 1.0)
 	if grpcstatus.Code(err) != codes.FailedPrecondition {
 		t.Fatalf("err = %v, want FailedPrecondition", err)
 	}
@@ -155,7 +155,7 @@ func TestComputePositionSize_ZeroEquity(t *testing.T) {
 		marketdata: &fakeMarketDataClient{bars: flatBars(15), quote: &marketdatav1.Quote{AskPrice: 10, BidPrice: 10}},
 	}
 	req := &tradingv1.PlaceOrderRequest{Symbol: "TEST", Side: tradingv1.OrderSide_ORDER_SIDE_BUY}
-	_, _, _, err := svc.ComputePositionSize(context.Background(), req, 0, 1.0)
+	_, _, _, _, err := svc.ComputePositionSize(context.Background(), req, 0, 1.0)
 	if grpcstatus.Code(err) != codes.FailedPrecondition {
 		t.Fatalf("err = %v, want FailedPrecondition", err)
 	}
@@ -168,7 +168,7 @@ func TestComputePositionSize_ZeroQuote(t *testing.T) {
 		marketdata: &fakeMarketDataClient{bars: flatBars(15), quote: &marketdatav1.Quote{AskPrice: 0, BidPrice: 0}},
 	}
 	req := &tradingv1.PlaceOrderRequest{Symbol: "TEST", Side: tradingv1.OrderSide_ORDER_SIDE_BUY}
-	_, _, _, err := svc.ComputePositionSize(context.Background(), req, 10000, 1.0)
+	_, _, _, _, err := svc.ComputePositionSize(context.Background(), req, 10000, 1.0)
 	if grpcstatus.Code(err) != codes.FailedPrecondition {
 		t.Fatalf("err = %v, want FailedPrecondition", err)
 	}

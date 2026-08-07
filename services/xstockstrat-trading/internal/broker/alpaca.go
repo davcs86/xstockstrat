@@ -337,7 +337,19 @@ func (c *Client) GetOrder(ctx context.Context, brokerOrderID string) (*BrokerOrd
 	if alpacaResp.FilledQty != "" {
 		filledQty, _ = strconv.ParseFloat(alpacaResp.FilledQty, 64)
 	}
-	return &BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status, FilledQty: filledQty, FilledAvgPrice: filledAvgPrice}, nil
+	out := &BrokerOrder{BrokerOrderID: alpacaResp.ID, Status: alpacaResp.Status, FilledQty: filledQty, FilledAvgPrice: filledAvgPrice}
+	// A bracket entry order's status response also nests its child leg IDs under "legs"
+	// (feature 030) — needed here so the fill poller can record them for an entry that
+	// fills asynchronously (not on the original SubmitOrder response).
+	for _, leg := range alpacaResp.Legs {
+		switch leg.Type {
+		case "stop":
+			out.StopLegOrderID = leg.ID
+		case "limit":
+			out.TakeProfitLegOrderID = leg.ID
+		}
+	}
+	return out, nil
 }
 
 // GetPositions fetches all open positions via GET /v2/positions.

@@ -116,6 +116,9 @@ func main() {
 	go svc.StartCredentialHealthPoller(ctx)
 	// Start order-intent sweeper — proactively reclaims orphaned PENDING intents (feature 101).
 	go svc.StartOrderIntentSweeper(ctx)
+	// Start bracket protection watchdog — flattens+halts on an unconfirmed bracket
+	// past its protection window (feature 030).
+	go svc.StartBracketProtectionWatchdog(ctx)
 
 	// gRPC server.
 	grpcHdl := handler.NewTradingHandler(svc)
