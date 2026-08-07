@@ -1,6 +1,6 @@
 # Implementation Spec: fix-mcp-target-user-authz
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-08-07
 **Feature**: `docs/roadmap/features/111-fix-mcp-target-user-authz/feature.md`
 **Total Steps**: 7
@@ -41,7 +41,7 @@ in product-spec.md).
 
 ### Step 1 — service: Add shared claims-derivation primitive `_require_claims` / `_caller_user_id`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -142,7 +142,7 @@ grep -n "_require_claims\|_caller_user_id" app/tools.py  # both new functions pr
 
 ### Step 2 — test: Direct unit tests for `_require_claims` / `_caller_user_id`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify
@@ -216,7 +216,7 @@ cd services/xstockstrat-agent && uv run pytest --cov=app --cov-fail-under=40
 
 ### Step 3 — service: `emit_alert` — replace `target_user_id` with required `broadcast: bool`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -322,7 +322,7 @@ grep -n "def emit_alert" -A 12 app/tools.py  # confirm ctx + broadcast, no targe
 
 ### Step 4 — test: Update `emit_alert` call sites; add broadcast/claims-derivation coverage
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify
@@ -415,7 +415,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 
 ### Step 5 — service: `manage_formula` — remove `author`/`formula_author_user_id`, derive both from claims
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -529,7 +529,7 @@ grep -n "formula_author_user_id\|author: str" app/tools.py  # expect zero hits
 
 ### Step 6 — test: Update `manage_formula` call sites; add ownership-derivation coverage
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify
@@ -639,7 +639,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check .
 
 ### Step 7 — docs: Rewrite `emit_alert` and `manage_formula` reference tables
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify
@@ -773,4 +773,16 @@ feature's final PR, and fix any grounded findings it reports.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+- **Branch/PR mechanics**: this feature's `**Development Branch**` field says
+  `feature/fix-mcp-target-user-authz` per Track C convention, but the harness assigned this session
+  to `claude/remove-target-user-mcp-g4tfqm` (root CLAUDE.md Harness Default Branch) with an explicit
+  "never push to a different branch" constraint. All 7 steps were implemented directly on that
+  branch, one commit per step-pair (matching the spec's paired service+test steps), and pushed to
+  the single PR (#886) already open for that branch, instead of the skill's normal per-step
+  branch/PR automation. Every step's Instructions/Verification were still followed exactly and
+  red-before-green (P-06) was proven for each service+test pair via a live pytest run showing the
+  failing state before the fix. Recorded per Constitution F-09 (no other change to step bodies).
+- **Teardown `/context-scrubber scan` (Step 7, root CLAUDE.md Teardown rule)**: the `context-scrubber`
+  skill/plugin was not available in this session (same situation as feature 092's execute session,
+  `docs/roadmap/features/092-fix-mcp-writepath-authz/context.md` per its archived synthesis) — the
+  scan was not run. Noted here and in the PR rather than silently skipped.

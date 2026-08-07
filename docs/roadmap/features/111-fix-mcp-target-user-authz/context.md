@@ -90,3 +90,34 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - No proto, migration, or config-key steps — confirmed via `packages/proto/notify/v1/notify.proto`
     (`:34,56`) and `packages/proto/indicators/v1/indicators.proto` (`:169,197,217`): both target RPC
     fields already exist and already accept plain strings.
+
+## Session 2026-08-07 (/sdd-execute — manual, harness-branch-pinned)
+
+- Executed all 7 implementation-spec.md steps directly on `claude/remove-target-user-mcp-g4tfqm`
+  (not the skill's normal per-step branch/PR automation — see implementation-spec.md Deviation Log)
+  because the harness pinned this session to that branch with a "never push elsewhere" constraint.
+  Every step's Instructions/Verification were followed exactly; TDD red-before-green (P-06) was
+  proven live for each service+test pair (ran the new/updated tests against the pre-fix tree to
+  confirm failure, then applied the service change and reran to confirm pass) rather than assumed.
+- Steps 1-2 (shared `_require_claims`/`_caller_user_id` helpers + direct tests): 4 new tests, all
+  198 pre-existing tests still passed after refactoring `_caller_access_scope` onto
+  `_require_claims` (no observable behavior change).
+- Steps 3-4 (`emit_alert`): confirmed `test_emit_alert_calls_grpc` failed red
+  (`TypeError: missing 2 required positional arguments`) before the fix; green after. Added 3 new
+  tests (broadcast-false derivation, removed-param rejection, no-claims raise).
+- Steps 5-6 (`manage_formula`): confirmed all 6 spec-enumerated call sites failed red
+  (`TypeError: unexpected keyword argument 'formula_author_user_id'`) before the fix; green after.
+  Added 3 new tests (claims-derived author+user_id, removed-param rejection, no-claims raise).
+- Step 7 (`docs/runbooks/mcp-tools.md`): full rewrite of both tools' parameter/error tables per
+  design.md's explicit scope. `context-scrubber` skill unavailable this session (same as feature
+  092's execute session) — noted in implementation-spec.md Deviation Log and feature.md Next
+  Action rather than silently skipped.
+- Final state: 208 tests passing (up from 198 baseline), 76.28% coverage (well above the 40%
+  threshold), `ruff check`/`ruff format --check` clean. No proto/migration/config changes, exactly
+  as design.md predicted.
+- Status: `implementation-ready` → `code-completed`.
+- Open Risks carried from design.md (unresolved, to watch post-merge): (1) requiring OAuth claims
+  for `emit_alert`/`manage_formula` going forward — no non-HTTP caller found, but this is
+  absence-of-evidence; (2) `broadcast` becoming required breaks any external MCP client caller
+  currently omitting it — accepted tradeoff, blast radius on real (non-test, non-`ingest_signal`)
+  callers not exhaustively enumerable from recon.
