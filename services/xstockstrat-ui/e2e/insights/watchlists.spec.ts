@@ -84,6 +84,23 @@ test.describe('Watchlists (insights)', () => {
     await expect(page.getByTestId('unbound-AAPL')).toHaveCount(0);
   });
 
+  test('strategy binding picker excludes non-live strategies (disabled strategies must not be usable)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page);
+    await page.goto('/insights/watchlists');
+
+    await createList(page, 'Filtered List');
+    await addSymbols(page, 'AAPL');
+
+    const select = page.getByTestId('binding-AAPL').getByLabel('Strategy for AAPL');
+    await select.click();
+    await expect(page.getByRole('option', { name: 'Live Test Strategy' })).toBeVisible();
+    // "Inactive Strategy" (liveEnabled: false in the fixture) must not be a selectable option.
+    await expect(page.getByRole('option', { name: 'Inactive Strategy' })).toHaveCount(0);
+  });
+
   test('master-detail: selecting a list swaps the detail pane (feature 098)', async ({ page }) => {
     await addAuthCookie(page);
     await mockWatchlists(page);
