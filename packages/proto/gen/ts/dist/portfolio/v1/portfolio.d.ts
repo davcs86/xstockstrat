@@ -86,6 +86,14 @@ export interface Position {
     factor: string;
     flag: PositionRiskFlag;
     exitRule: string;
+    /**
+     * Broker order IDs for the resting protective bracket legs (feature 030 —
+     * stop-loss-bracket-orders), sourced from trading's order.bracket_updated ledger
+     * events. "" when the position has no active bracket (manual entry, bracket
+     * disabled, or bracket not yet confirmed ACTIVE).
+     */
+    stopOrderId: string;
+    takeProfitOrderId: string;
 }
 export interface PortfolioSnapshot {
     portfolioId: string;

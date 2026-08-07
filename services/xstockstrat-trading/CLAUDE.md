@@ -22,6 +22,8 @@ Go gRPC service responsible for order execution and trade lifecycle management. 
 
 **Credential health**: every registered account's API secrets are validated against the broker (Alpaca `GET /v2/account`, IBKR `GET /portfolio/accounts`) on register, on credential update (`UpdateBrokerAccountCredentials`), and periodically by a background poller. The latest `CredentialStatus` (OK / INVALID / UNKNOWN) is persisted on `trading.broker_accounts` and returned by `ListBrokerAccounts` so the UI can surface accounts whose secrets stopped working.
 
+**Automatic stop-loss/take-profit brackets** (feature 030): whenever an auto-sized (`ComputePositionSize`) `MARKET`/`LIMIT` entry fills, `maybeSubmitBracket` opens a persisted bracket (`trading.order_brackets`) protecting it — Alpaca attaches the stop/take-profit atomically at entry `SubmitOrder`; IBKR submits them as a follow-up linked pair (`SubmitBracketLegs`, `isSingleGroup`+`parentId`) after the fill is confirmed, since IBKR's Client Portal Web API has no client-settable OCA group field. A per-account **protection-window watchdog** (`StartBracketProtectionWatchdog`, piggybacking on the fill-poller tick) flattens the position and halts the account (`trading.risk.max_unprotected_seconds`) if no bracket confirms in time. The halt is **persisted** on `trading.broker_accounts` (`halted`/`halted_at`/`halt_reason`, boot-hydrated) and blocks `PlaceOrder`/`ReplaceOrder` — never `CancelOrder`, the operator's sole remaining manual de-risk tool. `trading.risk.bracket_orders_enabled` seeds `false` in production (pending feature 103 or a documented manual verification) — a deliberate override of the default `true`, see `docs/roadmap/features/030-stop-loss-bracket-orders/design.md` § Rejected Alternatives.
+
 ## Language
 
 Go 1.25
@@ -76,6 +78,9 @@ All config values are served by **xstockstrat-config** namespace `trading`.
 | `trading.position_sync.interval_ms` | float | `300000` | Interval for the broker position/balance sync poller (`syncPositions`). Read live on every cycle. |
 | `trading.order_intent.stale_multiplier` | float | `3.0` | Multiplier applied to `max(live trading.broker.timeout_ms, IBKRRequestTimeout)` to derive the PENDING-intent staleness threshold; read live, floor-clamped in code to ≥1.5 so a misconfigured multiplier can never push the threshold below the live broker timeout. |
 | `trading.order_intent.sweep_interval_ms` | int | `5000` | Interval for `StartOrderIntentSweeper`, the proactive reclaim loop that transitions orphaned `PENDING` intents to `UNKNOWN` after an unattended crash (no retry needed). Matches `trading.fill_poller.interval_ms`'s existing default. |
+| `trading.risk.bracket_orders_enabled` | bool | `true` dev/staging, **`false` production** | Master gate for automatic stop-loss/take-profit bracket orders on auto-sized entries; `false` in production pending feature 103 (broker-failure-simulator) or a documented manual paper verification |
+| `trading.risk.take_profit_rr_multiple` | float | `2.0` | Reward-to-risk multiple for the take-profit leg; `0` disables the take-profit leg (stop-loss only) |
+| `trading.risk.max_unprotected_seconds` | int | `30` | Provisional default — max seconds an auto-sized position may go without a confirmed bracket before an automatic flatten+halt |
 
 `trading.broker.timeout_ms` also bounds each broker REST call made by `syncPositions` (an explicit
 per-call `context` deadline, matching the credential-health poller), so a black-holed connection can
@@ -89,6 +94,7 @@ _No webhooks. Call the gRPC RPCs on port 50051 directly._
 
 - Schema: `trading`
 - Hypertable: `trading.orders` (partition: `created_at`, chunk: 1 day)
+- `trading.order_brackets` — the per-order bracket (stop-loss/take-profit) state machine (feature 030): `NONE→SUBMITTING→PENDING_VERIFY→ACTIVE→CANCELING→CANCELED`, with a `FAILED` terminal on any submission error. Plain indexed `order_id` column (no FK — `trading.orders`' composite hypertable PK has no single-column FK target, matching this service's existing avoidance of cross-hypertable FKs).
 - Migration tool: `golang-migrate`
 - Run: `migrate -path ./migrations -database $DATABASE_URL up`
 
@@ -113,6 +119,7 @@ Orders requiring approval (above configured thresholds) are placed in `ORDER_STA
 | `order.broker_rejected` | `order:{order_id}` | Alpaca broker rejected the order |
 | `account.positions.synced` | `account:{account_id}` | Periodic broker position snapshot (poller); carries `user_id` + `account_id`, each position's broker mark-to-market valuation (`current_price`/`market_value`/`unrealized_pl`/`unrealized_plpc`), and its intraday/today's P&L (`day_pnl`/`day_pnl_pct`, from Alpaca `unrealized_intraday_pl`/`unrealized_intraday_plpc`) |
 | `account.balance.synced` | `account:{account_id}` | Periodic broker balance snapshot (poller): cash, buying power, equity, last_equity |
+| `order.bracket_updated` | `order:{order_id}` | Bracket leg order IDs assigned/cleared (feature 030) — consumed by `xstockstrat-portfolio` to populate `Position.stop_order_id`/`take_profit_order_id` |
 
 ## Order Replace (`ReplaceOrder`)
 
