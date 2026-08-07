@@ -5,11 +5,35 @@ Subscribes to xstockstrat-config WatchConfig stream at startup.
 
 import asyncio
 import logging
+import os
 
 import grpc
+from gen.common.v1 import common_pb2
 from gen.config.v1 import config_pb2, config_pb2_grpc
 
 log = logging.getLogger(__name__)
+
+
+def resolve_environment(application_env: str) -> int:
+    """Map APPLICATION_ENV ("development" | "production") to the proto Environment enum.
+    Anything other than "production" resolves to dev, matching this service's own default.
+    """
+    return (
+        common_pb2.ENVIRONMENT_PRODUCTION
+        if application_env == "production"
+        else common_pb2.ENVIRONMENT_DEV
+    )
+
+
+def resolve_trading_mode(trading_mode: str) -> int:
+    """Map TRADING_MODE ("paper" | "live") to the proto TradingMode enum.
+    Anything other than "live" resolves to paper, matching this service's own default.
+    """
+    return (
+        common_pb2.TRADING_MODE_LIVE
+        if trading_mode == "live"
+        else common_pb2.TRADING_MODE_PAPER
+    )
 
 
 class ConfigWatcher:
@@ -21,6 +45,11 @@ class ConfigWatcher:
     def __init__(self, endpoint: str, namespace: str):
         self.endpoint = endpoint
         self.namespace = namespace
+        # This deployment's own resolved scope (APPLICATION_ENV/TRADING_MODE) — passed on
+        # every WatchConfig request so the server serves this deployment's config rows
+        # instead of the zero-value dev/all default.
+        self._environment = resolve_environment(os.environ.get("APPLICATION_ENV", "development"))
+        self._trading_mode = resolve_trading_mode(os.environ.get("TRADING_MODE", "paper"))
         self._snapshot: config_pb2.ConfigSnapshot | None = None
         self._snapshot_event = asyncio.Event()
         self._channel = grpc.aio.insecure_channel(endpoint)
@@ -34,6 +63,8 @@ class ConfigWatcher:
                     config_pb2.WatchConfigRequest(
                         namespace=self.namespace,
                         client_id=f"indicators-{id(self)}",
+                        environment=self._environment,
+                        trading_mode=self._trading_mode,
                     )
                 )
                 async for snapshot in stream:
