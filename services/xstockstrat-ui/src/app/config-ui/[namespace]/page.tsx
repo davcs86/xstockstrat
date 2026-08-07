@@ -7,7 +7,14 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@/components/ui/table';
 import { useConfigKeys } from '@/app/config-ui/hooks/useConfigKeys';
 import { useSetConfig } from '@/app/config-ui/hooks/useSetConfig';
 
@@ -55,9 +62,18 @@ export default function NamespacePage({ params, searchParams }: Props) {
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [editReason, setEditReason] = useState('');
 
-  const { data: keysData, isLoading: loading, error: keysError } = useConfigKeys(namespace, env, mode);
-  const { mutate: setConfigMutate, isPending: saving, error: saveError } = useSetConfig(namespace, env, mode);
+  const {
+    data: keysData,
+    isLoading: loading,
+    error: keysError,
+  } = useConfigKeys(namespace, env, mode);
+  const {
+    mutate: setConfigMutate,
+    isPending: saving,
+    error: saveError,
+  } = useSetConfig(namespace, env, mode);
 
   const keys = (keysData?.keys ?? []) as {
     key: string;
@@ -79,17 +95,27 @@ export default function NamespacePage({ params, searchParams }: Props) {
         return; // FR-6: no SetConfig call when validation fails
       }
     }
+    if (key === 'platform.trading_state' && !editReason.trim()) {
+      setValidationError('A reason is required when changing platform.trading_state');
+      return; // no SetConfig call when a required reason is missing
+    }
     setValidationError(null);
     setConfigMutate(
       {
         namespace,
         key,
         value: { value: { case: 'stringVal', value: String(editValue) } },
-        reason: 'Updated via config-ui',
+        reason: editReason.trim() || 'Updated via config-ui',
         environment: envToProto(env),
         tradingMode: modeToProto(mode),
       },
-      { onSuccess: () => { setEditingKey(null); setValidationError(null); } },
+      {
+        onSuccess: () => {
+          setEditingKey(null);
+          setValidationError(null);
+          setEditReason('');
+        },
+      },
     );
   }
 
@@ -97,7 +123,10 @@ export default function NamespacePage({ params, searchParams }: Props) {
     <div className="space-y-4">
       {/* Breadcrumb */}
       <div className="flex flex-wrap items-center gap-2">
-        <Link href={`/config-ui?env=${env}&mode=${mode}`} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+        <Link
+          href={`/config-ui?env=${env}&mode=${mode}`}
+          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+        >
           ← namespaces
         </Link>
         <span className="text-muted-foreground">/</span>
@@ -105,8 +134,12 @@ export default function NamespacePage({ params, searchParams }: Props) {
           <span className="text-primary font-mono">{namespace}</span>
         </h1>
         <div className="flex gap-1.5 ml-1">
-          <Badge variant="secondary" className="text-xs">{env}</Badge>
-          <Badge variant={mode === 'paper' ? 'paper' : 'live'} className="text-xs">{mode}</Badge>
+          <Badge variant="secondary" className="text-xs">
+            {env}
+          </Badge>
+          <Badge variant={mode === 'paper' ? 'paper' : 'live'} className="text-xs">
+            {mode}
+          </Badge>
         </div>
       </div>
 
@@ -140,11 +173,21 @@ export default function NamespacePage({ params, searchParams }: Props) {
                             onBlur={() => {
                               if (k.validation?.valueType === 1) {
                                 setValidationError(
-                                  validateFloatMap(editValue, k.validation.minValue, k.validation.maxValue),
+                                  validateFloatMap(
+                                    editValue,
+                                    k.validation.minValue,
+                                    k.validation.maxValue,
+                                  ),
                                 );
                               }
                             }}
                             autoFocus
+                          />
+                          <Input
+                            className="h-7 text-xs w-40 mt-1"
+                            value={editReason}
+                            onChange={(e) => setEditReason(e.target.value)}
+                            placeholder="Reason for this change"
                           />
                           {validationError && editingKey === k.key && (
                             <p className="text-destructive text-xs mt-0.5">{validationError}</p>
@@ -156,14 +199,20 @@ export default function NamespacePage({ params, searchParams }: Props) {
                         <span className="text-foreground/80">{k.defaultValue || '—'}</span>
                       )}
                     </TableCell>
-                    <TableCell className="hidden md:table-cell text-muted-foreground text-xs">{k.description}</TableCell>
+                    <TableCell className="hidden md:table-cell text-muted-foreground text-xs">
+                      {k.description}
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
                         {!k.isSecret && editingKey !== k.key && (
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => { setEditingKey(k.key); setEditValue(k.defaultValue); }}
+                            onClick={() => {
+                              setEditingKey(k.key);
+                              setEditValue(k.defaultValue);
+                              setEditReason('');
+                            }}
                             className="h-7 px-2 text-xs text-primary hover:text-primary"
                           >
                             Edit
@@ -183,7 +232,10 @@ export default function NamespacePage({ params, searchParams }: Props) {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => { setEditingKey(null); setValidationError(null); }}
+                              onClick={() => {
+                                setEditingKey(null);
+                                setValidationError(null);
+                              }}
                               className="h-7 px-2 text-xs text-muted-foreground"
                             >
                               Cancel
@@ -197,7 +249,9 @@ export default function NamespacePage({ params, searchParams }: Props) {
               </TableBody>
             </Table>
             {keys.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-8">No config keys found for this namespace</p>
+              <p className="text-sm text-muted-foreground text-center py-8">
+                No config keys found for this namespace
+              </p>
             )}
           </CardContent>
         </Card>

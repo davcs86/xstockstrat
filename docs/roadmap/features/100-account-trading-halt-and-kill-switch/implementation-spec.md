@@ -1,6 +1,6 @@
 # Implementation Spec: account-trading-halt-and-kill-switch
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-08-06
 **Feature**: `docs/roadmap/features/100-account-trading-halt-and-kill-switch/feature.md`
 **Total Steps**: 13
@@ -64,7 +64,7 @@ and 107.
 
 ### Step 1 — docs: Re-verify FR-1 (no code change) and retire the stale findings-doc row
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/` (repo-wide) + `services/xstockstrat-trading/docs/`
 **Files**:
 - `services/xstockstrat-trading/docs/context-constitution-findings.md` — modify (row 13 only)
@@ -102,7 +102,7 @@ grep -c "platform.maintenance_mode" services/xstockstrat-trading/internal/servic
 
 ### Step 2 — migration: seed `platform.trading_state` per-`trading_mode` in `xstockstrat-config`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/011_platform_trading_state.up.sql` — create (NNN
@@ -180,7 +180,7 @@ ls services/xstockstrat-config/migrations/011_platform_trading_state.up.sql \
 
 ### Step 3 — service: write-time validation for `platform.trading_state` in `xstockstrat-config`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/grpc/configServiceImpl.ts` — modify
@@ -237,7 +237,7 @@ grep -n "trading_state" src/grpc/configServiceImpl.ts
 
 ### Step 4 — test: `platform.trading_state` write-time validation over a real gRPC loopback
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/src/__tests__/tradingStateValidation.test.ts` — create
@@ -279,7 +279,7 @@ cd services/xstockstrat-config && pnpm run lint && pnpm run test:coverage
 
 ### Step 5 — service: `ErrPositionNotFound` sentinel + `GetPosition` error-code fix in `xstockstrat-portfolio`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go` — modify
@@ -370,7 +370,7 @@ grep -n "ErrPositionNotFound" internal/repository/portfolio_repo.go internal/han
 
 ### Step 6 — test: `ErrPositionNotFound` sentinel + classification, no DB required
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo_test.go` — create
@@ -486,7 +486,7 @@ GOWORK=off golangci-lint run --modules-download-mode=mod
 
 ### Step 7 — service: `platform.trading_state` gate in `xstockstrat-trading` (`PlaceOrder` + `ReplaceOrder`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -674,7 +674,7 @@ GOWORK=off golangci-lint run --modules-download-mode=mod
 
 ### Step 8 — test: `platform.trading_state` gate — pure helpers + fake-portfolio-client cases
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_state_gate_test.go` — create
@@ -865,7 +865,7 @@ GOWORK=off golangci-lint run --modules-download-mode=mod
 
 ### Step 9 — service: reason-capture `<Input>` in the `/config-ui` namespace editor (C-14 consumer surface)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/[namespace]/page.tsx` — modify
@@ -920,7 +920,7 @@ grep -n "editReason" src/app/config-ui/\[namespace\]/page.tsx
 
 ### Step 10 — test: reason-capture e2e — generic forwarding + required-for-`platform.trading_state`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify (add a `platform.trading_state` fixture entry)
@@ -1034,7 +1034,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -- e2e/config-ui/reason-capture.spec
 
 ### Step 11 — docs: `xstockstrat-trading` CLAUDE.md — document `platform.trading_state`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/CLAUDE.md` — modify
@@ -1066,7 +1066,7 @@ grep -n "platform.trading_state" services/xstockstrat-trading/CLAUDE.md
 
 ### Step 12 — docs: `docs/patterns/config-governance.md` — global key table + Per-Feature Registered Keys log
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/patterns/config-governance.md` — modify
@@ -1110,7 +1110,7 @@ grep -n "platform.trading_state" docs/patterns/config-governance.md
 
 ### Step 13 — docs: correct product-spec.md's approval-gate checkbox (design.md Open Risk)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/roadmap/features/100-account-trading-halt-and-kill-switch/product-spec.md` — modify

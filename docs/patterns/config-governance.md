@@ -18,6 +18,7 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `platform.maintenance_mode` | bool | false | Halts all trading operations |
+| `platform.trading_state` | string | ACTIVE | Richer halt state (`ACTIVE`/`REDUCE_ONLY`/`HALTED`), independent of `platform.maintenance_mode`; seeded per `trading_mode` |
 | `platform.log_level` | string | info | Global log level override |
 | `platform.ledger_endpoint` | string | — | xstockstrat-ledger gRPC address |
 | `platform.config_endpoint` | string | — | xstockstrat-config gRPC address |
@@ -35,6 +36,17 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 ## Per-Feature Registered Keys
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
+
+### feature 100 — account-trading-halt-and-kill-switch (`xstockstrat-trading`, `xstockstrat-config`)
+
+A new parallel config key, independent of the existing `platform.maintenance_mode` boolean
+(which stays untouched — widening it in place was rejected as a confirmed fail-open bug on a
+proto oneof type mismatch). Seeded per `trading_mode` (paper/live independently), not `all`, so
+an operator can halt live trading during an incident while paper testing continues unaffected.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `platform.trading_state` | string | `ACTIVE` | `ACTIVE` \| `REDUCE_ONLY` \| `HALTED`. Enforced in `xstockstrat-trading`'s `PlaceOrder`/`ReplaceOrder`; `CancelOrder` deliberately ungated. Write-time validated to the three literals in `xstockstrat-config`'s `SetConfig`. |
 
 ### feature 097 — opportunity-universe-unification (`xstockstrat-analysis`)
 

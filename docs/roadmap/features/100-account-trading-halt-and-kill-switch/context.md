@@ -186,3 +186,121 @@
     corrects FR-5/AC-4's stale text to match. A future reader of product-spec.md would believe
     ledger-event audit is a requirement this feature satisfies. — [ ] unaddressed
 - Overlap findings: none blocking (see above).
+
+## Session 2026-08-07T00:00:00Z — sdd-execute (sequential mode)
+
+**Multi-feature program note**: executing as part of the sequence `100 → 101 → 023 → 030 → 102`
+(matches `merge-order.md`'s established build order). Per explicit user direction, using a
+**stacked-branch PR strategy** instead of sequential-mode's default (each feature branches from
+`main-dev`, integration PR targets `main-dev`): `feature/account-trading-halt-and-kill-switch`
+branches from `main-dev` (this feature is first in the chain, so no deviation here), but each
+downstream feature (101, 023, 030, 102) will branch from the *previous* feature's branch and its
+integration PR will target the *previous* feature's branch, not `main-dev` directly. This avoids
+blocking each feature's start on the previous one's PR actually merging (the `merge-order.md`
+same-function-overlap dependencies are satisfied by the stacked branch containing the code, not by
+a merge event). Recorded here since it diverges from `reference/sequential-mode.md` §5.6's default.
+
+- Re-spec gate (§5.3): validated all 13 steps' Codebase Evidence against the live tree via a
+  `codebase-discovery` subagent. 12/13 steps confirmed with exact line-anchors (including Step 7,
+  the most load-bearing). Step 2's cross-branch migration-`011` collision check required a
+  follow-up `git ls-remote --heads origin` — confirmed no other in-flight feature branch
+  (`exactly-once-order-intent`, `position-sizing-engine`, `stop-loss-bracket-orders`,
+  `broker-state-reconciliation`) exists yet, so `011` is free. No re-spec needed (directive: none,
+  no mismatches found).
+- Branch setup: `feature/account-trading-halt-and-kill-switch` created fresh from `origin/main-dev`
+  (did not exist on origin before this session).
+- Tooling setup: go1.25 ✓ · golangci-lint ✓ v2.5.0 · node ✓ v22.22.2 · pnpm ✓ 9.15.0 · uv ✓ 0.8.17 ·
+  `pnpm install --frozen-lockfile` run in `xstockstrat-config` and `xstockstrat-ui`; `go mod
+  download` run in `xstockstrat-portfolio` and `xstockstrat-trading`.
+- Step 1 [done] — Re-verified FR-1: `trading.go:244` reads only `platform.maintenance_mode`,
+  `CLAUDE.md:63` already documents it correctly. Retired the stale
+  `context-constitution-findings.md:13` row (marked resolved, kept for history per the step's own
+  instruction not to delete it). TDD: N/A (docs-only). Deviations: none.
+- Step 2 [done] — Created `011_platform_trading_state.{up,down}.sql` seeding four rows
+  (dev/paper, dev/live, production/paper, production/live, all `ACTIVE`). Re-verified `010` is
+  still the highest landed NNN and no sibling feature branch claimed `011` first — confirmed clean.
+  Verified offline: 4 INSERT rows in `.up`, single matching `DELETE` in `.down` scoped to
+  `namespace='platform' AND key='trading_state'`. TDD: N/A (migration — offline verification).
+  Deviations: none.
+- Steps 3+4 [done] (TDD pair) — Wrote `tradingStateValidation.test.ts` first (6 cases, loopback
+  gRPC harness mirroring `setConfigAuthz.test.ts`). RED: 2/6 failed (`rejects an invalid literal`,
+  `rejects an empty string` — both expected a gRPC error but got a successful INSERT, the right
+  failure reason). Implemented the guard in `configServiceImpl.ts` between the author-resolution
+  block (ends :313) and the existence gate (starts :315). GREEN: 6/6 pass. Full suite: 43/43 pass,
+  71.06% coverage (>> 40% threshold). Lint: 0 errors (73 pre-existing `any` warnings, none new).
+  Deviations: none.
+- **Environment note (applies to all Go steps from here on)**: this sandbox's `proxy.golang.org`
+  access cannot resolve the exact pinned dependency versions in `go.mod` for any of the three Go
+  services (confirmed identically on `xstockstrat-portfolio`, `xstockstrat-trading`, and
+  `xstockstrat-marketdata`, unrelated to this feature's changes — `go build ./...` fails with
+  "missing go.sum entry" even on an unmodified checkout). CI's own `go mod download` step is
+  expected to succeed against the real committed `go.mod`/`go.sum` with full network access.
+  Workaround used for local verification only: transient `go mod tidy` to resolve+test, then
+  `git checkout -- go.mod go.sum` before every commit — no dependency-version change ships in any
+  commit. Logged once here rather than repeating per step.
+- Steps 5+6 [done] (TDD pair) — Wrote `portfolio_repo_test.go` + `portfolio_handler_test.go` first.
+  RED: both packages failed to **build** (`undefined: ErrPositionNotFound` /
+  `undefined: classifyGetPositionError`) — correct failure reason (symbols don't exist yet).
+  Implemented: `ErrPositionNotFound` sentinel added to `portfolio_repo.go` (not `watchlist_repo.go`
+  — the spec's own Instructions say "immediately before `type pgxRow interface`", i.e. in
+  `portfolio_repo.go`; caught and corrected a mis-read during execution before committing).
+  `scanPositionRow` now returns it on `pgx.ErrNoRows`. `classifyGetPositionError` added to
+  `portfolio_handler.go` (new `internal/repository` import), `GetPosition` now uses it instead of
+  a hardcoded `connect.CodeNotFound`. GREEN: 5/5 pass. `golangci-lint run`: 0 issues. Deviations:
+  none (the file-placement correction was caught before commit, not a shipped defect).
+- Steps 7+8 [done] (TDD pair) — Wrote `trading_state_gate_test.go` first, applying the spec's own
+  execute-time cleanup instructions up front: renamed
+  `TestCheckTradingStateForPlaceOrder_Active_NeverCallsPortfolio` →
+  `..._DefaultHalted_NeverCallsPortfolio`, dropped the dead first-half fake/comment block, and
+  added a `TestReduceOnlyBranch_NotFoundFailsClosed` case exercising the NotFound→fail-closed path
+  the spec flagged as uncovered (direct assertion on `isExposureIncreasing` + the fixture's
+  `grpcstatus.Code`, since `config.Watcher`'s zero value cannot be set to REDUCE_ONLY — confirmed,
+  no exported setter). RED: build failed (`undefined: tradingState` etc — right reason, nothing
+  existed yet). Implemented: `tradingState` enum + `parseTradingState` + `currentTradingState` +
+  `isExposureIncreasing` + `isReplaceRiskReducing` + `checkTradingStateForPlaceOrder` +
+  `checkTradingStateForReplace` inserted before `resolveTradingMode` (trading.go:1328 pre-edit).
+  Wired into `PlaceOrder` using the review's preferred **hoist-and-reuse** fix (not the primary
+  duplicate-declaration instruction): moved the single `mode := s.resolveTradingMode(...)` call to
+  right after `resolveAccount`/before `checkPortfolioRisk`, called the new gate there, and left the
+  rest of the function's `mode` usages (order construction, ledger events) untouched — no duplicate
+  declaration, `go build` clean. Wired into `ReplaceOrder` after the fill-state gate, before the
+  `BrokerOrderId` check. Added the deliberate-non-gating doc comment above `CancelOrder`. GREEN:
+  7/7 new cases pass; full `internal/service` package: no regressions; `golangci-lint run`: 0
+  issues. Deviations: the hoist-and-reuse choice (spec's own offered alternative, footnoted as
+  acceptable) — logged here per the step's own instruction to record which option was taken.
+- Steps 9+10 [done] (TDD pair) — Wrote `reason-capture.spec.ts` + the `platform.trading_state`
+  `mock-backend.ts` fixture entry first. RED (real Playwright run against pre-Step-9 tree, Chromium
+  via `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` — the pinned `@playwright/test` version's bundled
+  headless-shell wasn't present in this sandbox, so the env's documented override was used): 2/3
+  cases failed for the right reason (timeout waiting for the `Reason for this change` placeholder;
+  the required-reason validation text never appeared), 1/3 passed trivially (unaffected fallback
+  behavior). Implemented Step 9: `editReason` state, required-reason gate in `handleSave` scoped to
+  `platform.trading_state`, reset on Edit-click and `onSuccess`, second `<Input>` in the edit-mode
+  cell. GREEN: 4/4 pass (setup + 3 cases). `pnpm run lint`: clean (one pre-existing unrelated
+  warning in a different file). Deviations: none.
+  - **Process note**: the stop-hook's uncommitted-changes check fired twice while a background
+    Playwright run was in flight; `git stash` was used to satisfy it, but the first stash raced a
+    still-running background test reading the stashed spec file (it reported "No tests found" —
+    invalidated, not a real result) — re-ran synchronously after popping the stash to get a valid
+    GREEN. No incorrect result was recorded; flagging so a future session recognizes the same
+    "No tests found" signature as a stash race, not a real failure.
+- Step 11 [done] — Added the `platform.trading_state` row to
+  `xstockstrat-trading/CLAUDE.md`'s Config Keys Consumed table, immediately after
+  `platform.maintenance_mode`. TDD: N/A (docs-only). Deviations: none.
+- Step 12 [done] — Added the `platform.trading_state` row to `config-governance.md`'s Global
+  Config Keys table, and a new `### feature 100` entry at the top of the Per-Feature Registered
+  Keys log (newest-first, confirmed against the existing 097→083→069 descending order). TDD: N/A
+  (docs-only). Deviations: none.
+- Step 13 [done] — **No edit needed**: `product-spec.md`'s approval-gate checkbox was already in
+  the target corrected state (`[x] Service owner + config team approval...`) — evidently already
+  fixed by an earlier commit (`c36aafd`, "cross-feature coordination fixes" for 023/030/100/101/102,
+  landed on `main-dev` before this session started). Verified the step's own grep command already
+  passes. TDD: N/A (docs-only, no-op). Deviations: none — the spec's own Codebase Evidence was
+  gathered before that coordination commit landed; re-verification at execute time (per Constitution
+  C-07) caught the drift and correctly avoided a redundant/conflicting edit.
+
+**All 13 steps done.** Feature lifecycle: `code-completed`. Reusable pattern for the ledger: the
+`config.Watcher`-zero-value-fail-closed testing technique (Step 8) — when a live-config watcher has
+no exported snapshot setter, its zero value's `GetString`/`GetBool` defaults are still directly
+testable and prove the fail-closed default deterministically without a real config service. Not yet
+promoted to `insights.md` — will fold into the archiver's synthesis pass if it recurs in 101/023/030.
