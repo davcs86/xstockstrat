@@ -57,3 +57,35 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Overlap scan (from the earlier run — unaffected by these edits, no new config keys/proto/DB):
   CLEAN. No live in-flight feature collides with 115.
 - Status: draft → spec-ready.
+
+## Session 2026-08-07 — sdd-design (Phase 0 + Phase 1, quick mode, 4 rounds)
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-ui config-ui segment only — xstockstrat-config
+  was listed as affected for its data model, not because it needs code changes; key reuse patterns:
+  `TradingModeBadge` fixed-value pattern, existing `Promise<SearchParams>` Server Component convention).
+- Phase 1 Grilling: 4 rounds (quick mode nominally requires 1; user requested 3 additional rounds).
+  Round 1: switcher-only UI gating proposed, adversary blocked it — cosmetic, leaves the actual
+  `SetConfig` write path fully reachable via direct URL/bookmark/stale tab, misreads product-spec's
+  own Consumer Surface section (which names `[namespace]/page.tsx`, not just `EnvModeSwitcher`).
+  Round 2: proposed BFF-layer guard (verified sound against real code) + fetch-based `native-env` API
+  route for `[namespace]/page.tsx` — adversary found the route's "unauthenticated" framing didn't
+  match `middleware.ts`'s actual matcher, and the fetch introduces a loading-race that reopens the
+  AC-1 presentation gap. Round 3: revised to a Server Component wrapper + prop-passing split (no
+  network round-trip, no race) — adversary caught an asymmetric `ENVIRONMENT_UNSPECIFIED` handling
+  bug (raw exact-match would falsely reject a legitimate write on a dev-native deployment) and a C-12
+  fixture-centralization gap (new BFF-guard e2e test would be a 3rd inline `SetConfig` payload
+  literal). Round 4 (closing check): APPROVE, no new objections, one non-blocking citation correction.
+- Chosen approach: BFF-layer `Code.FailedPrecondition` write guard in `configUiBff.ts`'s `setConfig`
+  (the actual enforcement, closes every access path) + UI gating on both named consumer surfaces
+  (`EnvModeSwitcher` badge, `[namespace]/page.tsx` banner + disabled Save via Server-wrapper prop).
+  Rejected: switcher-only fix, fetch-based native-env route, `Code.PermissionDenied`, unconditional
+  `UNSPECIFIED` rejection.
+- Constitution rules touched: C-01, C-05, C-08, C-10, C-12/C-13, C-14. No Floor breaches across any
+  of the 4 rounds.
+- Open risk carried forward: MODE (paper/live) axis residual risk — a MODE-mismatched write is not
+  orphaned the way an ENV-mismatched one is (same database, could go live on a future redeploy with
+  the other TRADING_MODE) — explicitly deferred per product-spec's Out of Scope, not addressed by
+  this feature. Also: `Environment.UNSPECIFIED`'s exact protobuf-es member name is inferred by
+  analogy (not directly confirmed against generated stubs) — to be confirmed at `/sdd-spec`/execute
+  time; `tsc` will fail loudly if wrong, so this cannot ship silently incorrect.
+- Status: spec-ready → design-approved.
