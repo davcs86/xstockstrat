@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
 	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
@@ -133,8 +134,9 @@ func (f *fakeReconciliationPortfolioClient) ListPositions(ctx context.Context, r
 // reconciliation.mismatch_found payload, not just that an emit occurred.
 type recordingLedgerClient struct {
 	ledgerv1.LedgerServiceClient
-	mu     sync.Mutex
-	events []*ledgerv1.AppendEventRequest
+	mu            sync.Mutex
+	events        []*ledgerv1.AppendEventRequest
+	queryEventsFn func(ctx context.Context, req *ledgerv1.QueryEventsRequest) (*ledgerv1.QueryEventsResponse, error)
 }
 
 func (f *recordingLedgerClient) AppendEvent(_ context.Context, req *ledgerv1.AppendEventRequest, _ ...grpc.CallOption) (*ledgerv1.AppendEventResponse, error) {
@@ -142,6 +144,13 @@ func (f *recordingLedgerClient) AppendEvent(_ context.Context, req *ledgerv1.App
 	f.events = append(f.events, req)
 	f.mu.Unlock()
 	return &ledgerv1.AppendEventResponse{}, nil
+}
+
+func (f *recordingLedgerClient) QueryEvents(ctx context.Context, req *ledgerv1.QueryEventsRequest, _ ...grpc.CallOption) (*ledgerv1.QueryEventsResponse, error) {
+	if f.queryEventsFn != nil {
+		return f.queryEventsFn(ctx, req)
+	}
+	return &ledgerv1.QueryEventsResponse{}, nil
 }
 
 func (f *recordingLedgerClient) eventTypes() []string {
@@ -155,6 +164,14 @@ func (f *recordingLedgerClient) eventTypes() []string {
 }
 
 func newTestReconciliationService(brokers map[string]brokerPoolEntry, portfolio portfoliov1.PortfolioServiceClient, ledger ledgerv1.LedgerServiceClient, notify notifyv1.NotifyServiceClient, accountRepo repository.AccountRepository) *TradingService {
+	return newTestReconciliationServiceWithIntents(brokers, portfolio, ledger, notify, accountRepo, nil)
+}
+
+// newTestReconciliationServiceWithIntents is newTestReconciliationService plus an
+// orderIntentRepo — split out rather than widening every existing call site, since only
+// Step 22's FR-6 tests need an order-intent repo (resolveUnknownIntents no-ops on a nil one,
+// so every other reconcileTick test is unaffected either way).
+func newTestReconciliationServiceWithIntents(brokers map[string]brokerPoolEntry, portfolio portfoliov1.PortfolioServiceClient, ledger ledgerv1.LedgerServiceClient, notify notifyv1.NotifyServiceClient, accountRepo repository.AccountRepository, orderIntentRepo repository.OrderIntentRepository) *TradingService {
 	return &TradingService{
 		cfg:                 &config.Config{},
 		cfgW:                &config.Watcher{},
@@ -163,6 +180,7 @@ func newTestReconciliationService(brokers map[string]brokerPoolEntry, portfolio 
 		ledger:              ledger,
 		notify:              notify,
 		accountRepo:         accountRepo,
+		orderIntentRepo:     orderIntentRepo,
 		orders:              make(map[string]*tradingv1.Order),
 		credStatus:          make(map[string]int32),
 		halted:              make(map[string]bool),
@@ -452,5 +470,161 @@ func TestReconcileTick_BelowThreshold_NoEscalation(t *testing.T) {
 
 	if len(setter.calls) != 0 {
 		t.Errorf("expected zero SetConfig calls for a below-threshold (ordinary-only) tick, got %d", len(setter.calls))
+	}
+}
+
+// ── Step 22: FR-6 — resolve 101's UNKNOWN order intents ────────────────────────────────────
+
+// fakeReconciliationOrderIntentRepo implements repository.OrderIntentRepository, overriding only
+// ListUnknownForAccount / ResolveUnknownIntent (the two Step 21 calls) — every other method
+// panics if called, mirroring this file's established fake convention.
+type fakeReconciliationOrderIntentRepo struct {
+	listUnknownFn       func(ctx context.Context, brokerAccountID string) ([]*repository.OrderIntentRecord, error)
+	resolveUnknownFn    func(ctx context.Context, intentID string, newState int16, response []byte) (bool, error)
+	mu                  sync.Mutex
+	resolveUnknownCalls []int16
+}
+
+func (f *fakeReconciliationOrderIntentRepo) InsertIntent(ctx context.Context, rec *repository.OrderIntentRecord) (bool, error) {
+	panic("fakeReconciliationOrderIntentRepo.InsertIntent not implemented")
+}
+func (f *fakeReconciliationOrderIntentRepo) GetIntentByID(ctx context.Context, intentID string) (*repository.OrderIntentRecord, error) {
+	panic("fakeReconciliationOrderIntentRepo.GetIntentByID not implemented")
+}
+func (f *fakeReconciliationOrderIntentRepo) ReclaimOrphanIntent(ctx context.Context, intentID string, staleBefore time.Time) (bool, *repository.OrderIntentRecord, error) {
+	panic("fakeReconciliationOrderIntentRepo.ReclaimOrphanIntent not implemented")
+}
+func (f *fakeReconciliationOrderIntentRepo) FinalizeIntent(ctx context.Context, intentID, orderID string, state int16, response []byte) error {
+	panic("fakeReconciliationOrderIntentRepo.FinalizeIntent not implemented")
+}
+func (f *fakeReconciliationOrderIntentRepo) SweepStalePending(ctx context.Context, staleBefore time.Time, limit int) ([]*repository.OrderIntentRecord, error) {
+	panic("fakeReconciliationOrderIntentRepo.SweepStalePending not implemented")
+}
+func (f *fakeReconciliationOrderIntentRepo) ListUnknownForAccount(ctx context.Context, brokerAccountID string) ([]*repository.OrderIntentRecord, error) {
+	if f.listUnknownFn != nil {
+		return f.listUnknownFn(ctx, brokerAccountID)
+	}
+	return nil, nil
+}
+func (f *fakeReconciliationOrderIntentRepo) ResolveUnknownIntent(ctx context.Context, intentID string, newState int16, response []byte) (bool, error) {
+	f.mu.Lock()
+	f.resolveUnknownCalls = append(f.resolveUnknownCalls, newState)
+	f.mu.Unlock()
+	if f.resolveUnknownFn != nil {
+		return f.resolveUnknownFn(ctx, intentID, newState, response)
+	}
+	return true, nil
+}
+
+var _ repository.OrderIntentRepository = (*fakeReconciliationOrderIntentRepo)(nil)
+
+func TestReconcileTick_UnknownIntent_ResolvedViaLateResponseConflictEvent(t *testing.T) {
+	payload, err := structpb.NewStruct(map[string]interface{}{"outcome": "completed"})
+	if err != nil {
+		t.Fatalf("build payload: %v", err)
+	}
+	ledger := &recordingLedgerClient{
+		queryEventsFn: func(ctx context.Context, req *ledgerv1.QueryEventsRequest) (*ledgerv1.QueryEventsResponse, error) {
+			if req.EventType == "order_intent.late_response_conflict" {
+				return &ledgerv1.QueryEventsResponse{Events: []*ledgerv1.LedgerEvent{{Payload: payload}}}, nil
+			}
+			return &ledgerv1.QueryEventsResponse{}, nil
+		},
+	}
+	intents := &fakeReconciliationOrderIntentRepo{
+		listUnknownFn: func(ctx context.Context, brokerAccountID string) ([]*repository.OrderIntentRecord, error) {
+			return []*repository.OrderIntentRecord{{IntentID: "intent-1", OrderID: "order-1"}}, nil
+		},
+	}
+	svc := newTestReconciliationServiceWithIntents(
+		map[string]brokerPoolEntry{"acct-1": {client: &fakeReconciliationBroker{}, userID: "u-1", brokerType: 1}},
+		&fakeReconciliationPortfolioClient{}, ledger, &fakeNotifyClient{}, noopAccountRepo{}, intents,
+	)
+
+	svc.reconcileTick(context.Background(), 0, 1.1)
+
+	if len(intents.resolveUnknownCalls) != 1 || intents.resolveUnknownCalls[0] != repository.IntentStateCompleted {
+		t.Fatalf("expected exactly 1 ResolveUnknownIntent(Completed) call, got %v", intents.resolveUnknownCalls)
+	}
+	found := false
+	for _, e := range ledger.eventTypes() {
+		if e == "order_intent.resolved_by_reconciliation" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected an order_intent.resolved_by_reconciliation event, got %v", ledger.eventTypes())
+	}
+}
+
+func TestReconcileTick_UnknownIntent_ResolvedViaAlpacaListOrdersFallback(t *testing.T) {
+	intentID := "intent-2"
+	intents := &fakeReconciliationOrderIntentRepo{
+		listUnknownFn: func(ctx context.Context, brokerAccountID string) ([]*repository.OrderIntentRecord, error) {
+			return []*repository.OrderIntentRecord{{IntentID: intentID, OrderID: "order-2"}}, nil
+		},
+	}
+	svc := newTestReconciliationServiceWithIntents(
+		map[string]brokerPoolEntry{"acct-1": {client: &fakeReconciliationBroker{
+			listOrdersFn: func(ctx context.Context) ([]broker.BrokerOrder, error) {
+				return []broker.BrokerOrder{{
+					BrokerOrderID: "bo-2", ClientOrderID: broker.DeriveBrokerClientOrderID(intentID), Status: "filled",
+				}}, nil
+			},
+		}, userID: "u-1", brokerType: 1}}, // 1 = BROKER_TYPE_ALPACA
+		&fakeReconciliationPortfolioClient{}, &recordingLedgerClient{}, &fakeNotifyClient{}, noopAccountRepo{}, intents,
+	)
+
+	svc.reconcileTick(context.Background(), 0, 1.1)
+
+	if len(intents.resolveUnknownCalls) != 1 || intents.resolveUnknownCalls[0] != repository.IntentStateCompleted {
+		t.Fatalf("expected exactly 1 ResolveUnknownIntent(Completed) call via the Alpaca fallback, got %v", intents.resolveUnknownCalls)
+	}
+}
+
+func TestReconcileTick_UnknownIntent_IBKR_NeverUsesFallback(t *testing.T) {
+	intentID := "intent-3"
+	intents := &fakeReconciliationOrderIntentRepo{
+		listUnknownFn: func(ctx context.Context, brokerAccountID string) ([]*repository.OrderIntentRecord, error) {
+			return []*repository.OrderIntentRecord{{IntentID: intentID, OrderID: "order-3"}}, nil
+		},
+	}
+	svc := newTestReconciliationServiceWithIntents(
+		map[string]brokerPoolEntry{"acct-1": {client: &fakeReconciliationBroker{
+			listOrdersFn: func(ctx context.Context) ([]broker.BrokerOrder, error) {
+				// An IBKR ListOrders result never carries a ClientOrderID (Steps 9/11) —
+				// even if one happened to match, IBKR must never resolve via this path.
+				return []broker.BrokerOrder{{BrokerOrderID: "bo-3", ClientOrderID: "", Status: "filled"}}, nil
+			},
+		}, userID: "u-1", brokerType: 2}}, // 2 = BROKER_TYPE_IBKR
+		&fakeReconciliationPortfolioClient{}, &recordingLedgerClient{}, &fakeNotifyClient{}, noopAccountRepo{}, intents,
+	)
+
+	svc.reconcileTick(context.Background(), 0, 1.1)
+
+	if len(intents.resolveUnknownCalls) != 0 {
+		t.Errorf("expected zero ResolveUnknownIntent calls for an IBKR account, got %v", intents.resolveUnknownCalls)
+	}
+}
+
+func TestReconcileTick_UnknownIntent_GenuinelyInconclusive_NoWrite(t *testing.T) {
+	intents := &fakeReconciliationOrderIntentRepo{
+		listUnknownFn: func(ctx context.Context, brokerAccountID string) ([]*repository.OrderIntentRecord, error) {
+			return []*repository.OrderIntentRecord{{IntentID: "intent-4", OrderID: "order-4"}}, nil
+		},
+	}
+	svc := newTestReconciliationServiceWithIntents(
+		map[string]brokerPoolEntry{"acct-1": {client: &fakeReconciliationBroker{
+			listOrdersFn: func(ctx context.Context) ([]broker.BrokerOrder, error) {
+				return nil, nil // no ledger event, no matching ListOrders entry
+			},
+		}, userID: "u-1", brokerType: 1}},
+		&fakeReconciliationPortfolioClient{}, &recordingLedgerClient{}, &fakeNotifyClient{}, noopAccountRepo{}, intents,
+	)
+
+	svc.reconcileTick(context.Background(), 0, 1.1)
+
+	if len(intents.resolveUnknownCalls) != 0 {
+		t.Errorf("expected zero writes for a genuinely inconclusive intent, got %v", intents.resolveUnknownCalls)
 	}
 }

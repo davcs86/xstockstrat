@@ -1492,6 +1492,11 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 				s.clearReconciliationCandidate(key)
 			}
 		}
+
+		// FR-6: resolve 101's own deferred "who resolves an UNKNOWN order intent" question,
+		// reusing this tick's already-fetched ListOrders result (brokerOrders) — not a second
+		// broker round-trip.
+		s.resolveUnknownIntents(ctx, accountID, entry, brokerOrders)
 	}
 
 	// Rare, genuinely systemic finding: half or more (default threshold) of registered
@@ -1538,6 +1543,107 @@ func (s *TradingService) escalateSystemic(ctx context.Context, systemicCount, to
 	})
 	if alertErr != nil {
 		slog.Warn("systemic escalation alert failed", "error", alertErr)
+	}
+}
+
+// resolveUnknownIntents implements FR-6: resolve 101's UNKNOWN-state order intents against
+// broker truth (feature 102). For each UNKNOWN intent on this account:
+//  1. First check the ledger for an order_intent.late_response_conflict event at stream key
+//     order:{order_id} — resolves via the real recorded outcome. NOTE: 101's own
+//     implementation-spec.md never actually emits this event anywhere in its Instructions (only
+//     named in a forward-reference dependency note) — confirmed by direct grep of this
+//     service's tree, zero hits for "late_response_conflict". This branch can therefore never
+//     match today; it is left in place, not removed, because it is cheap, correct once 101 gains
+//     an emit site, and documents the intended two-source design rather than silently degrading
+//     to fallback-only. A one-time WARN fires if a full sweep finds zero such events ever
+//     recorded, signaling the upstream gap needs fixing in 101, not 102.
+//  2. Fallback (Alpaca only — IBKR's SubmitOrder never sends a customer-order tag, so
+//     BrokerOrder.ClientOrderID is always "" for IBKR, see Steps 9/11): scan this tick's
+//     already-fetched ListOrders result for a ClientOrderID matching the intent's derived nonce.
+//  3. Genuinely inconclusive: no write this tick — never guess an outcome (FR-3).
+func (s *TradingService) resolveUnknownIntents(ctx context.Context, accountID string, entry brokerPoolEntry, brokerOrders []broker.BrokerOrder) {
+	if s.orderIntentRepo == nil {
+		return
+	}
+	unknownIntents, err := s.orderIntentRepo.ListUnknownForAccount(ctx, accountID)
+	if err != nil {
+		slog.Warn("resolveUnknownIntents: ListUnknownForAccount failed", "account_id", accountID, "error", err)
+		return
+	}
+	if len(unknownIntents) == 0 {
+		return
+	}
+
+	byClientOrderID := make(map[string]broker.BrokerOrder, len(brokerOrders))
+	for _, bo := range brokerOrders {
+		if bo.ClientOrderID != "" {
+			byClientOrderID[bo.ClientOrderID] = bo
+		}
+	}
+	isAlpaca := commonv1.BrokerType(entry.brokerType) == commonv1.BrokerType_BROKER_TYPE_ALPACA
+
+	for _, intent := range unknownIntents {
+		// 2a. First check: a late-broker-response conflict event, if 101 ever emits one.
+		events, qerr := s.ledger.QueryEvents(ctx, &ledgerv1.QueryEventsRequest{
+			StreamKey: fmt.Sprintf("order:%s", intent.OrderID),
+			EventType: "order_intent.late_response_conflict",
+		})
+		if qerr != nil {
+			slog.Warn("resolveUnknownIntents: QueryEvents failed", "intent_id", intent.IntentID, "error", qerr)
+		} else if len(events.Events) > 0 {
+			payload := events.Events[0].Payload.AsMap()
+			outcome, _ := payload["outcome"].(string)
+			var newState int16
+			switch outcome {
+			case "rejected":
+				newState = repository.IntentStateRejected
+			case "completed":
+				newState = repository.IntentStateCompleted
+			default:
+				continue // an unrecognized outcome literal is not a basis for a guess
+			}
+			responseJSON, _ := json.Marshal(payload)
+			resolved, rerr := s.orderIntentRepo.ResolveUnknownIntent(ctx, intent.IntentID, newState, responseJSON)
+			if rerr != nil {
+				slog.Warn("resolveUnknownIntents: ResolveUnknownIntent failed", "intent_id", intent.IntentID, "error", rerr)
+				continue
+			}
+			if resolved {
+				s.emitLedgerEvent(ctx, "order_intent.resolved_by_reconciliation", fmt.Sprintf("order:%s", intent.OrderID), map[string]interface{}{
+					"intent_id": intent.IntentID, "order_id": intent.OrderID, "resolved_via": "late_response_conflict",
+				})
+			}
+			continue
+		}
+
+		// 2b. Fallback: Alpaca-only broker-side scan by the derived client-order-id nonce.
+		if !isAlpaca {
+			continue // IBKR never carries a client-order-id to match against (2c: no write)
+		}
+		bo, found := byClientOrderID[broker.DeriveBrokerClientOrderID(intent.IntentID)]
+		if !found {
+			continue // 2c: genuinely inconclusive this tick — retried next tick, no guess
+		}
+		status := alpacaStatusToProto(bo.Status)
+		var newState int16
+		switch status {
+		case tradingv1.OrderStatus_ORDER_STATUS_REJECTED:
+			newState = repository.IntentStateRejected
+		case tradingv1.OrderStatus_ORDER_STATUS_UNSPECIFIED:
+			continue // an unrecognized/transient broker status is not a basis for a guess
+		default:
+			newState = repository.IntentStateCompleted
+		}
+		resolved, rerr := s.orderIntentRepo.ResolveUnknownIntent(ctx, intent.IntentID, newState, nil)
+		if rerr != nil {
+			slog.Warn("resolveUnknownIntents: ResolveUnknownIntent failed", "intent_id", intent.IntentID, "error", rerr)
+			continue
+		}
+		if resolved {
+			s.emitLedgerEvent(ctx, "order_intent.resolved_by_reconciliation", fmt.Sprintf("order:%s", intent.OrderID), map[string]interface{}{
+				"intent_id": intent.IntentID, "order_id": intent.OrderID, "resolved_via": "alpaca_list_orders_fallback",
+			})
+		}
 	}
 }
 
