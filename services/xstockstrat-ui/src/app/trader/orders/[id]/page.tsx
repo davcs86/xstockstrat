@@ -8,7 +8,7 @@ import { BackToDashboardButton } from '@/components/trader/BackToDashboardButton
 import { EditOrderDialog } from '@/components/trader/EditOrderDialog';
 import { useOrder } from '@/hooks/useOrders';
 import { useCancelOrder } from '@/hooks/useCancelOrder';
-import { OrderType, OrderStatus } from '@xstockstrat/proto/trading/v1/trading_pb';
+import { OrderType, OrderStatus, IntentState } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { TradingMode } from '@xstockstrat/proto/common/v1/common_pb';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -25,9 +25,15 @@ function formatQty(v: number | undefined | null): string {
   return String(v);
 }
 
-// A working order (NEW / PARTIALLY_FILLED) can still be replaced or canceled; a terminal one cannot.
-function isWorking(status: OrderStatus): boolean {
-  return status === OrderStatus.NEW || status === OrderStatus.PARTIALLY_FILLED;
+// A working order (NEW / PARTIALLY_FILLED) can still be replaced or canceled; a terminal one
+// cannot. Also gated on intentState !== UNKNOWN (feature 101): the write handlers reject on
+// their own dedup terms server-side, but a proactive UI disable avoids a pointless round trip
+// when the platform doesn't know whether the underlying command reached the broker.
+function isWorking(status: OrderStatus, intentState: IntentState): boolean {
+  return (
+    (status === OrderStatus.NEW || status === OrderStatus.PARTIALLY_FILLED) &&
+    intentState !== IntentState.UNKNOWN
+  );
 }
 
 export default function OrderDetailPage() {
@@ -39,7 +45,7 @@ export default function OrderDetailPage() {
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [actionError, setActionError] = useState('');
 
-  const working = order ? isWorking(order.status) : false;
+  const working = order ? isWorking(order.status, order.intentState) : false;
   // Order preview figures — all derived from the order's own fields (no new data source).
   const refPrice = order ? Number(order.limitPrice || order.filledAvgPrice || 0) : 0;
   const notional = order ? Number(order.qty ?? 0) * refPrice : 0;
@@ -90,7 +96,7 @@ export default function OrderDetailPage() {
                     {order.symbol}
                   </span>
                   <OrderSideBadge side={order.side} />
-                  <OrderStatusBadge status={order.status} />
+                  <OrderStatusBadge status={order.status} intentState={order.intentState} />
                 </div>
                 <p className="font-mono text-xs text-muted-foreground">{order.orderId}</p>
               </div>

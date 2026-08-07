@@ -23,7 +23,10 @@ import { useReadiness, useStrategyAnalytics } from '@/hooks/useOpportunities';
 export function SignalReadiness({ symbol }: { symbol: string }) {
   const searchParams = useSearchParams();
   const { data: defs } = useStrategyDefinitions();
-  const strategies = useMemo(() => defs?.definitions ?? [], [defs]);
+  // Only strategies actually eligible to trade live are selectable here — `active` alone (the
+  // fetch default) also admits paused/never-enabled strategies, which would be misleading to
+  // evaluate readiness against.
+  const strategies = useMemo(() => (defs?.definitions ?? []).filter((s) => s.liveEnabled), [defs]);
   // Strategy threaded from the opportunity row (?strategy=), else chosen from the picker.
   const [strategyId, setStrategyId] = useState(searchParams?.get('strategy') ?? '');
 

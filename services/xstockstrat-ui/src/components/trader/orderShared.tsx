@@ -3,7 +3,7 @@
 // Single source of truth (DRY guard rail — see docs/patterns/dry-guard-rail.md).
 
 import Link from 'next/link';
-import { OrderSide, OrderStatus } from '@xstockstrat/proto/trading/v1/trading_pb';
+import { OrderSide, OrderStatus, IntentState } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { Badge } from '../ui/badge';
 import { TableCell } from '../ui/table';
 
@@ -42,9 +42,49 @@ export function OrderSideBadge({ side }: { side: OrderSide }) {
   );
 }
 
-export function OrderStatusBadge({ status }: { status: OrderStatus }) {
+export function OrderStatusBadge({
+  status,
+  intentState,
+}: {
+  status: OrderStatus;
+  intentState: IntentState;
+}) {
   const name = OrderStatus[status] ?? 'UNKNOWN';
-  return <Badge variant={STATUS_VARIANT[name] ?? 'secondary'}>{name}</Badge>;
+  return (
+    <div className="flex items-center gap-1">
+      <Badge variant={STATUS_VARIANT[name] ?? 'secondary'}>{name}</Badge>
+      <IntentStateBadge intentState={intentState} />
+    </div>
+  );
+}
+
+// intent_state describes whether the platform knows if a PlaceOrder/ReplaceOrder/
+// CancelOrder command actually reached the broker — orthogonal to OrderStatus (feature
+// 101). Only UNKNOWN needs a visible signal per product-spec's literal requirement; every
+// other state renders nothing, so existing terminal/working orders are visually unchanged.
+interface IntentRender {
+  label: string;
+  variant: 'warning';
+}
+export const INTENT_STATE_RENDER: Record<IntentState, IntentRender | null> = {
+  [IntentState.UNSPECIFIED]: null,
+  [IntentState.PENDING]: null,
+  [IntentState.COMPLETED]: null,
+  [IntentState.REJECTED]: null,
+  [IntentState.UNKNOWN]: { label: 'Uncertain — verify with broker', variant: 'warning' },
+};
+
+export function IntentStateBadge({ intentState }: { intentState: IntentState }) {
+  const r = INTENT_STATE_RENDER[intentState];
+  if (!r) return null;
+  return (
+    <Badge
+      variant={r.variant}
+      title="Command outcome unknown — check the broker dashboard before retrying"
+    >
+      {r.label}
+    </Badge>
+  );
 }
 
 /** Symbol cell linking to the order-detail page. */
@@ -66,10 +106,16 @@ export function OrderSideCell({ side }: { side: OrderSide }) {
   );
 }
 
-export function OrderStatusCell({ status }: { status: OrderStatus }) {
+export function OrderStatusCell({
+  status,
+  intentState,
+}: {
+  status: OrderStatus;
+  intentState: IntentState;
+}) {
   return (
     <TableCell>
-      <OrderStatusBadge status={status} />
+      <OrderStatusBadge status={status} intentState={intentState} />
     </TableCell>
   );
 }

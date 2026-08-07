@@ -385,7 +385,7 @@ function PositionBody({
                           {formatOrderPrice(o.filledAvgPrice)}
                         </TableCell>
                         <TableCell>
-                          <OrderStatusBadge status={o.status} />
+                          <OrderStatusBadge status={o.status} intentState={o.intentState} />
                         </TableCell>
                         <TableCell className="font-mono text-xs text-muted-foreground hidden md:table-cell">
                           {o.strategyId || 'Manual'}
@@ -431,6 +431,12 @@ function PositionBody({
                 </Row>
                 <Row label="Exit rule" valueClass="font-mono text-xs">
                   {position.exitRule || '—'}
+                </Row>
+                <Row label="Stop order" valueClass="font-mono text-xs">
+                  {position.stopOrderId || '—'}
+                </Row>
+                <Row label="Take-profit order" valueClass="font-mono text-xs">
+                  {position.takeProfitOrderId || '—'}
                 </Row>
                 <Row label="Factor bucket">{position.factor || 'Unclassified'}</Row>
                 <Row label="Flag">

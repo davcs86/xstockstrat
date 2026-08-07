@@ -10,7 +10,7 @@ findings log; this file holds trading-specific defects.
 |---|---|---|---|
 | `trading.order.max_retries` / `retry_delay_ms` documented as retry config; CLAUDE.md implies a retry loop | `SubmitOrder` is called exactly once — no retry loop; keys read by nobody | `CLAUDE.md:13,55-56` vs `internal/service/trading.go:342` (zero `GetInt` sites) | Implement retry or delete the keys + doc |
 | `trading.risk.daily_loss_limit` — "Halt trading if day loss exceeds 2%" | No code reads it; no daily-loss halt exists | `CLAUDE.md:58` (zero call sites) | Implement or delete |
-| `trading.maintenance_mode` — "reject all new orders" | Code reads only `platform.maintenance_mode` | `CLAUDE.md:59` vs `trading.go:244` | Fix the doc/key name |
+| `trading.maintenance_mode` — "reject all new orders" | Code reads only `platform.maintenance_mode` | `CLAUDE.md:59` vs `trading.go:244` | Resolved — CLAUDE.md:63 and trading.go:244 agree as of 2026-08-04 (feature 100); row kept for history, not an open action |
 | `platform.ledger_endpoint` documented as a config key | Ledger address comes from `LEDGER_ENDPOINT` env | `CLAUDE.md:60` vs `config.go:36` | Remove the config key from docs |
 | `order.approved` listed in the emitted-events table | No emit site and no Approve RPC exists; approval dead-ends at `PENDING_APPROVAL` + alert | `CLAUDE.md:99` vs `trading.go:320-328` | Remove the row or implement approval |
 

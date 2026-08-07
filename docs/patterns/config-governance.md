@@ -18,6 +18,7 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 | Key | Type | Default | Description |
 |---|---|---|---|
 | `platform.maintenance_mode` | bool | false | Halts all trading operations |
+| `platform.trading_state` | string | ACTIVE | Richer halt state (`ACTIVE`/`REDUCE_ONLY`/`HALTED`), independent of `platform.maintenance_mode`; seeded per `trading_mode` |
 | `platform.log_level` | string | info | Global log level override |
 | `platform.ledger_endpoint` | string | — | xstockstrat-ledger gRPC address |
 | `platform.config_endpoint` | string | — | xstockstrat-config gRPC address |
@@ -32,9 +33,90 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 3. Approval: service owner + config team (see `docs/runbooks/approval-flow.md`).
 4. Add a row to the "Per-Feature Registered Keys" log below.
 
+## Author-sentinel conventions
+
+A `SetConfigRequest.author` (or equivalent write-attribution field) written by an automated
+process, not a human operator, uses a `system:<process>` sentinel so an investigator can
+distinguish "an operator clicked Save" from "an automated process wrote this" in the audit log —
+without this convention, both look identical (fails.md 2026-07-01).
+
+| Sentinel | Service | Writer |
+|---|---|---|
+| `system` | `xstockstrat-indicators` | The seeded fundamentals-scoring formula (`app/formulas/fundamentals_value_quality.py`), documented here retroactively per feature 102 |
+| `system:reconciliation-poller` | `xstockstrat-trading` → `xstockstrat-config` | The broker-state-reconciliation poller's rare systemic escalation of `platform.trading_state` (feature 102) — paired with the structural `x-internal-caller`/`caller_identity` mechanism (see `services/xstockstrat-config/CLAUDE.md`), not a free-text convention alone |
+
 ## Per-Feature Registered Keys
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
+
+### feature 102 — broker-state-reconciliation (`xstockstrat-trading`)
+
+A lightweight periodic ticker (`StartReconciliationPoller`/`reconcileTick`) compares open orders/
+positions against broker truth, self-heals benign propagation-delay drift, and halts on a genuine
+mismatch (reusing feature 030's per-account halt mechanism, `HaltSource_HALT_SOURCE_RECONCILIATION`)
+or escalates to feature 100's platform-wide `platform.trading_state=REDUCE_ONLY` on a rare systemic
+finding. Both keys follow 101's own established "no config-service seed migration" pattern — read
+live via `s.cfgW.GetFloat`/`GetInt` with the default supplied in Go code.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `trading.reconciliation.interval_ms` | float | `60000` | Interval for the reconciliation poller (`reconcileTick`). Read live on every cycle. |
+| `trading.reconciliation.grace_ticks` | int | `1` | Consecutive ticks a mismatch must persist before it's a real finding (not a benign propagation delay). |
+| `trading.reconciliation.systemic_threshold_pct` | float | `0.5` | Share of accounts erroring/unprotected in one tick that escalates to `platform.trading_state=REDUCE_ONLY`. |
+
+### feature 030 — stop-loss-bracket-orders (`xstockstrat-trading`, `xstockstrat-config`)
+
+Automatic stop-loss/take-profit bracket orders on auto-sized entries (feature 023's `ComputePositionSize`
+stop price becomes the bracket stop leg). `bracket_orders_enabled` seeds `false` in production (not the
+product spec's literal `true` default) pending feature 103 or a documented manual paper-account
+verification — see `docs/roadmap/features/030-stop-loss-bracket-orders/design.md` § Rejected
+Alternatives. A protection-window watchdog (`StartBracketProtectionWatchdog`) flattens the position and
+halts the account (persisted `broker_accounts.halted`) if a bracket is not confirmed `ACTIVE` within
+`max_unprotected_seconds` of entry fill.
+
+| Key | Type | Default (dev) | Default (production) | Description |
+|---|---|---|---|---|
+| `trading.risk.bracket_orders_enabled` | bool | `true` | `false` | Master gate for automatic stop-loss/take-profit bracket orders on auto-sized entries |
+| `trading.risk.take_profit_rr_multiple` | float | `2.0` | `2.0` | Reward-to-risk multiple for the take-profit leg; `0` disables the take-profit leg |
+| `trading.risk.max_unprotected_seconds` | int | `30` | `30` | Provisional default — max seconds an auto-sized position may remain without a confirmed bracket before automatic flatten+halt |
+
+### feature 023 — position-sizing-engine (`xstockstrat-trading`)
+
+`ComputePositionSize` computes order quantity from account equity, ATR(14)-based stop distance,
+signal confidence, and a portfolio concentration cap, activated whenever `PlaceOrder` receives
+`qty <= 0`. The pre-existing warn-only `trading.risk.max_position_pct` (5%, `checkPortfolioRisk`)
+is unchanged and coexists — it covers override-mode (explicit-qty) orders, which never reach the new
+enforcing cap below.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `trading.risk.max_risk_per_trade_pct` | float | `0.02` | Fraction of equity to risk per trade (auto-sized orders only) |
+| `trading.risk.atr_multiplier` | float | `1.5` | Stop distance as a multiple of ATR(14) |
+| `trading.risk.max_concentration_pct` | float | `0.10` | Max fraction of equity in any single auto-sized position (enforcing) |
+| `trading.risk.sizing_enabled` | bool | `true` | Master gate; `false` rejects orders submitted without an explicit `qty` |
+
+### feature 101 — exactly-once-order-intent (`xstockstrat-trading`)
+
+Durable order-intent dedup + `UNKNOWN` uncertainty tracking for `PlaceOrder`/`ReplaceOrder`/
+`CancelOrder`. Both keys follow the established local precedent of every other `trading.*` key
+today: read live via `s.cfgW.GetFloat`/`GetInt` with the default supplied in Go code, no
+config-service seed migration.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `trading.order_intent.stale_multiplier` | float | `3.0` | Multiplier applied to `max(live trading.broker.timeout_ms, IBKRRequestTimeout)` to derive the PENDING-intent staleness threshold; floor-clamped in code to ≥1.5. |
+| `trading.order_intent.sweep_interval_ms` | int | `5000` | Interval for `StartOrderIntentSweeper`'s proactive orphaned-`PENDING`-intent reclaim loop. |
+
+### feature 100 — account-trading-halt-and-kill-switch (`xstockstrat-trading`, `xstockstrat-config`)
+
+A new parallel config key, independent of the existing `platform.maintenance_mode` boolean
+(which stays untouched — widening it in place was rejected as a confirmed fail-open bug on a
+proto oneof type mismatch). Seeded per `trading_mode` (paper/live independently), not `all`, so
+an operator can halt live trading during an incident while paper testing continues unaffected.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `platform.trading_state` | string | `ACTIVE` | `ACTIVE` \| `REDUCE_ONLY` \| `HALTED`. Enforced in `xstockstrat-trading`'s `PlaceOrder`/`ReplaceOrder`; `CancelOrder` deliberately ungated. Write-time validated to the three literals in `xstockstrat-config`'s `SetConfig`. |
 
 ### feature 097 — opportunity-universe-unification (`xstockstrat-analysis`)
 

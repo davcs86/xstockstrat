@@ -157,3 +157,8 @@ class ConfigWatcher:
     @property
     def backfill_max_concurrent_chunks(self) -> int:
         return self.get_int("ingest.backfill.max_concurrent_chunks", default=3)
+
+    # Signal dedup config helper — ingest.signals.* (feature 111)
+    @property
+    def dedup_window_hours(self) -> int:
+        return self.get_int("ingest.signals.dedup_window_hours", default=24)

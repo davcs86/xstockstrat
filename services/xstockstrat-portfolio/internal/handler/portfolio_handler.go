@@ -11,6 +11,7 @@ import (
 
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
 	portfoliov1connect "github.com/xstockstrat/contracts/gen/go/portfolio/v1/portfoliov1connect"
+	"github.com/xstockstrat/portfolio/internal/repository"
 	"github.com/xstockstrat/portfolio/internal/service"
 )
 
@@ -47,7 +48,7 @@ func (h *PortfolioHandler) GetPosition(ctx context.Context, req *connect.Request
 	}
 	p, err := h.svc.GetPosition(ctx, req.Msg)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, connect.NewError(classifyGetPositionError(err), err)
 	}
 	return connect.NewResponse(p), nil
 }
@@ -324,6 +325,18 @@ func (a *grpcPortfolioAdapter) RemoveWatchlistSymbols(ctx context.Context, req *
 
 func errorf(msg string) error {
 	return fmt.Errorf("%s", msg)
+}
+
+// classifyGetPositionError maps a GetPosition error to a Connect code: NotFound only for
+// a confirmed absent position (repository.ErrPositionNotFound); every other error (DB
+// failure, timeout) is Internal — previously both collapsed to NotFound unconditionally,
+// which made REDUCE_ONLY's fail-closed design (trading.go) unable to tell "no position,
+// definitely safe to block" from "backend down, block out of caution" (feature 100).
+func classifyGetPositionError(err error) connect.Code {
+	if errors.Is(err, repository.ErrPositionNotFound) {
+		return connect.CodeNotFound
+	}
+	return connect.CodeInternal
 }
 
 func toGRPCError(err error) error {

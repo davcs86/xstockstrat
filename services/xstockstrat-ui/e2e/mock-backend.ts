@@ -131,11 +131,40 @@ export async function startMockBackend(): Promise<void> {
   };
 
   // ── Port 9091 — Trader segment ──────────────────────────────────────────
+  // placeOrderIntents: an in-memory map keyed by clientOrderId, genuinely exercising
+  // dedup (feature 101) rather than just echoing the field back — a repeat call with a
+  // clientOrderId already seen in this test run returns the SAME stored response, not a
+  // freshly-built one (see docs/roadmap/ledger/insights.md 2026-07-27: "a mock that echoes
+  // a request field back as its response cannot distinguish a correct consumer from an
+  // incorrect one"). The orderId itself stays the fixed 'mock-order-001' literal that
+  // order-form.spec.ts hard-asserts — startMockBackend() runs once for the whole Playwright
+  // run (global-setup.ts), so this map is shared/persistent across every spec file and
+  // worker; a counter-based id would make that assertion depend on cross-file run order.
+  const placeOrderIntents = new Map<
+    string,
+    { orderId: string; status: number; tradingMode: number; qty: number; stopPrice: number }
+  >();
   const traderHandler = connectNodeAdapter({
     routes(router) {
       router.service(TradingService, {
-        async placeOrder() {
-          return { orderId: 'mock-order-001', status: 3, tradingMode: 1 };
+        async placeOrder(req) {
+          const clientOrderId = req.clientOrderId;
+          const stored = clientOrderId ? placeOrderIntents.get(clientOrderId) : undefined;
+          if (stored) {
+            return stored;
+          }
+          // qty/stopPrice (feature 023): a plausible auto-sized order response, so
+          // OrderForm's post-submit "qty N, stop N" display (C-14) has something to
+          // render — the mock ignores req's own qty/side, per the existing note below.
+          const resp = {
+            orderId: 'mock-order-001',
+            status: 3,
+            tradingMode: 1,
+            qty: 5,
+            stopPrice: 148.25,
+          };
+          if (clientOrderId) placeOrderIntents.set(clientOrderId, resp);
+          return resp;
         },
         async cancelOrder() {
           // Order-ticket page Cancel action (feature 096). Specs that need a specific
@@ -223,6 +252,24 @@ export async function startMockBackend(): Promise<void> {
                 payload: { role: m.role, text: m.text },
                 sequence: m.sequence,
               })),
+              page: { nextPageToken: '' },
+            };
+          }
+          // feature 102 — reconciliation status for /trader/positions (useReconciliationStatus).
+          // Default branch: one healthy tick, no mismatch. Overridden per-test via page.route()
+          // for the mismatch/halt scenarios (positions-reconciliation.spec.ts).
+          if (req.streamKey?.startsWith('account:')) {
+            return {
+              events: [
+                {
+                  eventId: 'evt-reconciliation-001',
+                  eventType: 'reconciliation.mismatch_found',
+                  streamKey: req.streamKey,
+                  sourceService: 'xstockstrat-trading',
+                  payload: { mismatch_class: 'quantity_discrepancy', tick_at: Date.now() },
+                  sequence: BigInt(1),
+                },
+              ],
               page: { nextPageToken: '' },
             };
           }
@@ -811,6 +858,15 @@ export async function startMockBackend(): Promise<void> {
                 tradingMode: 0,
               },
               {
+                key: 'platform.trading_state',
+                description: 'Richer halt state: ACTIVE | REDUCE_ONLY | HALTED',
+                defaultValue: 'ACTIVE',
+                isSecret: false,
+                consumingService: 'xstockstrat-trading',
+                environment: 1,
+                tradingMode: 1,
+              },
+              {
                 key: 'secret.alpaca_api_key',
                 description: 'Alpaca API key for live trading',
                 defaultValue: '[secret]',
@@ -834,6 +890,20 @@ export async function startMockBackend(): Promise<void> {
         },
         async setConfig() {
           return {};
+        },
+        // feature 102 — trader/positions reads platform.trading_state via traderConfigClient
+        // (unified across the CONFIG_ENDPOINT port; see playwright.config.ts). Default: ACTIVE
+        // (no platform-wide restriction) so the existing suite's happy-path assertions are
+        // unaffected. Overridden per-test via page.route() for the REDUCE_ONLY/HALTED cases
+        // (positions-reconciliation.spec.ts).
+        async getConfig() {
+          return {
+            namespace: 'platform',
+            version: '1',
+            values: {
+              trading_state: { value: { case: 'stringVal', value: 'ACTIVE' } },
+            },
+          };
         },
       });
 

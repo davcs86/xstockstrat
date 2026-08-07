@@ -3495,7 +3495,7 @@ def _wl(bindings=None, symbols=None):
     )
 
 
-def _strat_row(strategy_id, entry=None, exit_=None):
+def _strat_row(strategy_id, entry=None, exit_=None, active=True, live_enabled=True):
     """A strategy row (SMA≈close via the ComputeIndicator stub) with optional entry/exit rules."""
     definition = analysis_pb2.StrategyDefinition(
         strategy_id=strategy_id,
@@ -3514,8 +3514,8 @@ def _strat_row(strategy_id, entry=None, exit_=None):
     return {
         "strategy_id": strategy_id,
         "display_name": strategy_id.upper(),
-        "active": True,
-        "live_enabled": True,
+        "active": active,
+        "live_enabled": live_enabled,
         "definition_json": json_format.MessageToDict(definition),
     }
 
@@ -3590,6 +3590,36 @@ class TestListOpportunitiesMaterialized:
         assert by_symbol["TSLA"].strategy_id == ""
         assert by_symbol["TSLA"].total_conditions == 0
         assert by_symbol["TSLA"].action == analysis_pb2.OPPORTUNITY_ACTION_TAG_ADD
+
+    @pytest.mark.asyncio
+    async def test_watchlist_binding_to_disabled_strategy_traces_to_zero(self):
+        """A watchlist binding to a strategy the operator turned off (live_enabled=False) must
+        not fabricate readiness — it stays a candidate but traces 0/0, mirroring the live loop's
+        own `live_enabled AND active` gate (live_loop.py) rather than surfacing a real-looking
+        opportunity row for a disabled strategy."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100, live_enabled=False)},
+            bars={"AAPL": _FIRING_BARS},
+        )
+        by_symbol, _ = await _list_opps(svc)
+        row = by_symbol["AAPL"]
+        assert row.strategy_id == "sx"
+        assert row.passing_conditions == 0
+        assert row.total_conditions == 0
+
+    @pytest.mark.asyncio
+    async def test_watchlist_binding_to_deactivated_strategy_traces_to_zero(self):
+        """Same as above for a soft-deleted (active=False) strategy."""
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100, active=False)},
+            bars={"AAPL": _FIRING_BARS},
+        )
+        by_symbol, _ = await _list_opps(svc)
+        row = by_symbol["AAPL"]
+        assert row.passing_conditions == 0
+        assert row.total_conditions == 0
 
     @pytest.mark.asyncio
     async def test_signal_and_watchlist_collapse_into_one_row(self):

@@ -50,6 +50,8 @@ message Order {
   string broker_order_id = 18; // Alpaca-assigned order ID, populated after broker submission
   string account_id = 19;
   xstockstrat.common.v1.BrokerType broker_type = 20;
+  // intent_state is set by every write path and read via a cross-intent LATERAL join on other reads; see design.md.
+  IntentState intent_state = 21;
 }
 
 enum OrderSide {
@@ -88,6 +90,9 @@ message PlaceOrderRequest {
   string time_in_force = 7;
   string strategy_id = 8;
   string user_id = 9;
+  // client_order_id is required: a stable client-generated nonce reused across retries of
+  // the same logical place-order action (see the /trader Place Order form's nonce generator).
+  // Empty is rejected with InvalidArgument. Used as the order-intent dedup key (feature 101).
   string client_order_id = 10;
   bool requires_approval = 11;
   // If UNSPECIFIED, the service uses trading.broker.paper config key to determine mode.
@@ -100,6 +105,9 @@ message PlaceOrderRequest {
   // ORDER_TYPE_TRAILING_STOP; both must be zero for any other order type.
   double trail_price = 14;
   double trail_percent = 15;
+  // Signal confidence 0.0-1.0 for automatic position sizing (see ComputePositionSize). Unset →
+  // confidence=1.0 (full size); explicit 0.0 → size to zero; out-of-range → InvalidArgument.
+  optional double confidence = 16;
 }
 
 message CancelOrderRequest {
@@ -164,6 +172,27 @@ enum CredentialStatus {
   CREDENTIAL_STATUS_UNKNOWN = 3;     // validation could not complete (transient/network error)
 }
 
+// IntentState is the platform's own knowledge of whether a PlaceOrder/ReplaceOrder/
+// CancelOrder command actually reached the broker — orthogonal to OrderStatus (an order
+// can be NEW and also UNKNOWN simultaneously). See docs/roadmap/features/101-exactly-once-order-intent/design.md.
+enum IntentState {
+  INTENT_STATE_UNSPECIFIED = 0;
+  INTENT_STATE_PENDING = 1;    // intent recorded, broker call not yet resolved
+  INTENT_STATE_COMPLETED = 2;  // broker call resolved (accepted or a definite rejection)
+  INTENT_STATE_REJECTED = 3;   // definite, synchronous broker rejection (not a timeout)
+  INTENT_STATE_UNKNOWN = 4;    // broker outcome unknown — never retried automatically (FR-5)
+}
+
+// HaltSource distinguishes which automated mechanism halted an account — 030's
+// bracket-protection flatten failure vs. 102's broker-state-reconciliation mismatch — so an
+// operator (and the /trader UI) can tell which one fired without guessing from halt_reason's
+// free text alone.
+enum HaltSource {
+  HALT_SOURCE_UNSPECIFIED = 0;
+  HALT_SOURCE_BRACKET_PROTECTION = 1;  // 030
+  HALT_SOURCE_RECONCILIATION = 2;       // 102
+}
+
 // BrokerAccount is a registered broker account (credentials never returned).
 message BrokerAccount {
   string id = 1;
@@ -177,6 +206,14 @@ message BrokerAccount {
   CredentialStatus credential_status = 7;
   // credential_checked_at is when credential_status was last refreshed.
   google.protobuf.Timestamp credential_checked_at = 8;
+  // halted / halted_at / halt_reason / halt_source (feature 030 + 102): whether this account is
+  // currently halted by an automated safety mechanism, when, why, and which mechanism. False/unset
+  // means no automated halt is in effect; an operator may still have separately deactivated the
+  // account (is_active).
+  bool halted = 9;
+  google.protobuf.Timestamp halted_at = 10;
+  string halt_reason = 11;
+  HaltSource halt_source = 12;
 }
 
 message RegisterBrokerAccountRequest {

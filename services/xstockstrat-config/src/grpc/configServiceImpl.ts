@@ -2,8 +2,11 @@ import { Pool } from 'pg';
 import { getLogger } from '../services/logger';
 import {
   ADMIN_SCOPE_ERROR,
+  HEADER_INTERNAL_CALLER,
   MISSING_AUTHOR_ERROR,
+  first,
   hasAdminAccessScope,
+  hasInternalCallerAuthority,
   userIdFrom,
 } from './authz';
 import { ConfigUpdateType, ValueType } from '@xstockstrat/proto/config/v1/config';
@@ -290,14 +293,26 @@ export class ConfigServiceImpl {
     // boots over an unauthenticated WatchConfig whose first message is a full namespace
     // snapshot, so gating GetConfig without WatchConfig would be incoherent and gating
     // WatchConfig would break platform startup. See feature 074 design.md.
-    if (!hasAdminAccessScope(call.metadata)) {
-      log.warn('SetConfig denied — caller lacks admin scope', {
+    // Feature 102: an admin write OR an internal-caller-authorized write is accepted —
+    // additive, not a replacement (humans via config-ui are unaffected). The internal-caller
+    // channel is structurally separate from x-access-scope (see authz.ts's HEADER_INTERNAL_CALLER
+    // doc comment) and direction-restricted per-grant (e.g. never toward 'ACTIVE').
+    const rawValue = call.request?.value?.string_val ?? call.request?.value?.stringVal ?? '';
+    const internalCallerAuthorized = hasInternalCallerAuthority(
+      call.metadata,
+      call.request?.namespace,
+      call.request?.key,
+      rawValue,
+    );
+    if (!hasAdminAccessScope(call.metadata) && !internalCallerAuthorized) {
+      log.warn('SetConfig denied — caller lacks admin scope and internal-caller authority', {
         namespace: call.request?.namespace,
         key: call.request?.key,
       });
       callback(ADMIN_SCOPE_ERROR);
       return;
     }
+    const callerIdentity = first(call.metadata, HEADER_INTERNAL_CALLER) || null;
 
     const { namespace, key, value, reason } = call.request;
     const env = resolveEnv(call.request.environment);
@@ -310,6 +325,22 @@ export class ConfigServiceImpl {
     if (!author) {
       callback(MISSING_AUTHOR_ERROR);
       return;
+    }
+
+    // Feature 100: platform.trading_state is a closed 3-literal string enum (C-04 deferred to
+    // a future proto enum once a second consumer exists — see design.md). Reject any write
+    // outside the known literals so a stale/typo'd caller can't mint a value the trading-side
+    // gate would otherwise read as an unrecognized-hence-HALTED string with no server-side signal.
+    if (namespace === 'platform' && key === 'trading_state') {
+      const raw = value?.string_val ?? value?.stringVal ?? '';
+      const ALLOWED = ['ACTIVE', 'REDUCE_ONLY', 'HALTED'];
+      if (!ALLOWED.includes(raw)) {
+        callback({
+          code: 3, // INVALID_ARGUMENT
+          message: `platform.trading_state must be one of ${ALLOWED.join(', ')} (got: ${JSON.stringify(raw)})`,
+        });
+        return;
+      }
     }
 
     // Feature 091: existence gate. A write to a not-yet-registered (namespace,key,env,mode)
@@ -336,14 +367,15 @@ export class ConfigServiceImpl {
 
     try {
       await this.pool.query(
-        `INSERT INTO config.config_values (namespace, key, value_type, value_data, updated_by, update_reason, environment, trading_mode)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        `INSERT INTO config.config_values (namespace, key, value_type, value_data, updated_by, update_reason, environment, trading_mode, caller_identity)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          ON CONFLICT (namespace, key, environment, trading_mode) DO UPDATE
            SET value_data = EXCLUDED.value_data,
                updated_by = EXCLUDED.updated_by,
                update_reason = EXCLUDED.update_reason,
+               caller_identity = EXCLUDED.caller_identity,
                updated_at = NOW()`,
-        [namespace, key, inferValueType(value), extractValueData(value), author, reason, env, mode]
+        [namespace, key, inferValueType(value), extractValueData(value), author, reason, env, mode, callerIdentity]
       );
       await this.pool.query(`SELECT pg_notify('config_changed', $1)`, [
         JSON.stringify({ namespace, key, environment: env, trading_mode: mode }),
@@ -365,8 +397,19 @@ export class ConfigServiceImpl {
          WHERE namespace = $1 AND environment = $2 AND (trading_mode = $3 OR trading_mode = 'all')`,
         [call.request.namespace, env, mode]
       );
+      // A key can have both a trading_mode='all' row and a mode-exact shadow row for the same
+      // (namespace, key, environment) scope — see the setConfig existence-gate comment above.
+      // The WHERE clause above matches both, so resolve to one row per key here, preferring the
+      // mode-exact row over 'all', instead of surfacing the same key twice to callers.
+      const byKey = new Map<string, (typeof result.rows)[number]>();
+      for (const row of result.rows) {
+        const existing = byKey.get(row.key);
+        if (!existing || (row.trading_mode !== 'all' && existing.trading_mode === 'all')) {
+          byKey.set(row.key, row);
+        }
+      }
       callback(null, {
-        keys: result.rows.map((r) => {
+        keys: Array.from(byKey.values()).map((r) => {
           const weightBounds = WEIGHT_KEY_REGISTRY[r.key];
           // ts-proto encodes camelCase field names and (buf.gen.yaml stringEnums=true)
           // string enum constants. Emitting snake_case/numeric here meant ConfigKeyMeta.encode()
