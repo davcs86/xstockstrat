@@ -164,6 +164,65 @@ test.describe('Watchlists (insights)', () => {
     await expect(page.getByLabel('Strategy for new symbols')).toHaveText('Unbound');
   });
 
+  test('concurrency guard disables controls while a write is in flight (Layers 1 and 2)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page);
+    await page.goto('/insights/watchlists');
+
+    await createList(page, 'Concurrency List');
+    await addSymbols(page, 'AAPL');
+    // A second list to exercise Layer 2 against — the master-list's *other* button.
+    await createList(page, 'Other List');
+
+    // Register the delaying override AFTER mockWatchlists so it wins interception order.
+    let releaseResponse: () => void = () => {};
+    const delayed = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
+    await page.route(
+      '**/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlist',
+      async (route) => {
+        await delayed;
+        const req = JSON.parse(route.request().postData() ?? '{}');
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ watchlist: { watchlistId: req.watchlistId, ...req } }),
+        });
+      },
+    );
+
+    const master = page.getByTestId('watchlist-master');
+    await master.getByRole('button', { name: /Concurrency List/ }).click();
+
+    // Layer 1: trigger a rebind (don't await its internal round-trip assertion) — while the
+    // UpdateWatchlist request is held, the add-row's Input and the bound row's remove button must
+    // both be disabled.
+    const select = page.getByTestId('readiness-row-AAPL').getByLabel('Strategy for AAPL');
+    await select.click();
+    await page.getByRole('option', { name: 'Live Test Strategy' }).click();
+
+    await expect(page.getByPlaceholder('Add symbols (e.g. AAPL MSFT)')).toBeDisabled();
+    await expect(page.getByLabel('Remove AAPL')).toBeDisabled();
+
+    // Layer 2: the master-list's *other* watchlist-select button must also be disabled while the
+    // write and its refetch are settling — the ancestor (page.tsx) sees it even though it never
+    // remounts.
+    const otherButton = master.getByRole('button', { name: /Other List/ });
+    await expect(otherButton).toBeDisabled();
+
+    // Release the delayed response — both layers must re-enable once the write and its refetch
+    // (the isFetching clause) resolve.
+    releaseResponse();
+    await expect(page.getByPlaceholder('Add symbols (e.g. AAPL MSFT)')).toBeEnabled({
+      timeout: 5000,
+    });
+    await expect(page.getByLabel('Remove AAPL')).toBeEnabled();
+    await expect(otherButton).toBeEnabled({ timeout: 5000 });
+  });
+
   test('strategy binding picker excludes non-live strategies (disabled strategies must not be usable)', async ({
     page,
   }) => {
