@@ -174,3 +174,11 @@ Tooling setup (steps 1-8, all `xstockstrat-ui`): node ✓ v22.22.2 · pnpm ✓ 9
   warning in `insights/strategies/[id]/page.tsx`, not touched by this step).
 - Files modified: `services/xstockstrat-ui/src/lib/deploymentEnv.ts`
 - Deviations: none
+
+### Step 2 — test: `deploymentEnv.test.ts` [done]
+- Test file was written first (per the TDD gate's test-first ordering) during Step 1's red→green
+  cycle — already exists and passes (7/7). Re-verified this step's own commands: `pnpm run
+  test:unit -- deploymentEnv.test.ts` (7 passed) and `pnpm run test:coverage` (`deploymentEnv.ts`:
+  100% stmts/branch/funcs/lines, well above the 40% `src/lib` threshold).
+- Files modified: `services/xstockstrat-ui/src/lib/deploymentEnv.test.ts`
+- Deviations: none

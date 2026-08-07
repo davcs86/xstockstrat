@@ -122,7 +122,7 @@ alone confirms the `Environment` import resolves and the file type-checks.)
 
 ### Step 2 — test: `deploymentEnv.test.ts`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/deploymentEnv.test.ts` — create
