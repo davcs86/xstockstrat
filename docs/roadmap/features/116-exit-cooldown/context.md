@@ -331,3 +331,10 @@ Next: Step 1.
 - Deviations: none (sequential mode's one-commit-per-step convention keeps this a separate
   commit from Step 1, rather than literally bundled into "the same commit" as the spec's
   Instructions phrase assumed for default-mode PRs — not a content deviation).
+
+### Step 3 — migration: `012_strategy_cooldowns_last_entry_at` [done]
+- Created the up/down pair adding a nullable `last_entry_at` column to
+  `analysis.strategy_cooldowns`. Verified offline (no DB started): single `ADD COLUMN` has an
+  exact inverse `DROP COLUMN`; migration 009 confirmed untouched (F-01).
+- Files modified: `services/xstockstrat-analysis/migrations/012_strategy_cooldowns_last_entry_at.{up,down}.sql`
+- Deviations: none

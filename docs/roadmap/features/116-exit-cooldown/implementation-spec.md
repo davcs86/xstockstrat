@@ -131,7 +131,7 @@ Confirm the new field appears in all three generated targets and no unrelated fi
 
 ### Step 3 — migration: `012_strategy_cooldowns_last_entry_at`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/012_strategy_cooldowns_last_entry_at.up.sql` — create
