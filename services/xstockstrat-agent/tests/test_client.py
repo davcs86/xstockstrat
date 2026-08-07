@@ -329,6 +329,28 @@ class TestManageSignalSourceClient:
         assert result["slug"] == "uw"
 
 
+class TestIngestSignalClient:
+    """feature 111 — client.ingest_signal maps IngestSignalResponse.deduplicated through."""
+
+    @pytest.mark.asyncio
+    async def test_ingest_signal_maps_deduplicated_field(self):
+        from gen.ingest.v1 import ingest_pb2, ingest_pb2_grpc  # type: ignore
+
+        resp = ingest_pb2.IngestSignalResponse(signal_id=7, deduplicated=True)
+        mock_stub = MagicMock()
+        mock_stub.IngestSignal = AsyncMock(return_value=resp)
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(ingest_pb2_grpc, "IngestServiceStub", return_value=mock_stub):
+                result = await client.ingest_signal(
+                    source="unusual_whales",
+                    symbol="AAPL",
+                    direction="buy",
+                    valid_from="2026-05-01T00:00:00Z",
+                )
+        assert result == {"signal_id": 7, "deduplicated": True}
+
+
 class TestSetStrategyLiveClient:
     @pytest.mark.asyncio
     async def test_uses_analysis_endpoint_and_admin_scope(self):

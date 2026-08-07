@@ -420,6 +420,12 @@ export interface IngestSignalRequest {
 
 export interface IngestSignalResponse {
   signalId: number;
+  /**
+   * True when this submission matched an existing signal within the dedup window
+   * (ingest.signals.dedup_window_hours) on (source, symbol, direction, conviction,
+   * valid_until); signal_id is then the EXISTING signal's id, not a newly-inserted one.
+   */
+  deduplicated: boolean;
 }
 
 export interface QuerySignalsRequest {
@@ -1807,13 +1813,16 @@ export const IngestSignalRequest: MessageFns<IngestSignalRequest> = {
 };
 
 function createBaseIngestSignalResponse(): IngestSignalResponse {
-  return { signalId: 0 };
+  return { signalId: 0, deduplicated: false };
 }
 
 export const IngestSignalResponse: MessageFns<IngestSignalResponse> = {
   encode(message: IngestSignalResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
     if (message.signalId !== 0) {
       writer.uint32(8).int64(message.signalId);
+    }
+    if (message.deduplicated !== false) {
+      writer.uint32(16).bool(message.deduplicated);
     }
     return writer;
   },
@@ -1833,6 +1842,14 @@ export const IngestSignalResponse: MessageFns<IngestSignalResponse> = {
           message.signalId = longToNumber(reader.int64());
           continue;
         }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.deduplicated = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1849,6 +1866,7 @@ export const IngestSignalResponse: MessageFns<IngestSignalResponse> = {
         : isSet(object.signal_id)
         ? globalThis.Number(object.signal_id)
         : 0,
+      deduplicated: isSet(object.deduplicated) ? globalThis.Boolean(object.deduplicated) : false,
     };
   },
 
@@ -1856,6 +1874,9 @@ export const IngestSignalResponse: MessageFns<IngestSignalResponse> = {
     const obj: any = {};
     if (message.signalId !== 0) {
       obj.signalId = Math.round(message.signalId);
+    }
+    if (message.deduplicated !== false) {
+      obj.deduplicated = message.deduplicated;
     }
     return obj;
   },
@@ -1866,6 +1887,7 @@ export const IngestSignalResponse: MessageFns<IngestSignalResponse> = {
   fromPartial<I extends Exact<DeepPartial<IngestSignalResponse>, I>>(object: I): IngestSignalResponse {
     const message = createBaseIngestSignalResponse();
     message.signalId = object.signalId ?? 0;
+    message.deduplicated = object.deduplicated ?? false;
     return message;
   },
 };

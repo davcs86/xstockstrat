@@ -330,6 +330,14 @@ export type IngestSignalResponse = Message<"xstockstrat.ingest.v1.IngestSignalRe
      * @generated from field: int64 signal_id = 1;
      */
     signalId: bigint;
+    /**
+     * True when this submission matched an existing signal within the dedup window
+     * (ingest.signals.dedup_window_hours) on (source, symbol, direction, conviction,
+     * valid_until); signal_id is then the EXISTING signal's id, not a newly-inserted one.
+     *
+     * @generated from field: bool deduplicated = 2;
+     */
+    deduplicated: boolean;
 };
 /**
  * Describes the message xstockstrat.ingest.v1.IngestSignalResponse.

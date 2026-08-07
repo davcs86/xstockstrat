@@ -76,6 +76,15 @@ async def mark_source_error(db_pool, slug: str, error: str) -> None:
     )
 
 
+async def touch_source_last_seen(db_pool, slug: str) -> None:
+    """Record that a source is alive (heard from it) without counting a new signal fed —
+    used on a dedup hit, where mark_source_fed's signals_fed bump would be wrong (feature 111)."""
+    await db_pool.execute(
+        "UPDATE ingest.signal_sources SET last_seen_at = NOW() WHERE slug = $1",
+        slug,
+    )
+
+
 async def get_source(db_pool, slug: str) -> dict | None:
     """Fetch a signal source by slug, or None (feature 088: honest register/update verbs)."""
     row = await db_pool.fetchrow("SELECT * FROM ingest.signal_sources WHERE slug = $1", slug)

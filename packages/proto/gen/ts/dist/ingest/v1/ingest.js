@@ -1495,12 +1495,15 @@ exports.IngestSignalRequest = {
     },
 };
 function createBaseIngestSignalResponse() {
-    return { signalId: 0 };
+    return { signalId: 0, deduplicated: false };
 }
 exports.IngestSignalResponse = {
     encode(message, writer = new wire_1.BinaryWriter()) {
         if (message.signalId !== 0) {
             writer.uint32(8).int64(message.signalId);
+        }
+        if (message.deduplicated !== false) {
+            writer.uint32(16).bool(message.deduplicated);
         }
         return writer;
     },
@@ -1518,6 +1521,13 @@ exports.IngestSignalResponse = {
                     message.signalId = longToNumber(reader.int64());
                     continue;
                 }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.deduplicated = reader.bool();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1533,12 +1543,16 @@ exports.IngestSignalResponse = {
                 : isSet(object.signal_id)
                     ? globalThis.Number(object.signal_id)
                     : 0,
+            deduplicated: isSet(object.deduplicated) ? globalThis.Boolean(object.deduplicated) : false,
         };
     },
     toJSON(message) {
         const obj = {};
         if (message.signalId !== 0) {
             obj.signalId = Math.round(message.signalId);
+        }
+        if (message.deduplicated !== false) {
+            obj.deduplicated = message.deduplicated;
         }
         return obj;
     },
@@ -1548,6 +1562,7 @@ exports.IngestSignalResponse = {
     fromPartial(object) {
         const message = createBaseIngestSignalResponse();
         message.signalId = object.signalId ?? 0;
+        message.deduplicated = object.deduplicated ?? false;
         return message;
     },
 };
