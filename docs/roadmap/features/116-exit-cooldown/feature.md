@@ -1,6 +1,6 @@
 # Feature: exit-cooldown
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/exit-cooldown`
 **Created**: 2026-08-07
 **Last Updated**: 2026-08-07
@@ -17,6 +17,7 @@
 | 2026-08-07 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 21 steps |
 | 2026-08-07 | `implementation-ready` (unchanged) | /sdd-execute (sequential, re-spec gate) | Renumbered 110 → 116 (trunk collision); re-spec corrected 3 stale evidence citations (Steps 15, 18) |
 | 2026-08-07 | `implementation-ready` → `in-progress` | /sdd-execute (sequential) | Step 1 (proto field) done |
+| 2026-08-07 | `in-progress` → `code-completed` | /sdd-execute (sequential) | All 21 steps done; merge-order gate clear (no blocking dependency); opening integration PR |
 
 ---
 
