@@ -107,6 +107,14 @@ type TradingService struct {
 	// goroutines — a slow flatten must not be re-triggered by the next tick.
 	flattenInFlight   map[string]bool
 	flattenInFlightMu sync.Mutex
+	// reconcileCandidates tracks how many consecutive ticks a candidate mismatch has been
+	// observed (feature 102), keyed by "accountID:order:orderID" or "accountID:pos:symbol".
+	// Cleared once resolved (no longer observed on a later tick) or once it crosses the
+	// grace window and becomes a real finding. reconcileTick runs on a single poller
+	// goroutine, but this is guarded by its own mutex anyway per design.md's instruction
+	// (defensive — a future caller from another goroutine must not silently race).
+	reconcileCandidates   map[string]int
+	reconcileCandidatesMu sync.Mutex
 }
 
 // clientKeepAlive prevents silent connection drops on idle inter-service links.
@@ -142,25 +150,26 @@ func NewTradingService(
 		return nil, fmt.Errorf("dial marketdata: %w", err)
 	}
 	return &TradingService{
-		cfg:              cfg,
-		cfgW:             cfgW,
-		brokers:          make(map[string]brokerPoolEntry),
-		accountRepo:      accountRepo,
-		encKey:           encKey,
-		ledger:           ledgerv1.NewLedgerServiceClient(ledgerConn),
-		notify:           notifyv1.NewNotifyServiceClient(notifyConn),
-		portfolio:        portfoliov1.NewPortfolioServiceClient(portfolioConn),
-		marketdata:       marketdatav1.NewMarketDataServiceClient(marketdataConn),
-		repo:             repo,
-		orderIntentRepo:  orderIntentRepo,
-		bracketRepo:      bracketRepo,
-		orders:           make(map[string]*tradingv1.Order),
-		subs:             make(map[string]chan *tradingv1.Order),
-		credStatus:       make(map[string]int32),
-		credSkipLoggedAt: make(map[string]time.Time),
-		halted:           make(map[string]bool),
-		haltReasons:      make(map[string]string),
-		flattenInFlight:  make(map[string]bool),
+		cfg:                 cfg,
+		cfgW:                cfgW,
+		brokers:             make(map[string]brokerPoolEntry),
+		accountRepo:         accountRepo,
+		encKey:              encKey,
+		ledger:              ledgerv1.NewLedgerServiceClient(ledgerConn),
+		notify:              notifyv1.NewNotifyServiceClient(notifyConn),
+		portfolio:           portfoliov1.NewPortfolioServiceClient(portfolioConn),
+		marketdata:          marketdatav1.NewMarketDataServiceClient(marketdataConn),
+		repo:                repo,
+		orderIntentRepo:     orderIntentRepo,
+		bracketRepo:         bracketRepo,
+		orders:              make(map[string]*tradingv1.Order),
+		subs:                make(map[string]chan *tradingv1.Order),
+		credStatus:          make(map[string]int32),
+		credSkipLoggedAt:    make(map[string]time.Time),
+		halted:              make(map[string]bool),
+		haltReasons:         make(map[string]string),
+		flattenInFlight:     make(map[string]bool),
+		reconcileCandidates: make(map[string]int),
 	}, nil
 }
 
@@ -1219,6 +1228,254 @@ func (s *TradingService) pollFills(ctx context.Context) {
 			})
 		}
 	}
+}
+
+// Mismatch classes emitted on reconciliation.mismatch_found (feature 102). An internal
+// ledger-payload string tag, not a wire/proto type — the taxonomy is closed within this
+// feature's own scope.
+const (
+	mismatchClassUnknownBrokerOrder  = "unknown_broker_order"
+	mismatchClassQuantityDiscrepancy = "quantity_discrepancy"
+	mismatchClassMissingBrokerOrder  = "missing_broker_order"
+)
+
+// isTerminalOrderStatus mirrors pollFills' own terminal-status set (see its candidate
+// collection above).
+func isTerminalOrderStatus(status tradingv1.OrderStatus) bool {
+	switch status {
+	case tradingv1.OrderStatus_ORDER_STATUS_FILLED,
+		tradingv1.OrderStatus_ORDER_STATUS_CANCELED,
+		tradingv1.OrderStatus_ORDER_STATUS_REJECTED,
+		tradingv1.OrderStatus_ORDER_STATUS_EXPIRED:
+		return true
+	}
+	return false
+}
+
+// StartReconciliationPoller periodically compares open orders/positions against broker truth
+// (feature 102 — broker-state-reconciliation). Mirrors StartFillPoller's exact
+// ticker+ctx.Done()+live-config-reread shape.
+func (s *TradingService) StartReconciliationPoller(ctx context.Context) {
+	const defaultIntervalMs = 60000.0
+	currentInterval := time.Duration(defaultIntervalMs) * time.Millisecond
+	ticker := time.NewTicker(currentInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.reconcileTick(ctx, int(s.cfgW.GetInt("trading.reconciliation.grace_ticks", 1)))
+			intervalMs := s.cfgW.GetFloat("trading.reconciliation.interval_ms", defaultIntervalMs)
+			if intervalMs > 0 {
+				newInterval := time.Duration(intervalMs) * time.Millisecond
+				if newInterval != currentInterval {
+					currentInterval = newInterval
+					ticker.Reset(currentInterval)
+				}
+			}
+		}
+	}
+}
+
+// recordReconciliationCandidate increments the consecutive-tick counter for a candidate
+// mismatch and reports whether it has now crossed the grace window (1+graceTicks
+// observations) and become a real finding. A real finding is cleared immediately, so a
+// persisting mismatch starts a fresh episode on its next occurrence rather than re-firing
+// every tick indefinitely.
+func (s *TradingService) recordReconciliationCandidate(key string, graceTicks int) bool {
+	s.reconcileCandidatesMu.Lock()
+	defer s.reconcileCandidatesMu.Unlock()
+	s.reconcileCandidates[key]++
+	if s.reconcileCandidates[key] >= 1+graceTicks {
+		delete(s.reconcileCandidates, key)
+		return true
+	}
+	return false
+}
+
+// clearReconciliationCandidate drops a candidate no longer observed this tick — the
+// propagation delay passed and the mismatch resolved on its own (self-heal; no ledger event,
+// no halt, per design.md).
+func (s *TradingService) clearReconciliationCandidate(key string) {
+	s.reconcileCandidatesMu.Lock()
+	delete(s.reconcileCandidates, key)
+	s.reconcileCandidatesMu.Unlock()
+}
+
+// emitReconciliationFinding records a real (past-grace-window) mismatch: a ledger event, a
+// CRITICAL alert, and the ordinary per-account halt (feature 030's mechanism, reused — no
+// SetConfig/authz call for this common case; that is Step 19's rare systemic escalation).
+func (s *TradingService) emitReconciliationFinding(ctx context.Context, accountID, mismatchClass, orderID string, expected, brokerReported float64) {
+	s.emitLedgerEvent(ctx, "reconciliation.mismatch_found", fmt.Sprintf("account:%s", accountID), map[string]interface{}{
+		"mismatch_class":  mismatchClass,
+		"order_id":        orderID,
+		"expected":        expected,
+		"broker_reported": brokerReported,
+		"tick_at":         time.Now().UnixMilli(),
+	})
+	s.haltAccount(ctx, accountID, fmt.Sprintf("%s: %s", mismatchClass, orderID), int32(tradingv1.HaltSource_HALT_SOURCE_RECONCILIATION))
+	_, err := s.notify.EmitAlert(ctx, &notifyv1.EmitAlertRequest{
+		Severity:      notifyv1.AlertSeverity_ALERT_SEVERITY_CRITICAL,
+		Category:      "reconciliation",
+		Title:         fmt.Sprintf("Broker state mismatch: %s", mismatchClass),
+		Body:          fmt.Sprintf("Account %s: %s (%s) — expected %.4f, broker reported %.4f", accountID, mismatchClass, orderID, expected, brokerReported),
+		SourceService: "xstockstrat-trading",
+	})
+	if err != nil {
+		slog.Warn("reconciliation: emit alert failed", "account_id", accountID, "mismatch_class", mismatchClass, "error", err)
+	}
+}
+
+// reconcileTick compares each registered account's open orders and positions against broker
+// truth (feature 102). Returns the number of accounts that errored this tick (systemicCount)
+// out of the total registered accounts (totalAccounts) — Step 19's systemic-escalation trigger
+// reads these.
+//
+// Deviation from design.md's literal "Qty - FilledQty on both sides" plan: broker.BrokerOrder
+// (the ListOrders/GetOrder result shape) carries only a cumulative FilledQty, not a total
+// order Qty — there is nothing to derive a broker-side "remaining" quantity from. The
+// quantity-discrepancy check below compares FilledQty directly (platform vs. broker-reported),
+// the only remaining-quantity-adjacent figure ListOrders actually returns.
+//
+// The "unprotected/impossible" bucket (an order/position under an account ID not present in
+// s.brokers at all) is not implemented: every Broker client is constructed scoped to one
+// account's own credentials (ibkrAccountID / the Alpaca key pair), so a ListOrders/GetPositions
+// call can only ever return records for that same account — there is no code path by which a
+// call scoped to account A could surface a record under a different, unregistered account B.
+// This bucket is architecturally unreachable given this feature's broker-client design, not a
+// skipped implementation; a genuine per-step finding, not a silent gap.
+// graceTicks is hoisted as an explicit parameter (not read live via s.cfgW inside this
+// function) — config.Watcher has no exported snapshot setter (an established limitation in
+// this service; see 030/023/101's own identical hoisting of a config-read value for the same
+// reason), so a live read here would make the "grace window not yet crossed" test case
+// untestable against a hand-constructed service. The one real caller (StartReconciliationPoller)
+// still reads the live config value and passes it in.
+func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int) (systemicCount, totalAccounts int) {
+	s.brokersMu.RLock()
+	brokerMap := make(map[string]brokerPoolEntry, len(s.brokers))
+	for id, e := range s.brokers {
+		brokerMap[id] = e
+	}
+	s.brokersMu.RUnlock()
+
+	s.credStatusMu.Lock()
+	credStatus := make(map[string]int32, len(s.credStatus))
+	for id, st := range s.credStatus {
+		credStatus[id] = st
+	}
+	s.credStatusMu.Unlock()
+
+	timeout := s.brokerCallTimeout()
+	totalAccounts = len(brokerMap)
+
+	for accountID, entry := range brokerMap {
+		if credentialsKnownInvalid(credStatus[accountID]) {
+			continue
+		}
+
+		listCtx, cancel := context.WithTimeout(ctx, timeout)
+		brokerOrders, err := entry.client.ListOrders(listCtx)
+		cancel()
+		if err != nil {
+			slog.Warn("reconcileTick: ListOrders failed", "account_id", accountID, "error", err)
+			systemicCount++
+			continue
+		}
+		brokerByID := make(map[string]broker.BrokerOrder, len(brokerOrders))
+		for _, bo := range brokerOrders {
+			brokerByID[bo.BrokerOrderID] = bo
+		}
+
+		s.mu.Lock()
+		var acctOrders []*tradingv1.Order
+		for _, o := range s.orders {
+			if o.AccountId == accountID && o.BrokerOrderId != "" {
+				acctOrders = append(acctOrders, o)
+			}
+		}
+		s.mu.Unlock()
+
+		knownBrokerIDs := make(map[string]bool, len(acctOrders))
+		for _, o := range acctOrders {
+			knownBrokerIDs[o.BrokerOrderId] = true
+			bo, found := brokerByID[o.BrokerOrderId]
+			if !found {
+				if isTerminalOrderStatus(o.Status) {
+					continue // already reconciled to a terminal state; not a live mismatch
+				}
+				key := accountID + ":order:" + o.OrderId
+				if s.recordReconciliationCandidate(key, graceTicks) {
+					s.emitReconciliationFinding(ctx, accountID, mismatchClassMissingBrokerOrder, o.OrderId, o.Qty-o.FilledQty, 0)
+				}
+				continue
+			}
+			// A quantity discrepancy is a genuine post-grace-window disagreement, never a
+			// bare PARTIALLY_FILLED status alone (FR-2) — the grace window below is exactly
+			// that carve-out: a fresh disagreement must persist across ticks before it counts.
+			key := accountID + ":order:" + o.OrderId
+			if bo.FilledQty != o.FilledQty {
+				if s.recordReconciliationCandidate(key, graceTicks) {
+					s.emitReconciliationFinding(ctx, accountID, mismatchClassQuantityDiscrepancy, o.OrderId, o.FilledQty, bo.FilledQty)
+				}
+			} else {
+				s.clearReconciliationCandidate(key)
+			}
+		}
+		for boID, bo := range brokerByID {
+			if knownBrokerIDs[boID] {
+				continue
+			}
+			// An order the broker knows about that the platform has no record of at all —
+			// detected regardless of fill state (AC-1), the primary reason ListOrders exists.
+			key := accountID + ":order:" + boID
+			if s.recordReconciliationCandidate(key, graceTicks) {
+				s.emitReconciliationFinding(ctx, accountID, mismatchClassUnknownBrokerOrder, boID, 0, bo.FilledQty)
+			}
+		}
+
+		// Position-side comparison: catches a fully FILLED order's resulting position
+		// disagreeing with the broker's own position — FILLED orders already dropped out of
+		// the order-side loop above (the same terminal-status convention pollFills uses).
+		posCtx, posCancel := context.WithTimeout(ctx, timeout)
+		brokerPositions, posErr := entry.client.GetPositions(posCtx)
+		posCancel()
+		if posErr != nil {
+			slog.Warn("reconcileTick: GetPositions failed", "account_id", accountID, "error", posErr)
+			systemicCount++
+			continue
+		}
+		tradingMode := commonv1.TradingMode_TRADING_MODE_PAPER
+		if !entry.client.IsPaper() {
+			tradingMode = commonv1.TradingMode_TRADING_MODE_LIVE
+		}
+		listPosCtx, listPosCancel := context.WithTimeout(ctx, timeout)
+		platformPositions, ppErr := s.portfolio.ListPositions(listPosCtx, &portfoliov1.ListPositionsRequest{
+			UserId: entry.userID, AccountId: &accountID, TradingMode: tradingMode,
+			Page: &commonv1.PageRequest{PageSize: 500},
+		})
+		listPosCancel()
+		if ppErr != nil {
+			slog.Warn("reconcileTick: portfolio ListPositions failed", "account_id", accountID, "error", ppErr)
+			continue // not counted toward systemic — the broker side of this account is fine
+		}
+		platformBySymbol := make(map[string]float64, len(platformPositions.Positions))
+		for _, p := range platformPositions.Positions {
+			platformBySymbol[p.Symbol] = p.Qty
+		}
+		for _, bp := range brokerPositions {
+			key := accountID + ":pos:" + bp.Symbol
+			platformQty := platformBySymbol[bp.Symbol]
+			if platformQty != bp.Quantity {
+				if s.recordReconciliationCandidate(key, graceTicks) {
+					s.emitReconciliationFinding(ctx, accountID, mismatchClassQuantityDiscrepancy, bp.Symbol, platformQty, bp.Quantity)
+				}
+			} else {
+				s.clearReconciliationCandidate(key)
+			}
+		}
+	}
+	return systemicCount, totalAccounts
 }
 
 // StartPositionSyncPoller polls all registered broker accounts for open positions

@@ -119,6 +119,9 @@ func main() {
 	// Start bracket protection watchdog — flattens+halts on an unconfirmed bracket
 	// past its protection window (feature 030).
 	go svc.StartBracketProtectionWatchdog(ctx)
+	// Start broker-state reconciliation poller — compares open orders/positions against
+	// broker truth, self-heals benign drift, halts on a genuine mismatch (feature 102).
+	go svc.StartReconciliationPoller(ctx)
 
 	// gRPC server.
 	grpcHdl := handler.NewTradingHandler(svc)
