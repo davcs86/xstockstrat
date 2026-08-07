@@ -51,17 +51,24 @@ is bound to.
 
 - [x] No proto changes anticipated
 - [x] No database migrations anticipated
-- [ ] No config key changes anticipated — _n/a, this is a UI behavior change, not a config value change_
+- [x] No config key changes anticipated — this is a UI behavior change, not a config value change
 
 (Update after investigation — remove or replace each item as needed)
 
+## Consumer Surface(s)
+
+- **UI segment**: `xstockstrat-ui`, `/config-ui` segment — `EnvModeSwitcher`
+  (`services/xstockstrat-ui/src/app/config-ui/page.tsx:58-99`) and its Link-based `env`/`mode`
+  query-param navigation, consumed by `services/xstockstrat-ui/src/app/config-ui/[namespace]/page.tsx`.
+  No other UI segment or the MCP agent surface is affected.
+
 ## Acceptance Criteria
 
-- [ ] The Config UI does not present the non-native `ENV` option as a plain, silently-writable
-      choice on a deployment whose `APPLICATION_ENV` fixes it to the other value — mirroring the
-      Accounts page's fixed read-only mode badge instead of a picker.
-- [ ] No behavior change to same-scope (native `ENV`) reads/writes.
-- [ ] Existing config-ui e2e tests pass; a new test covers the gated/non-native state.
+- **AC-1**: The Config UI does not present the non-native `ENV` option as a plain, silently-writable
+  choice on a deployment whose `APPLICATION_ENV` fixes it to the other value — mirroring the
+  Accounts page's fixed read-only mode badge instead of a picker.
+- **AC-2**: No behavior change to same-scope (native `ENV`) reads/writes.
+- **AC-3**: Existing config-ui e2e tests pass; a new test covers the gated/non-native state.
 
 ## Out of Scope
 
