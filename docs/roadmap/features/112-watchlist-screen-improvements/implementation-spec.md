@@ -225,7 +225,7 @@ Confirm no TypeScript errors on `WatchlistReadiness.tsx` / `WatchlistDetail.tsx`
 
 ### Step 2 — test: Repoint existing e2e coverage at the relocated readiness-row controls (FR-1/FR-2, AC-1)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/watchlists.spec.ts` — modify

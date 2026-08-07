@@ -22,7 +22,7 @@ async function addSymbols(page: Page, entry: string) {
  * Waits for the mutation+refetch round-trip (the trigger reflects the selection) before returning,
  * so binding several symbols in a row can't send a stale binding set that resets an earlier one. */
 async function bindStrategy(page: Page, symbol: string, optionName = 'Live Test Strategy') {
-  const select = page.getByTestId(`binding-${symbol}`).getByLabel(`Strategy for ${symbol}`);
+  const select = page.getByTestId(`readiness-row-${symbol}`).getByLabel(`Strategy for ${symbol}`);
   await select.click();
   await page.getByRole('option', { name: optionName }).click();
   await expect(select).toContainText(optionName, { timeout: 5000 });
@@ -39,13 +39,13 @@ test.describe('Watchlists (insights)', () => {
 
     // Add two symbols (lowercase input proves server-side uppercase via the mock).
     await addSymbols(page, 'aapl msft');
-    await expect(page.getByTestId('binding-AAPL')).toBeVisible({ timeout: 5000 });
-    await expect(page.getByTestId('binding-MSFT')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('readiness-row-AAPL')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('readiness-row-MSFT')).toBeVisible({ timeout: 5000 });
 
     // Remove one.
     await page.getByRole('button', { name: 'Remove AAPL' }).click();
-    await expect(page.getByTestId('binding-AAPL')).toHaveCount(0, { timeout: 5000 });
-    await expect(page.getByTestId('binding-MSFT')).toBeVisible();
+    await expect(page.getByTestId('readiness-row-AAPL')).toHaveCount(0, { timeout: 5000 });
+    await expect(page.getByTestId('readiness-row-MSFT')).toBeVisible();
 
     // Delete the list (confirm() auto-accepted).
     page.on('dialog', (d) => d.accept());
@@ -78,6 +78,14 @@ test.describe('Watchlists (insights)', () => {
     await expect(readiness.getByText('1 away')).toBeVisible();
     await expect(readiness.getByTestId('in-queue')).toBeVisible();
 
+    // Relocated row controls (FR-1/FR-2) must render visibly, not clipped by the row's
+    // fixed-width columns (design.md round-4: the w-32 Select width is an estimate to verify).
+    const row = readiness.getByTestId('readiness-row-AAPL');
+    await expect(row.getByLabel('Strategy for AAPL')).toBeVisible();
+    await expect(row.getByLabel('Remove AAPL')).toBeVisible();
+    const box = await row.boundingBox();
+    expect(box).not.toBeNull();
+
     // The binding is persisted: a reload re-fetches it (the Select keeps its strategy, still evaluated).
     await page.reload();
     await expect(readiness.getByTestId('readiness-row-AAPL')).toBeVisible({ timeout: 8000 });
@@ -94,7 +102,7 @@ test.describe('Watchlists (insights)', () => {
     await createList(page, 'Filtered List');
     await addSymbols(page, 'AAPL');
 
-    const select = page.getByTestId('binding-AAPL').getByLabel('Strategy for AAPL');
+    const select = page.getByTestId('readiness-row-AAPL').getByLabel('Strategy for AAPL');
     await select.click();
     await expect(page.getByRole('option', { name: 'Live Test Strategy' })).toBeVisible();
     // "Inactive Strategy" (liveEnabled: false in the fixture) must not be a selectable option.

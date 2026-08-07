@@ -277,3 +277,14 @@
 - Files modified: `services/xstockstrat-ui/src/hooks/useWatchlists.ts`,
   `services/xstockstrat-ui/src/components/insights/WatchlistReadiness.tsx`,
   `services/xstockstrat-ui/src/components/insights/WatchlistDetail.tsx`.
+
+### Step 2 — Repoint existing e2e coverage at the relocated readiness-row controls [done]
+- Repointed `bindStrategy` and the "create a list..." test from `binding-${symbol}` to
+  `readiness-row-${symbol}`; repointed the re-spec-found "excludes non-live strategies" test the
+  same way; added the round-4 width/visibility assertions to the "per-symbol strategy binding" test.
+  "readiness rollup buckets" needed no edit — passed unmodified once the `bindStrategy` helper was
+  fixed, confirming P-03's "confirm, don't assume" note in this step's own instructions.
+- TDD: applied and verified together with Step 1's red→green cycle (this file's edits were the RED
+  fixture run against pre-Step-1 code, then re-run for GREEN after Step 1 landed — see Step 1's
+  entry above for the actual run output: 3 failed → 7/7 passed, 54.8s).
+- Files modified: `services/xstockstrat-ui/e2e/insights/watchlists.spec.ts`.
