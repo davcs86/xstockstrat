@@ -131,6 +131,11 @@ export interface PlaceOrderRequest {
      */
     trailPrice: number;
     trailPercent: number;
+    /**
+     * Signal confidence 0.0-1.0 for automatic position sizing (see ComputePositionSize). Unset →
+     * confidence=1.0 (full size); explicit 0.0 → size to zero; out-of-range → InvalidArgument.
+     */
+    confidence?: number | undefined;
 }
 export interface CancelOrderRequest {
     orderId: string;

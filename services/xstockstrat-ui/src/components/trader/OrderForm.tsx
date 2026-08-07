@@ -89,7 +89,15 @@ export function OrderForm({ mode, initialSymbol }: OrderFormProps) {
       {
         onSuccess: (order) => {
           setIsErrorMsg(false);
-          setMessage(`Order placed: ${order.orderId} (${OrderStatus[order.status] ?? 'UNKNOWN'})`);
+          // Consumer surface requirement (C-14, feature 023): show the computed
+          // quantity/stop price whenever the server auto-sized the order (qty<=0
+          // submitted). stopPrice is shown only when non-zero — an ordinary override-mode
+          // buy/sell always sends stop_price=0, and printing "stop: 0" on every plain
+          // market/limit order would be noise.
+          const stopInfo = order.stopPrice > 0 ? `, stop ${order.stopPrice}` : '';
+          setMessage(
+            `Order placed: ${order.orderId} (${OrderStatus[order.status] ?? 'UNKNOWN'}) — qty ${order.qty}${stopInfo}`,
+          );
           setSymbol('');
           setQty('');
           setLimitPrice('');

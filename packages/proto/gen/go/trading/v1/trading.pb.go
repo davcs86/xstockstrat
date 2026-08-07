@@ -535,8 +535,11 @@ type PlaceOrderRequest struct {
 	// Trailing-stop parameters. Exactly one of trail_price (dollar offset) or
 	// trail_percent (percent offset) is required when order_type is
 	// ORDER_TYPE_TRAILING_STOP; both must be zero for any other order type.
-	TrailPrice    float64 `protobuf:"fixed64,14,opt,name=trail_price,json=trailPrice,proto3" json:"trail_price,omitempty"`
-	TrailPercent  float64 `protobuf:"fixed64,15,opt,name=trail_percent,json=trailPercent,proto3" json:"trail_percent,omitempty"`
+	TrailPrice   float64 `protobuf:"fixed64,14,opt,name=trail_price,json=trailPrice,proto3" json:"trail_price,omitempty"`
+	TrailPercent float64 `protobuf:"fixed64,15,opt,name=trail_percent,json=trailPercent,proto3" json:"trail_percent,omitempty"`
+	// Signal confidence 0.0-1.0 for automatic position sizing (see ComputePositionSize). Unset →
+	// confidence=1.0 (full size); explicit 0.0 → size to zero; out-of-range → InvalidArgument.
+	Confidence    *float64 `protobuf:"fixed64,16,opt,name=confidence,proto3,oneof" json:"confidence,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -672,6 +675,13 @@ func (x *PlaceOrderRequest) GetTrailPrice() float64 {
 func (x *PlaceOrderRequest) GetTrailPercent() float64 {
 	if x != nil {
 		return x.TrailPercent
+	}
+	return 0
+}
+
+func (x *PlaceOrderRequest) GetConfidence() float64 {
+	if x != nil && x.Confidence != nil {
+		return *x.Confidence
 	}
 	return 0
 }
@@ -1751,7 +1761,7 @@ const file_trading_v1_trading_proto_rawDesc = "" +
 	"account_id\x18\x13 \x01(\tR\taccountId\x12B\n" +
 	"\vbroker_type\x18\x14 \x01(\x0e2!.xstockstrat.common.v1.BrokerTypeR\n" +
 	"brokerType\x12F\n" +
-	"\fintent_state\x18\x15 \x01(\x0e2#.xstockstrat.trading.v1.IntentStateR\vintentState\"\xd5\x04\n" +
+	"\fintent_state\x18\x15 \x01(\x0e2#.xstockstrat.trading.v1.IntentStateR\vintentState\"\x89\x05\n" +
 	"\x11PlaceOrderRequest\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x125\n" +
 	"\x04side\x18\x02 \x01(\x0e2!.xstockstrat.trading.v1.OrderSideR\x04side\x12@\n" +
@@ -1774,7 +1784,11 @@ const file_trading_v1_trading_proto_rawDesc = "" +
 	"account_id\x18\r \x01(\tR\taccountId\x12\x1f\n" +
 	"\vtrail_price\x18\x0e \x01(\x01R\n" +
 	"trailPrice\x12#\n" +
-	"\rtrail_percent\x18\x0f \x01(\x01R\ftrailPercent\"H\n" +
+	"\rtrail_percent\x18\x0f \x01(\x01R\ftrailPercent\x12#\n" +
+	"\n" +
+	"confidence\x18\x10 \x01(\x01H\x00R\n" +
+	"confidence\x88\x01\x01B\r\n" +
+	"\v_confidence\"H\n" +
 	"\x12CancelOrderRequest\x12\x19\n" +
 	"\border_id\x18\x01 \x01(\tR\aorderId\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\"d\n" +
@@ -2007,6 +2021,7 @@ func file_trading_v1_trading_proto_init() {
 	if File_trading_v1_trading_proto != nil {
 		return
 	}
+	file_trading_v1_trading_proto_msgTypes[1].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

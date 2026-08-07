@@ -464,6 +464,11 @@ export interface PlaceOrderRequest {
    */
   trailPrice: number;
   trailPercent: number;
+  /**
+   * Signal confidence 0.0-1.0 for automatic position sizing (see ComputePositionSize). Unset →
+   * confidence=1.0 (full size); explicit 0.0 → size to zero; out-of-range → InvalidArgument.
+   */
+  confidence?: number | undefined;
 }
 
 export interface CancelOrderRequest {
@@ -1087,6 +1092,7 @@ function createBasePlaceOrderRequest(): PlaceOrderRequest {
     accountId: "",
     trailPrice: 0,
     trailPercent: 0,
+    confidence: undefined,
   };
 }
 
@@ -1136,6 +1142,9 @@ export const PlaceOrderRequest: MessageFns<PlaceOrderRequest> = {
     }
     if (message.trailPercent !== 0) {
       writer.uint32(121).double(message.trailPercent);
+    }
+    if (message.confidence !== undefined) {
+      writer.uint32(129).double(message.confidence);
     }
     return writer;
   },
@@ -1267,6 +1276,14 @@ export const PlaceOrderRequest: MessageFns<PlaceOrderRequest> = {
           message.trailPercent = reader.double();
           continue;
         }
+        case 16: {
+          if (tag !== 129) {
+            break;
+          }
+
+          message.confidence = reader.double();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1341,6 +1358,7 @@ export const PlaceOrderRequest: MessageFns<PlaceOrderRequest> = {
         : isSet(object.trail_percent)
         ? globalThis.Number(object.trail_percent)
         : 0,
+      confidence: isSet(object.confidence) ? globalThis.Number(object.confidence) : undefined,
     };
   },
 
@@ -1391,6 +1409,9 @@ export const PlaceOrderRequest: MessageFns<PlaceOrderRequest> = {
     if (message.trailPercent !== 0) {
       obj.trailPercent = message.trailPercent;
     }
+    if (message.confidence !== undefined) {
+      obj.confidence = message.confidence;
+    }
     return obj;
   },
 
@@ -1414,6 +1435,7 @@ export const PlaceOrderRequest: MessageFns<PlaceOrderRequest> = {
     message.accountId = object.accountId ?? "";
     message.trailPrice = object.trailPrice ?? 0;
     message.trailPercent = object.trailPercent ?? 0;
+    message.confidence = object.confidence ?? undefined;
     return message;
   },
 };

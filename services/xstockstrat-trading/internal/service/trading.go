@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net"
 	"strconv"
 	"sync"
@@ -24,6 +25,7 @@ import (
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
+	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
 	tradingv1 "github.com/xstockstrat/contracts/gen/go/trading/v1"
@@ -70,6 +72,8 @@ type TradingService struct {
 	notify      notifyv1.NotifyServiceClient
 	// portfolio is used for pre-trade risk checks (non-blocking on failure).
 	portfolio portfoliov1.PortfolioServiceClient
+	// marketdata is used by ComputePositionSize for ATR bars and current price.
+	marketdata marketdatav1.MarketDataServiceClient
 	// repo persists orders to trading.orders hypertable.
 	repo *repository.TradingRepo
 	// orderIntentRepo is the insert-or-return-existing dedup store (feature 101). Struct
@@ -120,6 +124,10 @@ func NewTradingService(
 	if err != nil {
 		return nil, fmt.Errorf("dial portfolio: %w", err)
 	}
+	marketdataConn, err := grpc.NewClient(cfg.MarketDataEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), clientKeepAlive, grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
+	if err != nil {
+		return nil, fmt.Errorf("dial marketdata: %w", err)
+	}
 	return &TradingService{
 		cfg:              cfg,
 		cfgW:             cfgW,
@@ -129,6 +137,7 @@ func NewTradingService(
 		ledger:           ledgerv1.NewLedgerServiceClient(ledgerConn),
 		notify:           notifyv1.NewNotifyServiceClient(notifyConn),
 		portfolio:        portfoliov1.NewPortfolioServiceClient(portfolioConn),
+		marketdata:       marketdatav1.NewMarketDataServiceClient(marketdataConn),
 		repo:             repo,
 		orderIntentRepo:  orderIntentRepo,
 		orders:           make(map[string]*tradingv1.Order),
@@ -294,16 +303,67 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		return nil, err
 	}
 
-	// Non-blocking portfolio risk check: log warnings but never block order placement.
-	s.checkPortfolioRisk(ctx, req)
-
 	// Compute the request-content hash (feature 101, FR-3) — the dedup mechanism's
-	// content-identity check, independent of the client_order_id nonce itself.
+	// content-identity check, independent of the client_order_id nonce itself. Deliberately
+	// computed BEFORE position sizing (feature 023) mutates req.Qty below: the hash must
+	// reflect the caller's original request so a genuine retry of the same logical action
+	// always matches, even if market data has since moved and would size differently.
 	hashDigest, err := placeOrderRequestHash(req)
 	if err != nil {
 		return nil, grpcstatus.Errorf(codes.Internal, "compute request hash: %v", err)
 	}
 	requestHashHex := hex.EncodeToString(hashDigest)
+
+	// Position sizing (feature 023): qty <= 0 means "auto-size this order" — the
+	// sizing_enabled master gate rejects that up front if sizing is disabled (AC-4).
+	sizingEnabled := s.cfgW.GetBool("trading.risk.sizing_enabled", true)
+	needSizing := req.Qty <= 0
+	if needSizing && !sizingEnabled {
+		return nil, grpcstatus.Errorf(codes.FailedPrecondition, "position sizing is disabled; an explicit qty is required")
+	}
+
+	// Hoisted from checkPortfolioRisk's own internal guard so sizing and the warn-only
+	// risk check can share one equity lookup instead of each fetching it independently.
+	needRiskCheck := req.UserId != "" && s.cfgW.GetFloat("trading.risk.max_position_pct", 0.05) > 0
+	var equity float64
+	var equityErr error
+	if needSizing || needRiskCheck {
+		equity, equityErr = s.resolveAccountEquity(ctx, resolvedAccountID)
+	}
+
+	// sizedStopPrice is the informational stop computed by ComputePositionSize (feature
+	// 023) — set on the order below only for MARKET/LIMIT auto-sized orders; never a real
+	// broker-submitted STOP/STOP_LIMIT/TRAILING_STOP trigger.
+	var sizedStopPrice float64
+	if needSizing {
+		// Fail-closed (design.md § Chosen Approach) — unlike checkPortfolioRisk below,
+		// missing/zero equity aborts the order rather than just skipping a warning.
+		if equityErr != nil || equity <= 0 {
+			return nil, grpcstatus.Errorf(codes.FailedPrecondition, "cannot auto-size order: equity unavailable: %v", equityErr)
+		}
+		confidence := 1.0
+		if req.Confidence != nil {
+			confidence = *req.Confidence
+		}
+		if confidence < 0.0 || confidence > 1.0 {
+			return nil, grpcstatus.Errorf(codes.InvalidArgument, "confidence must be in [0.0, 1.0], got %v", confidence)
+		}
+		sizedQty, _, computedStopPrice, sizeErr := s.ComputePositionSize(ctx, req, equity, confidence)
+		if sizeErr != nil {
+			return nil, sizeErr
+		}
+		// Mutate req.Qty in place — load-bearing: buildBrokerRequest(req) and the approval
+		// threshold check below both read req.Qty after this point.
+		req.Qty = sizedQty
+		sizedStopPrice = computedStopPrice
+	}
+
+	// Non-blocking portfolio risk check: log warnings but never block order placement. Runs
+	// after sizing so it evaluates the real (possibly auto-sized) req.Qty — fixes the
+	// pre-existing bug where this structurally could never fire for auto-sized orders.
+	if needRiskCheck {
+		s.checkPortfolioRisk(ctx, req, mode, equity, equityErr)
+	}
 
 	// Check approval thresholds from live config.
 	approvalQtyThreshold := s.cfgW.GetFloat("trading.approval.require_above_qty", 500)
@@ -388,6 +448,13 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		CreatedAt:     timestamppb.New(time.Now()),
 		UpdatedAt:     timestamppb.New(time.Now()),
 		IntentState:   intentState,
+	}
+	// Informational stop price for auto-sized MARKET/LIMIT orders only (feature 023) — this
+	// is never submitted to the broker as a real STOP/STOP_LIMIT/TRAILING_STOP trigger
+	// (product-spec's Out-of-Scope note); every other order type and every override-mode
+	// (explicit-qty) order keeps req.StopPrice, the real broker-trigger price, untouched.
+	if needSizing && (req.OrderType == tradingv1.OrderType_ORDER_TYPE_MARKET || req.OrderType == tradingv1.OrderType_ORDER_TYPE_LIMIT) {
+		order.StopPrice = sizedStopPrice
 	}
 
 	s.mu.Lock()
@@ -1533,7 +1600,17 @@ func (s *TradingService) instantiateBrokerLocked(rec *repository.BrokerAccountRe
 // checkPortfolioRisk makes a non-blocking GetPortfolio call to validate position
 // concentration limits before placing an order. Warnings are logged but never
 // block order placement — portfolio unavailability must not halt trading.
-func (s *TradingService) checkPortfolioRisk(ctx context.Context, req *tradingv1.PlaceOrderRequest) {
+// checkPortfolioRisk is non-blocking (warn-only) — it logs when an order's notional exceeds
+// trading.risk.max_position_pct but never rejects. Unlike ComputePositionSize (feature 023,
+// fail-closed by design.md's explicit choice), this pre-existing check stays fail-open:
+// "portfolio unavailability must not halt trading" on this single-instance, no-HA topology.
+// equity/equityErr are now passed in (feature 023) rather than fetched here, so this and
+// ComputePositionSize share one ListPortfolios call per PlaceOrder — fixing the pre-existing
+// two-equity-sources bug (fails.md 2026-07-01 C-10(b)): this used to call GetPortfolio
+// (position-value-summed, $0 for a flat funded account) while ComputePositionSize's sibling
+// call uses ListPortfolios (the real account equity), so a flat account's order could silently
+// bypass this check.
+func (s *TradingService) checkPortfolioRisk(ctx context.Context, req *tradingv1.PlaceOrderRequest, mode commonv1.TradingMode, equity float64, equityErr error) {
 	if req.UserId == "" {
 		return
 	}
@@ -1542,35 +1619,172 @@ func (s *TradingService) checkPortfolioRisk(ctx context.Context, req *tradingv1.
 		return
 	}
 
-	riskCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-
-	portfolio, err := s.portfolio.GetPortfolio(riskCtx, &portfoliov1.GetPortfolioRequest{
-		UserId:      req.UserId,
-		TradingMode: req.TradingMode,
-	})
-	if err != nil {
-		slog.Warn("portfolio risk check skipped", "user_id", req.UserId, "error", err)
+	if equityErr != nil {
+		slog.Warn("portfolio risk check skipped", "user_id", req.UserId, "error", equityErr)
 		return
 	}
 
-	if portfolio.Equity <= 0 {
+	if equity <= 0 {
 		return
 	}
 
 	orderNotional := req.Qty * req.LimitPrice
 	if orderNotional > 0 {
-		pct := orderNotional / portfolio.Equity
+		pct := orderNotional / equity
 		if pct > maxPositionPct {
 			slog.Warn("order exceeds max_position_pct threshold",
 				"order_id_pending", req.Symbol,
 				"order_notional", orderNotional,
-				"portfolio_equity", portfolio.Equity,
+				"portfolio_equity", equity,
 				"pct", pct,
 				"max_pct", maxPositionPct,
+				"trading_mode", mode.String(),
 			)
 		}
 	}
+}
+
+// resolveAccountEquity fetches the given account's real equity via ListPortfolios (not
+// GetPortfolio — see checkPortfolioRisk's comment above for why). Shared by
+// checkPortfolioRisk and ComputePositionSize so both risk checks agree on one number per
+// PlaceOrder call.
+func (s *TradingService) resolveAccountEquity(ctx context.Context, accountID string) (float64, error) {
+	eqCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	resp, err := s.portfolio.ListPortfolios(eqCtx, &portfoliov1.ListPortfoliosRequest{AccountId: &accountID})
+	if err != nil {
+		return 0, fmt.Errorf("list portfolios: %w", err)
+	}
+	if len(resp.Portfolios) == 0 {
+		return 0, fmt.Errorf("no portfolio found for account %q", accountID)
+	}
+	return resp.Portfolios[0].Equity, nil
+}
+
+// wilderATR computes Wilder's true-range Average True Range over the given period from a
+// chronologically-ascending (oldest-first) slice of bars. Requires len(bars) >= period+1 (the
+// first true range needs a previous close, so period bars of TR need period+1 bars of price
+// data).
+func wilderATR(bars []*marketdatav1.Bar, period int) (float64, error) {
+	if len(bars) < period+1 {
+		return 0, fmt.Errorf("wilderATR: need at least %d bars, got %d", period+1, len(bars))
+	}
+
+	trueRange := func(high, low, prevClose float64) float64 {
+		tr := high - low
+		if v := math.Abs(high - prevClose); v > tr {
+			tr = v
+		}
+		if v := math.Abs(low - prevClose); v > tr {
+			tr = v
+		}
+		return tr
+	}
+
+	// First ATR = simple mean of the first `period` true ranges.
+	sum := 0.0
+	for i := 1; i <= period; i++ {
+		sum += trueRange(bars[i].High, bars[i].Low, bars[i-1].Close)
+	}
+	atr := sum / float64(period)
+
+	// Subsequent bars use Wilder's smoothing: ATR_i = ((prevATR * (period-1)) + TR_i) / period.
+	for i := period + 1; i < len(bars); i++ {
+		tr := trueRange(bars[i].High, bars[i].Low, bars[i-1].Close)
+		atr = ((atr * float64(period-1)) + tr) / float64(period)
+	}
+	return atr, nil
+}
+
+// ComputePositionSize computes an auto-sized order's quantity, dollar risk, and informational
+// stop price (feature 023) from account equity, ATR(14)-derived stop distance, signal
+// confidence, and a portfolio concentration cap. Fail-closed by design (unlike
+// checkPortfolioRisk above): any error or insufficient-data condition returns a non-nil error
+// and no quantity — this is the enforcing counterpart to that warn-only check.
+func (s *TradingService) ComputePositionSize(ctx context.Context, req *tradingv1.PlaceOrderRequest, equity, confidence float64) (qty float64, dollarRisk float64, stopPrice float64, err error) {
+	// Belt-and-suspenders: PlaceOrder already fail-closes on equity<=0 before calling this
+	// (its equityErr/equity<=0 check ahead of ComputePositionSize), but ComputePositionSize
+	// is a public method other callers could invoke directly — it must not silently size to
+	// a zero-quantity result for a non-positive equity input.
+	if equity <= 0 {
+		return 0, 0, 0, grpcstatus.Errorf(codes.FailedPrecondition, "cannot size position: equity must be positive, got %v", equity)
+	}
+
+	mdCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+
+	now := time.Now()
+	barsResp, err := s.marketdata.GetBars(mdCtx, &marketdatav1.GetBarsRequest{
+		Symbol: req.Symbol,
+		Range: &commonv1.TimeRange{
+			Start: timestamppb.New(now.Add(-45 * 24 * time.Hour)),
+			End:   timestamppb.New(now),
+		},
+		Page:          &commonv1.PageRequest{PageSize: 40},
+		TimeframeEnum: commonv1.Timeframe_TIMEFRAME_1DAY,
+	})
+	if err != nil {
+		return 0, 0, 0, grpcstatus.Errorf(codes.FailedPrecondition, "fetch bars for %s: %v", req.Symbol, err)
+	}
+	if len(barsResp.Bars) < 15 {
+		return 0, 0, 0, grpcstatus.Errorf(codes.FailedPrecondition,
+			"insufficient bar history for %s: got %d bars, need at least 15", req.Symbol, len(barsResp.Bars))
+	}
+	// Bars are returned chronological ascending (oldest first); take the most recent 15.
+	recentBars := barsResp.Bars[len(barsResp.Bars)-15:]
+	atr, err := wilderATR(recentBars, 14)
+	if err != nil {
+		return 0, 0, 0, grpcstatus.Errorf(codes.FailedPrecondition, "compute ATR for %s: %v", req.Symbol, err)
+	}
+
+	quote, err := s.marketdata.GetLatestQuote(mdCtx, &marketdatav1.GetLatestQuoteRequest{Symbol: req.Symbol})
+	if err != nil {
+		return 0, 0, 0, grpcstatus.Errorf(codes.FailedPrecondition, "fetch quote for %s: %v", req.Symbol, err)
+	}
+	var currentPrice float64
+	switch {
+	case quote.AskPrice > 0 && quote.BidPrice > 0:
+		currentPrice = (quote.AskPrice + quote.BidPrice) / 2
+	case quote.AskPrice > 0:
+		currentPrice = quote.AskPrice
+	case quote.BidPrice > 0:
+		currentPrice = quote.BidPrice
+	default:
+		return 0, 0, 0, grpcstatus.Errorf(codes.FailedPrecondition, "no usable quote price for %s", req.Symbol)
+	}
+
+	maxRiskPct := s.cfgW.GetFloat("trading.risk.max_risk_per_trade_pct", 0.02)
+	atrMultiplier := s.cfgW.GetFloat("trading.risk.atr_multiplier", 1.5)
+	maxConcentrationPct := s.cfgW.GetFloat("trading.risk.max_concentration_pct", 0.10)
+
+	dollarRiskBudget := equity * maxRiskPct * confidence
+	stopDistance := atrMultiplier * atr
+	if stopDistance <= 0 {
+		return 0, 0, 0, grpcstatus.Errorf(codes.FailedPrecondition, "computed stop distance for %s is non-positive", req.Symbol)
+	}
+	rawQty := math.Floor(dollarRiskBudget / stopDistance)
+
+	finalQty := rawQty
+	if finalQty*currentPrice > equity*maxConcentrationPct {
+		finalQty = math.Floor(equity * maxConcentrationPct / currentPrice)
+	}
+
+	// Direction-aware stop: BUY (long) stops below current price, SELL (short) stops above.
+	if req.Side == tradingv1.OrderSide_ORDER_SIDE_SELL {
+		stopPrice = currentPrice + stopDistance
+	} else {
+		stopPrice = currentPrice - stopDistance
+	}
+	dollarRisk = finalQty * stopDistance
+
+	slog.Info("computed position size",
+		"symbol", req.Symbol, "sized_qty", finalQty, "stop_price", stopPrice, "dollar_risk", dollarRisk,
+		"equity", equity, "confidence", confidence,
+		"max_risk_per_trade_pct", maxRiskPct, "atr_multiplier", atrMultiplier, "max_concentration_pct", maxConcentrationPct,
+	)
+
+	return finalQty, dollarRisk, stopPrice, nil
 }
 
 // tradingState is the richer platform.trading_state enum (feature 100), independent of

@@ -37,6 +37,21 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 023 — position-sizing-engine (`xstockstrat-trading`)
+
+`ComputePositionSize` computes order quantity from account equity, ATR(14)-based stop distance,
+signal confidence, and a portfolio concentration cap, activated whenever `PlaceOrder` receives
+`qty <= 0`. The pre-existing warn-only `trading.risk.max_position_pct` (5%, `checkPortfolioRisk`)
+is unchanged and coexists — it covers override-mode (explicit-qty) orders, which never reach the new
+enforcing cap below.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `trading.risk.max_risk_per_trade_pct` | float | `0.02` | Fraction of equity to risk per trade (auto-sized orders only) |
+| `trading.risk.atr_multiplier` | float | `1.5` | Stop distance as a multiple of ATR(14) |
+| `trading.risk.max_concentration_pct` | float | `0.10` | Max fraction of equity in any single auto-sized position (enforcing) |
+| `trading.risk.sizing_enabled` | bool | `true` | Master gate; `false` rejects orders submitted without an explicit `qty` |
+
 ### feature 101 — exactly-once-order-intent (`xstockstrat-trading`)
 
 Durable order-intent dedup + `UNKNOWN` uncertainty tracking for `PlaceOrder`/`ReplaceOrder`/

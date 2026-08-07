@@ -105,6 +105,9 @@ message PlaceOrderRequest {
   // ORDER_TYPE_TRAILING_STOP; both must be zero for any other order type.
   double trail_price = 14;
   double trail_percent = 15;
+  // Signal confidence 0.0-1.0 for automatic position sizing (see ComputePositionSize). Unset →
+  // confidence=1.0 (full size); explicit 0.0 → size to zero; out-of-range → InvalidArgument.
+  optional double confidence = 16;
 }
 
 message CancelOrderRequest {

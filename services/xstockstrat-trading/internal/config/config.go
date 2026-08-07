@@ -21,6 +21,7 @@ type Config struct {
 	LedgerEndpoint              string
 	PortfolioEndpoint           string
 	IndicatorsEndpoint          string
+	MarketDataEndpoint          string
 	NotifyEndpoint              string
 	DBConnStr                   string
 	RequireApprovalAbove        float64 // order qty threshold requiring manual approval
@@ -36,6 +37,7 @@ func LoadFromEnv() *Config {
 		LedgerEndpoint:              getEnv("LEDGER_ENDPOINT", "xstockstrat-ledger:50057"),
 		PortfolioEndpoint:           getEnv("PORTFOLIO_ENDPOINT", "xstockstrat-portfolio:50052"),
 		IndicatorsEndpoint:          getEnv("INDICATORS_ENDPOINT", "xstockstrat-indicators:50054"),
+		MarketDataEndpoint:          getEnv("MARKETDATA_ENDPOINT", "xstockstrat-marketdata:50053"),
 		NotifyEndpoint:              getEnv("NOTIFY_ENDPOINT", "xstockstrat-notify:50059"),
 		DBConnStr:                   getEnv("DATABASE_URL", ""),
 		RequireApprovalAbove:        0, // loaded from config service at runtime
