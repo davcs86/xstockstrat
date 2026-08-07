@@ -338,7 +338,12 @@ async def test_emit_alert_calls_grpc():
     with patch.object(client, "emit_alert", mock_alert):
         server = _make_server()
         result = await _tool_fn(server, "emit_alert")(
-            severity="info", category="signal", title="Test alert", body="Body text"
+            ctx=_ctx(ADMIN),
+            severity="info",
+            category="signal",
+            title="Test alert",
+            body="Body text",
+            broadcast=True,
         )
         assert result == {"alert_id": "a1"}
         mock_alert.assert_called_once_with(
@@ -351,6 +356,56 @@ async def test_emit_alert_calls_grpc():
             context=None,
             tags=None,
             correlation_id="",
+        )
+
+
+@pytest.mark.asyncio
+async def test_emit_alert_broadcast_false_derives_caller_identity():
+    """broadcast=False derives target_user_id from the caller's own verified claims."""
+    mock_alert = AsyncMock(return_value={"alert_id": "a2"})
+    with patch.object(client, "emit_alert", mock_alert):
+        server = _make_server()
+        await _tool_fn(server, "emit_alert")(
+            ctx=_ctx(ADMIN),
+            severity="info",
+            category="signal",
+            title="t",
+            body="b",
+            broadcast=False,
+        )
+    assert mock_alert.call_args.kwargs["target_user_id"] == "u-1"
+
+
+@pytest.mark.asyncio
+async def test_emit_alert_rejects_caller_supplied_target_user_id():
+    """target_user_id is no longer a parameter — supplying it is a TypeError, not silently
+    ignored or accepted."""
+    server = _make_server()
+    with pytest.raises(TypeError):
+        await _tool_fn(server, "emit_alert")(
+            ctx=_ctx(ADMIN),
+            severity="info",
+            category="signal",
+            title="t",
+            body="b",
+            broadcast=True,
+            target_user_id="someone-else",
+        )
+
+
+@pytest.mark.asyncio
+async def test_emit_alert_broadcast_false_without_claims_raises():
+    """broadcast=False with no verified claims on the request raises rather than silently
+    deriving an empty/broadcast identity."""
+    server = _make_server()
+    with pytest.raises(RuntimeError, match="Streamable HTTP"):
+        await _tool_fn(server, "emit_alert")(
+            ctx=_ctx(None),
+            severity="info",
+            category="signal",
+            title="t",
+            body="b",
+            broadcast=False,
         )
 
 
@@ -1186,10 +1241,12 @@ class TestAdditiveTools:
         server = _make_server()
         with patch.object(client, "emit_alert", AsyncMock(return_value={"alert_id": "a1"})) as m:
             await _tool_fn(server, "emit_alert")(
+                ctx=_ctx(ADMIN),
                 severity="info",
                 category="system",
                 title="t",
                 body="b",
+                broadcast=True,
                 context={"k": "v"},
                 tags=["x"],
                 correlation_id="c1",

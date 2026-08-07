@@ -326,12 +326,13 @@ def register_tools(server: MCPServer) -> None:
 
     @server.tool()
     async def emit_alert(
+        ctx: Context,
         severity: str,
         category: str,
         title: str,
         body: str,
+        broadcast: bool,
         source_service: str = "xstockstrat-agent",
-        target_user_id: str = "",
         context: dict | None = None,
         tags: list[str] | None = None,
         correlation_id: str = "",
@@ -342,13 +343,16 @@ def register_tools(server: MCPServer) -> None:
         category: alert category e.g. 'signal', 'system'.
         title/body: required and non-blank — an empty or whitespace-only title or body is
             rejected INVALID_ARGUMENT by notify, so populate both.
-        target_user_id: defaults to '' which BROADCASTS to all users; set it to target one user.
+        broadcast: REQUIRED, no default. True sends a system-wide broadcast (unchanged semantic —
+            target_user_id="" on the wire). False addresses the alert to the OAuth-authenticated
+            caller's own derived identity — you can no longer address another user.
         context: optional structured JSON object stored and fanned out with the alert.
         tags: optional list of string tags for filtering/grouping.
         correlation_id: optional id to correlate related alerts.
         Use for system-level alerts or alerts not tied to a specific ingested signal (ingest_signal
             already auto-alerts high-conviction signals).
         Returns {"alert_id": <str>}."""
+        target_user_id = "" if broadcast else _caller_user_id(ctx, "emit_alert")
         return await client.emit_alert(
             severity=severity,
             category=category,
