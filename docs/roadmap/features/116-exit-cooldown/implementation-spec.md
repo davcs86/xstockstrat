@@ -1364,7 +1364,7 @@ No coverage threshold applies to `xstockstrat-ui` (Playwright e2e, per
 
 ### Step 19 — test: cross-cutting fingerprint/parity confirmation sweep
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**: none (verification-only step — no source changes)
 
@@ -1394,7 +1394,7 @@ All tests green; coverage ≥ 40%.
 
 ### Step 20 — docs: file the pre-existing `max_strategies_per_cycle` starvation defect
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/reports/`
 **Files**:
 - `docs/reports/2026-08-07-exit-cooldown-max-strategies-per-cycle-starvation.md` — create
@@ -1433,7 +1433,7 @@ ls docs/reports/2026-08-07-exit-cooldown-max-strategies-per-cycle-starvation.md
 
 ### Step 21 — test: final full-suite regression run
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: multi (`xstockstrat-analysis`, `xstockstrat-agent`, `xstockstrat-ui`)
 **Files**: none (verification-only step)
 
@@ -1582,6 +1582,21 @@ mock state that mimics an old code path's *outcome* (here, `_last_state[key] = T
 state the *new* code path actually needs to reach the same outcome can leave a test silently
 exercising nothing — see `docs/roadmap/ledger/fails.md` ("2026-08-07 — exit-cooldown —
 test-infra").
+
+### Deviation: Step 21 — test: final full-suite regression run
+**Spec said**: `buf breaking --against ".git#branch=feature/exit-cooldown"` (the current feature
+branch itself).
+**Actual**: `buf breaking packages/proto --against ".git#branch=main-dev,subdir=packages/proto"`
+(the repo-root-relative form Step 1's own deviation already established, targeting `main-dev`
+instead).
+**Reason**: comparing the branch against itself is a no-op — with the working tree checked out
+on `feature/exit-cooldown` and everything committed, `HEAD` and `.git#branch=feature/exit-
+cooldown` resolve to the same content, so the check would trivially pass regardless of whether
+this feature's aggregate proto changes are actually safe to merge. The check that matters at this
+final-regression step is whether the WHOLE feature (all of Steps 1-21's proto changes, here just
+Step 1's `exit_cooldown_days` field) is non-breaking against `main-dev` — the actual merge target
+this branch will land on (§5.6's integration PR). Ran with the corrected target; clean (no
+breaking changes).
 
 ### Deviation: Step 10 — `_make_loop()` missing `get_int_present` stub
 **Spec said**: `_make_loop()` (`tests/test_live_loop.py`) needs no change for Step 10/11 beyond

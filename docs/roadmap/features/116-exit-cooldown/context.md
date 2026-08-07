@@ -672,3 +672,43 @@ to proceed. Counter reset; continuing to Step 17.
 - Files modified: `services/xstockstrat-ui/e2e/insights/strategy-authoring.spec.ts`,
   `services/xstockstrat-ui/e2e/mock-backend.ts`, `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`
 - Deviations: see Deviation Log ("Step 18").
+
+### Checkpoint — steps 17–18 (surface: ui → backend boundary)
+Sequential-mode §5.5b checkpoint report printed to the operator (surface-boundary trigger: Step
+19's Service is `xstockstrat-analysis`, differing from Step 17/18's `ui`). Accountability: no
+out-of-scope changes, no open items, no unaddressed warnings, 1 deviation (Step 18 hoisting).
+Operator directed to proceed. Counter reset; continuing to Steps 19-21 (backend, final steps).
+
+### Step 19 — test: cross-cutting fingerprint/parity confirmation sweep [done]
+- Verification-only, no source changes. Re-ran the full `xstockstrat-analysis` suite fresh:
+  459/459 passed, 82.21% coverage, `ruff check`/`ruff format --check` both clean. FR-9
+  (fingerprint participation) already proven by Step 7's
+  `test_fingerprint_changes_with_exit_cooldown_days`; FR-4 (backtest/live parity) already proven
+  structurally by Step 11's `test_replay_state_matches_sequential_apply_transition` (one shared
+  `_apply_transition` core, not two hand-synchronized copies) — this step confirms no cross-step
+  interaction broke either.
+- Deviations: none.
+
+### Step 20 — docs: file the pre-existing `max_strategies_per_cycle` starvation defect [done]
+- Created `docs/reports/2026-08-07-exit-cooldown-max-strategies-per-cycle-starvation.md`
+  following the `docs/reports/` defect-report convention (modeled on
+  `2026-08-07-watchconfig-scope-omission-defect.md`'s filed-only shape): symptom, root cause
+  (`_run_cycle`'s unordered `SELECT` + no-rotation early-return at the cap,
+  `live_loop.py:185-206`), SEV-2, confirms it predates feature 116 (equally affects the
+  feature-069 re-entry gate) and was discovered during 116's design debate, not introduced by
+  it. Filed only — no fix attempted, per design.md's explicit instruction. Routes via
+  `/sdd-triage --from-report` for a future fix track.
+- Deviations: none.
+
+### Step 21 — test: final full-suite regression run [done]
+- `xstockstrat-analysis`: 459/459 passed, 82.21% coverage, ruff clean.
+- `xstockstrat-agent`: 216/216 passed, 77.32% coverage, ruff clean.
+- `xstockstrat-ui`: `tsc --noEmit` clean, `pnpm run lint` clean (one pre-existing unrelated
+  warning); the e2e run was already confirmed in Step 18 (23/23 passed).
+- `packages/proto`: `buf lint` clean; `buf breaking` run against `main-dev` (not the spec'd
+  `feature/exit-cooldown` self-comparison, which is a no-op — see Deviation Log) — clean, no
+  breaking changes across the feature's one proto field addition.
+- No cross-step regressions found across all four affected surfaces.
+- Deviations: see Deviation Log ("Step 21").
+
+## All 21 implementation steps done. Feature ready for the merge-order gate + integration PR (§5.6).
