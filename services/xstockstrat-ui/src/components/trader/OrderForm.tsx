@@ -55,6 +55,12 @@ export function OrderForm({ mode, initialSymbol }: OrderFormProps) {
   useEffect(() => {
     if (prefillSymbol) setSymbol(prefillSymbol);
   }, [prefillSymbol]);
+  // An explicit initialSymbol (Signal-detail's SignalOrderTicket) pins this ticket to one
+  // symbol — the chart, conviction, and edge stats above it are all keyed to it, so letting the
+  // field be edited away from it would desync the order from the analysis it was placed from.
+  // The generic ?symbol= quick-trade deep link (/trader) stays editable — it's a convenience
+  // prefill, not a pinned context.
+  const symbolLocked = Boolean(initialSymbol);
   const [side, setSide] = useState<OrderSide>('buy');
   const [orderType, setOrderType] = useState<OrderType>('market');
   const [qty, setQty] = useState('');
@@ -82,7 +88,7 @@ export function OrderForm({ mode, initialSymbol }: OrderFormProps) {
         onSuccess: (order) => {
           setIsErrorMsg(false);
           setMessage(`Order placed: ${order.orderId} (${OrderStatus[order.status] ?? 'UNKNOWN'})`);
-          setSymbol('');
+          setSymbol(symbolLocked ? prefillSymbol : '');
           setQty('');
           setLimitPrice('');
           setStopPrice('');
@@ -114,6 +120,8 @@ export function OrderForm({ mode, initialSymbol }: OrderFormProps) {
             value={symbol}
             onChange={(e) => setSymbol(e.target.value)}
             required
+            disabled={symbolLocked}
+            title={symbolLocked ? 'Symbol is locked to this signal' : undefined}
           />
 
           {/* Buy / Sell toggle */}

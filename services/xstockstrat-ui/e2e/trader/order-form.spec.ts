@@ -32,6 +32,12 @@ test.describe('OrderForm', () => {
     await expect(page.getByText('Place Order')).toBeVisible();
   });
 
+  test('symbol field stays editable on the standalone trader ticket', async ({ page }) => {
+    // Unlike the Signal-detail ticket (pinned to a route symbol — order-parity.spec.ts), the
+    // /trader ticket has no fixed symbol context, so the field must remain a free-text input.
+    await expect(page.getByPlaceholder('Symbol (e.g. AAPL)')).toBeEnabled();
+  });
+
   test('limit price field is hidden for market orders by default', async ({ page }) => {
     await expect(page.getByPlaceholder('Limit price')).not.toBeVisible();
   });
