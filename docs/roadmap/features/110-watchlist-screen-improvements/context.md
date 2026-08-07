@@ -128,12 +128,27 @@
     B2 criterion) — this is the established, repo-wide Playwright-e2e-vs-vitest-unit split (coverage
     gating applies only to the vitest unit layer scoped to `src/lib/**`), not a defect unique to this
     spec — [x] accepted as-is, no action needed.
-  - Step 2: viewport citation says `playwright.config.ts` contains "1280×720" — the value is correct
-    in substance (inherited from `devices['Desktop Chrome']`) but not a literal string match —
-    cosmetic — [x] accepted as-is, no action needed.
-  - Step 8: the `['watchlist-write']` mutationKey literal repeats 4× across `useWatchlists.ts`/
+  - Step 2: viewport citation said `playwright.config.ts` contains "1280×720" — corrected in
+    implementation-spec.md to cite the actual source (`playwright.config.ts:127`,
+    `...devices['Desktop Chrome']`) instead of implying a literal value in this repo's config —
+    [x] fixed (pre-execution spec edit, 2026-08-07).
+  - Step 8: the `['watchlist-write']` mutationKey literal repeated 4× across `useWatchlists.ts`/
     `page.tsx`; the file already has a `WATCHLISTS_KEY` shared-constant precedent one line above.
-    A named constant (e.g. `WATCHLIST_WRITE_KEY`) would better match the file's own DRY convention.
-    Below jscpd's typical detection threshold (not expected to trip CI) — [ ] optional, implementer's
-    call at Step 8 execution time; not required to close.
+    Fixed by adding an exported `WATCHLIST_WRITE_KEY` constant next to `WATCHLISTS_KEY`, used at all
+    four call sites instead of the repeated literal — matches the file's own convention — [x] fixed
+    (pre-execution spec edit, 2026-08-07).
 - Overlap findings: none.
+
+## Session 2026-08-07T00:45:00Z — pre-execution spec fixes
+
+- User asked to fix the impl-spec review's warnings before starting execution. Fixed the two
+  genuinely actionable items directly in `implementation-spec.md` (Step 2's evidence citation, Step
+  8's constant extraction — both closed above). Editing the spec now is within F-09's bounds (the
+  rule bars editing a step's body *during execution*; the feature is still `implementation-ready`,
+  execution has not started).
+- Did **not** "fix" the 4 coverage-threshold warnings (Steps 2/4/6/9) — these were already flagged
+  by the reviewer itself as advisory-only, consistent with this repo's established convention that
+  coverage gating applies only to the vitest unit layer (`src/lib/**`), not Playwright e2e specs
+  (root `CLAUDE.md`, `services/xstockstrat-ui/CLAUDE.md` § Testing). Adding a fabricated numeric
+  coverage threshold to an e2e step's Verification would contradict that established convention
+  rather than fix a real gap — left as-is and noted here rather than silently ignored (P-03).

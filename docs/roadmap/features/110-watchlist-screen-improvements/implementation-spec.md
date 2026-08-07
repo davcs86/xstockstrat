@@ -237,9 +237,11 @@ Confirm no TypeScript errors on `WatchlistReadiness.tsx` / `WatchlistDetail.tsx`
    expect(box).not.toBeNull();
    // The row must not overflow the readiness list's border container (no horizontal scroll forced).
    ```
-   If this reveals actual overflow at the default Playwright viewport (1280×720,
-   `playwright.config.ts`), the deviation (adjusting `w-32`) is recorded in the Deviation Log at
-   execute time per F-09 — this step's Instructions text is not edited after the fact.
+   If this reveals actual overflow at the default Playwright viewport (`playwright.config.ts:127`,
+   the chromium project's `...devices['Desktop Chrome']` spread — Playwright's stock 1280×720
+   default, not a literal value in this repo's config), the deviation (adjusting `w-32`) is recorded
+   in the Deviation Log at execute time per F-09 — this step's Instructions text is not edited after
+   the fact.
 
 **Verification**:
 ```bash
@@ -525,6 +527,12 @@ Behavioral proof is Step 9.
   factory — are unaffected).
 - `useAddWatchlistSymbols` / `useRemoveWatchlistSymbols` / `useUpdateWatchlist` call sites to update:
   `useWatchlists.ts:73-83`, `:85-91`, `:46-64` respectively.
+- `WATCHLISTS_KEY` module-level constant precedent to mirror: `useWatchlists.ts:7` (`const
+  WATCHLISTS_KEY = ['watchlists'];`), reused at `:23,42,62,69,81,89` — establishes this file's own
+  convention of naming a shared query-key literal instead of repeating it inline. The new write-flight
+  key must follow the same pattern (a named, exported constant), not a repeated inline literal
+  (`/sdd-review` impl-spec note — below jscpd's detection threshold but worth matching the file's own
+  convention).
 - **Correction to design.md's literal text** (caught at spec time, not carried forward silently —
   P-03): design.md §5 Layer 2 specifies `page.tsx` computing `useWatchlists().isFetching`, but
   `useWatchlists`'s declared return type (`useWatchlists.ts:17-21`) is explicitly `{ data:
@@ -574,17 +582,22 @@ Behavioral proof is Step 9.
      });
    }
    ```
-2. In `useWatchlists.ts`, pass `{ mutationKey: ['watchlist-write'] }` as the third argument to
-   `useAddWatchlistSymbols` (`:73-83`), `useRemoveWatchlistSymbols` (`:85-91`), and
-   `useUpdateWatchlist` (`:46-64`) — **not** `useCreateWatchlist` or `useDeleteWatchlist` (those are
-   whole-list operations outside this feature's scope; leave them on the default untagged key).
+2. In `useWatchlists.ts`, add a new exported constant next to `WATCHLISTS_KEY` (`:7`), following that
+   same naming/scoping convention: `export const WATCHLIST_WRITE_KEY = ['watchlist-write'];`. Pass
+   `{ mutationKey: WATCHLIST_WRITE_KEY }` as the third argument to `useAddWatchlistSymbols`
+   (`:73-83`), `useRemoveWatchlistSymbols` (`:85-91`), and `useUpdateWatchlist` (`:46-64`) — **not**
+   `useCreateWatchlist` or `useDeleteWatchlist` (those are whole-list operations outside this
+   feature's scope; leave them on the default untagged key). Using one exported constant instead of
+   repeating the `['watchlist-write']` literal at all four call sites (three here, one in `page.tsx`)
+   matches this file's own `WATCHLISTS_KEY` convention (`/sdd-review` impl-spec finding).
 3. In the same file, widen `useWatchlists`'s declared return type (`:17-21`) to add `isFetching:
    boolean` alongside the existing `data`/`isLoading`/`error` fields (see Codebase Evidence
    correction above).
-4. In `page.tsx`, import `useIsMutating` from `@tanstack/react-query`. After the existing
-   `useWatchlists()` call (`:13`), compute:
+4. In `page.tsx`, import `useIsMutating` from `@tanstack/react-query`, and `WATCHLIST_WRITE_KEY`
+   alongside the existing `useWatchlists` import. After the existing `useWatchlists()` call (`:13`),
+   compute:
    ```ts
-   const anyWatchlistWriteInFlight = useIsMutating({ mutationKey: ['watchlist-write'] }) > 0 || isFetching;
+   const anyWatchlistWriteInFlight = useIsMutating({ mutationKey: WATCHLIST_WRITE_KEY }) > 0 || isFetching;
    ```
    (destructure `isFetching` from the same `useWatchlists()` call at `:13`, alongside the existing
    `data, isLoading, error`).
