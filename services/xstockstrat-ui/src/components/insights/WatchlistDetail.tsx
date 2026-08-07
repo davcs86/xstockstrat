@@ -1,17 +1,9 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { Trash2, X, Search } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { Trash2, Search } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   useAddWatchlistSymbols,
   useRemoveWatchlistSymbols,
@@ -35,9 +27,6 @@ type WatchlistLike = {
   bindings?: Binding[];
 };
 
-// Radix Select forbids an empty-string item value, so an unbound symbol uses this sentinel.
-const UNBOUND = '__unbound__';
-
 /**
  * Detail pane for the selected watchlist (feature 098, per-symbol bindings by feature 097). Owns
  * the symbol-chip CRUD, an inline per-symbol strategy binding editor, the "Build from screener"
@@ -60,14 +49,6 @@ export function WatchlistDetail({
   // Only live-enabled strategies are offered for a NEW binding — `active` alone (the fetch
   // default) also admits paused/never-enabled/test strategies. An already-bound strategy that
   // is no longer live stays visible (labeled) so its existing binding doesn't appear to vanish.
-  const liveStrategies = allStrategies.filter((s) => s.liveEnabled);
-  function strategyOptions(boundStrategyId: string) {
-    if (!boundStrategyId || liveStrategies.some((s) => s.strategyId === boundStrategyId)) {
-      return liveStrategies;
-    }
-    const bound = allStrategies.find((s) => s.strategyId === boundStrategyId);
-    return bound ? [...liveStrategies, bound] : liveStrategies;
-  }
   const { data: oppData } = useOpportunities();
   const [symbolInput, setSymbolInput] = useState('');
 
@@ -134,47 +115,7 @@ export function WatchlistDetail({
         </div>
       </div>
 
-      {/* Per-symbol rows: symbol chip + remove + an inline strategy-binding Select (FR-6). */}
-      <div className="mb-3 space-y-1.5" data-testid="symbol-list">
-        {bindings.length === 0 && <span className="text-sm text-muted-foreground">No symbols</span>}
-        {bindings.map((b) => (
-          <div
-            key={b.symbol}
-            className="flex items-center gap-2"
-            data-testid={`binding-${b.symbol}`}
-          >
-            <Badge variant="info" className="gap-1">
-              {b.symbol}
-              <button
-                type="button"
-                aria-label={`Remove ${b.symbol}`}
-                onClick={() =>
-                  removeSymbols.mutate({ watchlistId: watchlist.watchlistId, symbols: [b.symbol] })
-                }
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
-            <Select
-              value={b.strategyId || UNBOUND}
-              onValueChange={(v) => setBinding(b.symbol, v === UNBOUND ? '' : v)}
-            >
-              <SelectTrigger className="h-7 w-48 text-xs" aria-label={`Strategy for ${b.symbol}`}>
-                <SelectValue placeholder="Bind a strategy…" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={UNBOUND}>Unbound</SelectItem>
-                {strategyOptions(b.strategyId).map((s) => (
-                  <SelectItem key={s.strategyId} value={s.strategyId}>
-                    {s.displayName || s.strategyId}
-                    {!s.liveEnabled ? ' (non-live)' : ''}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        ))}
-      </div>
+      {bindings.length === 0 && <p className="mb-3 text-sm text-muted-foreground">No symbols</p>}
 
       <div className="flex items-center gap-2">
         <Input
@@ -189,7 +130,15 @@ export function WatchlistDetail({
         </Button>
       </div>
 
-      <WatchlistReadiness bindings={bindings} inQueue={inQueue} />
+      <WatchlistReadiness
+        bindings={bindings}
+        inQueue={inQueue}
+        strategies={allStrategies}
+        onRemoveSymbol={(symbol) =>
+          removeSymbols.mutate({ watchlistId: watchlist.watchlistId, symbols: [symbol] })
+        }
+        onRebindSymbol={setBinding}
+      />
     </div>
   );
 }

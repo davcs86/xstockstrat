@@ -244,3 +244,36 @@
   the watchlists `page.tsx`, `watchlistMock.ts`, `button.tsx`, `queryClient.ts`, or `INVENTORY.md`'s
   watchlist rows — confirmed untouched by the merge (verified via `git diff` against each, not
   assumed).
+- Up-front confirm (§5.4): presented the re-spec summary + all 9 pending steps (surface `ui` for
+  every step — `Service: xstockstrat-ui`, so checkpoints fall at the Step-5 cap and Step-9
+  feature-end only, no surface-boundary checkpoints between). User approved.
+- Tooling setup (§5.4b, steps 1-9): node v22.22.2 ✓ (pinned 22) · pnpm 9.15.0 ✓ (exact pin) ·
+  Chromium ✓ pre-provisioned (`/opt/pw-browsers`, `PLAYWRIGHT_BROWSERS_PATH` set) · `pnpm install
+  --frozen-lockfile` in `services/xstockstrat-ui` — clean, no gaps. No blockers.
+- **Real e2e execution required a fix beyond tooling setup's own probe**: the pre-provisioned
+  Chromium at `/opt/pw-browsers/chromium` (a symlink) isn't the variant `global-setup.ts`'s preflight
+  looks for by default (`chromium_headless_shell-*`) — had to set
+  `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium` (an override this repo's own
+  `playwright.config.ts`/`global-setup.ts` already read, just not set in this sandbox). Also: `pnpm
+  test:e2e -- <args>` did not forward extra CLI flags correctly (the literal `"--"` token reached
+  `playwright test` and desynced its arg parsing, silently dropping a `--timeout` override); calling
+  `pnpm exec playwright test <args>` directly worked. Both noted for future sessions in this sandbox.
+
+### Step 1 — Sentinel/translation helper + relocate remove/rebind controls [done]
+- Added `UNBOUND`/`toApiStrategyId` to `useWatchlists.ts`. Added a stateless `BindingRowControls`
+  subcomponent to `WatchlistReadiness.tsx` (replicates `WatchlistDetail.tsx`'s pre-existing
+  live-strategy filter + "(non-live)" label, since that logic was co-located with the Select being
+  relocated) and wired it into both the bound and unbound row branches; removed the static
+  `strategyId` text span from the bound row. Deleted the chip-row block from `WatchlistDetail.tsx`;
+  replaced it with a standalone empty-state check; updated the `<WatchlistReadiness>` call with the
+  new `strategies`/`onRemoveSymbol`/`onRebindSymbol` props.
+- TDD: red — 3 of 7 `watchlists.spec.ts` tests failed (`Test timeout... waiting for
+  getByTestId('readiness-row-AAPL').getByLabel('Strategy for AAPL')`) against Step 2's e2e edits
+  (applied first, uncommitted) run against pre-Step-1 code. Green — same 7 tests, all pass (54.8s),
+  after Step 1 landed. `pnpm run lint` and `pnpm exec tsc --noEmit` both clean.
+- Deviations: see `implementation-spec.md` Deviation Log (Step 1) — `liveStrategies` and the
+  `Select`-family imports temporarily removed from `WatchlistDetail.tsx` (lint-caught unused-var/
+  import; Step 3 re-adds when it actually needs them). No behavior change.
+- Files modified: `services/xstockstrat-ui/src/hooks/useWatchlists.ts`,
+  `services/xstockstrat-ui/src/components/insights/WatchlistReadiness.tsx`,
+  `services/xstockstrat-ui/src/components/insights/WatchlistDetail.tsx`.

@@ -13,6 +13,12 @@ const WATCHLISTS_KEY = ['watchlists'];
  */
 export type WatchlistBindingInput = { symbol: string; strategyId: string };
 
+// Radix Select forbids an empty-string item value, so an unbound symbol uses this sentinel.
+export const UNBOUND = '__unbound__';
+export function toApiStrategyId(v: string): string {
+  return v === UNBOUND ? '' : v;
+}
+
 /** List the calling user's watchlists (ownership scoped server-side by x-user-id). */
 export function useWatchlists(): {
   data: ListWatchlistsResult | undefined;

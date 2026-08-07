@@ -1,6 +1,6 @@
 # Implementation Spec: watchlist-screen-improvements
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-08-07
 **Feature**: `docs/roadmap/features/112-watchlist-screen-improvements/feature.md`
 **Total Steps**: 9
@@ -47,7 +47,7 @@ does not expose `isFetching`, which Layer 2 depends on (see Step 8 Codebase Evid
 
 ### Step 1 — service: Sentinel/translation helper + relocate remove/rebind controls into the readiness table (FR-1/FR-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/hooks/useWatchlists.ts` — modify
@@ -752,4 +752,17 @@ cd services/xstockstrat-ui && pnpm test:e2e -- e2e/insights/watchlists.spec.ts
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Step 1 (2026-08-07)
+- **Disposition**: minor, mechanical — caught by lint, not silently worked around.
+- Instruction 7 said to import `UNBOUND` into `WatchlistDetail.tsx` and to keep `allStrategies`/
+  `liveStrategies` there as part of Step 1. Actual `pnpm run lint` run after the edit showed both
+  `liveStrategies` and the `Select`/`SelectContent`/`SelectItem`/`SelectTrigger`/`SelectValue`
+  imports as `@typescript-eslint/no-unused-vars` errors — Step 1's own diff of `WatchlistDetail.tsx`
+  has no consumer for `liveStrategies` or `UNBOUND` until Step 3 lands (the add-time picker). Applied
+  the same "remove now, Step 3 re-adds" treatment the instructions already anticipated for the
+  `Select` imports to `liveStrategies` and the `UNBOUND` import too — mechanically identical
+  reasoning, just not spelled out for those two symbols. `WatchlistDetail.tsx` after Step 1 keeps
+  only `allStrategies` (consumed by the `<WatchlistReadiness strategies={allStrategies} .../>` call).
+  No behavior change; TDD gate: red (3 e2e tests failing on `readiness-row-*`'s missing `Strategy
+  for <symbol>`/`Remove <symbol>` controls) → green (all 7 tests in `watchlists.spec.ts` pass,
+  54.8s) confirmed before this step was marked `done`.
