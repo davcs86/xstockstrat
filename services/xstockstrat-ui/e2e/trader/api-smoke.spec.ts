@@ -35,7 +35,7 @@ test.describe('Connect BFF — TradingService/ListOrders data contract', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ tradingMode: 1 }),
       });
-      return { status: res.status, body: await res.json() as Record<string, unknown> };
+      return { status: res.status, body: (await res.json()) as Record<string, unknown> };
     });
 
     expect(result.status).toBe(200);
@@ -72,9 +72,17 @@ test.describe('Connect BFF — TradingService/PlaceOrder data contract', () => {
       const res = await fetch('/trader/api/xstockstrat.trading.v1.TradingService/PlaceOrder', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ symbol: 'AAPL', side: 1, orderType: 1, qty: 1, tradingMode: 1 }),
+        // clientOrderId is required (feature 101 — exactly-once order intent).
+        body: JSON.stringify({
+          symbol: 'AAPL',
+          side: 1,
+          orderType: 1,
+          qty: 1,
+          tradingMode: 1,
+          clientOrderId: 'e2e-smoke-place-order-001',
+        }),
       });
-      return { status: res.status, body: await res.json() as Record<string, unknown> };
+      return { status: res.status, body: (await res.json()) as Record<string, unknown> };
     });
 
     expect(result.status).toBe(200);
@@ -98,12 +106,15 @@ test.describe('Connect BFF — PortfolioService/GetPortfolio data contract', () 
     await page.goto('/auth/login');
 
     const result = await page.evaluate(async () => {
-      const res = await fetch('/trader/api/xstockstrat.portfolio.v1.PortfolioService/GetPortfolio', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: '{}',
-      });
-      return { status: res.status, body: await res.json() as Record<string, unknown> };
+      const res = await fetch(
+        '/trader/api/xstockstrat.portfolio.v1.PortfolioService/GetPortfolio',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: '{}',
+        },
+      );
+      return { status: res.status, body: (await res.json()) as Record<string, unknown> };
     });
 
     expect(result.status).toBe(200);
@@ -123,12 +134,15 @@ test.describe('Connect BFF — PortfolioService/GetPortfolio data contract', () 
     await page.goto('/auth/login');
 
     const result = await page.evaluate(async () => {
-      const res = await fetch('/trader/api/xstockstrat.portfolio.v1.PortfolioService/GetPortfolio', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: '{}',
-      });
-      return { status: res.status, body: await res.json() as Record<string, unknown> };
+      const res = await fetch(
+        '/trader/api/xstockstrat.portfolio.v1.PortfolioService/GetPortfolio',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: '{}',
+        },
+      );
+      return { status: res.status, body: (await res.json()) as Record<string, unknown> };
     });
 
     const body = result.body;
@@ -154,12 +168,15 @@ test.describe('Connect BFF — PortfolioService/ListPositions data contract', ()
     await page.goto('/auth/login');
 
     const result = await page.evaluate(async () => {
-      const res = await fetch('/trader/api/xstockstrat.portfolio.v1.PortfolioService/ListPositions', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ tradingMode: 1 }),
-      });
-      return { status: res.status, body: await res.json() as Record<string, unknown> };
+      const res = await fetch(
+        '/trader/api/xstockstrat.portfolio.v1.PortfolioService/ListPositions',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ tradingMode: 1 }),
+        },
+      );
+      return { status: res.status, body: (await res.json()) as Record<string, unknown> };
     });
 
     expect(result.status).toBe(200);
@@ -189,7 +206,7 @@ test.describe('Connect BFF — LedgerService/QueryEvents data contract', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ eventType: 'order.filled', sourceService: 'trading' }),
       });
-      return { status: res.status, body: await res.json() as Record<string, unknown> };
+      return { status: res.status, body: (await res.json()) as Record<string, unknown> };
     });
 
     expect(result.status).toBe(200);

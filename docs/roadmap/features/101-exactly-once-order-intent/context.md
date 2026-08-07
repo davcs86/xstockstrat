@@ -448,3 +448,40 @@ of `main-dev`. This satisfies the `merge-order.md` same-function-overlap depende
   `pnpm exec tsc --noEmit` — clean, no errors (confirms the exhaustive `Record<IntentState, ...>`
   compiles against all 5 enum values and every call site's props type-check). Deviations: the
   `OrderStatusBadge`-renders-both-badges restructuring noted above.
+- Step 20 [done] — Added `ORDER_UNKNOWN_INTENT` (`mock-order-003`, MSFT, `intentState: 4 // UNKNOWN`)
+  to `e2e/fixtures/orders.ts` + the shared `ORDERS` array; updated `INVENTORY.md`'s orders row.
+  Extended `mock-backend.ts`'s `placeOrder` handler with a `clientOrderId`-keyed `Map` that returns
+  the previously-stored response object on a repeat call. **Deviation from the spec's literal
+  Instruction 3** ("returns the same `orderId` as before"): the id itself stays the fixed
+  `'mock-order-001'` literal for every non-repeat call rather than a freshly-minted one, because
+  `order-form.spec.ts` hard-asserts that exact string and `startMockBackend()` runs once for the
+  *entire* Playwright run (`global-setup.ts` `globalSetup`) — the mock server's in-memory state,
+  including this map, is shared/persistent across every spec file and worker for the run's
+  lifetime, not reset per test. A counter-based id (my first attempt) would have made
+  `order-form.spec.ts`'s hard-coded assertion depend on cross-file/cross-worker execution order —
+  caught before committing by reasoning through `global-setup.ts` and re-reading
+  `order-form.spec.ts` in full. The map still genuinely branches on `clientOrderId` (dedup is real —
+  a repeat call returns the stored response object, not a freshly-built one) per the 2026-07-27
+  ledger entry's requirement; only the *value* of the non-repeat-call id stayed fixed. Also hit and
+  fixed a real `tsc` error the Next.js dev-server build caught: `Map.get()` returns `T | undefined`,
+  which isn't assignable to the generated `PlaceOrder` handler's `MessageInit<Order>` return type —
+  fixed with an explicit `stored` local instead of returning `.get()` directly. Fixed
+  `api-smoke.spec.ts:75` to include a fixed `clientOrderId: 'e2e-smoke-place-order-001'` in the
+  PlaceOrder POST body (Instruction 2). Landed Instruction 4 as a new `e2e/trader/order-intent.spec.ts`
+  (registered in `INVENTORY.md`) rather than extending `order-ticket.spec.ts`, whose existing scope
+  (working/filled contrast) is a different axis from intent-state uncertainty — two cases: the
+  "Uncertain — verify with broker" text is visible for `mock-order-003` and absent for
+  `mock-order-001`. Landed Instruction 5 as a new `order-form.spec.ts` test using `page.route()` to
+  intercept `PlaceOrder` and read each request's `clientOrderId` from `postDataJSON()` (the Step-3
+  map isn't reachable from the browser) — asserts the nonce is unchanged across a failed resubmit and
+  rotates after a successful placement. Verification: `pnpm test:e2e -- trader/order-ticket.spec.ts
+  trader/api-smoke.spec.ts trader/order-form.spec.ts trader/order-intent.spec.ts` — 21/21 pass; full
+  `pnpm test:e2e -- trader/` (62 tests, the whole trader segment) also run to confirm no regression
+  from the shared `mock-backend.ts` edit — 62/62 pass. `pnpm exec tsc --noEmit` and `pnpm lint` both
+  clean (lint's one warning, `insights/strategies/[id]/page.tsx:483` `jsx-a11y/role-supports-aria-
+  props`, pre-exists this change and is out of scope).
+
+**Feature 101 — all 20 steps done.** Next: mark `code-completed` in `feature.md`, open the
+integration PR targeting `feature/account-trading-halt-and-kill-switch` (stacked-branch strategy —
+see the user's explicit directive logged earlier in this file), subscribe to its PR activity, then
+proceed to feature 023 (position-sizing-engine) per the user's 100→101→023→030→102 sequence.

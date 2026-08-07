@@ -96,6 +96,57 @@ test.describe('OrderForm', () => {
     await expect(page.getByRole('button', { name: 'SELL', exact: true })).toBeVisible();
   });
 
+  test('clientOrderId nonce is reused on a failed resubmit, rotated after success', async ({
+    page,
+  }) => {
+    // feature 101 (FR-1/FR-2): the form generates one idempotency nonce per logical
+    // place-order action and must keep it across a failed retry, then mint a fresh one
+    // only after a successful placement — verified here from the actual wire request.
+    const seenClientOrderIds: string[] = [];
+    let failNext = true;
+    await page.route('**/xstockstrat.trading.v1.TradingService/PlaceOrder', async (route) => {
+      const body = route.request().postDataJSON() as { clientOrderId?: string };
+      seenClientOrderIds.push(body.clientOrderId ?? '');
+      if (failNext) {
+        await route.fulfill({
+          status: 400,
+          contentType: 'application/connect+json',
+          body: JSON.stringify({ code: 'invalid_argument', message: 'Insufficient buying power' }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ orderId: 'mock-order-001', status: 3, tradingMode: 1 }),
+      });
+    });
+
+    await page.getByPlaceholder('Symbol (e.g. AAPL)').fill('TSLA');
+    await page.getByPlaceholder('Quantity').fill('1000');
+    const submit = page.getByRole('button', { name: /buy|sell/i }).last();
+
+    await submit.click();
+    await expect(page.getByText('Insufficient buying power')).toBeVisible({ timeout: 10000 });
+
+    // Resubmit the same logical action after the failure — nonce must be unchanged.
+    failNext = false;
+    await submit.click();
+    await expect(page.getByText(/mock-order-001/)).toBeVisible({ timeout: 10000 });
+
+    expect(seenClientOrderIds).toHaveLength(2);
+    expect(seenClientOrderIds[1]).toBe(seenClientOrderIds[0]);
+
+    // A new logical action after success must mint a fresh nonce.
+    await page.getByPlaceholder('Symbol (e.g. AAPL)').fill('AAPL');
+    await page.getByPlaceholder('Quantity').fill('1');
+    await submit.click();
+    await expect(page.getByText(/mock-order-001/)).toBeVisible({ timeout: 10000 });
+
+    expect(seenClientOrderIds).toHaveLength(3);
+    expect(seenClientOrderIds[2]).not.toBe(seenClientOrderIds[0]);
+  });
+
   test('PAPER or LIVE badge is shown in the global header', async ({ page }) => {
     // The header TradingModeBadge (#575) renders the mode as lowercase text
     // ("paper"/"live") and uppercases it via CSS only; getByText matches the DOM

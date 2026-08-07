@@ -1099,7 +1099,7 @@ Behavioral proof (nonce reused across a retry, rotated after success) is Step 20
 
 ### Step 20 — test: `xstockstrat-ui` e2e — fixtures, `mock-backend.ts`, `api-smoke.spec.ts`, new assertions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/orders.ts` — modify
@@ -1158,6 +1158,31 @@ cd services/xstockstrat-ui && pnpm test:e2e -- trader/order-ticket.spec.ts trade
 ```
 (add `trader/order-intent.spec.ts` to the invocation if created as a separate file). No coverage
 threshold applies to `xstockstrat-ui` (spec-template's coverage table: "n/a — use `pnpm test:e2e`").
+
+**Execution notes**:
+- Instruction 4 landed as a new `e2e/trader/order-intent.spec.ts` (Instruction 4's own fallback) —
+  `order-ticket.spec.ts`'s existing scope is the working/filled contrast, not intent-state uncertainty;
+  a separate file keeps that distinction legible. Registered in `INVENTORY.md`'s orders row.
+- Instruction 3's dedup map had to store the *whole* mocked response (`{orderId, status, tradingMode}`),
+  not just an `orderId` string, and the id itself stays the fixed `'mock-order-001'` literal —
+  `order-form.spec.ts` hard-asserts that exact string, and `startMockBackend()` runs once for the whole
+  Playwright run (`global-setup.ts`), so the map (and any id-generation scheme) is shared/persistent
+  across every spec file and worker for the run's lifetime. A counter-based id would have made that
+  assertion depend on cross-file execution order. `Map.get()`'s `| undefined` return also required an
+  explicit `stored` local (not returned directly) to satisfy `tsc` against the generated `PlaceOrder`
+  handler's `MessageInit<Order>` return type — caught by the Next.js dev-server type-check build itself.
+  Also documented in the ledger (2026-08-07 addendum to the 2026-07-27 entry): a dedup mock must persist
+  the *stored response*, not synthesize a new deterministic-looking id per call, when any consumer
+  elsewhere in the suite hard-asserts the original literal.
+- Instruction 5 landed as a new `order-form.spec.ts` test (`clientOrderId nonce is reused on a failed
+  resubmit, rotated after success`) using `page.route()` to intercept `PlaceOrder` directly (rather than
+  reading the Step-3 map, which isn't exposed to the browser) and recording each request's
+  `clientOrderId` from `postDataJSON()` — asserts the id is unchanged across a failed retry and rotates
+  after a successful placement.
+- `api-smoke.spec.ts:75`'s POST body now sends a fixed `clientOrderId: 'e2e-smoke-place-order-001'`
+  rather than a randomly generated one — the smoke test only asserts response shape (`orderId`/`status`
+  presence and type), so a fixed literal is simpler and equally correct; no assertion depends on
+  uniqueness within this file.
 
 ---
 
