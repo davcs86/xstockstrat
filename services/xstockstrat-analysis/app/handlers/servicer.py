@@ -2871,7 +2871,15 @@ def _row_to_backtest_summary(row: dict) -> "analysis_pb2.BacktestRunSummary":
 # Top-level StrategyDefinition paths an update_mask may name. Deliberately flat and closed —
 # a mask is an authorization-shaped input and an open path set invites surprises.
 _MASKABLE_PATHS = frozenset(
-    {"display_name", "components", "entry_rule", "exit_rule", "signal_params", "cooldown_days"}
+    {
+        "display_name",
+        "components",
+        "entry_rule",
+        "exit_rule",
+        "signal_params",
+        "cooldown_days",
+        "exit_cooldown_days",
+    }
 )
 
 # These live in real columns and are overlaid at read time by _row_to_strategy_definition, so

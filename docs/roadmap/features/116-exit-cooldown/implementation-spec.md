@@ -418,7 +418,7 @@ ruff check . && ruff format --check .
 
 ### Step 8 — service: write-time validation, maskable paths, config doc
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/evaluator.py` — modify
@@ -483,7 +483,7 @@ grep -n "default_exit_cooldown_days" CLAUDE.md
 
 ### Step 9 — test: paired with Step 8
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify

@@ -405,3 +405,25 @@ re-checking against this scenario when Step 10 is reached; likely fix is seeding
   stub). Final: 438/438 full suite, 82% coverage, ruff clean.
 - Files modified: `services/xstockstrat-analysis/tests/test_analysis_servicer.py`
 - Deviations: see Deviation Log ("Step 7").
+
+### Step 8 — service: write-time validation, maskable paths, config doc [done]
+- Added the mirror negative-value check to `evaluator.py`'s `_validate_definition`; added
+  `exit_cooldown_days` to `servicer.py`'s `_MASKABLE_PATHS`; added the config-key row to
+  `CLAUDE.md`. `_FINGERPRINT_EXCLUDED_KEYS` deliberately left unchanged (Step 7 already proved
+  inclusion by omission).
+- Files modified: `services/xstockstrat-analysis/app/services/evaluator.py`,
+  `services/xstockstrat-analysis/app/handlers/servicer.py`,
+  `services/xstockstrat-analysis/CLAUDE.md`
+- Deviations: none
+
+### Step 9 — test: paired with Step 8 [done]
+- Added 4 tests: 2 validation (`test_manage_strategy_rejects_negative_exit_cooldown`,
+  `test_manage_strategy_accepts_zero_exit_cooldown`) mirroring the `cooldown_days` templates
+  exactly; 2 maskable-paths (`test_exit_cooldown_only_update_preserves_components_and_rules`,
+  `test_exit_cooldown_days_can_be_cleared_back_to_platform_default`) mirroring their `cooldown_days`
+  counterparts.
+- All 218 tests in `test_analysis_servicer.py` pass; full suite 442/442, 82% coverage, ruff clean.
+  Steps 8/9 were straightforward mirrors of an already-proven pattern — no red/green surprise,
+  no deviation.
+- Files modified: `services/xstockstrat-analysis/tests/test_analysis_servicer.py`
+- Deviations: none

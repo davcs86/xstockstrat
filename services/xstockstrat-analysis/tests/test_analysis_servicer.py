@@ -2577,6 +2577,38 @@ class TestBacktestCooldown:
             {**base, "exit_cooldown_days": 14}
         )
 
+    @pytest.mark.asyncio
+    async def test_manage_strategy_rejects_negative_exit_cooldown(self):
+        """FR-2: ManageStrategy register aborts INVALID_ARGUMENT on a negative exit cooldown."""
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.create = AsyncMock(return_value=_row_for(_valid_definition()))
+        definition = _valid_definition()
+        definition.exit_cooldown_days = -1
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_REGISTER, definition=definition
+        )
+        ctx = _admin_ctx()
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(req, ctx)
+        code, _ = ctx.abort.await_args.args
+        assert code == grpc.StatusCode.INVALID_ARGUMENT
+
+    @pytest.mark.asyncio
+    async def test_manage_strategy_accepts_zero_exit_cooldown(self):
+        """Explicit exit_cooldown_days=0 passes write-time validation (register proceeds)."""
+        svc = make_servicer()
+        definition = _valid_definition()
+        definition.exit_cooldown_days = 0
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
+        svc._strategies_repo.create = AsyncMock(return_value=_row_for(definition))
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_REGISTER, definition=definition
+        )
+        result = await svc.ManageStrategy(req, context=_admin_ctx())
+        assert result.strategy_id == "sma_x"
+
 
 # ---------------------------------------------------------------------------
 # feature 070 — partial strategy update (update_mask)
@@ -2677,6 +2709,35 @@ class TestPartialStrategyUpdate:
             _masked_req(paths=["cooldown_days"]), context=_admin_ctx()
         )
         assert not result.HasField("cooldown_days")
+
+    @pytest.mark.asyncio
+    async def test_exit_cooldown_only_update_preserves_components_and_rules(self):
+        """feature 116, mirrors test_cooldown_only_update_preserves_components_and_rules."""
+        svc = make_servicer()
+        stored = _stored_row()
+        repo = _stub_update_repo(svc, stored)
+
+        req = _masked_req(paths=["exit_cooldown_days"], exit_cooldown_days=5)
+        result = await svc.ManageStrategy(req, context=_admin_ctx())
+
+        assert result.exit_cooldown_days == 5
+        assert [c.ref_name for c in result.components] == ["z"]
+        assert result.components[0].indicator == "SMA"
+        assert json.loads(result.entry_rule) == {"fn": "<", "lhs": "z", "rhs": -1.0}
+        assert json.loads(result.exit_rule) == {"fn": ">", "lhs": "z", "rhs": 1.0}
+        assert result.display_name == "Range MR v3"
+        repo.update_locked.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_exit_cooldown_days_can_be_cleared_back_to_platform_default(self):
+        """feature 116, mirrors test_cooldown_days_can_be_cleared_back_to_platform_default."""
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row())
+
+        result = await svc.ManageStrategy(
+            _masked_req(paths=["exit_cooldown_days"]), context=_admin_ctx()
+        )
+        assert not result.HasField("exit_cooldown_days")
 
     @pytest.mark.asyncio
     async def test_maskless_update_is_still_a_full_replace(self):
