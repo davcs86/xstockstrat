@@ -385,7 +385,7 @@ function PositionBody({
                           {formatOrderPrice(o.filledAvgPrice)}
                         </TableCell>
                         <TableCell>
-                          <OrderStatusBadge status={o.status} />
+                          <OrderStatusBadge status={o.status} intentState={o.intentState} />
                         </TableCell>
                         <TableCell className="font-mono text-xs text-muted-foreground hidden md:table-cell">
                           {o.strategyId || 'Manual'}

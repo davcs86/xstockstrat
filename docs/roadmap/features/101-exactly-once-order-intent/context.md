@@ -427,3 +427,24 @@ of `main-dev`. This satisfies the `merge-order.md` same-function-overlap depende
   same pre-existing condition as `section_13`; its value is a documented, runnable manual proof).
   Verification: `grep -n client_order_id` confirms both fixes + the new section; `bash -n` confirms
   valid syntax. Deviations: none.
+- Steps 17+18+19 [done] — `orderShared.tsx`: imported `IntentState`, added the exhaustive
+  `INTENT_STATE_RENDER: Record<IntentState, IntentRender | null>` (only `UNKNOWN` renders
+  visibly) + `IntentStateBadge`. **Deviation from the spec's literal instruction**: threaded
+  `intentState` into `OrderStatusBadge` itself (not just `OrderStatusCell`) so it renders both
+  badges together — the spec's own Instruction 4 says to add the prop to *both*
+  `OrderStatusBadge` and `OrderStatusCell` "rendering `<IntentStateBadge>` alongside the existing
+  status badge," which only makes sense if `OrderStatusBadge` (used standalone at 2 of the 4 call
+  sites — `orders/[id]/page.tsx` and `positions/[symbol]/page.tsx`) does the rendering itself;
+  `OrderStatusCell` then just forwards the prop to `OrderStatusBadge` rather than independently
+  rendering a second `IntentStateBadge` (would have duplicated it for `OrderBook.tsx`/
+  `OrdersTable.tsx`, which only use `OrderStatusCell`). Wired all 4 call sites
+  (`OrderBook.tsx:51`, `OrdersTable.tsx:110`, `orders/[id]/page.tsx:99`,
+  `positions/[symbol]/page.tsx:388`) with `intentState={order.intentState}` /
+  `{o.intentState}`. Changed `isWorking(status)` → `isWorking(status, intentState)`, adding the
+  `intentState !== IntentState.UNKNOWN` gate; updated its one call site
+  (`orders/[id]/page.tsx:42`). `OrderForm.tsx`: added `clientOrderId` state seeded with
+  `crypto.randomUUID()` on mount, included in the `placeOrder(...)` request object, rotated only
+  in `onSuccess` (not `onError`, so a resubmit after a failure keeps the same nonce). Verification:
+  `pnpm exec tsc --noEmit` — clean, no errors (confirms the exhaustive `Record<IntentState, ...>`
+  compiles against all 5 enum values and every call site's props type-check). Deviations: the
+  `OrderStatusBadge`-renders-both-badges restructuring noted above.

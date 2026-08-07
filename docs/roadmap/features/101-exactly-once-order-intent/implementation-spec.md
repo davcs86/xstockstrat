@@ -946,7 +946,7 @@ comments already describe its role.
 
 ### Step 17 — service: `xstockstrat-ui` — `IntentState` render map + prop threading
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/orderShared.tsx` — modify
@@ -1007,7 +1007,7 @@ later would fail this build — the C-10(a/d) compile-time guard the design requ
 
 ### Step 18 — service: wire `intentState` through the 4 call sites + `isWorking()` gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/OrderBook.tsx` — modify
@@ -1047,7 +1047,7 @@ cd services/xstockstrat-ui && pnpm exec tsc --noEmit
 
 ### Step 19 — service: Place Order client nonce (Consumer Surface — Place Order flow)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/OrderForm.tsx` — modify
