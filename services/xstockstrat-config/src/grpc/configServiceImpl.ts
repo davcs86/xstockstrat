@@ -397,8 +397,19 @@ export class ConfigServiceImpl {
          WHERE namespace = $1 AND environment = $2 AND (trading_mode = $3 OR trading_mode = 'all')`,
         [call.request.namespace, env, mode]
       );
+      // A key can have both a trading_mode='all' row and a mode-exact shadow row for the same
+      // (namespace, key, environment) scope — see the setConfig existence-gate comment above.
+      // The WHERE clause above matches both, so resolve to one row per key here, preferring the
+      // mode-exact row over 'all', instead of surfacing the same key twice to callers.
+      const byKey = new Map<string, (typeof result.rows)[number]>();
+      for (const row of result.rows) {
+        const existing = byKey.get(row.key);
+        if (!existing || (row.trading_mode !== 'all' && existing.trading_mode === 'all')) {
+          byKey.set(row.key, row);
+        }
+      }
       callback(null, {
-        keys: result.rows.map((r) => {
+        keys: Array.from(byKey.values()).map((r) => {
           const weightBounds = WEIGHT_KEY_REGISTRY[r.key];
           // ts-proto encodes camelCase field names and (buf.gen.yaml stringEnums=true)
           // string enum constants. Emitting snake_case/numeric here meant ConfigKeyMeta.encode()
