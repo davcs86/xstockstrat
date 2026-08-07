@@ -49,4 +49,4 @@ while adding a symbol instead of via a second binding step, and add an editable 
 
 ## Next Action
 
-Open the integration PR: `claude/watchlist-screen-improvements-9qf5vq` → `main-dev`.
+Integration PR open: https://github.com/davcs86/xstockstrat/pull/893 (`claude/watchlist-screen-improvements-9qf5vq` → `main-dev`). Merge when CI passes and reviewers approve.
