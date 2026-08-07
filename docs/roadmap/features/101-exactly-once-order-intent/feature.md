@@ -1,6 +1,8 @@
 # Feature: exactly-once-order-intent
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 856ad5a3a2ebc431c108cc7f508deb26885545c6
+**Launched date**: 2026-08-07
 **Priority**: `P1` — rescoped 2026-08-04 to the trader UI's real order flow, not hypothetical
 scheduler/agent callers (see context.md); not `P0` because the risk today is bounded by a human
 watching the UI, unlike an unattended caller
@@ -22,6 +24,7 @@ watching the UI, unlike an unattended caller
 | 2026-08-07 | `implementation-ready` → `in-progress` | /sdd-execute (sequential) | Steps 1-2 done — proto `IntentState` enum + `Order.intent_state` field, stubs regenerated |
 | 2026-08-07 | `in-progress` → `code-completed` | /sdd-execute (sequential) | All 20 steps done. Stacked-branch build (per user directive) on top of `feature/account-trading-halt-and-kill-switch` (feature 100) — integration PR #880 targets that branch, not `main-dev` |
 
+| 2026-08-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #878; committed 856ad5a3a2ebc431c108cc7f508deb26885545c6 |
 ---
 
 ## Artifacts

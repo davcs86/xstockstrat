@@ -486,3 +486,10 @@ of `main-dev`. This satisfies the `merge-order.md` same-function-overlap depende
 `feature/account-trading-halt-and-kill-switch` (stacked-branch strategy — see the user's explicit
 directive logged earlier in this file) and subscribed to its PR activity. Proceeding to feature 023
 (position-sizing-engine) per the user's 100→101→023→030→102 sequence.
+
+## Session 2026-08-07 (CI: feature status automation)
+
+- Promotion PR #878 merged to main
+- Feature promoted and committed: 856ad5a3a2ebc431c108cc7f508deb26885545c6
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-07

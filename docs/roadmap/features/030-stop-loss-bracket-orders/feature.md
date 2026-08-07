@@ -1,6 +1,8 @@
 # Feature: stop-loss-bracket-orders
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 856ad5a3a2ebc431c108cc7f508deb26885545c6
+**Launched date**: 2026-08-07
 **Priority**: `P0` — blocking live-capital expansion (Live-Capital Safety program, see context.md 2026-08-04)
 **Development Branch**: `feature/stop-loss-bracket-orders`
 **Created**: 2026-05-26
@@ -18,6 +20,7 @@
 | 2026-08-06 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 23 steps |
 | 2026-08-07 | `implementation-ready` → `code-completed` | /sdd-execute (sequential) | All 23 steps done. Stacked-branch build (per user directive) on top of `feature/position-sizing-engine` (feature 023, itself stacked on 101 on 100) — integration PR targets that branch, not `main-dev` |
 
+| 2026-08-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #878; committed 856ad5a3a2ebc431c108cc7f508deb26885545c6 |
 ---
 
 ## Artifacts

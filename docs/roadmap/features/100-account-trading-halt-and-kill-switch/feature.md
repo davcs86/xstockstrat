@@ -1,6 +1,8 @@
 # Feature: account-trading-halt-and-kill-switch
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 856ad5a3a2ebc431c108cc7f508deb26885545c6
+**Launched date**: 2026-08-07
 **Priority**: `P0` — blocking live-capital expansion; rescoped 2026-08-04 to hardening the
 `platform.maintenance_mode` key that already exists, not a green-field build (see context.md)
 **Development Branch**: `feature/account-trading-halt-and-kill-switch`
@@ -21,6 +23,7 @@
 | 2026-08-07 | `implementation-ready` → `in-progress` | /sdd-execute (sequential) | Step 1 done — re-verified FR-1, retired the stale findings-doc row |
 | 2026-08-07 | `in-progress` → `code-completed` | /sdd-execute (sequential) | All 13 steps done. Next: merge-order gate + integration PR to `main-dev` |
 
+| 2026-08-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #878; committed 856ad5a3a2ebc431c108cc7f508deb26885545c6 |
 ---
 
 ## Artifacts

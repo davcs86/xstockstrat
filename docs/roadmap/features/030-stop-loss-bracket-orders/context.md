@@ -263,3 +263,10 @@
 - Status: `implementation-ready` → `code-completed`. Next: open the stacked integration PR against
   `feature/position-sizing-engine`, subscribe to PR activity, then proceed to feature 102
   (`broker-state-reconciliation`) per the user's directed sequence.
+
+## Session 2026-08-07 (CI: feature status automation)
+
+- Promotion PR #878 merged to main
+- Feature promoted and committed: 856ad5a3a2ebc431c108cc7f508deb26885545c6
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-07

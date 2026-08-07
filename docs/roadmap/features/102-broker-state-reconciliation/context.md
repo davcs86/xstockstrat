@@ -283,3 +283,10 @@ All 25 implementation-spec.md steps done; full TDD red/green discipline followed
 **Teardown note**: this session's `context-scrubber` (context-forge plugin) skill was not available
 to run the mandated scoped scan over the touched `CLAUDE.md`/`config-governance.md` files —
 flagging per CLAUDE.md's fallback instruction rather than skipping silently (same note as 030's PR).
+
+## Session 2026-08-07 (CI: feature status automation)
+
+- Promotion PR #878 merged to main
+- Feature promoted and committed: 856ad5a3a2ebc431c108cc7f508deb26885545c6
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-07

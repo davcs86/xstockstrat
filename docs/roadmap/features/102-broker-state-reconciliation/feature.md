@@ -1,6 +1,8 @@
 # Feature: broker-state-reconciliation
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 856ad5a3a2ebc431c108cc7f508deb26885545c6
+**Launched date**: 2026-08-07
 **Priority**: `P1` — revived 2026-08-04 after user pushback on the demotion; rescoped to a lightweight
 periodic ticker inside `xstockstrat-trading` reusing its existing broker client, not a new engine or
 dashboard (see context.md)
@@ -23,6 +25,7 @@ dashboard (see context.md)
 | 2026-08-07 | `implementation-ready` → `code-completed` | /sdd-execute | All 25 steps executed as the final feature in the stacked 100→101→023→030→102 chain; PR opened targeting `feature/stop-loss-bracket-orders` (030's branch). Full deviation detail in implementation-spec.md's Deviation Log |
 | 2026-08-07 | `code-completed` (PR #883 merged) | /sdd-execute | PR #883 squash-merged into `main-dev`, the last of the 100→101→023→030→102 chain to land (#879→#880→#881→#882→#883, each retargeted to `main-dev` and reconciled after the prior squash-merge) |
 
+| 2026-08-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #878; committed 856ad5a3a2ebc431c108cc7f508deb26885545c6 |
 ---
 
 ## Artifacts

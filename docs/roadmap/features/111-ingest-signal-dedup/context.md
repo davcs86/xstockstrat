@@ -210,3 +210,10 @@
   check`/`format --check` clean on both, `buf lint`/`buf breaking` clean with an empty generated-
   stub diff (proto untouched by the merge), `jscpd` clean. Pushed the merge commit
   (`0530ae7..1d54cc5`).
+
+## Session 2026-08-07 (CI: feature status automation)
+
+- Promotion PR #878 merged to main
+- Feature promoted and committed: 856ad5a3a2ebc431c108cc7f508deb26885545c6
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-07

@@ -304,3 +304,10 @@ a merge event). Recorded here since it diverges from `reference/sequential-mode.
 no exported snapshot setter, its zero value's `GetString`/`GetBool` defaults are still directly
 testable and prove the fail-closed default deterministically without a real config service. Not yet
 promoted to `insights.md` — will fold into the archiver's synthesis pass if it recurs in 101/023/030.
+
+## Session 2026-08-07 (CI: feature status automation)
+
+- Promotion PR #878 merged to main
+- Feature promoted and committed: 856ad5a3a2ebc431c108cc7f508deb26885545c6
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-07
