@@ -52,4 +52,5 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review stop-loss-bracket-orders impl-spec` — validate implementation spec, then `/sdd-execute stop-loss-bracket-orders`
+[PR #882](https://github.com/davcs86/xstockstrat/pull/882) is open against
+`feature/position-sizing-engine` (stacked-branch strategy) — drive to green.
