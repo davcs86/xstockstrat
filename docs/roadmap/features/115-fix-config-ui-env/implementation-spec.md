@@ -209,7 +209,7 @@ holds — `deploymentEnv.ts` is now a fully-exercised file in the `all: false` s
 
 ### Step 3 — service: BFF write guard (`configUiBff.ts`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/configUiBff.ts` — modify
@@ -279,7 +279,7 @@ this codebase; `src/lib/*Bff.ts` files are excluded from vitest coverage,
 
 ### Step 4 — test: BFF guard e2e coverage (`api-smoke.spec.ts` + fixture + playwright env)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/configKeys.ts` — create

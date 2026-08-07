@@ -182,3 +182,34 @@ Tooling setup (steps 1-8, all `xstockstrat-ui`): node ✓ v22.22.2 · pnpm ✓ 9
   100% stmts/branch/funcs/lines, well above the 40% `src/lib` threshold).
 - Files modified: `services/xstockstrat-ui/src/lib/deploymentEnv.test.ts`
 - Deviations: none
+
+### Step 3 — service: BFF write guard (`configUiBff.ts`) [done]
+- TDD cycle run test-first, spanning Steps 3+4 per `tdd-gate.md`: built Step 4's full deliverable
+  set first (fixture, 3 refactored literals, new "rejected for a non-native environment" test,
+  `playwright.config.ts` `APPLICATION_ENV` addition), ran the e2e suite for red — confirmed failing
+  for the right reason (`Expected: 400, Received: 200`, mock's `setConfig` passes through
+  unconditionally), all 3 refactored tests still passed unchanged. Then implemented the guard in
+  `configUiBff.ts`; re-ran — 12/12 passed (green). `pnpm run lint` clean (same pre-existing
+  unrelated warning).
+- Playwright environment note: the repo's pinned Chromium build (headless_shell-1217) isn't the
+  pre-provisioned one (`chromium-1194`) — ran with
+  `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome` and
+  `CI=true` (the non-CI 10s test timeout was too short for cold Next.js dev-server compilation in
+  this environment; CI's 30s/240s timeouts are the documented safety margin already built into
+  `playwright.config.ts`, not a new fallback). Logged here per the sequential-mode verification
+  fallback rule (CI-equivalent, not a spec deviation).
+- Files modified: `services/xstockstrat-ui/src/lib/configUiBff.ts`
+- Deviations: none (see environment note above — not a spec deviation, a documented CI-equivalent
+  invocation)
+
+### Step 4 — test: BFF guard e2e coverage (`api-smoke.spec.ts` + fixture + playwright env) [done]
+- Built alongside Step 3 for TDD test-first ordering (see Step 3 entry for the red/green run).
+  Centralized the SetConfig payload (3 existing inline literals + the new test) into
+  `e2e/fixtures/configKeys.ts`'s `setConfigPayload()` factory per C-12; updated `INVENTORY.md`
+  (added the new canonical-fixture row, removed the stale "Config keys" row from "Not yet
+  centralized" per the step's own instruction 5).
+- Files modified: `services/xstockstrat-ui/e2e/fixtures/configKeys.ts`,
+  `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`,
+  `services/xstockstrat-ui/e2e/config-ui/api-smoke.spec.ts`,
+  `services/xstockstrat-ui/playwright.config.ts`
+- Deviations: none
