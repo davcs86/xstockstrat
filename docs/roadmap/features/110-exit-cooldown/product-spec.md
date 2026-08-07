@@ -141,8 +141,9 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Open Questions
 
-- [ ] **Known trap (see `docs/roadmap/ledger/fails.md` 2026-08-05 "live-strategy-alert-engine" /
-  2026-08-05 "070-strategy-partial-update" pattern; also the C-10(b) rule from 056)**: any new field
+- [ ] **Known trap (see `docs/roadmap/ledger/fails.md` 2026-08-05 "live-strategy-alert-engine" —
+  mapper-lockstep mistake; also `docs/roadmap/ledger/insights.md` 2026-07-26/2026-08-06 on the
+  `manage_strategy` partial-update pattern; also the C-10(b) rule from 056)**: any new field
   added to `StrategyDefinition` must be propagated through **every** row-to-proto mapper
   (`_row_to_strategy_definition`), the maskable-paths set, the fingerprint computation, the MCP tool
   builder, AND the UI form in the same feature — a partial rollout is the exact recurring mistake

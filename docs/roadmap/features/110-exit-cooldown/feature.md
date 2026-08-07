@@ -1,6 +1,6 @@
 # Feature: exit-cooldown
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/exit-cooldown`
 **Created**: 2026-08-07
 **Last Updated**: 2026-08-07
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-07 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-07 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
 
 ---
 
@@ -43,4 +44,4 @@ tool, and the `StrategyWizard` UI form (Step 1 — Identity, alongside "Re-entry
 
 ## Next Action
 
-`/sdd-review exit-cooldown product-spec` — AI review of product spec before running /sdd-design
+`/sdd-design exit-cooldown` — full design debate (recon + adversarial grilling)

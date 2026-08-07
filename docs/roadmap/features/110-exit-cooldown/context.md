@@ -39,3 +39,26 @@
 
 Next: `/sdd-review exit-cooldown product-spec`, then `/sdd-design exit-cooldown` (full mode, per
 explicit user request).
+
+## Session 2026-08-07T00:15:00Z — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings:
+  - Open Questions section has 4 unresolved `- [ ]` items — all appropriately scoped to
+    `/sdd-design`, not story-time ambiguities. `/sdd-design` must resolve all four before
+    `implementation-ready`.
+  - Ledger citation imprecision fixed in product-spec.md: the "mapper-lockstep" trap is correctly
+    in `fails.md` (2026-08-05, live-strategy-alert-engine); the `manage_strategy` partial-update
+    pattern actually lives in `insights.md` (2026-07-26, 2026-08-06), not `fails.md` — corrected.
+- Overlap findings: CLEAN. Next migration NNN = `012` (last is `011_opportunities`), next proto
+  field number = `11` (fields 1-10 in use, `cooldown_days`=9, `warnings`=10) — both currently
+  unclaimed. Low-risk shared-file note: `xstockstrat-agent/app/tools.py` is also touched by
+  `085-mcp-python-sdk-v2-upgrade` (code-completed) — no key/field/migration overlap, re-check at
+  impl-spec time if 085 hasn't landed. `analysis.strategy_cooldowns` table (069/070 precedent) is
+  trunk context only, not a live collision.
+- Additional design-phase note from review: `_definition_fingerprint` (servicer.py:2928-2944) is
+  opt-OUT (`_FINGERPRINT_EXCLUDED_KEYS`), so FR-9 is likely satisfied automatically once the new
+  field round-trips through `definition_json` — design should confirm the new field is never added
+  to that exclusion set.
+
+Next: `/sdd-design exit-cooldown` (full mode, per explicit user request).
