@@ -119,6 +119,51 @@ test.describe('Watchlists (insights)', () => {
     await expect(page.getByTestId('unbound-MSFT')).toBeVisible({ timeout: 5000 });
   });
 
+  test('inline rename + watchlist-switch resets local state (FR-4, AC-3)', async ({ page }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page);
+    await page.goto('/insights/watchlists');
+
+    await createList(page, 'Original Name');
+    await addSymbols(page, 'AAPL');
+    await bindStrategy(page, 'AAPL');
+
+    // Commit a rename — the header updates and the bound symbol's binding survives (fails-080
+    // invariant: rename sends the full current bindings array, never a partial one).
+    await page.getByRole('button', { name: /^Rename /i }).click();
+    const nameField = page.getByLabel('Watchlist name', { exact: true });
+    await nameField.fill('Renamed List');
+    await nameField.press('Enter');
+    await expect(page.getByRole('heading', { name: 'Renamed List' })).toBeVisible({
+      timeout: 5000,
+    });
+    await expect(page.getByTestId('readiness-row-AAPL')).toBeVisible();
+
+    // Cancel: open the rename control again, type a different draft, press Escape — no mutation.
+    await page.getByRole('button', { name: /^Rename /i }).click();
+    await page.getByLabel('Watchlist name', { exact: true }).fill('Should Not Save');
+    await page.getByLabel('Watchlist name', { exact: true }).press('Escape');
+    await expect(page.getByRole('heading', { name: 'Renamed List' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Should Not Save' })).toHaveCount(0);
+
+    // Switch-reset: create a second list (selects it), pick a strategy in its add-time picker
+    // without adding, then switch back to the first list — the rename control must be back in
+    // display mode (not stuck mid-edit) and the add-time picker back to "Unbound" (the
+    // key={selected.watchlistId} remount closes both leaks in one mechanism, design.md §4).
+    await createList(page, 'Second List');
+    await page.getByLabel('Strategy for new symbols').click();
+    await page.getByRole('option', { name: 'Live Test Strategy' }).click();
+
+    const master = page.getByTestId('watchlist-master');
+    await master.getByRole('button', { name: /Renamed List/ }).click();
+    await expect(page.getByRole('heading', { name: 'Renamed List' })).toBeVisible({
+      timeout: 5000,
+    });
+    await expect(page.getByRole('button', { name: /^Rename /i })).toBeVisible();
+    await expect(page.getByLabel('Watchlist name', { exact: true })).toHaveCount(0);
+    await expect(page.getByLabel('Strategy for new symbols')).toHaveText('Unbound');
+  });
+
   test('strategy binding picker excludes non-live strategies (disabled strategies must not be usable)', async ({
     page,
   }) => {
