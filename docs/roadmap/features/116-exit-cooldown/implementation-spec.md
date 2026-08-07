@@ -2,7 +2,7 @@
 
 **Status**: `pending`
 **Created**: 2026-08-07
-**Feature**: `docs/roadmap/features/110-exit-cooldown/feature.md`
+**Feature**: `docs/roadmap/features/116-exit-cooldown/feature.md`
 **Total Steps**: 21
 **Feature Branch**: `feature/exit-cooldown`
 

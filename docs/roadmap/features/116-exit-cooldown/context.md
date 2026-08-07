@@ -1,8 +1,8 @@
 # Context: exit-cooldown
 
-**Feature**: `docs/roadmap/features/110-exit-cooldown/feature.md`
-**Product Spec**: `docs/roadmap/features/110-exit-cooldown/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/110-exit-cooldown/implementation-spec.md`
+**Feature**: `docs/roadmap/features/116-exit-cooldown/feature.md`
+**Product Spec**: `docs/roadmap/features/116-exit-cooldown/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/116-exit-cooldown/implementation-spec.md`
 
 ---
 
@@ -222,3 +222,32 @@ Next: `/sdd-execute exit-cooldown`.
 
 Next: `/sdd-review exit-cooldown impl-spec` — validate implementation spec, then
 `/sdd-execute exit-cooldown`.
+
+## Session 2026-08-07T03:00:00Z — sdd-execute (sequential) — feature-number collision
+
+- User approved running `/sdd-execute exit-cooldown sequential` per its normal branch model
+  (`feature/exit-cooldown`, created from the session's `claude/exit-cooldown-feature-g8sbts`
+  branch since `main-dev` did not yet have this feature's SDD docs — PR #894, the docs-only
+  design-phase PR, was still unmerged).
+- §5.3 re-spec gate step 1 (`git merge -X ours origin/main-dev` into `feature/exit-cooldown`)
+  surfaced a real feature-number collision: `main-dev` has independently landed a different,
+  unrelated feature also numbered `110` — `110-wire-signal-confidence-to-position-sizing`
+  (merged) — while this feature (`110-exit-cooldown`) was still unmerged. Per
+  `docs/runbooks/feature-workflow.md` § Feature Numbering's documented collision-resolution
+  procedure (same one used historically for the `020`/`052` and `080`/`081` collisions), the
+  later-to-merge feature is renumbered.
+- **Resolution** (user-approved): `git mv docs/roadmap/features/110-exit-cooldown
+  docs/roadmap/features/116-exit-cooldown` — max NNN on trunk after the merge is `115`
+  (`115-fix-config-ui-env`), so `116` is the next free number. Fixed every self-referential
+  path (`context.md`, `implementation-spec.md`'s `**Feature**` line) and the two
+  `docs/roadmap/ledger/insights.md` evidence citations written during the design phase (not
+  yet merged to `main-dev`, so this is a pre-merge correction, not a rewrite of established
+  trunk history). **No content collision**: re-verified the actual implementation artifacts
+  (proto field `11` on `StrategyDefinition`, migration `012` for
+  `services/xstockstrat-analysis/migrations/`, both new config keys) are all still free on the
+  post-merge trunk — only the feature *directory number* collided, nothing this feature
+  actually builds.
+- Branch/PR names are unaffected (they use the slug `exit-cooldown`, not the number, per
+  `docs/roadmap/features/CLAUDE.md`).
+
+Next: continue the sequential step loop (Step 1).
