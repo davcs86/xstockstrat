@@ -21,6 +21,7 @@ dashboard (see context.md)
 | 2026-08-06 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds, full) and approved with noted open risks; recon.md + design.md written; FR-4/AC-3/AC-5 amended (user-approved) |
 | 2026-08-06 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 25 steps; discovered and surfaced two new risks beyond design.md (IBKR never sends a client-order tag on SubmitOrder — FR-6's broker-side scan fallback is Alpaca-only; QueryEvents.event_type is exact-match only, not a prefix filter) |
 | 2026-08-07 | `implementation-ready` → `code-completed` | /sdd-execute | All 25 steps executed as the final feature in the stacked 100→101→023→030→102 chain; PR opened targeting `feature/stop-loss-bracket-orders` (030's branch). Full deviation detail in implementation-spec.md's Deviation Log |
+| 2026-08-07 | `code-completed` (PR #883 merged) | /sdd-execute | PR #883 squash-merged into `main-dev`, the last of the 100→101→023→030→102 chain to land (#879→#880→#881→#882→#883, each retargeted to `main-dev` and reconciled after the prior squash-merge) |
 
 ---
 
@@ -57,5 +58,6 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-Code-complete. PR opened targeting `feature/stop-loss-bracket-orders` (030's branch, the top of the
-stacked 100→101→023→030→102 chain) — see PR link in context.md. Awaiting CI + merge in stack order.
+Merged. PR #883 squash-merged into `main-dev` (2026-08-07), the last of the stacked
+100→101→023→030→102 chain (#879/#880/#881/#882 merged first, in order). Awaiting promotion to
+`main` via `/promote`.
