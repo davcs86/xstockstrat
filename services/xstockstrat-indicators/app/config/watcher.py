@@ -29,11 +29,7 @@ def resolve_trading_mode(trading_mode: str) -> int:
     """Map TRADING_MODE ("paper" | "live") to the proto TradingMode enum.
     Anything other than "live" resolves to paper, matching this service's own default.
     """
-    return (
-        common_pb2.TRADING_MODE_LIVE
-        if trading_mode == "live"
-        else common_pb2.TRADING_MODE_PAPER
-    )
+    return common_pb2.TRADING_MODE_LIVE if trading_mode == "live" else common_pb2.TRADING_MODE_PAPER
 
 
 class ConfigWatcher:
