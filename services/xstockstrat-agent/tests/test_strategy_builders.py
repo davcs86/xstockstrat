@@ -65,6 +65,7 @@ async def _capture_manage_strategy_request():
                     "entry_rule": '{"fn":">","lhs":"r","rhs":1}',
                     "exit_rule": '{"fn":"<","lhs":"r","rhs":1}',
                     "cooldown_days": 5,
+                    "exit_cooldown_days": 3,
                     "signal_params": {"symbols": ["AAPL"]},
                 },
             )

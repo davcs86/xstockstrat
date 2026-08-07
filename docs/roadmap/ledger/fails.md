@@ -723,3 +723,51 @@ ambiguity is logged here).
 - **Mistake**: An un-keyed master-detail component with per-piece local state (a strategy picker's selected value, an inline-rename draft) silently carries that state across a list-item switch, because switching selection re-renders the same component instance rather than remounting it. The design debate rediscovered this same leak twice for two different pieces of local state, each time patched with its own hand-rolled `key`-scoped wrapper subcomponent, before recognizing the pattern and closing the whole class in one step (`key={selected.id}` on the parent).
 - **Evidence**: `docs/roadmap/features/110-watchlist-screen-improvements/design.md` § Chosen Approach point 4, § Rejected Alternatives (per-piece-of-state keyed subcomponents); `docs/roadmap/features/110-watchlist-screen-improvements/context.md` sdd-design session (rounds 3-5 summary).
 - **Rule it implies**: when designing a master-detail UI where the detail pane holds any local state (an in-progress edit, a picker selection, a draft), key the detail component on the selected item's id from the start — don't wait for the leak to surface once per state variable. Verify the remount's cost against the app's actual query `staleTime`/cache config before assuming a whole-component key is too expensive; a componentized fix for each symptom is a sign the systemic fix (the outer key) was skipped.
+
+### 2026-08-07 — exit-cooldown — design
+- **Mistake**: A 6-round adversarial design debate specified a new upsert method
+  (`upsert_entry`) that INSERTs a subset of a table's columns ("touching only the `last_entry_at`
+  column") without ever tracing that INSERT against the table's actual `NOT NULL` constraints on
+  the OTHER columns. `analysis.strategy_cooldowns.last_exit_at` was `NOT NULL` (migration 009,
+  safe when the only writer always supplied a real timestamp) — `upsert_entry` can now INSERT a
+  brand-new row for a pair that has never exited (a boot-time backfill, or a live entry with no
+  prior exit history), which PostgreSQL rejects outright. Six rounds of architectural debate
+  (bar-replay windows, boot-time backfill races, alert suppression) never surfaced this because
+  the debate operated entirely at the design-prose level ("touching only X column") without
+  re-deriving the actual `INSERT` statement's full column list against the schema.
+- **Evidence**: `docs/roadmap/features/116-exit-cooldown/implementation-spec.md` Deviation Log,
+  "Step 4"; `services/xstockstrat-analysis/migrations/009_strategy_cooldowns.up.sql:9`
+  (`last_exit_at TIMESTAMPTZ NOT NULL`); `012_strategy_cooldowns_last_entry_at.up.sql` (added
+  `ALTER COLUMN last_exit_at DROP NOT NULL` mid-Step-4, not part of the original migration
+  design).
+- **Rule it implies**: when a design adds a new writer (upsert/insert method) to an EXISTING
+  table, verify its full `INSERT` column list against every `NOT NULL`/`CHECK` constraint on that
+  table — not just the column the writer is described as "touching" — before the design debate
+  concludes. A design-prose description of "the SQL only changes column X" is a claim about the
+  UPDATE branch of an upsert; the INSERT branch is a different code path with different
+  constraints and needs its own check. Same family as the 2026-07-29 (080) "absence claim"
+  pattern, applied to schema constraints instead of code assumptions.
+
+### 2026-08-07 — exit-cooldown — test-infra
+- **Mistake**: Adding a new cross-cutting state-machine mechanism (bar-replay-on-first-seen-key)
+  to an already-tested class silently turned one existing, passing test
+  (`test_write_cooldown_failure_never_propagates`) into a false-positive green: the test
+  hand-seeded `loop._last_state[key] = True` to represent "already in position" without also
+  seeding the new `_replayed` set, so the new replay step ran on an empty bar window, reset
+  `in_position` back to `False`, and the exit branch the test claimed to exercise (`upsert_exit`,
+  the write-failure path under test) never ran at all. The test still asserted "no exception
+  propagates," which trivially held for code that was never reached — it kept passing while
+  testing nothing.
+- **Evidence**: `docs/roadmap/features/116-exit-cooldown/implementation-spec.md` Deviation Log,
+  "Step 10/11" ("pre-existing `TestLiveEvaluationLoopCooldown` tests broke under replay");
+  `services/xstockstrat-analysis/tests/test_live_loop.py::TestLiveEvaluationLoopCooldown::test_write_cooldown_failure_never_propagates`
+  (fix added `repo.upsert_exit.assert_awaited_once()`).
+- **Rule it implies**: when a test seeds mock/fixture state to represent an *outcome* of a prior
+  code path (e.g. `_last_state[key] = True` standing in for "replay already resolved this key"),
+  adding new state-producing machinery upstream of that outcome (a replay step, a hydration step)
+  can silently short-circuit the path the test exists to cover. A test whose seeded state
+  represents an outcome rather than a cause is fragile to exactly this kind of change — prefer
+  seeding the actual precondition state (here, `_replayed.add(key)`) so new upstream logic can't
+  quietly bypass the assertion, and add a positive "the thing under test actually ran"
+  assertion (a mock call-count check) alongside any negative "no exception" assertion so a
+  silent bypass fails loudly instead of passing vacuously.

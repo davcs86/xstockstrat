@@ -264,6 +264,13 @@ message StrategyDefinition {
   // backtests) using the formula's last-saved definition, but the deletion is flagged. Populated
   // by GetStrategy; empty elsewhere.
   repeated string warnings = 10;
+  // Per-strategy minimum holding period in calendar days before exit_rule may fire a sell
+  // (feature 116 — exit cooldown; mirrors cooldown_days but gates the exit transition).
+  // optional = explicit presence: unset → platform default
+  // (analysis.strategy.default_exit_cooldown_days); explicit 0 → no minimum hold (exit
+  // permitted immediately, current behavior); negative → rejected at write time
+  // (INVALID_ARGUMENT).
+  optional int32 exit_cooldown_days = 11;
 }
 
 enum StrategyOperation {
@@ -288,7 +295,8 @@ message ManageStrategyRequest {
   //   absent   → FULL REPLACE: byte-for-byte the pre-070 behavior, so existing clients (the
   //              StrategyWizard, which always sends a complete definition) are unaffected.
   //
-  // Allowed paths: display_name, components, entry_rule, exit_rule, signal_params, cooldown_days.
+  // Allowed paths: display_name, components, entry_rule, exit_rule, signal_params, cooldown_days,
+  // exit_cooldown_days.
   // strategy_id/active/live_enabled are column-authoritative and rejected with INVALID_ARGUMENT.
   google.protobuf.FieldMask update_mask = 3;
 }

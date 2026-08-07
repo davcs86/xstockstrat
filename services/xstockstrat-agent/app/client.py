@@ -434,6 +434,7 @@ async def manage_strategy(
         # protobuf treats field=None as omitted for an optional field, so an absent key stays unset
         # and an explicit 0 sets presence (feature 069 — no post-construction assignment needed).
         cooldown_days=definition.get("cooldown_days"),
+        exit_cooldown_days=definition.get("exit_cooldown_days"),
     )
     signal_params = definition.get("signal_params")
     if signal_params:

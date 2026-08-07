@@ -38,6 +38,19 @@ function parseCooldownDays(
   return { valid: true, value: n };
 }
 
+// feature 116: same presence-honest shape as parseCooldownDays, for the exit-side minimum
+// holding period (blank → omit → platform default 0; "0" → explicit no minimum hold).
+function parseExitCooldownDays(
+  raw: string,
+): { valid: true; value: number | undefined } | { valid: false; error: string } {
+  if (raw.trim() === '') return { valid: true, value: undefined };
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 0) {
+    return { valid: false, error: 'exit cooldown days must be a non-negative integer' };
+  }
+  return { valid: true, value: n };
+}
+
 interface StrategyWizardProps {
   mode: 'create' | 'edit';
   initial?: StrategyDefinition;
@@ -55,6 +68,9 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
   // never silently writes cooldown_days: 0 over the strategy's implicit platform default (feature 069).
   const [cooldownDaysRaw, setCooldownDaysRaw] = useState(
     initial?.cooldownDays !== undefined ? String(initial.cooldownDays) : '',
+  );
+  const [exitCooldownDaysRaw, setExitCooldownDaysRaw] = useState(
+    initial?.exitCooldownDays !== undefined ? String(initial.exitCooldownDays) : '',
   );
   const [components, setComponents] = useState<StrategyComponentDraft[]>(() =>
     (initial?.components ?? []).map((c) => ({
@@ -100,9 +116,10 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
 
   const idValid = STRATEGY_ID_RE.test(strategyId);
   const cooldownParsed = parseCooldownDays(cooldownDaysRaw);
+  const exitCooldownParsed = parseExitCooldownDays(exitCooldownDaysRaw);
   const canAdvance =
     step === 1
-      ? idValid && displayName.trim() !== '' && cooldownParsed.valid
+      ? idValid && displayName.trim() !== '' && cooldownParsed.valid && exitCooldownParsed.valid
       : step === 2
         ? components.length >= 1
         : step === 3
@@ -111,6 +128,7 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
 
   function handleSubmit() {
     const cd = parseCooldownDays(cooldownDaysRaw);
+    const cd2 = parseExitCooldownDays(exitCooldownDaysRaw);
     const definition = {
       strategyId,
       displayName,
@@ -124,6 +142,7 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
       ...(initial?.signalParams !== undefined ? { signalParams: initial.signalParams } : {}),
       // Presence-honest: blank omits the key (server default drives the gate); "0" sends cooldownDays: 0.
       ...(cd.valid && cd.value !== undefined ? { cooldownDays: cd.value } : {}),
+      ...(cd2.valid && cd2.value !== undefined ? { exitCooldownDays: cd2.value } : {}),
     };
     mutate(
       {
@@ -202,6 +221,21 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
                 />
                 {!cooldownParsed.valid && (
                   <p className="mt-1 text-xs text-destructive">{cooldownParsed.error}</p>
+                )}
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-muted-foreground">
+                  Exit cooldown (days)
+                </label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={exitCooldownDaysRaw}
+                  placeholder="0 (default)"
+                  onChange={(e) => setExitCooldownDaysRaw(e.target.value)}
+                />
+                {!exitCooldownParsed.valid && (
+                  <p className="mt-1 text-xs text-destructive">{exitCooldownParsed.error}</p>
                 )}
               </div>
             </div>

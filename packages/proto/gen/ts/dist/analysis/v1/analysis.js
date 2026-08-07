@@ -3513,6 +3513,7 @@ function createBaseStrategyDefinition() {
         liveEnabled: false,
         cooldownDays: undefined,
         warnings: [],
+        exitCooldownDays: undefined,
     };
 }
 exports.StrategyDefinition = {
@@ -3546,6 +3547,9 @@ exports.StrategyDefinition = {
         }
         for (const v of message.warnings) {
             writer.uint32(82).string(v);
+        }
+        if (message.exitCooldownDays !== undefined) {
+            writer.uint32(88).int32(message.exitCooldownDays);
         }
         return writer;
     },
@@ -3626,6 +3630,13 @@ exports.StrategyDefinition = {
                     message.warnings.push(reader.string());
                     continue;
                 }
+                case 11: {
+                    if (tag !== 88) {
+                        break;
+                    }
+                    message.exitCooldownDays = reader.int32();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -3678,6 +3689,11 @@ exports.StrategyDefinition = {
             warnings: globalThis.Array.isArray(object?.warnings)
                 ? object.warnings.map((e) => globalThis.String(e))
                 : [],
+            exitCooldownDays: isSet(object.exitCooldownDays)
+                ? globalThis.Number(object.exitCooldownDays)
+                : isSet(object.exit_cooldown_days)
+                    ? globalThis.Number(object.exit_cooldown_days)
+                    : undefined,
         };
     },
     toJSON(message) {
@@ -3712,6 +3728,9 @@ exports.StrategyDefinition = {
         if (message.warnings?.length) {
             obj.warnings = message.warnings;
         }
+        if (message.exitCooldownDays !== undefined) {
+            obj.exitCooldownDays = Math.round(message.exitCooldownDays);
+        }
         return obj;
     },
     create(base) {
@@ -3729,6 +3748,7 @@ exports.StrategyDefinition = {
         message.liveEnabled = object.liveEnabled ?? false;
         message.cooldownDays = object.cooldownDays ?? undefined;
         message.warnings = object.warnings?.map((e) => e) || [];
+        message.exitCooldownDays = object.exitCooldownDays ?? undefined;
         return message;
     },
 };
