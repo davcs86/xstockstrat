@@ -50,6 +50,8 @@ message Order {
   string broker_order_id = 18; // Alpaca-assigned order ID, populated after broker submission
   string account_id = 19;
   xstockstrat.common.v1.BrokerType broker_type = 20;
+  // intent_state is set by every write path and read via a cross-intent LATERAL join on other reads; see design.md.
+  IntentState intent_state = 21;
 }
 
 enum OrderSide {
@@ -88,6 +90,9 @@ message PlaceOrderRequest {
   string time_in_force = 7;
   string strategy_id = 8;
   string user_id = 9;
+  // client_order_id is required: a stable client-generated nonce reused across retries of
+  // the same logical place-order action (see the /trader Place Order form's nonce generator).
+  // Empty is rejected with InvalidArgument. Used as the order-intent dedup key (feature 101).
   string client_order_id = 10;
   bool requires_approval = 11;
   // If UNSPECIFIED, the service uses trading.broker.paper config key to determine mode.
@@ -162,6 +167,17 @@ enum CredentialStatus {
   CREDENTIAL_STATUS_OK = 1;          // last validation succeeded
   CREDENTIAL_STATUS_INVALID = 2;     // broker rejected the credentials (auth failure)
   CREDENTIAL_STATUS_UNKNOWN = 3;     // validation could not complete (transient/network error)
+}
+
+// IntentState is the platform's own knowledge of whether a PlaceOrder/ReplaceOrder/
+// CancelOrder command actually reached the broker — orthogonal to OrderStatus (an order
+// can be NEW and also UNKNOWN simultaneously). See docs/roadmap/features/101-exactly-once-order-intent/design.md.
+enum IntentState {
+  INTENT_STATE_UNSPECIFIED = 0;
+  INTENT_STATE_PENDING = 1;    // intent recorded, broker call not yet resolved
+  INTENT_STATE_COMPLETED = 2;  // broker call resolved (accepted or a definite rejection)
+  INTENT_STATE_REJECTED = 3;   // definite, synchronous broker rejection (not a timeout)
+  INTENT_STATE_UNKNOWN = 4;    // broker outcome unknown — never retried automatically (FR-5)
 }
 
 // BrokerAccount is a registered broker account (credentials never returned).

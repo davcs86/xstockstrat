@@ -92,6 +92,12 @@ export type Order = Message<"xstockstrat.trading.v1.Order"> & {
      * @generated from field: xstockstrat.common.v1.BrokerType broker_type = 20;
      */
     brokerType: BrokerType;
+    /**
+     * intent_state is set by every write path and read via a cross-intent LATERAL join on other reads; see design.md.
+     *
+     * @generated from field: xstockstrat.trading.v1.IntentState intent_state = 21;
+     */
+    intentState: IntentState;
 };
 /**
  * Describes the message xstockstrat.trading.v1.Order.
@@ -139,6 +145,10 @@ export type PlaceOrderRequest = Message<"xstockstrat.trading.v1.PlaceOrderReques
      */
     userId: string;
     /**
+     * client_order_id is required: a stable client-generated nonce reused across retries of
+     * the same logical place-order action (see the /trader Place Order form's nonce generator).
+     * Empty is rejected with InvalidArgument. Used as the order-intent dedup key (feature 101).
+     *
      * @generated from field: string client_order_id = 10;
      */
     clientOrderId: string;
@@ -703,6 +713,47 @@ export declare enum CredentialStatus {
  * Describes the enum xstockstrat.trading.v1.CredentialStatus.
  */
 export declare const CredentialStatusSchema: GenEnum<CredentialStatus>;
+/**
+ * IntentState is the platform's own knowledge of whether a PlaceOrder/ReplaceOrder/
+ * CancelOrder command actually reached the broker — orthogonal to OrderStatus (an order
+ * can be NEW and also UNKNOWN simultaneously). See docs/roadmap/features/101-exactly-once-order-intent/design.md.
+ *
+ * @generated from enum xstockstrat.trading.v1.IntentState
+ */
+export declare enum IntentState {
+    /**
+     * @generated from enum value: INTENT_STATE_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * intent recorded, broker call not yet resolved
+     *
+     * @generated from enum value: INTENT_STATE_PENDING = 1;
+     */
+    PENDING = 1,
+    /**
+     * broker call resolved (accepted or a definite rejection)
+     *
+     * @generated from enum value: INTENT_STATE_COMPLETED = 2;
+     */
+    COMPLETED = 2,
+    /**
+     * definite, synchronous broker rejection (not a timeout)
+     *
+     * @generated from enum value: INTENT_STATE_REJECTED = 3;
+     */
+    REJECTED = 3,
+    /**
+     * broker outcome unknown — never retried automatically (FR-5)
+     *
+     * @generated from enum value: INTENT_STATE_UNKNOWN = 4;
+     */
+    UNKNOWN = 4
+}
+/**
+ * Describes the enum xstockstrat.trading.v1.IntentState.
+ */
+export declare const IntentStateSchema: GenEnum<IntentState>;
 /**
  * @generated from service xstockstrat.trading.v1.TradingService
  */

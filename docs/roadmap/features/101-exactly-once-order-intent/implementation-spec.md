@@ -1,6 +1,6 @@
 # Implementation Spec: exactly-once-order-intent
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-08-06
 **Feature**: `docs/roadmap/features/101-exactly-once-order-intent/feature.md`
 **Total Steps**: 20
@@ -60,7 +60,7 @@ not confirmed by any file in this repository.
 
 ### Step 1 — proto: add `IntentState` enum and `Order.intent_state` field
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/trading/v1/trading.proto` — modify
@@ -114,7 +114,7 @@ rows as of this spec).
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/trading/v1/*` — generate (checked-in codegen output)

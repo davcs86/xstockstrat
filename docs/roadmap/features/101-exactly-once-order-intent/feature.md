@@ -1,6 +1,6 @@
 # Feature: exactly-once-order-intent
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Priority**: `P1` — rescoped 2026-08-04 to the trader UI's real order flow, not hypothetical
 scheduler/agent callers (see context.md); not `P0` because the risk today is bounded by a human
 watching the UI, unlike an unattended caller
@@ -19,6 +19,7 @@ watching the UI, unlike an unattended caller
 | 2026-08-05 | `draft` → `spec-ready` | /sdd-review | Product spec approved after 3 review rounds (2 warnings) |
 | 2026-08-06 | `spec-ready` → `design-approved` | /sdd-design | Design debated (7 rounds, full — user-extended past the default 5-round cap) and approved; recon.md + design.md written |
 | 2026-08-06 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 20 steps |
+| 2026-08-07 | `implementation-ready` → `in-progress` | /sdd-execute (sequential) | Steps 1-2 done — proto `IntentState` enum + `Order.intent_state` field, stubs regenerated |
 
 ---
 
