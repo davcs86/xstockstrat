@@ -486,7 +486,7 @@ GOWORK=off golangci-lint run --modules-download-mode=mod
 
 ### Step 7 — service: `platform.trading_state` gate in `xstockstrat-trading` (`PlaceOrder` + `ReplaceOrder`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -674,7 +674,7 @@ GOWORK=off golangci-lint run --modules-download-mode=mod
 
 ### Step 8 — test: `platform.trading_state` gate — pure helpers + fake-portfolio-client cases
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_state_gate_test.go` — create

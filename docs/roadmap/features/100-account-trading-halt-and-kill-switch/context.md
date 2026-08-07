@@ -248,3 +248,23 @@ a merge event). Recorded here since it diverges from `reference/sequential-mode.
   `portfolio_handler.go` (new `internal/repository` import), `GetPosition` now uses it instead of
   a hardcoded `connect.CodeNotFound`. GREEN: 5/5 pass. `golangci-lint run`: 0 issues. Deviations:
   none (the file-placement correction was caught before commit, not a shipped defect).
+- Steps 7+8 [done] (TDD pair) — Wrote `trading_state_gate_test.go` first, applying the spec's own
+  execute-time cleanup instructions up front: renamed
+  `TestCheckTradingStateForPlaceOrder_Active_NeverCallsPortfolio` →
+  `..._DefaultHalted_NeverCallsPortfolio`, dropped the dead first-half fake/comment block, and
+  added a `TestReduceOnlyBranch_NotFoundFailsClosed` case exercising the NotFound→fail-closed path
+  the spec flagged as uncovered (direct assertion on `isExposureIncreasing` + the fixture's
+  `grpcstatus.Code`, since `config.Watcher`'s zero value cannot be set to REDUCE_ONLY — confirmed,
+  no exported setter). RED: build failed (`undefined: tradingState` etc — right reason, nothing
+  existed yet). Implemented: `tradingState` enum + `parseTradingState` + `currentTradingState` +
+  `isExposureIncreasing` + `isReplaceRiskReducing` + `checkTradingStateForPlaceOrder` +
+  `checkTradingStateForReplace` inserted before `resolveTradingMode` (trading.go:1328 pre-edit).
+  Wired into `PlaceOrder` using the review's preferred **hoist-and-reuse** fix (not the primary
+  duplicate-declaration instruction): moved the single `mode := s.resolveTradingMode(...)` call to
+  right after `resolveAccount`/before `checkPortfolioRisk`, called the new gate there, and left the
+  rest of the function's `mode` usages (order construction, ledger events) untouched — no duplicate
+  declaration, `go build` clean. Wired into `ReplaceOrder` after the fill-state gate, before the
+  `BrokerOrderId` check. Added the deliberate-non-gating doc comment above `CancelOrder`. GREEN:
+  7/7 new cases pass; full `internal/service` package: no regressions; `golangci-lint run`: 0
+  issues. Deviations: the hoist-and-reuse choice (spec's own offered alternative, footnoted as
+  acceptable) — logged here per the step's own instruction to record which option was taken.

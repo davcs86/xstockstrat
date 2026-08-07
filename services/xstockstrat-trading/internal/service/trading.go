@@ -264,11 +264,18 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		return nil, err
 	}
 
-	// Non-blocking portfolio risk check: log warnings but never block order placement.
-	s.checkPortfolioRisk(ctx, req)
-
 	// Resolve trading mode: request field takes precedence; fall back to live config, then env.
 	mode := s.resolveTradingMode(req.TradingMode)
+
+	// platform.trading_state gate (feature 100): HALTED blocks outright; REDUCE_ONLY
+	// blocks only exposure-increasing orders (verified via PortfolioService.GetPosition).
+	// Independent of and parallel to platform.maintenance_mode below.
+	if err := s.checkTradingStateForPlaceOrder(ctx, accountEntry.userID, req.Symbol, mode, req.Side); err != nil {
+		return nil, err
+	}
+
+	// Non-blocking portfolio risk check: log warnings but never block order placement.
+	s.checkPortfolioRisk(ctx, req)
 
 	// Check approval thresholds from live config.
 	approvalQtyThreshold := s.cfgW.GetFloat("trading.approval.require_above_qty", 500)
@@ -384,6 +391,9 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 	return order, nil
 }
 
+// CancelOrder is deliberately NOT gated by platform.trading_state (feature 100) — mirrors
+// feature 030's identical decision on its own per-account halt: cancellation is the
+// operator's sole remaining manual de-risk tool and must work even when trading is halted.
 func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelOrderRequest) (*tradingv1.CancelOrderResponse, error) {
 	s.mu.Lock()
 	order, ok := s.orders[req.OrderId]
@@ -455,6 +465,12 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 	default:
 		return nil, grpcstatus.Errorf(codes.FailedPrecondition,
 			"order %s is not replaceable in status %s", req.OrderId, order.Status)
+	}
+
+	// platform.trading_state gate (feature 100): mirrors PlaceOrder's gate — HALTED
+	// blocks outright; REDUCE_ONLY blocks only size-increasing replaces.
+	if err := s.checkTradingStateForReplace(order, req); err != nil {
+		return nil, err
 	}
 
 	if order.BrokerOrderId == "" {
@@ -1322,6 +1338,112 @@ func (s *TradingService) checkPortfolioRisk(ctx context.Context, req *tradingv1.
 				"max_pct", maxPositionPct,
 			)
 		}
+	}
+}
+
+// tradingState is the richer platform.trading_state enum (feature 100), independent of
+// and parallel to platform.maintenance_mode.
+type tradingState int
+
+const (
+	tradingStateActive tradingState = iota
+	tradingStateReduceOnly
+	tradingStateHalted
+)
+
+// parseTradingState maps the raw config string to a tradingState. Unrecognized or empty
+// values fail to HALTED — the maximally conservative state — per design.md § Chosen Approach.
+func parseTradingState(raw string) tradingState {
+	switch raw {
+	case "ACTIVE":
+		return tradingStateActive
+	case "REDUCE_ONLY":
+		return tradingStateReduceOnly
+	default: // "HALTED", "", or any unrecognized literal
+		return tradingStateHalted
+	}
+}
+
+// currentTradingState reads platform.trading_state live. The GetString default of "HALTED"
+// (not "ACTIVE") means an unseeded/unreachable key fails closed, matching parseTradingState's
+// own fail-closed default for an unrecognized value.
+func (s *TradingService) currentTradingState() tradingState {
+	return parseTradingState(s.cfgW.GetString("platform.trading_state", "HALTED"))
+}
+
+// isExposureIncreasing reports whether an order on the given side increases net exposure
+// given the account's existing position qty in that symbol (0 = flat). A flat account
+// increasing in either direction; a long position increases only on BUY; a short position
+// increases only on SELL.
+func isExposureIncreasing(side tradingv1.OrderSide, existingQty float64) bool {
+	switch {
+	case existingQty == 0:
+		return true
+	case existingQty > 0:
+		return side == tradingv1.OrderSide_ORDER_SIDE_BUY
+	default:
+		return side == tradingv1.OrderSide_ORDER_SIDE_SELL
+	}
+}
+
+// isReplaceRiskReducing reports whether a ReplaceOrder request is safe under REDUCE_ONLY:
+// requestedQty == 0 means "leave qty unchanged" (trading.go:482's existing convention) —
+// never exposure-increasing. Otherwise safe only when the new qty is <= the current qty.
+func isReplaceRiskReducing(currentQty, requestedQty float64) bool {
+	if requestedQty == 0 {
+		return true
+	}
+	return requestedQty <= currentQty
+}
+
+// checkTradingStateForPlaceOrder blocks PlaceOrder when platform.trading_state is HALTED,
+// or when it is REDUCE_ONLY and the order would increase exposure. REDUCE_ONLY fails
+// closed on any GetPosition error (not just NotFound) — this gate is the enforcement
+// point, not an advisory warning (design.md § Chosen Approach, a deliberate divergence
+// from checkPortfolioRisk's fail-open philosophy).
+func (s *TradingService) checkTradingStateForPlaceOrder(ctx context.Context, userID, symbol string, mode commonv1.TradingMode, side tradingv1.OrderSide) error {
+	switch s.currentTradingState() {
+	case tradingStateActive:
+		return nil
+	case tradingStateHalted:
+		return grpcstatus.Errorf(codes.FailedPrecondition, "trading halted: platform.trading_state=HALTED")
+	default: // REDUCE_ONLY
+		posCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		defer cancel()
+		pos, err := s.portfolio.GetPosition(posCtx, &portfoliov1.GetPositionRequest{
+			UserId: userID, Symbol: symbol, TradingMode: mode,
+		})
+		if err != nil {
+			if grpcstatus.Code(err) == codes.NotFound {
+				return grpcstatus.Errorf(codes.FailedPrecondition,
+					"trading reduce-only: no existing position in %s; order would increase exposure", symbol)
+			}
+			return grpcstatus.Errorf(codes.Unavailable,
+				"trading reduce-only: unable to verify risk-reducing status for %s: %v", symbol, err)
+		}
+		if isExposureIncreasing(side, pos.Qty) {
+			return grpcstatus.Errorf(codes.FailedPrecondition,
+				"trading reduce-only: order for %s would increase exposure", symbol)
+		}
+		return nil
+	}
+}
+
+// checkTradingStateForReplace mirrors checkTradingStateForPlaceOrder for ReplaceOrder,
+// using a pure local qty comparison instead of a GetPosition call (the order's own current
+// qty is already loaded — no cross-service call needed).
+func (s *TradingService) checkTradingStateForReplace(order *tradingv1.Order, req *tradingv1.ReplaceOrderRequest) error {
+	switch s.currentTradingState() {
+	case tradingStateActive:
+		return nil
+	case tradingStateHalted:
+		return grpcstatus.Errorf(codes.FailedPrecondition, "trading halted: platform.trading_state=HALTED")
+	default: // REDUCE_ONLY
+		if !isReplaceRiskReducing(order.Qty, req.Qty) {
+			return grpcstatus.Errorf(codes.FailedPrecondition,
+				"trading reduce-only: replace on order %s would increase size", req.OrderId)
+		}
+		return nil
 	}
 }
 
