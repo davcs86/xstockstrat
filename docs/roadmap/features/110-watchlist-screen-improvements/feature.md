@@ -1,7 +1,10 @@
 # Feature: watchlist-screen-improvements
 
 **Lifecycle Status**: `implementation-ready`
-**Development Branch**: `feature/watchlist-screen-improvements`
+**Development Branch**: `claude/watchlist-screen-improvements-9qf5vq` (harness-assigned session
+branch — overrides the `feature/<slug>` convention per root `CLAUDE.md` § Harness Default Branch;
+this branch bases on and integrates directly into `main-dev`, same as `sdd-execute` sequential
+mode's own integration-PR target)
 **Created**: 2026-08-07
 **Last Updated**: 2026-08-07
 

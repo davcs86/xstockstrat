@@ -152,3 +152,25 @@
   (root `CLAUDE.md`, `services/xstockstrat-ui/CLAUDE.md` § Testing). Adding a fabricated numeric
   coverage threshold to an e2e step's Verification would contradict that established convention
   rather than fix a real gap — left as-is and noted here rather than silently ignored (P-03).
+
+## Session 2026-08-07T00:50:00Z — sdd-execute boot (sequential)
+
+- `/sdd-execute watchlist-screen-improvements sequential` — BOOT Step B3 found this feature's
+  artifacts on neither `origin/feature/watchlist-screen-improvements` (branch doesn't exist on
+  origin) nor `origin/main-dev` (files not present there — this feature hasn't merged) — both the
+  skill's normal authoritative-source paths. Root cause: this session's harness instructions require
+  developing and pushing only to the assigned `claude/watchlist-screen-improvements-9qf5vq` branch
+  ("NEVER push to a different branch without explicit permission"), so every artifact since
+  `/sdd-story` lives there instead of on a `feature/<slug>` branch.
+- Resolution (not escalated to the user — dictated by the harness's own, unambiguous constraint, and
+  consistent with root `CLAUDE.md` § Harness Default Branch, which already establishes `claude/*`
+  branches base on and PR into `main-dev`): treat `claude/watchlist-screen-improvements-9qf5vq` as
+  the effective `<dev-branch>` for this feature's execution. Updated `feature.md`'s `**Development
+  Branch**` field to record this explicitly, with rationale, rather than leaving the stale
+  `feature/watchlist-screen-improvements` value silently wrong (P-03). Verified the branch is fully
+  in sync with its origin remote (`77af7ab` both locally and on `origin/claude/...`) before treating
+  local files as authoritative for B3's purposes.
+- No `feature/watchlist-screen-improvements` branch will be created this session — sequential mode's
+  BRANCH SYNC / step commits target `claude/watchlist-screen-improvements-9qf5vq` directly, and its
+  eventual integration PR targets `main-dev` (identical target to what sequential mode would have
+  used from a conventional `feature/<slug>` branch).
