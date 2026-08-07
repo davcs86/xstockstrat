@@ -83,3 +83,36 @@
   converging on "key the whole detail component, verify the remount is cheap via the app's actual
   staleTime, then close any remaining cross-instance mutation race separately" — logging both a
   `fails.md` entry (the recurring trap) and an `insights.md` entry (the converged pattern) below.
+
+## Session 2026-08-07T00:30:00Z — sdd-spec
+
+- Generated implementation-spec.md with 9 steps. Status → implementation-ready.
+- recon.md + design.md were both present and consumed directly (Step 1.5) — most `**Codebase
+  Evidence**` reused their `path:line` citations as-is; re-read the live files anyway to confirm
+  every cited line still matched (all did) and to pull additional detail the design didn't need
+  (exact current chip-row/readiness-row line ranges, `button.tsx`/`queryClient.ts` exact lines,
+  the full text of the two e2e tests design.md flagged for repointing).
+- Step ordering: (1) sentinel/translation + relocate remove/rebind controls (FR-1/FR-2) + its e2e
+  repoint, (2) add-time strategy picker (FR-3) + new e2e case, (3) whole-component `key` remount +
+  inline rename (FR-4) + new e2e case, (4) two-layer concurrency guard (Layers 1+2) sharing one
+  closing e2e step. 9 steps total; no dedicated test step for the sentinel/translation extraction
+  alone (no independently observable behavior) — recorded explicitly in `## Step Dependencies`
+  rather than left implicit.
+- Key codebase findings:
+  - **Correction to design.md's own literal text** (Step 8): design.md §5 Layer 2 specifies
+    `page.tsx` computing `useWatchlists().isFetching`, but `useWatchlists`'s declared return type
+    (`useWatchlists.ts:17-21`) is `{ data, isLoading, error }` — no `isFetching` field, even though
+    the function body returns the full `useQuery(...)` result at runtime. `useWatchlists().isFetching`
+    as literally written in design.md would be a TypeScript compile error. Step 8 now explicitly
+    widens the declared return type to add `isFetching: boolean`; the design's underlying race
+    analysis is unaffected, only the return-type annotation was unverified. Caught by re-reading the
+    live file rather than trusting the design snippet — same "verify the claim, don't just cite it"
+    discipline the ledger already documents repeatedly (2026-07-27, 2026-07-29, 2026-08-02 entries).
+  - Confirmed via `grep -rn "binding-\${|symbol-list" services/xstockstrat-ui/e2e/`: only
+    `e2e/insights/watchlists.spec.ts` references the doomed chip-row testids — no other spec (e.g.
+    `screener.spec.ts`) is affected by the chip-row removal.
+  - `INVENTORY.md:23` (`mockWatchlists`/`MockWatchlist`/`MockBinding`) already covers every RPC this
+    feature's e2e steps touch — no fixture changes anywhere in the 9 steps (C-12 clean).
+  - Not trading-domain-relevant (no `BrokerType`/`TRADING_MODE`/broker/order-type hits) — the
+    `reference/step-constraints.md` §A trading-domain table does not apply; only §B (lint gate,
+    C-12 test-data reuse) applies to each `service`/`test` step.
