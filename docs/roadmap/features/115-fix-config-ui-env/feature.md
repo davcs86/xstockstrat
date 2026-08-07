@@ -1,7 +1,7 @@
 # Feature: fix-config-ui-env
 
 **Type**: bug
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/fix-config-ui-env`
 **GitHub Issue**: docs/reports/2026-08-07-config-ui-cross-environment-toggle-defect.md (GitHub Issues disabled on this repo — see `docs/CLAUDE.md`)
 **Severity**: SEV-2
@@ -20,6 +20,7 @@
 | 2026-08-07 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 8 steps |
 | 2026-08-07 | `implementation-ready` (unchanged) | /sdd-execute (re-spec gate) | Step 7 re-spec'd: `[namespace]/page.tsx` shifted ~5 lines from an unrelated upstream fix (`config-ui-duplicate-keys-defect`); corrected Codebase Evidence citations, clarified ambiguous move-instruction wording. No design change — content pattern matches were unaffected. |
 | 2026-08-07 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 done (first step of execution) |
+| 2026-08-07 | `in-progress` → `code-completed` | /sdd-execute | All 8 steps done; no merge-order.md blockers; opening the single integration PR to `main-dev` |
 
 ---
 
