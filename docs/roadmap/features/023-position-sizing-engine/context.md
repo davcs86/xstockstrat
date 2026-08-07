@@ -272,7 +272,8 @@
   `pnpm lint` — 0 new warnings (the pre-existing `insights/strategies/[id]/page.tsx` a11y warning
   is unrelated/out of scope).
 
-**Feature 023 — all 12 steps done.** Marked `code-completed` in `feature.md`. Next: open the
-integration PR targeting `feature/exactly-once-order-intent` (stacked-branch strategy), subscribe
-to its PR activity, then proceed to feature 030 (stop-loss-bracket-orders) per the user's
-100→101→023→030→102 sequence.
+**Feature 023 — all 12 steps done.** Marked `code-completed` in `feature.md`. Opened
+[PR #881](https://github.com/davcs86/xstockstrat/pull/881) targeting
+`feature/exactly-once-order-intent` (stacked-branch strategy) and subscribed to its PR activity.
+Proceeding to feature 030 (stop-loss-bracket-orders) per the user's 100→101→023→030→102
+sequence.
