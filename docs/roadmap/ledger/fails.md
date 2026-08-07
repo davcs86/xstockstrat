@@ -285,6 +285,32 @@ ambiguity is logged here).
 - **Evidence**: `docs/roadmap/features/023-position-sizing-engine/design.md` § Rejected Alternatives ("Wire `Opportunity.conviction`... rejected after round 5's adversary found this to be a genuine semantic mismatch"); `docs/roadmap/features/023-position-sizing-engine/context.md` § Session 2026-08-05 — sdd-design, round 5.
 - **Rule it implies**: extends **C-01**/**P-03** — when wiring a value across a semantic boundary (a UI-visible field into a risk/sizing input), read the *candidate* field's own doc comment for what it claims to represent, not just its name, range, and convenient availability. A field that is already fetched, already rendered, and numerically in-range is exactly the shape a wrong-but-plausible substitution takes — the doc comment is the fastest disqualifying check and should run before proposing the wiring, not after.
 
+### 2026-08-07 — fix-config-ui-env — assumption
+- **Mistake**: Design round 1 proposed gating a cross-environment config-write bug by hiding the
+  triggering `<Link>` in the discoverable UI (`EnvModeSwitcher`), leaving the actual mutation path
+  (`[namespace]/page.tsx`'s `SetConfig` call) completely unguarded and reachable via direct URL,
+  bookmark, or a stale open tab — a second recurrence of the 2026-07-01 (063) pattern this ledger
+  already promoted to **C-10(c)** ("a resource that must not be mutated needs an RPC/write-path
+  guard, not just a read-only UI"), caught only by round-1's adversary re-reading the product spec's
+  own Consumer Surface section, which explicitly named the write-path file the proposal had excluded.
+  A follow-on round then proposed the correct guard's comparison as an unconditional exact-match
+  reject of the proto zero-value (`Environment.UNSPECIFIED`) — plausible in isolation, but wrong: the
+  backend's own `resolveEnv`/`ENV_MAP` already treats `UNSPECIFIED` as equivalent to `DEV` (a
+  documented platform convention, PROTO-3), so a raw exact-match guard would have silently rejected a
+  legitimate write on a dev-native deployment. Caught only because round 3's adversary re-read the
+  backend's actual resolution code instead of reasoning about the enum in the abstract.
+- **Evidence**: `docs/roadmap/features/115-fix-config-ui-env/design.md` § Rejected Alternatives
+  (switcher-only fix; unconditional `UNSPECIFIED` rejection); `context.md` § sdd-design session
+  (round 1 and round 3 findings); `services/xstockstrat-config/src/grpc/configServiceImpl.ts:22,87-92`
+  (`ENV_MAP`/`resolveEnv`).
+- **Rule it implies**: reinforces **C-10(c)** with a second real instance — when a design proposes
+  gating a mutation via UI presentation alone, check whether the product spec's own Consumer Surface
+  or Reproduction Steps name the actual write call site, and route the guard there first. Extends
+  **P-03** to enum sentinels specifically: before writing a guard's comparison against a proto
+  zero-value (`*_UNSPECIFIED = 0`), grep the value's *existing* resolution/consumption code (a
+  `resolveX`/`*_MAP` function) rather than assuming "unset" should mean "reject" — a zero-value's
+  platform-wide meaning is a producer contract, not a guess.
+
 ### 2026-08-06 — 100-account-trading-halt-and-kill-switch — config
 - **Mistake**: A design round 1 proposal widened the existing `platform.maintenance_mode` config key's `value_type` in place (bool → string) to carry a richer `ACTIVE`/`REDUCE_ONLY`/`HALTED` enum, reasoning it avoided a parallel key and reused the already-enforced gate. Direct code verification of `config.Watcher`'s typed getters found this to be a confirmed fail-open bug, not a hypothetical one: a `GetBool` call against a `ConfigValue` whose oneof is now populated as `string_val` (not `bool_val`) hits the proto3 oneof's documented zero-value-on-mismatch semantics and silently returns `false` — during any rollout window where old (bool-reading) and new (string-writing) code coexist, the kill switch itself goes dark exactly when a halt is in effect. Caught only because the adversary read the getter's implementation, not just its call site.
 - **Evidence**: `docs/roadmap/features/100-account-trading-halt-and-kill-switch/design.md` § Rejected Alternatives ("widen `platform.maintenance_mode` in place — rejected, round 1: confirmed fail-open via `Watcher.GetBool` oneof zero-value semantics"); `docs/roadmap/features/100-account-trading-halt-and-kill-switch/context.md` § Session 2026-08-06 — sdd-design, round 1.

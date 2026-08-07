@@ -23,6 +23,7 @@ skill).
 | Watchlists (stateful mock) | `mockWatchlists`, `MockWatchlist`, `MockBinding` (per-symbol `(symbol, strategyId)` bindings + `UpdateWatchlist` route, feature 097) | `e2e/helpers/watchlistMock.ts` | `xstockstrat.portfolio.v1.Watchlist` CRUD RPCs | `e2e/insights/watchlists.spec.ts`, `e2e/insights/screener.spec.ts` (Save/Add-top-N, feature 098) |
 | Positions | `POSITION_AAPL` (`stopOrderId`/`takeProfitOrderId` set, feature 030), `POSITION_MSFT` (both omitted — exercises the em-dash "no active bracket" fallback), `POSITIONS`, `positionForSymbol` | `e2e/fixtures/positions.ts` | `xstockstrat.portfolio.v1.Position` | `e2e/mock-backend.ts` (`listPositions`, `getPosition`), `e2e/trader/{positions,position-detail,valuation-parity}.spec.ts` |
 | Orders (shared mock set) | `ORDER_FILLED`, `ORDER_WORKING`, `ORDER_UNKNOWN_INTENT` (`intentState=4/UNKNOWN`, feature 101), `ORDERS`, `orderForId` | `e2e/fixtures/orders.ts` | `xstockstrat.trading.v1.Order` | `e2e/mock-backend.ts` (`listOrders`, `getOrder`), `e2e/trader/{order-ticket,order-intent}.spec.ts` |
+| Config key SetConfig payload | `setConfigPayload` | `e2e/fixtures/configKeys.ts` | `xstockstrat.config.v1.SetConfigRequest` | `e2e/config-ui/api-smoke.spec.ts` |
 
 ## Recurring sentinel ids (stay inline, but are reserved)
 
@@ -54,7 +55,6 @@ a fixture module and register it above (never copy-paste it into a second site).
 | Backtest diagnostics + run history | `e2e/mock-backend.ts` (`runBacktest` sentinel branches, `listBacktests`) — the coverage-gap half was centralized by feature 071; the `strat-diag-001` / `strat-formula-error-001` diagnostics and the run-history rows are still inline |
 | Screener results | `e2e/mock-backend.ts` (`screenSymbols`) |
 | Editable strategy components (`getStrategy`) | `e2e/mock-backend.ts` |
-| Config keys | `e2e/mock-backend.ts` (`listKeys`) |
 | Signal sources | `e2e/mock-backend.ts` (`listSignalSources`, `manageSignalSource`) |
 | OAuth authorized apps | `e2e/mock-backend.ts` (`listAuthorizedApps`) |
 | Backfill jobs | `e2e/insights/backfills.spec.ts` (`runningJob()` factory) — carries **both** `timeframe: '1d'` and `timeframeEnum: 'TIMEFRAME_1DAY'` (feature 080) |

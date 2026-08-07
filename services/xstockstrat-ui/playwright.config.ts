@@ -175,6 +175,9 @@ export default defineConfig({
       // config-ui segment: ConfigService + IngestService are mocked on port 9093
       CONFIG_ENDPOINT: '127.0.0.1:9093',
       INGEST_ENDPOINT: '127.0.0.1:9093',
+      // Fixes this deployment's native Config UI scope to 'dev' for feature 115's BFF write
+      // guard and UI gating (deploymentEnv.ts) — deterministic across CI/local runs.
+      APPLICATION_ENV: 'development',
       JWT_SECRET: 'test-jwt-secret-for-e2e-tests-min32c',
       // Feature 051 — the /accounts layout reads AGENT_PUBLIC_URL server-side to render the
       // connector URL + drive the agent-health probe. Point at a dead port so the probe is
