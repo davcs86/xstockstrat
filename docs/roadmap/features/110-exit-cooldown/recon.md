@@ -213,19 +213,36 @@ and the `StrategyWizard` UI (Step 1 — Identity).
 
 ## Recommended Scope
 
-Advisory step boundaries for `/sdd-spec` (not binding):
+**Superseded by `design.md` (rounds 1–6) — kept here only as the story-time starting point.**
+`design.md`'s Chosen Approach is the authoritative source for `/sdd-spec`; steps 3 and 5 below are
+stale relative to it (design.md adds the shared `_apply_transition`/`_replay_state` core, the
+boot-time `entry_backfill.py` module + `main.py` wiring, a second config key
+(`analysis.strategy.max_concurrent_entry_backfill`), and the skip-until-known guard + required
+diagnostic log + 3 paired tests — none of which existed when this list was first drafted in Phase 0).
+Advisory step boundaries for `/sdd-spec` (not binding), updated to reflect the approved design:
 1. Proto: add `optional int32 exit_cooldown_days = 11` to `StrategyDefinition`; update
    `ManageStrategyRequest.update_mask` comment; regen stubs.
-2. Analysis: extend (or add sibling to) the pure gate module with exit-side gate functions +
+2. Analysis: extend the pure gate module with the renamed, direction-neutral gate parameter +
    dedicated unit tests (mirrors `test_cooldown.py`).
-3. Analysis: migration `012` — durable entry-timestamp store (schema per design decision).
+3. Analysis: migration `012` — `analysis.strategy_cooldowns` gains `last_entry_at`; repository gains
+   `upsert_entry`; migration/repo docstrings updated for the table's now-dual purpose.
 4. Analysis: backtest engine gate (`_backtest_symbol_evaluated`) — reuse existing ephemeral
    `entry_time` local.
-5. Analysis: live-loop gate — new in-memory `_last_entry_at` state + hydrate/write-through against
-   the new durable store.
-6. Analysis: `_MASKABLE_PATHS` + config key (`analysis.strategy.*`) + `CLAUDE.md` doc + write-time
-   validation (mirrors `evaluator.py:351-354`).
-7. Agent: `manage_strategy` parameter + `client.py` gRPC construction + docstrings + tests.
-8. Agent: `docs/runbooks/mcp-tools.md` + `plugins/strat-lab/skills/backtest/SKILL.md` updates.
-9. UI: `StrategyWizard.tsx` field + `handleSubmit` wiring + e2e tests + `mock-backend.ts` sentinel.
-10. Cross-cutting: fingerprint participation confirmation, backtest/live parity test (FR-4).
+5. Analysis: live-loop gate — factor `_apply_transition` out of `_eval_pair`'s gating block; add the
+   module-level `_replay_state` (bar-replay, lazy, first-cycle-since-restart); new `_last_entry_at`
+   dict + `_write_entry_cooldown`; the skip-until-known combined guard (design.md's finalized
+   snippet) + required throttled diagnostic log + the 3 required paired tests
+   (suppression/resolution/isolation).
+6. Analysis: new `app/engine/entry_backfill.py` (boot-time-only, imported by `main.py` alone, never
+   by `live_loop.py`) — `_infer_open_entry_time` (unfiltered `ListOrders`, `filled_qty`-based signed
+   balance, `updated_at` anchor), semaphore-bounded fan-out, `main.py` wiring as its own
+   `asyncio.create_task` (not blocking `run_forever()`); new config key
+   `analysis.strategy.max_concurrent_entry_backfill`.
+7. Analysis: `_MASKABLE_PATHS` + config key (`analysis.strategy.default_exit_cooldown_days` via
+   `get_int_present`) + `CLAUDE.md` doc + write-time validation (mirrors `evaluator.py:351-354`).
+8. Agent: `manage_strategy` parameter + `client.py` gRPC construction + docstrings + tests.
+9. Agent: `docs/runbooks/mcp-tools.md` + `plugins/strat-lab/skills/backtest/SKILL.md` updates.
+10. UI: `StrategyWizard.tsx` field + `handleSubmit` wiring + e2e tests + `mock-backend.ts` sentinel.
+11. Cross-cutting: fingerprint participation confirmation (no exclusion-set change), backtest/live/
+    replay parity test (FR-4, fold-equivalence between `_replay_state` and sequential
+    `_apply_transition` calls).

@@ -61,4 +61,66 @@ explicit user request).
   field round-trips through `definition_json` — design should confirm the new field is never added
   to that exclusion set.
 
-Next: `/sdd-design exit-cooldown` (full mode, per explicit user request).
+## Session 2026-08-07T00:30:00Z — sdd-design
+
+- Phase 0 Recon: wrote `recon.md` (services: xstockstrat-analysis, xstockstrat-agent,
+  xstockstrat-ui, packages/proto; key reuse patterns: `cooldown.py`'s pure gate functions reused
+  verbatim for the exit side; `StrategyCooldownsRepository`/`analysis.strategy_cooldowns` extended
+  rather than duplicated). Three `codebase-discovery` subagents ran in parallel per affected
+  service. Key finding: the live loop tracks no entry timestamp at all today (only a boolean
+  `_last_state`) — more implementation surface than feature 069's symmetric entry-side gate needed.
+
+- Phase 1 Grilling: **6 rounds** (full mode; the user explicitly overrode the standard 5-round cap
+  for a 6th completeness-audit round). Chosen approach: reuse `cooldown.py` (renamed
+  direction-neutral parameter), extend `analysis.strategy_cooldowns` with `last_entry_at` (migration
+  `012`), a shared `_apply_transition`/`_replay_state` free-function core so live-loop and
+  restart-replay parity is structural (not test-maintained), a bounded 365-day bar-replay for the
+  common restart case, and — per explicit user steering — a boot-time-only `entry_backfill.py`
+  module that reconstructs entry time for positions older than the replay window from
+  `xstockstrat-trading`'s `ListOrders` (real `strategy_id` attribution), never `xstockstrat-portfolio`
+  (`Position` has no `strategy_id` — would have repeated the exact fabrication feature 083 already
+  declined). A "skip-until-known" guard in `_eval_pair` closes the one remaining async-backfill race
+  the user required closed, backed by a required throttled diagnostic log and 3 required paired
+  tests (suppression/resolution/isolation).
+
+  **Rejected**: inferring `_last_state` from last-entry/last-exit timestamp recency (undecidable for
+  the deploy-day cohort); a new `entry_cooldown.py` sibling module (unnecessary — `cooldown.py`'s
+  gate math is direction-agnostic); backfilling from `portfolio.Position` (no strategy attribution,
+  would fabricate a link); widening `_LOOKBACK_DAYS` instead of an Order-based backfill (doesn't
+  eliminate the gap, just shrinks it); accepting the >365-day-position gap as documented (user
+  explicitly overrode this after round 2); making the boot backfill fully blocking (reintroduces the
+  startup-latency problem the async design solves).
+
+  **Key mid-debate steer**: after round 2 left a documented gap for positions held >365 days at
+  deploy time, the user explicitly required a real fix ("do not accept the gap") rather than a
+  narrowed acceptance criterion — this drove rounds 3-4's Order-based backfill design and round 4's
+  discovery of the async-backfill race, which round 5 closed with the skip-until-known guard.
+
+  **Round 6** (user-directed, beyond the standard cap): a completeness/consistency audit of the
+  final document — re-verified 8+ citations fresh against live files (all held), then closed 3
+  copy-edit-level gaps: `recon.md`'s Recommended Scope was stale relative to rounds 3-6 (amended to
+  11 steps covering `entry_backfill.py`/`main.py` wiring, the second config key, and the guard/tests);
+  a citation overstated `metadata=()` as "explicit" when the actual precedent relies on an implicit
+  default (corrected); product-spec Open Question 4 (does the gate suppress the alert too?) was
+  resolved by the control flow but never stated explicitly (added to design.md — yes, both,
+  unconditionally, symmetric with the existing entry-side gate).
+
+- Constitution rules touched: C-01, C-05, C-07, C-08, C-09 (at spec/execute time), C-10(b), C-13,
+  C-14, F-01, F-06. No Floor breach in any round.
+
+- Ledger: wrote 2 `insights.md` entries (2026-08-07, `exit-cooldown`) — (1) the asymmetry between an
+  entry-side gate (naturally reachable regardless of a restart-state default) and an exit-side gate
+  (unreachable if the restart-state default is wrong), a generalizable lesson for any future feature
+  gating a *later* transition in an edge-triggered state machine; (2) when P-03 blocks fabricating an
+  attribution from one domain object (`portfolio.Position` has no `strategy_id`), check one layer
+  upstream in the data flow (`trading.Order` does) before accepting the gap.
+
+- All 4 product-spec Open Questions closed by the design: field name `exit_cooldown_days` (settled
+  round 1); durable-state shape = extend `analysis.strategy_cooldowns`, not a new table (round 1);
+  known trap (C-10(b) mapper lockstep) — enumerated explicitly in design.md's Chosen Approach, not
+  left to "mirrors `cooldown_days`" assertion; alert-suppression symmetry — closed round 6 (both
+  transition and alert suppressed together, unconditionally).
+
+- Status: `spec-ready` → `design-approved`. User approved design.md explicitly.
+
+Next: `/sdd-spec exit-cooldown` — generate the implementation spec from the approved design.

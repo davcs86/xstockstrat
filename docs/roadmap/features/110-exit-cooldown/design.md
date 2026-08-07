@@ -1,7 +1,8 @@
 # Design: exit-cooldown
 
 **Created**: 2026-08-07
-**Rounds**: 5 (full; termination: approved)
+**Rounds**: 6 (full; user explicitly overrode the standard 5-round cap for one final completeness
+audit; termination: approved)
 **Approved by**: user @ 2026-08-07
 **Grounded in**: recon.md
 
@@ -124,11 +125,12 @@ single-boolean-per-pair model (not a FIFO/multi-lot ledger).
 
 The backfill's own RPC fan-out is concurrency-bounded via a semaphore (mirrors
 `app/services/screener.py:76-77`'s existing shape), gated by a new key
-`analysis.strategy.max_concurrent_entry_backfill` (int, default `4`). Boot-time calls pass
-`metadata=()` explicitly (mirrors the only existing no-inbound-context precedent,
-`app/engine/fundsignal_loop.py:94,100` — no fabricated `x-user-id`/`x-trace-id`, since there is no
-inbound request at boot). Backfill runs as its own `asyncio.create_task`, concurrent with (not
-blocking) the other boot-time task creations (`fundsignal_loop`/`run_opportunity_refresh_forever`,
+`analysis.strategy.max_concurrent_entry_backfill` (int, default `4`). Boot-time calls carry no
+inbound-request headers to propagate — the same implicit no-metadata default already relied on by
+`app/engine/fundsignal_loop.py:100`'s `run_once(..., metadata=())` signature, whose own boot/scheduled
+call site (`:94`) doesn't pass `metadata` explicitly either, it just relies on that default — never a
+fabricated `x-user-id`/`x-trace-id`. Backfill runs as its own `asyncio.create_task`, concurrent with
+(not blocking) the other boot-time task creations (`fundsignal_loop`/`run_opportunity_refresh_forever`,
 `main.py:96-148`) — not inline in the `hydrate_cooldowns()` → `run_forever()` chain.
 
 **The one required correctness fix (round 4 adversary, closing the loop):** running backfill
@@ -176,6 +178,15 @@ history `_infer_open_entry_time` can't parse) is correctly skipped every cycle f
 `log.warning` (once per key on first-seen-unresolved, reusing the existing per-key throttle shape at
 `_last_alert_ts`, `:178-186` — never one line per 60s eval cycle forever) is **required**, not
 optional, so an operator can diagnose a permanently-stuck pair instead of it degrading silently.
+
+**Product-spec Open Question 4, closed (round 6):** "does the exit-cooldown gate suppress only the
+state transition or also the live-loop alert?" — **both, together, unconditionally.** Every gated
+return in the exit branch (the skip-until-known guard above, and the ordinary `is_cooldown_active`
+check) happens *before* `trigger`/`new_state` are ever assigned, so the code never reaches the later
+`_emit_alert` call (`:184`) for a suppressed exit — exactly symmetric with how the existing entry-side
+re-entry-cooldown gate already suppresses both the transition and the alert (`:163-167`, same
+return-before-assignment shape). No separate design choice was needed; this falls out of reusing the
+existing edge-triggered control-flow pattern verbatim.
 
 **Agent (`xstockstrat-agent`)** — `manage_strategy` (`app/tools.py:442-563`) gains
 `exit_cooldown_days: int | None = None`, added to the `supplied` dict (`:521-529`) and the
@@ -299,16 +310,22 @@ product-spec).
 
 ## Rounds
 
-5 rounds (full mode, the full 5-round cap). Round 1 (proto/config/gate-module/migration-shape/
-backtest wiring, all unchallenged) surfaced the `_last_state` restart-durability gap as the one
-unresolved fork. Round 2 (bar-replay mechanism) closed the common case but left a >365-day-position
-gap the user explicitly required closed — user steered: adopt a real fix, do not accept the gap.
-Round 3 (boot-time Order-based backfill + shared `_apply_transition` core) designed the mechanism;
-the adversary found one correctness bug (FILLED-only order filter) and two process gaps (call-site
-alert-suppression proof, boot-latency). Round 4 closed all three, and its own adversary pass found
-one remaining real gap (the async-backfill race against an unknown `last_entry_at`) with a precise,
-small fix (skip-until-known in the live-loop caller). Round 5 (user-requested final verification)
+6 rounds (full mode; the user explicitly overrode the standard 5-round cap for a sixth,
+completeness-audit round). Round 1 (proto/config/gate-module/migration-shape/backtest wiring, all
+unchallenged) surfaced the `_last_state` restart-durability gap as the one unresolved fork. Round 2
+(bar-replay mechanism) closed the common case but left a >365-day-position gap the user explicitly
+required closed — user steered: adopt a real fix, do not accept the gap. Round 3 (boot-time
+Order-based backfill + shared `_apply_transition` core) designed the mechanism; the adversary found
+one correctness bug (FILLED-only order filter) and two process gaps (call-site alert-suppression
+proof, boot-latency). Round 4 closed all three, and its own adversary pass found one remaining real
+gap (the async-backfill race against an unknown `last_entry_at`) with a precise, small fix
+(skip-until-known in the live-loop caller). Round 5 (user-requested verification of that fix)
 formalized the exact guard placement, and its adversary pass promoted two "recommended" items to
 required (a throttled diagnostic log, a third isolation test) plus one 3-line implementation
-tightening (a single combined guard condition instead of two stacked early-returns) — no new fork,
-no architectural rework. **Verdict: APPROVABLE**, approved by the user after round 5.
+tightening (a single combined guard condition instead of two stacked early-returns) — no new fork.
+Round 6 (user-directed final completeness audit, beyond the standard cap) re-verified 8+ citations
+fresh against live files (all held), and found three copy-edit-level gaps, all closed in this
+document: `recon.md`'s Recommended Scope was stale relative to rounds 3–6 (amended), a citation
+overstated an explicit-vs-implicit default (corrected), and product-spec Open Question 4 was
+resolved by the control flow but never stated explicitly (added above). No design defect, no
+architectural rework. **Verdict: APPROVABLE**, approved by the user after round 6.

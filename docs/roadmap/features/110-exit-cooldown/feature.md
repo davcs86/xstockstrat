@@ -1,6 +1,6 @@
 # Feature: exit-cooldown
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `design-approved`
 **Development Branch**: `feature/exit-cooldown`
 **Created**: 2026-08-07
 **Last Updated**: 2026-08-07
@@ -13,12 +13,15 @@
 |---|---|---|---|
 | 2026-08-07 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-07 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
+| 2026-08-07 | `spec-ready` → `design-approved` | /sdd-design | Design debated (6 rounds, full — user overrode the standard 5-round cap for a final completeness audit) and approved; recon.md + design.md written |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon](recon.md) — grounded codebase dossier (Phase 0)
+- [Design](design.md) — debated, approved architecture (Phase 1)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec exit-cooldown`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -44,4 +47,4 @@ tool, and the `StrategyWizard` UI form (Step 1 — Identity, alongside "Re-entry
 
 ## Next Action
 
-`/sdd-design exit-cooldown` — full design debate (recon + adversarial grilling)
+`/sdd-spec exit-cooldown` — generate implementation spec from the approved design
