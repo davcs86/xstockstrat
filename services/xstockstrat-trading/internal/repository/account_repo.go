@@ -35,6 +35,9 @@ type BrokerAccountRecord struct {
 	Halted     bool
 	HaltedAt   *time.Time
 	HaltReason string
+	// HaltSource distinguishes which automated mechanism halted this account (feature 102).
+	// Matches trading.v1.HaltSource: 0=UNSPECIFIED, 1=BRACKET_PROTECTION, 2=RECONCILIATION.
+	HaltSource int32
 }
 
 // AccountRepository defines CRUD operations for broker_accounts.
@@ -48,11 +51,11 @@ type AccountRepository interface {
 	UpdateCredentials(ctx context.Context, id string, credentialsEnc []byte) error
 	// UpdateCredentialStatus records the outcome of a credential validation.
 	UpdateCredentialStatus(ctx context.Context, id string, status int32, checkedAt time.Time) error
-	// UpdateHaltStatus persists an automated per-account halt (feature 030). Mirrors
-	// UpdateCredentialStatus's shape — best-effort from the caller's perspective; the
-	// caller (isAccountHalted's dual-write) does not roll back its in-memory state on
-	// a persistence failure (fail-safe: stay halted, retry the write later).
-	UpdateHaltStatus(ctx context.Context, id string, halted bool, reason string, haltedAt *time.Time) error
+	// UpdateHaltStatus persists an automated per-account halt (feature 030; haltSource added
+	// by feature 102). Mirrors UpdateCredentialStatus's shape — best-effort from the caller's
+	// perspective; the caller (isAccountHalted's dual-write) does not roll back its in-memory
+	// state on a persistence failure (fail-safe: stay halted, retry the write later).
+	UpdateHaltStatus(ctx context.Context, id string, halted bool, reason string, haltedAt *time.Time, haltSource int32) error
 }
 
 type pgAccountRepo struct {
@@ -86,7 +89,7 @@ func (r *pgAccountRepo) ListBrokerAccounts(ctx context.Context, userID string) (
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, display_name, broker_type, is_paper, is_active, user_id,
 		       credentials_enc, credential_status, credential_checked_at, created_at, updated_at,
-		       halted, halted_at, COALESCE(halt_reason, '')
+		       halted, halted_at, COALESCE(halt_reason, ''), halt_source
 		FROM trading.broker_accounts
 		WHERE user_id = $1
 		ORDER BY created_at ASC
@@ -102,7 +105,7 @@ func (r *pgAccountRepo) GetBrokerAccount(ctx context.Context, id string) (*Broke
 	row := r.pool.QueryRow(ctx, `
 		SELECT id, display_name, broker_type, is_paper, is_active, user_id,
 		       credentials_enc, credential_status, credential_checked_at, created_at, updated_at,
-		       halted, halted_at, COALESCE(halt_reason, '')
+		       halted, halted_at, COALESCE(halt_reason, ''), halt_source
 		FROM trading.broker_accounts
 		WHERE id = $1
 	`, id)
@@ -126,7 +129,7 @@ func (r *pgAccountRepo) ListActiveBrokerAccounts(ctx context.Context) ([]*Broker
 	rows, err := r.pool.Query(ctx, `
 		SELECT id, display_name, broker_type, is_paper, is_active, user_id,
 		       credentials_enc, credential_status, credential_checked_at, created_at, updated_at,
-		       halted, halted_at, COALESCE(halt_reason, '')
+		       halted, halted_at, COALESCE(halt_reason, ''), halt_source
 		FROM trading.broker_accounts
 		WHERE is_active = TRUE
 		ORDER BY created_at ASC
@@ -159,13 +162,14 @@ func (r *pgAccountRepo) UpdateCredentialStatus(ctx context.Context, id string, s
 	return err
 }
 
-// UpdateHaltStatus persists an automated per-account halt (feature 030).
-func (r *pgAccountRepo) UpdateHaltStatus(ctx context.Context, id string, halted bool, reason string, haltedAt *time.Time) error {
+// UpdateHaltStatus persists an automated per-account halt (feature 030; haltSource added by
+// feature 102).
+func (r *pgAccountRepo) UpdateHaltStatus(ctx context.Context, id string, halted bool, reason string, haltedAt *time.Time, haltSource int32) error {
 	_, err := r.pool.Exec(ctx, `
 		UPDATE trading.broker_accounts
-		SET halted = $2, halt_reason = $3, halted_at = $4
+		SET halted = $2, halt_reason = $3, halted_at = $4, halt_source = $5
 		WHERE id = $1
-	`, id, halted, reason, haltedAt)
+	`, id, halted, reason, haltedAt, haltSource)
 	return err
 }
 
@@ -182,7 +186,7 @@ func scanBrokerAccount(row rowScanner) (*BrokerAccountRecord, error) {
 		&rec.IsPaper, &rec.IsActive, &rec.UserID,
 		&rec.CredentialsEnc, &rec.CredentialStatus, &rec.CredentialCheckedAt,
 		&rec.CreatedAt, &rec.UpdatedAt,
-		&rec.Halted, &rec.HaltedAt, &rec.HaltReason,
+		&rec.Halted, &rec.HaltedAt, &rec.HaltReason, &rec.HaltSource,
 	)
 	if err != nil {
 		return nil, err

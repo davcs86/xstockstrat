@@ -1637,7 +1637,7 @@ func (s *TradingService) haltReason(accountID string) string {
 // failure (fail-safe — the halt itself must never be undone by a persistence
 // hiccup; this differs from validateAndRecordCredential's own rollback-on-failure,
 // which is a deliberate, different choice for that unrelated concern).
-func (s *TradingService) haltAccount(ctx context.Context, accountID, reason string) {
+func (s *TradingService) haltAccount(ctx context.Context, accountID, reason string, haltSource int32) {
 	now := time.Now().UTC()
 	s.haltedMu.Lock()
 	s.halted[accountID] = true
@@ -1646,7 +1646,7 @@ func (s *TradingService) haltAccount(ctx context.Context, accountID, reason stri
 
 	dbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	if err := s.accountRepo.UpdateHaltStatus(dbCtx, accountID, true, reason, &now); err != nil {
+	if err := s.accountRepo.UpdateHaltStatus(dbCtx, accountID, true, reason, &now, haltSource); err != nil {
 		slog.Warn("haltAccount: persist halt failed", "account_id", accountID, "error", err)
 	}
 
@@ -1747,7 +1747,8 @@ func (s *TradingService) flattenAndHalt(ctx context.Context, bracket *repository
 	}
 
 	s.haltAccount(context.Background(), bracket.AccountID,
-		fmt.Sprintf("flatten failed after protection window expiry: order %s: %v", bracket.OrderID, lastErr))
+		fmt.Sprintf("flatten failed after protection window expiry: order %s: %v", bracket.OrderID, lastErr),
+		int32(tradingv1.HaltSource_HALT_SOURCE_BRACKET_PROTECTION))
 }
 
 // StartBracketProtectionWatchdog periodically scans for brackets whose protection
@@ -1828,6 +1829,12 @@ func recordToProtoAccount(r *repository.BrokerAccountRecord) *tradingv1.BrokerAc
 	}
 	if r.CredentialCheckedAt != nil {
 		acct.CredentialCheckedAt = timestamppb.New(*r.CredentialCheckedAt)
+	}
+	acct.Halted = r.Halted
+	acct.HaltReason = r.HaltReason
+	acct.HaltSource = tradingv1.HaltSource(r.HaltSource)
+	if r.HaltedAt != nil {
+		acct.HaltedAt = timestamppb.New(*r.HaltedAt)
 	}
 	return acct
 }
