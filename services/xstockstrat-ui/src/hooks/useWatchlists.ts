@@ -5,6 +5,12 @@ import { useInvalidatingMutation } from './useInvalidatingMutation';
 type ListWatchlistsResult = Awaited<ReturnType<typeof insightsPortfolioClient.listWatchlists>>;
 
 const WATCHLISTS_KEY = ['watchlists'];
+// Shared mutationKey for every per-symbol/rename write (add/remove/rebind/rename) — lets an
+// ancestor that never remounts (page.tsx) detect an in-flight write via `useIsMutating`, even one
+// started by a WatchlistDetail instance that has since unmounted on a watchlist switch (design.md
+// §5 Layer 2). Deliberately NOT per-watchlist ([..., watchlistId]) — watchlistId is only known at
+// `.mutate()` call time, not at this hook-definition time.
+export const WATCHLIST_WRITE_KEY = ['watchlist-write'];
 
 /**
  * feature 097 — a per-symbol `(symbol, strategyId)` binding (FR-6). The write path carries
@@ -13,10 +19,17 @@ const WATCHLISTS_KEY = ['watchlists'];
  */
 export type WatchlistBindingInput = { symbol: string; strategyId: string };
 
+// Radix Select forbids an empty-string item value, so an unbound symbol uses this sentinel.
+export const UNBOUND = '__unbound__';
+export function toApiStrategyId(v: string): string {
+  return v === UNBOUND ? '' : v;
+}
+
 /** List the calling user's watchlists (ownership scoped server-side by x-user-id). */
 export function useWatchlists(): {
   data: ListWatchlistsResult | undefined;
   isLoading: boolean;
+  isFetching: boolean;
   error: Error | null;
 } {
   return useQuery({
@@ -60,6 +73,7 @@ export function useUpdateWatchlist() {
         bindings: input.bindings ?? [],
       }),
     [WATCHLISTS_KEY],
+    { mutationKey: WATCHLIST_WRITE_KEY },
   );
 }
 
@@ -79,6 +93,7 @@ export function useAddWatchlistSymbols() {
         bindings: input.bindings ?? [],
       }),
     [WATCHLISTS_KEY],
+    { mutationKey: WATCHLIST_WRITE_KEY },
   );
 }
 
@@ -87,5 +102,6 @@ export function useRemoveWatchlistSymbols() {
     (input: { watchlistId: string; symbols: string[] }) =>
       insightsPortfolioClient.removeWatchlistSymbols(input),
     [WATCHLISTS_KEY],
+    { mutationKey: WATCHLIST_WRITE_KEY },
   );
 }
