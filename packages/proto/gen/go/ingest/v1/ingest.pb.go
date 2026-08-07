@@ -1003,8 +1003,12 @@ func (x *IngestSignalRequest) GetSignal() *ExternalSignal {
 }
 
 type IngestSignalResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SignalId      int64                  `protobuf:"varint,1,opt,name=signal_id,json=signalId,proto3" json:"signal_id,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	SignalId int64                  `protobuf:"varint,1,opt,name=signal_id,json=signalId,proto3" json:"signal_id,omitempty"`
+	// True when this submission matched an existing signal within the dedup window
+	// (ingest.signals.dedup_window_hours) on (source, symbol, direction, conviction,
+	// valid_until); signal_id is then the EXISTING signal's id, not a newly-inserted one.
+	Deduplicated  bool `protobuf:"varint,2,opt,name=deduplicated,proto3" json:"deduplicated,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1044,6 +1048,13 @@ func (x *IngestSignalResponse) GetSignalId() int64 {
 		return x.SignalId
 	}
 	return 0
+}
+
+func (x *IngestSignalResponse) GetDeduplicated() bool {
+	if x != nil {
+		return x.Deduplicated
+	}
+	return false
 }
 
 type QuerySignalsRequest struct {
@@ -1584,9 +1595,10 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\araw_url\x18\b \x01(\tR\x06rawUrl\x12\x12\n" +
 	"\x04tags\x18\t \x03(\tR\x04tags\"T\n" +
 	"\x13IngestSignalRequest\x12=\n" +
-	"\x06signal\x18\x01 \x01(\v2%.xstockstrat.ingest.v1.ExternalSignalR\x06signal\"3\n" +
+	"\x06signal\x18\x01 \x01(\v2%.xstockstrat.ingest.v1.ExternalSignalR\x06signal\"W\n" +
 	"\x14IngestSignalResponse\x12\x1b\n" +
-	"\tsignal_id\x18\x01 \x01(\x03R\bsignalId\"\xe2\x01\n" +
+	"\tsignal_id\x18\x01 \x01(\x03R\bsignalId\x12\"\n" +
+	"\fdeduplicated\x18\x02 \x01(\bR\fdeduplicated\"\xe2\x01\n" +
 	"\x13QuerySignalsRequest\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x16\n" +
 	"\x06symbol\x18\x02 \x01(\tR\x06symbol\x12\x1c\n" +

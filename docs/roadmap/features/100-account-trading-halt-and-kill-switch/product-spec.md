@@ -9,12 +9,14 @@ state machine to hardening the kill switch that already exists)
 ## Problem Statement
 
 `xstockstrat-trading` already enforces a server-side kill switch: `platform.maintenance_mode`, read
-synchronously inside `PlaceOrder` (`services/xstockstrat-trading/internal/service/trading.go:244`).
-What it lacks: a documented/correct key name (a live doc/code drift is already flagged in
-`services/xstockstrat-trading/docs/context-constitution-findings.md:13` — the service's own CLAUDE.md
-names the wrong key), a durable audit trail of who/what flipped it and why, a distinction between
-"reject new exposure but allow risk-reducing closes" (`REDUCE_ONLY`) and "reject everything," and a
-guarantee that every order-ingress path actually checks it (today only `PlaceOrder` is confirmed;
+synchronously inside `PlaceOrder` (`services/xstockstrat-trading/internal/service/trading.go:244`), and
+already correctly documented at `services/xstockstrat-trading/CLAUDE.md:63` ("the real halt key; there
+is no `trading.maintenance_mode`") — the doc/code drift once flagged in
+`services/xstockstrat-trading/docs/context-constitution-findings.md:13` (dated 2026-07-24) has since
+been fixed on trunk and is now stale; re-verified 2026-08-04, no remaining action needed on this point.
+What the kill switch still lacks: a durable audit trail of who/what flipped it and why, a distinction
+between "reject new exposure but allow risk-reducing closes" (`REDUCE_ONLY`) and "reject everything,"
+and a guarantee that every order-ingress path actually checks it (today only `PlaceOrder` is confirmed;
 `ReplaceOrder`/`CancelOrder`/close-position paths need the same verification).
 
 ## User Story
@@ -26,9 +28,13 @@ safe risk-reducing action, and every transition is reconstructable after the fac
 
 ## Functional Requirements
 
-FR-1. Fix the documented key-name drift: `services/xstockstrat-trading/CLAUDE.md` currently names
-`trading.maintenance_mode` as the halt key; the code reads `platform.maintenance_mode`. Correct the
-doc (or the code, if `/sdd-design` decides the doc's intended name was actually right) so they agree.
+FR-1. **Superseded — already true, kept as a verification step, not a fix.** The doc/code key-name
+drift this FR originally targeted no longer exists: `services/xstockstrat-trading/CLAUDE.md:63`
+already documents `platform.maintenance_mode` correctly and explicitly disclaims
+`trading.maintenance_mode`. `/sdd-spec` should still include a step that re-confirms this at
+implementation time (a re-drift is possible between now and then), but must **not** rename the
+working config key on the strength of the stale, dated (2026-07-24) findings-doc entry — that would
+regress a control that already works.
 
 FR-2. Extend the halt signal from a boolean to a small enum consumed the same way `platform.
 maintenance_mode` is today — via the existing `xstockstrat-config` `WatchConfig` stream, no new
@@ -104,6 +110,16 @@ _Constitution **C-14**._
   whether existing readers of the boolean key can tolerate the type change or need a parallel key
   during migration.
 
+**Trading-mode scoping (Constitution-adjacent, config-governance rule 4):** every service already
+subscribes to `WatchConfig` with `environment` + `trading_mode`, and the config service already
+supports per-`trading_mode` rows (`docs/patterns/config-governance.md` rules 3–4) — the scoping
+mechanism is not new. This feature must seed the halt key with **per-`trading_mode` rows** (`paper`
+and `live` seeded independently, not `trading_mode='all'`), so an operator can halt live trading
+during an incident while paper testing continues unaffected (or vice versa) — the opposite default
+(`all`) would force every halt to freeze paper testing too, undermining the ability to verify a fix
+in paper before lifting a live halt. `/sdd-design` should confirm this against the actual seed-data
+pattern used for other per-mode keys before finalizing.
+
 ## Database Changes
 
 - [x] No schema changes — audit trail uses the existing ledger event store, not a new table.
@@ -112,13 +128,18 @@ _Constitution **C-14**._
 
 Branch to create: `feature/account-trading-halt-and-kill-switch` (branch from `main-dev`)
 Approval gates required (per docs/runbooks/feature-workflow.md):
-- [x] 1 service owner approval (non-breaking proto or config change)
+- [ ] 1 service owner approval (non-breaking proto or config change) — **resolved 2026-08-06**:
+  `/sdd-design` picked the parallel-key (`platform.trading_state`) path, not "extend existing key" —
+  per root `CLAUDE.md` § Approval Flow's "New config key" rule, this requires the gate below instead.
+- [x] Service owner + config team approval (new config key) — the applicable gate, per the resolved
+  parallel-key decision (`design.md` § Chosen Approach).
 - [ ] 2 service owners + platform lead (breaking proto change)
 - [ ] DBA review + service owner (schema migration) — not applicable, no schema change
 
 ## Acceptance Criteria
 
-1. `services/xstockstrat-trading/CLAUDE.md` and the code agree on the halt config key name.
+1. `services/xstockstrat-trading/CLAUDE.md` and the code agree on the halt config key name (already
+   true as of this writing — re-verified, not re-fixed, per FR-1).
 2. `HALTED`/`REDUCE_ONLY` reject exposure-increasing orders on every order-ingress handler
    (`PlaceOrder`, `ReplaceOrder`, close-position), verified by a test per handler — not just
    `PlaceOrder`.

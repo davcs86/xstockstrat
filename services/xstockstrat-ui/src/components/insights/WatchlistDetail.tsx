@@ -56,7 +56,18 @@ export function WatchlistDetail({
   const removeSymbols = useRemoveWatchlistSymbols();
   const updateWatchlist = useUpdateWatchlist();
   const { data: defs } = useStrategyDefinitions();
-  const strategies = defs?.definitions ?? [];
+  const allStrategies = defs?.definitions ?? [];
+  // Only live-enabled strategies are offered for a NEW binding — `active` alone (the fetch
+  // default) also admits paused/never-enabled/test strategies. An already-bound strategy that
+  // is no longer live stays visible (labeled) so its existing binding doesn't appear to vanish.
+  const liveStrategies = allStrategies.filter((s) => s.liveEnabled);
+  function strategyOptions(boundStrategyId: string) {
+    if (!boundStrategyId || liveStrategies.some((s) => s.strategyId === boundStrategyId)) {
+      return liveStrategies;
+    }
+    const bound = allStrategies.find((s) => s.strategyId === boundStrategyId);
+    return bound ? [...liveStrategies, bound] : liveStrategies;
+  }
   const { data: oppData } = useOpportunities();
   const [symbolInput, setSymbolInput] = useState('');
 
@@ -153,9 +164,10 @@ export function WatchlistDetail({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={UNBOUND}>Unbound</SelectItem>
-                {strategies.map((s) => (
+                {strategyOptions(b.strategyId).map((s) => (
                   <SelectItem key={s.strategyId} value={s.strategyId}>
                     {s.displayName || s.strategyId}
+                    {!s.liveEnabled ? ' (non-live)' : ''}
                   </SelectItem>
                 ))}
               </SelectContent>

@@ -4,6 +4,7 @@ import { MarketDataService } from '@xstockstrat/proto/marketdata/v1/marketdata_p
 import { NotifyService } from '@xstockstrat/proto/notify/v1/notify_pb';
 import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { LedgerService } from '@xstockstrat/proto/ledger/v1/ledger_pb';
+import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
 import {
   tradingClient,
   portfolioClient,
@@ -11,6 +12,7 @@ import {
   notifyClient,
   analysisClient,
   ledgerClient,
+  configClient,
 } from '@/lib/connectClients';
 import {
   createBffRouter,
@@ -151,6 +153,14 @@ router.service(LedgerService, {
       { headers: backendHeaders(claims, ctx) },
     );
   },
+});
+
+router.service(ConfigService, {
+  // Read-only — GetConfig is deliberately open on the backend (xstockstrat-config's own
+  // Critical Invariant #5), no admin gate needed. Used by the amended AC-5 "one coherent
+  // restriction display" on /trader/positions: platform.trading_state, checked before any
+  // per-account halt badge (feature 102).
+  getConfig: forward((req, opts) => configClient.getConfig(req, opts)),
 });
 
 // In the consolidated app there is no basePath — Next.js does NOT strip a prefix.

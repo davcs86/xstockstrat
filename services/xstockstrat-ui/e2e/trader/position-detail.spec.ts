@@ -30,6 +30,12 @@ test.describe('Single Position page', () => {
     await expect(page.getByText('Tech', { exact: true })).toBeVisible();
     await expect(page.getByText('Stop near')).toBeVisible();
 
+    // Bracket leg order IDs (feature 030) — AAPL carries a confirmed resting bracket.
+    await expect(page.getByText('Stop order')).toBeVisible();
+    await expect(page.getByText('ord-stop-778')).toBeVisible();
+    await expect(page.getByText('Take-profit order')).toBeVisible();
+    await expect(page.getByText('ord-tp-779')).toBeVisible();
+
     // Per-symbol Orders & fills table (ListOrders filtered to AAPL → the filled AAPL order).
     await expect(page.getByText('Orders & fills · AAPL')).toBeVisible();
   });
@@ -43,6 +49,9 @@ test.describe('Single Position page', () => {
     await expect(page.getByText('MSFT').first()).toBeVisible({ timeout: 30000 });
     // MSFT carries no stopPrice → the risk sidebar shows "no stop set", never a fabricated 0.
     await expect(page.getByText('no stop set').first()).toBeVisible();
+    // MSFT carries no bracket (feature 030) → both leg-order rows fall back to the em-dash.
+    await expect(page.getByText('Stop order')).toBeVisible();
+    await expect(page.getByText('Take-profit order')).toBeVisible();
   });
 
   test('is reachable from the Exposure list by clicking a position symbol (C-10(a))', async ({

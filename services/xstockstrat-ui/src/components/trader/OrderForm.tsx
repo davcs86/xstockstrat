@@ -55,6 +55,12 @@ export function OrderForm({ mode, initialSymbol }: OrderFormProps) {
   useEffect(() => {
     if (prefillSymbol) setSymbol(prefillSymbol);
   }, [prefillSymbol]);
+  // An explicit initialSymbol (Signal-detail's SignalOrderTicket) pins this ticket to one
+  // symbol — the chart, conviction, and edge stats above it are all keyed to it, so letting the
+  // field be edited away from it would desync the order from the analysis it was placed from.
+  // The generic ?symbol= quick-trade deep link (/trader) stays editable — it's a convenience
+  // prefill, not a pinned context.
+  const symbolLocked = Boolean(initialSymbol);
   const [side, setSide] = useState<OrderSide>('buy');
   const [orderType, setOrderType] = useState<OrderType>('market');
   const [qty, setQty] = useState('');
@@ -62,6 +68,13 @@ export function OrderForm({ mode, initialSymbol }: OrderFormProps) {
   const [stopPrice, setStopPrice] = useState('');
   const [message, setMessage] = useState('');
   const [isErrorMsg, setIsErrorMsg] = useState(false);
+  // Client-side idempotency nonce (feature 101, FR-1/FR-2): a stable ID per logical
+  // place-order action, generated once when the form opens and reused across retries of
+  // that same action (a network retry, a double-click, or the operator clicking "Place
+  // Order" again after seeing an error) so the server can dedup. Rotated only after a
+  // successful placement — a failed attempt must keep the same nonce so a resubmit is
+  // recognized as the same logical action, not a new one.
+  const [clientOrderId, setClientOrderId] = useState(() => crypto.randomUUID());
   const { mutate: placeOrder, isPending } = usePlaceOrder();
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -77,15 +90,25 @@ export function OrderForm({ mode, initialSymbol }: OrderFormProps) {
         stopPrice: stopPrice ? parseFloat(stopPrice) : 0,
         tradingMode: mode === 'live' ? PbTradingMode.LIVE : PbTradingMode.PAPER,
         accountId: selectedAccountId ?? '',
+        clientOrderId,
       },
       {
         onSuccess: (order) => {
           setIsErrorMsg(false);
-          setMessage(`Order placed: ${order.orderId} (${OrderStatus[order.status] ?? 'UNKNOWN'})`);
-          setSymbol('');
+          // Consumer surface requirement (C-14, feature 023): show the computed
+          // quantity/stop price whenever the server auto-sized the order (qty<=0
+          // submitted). stopPrice is shown only when non-zero — an ordinary override-mode
+          // buy/sell always sends stop_price=0, and printing "stop: 0" on every plain
+          // market/limit order would be noise.
+          const stopInfo = order.stopPrice > 0 ? `, stop ${order.stopPrice}` : '';
+          setMessage(
+            `Order placed: ${order.orderId} (${OrderStatus[order.status] ?? 'UNKNOWN'}) — qty ${order.qty}${stopInfo}`,
+          );
+          setSymbol(symbolLocked ? prefillSymbol : '');
           setQty('');
           setLimitPrice('');
           setStopPrice('');
+          setClientOrderId(crypto.randomUUID());
         },
         onError: (err) => {
           setIsErrorMsg(true);
@@ -114,6 +137,8 @@ export function OrderForm({ mode, initialSymbol }: OrderFormProps) {
             value={symbol}
             onChange={(e) => setSymbol(e.target.value)}
             required
+            disabled={symbolLocked}
+            title={symbolLocked ? 'Symbol is locked to this signal' : undefined}
           />
 
           {/* Buy / Sell toggle */}

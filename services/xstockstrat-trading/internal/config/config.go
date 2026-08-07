@@ -8,8 +8,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 
 	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
 )
@@ -21,6 +23,7 @@ type Config struct {
 	LedgerEndpoint              string
 	PortfolioEndpoint           string
 	IndicatorsEndpoint          string
+	MarketDataEndpoint          string
 	NotifyEndpoint              string
 	DBConnStr                   string
 	RequireApprovalAbove        float64 // order qty threshold requiring manual approval
@@ -36,6 +39,7 @@ func LoadFromEnv() *Config {
 		LedgerEndpoint:              getEnv("LEDGER_ENDPOINT", "xstockstrat-ledger:50057"),
 		PortfolioEndpoint:           getEnv("PORTFOLIO_ENDPOINT", "xstockstrat-portfolio:50052"),
 		IndicatorsEndpoint:          getEnv("INDICATORS_ENDPOINT", "xstockstrat-indicators:50054"),
+		MarketDataEndpoint:          getEnv("MARKETDATA_ENDPOINT", "xstockstrat-marketdata:50053"),
 		NotifyEndpoint:              getEnv("NOTIFY_ENDPOINT", "xstockstrat-notify:50059"),
 		DBConnStr:                   getEnv("DATABASE_URL", ""),
 		RequireApprovalAbove:        0, // loaded from config service at runtime
@@ -177,4 +181,19 @@ func (w *Watcher) GetFloat(key string, def float64) float64 {
 		return def
 	}
 	return v.GetFloatVal()
+}
+
+// SetConfig forwards to xstockstrat-config's SetConfig RPC, attaching the x-internal-caller
+// metadata header the receiving service's internal-caller authz channel checks (feature 102 —
+// see docs/roadmap/features/102-broker-state-reconciliation/design.md § "Internal-caller authz").
+// callerID identifies the automated caller (e.g. "trading-reconciliation-poller"); a fresh
+// x-trace-id is minted per call for audit correlation, since this is a distinct outbound edge
+// from the WatchConfig stream every other call on w.client uses.
+func (w *Watcher) SetConfig(ctx context.Context, callerID string, req *configv1.SetConfigRequest) (*configv1.SetConfigResponse, error) {
+	md := metadata.Pairs(
+		"x-internal-caller", callerID,
+		"x-trace-id", uuid.NewString(),
+	)
+	outCtx := metadata.NewOutgoingContext(ctx, md)
+	return w.client.SetConfig(outCtx, req)
 }

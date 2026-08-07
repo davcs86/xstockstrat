@@ -16,9 +16,13 @@ Go gRPC service responsible for order execution and trade lifecycle management. 
 
 **Idempotency**: `PlaceOrder` forwards the internally-minted order ID as Alpaca's `client_order_id`, so a retried submission (`trading.order.max_retries`) is de-duplicated by the broker instead of placing a second order.
 
+**Automatic position sizing**: `ComputePositionSize` triggers whenever `PlaceOrder` receives `qty <= 0` (FR-5) — an explicit `qty` bypasses it entirely (override mode). It sizes from account equity (`ListPortfolios`, not `GetPortfolio` — see the Config Keys table's `risk.max_concentration_pct` row), a Wilder ATR(14)-derived stop distance (`xstockstrat-marketdata` `GetBars`), the request's `confidence` (0.0–1.0, defaults to 1.0 when unset), and a portfolio concentration cap. **Fail-closed**, unlike the pre-existing warn-only `checkPortfolioRisk` below: missing/insufficient equity, bar history, or quote data aborts the order rather than sizing to a fallback value. `trading.risk.sizing_enabled=false` rejects any order submitted without an explicit `qty` instead of silently bypassing sizing.
+
 **Broker account registration mode is environment-owned**: `RegisterBrokerAccount` ignores the (deprecated) `is_paper` request field and derives the account's mode from the environment (`trading.broker.paper` config / `TRADING_MODE` env), so users cannot register an account in a mode the deployment does not run. The UI reads `GetTradingEnvironment` to display the fixed mode instead of offering a paper/live choice.
 
 **Credential health**: every registered account's API secrets are validated against the broker (Alpaca `GET /v2/account`, IBKR `GET /portfolio/accounts`) on register, on credential update (`UpdateBrokerAccountCredentials`), and periodically by a background poller. The latest `CredentialStatus` (OK / INVALID / UNKNOWN) is persisted on `trading.broker_accounts` and returned by `ListBrokerAccounts` so the UI can surface accounts whose secrets stopped working.
+
+**Automatic stop-loss/take-profit brackets** (feature 030): whenever an auto-sized (`ComputePositionSize`) `MARKET`/`LIMIT` entry fills, `maybeSubmitBracket` opens a persisted bracket (`trading.order_brackets`) protecting it — Alpaca attaches the stop/take-profit atomically at entry `SubmitOrder`; IBKR submits them as a follow-up linked pair (`SubmitBracketLegs`, `isSingleGroup`+`parentId`) after the fill is confirmed, since IBKR's Client Portal Web API has no client-settable OCA group field. A per-account **protection-window watchdog** (`StartBracketProtectionWatchdog`, piggybacking on the fill-poller tick) flattens the position and halts the account (`trading.risk.max_unprotected_seconds`) if no bracket confirms in time. The halt is **persisted** on `trading.broker_accounts` (`halted`/`halted_at`/`halt_reason`, boot-hydrated) and blocks `PlaceOrder`/`ReplaceOrder` — never `CancelOrder`, the operator's sole remaining manual de-risk tool. `trading.risk.bracket_orders_enabled` seeds `false` in production (pending feature 103 or a documented manual verification) — a deliberate override of the default `true`, see `docs/roadmap/features/030-stop-loss-bracket-orders/design.md` § Rejected Alternatives.
 
 ## Language
 
@@ -45,6 +49,7 @@ agent) connect over gRPC `50051`. The former HTTP/Connect-RPC server on `8051` w
 | xstockstrat-ledger | gRPC write | Emit order lifecycle events |
 | xstockstrat-portfolio | gRPC read | Check position/buying power before order |
 | xstockstrat-indicators | gRPC read | Validate signal before execution |
+| xstockstrat-marketdata | gRPC read | ATR bars + current price for ComputePositionSize |
 | xstockstrat-notify | gRPC write | Emit order fill/rejection alerts |
 | TimescaleDB | DB (schema: `trading`) | Persist orders hypertable |
 
@@ -58,14 +63,27 @@ All config values are served by **xstockstrat-config** namespace `trading`.
 | `trading.approval.require_above_notional` | float | `50000` | Orders above this USD notional require approval |
 | `trading.order.max_retries` | int | `3` | Max broker submission retries |
 | `trading.order.retry_delay_ms` | int | `500` | Delay between retries |
-| `trading.risk.max_position_pct` | float | `0.05` | Max 5% of portfolio in single position |
+| `trading.risk.max_position_pct` | float | `0.05` | Max 5% of portfolio in single position — warn-only, covers only override-mode (explicit-qty) orders; auto-sized orders are covered by the new enforcing `risk.max_concentration_pct` below |
 | `trading.risk.daily_loss_limit` | float | `0.02` | **Documented, not yet implemented** — intended daily-loss halt; no code reads this key yet (see `docs/context-constitution-findings.md`). |
+| `trading.risk.max_risk_per_trade_pct` | float | `0.02` | Fraction of equity to risk per trade for auto-sized orders |
+| `trading.risk.atr_multiplier` | float | `1.5` | Stop distance as a multiple of ATR(14) |
+| `trading.risk.max_concentration_pct` | float | `0.10` | Max fraction of equity in any single auto-sized position — enforcing, unlike the warn-only `max_position_pct` above |
+| `trading.risk.sizing_enabled` | bool | `true` | Master gate for `ComputePositionSize`; `false` rejects any order submitted without an explicit `qty` |
 | `platform.maintenance_mode` | bool | `false` | Platform-wide halt (the real halt key; there is no `trading.maintenance_mode`) |
+| `platform.trading_state` | string | `ACTIVE` | Richer halt state (`ACTIVE`/`REDUCE_ONLY`/`HALTED`), independent of `platform.maintenance_mode`. `HALTED` blocks `PlaceOrder`/`ReplaceOrder`; `REDUCE_ONLY` blocks only exposure-increasing orders (verified via `PortfolioService.GetPosition` for `PlaceOrder`, a local qty comparison for `ReplaceOrder`). `CancelOrder` is deliberately ungated. Unrecognized/unset values fail closed to `HALTED`. Seeded per `trading_mode` (feature 100). |
 | `trading.broker.paper` | bool | `true` | Route orders to paper API when true; live API when false. Also the source of truth for the mode new broker accounts are registered in. |
 | `trading.broker.timeout_ms` | int | `5000` | Alpaca broker HTTP call timeout. Read at account-client construction and applied as the broker HTTP client's `Timeout`. |
 | `trading.credential_health.interval_ms` | int | `300000` | Interval for the background poller that re-validates each broker account's API secrets. Read live on every cycle; set to `0` (or negative) to disable/pause the poller without a restart. |
 | `trading.fill_poller.interval_ms` | float | `5000` | Interval for the order-fill reconciliation poller (`pollFills`). Read live on every cycle. |
 | `trading.position_sync.interval_ms` | float | `300000` | Interval for the broker position/balance sync poller (`syncPositions`). Read live on every cycle. |
+| `trading.order_intent.stale_multiplier` | float | `3.0` | Multiplier applied to `max(live trading.broker.timeout_ms, IBKRRequestTimeout)` to derive the PENDING-intent staleness threshold; read live, floor-clamped in code to ≥1.5 so a misconfigured multiplier can never push the threshold below the live broker timeout. |
+| `trading.order_intent.sweep_interval_ms` | int | `5000` | Interval for `StartOrderIntentSweeper`, the proactive reclaim loop that transitions orphaned `PENDING` intents to `UNKNOWN` after an unattended crash (no retry needed). Matches `trading.fill_poller.interval_ms`'s existing default. |
+| `trading.risk.bracket_orders_enabled` | bool | `true` dev/staging, **`false` production** | Master gate for automatic stop-loss/take-profit bracket orders on auto-sized entries; `false` in production pending feature 103 (broker-failure-simulator) or a documented manual paper verification |
+| `trading.risk.take_profit_rr_multiple` | float | `2.0` | Reward-to-risk multiple for the take-profit leg; `0` disables the take-profit leg (stop-loss only) |
+| `trading.risk.max_unprotected_seconds` | int | `30` | Provisional default — max seconds an auto-sized position may go without a confirmed bracket before an automatic flatten+halt |
+| `trading.reconciliation.interval_ms` | float | `60000` | Interval for the broker-state-reconciliation poller (`reconcileTick`). Read live on every cycle. |
+| `trading.reconciliation.grace_ticks` | int | `1` | Consecutive ticks a mismatch must persist before it's a real finding (not a benign propagation delay). |
+| `trading.reconciliation.systemic_threshold_pct` | float | `0.5` | Share of accounts erroring/unprotected in one tick that escalates to `platform.trading_state=REDUCE_ONLY`. |
 
 `trading.broker.timeout_ms` also bounds each broker REST call made by `syncPositions` (an explicit
 per-call `context` deadline, matching the credential-health poller), so a black-holed connection can
@@ -79,6 +97,7 @@ _No webhooks. Call the gRPC RPCs on port 50051 directly._
 
 - Schema: `trading`
 - Hypertable: `trading.orders` (partition: `created_at`, chunk: 1 day)
+- `trading.order_brackets` — the per-order bracket (stop-loss/take-profit) state machine (feature 030): `NONE→SUBMITTING→PENDING_VERIFY→ACTIVE→CANCELING→CANCELED`, with a `FAILED` terminal on any submission error. Plain indexed `order_id` column (no FK — `trading.orders`' composite hypertable PK has no single-column FK target, matching this service's existing avoidance of cross-hypertable FKs).
 - Migration tool: `golang-migrate`
 - Run: `migrate -path ./migrations -database $DATABASE_URL up`
 
@@ -103,6 +122,9 @@ Orders requiring approval (above configured thresholds) are placed in `ORDER_STA
 | `order.broker_rejected` | `order:{order_id}` | Alpaca broker rejected the order |
 | `account.positions.synced` | `account:{account_id}` | Periodic broker position snapshot (poller); carries `user_id` + `account_id`, each position's broker mark-to-market valuation (`current_price`/`market_value`/`unrealized_pl`/`unrealized_plpc`), and its intraday/today's P&L (`day_pnl`/`day_pnl_pct`, from Alpaca `unrealized_intraday_pl`/`unrealized_intraday_plpc`) |
 | `account.balance.synced` | `account:{account_id}` | Periodic broker balance snapshot (poller): cash, buying power, equity, last_equity |
+| `order.bracket_updated` | `order:{order_id}` | Bracket leg order IDs assigned/cleared (feature 030) — consumed by `xstockstrat-portfolio` to populate `Position.stop_order_id`/`take_profit_order_id` |
+| `reconciliation.mismatch_found` | `account:{account_id}` | Non-propagation-delay mismatch found by the reconciliation poller (feature 102) |
+| `order_intent.resolved_by_reconciliation` | `order:{order_id}` | A `101` `UNKNOWN` order intent resolved against broker truth by the reconciliation poller (feature 102) |
 
 ## Order Replace (`ReplaceOrder`)
 
@@ -145,6 +167,28 @@ order settles to its true terminal state (`expired` or `filled`). It must **not*
 stopped and never captured the eventual `expired` (UI showed CANCELED while the broker showed
 expired).
 
+## Broker State Reconciliation
+
+`StartReconciliationPoller`/`reconcileTick` (feature 102) periodically compares open orders and
+positions against broker truth via `Broker.ListOrders()`/`GetPositions()`, independent of the
+fill poller — it is the only path that detects an order placed directly through the broker's own
+dashboard, regardless of fill state. A candidate mismatch (unknown broker order, quantity
+discrepancy, or missing broker order) must persist across `1 + trading.reconciliation.grace_ticks`
+consecutive ticks before it becomes a real finding — a routine partial fill or propagation delay
+resolves on its own with no ledger event and no halt (self-heal). A real finding emits
+`reconciliation.mismatch_found`, a CRITICAL alert, and routes to the **ordinary, per-account**
+halt (`HaltSource_HALT_SOURCE_RECONCILIATION`, reusing feature 030's `broker_accounts.halted`
+mechanism). Only a **rare, systemic** finding — `trading.reconciliation.systemic_threshold_pct`
+or more of registered accounts erroring/unreachable in one tick — escalates platform-wide to
+`platform.trading_state=REDUCE_ONLY` via `xstockstrat-config`'s internal-caller authz channel
+(`x-internal-caller`, distinct from the human-role `x-access-scope` header; see
+`services/xstockstrat-config/CLAUDE.md`). The same tick also resolves feature 101's `UNKNOWN`
+order intents against broker truth (FR-6) — a ledger `order_intent.late_response_conflict` event
+first (not yet emitted by 101 today, see the code comment on `resolveUnknownIntents`), falling
+back to a broker-side scan by the derived client-order-id nonce for **Alpaca accounts only** (IBKR
+never sends a customer-order tag on submission, so its `ListOrders` results never carry one to
+match against) — a genuinely inconclusive intent is retried next tick, never guessed.
+
 ## Position & Balance Sync Observability
 
 The position-sync poller (`syncPositions`) emits no events on a quiet cycle, which previously made a
@@ -164,6 +208,7 @@ CONFIG_ENDPOINT=xstockstrat-config:50060
 LEDGER_ENDPOINT=xstockstrat-ledger:50057
 PORTFOLIO_ENDPOINT=xstockstrat-portfolio:50052
 INDICATORS_ENDPOINT=xstockstrat-indicators:50054
+MARKETDATA_ENDPOINT=xstockstrat-marketdata:50053
 NOTIFY_ENDPOINT=xstockstrat-notify:50059
 DATABASE_URL=postgres://xstockstrat:${POSTGRES_PASSWORD}@timescaledb:5432/xstockstrat?sslmode=disable  # constructed by docker-compose from POSTGRES_PASSWORD in .env
 APPLICATION_ENV=development            # development | production

@@ -35,6 +35,21 @@ startup; the Docker healthcheck probes `50060` directly.
 4. **Config changes trigger pg_notify** → reloads namespace in memory → broadcasts DELTA to all active WatchConfig subscribers (same env/mode scope).
 5. **`SetConfig` is admin-gated; reads are not.** `SetConfig` rejects `PERMISSION_DENIED` ("admin scope required") unless the propagated `x-access-scope` carries the ADMIN bit (`0x04`), and rejects `INVALID_ARGUMENT` when a write has neither an explicit `author` nor a propagated `x-user-id`. Gate + helpers: `src/grpc/authz.ts` (feature 074 — the platform's first Node-side role check). `GetConfig`/`ListKeys`/`WatchConfig` are deliberately **open**: every service boots by subscribing to `WatchConfig` unauthenticated, and its first message is a full namespace snapshot, so gating reads would break platform startup without hiding anything `WatchConfig` doesn't already serve.
 6. **Secrets** use `is_secret = true`. The value_data for secrets is a secret reference key (e.g. `secret://vault/alpaca-key`), not the actual value.
+7. **`SetConfig` also accepts an internal-caller write, additive to the admin-scope gate** (feature
+   102): a background/automated process (e.g. `xstockstrat-trading`'s reconciliation poller) may
+   write a normally human-operator-gated key by propagating `x-internal-caller`
+   (`HEADER_INTERNAL_CALLER`, `src/grpc/authz.ts`) instead of `x-access-scope`. This is a **structurally separate**
+   metadata channel — never an extension of `x-access-scope`'s human-role bitmap — checked against
+   a hardcoded `INTERNAL_CALLER_ALLOWLIST` of `{callerID, namespace, key, allowedTargetValues}`
+   grants. Fails closed (an absent header, an unlisted `callerID`, or a `targetValue` outside that
+   caller's allowed set are all denied) and is **direction-restricted per grant** — e.g.
+   `trading-reconciliation-poller` may only write `platform.trading_state` to `REDUCE_ONLY`/
+   `HALTED`, never back to `ACTIVE`, so a bug or compromised caller cannot silently clear a
+   human-set halt. Every internal-caller write also persists `caller_identity` (the propagated
+   `x-internal-caller` value) on both `config.config_values` and `config.config_audit` — `NULL` for
+   every ordinary human/admin write — so an investigator can `WHERE`-filter "an automated process
+   wrote this" instead of grepping free-text `author`/`reason` (see the Author-sentinel conventions
+   table in `docs/patterns/config-governance.md`).
 
 ## Dependencies
 

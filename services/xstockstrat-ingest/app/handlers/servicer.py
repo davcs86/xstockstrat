@@ -30,6 +30,7 @@ from app.repositories.signal_sources import (
     mark_source_error,
     mark_source_fed,
     reactivate_source,
+    touch_source_last_seen,
     update_source,
     validate_config_json,
 )
@@ -745,26 +746,84 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
 
         conviction = signal.conviction if signal.conviction > 0.0 else None
 
+        symbol_upper = signal.symbol.upper()
+
+        class _DuplicateSignal(Exception):
+            """Internal control-flow signal only: the dedup claim's WHERE evaluated false —
+            force the `async with conn.transaction():` block below to ROLLBACK the
+            speculative newsletter_signals insert. Never crosses the RPC boundary."""
+
+        deduplicated = False
         try:
-            row = await self._db.fetchrow(
-                """
-                INSERT INTO ingest.newsletter_signals
-                    (source, symbol, direction, conviction,
-                     valid_from, valid_until, headline, raw_url, tags)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-                RETURNING id
-                """,
+            async with self._db.acquire() as conn, conn.transaction():
+                row = await conn.fetchrow(
+                    """
+                    INSERT INTO ingest.newsletter_signals
+                        (source, symbol, direction, conviction,
+                         valid_from, valid_until, headline, raw_url, tags)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    RETURNING id
+                    """,
+                    signal.source,
+                    symbol_upper,
+                    signal.direction,
+                    conviction,
+                    valid_from,
+                    valid_until,
+                    signal.headline or None,
+                    signal.raw_url or None,
+                    list(signal.tags) if signal.tags else [],
+                )
+                candidate_id = row["id"]
+
+                claim = await conn.fetchrow(
+                    """
+                    INSERT INTO ingest.signal_dedup_keys
+                        (source, symbol, direction, signal_id, conviction, valid_until, claimed_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, NOW())
+                    ON CONFLICT (source, symbol, direction) DO UPDATE
+                        SET signal_id = EXCLUDED.signal_id,
+                            conviction = EXCLUDED.conviction,
+                            valid_until = EXCLUDED.valid_until,
+                            claimed_at = EXCLUDED.claimed_at
+                        WHERE ingest.signal_dedup_keys.claimed_at
+                                  < NOW() - make_interval(hours => $7::int)
+                           OR ingest.signal_dedup_keys.conviction
+                                  IS DISTINCT FROM EXCLUDED.conviction
+                           OR ingest.signal_dedup_keys.valid_until
+                                  IS DISTINCT FROM EXCLUDED.valid_until
+                    RETURNING signal_id
+                    """,
+                    signal.source,
+                    symbol_upper,
+                    signal.direction,
+                    candidate_id,
+                    conviction,
+                    valid_until,
+                    self._cfg.dedup_window_hours,
+                )
+                if claim is None:
+                    # Raising here — still inside `async with conn.transaction():` — is what
+                    # forces the ROLLBACK. This except clause must stay ordered BEFORE the
+                    # generic `except Exception` below (_DuplicateSignal is itself an
+                    # Exception subclass) — reordering would silently defeat "MUST NOT insert
+                    # a second row" while still reporting deduplicated=true.
+                    raise _DuplicateSignal()
+                signal_id = candidate_id
+        except _DuplicateSignal:
+            deduplicated = True
+            existing = await self._db.fetchrow(
+                "SELECT signal_id FROM ingest.signal_dedup_keys "
+                "WHERE source=$1 AND symbol=$2 AND direction=$3",
                 signal.source,
-                signal.symbol.upper(),
+                symbol_upper,
                 signal.direction,
-                conviction,
-                valid_from,
-                valid_until,
-                signal.headline or None,
-                signal.raw_url or None,
-                list(signal.tags) if signal.tags else [],
             )
-            signal_id = row["id"]
+            if existing is None:
+                # Unreachable in normal operation — nothing deletes signal_dedup_keys rows.
+                await context.abort(grpc.StatusCode.INTERNAL, "dedup claim lost")
+                return
+            signal_id = existing["signal_id"]
         except Exception as e:
             log.error("failed to insert signal: %s", e)
             try:  # feature 083 — record the source's last error (best-effort)
@@ -776,46 +835,65 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             await context.abort(grpc.StatusCode.INTERNAL, f"database error: {e}")
             return
 
-        # feature 083 — record a successful feed (last_seen_at + signals_fed++, clear last_error).
-        try:
-            await mark_source_fed(self._db, signal.source)
-        except Exception as e:
-            log.warning("failed to record source feed for %s: %s", signal.source, e)
+        if not deduplicated:
+            # feature 083 — record a successful feed (last_seen_at + signals_fed++, clear
+            # last_error). GATED to the non-duplicate path only — a dedup hit performed no
+            # new ingest.
+            try:
+                await mark_source_fed(self._db, signal.source)
+            except Exception as e:
+                log.warning("failed to record source feed for %s: %s", signal.source, e)
 
-        log.info(
-            "ingested signal id=%d source=%s symbol=%s direction=%s",
-            signal_id,
-            signal.source,
-            signal.symbol,
-            signal.direction,
-        )
-
-        # Emit ledger event
-        from google.protobuf.struct_pb2 import Struct
-
-        payload = Struct()
-        payload.update(
-            {
-                "signal_id": signal_id,
-                "source": signal.source,
-                "symbol": signal.symbol,
-                "direction": signal.direction,
-            }
-        )
-        try:
-            await self._ledger.AppendEvent(
-                ledger_pb2.AppendEventRequest(
-                    event_type="ingest.signal.ingested",
-                    source_service="xstockstrat-ingest",
-                    stream_key=f"signal:{signal.source}:{signal.symbol}",
-                    payload=payload,
-                ),
-                metadata=propagation_meta,
+            log.info(
+                "ingested signal id=%d source=%s symbol=%s direction=%s",
+                signal_id,
+                signal.source,
+                signal.symbol,
+                signal.direction,
             )
-        except Exception as e:
-            log.warning("failed to emit ledger event for signal %d: %s", signal_id, e)
 
-        return ingest_pb2.IngestSignalResponse(signal_id=signal_id)
+            # Emit ledger event
+            from google.protobuf.struct_pb2 import Struct
+
+            payload = Struct()
+            payload.update(
+                {
+                    "signal_id": signal_id,
+                    "source": signal.source,
+                    "symbol": signal.symbol,
+                    "direction": signal.direction,
+                }
+            )
+            try:
+                await self._ledger.AppendEvent(
+                    ledger_pb2.AppendEventRequest(
+                        event_type="ingest.signal.ingested",
+                        source_service="xstockstrat-ingest",
+                        stream_key=f"signal:{signal.source}:{signal.symbol}",
+                        payload=payload,
+                    ),
+                    metadata=propagation_meta,
+                )
+            except Exception as e:
+                log.warning("failed to emit ledger event for signal %d: %s", signal_id, e)
+        else:
+            # feature 111 — a dedup hit still means the source is alive; bump last_seen_at
+            # (but NOT signals_fed, which counts genuinely new signals) so a source that
+            # legitimately keeps resending the same still-current recommendation doesn't
+            # read as STALE/DOWN in ListSignalSources health derivation.
+            try:
+                await touch_source_last_seen(self._db, signal.source)
+            except Exception as e:
+                log.warning("failed to touch last_seen for %s: %s", signal.source, e)
+            log.info(
+                "deduplicated signal source=%s symbol=%s direction=%s -> signal_id=%d",
+                signal.source,
+                signal.symbol,
+                signal.direction,
+                signal_id,
+            )
+
+        return ingest_pb2.IngestSignalResponse(signal_id=signal_id, deduplicated=deduplicated)
 
     async def QuerySignals(self, request, context):
         """Query active signals filtered by source/symbol/direction and time window."""

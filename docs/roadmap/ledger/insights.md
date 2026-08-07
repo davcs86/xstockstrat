@@ -573,6 +573,29 @@ reusing.
 - **Evidence**: `docs/roadmap/features/097-opportunity-universe-unification/design.md` § Rejected Alternatives; `services/xstockstrat-analysis/app/engine/live_loop.py:102-110` (SELECT with no ORDER BY + `processed >= max` return = truncation, not round-robin); `migrations/001_strategies.up.sql` (strategies are global, no `user_id`).
 - **Rule it implies**: a background materializer is only justified when it can enumerate the full consumer set independently of reads; otherwise lazy-on-read + TTL revalidate is the minimal shape (How-to-Act #2). Candidate design principle.
 
+### 2026-08-06 — 030-stop-loss-bracket-orders — design
+- **Pattern**: A safety-critical in-process flag (an automated account halt, a kill switch) proposed as
+  a bare `map[string]bool` was caught across two design rounds for the same root cause: process-local
+  state silently evaporates on the routine event this platform's CI/CD triggers on every merge — a
+  redeploy — not just on a hypothetical multi-replica race. The fix each time was the same: this
+  codebase already has the *exact* precedent for "a per-account status that must survive a restart" —
+  `xstockstrat-trading`'s `credential_status` column (`migrations/004_broker_accounts_credential_status.up.sql`),
+  hydrated into an in-memory map at `LoadBrokerPool` boot (`trading.go:127,155-157`). Reuse that shape
+  (persisted column + boot-time hydration) for any new per-account safety state instead of inventing a
+  bare map — but reuse the *mechanics*, not just the description: the precedent's own dual-write
+  releases its mutex *before* the DB call and does not hold a lock across a Postgres round-trip
+  (`validateAndRecordCredential`, `trading.go:1072-1090`). A superficial "follows the same pattern"
+  claim that skips this detail reintroduces an unbounded-lock-hold liveness risk on the very read path
+  (`PlaceOrder`) the halt is meant to protect.
+- **Evidence**: `docs/roadmap/features/030-stop-loss-bracket-orders/design.md` § Chosen Approach
+  ("Halt.") + § Rejected Alternatives ("Hold the halt mutex across the DB write"); 5-round design
+  debate, round-4 and round-5 adversary findings.
+- **Rule it implies**: extends **P-03** — when reusing an existing persistence pattern for new
+  safety-critical state, verify the precedent's actual concurrency mechanics (lock scope, write
+  ordering, rollback-on-failure direction), not just its surface shape (a column + a boot hydrate). A
+  described pattern and its real mechanics can silently diverge, and the diverging detail is often the
+  one that matters most under failure.
+
 ### 2026-08-05 — add-ikbr-account-support — reuse
 - **Pattern**: When a PRE_DEPLOY migrator job lacks a service's runtime secrets, seed env-var-derived default rows in application startup code, not in the migration.
 - **Evidence**: `docs/roadmap/features/001-add-ikbr-account-support/context.md:144,214,353-356`.
@@ -1165,6 +1188,11 @@ reusing.
 - **Pattern**: A product spec adapted from an external best-practice/risk-review source (team-oriented ops cadence: on-call rotations, scheduled ceremonies) can be structurally unworkable for a solo-maintainer repo even when technically sound.
 - **Evidence**: docs/roadmap/features/109-live-trading-game-day/context.md:17-22 — demoted within an hour of story creation once checked against `git log` author list / absence of `CODEOWNERS`.
 - **Rule it implies**: When `/sdd-story` derives a spec from an external checklist/review, explicitly check the proposed operating cadence (rotations, multi-person ceremonies) against this repo's actual maintainer count before advancing past draft.
+
+### 2026-08-06 — broker-state-reconciliation — design
+- **Pattern**: This platform's authz headers (`x-user-id`/`x-access-scope`/`x-trace-id`) carry exactly one trust shape today — a value the external edge injects once after authenticating a real human, then internal services only ever *forward*, never *originate*. A design round proposed reusing `x-access-scope`'s bitmask for a background service to *self-assert* an elevated scope on its own outbound call (no inbound request to forward from) — this looks like a small, natural extension of an existing mechanism, but it's actually a different trust primitive: the check becomes "does this (namespace,key) tuple allow the bit," not "did a real authenticated actor grant this," and since the check has no caller-identity component, *any* code path in the calling service's binary — not just the intended automated caller — can construct the same header. The fix that survived adversarial review was a structurally separate channel (a distinct metadata field + a hardcoded `{caller, resource, allowed-target-values}` allow-list), explicit about trusting network position (the same trust anchor every other backend RPC on this platform already relies on) rather than silently piggybacking on the human-role bitmap.
+- **Evidence**: `docs/roadmap/features/102-broker-state-reconciliation/design.md` § "Internal-caller authz for `platform.trading_state`" and § Rejected Alternatives ("Reusing `x-access-scope`'s user-role bitmap for a service self-assertion"); `docs/roadmap/features/102-broker-state-reconciliation/context.md` § Session 2026-08-06, round 2→3.
+- **Rule it implies**: when a background/automated process needs to write somewhere normally gated to human operators, do not extend the human-role header — introduce a distinct, purpose-built channel with its own caller-identity check and (for anything safety-critical) a direction/value restriction, so the human-authz path and the service-self-assertion path stay separately auditable and separately revocable. Candidate design principle for a future Constitution pass on internal-caller authz patterns generally.
 
 ### 2026-08-06 — backfill-backtest-coverage — design
 - **Pattern**: For an RPC that operates over multiple independent items in one call (e.g. a multi-symbol backtest), return a soft structured per-item status (`status` enum + per-item diagnostic messages) instead of a hard gRPC error when some items succeed and others don't — preserves partial results for callers instead of failing the whole call.

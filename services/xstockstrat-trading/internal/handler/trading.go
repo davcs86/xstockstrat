@@ -32,9 +32,9 @@ func (h *TradingHandler) PlaceOrder(ctx context.Context, req *connect.Request[tr
 	if req.Msg.Symbol == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("symbol is required"))
 	}
-	if req.Msg.Qty <= 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("qty must be positive"))
-	}
+	// qty <= 0 is no longer rejected here (feature 023): it now means "auto-size this
+	// order" — TradingService.PlaceOrder's own sizing gate (trading.risk.sizing_enabled)
+	// decides whether that's allowed.
 	order, err := h.svc.PlaceOrder(ctx, req.Msg)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)

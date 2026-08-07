@@ -188,6 +188,12 @@ func (r *PortfolioRepo) CountPositions(ctx context.Context, userID string, mode 
 	return count, err
 }
 
+// ErrPositionNotFound is returned when a position row does not exist — mirrors
+// ErrWatchlistNotFound (watchlist_repo.go:17). Lets GetPosition's Connect handler
+// distinguish "no position" (NotFound) from a genuine backend failure (Internal),
+// which scanPositionRow could not do before (feature 100).
+var ErrPositionNotFound = errors.New("position not found")
+
 type pgxRow interface {
 	Scan(dest ...any) error
 }
@@ -198,31 +204,40 @@ func scanPositionRow(row pgxRow) (*portfoliov1.Position, error) {
 		qty, avgEntry, costBasis                                   float64
 		currentPrice, marketValue, unrealizedPnl, unrealizedPnlPct float64
 		dayPnl, dayPnlPct                                          float64
+		stopOrderID, takeProfitOrderID                             string
 		openedAt                                                   time.Time
 	)
 	if err := row.Scan(&symbol, &qty, &avgEntry, &costBasis, &openedAt, &modeStr, &accountID,
-		&currentPrice, &marketValue, &unrealizedPnl, &unrealizedPnlPct, &dayPnl, &dayPnlPct); err != nil {
+		&currentPrice, &marketValue, &unrealizedPnl, &unrealizedPnlPct, &dayPnl, &dayPnlPct,
+		&stopOrderID, &takeProfitOrderID); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrPositionNotFound
+		}
 		return nil, fmt.Errorf("scan position: %w", err)
 	}
 	return &portfoliov1.Position{
-		Symbol:           symbol,
-		Qty:              qty,
-		AvgEntryPrice:    avgEntry,
-		CostBasis:        costBasis,
-		OpenedAt:         timestamppb.New(openedAt),
-		AccountId:        accountID,
-		CurrentPrice:     currentPrice,
-		MarketValue:      marketValue,
-		UnrealizedPnl:    unrealizedPnl,
-		UnrealizedPnlPct: unrealizedPnlPct,
-		DayPnl:           dayPnl,
-		DayPnlPct:        dayPnlPct,
+		Symbol:            symbol,
+		Qty:               qty,
+		AvgEntryPrice:     avgEntry,
+		CostBasis:         costBasis,
+		OpenedAt:          timestamppb.New(openedAt),
+		AccountId:         accountID,
+		CurrentPrice:      currentPrice,
+		MarketValue:       marketValue,
+		UnrealizedPnl:     unrealizedPnl,
+		UnrealizedPnlPct:  unrealizedPnlPct,
+		DayPnl:            dayPnl,
+		DayPnlPct:         dayPnlPct,
+		StopOrderId:       stopOrderID,
+		TakeProfitOrderId: takeProfitOrderID,
 	}, nil
 }
 
 // positionColumns is the SELECT column list backing scanPositionRow — kept in one place so
-// the column order stays in lockstep with the Scan call above.
-const positionColumns = `symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id, current_price, market_value, unrealized_pnl, unrealized_pnl_pct, day_pnl, day_pnl_pct`
+// the column order stays in lockstep with the Scan call above. stop_order_id/take_profit_order_id
+// are nullable TEXT (feature 030); COALESCE'd to ” so scanPositionRow can use plain strings,
+// matching the "empty = no active bracket" contract on Position (portfolio.proto).
+const positionColumns = `symbol, qty, avg_entry_price, cost_basis, opened_at, trading_mode, account_id, current_price, market_value, unrealized_pnl, unrealized_pnl_pct, day_pnl, day_pnl_pct, COALESCE(stop_order_id, ''), COALESCE(take_profit_order_id, '')`
 
 // PositionValuation is the broker's mark-to-market snapshot for a single position,
 // carried on account.positions.synced. Zero fields mean the broker did not report a
@@ -253,6 +268,19 @@ func (r *PortfolioRepo) UpsertPositionFromSync(ctx context.Context, userID, symb
 		SET qty=$3, avg_entry_price=$4, cost_basis=$5, current_price=$8, market_value=$9, unrealized_pnl=$10, unrealized_pnl_pct=$11, day_pnl=$12, day_pnl_pct=$13, updated_at=NOW()`
 	_, err := r.pool.Exec(ctx, q, userID, symbol, qty, avgCost, costBasis, tradingMode, accountID,
 		val.CurrentPrice, val.MarketValue, val.UnrealizedPnl, val.UnrealizedPnlPct, val.DayPnl, val.DayPnlPct)
+	return err
+}
+
+// UpdatePositionBracket sets (or clears) the bracket leg order IDs for a position, sourced
+// from trading's order.bracket_updated ledger event (feature 030). An empty stopOrderID/
+// takeProfitOrderID means "cleared" — NULLIF maps it to NULL so scanPositionRow's COALESCE
+// round-trips back to "".
+func (r *PortfolioRepo) UpdatePositionBracket(ctx context.Context, userID, symbol, tradingMode, accountID, stopOrderID, takeProfitOrderID string) error {
+	_, err := r.pool.Exec(ctx, `
+		UPDATE portfolio.positions
+		SET stop_order_id = NULLIF($5, ''), take_profit_order_id = NULLIF($6, '')
+		WHERE user_id = $1 AND symbol = $2 AND trading_mode = $3 AND account_id = $4
+	`, userID, symbol, tradingMode, accountID, stopOrderID, takeProfitOrderID)
 	return err
 }
 

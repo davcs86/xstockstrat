@@ -55,6 +55,43 @@ export declare enum CredentialStatus {
 export declare function credentialStatusFromJSON(object: any): CredentialStatus;
 export declare function credentialStatusToJSON(object: CredentialStatus): string;
 export declare function credentialStatusToNumber(object: CredentialStatus): number;
+/**
+ * IntentState is the platform's own knowledge of whether a PlaceOrder/ReplaceOrder/
+ * CancelOrder command actually reached the broker — orthogonal to OrderStatus (an order
+ * can be NEW and also UNKNOWN simultaneously). See docs/roadmap/features/101-exactly-once-order-intent/design.md.
+ */
+export declare enum IntentState {
+    INTENT_STATE_UNSPECIFIED = "INTENT_STATE_UNSPECIFIED",
+    /** INTENT_STATE_PENDING - intent recorded, broker call not yet resolved */
+    INTENT_STATE_PENDING = "INTENT_STATE_PENDING",
+    /** INTENT_STATE_COMPLETED - broker call resolved (accepted or a definite rejection) */
+    INTENT_STATE_COMPLETED = "INTENT_STATE_COMPLETED",
+    /** INTENT_STATE_REJECTED - definite, synchronous broker rejection (not a timeout) */
+    INTENT_STATE_REJECTED = "INTENT_STATE_REJECTED",
+    /** INTENT_STATE_UNKNOWN - broker outcome unknown — never retried automatically (FR-5) */
+    INTENT_STATE_UNKNOWN = "INTENT_STATE_UNKNOWN",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function intentStateFromJSON(object: any): IntentState;
+export declare function intentStateToJSON(object: IntentState): string;
+export declare function intentStateToNumber(object: IntentState): number;
+/**
+ * HaltSource distinguishes which automated mechanism halted an account — 030's
+ * bracket-protection flatten failure vs. 102's broker-state-reconciliation mismatch — so an
+ * operator (and the /trader UI) can tell which one fired without guessing from halt_reason's
+ * free text alone.
+ */
+export declare enum HaltSource {
+    HALT_SOURCE_UNSPECIFIED = "HALT_SOURCE_UNSPECIFIED",
+    /** HALT_SOURCE_BRACKET_PROTECTION - 030 */
+    HALT_SOURCE_BRACKET_PROTECTION = "HALT_SOURCE_BRACKET_PROTECTION",
+    /** HALT_SOURCE_RECONCILIATION - 102 */
+    HALT_SOURCE_RECONCILIATION = "HALT_SOURCE_RECONCILIATION",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function haltSourceFromJSON(object: any): HaltSource;
+export declare function haltSourceToJSON(object: HaltSource): string;
+export declare function haltSourceToNumber(object: HaltSource): number;
 export interface Order {
     orderId: string;
     clientOrderId: string;
@@ -77,6 +114,8 @@ export interface Order {
     brokerOrderId: string;
     accountId: string;
     brokerType: BrokerType;
+    /** intent_state is set by every write path and read via a cross-intent LATERAL join on other reads; see design.md. */
+    intentState: IntentState;
 }
 export interface PlaceOrderRequest {
     symbol: string;
@@ -88,6 +127,11 @@ export interface PlaceOrderRequest {
     timeInForce: string;
     strategyId: string;
     userId: string;
+    /**
+     * client_order_id is required: a stable client-generated nonce reused across retries of
+     * the same logical place-order action (see the /trader Place Order form's nonce generator).
+     * Empty is rejected with InvalidArgument. Used as the order-intent dedup key (feature 101).
+     */
     clientOrderId: string;
     requiresApproval: boolean;
     /** If UNSPECIFIED, the service uses trading.broker.paper config key to determine mode. */
@@ -104,6 +148,11 @@ export interface PlaceOrderRequest {
      */
     trailPrice: number;
     trailPercent: number;
+    /**
+     * Signal confidence 0.0-1.0 for automatic position sizing (see ComputePositionSize). Unset →
+     * confidence=1.0 (full size); explicit 0.0 → size to zero; out-of-range → InvalidArgument.
+     */
+    confidence?: number | undefined;
 }
 export interface CancelOrderRequest {
     orderId: string;
@@ -168,6 +217,16 @@ export interface BrokerAccount {
     credentialStatus: CredentialStatus;
     /** credential_checked_at is when credential_status was last refreshed. */
     credentialCheckedAt?: Date | undefined;
+    /**
+     * halted / halted_at / halt_reason / halt_source (feature 030 + 102): whether this account is
+     * currently halted by an automated safety mechanism, when, why, and which mechanism. False/unset
+     * means no automated halt is in effect; an operator may still have separately deactivated the
+     * account (is_active).
+     */
+    halted: boolean;
+    haltedAt?: Date | undefined;
+    haltReason: string;
+    haltSource: HaltSource;
 }
 export interface RegisterBrokerAccountRequest {
     displayName: string;

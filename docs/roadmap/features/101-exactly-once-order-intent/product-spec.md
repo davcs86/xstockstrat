@@ -30,7 +30,10 @@ record: a platform intent ID, a broker client-order ID deterministically derived
 hash, lifecycle state, broker account/environment, first/latest broker response, and an uncertainty
 flag. Scope is the three commands the trader UI actually issues today — not `close`/`emergency-flatten`
 command types with no real caller yet (those are added when a caller exists, likely alongside a
-rescoped `030`/`100`).
+rescoped `030`/`100`). `PlaceOrder`'s intent ID is seeded from the client-supplied nonce (see Consumer
+Surface(s)) since a deliberate duplicate order must not be silently collapsed with a lost-response
+retry; `ReplaceOrder`/`CancelOrder` target an already-identified `order_id` and may derive their intent
+ID server-side from request content (exact derivation at `/sdd-design`/`/sdd-spec`).
 
 FR-2. Repeating the same intent (same ID, same request hash — e.g. the UI retries a request whose
 response was lost) returns the existing result instead of resubmitting to the broker.
@@ -63,14 +66,26 @@ logical command (e.g. the UI resubmitting after a network blip).
 
 - `xstockstrat-trading` — owns the order-intent record and the idempotent place/replace/cancel
   handlers.
+- `xstockstrat-ui` — the `/trader` existing orders view renders the new `UNKNOWN` display state, and
+  the `/trader` Place Order flow generates and reuses a stable client-side idempotency nonce across
+  retries of the same logical action (see Consumer Surface(s)).
 
 ## Consumer Surface(s)
 
 _Constitution **C-14**._
 
-- [x] **UI** — `xstockstrat-ui` `/trader` existing orders view: an order in the `UNKNOWN` state must
-  render distinctly (not silently `working` or `failed`) — a display-state addition to the existing
-  orders surface, not a new page.
+- [x] **UI** — `xstockstrat-ui` `/trader`:
+  1. Existing orders view: an order in the `UNKNOWN` state must render distinctly (not silently
+     `working` or `failed`) — a display-state addition to the existing orders surface, not a new page.
+  2. **Place Order flow (scope expanded 2026-08-06 — see context.md; user-approved override of the
+     original Consumer Surface(s), Constitution C-14):** the client generates a stable nonce per
+     logical place-order action (e.g., on form open / first submit attempt) and reuses the *same*
+     nonce on every retry of that same action (network retry, double-click, resubmit-after-timeout),
+     via the existing-but-currently-unused `PlaceOrderRequest.client_order_id` field. Without this, the
+     server cannot distinguish "same logical action, retried" from "a brand new call," and FR-2's
+     dedup guarantee cannot hold for `PlaceOrder` — the original spec's UI scope covered only the
+     `UNKNOWN` display change, which is insufficient for FR-1/FR-2 as written. `ReplaceOrder`/
+     `CancelOrder` do not need a UI-generated nonce (see FR-1's per-command-type derivation note).
 - [ ] **Agent**
 - [ ] **None**
 
@@ -78,6 +93,20 @@ _Constitution **C-14**._
 
 - A field or small message addition to the existing order-status response surfacing the `UNKNOWN`
   uncertainty state (exact shape at `/sdd-spec`); needs a `_UNSPECIFIED = 0` sentinel if a new enum.
+  Must land on the shared `Order` message (`packages/proto/trading/v1/trading.proto:32-53`) — not a
+  narrower response type — so it automatically propagates to every read path that returns `Order`
+  (`GetOrder`, `ListOrders`, `StreamOrderUpdates`), not just the call that created the intent.
+
+**Interaction with the existing order-status lifecycle (C-5, trading-domain):** the new `UNKNOWN`
+*intent* state is orthogonal to the underlying order's real `OrderStatus`
+(`ORDER_STATUS_PARTIALLY_FILLED`/`ORDER_STATUS_FILLED`/etc., `trading.proto:70-79`) — an intent can be
+`UNKNOWN` (the platform doesn't know if the broker accepted the command) independent of whatever fill
+state that order eventually reaches once broker truth is recovered. `UNKNOWN` describes the platform's
+knowledge of *whether the command landed*, not the order's fill progress; once `102`'s reconciliation
+resolves an `UNKNOWN` intent against broker truth (or an operator manually checks and confirms), the
+underlying order's `OrderStatus` — including any partial fill that occurred while the intent was
+`UNKNOWN` — is unaffected by this feature and continues to be read normally. This feature does not
+change fill handling in any way.
 
 ## Config Key Changes
 
@@ -85,11 +114,13 @@ _Constitution **C-14**._
 
 ## Database Changes
 
-- New, small migration in `services/xstockstrat-trading/migrations/`: one `order_intents` table
+- New migration `005_order_intents` (up+down pair) in `services/xstockstrat-trading/migrations/` — next
+  after the current highest, `004_broker_accounts_credential_status`. One `order_intents` table
   (intent id, client order id, request hash, state, broker account/environment, first/latest broker
-  response, uncertainty flag) with a uniqueness constraint on intent id. This is additive and does not
-  raise `xstockstrat-trading`'s pool-max (see root CLAUDE.md § Connection Pool Budget) — it's one more
-  table under the existing pool, not a new connection.
+  response, uncertainty flag) with a uniqueness constraint on intent id, applied via
+  `scripts/db-migrate.sh` in the standard run order. This is additive and does not raise
+  `xstockstrat-trading`'s pool-max (see root CLAUDE.md § Connection Pool Budget) — it's one more table
+  under the existing pool, not a new connection.
 
 ## Feature Workflow Notes
 
@@ -111,7 +142,24 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Open Questions
 
-- [ ] Does the trader UI (`traderBff.ts`) already generate any client-side request identifier today
-  that could seed the intent ID, or does this feature introduce the first one? Check before designing.
-- [ ] How is the deterministic client-order-id derived, given Alpaca/IBKR client-order-id length/
-  charset limits? Flag for `/sdd-design`.
+- [x] Does the trader UI (`traderBff.ts`) already generate any client-side request identifier today
+  that could seed the intent ID, or does this feature introduce the first one? **Resolved by grep:**
+  no. `services/xstockstrat-ui/src/lib/traderBff.ts` forwards `PlaceOrderRequest` unmodified (no
+  `clientOrderId`/`client_order_id` reference anywhere in `services/xstockstrat-ui/src`), and
+  `trading.go:287` passes `req.ClientOrderId` straight to the broker, which today is always the
+  proto zero-value (empty string). This feature introduces the platform's first client-side
+  idempotency key from scratch — no existing generator to interoperate with or migrate.
+- [x] Which `BrokerType` values are in scope for the intent/dedup mechanism? **Resolved: both.**
+  `BrokerType` has exactly two real values besides `_UNSPECIFIED` (`BROKER_TYPE_ALPACA`,
+  `BROKER_TYPE_IBKR` — `packages/proto/common/v1/common.proto`), and this feature covers both; neither
+  is out of scope. The intent record's `broker account/environment` field (FR-1) already carries
+  whichever broker the order targets.
+- [x] Does this feature's behavior differ under `TRADING_MODE=paper` vs `live`? **Resolved: no.** A
+  `BrokerAccount`'s paper/live-ness is fixed at the deployment/account level
+  (`packages/proto/trading/v1/trading.proto:172`, `is_paper`), not chosen per request, so the
+  intent/dedup mechanism behaves identically in both — nothing in FR-1..FR-6 branches on trading mode.
+
+_Deferred to `/sdd-design` (implementation detail, not a product blocker):_
+- How is the deterministic client-order-id actually derived (hash function, length truncation, charset
+  sanitization) given Alpaca's and IBKR's differing client-order-id length/charset limits? Broker scope
+  is resolved above; only the derivation algorithm itself is left open.
