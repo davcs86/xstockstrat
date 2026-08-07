@@ -215,3 +215,51 @@
   own judgment call, not the P0 review's 5s example — accepted as more realistic for IBKR's
   conid-resolution + 2-call submission path). No longer a provisional placeholder; `implementation-spec.md`
   Step 8's Codebase Evidence updated to reflect the confirmation.
+
+## Session 2026-08-07T00:00:00Z — sdd-execute (sequential, all 23 steps)
+
+- Executed as the fourth feature in the user-directed stacked-branch sequence
+  `100 → 101 → 023 → 030 → 102`, branched from `feature/position-sizing-engine` (023). Per standing
+  user directive ("proceed, use stacked PRs to overcome rebase need; do not run /clean at all"), this
+  ran continuously in one session with no context clear between features.
+- All 23 steps executed with red-green TDD discipline; full build/vet/gofmt/golangci-lint/`go test
+  -race` loop run after every step group (trading + portfolio Go services), plus tsc/next-lint/
+  Playwright e2e for the UI step. Every loop was clean before commit.
+- Steps 1-14 (trading service — migration, `BracketRepository`, broker-layer bracket support for both
+  Alpaca and IBKR, bracket state machine, protection-window watchdog, persisted per-account halt gate,
+  leg cancellation on signal-driven close) landed first; Steps 15-22 (docs, config seed, proto fields,
+  portfolio consumer) and Step 23 (UI sidebar) followed. Full deviation detail lives in
+  `implementation-spec.md`'s Deviation Log — not duplicated here; highlights below.
+- **Confirms and extends the Step 7 IBKR finding from `/sdd-spec`**: implemented `SubmitBracketLegs`
+  per the corrected mechanism (linked-array submission with `isSingleGroup`/`parentId`↔`cOID`, not a
+  client-set `OCAGroup`) and unit-tested it (Step 8). Recorded as a new `insights.md` entry (design
+  category) — still caveated as verified against published API docs only, not a live IBKR paper
+  account, since this session had no such account to exercise.
+- **Three recurring instances of the same testability constraint, each independently discovered and
+  resolved the established way**: `config.Watcher` has no exported snapshot setter, so any config-read
+  boolean/float a test needs to vary must be hoisted as an explicit parameter or extracted into a pure
+  function — done for `bracketOrdersEnabled` (Step 9/10) and `computeTakeProfitPriceFromRR` (Step
+  9/10), mirroring features 100/101/023's own prior instances of the identical pattern. A **new**
+  constraint surfaced this feature: `TradingRepo` is a concrete type, not an interface, which blocks
+  full round-trip testing of `flattenAndHalt`'s retry loop — documented as an accepted, named test gap
+  (Step 12), not silently skipped or faked.
+- **Cross-feature `PlaceOrder`/`ReplaceOrder`/`CancelOrder` collision** with features 100/101/023 (all
+  landed on this stacked branch ahead of this feature, per `merge-order.md`) resolved by re-reading the
+  live tree at each step rather than the spec's frozen citations — every trading-service step's
+  Codebase Evidence was re-verified against the real, already-merged 100/101/023 code, not assumed
+  from the spec's pre-101/023 snapshot. `submitOrder`'s extracted signature (11 params) reflects this:
+  it had to satisfy 101's pre-sizing dedup-hash requirement and 023's sizing outputs simultaneously,
+  neither of which existed when `design.md`/`implementation-spec.md` were written.
+- **Portfolio module drift, unrelated to this feature, surfaced by touching it for the first time**:
+  `xstockstrat-portfolio/go.mod` was stale against `packages/proto/go.mod`'s already-bumped grpc/
+  protobuf versions (a prior Dependabot commit, predating this feature). The stacked branch chain
+  never built/linted `xstockstrat-portfolio` before Step 19-22, so nothing surfaced it until now. Fixed
+  as a byproduct of the mandated `golangci-lint run --modules-download-mode=mod` verification command;
+  confirmed via diff to be a pure version sync, no unrelated dependency changes.
+- All Deviation Log entries (implementation-spec.md) and the one Ledger insights.md entry are recorded.
+  No `fails.md` entry — no mistake recurred from a prior feature in this session; every deviation was
+  either a genuine new-information correction (IBKR mechanism) or an already-cataloged, correctly-
+  reapplied pattern (config.Watcher hoisting).
+- Status: `implementation-ready` → `code-completed`. Next: open the stacked integration PR against
+  `feature/position-sizing-engine`, subscribe to PR activity, then proceed to feature 102
+  (`broker-state-reconciliation`) per the user's directed sequence.
