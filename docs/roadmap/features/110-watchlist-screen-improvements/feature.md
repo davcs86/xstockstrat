@@ -1,0 +1,41 @@
+# Feature: watchlist-screen-improvements
+
+**Lifecycle Status**: `spec-ready`
+**Development Branch**: `feature/watchlist-screen-improvements`
+**Created**: 2026-08-07
+**Last Updated**: 2026-08-07
+
+---
+
+## Status History
+
+| Date | Status | Updated by | Note |
+|---|---|---|---|
+| 2026-08-07 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-07 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
+
+---
+
+## Artifacts
+
+- [Product Spec](product-spec.md) — requirements and governance
+- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec watchlist-screen-improvements`_
+- [Context Log](context.md) — session history, decisions, deviations
+
+---
+
+## Summary
+
+Rework the `/insights/watchlists` detail pane: move per-symbol edit/delete actions into the
+readiness table (removing the separate chip-row list above it), let a strategy be chosen inline
+while adding a symbol instead of via a second binding step, and add an editable watchlist name.
+
+## Reviewers
+
+| Role | Review Focus |
+|---|---|
+| `xstockstrat-ui` service owner | Trading UI correctness, analytics display accuracy, config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values rendered in UI, no direct DB access (except audit log) |
+
+## Next Action
+
+`/sdd-spec watchlist-screen-improvements` — generate implementation spec
