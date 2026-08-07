@@ -521,3 +521,23 @@ authorization). Counter reset; continuing to Step 12.
 - Files modified: `services/xstockstrat-analysis/app/engine/entry_backfill.py` (new),
   `services/xstockstrat-analysis/app/main.py`, `services/xstockstrat-analysis/CLAUDE.md`
 - Deviations: see Deviation Log ("Step 12").
+
+### Step 13 — test: paired with Step 12 [done]
+- Created `tests/test_entry_backfill.py` with the 9 specified tests: `TestInferOpenEntryTime`
+  (single round trip, flat-after-round-trip, multi-crossing re-arm — Open Risk 3 — zero-fill
+  skip, CANCELED-partial-fill counting — proves `status` stays unfiltered) and `TestRunOnce`
+  (seed+persist, skip-when-already-known, per-pair RPC-failure isolation, no-op without a
+  trading stub). Discovery (codebase-discovery subagent) confirmed no prior test in this repo
+  builds a real `trading_pb2.Order` with a real `Timestamp` — synthesized the `_order()` helper
+  from the closest analogs (`test_live_loop.py`'s `_bar_at`, `test_analysis_servicer.py`'s
+  standalone `Timestamp().FromDatetime(...)`). Used the spec's suggested lightweight
+  `SimpleNamespace(_last_state, _last_entry_at, _write_entry_cooldown=AsyncMock())` stand-in for
+  `live_loop` in the `run_once` tests rather than a full `LiveEvaluationLoop` instance — simpler,
+  and `run_once` only touches those 3 members.
+- TDD: all 9 tests passed on first run against the already-implemented Step 12 code (no
+  red/fix cycle needed — matches this session's established pattern for a paired-test step that
+  follows its service step, e.g. Step 11's note).
+- Verification: `uv run pytest tests/test_entry_backfill.py -v` → 9/9 passed. Full suite:
+  459/459 passed, 82.21% coverage, ruff clean.
+- Files modified: `services/xstockstrat-analysis/tests/test_entry_backfill.py` (new)
+- Deviations: none.

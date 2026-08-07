@@ -940,7 +940,7 @@ ruff check app/engine/entry_backfill.py
 
 ### Step 13 — test: paired with Step 12
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_entry_backfill.py` — create
