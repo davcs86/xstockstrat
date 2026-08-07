@@ -9,6 +9,7 @@ from gen.ingest.v1 import ingest_pb2
 
 from app.handlers.servicer import IngestServicer
 from app.repositories.signal_sources import derive_health_status
+from tests._helpers import transaction_conn
 
 NOW = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
 
@@ -22,6 +23,7 @@ def _servicer(db):
     cfg.backfill_max_concurrent_chunks = 5
     cfg.backfill_chunk_window_days = 400
     cfg.backfill_chunk_max_bars = 10_000_000
+    cfg.dedup_window_hours = 24
     svc = IngestServicer(cfg, MagicMock(), MagicMock(), db_pool=db)
     svc._ledger = MagicMock()
     svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
@@ -132,9 +134,10 @@ async def test_list_sources_down_when_stale_and_error():
 
 @pytest.mark.asyncio
 async def test_ingest_signal_bumps_fed_count():
-    db = MagicMock()
-    # fetchrow: (1) source lookup → active row; (2) INSERT ... RETURNING id.
-    db.fetchrow = AsyncMock(side_effect=[{"slug": "uw"}, {"id": 7}])
+    db, conn = transaction_conn(
+        db_fetchrow_side_effect=[{"slug": "uw"}],
+        conn_fetchrow_side_effect=[{"id": 7}, {"signal_id": 7}],
+    )
     db.execute = AsyncMock(return_value="UPDATE 1")
     svc = _servicer(db)
     signal = ingest_pb2.ExternalSignal(source="uw", symbol="aapl", direction="buy", conviction=0.8)

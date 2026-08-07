@@ -40,4 +40,16 @@ test.describe('Signal detail readiness', () => {
     await page.goto('/insights/market/AAPL');
     await expect(page.getByText(/Select a strategy to evaluate/)).toBeVisible({ timeout: 8000 });
   });
+
+  test('strategy picker excludes non-live strategies (disabled strategies must not be usable)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/insights/market/AAPL');
+    await expect(page.getByText(/Select a strategy to evaluate/)).toBeVisible({ timeout: 8000 });
+    await page.getByLabel('Strategy').click();
+    await expect(page.getByRole('option', { name: 'Live Test Strategy' })).toBeVisible();
+    // "Inactive Strategy" (liveEnabled: false in the fixture) must not be a selectable option.
+    await expect(page.getByRole('option', { name: 'Inactive Strategy' })).toHaveCount(0);
+  });
 });

@@ -283,11 +283,17 @@ type Position struct {
 	StopDistancePct float64 `protobuf:"fixed64,16,opt,name=stop_distance_pct,json=stopDistancePct,proto3" json:"stop_distance_pct,omitempty"`
 	// factor grouping from the portfolio.exposure.factor_map config key (marketdata
 	// exposes no sector); "" → UI groups as "Unclassified".
-	Factor        string           `protobuf:"bytes,17,opt,name=factor,proto3" json:"factor,omitempty"`
-	Flag          PositionRiskFlag `protobuf:"varint,18,opt,name=flag,proto3,enum=xstockstrat.portfolio.v1.PositionRiskFlag" json:"flag,omitempty"`
-	ExitRule      string           `protobuf:"bytes,19,opt,name=exit_rule,json=exitRule,proto3" json:"exit_rule,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Factor   string           `protobuf:"bytes,17,opt,name=factor,proto3" json:"factor,omitempty"`
+	Flag     PositionRiskFlag `protobuf:"varint,18,opt,name=flag,proto3,enum=xstockstrat.portfolio.v1.PositionRiskFlag" json:"flag,omitempty"`
+	ExitRule string           `protobuf:"bytes,19,opt,name=exit_rule,json=exitRule,proto3" json:"exit_rule,omitempty"`
+	// Broker order IDs for the resting protective bracket legs (feature 030 —
+	// stop-loss-bracket-orders), sourced from trading's order.bracket_updated ledger
+	// events. "" when the position has no active bracket (manual entry, bracket
+	// disabled, or bracket not yet confirmed ACTIVE).
+	StopOrderId       string `protobuf:"bytes,20,opt,name=stop_order_id,json=stopOrderId,proto3" json:"stop_order_id,omitempty"`
+	TakeProfitOrderId string `protobuf:"bytes,21,opt,name=take_profit_order_id,json=takeProfitOrderId,proto3" json:"take_profit_order_id,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *Position) Reset() {
@@ -449,6 +455,20 @@ func (x *Position) GetFlag() PositionRiskFlag {
 func (x *Position) GetExitRule() string {
 	if x != nil {
 		return x.ExitRule
+	}
+	return ""
+}
+
+func (x *Position) GetStopOrderId() string {
+	if x != nil {
+		return x.StopOrderId
+	}
+	return ""
+}
+
+func (x *Position) GetTakeProfitOrderId() string {
+	if x != nil {
+		return x.TakeProfitOrderId
 	}
 	return ""
 }
@@ -2054,7 +2074,7 @@ const file_portfolio_v1_portfolio_proto_rawDesc = "" +
 	"\tpositions\x18\n" +
 	" \x03(\v2\".xstockstrat.portfolio.v1.PositionR\tpositions\x12\x1d\n" +
 	"\n" +
-	"account_id\x18\v \x01(\tR\taccountId\"\xd2\x05\n" +
+	"account_id\x18\v \x01(\tR\taccountId\"\xa7\x06\n" +
 	"\bPosition\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12\x10\n" +
 	"\x03qty\x18\x02 \x01(\x01R\x03qty\x12&\n" +
@@ -2079,7 +2099,9 @@ const file_portfolio_v1_portfolio_proto_rawDesc = "" +
 	"\x11stop_distance_pct\x18\x10 \x01(\x01R\x0fstopDistancePct\x12\x16\n" +
 	"\x06factor\x18\x11 \x01(\tR\x06factor\x12>\n" +
 	"\x04flag\x18\x12 \x01(\x0e2*.xstockstrat.portfolio.v1.PositionRiskFlagR\x04flag\x12\x1b\n" +
-	"\texit_rule\x18\x13 \x01(\tR\bexitRule\"\xc9\x02\n" +
+	"\texit_rule\x18\x13 \x01(\tR\bexitRule\x12\"\n" +
+	"\rstop_order_id\x18\x14 \x01(\tR\vstopOrderId\x12/\n" +
+	"\x14take_profit_order_id\x18\x15 \x01(\tR\x11takeProfitOrderId\"\xc9\x02\n" +
 	"\x11PortfolioSnapshot\x12!\n" +
 	"\fportfolio_id\x18\x01 \x01(\tR\vportfolioId\x12?\n" +
 	"\rsnapshot_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\fsnapshotTime\x12\x16\n" +

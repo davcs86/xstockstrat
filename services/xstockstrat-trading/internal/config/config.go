@@ -8,9 +8,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 
+	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
 )
 
@@ -21,6 +24,7 @@ type Config struct {
 	LedgerEndpoint              string
 	PortfolioEndpoint           string
 	IndicatorsEndpoint          string
+	MarketDataEndpoint          string
 	NotifyEndpoint              string
 	DBConnStr                   string
 	RequireApprovalAbove        float64 // order qty threshold requiring manual approval
@@ -36,6 +40,7 @@ func LoadFromEnv() *Config {
 		LedgerEndpoint:              getEnv("LEDGER_ENDPOINT", "xstockstrat-ledger:50057"),
 		PortfolioEndpoint:           getEnv("PORTFOLIO_ENDPOINT", "xstockstrat-portfolio:50052"),
 		IndicatorsEndpoint:          getEnv("INDICATORS_ENDPOINT", "xstockstrat-indicators:50054"),
+		MarketDataEndpoint:          getEnv("MARKETDATA_ENDPOINT", "xstockstrat-marketdata:50053"),
 		NotifyEndpoint:              getEnv("NOTIFY_ENDPOINT", "xstockstrat-notify:50059"),
 		DBConnStr:                   getEnv("DATABASE_URL", ""),
 		RequireApprovalAbove:        0, // loaded from config service at runtime
@@ -62,8 +67,10 @@ func getEnvBool(key string, fallback bool) bool {
 
 // Watcher subscribes to xstockstrat-config WatchConfig stream.
 type Watcher struct {
-	namespace string
-	client    configv1.ConfigServiceClient
+	namespace   string
+	client      configv1.ConfigServiceClient
+	environment commonv1.Environment
+	tradingMode commonv1.TradingMode
 
 	mu       sync.RWMutex
 	snapshot map[string]*configv1.ConfigValue
@@ -71,19 +78,44 @@ type Watcher struct {
 	once     sync.Once
 }
 
-func NewWatcher(endpoint, namespace string) (*Watcher, error) {
+// NewWatcher dials the config service and starts the background watch loop.
+// applicationEnv/tradingMode are this deployment's own resolved scope (Config.ApplicationEnv /
+// Config.TradingMode) — passed on every WatchConfig request so the server serves this
+// deployment's config rows instead of the zero-value dev/all default.
+func NewWatcher(endpoint, namespace, applicationEnv, tradingMode string) (*Watcher, error) {
 	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("dial config service: %w", err)
 	}
 	w := &Watcher{
-		namespace: namespace,
-		client:    configv1.NewConfigServiceClient(conn),
-		ready:     make(chan struct{}),
-		snapshot:  make(map[string]*configv1.ConfigValue),
+		namespace:   namespace,
+		client:      configv1.NewConfigServiceClient(conn),
+		ready:       make(chan struct{}),
+		snapshot:    make(map[string]*configv1.ConfigValue),
+		environment: resolveEnvironment(applicationEnv),
+		tradingMode: resolveTradingMode(tradingMode),
 	}
 	go w.watchLoop()
 	return w, nil
+}
+
+// resolveEnvironment maps Config.ApplicationEnv ("development" | "production") to the proto
+// Environment enum. Anything other than "production" resolves to dev, matching the default in
+// LoadFromEnv.
+func resolveEnvironment(applicationEnv string) commonv1.Environment {
+	if applicationEnv == "production" {
+		return commonv1.Environment_ENVIRONMENT_PRODUCTION
+	}
+	return commonv1.Environment_ENVIRONMENT_DEV
+}
+
+// resolveTradingMode maps Config.TradingMode ("paper" | "live") to the proto TradingMode enum.
+// Anything other than "live" resolves to paper, matching the default in LoadFromEnv.
+func resolveTradingMode(tradingMode string) commonv1.TradingMode {
+	if tradingMode == "live" {
+		return commonv1.TradingMode_TRADING_MODE_LIVE
+	}
+	return commonv1.TradingMode_TRADING_MODE_PAPER
 }
 
 func (w *Watcher) watchLoop() {
@@ -101,8 +133,10 @@ func (w *Watcher) watchLoop() {
 
 func (w *Watcher) stream() error {
 	req := &configv1.WatchConfigRequest{
-		Namespace: w.namespace,
-		ClientId:  fmt.Sprintf("go-trading-%d", os.Getpid()),
+		Namespace:   w.namespace,
+		ClientId:    fmt.Sprintf("go-trading-%d", os.Getpid()),
+		Environment: w.environment,
+		TradingMode: w.tradingMode,
 	}
 	stream, err := w.client.WatchConfig(context.Background(), req)
 	if err != nil {
@@ -177,4 +211,19 @@ func (w *Watcher) GetFloat(key string, def float64) float64 {
 		return def
 	}
 	return v.GetFloatVal()
+}
+
+// SetConfig forwards to xstockstrat-config's SetConfig RPC, attaching the x-internal-caller
+// metadata header the receiving service's internal-caller authz channel checks (feature 102 —
+// see docs/roadmap/features/102-broker-state-reconciliation/design.md § "Internal-caller authz").
+// callerID identifies the automated caller (e.g. "trading-reconciliation-poller"); a fresh
+// x-trace-id is minted per call for audit correlation, since this is a distinct outbound edge
+// from the WatchConfig stream every other call on w.client uses.
+func (w *Watcher) SetConfig(ctx context.Context, callerID string, req *configv1.SetConfigRequest) (*configv1.SetConfigResponse, error) {
+	md := metadata.Pairs(
+		"x-internal-caller", callerID,
+		"x-trace-id", uuid.NewString(),
+	)
+	outCtx := metadata.NewOutgoingContext(ctx, md)
+	return w.client.SetConfig(outCtx, req)
 }

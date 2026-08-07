@@ -429,7 +429,8 @@ section_8_place_order() {
       \"side\": \"BUY\",
       \"type\": \"MARKET\",
       \"qty\": 10,
-      \"trading_mode\": \"${TRADING_MODE}\"
+      \"trading_mode\": \"${TRADING_MODE}\",
+      \"client_order_id\": \"it-place-$$\"
     }")
 
   if echo "$order_resp" | grep -q "order_id"; then
@@ -529,7 +530,8 @@ section_13_maintenance_mode() {
       \"side\": \"BUY\",
       \"type\": \"MARKET\",
       \"qty\": 1,
-      \"trading_mode\": \"${TRADING_MODE}\"
+      \"trading_mode\": \"${TRADING_MODE}\",
+      \"client_order_id\": \"it-maint-$$\"
     }")
 
   # CAUTION: this pattern matches ANY error string, not just a maintenance rejection.
@@ -551,6 +553,63 @@ section_13_maintenance_mode() {
     >/dev/null 2>&1 || true
 
   log "  Maintenance mode cleared."
+}
+
+section_14_order_intent_dedup() {
+  sep
+  log "SECTION 14 — Order intent dedup (feature 101, AC-1/AC-3)"
+
+  local body1 resp1 order_id_1
+  body1="{
+    \"symbol\": \"${TEST_SYMBOL}\",
+    \"side\": \"BUY\",
+    \"type\": \"MARKET\",
+    \"qty\": 1,
+    \"trading_mode\": \"${TRADING_MODE}\",
+    \"client_order_id\": \"it-dedup-fixed\"
+  }"
+  resp1=$(post "${TRADING_URL}/xstockstrat.trading.v1.TradingService/PlaceOrder" "$body1")
+  order_id_1=$(echo "$resp1" | python3 -c "import sys,json; print(json.load(sys.stdin).get('order_id',''))" 2>/dev/null ||
+    echo "$resp1" | grep -o '"order_id":"[^"]*"' | cut -d'"' -f4)
+
+  if [ -z "$order_id_1" ]; then
+    fail "Order intent dedup — first PlaceOrder did not return an order_id"
+    echo "  Response: $resp1"
+    return 1
+  fi
+  ok "Order intent dedup setup — first PlaceOrder order_id=${order_id_1}"
+
+  # AC-1/FR-2: repeating the identical PlaceOrder call (same client_order_id, same body)
+  # must return the SAME order_id — no second broker submission.
+  local resp2 order_id_2
+  resp2=$(post "${TRADING_URL}/xstockstrat.trading.v1.TradingService/PlaceOrder" "$body1")
+  order_id_2=$(echo "$resp2" | python3 -c "import sys,json; print(json.load(sys.stdin).get('order_id',''))" 2>/dev/null ||
+    echo "$resp2" | grep -o '"order_id":"[^"]*"' | cut -d'"' -f4)
+
+  if [ "$order_id_2" = "$order_id_1" ]; then
+    ok "Order intent dedup — identical retry returned the same order_id (no second broker submission)"
+  else
+    fail "Order intent dedup — identical retry returned a DIFFERENT order_id (${order_id_2} vs ${order_id_1})"
+    echo "  Response: $resp2"
+  fi
+
+  # AC-3/FR-3: same client_order_id, different qty — must be rejected (content hash mismatch).
+  local body3 resp3
+  body3="{
+    \"symbol\": \"${TEST_SYMBOL}\",
+    \"side\": \"BUY\",
+    \"type\": \"MARKET\",
+    \"qty\": 99,
+    \"trading_mode\": \"${TRADING_MODE}\",
+    \"client_order_id\": \"it-dedup-fixed\"
+  }"
+  resp3=$(post_raw "${TRADING_URL}/xstockstrat.trading.v1.TradingService/PlaceOrder" "$body3")
+  if echo "$resp3" | grep -qiE "FailedPrecondition|code.*9|different order content"; then
+    ok "Order intent dedup — reused client_order_id with different content was rejected"
+  else
+    fail "Order intent dedup — reused client_order_id with different content was NOT rejected"
+    echo "  Response: $resp3"
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -582,6 +641,7 @@ main() {
   section_10_portfolio
   section_11_notify
   section_13_maintenance_mode
+  section_14_order_intent_dedup
 
   sep
   echo ""

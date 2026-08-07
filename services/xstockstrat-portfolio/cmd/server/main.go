@@ -43,7 +43,7 @@ func main() {
 
 	cfg := config.LoadFromEnv()
 
-	cfgWatcher, err := config.NewWatcher(cfg.ConfigEndpoint, "portfolio")
+	cfgWatcher, err := config.NewWatcher(cfg.ConfigEndpoint, "portfolio", cfg.ApplicationEnv, cfg.TradingMode)
 	if err != nil {
 		slog.Error("config watcher failed", "error", err)
 		os.Exit(1)
@@ -64,6 +64,8 @@ func main() {
 	go svc.ConsumeOrderFills(ctx)
 	go svc.ConsumePositionSyncs(ctx)
 	go svc.ConsumeBalanceSyncs(ctx)
+	// feature 030 — persist resting bracket leg order IDs onto positions.
+	go svc.ConsumeBracketUpdates(ctx)
 	// feature 083 — rebuild the in-memory resting-stop store from ledger history (best-effort).
 	go svc.HydrateStops(ctx)
 

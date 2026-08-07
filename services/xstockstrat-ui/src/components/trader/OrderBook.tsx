@@ -48,7 +48,7 @@ export function OrderBook({ mode }: { mode: TradingMode }) {
                     <TableCell className="text-right hidden sm:table-cell">
                       {formatUsd(order.filledAvgPrice)}
                     </TableCell>
-                    <OrderStatusCell status={order.status} />
+                    <OrderStatusCell status={order.status} intentState={order.intentState} />
                   </TableRow>
                 ))}
               </TableBody>

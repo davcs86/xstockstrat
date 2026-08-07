@@ -74,14 +74,13 @@ def _claims_from_context(ctx: Context) -> dict | None:
     return claims if isinstance(claims, dict) else None
 
 
-def _caller_access_scope(ctx: Context, tool: str) -> int:
-    """Derive the REAL caller's ``x-access-scope`` from their verified claims.
+def _require_claims(ctx: Context, tool: str) -> dict:
+    """Materialize and validate the caller's claims, raising if absent.
 
-    Feature 073 introduced this for ``set_config``; feature 092 generalized it to every management
-    write tool (``manage_strategy``, ``manage_signal_source``, ``set_strategy_live``,
-    ``trigger_backfill``) so admin is *verified by the backend gate*, not asserted via a hardcoded
-    scope. Raises when no verified claims are present (the Streamable HTTP transport authenticates
-    the tool call itself; the legacy SSE transport that didn't was removed by feature 079)."""
+    Single choke point for "no verified claims on this request" — both
+    ``_caller_access_scope`` (role-derived ``x-access-scope``) and ``_caller_user_id``
+    (identity for ``emit_alert``/``manage_formula``) go through this so the raise condition
+    and message live in exactly one place."""
     claims = _claims_from_context(ctx)
     if claims is None:
         raise RuntimeError(
@@ -90,7 +89,37 @@ def _caller_access_scope(ctx: Context, tool: str) -> int:
             "caller's role cannot be established. (The legacy SSE transport, which never "
             "authenticated individual tool calls, was removed by feature 079.)"
         )
+    return claims
+
+
+def _caller_access_scope(ctx: Context, tool: str) -> int:
+    """Derive the REAL caller's ``x-access-scope`` from their verified claims.
+
+    Feature 073 introduced this for ``set_config``; feature 092 generalized it to every management
+    write tool (``manage_strategy``, ``manage_signal_source``, ``set_strategy_live``,
+    ``trigger_backfill``) so admin is *verified by the backend gate*, not asserted via a hardcoded
+    scope. Raises when no verified claims are present (the Streamable HTTP transport authenticates
+    the tool call itself; the legacy SSE transport that didn't was removed by feature 079)."""
+    claims = _require_claims(ctx, tool)
     return roles_to_access_scope(claims.get("roles"))
+
+
+def _caller_user_id(ctx: Context, tool: str) -> str:
+    """Derive the REAL caller's own user id from their verified claims, raising if empty.
+
+    A thin wrapper over ``_require_claims`` for tools (``emit_alert``, ``manage_formula``)
+    that need the caller's own identity rather than their access scope. Raises rather than
+    returning "" on a falsy claims user_id: notify's EmitAlertRequest.target_user_id == ""
+    means BROADCAST (packages/proto/notify/v1/notify.proto:34), so silently returning "" here
+    would make a caller who explicitly chose not to broadcast broadcast anyway."""
+    claims = _require_claims(ctx, tool)
+    user_id = claims.get("user_id")
+    if not user_id:
+        raise RuntimeError(
+            f"{tool} requires the caller's verified claims to carry a non-empty user_id, "
+            "but none was present. Refusing rather than deriving an empty identity."
+        )
+    return user_id
 
 
 def _grpc_error_message(exc: grpc.aio.AioRpcError, not_found: str = "not found") -> str:
@@ -247,8 +276,10 @@ def register_tools(server: MCPServer) -> None:
         SIDE EFFECT: on success this tool AUTO-EMITS an alert when conviction is present and >= the
             agent.signal.alert_threshold config value (default 0.6); an alert failure does not fail
             the ingest. Do NOT also call emit_alert for the same signal, or you will double-alert.
-        Returns {"signal_id": <int>} on success; raises on unknown source slug
-        (INVALID_ARGUMENT)."""
+        Returns {"signal_id": <int>, "deduplicated": <bool>} on success — deduplicated=true means
+            this submission matched an existing signal within the dedup window and no new row was
+            inserted (the auto-alert above is suppressed in that case); raises on unknown source
+            slug (INVALID_ARGUMENT)."""
         result = await client.ingest_signal(
             source=source,
             symbol=symbol,
@@ -275,7 +306,11 @@ def register_tools(server: MCPServer) -> None:
         except Exception as e:
             log.warning("alert-threshold read failed, using default: %s", e)
             alert_threshold = _ALERT_THRESHOLD_DEFAULT
-        if conviction is not None and conviction >= alert_threshold:
+        if (
+            not result.get("deduplicated")
+            and conviction is not None
+            and conviction >= alert_threshold
+        ):
             try:
                 alert_title = headline if headline else f"{direction.upper()} {symbol} via {source}"
                 alert_body = f"Signal ingested: {direction} {symbol} (conviction {conviction:.2f})"
@@ -297,12 +332,13 @@ def register_tools(server: MCPServer) -> None:
 
     @server.tool()
     async def emit_alert(
+        ctx: Context,
         severity: str,
         category: str,
         title: str,
         body: str,
+        broadcast: bool,
         source_service: str = "xstockstrat-agent",
-        target_user_id: str = "",
         context: dict | None = None,
         tags: list[str] | None = None,
         correlation_id: str = "",
@@ -313,13 +349,16 @@ def register_tools(server: MCPServer) -> None:
         category: alert category e.g. 'signal', 'system'.
         title/body: required and non-blank — an empty or whitespace-only title or body is
             rejected INVALID_ARGUMENT by notify, so populate both.
-        target_user_id: defaults to '' which BROADCASTS to all users; set it to target one user.
+        broadcast: REQUIRED, no default. True sends a system-wide broadcast (unchanged semantic —
+            target_user_id="" on the wire). False addresses the alert to the OAuth-authenticated
+            caller's own derived identity — you can no longer address another user.
         context: optional structured JSON object stored and fanned out with the alert.
         tags: optional list of string tags for filtering/grouping.
         correlation_id: optional id to correlate related alerts.
         Use for system-level alerts or alerts not tied to a specific ingested signal (ingest_signal
             already auto-alerts high-conviction signals).
         Returns {"alert_id": <str>}."""
+        target_user_id = "" if broadcast else _caller_user_id(ctx, "emit_alert")
         return await client.emit_alert(
             severity=severity,
             category=category,
@@ -564,14 +603,13 @@ def register_tools(server: MCPServer) -> None:
 
     @server.tool()
     async def manage_formula(
+        ctx: Context,
         operation: str,
         name: str | None = None,
         description: str | None = None,
         source: str | None = None,
         is_public: bool | None = None,
         formula_id: str = "",
-        author: str = "",
-        formula_author_user_id: str = "",
         parameters: list[dict] | None = None,
         outputs: list[dict] | None = None,
         warmup_period: int | None = None,
@@ -580,10 +618,12 @@ def register_tools(server: MCPServer) -> None:
         operation: 'register' | 'update' | 'delete'.
         name/description/source/is_public: for register and update. On UPDATE these are
             presence-detected — pass a field only if you want to change it (see UPDATE below).
-        author: stored immutably on register.
         formula_id: required for update/delete.
-        formula_author_user_id: required for update/delete; must match the formula's original
-            author (the indicators backend returns PERMISSION_DENIED otherwise).
+        Ownership is always derived from the OAuth-authenticated caller's own verified identity —
+            there is no author/formula_author_user_id parameter. On register, the caller becomes
+            the formula's author. On update/delete, the caller's own identity is checked against
+            the formula's stored author (PERMISSION_DENIED on mismatch) — you cannot assert
+            someone else's ownership.
         parameters: typed parameter definitions — a list of
             {name, type, default, description, required, min, max} where type is one of
             'int'|'float'|'bool'|'string' and min/max apply to numeric params only. Values
@@ -624,10 +664,11 @@ def register_tools(server: MCPServer) -> None:
                 mean = s.rolling(params["period"]).mean()
                 std = s.rolling(params["period"]).std()
                 result = {"value": ((s - mean) / std).tolist()}"""
+        user_id = _caller_user_id(ctx, "manage_formula")
         formula: dict = {
             "formula_id": formula_id,
-            "user_id": formula_author_user_id,
-            "author": author,
+            "user_id": user_id,
+            "author": user_id,
             "name": name or "",
             "description": description or "",
             "source": source or "",

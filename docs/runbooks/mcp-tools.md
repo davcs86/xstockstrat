@@ -194,7 +194,7 @@ Fetches and returns raw text from a registered website source. The URL is read f
 
 ### `ingest_signal`
 
-Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exceeds `agent.signal.alert_threshold` (config key, default `0.6`), an alert is automatically emitted via `xstockstrat-notify`.
+Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exceeds `agent.signal.alert_threshold` (config key, default `0.6`), an alert is automatically emitted via `xstockstrat-notify`. A resubmission matching an existing signal within `ingest.signals.dedup_window_hours` (source, symbol, direction, conviction, and valid_until all equal) returns the **existing** `signal_id` with `deduplicated: true` instead of inserting a new row, and the auto-alert above is suppressed in that case.
 
 **Parameters**
 
@@ -213,7 +213,7 @@ Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exc
 **Return**
 
 ```json
-{ "signal_id": 42 }
+{ "signal_id": 42, "deduplicated": false }
 ```
 
 **Errors**
@@ -224,12 +224,13 @@ Ingests a trading signal into `xstockstrat-ingest`. If `conviction` meets or exc
 | `valid_from` missing | `invalid argument` (INVALID_ARGUMENT) from ingest |
 | `conviction` out of range (`< 0.0` or `> 1.0`) or NaN | `invalid argument` (INVALID_ARGUMENT) from ingest |
 | Auto-alert emission fails | Warning logged; signal is already ingested — not rolled back |
+| `deduplicated: true` in the response | Not an error — the auto-alert is intentionally suppressed for this submission |
 
 ---
 
 ### `emit_alert`
 
-Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or notifications not tied to an ingested signal. Sends no security metadata (no shared secret, no admin `x-access-scope`): `EmitAlert` is an internal-service-caller RPC that is intentionally **not** role-gated (feature 092) — its trust boundary is the private network plus the agent's OAuth edge, and every caller (agent + internal service loops) is unauthenticated at the RPC layer.
+Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or notifications not tied to an ingested signal. Sends no security metadata (no shared secret, no admin `x-access-scope`): `EmitAlert` is an internal-service-caller RPC that is intentionally **not** role-gated (feature 092) — its trust boundary is the private network plus the agent's OAuth edge, and every caller (agent + internal service loops) is unauthenticated at the RPC layer. The alert's recipient is always derived from the OAuth-authenticated caller's own verified identity or an explicit system-wide broadcast (feature 111) — the caller can no longer address an alert to an arbitrary other user.
 
 **Parameters**
 
@@ -239,8 +240,8 @@ Emits an alert directly via `xstockstrat-notify`. Use for system-level alerts or
 | `category` | `string` | Yes | Alert category, e.g. `"signal"`, `"system"` |
 | `title` | `string` | Yes | Short alert title |
 | `body` | `string` | Yes | Alert body text |
+| `broadcast` | `bool` | Yes | `true` sends a system-wide broadcast (`target_user_id=""` on the wire, unchanged semantic); `false` addresses the alert to the OAuth-authenticated caller's own derived identity. No default — omitting it is a schema error. |
 | `source_service` | `string` | No | Emitting service name (default `"xstockstrat-agent"`) |
-| `target_user_id` | `string` | No | Target user ID (default `""` = broadcast) |
 | `context` | `object` | No | Structured JSON context stored + fanned out with the alert (feature 087) |
 | `tags` | `string[]` | No | Tags for filtering/grouping (feature 087) |
 | `correlation_id` | `string` | No | Id to correlate related alerts (feature 087) |
@@ -260,6 +261,7 @@ title or body is rejected `INVALID_ARGUMENT` by notify before the alert is persi
 | Condition | Error |
 |---|---|
 | Empty or whitespace-only `title` or `body` | `invalid argument` (INVALID_ARGUMENT) from notify |
+| No verified OAuth claims on the request, when `broadcast=false` | `RuntimeError` — Streamable HTTP transport required |
 | Notify service unreachable | `httpx` connection error propagated |
 
 ---
@@ -540,7 +542,7 @@ including an explicit `0`, which means "no cooldown".
 
 ### `manage_formula`
 
-Registers, updates, or deletes a custom formula definition in `xstockstrat-indicators`.
+Registers, updates, or deletes a custom formula definition in `xstockstrat-indicators`. The formula's `author`/ownership identity is always derived from the OAuth-authenticated caller's own verified claims (feature 111) — it can no longer be asserted as a parameter.
 
 **Parameters**
 
@@ -555,8 +557,8 @@ Registers, updates, or deletes a custom formula definition in `xstockstrat-indic
 | `outputs` | `list` | No | Declared secondary output series `{name, description}`; addressable in strategy rules as `<ref>.<name>`. The implicit `value` series is always present and must not be declared. |
 | `warmup_period` | `int` | No | Bars of warm-up before the formula's outputs are valid |
 | `formula_id` | `string` | update/delete | Formula identifier |
-| `author` | `string` | register | Author, stored immutably on register |
-| `formula_author_user_id` | `string` | update/delete | Must match the formula's original `author` (else PERMISSION_DENIED) |
+
+**Ownership is derived, not asserted (feature 111).** `author` (register) and the ownership identity checked on `update`/`delete` are both the OAuth-authenticated caller's own `user_id` from their verified claims — there is no `author`/`formula_author_user_id` parameter. A caller can no longer register a formula under someone else's identity (including the reserved `"system"` sentinel), or claim someone else's ownership to update/delete a formula; the indicators backend's own PERMISSION_DENIED check (stored `author` vs. `user_id` mismatch) now always compares against the real caller.
 
 **Update is a partial merge (AIP-161).** Only the fields you pass are changed; omitted fields are
 preserved. Pass `is_public=false` to unpublish; omit it to leave it unchanged. At least one field
@@ -582,10 +584,11 @@ delete → `{"success": true}`.
 
 | Condition | Error |
 |---|---|
-| `formula_author_user_id` ≠ author | `permission denied` (PERMISSION_DENIED) |
+| Caller's derived identity ≠ the formula's stored `author` (update/delete) | `permission denied` (PERMISSION_DENIED) |
 | `update`/`delete` on unknown formula | `formula not found` (NOT_FOUND) |
 | `update` with no fields supplied | `update requires at least one field to change` |
 | `update` on a soft-deleted formula | `formula is deleted and cannot be updated` (FAILED_PRECONDITION) |
+| No verified OAuth claims on the request | `RuntimeError` — Streamable HTTP transport required |
 
 ---
 

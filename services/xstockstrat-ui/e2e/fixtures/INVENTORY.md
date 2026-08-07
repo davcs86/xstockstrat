@@ -11,7 +11,7 @@ skill).
 |---|---|---|---|---|
 | Test user identity | `TEST_USER_ID`, `TEST_USER_EMAIL` | `e2e/fixtures/users.ts` | identity JWT claims | `e2e/helpers/auth.ts`, `e2e/mock-backend.ts` (identity handlers), formula fixtures |
 | Test JWT signing / auth cookies | `TEST_JWT_SECRET`, `signTestJwt`, `addAuthCookie`, `addAdminCookie`, `addCookieWithRoles` | `e2e/helpers/auth.ts` (canonical helper home) | HS256 JWT minted like xstockstrat-identity | all specs, `e2e/mock-backend.ts`, `playwright.config.ts` (`JWT_SECRET` env) |
-| Broker accounts | `BROKER_ACCOUNT_ALPACA`, `BROKER_ACCOUNT_IBKR`, `BROKER_ACCOUNT_NEW`, `BROKER_ACCOUNTS` | `e2e/fixtures/accounts.ts` | `xstockstrat.trading.v1.BrokerAccount` | `e2e/mock-backend.ts` (trader + insights `listBrokerAccounts`, register/update), `e2e/trader/{orders,order-form,account-selector}.spec.ts`, `e2e/insights/account-portfolio.spec.ts` |
+| Broker accounts | `BROKER_ACCOUNT_ALPACA`, `BROKER_ACCOUNT_IBKR`, `BROKER_ACCOUNT_NEW`, `BROKER_ACCOUNTS` | `e2e/fixtures/accounts.ts` | `xstockstrat.trading.v1.BrokerAccount` | `e2e/mock-backend.ts` (trader + insights `listBrokerAccounts`, register/update), `e2e/trader/{orders,order-form,account-selector}.spec.ts`, `e2e/insights/account-portfolio.spec.ts`, `e2e/trader/positions-reconciliation.spec.ts` (spread-override `halted`/`haltReason`/`haltSource`, feature 102) |
 | Portfolios | `PORTFOLIO_ALPACA`, `PORTFOLIO_IBKR`, `PORTFOLIOS` | `e2e/fixtures/portfolios.ts` | `xstockstrat.portfolio.v1.Portfolio` | `e2e/mock-backend.ts` (trader + insights `listPortfolios`), `e2e/insights/account-portfolio.spec.ts` |
 | Strategy scores | `STRATEGY_SCORE_{HIGH,MID,LOW}`, `STRATEGY_SCORES` | `e2e/fixtures/strategies.ts` | `xstockstrat.analysis.v1.StrategyScore` | `e2e/mock-backend.ts` (`listStrategies`), `e2e/insights/dashboard.spec.ts` |
 | Strategy definitions | `STRATEGY_DEF_LIVE`, `STRATEGY_DEF_INACTIVE`, `STRATEGY_DEFINITIONS` | `e2e/fixtures/strategies.ts` | `xstockstrat.analysis.v1.StrategyDefinition` | `e2e/mock-backend.ts` (`listStrategyDefinitions`, `setStrategyLive`), `e2e/trader/live-strategies.spec.ts` (asserts `strat-live-001`) |
@@ -21,8 +21,9 @@ skill).
 | Opportunity queue | `OPPORTUNITIES` (rows carry `opportunityKey` + `provenance`, feature 097) | `e2e/fixtures/opportunities.ts` | `xstockstrat.analysis.v1.Opportunity` | `e2e/mock-backend.ts` (`listOpportunities`), `e2e/insights/opportunities.spec.ts` (also a per-page `page.route()` stateful ListOpportunities/SetOpportunityAction mock proving snooze/dismiss reload-persistence — see the spec), `e2e/insights/watchlists.spec.ts` (in-queue mark, feature 098) |
 | Symbol readiness | `symbolReadiness` (single-arg factory) | `e2e/fixtures/opportunities.ts` | `xstockstrat.analysis.v1.SymbolReadiness` | `e2e/mock-backend.ts` (`evaluateReadiness` — spreads `READINESS_BUCKET_OVERRIDE` over it; keep single-arg, the `.map` is an arrow), `e2e/insights/watchlists.spec.ts` (readiness rollup, feature 098) |
 | Watchlists (stateful mock) | `mockWatchlists`, `MockWatchlist`, `MockBinding` (per-symbol `(symbol, strategyId)` bindings + `UpdateWatchlist` route, feature 097) | `e2e/helpers/watchlistMock.ts` | `xstockstrat.portfolio.v1.Watchlist` CRUD RPCs | `e2e/insights/watchlists.spec.ts`, `e2e/insights/screener.spec.ts` (Save/Add-top-N, feature 098) |
-| Positions | `POSITION_AAPL`, `POSITION_MSFT`, `POSITIONS`, `positionForSymbol` | `e2e/fixtures/positions.ts` | `xstockstrat.portfolio.v1.Position` | `e2e/mock-backend.ts` (`listPositions`, `getPosition`), `e2e/trader/{positions,position-detail,valuation-parity}.spec.ts` |
-| Orders (shared mock set) | `ORDER_FILLED`, `ORDER_WORKING`, `ORDERS`, `orderForId` | `e2e/fixtures/orders.ts` | `xstockstrat.trading.v1.Order` | `e2e/mock-backend.ts` (`listOrders`, `getOrder`), `e2e/trader/order-ticket.spec.ts` |
+| Positions | `POSITION_AAPL` (`stopOrderId`/`takeProfitOrderId` set, feature 030), `POSITION_MSFT` (both omitted — exercises the em-dash "no active bracket" fallback), `POSITIONS`, `positionForSymbol` | `e2e/fixtures/positions.ts` | `xstockstrat.portfolio.v1.Position` | `e2e/mock-backend.ts` (`listPositions`, `getPosition`), `e2e/trader/{positions,position-detail,valuation-parity}.spec.ts` |
+| Orders (shared mock set) | `ORDER_FILLED`, `ORDER_WORKING`, `ORDER_UNKNOWN_INTENT` (`intentState=4/UNKNOWN`, feature 101), `ORDERS`, `orderForId` | `e2e/fixtures/orders.ts` | `xstockstrat.trading.v1.Order` | `e2e/mock-backend.ts` (`listOrders`, `getOrder`), `e2e/trader/{order-ticket,order-intent}.spec.ts` |
+| Config key SetConfig payload | `setConfigPayload` | `e2e/fixtures/configKeys.ts` | `xstockstrat.config.v1.SetConfigRequest` | `e2e/config-ui/api-smoke.spec.ts` |
 
 ## Recurring sentinel ids (stay inline, but are reserved)
 
@@ -54,7 +55,6 @@ a fixture module and register it above (never copy-paste it into a second site).
 | Backtest diagnostics + run history | `e2e/mock-backend.ts` (`runBacktest` sentinel branches, `listBacktests`) — the coverage-gap half was centralized by feature 071; the `strat-diag-001` / `strat-formula-error-001` diagnostics and the run-history rows are still inline |
 | Screener results | `e2e/mock-backend.ts` (`screenSymbols`) |
 | Editable strategy components (`getStrategy`) | `e2e/mock-backend.ts` |
-| Config keys | `e2e/mock-backend.ts` (`listKeys`) |
 | Signal sources | `e2e/mock-backend.ts` (`listSignalSources`, `manageSignalSource`) |
 | OAuth authorized apps | `e2e/mock-backend.ts` (`listAuthorizedApps`) |
 | Backfill jobs | `e2e/insights/backfills.spec.ts` (`runningJob()` factory) — carries **both** `timeframe: '1d'` and `timeframeEnum: 'TIMEFRAME_1DAY'` (feature 080) |

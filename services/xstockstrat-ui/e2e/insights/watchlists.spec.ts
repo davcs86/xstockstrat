@@ -22,7 +22,7 @@ async function addSymbols(page: Page, entry: string) {
  * Waits for the mutation+refetch round-trip (the trigger reflects the selection) before returning,
  * so binding several symbols in a row can't send a stale binding set that resets an earlier one. */
 async function bindStrategy(page: Page, symbol: string, optionName = 'Live Test Strategy') {
-  const select = page.getByTestId(`binding-${symbol}`).getByLabel(`Strategy for ${symbol}`);
+  const select = page.getByTestId(`readiness-row-${symbol}`).getByLabel(`Strategy for ${symbol}`);
   await select.click();
   await page.getByRole('option', { name: optionName }).click();
   await expect(select).toContainText(optionName, { timeout: 5000 });
@@ -39,13 +39,13 @@ test.describe('Watchlists (insights)', () => {
 
     // Add two symbols (lowercase input proves server-side uppercase via the mock).
     await addSymbols(page, 'aapl msft');
-    await expect(page.getByTestId('binding-AAPL')).toBeVisible({ timeout: 5000 });
-    await expect(page.getByTestId('binding-MSFT')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('readiness-row-AAPL')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('readiness-row-MSFT')).toBeVisible({ timeout: 5000 });
 
     // Remove one.
     await page.getByRole('button', { name: 'Remove AAPL' }).click();
-    await expect(page.getByTestId('binding-AAPL')).toHaveCount(0, { timeout: 5000 });
-    await expect(page.getByTestId('binding-MSFT')).toBeVisible();
+    await expect(page.getByTestId('readiness-row-AAPL')).toHaveCount(0, { timeout: 5000 });
+    await expect(page.getByTestId('readiness-row-MSFT')).toBeVisible();
 
     // Delete the list (confirm() auto-accepted).
     page.on('dialog', (d) => d.accept());
@@ -78,10 +78,166 @@ test.describe('Watchlists (insights)', () => {
     await expect(readiness.getByText('1 away')).toBeVisible();
     await expect(readiness.getByTestId('in-queue')).toBeVisible();
 
+    // Relocated row controls (FR-1/FR-2) must render visibly, not clipped by the row's
+    // fixed-width columns (design.md round-4: the w-32 Select width is an estimate to verify).
+    const row = readiness.getByTestId('readiness-row-AAPL');
+    await expect(row.getByLabel('Strategy for AAPL')).toBeVisible();
+    await expect(row.getByLabel('Remove AAPL')).toBeVisible();
+    const box = await row.boundingBox();
+    expect(box).not.toBeNull();
+
     // The binding is persisted: a reload re-fetches it (the Select keeps its strategy, still evaluated).
     await page.reload();
     await expect(readiness.getByTestId('readiness-row-AAPL')).toBeVisible({ timeout: 8000 });
     await expect(page.getByTestId('unbound-AAPL')).toHaveCount(0);
+  });
+
+  test('add-time strategy picker binds a new symbol in one call (FR-3, AC-2)', async ({ page }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page);
+    await page.goto('/insights/watchlists');
+
+    await createList(page, 'Picker List');
+
+    // Bound add: choose a strategy in the add-time picker before adding — the symbol should land
+    // already evaluated, proving the single-call add-already-bound path (no separate rebind step).
+    const addStrategySelect = page.getByLabel('Strategy for new symbols');
+    await addStrategySelect.click();
+    await page.getByRole('option', { name: 'Live Test Strategy' }).click();
+    await page.getByPlaceholder('Add symbols (e.g. AAPL MSFT)').fill('AAPL');
+    await page.getByRole('button', { name: 'Add' }).click();
+    await expect(page.getByTestId('readiness-row-AAPL')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('unbound-AAPL')).toHaveCount(0);
+
+    // Default unbound add: the picker is explicitly reset to "Unbound" — it is NOT reset
+    // automatically after a successful add (design.md §3: a repeat add keeps the active choice) —
+    // reproduces today's default only when the user actually leaves/sets it to Unbound.
+    await addStrategySelect.click();
+    await page.getByRole('option', { name: 'Unbound' }).click();
+    await page.getByPlaceholder('Add symbols (e.g. AAPL MSFT)').fill('MSFT');
+    await page.getByRole('button', { name: 'Add' }).click();
+    await expect(page.getByTestId('unbound-MSFT')).toBeVisible({ timeout: 5000 });
+  });
+
+  test('inline rename + watchlist-switch resets local state (FR-4, AC-3)', async ({ page }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page);
+    await page.goto('/insights/watchlists');
+
+    await createList(page, 'Original Name');
+    await addSymbols(page, 'AAPL');
+    await bindStrategy(page, 'AAPL');
+
+    // Commit a rename — the header updates and the bound symbol's binding survives (fails-080
+    // invariant: rename sends the full current bindings array, never a partial one).
+    await page.getByRole('button', { name: /^Rename /i }).click();
+    const nameField = page.getByLabel('Watchlist name', { exact: true });
+    await nameField.fill('Renamed List');
+    await nameField.press('Enter');
+    await expect(page.getByRole('heading', { name: 'Renamed List' })).toBeVisible({
+      timeout: 5000,
+    });
+    await expect(page.getByTestId('readiness-row-AAPL')).toBeVisible();
+
+    // Cancel: open the rename control again, type a different draft, press Escape — no mutation.
+    await page.getByRole('button', { name: /^Rename /i }).click();
+    await page.getByLabel('Watchlist name', { exact: true }).fill('Should Not Save');
+    await page.getByLabel('Watchlist name', { exact: true }).press('Escape');
+    await expect(page.getByRole('heading', { name: 'Renamed List' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Should Not Save' })).toHaveCount(0);
+
+    // Switch-reset: create a second list (selects it), pick a strategy in its add-time picker
+    // without adding, then switch back to the first list — the rename control must be back in
+    // display mode (not stuck mid-edit) and the add-time picker back to "Unbound" (the
+    // key={selected.watchlistId} remount closes both leaks in one mechanism, design.md §4).
+    await createList(page, 'Second List');
+    await page.getByLabel('Strategy for new symbols').click();
+    await page.getByRole('option', { name: 'Live Test Strategy' }).click();
+
+    const master = page.getByTestId('watchlist-master');
+    await master.getByRole('button', { name: /Renamed List/ }).click();
+    await expect(page.getByRole('heading', { name: 'Renamed List' })).toBeVisible({
+      timeout: 5000,
+    });
+    await expect(page.getByRole('button', { name: /^Rename /i })).toBeVisible();
+    await expect(page.getByLabel('Watchlist name', { exact: true })).toHaveCount(0);
+    await expect(page.getByLabel('Strategy for new symbols')).toHaveText('Unbound');
+  });
+
+  test('concurrency guard disables controls while a write is in flight (Layers 1 and 2)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page);
+    await page.goto('/insights/watchlists');
+
+    await createList(page, 'Concurrency List');
+    await addSymbols(page, 'AAPL');
+    // A second list to exercise Layer 2 against — the master-list's *other* button.
+    await createList(page, 'Other List');
+
+    // Register the delaying override AFTER mockWatchlists so it wins interception order.
+    let releaseResponse: () => void = () => {};
+    const delayed = new Promise<void>((resolve) => {
+      releaseResponse = resolve;
+    });
+    await page.route(
+      '**/xstockstrat.portfolio.v1.PortfolioService/UpdateWatchlist',
+      async (route) => {
+        await delayed;
+        const req = JSON.parse(route.request().postData() ?? '{}');
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ watchlist: { watchlistId: req.watchlistId, ...req } }),
+        });
+      },
+    );
+
+    const master = page.getByTestId('watchlist-master');
+    await master.getByRole('button', { name: /Concurrency List/ }).click();
+
+    // Layer 1: trigger a rebind (don't await its internal round-trip assertion) — while the
+    // UpdateWatchlist request is held, the add-row's Input and the bound row's remove button must
+    // both be disabled.
+    const select = page.getByTestId('readiness-row-AAPL').getByLabel('Strategy for AAPL');
+    await select.click();
+    await page.getByRole('option', { name: 'Live Test Strategy' }).click();
+
+    await expect(page.getByPlaceholder('Add symbols (e.g. AAPL MSFT)')).toBeDisabled();
+    await expect(page.getByLabel('Remove AAPL')).toBeDisabled();
+
+    // Layer 2: the master-list's *other* watchlist-select button must also be disabled while the
+    // write and its refetch are settling — the ancestor (page.tsx) sees it even though it never
+    // remounts.
+    const otherButton = master.getByRole('button', { name: /Other List/ });
+    await expect(otherButton).toBeDisabled();
+
+    // Release the delayed response — both layers must re-enable once the write and its refetch
+    // (the isFetching clause) resolve.
+    releaseResponse();
+    await expect(page.getByPlaceholder('Add symbols (e.g. AAPL MSFT)')).toBeEnabled({
+      timeout: 5000,
+    });
+    await expect(page.getByLabel('Remove AAPL')).toBeEnabled();
+    await expect(otherButton).toBeEnabled({ timeout: 5000 });
+  });
+
+  test('strategy binding picker excludes non-live strategies (disabled strategies must not be usable)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page);
+    await page.goto('/insights/watchlists');
+
+    await createList(page, 'Filtered List');
+    await addSymbols(page, 'AAPL');
+
+    const select = page.getByTestId('readiness-row-AAPL').getByLabel('Strategy for AAPL');
+    await select.click();
+    await expect(page.getByRole('option', { name: 'Live Test Strategy' })).toBeVisible();
+    // "Inactive Strategy" (liveEnabled: false in the fixture) must not be a selectable option.
+    await expect(page.getByRole('option', { name: 'Inactive Strategy' })).toHaveCount(0);
   });
 
   test('master-detail: selecting a list swaps the detail pane (feature 098)', async ({ page }) => {

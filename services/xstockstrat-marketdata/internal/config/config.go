@@ -68,19 +68,43 @@ type Watcher struct {
 }
 
 // NewWatcher dials the config service and starts the background watch loop.
-func NewWatcher(endpoint, namespace string) (*Watcher, error) {
+// applicationEnv/tradingMode are this deployment's own resolved scope (Config.ApplicationEnv /
+// Config.TradingMode) — passed on every WatchConfig request so the server serves this
+// deployment's config rows instead of the zero-value dev/all default.
+func NewWatcher(endpoint, namespace, applicationEnv, tradingMode string) (*Watcher, error) {
 	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("dial config service %s: %w", endpoint, err)
 	}
 	w := &Watcher{
-		namespace: namespace,
-		client:    configv1.NewConfigServiceClient(conn),
-		ready:     make(chan struct{}),
-		snapshot:  make(map[string]*configv1.ConfigValue),
+		namespace:   namespace,
+		client:      configv1.NewConfigServiceClient(conn),
+		ready:       make(chan struct{}),
+		snapshot:    make(map[string]*configv1.ConfigValue),
+		environment: resolveEnvironment(applicationEnv),
+		tradingMode: resolveTradingMode(tradingMode),
 	}
 	go w.watchLoop()
 	return w, nil
+}
+
+// resolveEnvironment maps Config.ApplicationEnv ("development" | "production") to the proto
+// Environment enum. Anything other than "production" resolves to dev, matching the default in
+// LoadFromEnv.
+func resolveEnvironment(applicationEnv string) commonv1.Environment {
+	if applicationEnv == "production" {
+		return commonv1.Environment_ENVIRONMENT_PRODUCTION
+	}
+	return commonv1.Environment_ENVIRONMENT_DEV
+}
+
+// resolveTradingMode maps Config.TradingMode ("paper" | "live") to the proto TradingMode enum.
+// Anything other than "live" resolves to paper, matching the default in LoadFromEnv.
+func resolveTradingMode(tradingMode string) commonv1.TradingMode {
+	if tradingMode == "live" {
+		return commonv1.TradingMode_TRADING_MODE_LIVE
+	}
+	return commonv1.TradingMode_TRADING_MODE_PAPER
 }
 
 // WaitForSnapshot blocks until the initial config snapshot has been received

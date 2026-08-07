@@ -2228,14 +2228,16 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
 
     async def _load_strategy_definition(self, strategy_id: str, cache: dict):
         """Load + cache a StrategyDefinition for the compute (one DB read per distinct strategy).
-        Returns None (cached) when the strategy is missing — a dangling binding stays a candidate
-        but traces to 0/0 rather than fabricating readiness."""
+        Returns None (cached) when the strategy is missing, deactivated, or not live-enabled — a
+        dangling or disabled binding stays a candidate but traces to 0/0 rather than fabricating
+        readiness for a strategy the operator turned off (mirrors the live loop's own
+        `live_enabled AND active` gate, live_loop.py)."""
         if strategy_id in cache:
             return cache[strategy_id]
         definition = None
         if self._strategies_repo is not None:
             row = await self._strategies_repo.get_by_id(strategy_id)
-            if row is not None:
+            if row is not None and row.get("active") and row.get("live_enabled"):
                 definition = _row_to_strategy_definition(row)
         cache[strategy_id] = definition
         return definition

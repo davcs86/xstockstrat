@@ -58,7 +58,7 @@ func main() {
 
 	// Block until config snapshot received — required before accepting traffic.
 	slog.Info("connecting to config service", "endpoint", cfg.ConfigEndpoint)
-	cfgWatcher, err := config.NewWatcher(cfg.ConfigEndpoint, "trading")
+	cfgWatcher, err := config.NewWatcher(cfg.ConfigEndpoint, "trading", cfg.ApplicationEnv, cfg.TradingMode)
 	if err != nil {
 		slog.Error("config watcher init failed", "error", err)
 		os.Exit(1)
@@ -83,8 +83,14 @@ func main() {
 	accountRepo := repository.NewAccountRepo(repo.Pool())
 	slog.Info("account repository initialized")
 
+	// Order-intent repository — shares the TradingRepo pool, no second connection (F-06).
+	orderIntentRepo := repository.NewOrderIntentRepo(repo.Pool())
+
+	// Bracket repository — shares the TradingRepo pool, no second connection (F-06, feature 030).
+	bracketRepo := repository.NewBracketRepo(repo.Pool())
+
 	// Wire service layer.
-	svc, err := service.NewTradingService(cfg, cfgWatcher, accountRepo, repo, cfg.BrokerAccountsEncryptionKey)
+	svc, err := service.NewTradingService(cfg, cfgWatcher, accountRepo, repo, orderIntentRepo, bracketRepo, cfg.BrokerAccountsEncryptionKey)
 	if err != nil {
 		slog.Error("service init failed", "error", err)
 		os.Exit(1)
@@ -108,6 +114,14 @@ func main() {
 	go svc.StartPositionSyncPoller(ctx)
 	// Start credential health poller — flags accounts whose API secrets stopped working.
 	go svc.StartCredentialHealthPoller(ctx)
+	// Start order-intent sweeper — proactively reclaims orphaned PENDING intents (feature 101).
+	go svc.StartOrderIntentSweeper(ctx)
+	// Start bracket protection watchdog — flattens+halts on an unconfirmed bracket
+	// past its protection window (feature 030).
+	go svc.StartBracketProtectionWatchdog(ctx)
+	// Start broker-state reconciliation poller — compares open orders/positions against
+	// broker truth, self-heals benign drift, halts on a genuine mismatch (feature 102).
+	go svc.StartReconciliationPoller(ctx)
 
 	// gRPC server.
 	grpcHdl := handler.NewTradingHandler(svc)
