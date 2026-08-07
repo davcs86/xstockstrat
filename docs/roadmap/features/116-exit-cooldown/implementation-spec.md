@@ -998,7 +998,7 @@ ruff check . && ruff format --check .
 
 ### Step 14 — service: `manage_strategy`/`get_strategy` MCP tool + client builder
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -1072,7 +1072,7 @@ uv run pytest tests/test_strategy_builders.py -k manage_strategy_definition -v
 
 ### Step 15 — test: paired with Step 14
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify

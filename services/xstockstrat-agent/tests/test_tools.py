@@ -802,6 +802,33 @@ class TestManageStrategyTool:
             assert "cooldown_days" not in m.call_args.kwargs["definition"]
 
     @pytest.mark.asyncio
+    async def test_forwards_exit_cooldown_days(self):
+        """feature 116: an explicit exit_cooldown_days (incl. 0) is forwarded; omitting it omits
+        the key — mirrors test_forwards_cooldown_days for the sibling exit-side field."""
+        server = _make_server()
+        with patch.object(
+            client, "manage_strategy", AsyncMock(return_value={"strategy_id": "s"})
+        ) as m:
+            # Non-zero value forwarded.
+            await _tool_fn(server, "manage_strategy")(
+                ctx=_ctx(ADMIN), operation="register", strategy_id="s", exit_cooldown_days=5
+            )
+            assert m.call_args.kwargs["definition"]["exit_cooldown_days"] == 5
+
+            # Explicit 0 (no minimum hold) must NOT be dropped by a truthy check.
+            await _tool_fn(server, "manage_strategy")(
+                ctx=_ctx(ADMIN), operation="register", strategy_id="s", exit_cooldown_days=0
+            )
+            defn = m.call_args.kwargs["definition"]
+            assert "exit_cooldown_days" in defn and defn["exit_cooldown_days"] == 0
+
+            # Omitted → key absent (server applies the platform default).
+            await _tool_fn(server, "manage_strategy")(
+                ctx=_ctx(ADMIN), operation="register", strategy_id="s"
+            )
+            assert "exit_cooldown_days" not in m.call_args.kwargs["definition"]
+
+    @pytest.mark.asyncio
     async def test_grpc_error_reraised_as_clear_message(self):
         import grpc  # noqa: PLC0415
 
@@ -1212,6 +1239,35 @@ class TestManageStrategyPartialUpdate:
             )
         assert m.await_args.kwargs["definition"]["cooldown_days"] == 0
         assert m.await_args.kwargs["update_mask"] == ["cooldown_days"]
+
+    @pytest.mark.asyncio
+    async def test_exit_cooldown_only_update_sends_only_exit_cooldown(self):
+        """feature 116 — mirrors test_cooldown_only_update_sends_only_cooldown for the sibling
+        exit-side field."""
+        server = _make_server()
+        with patch.object(client, "manage_strategy", AsyncMock(return_value={})) as m:
+            await _tool_fn(server, "manage_strategy")(
+                ctx=_ctx(ADMIN),
+                operation="update",
+                strategy_id="range_mr_v3",
+                exit_cooldown_days=5,
+            )
+        kwargs = m.await_args.kwargs
+        assert kwargs["definition"] == {"strategy_id": "range_mr_v3", "exit_cooldown_days": 5}
+        assert kwargs["update_mask"] == ["exit_cooldown_days"]
+        for wiped in ("components", "entry_rule", "exit_rule", "display_name", "cooldown_days"):
+            assert wiped not in kwargs["definition"]
+
+    @pytest.mark.asyncio
+    async def test_explicit_zero_exit_cooldown_still_survives(self):
+        """feature 116's explicit-presence contract: 0 means 'no minimum hold', not 'unset'."""
+        server = _make_server()
+        with patch.object(client, "manage_strategy", AsyncMock(return_value={})) as m:
+            await _tool_fn(server, "manage_strategy")(
+                ctx=_ctx(ADMIN), operation="update", strategy_id="x", exit_cooldown_days=0
+            )
+        assert m.await_args.kwargs["definition"]["exit_cooldown_days"] == 0
+        assert m.await_args.kwargs["update_mask"] == ["exit_cooldown_days"]
 
     @pytest.mark.asyncio
     async def test_clear_fields_joins_the_mask_without_a_value(self):

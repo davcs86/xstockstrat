@@ -541,3 +541,55 @@ authorization). Counter reset; continuing to Step 12.
   459/459 passed, 82.21% coverage, ruff clean.
 - Files modified: `services/xstockstrat-analysis/tests/test_entry_backfill.py` (new)
 - Deviations: none.
+
+### Checkpoint — steps 12–13 (surface: backend → agent boundary)
+Sequential-mode §5.5b checkpoint report printed to the operator (surface-boundary trigger: Step
+14 shifts from `backend` to `agent`). Accountability: no out-of-scope changes, no unresolved
+open items (all 3 design.md Open Risks now have a landed disposition), no unaddressed review
+warnings, 1 deviation (Step 12 import style). Operator directed to proceed. Counter reset;
+continuing to Step 14 on the `agent` surface.
+
+### Step 14 — service: `manage_strategy`/`get_strategy` MCP tool + client builder [done]
+- Added `exit_cooldown_days: int | None = None` to `manage_strategy`'s signature (directly
+  after `cooldown_days`), the `supplied` dict entry, the docstring's field description and its
+  "changing any scoring-relevant field" note, and `get_strategy`'s docstring field list — all in
+  `tools.py`. Added `exit_cooldown_days=definition.get("exit_cooldown_days")` to `client.py`'s
+  `pb_def` construction (directly after `cooldown_days=...`) — same presence-safe bare-`.get()`
+  pattern feature 069 already established.
+- Discovery (codebase-discovery subagent) confirmed all 7 pieces of Codebase Evidence are intact
+  content-wise; only line numbers had drifted (the `manage_strategy` tool moved ~39 lines later
+  than the spec's original citation). No re-spec needed.
+- Noted (not a functional issue): Step 14's own Codebase Evidence prose says "Step 16 updates
+  the test's fixture" — this is an editorial slip; the actual fixture update is Step 15's own
+  Instruction 5 (`test_strategy_builders.py`'s `_capture_manage_strategy_request`), which Step
+  15's Codebase Evidence correctly attributes. Step 16 is docs-only (`mcp-tools.md` +
+  `strat-lab` skill). Not worth a Deviation Log entry — Step 15's text is already correct and is
+  what actually governs the next step.
+- TDD: confirmed RED as expected — `test_manage_strategy_definition_covers_every_proto_field`
+  (the descriptor-parity test) fails after this step alone, because the proto now has
+  `exit_cooldown_days` but the test's fixture doesn't supply it yet (so `ListFields()` never
+  sets it) — exactly what Step 14's own TDD note and Step 15's Codebase Evidence both predict.
+  Full suite: 210 passed, 1 failed (the expected RED), ruff clean.
+- Files modified: `services/xstockstrat-agent/app/tools.py`,
+  `services/xstockstrat-agent/app/client.py`
+- Deviations: none.
+
+### Step 15 — test: paired with Step 14 [done]
+- Added `test_forwards_exit_cooldown_days` (sibling to `test_forwards_cooldown_days`,
+  `test_tools.py`); `test_exit_cooldown_only_update_sends_only_exit_cooldown` +
+  `test_explicit_zero_exit_cooldown_still_survives` in `TestManageStrategyPartialUpdate`
+  (`test_tools.py`); `test_exit_cooldown_days_round_trips_presence`
+  (`TestManageStrategyClient`, `test_client.py`); `test_exit_cooldown_days_reaches_the_wire_
+  under_its_own_mask` (`TestManageStrategyUpdateMask`, `test_client.py`) — all direct mirrors
+  of the `cooldown_days` templates the spec cited, content/shape confirmed unchanged by
+  discovery. Updated `_capture_manage_strategy_request`'s fixture (`test_strategy_builders.py`)
+  to add `"exit_cooldown_days": 3` alongside `"cooldown_days": 5` — the change that actually
+  turns the descriptor-parity test GREEN.
+- TDD: RED confirmed at the end of Step 14 (`test_manage_strategy_definition_covers_every_
+  proto_field` failing, 210 passed / 1 failed). GREEN after this step's fixture change: full
+  suite `tests/test_tools.py tests/test_client.py tests/test_strategy_builders.py` → 127/127
+  passed; whole-service suite → 216/216 passed, 77.32% coverage, ruff clean.
+- Files modified: `services/xstockstrat-agent/tests/test_tools.py`,
+  `services/xstockstrat-agent/tests/test_client.py`,
+  `services/xstockstrat-agent/tests/test_strategy_builders.py`
+- Deviations: none.
