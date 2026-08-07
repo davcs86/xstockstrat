@@ -119,3 +119,26 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - `playwright.config.ts`'s `webServer.env` block is confirmed at lines 148-187 (not 159-185 as
     recon.md approximated) — `APPLICATION_ENV: 'development'` is added there in Step 4; Steps 6 and
     8 depend on it for a deterministic native scope in CI.
+
+## Session 2026-08-07 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 7 warnings (advisory — did not block). Overlap: low-severity (one shared
+  additive row in `e2e/fixtures/INVENTORY.md` with feature 096, mechanical rebase, no ordering
+  dependency).
+- Unresolved ⚠ carried into execution (all minor citation line-number drift — content described
+  remains accurate, only line numbers shifted by 1-3; execute-time discovery re-reads files fresh
+  so these self-correct, but recording per P-03):
+  - Step 3: `bffShared.ts:8-14` import-shape citation off by one — actual `9-15`. — [x] resolved
+    (execute-time discovery re-verifies against the live file).
+  - Step 4: `callBff` helper citation (`api-smoke.spec.ts:21-35`) truncated — actual `21-38`. — [x] resolved.
+  - Step 6: docstring citation (`lines 3-11`) off by one — actual `4-12`. — [x] resolved.
+  - Step 7: `use(params)`/`use(searchParams)` citation (`lines 58-59`) off by one — actual `57-58`;
+    `Props` type citation (`page.tsx:53-56`) off — actual `51-54`. — [x] resolved.
+  - Step 7: instruction wording "(all imports except `use`, the ... helpers, and the JSX)" is
+    ambiguous — intent (confirmed by rest of step) is the helpers/JSX carry over unchanged, not
+    excluded. — [ ] unaddressed — clarify at Step 7 execution time, not a blocker.
+  - Cross-cutting: MODE-axis deferral's C-14 "named follow-up" framing has no actual follow-up
+    feature number — already debated and user-approved in `design.md`/this file's design session;
+    surfaced again here for visibility only. — [ ] unaddressed — accepted deferral, no action.
+- Overlap findings: `e2e/fixtures/INVENTORY.md` shared with `096-position-and-order-detail-pages`
+  (additive rows in each, no semantic clash).
