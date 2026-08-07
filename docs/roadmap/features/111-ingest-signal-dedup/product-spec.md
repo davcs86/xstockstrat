@@ -31,8 +31,13 @@ alerts, duplicate backtest/strategy scoring inputs, or skewed signal-weighted an
 
 FR-1. `IngestSignal` MUST detect a duplicate submission before insert, defined as a signal
 matching an existing `ingest.newsletter_signals` row on the natural key
-`(source, symbol, direction)` with `valid_from` within a configurable dedup window, and MUST NOT
-insert a second row for it.
+`(source, symbol, direction)` **and** matching that row's `conviction` and `valid_until` exactly
+(NULL-safe), submitted within a configurable dedup window measured from the **ingestion time**
+(`claimed_at`) of the last claim for that natural key — not from `valid_from`. MUST NOT insert a
+second row for a submission that matches on all of the above; a submission sharing the natural key
+but differing in `conviction` or `valid_until` (e.g. an updated confidence on an ongoing
+recommendation) MUST be treated as a fresh signal and inserted, even within the window. (Design
+decision, `/sdd-design` gate 2026-08-07 — see `design.md`.)
 
 FR-2. The dedup window MUST be driven by a config key in the `ingest.*` namespace (reviving the
 intent of the previously-dead `dedup_window_hours` key, renamed/renumbered as needed to fit
@@ -98,11 +103,13 @@ feature fixes does not recur.
 
 ## Database Changes
 
-- [ ] No schema changes
-- Open question for `/sdd-design`: whether the dedup check is a read-then-conditional-insert
-  (application-level `SELECT ... FOR UPDATE`-guarded check) or backed by a partial/expression
-  index to make the check efficient and race-safe under concurrent `IngestSignal` calls. No new
-  table is needed either way; at most a supporting index migration.
+- New migration `009` in `services/xstockstrat-ingest/migrations/`: plain (non-hypertable) table
+  `ingest.signal_dedup_keys` (`PRIMARY KEY (source, symbol, direction)`, plus `conviction`,
+  `valid_until`, `signal_id`, `claimed_at` columns and a supporting index on `claimed_at`) — see
+  `design.md` for the exact schema and the atomic `INSERT ... ON CONFLICT ... DO UPDATE ...
+  WHERE ... RETURNING` claim statement. A unique index directly on `ingest.newsletter_signals`
+  isn't possible: it's a hypertable partitioned on `ingested_at`, and TimescaleDB requires a
+  hypertable's unique index to include its partition column.
 
 ## Feature Workflow Notes
 
@@ -110,15 +117,16 @@ Branch to create: `feature/ingest-signal-dedup` (branch from `main-dev`)
 Approval gates required (per docs/runbooks/feature-workflow.md):
 - [x] 1 service owner approval (non-breaking proto change — additive field only)
 - [ ] 2 service owners + platform lead (breaking proto change) — N/A, additive only
-- [ ] DBA review + service owner (schema migration) — only if `/sdd-design` picks an index-migration approach
+- [x] DBA review + service owner (schema migration — new `009_signal_dedup_keys` table)
 
 ## Acceptance Criteria
 
-1. Submitting the same `(source, symbol, direction)` signal twice within the dedup window via
-   `IngestSignal` results in exactly one row in `ingest.newsletter_signals`; the second call's
-   response carries `deduplicated=true` and the same `signal_id` as the first.
-2. Submitting the same natural key again *outside* the dedup window (or with a different
-   `direction`) is treated as a new signal and inserted normally.
+1. Submitting the same `(source, symbol, direction, conviction, valid_until)` signal twice within
+   the dedup window via `IngestSignal` results in exactly one row in `ingest.newsletter_signals`;
+   the second call's response carries `deduplicated=true` and the same `signal_id` as the first.
+2. Submitting the same natural key again *outside* the dedup window, with a different `direction`,
+   or with a different `conviction`/`valid_until`, is treated as a new signal and inserted
+   normally (and `claimed_at` is refreshed to the new submission's time).
 3. The MCP agent's `ingest_signal` tool does not emit a duplicate auto-alert when
    `IngestSignalResponse.deduplicated=true`.
 4. `ingest.signals.dedup_window_hours` is documented in `services/xstockstrat-ingest/CLAUDE.md`,
@@ -127,15 +135,18 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 6. `services/xstockstrat-ingest/docs/context-constitution-findings.md`'s "Dedup key" row is
    corrected or removed now that the behavior is implemented (per the CLAUDE.md Teardown rule).
 
-## Open Questions
+## Open Questions — resolved at `/sdd-design` (2026-08-07, see `design.md`)
 
-- [ ] Exact default for `ingest.signals.dedup_window_hours` — `/sdd-design` to confirm a sane
-  default (candidate: 24h, matching the historical documented intent recorded in
-  `context-constitution-findings.md:12`).
-- [ ] Whether the dedup check should also match on `raw_url` (when present) as an alternative
-  duplicate signal, in addition to the `(source, symbol, direction, valid_from-in-window)` key —
-  `/sdd-design` to weigh against Out-of-Scope (exact-match only, no fuzzy matching).
-- [ ] Known trap (ledger 2026-08-06, `086-fix-mcp-formula-lifecycle` / general C-10(b) pattern):
-  whatever dedup signal is added to `IngestSignalResponse` must be honestly surfaced by *every*
-  path that returns signal data the agent or a future UI might read from, not just the
-  freshly-inserted path — verify at design time.
+- [x] Window anchor: **ingestion time** (`claimed_at`), not `valid_from` — user-confirmed at the
+  design gate.
+- [x] Conviction/`valid_until` updates within the window: **treated as a fresh signal**, not
+  swallowed as a duplicate — user-confirmed at the design gate; widens the dedup match beyond the
+  bare `(source, symbol, direction)` natural key (see FR-1).
+- [x] Default for `ingest.signals.dedup_window_hours`: **24** — matches the historical documented
+  intent recorded in `context-constitution-findings.md:12`.
+- [x] `raw_url` fuzzy matching: **not adopted** — stays exact-match only per Out of Scope.
+- [x] Known trap (ledger 2026-08-06, `086-fix-mcp-formula-lifecycle` / C-10(b)): the
+  `deduplicated` field must be honestly surfaced everywhere `IngestSignalResponse` is consumed —
+  verified in `design.md` (agent tool response, docstring, and `mcp-tools.md` all updated in the
+  same feature; `xstockstrat-analysis`'s `fundsignal_loop.py` caller reviewed and needs no change,
+  see design.md § Reviewed, No Change Needed).

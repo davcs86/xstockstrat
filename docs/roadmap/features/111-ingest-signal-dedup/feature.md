@@ -1,6 +1,6 @@
 # Feature: ingest-signal-dedup
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `design-approved`
 **Development Branch**: `feature/ingest-signal-dedup`
 **Created**: 2026-08-07
 **Last Updated**: 2026-08-07
@@ -12,12 +12,15 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-07 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-07 | `draft` → `design-approved` | /sdd-design | Design debated (3 rounds, quick mode + 2 user-requested extensions) and approved; recon.md + design.md written |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon](recon.md) — grounded codebase dossier
+- [Design](design.md) — debated, approved architecture
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec ingest-signal-dedup`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -41,4 +44,4 @@ downstream side effects (auto-alerts, signal-weighted analysis inputs).
 
 ## Next Action
 
-`/sdd-review ingest-signal-dedup product-spec` — AI review of product spec before running /sdd-design
+`/sdd-spec ingest-signal-dedup` — generate implementation spec from the approved design
