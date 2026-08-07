@@ -1,7 +1,7 @@
 # Feature: fix-config-ui-env
 
 **Type**: bug
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/fix-config-ui-env`
 **GitHub Issue**: docs/reports/2026-08-07-config-ui-cross-environment-toggle-defect.md (GitHub Issues disabled on this repo — see `docs/CLAUDE.md`)
 **Severity**: SEV-2
@@ -15,6 +15,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-07 | `bug-reported` → `draft` | /sdd-triage | Product spec pre-populated from docs/reports/2026-08-07-config-ui-cross-environment-toggle-defect.md |
+| 2026-08-07 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning) |
 
 ---
 
@@ -35,4 +36,4 @@ with no indication the edit is inert.
 
 ## Next Action
 
-`/sdd-design fix-config-ui-env` — recommended design depth (full) from triage; see context.md
+`/sdd-design fix-config-ui-env` — debate and approve a design, then run `/sdd-spec` to generate the implementation spec

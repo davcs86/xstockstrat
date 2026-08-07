@@ -47,3 +47,13 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   `APPLICATION_ENV === env` native-scope check would never match on a dev deployment — the fix
   must normalize `"development"` → `"dev"` before comparing (mirrors what the companion Go hotfix
   already does correctly in `resolveEnvironment`: anything other than `"production"` → dev).
+
+## Session 2026-08-07 — sdd-review product-spec
+
+- Re-ran `/sdd-review fix-config-ui-env product-spec` after the fixes above (this time without
+  switching branches mid-run). Result: **PASS**, 0 blockers, 1 advisory warning (optionally state
+  the fix is UI-only/paper-safe with no market or broker interaction — not a real gap given the
+  Out-of-Scope framing already covers it).
+- Overlap scan (from the earlier run — unaffected by these edits, no new config keys/proto/DB):
+  CLEAN. No live in-flight feature collides with 115.
+- Status: draft → spec-ready.
