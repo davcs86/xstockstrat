@@ -690,7 +690,7 @@ Confirm all 3 `resolveAccount` call sites compile against the new 3-return signa
 
 ### Step 12 — service: `PlaceOrder` dedup rewrite
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -778,7 +778,7 @@ Confirm all 3 `resolveAccount` call sites compile against the new 3-return signa
 
 ### Step 13 — service: `ReplaceOrder` dedup rewrite
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -818,7 +818,7 @@ Confirm all 3 `resolveAccount` call sites compile against the new 3-return signa
 
 ### Step 14 — service: `CancelOrder` dedup rewrite (fail-open semantics preserved)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -861,7 +861,7 @@ Confirm all 3 `resolveAccount` call sites compile against the new 3-return signa
 
 ### Step 15 — test: write-handler unit coverage (excluded package — targeted assertions)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_helpers_test.go` — modify

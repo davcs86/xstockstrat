@@ -379,3 +379,40 @@ of `main-dev`. This satisfies the `merge-order.md` same-function-overlap depende
   4/4 new cases pass. Full `go test ./...`: all packages pass, no regressions. `golangci-lint run
   ./...`: 0 issues. Deviations: the constructor-parameter-position correction (5th, not 6th) noted
   above.
+- Steps 12+15 [done] (TDD pair, plus 13+14 delivered together) — Wrote
+  `TestPlaceOrder_RequiresClientOrderId` in `trading_helpers_test.go` first (Step 15's reachable
+  assertion). RED: failed with `FailedPrecondition` (the pre-fix `resolveAccount` empty-brokers path),
+  not the expected `InvalidArgument` — right reason, the mandatory-nonce guard didn't exist yet.
+  Implemented Step 12 per the **PlaceOrder ordering resolution** recorded at re-spec time: mandatory
+  `client_order_id` check right after trailing-stop validation; `resolveAccount` → feature-100's
+  `trading_state` gate → `checkPortfolioRisk` (all unchanged) → request-hash computation → approval
+  threshold/`orderID` mint → **dedup `InsertIntent` gated on `!requiresApproval`** → order-struct
+  build (now setting `IntentState`) → the rest of the function unchanged in shape but with the
+  timeout-vs-definite-rejection broker-error branch (new `order.broker_call_uncertain` ledger event
+  on timeout, leaves `order.Status` untouched and the intent `PENDING`; existing REJECTED behavior +
+  new `FinalizeIntent(...Rejected...)` on a definite error) and `FinalizeIntent(...Completed...)` on
+  success. `brokerReq.ClientOrderID` now uses `broker.DeriveBrokerClientOrderID(intentID)` (Step 5)
+  instead of the raw `orderID`. GREEN: `TestPlaceOrder_RequiresClientOrderId` passes; full
+  `go build ./...` clean; full `go test ./...` all packages pass, no regressions; `golangci-lint run
+  ./...`: 0 issues (including a `gofmt -l .` clean check).
+  - **Deviation — skipped the optional intent+order-row shared-transaction optimization**:
+    design.md's own language is "may share one short transaction" (permissive, framed as "closing a
+    narrow crash window for free," not a hard requirement). Implemented as two sequential,
+    independent statements (`InsertIntent` then the existing `UpsertOrder` call) instead of adding a
+    new transactional repository method or duplicating `UpsertOrder`'s SQL inline via a raw `tx.Exec`
+    — CLAUDE.md's "write the minimum that solves the stated problem" guardrail. Accepts a narrower
+    crash window (between the two inserts) than the optional optimization would have closed; the
+    mandatory invariant — never wrapping the broker HTTP call in a transaction — is fully honored.
+    Logging here since it's a real, deliberate scope-narrowing choice, not an oversight.
+  - Also implemented Step 13 (`ReplaceOrder`) and Step 14 (`CancelOrder`) in this same pass — both
+    reuse the identical `InsertIntent`/`classifyIntentLookup`/`FinalizeIntent` shape via
+    `deriveReplaceCancelIntentID` (server-derived, no client nonce). `ReplaceOrder`'s broker-error
+    branch applies the same timeout-vs-definite split (timeout leaves the intent `PENDING`, existing
+    `codes.Internal` error unchanged either way — design.md's specified behavior for this handler,
+    which does not distinguish REJECTED the way `PlaceOrder` does). `CancelOrder`'s existing fail-open
+    broker-call-error branch is **unchanged** (still log-only, cancellation proceeds locally
+    regardless) — the only addition is finalizing the intent to `UNKNOWN` (not `COMPLETED`) on that
+    branch, structurally wiring the existing "act as if it worked" behavior into the same
+    `IntentState` display via the LATERAL join, per design.md's explicit two-different-axes framing.
+    All three handlers verified together (same build/test/lint pass above) since they share one
+    tightly-coupled edit to `trading.go`.

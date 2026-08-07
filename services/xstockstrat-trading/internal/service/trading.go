@@ -2,10 +2,12 @@ package service
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
 	"strconv"
 	"sync"
 	"time"
@@ -16,6 +18,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/keepalive"
 	grpcstatus "google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -267,6 +270,14 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 			"trail_price/trail_percent are only valid for trailing_stop orders")
 	}
 
+	// client_order_id is now mandatory (feature 101, FR-1): a stable client-generated
+	// nonce reused across retries of the same logical place-order action, and this
+	// order's intent ID for dedup purposes.
+	if req.ClientOrderId == "" {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, "client_order_id is required")
+	}
+	intentID := req.ClientOrderId
+
 	// Resolve broker account.
 	resolvedAccountID, accountEntry, err := s.resolveAccount(req.AccountId)
 	if err != nil {
@@ -286,6 +297,14 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 	// Non-blocking portfolio risk check: log warnings but never block order placement.
 	s.checkPortfolioRisk(ctx, req)
 
+	// Compute the request-content hash (feature 101, FR-3) — the dedup mechanism's
+	// content-identity check, independent of the client_order_id nonce itself.
+	hashDigest, err := placeOrderRequestHash(req)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "compute request hash: %v", err)
+	}
+	requestHashHex := hex.EncodeToString(hashDigest)
+
 	// Check approval thresholds from live config.
 	approvalQtyThreshold := s.cfgW.GetFloat("trading.approval.require_above_qty", 500)
 	approvalNotionalThreshold := s.cfgW.GetFloat("trading.approval.require_above_notional", 50000)
@@ -296,6 +315,57 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 	orderStatus := tradingv1.OrderStatus_ORDER_STATUS_NEW
 	if requiresApproval {
 		orderStatus = tradingv1.OrderStatus_ORDER_STATUS_PENDING_APPROVAL
+	}
+
+	// Dedup insert (feature 101): gated on !requiresApproval. An approval-required
+	// order has no broker call yet at all — it is not part of this feature's dedup
+	// surface (FR-1..FR-6 concern the broker call, which the approval path defers
+	// indefinitely) — so it deliberately touches no order_intents row. This also
+	// satisfies "insert before building the provisional order struct" (still true when
+	// it does run) without an approval-required order acquiring an intent it should
+	// never have.
+	ownsIntent := true
+	var intentState tradingv1.IntentState
+	if !requiresApproval {
+		ok, err := s.orderIntentRepo.InsertIntent(ctx, &repository.OrderIntentRecord{
+			IntentID: intentID, OrderID: orderID, RequestHash: requestHashHex,
+			BrokerAccountID: resolvedAccountID,
+		})
+		if err != nil {
+			return nil, grpcstatus.Errorf(codes.Internal, "insert order intent: %v", err)
+		}
+		if !ok {
+			existing, getErr := s.orderIntentRepo.GetIntentByID(ctx, intentID)
+			if getErr != nil || existing == nil {
+				return nil, grpcstatus.Errorf(codes.Internal, "load existing order intent: %v", getErr)
+			}
+			action, isStale := classifyIntentLookup(existing, requestHashHex, time.Now(), staleThreshold(s.cfgW))
+			switch action {
+			case intentActionRejectHashMismatch:
+				return nil, grpcstatus.Errorf(codes.FailedPrecondition,
+					"client_order_id %q was already used with different order content", intentID)
+			case intentActionReturnStored:
+				var stored tradingv1.Order
+				if err := proto.Unmarshal(existing.LatestResponse, &stored); err != nil {
+					return nil, grpcstatus.Errorf(codes.Internal, "unmarshal stored intent response: %v", err)
+				}
+				return &stored, nil
+			case intentActionRejectUnknown:
+				return nil, grpcstatus.Errorf(codes.FailedPrecondition,
+					"order intent %q outcome is unknown; verify with the broker before retrying", intentID)
+			default: // intentActionRejectPending
+				if isStale {
+					// Best-effort — the caller cannot and need not distinguish "not yet
+					// stale" from "just reclaimed" (design.md § Concurrency).
+					_, _, _ = s.orderIntentRepo.ReclaimOrphanIntent(ctx, intentID, existing.UpdatedAt.Add(staleThreshold(s.cfgW)))
+				}
+				return nil, grpcstatus.Errorf(codes.FailedPrecondition,
+					"order intent %q is still pending", intentID)
+			}
+		}
+		intentState = tradingv1.IntentState_INTENT_STATE_PENDING
+	} else {
+		ownsIntent = false
 	}
 
 	order := &tradingv1.Order{
@@ -317,6 +387,7 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 		BrokerType:    commonv1.BrokerType(accountEntry.brokerType),
 		CreatedAt:     timestamppb.New(time.Now()),
 		UpdatedAt:     timestamppb.New(time.Now()),
+		IntentState:   intentState,
 	}
 
 	s.mu.Lock()
@@ -351,18 +422,40 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 
 	// Submit to broker.
 	brokerReq := s.buildBrokerRequest(req)
-	// Forward our order ID as the broker client_order_id so a retried submission
-	// (trading.order.max_retries) is de-duplicated by the broker instead of placing
-	// a second order.
-	brokerReq.ClientOrderID = orderID
+	// Forward the derived broker client-order-id (feature 101) instead of the raw
+	// platform order ID, so a retried submission is de-duplicated by the broker too —
+	// IBKR's only dedup mechanism (it has no server-side idempotency of its own).
+	brokerReq.ClientOrderID = broker.DeriveBrokerClientOrderID(intentID)
 	brokerOrder, err := accountEntry.client.SubmitOrder(ctx, brokerReq)
 	if err != nil {
+		var netErr net.Error
+		isTimeout := errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &netErr) && netErr.Timeout())
+		if isTimeout {
+			// Uncertain outcome (feature 101, FR-4): leave order.Status at its
+			// pre-broker-call value and the intent PENDING for reclaim — do not
+			// unconditionally mark REJECTED, which would conflate "definitely
+			// rejected" with "we don't know what happened."
+			_ = s.repo.UpsertOrder(context.Background(), order)
+			go s.emitLedgerEvent(context.Background(), "order.broker_call_uncertain", orderID, map[string]interface{}{
+				"order_id": orderID, "intent_id": intentID, "error": err.Error(),
+			})
+			slog.Warn("broker call uncertain (timeout)", "order_id", orderID, "intent_id", intentID, "error", err)
+			return order, fmt.Errorf("broker submission failed: %w", err)
+		}
+		// Definite, synchronous rejection — existing behavior unchanged.
 		order.Status = tradingv1.OrderStatus_ORDER_STATUS_REJECTED
 		order.UpdatedAt = timestamppb.New(time.Now())
 		go s.emitLedgerEvent(context.Background(), "order.broker_rejected", orderID, map[string]interface{}{
 			"order_id": orderID, "error": err.Error(), "trading_mode": mode.String(),
 		})
 		_ = s.repo.UpsertOrder(context.Background(), order)
+		if ownsIntent {
+			if marshaled, mErr := proto.Marshal(order); mErr == nil {
+				if fErr := s.orderIntentRepo.FinalizeIntent(context.Background(), intentID, orderID, repository.IntentStateRejected, marshaled); fErr != nil {
+					slog.Warn("finalize order intent (rejected) failed", "intent_id", intentID, "error", fErr)
+				}
+			}
+		}
 		slog.Error("broker rejected order", "order_id", orderID, "error", err)
 		return nil, fmt.Errorf("broker submission failed: %w", err)
 	}
@@ -384,10 +477,18 @@ func (s *TradingService) PlaceOrder(ctx context.Context, req *tradingv1.PlaceOrd
 	if order.Status == tradingv1.OrderStatus_ORDER_STATUS_FILLED && order.FilledQty == 0 {
 		order.FilledQty = order.Qty
 	}
+	order.IntentState = tradingv1.IntentState_INTENT_STATE_COMPLETED
 
 	// Persist updated order with broker fields.
 	if err := s.repo.UpsertOrder(context.Background(), order); err != nil {
 		slog.Warn("db upsert after broker submit failed", "order_id", orderID, "error", err)
+	}
+	if ownsIntent {
+		if marshaled, mErr := proto.Marshal(order); mErr == nil {
+			if fErr := s.orderIntentRepo.FinalizeIntent(context.Background(), intentID, orderID, repository.IntentStateCompleted, marshaled); fErr != nil {
+				slog.Warn("finalize order intent (completed) failed", "intent_id", intentID, "error", fErr)
+			}
+		}
 	}
 
 	go s.emitLedgerEvent(context.Background(), "order.broker_submitted", orderID, map[string]interface{}{
@@ -419,23 +520,83 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 		s.mu.Unlock()
 	}
 
-	// Cancel at broker if we have a broker order ID.
+	// Dedup insert (feature 101): server-derived intent ID (a content-identical cancel
+	// on the same order is safe to collapse — no client nonce needed).
+	intentID, requestHashHex, err := deriveReplaceCancelIntentID(req)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "derive order intent: %v", err)
+	}
+	ok2, err := s.orderIntentRepo.InsertIntent(ctx, &repository.OrderIntentRecord{
+		IntentID: intentID, OrderID: req.OrderId, RequestHash: requestHashHex,
+		BrokerAccountID: order.AccountId,
+	})
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "insert order intent: %v", err)
+	}
+	if !ok2 {
+		existing, getErr := s.orderIntentRepo.GetIntentByID(ctx, intentID)
+		if getErr != nil || existing == nil {
+			return nil, grpcstatus.Errorf(codes.Internal, "load existing order intent: %v", getErr)
+		}
+		action, isStale := classifyIntentLookup(existing, requestHashHex, time.Now(), staleThreshold(s.cfgW))
+		switch action {
+		case intentActionRejectHashMismatch:
+			return nil, grpcstatus.Errorf(codes.FailedPrecondition,
+				"cancel on order %s was already attempted with different content", req.OrderId)
+		case intentActionReturnStored:
+			var stored tradingv1.Order
+			if err := proto.Unmarshal(existing.LatestResponse, &stored); err != nil {
+				return nil, grpcstatus.Errorf(codes.Internal, "unmarshal stored intent response: %v", err)
+			}
+			return &tradingv1.CancelOrderResponse{Success: true, Order: &stored}, nil
+		case intentActionRejectUnknown:
+			return nil, grpcstatus.Errorf(codes.FailedPrecondition,
+				"cancel intent for order %s outcome is unknown; verify with the broker before retrying", req.OrderId)
+		default: // intentActionRejectPending
+			if isStale {
+				_, _, _ = s.orderIntentRepo.ReclaimOrphanIntent(ctx, intentID, existing.UpdatedAt.Add(staleThreshold(s.cfgW)))
+			}
+			return nil, grpcstatus.Errorf(codes.FailedPrecondition,
+				"cancel on order %s is still pending", req.OrderId)
+		}
+	}
+	order.IntentState = tradingv1.IntentState_INTENT_STATE_PENDING
+
+	// Cancel at broker if we have a broker order ID. This branch's existing fail-open
+	// behavior (log-only, cancellation proceeds locally regardless) is deliberately
+	// UNCHANGED by this feature — "mark canceled locally regardless of broker response"
+	// is a distinct, pre-existing decision (design.md § Cross-intent precedence).
+	finalIntentState := repository.IntentStateCompleted
 	if order.BrokerOrderId != "" {
 		_, entry, resolveErr := s.resolveAccount(order.AccountId)
 		if resolveErr != nil {
 			slog.Warn("cancel: could not resolve broker account", "order_id", req.OrderId, "account_id", order.AccountId, "error", resolveErr)
+			// A broker-call failure doesn't support the certainty CONFIRMED (Completed)
+			// would assert — the cancel intent goes to UNKNOWN, not CONFIRMED (design.md).
+			finalIntentState = repository.IntentStateUnknown
 		} else {
 			if err := entry.client.CancelOrder(ctx, order.BrokerOrderId); err != nil {
 				slog.Warn("broker cancel failed", "order_id", req.OrderId, "broker_order_id", order.BrokerOrderId, "error", err)
 				// Continue with internal cancellation — broker may have already filled/canceled.
+				finalIntentState = repository.IntentStateUnknown
 			}
 		}
 	}
 
 	order.Status = tradingv1.OrderStatus_ORDER_STATUS_CANCELED
 	order.UpdatedAt = timestamppb.New(time.Now())
+	if finalIntentState == repository.IntentStateUnknown {
+		order.IntentState = tradingv1.IntentState_INTENT_STATE_UNKNOWN
+	} else {
+		order.IntentState = tradingv1.IntentState_INTENT_STATE_COMPLETED
+	}
 
 	_ = s.repo.UpsertOrder(ctx, order)
+	if marshaled, mErr := proto.Marshal(order); mErr == nil {
+		if fErr := s.orderIntentRepo.FinalizeIntent(context.Background(), intentID, req.OrderId, finalIntentState, marshaled); fErr != nil {
+			slog.Warn("finalize cancel intent failed", "intent_id", intentID, "error", fErr)
+		}
+	}
 
 	go s.emitLedgerEvent(context.Background(), "order.canceled", req.OrderId, map[string]interface{}{
 		"order_id": req.OrderId, "user_id": req.UserId,
@@ -492,6 +653,49 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 		return nil, err
 	}
 
+	// Dedup insert (feature 101): server-derived intent ID (a content-identical replace
+	// on the same order is safe to collapse — no client nonce needed, unlike PlaceOrder).
+	intentID, requestHashHex, err := deriveReplaceCancelIntentID(req)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "derive order intent: %v", err)
+	}
+	ownsIntent := true
+	ok2, err := s.orderIntentRepo.InsertIntent(ctx, &repository.OrderIntentRecord{
+		IntentID: intentID, OrderID: req.OrderId, RequestHash: requestHashHex,
+		BrokerAccountID: order.AccountId,
+	})
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.Internal, "insert order intent: %v", err)
+	}
+	if !ok2 {
+		existing, getErr := s.orderIntentRepo.GetIntentByID(ctx, intentID)
+		if getErr != nil || existing == nil {
+			return nil, grpcstatus.Errorf(codes.Internal, "load existing order intent: %v", getErr)
+		}
+		action, isStale := classifyIntentLookup(existing, requestHashHex, time.Now(), staleThreshold(s.cfgW))
+		switch action {
+		case intentActionRejectHashMismatch:
+			return nil, grpcstatus.Errorf(codes.FailedPrecondition,
+				"replace on order %s was already attempted with different content", req.OrderId)
+		case intentActionReturnStored:
+			var stored tradingv1.Order
+			if err := proto.Unmarshal(existing.LatestResponse, &stored); err != nil {
+				return nil, grpcstatus.Errorf(codes.Internal, "unmarshal stored intent response: %v", err)
+			}
+			return &stored, nil
+		case intentActionRejectUnknown:
+			return nil, grpcstatus.Errorf(codes.FailedPrecondition,
+				"replace intent for order %s outcome is unknown; verify with the broker before retrying", req.OrderId)
+		default: // intentActionRejectPending
+			if isStale {
+				_, _, _ = s.orderIntentRepo.ReclaimOrphanIntent(ctx, intentID, existing.UpdatedAt.Add(staleThreshold(s.cfgW)))
+			}
+			return nil, grpcstatus.Errorf(codes.FailedPrecondition,
+				"replace on order %s is still pending", req.OrderId)
+		}
+	}
+	order.IntentState = tradingv1.IntentState_INTENT_STATE_PENDING
+
 	// Only the changed fields are sent to the broker (zero/empty = leave unchanged).
 	brokerReq := broker.OrderRequest{
 		Qty:         req.Qty,
@@ -501,6 +705,17 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 		TimeInForce: req.TimeInForce,
 	}
 	if _, replaceErr := entry.client.ReplaceOrder(ctx, order.BrokerOrderId, brokerReq); replaceErr != nil {
+		var netErr net.Error
+		isTimeout := errors.Is(replaceErr, context.DeadlineExceeded) || (errors.As(replaceErr, &netErr) && netErr.Timeout())
+		if !isTimeout && ownsIntent {
+			if marshaled, mErr := proto.Marshal(order); mErr == nil {
+				if fErr := s.orderIntentRepo.FinalizeIntent(context.Background(), intentID, req.OrderId, repository.IntentStateRejected, marshaled); fErr != nil {
+					slog.Warn("finalize replace intent (rejected) failed", "intent_id", intentID, "error", fErr)
+				}
+			}
+		}
+		// Timeout leaves the intent PENDING for reclaim — existing codes.Internal error
+		// returned unchanged either way (this branch's RPC-level behavior is preserved).
 		return nil, grpcstatus.Errorf(codes.Internal, "broker replace failed: %v", replaceErr)
 	}
 
@@ -517,8 +732,16 @@ func (s *TradingService) ReplaceOrder(ctx context.Context, req *tradingv1.Replac
 		order.TimeInForce = req.TimeInForce
 	}
 	order.UpdatedAt = timestamppb.New(time.Now())
+	order.IntentState = tradingv1.IntentState_INTENT_STATE_COMPLETED
 
 	_ = s.repo.UpsertOrder(ctx, order)
+	if ownsIntent {
+		if marshaled, mErr := proto.Marshal(order); mErr == nil {
+			if fErr := s.orderIntentRepo.FinalizeIntent(context.Background(), intentID, req.OrderId, repository.IntentStateCompleted, marshaled); fErr != nil {
+				slog.Warn("finalize replace intent (completed) failed", "intent_id", intentID, "error", fErr)
+			}
+		}
+	}
 
 	go s.emitLedgerEvent(context.Background(), "order.replaced", req.OrderId, map[string]interface{}{
 		"order_id": req.OrderId, "user_id": req.UserId,
