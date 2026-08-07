@@ -306,6 +306,59 @@ func (IntentState) EnumDescriptor() ([]byte, []int) {
 	return file_trading_v1_trading_proto_rawDescGZIP(), []int{4}
 }
 
+// HaltSource distinguishes which automated mechanism halted an account — 030's
+// bracket-protection flatten failure vs. 102's broker-state-reconciliation mismatch — so an
+// operator (and the /trader UI) can tell which one fired without guessing from halt_reason's
+// free text alone.
+type HaltSource int32
+
+const (
+	HaltSource_HALT_SOURCE_UNSPECIFIED        HaltSource = 0
+	HaltSource_HALT_SOURCE_BRACKET_PROTECTION HaltSource = 1 // 030
+	HaltSource_HALT_SOURCE_RECONCILIATION     HaltSource = 2 // 102
+)
+
+// Enum value maps for HaltSource.
+var (
+	HaltSource_name = map[int32]string{
+		0: "HALT_SOURCE_UNSPECIFIED",
+		1: "HALT_SOURCE_BRACKET_PROTECTION",
+		2: "HALT_SOURCE_RECONCILIATION",
+	}
+	HaltSource_value = map[string]int32{
+		"HALT_SOURCE_UNSPECIFIED":        0,
+		"HALT_SOURCE_BRACKET_PROTECTION": 1,
+		"HALT_SOURCE_RECONCILIATION":     2,
+	}
+)
+
+func (x HaltSource) Enum() *HaltSource {
+	p := new(HaltSource)
+	*p = x
+	return p
+}
+
+func (x HaltSource) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (HaltSource) Descriptor() protoreflect.EnumDescriptor {
+	return file_trading_v1_trading_proto_enumTypes[5].Descriptor()
+}
+
+func (HaltSource) Type() protoreflect.EnumType {
+	return &file_trading_v1_trading_proto_enumTypes[5]
+}
+
+func (x HaltSource) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use HaltSource.Descriptor instead.
+func (HaltSource) EnumDescriptor() ([]byte, []int) {
+	return file_trading_v1_trading_proto_rawDescGZIP(), []int{5}
+}
+
 type Order struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	OrderId        string                 `protobuf:"bytes,1,opt,name=order_id,json=orderId,proto3" json:"order_id,omitempty"`
@@ -1166,8 +1219,16 @@ type BrokerAccount struct {
 	CredentialStatus CredentialStatus `protobuf:"varint,7,opt,name=credential_status,json=credentialStatus,proto3,enum=xstockstrat.trading.v1.CredentialStatus" json:"credential_status,omitempty"`
 	// credential_checked_at is when credential_status was last refreshed.
 	CredentialCheckedAt *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=credential_checked_at,json=credentialCheckedAt,proto3" json:"credential_checked_at,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// halted / halted_at / halt_reason / halt_source (feature 030 + 102): whether this account is
+	// currently halted by an automated safety mechanism, when, why, and which mechanism. False/unset
+	// means no automated halt is in effect; an operator may still have separately deactivated the
+	// account (is_active).
+	Halted        bool                   `protobuf:"varint,9,opt,name=halted,proto3" json:"halted,omitempty"`
+	HaltedAt      *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=halted_at,json=haltedAt,proto3" json:"halted_at,omitempty"`
+	HaltReason    string                 `protobuf:"bytes,11,opt,name=halt_reason,json=haltReason,proto3" json:"halt_reason,omitempty"`
+	HaltSource    HaltSource             `protobuf:"varint,12,opt,name=halt_source,json=haltSource,proto3,enum=xstockstrat.trading.v1.HaltSource" json:"halt_source,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BrokerAccount) Reset() {
@@ -1254,6 +1315,34 @@ func (x *BrokerAccount) GetCredentialCheckedAt() *timestamppb.Timestamp {
 		return x.CredentialCheckedAt
 	}
 	return nil
+}
+
+func (x *BrokerAccount) GetHalted() bool {
+	if x != nil {
+		return x.Halted
+	}
+	return false
+}
+
+func (x *BrokerAccount) GetHaltedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.HaltedAt
+	}
+	return nil
+}
+
+func (x *BrokerAccount) GetHaltReason() string {
+	if x != nil {
+		return x.HaltReason
+	}
+	return ""
+}
+
+func (x *BrokerAccount) GetHaltSource() HaltSource {
+	if x != nil {
+		return x.HaltSource
+	}
+	return HaltSource_HALT_SOURCE_UNSPECIFIED
 }
 
 type RegisterBrokerAccountRequest struct {
@@ -1827,7 +1916,7 @@ const file_trading_v1_trading_proto_rawDesc = "" +
 	"stop_price\x18\x04 \x01(\x01R\tstopPrice\x12\"\n" +
 	"\rtime_in_force\x18\x05 \x01(\tR\vtimeInForce\x12\x17\n" +
 	"\auser_id\x18\x06 \x01(\tR\x06userId\x12\x14\n" +
-	"\x05trail\x18\a \x01(\x01R\x05trail\"\xfe\x02\n" +
+	"\x05trail\x18\a \x01(\x01R\x05trail\"\xb5\x04\n" +
 	"\rBrokerAccount\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12B\n" +
@@ -1837,7 +1926,14 @@ const file_trading_v1_trading_proto_rawDesc = "" +
 	"\auser_id\x18\x05 \x01(\tR\x06userId\x12\x1b\n" +
 	"\tis_active\x18\x06 \x01(\bR\bisActive\x12U\n" +
 	"\x11credential_status\x18\a \x01(\x0e2(.xstockstrat.trading.v1.CredentialStatusR\x10credentialStatus\x12N\n" +
-	"\x15credential_checked_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\x13credentialCheckedAt\"\xcf\x01\n" +
+	"\x15credential_checked_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\x13credentialCheckedAt\x12\x16\n" +
+	"\x06halted\x18\t \x01(\bR\x06halted\x127\n" +
+	"\thalted_at\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\bhaltedAt\x12\x1f\n" +
+	"\vhalt_reason\x18\v \x01(\tR\n" +
+	"haltReason\x12C\n" +
+	"\vhalt_source\x18\f \x01(\x0e2\".xstockstrat.trading.v1.HaltSourceR\n" +
+	"haltSource\"\xcf\x01\n" +
 	"\x1cRegisterBrokerAccountRequest\x12!\n" +
 	"\fdisplay_name\x18\x01 \x01(\tR\vdisplayName\x12B\n" +
 	"\vbroker_type\x18\x02 \x01(\x0e2!.xstockstrat.common.v1.BrokerTypeR\n" +
@@ -1893,7 +1989,12 @@ const file_trading_v1_trading_proto_rawDesc = "" +
 	"\x14INTENT_STATE_PENDING\x10\x01\x12\x1a\n" +
 	"\x16INTENT_STATE_COMPLETED\x10\x02\x12\x19\n" +
 	"\x15INTENT_STATE_REJECTED\x10\x03\x12\x18\n" +
-	"\x14INTENT_STATE_UNKNOWN\x10\x042\x89\n" +
+	"\x14INTENT_STATE_UNKNOWN\x10\x04*m\n" +
+	"\n" +
+	"HaltSource\x12\x1b\n" +
+	"\x17HALT_SOURCE_UNSPECIFIED\x10\x00\x12\"\n" +
+	"\x1eHALT_SOURCE_BRACKET_PROTECTION\x10\x01\x12\x1e\n" +
+	"\x1aHALT_SOURCE_RECONCILIATION\x10\x022\x89\n" +
 	"\n" +
 	"\x0eTradingService\x12V\n" +
 	"\n" +
@@ -1922,7 +2023,7 @@ func file_trading_v1_trading_proto_rawDescGZIP() []byte {
 	return file_trading_v1_trading_proto_rawDescData
 }
 
-var file_trading_v1_trading_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_trading_v1_trading_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
 var file_trading_v1_trading_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_trading_v1_trading_proto_goTypes = []any{
 	(OrderSide)(0),                                 // 0: xstockstrat.trading.v1.OrderSide
@@ -1930,90 +2031,93 @@ var file_trading_v1_trading_proto_goTypes = []any{
 	(OrderStatus)(0),                               // 2: xstockstrat.trading.v1.OrderStatus
 	(CredentialStatus)(0),                          // 3: xstockstrat.trading.v1.CredentialStatus
 	(IntentState)(0),                               // 4: xstockstrat.trading.v1.IntentState
-	(*Order)(nil),                                  // 5: xstockstrat.trading.v1.Order
-	(*PlaceOrderRequest)(nil),                      // 6: xstockstrat.trading.v1.PlaceOrderRequest
-	(*CancelOrderRequest)(nil),                     // 7: xstockstrat.trading.v1.CancelOrderRequest
-	(*CancelOrderResponse)(nil),                    // 8: xstockstrat.trading.v1.CancelOrderResponse
-	(*GetOrderRequest)(nil),                        // 9: xstockstrat.trading.v1.GetOrderRequest
-	(*ListOrdersRequest)(nil),                      // 10: xstockstrat.trading.v1.ListOrdersRequest
-	(*ListOrdersResponse)(nil),                     // 11: xstockstrat.trading.v1.ListOrdersResponse
-	(*StreamOrderUpdatesRequest)(nil),              // 12: xstockstrat.trading.v1.StreamOrderUpdatesRequest
-	(*ReplaceOrderRequest)(nil),                    // 13: xstockstrat.trading.v1.ReplaceOrderRequest
-	(*BrokerAccount)(nil),                          // 14: xstockstrat.trading.v1.BrokerAccount
-	(*RegisterBrokerAccountRequest)(nil),           // 15: xstockstrat.trading.v1.RegisterBrokerAccountRequest
-	(*RegisterBrokerAccountResponse)(nil),          // 16: xstockstrat.trading.v1.RegisterBrokerAccountResponse
-	(*UpdateBrokerAccountCredentialsRequest)(nil),  // 17: xstockstrat.trading.v1.UpdateBrokerAccountCredentialsRequest
-	(*UpdateBrokerAccountCredentialsResponse)(nil), // 18: xstockstrat.trading.v1.UpdateBrokerAccountCredentialsResponse
-	(*GetTradingEnvironmentRequest)(nil),           // 19: xstockstrat.trading.v1.GetTradingEnvironmentRequest
-	(*GetTradingEnvironmentResponse)(nil),          // 20: xstockstrat.trading.v1.GetTradingEnvironmentResponse
-	(*ListBrokerAccountsRequest)(nil),              // 21: xstockstrat.trading.v1.ListBrokerAccountsRequest
-	(*ListBrokerAccountsResponse)(nil),             // 22: xstockstrat.trading.v1.ListBrokerAccountsResponse
-	(*DeregisterBrokerAccountRequest)(nil),         // 23: xstockstrat.trading.v1.DeregisterBrokerAccountRequest
-	(*DeregisterBrokerAccountResponse)(nil),        // 24: xstockstrat.trading.v1.DeregisterBrokerAccountResponse
-	(*timestamppb.Timestamp)(nil),                  // 25: google.protobuf.Timestamp
-	(v1.TradingMode)(0),                            // 26: xstockstrat.common.v1.TradingMode
-	(v1.BrokerType)(0),                             // 27: xstockstrat.common.v1.BrokerType
-	(*v1.TimeRange)(nil),                           // 28: xstockstrat.common.v1.TimeRange
-	(*v1.PageRequest)(nil),                         // 29: xstockstrat.common.v1.PageRequest
-	(*v1.PageResponse)(nil),                        // 30: xstockstrat.common.v1.PageResponse
+	(HaltSource)(0),                                // 5: xstockstrat.trading.v1.HaltSource
+	(*Order)(nil),                                  // 6: xstockstrat.trading.v1.Order
+	(*PlaceOrderRequest)(nil),                      // 7: xstockstrat.trading.v1.PlaceOrderRequest
+	(*CancelOrderRequest)(nil),                     // 8: xstockstrat.trading.v1.CancelOrderRequest
+	(*CancelOrderResponse)(nil),                    // 9: xstockstrat.trading.v1.CancelOrderResponse
+	(*GetOrderRequest)(nil),                        // 10: xstockstrat.trading.v1.GetOrderRequest
+	(*ListOrdersRequest)(nil),                      // 11: xstockstrat.trading.v1.ListOrdersRequest
+	(*ListOrdersResponse)(nil),                     // 12: xstockstrat.trading.v1.ListOrdersResponse
+	(*StreamOrderUpdatesRequest)(nil),              // 13: xstockstrat.trading.v1.StreamOrderUpdatesRequest
+	(*ReplaceOrderRequest)(nil),                    // 14: xstockstrat.trading.v1.ReplaceOrderRequest
+	(*BrokerAccount)(nil),                          // 15: xstockstrat.trading.v1.BrokerAccount
+	(*RegisterBrokerAccountRequest)(nil),           // 16: xstockstrat.trading.v1.RegisterBrokerAccountRequest
+	(*RegisterBrokerAccountResponse)(nil),          // 17: xstockstrat.trading.v1.RegisterBrokerAccountResponse
+	(*UpdateBrokerAccountCredentialsRequest)(nil),  // 18: xstockstrat.trading.v1.UpdateBrokerAccountCredentialsRequest
+	(*UpdateBrokerAccountCredentialsResponse)(nil), // 19: xstockstrat.trading.v1.UpdateBrokerAccountCredentialsResponse
+	(*GetTradingEnvironmentRequest)(nil),           // 20: xstockstrat.trading.v1.GetTradingEnvironmentRequest
+	(*GetTradingEnvironmentResponse)(nil),          // 21: xstockstrat.trading.v1.GetTradingEnvironmentResponse
+	(*ListBrokerAccountsRequest)(nil),              // 22: xstockstrat.trading.v1.ListBrokerAccountsRequest
+	(*ListBrokerAccountsResponse)(nil),             // 23: xstockstrat.trading.v1.ListBrokerAccountsResponse
+	(*DeregisterBrokerAccountRequest)(nil),         // 24: xstockstrat.trading.v1.DeregisterBrokerAccountRequest
+	(*DeregisterBrokerAccountResponse)(nil),        // 25: xstockstrat.trading.v1.DeregisterBrokerAccountResponse
+	(*timestamppb.Timestamp)(nil),                  // 26: google.protobuf.Timestamp
+	(v1.TradingMode)(0),                            // 27: xstockstrat.common.v1.TradingMode
+	(v1.BrokerType)(0),                             // 28: xstockstrat.common.v1.BrokerType
+	(*v1.TimeRange)(nil),                           // 29: xstockstrat.common.v1.TimeRange
+	(*v1.PageRequest)(nil),                         // 30: xstockstrat.common.v1.PageRequest
+	(*v1.PageResponse)(nil),                        // 31: xstockstrat.common.v1.PageResponse
 }
 var file_trading_v1_trading_proto_depIdxs = []int32{
 	0,  // 0: xstockstrat.trading.v1.Order.side:type_name -> xstockstrat.trading.v1.OrderSide
 	1,  // 1: xstockstrat.trading.v1.Order.order_type:type_name -> xstockstrat.trading.v1.OrderType
 	2,  // 2: xstockstrat.trading.v1.Order.status:type_name -> xstockstrat.trading.v1.OrderStatus
-	25, // 3: xstockstrat.trading.v1.Order.created_at:type_name -> google.protobuf.Timestamp
-	25, // 4: xstockstrat.trading.v1.Order.updated_at:type_name -> google.protobuf.Timestamp
-	26, // 5: xstockstrat.trading.v1.Order.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
-	27, // 6: xstockstrat.trading.v1.Order.broker_type:type_name -> xstockstrat.common.v1.BrokerType
+	26, // 3: xstockstrat.trading.v1.Order.created_at:type_name -> google.protobuf.Timestamp
+	26, // 4: xstockstrat.trading.v1.Order.updated_at:type_name -> google.protobuf.Timestamp
+	27, // 5: xstockstrat.trading.v1.Order.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
+	28, // 6: xstockstrat.trading.v1.Order.broker_type:type_name -> xstockstrat.common.v1.BrokerType
 	4,  // 7: xstockstrat.trading.v1.Order.intent_state:type_name -> xstockstrat.trading.v1.IntentState
 	0,  // 8: xstockstrat.trading.v1.PlaceOrderRequest.side:type_name -> xstockstrat.trading.v1.OrderSide
 	1,  // 9: xstockstrat.trading.v1.PlaceOrderRequest.order_type:type_name -> xstockstrat.trading.v1.OrderType
-	26, // 10: xstockstrat.trading.v1.PlaceOrderRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
-	5,  // 11: xstockstrat.trading.v1.CancelOrderResponse.order:type_name -> xstockstrat.trading.v1.Order
+	27, // 10: xstockstrat.trading.v1.PlaceOrderRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
+	6,  // 11: xstockstrat.trading.v1.CancelOrderResponse.order:type_name -> xstockstrat.trading.v1.Order
 	2,  // 12: xstockstrat.trading.v1.ListOrdersRequest.status:type_name -> xstockstrat.trading.v1.OrderStatus
-	28, // 13: xstockstrat.trading.v1.ListOrdersRequest.range:type_name -> xstockstrat.common.v1.TimeRange
-	29, // 14: xstockstrat.trading.v1.ListOrdersRequest.page:type_name -> xstockstrat.common.v1.PageRequest
-	26, // 15: xstockstrat.trading.v1.ListOrdersRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
+	29, // 13: xstockstrat.trading.v1.ListOrdersRequest.range:type_name -> xstockstrat.common.v1.TimeRange
+	30, // 14: xstockstrat.trading.v1.ListOrdersRequest.page:type_name -> xstockstrat.common.v1.PageRequest
+	27, // 15: xstockstrat.trading.v1.ListOrdersRequest.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
 	0,  // 16: xstockstrat.trading.v1.ListOrdersRequest.side:type_name -> xstockstrat.trading.v1.OrderSide
 	1,  // 17: xstockstrat.trading.v1.ListOrdersRequest.order_type:type_name -> xstockstrat.trading.v1.OrderType
-	5,  // 18: xstockstrat.trading.v1.ListOrdersResponse.orders:type_name -> xstockstrat.trading.v1.Order
-	30, // 19: xstockstrat.trading.v1.ListOrdersResponse.page:type_name -> xstockstrat.common.v1.PageResponse
+	6,  // 18: xstockstrat.trading.v1.ListOrdersResponse.orders:type_name -> xstockstrat.trading.v1.Order
+	31, // 19: xstockstrat.trading.v1.ListOrdersResponse.page:type_name -> xstockstrat.common.v1.PageResponse
 	2,  // 20: xstockstrat.trading.v1.StreamOrderUpdatesRequest.status_filter:type_name -> xstockstrat.trading.v1.OrderStatus
-	27, // 21: xstockstrat.trading.v1.BrokerAccount.broker_type:type_name -> xstockstrat.common.v1.BrokerType
+	28, // 21: xstockstrat.trading.v1.BrokerAccount.broker_type:type_name -> xstockstrat.common.v1.BrokerType
 	3,  // 22: xstockstrat.trading.v1.BrokerAccount.credential_status:type_name -> xstockstrat.trading.v1.CredentialStatus
-	25, // 23: xstockstrat.trading.v1.BrokerAccount.credential_checked_at:type_name -> google.protobuf.Timestamp
-	27, // 24: xstockstrat.trading.v1.RegisterBrokerAccountRequest.broker_type:type_name -> xstockstrat.common.v1.BrokerType
-	14, // 25: xstockstrat.trading.v1.RegisterBrokerAccountResponse.account:type_name -> xstockstrat.trading.v1.BrokerAccount
-	14, // 26: xstockstrat.trading.v1.UpdateBrokerAccountCredentialsResponse.account:type_name -> xstockstrat.trading.v1.BrokerAccount
-	26, // 27: xstockstrat.trading.v1.GetTradingEnvironmentResponse.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
-	14, // 28: xstockstrat.trading.v1.ListBrokerAccountsResponse.accounts:type_name -> xstockstrat.trading.v1.BrokerAccount
-	6,  // 29: xstockstrat.trading.v1.TradingService.PlaceOrder:input_type -> xstockstrat.trading.v1.PlaceOrderRequest
-	7,  // 30: xstockstrat.trading.v1.TradingService.CancelOrder:input_type -> xstockstrat.trading.v1.CancelOrderRequest
-	9,  // 31: xstockstrat.trading.v1.TradingService.GetOrder:input_type -> xstockstrat.trading.v1.GetOrderRequest
-	10, // 32: xstockstrat.trading.v1.TradingService.ListOrders:input_type -> xstockstrat.trading.v1.ListOrdersRequest
-	12, // 33: xstockstrat.trading.v1.TradingService.StreamOrderUpdates:input_type -> xstockstrat.trading.v1.StreamOrderUpdatesRequest
-	13, // 34: xstockstrat.trading.v1.TradingService.ReplaceOrder:input_type -> xstockstrat.trading.v1.ReplaceOrderRequest
-	15, // 35: xstockstrat.trading.v1.TradingService.RegisterBrokerAccount:input_type -> xstockstrat.trading.v1.RegisterBrokerAccountRequest
-	21, // 36: xstockstrat.trading.v1.TradingService.ListBrokerAccounts:input_type -> xstockstrat.trading.v1.ListBrokerAccountsRequest
-	23, // 37: xstockstrat.trading.v1.TradingService.DeregisterBrokerAccount:input_type -> xstockstrat.trading.v1.DeregisterBrokerAccountRequest
-	17, // 38: xstockstrat.trading.v1.TradingService.UpdateBrokerAccountCredentials:input_type -> xstockstrat.trading.v1.UpdateBrokerAccountCredentialsRequest
-	19, // 39: xstockstrat.trading.v1.TradingService.GetTradingEnvironment:input_type -> xstockstrat.trading.v1.GetTradingEnvironmentRequest
-	5,  // 40: xstockstrat.trading.v1.TradingService.PlaceOrder:output_type -> xstockstrat.trading.v1.Order
-	8,  // 41: xstockstrat.trading.v1.TradingService.CancelOrder:output_type -> xstockstrat.trading.v1.CancelOrderResponse
-	5,  // 42: xstockstrat.trading.v1.TradingService.GetOrder:output_type -> xstockstrat.trading.v1.Order
-	11, // 43: xstockstrat.trading.v1.TradingService.ListOrders:output_type -> xstockstrat.trading.v1.ListOrdersResponse
-	5,  // 44: xstockstrat.trading.v1.TradingService.StreamOrderUpdates:output_type -> xstockstrat.trading.v1.Order
-	5,  // 45: xstockstrat.trading.v1.TradingService.ReplaceOrder:output_type -> xstockstrat.trading.v1.Order
-	16, // 46: xstockstrat.trading.v1.TradingService.RegisterBrokerAccount:output_type -> xstockstrat.trading.v1.RegisterBrokerAccountResponse
-	22, // 47: xstockstrat.trading.v1.TradingService.ListBrokerAccounts:output_type -> xstockstrat.trading.v1.ListBrokerAccountsResponse
-	24, // 48: xstockstrat.trading.v1.TradingService.DeregisterBrokerAccount:output_type -> xstockstrat.trading.v1.DeregisterBrokerAccountResponse
-	18, // 49: xstockstrat.trading.v1.TradingService.UpdateBrokerAccountCredentials:output_type -> xstockstrat.trading.v1.UpdateBrokerAccountCredentialsResponse
-	20, // 50: xstockstrat.trading.v1.TradingService.GetTradingEnvironment:output_type -> xstockstrat.trading.v1.GetTradingEnvironmentResponse
-	40, // [40:51] is the sub-list for method output_type
-	29, // [29:40] is the sub-list for method input_type
-	29, // [29:29] is the sub-list for extension type_name
-	29, // [29:29] is the sub-list for extension extendee
-	0,  // [0:29] is the sub-list for field type_name
+	26, // 23: xstockstrat.trading.v1.BrokerAccount.credential_checked_at:type_name -> google.protobuf.Timestamp
+	26, // 24: xstockstrat.trading.v1.BrokerAccount.halted_at:type_name -> google.protobuf.Timestamp
+	5,  // 25: xstockstrat.trading.v1.BrokerAccount.halt_source:type_name -> xstockstrat.trading.v1.HaltSource
+	28, // 26: xstockstrat.trading.v1.RegisterBrokerAccountRequest.broker_type:type_name -> xstockstrat.common.v1.BrokerType
+	15, // 27: xstockstrat.trading.v1.RegisterBrokerAccountResponse.account:type_name -> xstockstrat.trading.v1.BrokerAccount
+	15, // 28: xstockstrat.trading.v1.UpdateBrokerAccountCredentialsResponse.account:type_name -> xstockstrat.trading.v1.BrokerAccount
+	27, // 29: xstockstrat.trading.v1.GetTradingEnvironmentResponse.trading_mode:type_name -> xstockstrat.common.v1.TradingMode
+	15, // 30: xstockstrat.trading.v1.ListBrokerAccountsResponse.accounts:type_name -> xstockstrat.trading.v1.BrokerAccount
+	7,  // 31: xstockstrat.trading.v1.TradingService.PlaceOrder:input_type -> xstockstrat.trading.v1.PlaceOrderRequest
+	8,  // 32: xstockstrat.trading.v1.TradingService.CancelOrder:input_type -> xstockstrat.trading.v1.CancelOrderRequest
+	10, // 33: xstockstrat.trading.v1.TradingService.GetOrder:input_type -> xstockstrat.trading.v1.GetOrderRequest
+	11, // 34: xstockstrat.trading.v1.TradingService.ListOrders:input_type -> xstockstrat.trading.v1.ListOrdersRequest
+	13, // 35: xstockstrat.trading.v1.TradingService.StreamOrderUpdates:input_type -> xstockstrat.trading.v1.StreamOrderUpdatesRequest
+	14, // 36: xstockstrat.trading.v1.TradingService.ReplaceOrder:input_type -> xstockstrat.trading.v1.ReplaceOrderRequest
+	16, // 37: xstockstrat.trading.v1.TradingService.RegisterBrokerAccount:input_type -> xstockstrat.trading.v1.RegisterBrokerAccountRequest
+	22, // 38: xstockstrat.trading.v1.TradingService.ListBrokerAccounts:input_type -> xstockstrat.trading.v1.ListBrokerAccountsRequest
+	24, // 39: xstockstrat.trading.v1.TradingService.DeregisterBrokerAccount:input_type -> xstockstrat.trading.v1.DeregisterBrokerAccountRequest
+	18, // 40: xstockstrat.trading.v1.TradingService.UpdateBrokerAccountCredentials:input_type -> xstockstrat.trading.v1.UpdateBrokerAccountCredentialsRequest
+	20, // 41: xstockstrat.trading.v1.TradingService.GetTradingEnvironment:input_type -> xstockstrat.trading.v1.GetTradingEnvironmentRequest
+	6,  // 42: xstockstrat.trading.v1.TradingService.PlaceOrder:output_type -> xstockstrat.trading.v1.Order
+	9,  // 43: xstockstrat.trading.v1.TradingService.CancelOrder:output_type -> xstockstrat.trading.v1.CancelOrderResponse
+	6,  // 44: xstockstrat.trading.v1.TradingService.GetOrder:output_type -> xstockstrat.trading.v1.Order
+	12, // 45: xstockstrat.trading.v1.TradingService.ListOrders:output_type -> xstockstrat.trading.v1.ListOrdersResponse
+	6,  // 46: xstockstrat.trading.v1.TradingService.StreamOrderUpdates:output_type -> xstockstrat.trading.v1.Order
+	6,  // 47: xstockstrat.trading.v1.TradingService.ReplaceOrder:output_type -> xstockstrat.trading.v1.Order
+	17, // 48: xstockstrat.trading.v1.TradingService.RegisterBrokerAccount:output_type -> xstockstrat.trading.v1.RegisterBrokerAccountResponse
+	23, // 49: xstockstrat.trading.v1.TradingService.ListBrokerAccounts:output_type -> xstockstrat.trading.v1.ListBrokerAccountsResponse
+	25, // 50: xstockstrat.trading.v1.TradingService.DeregisterBrokerAccount:output_type -> xstockstrat.trading.v1.DeregisterBrokerAccountResponse
+	19, // 51: xstockstrat.trading.v1.TradingService.UpdateBrokerAccountCredentials:output_type -> xstockstrat.trading.v1.UpdateBrokerAccountCredentialsResponse
+	21, // 52: xstockstrat.trading.v1.TradingService.GetTradingEnvironment:output_type -> xstockstrat.trading.v1.GetTradingEnvironmentResponse
+	42, // [42:53] is the sub-list for method output_type
+	31, // [31:42] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_trading_v1_trading_proto_init() }
@@ -2027,7 +2131,7 @@ func file_trading_v1_trading_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_trading_v1_trading_proto_rawDesc), len(file_trading_v1_trading_proto_rawDesc)),
-			NumEnums:      5,
+			NumEnums:      6,
 			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
