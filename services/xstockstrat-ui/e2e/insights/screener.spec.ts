@@ -224,4 +224,44 @@ test.describe('Screener', () => {
 
     await expect.poll(() => addReq.symbols).toEqual(['AAA', 'BBB', 'CCC']);
   });
+
+  test('the Fundamental metric field is a catalog-backed select with 11 options, default P/E ratio (FR-1/FR-2/FR-3)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/insights/screener');
+
+    // Default seeded criterion is Fundamental (page.tsx newCriterion()) — its metric control is now
+    // a Radix Select trigger, not a native <select> or free-text <input>. Scope through the row
+    // wrapper per design.md's Open Risks note (a second, Technical-kind row would otherwise collide
+    // on the shared aria-label="metric").
+    const row = page.getByTestId('criterion-row').first();
+    const metricTrigger = row.getByLabel('metric');
+    await expect(metricTrigger).toContainText('pe_ratio');
+
+    await metricTrigger.click();
+    await expect(page.getByRole('option')).toHaveCount(11);
+    await expect(page.getByRole('option', { name: /pe_ratio — P\/E ratio/ })).toBeVisible();
+    await page.keyboard.press('Escape');
+  });
+
+  test('selecting a different Fundamental metric updates metricName and is what gets sent on scan (FR-1/FR-2)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    const captured: { req?: Record<string, unknown> } = {};
+    await mockScreen(page, captured);
+    await page.goto('/insights/screener');
+
+    const row = page.getByTestId('criterion-row').first();
+    await row.getByLabel('metric').click();
+    await page.getByRole('option', { name: /market_cap — Market cap/ }).click();
+    await expect(row.getByLabel('metric')).toContainText('market_cap');
+
+    await page.getByTestId('run-screen').click();
+    await expect(page.getByTestId('screen-results')).toBeVisible({ timeout: 10000 });
+
+    const criteria = captured.req?.criteria as Array<{ metricName?: string }>;
+    expect(criteria[0].metricName).toBe('market_cap');
+  });
 });

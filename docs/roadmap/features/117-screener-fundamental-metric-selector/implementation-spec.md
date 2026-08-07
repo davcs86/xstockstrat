@@ -1,10 +1,12 @@
 # Implementation Spec: screener-fundamental-metric-selector
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-08-07
 **Feature**: `docs/roadmap/features/117-screener-fundamental-metric-selector/feature.md`
 **Total Steps**: 3
-**Feature Branch**: `feature/screener-fundamental-metric-selector`
+**Feature Branch**: `claude/fundamentals-selector-audit-egeez2` (harness-assigned session branch —
+overrides the `feature/<slug>` convention per root `CLAUDE.md` § Harness Default Branch; single-branch
+mandate, no per-step sub-branches/PRs, matching feature 112's precedent)
 
 ---
 
@@ -34,7 +36,7 @@ surface; Step 3 is its reachability/regression proof.
 
 ### Step 1 — service: add `FUNDAMENTAL_METRICS` catalog to `strategyCatalog.ts`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/strategyCatalog.ts` — modify
@@ -139,7 +141,7 @@ entries whose `name` values match `_FUNDAMENTAL_FIELDS` (`screener.py:32-44`) 1:
 
 ### Step 2 — service: convert the Fundamental metric field to a catalog-driven `Select`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/screener/page.tsx` — modify
@@ -271,7 +273,7 @@ kind branch (Technical native `<select>` at `page.tsx:228-240` unchanged, Fundam
 
 ### Step 3 — test: e2e coverage for the catalog-driven Fundamental metric select
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/screener.spec.ts` — modify
@@ -381,4 +383,26 @@ pass against a free-text `<Input>`.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+Executed directly on the harness-assigned branch `claude/fundamentals-selector-audit-egeez2` in a
+single session (no per-step sub-branches/PRs — single-branch mandate, matching feature 112's
+precedent). No spec-body deviations — all three steps landed exactly as specced, byte-for-byte.
+
+- **Environment setup (not a spec deviation, a tooling note):** `node_modules` was not present at
+  session start; ran `pnpm install --frozen-lockfile` at the repo root before any verification
+  command. `tsc --noEmit` and `pnpm run lint` were then clean on the first run for both Step 1 and
+  Step 2 (only pre-existing, unrelated warnings elsewhere in the codebase, e.g.
+  `strategies/[id]/page.tsx:483` `jsx-a11y/role-supports-aria-props`).
+- **Step 3 TDD red-before-green (P-06), performed literally:** `git stash push -- strategyCatalog.ts
+  page.tsx` to revert Steps 1–2 while keeping the new e2e tests, ran the new tests against the
+  pre-change tree (confirmed **red**: `toContainText('pe_ratio')` failed because the field resolved
+  to a native `<input>`, not a Radix trigger — exact failure mode the spec predicted), then
+  `git stash pop` to restore Steps 1–2 and re-ran the full `screener.spec.ts` (confirmed **green**:
+  12/12 passed, including the pre-existing Technical-indicator test at `:122`, unaffected per
+  Acceptance Criterion 5).
+- **Playwright browser resolution (sandbox-specific, CI-equivalent fallback, sanctioned by
+  `docs/roadmap/ledger/fails.md` 2026-07-31 "083-ui-revamp" entry):** the pre-installed Chromium
+  build (`chromium-1194`) didn't match this `@playwright/test` version's expected revision for
+  `e2e/global-setup.ts`'s own preflight launch (which doesn't read `playwright.config.ts`'s
+  auto-detection). Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium` and `CI=true`
+  (for the wider local-vs-CI timeout budget on cold dev-server compiles) for the verification runs —
+  matches the exact documented gotcha and fix, not a new deviation.

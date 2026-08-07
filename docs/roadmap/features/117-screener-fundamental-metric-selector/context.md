@@ -89,3 +89,41 @@
     server-mocked domain data, confirmed by recon.md.
 - Next: `/sdd-review screener-fundamental-metric-selector impl-spec`, then
   `/sdd-execute screener-fundamental-metric-selector`.
+
+## Session 2026-08-07T02:30:00Z — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 0 warnings, 1 informational note (advisory — did not block).
+- Unresolved ✗ / ⚠ carried into execution: none.
+- Note (non-blocking): Step 3's Verification has no literal `--cov-fail-under=N`/`≥N%` string —
+  satisfied instead by the documented `xstockstrat-ui` policy that Playwright e2e (not vitest
+  coverage) is the verification gate for this kind of change; confirmed correct against
+  `vitest.config.ts` scope.
+- Overlap findings: none (clean scan; only other `implementation-ready`/`in-progress` feature,
+  `096-position-and-order-detail-pages`, touches a fully disjoint `/trader/*` file set).
+
+## Session 2026-08-07T03:00:00Z — manual execute (all 3 steps)
+
+- Executed all 3 implementation-spec steps directly on the harness-assigned branch
+  `claude/fundamentals-selector-audit-egeez2` in one session — single-branch mandate (root
+  CLAUDE.md § Harness Default Branch), no `feature/screener-fundamental-metric-selector` branch or
+  per-step sub-branches/PRs, matching feature 112's precedent.
+- Step 1: added `FundamentalMetric`/`FUNDAMENTAL_METRICS`/`DEFAULT_FUNDAMENTAL_METRIC` to
+  `strategyCatalog.ts`, extended the "keep in sync" doc comment to a third source. Step 2: replaced
+  the free-text `<Input>` with a catalog-driven Radix `Select` in `page.tsx`, replaced both
+  `'pe_ratio'` literals with `DEFAULT_FUNDAMENTAL_METRIC`. Step 3: added two e2e tests to
+  `screener.spec.ts`. All landed byte-for-byte as specced — no spec-body deviations.
+- Environment: `node_modules` was missing at session start; ran `pnpm install --frozen-lockfile`
+  first. `tsc --noEmit` and `pnpm run lint` clean throughout (one pre-existing, unrelated lint
+  warning elsewhere).
+- TDD red-before-green (P-06) performed literally via `git stash push -- strategyCatalog.ts
+  page.tsx` (revert Steps 1-2, keep the new tests) → confirmed red (both new tests failed against
+  the free-text `<Input>`, exact predicted failure mode) → `git stash pop` (restore) → confirmed
+  green (12/12 `screener.spec.ts` tests pass, including the untouched pre-existing
+  Technical-indicator test).
+- Playwright browser resolution: pre-installed Chromium didn't match this project's pinned
+  `@playwright/test` revision for `e2e/global-setup.ts`'s own preflight launch (a known, already
+  ledger-documented gotcha — `docs/roadmap/ledger/fails.md` 2026-07-31 "083-ui-revamp" entry). Fixed
+  by setting `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium` + `CI=true` for the
+  verification runs, per that entry's documented fix — not a new deviation.
+- Status: implementation-ready → code-completed. No `merge-order.md` entry needed (overlap scan was
+  clean). Next: open the integration PR to `main-dev`.
