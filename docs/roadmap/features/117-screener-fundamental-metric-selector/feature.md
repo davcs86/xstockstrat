@@ -43,5 +43,6 @@ matching the existing select-driven pattern used for the Technical indicator fie
 
 ## Next Action
 
-Feature complete (code-completed), no merge-order dependency. Open the integration PR from
-`claude/fundamentals-selector-audit-egeez2` to `main-dev`.
+Integration PR open: https://github.com/davcs86/xstockstrat/pull/900
+(`claude/fundamentals-selector-audit-egeez2` → `main-dev`). Merge when CI passes and reviewers
+approve.
