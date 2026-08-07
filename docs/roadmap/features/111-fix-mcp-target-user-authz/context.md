@@ -64,3 +64,29 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
 - Constitution rules touched: C-01, C-03, C-08, C-10, C-11, C-14, F-04/P-03. Floor breaches: none
   in either round.
 - Status: `draft` → `design-approved`.
+
+## Session 2026-08-07 (/sdd-spec)
+
+- Generated implementation-spec.md with 7 steps. Status → implementation-ready.
+- Key codebase findings (all re-verified against the current tree, not just recon.md):
+  - `emit_alert` is exactly `app/tools.py:298-333`; `target_user_id: str = ""` at `:305`, docstring
+    at `:316`, passthrough at `:329` — matches recon precisely.
+  - `manage_formula` is exactly `app/tools.py:565-659`; `author: str = ""` at `:573`,
+    `formula_author_user_id: str = ""` at `:574`, dict build at `:627-638` (`user_id=
+    formula_author_user_id` at `:629`, `author=author` at `:630`).
+  - Confirmed the indicators backend's ownership check is identical for update AND delete:
+    `row["author"] != request.user_id` at both `servicer.py:317` (UpdateFormula) and `:416`
+    (DeleteFormula); `RegisterFormula`'s `if request.author: author = request.author` at
+    `servicer.py:215-216` is the exact sentinel-impersonation gap `design.md` cites.
+  - Full breaking-test-call-site inventory (six for `manage_formula`, two for `emit_alert`) taken by
+    direct grep of `tests/test_tools.py`, not estimated — see implementation-spec.md Step 4 and
+    Step 6 Codebase Evidence for exact line numbers.
+  - `docs/runbooks/mcp-tools.md` sections confirmed at `emit_alert` `:230-264` and `manage_formula`
+    `:541-589`; repo-wide grep confirmed zero other doc/code surface (agent CLAUDE.md,
+    `plugins/strat-lab/`, `context-constitution.md`) mentions either removed parameter by name,
+    other than this feature's own artifacts and an unrelated historical spec
+    (`docs/roadmap/features/094-fix-mcp-server-input-validation/implementation-spec.md:206`, left
+    untouched — describes a different, already-shipped feature's input-validation work).
+  - No proto, migration, or config-key steps — confirmed via `packages/proto/notify/v1/notify.proto`
+    (`:34,56`) and `packages/proto/indicators/v1/indicators.proto` (`:169,197,217`): both target RPC
+    fields already exist and already accept plain strings.
