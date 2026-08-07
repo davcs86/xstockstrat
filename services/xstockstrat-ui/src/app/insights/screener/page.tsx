@@ -20,7 +20,11 @@ import { useWatchlists, useCreateWatchlist, useAddWatchlistSymbols } from '@/hoo
 import { normalizeWeights } from '@/lib/screenWeights';
 import { formatLastRun } from '@/lib/formatLastRun';
 import { scoreColor } from '@/lib/scoreDisplay';
-import { BUILTIN_INDICATORS } from '@/lib/strategyCatalog';
+import {
+  BUILTIN_INDICATORS,
+  FUNDAMENTAL_METRICS,
+  DEFAULT_FUNDAMENTAL_METRIC,
+} from '@/lib/strategyCatalog';
 import {
   Comparator,
   ComponentKind,
@@ -67,7 +71,7 @@ function newCriterion(i: number): CriterionRow {
   return {
     refName: `c${i}`,
     kind: ScreenKind.FUNDAMENTAL,
-    metricName: 'pe_ratio',
+    metricName: DEFAULT_FUNDAMENTAL_METRIC,
     op: Comparator.LT,
     threshold: 20,
     weight: 1,
@@ -215,7 +219,7 @@ export default function ScreenerPage() {
                         const metricName =
                           kind === ScreenKind.TECHNICAL_INDICATOR
                             ? BUILTIN_INDICATORS[0].name
-                            : 'pe_ratio';
+                            : DEFAULT_FUNDAMENTAL_METRIC;
                         updateCriterion(i, { kind, metricName });
                       }}
                     >
@@ -239,12 +243,21 @@ export default function ScreenerPage() {
                         ))}
                       </select>
                     ) : (
-                      <Input
-                        aria-label="metric"
-                        className="w-40 font-mono"
+                      <Select
                         value={c.metricName}
-                        onChange={(e) => updateCriterion(i, { metricName: e.target.value })}
-                      />
+                        onValueChange={(v) => updateCriterion(i, { metricName: v })}
+                      >
+                        <SelectTrigger aria-label="metric" className="h-9 w-40 font-mono">
+                          <SelectValue placeholder="Select a metric…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {FUNDAMENTAL_METRICS.map((m) => (
+                            <SelectItem key={m.name} value={m.name}>
+                              {m.name} — {m.description}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     )}
                     <select
                       aria-label="comparator"
