@@ -1,18 +1,32 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useIsMutating } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { AppShell } from '@/components/insights/AppShell';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/components/ui/utils';
-import { useWatchlists, useCreateWatchlist, useDeleteWatchlist } from '@/hooks/useWatchlists';
+import {
+  useWatchlists,
+  useCreateWatchlist,
+  useDeleteWatchlist,
+  WATCHLIST_WRITE_KEY,
+} from '@/hooks/useWatchlists';
 import { WatchlistDetail } from '@/components/insights/WatchlistDetail';
 
 export default function WatchlistsPage() {
-  const { data, isLoading, error } = useWatchlists();
+  const { data, isLoading, isFetching, error } = useWatchlists();
   const createWl = useCreateWatchlist();
   const deleteWl = useDeleteWatchlist();
+  // Layer 2 of the concurrency guard (design.md §5) — closes the race a WatchlistDetail-per-switch
+  // `key` remount would otherwise reopen: since page.tsx is never remounted, this sees an in-flight
+  // write even if the WatchlistDetail instance that started it has since unmounted. The
+  // `|| isFetching` clause closes the residual window between a mutation settling and its
+  // invalidated `['watchlists']` query actually refetching (useIsMutating alone only covers the
+  // RPC's own duration).
+  const anyWatchlistWriteInFlight =
+    useIsMutating({ mutationKey: WATCHLIST_WRITE_KEY }) > 0 || isFetching;
 
   const [newName, setNewName] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -118,11 +132,13 @@ export default function WatchlistsPage() {
                         type="button"
                         onClick={() => setSelectedId(wl.watchlistId)}
                         aria-current={wl.watchlistId === selectedId}
+                        disabled={anyWatchlistWriteInFlight}
                         className={cn(
                           'flex w-full items-center justify-between rounded-md px-3 py-2 text-left text-sm',
                           wl.watchlistId === selectedId
                             ? 'bg-accent text-accent-foreground'
                             : 'hover:bg-accent/50',
+                          'disabled:pointer-events-none disabled:opacity-50',
                         )}
                       >
                         <span className="truncate font-medium">{wl.name}</span>
