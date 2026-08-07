@@ -423,6 +423,7 @@ services:
       LEDGER_ENDPOINT: xstockstrat-ledger:50057
       PORTFOLIO_ENDPOINT: xstockstrat-portfolio:50052
       INDICATORS_ENDPOINT: xstockstrat-indicators:50054
+      MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
       SERVICE_NAME: trading
       DB_POOL_MAX: "2"
@@ -441,6 +442,8 @@ services:
       xstockstrat-indicators:
         condition: service_healthy
       xstockstrat-portfolio:
+        condition: service_started
+      xstockstrat-marketdata:
         condition: service_started
 
   # ── Consolidated Frontend ───────────────────────────────────────────────

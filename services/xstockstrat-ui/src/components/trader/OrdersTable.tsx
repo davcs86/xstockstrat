@@ -107,7 +107,7 @@ export function OrdersTable({
                     <TableCell className="text-right hidden md:table-cell">
                       {formatUsd(order.filledAvgPrice)}
                     </TableCell>
-                    <OrderStatusCell status={order.status} />
+                    <OrderStatusCell status={order.status} intentState={order.intentState} />
                     <TableCell className="hidden lg:table-cell text-muted-foreground">
                       {order.strategyId ? (
                         <Link

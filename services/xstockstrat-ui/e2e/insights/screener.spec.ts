@@ -119,6 +119,30 @@ test.describe('Screener', () => {
     expect(criteria[0].hardFilter).toBe(true);
   });
 
+  test('a Technical indicator criterion sends component.indicator, not metricName (bug fix)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    const captured: { req?: Record<string, unknown> } = {};
+    await mockScreen(page, captured);
+    await page.goto('/insights/screener');
+
+    // Switch the default criterion's kind from Fundamental to Technical indicator, then scan.
+    await page.getByLabel('kind').selectOption({ label: 'Technical indicator' });
+    await page.getByLabel('metric').selectOption('RSI');
+    await page.getByTestId('run-screen').click();
+    await expect(page.getByTestId('screen-results')).toBeVisible({ timeout: 10000 });
+
+    const criteria = captured.req?.criteria as Array<{
+      metricName?: string;
+      component?: { indicator?: string };
+    }>;
+    // Must NOT be sent as a bare metricName — that only resolves fundamentals fields and would
+    // silently skip an indicator criterion, letting a hard filter like "rsi < 30" pass unchecked.
+    expect(criteria[0].metricName ?? '').toBe('');
+    expect(criteria[0].component?.indicator).toBe('RSI');
+  });
+
   test('shows last-run metadata after a scan (feature 098, FR-4)', async ({ page }) => {
     await addAuthCookie(page);
     await mockScreen(page, {});

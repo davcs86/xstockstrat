@@ -1,11 +1,33 @@
 package service
 
 import (
+	"context"
 	"testing"
+
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
 	tradingv1 "github.com/xstockstrat/contracts/gen/go/trading/v1"
+	"github.com/xstockstrat/trading/internal/config"
 )
+
+// TestPlaceOrder_RequiresClientOrderId proves the mandatory-nonce guard (feature 101,
+// FR-1) runs before any dependency call — reachable with a bare TradingService{} because
+// the guard is checked before resolveAccount/orderIntentRepo/repo are ever touched.
+func TestPlaceOrder_RequiresClientOrderId(t *testing.T) {
+	s := &TradingService{cfgW: &config.Watcher{}}
+	_, err := s.PlaceOrder(context.Background(), &tradingv1.PlaceOrderRequest{
+		Symbol: "AAPL", Side: tradingv1.OrderSide_ORDER_SIDE_BUY, Qty: 1,
+		ClientOrderId: "",
+	})
+	if err == nil {
+		t.Fatal("expected an error for a missing client_order_id")
+	}
+	if grpcstatus.Code(err) != codes.InvalidArgument {
+		t.Errorf("got code %v, want InvalidArgument", grpcstatus.Code(err))
+	}
+}
 
 func TestAlpacaStatusToProto(t *testing.T) {
 	tests := []struct {
@@ -360,5 +382,89 @@ func TestPaginateOrders(t *testing.T) {
 	page, _ = paginateOrders(all, &commonv1.PageRequest{PageSize: 2, PageToken: "99"})
 	if len(page) != 0 {
 		t.Errorf("offset beyond end: got len=%d, want 0", len(page))
+	}
+}
+
+// TestSizingRequiredGate replicates PlaceOrder's `needSizing := req.Qty <= 0; needSizing &&
+// !sizingEnabled → reject` gate (feature 023, AC-4) as a standalone table, the same technique
+// TestApprovalThresholdLogic/TestTrailingStopValidation use above.
+func TestSizingRequiredGate(t *testing.T) {
+	sizingGateRejects := func(qty float64, sizingEnabled bool) bool {
+		needSizing := qty <= 0
+		return needSizing && !sizingEnabled
+	}
+	cases := []struct {
+		name          string
+		qty           float64
+		sizingEnabled bool
+		wantReject    bool
+	}{
+		{"qty<=0, sizing enabled — auto-size, not rejected", 0, true, false},
+		{"qty<=0, sizing disabled — rejected (AC-4)", 0, false, true},
+		{"explicit qty, sizing disabled — override mode bypasses the gate (FR-6)", 10, false, false},
+		{"negative qty also means unset (FR-5), sizing disabled — rejected", -5, false, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := sizingGateRejects(tc.qty, tc.sizingEnabled); got != tc.wantReject {
+				t.Errorf("sizingGateRejects(%v, %v) = %v, want %v", tc.qty, tc.sizingEnabled, got, tc.wantReject)
+			}
+		})
+	}
+}
+
+// TestConfidenceResolution replicates PlaceOrder's `confidence := 1.0; if req.Confidence !=
+// nil { confidence = *req.Confidence }` resolution (feature 023, FR-2).
+func TestConfidenceResolution(t *testing.T) {
+	resolve := func(reqConfidence *float64) float64 {
+		confidence := 1.0
+		if reqConfidence != nil {
+			confidence = *reqConfidence
+		}
+		return confidence
+	}
+	zero := 0.0
+	half := 0.5
+	cases := []struct {
+		name string
+		in   *float64
+		want float64
+	}{
+		{"unset (nil) — full size", nil, 1.0},
+		{"explicit 0.0 — distinct from unset, sizes to zero", &zero, 0.0},
+		{"explicit 0.5", &half, 0.5},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := resolve(tc.in); got != tc.want {
+				t.Errorf("resolve(%v) = %v, want %v", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestConfidenceDomainValidation replicates PlaceOrder's confidence [0.0, 1.0] range check
+// (feature 023, FR-2's domain).
+func TestConfidenceDomainValidation(t *testing.T) {
+	inDomain := func(confidence float64) bool {
+		return confidence >= 0.0 && confidence <= 1.0
+	}
+	cases := []struct {
+		name string
+		in   float64
+		want bool
+	}{
+		{"below range", -0.1, false},
+		{"above range", 1.1, false},
+		{"lower bound", 0.0, true},
+		{"mid range", 0.5, true},
+		{"upper bound", 1.0, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := inDomain(tc.in); got != tc.want {
+				t.Errorf("inDomain(%v) = %v, want %v", tc.in, got, tc.want)
+			}
+		})
 	}
 }

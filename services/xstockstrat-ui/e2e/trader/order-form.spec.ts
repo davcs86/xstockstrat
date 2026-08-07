@@ -70,11 +70,14 @@ test.describe('OrderForm', () => {
       .last()
       .click();
 
-    // Mock returns { orderId: 'mock-order-001', status: 3 }
-    // Component shows: "Order placed: mock-order-001 (FILLED)" (OrderStatus[3] = 'FILLED')
+    // Mock returns { orderId: 'mock-order-001', status: 3, qty: 5, stopPrice: 148.25 }
+    // Component shows: "Order placed: mock-order-001 (FILLED) — qty 5, stop 148.25"
     await expect(page.getByText(/mock-order-001/)).toBeVisible({ timeout: 10000 });
     // Order book also shows "FILLED" badge — match the success message paragraph specifically
     await expect(page.getByText(/Order placed:.*FILLED/)).toBeVisible();
+    // Consumer surface requirement (C-14, feature 023): the computed quantity/stop price
+    // are shown at submission.
+    await expect(page.getByText(/qty 5, stop 148.25/)).toBeVisible();
   });
 
   test('failed order submission shows error message', async ({ page }) => {
@@ -100,6 +103,57 @@ test.describe('OrderForm', () => {
   test('BUY and SELL side buttons are present', async ({ page }) => {
     await expect(page.getByRole('button', { name: 'BUY', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'SELL', exact: true })).toBeVisible();
+  });
+
+  test('clientOrderId nonce is reused on a failed resubmit, rotated after success', async ({
+    page,
+  }) => {
+    // feature 101 (FR-1/FR-2): the form generates one idempotency nonce per logical
+    // place-order action and must keep it across a failed retry, then mint a fresh one
+    // only after a successful placement — verified here from the actual wire request.
+    const seenClientOrderIds: string[] = [];
+    let failNext = true;
+    await page.route('**/xstockstrat.trading.v1.TradingService/PlaceOrder', async (route) => {
+      const body = route.request().postDataJSON() as { clientOrderId?: string };
+      seenClientOrderIds.push(body.clientOrderId ?? '');
+      if (failNext) {
+        await route.fulfill({
+          status: 400,
+          contentType: 'application/connect+json',
+          body: JSON.stringify({ code: 'invalid_argument', message: 'Insufficient buying power' }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ orderId: 'mock-order-001', status: 3, tradingMode: 1 }),
+      });
+    });
+
+    await page.getByPlaceholder('Symbol (e.g. AAPL)').fill('TSLA');
+    await page.getByPlaceholder('Quantity').fill('1000');
+    const submit = page.getByRole('button', { name: /buy|sell/i }).last();
+
+    await submit.click();
+    await expect(page.getByText('Insufficient buying power')).toBeVisible({ timeout: 10000 });
+
+    // Resubmit the same logical action after the failure — nonce must be unchanged.
+    failNext = false;
+    await submit.click();
+    await expect(page.getByText(/mock-order-001/)).toBeVisible({ timeout: 10000 });
+
+    expect(seenClientOrderIds).toHaveLength(2);
+    expect(seenClientOrderIds[1]).toBe(seenClientOrderIds[0]);
+
+    // A new logical action after success must mint a fresh nonce.
+    await page.getByPlaceholder('Symbol (e.g. AAPL)').fill('AAPL');
+    await page.getByPlaceholder('Quantity').fill('1');
+    await submit.click();
+    await expect(page.getByText(/mock-order-001/)).toBeVisible({ timeout: 10000 });
+
+    expect(seenClientOrderIds).toHaveLength(3);
+    expect(seenClientOrderIds[2]).not.toBe(seenClientOrderIds[0]);
   });
 
   test('PAPER or LIVE badge is shown in the global header', async ({ page }) => {

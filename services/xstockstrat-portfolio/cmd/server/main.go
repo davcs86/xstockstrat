@@ -64,6 +64,8 @@ func main() {
 	go svc.ConsumeOrderFills(ctx)
 	go svc.ConsumePositionSyncs(ctx)
 	go svc.ConsumeBalanceSyncs(ctx)
+	// feature 030 — persist resting bracket leg order IDs onto positions.
+	go svc.ConsumeBracketUpdates(ctx)
 	// feature 083 — rebuild the in-memory resting-stop store from ledger history (best-effort).
 	go svc.HydrateStops(ctx)
 

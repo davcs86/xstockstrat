@@ -39,6 +39,11 @@ type IBKRClient struct {
 	httpClient        *http.Client
 }
 
+// IBKRRequestTimeout is IBKR's hardcoded HTTP client timeout (a confirmed pre-existing
+// bug — see docs/context-constitution-findings.md — this feature does not fix it, only
+// names it so design.md's staleness-threshold formula has one source of truth).
+const IBKRRequestTimeout = 10 * time.Second
+
 func NewIBKRClient(cfg IBKRConfig) *IBKRClient {
 	base := cfg.BaseURL
 	if base == "" {
@@ -52,7 +57,7 @@ func NewIBKRClient(cfg IBKRConfig) *IBKRClient {
 		accessTokenSecret: cfg.AccessTokenSecret,
 		ibkrAccountID:     cfg.IBKRAccountID,
 		isPaper:           cfg.IsPaper,
-		httpClient:        &http.Client{Timeout: 10 * time.Second},
+		httpClient:        &http.Client{Timeout: IBKRRequestTimeout},
 	}
 }
 
@@ -133,6 +138,11 @@ func (c *IBKRClient) SubmitOrder(ctx context.Context, req OrderRequest) (*Broker
 	if req.StopPrice != 0 {
 		body["auxPrice"] = req.StopPrice
 	}
+	if req.ClientOrderID != "" {
+		// cOID is IBKR's Client Portal Web API customer-order-id field (confirmed against
+		// IBKR's public docs at execute time — feature 101 design.md Open Risk #1, resolved).
+		body["cOID"] = req.ClientOrderID
+	}
 
 	payload, err := json.Marshal(map[string]interface{}{"orders": []interface{}{body}})
 	if err != nil {
@@ -167,6 +177,63 @@ func (c *IBKRClient) SubmitOrder(ctx context.Context, req OrderRequest) (*Broker
 		return nil, fmt.Errorf("ibkr SubmitOrder: parse response: %w", err)
 	}
 	return &BrokerOrder{BrokerOrderID: replies[0].OrderID, Status: replies[0].OrderStatus}, nil
+}
+
+// SubmitBracketLegs submits a stop-loss + optional take-profit leg as a linked pair
+// (feature 030). IBKR's Client Portal Web API has no client-settable OCA group name
+// field — grouping is done by submitting the linked orders together in one call, each
+// carrying isSingleGroup: true; the server assigns the OCA group ID. Parent/child
+// linkage uses parentId on each child, set to the parent (entry) order's own cOID.
+func (c *IBKRClient) SubmitBracketLegs(ctx context.Context, parentBrokerOrderID, parentClientOrderID string, legs BracketLegsRequest) (*BracketLegsResponse, error) {
+	conid, err := c.resolveConid(ctx, legs.Symbol)
+	if err != nil {
+		return nil, fmt.Errorf("ibkr SubmitBracketLegs: %w", err)
+	}
+	orders := []map[string]interface{}{
+		{
+			"conid": conid, "orderType": "STP", "side": strings.ToUpper(legs.Side),
+			"quantity": legs.Qty, "tif": strings.ToUpper(legs.TimeInForce), "ticker": legs.Symbol,
+			"auxPrice": legs.StopPrice, "parentId": parentClientOrderID, "isSingleGroup": true,
+		},
+	}
+	if legs.TakeProfitPrice != 0 {
+		orders = append(orders, map[string]interface{}{
+			"conid": conid, "orderType": "LMT", "side": strings.ToUpper(legs.Side),
+			"quantity": legs.Qty, "tif": strings.ToUpper(legs.TimeInForce), "ticker": legs.Symbol,
+			"price": legs.TakeProfitPrice, "parentId": parentClientOrderID, "isSingleGroup": true,
+		})
+	}
+	payload, err := json.Marshal(map[string]interface{}{"orders": orders})
+	if err != nil {
+		return nil, fmt.Errorf("ibkr SubmitBracketLegs: marshal: %w", err)
+	}
+	endpoint := fmt.Sprintf("%s/iserver/account/%s/orders", c.baseURL, c.ibkrAccountID)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(payload))
+	if err != nil {
+		return nil, fmt.Errorf("ibkr SubmitBracketLegs: build request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", c.signRequest(http.MethodPost, endpoint))
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("ibkr SubmitBracketLegs: http: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return nil, fmt.Errorf("ibkr SubmitBracketLegs: status %d: %s", resp.StatusCode, respBody)
+	}
+	var replies []struct {
+		OrderID string `json:"order_id"`
+	}
+	if err := json.Unmarshal(respBody, &replies); err != nil || len(replies) == 0 {
+		return nil, fmt.Errorf("ibkr SubmitBracketLegs: parse response: %w", err)
+	}
+	out := &BracketLegsResponse{StopLegOrderID: replies[0].OrderID}
+	if len(replies) > 1 {
+		out.TakeProfitLegOrderID = replies[1].OrderID
+	}
+	return out, nil
 }
 
 // CancelOrder cancels an order via DELETE /v1/api/iserver/account/{accountID}/order/{orderId}.
@@ -287,6 +354,56 @@ func (c *IBKRClient) GetOrder(ctx context.Context, brokerOrderID string) (*Broke
 	}
 	o := result.Orders[0]
 	return &BrokerOrder{BrokerOrderID: o.OrderID, Status: o.Status, FilledQty: o.FilledQty, FilledAvgPrice: o.AvgPrice}, nil
+}
+
+// ListOrders fetches every order currently known to IBKR for this account via
+// GET /iserver/account/orders?accountId={id} (feature 102). Reuses GetOrder's exact endpoint
+// and response shape, minus the single-order orderId filter — an explicit accountId query
+// param is required here (GetOrder relies on orderId alone to implicitly scope its single
+// result; a bulk call has nothing else scoping it under a Client Portal session that can span
+// multiple sub-accounts). ClientOrderID is deliberately left unpopulated: IBKR's SubmitOrder
+// (see SubmitOrder above) never sends a customer-order tag, so there is nothing for the broker
+// to echo back here.
+func (c *IBKRClient) ListOrders(ctx context.Context) ([]BrokerOrder, error) {
+	endpoint := fmt.Sprintf("%s/iserver/account/orders", c.baseURL)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, fmt.Errorf("ibkr ListOrders: build request: %w", err)
+	}
+	q := httpReq.URL.Query()
+	q.Set("accountId", c.ibkrAccountID)
+	httpReq.URL.RawQuery = q.Encode()
+	httpReq.Header.Set("Authorization", c.signRequest(http.MethodGet, endpoint))
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("ibkr ListOrders: http: %w", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("ibkr ListOrders: status %d: %s", resp.StatusCode, respBody)
+	}
+
+	var result struct {
+		Orders []struct {
+			OrderID   string  `json:"orderId"`
+			Status    string  `json:"status"`
+			AvgPrice  float64 `json:"avgPrice"`
+			FilledQty float64 `json:"filledQuantity"`
+		} `json:"orders"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("ibkr ListOrders: parse response: %w", err)
+	}
+	orders := make([]BrokerOrder, 0, len(result.Orders))
+	for _, o := range result.Orders {
+		orders = append(orders, BrokerOrder{
+			BrokerOrderID: o.OrderID, Status: o.Status, FilledQty: o.FilledQty, FilledAvgPrice: o.AvgPrice,
+		})
+	}
+	return orders, nil
 }
 
 // GetPositions fetches all open positions via GET /v1/api/portfolio/{accountID}/positions/0.
