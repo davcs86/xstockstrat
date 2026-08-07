@@ -1292,3 +1292,20 @@ reusing.
   like every other broker" without an explicit citation, treat that assumption as unverified and
   re-confirm it against the specific broker's own documentation before implementation — a plausible,
   common-pattern guess is not evidence.
+
+### 2026-08-07 — fix-mcp-target-user-authz — design
+- **Pattern**: When closing an authz-shaped defect by removing a caller-suppliable identity
+  parameter, prefer a **required parameter with no default** over both (a) silently keeping the old
+  permissive default and (b) silently hard-flipping to a new restrictive default. Both silent
+  options fail *quietly* — an omitted argument keeps working but does something the caller didn't
+  ask for (either re-shipping the vulnerability's shape, or narrowing behavior for a legitimate
+  caller recon couldn't rule out). A required parameter with no default fails *loud* (a schema/type
+  error) at the exact call sites that need to state their intent explicitly, closing the same hole
+  without silently changing anyone's observed behavior.
+- **Evidence**: `docs/roadmap/features/111-fix-mcp-target-user-authz/design.md` § Rejected
+  Alternatives ("Hard-flip `emit_alert`'s default..." rejected in round 2 in favor of `broadcast:
+  bool` required, no default); `context.md` § Session 2026-08-07 — sdd-design.
+- **Rule it implies**: when a design round is choosing between two silent defaults for a
+  behavior-changing parameter, check whether a required (no-default) parameter closes the same gap
+  — it usually does, at zero extra implementation cost, and turns an unverifiable-blast-radius
+  question into a caught-at-call-site error instead of a guess either way.

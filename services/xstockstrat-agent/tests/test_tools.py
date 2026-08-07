@@ -24,6 +24,38 @@ def _tool_fn(server: MCPServer, name: str):
     return server._tool_manager.get_tool(name).fn
 
 
+class TestCallerIdentityHelpers:
+    """Direct coverage of the shared claims primitive (feature 111) — both
+    _caller_access_scope and _caller_user_id depend on it, so it is tested directly rather than
+    only transitively through one consumer (Constitution C-10)."""
+
+    def test_require_claims_raises_without_claims(self):
+        from app import tools as tools_mod
+
+        with pytest.raises(RuntimeError, match="Streamable HTTP"):
+            tools_mod._require_claims(_ctx(None), "emit_alert")
+
+    def test_caller_user_id_happy_path(self):
+        from app import tools as tools_mod
+
+        assert tools_mod._caller_user_id(_ctx(ADMIN), "emit_alert") == "u-1"
+
+    def test_caller_user_id_raises_on_empty_user_id(self):
+        from app import tools as tools_mod
+
+        claims = {"user_id": "", "email": "x@y.z", "roles": ["trader"], "aud": "http://x"}
+        with pytest.raises(RuntimeError):
+            tools_mod._caller_user_id(_ctx(claims), "emit_alert")
+
+    def test_caller_access_scope_still_raises_without_claims(self):
+        """Regression: the Step 1 refactor of _caller_access_scope onto _require_claims must not
+        change its observable raise behavior."""
+        from app import tools as tools_mod
+
+        with pytest.raises(RuntimeError, match="Streamable HTTP"):
+            tools_mod._caller_access_scope(_ctx(None), "manage_strategy")
+
+
 # Shared source list used by many tests
 _SOURCES = [
     {
@@ -306,7 +338,12 @@ async def test_emit_alert_calls_grpc():
     with patch.object(client, "emit_alert", mock_alert):
         server = _make_server()
         result = await _tool_fn(server, "emit_alert")(
-            severity="info", category="signal", title="Test alert", body="Body text"
+            ctx=_ctx(ADMIN),
+            severity="info",
+            category="signal",
+            title="Test alert",
+            body="Body text",
+            broadcast=True,
         )
         assert result == {"alert_id": "a1"}
         mock_alert.assert_called_once_with(
@@ -319,6 +356,56 @@ async def test_emit_alert_calls_grpc():
             context=None,
             tags=None,
             correlation_id="",
+        )
+
+
+@pytest.mark.asyncio
+async def test_emit_alert_broadcast_false_derives_caller_identity():
+    """broadcast=False derives target_user_id from the caller's own verified claims."""
+    mock_alert = AsyncMock(return_value={"alert_id": "a2"})
+    with patch.object(client, "emit_alert", mock_alert):
+        server = _make_server()
+        await _tool_fn(server, "emit_alert")(
+            ctx=_ctx(ADMIN),
+            severity="info",
+            category="signal",
+            title="t",
+            body="b",
+            broadcast=False,
+        )
+    assert mock_alert.call_args.kwargs["target_user_id"] == "u-1"
+
+
+@pytest.mark.asyncio
+async def test_emit_alert_rejects_caller_supplied_target_user_id():
+    """target_user_id is no longer a parameter — supplying it is a TypeError, not silently
+    ignored or accepted."""
+    server = _make_server()
+    with pytest.raises(TypeError):
+        await _tool_fn(server, "emit_alert")(
+            ctx=_ctx(ADMIN),
+            severity="info",
+            category="signal",
+            title="t",
+            body="b",
+            broadcast=True,
+            target_user_id="someone-else",
+        )
+
+
+@pytest.mark.asyncio
+async def test_emit_alert_broadcast_false_without_claims_raises():
+    """broadcast=False with no verified claims on the request raises rather than silently
+    deriving an empty/broadcast identity."""
+    server = _make_server()
+    with pytest.raises(RuntimeError, match="Streamable HTTP"):
+        await _tool_fn(server, "emit_alert")(
+            ctx=_ctx(None),
+            severity="info",
+            category="signal",
+            title="t",
+            body="b",
+            broadcast=False,
         )
 
 
@@ -691,16 +778,54 @@ class TestManageFormulaTool:
             client, "manage_formula", AsyncMock(return_value={"formula_id": "f-1"})
         ) as m:
             await _tool_fn(server, "manage_formula")(
-                operation="register", name="rsi2", source="x = 1"
+                ctx=_ctx(ADMIN), operation="register", name="rsi2", source="x = 1"
             )
             await _tool_fn(server, "manage_formula")(
+                ctx=_ctx(ADMIN),
                 operation="delete",
                 formula_id="f-1",
-                formula_author_user_id="u1",
             )
         assert m.call_count == 2
         assert m.call_args_list[0].kwargs["operation"] == "register"
         assert m.call_args_list[1].kwargs["operation"] == "delete"
+
+    @pytest.mark.asyncio
+    async def test_register_derives_author_and_user_id_from_claims(self):
+        """Ownership is derived from the caller's own verified claims (feature 111) — there is no
+        author/formula_author_user_id parameter to assert a different identity."""
+        server = _make_server()
+        with patch.object(
+            client, "manage_formula", AsyncMock(return_value={"formula_id": "f-3"})
+        ) as m:
+            await _tool_fn(server, "manage_formula")(
+                ctx=_ctx(ADMIN), operation="register", name="rsi4", source="x = 1"
+            )
+        formula = m.call_args.kwargs["formula"]
+        assert formula["author"] == "u-1"
+        assert formula["user_id"] == "u-1"
+
+    @pytest.mark.asyncio
+    async def test_rejects_caller_supplied_author_and_user_id(self):
+        server = _make_server()
+        with pytest.raises(TypeError):
+            await _tool_fn(server, "manage_formula")(
+                ctx=_ctx(ADMIN), operation="register", name="x", source="y = 1", author="system"
+            )
+        with pytest.raises(TypeError):
+            await _tool_fn(server, "manage_formula")(
+                ctx=_ctx(ADMIN),
+                operation="delete",
+                formula_id="f-1",
+                formula_author_user_id="u1",
+            )
+
+    @pytest.mark.asyncio
+    async def test_refuses_without_verified_claims(self):
+        server = _make_server()
+        with pytest.raises(RuntimeError, match="Streamable HTTP"):
+            await _tool_fn(server, "manage_formula")(
+                ctx=_ctx(None), operation="register", name="x", source="y = 1"
+            )
 
     @pytest.mark.asyncio
     async def test_register_carries_parameter_definitions(self):
@@ -709,6 +834,7 @@ class TestManageFormulaTool:
             client, "manage_formula", AsyncMock(return_value={"formula_id": "f-2"})
         ) as m:
             await _tool_fn(server, "manage_formula")(
+                ctx=_ctx(ADMIN),
                 operation="register",
                 name="rsi3",
                 source="result = params['period']",
@@ -1154,10 +1280,12 @@ class TestAdditiveTools:
         server = _make_server()
         with patch.object(client, "emit_alert", AsyncMock(return_value={"alert_id": "a1"})) as m:
             await _tool_fn(server, "emit_alert")(
+                ctx=_ctx(ADMIN),
                 severity="info",
                 category="system",
                 title="t",
                 body="b",
+                broadcast=True,
                 context={"k": "v"},
                 tags=["x"],
                 correlation_id="c1",
@@ -1176,9 +1304,9 @@ class TestFormulaPartialUpdateTool:
             client, "manage_formula", AsyncMock(return_value={"formulaId": "f-1"})
         ) as m:
             await _tool_fn(server, "manage_formula")(
+                ctx=_ctx(ADMIN),
                 operation="update",
                 formula_id="f-1",
-                formula_author_user_id="u1",
                 description="tweak",
             )
         formula = m.call_args.kwargs["formula"]
@@ -1192,9 +1320,9 @@ class TestFormulaPartialUpdateTool:
             client, "manage_formula", AsyncMock(return_value={"formulaId": "f-1"})
         ) as m:
             await _tool_fn(server, "manage_formula")(
+                ctx=_ctx(ADMIN),
                 operation="update",
                 formula_id="f-1",
-                formula_author_user_id="u1",
                 is_public=False,
             )
         assert m.call_args.kwargs["formula"]["update_mask"] == ["is_public"]
@@ -1206,9 +1334,9 @@ class TestFormulaPartialUpdateTool:
             client, "manage_formula", AsyncMock(return_value={"formulaId": "f-1"})
         ) as m:
             await _tool_fn(server, "manage_formula")(
+                ctx=_ctx(ADMIN),
                 operation="update",
                 formula_id="f-1",
-                formula_author_user_id="u1",
                 description="only this",
             )
         assert "is_public" not in m.call_args.kwargs["formula"]["update_mask"]
@@ -1218,7 +1346,7 @@ class TestFormulaPartialUpdateTool:
         server = _make_server()
         with pytest.raises(RuntimeError, match="at least one field"):
             await _tool_fn(server, "manage_formula")(
-                operation="update", formula_id="f-1", formula_author_user_id="u1"
+                ctx=_ctx(ADMIN), operation="update", formula_id="f-1"
             )
 
 
