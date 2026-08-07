@@ -92,6 +92,33 @@ test.describe('Watchlists (insights)', () => {
     await expect(page.getByTestId('unbound-AAPL')).toHaveCount(0);
   });
 
+  test('add-time strategy picker binds a new symbol in one call (FR-3, AC-2)', async ({ page }) => {
+    await addAuthCookie(page);
+    await mockWatchlists(page);
+    await page.goto('/insights/watchlists');
+
+    await createList(page, 'Picker List');
+
+    // Bound add: choose a strategy in the add-time picker before adding — the symbol should land
+    // already evaluated, proving the single-call add-already-bound path (no separate rebind step).
+    const addStrategySelect = page.getByLabel('Strategy for new symbols');
+    await addStrategySelect.click();
+    await page.getByRole('option', { name: 'Live Test Strategy' }).click();
+    await page.getByPlaceholder('Add symbols (e.g. AAPL MSFT)').fill('AAPL');
+    await page.getByRole('button', { name: 'Add' }).click();
+    await expect(page.getByTestId('readiness-row-AAPL')).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('unbound-AAPL')).toHaveCount(0);
+
+    // Default unbound add: the picker is explicitly reset to "Unbound" — it is NOT reset
+    // automatically after a successful add (design.md §3: a repeat add keeps the active choice) —
+    // reproduces today's default only when the user actually leaves/sets it to Unbound.
+    await addStrategySelect.click();
+    await page.getByRole('option', { name: 'Unbound' }).click();
+    await page.getByPlaceholder('Add symbols (e.g. AAPL MSFT)').fill('MSFT');
+    await page.getByRole('button', { name: 'Add' }).click();
+    await expect(page.getByTestId('unbound-MSFT')).toBeVisible({ timeout: 5000 });
+  });
+
   test('strategy binding picker excludes non-live strategies (disabled strategies must not be usable)', async ({
     page,
   }) => {
