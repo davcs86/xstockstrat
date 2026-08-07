@@ -15,6 +15,7 @@
 | 2026-08-07 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings) |
 | 2026-08-07 | `spec-ready` → `design-approved` | /sdd-design | Design debated (6 rounds, full — user overrode the standard 5-round cap for a final completeness audit) and approved; recon.md + design.md written |
 | 2026-08-07 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 21 steps |
+| 2026-08-07 | `implementation-ready` (unchanged) | /sdd-execute (sequential, re-spec gate) | Renumbered 110 → 116 (trunk collision); re-spec corrected 3 stale evidence citations (Steps 15, 18) |
 
 ---
 

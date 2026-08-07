@@ -251,3 +251,39 @@ Next: `/sdd-review exit-cooldown impl-spec` — validate implementation spec, th
   `docs/roadmap/features/CLAUDE.md`).
 
 Next: continue the sequential step loop (Step 1).
+
+## Session 2026-08-07T03:15:00Z — sdd-execute (sequential) — re-spec gate (§5.3)
+
+- §5.3 step 2 (read-only validation): spawned 3 parallel `codebase-discovery` agents (one per
+  affected service) to re-run every step's `**Codebase Evidence**` against the post-merge tree.
+  Result: no step blocked, all target code exists and is functionally unchanged. Most drift was
+  pure line-number shift (2-50 lines, one outlier ~1547 lines in `trading.go`) from unrelated
+  features that landed on `main-dev` since this spec was written — content/shape identical, not
+  re-spec'd (Phase 1 Discovery will re-locate current positions at each step naturally).
+- Directive = **none** (no re-spec directive was given for this single-feature run), so per
+  §5.3 step 3, any real mismatch required a blocker + user decision rather than a silent edit.
+  User chose targeted re-spec. **3 real evidence corrections applied** (edited directly in
+  `implementation-spec.md`, the sanctioned pre-loop exception per §5.3 step 5):
+  1. **Step 15**: spec attributed two tests to a class `TestManageStrategyUpdateMask` in
+     `test_tools.py` that does not exist there (that class name exists only in `test_client.py`).
+     Corrected to the actual class, `TestManageStrategyPartialUpdate` (`test_tools.py:1182`),
+     with corrected line numbers for both tests. Tests themselves are real and unchanged.
+  2. **Step 18**: spec's insertion point ("after the feature-069 describe block, `:256-358`")
+     was wrong — that block's actual closing `});` is at `:382`; a later, unrelated feature 097
+     test was added inside it at `:360-381`. Corrected the insertion point to after `:382`, with
+     an explicit warning that `:358` would land the new block mid-existing-block.
+  3. **Step 18**: spec claimed `strat-cooldown-14` "is registered in" `INVENTORY.md`'s
+     "Recurring sentinel ids" table — false; grep confirms zero cooldown-related rows there
+     (feature 069 apparently never backfilled it). Corrected Instruction 2 to add
+     `strat-exit-cooldown-7` as a new row (not "mirroring" a nonexistent one) and explicitly
+     scoped backfilling `strat-cooldown-14` as feature 069's gap, out of this step.
+- **Consistency fix (mechanical consequence of the 110→116 renumbering, not a new re-spec
+  judgment call)**: 13 in-spec code-comment/prose references to "feature 110" — several destined
+  to land verbatim as comments in `cooldown.py`, `live_loop.py`, `servicer.py`,
+  `entry_backfill.py`, and `CLAUDE.md` — corrected to "feature 116" so the number future readers
+  grep for actually matches this feature's directory.
+- No other steps required correction. `feature.md` status history row added (status unchanged,
+  `implementation-ready`).
+
+Next: continue the sequential step loop (Step 1) — up-front confirm (§5.4), then tooling setup
+(§5.4b).

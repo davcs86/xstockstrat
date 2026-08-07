@@ -76,7 +76,7 @@ verified by buf lint/breaking below and by every downstream step that reads the 
    `warnings = 10`:
    ```proto
    // Per-strategy minimum holding period in calendar days before exit_rule may fire a sell
-   // (feature 110 — exit cooldown; mirrors cooldown_days but gates the exit transition).
+   // (feature 116 — exit cooldown; mirrors cooldown_days but gates the exit transition).
    // optional = explicit presence: unset → platform default
    // (analysis.strategy.default_exit_cooldown_days); explicit 0 → no minimum hold (exit
    // permitted immediately, current behavior); negative → rejected at write time
@@ -157,7 +157,7 @@ Confirm the new field appears in all three generated targets and no unrelated fi
 
 `012_strategy_cooldowns_last_entry_at.up.sql`:
 ```sql
--- Live-loop exit-cooldown state (feature 110). Extends the table feature 069 created — the
+-- Live-loop exit-cooldown state (feature 116). Extends the table feature 069 created — the
 -- same (strategy_id, symbol) key now carries both the re-entry gate's last-exit anchor and
 -- the exit-cooldown gate's last-entry anchor. NULL for a pair with no known entry time yet
 -- (see app/engine/entry_backfill.py). Migration 009 itself is NOT edited (F-01).
@@ -217,7 +217,7 @@ COLUMN` in down (offline, no-DB check per the migration-step verification rule);
    is a last-exit or a last-entry timestamp). Update the function's docstring to describe both
    directions ("re-entry" → generic "gated"). Generalize the module docstring (line 1) from
    `"""Shared re-entry cooldown gate (feature 069)."""` to describe both consumers (the
-   re-entry gate, anchored on last-exit, AND the exit-cooldown gate added by feature 110,
+   re-entry gate, anchored on last-exit, AND the exit-cooldown gate added by feature 116,
    anchored on last-entry). Do **not** touch `effective_cooldown_days` or `_require_aware` —
    both are already direction-agnostic.
 2. In `strategy_cooldowns.py`:
@@ -337,7 +337,7 @@ look-ahead bias.
 1. Immediately after the existing `cooldown_days = effective_cooldown_days(...)` block
    (`:1049-1052`), add the exit-cooldown resolution:
    ```python
-   # Exit cooldown (feature 110) — minimum holding period. Ephemeral per-RunBacktest state
+   # Exit cooldown (feature 116) — minimum holding period. Ephemeral per-RunBacktest state
    # (FR-5/FR-7), symmetric to the re-entry cooldown above. get_int_present (not get_int) —
    # a configured 0 is a legitimate, meaningful default and must not be zero-trapped.
    exit_cooldown_days = effective_cooldown_days(
@@ -447,7 +447,7 @@ ruff check . && ruff format --check .
 1. In `evaluator.py`, immediately after the existing negative-`cooldown_days` check
    (`:353-354`), add the mirror check:
    ```python
-   # Exit cooldown (feature 110, FR-2): a negative value is rejected at write time. Unset
+   # Exit cooldown (feature 116, FR-2): a negative value is rejected at write time. Unset
    # never triggers this (no HasField); an explicit 0 (no minimum hold) passes.
    if definition.HasField("exit_cooldown_days") and definition.exit_cooldown_days < 0:
        raise ValueError("exit_cooldown_days must be >= 0")
@@ -469,7 +469,7 @@ ruff check . && ruff format --check .
 3. In `services/xstockstrat-analysis/CLAUDE.md`'s Config Keys Consumed table, add a new row
    directly after the `analysis.strategy.default_cooldown_days` row:
    ```
-   | `analysis.strategy.default_exit_cooldown_days` | int | `0` | Per-strategy default minimum holding period (calendar days) before `exit_rule` may fire a sell, when `StrategyDefinition.exit_cooldown_days` is unset (feature 110); mirrors `default_cooldown_days` but gates the exit transition. Default `0` (no minimum hold — no wash-sale-style rationale exists for a non-zero default here, unlike the 31-day re-entry default). Read via `get_int_present` (**not** `get_int`) — a configured `0` is a legitimate value and `get_int`'s zero-trap would silently collapse it. |
+   | `analysis.strategy.default_exit_cooldown_days` | int | `0` | Per-strategy default minimum holding period (calendar days) before `exit_rule` may fire a sell, when `StrategyDefinition.exit_cooldown_days` is unset (feature 116); mirrors `default_cooldown_days` but gates the exit transition. Default `0` (no minimum hold — no wash-sale-style rationale exists for a non-zero default here, unlike the 31-day re-entry default). Read via `get_int_present` (**not** `get_int`) — a configured `0` is a legitimate value and `get_int`'s zero-trap would silently collapse it. |
    ```
 
 **Verification**:
@@ -577,7 +577,7 @@ ruff check . && ruff format --check .
    ) -> tuple[bool, datetime | None, datetime | None, str | None]:
        """Pure edge-triggered transition step — the ONE shared core for both the live bar
        (_eval_pair) and historical replay (_replay_state), so live/replay parity is
-       structural (feature 110 design.md § Live loop — shared transition core). Returns
+       structural (feature 116 design.md § Live loop — shared transition core). Returns
        (new_in_position, new_entry_time, new_last_exit_at, trigger_or_None). `trigger` is
        "entry"/"exit" only on an actual transition; None on steady state OR a gated
        (cooldown-suppressed) transition attempt — including the "known open, entry time
@@ -599,7 +599,7 @@ ruff check . && ruff format --check .
        bars, decisions, cooldown_days: int, exit_cooldown_days: int
    ) -> tuple[bool, datetime | None, datetime | None]:
        """Fold _apply_transition over historical (bar, decision) pairs to seed state for a
-       key reached for the first time since restart (feature 110). Pure — plain data in,
+       key reached for the first time since restart (feature 116). Pure — plain data in,
        plain data out; cannot emit an alert or ledger write by construction."""
        in_position, entry_time, last_exit_at = False, None, None
        for bar, decision in zip(bars, decisions, strict=True):
@@ -663,7 +663,7 @@ ruff check . && ruff format --check .
            log.warning(
                "live_loop: (%s,%s) in position with unresolved entry time — exit-cooldown "
                "gate is skipping this pair until app.engine.entry_backfill resolves it "
-               "(feature 110)", key[0], key[1],
+               "(feature 116)", key[0], key[1],
            )
        self._last_state[key] = new_in_position
        return
@@ -818,7 +818,7 @@ directly in a code comment... so a future editor sees the constraint before brea
 **Instructions**:
 1. Create `app/engine/entry_backfill.py`:
    ```python
-   """Boot-time-only Order-based entry-time backfill (feature 110).
+   """Boot-time-only Order-based entry-time backfill (feature 116).
 
    Closes the >365-day-position gap bar-replay cannot reach (live_loop.py's own replay only
    sees the fetched 365-day bar window). Runs ONCE at boot, concurrently with (not blocking)
@@ -913,7 +913,7 @@ directly in a code comment... so a future editor sees the constraint before brea
    `await live_loop.hydrate_cooldowns()` try/except (`:117-123`) and **before** the fundsignal
    loop section, add:
    ```python
-   # ── Boot-time entry-time backfill for exit-cooldown (feature 110) ────────
+   # ── Boot-time entry-time backfill for exit-cooldown (feature 116) ────────
    # Non-blocking — runs concurrently with run_forever(), never delays server start.
    from app.engine.entry_backfill import run_once as backfill_entry_times
 
@@ -925,7 +925,7 @@ directly in a code comment... so a future editor sees the constraint before brea
 3. In `services/xstockstrat-analysis/CLAUDE.md`'s Config Keys Consumed table, add a row after
    the new `default_exit_cooldown_days` row (Step 8):
    ```
-   | `analysis.strategy.max_concurrent_entry_backfill` | int | `4` | Semaphore bound on concurrent `ListOrders` calls during the boot-time entry-time backfill pass (feature 110, `app/engine/entry_backfill.py`) — mirrors `analysis.screener.max_concurrent_formula_evals`'s shape. |
+   | `analysis.strategy.max_concurrent_entry_backfill` | int | `4` | Semaphore bound on concurrent `ListOrders` calls during the boot-time entry-time backfill pass (feature 116, `app/engine/entry_backfill.py`) — mirrors `analysis.screener.max_concurrent_formula_evals`'s shape. |
    ```
 
 **Verification**:
@@ -1082,16 +1082,26 @@ uv run pytest tests/test_strategy_builders.py -k manage_strategy_definition -v
 **Reviewers**: `xstockstrat-agent` (service owner).
 
 **Codebase Evidence**:
-- `test_forwards_cooldown_days`, `test_tools.py:646-670` — direct template (non-zero forwarded,
-  explicit-0 not dropped, omitted → key absent).
-- `TestManageStrategyUpdateMask.test_cooldown_only_update_sends_only_cooldown` /
-  `test_explicit_zero_cooldown_still_survives`, `test_tools.py:1019-1043` — direct templates.
-- `test_cooldown_days_round_trips_presence`, `test_client.py:108-132` — direct template
-  (`d14.HasField("cooldown_days")`/`d0.HasField(...)`/`not d_unset.HasField(...)`).
+- `test_forwards_cooldown_days`, `test_tools.py:779-802` (spec originally cited `:646-670`;
+  location drifted from unrelated content added earlier in the file since this spec was
+  written — content/shape unchanged; re-verified 2026-08-07 re-spec gate) — direct template
+  (non-zero forwarded `:789`, explicit-0 survives `:796`, omitted → key absent `:802`).
+- **Correction (2026-08-07 re-spec gate)**: the spec originally attributed
+  `test_cooldown_only_update_sends_only_cooldown` / `test_explicit_zero_cooldown_still_survives`
+  to a class `TestManageStrategyUpdateMask` in `test_tools.py:1019-1043` — that class does not
+  exist in this file (it exists, correctly, only in `test_client.py` — see below). The actual
+  class is **`TestManageStrategyPartialUpdate`**, `test_tools.py:1182`, with
+  `test_cooldown_only_update_sends_only_cooldown` at `:1191` and
+  `test_explicit_zero_cooldown_still_survives` at `:1206` — both direct templates, content
+  matches the spec's original description verbatim.
+- `test_cooldown_days_round_trips_presence`, `test_client.py:108-132` — direct template, exact
+  lines unchanged (`d14.HasField("cooldown_days")`/`d0.HasField(...)`/`not
+  d_unset.HasField(...)`).
 - `TestManageStrategyUpdateMask.test_mask_is_attached_and_absent_when_not_given`,
-  `test_client.py:559-585` — direct template.
+  `test_client.py:582` (class at `:578`; spec originally cited `:559-585` — small drift,
+  content/class name confirmed correct here) — direct template.
 - `_capture_manage_strategy_request`, `test_strategy_builders.py:41-71` — the fixture the
-  descriptor-parity test (`:96-102`) drives; its `definition` dict (`:53-69`) currently omits
+  descriptor-parity test (`:96-103`) drives; its `definition` dict (`:53-69`) currently omits
   `exit_cooldown_days`, which is why Step 14's `client.py` change alone still leaves the
   descriptor-parity test failing until this fixture is updated.
 
@@ -1101,9 +1111,9 @@ uv run pytest tests/test_strategy_builders.py -k manage_strategy_definition -v
 1. In `test_tools.py`, extend `test_forwards_cooldown_days` (or add a sibling
    `test_forwards_exit_cooldown_days`) mirroring the three assertions (non-zero forwarded,
    explicit-0 survives, omitted → absent) for `exit_cooldown_days`.
-2. In `TestManageStrategyUpdateMask` (`test_tools.py`), add
+2. In **`TestManageStrategyPartialUpdate`** (`test_tools.py:1182`), add
    `test_exit_cooldown_only_update_sends_only_exit_cooldown` and
-   `test_explicit_zero_exit_cooldown_still_survives`, mirroring `:1019-1043`.
+   `test_explicit_zero_exit_cooldown_still_survives`, mirroring `:1191`/`:1206`.
 3. In `test_client.py`, add `test_exit_cooldown_days_round_trips_presence` mirroring
    `:108-132` (14/0/unset presence cases for `exit_cooldown_days`).
 4. In `TestManageStrategyUpdateMask` (`test_client.py`), add a case asserting
@@ -1279,39 +1289,57 @@ grep -n "exitCooldownDays\|parseExitCooldownDays" src/components/insights/Strate
 
 **Codebase Evidence**:
 - `test.describe('Strategy authoring — re-entry cooldown (feature 069)', ...)`,
-  `strategy-authoring.spec.ts:256-358` — the entire block is the template: `captureManage
-  Strategy` helper (`:258-269`), `fillToReview(page, id, display, cooldown)` (`:271-293`,
-  fills the `'31 (default)'` placeholder), and the 5 test cases (blank-omits `:295-305`,
+  `strategy-authoring.spec.ts:256-382` (spec originally cited the block as `:256-358` — the
+  block actually runs through `:382`; a later, unrelated feature 097 test
+  `'editing a strategy preserves signal_params.symbols on save'` was added inside it at
+  `:360-381`, before the block's real closing `});` at `:382`; re-verified 2026-08-07 re-spec
+  gate) — the block through `:358` is still the correct template: `captureManageStrategy`
+  helper (`:258-269`), `fillToReview(page, id, display, cooldown)` (`:271-293`, fills the
+  `'31 (default)'` placeholder), and the 5 test cases (blank-omits `:295-305`,
   explicit-0-sends-0 `:307-317`, negative-blocks-step-1 `:319-329`, edit-prepopulates
   `:331-337` using sentinel id `strat-cooldown-14`, unrelated-edit-preserves-unset `:339-358`).
-- `mock-backend.ts`'s `getStrategy` handler, `:735-761` — the `cooldownDays` conditional at
-  `:752-754`: `...(req.strategyId === 'strat-cooldown-14' ? { cooldownDays: 14 } : {})` — the
+  **The new block must be inserted after `:382` (the block's actual end), not after `:358`** —
+  inserting at `:358` would land it inside the existing block, before the unrelated feature-097
+  test and before the closing `});`.
+- `mock-backend.ts`'s `getStrategy` handler, `:782-809` (spec originally cited `:735-761` — the
+  file grew ~47-50 lines from unrelated content earlier in the file since this spec was
+  written; content/shape unchanged; re-verified 2026-08-07) — the `cooldownDays` conditional at
+  `:801`: `...(req.strategyId === 'strat-cooldown-14' ? { cooldownDays: 14 } : {})` — the
   sentinel-id pattern this step's edit-prepopulation test reuses (a **reserved sentinel id**,
   per C-12's exemption for scenario one-offs — not a new fixture module).
-- `manageStrategy` handler, `:725-733` — `return req.definition ?? {};` (echoes the request
-  verbatim; **no change needed** — `exitCooldownDays` round-trips automatically once present
-  on the request, exactly as `cooldownDays` does today).
-- `INVENTORY.md:27-30` § "Recurring sentinel ids" — the section `strat-cooldown-14` is
-  registered in (exact content confirmed at execute time; the new sentinel id is added there,
-  not as a new fixture-module row, since it is a routing sentinel, not a domain fixture).
+- `manageStrategy` handler, `:772-780` (spec originally cited `:725-733` — same line-drift
+  cause) — `return req.definition ?? {};` (echoes the request verbatim; **no change needed** —
+  `exitCooldownDays` round-trips automatically once present on the request, exactly as
+  `cooldownDays` does today).
+- **Correction (2026-08-07 re-spec gate)**: the spec's claim that `strat-cooldown-14` "is
+  registered in" `INVENTORY.md`'s "Recurring sentinel ids" section is **false as currently
+  written** — that section exists at `INVENTORY.md:28-41`, but contains no `cooldown`-related
+  row at all (grep confirms zero matches); `strat-cooldown-14` was apparently never backfilled
+  into this table when feature 069 shipped it. This is a **pre-existing gap in another
+  feature's cleanup, out of this step's scope to fix** — Instruction 2 below adds only
+  `strat-exit-cooldown-7` as a new row (not "mirroring" a nonexistent one), formatted to match
+  the table's existing row shape (see the 8 present rows, e.g. `strat-diag-001`).
 
 **TDD**: `red-green required`
 
 **Instructions**:
-1. In `mock-backend.ts`'s `getStrategy` handler (`:735-761`), add a second sentinel-id
-   conditional directly after the `strat-cooldown-14` one (`:752-754`):
+1. In `mock-backend.ts`'s `getStrategy` handler (`:782-809`), add a second sentinel-id
+   conditional directly after the `strat-cooldown-14` one (`:801`):
    ```ts
-   // Feature 110: only this id carries a non-default exit cooldown (edit-prepopulation e2e);
+   // Feature 116: only this id carries a non-default exit cooldown (edit-prepopulation e2e);
    // every other id leaves exitCooldownDays unset so the "edit unset strategy" case stays honest.
    ...(req.strategyId === 'strat-exit-cooldown-7' ? { exitCooldownDays: 7 } : {}),
    ```
-2. In `e2e/fixtures/INVENTORY.md`'s "Recurring sentinel ids" section, add a row/line for
-   `strat-exit-cooldown-7`, mirroring the existing `strat-cooldown-14` entry — reserved,
-   `mock-backend.ts`-pattern-matched, do not rename or reuse for another meaning.
+2. In `e2e/fixtures/INVENTORY.md`'s "Recurring sentinel ids" section (`:28-41`), add a new row
+   for `strat-exit-cooldown-7` formatted to match the table's existing rows — reserved,
+   `mock-backend.ts`-pattern-matched, do not rename or reuse for another meaning. (Do not
+   backfill the missing `strat-cooldown-14` row here — that is feature 069's gap, not this
+   step's scope; flag it in `context.md` if worth a future doc-completeness follow-up.)
 3. In `strategy-authoring.spec.ts`, add a new `test.describe('Strategy authoring — exit
-   cooldown (feature 110)', ...)` block directly after the existing feature-069 block
-   (`:256-358`), reusing the same `captureManageStrategy`/`fillToReview` helpers extended with
-   an `exitCooldown` parameter (fills the `'0 (default)'` placeholder from Step 17), with the
+   cooldown (feature 116)', ...)` block directly after the existing feature-069 block's actual
+   closing `});` at `:382` (**not** at `:358` — see Codebase Evidence correction above),
+   reusing the same `captureManageStrategy`/`fillToReview` helpers extended with an
+   `exitCooldown` parameter (fills the `'0 (default)'` placeholder from Step 17), with the
    same 5 cases:
    - `create with a blank exit cooldown omits exitCooldownDays from the payload`
    - `create with an explicit 0 sends exitCooldownDays: 0`
@@ -1393,7 +1421,7 @@ the header/section convention), describing: the symptom (a live pair beyond the
 `max_strategies_per_cycle` cap — default 50 — is never evaluated, silently starving both the
 069 re-entry gate and this feature's exit gate for that pair), the root cause (`_run_cycle`'s
 unordered `SELECT` + early-return at the cap, `live_loop.py:99-120`), severity assessment, and
-that it predates this feature (discovered during 110's design phase, not introduced by it).
+that it predates this feature (discovered during 116's design phase, not introduced by it).
 Do **not** attempt a fix in this feature — file only.
 
 **Verification**:
