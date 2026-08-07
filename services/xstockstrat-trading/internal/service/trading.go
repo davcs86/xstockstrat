@@ -69,6 +69,10 @@ type TradingService struct {
 	portfolio portfoliov1.PortfolioServiceClient
 	// repo persists orders to trading.orders hypertable.
 	repo *repository.TradingRepo
+	// orderIntentRepo is the insert-or-return-existing dedup store (feature 101). Struct
+	// field added here (Step 9) so order_intent.go's sweeper compiles; NewTradingService's
+	// constructor parameter and main.go wiring land in Step 11.
+	orderIntentRepo repository.OrderIntentRepository
 	// In-memory order store for active fan-out and fill polling.
 	// Orders are also written to DB on every state change.
 	orders map[string]*tradingv1.Order

@@ -342,3 +342,22 @@ of `main-dev`. This satisfies the `merge-order.md` same-function-overlap depende
   clean. `golangci-lint run`: 0 issues. `go vet`: clean. TDD: N/A (coverage-excluded package per
   Step 8's own citation — Step 10's pure-function tests are the real behavioral proof; Step 16's
   integration script proves the SQL itself). Deviations: the `ListSubmittedOrders` extension above.
+- **Step-ordering issue found and resolved**: Step 9's `sweepOrderIntents` (as instructed) calls
+  `s.orderIntentRepo...`, but that struct field is formally added by Step 11 — Step 9's own
+  Verification (`go build ./...`) would fail if executed strictly as specced in isolation. Resolved
+  by adding just the `orderIntentRepo repository.OrderIntentRepository` struct field now (Step 9),
+  leaving the constructor parameter and `main.go` wiring for Step 11 as specced — the field is `nil`
+  until Step 11 wires it, which is fine for compilation (the field is only read inside the sweeper
+  goroutine, never invoked before `main.go` starts it).
+- Steps 9+10 [done] (TDD pair) — Wrote `order_intent_test.go` first, with one refinement to the
+  spec's own Step 10 Instruction 5: since `config.Watcher` has no exported snapshot setter (same
+  limitation feature 100 hit), the `stale_multiplier=1.0`-below-floor clamp case can't be exercised
+  through `staleThreshold(cfgW)` directly — factored the clamp math into a new pure
+  `computeStaleThreshold(floorMs, multiplier)` (mirroring feature 100's `parseTradingState` split),
+  directly unit-tested for both the clamped and unclamped cases, with `staleThreshold` itself tested
+  only for "uses the live-config defaults correctly." RED: build failed (`undefined: computeRequestHash`
+  etc — right reason). Implemented `order_intent.go` exactly per Step 9's Instructions 1-6 (using the
+  design.md-sourced formula/SQL-call shapes), plus the `computeStaleThreshold` extraction. GREEN:
+  12/12 pass. `golangci-lint`: 2 `gofmt` issues fixed (`gofmt -w`), then 0 issues. Full
+  `internal/service` package: no regressions. Deviations: the `computeStaleThreshold` extraction and
+  the struct-field-early-addition above.

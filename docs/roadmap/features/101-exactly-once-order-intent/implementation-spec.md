@@ -531,7 +531,7 @@ cd services/xstockstrat-trading && GOWORK=off go vet ./internal/repository/...
 
 ### Step 9 — service: pure decision helpers + `StartOrderIntentSweeper`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/order_intent.go` — create
@@ -606,7 +606,7 @@ GOWORK=off go build ./...
 
 ### Step 10 — test: pure decision helpers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/order_intent_test.go` — create
