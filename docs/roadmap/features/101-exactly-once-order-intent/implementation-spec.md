@@ -897,7 +897,7 @@ cd services/xstockstrat-trading && GOWORK=off go test ./internal/service/... -ra
 
 ### Step 16 — test: `scripts/integration-test.sh` — fix broken sections + new dedup section
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `scripts/integration-test.sh` — modify

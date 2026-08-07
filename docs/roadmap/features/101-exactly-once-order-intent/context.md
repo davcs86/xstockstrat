@@ -416,3 +416,14 @@ of `main-dev`. This satisfies the `merge-order.md` same-function-overlap depende
     `IntentState` display via the LATERAL join, per design.md's explicit two-different-axes framing.
     All three handlers verified together (same build/test/lint pass above) since they share one
     tightly-coupled edit to `trading.go`.
+- Step 16 [done] — Added `client_order_id` to `section_8_place_order`'s and
+  `section_13_maintenance_mode`'s `PlaceOrder` JSON bodies (`it-place-$$`/`it-maint-$$`, `$$` =
+  shell PID, unique per script run so the two sections' intents don't collide with each other or a
+  prior run). Added `section_14_order_intent_dedup()`: places an order with a fixed
+  `client_order_id`, repeats the identical call and asserts the same `order_id` comes back (AC-1/
+  FR-2), then repeats with a different `qty` under the same `client_order_id` and asserts a
+  `FailedPrecondition` rejection (AC-3/FR-3). Registered in the section-run list after
+  `section_13_maintenance_mode`. TDD: N/A per the step's own framing (this script is not CI-wired,
+  same pre-existing condition as `section_13`; its value is a documented, runnable manual proof).
+  Verification: `grep -n client_order_id` confirms both fixes + the new section; `bash -n` confirms
+  valid syntax. Deviations: none.
