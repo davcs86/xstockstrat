@@ -1,6 +1,6 @@
 # Implementation Spec: position-sizing-engine
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-08-06
 **Feature**: `docs/roadmap/features/023-position-sizing-engine/feature.md`
 **Total Steps**: 12
@@ -51,7 +51,7 @@ is N/A: `xstockstrat-agent` has no order-placement tool today (confirmed absent,
 
 ### Step 1 — migration: seed the four new `trading.risk.*` sizing config keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/012_trading_risk_sizing.up.sql` — create
@@ -105,7 +105,7 @@ existing warn-only key must be untouched by this migration).
 
 ### Step 2 — docs: register the new keys in the Per-Feature Registered Keys log
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/patterns/`
 **Files**:
 - `docs/patterns/config-governance.md` — modify
@@ -150,7 +150,7 @@ the feature-097 entry).
 
 ### Step 3 — proto: add `optional double confidence = 16` to `PlaceOrderRequest`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/trading/v1/trading.proto` — modify
@@ -196,7 +196,7 @@ git diff --stat packages/proto/gen/     # confirm empty — stubs fully regenera
 
 ### Step 4 — service: wire a new `xstockstrat-trading → xstockstrat-marketdata` gRPC client
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/config/config.go` — modify
@@ -257,7 +257,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 5 — test: construction canary for the new marketdata client
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_sizing_test.go` — create
@@ -318,7 +318,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 6 — service: implement `ComputePositionSize`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading.go` — modify
@@ -416,7 +416,7 @@ cd services/xstockstrat-trading && GOWORK=off golangci-lint run --modules-downlo
 
 ### Step 7 — test: `ComputePositionSize` unit tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_sizing_test.go` — modify (created in Step 5)
@@ -499,7 +499,7 @@ is the required proof.
 
 ### Step 8 — service: wire `ComputePositionSize` into `PlaceOrder`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/handler/trading.go` — modify
@@ -584,7 +584,7 @@ Trading-domain constraints (`reference/step-constraints.md` §A):
 
 ### Step 9 — test: `PlaceOrder` sizing-gate and confidence-validation tests
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/service/trading_helpers_test.go` — modify
@@ -620,7 +620,7 @@ New logic is in `internal/service`, excluded from the CI Go coverage `COVERPKGS`
 
 ### Step 10 — docs: update `xstockstrat-trading/CLAUDE.md`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/CLAUDE.md` — modify
@@ -665,7 +665,7 @@ Confirm all five strings appear.
 
 ### Step 11 — service: display computed quantity/stop price on the `/trader` order form
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/OrderForm.tsx` — modify
@@ -714,7 +714,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 12 — test: e2e coverage for the new order-form display text
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify
@@ -756,3 +756,44 @@ cd services/xstockstrat-ui && pnpm run lint
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+- **Step 6/8 — request-hash-before-sizing ordering (real, unspecced gap)**: this spec predates
+  feature 101 (`exactly-once-order-intent`), so it never addresses where `placeOrderRequestHash`
+  should run relative to `ComputePositionSize` mutating `req.Qty`. Decided at execute time: the
+  hash is computed **before** sizing, over the caller's original request — sizing mutates
+  `req.Qty` only after the hash is captured. Rationale: the hash is the dedup content-identity
+  check; if it were computed after sizing, a genuine retry of the identical original request
+  could hash differently (ATR/quote can drift between calls), spuriously failing dedup with
+  "already used with different order content." Hashing pre-sizing keeps dedup correctness
+  independent of server-computed, time-varying sizing outputs.
+- **Step 8 — full merged `PlaceOrder` statement order**: manually interleaved with feature 100's
+  `platform.trading_state` gate and feature 101's dedup/hash/finalize logic (both landed on this
+  stacked branch ahead of this feature, per `merge-order.md`). Final order: maintenance check →
+  trailing-stop validation → `client_order_id` required (101) → `resolveAccount` → `mode` →
+  `trading_state` gate (100) → request hash (101, pre-sizing per the note above) → sizing
+  gate/equity fetch/`ComputePositionSize` (023) → `checkPortfolioRisk` (023, now post-sizing) →
+  approval threshold → dedup insert (101) → order struct build (with the informational
+  auto-sized `StopPrice` set for `MARKET`/`LIMIT` orders) → broker submit / intent finalize
+  (101). `checkPortfolioRisk`'s new `(ctx, req, mode, equity, equityErr)` signature matches the
+  spec exactly.
+- **Step 6/7 — added an inner `equity <= 0` guard inside `ComputePositionSize` itself**: the
+  spec's Step 6 instructions describe the equity fail-closed check as living in `PlaceOrder`
+  (the caller), but Step 7 lists `TestComputePositionSize_ZeroEquity` as a direct unit test of
+  `ComputePositionSize`. Resolved by adding a belt-and-suspenders `equity <= 0` guard inside
+  `ComputePositionSize` too — `PlaceOrder`'s own check still fires first in the real call path,
+  but `ComputePositionSize` (a method other callers could invoke directly) no longer silently
+  sizes to a zero-quantity result for non-positive equity.
+- **Step 5/7 — test fixture name collision**: the spec's literal `fakePortfolioClient` name
+  collides with an existing fixture of the same name already in this package (feature 100's
+  `trading_state_gate_test.go`, a different shape — `getPositionFn`/`called`). Renamed this
+  feature's fixture to `fakeSizingPortfolioClient`.
+- **Step 5 — `NewTradingService` call-site arg count**: the spec's test template calls
+  `NewTradingService(cfg, &config.Watcher{}, nil, nil, "")` (5 args), but feature 101 already
+  landed a 6th parameter (`orderIntentRepo`, inserted before `encKey`) on this stacked branch.
+  Updated the canary test to `NewTradingService(cfg, &config.Watcher{}, nil, nil, nil, "")`.
+- **Step 12 — mock-backend.ts `qty`/`stopPrice` landed inside feature 101's existing dedup
+  response object**, not as a bare literal return: feature 101 (Step 20, same stacked branch)
+  had already turned `placeOrder`'s canned `{orderId, status, tradingMode}` return into a
+  `clientOrderId`-keyed dedup map. Added `qty: 5, stopPrice: 148.25` to that same response
+  object rather than reverting to a plain literal — preserves 101's dedup behavior and this
+  feature's new display fields in one response shape.

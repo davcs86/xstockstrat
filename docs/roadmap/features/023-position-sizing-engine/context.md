@@ -206,3 +206,74 @@
     above; no code change required unless `mode` becomes load-bearing later. — [ ] unaddressed
 - Overlap findings: migration `011`→`012` renumbering applied directly to this spec (see above);
   trading.go 3-way collision recorded in merge-order.md (see above).
+
+## Session 2026-08-07T00:00:00Z — sdd-execute (sequential, all 12 steps)
+
+- Stacked-branch build (per user directive for the whole 100→101→023→030→102 program): branched
+  `feature/position-sizing-engine` off the tip of `feature/exactly-once-order-intent` (which is
+  itself stacked on `feature/account-trading-halt-and-kill-switch`), so this feature already saw
+  100 and 101's landed `trading.go` — matching this feature's own overlap-scan finding above.
+- Migration `012` confirmed still the correct next number at execute time (100's `011` was
+  already on the branch) — matches merge-order.md's prediction exactly, no renumbering needed.
+- Steps 1-2 [done] — `012_trading_risk_sizing.{up,down}.sql` (8 rows, 4 keys × 2 envs,
+  `trading_mode='all'`), registered in `config-governance.md`'s Per-Feature Registered Keys log
+  (newest-first, inserted above feature 101's entry).
+- Step 3 [done] — `optional double confidence = 16` added to `PlaceOrderRequest` (field 16 was
+  free; 101's `Order.intent_state = 21` is a disjoint field on a different message). `buf lint`
+  clean; `./scripts/buf-gen.sh` regenerated Go/Python/TS stubs with an empty `git diff` on
+  everything except the touched files (proto-freshness invariant honored).
+- Step 4 [done] — `MarketDataEndpoint` added to `Config`; new `marketdata` gRPC client dialed in
+  `NewTradingService` reusing `clientKeepAlive`/`UnaryClientInterceptor`; `MARKETDATA_ENDPOINT`
+  wired into `docker-compose.yml` (env + `depends_on`), `.do/app.yaml`, `.do/app.dev.yaml`.
+- Step 5 [done] (TDD) — construction canary test. **Deviations**: renamed the spec's literal
+  `fakePortfolioClient` to `fakeSizingPortfolioClient` (name collision with feature 100's own
+  fixture of the same name in `trading_state_gate_test.go`); updated the `NewTradingService` call
+  from the spec's 5-arg template to the real 6-arg constructor (101 added `orderIntentRepo`
+  before `encKey`). RED confirmed via the pre-existing `svc.marketdata unknown field` failure
+  mode described in the spec (verified by inspection — Step 4 landed immediately before this
+  step in the same session, so a literal RED run wasn't re-captured); GREEN: test passes.
+- Steps 6+7 [done] (TDD pair) — Implemented `resolveAccountEquity` (`ListPortfolios`, not
+  `GetPortfolio` — fixes the pre-existing `fails.md` 2026-07-01 C-10(b) two-equity-sources bug),
+  `wilderATR` (pure helper), `ComputePositionSize`. **Deviation**: added an inner `equity <= 0`
+  fail-closed guard inside `ComputePositionSize` itself — the spec's Step 6 narrative places the
+  equity check in `PlaceOrder` (the caller) only, but Step 7 lists `TestComputePositionSize_
+  ZeroEquity` as a direct unit test of `ComputePositionSize`; added the guard so the function is
+  correct in isolation, not just via its one caller. All 8 Step 7 test cases pass, matching
+  product-spec.md's AC-1 (66 shares)/AC-2 (5 shares, concentration cap)/AC-7 (33 shares,
+  confidence=0.5) worked arithmetic exactly, using a hand-built `flatBars` fixture (constant
+  High=101/Low=99/Close=100 → every day's true range = 2.0 → ATR(14) = 2.00 exactly).
+- Step 8 [done] — Deleted the `req.Msg.Qty <= 0` gate in `internal/handler/trading.go`. Rewrote
+  `PlaceOrder`'s statement order, manually merging three features' logic (100's `trading_state`
+  gate, 101's dedup/hash/finalize, this feature's sizing) — see implementation-spec.md's
+  Deviation Log for the exact final order and the request-hash-before-sizing correctness
+  resolution (a genuine unspecced gap: this spec predates feature 101 entirely). `checkPortfolioRisk`
+  now takes `(ctx, req, mode, equity, equityErr)` and reuses the one `resolveAccountEquity` call
+  sizing already made — fixing the two-equity-sources bug for real (not just at the sizing call
+  site). `order.StopPrice` is set to the computed informational stop only for auto-sized
+  `MARKET`/`LIMIT` orders; every other order type and every override-mode order keeps
+  `req.StopPrice` untouched.
+- Step 9 [done] (TDD) — `TestSizingRequiredGate`/`TestConfidenceResolution`/
+  `TestConfidenceDomainValidation` in `trading_helpers_test.go`, replicating `PlaceOrder`'s pure
+  boolean expressions as standalone tables (the existing `TestApprovalThresholdLogic`/
+  `TestTrailingStopValidation` pattern). All pass.
+- Step 10 [done] — `xstockstrat-trading/CLAUDE.md`: 4 new Config Keys Consumed rows, updated the
+  `max_position_pct` row to note the coexistence split, `MARKETDATA_ENDPOINT` env var, new
+  Dependencies row, and an "Automatic position sizing" paragraph near the top.
+- Steps 11+12 [done] (TDD pair) — `OrderForm.tsx`'s post-submit message now shows
+  `— qty N[, stop N]` (stop shown only when >0). `mock-backend.ts`'s `placeOrder` response gained
+  `qty: 5, stopPrice: 148.25`. **Deviation**: these fields landed inside feature 101's existing
+  `clientOrderId`-keyed dedup response object (same stacked branch, Step 20 landed first in this
+  session), not as a bare literal return — one response shape carries both features' additions.
+  `order-form.spec.ts`'s existing success-path test extended with the new assertion.
+- Full verification across all steps: `go build ./...` / `go test ./...` / `golangci-lint run
+  ./...` (0 issues) all clean, no regressions in `internal/broker`/`internal/config`/
+  `internal/service`. `pnpm exec tsc --noEmit` clean. `pnpm test:e2e -- trader/` — 62/62 pass
+  (full trader segment, confirming no regression from the shared `mock-backend.ts` edit).
+  `pnpm lint` — 0 new warnings (the pre-existing `insights/strategies/[id]/page.tsx` a11y warning
+  is unrelated/out of scope).
+
+**Feature 023 — all 12 steps done.** Marked `code-completed` in `feature.md`. Opened
+[PR #881](https://github.com/davcs86/xstockstrat/pull/881) targeting
+`feature/exactly-once-order-intent` (stacked-branch strategy) and subscribed to its PR activity.
+Proceeding to feature 030 (stop-loss-bracket-orders) per the user's 100→101→023→030→102
+sequence.

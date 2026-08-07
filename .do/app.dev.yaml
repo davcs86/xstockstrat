@@ -61,6 +61,8 @@ services:
         value: ${xstockstrat-portfolio.PRIVATE_DOMAIN}:50052
       - key: INDICATORS_ENDPOINT
         value: ${xstockstrat-indicators.PRIVATE_DOMAIN}:50054
+      - key: MARKETDATA_ENDPOINT
+        value: ${xstockstrat-marketdata.PRIVATE_DOMAIN}:50053
       - key: DATABASE_URL
         scope: RUN_TIME
         # Transaction-pool (PgBouncer :25061/staging) — see docs/patterns/database.md § Connection pooling

@@ -64,11 +64,14 @@ test.describe('OrderForm', () => {
       .last()
       .click();
 
-    // Mock returns { orderId: 'mock-order-001', status: 3 }
-    // Component shows: "Order placed: mock-order-001 (FILLED)" (OrderStatus[3] = 'FILLED')
+    // Mock returns { orderId: 'mock-order-001', status: 3, qty: 5, stopPrice: 148.25 }
+    // Component shows: "Order placed: mock-order-001 (FILLED) — qty 5, stop 148.25"
     await expect(page.getByText(/mock-order-001/)).toBeVisible({ timeout: 10000 });
     // Order book also shows "FILLED" badge — match the success message paragraph specifically
     await expect(page.getByText(/Order placed:.*FILLED/)).toBeVisible();
+    // Consumer surface requirement (C-14, feature 023): the computed quantity/stop price
+    // are shown at submission.
+    await expect(page.getByText(/qty 5, stop 148.25/)).toBeVisible();
   });
 
   test('failed order submission shows error message', async ({ page }) => {

@@ -142,7 +142,7 @@ export async function startMockBackend(): Promise<void> {
   // worker; a counter-based id would make that assertion depend on cross-file run order.
   const placeOrderIntents = new Map<
     string,
-    { orderId: string; status: number; tradingMode: number }
+    { orderId: string; status: number; tradingMode: number; qty: number; stopPrice: number }
   >();
   const traderHandler = connectNodeAdapter({
     routes(router) {
@@ -153,7 +153,16 @@ export async function startMockBackend(): Promise<void> {
           if (stored) {
             return stored;
           }
-          const resp = { orderId: 'mock-order-001', status: 3, tradingMode: 1 };
+          // qty/stopPrice (feature 023): a plausible auto-sized order response, so
+          // OrderForm's post-submit "qty N, stop N" display (C-14) has something to
+          // render — the mock ignores req's own qty/side, per the existing note below.
+          const resp = {
+            orderId: 'mock-order-001',
+            status: 3,
+            tradingMode: 1,
+            qty: 5,
+            stopPrice: 148.25,
+          };
           if (clientOrderId) placeOrderIntents.set(clientOrderId, resp);
           return resp;
         },
