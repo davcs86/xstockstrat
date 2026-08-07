@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { Trash2, Search } from 'lucide-react';
+import { Trash2, Search, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -62,6 +62,8 @@ export function WatchlistDetail({
   const { data: oppData } = useOpportunities();
   const [symbolInput, setSymbolInput] = useState('');
   const [addStrategyId, setAddStrategyId] = useState(UNBOUND);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(watchlist.name);
 
   const inQueue = new Set((oppData?.opportunities ?? []).map((o) => o.symbol.toUpperCase()));
 
@@ -103,11 +105,58 @@ export function WatchlistDetail({
     });
   }
 
+  // Commit the rename only if the trimmed draft is non-empty and actually changed. Sends the
+  // FULL current bindings/description unchanged (same fails-080 invariant as setBinding, FR-6).
+  function commitRename() {
+    const trimmed = nameDraft.trim();
+    if (trimmed && trimmed !== watchlist.name) {
+      updateWatchlist.mutate({
+        watchlistId: watchlist.watchlistId,
+        name: trimmed,
+        description: watchlist.description ?? '',
+        bindings,
+      });
+    }
+    setIsEditingName(false);
+  }
+
+  function cancelRename() {
+    setNameDraft(watchlist.name);
+    setIsEditingName(false);
+  }
+
   return (
     <div className="p-4">
       <div className="mb-3 flex items-start justify-between">
         <div>
-          <h2 className="font-semibold">{watchlist.name}</h2>
+          {isEditingName ? (
+            <Input
+              autoFocus
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onBlur={commitRename}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitRename();
+                if (e.key === 'Escape') cancelRename();
+              }}
+              aria-label="Watchlist name"
+              className="h-8 max-w-xs font-semibold"
+            />
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <h2 className="font-semibold">{watchlist.name}</h2>
+              <button
+                type="button"
+                aria-label={`Rename ${watchlist.name}`}
+                onClick={() => {
+                  setNameDraft(watchlist.name);
+                  setIsEditingName(true);
+                }}
+              >
+                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
+            </div>
+          )}
           {watchlist.description && (
             <p className="text-sm text-muted-foreground">{watchlist.description}</p>
           )}

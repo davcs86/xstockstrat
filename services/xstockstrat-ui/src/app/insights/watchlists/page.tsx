@@ -140,7 +140,11 @@ export default function WatchlistsPage() {
             <Card>
               <CardContent className="p-0">
                 {selected ? (
-                  <WatchlistDetail watchlist={selected} onDelete={handleDelete} />
+                  <WatchlistDetail
+                    watchlist={selected}
+                    onDelete={handleDelete}
+                    key={selected.watchlistId}
+                  />
                 ) : (
                   <p className="p-4 text-sm text-muted-foreground">Select a watchlist.</p>
                 )}

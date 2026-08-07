@@ -311,3 +311,28 @@
   picker to "Unbound", assert `unbound-${symbol}`).
 - TDD: verified together with Step 3's red→green cycle (see Step 3's entry above).
 - Files modified: `services/xstockstrat-ui/e2e/insights/watchlists.spec.ts`.
+
+### Step 5 — Whole-component reset mechanism + inline watchlist rename (FR-4) [done]
+- `page.tsx`: added `key={selected.watchlistId}` to `<WatchlistDetail>` — forces a full remount on
+  watchlist switch, resetting `symbolInput`/`addStrategyId`/the new rename edit-state in one
+  mechanism. `WatchlistDetail.tsx`: added `isEditingName`/`nameDraft` state and a click-to-edit
+  toggle (`<h2>` + a `Pencil`-icon `aria-label="Rename ${name}"` button in display mode; an
+  auto-focused `Input` `aria-label="Watchlist name"` in edit mode). `commitRename` only mutates on a
+  non-empty, changed, trimmed value, sending the watchlist's full current `description`/`bindings`
+  unchanged (same fails-080 invariant as `setBinding`); Escape cancels without mutating.
+- TDD: red (Step 6's test, written first, failed waiting for the `Rename` button) → green (9/9
+  `watchlists.spec.ts` tests pass, 49.2s, after two test-locator fixes — see Deviation Log Step
+  5/6). `pnpm run lint` and `pnpm exec tsc --noEmit` both clean.
+- Files modified: `services/xstockstrat-ui/src/app/insights/watchlists/page.tsx`,
+  `services/xstockstrat-ui/src/components/insights/WatchlistDetail.tsx`.
+
+### Step 6 — New e2e case for inline rename + switch-reset (FR-4, AC-3) [done]
+- New test: commit a rename (header updates, bound symbol's binding survives) → cancel (Escape,
+  no mutation) → switch-reset (create a second list, pick a strategy in its add-time picker without
+  adding, switch back to the first — rename control back in display mode, add-time picker back to
+  "Unbound", proving the `key`-remount closes both leaks in one mechanism).
+- Deviation (implementation-spec.md Deviation Log, Step 5/6): `getByLabel('Watchlist name')`
+  collided via substring match with the page's "New watchlist name" create-card label; fixed with
+  `{ exact: true }` (4 occurrences).
+- TDD: verified together with Step 5's red→green cycle (see Step 5's entry above).
+- Files modified: `services/xstockstrat-ui/e2e/insights/watchlists.spec.ts`.

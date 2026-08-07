@@ -442,7 +442,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 5 — service: Whole-component reset mechanism + inline watchlist rename (FR-4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/watchlists/page.tsx` — modify
@@ -511,7 +511,7 @@ Behavioral proof is Step 6.
 
 ### Step 6 — test: New e2e case for inline rename + switch-reset (FR-4, AC-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/watchlists.spec.ts` — modify
@@ -776,3 +776,14 @@ cd services/xstockstrat-ui && pnpm test:e2e -- e2e/insights/watchlists.spec.ts
   RED failure from a bad fixture choice, not a code bug. Renamed the list to `'Picker List'` (no
   substring overlap with any button label in this suite) and re-ran; 8/8 passed (48.5s). No spec
   text edited — the name was never prescribed, only implied by convention.
+
+### Step 5/6 (2026-08-07)
+- **Disposition**: minor, mechanical — caught by the actual test run, fixed immediately.
+- Step 6's Instructions didn't specify a query for the rename `Input`; the first attempt used
+  `page.getByLabel('Watchlist name')`, which collides via Playwright's default substring
+  accessible-name matching with the page-level "New watchlist name" create-card input
+  (`page.tsx`'s `<label htmlFor="new-watchlist">New watchlist name</label>` — "Watchlist name" is a
+  substring of "New watchlist name"). Fixed by adding `{ exact: true }` to every
+  `getByLabel('Watchlist name', ...)` call in the new test (4 occurrences) — matches Playwright's
+  own suggested disambiguation in the error output. Re-ran; 9/9 passed (49.2s). No spec text or
+  component code changed — purely a test-locator fix.
