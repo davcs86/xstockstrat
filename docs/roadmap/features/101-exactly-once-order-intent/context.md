@@ -481,7 +481,8 @@ of `main-dev`. This satisfies the `merge-order.md` same-function-overlap depende
   clean (lint's one warning, `insights/strategies/[id]/page.tsx:483` `jsx-a11y/role-supports-aria-
   props`, pre-exists this change and is out of scope).
 
-**Feature 101 — all 20 steps done.** Next: mark `code-completed` in `feature.md`, open the
-integration PR targeting `feature/account-trading-halt-and-kill-switch` (stacked-branch strategy —
-see the user's explicit directive logged earlier in this file), subscribe to its PR activity, then
-proceed to feature 023 (position-sizing-engine) per the user's 100→101→023→030→102 sequence.
+**Feature 101 — all 20 steps done.** Marked `code-completed` in `feature.md`. Opened
+[PR #880](https://github.com/davcs86/xstockstrat/pull/880) targeting
+`feature/account-trading-halt-and-kill-switch` (stacked-branch strategy — see the user's explicit
+directive logged earlier in this file) and subscribed to its PR activity. Proceeding to feature 023
+(position-sizing-engine) per the user's 100→101→023→030→102 sequence.

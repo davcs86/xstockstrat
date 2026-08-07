@@ -20,7 +20,7 @@ watching the UI, unlike an unattended caller
 | 2026-08-06 | `spec-ready` → `design-approved` | /sdd-design | Design debated (7 rounds, full — user-extended past the default 5-round cap) and approved; recon.md + design.md written |
 | 2026-08-06 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 20 steps |
 | 2026-08-07 | `implementation-ready` → `in-progress` | /sdd-execute (sequential) | Steps 1-2 done — proto `IntentState` enum + `Order.intent_state` field, stubs regenerated |
-| 2026-08-07 | `in-progress` → `code-completed` | /sdd-execute (sequential) | All 20 steps done. Stacked-branch build (per user directive) on top of `feature/account-trading-halt-and-kill-switch` (feature 100) — integration PR targets that branch, not `main-dev` |
+| 2026-08-07 | `in-progress` → `code-completed` | /sdd-execute (sequential) | All 20 steps done. Stacked-branch build (per user directive) on top of `feature/account-trading-halt-and-kill-switch` (feature 100) — integration PR #880 targets that branch, not `main-dev` |
 
 ---
 
@@ -54,5 +54,6 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-Open the integration PR against `feature/account-trading-halt-and-kill-switch` (stacked-branch
-strategy) and drive it to green; then proceed to feature 023 (position-sizing-engine).
+[PR #880](https://github.com/davcs86/xstockstrat/pull/880) is open against
+`feature/account-trading-halt-and-kill-switch` (stacked-branch strategy) — drive to green.
+Then proceed to feature 023 (position-sizing-engine).
