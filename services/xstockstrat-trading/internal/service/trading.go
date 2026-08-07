@@ -24,6 +24,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	commonv1 "github.com/xstockstrat/contracts/gen/go/common/v1"
+	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
 	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
@@ -34,6 +35,13 @@ import (
 	"github.com/xstockstrat/trading/internal/middleware"
 	"github.com/xstockstrat/trading/internal/repository"
 )
+
+// configSetConfigForwarder is the seam TradingService.escalateSystemic calls through — see the
+// TradingService.configSetter field doc comment for why this exists. *config.Watcher's real
+// SetConfig method already matches this signature exactly.
+type configSetConfigForwarder interface {
+	SetConfig(ctx context.Context, callerID string, req *configv1.SetConfigRequest) (*configv1.SetConfigResponse, error)
+}
 
 // brokerPoolEntry holds a broker client and its type tag for a registered account.
 type brokerPoolEntry struct {
@@ -63,6 +71,14 @@ type ibkrCreds struct {
 type TradingService struct {
 	cfg  *config.Config
 	cfgW *config.Watcher
+	// configSetter is the narrow seam escalateSystemic calls through instead of cfgW.SetConfig
+	// directly (feature 102). *config.Watcher satisfies it in production. config.Watcher's
+	// underlying gRPC client field is unexported (package config), so a test in this package
+	// has no way to construct a *config.Watcher around a fake client — extracting this
+	// interface lets a test substitute a fake without touching the config package, the same
+	// hoisting-for-testability approach this codebase has used repeatedly (030/023/101's own
+	// config-value hoists), applied here to a client dependency instead of a config value.
+	configSetter configSetConfigForwarder
 	// Multi-broker pool: key is account_id.
 	brokers     map[string]brokerPoolEntry
 	brokersMu   sync.RWMutex
@@ -152,6 +168,7 @@ func NewTradingService(
 	return &TradingService{
 		cfg:                 cfg,
 		cfgW:                cfgW,
+		configSetter:        cfgW,
 		brokers:             make(map[string]brokerPoolEntry),
 		accountRepo:         accountRepo,
 		encKey:              encKey,
@@ -1265,7 +1282,8 @@ func (s *TradingService) StartReconciliationPoller(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			s.reconcileTick(ctx, int(s.cfgW.GetInt("trading.reconciliation.grace_ticks", 1)))
+			s.reconcileTick(ctx, int(s.cfgW.GetInt("trading.reconciliation.grace_ticks", 1)),
+				s.cfgW.GetFloat("trading.reconciliation.systemic_threshold_pct", 0.5))
 			intervalMs := s.cfgW.GetFloat("trading.reconciliation.interval_ms", defaultIntervalMs)
 			if intervalMs > 0 {
 				newInterval := time.Duration(intervalMs) * time.Millisecond
@@ -1351,7 +1369,7 @@ func (s *TradingService) emitReconciliationFinding(ctx context.Context, accountI
 // reason), so a live read here would make the "grace window not yet crossed" test case
 // untestable against a hand-constructed service. The one real caller (StartReconciliationPoller)
 // still reads the live config value and passes it in.
-func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int) (systemicCount, totalAccounts int) {
+func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, systemicThresholdPct float64) (systemicCount, totalAccounts int) {
 	s.brokersMu.RLock()
 	brokerMap := make(map[string]brokerPoolEntry, len(s.brokers))
 	for id, e := range s.brokers {
@@ -1475,7 +1493,52 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int) (sys
 			}
 		}
 	}
+
+	// Rare, genuinely systemic finding: half or more (default threshold) of registered
+	// accounts errored/unreachable this tick — escalate platform-wide via the internal-caller
+	// authz channel (Steps 4-8), rather than routing through 030's per-account halt (Step 17's
+	// ordinary path above). Never called for an ordinary per-account finding.
+	if totalAccounts > 0 && float64(systemicCount)/float64(totalAccounts) >= systemicThresholdPct {
+		s.escalateSystemic(ctx, systemicCount, totalAccounts)
+	}
+
 	return systemicCount, totalAccounts
+}
+
+// escalateSystemic sets platform.trading_state=REDUCE_ONLY via the internal-caller authz
+// channel (feature 102's own trading -> config edge, Step 13) and pages an operator — a
+// config value must never silently change with no alert. Environment is set from this
+// deployment's own s.cfg.ApplicationEnv; TradingMode is deliberately left UNSPECIFIED
+// (resolves server-side to trading_mode='all') — a systemic broker-communication breakdown is
+// by definition platform-wide, not scoped to one trading mode, so REDUCE_ONLY must apply to
+// both paper and live simultaneously.
+func (s *TradingService) escalateSystemic(ctx context.Context, systemicCount, totalAccounts int) {
+	env := commonv1.Environment_ENVIRONMENT_DEV
+	if s.cfg.ApplicationEnv == "production" {
+		env = commonv1.Environment_ENVIRONMENT_PRODUCTION
+	}
+	_, err := s.configSetter.SetConfig(ctx, "trading-reconciliation-poller", &configv1.SetConfigRequest{
+		Namespace:   "platform",
+		Key:         "trading_state",
+		Value:       &configv1.ConfigValue{Value: &configv1.ConfigValue_StringVal{StringVal: "REDUCE_ONLY"}},
+		Reason:      fmt.Sprintf("reconciliation: %d/%d accounts unreachable/unprotected this tick", systemicCount, totalAccounts),
+		Author:      "system:reconciliation-poller",
+		Environment: env,
+	})
+	if err != nil {
+		slog.Warn("systemic escalation SetConfig failed", "error", err, "systemic_count", systemicCount, "total_accounts", totalAccounts)
+	}
+
+	_, alertErr := s.notify.EmitAlert(ctx, &notifyv1.EmitAlertRequest{
+		Severity:      notifyv1.AlertSeverity_ALERT_SEVERITY_CRITICAL,
+		Category:      "reconciliation",
+		Title:         "Systemic broker-reconciliation failure — trading reduced to REDUCE_ONLY",
+		Body:          fmt.Sprintf("%d of %d registered accounts were unreachable/unprotected this reconciliation tick.", systemicCount, totalAccounts),
+		SourceService: "xstockstrat-trading",
+	})
+	if alertErr != nil {
+		slog.Warn("systemic escalation alert failed", "error", alertErr)
+	}
 }
 
 // StartPositionSyncPoller polls all registered broker accounts for open positions

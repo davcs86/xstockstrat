@@ -8,6 +8,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	configv1 "github.com/xstockstrat/contracts/gen/go/config/v1"
 	ledgerv1 "github.com/xstockstrat/contracts/gen/go/ledger/v1"
 	notifyv1 "github.com/xstockstrat/contracts/gen/go/notify/v1"
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
@@ -195,7 +196,7 @@ func TestReconcileTick_UnknownBrokerOrder_DetectedRegardlessOfFillState(t *testi
 			)
 
 			// graceTicks=0 → 1+0=1 observation is enough to become a real finding immediately.
-			systemicCount, total := svc.reconcileTick(context.Background(), 0)
+			systemicCount, total := svc.reconcileTick(context.Background(), 0, 1.1)
 
 			if total != 1 {
 				t.Errorf("totalAccounts = %d, want 1", total)
@@ -234,7 +235,7 @@ func TestReconcileTick_PartialFillWithinGraceWindow_NoFindingNoHalt(t *testing.T
 	notify := svc.notify.(*fakeNotifyClient)
 
 	// graceTicks=1 → needs 2 observations; this is the first, so it must not fire yet.
-	svc.reconcileTick(context.Background(), 1)
+	svc.reconcileTick(context.Background(), 1, 1.1)
 
 	if len(ledger.eventTypes()) != 0 {
 		t.Errorf("expected zero ledger emits within the grace window, got %v", ledger.eventTypes())
@@ -262,8 +263,8 @@ func TestReconcileTick_QuantityDiscrepancy_PastGraceWindow_HaltsAndEmits(t *test
 	}
 
 	// 1 + graceTicks(1) = 2 consecutive observations of the same disagreement.
-	svc.reconcileTick(context.Background(), 1)
-	svc.reconcileTick(context.Background(), 1)
+	svc.reconcileTick(context.Background(), 1, 1.1)
+	svc.reconcileTick(context.Background(), 1, 1.1)
 
 	ledger := svc.ledger.(*recordingLedgerClient)
 	foundMismatch := false
@@ -298,7 +299,7 @@ func TestReconcileTick_MissingBrokerOrder_HaltsAndEmits(t *testing.T) {
 		Status: tradingv1.OrderStatus_ORDER_STATUS_NEW, Qty: 10, FilledQty: 0,
 	}
 
-	svc.reconcileTick(context.Background(), 0)
+	svc.reconcileTick(context.Background(), 0, 1.1)
 
 	ledger := svc.ledger.(*recordingLedgerClient)
 	found := false
@@ -334,7 +335,7 @@ func TestReconcileTick_PositionQuantityDiscrepancy_CaughtViaPositionSide(t *test
 		&recordingLedgerClient{}, &fakeNotifyClient{}, noopAccountRepo{},
 	)
 
-	svc.reconcileTick(context.Background(), 0)
+	svc.reconcileTick(context.Background(), 0, 1.1)
 
 	ledger := svc.ledger.(*recordingLedgerClient)
 	found := false
@@ -367,7 +368,7 @@ func TestReconcileTick_ListOrdersError_SkipsAccount_CountsTowardSystemic(t *test
 		&fakeReconciliationPortfolioClient{}, &recordingLedgerClient{}, &fakeNotifyClient{}, noopAccountRepo{},
 	)
 
-	systemicCount, total := svc.reconcileTick(context.Background(), 0)
+	systemicCount, total := svc.reconcileTick(context.Background(), 0, 1.1)
 
 	if total != 1 {
 		t.Errorf("totalAccounts = %d, want 1", total)
@@ -378,5 +379,78 @@ func TestReconcileTick_ListOrdersError_SkipsAccount_CountsTowardSystemic(t *test
 	ledger := svc.ledger.(*recordingLedgerClient)
 	if len(ledger.events) != 0 {
 		t.Errorf("expected no ledger events for a ListOrders error, got %v", ledger.eventTypes())
+	}
+}
+
+// ── Steps 19-20: systemic escalation via platform.trading_state ───────────────────────────
+
+// fakeConfigSetter implements configSetConfigForwarder, recording every call — the seam
+// escalateSystemic calls through instead of cfgW.SetConfig directly (see TradingService's
+// configSetter field doc comment for why: config.Watcher has no exported way to construct one
+// around a fake gRPC client from outside package config).
+type fakeConfigSetter struct {
+	mu    sync.Mutex
+	calls []*configv1.SetConfigRequest
+}
+
+func (f *fakeConfigSetter) SetConfig(ctx context.Context, callerID string, req *configv1.SetConfigRequest) (*configv1.SetConfigResponse, error) {
+	f.mu.Lock()
+	f.calls = append(f.calls, req)
+	f.mu.Unlock()
+	return &configv1.SetConfigResponse{}, nil
+}
+
+func TestReconcileTick_SystemicThresholdCrossed_EscalatesToReduceOnly(t *testing.T) {
+	// Two accounts, both erroring on ListOrders — 2/2 = 1.0, at/above the 0.5 threshold.
+	failingBroker := &fakeReconciliationBroker{
+		listOrdersFn: func(ctx context.Context) ([]broker.BrokerOrder, error) {
+			return nil, context.DeadlineExceeded
+		},
+	}
+	svc := newTestReconciliationService(
+		map[string]brokerPoolEntry{
+			"acct-1": {client: failingBroker, userID: "u-1"},
+			"acct-2": {client: failingBroker, userID: "u-2"},
+		},
+		&fakeReconciliationPortfolioClient{}, &recordingLedgerClient{}, &fakeNotifyClient{}, noopAccountRepo{},
+	)
+	setter := &fakeConfigSetter{}
+	svc.configSetter = setter
+
+	svc.reconcileTick(context.Background(), 0, 0.5)
+
+	if len(setter.calls) != 1 {
+		t.Fatalf("expected exactly 1 SetConfig call, got %d", len(setter.calls))
+	}
+	req := setter.calls[0]
+	if req.Namespace != "platform" || req.Key != "trading_state" {
+		t.Errorf("SetConfig target = %s.%s, want platform.trading_state", req.Namespace, req.Key)
+	}
+	if req.Value.GetStringVal() != "REDUCE_ONLY" {
+		t.Errorf("SetConfig value = %q, want REDUCE_ONLY", req.Value.GetStringVal())
+	}
+	if req.Author != "system:reconciliation-poller" {
+		t.Errorf("SetConfig author = %q, want system:reconciliation-poller", req.Author)
+	}
+}
+
+func TestReconcileTick_BelowThreshold_NoEscalation(t *testing.T) {
+	// One account with an ordinary per-account finding (0 errors) — below any systemic
+	// threshold; proves the ordinary/systemic split, not "every finding escalates".
+	svc := newTestReconciliationService(
+		map[string]brokerPoolEntry{"acct-1": {client: &fakeReconciliationBroker{
+			listOrdersFn: func(ctx context.Context) ([]broker.BrokerOrder, error) {
+				return []broker.BrokerOrder{{BrokerOrderID: "bo-unknown", Status: "new"}}, nil
+			},
+		}, userID: "u-1"}},
+		&fakeReconciliationPortfolioClient{}, &recordingLedgerClient{}, &fakeNotifyClient{}, noopAccountRepo{},
+	)
+	setter := &fakeConfigSetter{}
+	svc.configSetter = setter
+
+	svc.reconcileTick(context.Background(), 0, 0.5)
+
+	if len(setter.calls) != 0 {
+		t.Errorf("expected zero SetConfig calls for a below-threshold (ordinary-only) tick, got %d", len(setter.calls))
 	}
 }
