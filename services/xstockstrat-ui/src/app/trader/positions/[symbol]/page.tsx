@@ -432,6 +432,12 @@ function PositionBody({
                 <Row label="Exit rule" valueClass="font-mono text-xs">
                   {position.exitRule || '—'}
                 </Row>
+                <Row label="Stop order" valueClass="font-mono text-xs">
+                  {position.stopOrderId || '—'}
+                </Row>
+                <Row label="Take-profit order" valueClass="font-mono text-xs">
+                  {position.takeProfitOrderId || '—'}
+                </Row>
                 <Row label="Factor bucket">{position.factor || 'Unclassified'}</Row>
                 <Row label="Flag">
                   {position.flag ? <EnumBadge render={POSITION_RISK_FLAG[position.flag]} /> : '—'}
