@@ -1138,7 +1138,7 @@ ruff check . && ruff format --check .
 
 ### Step 16 — docs: `mcp-tools.md` + `strat-lab` skill
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify

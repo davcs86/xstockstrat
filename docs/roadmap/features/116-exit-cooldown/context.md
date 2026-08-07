@@ -593,3 +593,21 @@ continuing to Step 14 on the `agent` surface.
   `services/xstockstrat-agent/tests/test_client.py`,
   `services/xstockstrat-agent/tests/test_strategy_builders.py`
 - Deviations: none.
+
+### Checkpoint — steps 14–15 (surface: agent → backend boundary)
+Sequential-mode §5.5b checkpoint report printed to the operator (surface-boundary trigger: Step
+16's Service is `docs/runbooks/`, which classifies as `backend`, differing from Step 15's
+`agent`). Accountability: no out-of-scope changes, no unresolved open items, no unaddressed
+review warnings, no deviations. Operator directed to proceed. Counter reset; continuing to Step
+16.
+
+### Step 16 — docs: `mcp-tools.md` + `strat-lab` skill [done]
+- All 5 insertion points landed exactly as spec'd: `manage_strategy`'s parameter table row,
+  the Errors table's negative-value row, the "Effect on the derived grade" field list,
+  `get_strategy`'s presence sentence (all in `docs/runbooks/mcp-tools.md`), and the mutation-
+  guard sentence in `plugins/strat-lab/skills/backtest/SKILL.md` (same PR as Steps 14/15 per
+  root CLAUDE.md's rule).
+- TDD: N/A (docs). Verification: `grep -n "exit_cooldown_days"` confirms all 5 locations.
+- Files modified: `docs/runbooks/mcp-tools.md`,
+  `plugins/strat-lab/skills/backtest/SKILL.md`
+- Deviations: none.
