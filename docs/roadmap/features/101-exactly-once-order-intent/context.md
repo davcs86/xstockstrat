@@ -325,3 +325,20 @@ of `main-dev`. This satisfies the `merge-order.md` same-function-overlap depende
   (≥40% threshold; `internal/broker` is not coverage-excluded). Deviations: none beyond the IBKR
   length-limit caveat (no definitive ceiling found in public docs — flagged in the eventual PR, per
   the step's own instruction).
+- Steps 7+8 [done] — Created `order_intent_repo.go` implementing all 5 `OrderIntentRepository`
+  methods against design.md's verbatim SQL (`insertIntentSQL`/`getIntentByIDSQL`/
+  `reclaimOrphanIntentSQL`/`finalizeIntentSQL`/`sweepSelectSQL`), using the named `IntentState*`
+  int16 constants throughout (never a string literal against the `SMALLINT` column, per the round-6
+  bug design.md's own adversary caught). Added the cross-intent-precedence `LEFT JOIN LATERAL` to
+  `GetOrder` and `ListOrders` as instructed. **Deviation**: also added it to `ListSubmittedOrders`
+  (not explicitly named by Step 7) — `scanOrder` is a single function shared by all three read paths,
+  and Step 7's own instruction is to modify `scanOrder` itself to scan the new `li.state` column, so
+  giving only 2 of the 3 callers the extra column would break the third's `Scan()` call at runtime
+  (fewer scan targets than result columns... or vice versa, a runtime error either way). Adding the
+  join everywhere keeps one shared `scanOrder`, matches the literal instruction, and is harmless
+  (`ListSubmittedOrders`' result is polling-internal to `pollFills`, never serialized to a caller who'd
+  care about the extra populated field). `scanOrder`'s new `intentState *int16` uses a nullable
+  pointer since a freshly-inserted order has no intent rows yet (`LEFT JOIN` → NULL). `go build`:
+  clean. `golangci-lint run`: 0 issues. `go vet`: clean. TDD: N/A (coverage-excluded package per
+  Step 8's own citation — Step 10's pure-function tests are the real behavioral proof; Step 16's
+  integration script proves the SQL itself). Deviations: the `ListSubmittedOrders` extension above.

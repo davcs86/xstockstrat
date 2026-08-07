@@ -371,7 +371,7 @@ Confirm ≥40% and both new tests pass.
 
 ### Step 7 — service: `OrderIntentRepository` + `GetOrder`/`ListOrders` LATERAL join
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/order_intent_repo.go` — create
@@ -492,7 +492,7 @@ No coverage command here — see Step 8.
 
 ### Step 8 — test: repository package (coverage-excluded — build/lint only)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-trading`
 **Files**:
 - `services/xstockstrat-trading/internal/repository/order_intent_repo.go` — no additional changes (verification-only step)
