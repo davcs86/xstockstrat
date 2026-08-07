@@ -155,8 +155,13 @@ test.describe('FR-20 order parity', () => {
     // Scope to the OrderForm <form> so the type Select isn't confused with the
     // SignalReadiness strategy picker (also a combobox) on the same page.
     const form = page.locator('form').filter({ has: page.getByPlaceholder('Symbol (e.g. AAPL)') });
-    // The symbol field is pre-filled from the route param (FR-6).
-    await expect(form.getByPlaceholder('Symbol (e.g. AAPL)')).toHaveValue('AAPL');
+    // The symbol field is pre-filled from the route param (FR-6) and locked: the chart,
+    // conviction, and edge stats above the ticket are all keyed to this symbol, so the field
+    // must not be editable away from it (previously a plain editable input — inconsistent with
+    // the rest of the pinned Signal-detail page).
+    const symbolField = form.getByPlaceholder('Symbol (e.g. AAPL)');
+    await expect(symbolField).toHaveValue('AAPL');
+    await expect(symbolField).toBeDisabled();
     // Same 5-type selector as the trader ticket — proves FR-20 map reuse.
     await form.getByRole('combobox').click();
     for (const label of ['Market', 'Limit', 'Stop', 'Stop Limit', 'Trailing Stop']) {
