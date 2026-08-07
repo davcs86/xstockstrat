@@ -287,3 +287,34 @@ Next: continue the sequential step loop (Step 1).
 
 Next: continue the sequential step loop (Step 1) — up-front confirm (§5.4), then tooling setup
 (§5.4b).
+
+## Session 2026-08-07T03:30:00Z — sdd-execute (sequential) — tooling setup (§5.4b)
+
+Tooling setup (all 21 pending steps): buf ⬇ 1.72.0 (go-install fallback — GitHub release
+binary download failed, likely proxy) · protoc-gen-go ⬇ v1.36.11 · protoc-gen-go-grpc ⬇ v1.6.2 ·
+protoc-gen-connect-go ⬇ v1.19.2 · ts-proto/protoc-gen-es/protoc-gen-connect-es ⬇ (pinned) ·
+grpcio-tools ⬇ 1.80.0 · Node 22.22.2 ✓ · pnpm 9.15.0 ✓ · Python 3.11.15 (system; `uv sync`
+manages the service's own pinned env) · uv ✓ 0.8.17 · ruff ✓ 0.15.8 (both analysis + agent,
+via uv) · pytest ✓ 9.0.3 (both) · Playwright Chromium ✓ (pre-provisioned, not reinstalled) ·
+Go 1.25.0 ✓ (toolchain auto-fetch; not actually needed by any step in this feature — no Go
+service is modified, only read via an existing gRPC edge).
+
+Validated the host codegen toolchain **before touching any `.proto` file**, per
+`docs/runbooks/codegen-toolchain-host-setup.md` Step 5: created a local `main-dev` ref (`git
+branch -f main-dev origin/main-dev`, avoiding the silent-no-op guard), ran `./scripts/buf-gen.sh`
+(buf lint ✓, buf breaking against main-dev ✓, Go/Python/TS stub generation ✓), then confirmed
+`git diff --stat packages/proto/gen/` is **empty** — the host toolchain reproduces the committed
+stubs byte-for-byte. Step 1 (adding `exit_cooldown_days`) is now safe to run.
+
+No blockers.
+
+Next: Step 1.
+
+### Step 1 — proto: add `exit_cooldown_days` field [done]
+- Added `optional int32 exit_cooldown_days = 11` to `StrategyDefinition`; updated
+  `ManageStrategyRequest.update_mask`'s allowed-paths comment. `buf lint` and `buf breaking`
+  (against `feature/exit-cooldown`) both pass clean.
+- Files modified: `packages/proto/analysis/v1/analysis.proto`
+- Deviations: command-syntax fix only (see Deviation Log) — the spec'd `buf breaking` invocation
+  needed the repo-root `.git` + `subdir=packages/proto` form to actually run from
+  `packages/proto/`; no change to what was verified.

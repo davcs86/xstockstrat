@@ -50,7 +50,7 @@ left as required-but-deferred: a standalone defect report for the pre-existing
 
 ### Step 1 — proto: add `exit_cooldown_days` field
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -1461,4 +1461,12 @@ cd packages/proto && buf lint && buf breaking --against ".git#branch=feature/exi
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 1 — proto: add `exit_cooldown_days` field
+**Spec said**: `buf breaking --against ".git#branch=feature/exit-cooldown"`
+**Actual**: `buf breaking --against "/home/user/xstockstrat/.git#branch=feature/exit-cooldown,subdir=packages/proto"`
+**Reason**: the literal spec'd command fails when run from `packages/proto/` (`.git` doesn't
+exist there — the repo root's `.git` is two levels up) with "does not appear to be a git
+repository." `scripts/buf-gen.sh:41` already establishes the correct invocation (repo-root
+`.git` + `subdir=packages/proto`) for exactly this reason; used the same form. `buf lint` and
+`buf breaking` both pass clean with the corrected command — this is a command-syntax fix, not a
+change to what the step verifies.
