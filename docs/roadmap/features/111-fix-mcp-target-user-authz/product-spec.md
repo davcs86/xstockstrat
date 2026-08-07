@@ -60,24 +60,53 @@ as a plain parameter instead of the server deriving it.
   (system-decided broadcast, not caller-supplied) — unaffected by this fix unless the design phase
   determines otherwise.
 
-## Design Question For `/sdd-design quick`
+## Consumer Surface(s)
 
-Removing `emit_alert`'s caller-supplied `target_user_id` and always tying the call to the
-authenticated caller's own id removes the tool's ability to broadcast or address another user
-through the MCP surface. Confirm/settle during design whether that capability loss is intended, or
-whether a non-identity-bearing `broadcast: bool` flag (still always scoped to "all", never to a
-specific *other* user) should be preserved.
+(Constitution C-14) This feature changes the callable signature of two `xstockstrat-agent` Agent
+MCP tools — no UI segment is involved:
+
+- `emit_alert` — `target_user_id` removed; caller must now pass a required `broadcast: bool`
+  (no default) instead. `broadcast=True` → system-wide alert (unchanged semantic, `target_user_id=""`
+  on the wire); `broadcast=False` → the alert is addressed to the authenticated caller's own derived
+  identity. No more caller-addressable *other* user.
+- `manage_formula` — `author` and `formula_author_user_id` removed; both are now derived
+  server-side (agent-side) from the authenticated caller's claims.
+
+Both are reached only through the MCP tool surface (Claude.ai / any MCP client authenticated via
+this repo's OAuth 2.1 edge) — no `xstockstrat-ui` segment calls either tool.
+
+## Design Decision (resolved by `/sdd-design quick`, 2 rounds)
+
+Removing `emit_alert`'s caller-supplied `target_user_id` would remove the tool's ability to
+broadcast or address another user through the MCP surface unless a replacement is provided.
+Resolved: `broadcast: bool` is a **required** parameter (no default) — not an optional flag
+defaulting to either broadcast-on or self-only. This closes the vulnerability (no caller-suppliable
+*other-user* target) without silently narrowing or changing existing callers' behavior on omission:
+an omitted `broadcast` fails loudly (schema/type error), matching the tool's existing required
+params (`severity`, `category`, `title`, `body`) rather than either silently preserving the
+broadcast-on default (which would re-ship the underlying defect shape once `target_user_id` support
+is dropped and a value must still be chosen) or hard-flipping to a new self-only default (which
+could silently narrow delivery for an undiscovered legitimate broadcast caller — recon could not
+rule this out). See `design.md` for the full rationale and rejected alternatives.
 
 ## Acceptance Criteria
 
-- [ ] `emit_alert` no longer accepts a caller-supplied `target_user_id`/other-user parameter; the
-      alert's recipient is derived from the authenticated caller's own claims (or a defined
-      system-broadcast semantic, per the design decision above).
-- [ ] `manage_formula` no longer accepts `formula_author_user_id` as caller input; the value sent
-      to the backend is derived from the authenticated caller's own claims.
-- [ ] Existing tests updated/passing; new tests cover the claims-derivation path and reject
-      attempts to supply an identity parameter.
-- [ ] `docs/runbooks/mcp-tools.md` and any other doc describing these parameters updated.
+- [ ] `emit_alert` no longer accepts a caller-supplied `target_user_id`/other-user parameter;
+      `broadcast: bool` (required, no default) replaces it. `broadcast=False` derives the
+      recipient from the authenticated caller's own claims; `broadcast=True` sends the existing
+      system-wide broadcast semantic.
+- [ ] `manage_formula` no longer accepts `author` or `formula_author_user_id` as caller input; both
+      values sent to the backend are derived from the authenticated caller's own claims (this
+      closes a live `author="system"` sentinel-impersonation gap on formula registration, found
+      during recon — see `recon.md` and `design.md`).
+- [ ] The new claims-derivation helper(s) raise (never silently return an empty identity) when
+      claims are absent or the claims' `user_id` is empty — an empty identity must never reach
+      notify's `target_user_id=""` broadcast sentinel by accident.
+- [ ] Existing tests updated/passing; new tests cover the claims-derivation path, the raise-on-
+      missing-or-empty-identity path (for the new shared helper directly, not just the two tools),
+      and reject attempts to supply a caller-controlled identity parameter.
+- [ ] `docs/runbooks/mcp-tools.md` updated for both tools' full parameter/error tables (confirmed
+      during recon: no `plugins/strat-lab/` reference to update).
 - [ ] Teardown: `/context-scrubber scan` run over any touched context docs (root CLAUDE.md Teardown
       rule), since this changes documented tool behavior.
 

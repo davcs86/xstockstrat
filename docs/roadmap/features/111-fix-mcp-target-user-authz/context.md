@@ -35,3 +35,32 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   is a harness-assigned task pinned to `claude/remove-target-user-mcp-g4tfqm`
   (root CLAUDE.md Harness Default Branch), so implementation happens there instead; noted so a
   later `/sdd-status` or `/sdd-sync` run isn't confused by the branch name mismatch.
+- PR #886 opened early against `main-dev` (triage docs only, no code yet) per the harness's "always
+  create a PR after pushing" instruction; code lands via later commits to the same PR.
+
+## Session 2026-08-07 (/sdd-design quick)
+
+- Phase 0 Recon: wrote recon.md (services: xstockstrat-agent; key reuse: `_claims_from_context`/
+  `_caller_access_scope` claims plumbing, `ctx: Context` parameter convention from the four
+  admin-gated tools, `tests/conftest.py` claims fixtures). Recon flagged a third same-shape
+  parameter (`manage_formula`'s `author`) not named in the original product-spec — surfaced per
+  P-03 rather than silently absorbed or dropped.
+- Phase 1 Grilling: 2 rounds (quick mode; user explicitly requested a second round after round 1's
+  gate). Round 1: proposer/adversary established the core shape (shared claims-derivation helper,
+  `ctx: Context` added to both tools, `author` folded into scope) but the adversary flagged an
+  accidental-broadcast footgun (empty claims user_id silently reaching notify's `""`-means-broadcast
+  sentinel), a missing C-14 Consumer Surface section, and understated test-breakage scope. Round 2:
+  refined the shared-helper shape (two thin wrappers over one `_require_claims`, not a merged
+  tuple), and — after weighing the proposer's hard-flip-default proposal against the adversary's
+  fail-loud counter — chose **`broadcast: bool` as a required parameter (no default)** over
+  defaulting to either broadcast-on (re-ships the vulnerability once `target_user_id` is gone) or
+  self-only (silently narrows delivery for an unverifiable broadcast caller). Chosen approach: see
+  design.md. Rejected: keep-and-validate `target_user_id` instead of deriving it; admin-gate
+  `broadcast=True`; hard-flip default; defer `author`; merge the two claims helpers into one tuple
+  return; backfill RuntimeError-branch tests for the four unrelated admin-gated tools.
+- Patched product-spec.md during the design round (not deferred): added `## Consumer Surface(s)`
+  (C-14) and revised Acceptance Criteria to reflect the required-`broadcast` decision and the
+  `author` inclusion.
+- Constitution rules touched: C-01, C-03, C-08, C-10, C-11, C-14, F-04/P-03. Floor breaches: none
+  in either round.
+- Status: `draft` → `design-approved`.
