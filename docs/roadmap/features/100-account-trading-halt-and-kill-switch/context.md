@@ -268,3 +268,19 @@ a merge event). Recorded here since it diverges from `reference/sequential-mode.
   7/7 new cases pass; full `internal/service` package: no regressions; `golangci-lint run`: 0
   issues. Deviations: the hoist-and-reuse choice (spec's own offered alternative, footnoted as
   acceptable) — logged here per the step's own instruction to record which option was taken.
+- Steps 9+10 [done] (TDD pair) — Wrote `reason-capture.spec.ts` + the `platform.trading_state`
+  `mock-backend.ts` fixture entry first. RED (real Playwright run against pre-Step-9 tree, Chromium
+  via `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` — the pinned `@playwright/test` version's bundled
+  headless-shell wasn't present in this sandbox, so the env's documented override was used): 2/3
+  cases failed for the right reason (timeout waiting for the `Reason for this change` placeholder;
+  the required-reason validation text never appeared), 1/3 passed trivially (unaffected fallback
+  behavior). Implemented Step 9: `editReason` state, required-reason gate in `handleSave` scoped to
+  `platform.trading_state`, reset on Edit-click and `onSuccess`, second `<Input>` in the edit-mode
+  cell. GREEN: 4/4 pass (setup + 3 cases). `pnpm run lint`: clean (one pre-existing unrelated
+  warning in a different file). Deviations: none.
+  - **Process note**: the stop-hook's uncommitted-changes check fired twice while a background
+    Playwright run was in flight; `git stash` was used to satisfy it, but the first stash raced a
+    still-running background test reading the stashed spec file (it reported "No tests found" —
+    invalidated, not a real result) — re-ran synchronously after popping the stash to get a valid
+    GREEN. No incorrect result was recorded; flagging so a future session recognizes the same
+    "No tests found" signature as a stash race, not a real failure.

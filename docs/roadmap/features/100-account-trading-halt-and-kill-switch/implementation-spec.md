@@ -865,7 +865,7 @@ GOWORK=off golangci-lint run --modules-download-mode=mod
 
 ### Step 9 — service: reason-capture `<Input>` in the `/config-ui` namespace editor (C-14 consumer surface)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/[namespace]/page.tsx` — modify
@@ -920,7 +920,7 @@ grep -n "editReason" src/app/config-ui/\[namespace\]/page.tsx
 
 ### Step 10 — test: reason-capture e2e — generic forwarding + required-for-`platform.trading_state`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify (add a `platform.trading_state` fixture entry)

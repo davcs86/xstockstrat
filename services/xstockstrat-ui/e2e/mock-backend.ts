@@ -811,6 +811,15 @@ export async function startMockBackend(): Promise<void> {
                 tradingMode: 0,
               },
               {
+                key: 'platform.trading_state',
+                description: 'Richer halt state: ACTIVE | REDUCE_ONLY | HALTED',
+                defaultValue: 'ACTIVE',
+                isSecret: false,
+                consumingService: 'xstockstrat-trading',
+                environment: 1,
+                tradingMode: 1,
+              },
+              {
                 key: 'secret.alpaca_api_key',
                 description: 'Alpaca API key for live trading',
                 defaultValue: '[secret]',
