@@ -1,8 +1,8 @@
 # Context: watchlist-screen-improvements
 
-**Feature**: `docs/roadmap/features/110-watchlist-screen-improvements/feature.md`
-**Product Spec**: `docs/roadmap/features/110-watchlist-screen-improvements/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/110-watchlist-screen-improvements/implementation-spec.md`
+**Feature**: `docs/roadmap/features/112-watchlist-screen-improvements/feature.md`
+**Product Spec**: `docs/roadmap/features/112-watchlist-screen-improvements/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/112-watchlist-screen-improvements/implementation-spec.md`
 
 ---
 
@@ -174,3 +174,73 @@
   BRANCH SYNC / step commits target `claude/watchlist-screen-improvements-9qf5vq` directly, and its
   eventual integration PR targets `main-dev` (identical target to what sequential mode would have
   used from a conventional `feature/<slug>` branch).
+
+## Session 2026-08-07T00:55:00Z — sdd-execute re-spec gate (5.3)
+
+- Merged `origin/main-dev` (`d92960b`) into `claude/watchlist-screen-improvements-9qf5vq`
+  (`-X ours` on conflict, per branch-sync convention). Pulled in substantial unrelated main-dev
+  activity (features 023, 030, 100–102, 111×2) since this branch was cut this morning.
+- **Numbering collision found and resolved**: the merge revealed `docs/roadmap/features/
+  110-wire-signal-confidence-to-position-sizing/` already landed on `main-dev` (status `draft`,
+  never touched by this session) — the same `NNN` as this feature. Per
+  `docs/runbooks/feature-workflow.md` § Feature Numbering collision resolution: the feature not yet
+  integrated into `main-dev` renumbers. `git mv 110-watchlist-screen-improvements
+  112-watchlist-screen-improvements` (111 was unavailable — already double-booked on `main-dev` by
+  two unrelated features, `111-fix-mcp-target-user-authz`/`111-ingest-signal-dedup`, also not
+  touched by this session). Updated the moved dir's own `**Feature**`/`**Product
+  Spec**`/`**Implementation Spec**` path lines in `context.md`/`implementation-spec.md` and the
+  `feature.md` status history per the runbook's instructions. No `CHANGELOG.md`/`merge-order.md`
+  citation existed to update (this feature was never referenced there). No branch rename needed
+  (branches key off the slug, unchanged).
+- **Target-file drift check**: the merge touched `services/xstockstrat-ui/src/components/insights/
+  WatchlistDetail.tsx` (16 lines, from unrelated main-dev work) — one of this feature's Step 1/3/5/7
+  target files. Re-validating this feature's Codebase Evidence against the post-merge file next,
+  before the up-front confirm (§5.4), per the re-spec gate's mandate.
+- **Semantic drift found (not just line-shift)**: an unrelated same-day defect fix on `main-dev`
+  ("disabled strategies usable", `docs/reports/2026-08-07-disabled-strategies-usable.md`) split
+  `WatchlistDetail.tsx`'s flat `strategies` list (`defs?.definitions ?? []`, cited throughout
+  design.md/recon.md/the original implementation-spec) into `allStrategies`/`liveStrategies`/a new
+  `strategyOptions(boundStrategyId)` helper — the chip row's `SelectContent` (Step 1's own deletion
+  target) already consumes `strategyOptions(b.strategyId)` with a `(non-live)` label suffix, none of
+  which existed at spec-generation time. This meaningfully affects Step 1's `BindingRowControls` (the
+  rebind Select) and Step 3's add-time picker, not just citation line numbers.
+- Also found: `watchlists.spec.ts`'s "readiness rollup" test citation `:108-132` shifted to
+  `:125-149` (a new e2e test — "excludes non-live strategies" — was inserted above it, itself
+  targeting the doomed `binding-AAPL` chip-row testid Step 1 deletes, so Step 2 must repoint it too);
+  `screener/page.tsx`'s `useAddWatchlistSymbols` call citation `:68` shifted to `:82` (unrelated
+  screener changes above it, same merge).
+- No re-spec directive was given (bare `watchlist-screen-improvements` token, no parenthetical) —
+  per §5.3, raised as a blocker via `AskUserQuestion` rather than silently editing. User chose
+  **"Re-spec now"** (Option A, the protocol's preferred default).
+- **Re-spec applied** to `implementation-spec.md` Steps 1, 2, 3, 5, 7, 8 (immutable-spec exception
+  per §5.3/F-09 — this is the sole sanctioned pre-loop edit):
+  - Step 1: `BindingRowControls` now takes the **full** `strategies` (`allStrategies`) and replicates
+    `strategyOptions`'s live-filter-plus-keep-bound-visible logic + the `(non-live)` label suffix
+    inline, rather than assuming a flat list; `StrategyDef`'s local type alias gains `liveEnabled:
+    boolean`; all `WatchlistDetail.tsx` line citations shifted +11 (chip-row block `:126-165` →
+    `:138-177`, `setBinding` `:86-96` → `:97-107`, remove-call `:140-142` → `:151-153`, empty-state
+    `:128` → `:139`, `<WatchlistReadiness>` call `:180` → `:192`, add-row `:167-178` → `:179-190`);
+    added an explicit instruction to delete the now-dead `strategyOptions` function (`:64-70`) while
+    keeping `allStrategies`/`liveStrategies` (`:58-63`, Step 3 still needs `liveStrategies`).
+  - Step 2: Test 4 citation `:108-132` → `:125-149`; added instruction 4 to repoint the newly-found
+    "excludes non-live strategies" test's `binding-AAPL` reference to `readiness-row-AAPL`; updated
+    the "5 tests" verification note to "6".
+  - Step 3: `strategies` citation replaced with `liveStrategies` (`:63`) — a new binding is never
+    pre-bound to a non-live strategy, matching the merge's own stated rule ("only live-enabled
+    strategies are offered for a NEW binding"); `handleAddSymbol`/add-row/`symbolInput`-state
+    citations shifted +11 to `:83-93`/`:179-190`/`:72`.
+  - Step 5: header `<h2>` `:102` → `:113`; `setBinding` pattern `:86-96` → `:97-107`; rename-state
+    placement `:61` → `:72`; header-block replace range `:100-107` → `:111-118`; unchanged-header
+    range `:108-123` → `:119-134`. `updateWatchlist` hook citation (`:57`) and `page.tsx:143`
+    unaffected (above the shift point / different untouched file).
+  - Step 7: the stale `WatchlistDetail.tsx:180` citation for the `<WatchlistReadiness>` call
+    (a line that will shift *again* once Step 1 lands) replaced with an explicit "locate fresh via
+    Phase 1 discovery" note rather than a number guaranteed stale by the time Step 7 executes.
+  - Step 8: `screener/page.tsx:68` → `:82`.
+  - Steps 4, 6, 9: no changes needed — their insertion anchors ("after the per-symbol strategy
+    binding test") remained accurate; that test's own start line (`:59`) was unaffected by the
+    insertion, which landed below it.
+- No changes needed to `WatchlistReadiness.tsx`, `useWatchlists.ts`, `useInvalidatingMutation.ts`,
+  the watchlists `page.tsx`, `watchlistMock.ts`, `button.tsx`, `queryClient.ts`, or `INVENTORY.md`'s
+  watchlist rows — confirmed untouched by the merge (verified via `git diff` against each, not
+  assumed).
