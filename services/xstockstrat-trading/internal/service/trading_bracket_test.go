@@ -541,6 +541,8 @@ func TestIsAccountHalted_GateBlocksPlaceOrderAndReplaceOrder(t *testing.T) {
 		svc := &TradingService{
 			cfgW:            &config.Watcher{},
 			orderIntentRepo: &fakeOrderIntentRepo{},
+			bracketRepo:     &fakeBracketRepo{},
+			ledger:          &fakeLedgerClient{},
 			brokers:         map[string]brokerPoolEntry{"acct-1": {client: fb, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA)}},
 			halted:          map[string]bool{"acct-1": true},
 			orders: map[string]*tradingv1.Order{
@@ -668,3 +670,97 @@ func TestLoadBrokerPool_HydratesHaltedFromDB(t *testing.T) {
 // enough to review by inspection. Real coverage for the full flatten path requires
 // feature 103 (broker-failure-simulator) or a real deploy against a live DB, per
 // design.md's own already-accepted "true broker nondeterminism" test gap.
+
+// ── Step 14: leg cancellation + CRITICAL alert ───────────────────────────────────
+
+// TestCancelOrder_CancelsActiveBracketLegs: an ACTIVE bracket with 2 leg IDs — both
+// legs must be canceled at the broker and the bracket row transitioned to CANCELED.
+// Recovers from the expected downstream panic on s.repo.UpsertOrder (a concrete
+// *repository.TradingRepo this package cannot fake — see the Step 12 Deviation Log
+// note above) and asserts the broker calls that happen before that point.
+func TestCancelOrder_CancelsActiveBracketLegs(t *testing.T) {
+	fb := &fakeBroker{}
+	brokers := &fakeBracketRepo{}
+	brokers.byID = map[string]*repository.OrderBracketRecord{
+		"brk-1": {ID: "brk-1", OrderID: "ord-1", Status: bracketStatusActive, StopLegOrderID: "leg-stop-1", TakeProfitLegOrderID: "leg-tp-1"},
+	}
+	brokers.byOrder = map[string]*repository.OrderBracketRecord{"ord-1": brokers.byID["brk-1"]}
+
+	svc := &TradingService{
+		cfgW: &config.Watcher{}, orderIntentRepo: &fakeOrderIntentRepo{}, bracketRepo: brokers, ledger: &fakeLedgerClient{},
+		brokers: map[string]brokerPoolEntry{"acct-1": {client: fb, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA)}},
+		orders: map[string]*tradingv1.Order{
+			"ord-1": {OrderId: "ord-1", AccountId: "acct-1", BrokerOrderId: "brk-order-1", Status: tradingv1.OrderStatus_ORDER_STATUS_NEW},
+		},
+	}
+	func() {
+		defer func() { _ = recover() }()
+		_, _ = svc.CancelOrder(context.Background(), &tradingv1.CancelOrderRequest{OrderId: "ord-1"})
+	}()
+
+	fb.mu.Lock()
+	gotCalls := append([]string(nil), fb.cancelOrderCalls...)
+	fb.mu.Unlock()
+	// First call is the entry order itself (brk-order-1), then both bracket legs.
+	if len(gotCalls) != 3 || gotCalls[0] != "brk-order-1" || gotCalls[1] != "leg-stop-1" || gotCalls[2] != "leg-tp-1" {
+		t.Fatalf("expected CancelOrder(brk-order-1), CancelOrder(leg-stop-1), CancelOrder(leg-tp-1), got %v", gotCalls)
+	}
+	rec, _ := brokers.GetBracketByOrderID(context.Background(), "ord-1")
+	if rec == nil || rec.Status != bracketStatusCanceled {
+		t.Fatalf("expected bracket CANCELED, got %+v", rec)
+	}
+}
+
+// TestCancelOrder_NoBracketIsNoop: no bracket row for the order — CancelOrder behaves
+// exactly as before this feature (only the entry order is canceled at the broker).
+func TestCancelOrder_NoBracketIsNoop(t *testing.T) {
+	fb := &fakeBroker{}
+	svc := &TradingService{
+		cfgW: &config.Watcher{}, orderIntentRepo: &fakeOrderIntentRepo{}, bracketRepo: &fakeBracketRepo{}, ledger: &fakeLedgerClient{},
+		brokers: map[string]brokerPoolEntry{"acct-1": {client: fb, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA)}},
+		orders: map[string]*tradingv1.Order{
+			"ord-2": {OrderId: "ord-2", AccountId: "acct-1", BrokerOrderId: "brk-order-2", Status: tradingv1.OrderStatus_ORDER_STATUS_NEW},
+		},
+	}
+	func() {
+		defer func() { _ = recover() }()
+		_, _ = svc.CancelOrder(context.Background(), &tradingv1.CancelOrderRequest{OrderId: "ord-2"})
+	}()
+
+	fb.mu.Lock()
+	defer fb.mu.Unlock()
+	if len(fb.cancelOrderCalls) != 1 || fb.cancelOrderCalls[0] != "brk-order-2" {
+		t.Fatalf("expected only the entry order canceled (brk-order-2), got %v", fb.cancelOrderCalls)
+	}
+}
+
+// TestMaybeSubmitBracket_FailurePathEmitsCriticalAlert (Step 14, restated per its own
+// name): already proven end-to-end by TestMaybeSubmitBracket_IBKRFailureTransitionsFailedAndAlerts
+// above (Step 10) — same assertion (CRITICAL alert with a non-empty body on an
+// IBKR SubmitBracketLegs failure), not duplicated here per the DRY guard rail.
+
+// TestCreateBracket_FailureEmitsCriticalAlert: BracketRepository.CreateBracket errors
+// — the CRITICAL alert must still fire even though no broker call was ever attempted
+// (FR-6: "if bracket order submission fails after the entry fill", read broadly
+// enough to cover the row-creation step itself).
+func TestCreateBracket_FailureEmitsCriticalAlert(t *testing.T) {
+	brokers := &fakeBracketRepo{createErr: fmt.Errorf("db unavailable")}
+	notify := &fakeNotifyClient{}
+	svc := newTestBracketService(brokers, notify)
+	order := newTestBracketOrder("ord-7", tradingv1.OrderSide_ORDER_SIDE_BUY, commonv1.BrokerType_BROKER_TYPE_ALPACA)
+	// fakeBroker with no functions set panics if called — proves no broker call is
+	// ever attempted when the bracket row itself fails to persist.
+	entry := brokerPoolEntry{client: &fakeBroker{}, brokerType: int32(commonv1.BrokerType_BROKER_TYPE_ALPACA)}
+
+	svc.maybeSubmitBracket(context.Background(), order, entry, &broker.BrokerOrder{}, 145.0, 148.0, true)
+
+	waitForAlert(t, notify)
+	notify.mu.Lock()
+	defer notify.mu.Unlock()
+	if len(notify.calls) != 1 || notify.calls[0].Severity != notifyv1.AlertSeverity_ALERT_SEVERITY_CRITICAL {
+		t.Fatalf("expected 1 CRITICAL alert, got %+v", notify.calls)
+	}
+	if notify.calls[0].Body == "" {
+		t.Error("expected a non-empty alert body")
+	}
+}

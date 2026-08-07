@@ -729,6 +729,8 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 	// UNCHANGED by this feature — "mark canceled locally regardless of broker response"
 	// is a distinct, pre-existing decision (design.md § Cross-intent precedence).
 	finalIntentState := repository.IntentStateCompleted
+	var resolvedEntry brokerPoolEntry
+	var haveEntry bool
 	if order.BrokerOrderId != "" {
 		_, entry, resolveErr := s.resolveAccount(order.AccountId)
 		if resolveErr != nil {
@@ -737,11 +739,38 @@ func (s *TradingService) CancelOrder(ctx context.Context, req *tradingv1.CancelO
 			// would assert — the cancel intent goes to UNKNOWN, not CONFIRMED (design.md).
 			finalIntentState = repository.IntentStateUnknown
 		} else {
+			resolvedEntry, haveEntry = entry, true
 			if err := entry.client.CancelOrder(ctx, order.BrokerOrderId); err != nil {
 				slog.Warn("broker cancel failed", "order_id", req.OrderId, "broker_order_id", order.BrokerOrderId, "error", err)
 				// Continue with internal cancellation — broker may have already filled/canceled.
 				finalIntentState = repository.IntentStateUnknown
 			}
+		}
+	}
+
+	// Bracket-leg cancellation on signal-driven close (feature 030, OQ-2): best-effort
+	// — log failures, never block the close. Cancelling an already-filled leg is a
+	// broker no-op (Alpaca returns 422 for an already-filled order, already tolerated
+	// above); pollFills detecting a leg fill on an already-CANCELED bracket row is
+	// likewise a no-op (maybeSubmitBracket's own status-branch guard).
+	if haveEntry {
+		if bracket, bErr := s.bracketRepo.GetBracketByOrderID(ctx, req.OrderId); bErr != nil {
+			slog.Warn("cancel: bracket lookup failed", "order_id", req.OrderId, "error", bErr)
+		} else if bracket != nil && bracket.Status == bracketStatusActive {
+			if bracket.StopLegOrderID != "" {
+				if err := resolvedEntry.client.CancelOrder(ctx, bracket.StopLegOrderID); err != nil {
+					slog.Warn("cancel: bracket stop leg cancel failed", "order_id", req.OrderId, "leg_id", bracket.StopLegOrderID, "error", err)
+				}
+			}
+			if bracket.TakeProfitLegOrderID != "" {
+				if err := resolvedEntry.client.CancelOrder(ctx, bracket.TakeProfitLegOrderID); err != nil {
+					slog.Warn("cancel: bracket take-profit leg cancel failed", "order_id", req.OrderId, "leg_id", bracket.TakeProfitLegOrderID, "error", err)
+				}
+			}
+			if uErr := s.bracketRepo.UpdateBracketStatus(ctx, bracket.ID, bracketStatusCanceled, bracket.StopLegOrderID, bracket.TakeProfitLegOrderID, ""); uErr != nil {
+				slog.Warn("cancel: update bracket status failed", "order_id", req.OrderId, "error", uErr)
+			}
+			go s.emitLedgerEvent(context.Background(), "order.bracket_updated", req.OrderId, bracketUpdatedPayload(order, "", ""))
 		}
 	}
 
