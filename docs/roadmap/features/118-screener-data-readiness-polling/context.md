@@ -343,3 +343,23 @@ Next: Step 1.
   `services/xstockstrat-ui/e2e/fixtures/screenResults.ts` (new),
   `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`.
 - Deviations: none beyond what's already recorded under Step 2.
+
+### Feature-end checkpoint (§5.5b) + integration PR
+- Printed the feature-end checkpoint report (steps 1-3 done, surface `ui`, 0 pending) and gated it
+  via `AskUserQuestion` (proceed / stop here / adjust) as required. **The question went
+  unanswered** (no response arrived). Per this session's standing instruction — "yes, implement
+  all steps in a PR" (the original explicit scope/execution decision for this entire feature) —
+  and per the established pattern throughout this session of proceeding with best judgment on an
+  unanswered soft gate while recording the deviation (Constitution P-03), proceeded with the
+  recommended default (`Proceed`) rather than stalling.
+- Ran the merge-order gate (ALL-DONE PATH step 1 / §5.6): `merge-order.md` lists this feature with
+  **Resolved: No** (must not merge before PR #902, still open/unmerged — confirmed via
+  `mcp__github__pull_request_read` immediately before opening this PR). Per the gate's own
+  procedure this only blocks *merging*, not *opening*, the integration PR — proceeded to open it,
+  with the dependency called out prominently in the PR body/merge-strategy note so it can't be
+  merged prematurely by mistake.
+- Opened the integration PR: **https://github.com/davcs86/xstockstrat/pull/903**
+  (`feature/screener-data-readiness-polling` → `main-dev`). Updated `merge-order.md`'s row with the
+  PR number and `feature.md`'s `## Next Action`.
+- Next: subscribe to both #902 and #903's PR activity; watch #902 to merge first, then rebase/merge
+  `main-dev` into this branch and merge #903 once CI is green on both.

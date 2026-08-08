@@ -56,5 +56,6 @@ needed** — the approved design makes no proto/servicer/engine change; it resen
 
 ## Next Action
 
-All steps done. Open the integration PR (`feature/screener-data-readiness-polling` → `main-dev`) —
-per `docs/roadmap/features/merge-order.md`, must not merge before PR #902 merges.
+Integration PR open: https://github.com/davcs86/xstockstrat/pull/903 — per
+`docs/roadmap/features/merge-order.md`, must not merge before PR #902 merges. Watch both PRs to CI
+green; merge #902 first, then rebase/merge `main-dev` into this branch and merge #903.
