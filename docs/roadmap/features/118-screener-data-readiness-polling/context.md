@@ -321,3 +321,25 @@ Next: Step 1.
   `services/xstockstrat-ui/e2e/insights/screener.spec.ts` (fix #2 above, ahead of Step 3's formal
   commit — Step 3 will re-verify and commit this file with the fix already in place).
 - Deviations: see Deviation Log entry "Step 2" above (full detail).
+
+### Step 3 — test: Playwright coverage for background data-readiness polling [done]
+- Discovery re-verified `services/xstockstrat-ui/e2e/fixtures/screenResults.ts` (already written
+  ahead of Step 1 to support the TDD-gate red capture) matches Instructions §0 verbatim, and
+  `e2e/fixtures/INVENTORY.md`'s edit matches §0's exact row move. No further changes needed —
+  Step 2's TDD-gate work already brought `screener.spec.ts` to green (see that entry for the two
+  fixes: the production `dataUpdatedAt` keying fix and the test-loop real-wait fix).
+- Final verification, run exactly as specced:
+  - `pnpm run lint` — clean (one pre-existing, unrelated warning in
+    `strategies/[id]/page.tsx`, not touched by this feature).
+  - `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium pnpm exec playwright test
+    e2e/insights/screener.spec.ts --workers=1` → **20/20 passed** (13 pre-existing tests unmodified
+    behavior + 7 new feature-118 tests, matching the spec's re-confirmed pre-existing count).
+  - `git status` confirmed no test-file changes since that green run — the committed content is
+    exactly what passed.
+- All 3 steps done. `feature.md` → `code-completed`; appended an `insights.md` ledger entry (the
+  scan-generation-counter + timestamp-keyed-effect pairing, reusable for future "poll until
+  resolved" TanStack features).
+- Files modified: `services/xstockstrat-ui/e2e/insights/screener.spec.ts`,
+  `services/xstockstrat-ui/e2e/fixtures/screenResults.ts` (new),
+  `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md`.
+- Deviations: none beyond what's already recorded under Step 2.

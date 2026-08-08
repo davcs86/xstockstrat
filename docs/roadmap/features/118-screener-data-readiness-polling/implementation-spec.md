@@ -367,7 +367,7 @@ the polling/merge/cap behavior — see the red-green pairing in Step Dependencie
 
 ### Step 3 — test: Playwright coverage for background data-readiness polling
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/screener.spec.ts` — modify (append a new `test.describe`

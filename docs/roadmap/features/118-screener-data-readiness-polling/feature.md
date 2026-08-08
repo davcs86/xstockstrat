@@ -1,6 +1,6 @@
 # Feature: screener-data-readiness-polling
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/screener-data-readiness-polling`
 **Created**: 2026-08-08
 **Last Updated**: 2026-08-08
@@ -18,6 +18,8 @@
 | 2026-08-08 | `implementation-ready` (unchanged) | /sdd-execute boot | **Renumbered `117` → `118`**: a feature-number collision with `117-screener-fundamental-metric-selector` (independently `code-completed` on `main-dev`) was discovered when `main-dev` was merged into the feature branch. Per the Feature Numbering collision rule, this not-yet-executed feature renumbers. Directory `git mv`'d, self-references updated, `merge-order.md` entry added. Also branched `feature/screener-data-readiness-polling` off `claude/screener-criteria-filtering-7ydsuz` (PR #902) instead of `main-dev` — see context.md for both deviations. |
 | 2026-08-08 | `implementation-ready` (unchanged) | /sdd-execute re-spec (§5.3) | Conditional re-spec: every `page.tsx` `path:line` citation in Steps 1-3 re-verified and corrected against the post-merge file (lines shifted by `117-screener-fundamental-metric-selector`'s unrelated, disjoint-region edit). No step instructions/logic changed — evidence only. |
 | 2026-08-08 | `implementation-ready` → `in-progress` | /sdd-execute Step 1 | `useScreenSymbolsPoll` added to `useScreenSymbols.ts`. `tsc --noEmit`/lint clean. TDD: red observed across the Step-3 suite before this step (6/7 new tests failed on missing testids); green pending Step 2. |
+| 2026-08-08 | `in-progress` (unchanged) | /sdd-execute Step 2 | Background polling wired into `screener/page.tsx`. `tsc --noEmit`/lint clean. TDD-gate green run against the real implementation caught and fixed a real bug: the poll-merge `useEffect` keyed on `poll.data`/`poll.error` identity froze `pollAttempts` once TanStack's structural sharing started reusing the same reference across identical-valued retries (the normal case for a still-pending row) — fixed by keying on `dataUpdatedAt`/`errorUpdatedAt` instead. Also fixed a timing gap in the not-yet-committed Step 3 test loop. Logged to `docs/roadmap/ledger/fails.md`. See implementation-spec.md Deviation Log "Step 2" for full detail. |
+| 2026-08-08 | `in-progress` → `code-completed` | /sdd-execute Step 3 | Playwright suite (`screener.spec.ts` + new `e2e/fixtures/screenResults.ts`) committed. Full run: 20/20 passed (13 pre-existing + 7 new feature-118 tests), `pnpm run lint` clean. All 3 steps done — see merge-order.md before opening the integration PR (must not merge before PR #902). |
 
 ---
 
@@ -54,4 +56,5 @@ needed** — the approved design makes no proto/servicer/engine change; it resen
 
 ## Next Action
 
-`/sdd-execute screener-data-readiness-polling sequential` (in progress — Step 1)
+All steps done. Open the integration PR (`feature/screener-data-readiness-polling` → `main-dev`) —
+per `docs/roadmap/features/merge-order.md`, must not merge before PR #902 merges.
