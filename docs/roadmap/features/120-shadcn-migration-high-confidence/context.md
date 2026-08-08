@@ -50,3 +50,21 @@
   - `insights/screener/page.tsx` FR-2 citation (`:348-378`) should be re-verified at
     `/sdd-design` time — `117`/`118` (both `code-completed`, already on `main-dev`) touched
     other line ranges in the same file; no overlap today but trunk has moved since audit time.
+
+## Session 2026-08-08 — product-spec warning fixes (user-directed)
+
+- User directed: fix the review's advisory warnings rather than leave them noted-only, and use
+  **full** design-debate mode (≥2 rounds) instead of `quick` for this and the sibling features.
+- Edited `product-spec.md`:
+  - FR-6/FR-9 wording tightened — "one duplicated"/"identical" class-string language replaced
+    with an accurate description (same shape, different sizing/tone modifiers per site).
+  - FR-5 citation corrected: `FormulaWorkspace.tsx:278-284` → `278-285` (recon.md-confirmed
+    off-by-one).
+  - AC3 wording aligned with the FR-6/FR-9 fix ("triplicated progress-bar shape" /
+    "three related textarea class strings").
+  - AC6 firmed up: named which touched pages/components have existing e2e coverage
+    load-bearing on the replaced markup vs. which need a manual screenshot compare
+    (`config-ui/audit/page.tsx` — no e2e spec found).
+  - Both Open Questions closed `[x]` with their recon.md-sourced resolutions (e2e-selector
+    inventory; `PlatformHeader.tsx` cross-feature sequencing scoped to 121 only).
+- No scope change — wording/citation precision only. Product spec remains `spec-ready`.
