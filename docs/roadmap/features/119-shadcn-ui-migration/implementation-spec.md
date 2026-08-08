@@ -1,6 +1,6 @@
 # Implementation Spec: shadcn-ui-migration
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-08-08
 **Feature**: `docs/roadmap/features/119-shadcn-ui-migration/feature.md`
 **Total Steps**: 11
@@ -53,7 +53,7 @@ Step 10 runs the full build/unit/e2e/DRY sweep across all 4 segments (`/trader`,
 
 ### Step 1 — service: Tailwind v3 → v4 migration
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/package.json` — modify

@@ -1,11 +1,66 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+/* Tailwind v4 CSS-first theme (feature 119) — maps this app's HSL custom-property tokens (below)
+   onto Tailwind's `--color-*`/`--font-*`/`--radius-*`/`--animate-*` theme namespace, replacing the
+   removed tailwind.config.js `theme.extend`. Values are unchanged from the v3 config; only the
+   syntax convention changed. */
+@theme inline {
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+
+  /* Nocturne semantic roles (feature 083): gain #4cc79c / loss #e0787a / paper #c9b47e. */
+  --color-buy: hsl(159 52% 54%);
+  --color-sell: hsl(359 63% 67%);
+  --color-paper: hsl(43 41% 64%);
+
+  /* Numbers, tickers, IDs, thresholds and timestamps render mono + tabular-nums (FR-3). */
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+
+  --animate-accordion-down: accordion-down 0.2s ease-out;
+  --animate-accordion-up: accordion-up 0.2s ease-out;
+
+  @keyframes accordion-down {
+    from {
+      height: 0;
+    }
+    to {
+      height: var(--radix-accordion-content-height);
+    }
+  }
+  @keyframes accordion-up {
+    from {
+      height: var(--radix-accordion-content-height);
+    }
+    to {
+      height: 0;
+    }
+  }
+}
 
 @layer base {
   /* Nocturne dark theme (feature 083). App is dark-only — a two-file value remap of the
      existing tokens, not a new system. Brand accent = blurple (#9184d9); gain/loss/paper
-     live in tailwind.config.js. Background ≈ #161826. */
+     live in the @theme block above. Background ≈ #161826. */
   :root {
     --background: 232 27% 11%;
     --foreground: 213 31% 91%;

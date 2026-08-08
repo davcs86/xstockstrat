@@ -138,3 +138,59 @@
     `:139-148`, which starts at the numbered-list item above the table).
 - No Floor (`F-*`) risk found. No unresolved items remain.
 - Next: `/sdd-execute shadcn-ui-migration`.
+
+## Session 2026-08-08T01:30:00Z — sdd-execute boot (sequential mode)
+
+- **Branch adaptation (deliberate, not a silent deviation):** this session's harness task
+  instructions assign a fixed branch, `claude/shadcn-ui-migration-4w5bn4`, and require all
+  development + the final PR to use it (never push elsewhere without explicit permission) — this
+  supersedes `/sdd-execute`'s default `**Development Branch**: feature/shadcn-ui-migration`
+  naming for this session. `feature/shadcn-ui-migration` does not exist on origin
+  (`git ls-remote` confirmed empty) and will not be created. All BRANCH SYNC /
+  `<dev-branch>` references in the execution driver resolve to `claude/shadcn-ui-migration-4w5bn4`
+  instead; the eventual integration PR targets `main-dev` with `head: claude/shadcn-ui-migration-4w5bn4`,
+  which is consistent with root CLAUDE.md's "Harness Default Branch" section (`claude/*` branches
+  always PR into `main-dev`).
+- Confirmed clean working tree, branch up to date with origin, spec/context files already
+  authoritative on this branch (pushed this session) — no `git show origin/main-dev:...` fallback
+  needed.
+- Consumer surface(s) (C-14): UI — all steps touch `xstockstrat-ui` (`/trader`, `/insights`,
+  `/config-ui`, `/accounts`).
+- Open review warnings carried forward: none (all 9 warnings + 1 note from the impl-spec review
+  were fixed and closed in the prior session).
+- Re-spec gate (§5.3): merged `origin/main-dev` (e3482c2) into `claude/shadcn-ui-migration-4w5bn4`
+  — zero diff on `services/xstockstrat-ui/` between the recon-time commit and current main-dev, so
+  no re-spec needed. Pushed the merge commit.
+- Up-front confirm (§5.4): user agreed to the full 11-step plan (all steps surface=`ui`; checkpoints
+  fire only via the step-cap, no surface boundaries exist within this feature).
+- Tooling setup (§5.4b): `pnpm install --frozen-lockfile` at repo root (node_modules did not exist
+  yet — 874 packages, clean install, `packages/proto/gen/ts` `tsc` prepare step succeeded).
+  node 22.22.2 ✓ · pnpm 9.15.0 ✓ · chromium (pre-provisioned, `/opt/pw-browsers`) ✓ · eslint 10.1.0 ✓
+  (via `pnpm exec`) · shadcn CLI 4.16.2 ✓ (reachable via `npx`). No blockers.
+
+### Step 1 — Tailwind v3 → v4 migration [done]
+- Resolved exact version pins live (P-03, per the step's instruction not to guess):
+  `tailwindcss@4.3.3` / `@tailwindcss/postcss@4.3.3` / `tw-animate-css@1.4.0` (npm registry).
+  Verified the `@theme`/`@theme inline` CSS syntax and `--color-*`/`--font-*`/`--radius-*`/
+  `--animate-*` token-naming convention directly from the installed `tailwindcss@4.3.3` package's
+  own shipped `theme.css`/`index.css` (not from memory/docs — P-03), including the nested
+  `@keyframes` block shape inside `@theme`.
+- `pnpm remove tailwindcss autoprefixer tailwindcss-animate`; `pnpm add -D @tailwindcss/postcss
+  tw-animate-css`. Deleted `tailwind.config.js`.
+- `postcss.config.js`: `{ tailwindcss: {}, autoprefixer: {} }` → `{ '@tailwindcss/postcss': {} }`
+  (proven correct by the passing build, not just the object-key convention).
+- `globals.css`: `@tailwind base/components/utilities` → `@import 'tailwindcss'; @import
+  'tw-animate-css';` + a new `@theme inline { ... }` block (chosen over a value-baking `@theme`
+  because every color token references another CSS custom property — `hsl(var(--background))` —
+  defined in the pre-existing `:root` block below it, which is exactly `@theme inline`'s documented
+  use case) porting every value from the deleted `tailwind.config.js` unchanged: all 11 color
+  roles + `buy`/`sell`/`paper`, `font-mono`, the 3 `radius-*` tokens, and the
+  `accordion-down`/`accordion-up` `--animate-*` + nested `@keyframes` pair. The `:root` HSL
+  custom-property block itself is untouched — no value changed, only the wrapping syntax.
+- Verification: `pnpm --filter @xstockstrat/proto run build` ✓; `NEXT_DISABLE_STANDALONE=1 pnpm
+  build` ✓ (all 39 routes compiled/prerendered, one pre-existing unrelated a11y lint warning on
+  `insights/strategies/[id]/page.tsx:483` not touched by this step); `pnpm run test:unit` ✓ (62/62);
+  `pnpm exec eslint postcss.config.js` ✓ (clean).
+- Files modified: `services/xstockstrat-ui/package.json`, `postcss.config.js`,
+  `src/app/globals.css`, `pnpm-lock.yaml`; deleted `tailwind.config.js`.
+- Deviations: none.

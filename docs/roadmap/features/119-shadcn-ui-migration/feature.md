@@ -1,6 +1,6 @@
 # Feature: shadcn-ui-migration
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/shadcn-ui-migration`
 **Created**: 2026-08-08
 **Last Updated**: 2026-08-08
@@ -14,6 +14,7 @@
 | 2026-08-08 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-08 | `draft` → `design-approved` | /sdd-design | Design debated (1 quick round, superseded mid-session by explicit user scope change to full shadcn adoption incl. Tailwind v4 migration + preset `bLTl5gh6`) and approved; recon.md + design.md written |
 | 2026-08-08 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps |
+| 2026-08-08 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (Tailwind v3→v4 migration) done |
 
 ---
 
