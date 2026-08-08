@@ -782,7 +782,7 @@ ambiguity is logged here).
   scan — in the common one-symbol-still-pending case, `lo == hi` for every criterion and every
   score collapses to a content-free `0.5`. Caught by the design-adversary before implementation,
   not by a later test or review.
-- **Evidence**: `docs/roadmap/features/117-screener-data-readiness-polling/design.md` §
+- **Evidence**: `docs/roadmap/features/118-screener-data-readiness-polling/design.md` §
   Chosen Approach / Rejected Alternatives; the design-adversary's round-1 objection (context.md
   "sdd-design (quick)" session).
 - **Rule it implies**: this generalizes the `fix-mcp-screener-correctness` rule beyond

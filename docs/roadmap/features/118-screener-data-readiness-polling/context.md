@@ -1,8 +1,8 @@
 # Context: screener-data-readiness-polling
 
-**Feature**: `docs/roadmap/features/117-screener-data-readiness-polling/feature.md`
-**Product Spec**: `docs/roadmap/features/117-screener-data-readiness-polling/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/117-screener-data-readiness-polling/implementation-spec.md`
+**Feature**: `docs/roadmap/features/118-screener-data-readiness-polling/feature.md`
+**Product Spec**: `docs/roadmap/features/118-screener-data-readiness-polling/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/118-screener-data-readiness-polling/implementation-spec.md`
 
 ---
 
@@ -208,10 +208,57 @@ already-tested fix inline, duplicating work.
 same real-world situation `docs/roadmap/features/merge-order.md`'s Blocking Dependencies table
 exists to track (a feature stacked on another unmerged feature) — recorded there as a new row
 (`screener-data-readiness-polling` → PR #902) even though #902 has no `docs/roadmap/features/`
-entry of its own (it's a Track C bug-fix report, not a numbered feature). **117's own integration
+entry of its own (it's a Track C bug-fix report, not a numbered feature). **118's own integration
 PR to `main-dev` must not be created/merged before PR #902 merges** — when #902 merges first (as
 expected, since it's already fully tested and PR-reviewed-ready), `feature/screener-data-readiness-polling`'s
 history naturally becomes a superset that rebases/merges cleanly; the ordering constraint is
-purely "don't merge 117 first," not a code conflict.
+purely "don't merge 118 first," not a code conflict.
+
+Next: TOOLING SETUP → Step 1.
+
+## Session 2026-08-08 — sdd-execute re-spec gate (§5.3)
+
+**Second discovery from the same `main-dev` merge**: beyond the branch-origin issue above, merging
+`origin/main-dev` into `feature/screener-data-readiness-polling` surfaced a genuine **feature-number
+collision** — `docs/roadmap/features/117-screener-fundamental-metric-selector/` already exists on
+`main-dev`, `code-completed`, built and merged by a different session on 2026-08-07/08 entirely
+independently of this one. Both `/sdd-story` runs computed `max(existing NNN)+1` at a time when
+neither could see the other's in-flight work.
+
+- **Renumbered**: this feature `117` → `118` (`git mv docs/roadmap/features/117-screener-data-readiness-polling
+  docs/roadmap/features/118-screener-data-readiness-polling`), per the Feature Numbering collision
+  rule (root `CLAUDE.md` — the not-yet-executed feature renumbers, not the `code-completed` one).
+  Fixed every internal self-reference (`feature.md`/`context.md`/`implementation-spec.md` path
+  strings, and "feature 117"/"117's" prose in implementation-spec.md's code-comment instructions —
+  those comments get typed literally into `page.tsx`/`useScreenSymbols.ts`/`screener.spec.ts`, so a
+  wrong feature number there would ship into the codebase). Added a `merge-order.md` Blocking
+  Dependencies row recording the collision and its resolution.
+- **Real file-overlap, not just a number clash**: `117-screener-fundamental-metric-selector`
+  converts the Screener page's Fundamental-kind metric-name field from free-text `<Input>` to a
+  `<Select>` dropdown (`FUNDAMENTAL_METRICS` catalog) — a change entirely inside the criterion-row
+  rendering block of `page.tsx`, textually disjoint from anything this feature's Steps 2/3 touch
+  (state management, the results derivation, the results-table/banner JSX). The merge (`git merge -X
+  ours origin/main-dev`) applied cleanly with **no conflict markers** — verified directly (grepped
+  for `<<<<<<<`/`=======`/`>>>>>>>` across the three affected files, zero hits) and confirmed both
+  sides' changes are present in the merged file (the `FUNDAMENTAL_METRICS` Select block AND this
+  session's `pendingFundamentals`/badge logic both read back correctly).
+- **Re-spec performed (conditional — evidence only)**: their edit shifted every `page.tsx` line
+  number below the insertion point. Re-verified every `path:line` citation in
+  `implementation-spec.md` Steps 1-3 by direct `grep -n` against the current (post-merge) file —
+  not computed/estimated — and corrected the stale ones (`TOP_N` `58-60`→`62-64`, `runScan()`
+  `110-142`→`114-146`, the results/`pendingFundamentals` derivation `144-154`→`148-158`, the pending
+  banner `438-446`→`451-459`, the results-table badge JSX `508-525`→`521-539`, the
+  `save-as-watchlist` button `403-411`→`416-424`, the `comparatorGlyph`/`newCriterion` helper block
+  `62-76`→`66-80`, the `lastRun` state block `86-88`→`90-92`, the outer results fragment
+  `378-448`→`391-461`). **No step's `**Instructions**` logic changed** — every code snippet in the
+  spec is unaffected by their edit (different region of the file); only the citations pointing at
+  *where* to make each edit needed correcting. `tsc --noEmit` on the current merged tree is clean.
+- `ls services/xstockstrat-ui/e2e/fixtures/` and `INVENTORY.md` were also re-checked post-merge:
+  `main-dev` independently touched `INVENTORY.md`/`mock-backend.ts`/`configKeys.ts` for unrelated
+  config-ui work (`config-ui-value-not-updating-defect` report) — no collision with this feature's
+  planned `screenResults.ts` addition (new file, untouched by either).
+- Committed as `respec(screener-data-readiness-polling): align steps with post-merge page.tsx +
+  renumber 117->118` directly on `feature/screener-data-readiness-polling` (the sanctioned
+  pre-step-loop exception to step-body immutability, per sequential-mode §5.3).
 
 Next: TOOLING SETUP → Step 1.
