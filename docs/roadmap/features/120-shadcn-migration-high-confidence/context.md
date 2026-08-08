@@ -68,3 +68,35 @@
   - Both Open Questions closed `[x]` with their recon.md-sourced resolutions (e2e-selector
     inventory; `PlatformHeader.tsx` cross-feature sequencing scoped to 121 only).
 - No scope change — wording/citation precision only. Product spec remains `spec-ready`.
+
+## Session 2026-08-08 — sdd-design (full mode) — Round 1
+
+- **Proposer**: five step-groups (new primitives+tests → adopt-existing → no-e2e-risk call
+  sites → e2e-risk call sites paired same-step with spec updates → PlatformHeader.tsx's two
+  FRs adjacent-last).
+- **Adversary objections** (no Floor breach):
+  1. Group 1's own FR range omitted FR-5 (Checkbox) — a real scope gap that would break Group
+     3's Checkbox steps. **Fixed directly in product-spec.md FR-12** (range corrected to
+     FR-1–FR-5, FR-7–FR-9; also corrected the stale `React.forwardRef`/`displayName` fallback
+     recipe to match recon's confirmed post-119 function-component shape).
+  2. `CopilotRail.tsx`'s Badge (FR-10) vs Alert (FR-4) edit — proposer's own "Badge+Alert"
+     Group-4 label conflated two distinct FRs/groups; needs disambiguation in round 2 (product
+     spec itself is fine — FR-4 and FR-10 cite disjoint line ranges).
+  3. Batching all 8 primitives before any call-site validation risks an F-09 rework-after-close
+     problem — a primitive whose default shape doesn't fit its consumer surfaces no signal
+     until 3-4 groups later. Round 2 to interleave: pair each primitive with its lowest-risk
+     consumer in adjacent steps.
+  4. Group 4's same-step component-swap + e2e-spec-update lacks an explicit red-before-green
+     (P-06) checkpoint. Round 2 to split into two steps per risky call site: swap first (run
+     the *unmodified* spec, expect a selector-mismatch failure), then update the spec.
+  5. Full-Vitest-suite-per-primitive only catches import-resolution breakage (the ledger's
+     actual trap, already fixed at `vitest.config.ts`), not render/type correctness. Round 2 to
+     add `pnpm build`/`tsc --noEmit` per primitive-add step.
+  6. Progress (FR-9) per-site color differences unexamined for whether they're a semantically
+     meaningful taxonomy (→ shared cva variant) vs. legitimately arbitrary. Round 2 to decide
+     explicitly.
+  7. FR-8 (Accordion) has no confirmed e2e risk but was deferred to last purely for file
+     adjacency with FR-7 — weak rationale. Round 2 to reconsider tiering.
+- Floor status: none unresolved.
+- Full mode (user-directed) — round 2 mandatory before the approval gate. Feeding this
+  synthesis to round 2.
