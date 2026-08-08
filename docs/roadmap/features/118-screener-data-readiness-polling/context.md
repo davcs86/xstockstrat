@@ -261,4 +261,26 @@ neither could see the other's in-flight work.
   renumber 117->118` directly on `feature/screener-data-readiness-polling` (the sanctioned
   pre-step-loop exception to step-body immutability, per sequential-mode §5.3).
 
-Next: TOOLING SETUP → Step 1.
+Tooling setup (steps 1-3, all `xstockstrat-ui`): node22 ✓ v22.22.2 · pnpm ✓ 9.15.0 · tsc ✓
+(`node_modules` present) · Playwright Chromium ✓ (`/opt/pw-browsers/chromium`, requires
+`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH`+`CI=true` env override for the pinned-vs-installed browser
+build mismatch — already discovered and used successfully earlier this session; matches the
+`watchlist-management` ledger trap in `fails.md`).
+
+Next: Step 1.
+
+### Step 1 — service: add the poll-capable sibling hook to `useScreenSymbols.ts` [done]
+- Per the TDD gate's cross-step pairing (Step 3's test covers Steps 1+2), wrote Step 3's fixture
+  file (`e2e/fixtures/screenResults.ts`) and full test additions to `screener.spec.ts` *first*,
+  ran the suite against the pre-Step-1/2 tree, and captured **RED**: 6/7 new tests failed on the
+  missing `screener-checking`/`stop-polling`/`screener-polling-gave-up` testids (the right reason
+  — behavior not yet implemented); the 7th ("zero rows never starts checking") correctly passed
+  trivially (it only asserts absence, already true pre-implementation) — this is the expected,
+  non-vacuous RED baseline, not a gap in the test.
+- Implemented `useScreenSymbolsPoll` + `POLL_INTERVAL_MS`/`MAX_POLL_ATTEMPTS` exactly per the
+  spec's Instructions (also exported the two previously-private `ScreenSymbolsInput`/
+  `ScreenSymbolsResult` type aliases for Step 2 to import). `tsc --noEmit` and `pnpm run lint`
+  both clean.
+- Files modified: `services/xstockstrat-ui/src/hooks/useScreenSymbols.ts`.
+- Deviations: none.
+- Green not yet re-run (Step 2 must land first — `useScreenSymbolsPoll` is unused until then).

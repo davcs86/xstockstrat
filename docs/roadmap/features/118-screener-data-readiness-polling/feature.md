@@ -1,6 +1,6 @@
 # Feature: screener-data-readiness-polling
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/screener-data-readiness-polling`
 **Created**: 2026-08-08
 **Last Updated**: 2026-08-08
@@ -17,6 +17,7 @@
 | 2026-08-08 | `implementation-ready` (unchanged) | /sdd-review impl-spec | PASS WITH WARNINGS (0 blockers, 2 warnings, 1 note, no Floor breach; overlap scan clean). All findings fixed directly in implementation-spec.md — see context.md. |
 | 2026-08-08 | `implementation-ready` (unchanged) | /sdd-execute boot | **Renumbered `117` → `118`**: a feature-number collision with `117-screener-fundamental-metric-selector` (independently `code-completed` on `main-dev`) was discovered when `main-dev` was merged into the feature branch. Per the Feature Numbering collision rule, this not-yet-executed feature renumbers. Directory `git mv`'d, self-references updated, `merge-order.md` entry added. Also branched `feature/screener-data-readiness-polling` off `claude/screener-criteria-filtering-7ydsuz` (PR #902) instead of `main-dev` — see context.md for both deviations. |
 | 2026-08-08 | `implementation-ready` (unchanged) | /sdd-execute re-spec (§5.3) | Conditional re-spec: every `page.tsx` `path:line` citation in Steps 1-3 re-verified and corrected against the post-merge file (lines shifted by `117-screener-fundamental-metric-selector`'s unrelated, disjoint-region edit). No step instructions/logic changed — evidence only. |
+| 2026-08-08 | `implementation-ready` → `in-progress` | /sdd-execute Step 1 | `useScreenSymbolsPoll` added to `useScreenSymbols.ts`. `tsc --noEmit`/lint clean. TDD: red observed across the Step-3 suite before this step (6/7 new tests failed on missing testids); green pending Step 2. |
 
 ---
 

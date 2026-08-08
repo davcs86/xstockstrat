@@ -73,7 +73,7 @@ Constitution P-03 — not silent):
 
 ### Step 1 — service: add the poll-capable sibling hook to `useScreenSymbols.ts`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/hooks/useScreenSymbols.ts` — modify
@@ -579,10 +579,10 @@ cd services/xstockstrat-ui && pnpm run lint
 cd services/xstockstrat-ui && pnpm exec playwright test insights/screener.spec.ts
 ```
 All 7 new tests (Instructions §2–§8; §0–§1 are fixture/helper setup, not tests themselves) pass,
-and all pre-existing tests in `screener.spec.ts` (10 today, confirmed via
-`grep -c "^\s*test("` — not the 9 an earlier draft of this spec miscounted) continue to pass
-unmodified — proving AC-6's "no regression to the existing PR #902 badge/banner behavior." No
-coverage threshold applies to `xstockstrat-ui` (Next.js — e2e-only per
+and all pre-existing tests in `screener.spec.ts` (**12** as of the re-spec — `main-dev` gained 2
+more from `117-screener-fundamental-metric-selector` since this count was first written; re-confirmed
+via `grep -c "^\s*test("`) continue to pass unmodified — proving AC-6's "no regression to the
+existing PR #902 badge/banner behavior." No coverage threshold applies to `xstockstrat-ui` (Next.js — e2e-only per
 `.claude/skills/sdd-spec/reference/spec-template.md` § Test step pairing rule coverage table);
 this Playwright run is the required verification.
 
