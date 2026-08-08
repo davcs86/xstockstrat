@@ -126,7 +126,7 @@ documented Open Risk materializing: stop and escalate (P-03) rather than improvi
 
 ### Step 2 — service: shadcn CLI init + apply preset `bLTl5gh6`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/components.json` — create
@@ -718,4 +718,61 @@ grep -n "shadcn\|@theme" services/xstockstrat-ui/CLAUDE.md   # new Styling secti
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+**Step 1 (discovered during Step 2 execution) — bare `tailwindcss` package required.**
+`@tailwindcss/postcss` alone was not sufficient for the shadcn CLI's own "Validating Tailwind CSS"
+framework-detection check (`apply --preset` failed preflight with "No Tailwind CSS configuration
+found" until the bare `tailwindcss@4.3.3` package was also added as a direct devDependency).
+**Disposition**: added `tailwindcss@4.3.3` to `package.json` devDependencies (same version as
+`@tailwindcss/postcss`) during Step 2 — within Step 2's already-declared `package.json — modify`
+File scope. Not re-opening Step 1 (F-09: step bodies immutable once done).
+
+**Step 2 — `apply --preset` touched `src/app/layout.tsx` and created `src/lib/utils.ts`, neither
+listed in the step's `**Files**`.** The CLI's "Updating fonts" phase added a `Roboto` Google Font
+mapped to `--font-sans` (this preset's typography, referenced by the `@theme inline` block's
+`--font-sans`/`--font-heading` tokens) and switched `<html>`'s className to apply it via `cn()`,
+importing `cn` from the correct `@/components/ui/utils` alias. Separately, despite
+`components.json`'s `aliases.utils` correctly resolving to `@/components/ui/utils`, the CLI also
+unconditionally created `src/lib/utils.ts` (a duplicate stock `cn()` helper).
+**Disposition**:
+- `layout.tsx`: kept the font change — a preset's typography is as much a part of "the preset" as
+  its colors, and the user's explicit direction this session was full adoption with **no** hybrid
+  (product-spec.md Problem Statement) — rejecting the font while keeping the colors/components
+  would itself be a hybrid. Cleaned up the CLI's own leftover: removed the now-orphaned `Inter`
+  import and `const inter = ...` (confirmed zero other references to `--font-inter` anywhere in
+  the repo) — this is fixing the step's own change to pass its lint/build gate, not opportunistic
+  cleanup of code the step didn't touch.
+- `src/lib/utils.ts`: confirmed zero importers anywhere in `src/` (grep), deleted — a DRY-guard-rail
+  violation (duplicate `cn()` helper) the CLI created despite the correct alias config, not
+  anything this feature needs.
+- Both files added to this step's actual touched-file set below (Files section itself stays
+  immutable per F-09; this log is the record of the real diff).
+
+**Step 2 — hand-reconciled `globals.css` beyond the CLI's raw output.** The CLI's own written
+`globals.css` was not usable as-is:
+- `@import "shadcn/tailwind.css";` — confirmed broken in design.md's live spike (the `shadcn` npm
+  package has no such export); replaced with the already-verified-working `@import 'tailwindcss';`
+  from Step 1, and merged the preset's additional theme tokens (sidebar/chart/popover colors,
+  `--font-heading`, extra `--radius-xl/2xl/3xl/4xl`) into Step 1's existing `@theme inline` block
+  rather than leaving two separate theme blocks.
+- Duplicate `@import 'tw-animate-css';` line (Step 1 already added one; the CLI appended a second,
+  differently-quoted, copy) — removed the duplicate.
+- `@custom-variant dark (&:is(.dark *));` — dead code under the dark-only decision (no `.dark`
+  class is ever applied); removed.
+- Per the design's dark-only decision: folded the written `.dark` block's values into `:root`,
+  deleted the separate light `:root` block and the `.dark` selector block entirely.
+- `--destructive-foreground`: the preset's own `:root`/`.dark` output never defined this token
+  (confirmed by re-reading its raw output) — grepped all regenerated components and confirmed zero
+  usage of `destructive-foreground` anywhere (this preset's destructive variants use `text-destructive`
+  directly, not a foreground-on-solid-fill pattern). Omitted the token from both the `@theme inline`
+  mapping and `:root` rather than inventing a value (**F-04** — never invent what discovery didn't
+  find; the CLI's own omission was intentional, not a gap to fill).
+- `components.json`'s `tailwind.config` field defaulted to `"tailwind.config.js"` (the file Step 1
+  deleted) — corrected to `""` for v4 CSS-first correctness (this step creates `components.json`,
+  so within its own File scope).
+
+**Verification impact**: none of the above changes the step's specced Verification commands or
+their expected "two deliberate breakages remain" outcome — re-ran `tsc --noEmit` (scoped, full log
+inspected line-by-line to rule out any new/unexplained error) and confirmed every remaining error
+traces to the two already-documented breakages (the 3 combobox call sites' old prop API vs. the
+new compound API; every `Badge`/`Button` `buy`/`sell`/`paper`/`live`/`warning`/`info` consumer). No
+third breakage class was introduced.

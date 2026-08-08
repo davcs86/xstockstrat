@@ -194,3 +194,34 @@
 - Files modified: `services/xstockstrat-ui/package.json`, `postcss.config.js`,
   `src/app/globals.css`, `pnpm-lock.yaml`; deleted `tailwind.config.js`.
 - Deviations: none.
+
+### Step 2 — shadcn CLI init + apply preset `bLTl5gh6` [done]
+- Hand-authored `components.json` first (style `radix-rhea`, `iconLibrary: tabler`, `baseColor:
+  stone`, `aliases.utils: @/components/ui/utils`) to unblock non-interactive `apply`.
+- First attempt blocked: CLI's "Validating Tailwind CSS" preflight failed ("No Tailwind CSS
+  configuration found") — `@tailwindcss/postcss` alone wasn't enough; added bare
+  `tailwindcss@4.3.3` too (logged as a Step-1-adjacent deviation, see Deviation Log — did not
+  reopen Step 1).
+- `printf 'y\n' | npx shadcn@latest apply --preset bLTl5gh6 --yes` succeeded: regenerated all 10
+  primitives + created `textarea.tsx`/`input-group.tsx`, updated `globals.css`, overwrote
+  `components.json` (added `rtl`/`menuColor`/`menuAccent`/`registries` fields, kept my
+  `aliases.utils` value), added `@base-ui/react`/`@tabler/icons-react`/`radix-ui`/`shadcn` to
+  `package.json` (no `pnpm-lock.yaml`/`tailwind.config.js` side effects beyond what's expected).
+- Two undeclared files also changed (`layout.tsx` — Roboto font; `src/lib/utils.ts` — duplicate
+  `cn()` helper) — both handled and logged, see Deviation Log.
+- Hand-reconciled `globals.css` (broken `shadcn/tailwind.css` import, duplicate `tw-animate-css`
+  import, dead `@custom-variant dark`, folded `.dark`→`:root` per the dark-only decision, merged
+  the preset's extra theme tokens into Step 1's `@theme inline` block, omitted the never-used
+  `--destructive-foreground` rather than inventing a value) — full detail in Deviation Log.
+- Verification: `components.json`/`globals.css` grep checks per spec, all pass; ran a full scoped
+  `tsc --noEmit` (beyond the spec's minimum) specifically to rule out a third breakage class beyond
+  the two documented ones — confirmed clean, every remaining error traces to the combobox call
+  sites (Step 3) or Button/Badge variants (Step 7), nothing else.
+- Files modified (actual, beyond the spec's declared set — see Deviation Log):
+  `services/xstockstrat-ui/components.json` (new), `package.json`, `pnpm-lock.yaml`,
+  `src/app/globals.css`, `src/app/layout.tsx`, `src/components/ui/{badge,button,card,combobox,
+  input,select,separator,sheet,skeleton,table}.tsx`, `src/components/ui/{textarea,input-group}.tsx`
+  (new).
+- Deviations: see Deviation Log (3 entries — bare `tailwindcss` dep, `layout.tsx`/duplicate-utils
+  side effects, hand-reconciled `globals.css`). No blocker raised — all resolved within Step 2's
+  own scope per the disposition reasoning recorded.
