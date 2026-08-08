@@ -177,9 +177,19 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
    no independent add/move/remove implementation remaining in any of the three.
 5. FR-10's Questionnaire shell-vs-restructure decision is recorded in `design.md`, and
    `StrategyWizard.tsx`'s step indicator renders through the resulting `Questionnaire`-based shell.
-6. `pnpm lint` and `pnpm build` pass with no new errors; `pnpm test:e2e` passes for every spec covering
-   a touched page/component (strategy wizard flow, formula workspace, rule editor, backtest diagnostics
-   equity curve, formula test-run sparkline).
+6. `pnpm lint` and `pnpm build` pass with no new errors; `pnpm test:e2e` passes for every spec with a
+   selector load-bearing on a touched surface — confirmed by `/sdd-review` grep against current
+   `main-dev`: `e2e/insights/strategy-authoring.spec.ts` (step indicator's `getByRole('button', {name:
+   /Go to Step/})`, wizard `Next`/`Create Strategy`/`Save Changes` buttons, `Add component`, the
+   `JSON`-mode toggle button and `getByLabel('Entry rule JSON')`/`'Exit rule JSON')`),
+   `e2e/insights/backtest-coverage.spec.ts` (`getByTestId('equity-curve-chart')`), and
+   `e2e/trader/chart-panel.spec.ts` (`getByTestId('chart-container')` — see Open Questions for why this
+   spec also bears on the FR-5 decision). `FormulaRunResult.tsx`'s sparkline and
+   `OutputEditor.tsx`/`ParameterEditor.tsx`'s row add/move/remove controls have **no e2e selector
+   coverage today** (confirmed by grep — `e2e/insights/formulas.spec.ts` never interacts with a formula
+   row), so FR-4 and FR-8's migrations for those three files rely on manual verification, not e2e
+   regression protection; `/sdd-design` or `/sdd-spec` should flag this gap explicitly rather than
+   silently assume e2e coverage exists.
 
 ## Open Questions
 
@@ -193,7 +203,30 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
   `Questionnaire`'s `render` prop / custom-rendering support (mentioned in its docs but not fully
   detailed) is sufficient to embed `RuleEditor` inside a `Questionnaire.Item` without fighting the
   primitive's own DOM structure, before committing to option (a) or (b).
-- [ ] Per the same e2e-parity caution as the three sibling features' Open Questions
-  (`docs/roadmap/ledger/fails.md`, 2026-08-05 — align-frontend-e2e-bff-mocks — duplication), grep
-  `e2e/insights/strategies*.spec.ts` and any formula-workspace/rule-editor specs for selectors keyed to
-  the current step-indicator/list-editor/chart markup before committing to FR-8/FR-11's migration order.
+- [x] **Resolved by `/sdd-review` product-spec pass** (grepped `e2e/insights/*.spec.ts` and
+  `e2e/trader/*.spec.ts` for selectors keyed to the current step-indicator/list-editor/chart markup, per
+  the same e2e-parity caution as the three sibling features' Open Questions —
+  `docs/roadmap/ledger/fails.md`, 2026-08-05, align-frontend-e2e-bff-mocks — duplication):
+  - **Step indicator (FR-11)**: `e2e/insights/strategy-authoring.spec.ts:254` asserts
+    `page.getByRole('button', { name: /Go to Step/ })` — this is `StrategyWizard.tsx:316`'s
+    error-jump link, not the step indicator itself (`StrategyWizard.tsx:159-178`'s `<ol>` carries no
+    role/label the e2e suite queries), so `Questionnaire.Progress` is free to replace the `<ol>` markup
+    without a selector rewrite, but the wizard's `Next`/`Back`/`Create Strategy`/`Save Changes` button
+    text (asserted throughout the same spec) must survive whatever FR-10 shell is chosen.
+  - **Rule editor (FR-6/FR-8)**: no selector in any spec targets the visual condition-tree builder's
+    rows directly — only the JSON-mode toggle (`getByRole('button', {name:'JSON'})`) and the two
+    textareas (`getByLabel('Entry rule JSON'/'Exit rule JSON')`) are e2e-load-bearing, both outside
+    `RuleEditor.tsx:179-325`'s visual-mode render branch FR-6 touches.
+  - **Equity curve (FR-3)**: `e2e/insights/backtest-coverage.spec.ts:168` asserts
+    `getByTestId('equity-curve-chart')` — this `data-testid` must be preserved on whatever element
+    wraps the new `ChartContainer`.
+  - **ChartPanel / lightweight-charts (FR-5)**: `e2e/trader/chart-panel.spec.ts` is unusually coupled to
+    the current implementation — it asserts `getByTestId('chart-container')` (stable, survives either
+    FR-5 outcome) but also waits on `[data-testid="chart-container"] .tv-lightweight-charts` (a class
+    name `lightweight-charts` injects into the DOM itself) as its async-readiness signal before
+    exercising the timeframe-switch flow (`chart-panel.spec.ts:198-206`). A move to `recharts` would
+    require rewriting this readiness wait, not just swapping chart internals — additional evidence for
+    `/sdd-design`'s FR-5 weighing, not a reason to pre-decide it here.
+  - **OutputEditor/ParameterEditor rows (FR-8)**: no e2e coverage exists for these files' row
+    add/move/remove interactions at all (see Acceptance Criteria #6) — the migration order there is not
+    e2e-selector-constrained, but also not e2e-regression-protected.

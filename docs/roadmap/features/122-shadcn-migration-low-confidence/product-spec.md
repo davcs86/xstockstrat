@@ -38,12 +38,23 @@ manual `fetch` submit, inline `<p>` error text) against shadcn's `Form` recipe (
 `useState` + `Input`/`Button` composition (already using the repo's `ui/input.tsx`/`ui/button.tsx`) is
 the appropriately minimal implementation.
 
-FR-3. Evaluate `src/components/trader/accountShared.tsx`'s `CredentialFields`/`buildCredentialsJson`
-(broker-conditional controlled inputs, manual submit handler calling the gRPC client directly) against
-the same `Form` recipe. Record the same migrate-or-decline decision, noting that this form's
+FR-3. Evaluate `src/components/trader/accountShared.tsx`'s `CredentialFields`
+(`accountShared.tsx:51-113` — broker-conditional controlled inputs, `BrokerType.IBKR` vs. the
+Alpaca default branch) and `buildCredentialsJson` (`accountShared.tsx:39-48`) against the same
+`Form` recipe. `CredentialFields` is a shared field-rendering component with **two** independent
+consumers, each owning its own manual submit handler that calls `tradingClient` directly:
+`EditCredentialsForm` (`accountShared.tsx:116-167`, calls `updateBrokerAccountCredentials`) and
+`AddAccountForm` (`accountShared.tsx:259-332`, calls `registerBrokerAccount`). A "migrate"
+decision therefore means wiring **both** consumers to `react-hook-form` context (and
+`CredentialFields`, as a shared component, becoming aware of that context) — not a single
+call-site change. Record the same migrate-or-decline decision, noting that this form's
 broker-conditional field set (per-broker required/optional credential fields) is a more complex
 validation shape than `AuthForm`'s two static fields — react-hook-form + zod's schema-per-broker
-validation may be a stronger fit here even if FR-2 declines.
+validation may be a stronger fit here even if FR-2 declines. Both `BrokerType` values in the proto
+(`BROKER_TYPE_ALPACA`, `BROKER_TYPE_IBKR` — `packages/proto/common/v1/common.proto:66-67`) are the
+full enum; whichever decision is made (migrate or decline) must preserve both branches'
+existing required-field behavior unchanged — this feature does not alter broker credential
+storage or validation semantics, only the widget wiring that renders and submits them.
 
 FR-4. If FR-2 and/or FR-3 conclude adoption is warranted, add `react-hook-form` and `zod` to
 `services/xstockstrat-ui/package.json`, add `src/components/ui/form.tsx` (the shadcn `Form` primitive:
@@ -114,6 +125,8 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
   obligate reusing it for the other (avoiding "form library A here, manual state there" inconsistency)?
   Route to `/sdd-design` — this is exactly the kind of design-fork the SDD gate exists to surface
   rather than guess at.
-- [ ] Confirm no other `xstockstrat-ui` code already depends on `react-hook-form` or `zod` under a
-  different install path before FR-4 adds them fresh (`grep -r "react-hook-form\|from 'zod'"
-  services/xstockstrat-ui/src`) — the audit's dependency sweep did not check `zod` specifically.
+- [x] **Resolved by `/sdd-review`**: `grep -rn "react-hook-form\|from 'zod'\|\"zod\""
+  services/xstockstrat-ui/src services/xstockstrat-ui/package.json` returns zero matches. Neither
+  `react-hook-form` nor `zod` is present anywhere in `xstockstrat-ui` today, under any install
+  path or transitive re-export. If FR-4 triggers, both are genuinely new dependencies with no
+  existing precedent to reconcile against.
