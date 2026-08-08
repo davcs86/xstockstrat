@@ -293,3 +293,14 @@
 - Files modified: `services/xstockstrat-ui/src/components/ui/{card,skeleton}.tsx` (`input.tsx`/
   `separator.tsx`/`table.tsx` read and confirmed, no functional changes needed/made).
 - Deviations: see Deviation Log (CardTitle real fix; TableRow reasoned non-application).
+
+### Step 6 — Reconcile select.tsx, sheet.tsx [done]
+- Confirmed both files retain `'use client'` at the top (regeneration did not drop it).
+- Confirmed `sheet.tsx` still exports the stock `SheetDescription`/`SheetFooter` additions —
+  left as an intentional superset per recon.md's Risk note, no consumer forced onto them.
+- No functional re-application needed — neither file carried a custom variant beyond structural/
+  import differences the CLI regeneration already resolved.
+- Verification: `head -1` on both files confirms `'use client'`; scoped `tsc --noEmit` clean;
+  scoped `eslint` clean.
+- Files modified: none (verification-only step — both files already correct post-Step-2).
+- Deviations: none.

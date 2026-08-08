@@ -394,7 +394,7 @@ pnpm exec eslint src/components/ui/card.tsx src/components/ui/input.tsx src/comp
 
 ### Step 6 — service: Reconcile select.tsx, sheet.tsx (Client Component boundary + stock sub-exports)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/select.tsx` — modify
