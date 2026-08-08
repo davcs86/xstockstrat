@@ -57,6 +57,18 @@ No proto change was needed — `ScreenResultStatus.INSUFFICIENT_DATA` already ex
 entirely in how the existing fields are populated. `docs/runbooks/mcp-tools.md`'s `screen_symbols`
 reference and the agent tool's own docstring were updated to describe the corrected contract.
 
+**Follow-up (same PR): tell the two `INSUFFICIENT_DATA` causes apart in the UI.** A user asked
+whether the Screener could at least show that fundamentals will be available later, or notify them
+once populated. Screener scans aren't persisted, so there's no state to notify against without new
+infrastructure (out of scope here — see below); but the backend fix above already produces a clean
+signal the frontend can use for free: a fundamentals-unavailable result never carries a `CoverageGap`
+(that message is bars-specific), while a bars-insufficient result always does. `screener/page.tsx`
+now branches on `!r.gap` to render a distinct "Fundamentals pending" badge (vs. the generic
+"Insufficient data" for the bars case) plus a summary banner ("Fundamentals data isn't available
+right now for N of M symbols — re-run this scan later"), so the page no longer looks silently
+frozen and gives the user an accurate, actionable next step (re-run later) instead of implying a
+backfill is possible.
+
 ## Tests added
 
 - `services/xstockstrat-analysis/tests/test_screener.py`:
@@ -66,13 +78,20 @@ reference and the agent tool's own docstring were updated to describe the correc
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py`:
   `test_fundamental_unavailable_yields_insufficient_data_not_a_silent_pass` (same fix, at the
   servicer layer, replacing the prior assertion of the buggy behavior).
+- `services/xstockstrat-ui/e2e/insights/screener.spec.ts`: new spec asserting the
+  "Fundamentals pending" badge + banner render (and the generic "Insufficient data" badge does
+  *not*) for a `gap`-less `INSUFFICIENT_DATA` result, distinguishing it from the existing
+  bars-insufficient spec (which does carry a `gap`).
 
 ## Not in scope
 
 - Diagnosing *why* `GetFundamentalsMulti` itself was failing in the `staging` environment (likely
   a missing/invalid `FMP_API_KEY` secret, or FMP quota) — that is an infrastructure/secrets
   concern, not a code defect, and is outside this PR.
-- The UI (`services/xstockstrat-ui/src/app/insights/screener/page.tsx`) needed no change: it
-  already renders the existing per-row "Insufficient data" badge (`status !==
-  SCREEN_RESULT_STATUS_OK`) and already leaves the Passed column blank for `passed=false` rows —
-  once the backend reports the correct status/passed, the existing UI surfaces it with no changes.
+- **Notify-when-populated.** Persisting a pending scan's symbols/criteria and pushing an
+  in-app/`xstockstrat-notify` alert once fundamentals for those symbols are actually cached would
+  need real new infrastructure — durable scan state, a way to detect "now available" and match it
+  back to the pending scan, and a delivery channel — none of which exists today (screener scans are
+  intentionally stateless, feature 060 FR-9). That's new capability, not a bug fix, so per root
+  `CLAUDE.md`'s SDD entry-point rule it needs `/sdd-story` + `/sdd-design` first rather than being
+  built ad hoc in this PR.

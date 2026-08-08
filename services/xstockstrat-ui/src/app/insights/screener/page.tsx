@@ -142,6 +142,16 @@ export default function ScreenerPage() {
   }
 
   const results = screen.data?.results ?? [];
+  // INSUFFICIENT_DATA has two distinct causes the backend already tells apart (see
+  // services/xstockstrat-analysis/app/services/screener.py): too few bars for a technical
+  // criterion (carries a `gap` — actionable via the Backfills page) vs. the fundamentals data
+  // source being unavailable for a requested fundamental criterion (no `gap` — that message is
+  // bars-specific; there's no fundamentals backfill to trigger). Screener scans aren't persisted,
+  // so there's nothing to notify against — the pending count below just tells the user this scan
+  // will likely score more candidates on a later re-run rather than looking silently frozen.
+  const pendingFundamentals = results.filter(
+    (r) => r.status === ScreenResultStatus.INSUFFICIENT_DATA && !r.gap,
+  );
   const hasHardFilter = criteria.some((c) => c.hardFilter);
   // "Save as watchlist" seeds the passing subset when a hard filter is active, else all results (FR-5).
   const saveSymbols = (hasHardFilter ? results.filter((r) => r.passed) : results).map(
@@ -425,6 +435,15 @@ export default function ScreenerPage() {
             {createWl.error && (
               <p className="mb-2 text-sm text-destructive">{(createWl.error as Error).message}</p>
             )}
+            {pendingFundamentals.length > 0 && (
+              <p data-testid="fundamentals-pending-banner" className="mb-2 text-sm text-yellow-500">
+                Fundamentals data isn&apos;t available right now for{' '}
+                {pendingFundamentals.length === results.length
+                  ? 'any symbol'
+                  : `${pendingFundamentals.length} of ${results.length} symbols`}{' '}
+                — re-run this scan later once it is.
+              </p>
+            )}
           </>
         )}
 
@@ -488,9 +507,19 @@ export default function ScreenerPage() {
                         <td className="p-3">{r.passed ? '✓' : '—'}</td>
                         <td className="p-3">
                           {r.status === ScreenResultStatus.INSUFFICIENT_DATA ? (
-                            <Badge variant="warning" data-testid="insufficient-data">
-                              Insufficient data
-                            </Badge>
+                            r.gap ? (
+                              <Badge variant="warning" data-testid="insufficient-data">
+                                Insufficient data
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="warning"
+                                data-testid="fundamentals-pending"
+                                title="The fundamentals data source is currently unavailable — this candidate will be re-scored on a later scan once it's back."
+                              >
+                                Fundamentals pending
+                              </Badge>
+                            )
                           ) : (
                             <Badge variant="info">OK</Badge>
                           )}

@@ -51,6 +51,35 @@ test.describe('Screener', () => {
     await expect(page.getByTestId('insufficient-data')).toBeVisible();
   });
 
+  test('shows "Fundamentals pending" (not the generic bars message) when a fundamental criterion has no gap', async ({
+    page,
+  }) => {
+    // INSUFFICIENT_DATA with no `gap` is the fundamentals-unavailable case (screener.py never
+    // attaches a CoverageGap for it — that message is bars-specific); the UI must tell it apart
+    // from the bars-insufficient case (which does carry a gap) rather than showing one generic
+    // "Insufficient data" label for both.
+    await addAuthCookie(page);
+    await page.route('**/xstockstrat.analysis.v1.AnalysisService/ScreenSymbols', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          results: [{ symbol: 'AAA', score: 0, passed: false, status: 2 }],
+          coverageGaps: [],
+        }),
+      }),
+    );
+    await page.goto('/insights/screener');
+    await page.getByTestId('run-screen').click();
+    await expect(page.getByTestId('screen-results')).toBeVisible({ timeout: 10000 });
+
+    await expect(page.getByTestId('fundamentals-pending')).toBeVisible();
+    await expect(page.getByTestId('insufficient-data')).toHaveCount(0);
+    await expect(page.getByTestId('fundamentals-pending-banner')).toContainText(
+      "isn't available right now for any symbol",
+    );
+  });
+
   test('renders the feature-083 raw columns (pe / rsi / atr / rev-growth / held)', async ({
     page,
   }) => {
