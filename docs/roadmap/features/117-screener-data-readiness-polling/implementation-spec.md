@@ -362,6 +362,10 @@ the polling/merge/cap behavior — see the red-green pairing in Step Dependencie
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/screener.spec.ts` — modify (append a new `test.describe`
   block)
+- `services/xstockstrat-ui/e2e/fixtures/screenResults.ts` — new (C-12 fixture centralization, see
+  Codebase Evidence)
+- `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` — modify (move "Screener results" from "Not
+  yet centralized" to the canonical fixtures table, same commit as the new fixture file)
 
 **Reviewers**: xstockstrat-ui — Trading UI correctness, analytics display accuracy, config mutation
 safety, Connect-RPC call safety, environment scope correctness, no secret values rendered in UI, no
@@ -375,8 +379,21 @@ direct DB access (except audit log)
   exists anywhere in `e2e/mock-backend.ts` (`callCount`/`let call`/`callsByKey` → zero hits); the
   global `screenSymbols` handler is fully stateless/deterministic —
   `services/xstockstrat-ui/e2e/mock-backend.ts:709-753`. This step's new tests need their own local
-  `page.route` closure counter (matching the existing per-file convention, not a `mock-backend.ts`
-  change — C-12: a scenario one-off stays inline; no second consumer outside this spec file).
+  `page.route` closure counter — that part stays inline (matches the existing per-file convention;
+  the *counter/sequencing logic* has no fixture home and isn't domain data).
+- **C-12 correction from impl-spec review**: the *domain data itself* (the `ScreenResult` row
+  shapes) is a different question from the counter logic above, and does have a fixture-inventory
+  trigger — `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` ("Not yet centralized" table) lists
+  **"Screener results | `e2e/mock-backend.ts` (`screenSymbols`)"** verbatim. Per
+  `docs/patterns/test-data-inventory.md` Rule 3, a feature that substantially touches a domain
+  listed there centralizes it in the same step, regardless of consumer count — this step defines 3+
+  `ScreenResult`-shaped scenario rows (fundamentals-pending, bars-insufficient, resolved), several
+  structurally identical to the literal already inline at `screener.spec.ts:67`. Fixture-module
+  precedent to follow (single-arg scenario-row factories, not static objects, since `symbol` varies
+  per test): `services/xstockstrat-ui/e2e/fixtures/backtests.ts:47-60`
+  (`insufficientDataResult(strategyId, symbols, range)` factory pattern) and
+  `services/xstockstrat-ui/e2e/fixtures/orders.ts` (`orderForId` single-arg factory,
+  per `INVENTORY.md`'s Orders row).
 - Pinned test runner: `"@playwright/test": "1.59.1"` — `services/xstockstrat-ui/package.json:56`.
 - **New pattern for this repo** (not previously used anywhere under `e2e/` — confirmed via grep, zero
   hits for `page.clock`): Playwright's Clock API, confirmed via Context7 `/microsoft/playwright/v1.58.2`
@@ -384,7 +401,12 @@ direct DB access (except audit log)
   timers so `setTimeout`/`setInterval`-driven code (including TanStack Query's internal
   `refetchInterval` scheduling) can be advanced without a real wait; `page.clock.fastForward(ms)`
   "jumps forward in time, firing due timers at most once" per call. Used here to advance the 60s
-  cadence deterministically instead of a 4–5-minute real-time Playwright test.
+  cadence deterministically instead of a 4–5-minute real-time Playwright test. **Important scope
+  limit** (impl-spec review finding): `page.clock` virtualizes the *page's* timers only — it does
+  **not** control how fast a mocked `page.route` handler resolves in real Node time. The immediate
+  first poll (Execution Summary decision #2) is not gated by any page timer at all, so its real
+  resolution speed is a genuine race against Playwright's assertions unless the mock route
+  deliberately delays it — see the `mockScreenSequence` design in Instructions §1 below.
 - `data-testid`s this step asserts on, all added by Step 2: `screener-checking`, `stop-polling`,
   `screener-polling-gave-up`; existing testids reused: `fundamentals-pending`, `insufficient-data`,
   `screen-results`, `run-screen` — `page.tsx:509-522` (existing), Step 2 Instructions §9 (new).
@@ -396,20 +418,76 @@ call ever, proving red. After Steps 1–2 land, re-run for green.
 
 **Instructions**:
 
-Append a new `test.describe('Screener — background data-readiness polling (feature 117)', () => {
-... })` block to the end of `screener.spec.ts`, after the existing `test.describe('Screener', ...)`
-block closes. Inside it:
-
-1. A local stateful mock helper (file-scoped to this `describe`, not exported — matches the existing
-   `mockScreen` convention at the top of the file):
+0. Create `services/xstockstrat-ui/e2e/fixtures/screenResults.ts` (single-arg factories, matching
+   the `backtests.ts`/`orders.ts` precedent — see Codebase Evidence):
    ```ts
-   function mockScreenSequence(page: Page, responses: Array<Record<string, unknown>>) {
+   /**
+    * Canonical ScreenResult scenario rows for the Screener e2e suite.
+    *
+    * Shape source: `xstockstrat.analysis.v1.ScreenResult`
+    * (packages/proto/analysis/v1/analysis.proto). `status: 2` is
+    * `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`; `status: 1` is `SCREEN_RESULT_STATUS_OK`. A `gap`
+    * distinguishes the two pending causes the Screener UI tells apart (feature 117 design.md):
+    * absent → fundamentals-pending; present → bars-insufficient.
+    *
+    * Registered in e2e/fixtures/INVENTORY.md — update it when this file changes.
+    */
+
+   /** A pending row whose fundamentals data source is unavailable (no `gap`). */
+   export function fundamentalsPendingRow(symbol: string) {
+     return { symbol, score: 0, passed: false, status: 2 };
+   }
+
+   /** A pending row with too few bars for a technical criterion (carries a `gap`). */
+   export function barsInsufficientRow(symbol: string) {
+     return {
+       symbol,
+       score: 0,
+       passed: false,
+       status: 2,
+       gap: { symbol, timeframe: 4, barsHave: '0', barsNeed: '2' },
+     };
+   }
+
+   /** A resolved (OK) row with an explicit score/criterionScores. */
+   export function resolvedRow(symbol: string, score: number, criterionScores?: Record<string, number>) {
+     return { symbol, score, passed: true, status: 1, criterionScores: criterionScores ?? { c1: score } };
+   }
+   ```
+   Update `INVENTORY.md`: move the existing "Screener results | `e2e/mock-backend.ts`
+   (`screenSymbols`)" row out of "Not yet centralized" and add it to the canonical fixtures table
+   (same row shape as the other entries): `Screener results | fundamentalsPendingRow,
+   barsInsufficientRow, resolvedRow | e2e/fixtures/screenResults.ts |
+   xstockstrat.analysis.v1.ScreenResult | e2e/insights/screener.spec.ts (feature 117 polling suite)`.
+   The `mock-backend.ts` global `screenSymbols` handler's own inline rows are unaffected — only
+   *new* scenario rows in this step use the fixtures; C-12 doesn't require retrofitting the
+   pre-existing global mock.
+1. Append a new `test.describe('Screener — background data-readiness polling (feature 117)', () =>
+   { ... })` block to the end of `screener.spec.ts`, after the existing
+   `test.describe('Screener', ...)` block closes, importing the three factories from Step 0. Inside
+   it, a local stateful mock helper (file-scoped to this `describe`, not exported — matches the
+   existing `mockScreen` convention at the top of the file):
+   ```ts
+   import { fundamentalsPendingRow, barsInsufficientRow, resolvedRow } from '../fixtures/screenResults';
+
+   // Every response after the first (i.e. every poll attempt — including the immediate one that
+   // fires the instant polling is enabled, which page.clock does NOT gate; see Codebase Evidence)
+   // is delayed `delayMs` in real Node time. This is what makes the "still checking" transient
+   // state deterministically observable by Playwright's assertions instead of racing a
+   // near-instant mocked round trip (impl-spec review finding).
+   function mockScreenSequence(
+     page: Page,
+     responses: Array<Record<string, unknown>>,
+     delayMs = 150,
+   ) {
      const state = { calls: 0 };
      const routed = page.route(
        '**/xstockstrat.analysis.v1.AnalysisService/ScreenSymbols',
-       (route) => {
-         const body = responses[Math.min(state.calls, responses.length - 1)];
+       async (route) => {
+         const call = state.calls;
          state.calls += 1;
+         if (call > 0) await new Promise((r) => setTimeout(r, delayMs));
+         const body = responses[Math.min(call, responses.length - 1)];
          route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });
        },
      );
@@ -417,28 +495,31 @@ block closes. Inside it:
    }
    ```
 2. **Test — resolves live (AC-1 start condition, AC-2, AC-4 visible-checking half):**
-   `await page.clock.install();` before `page.goto`. Mock a 2-response sequence: response 1 = one
-   `AAA` row `{ score: 0, passed: false, status: 2 }` (no `gap` → fundamentals-pending); response 2 =
-   the same `AAA` now `{ score: 0.8, passed: true, status: 1, criterionScores: { c1: 0.8 } }`. Run
-   the scan; assert `fundamentals-pending`, `screener-checking`, and `stop-polling` are all visible.
+   `await page.clock.install();` before `page.goto`. Mock a 2-response sequence via
+   `mockScreenSequence`: response 1 = `{ results: [fundamentalsPendingRow('AAA')], coverageGaps: [] }`;
+   response 2 = `{ results: [resolvedRow('AAA', 0.8)], coverageGaps: [] }`. Run the scan; assert
+   `fundamentals-pending`, `screener-checking`, and `stop-polling` are all visible (the 150ms delay
+   on the immediate poll's response gives this a reliable window — see Instructions §1).
    `await page.clock.fastForward(60_000);` (the exported `POLL_INTERVAL_MS` value — hardcode `60_000`
    in the test with a comment citing the constant, since e2e specs don't import service internals).
    Assert `fundamentals-pending` and `screener-checking` both have count 0, and `state.calls === 2`.
 3. **Test — caps at 5 attempts and shows an honest "gave up" state (AC-3 cap half):** mock a
-   single always-`INSUFFICIENT_DATA` response (repeats via `Math.min(...)` clamping). Run the scan;
-   assert `screener-checking` visible. `await page.clock.fastForward(60_000);` **four** times (the
-   immediate first check + 4 more spaced ticks = 5 total poll attempts, per this spec's Execution
-   Summary decision #2). Assert `screener-polling-gave-up` is visible, `screener-checking` has count
-   0, and `state.calls === 6` (1 initial scan + 5 poll attempts).
+   single always-pending response (`[fundamentalsPendingRow('AAA')]`, repeats via `Math.min(...)`
+   clamping) via `mockScreenSequence`. Run the scan; assert `screener-checking` visible.
+   `await page.clock.fastForward(60_000);` **four** times (the immediate first check + 4 more spaced
+   ticks = 5 total poll attempts, per this spec's Execution Summary decision #2). Assert
+   `screener-polling-gave-up` is visible, `screener-checking` has count 0, and `state.calls === 6`
+   (1 initial scan + 5 poll attempts).
 4. **Test — "Stop checking" halts further attempts (AC-4 stop half):** same always-pending mock. Run
    the scan; wait for `screener-checking` visible; capture `state.calls` into `callsAtStop`; click
    `stop-polling`; assert `screener-checking` has count 0. `await page.clock.fastForward(5 * 60_000);`
    (well past the cadence); assert `state.calls === callsAtStop` (no further network calls after
    stopping).
 5. **Test — fundamentals-pending and bars-insufficient resolve independently (AC-5):** mock a
-   3-response sequence: response 1 = `AAA` fundamentals-pending (`status: 2`, no `gap`) + `BBB`
-   bars-insufficient (`status: 2`, `gap: { symbol: 'BBB', timeframe: 4, barsHave: '0', barsNeed:
-   '2' }`); response 2 = `AAA` resolved to OK, `BBB` still bars-insufficient; response 3 = both OK.
+   3-response sequence via `mockScreenSequence`: response 1 =
+   `{ results: [fundamentalsPendingRow('AAA'), barsInsufficientRow('BBB')], coverageGaps: [] }`;
+   response 2 = `{ results: [resolvedRow('AAA', 0.8), barsInsufficientRow('BBB')], coverageGaps: [] }`;
+   response 3 = `{ results: [resolvedRow('AAA', 0.8), resolvedRow('BBB', 0.6)], coverageGaps: [] }`.
    Run the scan; assert `fundamentals-pending` and `insufficient-data` both visible.
    `fastForward(60_000)` once; assert `fundamentals-pending` count 0, `insufficient-data` still
    visible, `screener-checking` still visible (BBB still pending). `fastForward(60_000)` again;
@@ -448,28 +529,50 @@ block closes. Inside it:
    scan; assert `screener-checking` has count 0 both immediately and after
    `fastForward(5 * 60_000)`.
 7. **Test — navigating away and back starts fresh, with no residual polling status (AC-6):** mock a
-   single always-pending response. Run the scan; assert `screener-checking` visible.
-   `page.goto('/insights/watchlists')` then `page.goto('/insights/screener')`; assert both
-   `screener-checking` and `screen-results` have count 0 (component remounted, all local state reset
-   — no scan, no results, no polling; consistent with the stateless-scan contract, FR-7/AC-6).
+   single always-pending response (`mockScreenSequence`, `[fundamentalsPendingRow('AAA')]`). Run the
+   scan; assert `screener-checking` visible. `page.goto('/insights/watchlists')` then
+   `page.goto('/insights/screener')`; assert both `screener-checking` and `screen-results` have
+   count 0 (component remounted, all local state reset — no scan, no results, no polling;
+   consistent with the stateless-scan contract, FR-7/AC-6).
 8. **Test — an erroring poll (not just a still-pending response) still gives up honestly at the cap
-   (regression guard for a defect caught during impl-spec review, see context.md):** mock the
-   *initial* scan as a normal always-pending 200 response, but route every poll attempt to a non-200
-   failure instead (e.g. `route.fulfill({ status: 500, body: 'boom' })`, or `route.abort()` — either
-   makes `analysisClient.screenSymbols()` reject). Run the scan; assert `screener-checking` visible
-   ("attempt 1 of 5"). `await page.clock.fastForward(60_000);` four times. Assert
-   `screener-polling-gave-up` is visible and `screener-checking` has count 0 — proving the page-level
-   `pollAttempts` counter advances on a **failed** poll exactly like a successful-but-still-pending
-   one (the `poll.error` branch added to the Step 2 §7 `useEffect`), not just frozen at "attempt 1".
+   (regression guard for a defect caught during impl-spec review, see context.md):** a dedicated
+   local helper (same file, mirrors `mockScreenSequence`'s delay treatment so the same race
+   consideration applies):
+   ```ts
+   function mockScreenInitialThenErroring(page: Page, initialBody: Record<string, unknown>, delayMs = 150) {
+     const state = { calls: 0 };
+     page.route('**/xstockstrat.analysis.v1.AnalysisService/ScreenSymbols', async (route) => {
+       const call = state.calls;
+       state.calls += 1;
+       if (call === 0) {
+         route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(initialBody) });
+         return;
+       }
+       await new Promise((r) => setTimeout(r, delayMs));
+       route.fulfill({ status: 500, contentType: 'text/plain', body: 'boom' });
+     });
+     return state;
+   }
+   ```
+   Mock the *initial* scan as `{ results: [fundamentalsPendingRow('AAA')], coverageGaps: [] }` (call
+   0, undelayed), then every poll attempt (call ≥ 1) 500s after the delay. Run the scan; assert
+   `screener-checking` visible showing "attempt 1 of 5" (reliable now — the delay keeps
+   `pollAttempts` at 0 until well after this assertion runs, unlike the undelayed race the review
+   flagged). `await page.clock.fastForward(60_000);` four times. Assert `screener-polling-gave-up`
+   is visible and `screener-checking` has count 0 — proving the page-level `pollAttempts` counter
+   advances on a **failed** poll exactly like a successful-but-still-pending one (the `poll.error`
+   branch added to the Step 2 §7 `useEffect`), not just frozen at "attempt 1".
 
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm run lint
 cd services/xstockstrat-ui && pnpm exec playwright test insights/screener.spec.ts
 ```
-All 8 new tests pass, and all pre-existing tests in `screener.spec.ts` (the 9 listed in the file
-today) continue to pass unmodified — proving AC-6's "no regression to the existing PR #902
-badge/banner behavior." No coverage threshold applies to `xstockstrat-ui` (Next.js — e2e-only per
+All 7 new tests (Instructions §2–§8; §0–§1 are fixture/helper setup, not tests themselves) pass,
+and all pre-existing tests in `screener.spec.ts` (10 today, confirmed via
+`grep -c "^\s*test("` — not the 9 an earlier draft of this spec miscounted) continue to pass
+unmodified — proving AC-6's "no regression to the existing PR #902 badge/banner behavior." No
+coverage threshold applies to `xstockstrat-ui` (Next.js — e2e-only per
 `.claude/skills/sdd-spec/reference/spec-template.md` § Test step pairing rule coverage table);
 this Playwright run is the required verification.
 

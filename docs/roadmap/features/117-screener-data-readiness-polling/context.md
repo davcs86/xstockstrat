@@ -157,3 +157,35 @@ fixed in `implementation-spec.md` directly (not deferred to a later step):
   right process step for anything this read-through missed.
 
 Next: `/sdd-review screener-data-readiness-polling impl-spec`.
+
+## Session 2026-08-08 — sdd-review impl-spec (advisory)
+
+- Result: 0 blockers, 2 warnings, 1 note (advisory — did not block). No `F-*` Floor risk found.
+  Overlap scan: clean (no shared file/config-key/proto-field/migration collision with any other
+  in-flight feature; only other `implementation-ready`/`in-progress` feature,
+  `096-position-and-order-detail-pages`, touches a fully disjoint file set).
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 3: `e2e/fixtures/INVENTORY.md` lists "Screener results" under "Not yet centralized"
+    (C-12) — [x] resolved: added `e2e/fixtures/screenResults.ts` (3 single-arg factories) + an
+    `INVENTORY.md` Files entry to Step 3 directly, rather than leaving it for `/sdd-execute` to
+    discover.
+  - Step 3 Tests 2/5/8: a genuine timing race — `page.clock` virtualizes page timers only, not how
+    fast a mocked `page.route` handler resolves in real Node time, and the immediate first poll
+    (Execution Summary decision #2) isn't gated by any page timer at all — [x] resolved: reworked
+    `mockScreenSequence` (and the new `mockScreenInitialThenErroring` for Test 8) to delay every
+    response after the first by 150ms real time, giving Playwright's assertions a deterministic
+    window to observe the transient "checking" state before it flips.
+  - Step 3 Verification: test-count prose was wrong ("8 new tests" / "9 pre-existing") — [x]
+    resolved: corrected to 7 new tests (§2–§8; §0–§1 are fixture/helper setup) and 10 pre-existing
+    (confirmed by the reviewer's own grep).
+- This spec-reviewer subagent's Step 1/Step 2 bug-hunt (explicitly asked to look for "any remaining
+  bug like the one already caught") re-traced the `poll.error` fix above line-by-line and found no
+  further logic errors — independent confirmation, not just self-report.
+- All three findings above were fixed directly in `implementation-spec.md` rather than left as
+  `[ ] unaddressed` for `/sdd-execute` to pick up — a deliberate deviation from this skill's default
+  "advisory only, record and move on" flow (recorded per P-03): none of the three needed a design
+  decision or user input, all were mechanical corrections to an as-yet-unexecuted plan, so fixing
+  them immediately was strictly better than shipping a known-wrong spec forward. No code has been
+  written yet — implementation-spec.md is still pre-execution.
+
+Next: `/sdd-execute screener-data-readiness-polling` (or `next`/a step number).
