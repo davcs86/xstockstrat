@@ -40,10 +40,11 @@ async function callBff(
 
 test.describe('GET /api/config — namespace config table data contract', () => {
   /**
-   * [namespace]/page.tsx (NamespacePage) accesses:
+   * [namespace]/NamespaceEditor.tsx accesses:
    *   data.keys                       → array iteration (data.keys ?? [])
    *   k.key                           → TableCell font-mono, row key prop
-   *   k.defaultValue                  → displayed in Value column (or '[secret]' if isSecret)
+   *   k.currentValue                  → displayed in Value column + edit-prefill (or '[secret]' if isSecret)
+   *   k.defaultValue                  → seed metadata only (CONFIG-2); NOT read for display
    *   k.description                   → Description column (hidden on mobile)
    *   k.isSecret                      → boolean gate: hides value + disables Edit button
    *   k.consumingService              → (not rendered, but part of ConfigKey interface)
@@ -76,7 +77,8 @@ test.describe('GET /api/config — namespace config table data contract', () => 
     expect(keys.length).toBeGreaterThan(0);
     for (const k of keys) {
       expect(k).toHaveProperty('key'); // row key + displayed in Key column
-      expect(k).toHaveProperty('defaultValue'); // displayed in Value column
+      expect(k).toHaveProperty('defaultValue'); // seed metadata only (CONFIG-2)
+      expect(k).toHaveProperty('currentValue'); // displayed in Value column + edit-prefill
       expect(k).toHaveProperty('description'); // Description column
       // isSecret is a proto3 bool — false (zero value) is omitted from JSON;
       // absent means false, which is the correct semantic for the component
@@ -84,7 +86,7 @@ test.describe('GET /api/config — namespace config table data contract', () => 
     }
   });
 
-  test('non-secret key: defaultValue is a readable string (not [secret])', async ({ page }) => {
+  test('non-secret key: currentValue is a readable string (not [secret])', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto('/auth/login');
     const { body } = await callBff(page, CONFIG_BFF, {
@@ -96,11 +98,11 @@ test.describe('GET /api/config — namespace config table data contract', () => 
 
     const nonSecret = keys.find((k) => !k.isSecret);
     expect(nonSecret).toBeDefined();
-    expect(typeof nonSecret!.defaultValue).toBe('string');
-    expect(nonSecret!.defaultValue).not.toBe('[secret]');
+    expect(typeof nonSecret!.currentValue).toBe('string');
+    expect(nonSecret!.currentValue).not.toBe('[secret]');
   });
 
-  test('secret key: isSecret is true and value is masked', async ({ page }) => {
+  test('secret key: isSecret is true and default/current values are masked', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto('/auth/login');
     const { body } = await callBff(page, CONFIG_BFF, {
@@ -118,6 +120,31 @@ test.describe('GET /api/config — namespace config table data contract', () => 
 
     expect(secretKey.isSecret).toBe(true);
     expect(secretKey.defaultValue).toBe('[secret]');
+    expect(secretKey.currentValue).toBe('[secret]');
+  });
+
+  test('a value freshly written by SetConfig is what the next ListKeys reports as currentValue', async ({
+    page,
+  }) => {
+    // Regression coverage for the config-ui "editing configs" bug (docs/reports/
+    // 2026-08-07-config-ui-value-not-updating-defect.md): ListKeys used to expose only the
+    // seed defaultValue, which a SetConfig write never touches, so a saved edit was invisible
+    // to any caller of this RPC — not just the NamespaceEditor UI.
+    await addAdminCookie(page);
+    await page.goto('/auth/login');
+    await callBff(page, SET_CONFIG_BFF, setConfigPayload());
+
+    const { body } = await callBff(page, CONFIG_BFF, {
+      namespace: 'platform',
+      environment: 1,
+      tradingMode: 0,
+    });
+    const keys = body.keys as Array<Record<string, unknown>>;
+    const logLevel = keys.find((k) => k.key === 'platform.log_level');
+    expect(logLevel).toBeDefined();
+    // setConfigPayload()'s default value is 'debug'.
+    expect(logLevel!.currentValue).toBe('debug');
+    expect(logLevel!.defaultValue).not.toBe('debug');
   });
 
   test('env and mode params are forwarded to ListKeys as proto enums', async ({ page }) => {
@@ -152,7 +179,7 @@ test.describe('POST /api/config — inline edit save flow', () => {
     const { status, body } = await callBff(
       page,
       SET_CONFIG_BFF,
-      setConfigPayload({ value: { value: { case: 'stringVal', value: 'warn' } } }),
+      setConfigPayload({ value: { stringVal: 'warn' } }),
     );
     expect(status).toBe(200);
     expect(body).not.toHaveProperty('error');
@@ -169,7 +196,7 @@ test.describe('POST /api/config — inline edit save flow', () => {
       SET_CONFIG_BFF,
       setConfigPayload({
         key: 'platform.maintenance_mode',
-        value: { value: { case: 'boolVal', value: true } },
+        value: { boolVal: true },
         reason: 'should be rejected',
       }),
     );
