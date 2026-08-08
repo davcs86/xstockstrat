@@ -2,13 +2,23 @@
 
 **Status**: `pending`
 **Created**: 2026-08-08
-**Feature**: `docs/roadmap/features/117-screener-data-readiness-polling/feature.md`
+**Feature**: `docs/roadmap/features/118-screener-data-readiness-polling/feature.md`
 **Total Steps**: 3
 **Feature Branch**: `feature/screener-data-readiness-polling`
 
 ---
 
 ## Execution Summary
+
+**Re-spec note (2026-08-08, conditional re-spec per sequential-mode §5.3 — evidence only, no logic
+change):** every `page.tsx` line-number citation below was re-verified and corrected against the
+current file after `117-screener-fundamental-metric-selector` (a different, already
+`code-completed` feature that independently claimed number `117`, resolved by renumbering this
+feature to `118` — see `merge-order.md` and `context.md`) landed on `main-dev` and shifted lines by
+inserting a `Select` dropdown for the Fundamental-kind metric field. That feature's change and this
+one are in disjoint regions of the file (its edit is inside the criterion-row rendering block; this
+spec's Steps 2/3 touch state management, the results derivation, and the results-table/banner JSX)
+— no step's actual instructions or code changed, only the `path:line` citations that had drifted.
 
 Three steps, all in `xstockstrat-ui` (`/insights/screener`), no other service touched — matching
 design.md's "No proto, servicer, or `xstockstrat-analysis` engine changes" conclusion. Step 1 adds a
@@ -63,7 +73,7 @@ Constitution P-03 — not silent):
 
 ### Step 1 — service: add the poll-capable sibling hook to `useScreenSymbols.ts`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/hooks/useScreenSymbols.ts` — modify
@@ -80,7 +90,7 @@ direct DB access (except audit log)
   `refetchInterval: (query) => { const status = query.state.data?.status; return status !== undefined
   && isTerminal(status) ? false : 4000; }` — `services/xstockstrat-ui/src/hooks/useBackfills.ts:35-45`.
 - Proto fields confirmed unchanged: `ScreenResultStatus.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA = 2` →
-  TS `ScreenResultStatus.INSUFFICIENT_DATA` (already imported/used in `page.tsx:28,153`);
+  TS `ScreenResultStatus.INSUFFICIENT_DATA` (already imported/used in `page.tsx:28,157`);
   `ScreenResult.gap`, `ScreenResult.symbol` — `packages/proto/analysis/v1/analysis.proto:351-403`.
 - `@tanstack/react-query` pinned at `5.100.14` (resolved) — `pnpm-lock.yaml:1981,1984`; `package.json`
   declares `"@tanstack/react-query": "^5.62.0"` (`services/xstockstrat-ui/package.json:37`).
@@ -93,7 +103,7 @@ direct DB access (except audit log)
 - No config key needed — `analysis.screener.*` keys unaffected
   (`services/xstockstrat-analysis/CLAUDE.md` "Config Keys Consumed"); this constant is deliberately a
   plain TS value per design.md § Chosen Approach (Cadence/attempts), following the `TOP_N` precedent
-  (`services/xstockstrat-ui/src/app/insights/screener/page.tsx:58-60`).
+  (`services/xstockstrat-ui/src/app/insights/screener/page.tsx:62-64`).
 
 **TDD**: `red-green required` (paired with Step 3's tests — see Step Dependencies)
 
@@ -165,7 +175,7 @@ check only; Step 3's tests are what prove the behavior.
 
 ### Step 2 — service: wire background polling into the Screener page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/screener/page.tsx` — modify
@@ -176,18 +186,18 @@ direct DB access (except audit log)
 
 **Codebase Evidence**:
 - Current `useScreenSymbols()` call + `runScan()` (builds the request inline as `.mutate()`'s first
-  arg) — `services/xstockstrat-ui/src/app/insights/screener/page.tsx:79,110-142`.
+  arg) — `services/xstockstrat-ui/src/app/insights/screener/page.tsx:83,114-146`.
 - Current `results` derivation `const results = screen.data?.results ?? [];` and pending-row
-  derivation `pendingFundamentals` — `page.tsx:144-154`.
+  derivation `pendingFundamentals` — `page.tsx:148-158`.
 - Existing pending banner (PR #902) to place the new affordance beside —
-  `page.tsx:438-446`.
+  `page.tsx:451-459`.
 - Existing per-row status badge (already reads `r.status`/`r.gap` reactively from `results` — no
   change needed here; it "self-updates" once `results` state updates from a merge) —
-  `page.tsx:508-525`.
+  `page.tsx:521-539`.
 - `TOP_N` UI-constant precedent (comment: "not a WatchConfig key, Floor F-07 unaffected") —
-  `page.tsx:58-60`.
+  `page.tsx:62-64`.
 - `Button` component with `variant="secondary"` already used for a similar secondary action
-  ("save-as-watchlist") — `page.tsx:403-411`.
+  ("save-as-watchlist") — `page.tsx:416-424`.
 
 **TDD**: `red-green required` (paired with Step 3's tests — see Step Dependencies)
 
@@ -206,9 +216,9 @@ direct DB access (except audit log)
    } from '@/hooks/useScreenSymbols';
    ```
 3. Add a module-level merge helper near the existing `comparatorGlyph`/`newCriterion` helpers
-   (`page.tsx:62-76`):
+   (`page.tsx:66-80`):
    ```ts
-   // Feature 117: merges a poll response into the displayed results by symbol, preserving row order
+   // Feature 118: merges a poll response into the displayed results by symbol, preserving row order
    // (avoids the table visibly reordering every 60s) — safe because every poll response is a full,
    // correctly-normalized result set for the identical symbol+criteria universe, not a partial one to
    // reconcile (design.md § Chosen Approach — full-scan recheck, never narrowed).
@@ -220,7 +230,7 @@ direct DB access (except audit log)
      return current.map((r) => bySymbol.get(r.symbol) ?? r);
    }
    ```
-4. In the component, replace the `lastRun` state block (`page.tsx:86-88`) area by adding four more
+4. In the component, replace the `lastRun` state block (`page.tsx:90-92`) area by adding four more
    `useState` declarations alongside it:
    ```ts
    const [results, setResults] = useState<ScreenSymbolsResult['results']>([]);
@@ -229,9 +239,9 @@ direct DB access (except audit log)
    const [pollingEnabled, setPollingEnabled] = useState(true);
    const [pollAttempts, setPollAttempts] = useState(0);
    ```
-5. Delete the old line `const results = screen.data?.results ?? [];` (`page.tsx:144`) — replaced by
+5. Delete the old line `const results = screen.data?.results ?? [];` (`page.tsx:148`) — replaced by
    the `results` state above.
-6. Move the pending-row derivation (`page.tsx:145-154`) to right after the new state block (before
+6. Move the pending-row derivation (`page.tsx:149-158`) to right after the new state block (before
    `runScan()`, since the poll hook call in the next sub-step needs `pendingRows` in scope), and
    broaden it per FR-3 (both `INSUFFICIENT_DATA` causes drive polling; `pendingFundamentals` stays
    the narrower subset the existing banner text is specific to):
@@ -239,7 +249,7 @@ direct DB access (except audit log)
    // INSUFFICIENT_DATA has two distinct causes the backend already tells apart (see
    // services/xstockstrat-analysis/app/services/screener.py): too few bars for a technical
    // criterion (carries a `gap`) vs. the fundamentals data source being unavailable (no `gap`).
-   // Both drive the background auto-recheck uniformly (feature 117, FR-3).
+   // Both drive the background auto-recheck uniformly (feature 118, FR-3).
    const pendingRows = results.filter((r) => r.status === ScreenResultStatus.INSUFFICIENT_DATA);
    const pendingFundamentals = pendingRows.filter((r) => !r.gap);
    ```
@@ -264,7 +274,7 @@ direct DB access (except audit log)
      setPollAttempts((n) => n + 1);
    }, [poll.data, poll.error]);
    ```
-8. Update `runScan()` (`page.tsx:110-142`) to capture the request object, reset per-scan polling
+8. Update `runScan()` (`page.tsx:114-146`) to capture the request object, reset per-scan polling
    state, and seed `results`/`lastScanReq` on success:
    ```ts
    function runScan() {
@@ -294,7 +304,7 @@ direct DB access (except audit log)
          return { ...base, metricName: c.metricName };
        }),
      };
-     // Feature 117 — scan-generation guard: bump before mutate so a still-in-flight poll from a
+     // Feature 118 — scan-generation guard: bump before mutate so a still-in-flight poll from a
      // superseded scan is orphaned; reset per-scan polling state so a stopped/exhausted previous
      // scan's status never leaks into the new one (closes the "stale permanent opt-out" gap).
      setScanGeneration((g) => g + 1);
@@ -311,8 +321,8 @@ direct DB access (except audit log)
    }
    ```
 9. In the JSX, inside the existing `{!screen.isPending && results.length > 0 && (<> ... </>)}` block
-   (`page.tsx:378-448`), immediately after the existing `pendingFundamentals` banner
-   (`page.tsx:438-446`) and still inside the same fragment, add the checking/stop/gave-up affordance
+   (`page.tsx:391-461`), immediately after the existing `pendingFundamentals` banner
+   (`page.tsx:451-459`) and still inside the same fragment, add the checking/stop/gave-up affordance
    (FR-6):
    ```tsx
    {pendingRows.length > 0 && pollingEnabled && pollAttempts < MAX_POLL_ATTEMPTS && (
@@ -341,7 +351,7 @@ direct DB access (except audit log)
      </p>
    )}
    ```
-   No change is needed to the results-table badge JSX (`page.tsx:508-525`) — it already reads
+   No change is needed to the results-table badge JSX (`page.tsx:521-539`) — it already reads
    `r.status`/`r.gap` from each row of `results`, so a merged-in resolved row renders the "OK" badge
    automatically.
 
@@ -357,7 +367,7 @@ the polling/merge/cap behavior — see the red-green pairing in Step Dependencie
 
 ### Step 3 — test: Playwright coverage for background data-readiness polling
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/screener.spec.ts` — modify (append a new `test.describe`
@@ -409,7 +419,7 @@ direct DB access (except audit log)
   deliberately delays it — see the `mockScreenSequence` design in Instructions §1 below.
 - `data-testid`s this step asserts on, all added by Step 2: `screener-checking`, `stop-polling`,
   `screener-polling-gave-up`; existing testids reused: `fundamentals-pending`, `insufficient-data`,
-  `screen-results`, `run-screen` — `page.tsx:509-522` (existing), Step 2 Instructions §9 (new).
+  `screen-results`, `run-screen` — `page.tsx:522-537` (existing), Step 2 Instructions §9 (new).
 
 **TDD**: `red-green required`. Run this suite against the tree from before Step 1/2 (or comment out
 Steps 1–2's changes) first — `screener-checking`/`stop-polling`/`screener-polling-gave-up` will never
@@ -427,7 +437,7 @@ call ever, proving red. After Steps 1–2 land, re-run for green.
     * Shape source: `xstockstrat.analysis.v1.ScreenResult`
     * (packages/proto/analysis/v1/analysis.proto). `status: 2` is
     * `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`; `status: 1` is `SCREEN_RESULT_STATUS_OK`. A `gap`
-    * distinguishes the two pending causes the Screener UI tells apart (feature 117 design.md):
+    * distinguishes the two pending causes the Screener UI tells apart (feature 118 design.md):
     * absent → fundamentals-pending; present → bars-insufficient.
     *
     * Registered in e2e/fixtures/INVENTORY.md — update it when this file changes.
@@ -458,11 +468,11 @@ call ever, proving red. After Steps 1–2 land, re-run for green.
    (`screenSymbols`)" row out of "Not yet centralized" and add it to the canonical fixtures table
    (same row shape as the other entries): `Screener results | fundamentalsPendingRow,
    barsInsufficientRow, resolvedRow | e2e/fixtures/screenResults.ts |
-   xstockstrat.analysis.v1.ScreenResult | e2e/insights/screener.spec.ts (feature 117 polling suite)`.
+   xstockstrat.analysis.v1.ScreenResult | e2e/insights/screener.spec.ts (feature 118 polling suite)`.
    The `mock-backend.ts` global `screenSymbols` handler's own inline rows are unaffected — only
    *new* scenario rows in this step use the fixtures; C-12 doesn't require retrofitting the
    pre-existing global mock.
-1. Append a new `test.describe('Screener — background data-readiness polling (feature 117)', () =>
+1. Append a new `test.describe('Screener — background data-readiness polling (feature 118)', () =>
    { ... })` block to the end of `screener.spec.ts`, after the existing
    `test.describe('Screener', ...)` block closes, importing the three factories from Step 0. Inside
    it, a local stateful mock helper (file-scoped to this `describe`, not exported — matches the
@@ -569,10 +579,10 @@ cd services/xstockstrat-ui && pnpm run lint
 cd services/xstockstrat-ui && pnpm exec playwright test insights/screener.spec.ts
 ```
 All 7 new tests (Instructions §2–§8; §0–§1 are fixture/helper setup, not tests themselves) pass,
-and all pre-existing tests in `screener.spec.ts` (10 today, confirmed via
-`grep -c "^\s*test("` — not the 9 an earlier draft of this spec miscounted) continue to pass
-unmodified — proving AC-6's "no regression to the existing PR #902 badge/banner behavior." No
-coverage threshold applies to `xstockstrat-ui` (Next.js — e2e-only per
+and all pre-existing tests in `screener.spec.ts` (**12** as of the re-spec — `main-dev` gained 2
+more from `117-screener-fundamental-metric-selector` since this count was first written; re-confirmed
+via `grep -c "^\s*test("`) continue to pass unmodified — proving AC-6's "no regression to the
+existing PR #902 badge/banner behavior." No coverage threshold applies to `xstockstrat-ui` (Next.js — e2e-only per
 `.claude/skills/sdd-spec/reference/spec-template.md` § Test step pairing rule coverage table);
 this Playwright run is the required verification.
 
@@ -581,3 +591,42 @@ this Playwright run is the required verification.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 2 — wire background polling into the Screener page
+
+**Spec said**: Instructions §7's `useEffect` snippet keys its dependency array on
+`[poll.data, poll.error]` and guards with `if (poll.data === undefined && poll.error === undefined) return;`.
+
+**Actual**: Keyed the effect on `[poll.dataUpdatedAt, poll.errorUpdatedAt]` instead (TanStack
+`QueryObserverResult` timestamp fields), guarding with
+`if (poll.dataUpdatedAt === 0 && poll.errorUpdatedAt === 0) return;`. `poll.data` is still read
+inside the effect body to merge into `results` (`react-hooks/exhaustive-deps` suppressed with an
+inline comment explaining why).
+
+**Reason**: Running the (not-yet-committed) Step 3 Playwright suite against this step's real
+implementation — the TDD-gate green run — surfaced that TanStack Query's structural sharing keeps
+`poll.data`'s object reference stable across successive polls that return a byte-identical response.
+That's the *normal* case for this feature: a still-pending row comes back unchanged on every retry
+until the underlying data resolves. With the spec's original `[poll.data, poll.error]` dependency,
+the effect fired once and then silently never fired again for identical-valued retries, freezing
+`pollAttempts` at 1 forever — even though the query's own internal counter (`dataUpdateCount` +
+`errorUpdateCount`, used inside `refetchInterval`) correctly kept incrementing and correctly stopped
+scheduling further fetches at the cap. The visible symptom: the UI stays stuck on "Checking… attempt
+1 of 5" forever instead of ever reaching "Gave up" — the exact kind of dishonest status this whole
+feature exists to prevent. `dataUpdatedAt`/`errorUpdatedAt` are fresh timestamps on every fetch
+regardless of structural sharing, so keying on them fixes the freeze without changing any other
+behavior. Confirmed via the Step 3 suite's two cap-exhaustion tests, both green after this fix.
+
+Also fixed, in the same TDD-gate pass, a timing bug in the not-yet-committed Step 3 test file itself
+(`e2e/insights/screener.spec.ts`): the two cap-exhaustion tests advanced Playwright's virtualized
+page clock (`page.clock.fastForward`) in a tight loop with no real-time wait between iterations, but
+each mocked poll response is deliberately delayed 150ms in *real* Node time (`mockScreenSequence`'s
+`delayMs`, page.clock doesn't gate that). Advancing virtual time faster than the real delayed
+response could land undercounted attempts by one. Added a real `page.waitForTimeout(300)` after the
+initial checking-visible assertion and after each `fastForward` in the loop, letting each attempt's
+real-time route delay actually resolve before the next virtual-time jump. This is inside Step 3's
+file scope but was fixed here since it's what the TDD-gate green run for this step required — Step 3
+will re-verify and commit the file with this fix already in place.
+
+**Ledger**: logged as a generalizable TanStack Query gotcha in `docs/roadmap/ledger/fails.md`
+(structural sharing vs. attempt-counting effects).
