@@ -113,3 +113,28 @@
   - No existing automated test asserts `Skeleton`'s `data-testid="skeleton"` or `TableRow`'s custom
     hover/selected classes — Step 5's reconciliation of those two files has no red-before-green
     target; verified by grep + the Step 10 full sweep instead.
+
+## Session 2026-08-08T01:15:00Z — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 9 warnings, 1 note (advisory — did not block). Overlap scan: CLEAN (no
+  collision with the only other in-flight feature, `096-position-and-order-detail-pages` — a
+  benign shared-component dependency on `button.tsx`/`badge.tsx`, already covered by this
+  feature's own Step 10 manual spot-check).
+- All 9 warnings + the 1 note fixed in this same session (implementation-spec.md edited directly,
+  before execution started — no F-09 concern, spec wasn't yet "during execution"):
+  - [x] Steps 1, 3, 5, 6, 7 — added scoped `pnpm exec eslint <touched files>` to each step's
+    Verification (the reviewer's core finding: no lint gate existed anywhere before Step 10).
+  - [x] Step 2 — expanded the brace-expansion `Files` shorthand
+    (`{badge,button,...}.tsx`) into 10 literal file paths (B2 criterion: no wildcards).
+  - [x] Step 9 — no source files besides `package.json`/`pnpm-lock.yaml`; no eslint gate needed
+    (not source-code-shaped), left as-is — reviewer flagged this gap generically across "every
+    service step," but Step 9 has no `.ts`/`.tsx` file to lint.
+  - [x] Step 10 — added whole-repo `pnpm run lint` (the first whole-repo lint pass in the spec)
+    and restated the exact coverage gate (`coverage_threshold: 40`, `ci.yml:561-562`) explicitly
+    in both Instructions and Verification, rather than only citing the config that enforces it.
+  - [x] Step 11 — corrected two loose `CLAUDE.md` line-range citations: Language Versions &
+    Tooling table is `:111-122` (not `:109-116`, which starts at the heading and stops short of
+    the Vitest row); Version Bump Workflow's "Tool | Files to update" table is `:143-149` (not
+    `:139-148`, which starts at the numbered-list item above the table).
+- No Floor (`F-*`) risk found. No unresolved items remain.
+- Next: `/sdd-execute shadcn-ui-migration`.
