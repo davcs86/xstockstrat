@@ -284,3 +284,40 @@ Next: Step 1.
 - Files modified: `services/xstockstrat-ui/src/hooks/useScreenSymbols.ts`.
 - Deviations: none.
 - Green not yet re-run (Step 2 must land first — `useScreenSymbolsPoll` is unused until then).
+
+### Step 2 — service: wire background polling into the Screener page [done]
+- Discovery re-verified every `**Codebase Evidence**` citation directly against the current
+  `page.tsx` (551 lines) — all matched exactly, no drift since the re-spec.
+- Implemented per Instructions §1-9: `useEffect` import, `useScreenSymbols` import broadened,
+  `mergeResultsBySymbol` helper, the five new `useState` declarations, the `pendingRows`/
+  `pendingFundamentals` derivation move+broaden, the `poll`/`useEffect` pair, `runScan()`'s
+  scan-generation-guard rewrite, and the checking/stop/gave-up JSX block. `tsc --noEmit` and
+  `pnpm run lint` both clean.
+- **TDD gate (red→green, paired with Step 3 per Step Dependencies)**: RED was captured before
+  Step 1 (see that entry — 6/7 new tests failed on missing testids). With Step 1+2 both landed,
+  ran the full Step 3 suite (not yet committed) against the real implementation:
+  `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium pnpm exec playwright test
+  e2e/insights/screener.spec.ts --workers=1` → **20/20 passed** (13 pre-existing + 7 new feature-118
+  tests) after two fixes made during this gate (see Deviation Log entry "Step 2" for full detail):
+  1. `page.tsx`'s poll-merge `useEffect` keyed on `[poll.data, poll.error]` (as literally specced)
+     froze `pollAttempts` at 1 forever once TanStack's structural sharing started reusing the same
+     `data` reference across identical-valued retries (the *normal* case: a still-pending row is
+     byte-identical on every retry until it resolves) — the UI would silently stay on "Checking…
+     attempt 1 of 5" forever instead of ever reaching "Gave up," even though polling had actually
+     stopped internally at the cap. Fixed by keying on `[poll.dataUpdatedAt, poll.errorUpdatedAt]`
+     instead. Logged to `docs/roadmap/ledger/fails.md` (generalizable TanStack Query gotcha).
+  2. The not-yet-committed `screener.spec.ts` cap-exhaustion tests advanced `page.clock` in a tight
+     loop with no real-time wait between iterations, but each mocked poll response is deliberately
+     delayed 150ms in *real* Node time (page.clock only virtualizes the page's own timers). Added
+     real `page.waitForTimeout(300)` calls between fast-forwards so each attempt's real-time route
+     delay actually resolves before the next virtual-time jump — otherwise attempts undercounted by
+     one and the cap was never reached within the loop's 4 iterations.
+  - Isolated debug runs (ad hoc, deleted before commit) also confirmed two OTHER red failures seen
+    mid-investigation (the pre-existing "runs a scan…" test and the "Technical indicator…" test)
+    were sandbox cold-compile/HMR-compile-race flakes specific to this constrained environment, not
+    regressions from this step's diff — both pass reliably once the dev server has had time to
+    settle after a fresh navigation, and both passed cleanly on the final full run.
+- Files modified: `services/xstockstrat-ui/src/app/insights/screener/page.tsx`,
+  `services/xstockstrat-ui/e2e/insights/screener.spec.ts` (fix #2 above, ahead of Step 3's formal
+  commit — Step 3 will re-verify and commit this file with the fix already in place).
+- Deviations: see Deviation Log entry "Step 2" above (full detail).

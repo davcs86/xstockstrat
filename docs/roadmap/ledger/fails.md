@@ -792,3 +792,31 @@ ambiguity is logged here).
   proposed, not from the subset alone, regardless of which layer (server truncation vs. client
   narrowing) does the subsetting. Worth promoting to a Constitution ID if this recurs a third
   time in a different feature.
+
+### 2026-08-08 — screener-data-readiness-polling — execute (Step 2)
+- **Mistake**: a `useEffect` meant to fire "once per poll attempt" was keyed on
+  `[poll.data, poll.error]` (a TanStack `useQuery` result's data/error fields) instead of
+  `[poll.dataUpdatedAt, poll.errorUpdatedAt]`. TanStack Query's structural sharing reuses the
+  previous `data` object reference when a new response is deeply equal to the last one — and for
+  this feature that's the *normal* case, not an edge case: a still-pending row comes back
+  byte-identical on every 60s retry until the underlying data resolves. The effect fired once on
+  the first response and then never again for identical-valued retries, freezing the page-level
+  attempt counter at 1 forever, even though the query's own internal counter (used inside
+  `refetchInterval`) correctly kept incrementing and correctly stopped polling at the cap. Net
+  effect: the UI silently claimed "Checking… attempt 1 of 5" forever instead of ever showing
+  "Gave up" — a dishonest-status bug in a feature whose entire purpose is honest status. Caught by
+  actually running the (not-yet-committed) Step 3 Playwright suite against the real
+  implementation as the TDD-gate green run, not by design review or a code read.
+- **Evidence**: `docs/roadmap/features/118-screener-data-readiness-polling/implementation-spec.md`
+  Deviation Log, "Step 2"; `services/xstockstrat-ui/src/app/insights/screener/page.tsx` (the fixed
+  `useEffect`); `e2e/insights/screener.spec.ts`'s two cap-exhaustion tests.
+- **Rule it implies**: any effect (or other reference-identity-keyed logic) that must fire once
+  **per fetch attempt** on a TanStack `useQuery`/`useInfiniteQuery` result must key on a
+  timestamp field (`dataUpdatedAt`/`errorUpdatedAt`) or an explicit counter
+  (`dataUpdateCount`/`errorUpdateCount`), never on `data`/`error` object identity — structural
+  sharing collapses identical-valued responses to the same reference by design, and "the response
+  didn't change" is often the expected, repeated case for a polling/recheck feature, not a rare
+  one. A design or spec review reading the hook code in isolation is unlikely to catch this
+  because the bug only manifests when a real request/response round-trip actually happens with
+  repeated identical payloads — it requires exercising the real behavior, not just reading the
+  wiring.

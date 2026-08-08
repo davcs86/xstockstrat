@@ -175,7 +175,7 @@ check only; Step 3's tests are what prove the behavior.
 
 ### Step 2 — service: wire background polling into the Screener page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/screener/page.tsx` — modify
@@ -591,3 +591,42 @@ this Playwright run is the required verification.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 2 — wire background polling into the Screener page
+
+**Spec said**: Instructions §7's `useEffect` snippet keys its dependency array on
+`[poll.data, poll.error]` and guards with `if (poll.data === undefined && poll.error === undefined) return;`.
+
+**Actual**: Keyed the effect on `[poll.dataUpdatedAt, poll.errorUpdatedAt]` instead (TanStack
+`QueryObserverResult` timestamp fields), guarding with
+`if (poll.dataUpdatedAt === 0 && poll.errorUpdatedAt === 0) return;`. `poll.data` is still read
+inside the effect body to merge into `results` (`react-hooks/exhaustive-deps` suppressed with an
+inline comment explaining why).
+
+**Reason**: Running the (not-yet-committed) Step 3 Playwright suite against this step's real
+implementation — the TDD-gate green run — surfaced that TanStack Query's structural sharing keeps
+`poll.data`'s object reference stable across successive polls that return a byte-identical response.
+That's the *normal* case for this feature: a still-pending row comes back unchanged on every retry
+until the underlying data resolves. With the spec's original `[poll.data, poll.error]` dependency,
+the effect fired once and then silently never fired again for identical-valued retries, freezing
+`pollAttempts` at 1 forever — even though the query's own internal counter (`dataUpdateCount` +
+`errorUpdateCount`, used inside `refetchInterval`) correctly kept incrementing and correctly stopped
+scheduling further fetches at the cap. The visible symptom: the UI stays stuck on "Checking… attempt
+1 of 5" forever instead of ever reaching "Gave up" — the exact kind of dishonest status this whole
+feature exists to prevent. `dataUpdatedAt`/`errorUpdatedAt` are fresh timestamps on every fetch
+regardless of structural sharing, so keying on them fixes the freeze without changing any other
+behavior. Confirmed via the Step 3 suite's two cap-exhaustion tests, both green after this fix.
+
+Also fixed, in the same TDD-gate pass, a timing bug in the not-yet-committed Step 3 test file itself
+(`e2e/insights/screener.spec.ts`): the two cap-exhaustion tests advanced Playwright's virtualized
+page clock (`page.clock.fastForward`) in a tight loop with no real-time wait between iterations, but
+each mocked poll response is deliberately delayed 150ms in *real* Node time (`mockScreenSequence`'s
+`delayMs`, page.clock doesn't gate that). Advancing virtual time faster than the real delayed
+response could land undercounted attempts by one. Added a real `page.waitForTimeout(300)` after the
+initial checking-visible assertion and after each `fastForward` in the loop, letting each attempt's
+real-time route delay actually resolve before the next virtual-time jump. This is inside Step 3's
+file scope but was fixed here since it's what the TDD-gate green run for this step required — Step 3
+will re-verify and commit the file with this fix already in place.
+
+**Ledger**: logged as a generalizable TanStack Query gotcha in `docs/roadmap/ledger/fails.md`
+(structural sharing vs. attempt-counting effects).
