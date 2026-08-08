@@ -406,8 +406,8 @@ supply a `component` dict (same shape as a strategy component: `ref_name` / `kin
 `_build_component` and sends it, so `SCREEN_KIND_TECHNICAL_FORMULA` /
 `SCREEN_KIND_TECHNICAL_INDICATOR` criteria are **scored** (feature 090). An unknown fundamental
 `metric_name` — a typo of a closed field, or an open metric that no scanned symbol carries — is
-**rejected with `INVALID_ARGUMENT`** rather than silently skipped (only enforceable when
-fundamentals are available; a degraded scan still skips them).
+**rejected with `INVALID_ARGUMENT`** (only enforceable when fundamentals are available at all —
+see the `status` note below for when they aren't).
 
 **Return**
 
@@ -420,7 +420,7 @@ fundamentals are available; a degraded scan still skips them).
 }
 ```
 
-`status` is the `ScreenResultStatus` name (`SCREEN_RESULT_STATUS_OK` | `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`); `coverage_gaps` lists symbols lacking enough data to screen, each with its `timeframe` (enum name) and `bars_have`/`bars_need` (int64 as JSON **strings**, matching `run_backtest`). Gaps are computed **before** `rank_limit` truncation (feature 090), so an under-covered symbol ranked below the cut still appears.
+`status` is the `ScreenResultStatus` name (`SCREEN_RESULT_STATUS_OK` | `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`). A symbol is `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA` (`passed: false`, no score, absent from `criterion_scores`) whenever a requested criterion could not be evaluated for lack of underlying data — too few bars for a technical criterion, **or** the fundamentals source (FMP) being disabled/erroring/quota-exhausted while a fundamental criterion was requested (bug fix: a scan used to report these as `OK`/`passed: true` with the criterion simply missing from `criterion_scores`, indistinguishable from a candidate that genuinely passed). `coverage_gaps` covers **only the bars case** — each entry carries `timeframe` (enum name) and `bars_have`/`bars_need` (int64 as JSON **strings**, matching `run_backtest`) — a fundamentals-unavailable result has no `CoverageGap` (that message is bars-specific) and so never appears there. When fundamentals ARE available for the batch but a specific symbol's value is still missing (e.g. the source omitted that symbol), only that symbol's hard-filter criteria fail closed (`passed: false`) — its `status` stays `OK` since it isn't a whole-batch outage. Gaps are computed **before** `rank_limit` truncation (feature 090), so an under-covered symbol ranked below the cut still appears.
 
 **Errors**
 

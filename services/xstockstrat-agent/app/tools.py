@@ -466,7 +466,12 @@ def register_tools(server: MCPServer) -> None:
             (bool), "status"}], "coverage_gaps": [{"symbol", "timeframe", "bars_have",
             "bars_need"}]}. coverage_gaps now carries the full gap detail (bars_have/bars_need as
             JSON strings — int64) and is computed BEFORE rank truncation, so an under-covered
-            symbol ranked below the cut still surfaces. Filter candidates on `passed`."""
+            symbol ranked below the cut still surfaces (bars gaps only — see next line for
+            fundamentals). A result is "SCREEN_RESULT_STATUS_INSUFFICIENT_DATA" (passed=false, no
+            score, its ref_name absent from criterion_scores) whenever a requested criterion
+            couldn't be evaluated for lack of data — too few bars, or the fundamentals source
+            (FMP) unavailable while a fundamental criterion was requested; it is never reported
+            OK/passed just because a criterion had no data. Filter candidates on `passed`."""
         return await client.screen_symbols(
             symbols=symbols,
             criteria=criteria,
