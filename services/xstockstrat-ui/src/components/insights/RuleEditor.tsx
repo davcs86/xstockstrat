@@ -1,7 +1,14 @@
 'use client';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Combobox } from '@/components/ui/combobox';
+import {
+  Combobox,
+  ComboboxInput,
+  ComboboxContent,
+  ComboboxList,
+  ComboboxItem,
+  ComboboxEmpty,
+} from '@/components/ui/combobox';
 import {
   Select,
   SelectContent,
@@ -197,17 +204,38 @@ export function RuleEditor({ value, onChange, label, operands }: RuleEditorProps
           {tree.conditions.map((cond, i) => (
             <div key={i} className="flex items-center gap-2">
               <Combobox
-                aria-label="left operand"
-                placeholder="component"
-                emptyText="No components — add one in Step 2"
-                value={cond.lhs}
-                options={refOptions}
-                onChange={(lhs) => {
+                items={refOptions.map((o) => o.value)}
+                value={cond.lhs || null}
+                itemToStringLabel={(v) => refOptions.find((o) => o.value === v)?.label ?? v}
+                onValueChange={(v) => {
+                  const lhs = v ?? '';
                   const conditions = [...tree.conditions];
                   conditions[i] = { ...cond, lhs };
                   updateTree({ ...tree, conditions });
                 }}
-              />
+              >
+                <ComboboxInput
+                  aria-label="left operand"
+                  placeholder="component"
+                  showTrigger={false}
+                />
+                <ComboboxContent>
+                  <ComboboxEmpty>No components — add one in Step 2</ComboboxEmpty>
+                  <ComboboxList>
+                    {(v) => {
+                      const o = refOptions.find((r) => r.value === v);
+                      return (
+                        <ComboboxItem key={v} value={v}>
+                          {o?.label ?? v}
+                          {o?.hint && (
+                            <span className="ml-2 text-xs text-muted-foreground">{o.hint}</span>
+                          )}
+                        </ComboboxItem>
+                      );
+                    }}
+                  </ComboboxList>
+                </ComboboxContent>
+              </Combobox>
               <Select
                 value={cond.fn}
                 onValueChange={(v) => {
@@ -227,19 +255,44 @@ export function RuleEditor({ value, onChange, label, operands }: RuleEditorProps
                   ))}
                 </SelectContent>
               </Select>
-              <Combobox
-                aria-label="right operand"
-                placeholder="component or number"
-                emptyText="Type a number, or pick a component"
-                allowFreeText
-                value={cond.rhs}
-                options={refOptions}
-                onChange={(rhs) => {
+              <Combobox<string>
+                items={refOptions.map((o) => o.value)}
+                itemToStringLabel={(v) => refOptions.find((o) => o.value === v)?.label ?? v}
+                inputValue={cond.rhs}
+                onInputValueChange={(rhs) => {
                   const conditions = [...tree.conditions];
                   conditions[i] = { ...cond, rhs };
                   updateTree({ ...tree, conditions });
                 }}
-              />
+                onValueChange={(v) => {
+                  const rhs = v ?? '';
+                  const conditions = [...tree.conditions];
+                  conditions[i] = { ...cond, rhs };
+                  updateTree({ ...tree, conditions });
+                }}
+              >
+                <ComboboxInput
+                  aria-label="right operand"
+                  placeholder="component or number"
+                  showTrigger={false}
+                />
+                <ComboboxContent>
+                  <ComboboxEmpty>Type a number, or pick a component</ComboboxEmpty>
+                  <ComboboxList>
+                    {(v) => {
+                      const o = refOptions.find((r) => r.value === v);
+                      return (
+                        <ComboboxItem key={v} value={v}>
+                          {o?.label ?? v}
+                          {o?.hint && (
+                            <span className="ml-2 text-xs text-muted-foreground">{o.hint}</span>
+                          )}
+                        </ComboboxItem>
+                      );
+                    }}
+                  </ComboboxList>
+                </ComboboxContent>
+              </Combobox>
               <Button
                 type="button"
                 size="sm"

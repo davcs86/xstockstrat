@@ -1,7 +1,14 @@
 'use client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Combobox } from '@/components/ui/combobox';
+import {
+  Combobox,
+  ComboboxInput,
+  ComboboxContent,
+  ComboboxList,
+  ComboboxItem,
+  ComboboxEmpty,
+} from '@/components/ui/combobox';
 import {
   Select,
   SelectContent,
@@ -108,17 +115,33 @@ export function ComponentEditor({ value, onChange, onRemove }: ComponentEditorPr
       {value.kind === ComponentKind.CUSTOM_FORMULA ? (
         <div className="space-y-2">
           <Combobox
-            aria-label="formula"
-            placeholder="Select a formula…"
-            emptyText="No matching formulas"
-            value={value.formulaId}
-            onChange={selectFormula}
-            options={formulas.map((f) => ({
-              value: f.formulaId,
-              label: f.name,
-              hint: f.formulaId,
-            }))}
-          />
+            items={formulas.map((f) => f.formulaId)}
+            value={value.formulaId || null}
+            onValueChange={(formulaId) => selectFormula(formulaId ?? '')}
+            itemToStringLabel={(formulaId) =>
+              formulas.find((f) => f.formulaId === formulaId)?.name ?? formulaId
+            }
+          >
+            <ComboboxInput
+              aria-label="formula"
+              placeholder="Select a formula…"
+              showTrigger={false}
+            />
+            <ComboboxContent>
+              <ComboboxEmpty>No matching formulas</ComboboxEmpty>
+              <ComboboxList>
+                {(formulaId) => {
+                  const f = formulas.find((x) => x.formulaId === formulaId);
+                  return (
+                    <ComboboxItem key={formulaId} value={formulaId}>
+                      {f?.name ?? formulaId}
+                      <span className="ml-2 text-xs text-muted-foreground">{formulaId}</span>
+                    </ComboboxItem>
+                  );
+                }}
+              </ComboboxList>
+            </ComboboxContent>
+          </Combobox>
 
           {selectedFormula && selectedFormula.parameters.length > 0 && (
             <div className="space-y-2">
