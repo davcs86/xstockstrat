@@ -43,6 +43,11 @@ no preservation of the old Nocturne visual identity, across all four frontend se
 |---|---|
 | `xstockstrat-ui` (Service Owner) | Trading UI correctness, analytics display accuracy, config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values rendered in UI, no direct DB access (except audit log) |
 
+## Integration PR
+
+https://github.com/davcs86/xstockstrat/pull/905 (`claude/shadcn-ui-migration-4w5bn4` → `main-dev`)
+
 ## Next Action
 
-`/sdd-review shadcn-ui-migration impl-spec` — validate implementation spec, then `/sdd-execute shadcn-ui-migration`
+Merge PR #905 when CI is green and reviewed; status flips to `launched` on the `main-dev` → `main`
+promotion.
