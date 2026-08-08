@@ -285,7 +285,7 @@ scoped-file check above; behavior parity is proven in Step 4.
 
 ### Step 4 — test: E2E parity verification for the 3 rewritten combobox call sites
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/strategy-authoring.spec.ts` — modify (only if Step 3's
@@ -804,3 +804,55 @@ the old component's internal default empty-state text, which is not recoverable 
 gone. **Disposition**: this is UI copy, not a factual claim path/symbol (F-04 concerns factual
 invention, not cosmetic strings) — a reasonable placeholder was written; flagged here for a human
 copy pass if a different empty-state message is preferred.
+
+**Step 4 — environment debugging required before any e2e test could run (3 real fixes, not code
+changes).** None of these touch the app; recorded so a future session doesn't re-diagnose them:
+1. This sandbox's pre-provisioned Chromium build (`chromium-1194`) doesn't match what
+   `@playwright/test@1.59.1` expects (`chromium_headless_shell-1217`) — fixed by exporting
+   `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome` for
+   every `playwright test` invocation (the repo's own `global-setup.ts`/`playwright.config.ts`
+   already honor this override).
+2. A manually-started `pnpm dev` (used to pre-warm the server outside Playwright's own managed
+   `webServer`) must set the **exact** `JWT_SECRET` from `playwright.config.ts`'s `webServer.env`
+   (`test-jwt-secret-for-e2e-tests-min32c`) — an ad-hoc value causes every `addAuthCookie`/
+   `addAdminCookie`-authenticated page to silently redirect to `/auth/login`, which looks like a
+   real auth bug but is a test-harness-config mismatch.
+3. The new dependency stack (unified `radix-ui`, `@base-ui/react`, `@tabler/icons-react`) is a
+   much heavier module graph than the individual `@radix-ui/react-*` packages it replaces —
+   confirmed via the dev server's own log (`/config-ui` alone: 13,272 modules, 43.5s to
+   first-compile). Next.js dev mode compiles routes lazily per-request, so the Playwright
+   `warmup.setup.ts` step (which pre-fetches 22 routes) needs a longer timeout on first run in
+   this sandbox than its 10s local default; once warm, subsequent runs are fast (`Pre-warmed
+   22/22 SSR routes in ~3-9s`). Not a defect — a one-time cold-compile cost of the new stack.
+
+**Step 4 — 2 e2e failures found in the broader suite run are pre-existing consequences of Step
+2's regeneration, not of this step's combobox rewrite, and are already scoped to later steps —
+not fixed here (would be out of Step 4's `**Files**` scope).**
+1. `e2e/trader/chart-panel.spec.ts:124` ("renders ChartPanel card on the dashboard") — fails
+   because the preset's regenerated `CardTitle` (`src/components/ui/card.tsx`) renders a plain
+   `<div>`, not the pre-migration `<h3>` (confirmed via `git show` against the pre-migration
+   file), so `getByRole('heading', { name: /chart/i })` finds nothing even though "Chart" text is
+   present (confirmed via server-rendered HTML). This is `card.tsx`'s own semantic-element
+   change — Step 5's declared scope ("Reconcile low-risk primitives: card, input, separator,
+   table, skeleton"), unrelated to `ChartPanel.tsx`'s combobox rewrite. Not fixed here.
+2. `e2e/insights/strategy-authoring.spec.ts:460` ("renders the aggregate stat row and the
+   Active/Paused/Off state badges") — the row is found (all preceding assertions pass — Active
+   strategies text, Blended score, Hit rate/Expectancy columnheaders) but doesn't contain the
+   expected "42" alongside "62%", most likely a `table.tsx`/`Badge` structural change from the
+   same Step 2 regeneration (`table.tsx` is Step 5's scope too; the Active/Paused badge itself is
+   Step 7's scope). No combobox involvement. Not fixed here.
+   Both are recorded as expected interim state per design.md's explicit framing (Step 2
+   "deliberately leaves the app non-building/misrendering in places" until Steps 5-9 land) —
+   `/sdd-execute`'s Step 10 full sweep is the actual gate that must show these green.
+
+**Step 4 — no existing e2e coverage exercises `RuleEditor.tsx`'s visual-builder comboboxes**
+(confirmed via `grep -rl "RuleEditor\|left operand\|right operand" e2e/` → zero matches). Per
+this step's own Instruction #3 ("manually exercise... against a local dev build"), wrote a
+temporary, uncommitted spec (`e2e/insights/__tmp-ruleeditor-verify.spec.ts`), ran it against the
+live dev server, confirmed both behaviors, then deleted it (not part of this step's `**Files**`,
+and adding permanent new coverage wasn't mandated — only manual verification was):
+- lhs (strict): clicking the combobox opens the dropdown, the one `sma_fast` option is
+  selectable, and the input reflects the selected value afterward — confirmed live (`LHS strict
+  selection: OK`).
+- rhs (free text): typing `1.5` (matching no ref option) is committed via the controlled
+  `inputValue`/`onInputValueChange` pair — confirmed live (`RHS free text "1.5" committed: OK`).

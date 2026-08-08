@@ -250,3 +250,27 @@
   `src/components/insights/ComponentEditor.tsx`, `src/components/insights/RuleEditor.tsx`.
 - Deviations: see Deviation Log (3 entries — explicit generic argument, dropped dead
   `symbolOptions` memo, invented empty-state copy for one call site).
+
+### Step 4 — E2E parity verification for the 3 rewritten combobox call sites [done]
+- Fixed 3 real environment issues before any test could run (full detail in Deviation Log, not
+  code changes): Chromium build mismatch (`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` override),
+  wrong `JWT_SECRET` on a manually-started dev server (must match `playwright.config.ts`'s
+  `webServer.env` exactly), and a slow first-compile of the new heavier dependency graph
+  (13k+ modules for `/config-ui` alone) needing a longer warmup timeout on the first run only.
+- `strategy-authoring.spec.ts`'s existing `'formula picker filters by substring (AC-7)'` test
+  (`ComponentEditor.tsx`'s combobox) passed unmodified — no locator change needed.
+- Ran the broader `strategy-authoring.spec.ts` + `chart-panel.spec.ts` suites (33 tests): 31
+  passed, 2 failed — both pre-existing consequences of Step 2's `card.tsx`/`table.tsx`
+  regeneration (CardTitle no longer a semantic heading; a table/badge content mismatch),
+  unrelated to combobox, already scoped to Steps 5/7 — full attribution in Deviation Log, not
+  fixed here (out of Step 4's own `**Files**` scope).
+- `RuleEditor.tsx` (no prior e2e coverage): wrote a temporary uncommitted spec, ran it live,
+  confirmed lhs strict-selection and rhs free-text-commit both work correctly in a real browser,
+  then deleted the temp file (per Instruction #3 — manual exercise, not permanent new coverage).
+- Product-spec AC-4 (behavior parity, not pixel parity) is satisfied for all 3 rewritten call
+  sites specifically; the 2 unrelated failures are tracked for Steps 5/7/10, not silently
+  dropped.
+- Files modified: none (verification-only step; the 2 conditionally-listed spec files needed no
+  changes).
+- Deviations: see Deviation Log (environment fixes + 2 attributed pre-existing failures + the
+  temporary RuleEditor verification spec, created and removed in this session).
