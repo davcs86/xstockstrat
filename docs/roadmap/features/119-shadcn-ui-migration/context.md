@@ -274,3 +274,22 @@
   changes).
 - Deviations: see Deviation Log (environment fixes + 2 attributed pre-existing failures + the
   temporary RuleEditor verification spec, created and removed in this session).
+
+### Step 5 — Reconcile low-risk primitives (card, input, separator, table, skeleton) [done]
+- `card.tsx`: fixed `CardTitle` back to `<h3>` (was a plain `<div>` in the preset's output) — a
+  real accessibility/semantic fix, resolves Step 4's deferred `chart-panel.spec.ts` failure.
+- `input.tsx`, `separator.tsx`: confirmed no-op per AC-3 (class-diff only in the preset's own
+  tokens, nothing functional to re-apply).
+- `table.tsx`: **deliberately did not** re-add the old `TableRow` hover/selected classes — the
+  preset's own stock `TableRow` already provides equivalent interactive-row feedback
+  (`hover:bg-muted/50`/`data-[state=selected]:bg-muted` vs. the old `-accent` tokens); the
+  functional affordance isn't missing, only the color choice differs, and re-imposing the old
+  color would contradict AC-3 + the user's no-hybrid direction. Recorded as a reasoned deviation
+  from the step's own literal Instructions, not a silent skip (P-03).
+- `skeleton.tsx`: re-added `data-testid="skeleton"` + `aria-hidden="true"`.
+- Verification: scoped `tsc --noEmit` clean; scoped `eslint` clean; `skeleton.tsx` grep confirms
+  the testid; the `table.tsx` grep for the old accent classes correctly returns nothing per the
+  deviation above (not a miss).
+- Files modified: `services/xstockstrat-ui/src/components/ui/{card,skeleton}.tsx` (`input.tsx`/
+  `separator.tsx`/`table.tsx` read and confirmed, no functional changes needed/made).
+- Deviations: see Deviation Log (CardTitle real fix; TableRow reasoned non-application).

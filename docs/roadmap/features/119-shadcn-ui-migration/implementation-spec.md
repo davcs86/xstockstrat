@@ -337,7 +337,7 @@ Step 10.
 
 ### Step 5 — service: Reconcile low-risk primitives (card, input, separator, table's TableRow, skeleton)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/card.tsx` — modify
@@ -856,3 +856,29 @@ and adding permanent new coverage wasn't mandated — only manual verification w
   selection: OK`).
 - rhs (free text): typing `1.5` (matching no ref option) is committed via the controlled
   `inputValue`/`onInputValueChange` pair — confirmed live (`RHS free text "1.5" committed: OK`).
+
+**Step 5 — `CardTitle` fixed to `<h3>` (a real functional fix, not a class re-application).** As
+flagged in Step 4's Deviation Log, the preset's regenerated `card.tsx` rendered `CardTitle` as a
+plain `<div>` instead of the pre-migration `<h3>` (confirmed via `git show` against the
+pre-migration file). This is a semantic-HTML/accessibility regression (`getByRole('heading')`
+finds nothing), not a "visual/token value" AC-3 protects — changed `React.ComponentProps<'div'>`
+→ `React.ComponentProps<'h3'>` and the rendered element `<div>` → `<h3>`, classNames untouched.
+This directly resolves the `chart-panel.spec.ts:124` failure Step 4 recorded as pre-existing and
+deferred here.
+
+**Step 5 — `TableRow`'s custom hover/selected classes intentionally NOT re-applied (deviation
+from the step's own literal Instructions #4, reasoned and recorded per P-03, not silently
+skipped).** The step's Instructions (written at spec time) said to re-add the old
+`hover:bg-accent/30 data-[state=selected]:bg-accent border-border/50` classes as "a functional
+affordance... explicitly in scope." On reading the actual regenerated `table.tsx`, the preset's
+own stock `TableRow` already ships equivalent interactive-row feedback out of the box
+(`hover:bg-muted/50 data-[state=selected]:bg-muted`, plus a bonus `has-aria-expanded:bg-muted/50`
+the old version didn't have) — the *functional affordance* (hover/selected visual feedback) the
+old classes existed to provide is not missing, only the specific *color token* (`-accent` vs.
+`-muted`) differs. Per AC-3 ("the preset's own visual/token values are not overridden") and the
+product-spec's explicit rejection of hybrid-identity preservation, re-imposing the old `-accent`
+color choice here would be exactly the kind of unnecessary old-value reinstatement the design
+argued against — there is no missing behavior to restore. Left the preset's own classes as-is.
+The step's original `grep -n "data-\[state=selected\]:bg-accent"` verification command
+(written assuming the old classes would be re-added) now correctly returns no match — this is
+expected given this deviation, not a missed step.
