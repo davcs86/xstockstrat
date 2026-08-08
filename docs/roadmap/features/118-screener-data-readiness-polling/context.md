@@ -363,3 +363,27 @@ Next: Step 1.
   PR number and `feature.md`'s `## Next Action`.
 - Next: subscribe to both #902 and #903's PR activity; watch #902 to merge first, then rebase/merge
   `main-dev` into this branch and merge #903 once CI is green on both.
+
+### Post-#902-merge rebase
+- PR #902 merged to `main-dev` (`bef4258`, webhook event). Fetched and merged `origin/main-dev`
+  into `feature/screener-data-readiness-polling`.
+- **Conflict** (expected, per this branch's C-06 deviation of branching off #902's pre-squash
+  branch rather than `main-dev`): `page.tsx` and `fails.md` both conflicted, because `main-dev`'s
+  squash-merge of #902 is textually different from this branch's pre-squash copy of the same
+  changes even though the content is logically identical. Resolved both by keeping this branch's
+  side in full (it's a strict superset: #902's fix plus this feature's Steps 1-3) — verified via
+  `diff` against `origin/main-dev`'s copy of `page.tsx` that no #902 content was lost, only this
+  feature's additive changes remained as the diff.
+- **Side effect caught and fixed**: the merge's rename-detection resurrected a stale, pre-renumber
+  snapshot of `docs/roadmap/features/117-screener-data-readiness-polling/` (6 files, staged as
+  "added") — leftover from this feature's own history before the `117`→`118` git-mv earlier this
+  session. `main-dev` never had this directory; git's 3-way merge algorithm apparently associated
+  it incorrectly across the rename. Removed via `git rm -r --cached` + `rm -rf` before completing
+  the merge commit — re-adding it would have reintroduced the exact feature-number collision this
+  session already resolved.
+- Verified: `tsc --noEmit` and `pnpm run lint` clean on the merged `page.tsx`; full Playwright run
+  (`e2e/insights/screener.spec.ts`) — 19/20 passed (the one failure is the pre-existing sandbox
+  cold-compile-race flake on the very first post-warmup test, already isolated and confirmed benign
+  earlier this session via dedicated debug runs — not a regression from this merge).
+- Committed the merge (`b7332f2`) and pushed. Updated `merge-order.md`'s row: Resolved `No` → `Yes`.
+- PR #903 is now clear to merge once its CI passes.
