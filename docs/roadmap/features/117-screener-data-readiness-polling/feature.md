@@ -1,6 +1,6 @@
 # Feature: screener-data-readiness-polling
 
-**Lifecycle Status**: `design-approved`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/screener-data-readiness-polling`
 **Created**: 2026-08-08
 **Last Updated**: 2026-08-08
@@ -13,6 +13,7 @@
 |---|---|---|---|
 | 2026-08-08 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-08 | `draft` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; recon.md + design.md written. Skipped `/sdd-review product-spec` per explicit user direction to proceed (recorded in context.md) — `draft` is the actual prior status, not `spec-ready`. |
+| 2026-08-08 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 3 steps (all `xstockstrat-ui`, no other service touched). |
 
 ---
 
@@ -21,7 +22,7 @@
 - [Product Spec](product-spec.md) — requirements and governance
 - [Recon](recon.md) — grounded codebase dossier
 - [Design](design.md) — debated, approved architecture
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec <slug>`_
+- [Implementation Spec](implementation-spec.md) — 3 steps
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -49,4 +50,4 @@ needed** — the approved design makes no proto/servicer/engine change; it resen
 
 ## Next Action
 
-`/sdd-spec screener-data-readiness-polling` — generate implementation spec from the approved design
+`/sdd-review screener-data-readiness-polling impl-spec` — validate implementation spec, then `/sdd-execute screener-data-readiness-polling`
