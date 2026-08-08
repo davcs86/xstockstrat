@@ -971,8 +971,9 @@ class TestScreenSymbols:
         assert resp.results[0].status == analysis_pb2.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA
 
     @pytest.mark.asyncio
-    async def test_fundamental_skipped_when_rpc_absent(self):
-        """FR-5: a fundamental hard-filter is skipped (scan completes) when fundamentals fail."""
+    async def test_fundamental_unavailable_yields_insufficient_data_not_a_silent_pass(self):
+        """Bug fix: a fundamental criterion whose data source failed must report
+        INSUFFICIENT_DATA/passed=false, never a misleading OK/passed=true."""
         import grpc
         from gen.analysis.v1 import analysis_pb2
 
@@ -996,7 +997,8 @@ class TestScreenSymbols:
         resp = await svc.ScreenSymbols(req, self._ctx())
         assert len(resp.results) == 1
         assert "cheap" not in resp.results[0].criterion_scores
-        assert resp.results[0].passed is True
+        assert resp.results[0].status == analysis_pb2.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA
+        assert resp.results[0].passed is False
 
     @pytest.mark.asyncio
     async def test_unknown_metric_aborts_invalid_argument(self):

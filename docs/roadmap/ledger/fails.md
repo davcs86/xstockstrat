@@ -771,3 +771,24 @@ ambiguity is logged here).
   quietly bypass the assertion, and add a positive "the thing under test actually ran"
   assertion (a mock call-count check) alongside any negative "no exception" assertion so a
   silent bypass fails loudly instead of passing vacuously.
+
+### 2026-08-08 — screener-data-readiness-polling — design
+- **Mistake**: a design proposal for a Screener recheck/polling feature narrowed the recheck
+  request to only the still-pending symbols to save quota — the same bug class as the
+  `fix-mcp-screener-correctness` entry above (`coverage_gaps` computed after truncation), just
+  relocated from server-side rank/floor truncation to client-side symbol narrowing. Any
+  universe-relative diagnostic (here, `_normalize_universe`'s min-max score, `screener.py:388-416`)
+  silently breaks when computed from a truncated/narrowed subset instead of the original full
+  scan — in the common one-symbol-still-pending case, `lo == hi` for every criterion and every
+  score collapses to a content-free `0.5`. Caught by the design-adversary before implementation,
+  not by a later test or review.
+- **Evidence**: `docs/roadmap/features/117-screener-data-readiness-polling/design.md` §
+  Chosen Approach / Rejected Alternatives; the design-adversary's round-1 objection (context.md
+  "sdd-design (quick)" session).
+- **Rule it implies**: this generalizes the `fix-mcp-screener-correctness` rule beyond
+  truncation specifically — **any value computed relative to a result set's full membership**
+  (universe-relative normalization, cross-row ranking, a percentile, a min/max) must be
+  recomputed from the *original* full set whenever a "just re-check a subset" optimization is
+  proposed, not from the subset alone, regardless of which layer (server truncation vs. client
+  narrowing) does the subsetting. Worth promoting to a Constitution ID if this recurs a third
+  time in a different feature.
