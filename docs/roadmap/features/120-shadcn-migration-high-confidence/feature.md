@@ -1,6 +1,6 @@
 # Feature: shadcn-migration-high-confidence
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/shadcn-migration-high-confidence`
 **Created**: 2026-08-08
 **Last Updated**: 2026-08-08
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-08 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-08 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
 
 ---
 
@@ -38,4 +39,4 @@ reimplementations a full-codebase audit found across the trader/insights/config-
 
 ## Next Action
 
-`/sdd-review shadcn-migration-high-confidence product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design shadcn-migration-high-confidence quick` — recon + design debate before running /sdd-spec
