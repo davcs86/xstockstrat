@@ -189,3 +189,29 @@ Next: `/sdd-review screener-data-readiness-polling impl-spec`.
   written yet — implementation-spec.md is still pre-execution.
 
 Next: `/sdd-execute screener-data-readiness-polling` (or `next`/a step number).
+
+## Session 2026-08-08 — sdd-execute boot (sequential mode) — branch deviation
+
+**Deviation from Constitution C-06 ("branch from `main-dev`, never `main`"), recorded per P-03
+before any code write:** `/sdd-execute`'s boot sequence checks out `main-dev` to fetch the
+authoritative spec files, which reverted the working tree to `main-dev`'s committed state — and
+confirmed by direct observation that `main-dev` does **not** yet have PR #902's changes
+(`screener.py`'s `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`/`gap` fix, `page.tsx`'s "Fundamentals
+pending" badge). This feature's entire recon.md/design.md/implementation-spec.md were written
+assuming that state already exists (they cite `page.tsx:509-522`, the `gap`-presence contract,
+etc.) — building `feature/screener-data-readiness-polling` from vanilla `main-dev` would either
+fail Phase 1 discovery (symbols not found → blocked) or require silently re-doing #902's
+already-tested fix inline, duplicating work.
+
+**Resolution**: `feature/screener-data-readiness-polling` was branched from
+`claude/screener-criteria-filtering-7ydsuz` (PR #902's branch) instead of `main-dev`. This is the
+same real-world situation `docs/roadmap/features/merge-order.md`'s Blocking Dependencies table
+exists to track (a feature stacked on another unmerged feature) — recorded there as a new row
+(`screener-data-readiness-polling` → PR #902) even though #902 has no `docs/roadmap/features/`
+entry of its own (it's a Track C bug-fix report, not a numbered feature). **117's own integration
+PR to `main-dev` must not be created/merged before PR #902 merges** — when #902 merges first (as
+expected, since it's already fully tested and PR-reviewed-ready), `feature/screener-data-readiness-polling`'s
+history naturally becomes a superset that rebases/merges cleanly; the ordering constraint is
+purely "don't merge 117 first," not a code conflict.
+
+Next: TOOLING SETUP → Step 1.
