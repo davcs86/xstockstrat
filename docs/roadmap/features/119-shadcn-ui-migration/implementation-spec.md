@@ -1,6 +1,6 @@
 # Implementation Spec: shadcn-ui-migration
 
-**Status**: `in-progress`
+**Status**: `complete`
 **Created**: 2026-08-08
 **Feature**: `docs/roadmap/features/119-shadcn-ui-migration/feature.md`
 **Total Steps**: 11
@@ -668,7 +668,7 @@ All must pass / exit 0.
 
 ### Step 11 — docs: Document the new workflow in xstockstrat-ui/CLAUDE.md + root CLAUDE.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/CLAUDE.md` — modify
@@ -929,6 +929,11 @@ All build/lint/coverage/e2e/DRY commands below ran against this production serve
   `order-form.spec.ts` ("BUY and SELL side buttons are present") and `order-parity.spec.ts`
   passing across all 3 runs — the highest-risk trading-relevant visual signal in this migration
   is exercised and green.
+
+**Step 11 — `/context-scrubber scan` (root CLAUDE.md's Teardown instruction) not run: the
+context-forge plugin is not available in this session.** Per that instruction's own fallback
+("say so in the PR body rather than skipping silently"), this is noted here and will be noted in
+the integration PR body — not silently skipped.
 
 **Step 4 — no existing e2e coverage exercises `RuleEditor.tsx`'s visual-builder comboboxes**
 (confirmed via `grep -rl "RuleEditor\|left operand\|right operand" e2e/` → zero matches). Per

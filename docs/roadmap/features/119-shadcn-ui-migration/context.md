@@ -367,3 +367,43 @@
 - Files modified: none (verification-only step; any failure found would be fixed at its owning
   step, per the step's own framing — none were, beyond the pre-existing flake already attributed).
 - Deviations: see Deviation Log (production-server fallback; pre-existing flake attribution).
+
+### Step 11 — Document the new workflow [done]
+- `services/xstockstrat-ui/CLAUDE.md`: added a "Styling" section (Tailwind v4 CSS-first setup,
+  shadcn CLI workflow — `add`/`apply --preset` commands with the confirmed-live non-interactive
+  invocation quirks, the functional-variant reconciliation convention + its regression-guard
+  tests, the `combobox.tsx` compound-API note, the `vitest.config.ts` alias fix).
+- Root `CLAUDE.md`: added a `Tailwind` row to the Language Versions & Tooling table (`:123`) and
+  the Version Bump Workflow's "Tool | Files to update" table (`:151`).
+- Verification: both grep checks (`Tailwind` in root CLAUDE.md; `shadcn|@theme` in the service
+  CLAUDE.md) confirmed.
+- `/context-scrubber scan` (Teardown instruction) not run — context-forge plugin unavailable in
+  this session; noted here and will be noted in the integration PR body per the instruction's own
+  fallback, not silently skipped.
+- Files modified: `services/xstockstrat-ui/CLAUDE.md`, `CLAUDE.md` (repo root).
+- Deviations: see Deviation Log (context-scrubber unavailable).
+
+## Session <this session> — sdd-execute (sequential mode, steps 1–11)
+
+**All 11 steps done. Feature is code-completed.** Summary of the full sequential run:
+- Environment fixes discovered and applied (documented in each step's Deviation Log entry, none
+  are app changes): Chromium executable path override, exact `JWT_SECRET` matching
+  `playwright.config.ts`, dev-mode cold-compile timeouts worked around by using a production
+  server for e2e runs (matches CI's own `E2E_PREBUILT`-false path).
+- Real regressions found and fixed beyond the literal step Instructions, each recorded in the
+  Deviation Log with reasoning: `CardTitle` restored to `<h3>` (Step 5), `vitest.config.ts`
+  `resolve.alias` for `@/*` (Step 8, also fixed a pre-existing broken test unrelated to this
+  feature), bare `tailwindcss` dependency (Step 1/2 boundary).
+- One reasoned non-application: `TableRow`'s old `-accent` hover/selected classes were NOT
+  re-added since the preset's own `-muted` tokens already provide equivalent functional feedback
+  (Step 5) — re-imposing the old color would have been exactly the "hybrid" the user rejected.
+- One invented-then-corrected mistake, caught before committing: `badge.tsx`'s `warning`/`info`
+  classes (Step 7) — verified against the real pre-migration file via `git show` instead of
+  shipping a plausible-sounding guess.
+- One pre-existing, unrelated, non-deterministic e2e flake identified and fully attributed
+  (`signal-detail.spec.ts`, Step 10) — not fixed, flagged for `/sdd-qa flake` follow-up.
+- Accountability (P-03): out-of-scope changes — none unannounced (all logged above and in the
+  Deviation Log); open questions — none; unaddressed review warnings — none (all 9+1 from the
+  impl-spec review were resolved before execution began).
+- Status: `implementation-ready` → `in-progress` (step 1) → `code-completed` (step 11, this entry).
+- Next: open the integration PR to `main-dev`.
