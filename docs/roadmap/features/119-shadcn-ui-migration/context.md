@@ -304,3 +304,33 @@
   scoped `eslint` clean.
 - Files modified: none (verification-only step — both files already correct post-Step-2).
 - Deviations: none.
+
+### Steps 7 + 8 — button/badge variant reconciliation + red-before-green regression guard [done]
+- Executed in TDD-paired order per P-06: wrote Step 8's tests first against the pre-Step-7 tree,
+  confirmed red, applied Step 7's fix, confirmed green.
+- **Real regression found and fixed first**: `vitest.config.ts` had no `resolve.alias` for `@/*`
+  — Next's bundler reads `tsconfig.json`'s `paths` automatically, Vite/Vitest does not. The
+  preset's regenerated `src/components/ui/*.tsx` use `@/...` alias imports (old files used
+  relative `'./utils'`), so ANY vitest test whose import graph touches `components/ui/*` broke —
+  confirmed via a pre-existing test, `copilot.test.ts`, failing with `Cannot find package
+  '@/components/ui/utils'` even before any of this feature's own test files existed. Added the
+  alias to `vitest.config.ts`, confirmed `copilot.test.ts` passes again (this restores product-
+  spec AC-5, not just unblocks Step 8's own new tests).
+- Red: `button.test.ts`/`badge.test.ts` written against pre-fix `cva` objects → 5 failing
+  assertions (missing `buy`/`sell`/`paper` keys), confirmed live.
+- Fix: re-added `buy`/`sell` to `button.tsx`'s `variants.variant`; `buy`/`sell`/`paper`/`live`/
+  `warning`/`info` to `badge.tsx`'s. **Caught and corrected an invented-class mistake before
+  committing**: an earlier draft guessed `amber-500`/`primary`-based classes for `warning`/`info`
+  from plausible convention rather than checking; `git show` against the pre-migration file
+  surfaced the real values (`yellow-500`/`blue-500`-based), used those instead (F-04).
+- Green: same test command → 12 files / 67 tests, 0 failures.
+- Full verification: `pnpm --filter @xstockstrat/proto run build` ✓; full production
+  `NEXT_DISABLE_STANDALONE=1 pnpm build` ✓ (first expected-passing full build in this spec — all
+  39+ routes compiled/prerendered); scoped `eslint` on both files ✓; grep confirmations for both
+  variant key sets ✓.
+- Files modified: `services/xstockstrat-ui/src/components/ui/button.tsx`,
+  `src/components/ui/badge.tsx`, `src/components/ui/button.test.ts` (new),
+  `src/components/ui/badge.test.ts` (new), `vitest.config.ts`.
+- Deviations: see Deviation Log (vitest alias fix — a real cross-cutting regression, not scoped
+  to either step's original Files list, fixed because it blocked AC-5 regardless of attribution;
+  the caught-and-corrected invented-class mistake).

@@ -16,6 +16,14 @@ const badgeVariants = cva(
         outline: 'border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground',
         ghost: 'hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50',
         link: 'text-primary underline-offset-4 hover:underline',
+        // app-specific (feature 083, re-applied post-shadcn-migration feature 119): order-side /
+        // paper-trading / status functional coloring, not part of the shadcn preset's own set.
+        buy: 'border-transparent bg-buy/20 text-buy',
+        sell: 'border-transparent bg-sell/20 text-sell',
+        paper: 'border-transparent bg-paper/20 text-paper',
+        live: 'border-transparent bg-buy/20 text-buy',
+        warning: 'border-transparent bg-yellow-500/20 text-yellow-400',
+        info: 'border-transparent bg-blue-500/20 text-blue-400',
       },
     },
     defaultVariants: {

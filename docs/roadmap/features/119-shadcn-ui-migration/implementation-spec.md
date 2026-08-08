@@ -442,7 +442,7 @@ pnpm exec eslint src/components/ui/select.tsx src/components/ui/sheet.tsx
 
 ### Step 7 — service: Reconcile button.tsx/badge.tsx (buy/sell/paper/live/warning/info variants)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/button.tsx` — modify
@@ -502,7 +502,7 @@ breakages.
 
 ### Step 8 — test: Vitest regression-guard tests for buy/sell/paper variants
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/button.test.ts` — create
@@ -844,6 +844,42 @@ not fixed here (would be out of Step 4's `**Files**` scope).**
    Both are recorded as expected interim state per design.md's explicit framing (Step 2
    "deliberately leaves the app non-building/misrendering in places" until Steps 5-9 land) —
    `/sdd-execute`'s Step 10 full sweep is the actual gate that must show these green.
+
+**Step 8 — `vitest.config.ts` needed a `resolve.alias` for `@/*` (a real, pre-existing regression
+Step 2 introduced, not scoped to Steps 7/8's own Files, fixed here because it blocked the new
+tests and broke an existing one).** The preset's CLI-regenerated `src/components/ui/*.tsx` files
+import `cn` via the `@/components/ui/utils` alias (matching `tsconfig.json`'s `paths`), whereas
+the old hand-rolled files used relative imports (`'./utils'`). Next.js's own bundler reads
+`tsconfig.json`'s `paths` automatically; Vite/Vitest does not. Confirmed via a clean repro: with
+no alias configured, `pnpm run test:unit -- copilot.test` — an **existing, pre-migration** test
+with no combobox/button/badge involvement of its own — failed with `Cannot find package
+'@/components/ui/utils'`, because `src/lib/copilot.ts`'s import graph transitively touches
+`badge.tsx`. This is a real regression against product-spec AC-5 ("no behavior/visual
+regression"), not something specific to this step's own new files, so — per the HARD CONSTRAINTS
+carve-out for "fixing the code needed to pass the step's own verification" and because leaving it
+broken would fail AC-5 regardless of which step gets credited — added a minimal
+`resolve.alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) }` to `vitest.config.ts`,
+mirroring `tsconfig.json`'s mapping exactly. Confirmed the fix: re-ran the full unit suite before
+writing any new test code and observed `copilot.test.ts` pass again (12 files / 67 tests, 0
+regressions) — this is the true "before" baseline the red-before-green sequence below started
+from.
+
+**Step 8 — red-before-green sequence, recorded (Constitution P-06):**
+1. Wrote `button.test.ts` (buy/sell) and `badge.test.ts` (buy/sell/paper) against the
+   pre-Step-7 `cva` objects (missing those variant keys since Step 2's regeneration).
+2. **Red observed**: `pnpm run test:unit -- button.test badge.test` → 5 failing assertions, each
+   `AssertionError: expected '...' to contain 'bg-buy'` (etc.) — the exact "regenerated object has
+   no buy/sell/paper key" failure mode the tests exist to catch.
+3. Applied Step 7's fix (below).
+4. **Green observed**: same command → 12 test files / 67 tests, 0 failures.
+
+**Step 7 — badge.tsx's `live`/`warning`/`info` variant classes verified against the actual
+pre-migration file, not re-derived from memory.** `git show <pre-migration-commit>:
+services/xstockstrat-ui/src/components/ui/badge.tsx` was read directly to source the exact
+`warning`/`info` class strings (`bg-yellow-500/20 text-yellow-400` / `bg-blue-500/20
+text-blue-400`) — an earlier draft of this step guessed `amber-500`/`primary`-based classes from
+plausible-sounding conventions before this check; caught and corrected before committing (F-04 —
+never invent when the real value is one `git show` away).
 
 **Step 4 — no existing e2e coverage exercises `RuleEditor.tsx`'s visual-builder comboboxes**
 (confirmed via `grep -rl "RuleEditor\|left operand\|right operand" e2e/` → zero matches). Per

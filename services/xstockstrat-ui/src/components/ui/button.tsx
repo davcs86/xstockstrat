@@ -19,6 +19,10 @@ const buttonVariants = cva(
         destructive:
           'bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40',
         link: 'text-primary underline-offset-4 hover:underline',
+        // app-specific (feature 083, re-applied post-shadcn-migration feature 119): order-side
+        // functional coloring, not part of the shadcn preset's own variant set.
+        buy: 'bg-buy text-background hover:bg-buy/90 font-semibold',
+        sell: 'bg-sell text-white hover:bg-sell/90 font-semibold',
       },
       size: {
         default:
