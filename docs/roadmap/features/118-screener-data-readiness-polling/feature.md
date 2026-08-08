@@ -20,6 +20,7 @@
 | 2026-08-08 | `implementation-ready` → `in-progress` | /sdd-execute Step 1 | `useScreenSymbolsPoll` added to `useScreenSymbols.ts`. `tsc --noEmit`/lint clean. TDD: red observed across the Step-3 suite before this step (6/7 new tests failed on missing testids); green pending Step 2. |
 | 2026-08-08 | `in-progress` (unchanged) | /sdd-execute Step 2 | Background polling wired into `screener/page.tsx`. `tsc --noEmit`/lint clean. TDD-gate green run against the real implementation caught and fixed a real bug: the poll-merge `useEffect` keyed on `poll.data`/`poll.error` identity froze `pollAttempts` once TanStack's structural sharing started reusing the same reference across identical-valued retries (the normal case for a still-pending row) — fixed by keying on `dataUpdatedAt`/`errorUpdatedAt` instead. Also fixed a timing gap in the not-yet-committed Step 3 test loop. Logged to `docs/roadmap/ledger/fails.md`. See implementation-spec.md Deviation Log "Step 2" for full detail. |
 | 2026-08-08 | `in-progress` → `code-completed` | /sdd-execute Step 3 | Playwright suite (`screener.spec.ts` + new `e2e/fixtures/screenResults.ts`) committed. Full run: 20/20 passed (13 pre-existing + 7 new feature-118 tests), `pnpm run lint` clean. All 3 steps done — see merge-order.md before opening the integration PR (must not merge before PR #902). |
+| 2026-08-08 | `code-completed` (unchanged) | /sdd-execute integration | Integration PR #903 opened (`feature/screener-data-readiness-polling` → `main-dev`), blocked on PR #902 per merge-order.md. #902 merged first (`bef4258`); rebased this feature's branch onto `main-dev`, resolving a textual (not semantic) conflict in `page.tsx`/`fails.md` and discarding a stale pre-renumber `117-*` directory the merge's rename-detection tried to resurrect. #903 then merged (`7c432aa`) — feature is fully on `main-dev`. |
 
 ---
 
@@ -56,6 +57,6 @@ needed** — the approved design makes no proto/servicer/engine change; it resen
 
 ## Next Action
 
-Integration PR open: https://github.com/davcs86/xstockstrat/pull/903 — per
-`docs/roadmap/features/merge-order.md`, must not merge before PR #902 merges. Watch both PRs to CI
-green; merge #902 first, then rebase/merge `main-dev` into this branch and merge #903.
+Merged. #902 merged first (`bef4258`), then #903 (`7c432aa`) after a rebase onto the updated
+`main-dev`. Feature is fully on `main-dev`; next lifecycle step is promotion to `main` via
+`/promote`.
