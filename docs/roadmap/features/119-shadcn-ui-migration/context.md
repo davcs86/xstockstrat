@@ -334,3 +334,15 @@
 - Deviations: see Deviation Log (vitest alias fix — a real cross-cutting regression, not scoped
   to either step's original Files list, fixed because it blocked AC-5 regardless of attribution;
   the caught-and-corrected invented-class mistake).
+
+### Step 9 — Dependency cleanup: remove unreferenced old Radix packages [done]
+- Re-ran the exact grep live against the current tree (post Steps 2-8, not the pre-migration
+  quote): zero matches for `@radix-ui/react-{dialog,select,separator,slot}` outside
+  `src/components/ui/` — confirmed removable. `lucide-react` still has 19 outside consumers —
+  confirmed NOT removable, left untouched.
+- `pnpm remove @radix-ui/react-dialog @radix-ui/react-select @radix-ui/react-separator
+  @radix-ui/react-slot`.
+- Verification: re-grep post-removal → zero matches (unchanged); `pnpm --filter @xstockstrat/proto
+  run build` ✓; full production `NEXT_DISABLE_STANDALONE=1 pnpm build` ✓.
+- Files modified: `services/xstockstrat-ui/package.json`, `pnpm-lock.yaml`.
+- Deviations: none.

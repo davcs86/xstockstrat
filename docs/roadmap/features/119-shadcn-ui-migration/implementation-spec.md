@@ -554,7 +554,7 @@ run output shows real assertions executing, not a vacuous pass).
 
 ### Step 9 — service: Dependency cleanup — remove unreferenced old Radix packages
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/package.json` — modify
