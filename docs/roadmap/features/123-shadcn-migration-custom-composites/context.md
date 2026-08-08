@@ -207,3 +207,83 @@
   `/sdd-execute` runs any step — flagged again in `feature.md`'s Next Action per Constitution **P-04**
   (phase-gate approval, recorded) and **C-11**/**C-14** (no unapproved scope expansion).
 - Next: `/sdd-review shadcn-migration-custom-composites impl-spec`.
+
+## Session 2026-08-08 — user-directed FR-10 override (Step 1 restructure)
+
+- **Trigger**: the orchestrating session asked the user directly whether FR-10 should really be
+  shell-only for the entire wizard (the confirmation `design.md`'s header note and Open Risks had
+  flagged as still pending, since no `AskUserQuestion` tool was available in the `/sdd-design`
+  session that produced Round 1/2). The user was presented the literal option "Convert Step 1's 4
+  independent fields to native Choice/Input answers" and **selected it, for Step 1 specifically**.
+  Steps 2/3/4 stay shell-only, unchanged from Round 2's original conclusion — this is a narrow,
+  explicit override, not a reopening of the whole FR-10 decision.
+- **Correction to the framing that prompted this override**: Step 1 ("Identity") is 4 plain text/number
+  fields (Strategy ID, Display name, Re-entry cooldown days, Exit cooldown days) — not symbol/side
+  pickers. Verified directly against `services/xstockstrat-ui/src/components/insights/
+  StrategyWizard.tsx` this session (not re-derived from recon/design, which already had this right —
+  the correction was to a framing assumption made when the user was asked, not to any prior artifact).
+- **Corrected/sourced evidence**: `design.md`'s Round 2 (point 3) cited "`recon.md` § Dependencies —
+  `FormData.get(itemName)`/`getAll`" for `Questionnaire.Item`'s one-answer-per-`Item` model, but
+  `recon.md` § Dependencies never actually contained that evidence at the time — it only had the
+  recharts-version and `@shadcn/react`-maturity bullets. This session verified the claim directly via
+  **two independent live `WebFetch` calls** against the shadcn `Questionnaire` docs and appended the
+  finding to `recon.md` § Dependencies, so the citation is now real: `QuestionnaireItem` renders as a
+  `fieldset`; each `Item` has a unique `name` that becomes the `FormData` key; `FormData.get(itemName)`
+  reads one answer, `FormData.getAll(itemName)` reads a multi-checkbox answer (`multiple: true`); an
+  `Item` supports one `Choice` group OR one optional `Input`, **not** multiple independently-named
+  `Input` fields — no pattern exists for that. This drives the "4 fields → 4 `Item` screens" consequence.
+- **Concrete design produced** (`design.md` § Round 3, full detail there): nested Step 1 sub-screens
+  (not a flattened 7-top-level-screen wizard) — chosen because the outer `CardTitle`'s literal "Step 1
+  — Identity" text stays valid across all 4 inner sub-screens (keeps 7 existing
+  `getByText('Step 1 — Identity')` e2e assertions passing unmodified) and because the user's own
+  framing ("Steps 2-4 stay... unchanged") reads as Steps 2/3/4 keeping their step-number identity, not
+  being renumbered. `canAdvance`'s 4-predicate AND decomposes into 4 independent per-sub-screen gates
+  (each predicate reused verbatim: `idValid`, `displayName.trim()!==''`, `cooldownParsed.valid`,
+  `exitCooldownParsed.valid`). `stepForError` extended to also return an `identitySubStep` (1-4) when
+  it targets Step 1, preserving the existing direct/ungated jump mechanism one level deeper. Back
+  navigation persists `identitySubStep` across outer-step transitions (Back from Step 2 lands on
+  sub-screen 4). Step 1's fields stay controlled-React-state-driven (not `FormData`-read-at-submit) to
+  preserve live validation and edit-mode pre-population/disabling unchanged.
+- **Confirmed, not hidden, consequence**: this is a real pacing change — Step 1 goes from one flat
+  4-field screen to 4 sequential sub-screens (overall wizard screens: 4 → 7, counting sub-screens).
+  `e2e/insights/strategy-authoring.spec.ts`'s Step-1 fill/click sequencing (the shared `fillToReview`
+  helper plus every inline Step-1 sequence — effectively every test in the file that reaches past
+  Step 1) needs a rewrite to insert an interstitial `Next` click between each field fill.
+  `getByPlaceholder(...)` strings and the `Next`/`Back` accessible names are **unchanged** — only the
+  number of clicks between them changes. This is now folded into `implementation-spec.md`'s revised
+  Step 11 as a required instruction (#9), not a follow-up.
+- **Files edited this session** (all within `docs/roadmap/features/123-shadcn-migration-custom-composites/`
+  only, per this session's constraints — no git commands run, no writes outside this feature directory):
+  - `design.md` — added a header addendum; added `## Round 3 — user-directed override` (full design);
+    rewrote Chosen Approach #10; rewrote the FR-10 Rejected Alternatives entry (old entry marked
+    superseded, new Round 3 rejected-flattening entry added); updated Open Risks (FR-10 checked off,
+    new e2e-rewrite risk added); updated the P-04 Constitution note.
+  - `recon.md` — appended the two-live-`WebFetch`-sourced `Questionnaire.Item` answer-model evidence to
+    § Dependencies (the corrected citation); updated Recommended Scope item 9's footnote.
+  - `implementation-spec.md` — **Total Steps 12 → 13**. Old Step 11 (shell-only for the whole wizard)
+    split into new Step 11 (FR-10 Step 1 restructure — full concrete instructions, evidence, and
+    verification, including the e2e-spec-rewrite instruction) and new Step 12 (FR-10 Steps 2-4 shell +
+    FR-11 outer indicator, content unchanged from the old Step 11 minus Step-1-specific material);
+    former Step 12 (whole-feature verification) renumbered to Step 13, with every internal
+    "Step 12"/"Steps 1-11" cross-reference in Steps 4/7/8/9/10/13 corrected to match. Execution
+    Summary, Consumer Surface(s), and Step Dependencies sections updated to match the new numbering.
+  - `product-spec.md` — Out-of-Scope clause given a narrow, dated, cited exception for Step 1's
+    restructure only; the general prohibition on wizard step-order/pacing changes stays in force for
+    every other step and every other feature.
+  - `feature.md` — new Status History row recording the override; Artifacts links updated (Design/
+    Implementation Spec descriptions); Next Action section split FR-10 out of the "still needs
+    confirmation" list into its own "FR-10 is resolved" paragraph.
+- **Not resolved by this session** (unchanged, still pending): FR-5 (`lightweight-charts` keep-vs-
+  replace), FR-9 (CLI-vendored `@shadcn/react` install, pinned version), FR-2's recharts-version
+  handling (hand-author against v2 vs. bump to v3), and the `## Deferred Item`
+  (`src/app/insights/page.tsx`'s second `recharts` chart) all still need the user's explicit
+  confirmation before `/sdd-execute` runs any step touching them.
+- **Not written this session, per this session's constraints** (`docs/roadmap/features/merge-order.md`,
+  any ledger file, and `services/xstockstrat-ui/CLAUDE.md` were explicitly out of bounds) — recommended
+  verbatim entries reported to the orchestrating session instead, including the **still-pending** FR-5
+  sanctioned-exception note for `services/xstockstrat-ui/CLAUDE.md` § Styling (drafted in `design.md`
+  § Chosen Approach #5 since the design session that produced Rounds 1-2, and confirmed **not yet
+  applied** by any prior session — grepped `services/xstockstrat-ui/CLAUDE.md` § Styling this session
+  and found no mention of `ChartPanel.tsx`, `lightweight-charts`, or "feature 123").
+- Next: still `/sdd-review shadcn-migration-custom-composites impl-spec`, then (once FR-5/FR-9/FR-2/
+  Deferred Item are also confirmed or overridden) `/sdd-execute shadcn-migration-custom-composites`.

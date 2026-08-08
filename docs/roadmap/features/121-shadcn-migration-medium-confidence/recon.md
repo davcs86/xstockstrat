@@ -86,6 +86,58 @@ and consolidate two independently-built filter toolbars into one shared `FilterT
       (C-10(a) test, feature 083 Step 21). Any FR-13 rewrite must keep this spec passing without
       rewriting its selectors, since the spec's whole point is walking the *rendered* shell, not
       calling internals directly.
+  - **FR-13 Round 3 addendum (2026-08-08) — user-directed override re-grounding.** The FR-13
+    keep-as-is call below (§ Recommended Scope) was overridden by the user directly (not a design
+    debate outcome) after this recon was first written; see `design.md` § Round 3. Re-verified this
+    session against the live repo to ground the replacement plan:
+    - `PlatformHeader.tsx` desktop row-1 group tabs — exact re-read range `:170-190`, `<nav
+      aria-label="Primary" className="hidden sm:flex items-center gap-1 flex-1">`, one flat `<Link>`
+      per `NAV_GROUPS` entry, `aria-current={isActive ? 'page' : undefined}` (`:177`) — zero
+      dropdown/flyout/nesting.
+    - `PlatformHeader.tsx` desktop row-2 breadcrumb + section links — the `<nav aria-label="Section"
+      className="flex items-center gap-1 overflow-x-auto">` element itself is `:271-287`, nested
+      inside the row-2 wrapper `<div>` at `:260-288`; the `aria-label="Breadcrumb"` `<span>` at `:261`
+      is a **sibling** of this `<nav>`, not inside it, and is out of this feature's scope — sibling
+      `120-shadcn-migration-high-confidence`'s FR-7 migrates that span to a Breadcrumb primitive.
+      Active-state logic consumed by both regions: `isItemActive` (`:81-84`), `resolveActive`
+      (`:87-95`).
+    - `BottomTabBar.tsx` — whole file is 56 lines; the nav element itself is `:28-54`
+      (`aria-label="Mobile primary"`, `data-testid="mobile-tab-bar"`), four `<Link>`s built from
+      `TABS = NAV_GROUPS.slice(0, 4)` (`:8`), `isGroupActive` (`:10-18`) drives active styling.
+    - Mobile `Sheet` disclosure (`PlatformHeader.tsx:195-255`) is confirmed **out of scope** for this
+      replacement: it is accordion-like expand/collapse (`aria-expanded`, local `useState` at `:151`,
+      `:214-230`), not a flat-link nav — structurally it doesn't match `NavigationMenu`'s flat-item
+      shape, and sibling `120`'s FR-8 Accordion migration already targets this same `:209-253` range.
+      Stays hand-built; not touched by FR-13.
+    - `e2e/nav-reachability.spec.ts` full-file re-read: line 60 `page.getByRole('navigation', { name:
+      'Primary' })`, line 61 `page.getByRole('navigation', { name: 'Section' })`, line 65
+      `primary.getByRole('link', { name: group.tab, exact: true })`, line 67
+      `section.getByRole('link', { name: item.label, exact: true })`, line 68
+      `expect(page).toHaveURL(...)`, lines 70-71 `page.getByLabel('Breadcrumb')` (unrelated —
+      don't break). The spec never touches the mobile `Sheet` or `BottomTabBar`.
+    - **shadcn Navigation Menu API** (verified live against
+      `https://ui.shadcn.com/r/styles/radix-rhea/navigation-menu.json` and the shadcn docs): 9 named
+      exports — `NavigationMenu`, `NavigationMenuList`, `NavigationMenuItem`, `NavigationMenuContent`,
+      `NavigationMenuTrigger`, `NavigationMenuLink`, `NavigationMenuIndicator`,
+      `NavigationMenuViewport`, `navigationMenuTriggerStyle` (a `cva()` helper).
+      `NavigationMenuLink` is documented as usable standalone inside a `NavigationMenuItem` with no
+      paired `Trigger`/`Content` — the flat-nav pattern this migration needs:
+      ```jsx
+      <NavigationMenuItem>
+        <NavigationMenuLink render={<Link href="/docs" />} className={navigationMenuTriggerStyle()}>
+          Documentation
+        </NavigationMenuLink>
+      </NavigationMenuItem>
+      ```
+      The `render={<Link .../>}` prop is the documented pattern for delegating to a framework router
+      link (confirmed by sibling feature 123's Combobox finding that this repo's `radix-rhea` style is
+      Base-UI-backed for at least one primitive, `combobox.tsx:4` importing from `@base-ui/react` while
+      `select.tsx:4`/`sheet.tsx:4` import from the unified `radix-ui` package) — **not independently
+      confirmed for `navigation-menu.tsx` specifically this session**; `/sdd-execute` must verify the
+      exact import source and prop name against the actual CLI-generated file (or shadcn's live
+      registry JSON) before hand-authoring a fallback. `package.json` carries both `radix-ui@^1.6.7`
+      and `@base-ui/react@^1.7.0` today, so either source is already a repo dependency — no new package
+      install is implied either way.
   - FR-9 target `LiveStrategiesPanel.tsx:35-72` re-read this session: `TableRow onClick={() =>
     setSelectedId(...)}` selects a strategy; `{selectedId && <StrategyAlertFeed .../>}` renders **one
     shared panel below the whole table**, not per-row inline expansion — i.e. today's interaction is
@@ -109,6 +161,13 @@ and consolidate two independently-built filter toolbars into one shared `FilterT
 - App-specific `cva` variant regression guard (if any new primitive needs one) → mirror
   `badge.test.ts:1-19` / `button.test.ts` — plain Vitest assertions on the exported `cva` variants
   function, no DOM rendering (confirmed convention, matches sibling `120`'s recon.md finding).
+- Navigation Menu (FR-13, Round 3 override) → new `ui/navigation-menu.tsx`, same post-119
+  plain-function-component/`data-slot`/`cn()` shape as `ui/badge.tsx:35`/`ui/select.tsx:9,27,53`/
+  `ui/sheet.tsx:10,42` — **no `React.forwardRef`/`displayName`**. `NavigationMenuLink` used standalone
+  (no `Trigger`/`Content` pairing) inside `NavigationMenuItem`, with `navigationMenuTriggerStyle()`
+  (the shadcn `cva()` helper) supplying the link's base classes and each call site's existing `cn(...)`
+  active/inactive classes layered on top via `className` — see § Codebase Map's Round 3 addendum above
+  for the full 9-export API and the standalone-`Link`-inside-`Item` pattern.
 - Test-data inventory (C-12) → `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` already carries
   fixtures for every domain object these FRs' e2e specs touch: `accounts.ts` (FR-12 AccountsModule),
   `orders.ts` (FR-12 OrderFilters), `strategies.ts` (FR-4 deactivate, FR-9), watchlist/opportunity
@@ -164,7 +223,8 @@ Two build tranches, matching product-spec's own Open Questions § Merge order:
 
 1. **No cross-feature dependency** (can start immediately): FR-1 (Switch), FR-2 (Slider), FR-3
    (Collapsible), FR-10 (Badge reuse ×2), FR-11 (Table reuse ×2), FR-12 (FilterToolbar consolidation),
-   FR-13 (nav evaluation — this round's design-fork decision).
+   FR-13 (nav — **REPLACE**, per Round 3 user-directed override; see § Codebase Map addendum above and
+   `design.md` § Round 3).
 2. **Blocked on `120-shadcn-migration-high-confidence` merging**: FR-4 (AlertDialog ×5), FR-5 (Tabs),
    FR-6 (ToggleGroup), FR-7 (Alert ×2), FR-8 (Checkbox), FR-9 (Accordion).
 

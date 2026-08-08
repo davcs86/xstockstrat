@@ -56,6 +56,14 @@ theme values come entirely from the preset).
   not read `tsconfig.json`'s `paths` automatically the way Next's own bundler does, and the
   shadcn-CLI-regenerated `components/ui/*` files use `@/...` alias imports (the old hand-rolled
   files used relative imports, which never needed this).
+- **Sanctioned exception — `ChartPanel.tsx` stays on `lightweight-charts`.** `ChartPanel.tsx` (and
+  its siblings via the shared `useCandlestickChart.ts` hook — `trader/positions/[symbol]/page.tsx`,
+  `insights/market/[symbol]/page.tsx`) intentionally stays on `lightweight-charts` rather than
+  `recharts`/`ui/chart.tsx` (feature 123 design decision, 2026-08-08): `recharts` has no
+  first-party OHLCV candlestick geometry, the hook has 3 shared consumers across `/trader` and
+  `/insights`, and `e2e/trader/chart-panel.spec.ts` depends on `lightweight-charts`'s own injected
+  `.tv-lightweight-charts` DOM class as an async-readiness signal. Do not re-flag this as an
+  unconsolidated charting approach in a future audit.
 
 ## Docker Build Pattern
 

@@ -23,7 +23,7 @@
 - [Product Spec](product-spec.md) — requirements and governance
 - [Recon](recon.md) — codebase dossier (Phase 0)
 - [Design](design.md) — approved architecture (Phase 1) — **see § Process Note: FR-13 call needs human re-affirmation**
-- [Implementation Spec](implementation-spec.md) — 17 steps, tranche 1 only (FR-1/FR-2/FR-3/FR-10/FR-11/FR-12/FR-13); FR-4–FR-9 deferred to a re-spec after `120` merges
+- [Implementation Spec](implementation-spec.md) — 21 steps, tranche 1 only (FR-1/FR-2/FR-3/FR-10/FR-11/FR-12/FR-13); FR-13 (Steps 17-20) migrates `PlatformHeader.tsx`/`BottomTabBar.tsx` onto `NavigationMenu`, per `design.md`'s Round 3 user-directed override; FR-4–FR-9 deferred to a re-spec after `120` merges
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---

@@ -191,3 +191,60 @@ Advisory step grouping (not binding — `/sdd-design` Phase 1 and `/sdd-spec` de
    so they can be separate steps with their own e2e/manual verification (`AddAccountForm`'s
    `form.reset()`-on-success parity is the one concretely testable behavior to verify per the
    `account-selector.spec.ts:92` finding above).
+
+## Addendum 2026-08-08 — user override + primitive correction (post-design Round 2)
+
+Appended after Round 2's design was already approved (provisionally) and after the calling session
+put the FR-2/FR-3/FR-4 narrowing in front of the user directly (this session had no
+`AskUserQuestion` tool available; the follow-up did). Two independent findings, both grounded before
+`design.md`'s Round 3 cites them:
+
+**1. User-directed scope override (explicit, not inferred).** The user was shown Round 2's
+narrower recommendation (decline `AuthForm`, migrate only `AddAccountForm`, `react-hook-form` only —
+no `zod`/`ui/form.tsx`) and **explicitly overrode it**: migrate all three call sites
+(`AuthForm.tsx`'s `CredentialsForm`, `accountShared.tsx`'s `AddAccountForm`, and
+`accountShared.tsx`'s `EditCredentialsForm`) onto the full recipe (react-hook-form + zod + the
+shadcn Form/Field primitive). This satisfies Constitution **P-04** as a live, recorded user
+decision — the thing Round 2's Open Risks flagged as missing. It supersedes Round 2's FR-2/FR-3
+narrowing outright; it does not touch FR-1 (`ui/alert.tsx` still doesn't exist in trunk, unaffected
+by this override).
+
+**2. The shadcn `Form` primitive shadcn recommends today is not `ui/form.tsx`.** Verified live
+(WebFetch, 2026-08-08) against shadcn's own docs site:
+
+- `https://ui.shadcn.com/docs/components/field` — the current primitive is **`ui/field.tsx`**,
+  exporting `Field`, `FieldLabel`, `FieldContent`, `FieldDescription`, `FieldError`, `FieldGroup`,
+  `FieldSet`, `FieldLegend`, `FieldTitle`, `FieldSeparator`. It is explicitly **framework-agnostic**
+  — documented as working with plain `useState`, react-hook-form, TanStack Form, or Formisch — unlike
+  `ui/form.tsx`'s `FormField`-wraps-`useFormContext` indirection, which is react-hook-form-specific.
+  Basic usage renders `Field` > `FieldLabel`/`Input`/`FieldDescription`, no context provider needed
+  for the non-RHF case.
+- `https://ui.shadcn.com/docs/forms/react-hook-form` — the react-hook-form integration guide uses
+  `Controller`/`useForm`/`useFieldArray` **directly from `react-hook-form`**, combined with the
+  `Field` family above, rather than a `Form`/`FormField` wrapper layer. Install command:
+  `npm install react-hook-form zod @hookform/resolvers/zod` — **three** packages, not the two
+  (`react-hook-form` + `zod`) product-spec.md's original FR-4 text anticipated.
+  `@hookform/resolvers/zod` is the glue package (`zodResolver`) connecting `useForm`'s `resolver`
+  option to a `zod` schema; it is not a transitive dependency of either `react-hook-form` or `zod`
+  alone.
+- **Conclusion**: `product-spec.md`'s FR-4, which names `Form`/`FormField`/`FormItem`/`FormLabel`/
+  `FormControl`/`FormMessage` wired to `useFormContext`, describes shadcn's **older** pattern.
+  `design.md`'s Round 3 targets `ui/field.tsx` + `Controller`/`useForm` instead, and
+  `product-spec.md`'s FR-4 text is corrected in place (not silently diverged from) to match this
+  verified-current reality, per this repo's "fix the spec, don't paper over drift" convention.
+- Structural precedent for `ui/field.tsx`'s compound shape (same reasoning as before, now
+  re-confirmed): `ui/select.tsx` (compound, `radix-ui` package import, `data-slot="select-*"` per
+  sub-part, no `forwardRef`) is the closest existing shape in this codebase — `ui/field.tsx` should
+  match it, not shadcn's classic `forwardRef` template. `ui/input.tsx` (plain function, `data-slot`,
+  `cn()`, no `forwardRef`) is the precedent for individual field controls staying as they are.
+
+**3. `EditCredentialsForm` e2e coverage gap — still unresolved as of this addendum.** Round 2's
+finding stands: `account-selector.spec.ts` and `orders.spec.ts` are the only account-form-adjacent
+specs, and neither drives `EditCredentialsForm`'s "Edit keys" flow. Now that the user has overridden
+scope to include this consumer, `design.md`'s Round 3 must decide explicitly whether to add a new
+characterization e2e test for it before migrating (red-before-green safety net matching the
+TDD-gate escape-hatch pattern already used for `AddAccountForm`) or accept the risk — this is not
+resolved by the override itself, which only settled *whether* to migrate, not *how safely*.
+
+No new dependencies, proto, config, or DB findings beyond what the original recon.md sections above
+already established — this addendum is scoped to the override and the primitive correction only.

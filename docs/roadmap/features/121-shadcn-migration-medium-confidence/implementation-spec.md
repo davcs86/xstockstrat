@@ -2,8 +2,11 @@
 
 **Status**: `pending`
 **Created**: 2026-08-08
+**Last Updated**: 2026-08-08 (FR-13 amendment — added Steps 17-20, real `NavigationMenu`
+migration steps, replacing the prior "no code step" text, per `design.md`'s Round 3
+user-directed override; old Step 17 renumbered to Step 21)
 **Feature**: `docs/roadmap/features/121-shadcn-migration-medium-confidence/feature.md`
-**Total Steps**: 17
+**Total Steps**: 21
 **Feature Branch**: `feature/shadcn-migration-medium-confidence`
 
 ---
@@ -12,10 +15,12 @@
 
 This spec covers **only tranche 1** of the product spec — FR-1, FR-2, FR-3, FR-10, FR-11, FR-12,
 FR-13 — the seven FRs `recon.md` § Recommended Scope and `design.md` confirm have **no
-cross-feature dependency** on sibling `120-shadcn-migration-high-confidence`. It adds three new
-primitives (`switch`, `slider`, `collapsible`), reuses two existing ones (`badge`, `table`) at four
-more call sites, and consolidates two independently-built filter toolbars into one shared
-`FilterToolbar`. All work lands in `services/xstockstrat-ui/` only; no proto, config, or DB changes.
+cross-feature dependency** on sibling `120-shadcn-migration-high-confidence`. It adds four new
+primitives (`switch`, `slider`, `collapsible`, `navigation-menu`), reuses two existing ones
+(`badge`, `table`) at four more call sites, consolidates two independently-built filter toolbars
+into one shared `FilterToolbar`, and migrates `PlatformHeader.tsx`'s/`BottomTabBar.tsx`'s hand-built
+nav onto the new `navigation-menu` primitive. All work lands in `services/xstockstrat-ui/` only; no
+proto, config, or DB changes.
 
 **Tranche 2 — deliberately NOT specced here.** FR-4 through FR-9 consume `ui/alert-dialog.tsx`,
 `ui/tabs.tsx`, `ui/toggle-group.tsx`, `ui/alert.tsx`, `ui/checkbox.tsx`, `ui/accordion.tsx` — a fresh
@@ -28,20 +33,21 @@ steps against those paths now would violate **F-04** (never invent a file path).
 with grounded evidence for the primitives it adds; `docs/roadmap/features/merge-order.md` should carry
 this as a registered blocking-dependency row per product-spec's Open Questions.
 
-**FR-13 (Navigation Menu evaluation) — no code step.** `design.md` § Chosen Approach point 5 resolved
-this as **KEEP AS-IS**: `PlatformHeader.tsx`/`BottomTabBar.tsx` stay hand-built `<Link>` rows, no
-`ui/navigation-menu.tsx` is added. This is a design decision, not an implementation step — it is
-already recorded in `design.md` § Rejected Alternatives and `context.md`'s 2026-08-08 sdd-design
-session, satisfying product-spec acceptance criterion 6. **Flag for the calling
-orchestrator/user**: `design.md` § Open Risks states this specific call "was not confirmed through an
-interactive user gate" (no `AskUserQuestion` tool was available in that session) and asks for explicit
-human re-affirmation before being treated as final. This spec proceeds on it as design.md's authoritative
-Chosen Approach per this skill's own Step 1.5 ("design.md is authoritative input"), but the
-re-affirmation is still outstanding and is restated here for visibility, not silently resolved.
+**FR-13 (Navigation Menu migration) — four real code steps.** `design.md` § Round 3 records the
+user-directed override that supersedes the original round-1/round-2 KEEP AS-IS recommendation:
+`PlatformHeader.tsx`'s and `BottomTabBar.tsx`'s hand-built `<Link>` nav must actually be replaced with
+`ui/navigation-menu.tsx`, using the standalone `NavigationMenuLink`-inside-`NavigationMenuItem`
+pattern (no dropdowns/flyouts). `design.md` § Chosen Approach point 5 is the authoritative migration
+plan — add the primitive, migrate `PlatformHeader.tsx`'s two desktop nav regions, migrate
+`BottomTabBar.tsx`'s single mobile nav, then re-run `e2e/nav-reachability.spec.ts` to confirm the
+C-10(a) contract still resolves. Steps 17–20 below implement this; `design.md`/`recon.md` are final and
+were not re-derived here, only translated into concrete steps with grounded file:line citations.
 
 **Ordering.** Steps 1–12 (FR-1/FR-2/FR-3/FR-10/FR-11) are independent of each other and of Steps
-13–16 (FR-12); execute in numeric order for a readable diff, not because of a hard dependency. Step 17
-is a whole-feature verification gate that must run last.
+13–16 (FR-12) and Steps 17–20 (FR-13); execute in numeric order for a readable diff, not because of a
+hard dependency. Within FR-13, Step 17 (the primitive) must land before Steps 18–19 (the two
+migrations), which must both land before Step 20 (the e2e regression check). Step 21 is the
+whole-feature verification gate and must run last, after every other step (1–20).
 
 ## Step Dependencies
 
@@ -51,7 +57,12 @@ is a whole-feature verification gate that must run last.
 - Step 9 [test] requires Steps 7 and 8 [service]: exercises both FR-10 swaps.
 - Step 12 [test] requires Steps 10 and 11 [service]: exercises both FR-11 swaps.
 - Step 16 [test] requires Steps 13–15 [service]: exercises the FR-12 consolidation.
-- Step 17 [test] requires Steps 1–16: whole-feature `lint`/`build`/`test:e2e` gate (acceptance
+- Step 18 [service] requires Step 17 [service]: migrates `PlatformHeader.tsx` onto the
+  `ui/navigation-menu.tsx` primitive Step 17 lands.
+- Step 19 [service] requires Step 17 [service]: migrates `BottomTabBar.tsx` onto the same primitive.
+- Step 20 [test] requires Steps 18 and 19 [service]: exercises both FR-13 nav migrations against
+  `e2e/nav-reachability.spec.ts`.
+- Step 21 [test] requires Steps 1–20: whole-feature `lint`/`build`/`test:e2e` gate (acceptance
   criterion 5), runs after every other step.
 - **Deferred, not a step in this spec**: FR-4 through FR-9 — re-run `/sdd-spec` once
   `120-shadcn-migration-high-confidence` merges to `main-dev` (see Execution Summary).
@@ -771,11 +782,237 @@ cd services/xstockstrat-ui && pnpm test:e2e -- e2e/trader/account-selector.spec.
 
 ---
 
-### Step 17 — test: Whole-feature verification gate (acceptance criterion 5)
+### Step 17 — service: Add `ui/navigation-menu.tsx` primitive (FR-13)
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
-**Files**: none — verification-only, runs after Steps 1–16
+**Files**:
+- `services/xstockstrat-ui/src/components/ui/navigation-menu.tsx` — create
+- `services/xstockstrat-ui/src/components/ui/navigation-menu.test.ts` — create
+
+**Reviewers**: `xstockstrat-ui` service owner — Trading UI correctness (shared nav shell renders on
+every UI segment)
+
+**Codebase Evidence**:
+- `design.md` § Chosen Approach point 5 (Round 3 override): add `ui/navigation-menu.tsx` via `npx
+  shadcn@latest add navigation-menu` against the existing `components.json` preset (`radix-rhea`);
+  hand-authored fallback matches the confirmed post-119 shape — plain function components,
+  `data-slot`, `cn()`, **no** `forwardRef`/`displayName` — the same shape `ui/badge.tsx:35`,
+  `ui/select.tsx:9,27,53`, `ui/sheet.tsx:10,42` already use.
+- `recon.md` § Codebase Map Round 3 addendum: verified live shadcn Navigation Menu API — 9 named
+  exports: `NavigationMenu`, `NavigationMenuList`, `NavigationMenuItem`, `NavigationMenuContent`,
+  `NavigationMenuTrigger`, `NavigationMenuLink`, `NavigationMenuIndicator`, `NavigationMenuViewport`,
+  `navigationMenuTriggerStyle` (a `cva()` helper). `NavigationMenuLink` is documented as usable
+  standalone inside a `NavigationMenuItem` with no paired `Trigger`/`Content` — the flat-nav pattern
+  Steps 18-19 need (`render={<Link href="..." />}`).
+- Confirmed absent: `grep -rn "ui/navigation-menu" services/xstockstrat-ui/src/` → zero hits
+  (`recon.md` § Risks/Not-found).
+- `recon.md` flags the `render={<Link .../>}` import-source/prop-name pairing as "**not
+  independently confirmed for `navigation-menu.tsx` specifically**" — verify the exact import source
+  (the unified `radix-ui` package vs `@base-ui/react`) and prop name against the CLI-generated file
+  (or shadcn's live registry JSON) before hand-authoring a fallback.
+
+**TDD**: N/A for the primitive itself — no app-specific `cva` variant to guard (unlike
+`badge.tsx:19-24`'s `buy`/`sell`/`paper`/`live` keys), so there is no red assertion to write first.
+The companion test file asserts the exported surface exists, per product-spec.md FR-14's convention
+(mirroring `badge.test.ts`/`button.test.ts`), not a red-before-green flow.
+
+**Instructions**:
+1. Run `npx shadcn@latest add navigation-menu` from `services/xstockstrat-ui/` against the existing
+   `components.json` preset. If the CLI is unavailable (network/registry), hand-author
+   `src/components/ui/navigation-menu.tsx` matching the confirmed shape: plain function components
+   for `NavigationMenu`/`NavigationMenuList`/`NavigationMenuItem`/`NavigationMenuContent`/
+   `NavigationMenuTrigger`/`NavigationMenuLink`/`NavigationMenuIndicator`/`NavigationMenuViewport`,
+   each `data-slot`-marked, `cn()` from `@/components/ui/utils`, plus the `navigationMenuTriggerStyle`
+   `cva()` helper — no `forwardRef`/`displayName`. Before hand-authoring, verify the exact import
+   source and the render-prop name against shadcn's live registry JSON, since `recon.md` flags this as
+   unconfirmed for this specific primitive.
+2. Create `src/components/ui/navigation-menu.test.ts` mirroring `badge.test.ts`/`button.test.ts`'s
+   shape: import the exported surface from `./navigation-menu` and assert it exists (e.g. each of the
+   9 exports is defined/is a function, or a single assertion that `navigationMenuTriggerStyle()`
+   returns a non-empty className string). Keep it minimal — there is no app-specific variant to guard
+   here, unlike `badge`/`button`'s `buy`/`sell`/`paper` `cva` keys.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && test -f src/components/ui/navigation-menu.tsx && grep -n "function NavigationMenu" src/components/ui/navigation-menu.tsx && ! grep -n "forwardRef\|displayName" src/components/ui/navigation-menu.tsx
+test -f src/components/ui/navigation-menu.test.ts
+pnpm vitest run src/components/ui/navigation-menu.test.ts
+pnpm lint
+```
+
+---
+
+### Step 18 — service: Migrate `PlatformHeader.tsx`'s two desktop nav regions onto `NavigationMenu` (FR-13)
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx` — modify (desktop row-1
+  Primary nav `:170-190`; desktop row-2 Section nav `:271-287`, nested inside the `:260-288` row-2
+  wrapper — the `aria-label="Breadcrumb"` `<span>` at `:261` is a sibling of this `<nav>`, not touched,
+  owned by sibling `120`'s FR-7)
+
+**Reviewers**: `xstockstrat-ui` service owner — Trading UI correctness (shared nav shell renders on
+every UI segment)
+
+**Codebase Evidence**:
+- `recon.md` § Codebase Map Round 3 addendum: Row-1 Primary tabs — exact re-read range `:170-190`,
+  `<nav aria-label="Primary" className="hidden sm:flex items-center gap-1 flex-1">`, one flat `<Link>`
+  per `NAV_GROUPS` entry, `aria-current={isActive ? 'page' : undefined}` (`:177`), zero
+  dropdown/flyout/nesting.
+- Row-2 Section links — the `<nav aria-label="Section" className="flex items-center gap-1
+  overflow-x-auto">` element itself is `:271-287`, nested inside the row-2 wrapper `<div>` at
+  `:260-288`. Active-state logic consumed by both regions: `isItemActive` (`:81-84`), `resolveActive`
+  (`:87-95`).
+- `e2e/nav-reachability.spec.ts` selectors that must keep resolving (`recon.md`'s exact re-read):
+  line 60 `page.getByRole('navigation', { name: 'Primary' })`, line 61 `page.getByRole('navigation',
+  { name: 'Section' })`, line 65 `primary.getByRole('link', { name: group.tab, exact: true })`,
+  line 67 `section.getByRole('link', { name: item.label, exact: true })`, line 68
+  `expect(page).toHaveURL(...)`.
+- `design.md` § Chosen Approach point 5: one `NavigationMenuItem`/`NavigationMenuLink` per
+  `NAV_GROUPS`/`activeItems` entry, `NavigationMenuLink` used standalone (no `Trigger`/`Content`
+  pairing — there is no dropdown here), `render={<Link href={...} />}` to preserve Next.js
+  client-side routing, carrying the exact same `aria-current` and `cn(...)` active/inactive classes
+  the current `<Link>` carries. The `NavigationMenu` root itself takes the `aria-label`
+  (`"Primary"`/`"Section"`) and the current `<nav>`'s `className`, and passes `viewport={false}` (no
+  dropdown flyout exists, so `Viewport`/`Indicator` machinery is unused weight).
+- Mobile `Sheet` disclosure (`:195-255`) is explicitly out of scope — accordion-like expand/collapse,
+  not a flat-link nav; sibling `120`'s FR-8 Accordion migration already targets this same `:209-253`
+  range.
+
+**TDD**: N/A (like-for-like markup swap preserving `role`/`aria-label`/`aria-current` exactly — no
+new conditional logic; Step 20 provides the e2e regression gate).
+
+**Instructions**:
+1. Import `{ NavigationMenu, NavigationMenuList, NavigationMenuItem, NavigationMenuLink,
+   navigationMenuTriggerStyle } from '@/components/ui/navigation-menu'` (or this file's existing
+   relative-import style — confirm before editing).
+2. Replace the Row-1 `<nav aria-label="Primary" className="hidden sm:flex items-center gap-1
+   flex-1">` block (`:170-190`) with `<NavigationMenu aria-label="Primary" viewport={false}
+   className="hidden sm:flex items-center gap-1 flex-1"><NavigationMenuList>` wrapping one
+   `<NavigationMenuItem key={group.id}><NavigationMenuLink render={<Link
+   href={group.items[0].href} />} aria-current={isActive ? 'page' : undefined} className={cn(...)}>
+   {group.tab}</NavigationMenuLink></NavigationMenuItem>` per `NAV_GROUPS` entry, preserving the exact
+   `aria-current` logic (`:177`) and existing `cn(...)` active/inactive classes verbatim.
+3. Replace the Row-2 `<nav aria-label="Section" className="flex items-center gap-1
+   overflow-x-auto">` block (`:271-287`) with the same `NavigationMenu`/`NavigationMenuList`/
+   `NavigationMenuItem`/`NavigationMenuLink` pattern, one item per `activeItems` entry, preserving
+   `aria-current={isItemActive(pathname, item) ? 'page' : undefined}` verbatim. Leave the sibling
+   `aria-label="Breadcrumb"` `<span>` at `:261` completely untouched.
+4. Leave the mobile `Sheet` block (`:195-255`) untouched — out of scope per `design.md`.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && grep -n "NavigationMenu" src/components/shared/PlatformHeader.tsx
+grep -n 'aria-label="Primary"' src/components/shared/PlatformHeader.tsx
+grep -n 'aria-label="Section"' src/components/shared/PlatformHeader.tsx
+grep -n 'aria-label="Breadcrumb"' src/components/shared/PlatformHeader.tsx  # confirm untouched, still present
+pnpm lint
+```
+
+---
+
+### Step 19 — service: Migrate `BottomTabBar.tsx`'s flat nav onto `NavigationMenu` (FR-13)
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/components/mobile/BottomTabBar.tsx` — modify (`:25-56`; the nav
+  element itself is `:28-54` per `recon.md`'s Round 3 re-read)
+
+**Reviewers**: `xstockstrat-ui` service owner — Trading UI correctness (mobile nav shell)
+
+**Codebase Evidence**:
+- `recon.md` § Codebase Map Round 3 addendum: whole file is 56 lines; the nav element itself is
+  `:28-54` (`aria-label="Mobile primary"`, `data-testid="mobile-tab-bar"`), four `<Link>`s built from
+  `TABS = NAV_GROUPS.slice(0, 4)` (`:8`), `isGroupActive` (`:10-18`) drives active styling.
+- `design.md` § Chosen Approach point 5: `NavigationMenu` root carries the `aria-label`/
+  `data-testid`/fixed-positioning classes, `NavigationMenuItem` per `TABS` entry (each `flex-1` so
+  the four tabs still split the width evenly — the equal-width class moves from the `Link` itself to
+  the `NavigationMenuItem` `<li>`, since `NavigationMenuList` renders a `<ul>`/`<li>` structure the
+  current flat-`<Link>` markup doesn't have), `aria-current` preserved.
+- `e2e/nav-reachability.spec.ts` never touches the mobile `Sheet` or `BottomTabBar` (`recon.md`'s
+  full-file re-read) — no selector in that spec targets this file; Step 20 still runs the full suite
+  as the regression gate regardless.
+
+**TDD**: N/A (like-for-like markup swap; Step 20 provides the e2e regression gate).
+
+**Instructions**:
+1. Import `{ NavigationMenu, NavigationMenuList, NavigationMenuItem, NavigationMenuLink } from
+   '@/components/ui/navigation-menu'` (or this file's existing relative-import style).
+2. Replace the `<nav aria-label="Mobile primary" data-testid="mobile-tab-bar" ...>` block (`:28-54`)
+   with `<NavigationMenu aria-label="Mobile primary" data-testid="mobile-tab-bar" viewport={false}
+   className={/* the current nav's fixed-positioning classes, unchanged */}><NavigationMenuList
+   className="flex w-full">` wrapping one `<NavigationMenuItem key={tab.id} className="flex-1">
+   <NavigationMenuLink render={<Link href={...} />} aria-current={isGroupActive(...) ? 'page' :
+   undefined} className={cn(...)}>{tab.label}</NavigationMenuLink></NavigationMenuItem>` per `TABS`
+   entry — move the equal-width `flex-1` class from the `Link` onto `NavigationMenuItem`, preserving
+   every other existing class and the `aria-current` logic verbatim.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && grep -n "NavigationMenu" src/components/mobile/BottomTabBar.tsx
+grep -n 'data-testid="mobile-tab-bar"' src/components/mobile/BottomTabBar.tsx
+grep -n 'aria-label="Mobile primary"' src/components/mobile/BottomTabBar.tsx
+pnpm lint
+```
+
+---
+
+### Step 20 — test: e2e regression for FR-13 (`nav-reachability.spec.ts` against the `NavigationMenu` swap)
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/e2e/nav-reachability.spec.ts` — verification-only unless a selector
+  breaks
+
+**Reviewers**: `xstockstrat-ui` service owner — Trading UI correctness (C-10(a) shared-shell
+contract)
+
+**Codebase Evidence**:
+- `recon.md` § Codebase Map Round 3 addendum: `e2e/nav-reachability.spec.ts` full-file re-read —
+  line 60 `page.getByRole('navigation', { name: 'Primary' })`, line 61
+  `page.getByRole('navigation', { name: 'Section' })`, line 65 `primary.getByRole('link', {
+  name: group.tab, exact: true })`, line 67 `section.getByRole('link', { name: item.label, exact:
+  true })`, line 68 `expect(page).toHaveURL(...)`, lines 70-71 `page.getByLabel('Breadcrumb')`
+  (unrelated — owned by sibling `120`'s FR-7, must stay passing).
+- `design.md` § Chosen Approach point 5: `NavigationMenuLink` used standalone (no `Trigger`/
+  `Content` pairing) renders an anchor-equivalent element, not a `button`/`menuitem`, so
+  `role=navigation`/`role=link`/`aria-current` are preservable without a spec rewrite — this step
+  exists to verify that claim against the real Steps 18-19 markup, not assume it holds.
+- This is this feature's own red-before-green discipline applied to a markup-only swap: role/label
+  -based selectors are the ones acceptance criterion 5 says should survive a markup swap unmodified
+  (the identical pattern this spec already uses in Steps 2/4/6/9/12/16), so the correct verification
+  order is run the existing suite first against Steps 18-19's changes, not rewrite the spec
+  pre-emptively.
+
+**TDD**: N/A (regression check over an already-existing, role/label-based suite — same pattern as
+this spec's other e2e steps; no pre-existing assertion needs to redden since the C-10(a) contract
+being tested is unchanged by design, only the markup implementing it).
+
+**Instructions**:
+Run `e2e/nav-reachability.spec.ts` unmodified against Steps 18-19's changes. If a case fails, read
+the spec first — if the failure is a role/label mismatch caused by `NavigationMenuLink` rendering a
+different accessible role than a plain `<Link>` (e.g. because the render-prop/import-source pairing
+`recon.md` flagged as unconfirmed turned out to require a different composition), fix Steps 18-19's
+markup to restore the exact `role=navigation`/`role=link`/`aria-current` contract rather than
+rewriting this spec's selectors — the whole point of the standalone-`Link`-inside-`Item` pattern
+(`design.md` § Round 3) is that no selector rework should be needed.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && pnpm test:e2e -- e2e/nav-reachability.spec.ts
+```
+
+---
+
+### Step 21 — test: Whole-feature verification gate (acceptance criterion 5)
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**: none — verification-only, runs after Steps 1–20
 
 **Reviewers**: `xstockstrat-ui` service owner — full review scope (final gate)
 

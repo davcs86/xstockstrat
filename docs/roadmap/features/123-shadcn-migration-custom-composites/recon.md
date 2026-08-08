@@ -130,6 +130,25 @@ an explicit design decision (FR-9–FR-11). No proto, config, or DB changes; sin
   (`https://registry.npmjs.org/@shadcn/react`): package **exists**, latest **0.3.0** (pre-1.0),
   created 2026-06-26, last modified 2026-08-05 (3 days before this recon) — an actively-changing,
   unstable-by-semver-convention dependency, not a mature/pinned one.
+- **`Questionnaire.Item`'s answer model — one answer per `Item`, verified 2026-08-08 (Round 3 override
+  session, `design.md`)**. This corrects/replaces an earlier, unsourced citation in `design.md`'s
+  Round 2 (point 3) that pointed here ("`recon.md` § Dependencies — `FormData.get(itemName)`/`getAll`")
+  before this bullet actually existed — the Round 1/2 registry-payload fetch above only established
+  that `QuestionnaireItem` forwards arbitrary `children`, not the `FormData`-key mechanics below.
+  Verified via **two independent live `WebFetch` calls** against the shadcn `Questionnaire` docs (not
+  the raw registry JSON payload used above, and not assumed):
+  - `QuestionnaireItem` renders as a `fieldset`; each `Item` has a unique `name` that becomes the
+    `FormData` key.
+  - `FormData.get(itemName)` reads a single answer; `FormData.getAll(itemName)` reads a multi-checkbox
+    answer (`multiple: true` within one `Choice` group).
+  - Exported parts: `QuestionnaireInput` (one input field wrapper), `QuestionnaireChoice`/
+    `QuestionnaireChoices` (one choice group). An `Item` supports **one** `Choice` group, OR one
+    optional freeform `Input` alongside choices — **not** multiple independently-named `Input` fields.
+  - **No pattern exists for multiple independently-named `Input` fields inside one `Item`.**
+  - **Consequence** (drives `design.md`'s Round 3 FR-10 override): any UI screen migrated onto this
+    model gets exactly one navigable unit per `Item` — a multi-field flat form (like `StrategyWizard`'s
+    original Step 1) can only be expressed as one `Item` per field, i.e. one screen per field, not one
+    screen with several independently-named answers.
 
 ## Risks / Not-found
 
@@ -193,6 +212,8 @@ Advisory step boundaries for `/sdd-spec` (not binding):
    as optional (present for a/b, absent for `RuleEditor`'s conditions).
 8. FR-8 — migrate all three editors onto `RepeatableRowList` + `useListEditor`, deleting bespoke logic.
 9. FR-9/FR-10 decision + FR-9's install (CLI-vendored `questionnaire.tsx`, confirmed live to match this
-   repo's registry/style) + FR-10's shell-vs-restructure scope (evidence strongly favors (a) shell-only
-   — see Dependencies § answer model finding below, folded into design.md).
+   repo's registry/style) + FR-10's shell-vs-restructure scope (design-time evidence favored (a)
+   shell-only for the whole wizard — see Dependencies § answer model finding above — but the user
+   directly overrode this for **Step 1 specifically** in a later Round 3 session, per `design.md`;
+   Steps 2/3/4 remain shell-only as this recon originally found).
 10. FR-11 — replace the `<ol>` step indicator with `Questionnaire.Progress` (or the FR-10-decided shell).

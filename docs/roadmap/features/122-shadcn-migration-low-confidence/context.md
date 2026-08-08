@@ -168,3 +168,66 @@
   than originally flagged, but still worth checking `merge-order.md`/the other feature's diff before
   merging Step 3 if `121` has landed changes to that function by then.
 - Feature status: `design-approved` → `implementation-ready`.
+
+## Session 2026-08-08 — implementation-spec.md rewritten for design.md's Round 3 override
+
+- **Trigger**: `design.md` and `recon.md` had already been finalized (in an earlier session) to
+  record the Round 3 user-directed override — migrate all three call sites (`AuthForm.tsx`,
+  `AddAccountForm`, `EditCredentialsForm` within `accountShared.tsx`) onto `ui/field.tsx` +
+  `react-hook-form` + `zod` + `@hookform/resolvers/zod` (not the older `ui/form.tsx` product-spec.md's
+  original FR-4 text assumed) — but `implementation-spec.md` still reflected the pre-override,
+  narrower Round 2 decision (decline `AuthForm`, migrate only `AddAccountForm`,
+  `react-hook-form`-only). This session's task was solely to bring `implementation-spec.md` into
+  agreement with the already-recorded design decisions — `design.md`/`recon.md` were read in full and
+  treated as ground truth, not re-derived or contradicted.
+- Rewrote the FR-2/FR-3/FR-4 portion of `implementation-spec.md`: Step 1 (docs) still records all
+  four FR decisions in `context.md` per AC-1, but now reflects FR-2/FR-3 as **migrate** (was decline/
+  split) and FR-4 as full-breadth-on-a-corrected-primitive (was narrowed-to-react-hook-form-only).
+  FR-1 (`OrderForm.tsx`/`EditOrderDialog.tsx`, declined) is unaffected and its step content is
+  unchanged in substance.
+- New step sequence (3 steps → 8 steps) for the FR-2/FR-3/FR-4 block:
+  1. docs — record FR-1/FR-2/FR-3/FR-4 decisions (Round 3 update)
+  2. service — add `react-hook-form`, `zod`, `@hookform/resolvers/zod` dependencies (install only,
+     no call-signature code, per the 2026-08-05 `trader-chart-panel` ledger trap)
+  3. service — add the `ui/field.tsx` primitive (`npx shadcn@latest add field`, hand-authored
+     fallback per recon.md's confirmed export list, matching `ui/select.tsx`'s shape)
+  4. **test** (new) — add `EditCredentialsForm`'s characterization e2e test, proven green against
+     the **pre-migration** code — a real red-before-green (here: green-before-and-after) safety net,
+     per design.md § FR-3's explicit sequencing decision. Grounded a real nuance while writing this
+     step: `EditCredentialsForm`'s `onDone` callback (`accountShared.tsx:141`) fully **unmounts**
+     the form on success (`AccountRow`'s `editing` state collapses, `:247-249`) rather than
+     resetting-in-place like `AddAccountForm` does — so the new test asserts the row collapsing back
+     to its "Edit keys" button, not a cleared-but-still-mounted field value. Also had to scope the
+     new test's locators to the specific edit form (`page.locator('form').filter({ has:
+     page.getByRole('button', { name: 'Save keys' }) })`) since `AddAccountForm` and
+     `EditCredentialsForm` render identical `"API Key"`/`"API Secret"` placeholders simultaneously
+     on `/trader/accounts` — a bare `getByPlaceholder` would strict-mode-violate.
+  5. service — migrate `AuthForm.tsx`'s `CredentialsForm` (useForm + Controller + zod +
+     Field/FieldLabel/FieldError; submit-level network error stays a local `error` state, not a
+     zod field error)
+  6. service — migrate `AddAccountForm` (same recipe; `account-selector.spec.ts:63-92` is the
+     pre-existing characterization test)
+  7. service — migrate `EditCredentialsForm` (same recipe; sequenced after Step 4's new test, which
+     serves as this step's green-state proof)
+  8. service — final gate: `pnpm lint`/`pnpm build`/`pnpm test:e2e -- e2e/trader/` +
+     `e2e/auth.spec.ts` for the whole FR-2/FR-3/FR-4 block
+- Verified real citations for the new/changed steps directly against current `main-dev` rather than
+  reusing design.md/recon.md's citations uncritically: re-read `AuthForm.tsx` (28-93, exact),
+  `accountShared.tsx` (51-332, exact — `CredentialFields`, `EditCredentialsForm`, `AccountRow`,
+  `AddAccountForm` all re-confirmed), `e2e/trader/account-selector.spec.ts` (63-92, exact),
+  `e2e/mock-backend.ts:199-201` (`updateBrokerAccountCredentials` already registered as a default
+  handler — no new mock-backend.ts change needed for Step 4), `e2e/fixtures/accounts.ts` and
+  `INVENTORY.md:14` (`BROKER_ACCOUNT_ALPACA`/`BROKER_ACCOUNT_IBKR` already canonical, no new
+  fixture), and `ui/select.tsx` (structural precedent for `ui/field.tsx`'s shape).
+- **Elevated merge risk flagged, not resolved here**: the original 3-step plan's `EditCredentialsForm`
+  touch was a one-line comment (low conflict risk against sibling
+  `121-shadcn-migration-medium-confidence`, which touches the same function for its
+  Collapsible/expand-collapse concern). The new Step 7 substantively rewrites
+  `EditCredentialsForm`'s internals, raising that risk from "shared file" to "same function, both
+  editing its internals." Noted in `implementation-spec.md`'s "Step Dependencies" section and here —
+  `/sdd-execute` should check `merge-order.md`/`121`'s status before merging Step 7.
+- `design.md` and `recon.md` were **not modified** — read-only ground truth for this session, per the
+  task's explicit constraint. Only `implementation-spec.md`, `feature.md` (a Status History row noting
+  the step-count change, no lifecycle transition), and this file were touched.
+- No git commands were run this session (per task constraint) — no branch/commit/push performed.
+- Status: `implementation-ready` (unchanged — this was a spec revision, not a new SDD phase).

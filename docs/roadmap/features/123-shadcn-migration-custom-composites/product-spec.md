@@ -123,6 +123,15 @@ resulting from FR-10's decision).
   watchlist name; copilot note thread; empty state; mobile section dispatcher) — nothing to change there.
 - Any visual/behavioral redesign of chart data, tooltips content, or wizard step *order* beyond what
   FR-2 through FR-11 require — this is a consolidation and componentization pass, not a UX redesign.
+  **Approved exception (2026-08-08, user-directed, `design.md` § Round 3)**: `StrategyWizard`'s Step 1
+  ("Identity") is restructured onto the shadcn `Questionnaire` primitive's native Choice/Input
+  answer model — its 4 independent fields become 4 nested sub-screens with their own navigation,
+  changing Step 1's internal pacing (a screen-per-field flow where today it is one flat 4-field
+  screen). The user was asked directly and explicitly chose this over the shell-only default FR-10
+  originally reached (`design.md` §§ Round 2, Chosen Approach #10 prior to Round 3). This exception is
+  scoped **narrowly to Step 1**: the outer wizard's 4-step count/order (`STEPS`) and Steps 2/3/4's
+  content and pacing are unchanged and remain subject to this Out-of-Scope clause as originally written
+  — no other step, and no other feature, may cite this exception.
 
 ## Affected Services
 

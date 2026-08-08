@@ -163,3 +163,50 @@ they are a fully-reasoned recommendation, not a confirmed one.
   - `OrderFilters.tsx` has no `activeFilterCount` computation today (confirmed via full Read) — Step
     14 does not invent one; it passes `activeFilterCount={0}` so `FilterToolbar`'s `'trailing'`
     Clear-button placement stays unconditional, matching today's actual behavior exactly.
+
+## Session 2026-08-08 — implementation-spec.md amendment for FR-13 (Round 3 override)
+
+- **Trigger**: `design.md` and `recon.md` were already updated in a prior session to record the
+  Round 3 user-directed override (FR-13 goes from KEEP AS-IS to REPLACE — see `design.md` § Round 3
+  — user-directed override and `recon.md` § Codebase Map's Round 3 addendum) but
+  `implementation-spec.md` had not yet been brought in line: it still carried the original 17-step,
+  pre-override text (FR-13 as "no code step"). This session's **only** job was to close that gap —
+  `design.md`/`recon.md` were not touched, re-derived, or re-litigated; they were read as final
+  ground truth per this feature's own Round 3 record.
+- **Changes made to `implementation-spec.md`**:
+  - Header: `**Total Steps**` 17 → 21; added a `**Last Updated**` line noting the FR-13 amendment.
+  - Execution Summary: replaced the "FR-13 — no code step" paragraph with one describing the real
+    `NavigationMenu` migration (citing `design.md` § Round 3 and § Chosen Approach point 5); updated
+    the "Ordering" paragraph to sequence Steps 17-20 (primitive → both migrations → e2e regression)
+    and to name Step 21 (not 17) as the final whole-feature verification gate; updated the opening
+    paragraph's primitive count (three → four, adding `navigation-menu`) for internal consistency.
+  - Step Dependencies: added entries for Steps 17-20's dependency chain (18 and 19 each require 17;
+    20 requires both 18 and 19) and renumbered the whole-feature-gate dependency line from Step 17 to
+    Step 21 (now requiring Steps 1-20).
+  - Inserted four new steps before the old Step 17 (now Step 21):
+    - **Step 17** (service): add `ui/navigation-menu.tsx` (CLI primary path against `radix-rhea`,
+      hand-authored fallback per the confirmed post-119 shape) plus a minimal
+      `navigation-menu.test.ts` asserting the exported surface exists (no app-specific `cva` variant
+      to guard here, so kept intentionally minimal, per product-spec.md FR-14's convention).
+    - **Step 18** (service): migrate `PlatformHeader.tsx`'s two desktop nav regions (Primary
+      `:170-190`, Section `:271-287`) onto `NavigationMenu`/`NavigationMenuList`/
+      `NavigationMenuItem`/`NavigationMenuLink`, preserving `role=navigation`, `aria-label`s,
+      `role=link`, `aria-current` logic, and NAV_GROUPS-derived labels exactly; leaves the sibling
+      `aria-label="Breadcrumb"` span (sibling `120`'s FR-7) and the mobile `Sheet` disclosure
+      (sibling `120`'s FR-8) untouched.
+    - **Step 19** (service): migrate `BottomTabBar.tsx`'s single flat nav (`:28-54`) the same way,
+      preserving `data-testid="mobile-tab-bar"` and `aria-label="Mobile primary"`.
+    - **Step 20** (test): run `e2e/nav-reachability.spec.ts` unmodified against Steps 18-19 to
+      confirm the C-10(a) contract (the exact selectors `recon.md` cites at spec lines 60/61/65/
+      67/68) still resolves without a spec rewrite.
+  - Renumbered the old "Step 17 — whole-feature verification gate" to **Step 21**, updating its
+    `Files` line from "runs after Steps 1–16" to "runs after Steps 1–20".
+- **Changes made to `feature.md`**: updated the Artifacts list's implementation-spec.md bullet from
+  "17 steps" to "21 steps," noting Steps 17-20 now migrate `PlatformHeader.tsx`/`BottomTabBar.tsx`
+  onto `NavigationMenu` per the Round 3 override. No `feature.md` Status History row was added — the
+  feature's lifecycle status is unchanged (`implementation-ready`); this was a spec amendment, not a
+  status transition.
+- **`design.md`/`recon.md` were NOT modified this session** — they were already final per the
+  feature's Round 3 record; this session only brought `implementation-spec.md` (and the one
+  `feature.md` cross-reference) into agreement with them.
+- No git commands were run this session.

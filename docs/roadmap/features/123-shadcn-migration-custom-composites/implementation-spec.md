@@ -2,8 +2,9 @@
 
 **Status**: `pending`
 **Created**: 2026-08-08
+**Updated**: 2026-08-08 (Step 11 revised — user-directed FR-10 override; see `design.md` Round 3)
 **Feature**: `docs/roadmap/features/123-shadcn-migration-custom-composites/feature.md`
-**Total Steps**: 12
+**Total Steps**: 13
 **Feature Branch**: `feature/shadcn-migration-custom-composites`
 
 ---
@@ -12,16 +13,28 @@
 
 Single-service (`xstockstrat-ui`), no proto/config/DB changes. Steps 1–5 land the chart consolidation
 (FR-1 close-out, FR-2 new `ui/chart.tsx` primitive, FR-3/FR-4 chart migrations, FR-5 keep-decision
-doc note); Steps 6–9 land the repeatable-row-editor composite (FR-6/FR-7/FR-8); Steps 10–11 land the
-`Questionnaire` wizard shell (FR-9/FR-10/FR-11); Step 12 is the cross-cutting verification pass
-(`pnpm lint`, `pnpm build`, targeted `pnpm test:e2e` specs) plus the acceptance-criteria manual-check
-note for the two files with no e2e coverage (`FormulaRunResult.tsx`, `OutputEditor.tsx`/
-`ParameterEditor.tsx`). Order follows `design.md`'s Chosen Approach numbering (1–11); Steps within each
-FR group are sequenced so a later step's import (`RepeatableRowList`, `ui/chart.tsx`,
-`ui/questionnaire.tsx`) always exists before the step that consumes it.
+doc note); Steps 6–9 land the repeatable-row-editor composite (FR-6/FR-7/FR-8); Steps 10–12 land the
+`Questionnaire` wizard shell (FR-9 install, then FR-10 split per `design.md` Round 3's user-directed
+override — Step 11 restructures `StrategyWizard.tsx`'s Step 1 onto `Questionnaire`'s native
+Choice/Input answer model, Step 12 shell-wraps Steps 2/3/4 exactly as originally spec'd plus FR-11's
+outer step indicator); Step 13 is the cross-cutting verification pass (`pnpm lint`, `pnpm build`,
+targeted `pnpm test:e2e` specs) plus the acceptance-criteria manual-check note for the two files with
+no e2e coverage (`FormulaRunResult.tsx`, `OutputEditor.tsx`/`ParameterEditor.tsx`). Order follows
+`design.md`'s Chosen Approach numbering; Steps within each FR group are sequenced so a later step's
+import (`RepeatableRowList`, `ui/chart.tsx`, `ui/questionnaire.tsx`) always exists before the step that
+consumes it.
+
+**Revision note (2026-08-08)**: the original Step 11 ("FR-10/FR-11 replace `StrategyWizard.tsx`'s step
+indicator with `Questionnaire.Progress` (shell only)") assumed `design.md`'s original FR-10 conclusion
+— shell-only for the *entire* wizard, Step 1 included. The user has since directly overridden that for
+Step 1 specifically (`design.md` § Round 3): Step 1 restructures onto `Questionnaire`'s native
+Choice/Input answer model (4 nested sub-screens); Steps 2/3/4 remain exactly as originally spec'd
+(shell-only, unchanged). The original Step 11 is therefore **split into two steps** below (new Step 11
+for the Step 1 restructure, new Step 12 for the unchanged Steps 2-4 shell + FR-11's outer indicator),
+and the former Step 12 (whole-feature verification) is renumbered to Step 13.
 
 **Consumer Surface(s) (Constitution C-14)**: `/insights` — formula workspace (Steps 4, 7, 8, 9),
-rule editor (Step 9), strategy wizard (Steps 10–11), backtest equity-curve display (Step 3). `/trader`
+rule editor (Step 9), strategy wizard (Steps 10–12), backtest equity-curve display (Step 3). `/trader`
 is touched only by Step 5's documentation note (FR-5 "keep" decision) — no `/trader` code change, per
 `design.md` § Chosen Approach #5 (Rejected Alternatives: replacing `ChartPanel.tsx`'s
 `lightweight-charts` chart). This matches product-spec's `## Consumer Surface(s)` exactly.
@@ -46,11 +59,15 @@ exact scope-if-confirmed and the file/line evidence.
   `src/components/shared/RepeatableRowList.tsx` Step 6 creates.
 - Step 8 requires Step 6: same, for `ParameterEditor.tsx`.
 - Step 9 requires Step 6: same, for `RuleEditor.tsx`'s condition rows.
-- Step 11 requires Step 10: `StrategyWizard.tsx` imports `Questionnaire.*` parts from
-  `src/components/ui/questionnaire.tsx` Step 10 creates (CLI-vendored install).
-- Step 12 requires Steps 1–11: it is the whole-feature verification pass (lint, build, targeted e2e
+- Step 11 requires Step 10: `StrategyWizard.tsx`'s Step 1 restructure imports `Questionnaire.*` parts
+  from `src/components/ui/questionnaire.tsx` Step 10 creates (CLI-vendored install).
+- Step 12 requires Step 10 (same `Questionnaire.*` import dependency, for Steps 2/3/4's shell wrap and
+  the outer step indicator) **and** Step 11 (both steps modify `StrategyWizard.tsx`; sequenced to avoid
+  concurrent edits to the same file within one execution pass — not a hard code dependency, since Step
+  11 touches only the Step-1 render branch and Step 12 touches the outer shell + Steps 2/3/4 branches).
+- Step 13 requires Steps 1–12: it is the whole-feature verification pass (lint, build, targeted e2e
   specs across every file the prior steps touch).
-- Steps 2–5 (chart group), 6–9 (row-editor group), and 10–11 (wizard group) are otherwise
+- Steps 2–5 (chart group), 6–9 (row-editor group), and 10–12 (wizard group) are otherwise
   independent of each other and may execute in any relative order once their own prerequisite is met.
 
 ---
@@ -241,7 +258,7 @@ pnpm test:e2e -- e2e/insights/backtest-coverage.spec.ts
   `outputs: []` in mock payloads, no row-level selector).
 
 **TDD**: `N/A (no e2e selector exists to prove red-before-green against; presentation-parity by
-manual check only — see Step 12)`
+manual check only — see Step 13)`
 
 **Instructions**:
 1. Replace the inline-SVG `Sparkline` function (`:7-27`) with a small `recharts` `LineChart` (hidden
@@ -404,11 +421,11 @@ pnpm lint
   `remove`/`move` — this call is **kept**, only the JSX consuming it changes.
 - No e2e selector coverage exists for this file's row interactions (confirmed by
   `e2e/insights/formulas.spec.ts` — grepped this session, 64 lines, no row-level `aria-label`/testid
-  query) — this migration relies on manual verification (Step 12), not e2e regression protection, per
+  query) — this migration relies on manual verification (Step 13), not e2e regression protection, per
   product-spec Acceptance Criteria #6.
 
 **TDD**: `N/A (no e2e selector exists to prove red-before-green against — see Step 4's identical
-situation; manual verification in Step 12 substitutes)`
+situation; manual verification in Step 13 substitutes)`
 
 **Instructions**:
 1. Replace the `value.map(...)` row block (`:57-101`) and the trailing "Add output" `Button`
@@ -458,7 +475,7 @@ pnpm build
   row-level selectors).
 
 **TDD**: `N/A (same as Step 7 — no e2e selector to prove red-before-green against; manual verification
-in Step 12)`
+in Step 13)`
 
 **Instructions**:
 1. Replace the `value.map(...)` row block (`:149-254`) and the trailing "Add parameter" `Button`
@@ -510,7 +527,7 @@ pnpm build
   (next: T[]) => void, makeEmpty: () => T)` — `Condition` satisfies `T extends object`.
 
 **TDD**: `red-green required` (this step changes real interactive behavior — condition
-add/edit/remove — with e2e coverage adjacent, per Step 12's spec run against the surrounding wizard
+add/edit/remove — with e2e coverage adjacent, per Step 13's spec run against the surrounding wizard
 flow, even though no selector targets the rows directly)
 
 **Instructions**:
@@ -591,8 +608,8 @@ pnpm test:e2e -- e2e/insights/strategy-authoring.spec.ts
   `@tabler/icons-react` imports already went through), not confirmed by fetching the raw payload
   directly — flag as a fallback risk only if the CLI is unavailable at execute time.
 
-**TDD**: N/A (new primitive install, no existing behavior to regress; Step 11's wizard-shell migration
-is where red-before-green applies)
+**TDD**: N/A (new primitive install, no existing behavior to regress; Steps 11-12's wizard-shell
+migrations are where red-before-green applies)
 
 **Instructions**:
 1. **Before running the CLI**, re-verify `Questionnaire`'s API and `@shadcn/react`'s current published
@@ -625,7 +642,132 @@ pnpm build
 
 ---
 
-### Step 11 — service: FR-10/FR-11 replace `StrategyWizard.tsx`'s step indicator with `Questionnaire.Progress` (shell only)
+### Step 11 — service: FR-10 (Step 1) restructure `StrategyWizard.tsx`'s Step 1 onto `Questionnaire`'s native Choice/Input answer model
+
+**Status**: `pending`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/components/insights/StrategyWizard.tsx` — modify
+- `services/xstockstrat-ui/e2e/insights/strategy-authoring.spec.ts` — modify (Step 1 fill/click
+  sequencing only — see Instructions #9)
+
+**Reviewers**: `xstockstrat-ui` service owner — Trading UI correctness
+
+**Codebase Evidence**:
+- `StrategyWizard.tsx:60-61` — outer `const [step, setStep] = useState(1);`, unchanged; `STEPS` array
+  at `:23`.
+- `StrategyWizard.tsx:65-74` — controlled state for the 4 Step-1 fields (`strategyId`, `displayName`,
+  `cooldownDaysRaw`, `exitCooldownDaysRaw`), seeded from `initial?.*` for edit-mode pre-population —
+  kept as-is per `design.md` § Round 3's "Controlled state, not `FormData`-uncontrolled submission."
+- `StrategyWizard.tsx:90-98` — `stepForError(msg): number`, to be extended to the `ErrorTarget` shape
+  `design.md` § Round 3 specifies (`{ step: number; identitySubStep?: 1|2|3|4 }`).
+- `StrategyWizard.tsx:117-127` — `idValid`, `cooldownParsed`, `exitCooldownParsed`, and the combined
+  `canAdvance` (`step === 1` branch ANDs all four) — the 4 predicates are reused **verbatim** as each
+  new sub-screen's own gate; only their scope narrows (see `design.md` § Round 3's mapping table).
+- `StrategyWizard.tsx:187-242` — the flat Step 1 render branch to replace: Strategy ID
+  (`:190-202`, `disabled={mode==='edit'}`, placeholder `'e.g. sma_crossover'`, regex error paragraph),
+  Display name (`:203-210`, placeholder `'SMA Crossover'`), Re-entry cooldown (`:211-225`,
+  `type="number"`, placeholder `'31 (default)'`, error paragraph), Exit cooldown (`:226-240`,
+  `type="number"`, placeholder `'0 (default)'`, error paragraph).
+- `StrategyWizard.tsx:306-319` — the error-jump `onClick={() => setStep(stepForError(serverError))}`
+  and its `"Go to Step {n}"` link text — the `onClick` gains the `identitySubStep` companion call per
+  `design.md` § Round 3; the link text itself is unchanged (not e2e-asserted at a specific Step 1
+  sub-target, per that section's confirmation the one covered `Go to Step` test targets Step 2, not
+  Step 1).
+- `StrategyWizard.tsx:325-346` — outer `Back`/`Next`/`Create Strategy`/`Save Changes` navigation, kept
+  for Steps 2-4 (Step 12); Step 1's *own* sub-screen navigation is new, added by this step, and is
+  scoped to the Step 1 render branch only.
+- `design.md` § Round 3 (this feature's own design phase, user-directed override, 2026-08-08) — the
+  full design this step implements: the nesting-vs-flattening decision, the `canAdvance`→
+  per-sub-screen-gate mapping table, the extended `stepForError`, the Back-navigation persistence
+  choice, the controlled-vs-`FormData` decision, and the separate-`Questionnaire.Root`-scope decision.
+- `recon.md` § Dependencies (updated 2026-08-08, Round 3) — the two-live-`WebFetch`-verified
+  one-answer-per-`Item` evidence (`FormData.get`/`getAll`, `fieldset` structure, no multi-independent-
+  `Input`-per-`Item` pattern) that drives the 4-sub-screen split.
+- `e2e/insights/strategy-authoring.spec.ts` (grepped this session) — `getByText('Step 1 — Identity')`
+  appears 7 times (`:55` in the shared `fillToReview` helper, plus `:194`, `:234`, `:262`, `:273`,
+  `:329`, `:341`, `:421`, `:433`, `:444` across the standalone tests) — all must resolve unchanged
+  (the outer `CardTitle` stays `Step {step} — {STEPS[step-1]}`, unconditional on the new inner
+  sub-step). Every Step-1 fill sequence (the `fillToReview` helper `:48-72`, plus the inline sequences
+  in the wizard-gates test `:186-227`, the server-error-jump test `:229-255`, the edit-prepopulation
+  test `:257-266`, the formula-picker test `:268-291`, and both cooldown-suite `test.describe` blocks
+  `:300-457`) needs the interstitial-`Next`-click rewrite `design.md` § Round 3 specifies.
+
+**TDD**: `red-green required` — this step changes real interactive behavior (Step 1's navigation
+granularity) with direct, extensive e2e coverage.
+
+**Instructions**:
+1. Add a new `identitySubStep` state (`useState<1|2|3|4>(1)`) alongside the existing `step` state.
+   Persist it across outer-step transitions (do **not** reset it to `1` when `step` changes) — per
+   `design.md` § Round 3's Back-navigation choice.
+2. Replace the flat Step 1 render branch (`:187-242`) with 4 sub-screens, rendering only the one
+   `identitySubStep` selects, each wrapped in its **own**, separately-scoped `Questionnaire.Root`/
+   `Questionnaire.Item` (from `src/components/ui/questionnaire.tsx`, Step 10) — distinct from whatever
+   chrome-only `Questionnaire.Root`/`Item` Step 12 wraps Steps 2-4 in:
+   - Sub-screen 1 — Strategy ID: unchanged `Input` (value/onChange/disabled/placeholder/error paragraph
+     verbatim from `:191-202`), inside `Questionnaire.Item name="strategyId"`. Gate (this sub-screen's
+     own `Next` `disabled` prop): `!idValid`.
+   - Sub-screen 2 — Display name: unchanged `Input` (`:205-210`), inside
+     `Questionnaire.Item name="displayName"`. Gate: `displayName.trim() === ''`.
+   - Sub-screen 3 — Re-entry cooldown (days): unchanged `Input` (`:215-225`), inside
+     `Questionnaire.Item name="cooldownDays"`. Gate: `!cooldownParsed.valid`.
+   - Sub-screen 4 — Exit cooldown (days): unchanged `Input` (`:230-240`), inside
+     `Questionnaire.Item name="exitCooldownDays"`. Gate: `!exitCooldownParsed.valid`. Its `Next`/advance
+     action calls the **outer** `setStep(2)` (not a 5th inner sub-screen) — this is where Step 1 hands
+     off to Step 2.
+3. Keep every field's `value`/`onChange` bound to the existing controlled state
+   (`strategyId`/`setStrategyId`, etc.) — do **not** switch to reading `FormData` at a terminal submit
+   (`design.md` § Round 3's explicit "Controlled state, not `FormData`-uncontrolled submission").
+4. Preserve every placeholder/label/error string **exactly**: `'e.g. sma_crossover'`,
+   `'SMA Crossover'`, `'31 (default)'`, `'0 (default)'`, `'Use lowercase letters, digits, and
+   underscores only.'`, `'cooldown days must be a non-negative integer'`,
+   `'exit cooldown days must be a non-negative integer'`, and `disabled={mode === 'edit'}` on the
+   Strategy ID input.
+5. Keep the outer `CardTitle` (`Step {step} — {STEPS[step - 1]}`, currently rendered once for the whole
+   Card) **unconditional on `identitySubStep`** — this is the mechanism that keeps all 7
+   `getByText('Step 1 — Identity')` e2e assertions valid without modification (per `design.md` § Round
+   3's nesting decision).
+6. Every sub-screen's advance/back control keeps the literal accessible name `'Next'` / `'Back'`
+   (matching `Questionnaire.Navigation`'s `children ?? 'Next'`-style fallback, `recon.md` § Patterns to
+   REUSE) — do not invent new button text; only one sub-screen renders at a time, so there is no
+   strict-mode ambiguity for `getByRole('button', { name: 'Next', exact: true })`.
+7. Extend `stepForError` (`:90-98`) to the `ErrorTarget` shape `design.md` § Round 3 gives verbatim
+   (`{ step: number; identitySubStep?: 1|2|3|4 }`, with `'strategy_id'`→sub 1, `'display'`→sub 2,
+   `'exit'+'cooldown'`→sub 4, plain `'cooldown'`→sub 3). Update the error-jump `onClick` (`:314`) to
+   `setStep(target.step); if (target.step === 1) setIdentitySubStep(target.identitySubStep ?? 1)`.
+8. Sub-screen 1's own `Back`/`Previous` stays disabled (nothing precedes Step 1). Back from outer Step 2
+   lands on Step 1's sub-screen 4 (`identitySubStep` was left at `4` when Step 1 completed, per
+   Instruction #1's persistence).
+9. **Update `e2e/insights/strategy-authoring.spec.ts`** per `design.md` § Round 3's "e2e-update
+   implication": rewrite the shared `fillToReview` helper and every inline Step-1 fill/click sequence
+   to insert a `next.click()` between each field fill (fields left blank, e.g. cooldown/exit-cooldown in
+   several tests, can be skipped over with a bare `next.click()` since blank is still a valid gate —
+   `parseCooldownDays`/`parseExitCooldownDays` both return `valid: true` for blank input, unchanged).
+   Do **not** change any `getByPlaceholder(...)` string or the `Next`/`Back` accessible names. Re-run
+   every affected test (both cooldown/exit-cooldown `test.describe` blocks, the two negative-cooldown
+   tests, the edit-prepopulation test, the server-error-jump test, the formula-picker test) and confirm
+   each passes against the restructured component.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui
+grep -n "identitySubStep" src/components/insights/StrategyWizard.tsx
+grep -n "Questionnaire" src/components/insights/StrategyWizard.tsx
+grep -n "'e.g. sma_crossover'\|'SMA Crossover'\|'31 (default)'\|'0 (default)'" src/components/insights/StrategyWizard.tsx
+# expect: all 4 placeholders still present verbatim
+pnpm lint
+pnpm build
+pnpm test:e2e -- e2e/insights/strategy-authoring.spec.ts
+# red-before-green (P-06): the pre-Step-11 tree's spec passes today only in its *pre-Instruction-9*
+# form; after Instruction #9's e2e rewrite lands alongside the component change, this is the concrete
+# regression guard for the whole restructure — every getByText('Step 1 — Identity'), every
+# getByPlaceholder, and every Next/Back/Create Strategy/Save Changes/Go to Step assertion must still
+# pass, now via the new multi-click sequencing.
+```
+
+---
+
+### Step 12 — service: FR-10 (Steps 2-4) + FR-11 shell-wrap `StrategyWizard.tsx`'s Steps 2-4 and replace the outer step indicator with `Questionnaire.Progress`
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
@@ -636,7 +778,9 @@ pnpm build
 
 **Codebase Evidence**:
 - `StrategyWizard.tsx:60-61` (read this session) — `const [step, setStep] = useState(1);` — own React
-  state, not a library; `STEPS` array at `:23` (`['Identity', 'Components', 'Rules', 'Review']`).
+  state, not a library; `STEPS` array at `:23` (`['Identity', 'Components', 'Rules', 'Review']`),
+  unchanged by Step 11 (Step 11 only touches Step 1's *inner* content, not the outer `step`/`STEPS`
+  model).
 - `StrategyWizard.tsx:159-178` (read this session) — the `<ol>` step indicator to replace: numbered
   pills via `STEPS.map`, `cn()` ternary for active (`n === step`) / complete (`n < step`) / upcoming
   tone.
@@ -649,39 +793,41 @@ pnpm build
   step 1), `Next` button (`:337-339`, disabled via `canAdvance`), `Create Strategy`/`Save Changes`
   button (`:341-343`, text depends on `mode`). Confirmed e2e-load-bearing via grep on
   `e2e/insights/strategy-authoring.spec.ts` this session: `getByRole('button', { name: 'Next', exact:
-  true })` (lines 60, 195, 237, 276, 356, 378, 448), `getByRole('button', { name: 'Create Strategy' })`
-  (lines 226, 250, 307, 319, 399, 411), `getByRole('button', { name: 'Save Changes' })` (lines 360, 382,
-  452).
-- `design.md` § Chosen Approach #10 — **FR-10: shell only (option a), for the entire wizard.** Every
-  step ruled out from restructuring (option b) with recon-traced evidence: Step 2 (dynamic
-  `ComponentEditor` list) and Step 3 (two `RuleEditor` instances — nested condition tree) both fail
-  `Questionnaire`'s single-scalar-answer-per-`Item` model outright; Step 1's 4 independent fields are
-  the closest structural fit, but splitting them into 4 separate `Questionnaire.Item` screens would be
-  an Out-of-Scope UX/step-count redesign; Step 4 has no fields to collect and trivially fits option (a)
-  via `Questionnaire.Submit`. `StrategyWizard.tsx` keeps its own `step`/`setStep` React state exactly as
-  today — `Questionnaire.Root`/`Item`/`Progress`/`Previous`/`Next`/`Submit` supply chrome only.
+  true })` (throughout the file), `getByRole('button', { name: 'Create Strategy' })`,
+  `getByRole('button', { name: 'Save Changes' })`. **Note**: after Step 11, the outer `Next` button is
+  only reachable/visible from Step 2 onward — Step 1's own advance is handled by its 4 sub-screens'
+  inner navigation (Step 11) — but its accessible name stays `'Next'`, so these selectors are unaffected.
+- `design.md` § Chosen Approach #10 — **Steps 2/3/4 stay SHELL ONLY (option a), unchanged by the Round
+  3 override.** Step 2 (dynamic `ComponentEditor` list) and Step 3 (two `RuleEditor` instances — nested
+  condition tree) both fail `Questionnaire`'s single-scalar-answer-per-`Item` model outright; Step 4 has
+  no fields to collect and trivially fits option (a) via `Questionnaire.Submit`. `StrategyWizard.tsx`
+  keeps its own `step`/`setStep` React state exactly as today for these three steps —
+  `Questionnaire.Root`/`Item`/`Progress`/`Previous`/`Next`/`Submit` supply chrome only, matching Round
+  2's original conclusion (still valid, only Step 1 changed).
 - `recon.md` § Patterns to REUSE — the fetched `questionnaire.tsx` registry payload's `QuestionnaireItem`
   forwards `{...props}` including arbitrary `children` to the underlying primitive, confirming
   `Questionnaire.Item` is not structurally restricted to `Choices`/`Input` content — this is what makes
   option (a) (shell-only, existing rich step content un-refactored inside a `Questionnaire.Item`)
-  feasible.
+  feasible for Steps 2-4.
 
 **TDD**: `red-green required`
 
 **Instructions**:
 1. Replace the `<ol>` step indicator (`:159-178`) with `Questionnaire.Progress` (from the
-   `src/components/ui/questionnaire.tsx` Step 10 creates), driven by the existing `step`/`STEPS.length`
-   state — do not adopt `Questionnaire.Root`'s own `item`/`onItemChange`/`FormData`-driven
-   answer-and-validation model; `StrategyWizard.tsx` keeps its own `step`/`setStep` as the single source
-   of truth (per `design.md`'s explicit "chrome only" framing) so Steps 2/3's rich sub-forms
-   (`ComponentEditor` list, `RuleEditor` instances) remain un-refactored inside their existing render
-   branches (`:244-283`).
+   `src/components/ui/questionnaire.tsx` Step 10 creates), driven by the existing outer `step`/
+   `STEPS.length` state — do not adopt `Questionnaire.Root`'s own `item`/`onItemChange`/`FormData`-driven
+   answer-and-validation model for the outer shell; `StrategyWizard.tsx` keeps its own `step`/`setStep`
+   as the single source of truth for Steps 2-4 (per `design.md`'s "chrome only" framing) so Steps 2/3's
+   rich sub-forms (`ComponentEditor` list, `RuleEditor` instances) remain un-refactored inside their
+   existing render branches (`:244-283`).
 2. If `Questionnaire.Root`/`Item` require being present in the tree for `Questionnaire.Progress`,
    `Questionnaire.Next`/`Previous`/`Submit` to render at all (verify against the actual installed
-   `questionnaire.tsx` from Step 10, not assumed from the raw registry payload), wrap the existing step
-   content (`:187-321`) in a minimal `Questionnaire.Root`/`Questionnaire.Item` shell without changing
+   `questionnaire.tsx` from Step 10, not assumed from the raw registry payload), wrap the Steps 2-4
+   content (`:244-321`) in a minimal `Questionnaire.Root`/`Questionnaire.Item` shell without changing
    what each step renders — the wrapping is chrome, the content inside stays `StrategyWizard`'s own JSX.
-3. Replace the navigation `Button`s (`:325-346`) with `Questionnaire.Previous`/`Questionnaire.Next`/
+   Do **not** wrap Step 1's content in this same shell instance — Step 11 already gave Step 1 its own,
+   separately-scoped `Questionnaire.Root` for its native-model sub-screens (`design.md` § Round 3).
+3. Replace the outer navigation `Button`s (`:325-346`) with `Questionnaire.Previous`/`Questionnaire.Next`/
    `Questionnaire.Submit` **only if** those parts support a `children` override for their default text
    (confirmed feasible in `recon.md` — "`children ?? 'Next'`-style fallback pattern") — preserve the
    exact button text e2e-load-bearing: `Back`, `Next`, `Create Strategy` / `Save Changes` (mode-
@@ -690,8 +836,9 @@ pnpm build
    existing `Button`s for navigation and use `Questionnaire.Progress` alone for FR-11's actual ask (the
    `<ol>` replacement) — the shell-only decision does not require every navigation control to migrate,
    only the step indicator (product-spec FR-11's literal scope).
-4. Do not change step **count**, **order**, or **content** — FR-10's shell-only decision explicitly
-   excludes any restructuring of what each step collects (product-spec Out-of-Scope).
+4. Do not change Steps 2/3/4's **count**, **order**, or **content** — FR-10's shell-only decision for
+   these three steps explicitly excludes any restructuring of what each collects (product-spec
+   Out-of-Scope, still in force for Steps 2-4).
 
 **Verification**:
 ```bash
@@ -704,19 +851,19 @@ grep -n "'Back'\|'Next'\|'Create Strategy'\|'Save Changes'\|Go to Step" src/comp
 pnpm lint
 pnpm build
 pnpm test:e2e -- e2e/insights/strategy-authoring.spec.ts
-# red-before-green (P-06): confirm this spec passes on the pre-Step-11 tree (baseline), then re-run
-# after the migration and confirm every Next/Back/Create Strategy/Save Changes/Go to Step assertion
-# still passes — this is the concrete regression guard for FR-10/FR-11's shell swap.
+# red-before-green (P-06): confirm this spec (already updated by Step 11's Instruction #9) still
+# passes after this step's outer-shell/indicator swap — this is the concrete regression guard for
+# FR-10 (Steps 2-4)/FR-11's shell swap.
 ```
 
 ---
 
-### Step 12 — test: whole-feature verification pass
+### Step 13 — test: whole-feature verification pass
 
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
-- (no new files — this step verifies Steps 1–11's combined changes)
+- (no new files — this step verifies Steps 1–12's combined changes)
 
 **Reviewers**: `xstockstrat-ui` service owner — Trading UI correctness, analytics display accuracy
 
@@ -738,7 +885,7 @@ pnpm test:e2e -- e2e/insights/strategy-authoring.spec.ts
 **TDD**: N/A (aggregation/verification step, not new behavior)
 
 **Instructions**:
-Run the full lint/build/e2e pass across every file Steps 1–11 touched, and perform the manual checks
+Run the full lint/build/e2e pass across every file Steps 1–12 touched, and perform the manual checks
 Acceptance Criteria #6 requires for the two files with no e2e coverage. No code changes in this step —
 if any command fails, the fix belongs in the step that introduced the regression (per **F-09**, this
 step's own body stays immutable; a fix is a deviation-log entry against the earlier step, not a new
@@ -787,7 +934,7 @@ before that step is written).
 whether to (a) fold this into the current feature via a product-spec amendment + a re-run of
 `/sdd-review product-spec` (since it expands the already-approved Affected Services list), or (b) leave
 it for a separate, later feature. This implementation spec does not implement it either way — Steps
-1–12 above are complete and self-contained without it.
+1–13 above are complete and self-contained without it.
 
 ## Deviation Log
 

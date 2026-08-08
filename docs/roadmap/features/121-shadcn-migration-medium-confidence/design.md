@@ -1,9 +1,12 @@
 # Design: shadcn-migration-medium-confidence
 
 **Created**: 2026-08-08
-**Rounds**: 2 (full; termination: approved)
-**Approved by**: subagent synthesis 2026-08-08 — **not gated through an interactive user
-AskUserQuestion prompt; see Process Note below**
+**Last Updated**: 2026-08-08 (Round 3 — user-directed override on FR-13; see below)
+**Rounds**: 2 (full; termination: approved) + Round 3 (user-directed override, not a debate round)
+**Approved by**: subagent synthesis 2026-08-08 for rounds 1-2 (**not** gated through an interactive
+user AskUserQuestion prompt — see Process Note below); **FR-13 specifically re-decided by explicit
+user confirmation in Round 3**, superseding the round-2 self-run recommendation — see `## Round 3 —
+user-directed override`.
 **Grounded in**: recon.md
 
 ---
@@ -18,10 +21,11 @@ rounds, playing both roles directly and mediating between them exactly as `/sdd-
 P-02 honored in substance), and recorded the complete reasoning below so a human — or the calling
 orchestrator — can review and override before this design is treated as final.
 
-**The FR-13 keep-vs-replace call and the round-2 approval below are both recommendations from that
-self-run debate, not confirmed user decisions.** The calling orchestrator should treat `design.md`'s
-Chosen Approach as an evidence-backed proposal and re-affirm it (or override) before `/sdd-spec`
-builds a numbered plan on top of it — this is called out again in the final report.
+**The FR-13 keep-vs-replace call and the round-2 approval below were recommendations from that
+self-run debate, not confirmed user decisions, at the time this file was first written.** That gap
+has since been closed for FR-13 specifically: see `## Round 3 — user-directed override` below, where
+the user was asked directly and overrode round 2's KEEP AS-IS with REPLACE. The rest of this design
+(FR-1 through FR-12) was never re-litigated and still carries the original self-run-debate caveat.
 
 ---
 
@@ -74,13 +78,47 @@ component never has to reconcile two different page-chrome shapes into one. Both
 `AccountsModule.tsx:55-135` and `OrderFilters.tsx:85-138` render it with no duplicated
 toolbar-composition JSX remaining (acceptance criterion 4).
 
-**5. Navigation Menu evaluation (FR-13) — KEEP AS-IS, do not add `ui/navigation-menu.tsx`.**
-`PlatformHeader.tsx:156-291` and `BottomTabBar.tsx:25-56` stay hand-built `<Link>` rows. Full
-reasoning in Rejected Alternatives below (this was the round-1→round-2 debate's central question).
-Consumer-surface consequence: none — the shared nav shell (which every UI segment renders) is
-unchanged, so there is no regression to the `/trader`/`/insights`/`/config-ui`/`/accounts` consumer
-surfaces named in product-spec's `## Consumer Surface(s)`, and `e2e/nav-reachability.spec.ts`
-(`recon.md` § Codebase Map) keeps passing unmodified.
+**5. Navigation Menu replacement (FR-13) — REPLACE, add `ui/navigation-menu.tsx`.** Supersedes the
+round-1/round-2 KEEP AS-IS recommendation below — see `## Round 3 — user-directed override`. Add
+`src/components/ui/navigation-menu.tsx` (CLI primary path: `npx shadcn@latest add navigation-menu`
+against the existing `components.json` preset; hand-authored fallback per the confirmed post-119
+shape — plain function components, `data-slot`, `cn()`, no `forwardRef`/`displayName` — if the CLI is
+unavailable, matching `recon.md` § Patterns to REUSE). Wrap `PlatformHeader.tsx`'s two desktop nav
+regions in `NavigationMenu`/`NavigationMenuList`/`NavigationMenuItem`/`NavigationMenuLink`:
+- **Row-1 Primary tabs** (`recon.md` § Codebase Map Round 3 addendum: `PlatformHeader.tsx:170-190`) —
+  one `NavigationMenuItem`/`NavigationMenuLink` per `NAV_GROUPS` entry, `NavigationMenuLink` used
+  standalone (no `Trigger`/`Content` pairing — there is no dropdown here), `render={<Link
+  href={group.items[0].href} />}` to preserve Next.js client-side routing, carrying the exact same
+  `aria-current={isActive ? 'page' : undefined}` and `cn(...)` active/inactive classes the current
+  `<Link>` carries. The `NavigationMenu` root itself takes the `aria-label="Primary"` and
+  `className="hidden sm:flex items-center gap-1 flex-1"` the current `<nav>` carries, and passes
+  `viewport={false}` (no dropdown flyout exists, so the `Viewport`/`Indicator` machinery is unused
+  weight, not a feature this migration adds).
+- **Row-2 Section links** (`PlatformHeader.tsx:271-287`, nested inside the `:260-288` row-2 wrapper) —
+  same pattern, one `NavigationMenuItem`/`NavigationMenuLink` per `activeItems` entry, `aria-label=
+  "Section"` on the root, `aria-current={isItemActive(pathname, item) ? 'page' : undefined}` preserved.
+  The sibling `aria-label="Breadcrumb"` `<span>` at `:261` is **not** inside this `<nav>` and is left
+  completely untouched — it belongs to sibling `120`'s FR-7 Breadcrumb migration.
+- **`BottomTabBar.tsx`**'s single flat nav (`:28-54`, `aria-label="Mobile primary"`,
+  `data-testid="mobile-tab-bar"`) gets the same treatment: `NavigationMenu` root carries the
+  `aria-label`/`data-testid`/fixed-positioning classes, `NavigationMenuItem` per `TABS` entry (each
+  `flex-1` so the four tabs still split the width evenly — the equal-width class moves from the `Link`
+  itself to the `NavigationMenuItem` `<li>`, since `NavigationMenuList` renders a `<ul>`/`<li>`
+  structure the current flat-`<Link>` markup doesn't have), `aria-current` preserved.
+- **Mobile `Sheet` disclosure is explicitly OUT of scope** (`PlatformHeader.tsx:195-255`) — it is
+  accordion-like expand/collapse (`aria-expanded`, local `useState`), not a flat-link nav, so it is
+  structurally not what `NavigationMenu` models; sibling `120`'s FR-8 Accordion migration already
+  targets this same `:209-253` range. This call is made explicitly here, not left implicit: FR-13 is
+  scoped to the two `PlatformHeader.tsx` desktop `<nav>` regions and `BottomTabBar.tsx`'s single nav
+  only.
+
+Preserving `role=navigation`/`aria-label`s exactly and `role=link` on every item (`NavigationMenuLink`
+renders an anchor-equivalent element, not a `button`/`menuitem`, when used standalone per `recon.md`'s
+verified API) keeps `e2e/nav-reachability.spec.ts`'s selectors (`recon.md` § Codebase Map Round 3
+addendum: lines 60/61/65/67/68/70-71) passing without a spec rewrite. Consumer-surface consequence:
+the shared nav shell (which every UI segment renders) changes markup but not behavior or the reachable
+route set, so there is no regression to the `/trader`/`/insights`/`/config-ui`/`/accounts` consumer
+surfaces named in product-spec's `## Consumer Surface(s)`.
 
 **Consumer surface.** All five points above land directly in the named UI segments
 (`recon.md`/product-spec `## Consumer Surface(s)`: `/insights`, `/trader`, `/config-ui`,
@@ -100,35 +138,76 @@ the markup swap **is** the surface change.
   a worse result than the existing 8-line span. Chosen approach defers the final call to a real
   render at execute time rather than mandating "every FR-10 site must use Badge" as an inflexible
   rule.
-- **Replace `PlatformHeader.tsx` row-1 tabs and `BottomTabBar.tsx` with a Radix `NavigationMenu`
-  (FR-13)** — rejected after both debate rounds, on three independent grounds:
-  1. **Overbuilt for what's there** (CF-N4 litmus, root `CLAUDE.md`): `NavigationMenu`'s actual value
-     — `Indicator`/`Viewport`, hover-triggered flyout submenus, roving-tabindex keyboard nav across a
-     multi-level menu — has no target here. The nav is flat, one level, entirely route-driven
+- **KEEP AS-IS: leave `PlatformHeader.tsx` row-1/row-2 nav and `BottomTabBar.tsx` as hand-built
+  `<Link>` rows (FR-13)** — this was the round-1/round-2 debate's converged recommendation, and it
+  held until `## Round 3 — user-directed override` below. It is recorded here, not deleted, because it
+  was a real (reasoned, not lazy) recommendation that a later explicit user decision superseded — see
+  Round 3 for why it no longer stands. The original three grounds for KEEP AS-IS:
+  1. **Overbuilt for what's there** (CF-N4 litmus, root `CLAUDE.md`): `NavigationMenu`'s
+     dropdown/flyout value — `Indicator`/`Viewport`, hover-triggered submenus, roving-tabindex
+     keyboard nav across a multi-level menu — has no target in a flat, one-level, route-driven nav
      (`recon.md` § Codebase Map: three `<Link>`-only regions, zero dropdown/flyout behavior anywhere
      in `PlatformHeader.tsx` or `BottomTabBar.tsx`).
-  2. **Two ways to apply it, both bad.** Using `NavigationMenu.Link`-only (no dropdowns) is a Radix
-     wrapper around what a plain `<Link>` already does — extra dependency surface and bundle weight
-     for zero functional gain. Actually using its dropdown/flyout capability would invent new
-     interaction the product doesn't have today, which crosses product-spec's own Out of Scope line
-     ("Any visual/behavioral redesign beyond swapping the underlying markup... like-for-like
-     substitution only").
-  3. **Unforced regression risk to an existing C-10(a) test.** `e2e/nav-reachability.spec.ts`
-     (`recon.md` § Codebase Map) walks the *rendered* shell by role/label and asserts breadcrumb
-     correctness — a `NavigationMenu` rewrite changes the DOM shape enough (trigger buttons, portalled
-     content, `role="menu"` semantics) that this spec's selectors would likely need rework, for a
-     component swap the audit itself flagged as only "arguably" a fit.
-  The mobile `BottomTabBar` case is even weaker: four flat links, no expand/collapse at all — nothing
-  a `NavigationMenu` adds there beyond a mobile-tab-bar's job of staying simple and fast.
+  2. **Two ways to apply it, both looked bad at the time.** `NavigationMenuLink`-only (no dropdowns)
+     looked like a Radix wrapper around what a plain `<Link>` already does — extra dependency surface
+     for apparently zero functional gain. Actually using dropdown/flyout capability would invent new
+     interaction the product doesn't have today, crossing product-spec's own Out of Scope line.
+     (Round 3 resolves this: the user's directive is specifically the standalone-`Link`-inside-`Item`
+     usage, i.e. option 1, accepting the primitive-consistency value as the point, not a defect.)
+  3. **Perceived regression risk to an existing C-10(a) test.** `e2e/nav-reachability.spec.ts`
+     (`recon.md` § Codebase Map) walks the *rendered* shell by role/label — the debate assumed a
+     `NavigationMenu` rewrite would change the DOM shape enough (trigger buttons, portalled content,
+     `role="menu"` semantics) to need selector rework. Round 3's grounding shows this assumption was
+     too pessimistic for the standalone-`Link` pattern specifically: `NavigationMenuLink` used without
+     `Trigger`/`Content` renders as a plain link-equivalent element, not a menu trigger, so
+     `role=navigation`/`role=link`/`aria-current` are preservable without a spec rewrite (Chosen
+     Approach point 5 above).
+  The mobile `BottomTabBar` case was argued as even weaker (four flat links, no expand/collapse) —
+  Round 3 applies the same standalone-`Link` pattern there for consistency with `PlatformHeader.tsx`,
+  since the user's directive names both files.
+
+## Round 3 — user-directed override
+
+This design session's original Chosen Approach point 5 (KEEP AS-IS) and its `## Open Risks` item 1
+were explicit that the FR-13 call was a **self-run debate's recommendation, not a confirmed user
+decision** — see `## Process Note` at the top of this file, and `feature.md`'s Status History /
+`context.md`'s 2026-08-08 sdd-design session entry, both of which flagged the gap and asked for
+explicit human re-affirmation before `/sdd-spec`/`/sdd-execute` treated it as final.
+
+That re-affirmation has now happened, and it went the other way: **the user was asked directly and
+overrode the KEEP AS-IS recommendation.** The directive: `PlatformHeader.tsx`'s and `BottomTabBar.tsx`'s
+hand-built nav must actually be replaced with a Radix Navigation Menu primitive
+(`ui/navigation-menu.tsx`), using the standalone `NavigationMenuLink`-inside-`NavigationMenuItem`
+pattern (no dropdowns/flyouts — the round-1/round-2 debate's "extra dependency surface for zero
+functional gain" reading of this specific usage is not how the user weighed it; consistency with the
+rest of this feature's primitive-migration work was the deciding factor, not a claimed new nav-UX
+capability).
+
+**This is a supersession, not a silent reversal.** The prior recommendation is preserved verbatim in
+`## Rejected Alternatives` above (now re-labeled "KEEP AS-IS" as the rejected alternative, replacing
+`NavigationMenu` as what used to be rejected) precisely so a future reader can see both what the
+self-run debate concluded and why a human overrode it, rather than the record being quietly rewritten
+as if REPLACE had been the answer all along. The three original KEEP AS-IS grounds were reasoned, not
+careless — the override does not invalidate them as reasoning, it just weighs "match the rest of this
+migration's primitive coverage" more heavily than "avoid an unforced dependency for a flat nav," which
+is a legitimate call only a human principal can make since it is a product/consistency preference, not
+a correctness question. `recon.md` § Codebase Map's Round 3 addendum re-grounds the concrete migration
+plan (exact line ranges, the verified shadcn Navigation Menu API, the e2e contract) so Chosen Approach
+point 5 above cites real evidence, not just "the user said so."
+
+**What changes as a result**: `implementation-spec.md` FR-13 goes from "no code step" to four real
+numbered steps (primitive + migrate `PlatformHeader.tsx` + migrate `BottomTabBar.tsx` + e2e
+regression), and acceptance criterion 1's "`ui/navigation-menu.tsx` exists only if FR-13's evaluation
+concludes replacement is warranted" (product-spec.md) is now satisfied — the evaluation concluded (by
+user directive) that it is warranted.
 
 ## Open Risks
 
-- [ ] **FR-13's keep-as-is recommendation was not confirmed through an interactive user gate** — no
-  `AskUserQuestion` tool was available in this session. Recorded as the debate's converged
-  recommendation with full reasoning above; the calling orchestrator/user should explicitly re-affirm
-  or override before `/sdd-spec` locks it in as a non-step (i.e., before treating "no
-  `ui/navigation-menu.tsx`, no `PlatformHeader.tsx`/`BottomTabBar.tsx` edits" as settled). — to be
-  confirmed before or during `/sdd-spec`.
+- [x] **RESOLVED (Round 3, 2026-08-08).** FR-13's keep-as-is recommendation was not confirmed through
+  an interactive user gate at design time (no `AskUserQuestion` tool was available in that session).
+  The user has since been asked directly and **overrode** it — REPLACE, per `## Round 3 —
+  user-directed override` above. `implementation-spec.md` now carries real numbered steps for FR-13;
+  no further re-affirmation needed.
 - [ ] **This entire design session ran without `Task`/`AskUserQuestion` tools** — the proposer/
   adversary debate was self-run by one agent instead of two independently-spawned subagents mediated
   by an orchestrator. The reasoning is recorded in full for audit, but it did not get the benefit of
@@ -149,9 +228,12 @@ the markup swap **is** the surface change.
 
 - `C-10` (integration completeness across shared/duplicated surfaces) — honored by: FR-12's
   `FilterToolbar` updates *both* `AccountsModule.tsx` and `OrderFilters.tsx` in the same feature, with
-  acceptance criterion 4 requiring zero duplicated toolbar JSX remaining in either file. FR-13's
-  keep-as-is doesn't invoke C-10(a) (no new route/page is added) or C-10(b)/(c) (no authoritative
-  displayed value, no shared mutable resource) — confirmed not applicable.
+  acceptance criterion 4 requiring zero duplicated toolbar JSX remaining in either file. FR-13
+  (Round 3: REPLACE) touches both nav-rendering surfaces (`PlatformHeader.tsx` desktop rows,
+  `BottomTabBar.tsx`) in the same feature, so the shared `NAV_GROUPS` data model has no lingering
+  hand-built consumer left after this feature lands — the mobile `Sheet` disclosure is the one
+  intentional exception, recorded as out of scope, not an omission. FR-13 doesn't invoke C-10(a) (no
+  new route/page is added) or C-10(c) (no shared mutable resource) — confirmed not applicable.
 - `C-14` (name the consumer surface, keep it in scope) — honored by: product-spec's `## Consumer
   Surface(s)` names every touched UI segment; this design's Chosen Approach confirms each FR lands
   directly in a named segment with no backend-only step left stale.
@@ -164,7 +246,11 @@ the markup swap **is** the surface change.
 
 ## Rounds
 
-**2** (full mode, mandated minimum met). Termination: converged synthesis after round 2 — proposer
-and adversary reached full agreement on both open questions (FilterToolbar's slot shape, FR-13
-keep-as-is) with no unresolved Floor breach. See Process Note above: this was a self-run debate
-(no `Task`/`AskUserQuestion` tools available), not a tool-mediated, user-gated approval.
+**2** (full mode, mandated minimum met) + **Round 3 (user-directed override, not a debate round)**.
+Termination of the original 2-round debate: converged synthesis after round 2 — proposer and adversary
+reached full agreement on both open questions (FilterToolbar's slot shape, FR-13 keep-as-is) with no
+unresolved Floor breach. See Process Note above: this was a self-run debate (no `Task`/
+`AskUserQuestion` tools available), not a tool-mediated, user-gated approval. Round 3 is not a further
+debate round — it is the calling orchestrator putting the flagged FR-13 gap directly to the user (as
+Open Risks item 1 asked for) and recording the answer: **REPLACE**, overriding round 2's KEEP AS-IS.
+See `## Round 3 — user-directed override` above for the full record.

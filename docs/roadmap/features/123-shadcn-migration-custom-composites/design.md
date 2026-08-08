@@ -14,6 +14,14 @@ forks would have received via the interactive gate. Flagged prominently in the f
 orchestrating session.
 **Grounded in**: recon.md
 
+**Update (Round 3, 2026-08-08)**: FR-10 has since been resolved via the user's direct, explicit answer
+— the orchestrating session asked the user directly (this document's own header note, above, flagged
+exactly this need) and the user overrode Round 2's "shell only for the entire wizard" synthesis for
+**Step 1 specifically**. See `## Round 3 — user-directed override` below and the rewritten
+`## Chosen Approach` #10. FR-5, FR-9, and FR-2's recharts-version handling, plus the Chosen Approach #12
+/ Deferred Item (`insights/page.tsx`'s second chart), remain exactly as before and still await the
+user's explicit confirmation.
+
 ---
 
 ## Round 1
@@ -141,6 +149,176 @@ Floor breach. Per this session's HARD CONSTRAINTS (no `AskUserQuestion`/`Task` t
 design proceeds to `design.md` with the above as the chosen approach, flagged for the user's
 confirmation in the final report rather than gated interactively.
 
+## Round 3 — user-directed override
+
+**Trigger**: the orchestrating session asked the user directly (outside this design skill's self-run
+Round 1/Round 2 process, which had no `AskUserQuestion` tool available) whether FR-10 should really be
+shell-only for the entire wizard. The user was presented the literal option "Convert Step 1's 4
+independent fields to native Choice/Input answers" (one of the options this document's own header note
+and Open Risks flagged as needing confirmation) and **selected it, for Step 1 specifically** — Steps
+2/3/4 keep Round 2's shell-only conclusion unchanged. This is a genuine, explicit **override** of
+Round 2's "shell-only for the whole wizard, for two independent, converging reasons" synthesis —
+Round 2 itself already found Step 1 "the closest structural fit" and rejected only restructuring it
+because doing so was ruled an Out-of-Scope UX/pacing redesign (product-spec's Out-of-Scope). The user's
+direct instruction waives that Out-of-Scope constraint for Step 1 alone, knowingly accepting the pacing
+consequence (`product-spec.md`'s Out-of-Scope clause is corrected in the same session to record this
+carve-out).
+
+**Corrected evidence (supersedes the unsourced citation in Round 2 point 3)**: Round 2's text cited
+"(`recon.md` § Dependencies — `FormData.get(itemName)`/`getAll`)" for the one-answer-per-`Item` claim,
+but `recon.md` § Dependencies never actually contained that evidence — it only had the recharts-version
+and `@shadcn/react`-maturity dependency bullets (the Round 1/2 registry-payload fetch only established
+that `QuestionnaireItem` forwards arbitrary `children`, not the `FormData`-key mechanics). This session
+verified the claim directly via **two independent live `WebFetch` calls** against the shadcn
+`Questionnaire` docs and appended the finding to `recon.md` § Dependencies (see that file — it is now
+the correctly-sourced citation for both this document and `implementation-spec.md`). Confirmed facts:
+- `QuestionnaireItem` renders as a `fieldset`; each `Item` has a unique `name` that becomes the
+  `FormData` key.
+- `FormData.get(itemName)` reads a single answer; `FormData.getAll(itemName)` reads a multi-checkbox
+  answer (`multiple: true` within one `Choice` group).
+- Exported parts: `QuestionnaireInput` (one input field wrapper), `QuestionnaireChoice`/
+  `QuestionnaireChoices` (one choice group). An `Item` supports **one** `Choice` group, OR one optional
+  freeform `Input` alongside choices — **not** multiple independently-named `Input` fields.
+- **No pattern exists for multiple independently-named `Input` fields inside one `Item`.**
+
+**Consequence, confirmed and accepted**: Step 1's 4 independent fields (Strategy ID, Display name,
+Re-entry cooldown, Exit cooldown), migrated onto this model, **must** become 4 separate
+`Questionnaire.Item` screens, each with its own advance-gate and its own `Questionnaire.Navigation`.
+Step 1 changes from one flat 4-field screen into 4 sequential sub-screens; overall wizard screen count
+(counting Step 1's sub-screens as distinct navigable units) goes from 4 to 7. This is a real pacing
+change to Step 1 specifically — documented, not hidden, and scoped narrowly per the user's literal
+instruction ("Steps 2-4 stay shell-only... unchanged").
+
+**Nesting decision (vs. flattening to a flat 7-screen wizard)**: **chosen: nest the 4 sub-screens
+inside outer Step 1**, not flatten the wizard into 7 top-level screens. Reasons:
+1. The user's own framing — "Steps 2-4 stay shell-only... unchanged from the prior design" — reads
+   most naturally as Steps 2/3/4 keeping their identity as steps 2/3/4 (`STEPS` array, `Step {step} —
+   {STEPS[step-1]}` numbering, `Questionnaire.Progress` denominator of 4). Flattening would renumber
+   them to 5/6/7, contradicting "unchanged."
+2. `e2e/insights/strategy-authoring.spec.ts` asserts `getByText('Step 1 — Identity')` **7 times** across
+   the file (the shared `fillToReview` helper plus the wizard-gates test, the server-error-jump test,
+   the edit-prepopulation test, the formula-picker test, and both cooldown-suite negative-value tests)
+   as the entry gate before interacting with Step 1's fields. Nesting keeps the outer `CardTitle`'s
+   "Step 1 — Identity" text **unchanged and valid across all 4 inner sub-screens** (the outer `step`
+   state stays `1` while a new `identitySubStep` state advances internally) — every one of those 7
+   assertions keeps passing **without modification**. Flattening would force every one of them to
+   become 4 different heading texts (e.g. "Step 1 of 7 — Strategy ID" … "Step 4 of 7 — Exit cooldown"),
+   a strictly larger, riskier e2e rewrite for no benefit the user asked for.
+3. `STEPS.length` (4) stays the authoritative denominator for the outer `Questionnaire.Progress`
+   indicator and for the existing `stepForError` step-jump vocabulary (1-4) — Steps 2/3/4's shell-only
+   treatment (Round 2, unchanged) already assumes a 4-step outer frame; flattening would force
+   Steps 2/3/4's already-approved, already-spec'd design to be renumbered too, which is explicitly
+   **not** part of the user's override.
+
+**Rejected under Round 3**: flattening `StrategyWizard` into a fully independent 7-top-level-screen
+wizard (no outer Step 1 wrapper) — rejected for the three reasons above. This does not reopen Round 2's
+separate, still-valid rejection of restructuring Steps 2/3 (dynamic `ComponentEditor` list; nested
+`RuleEditor` condition tree — both still fail the single-scalar-answer-per-`Item` model, unchanged
+evidence) or Step 4 (no fields to collect, still trivially fits `Questionnaire.Submit`).
+
+**e2e-update implication, stated explicitly (not hidden)**: even with nesting, the
+`getByText('Step 1 — Identity')` assertions survive unchanged, but the **fill/click sequencing** inside
+Step 1 does not. Every test that currently does `fill(id) → fill(display) → [fill(cooldown)] →
+[fill(exitCooldown)] → next.click()` (one click after filling up to 4 fields on a single flat screen)
+must become `fill(id) → next.click() → fill(display) → next.click() → [fill(cooldown)] → next.click() →
+[fill(exitCooldown)] → next.click()` (an interstitial `Next` click between every field, landing on
+outer Step 2 only after the 4th). This touches the shared `fillToReview` helper and every inline
+Step-1-filling sequence in `e2e/insights/strategy-authoring.spec.ts` — effectively every test in the
+file that reaches past Step 1. The `getByPlaceholder(...)` strings themselves are **unchanged** (hard
+constraint, honored) and the `Next` button's accessible name stays exactly `'Next'` on every sub-screen
+(each sub-screen's `Questionnaire.Navigation`/`Next` part renders with the same default text, matching
+the `children ?? 'Next'`-style fallback pattern `recon.md` already confirmed for the shell-only steps)
+— `getByRole('button', { name: 'Next', exact: true })` needs no selector change, only more `.click()`
+calls per test. `implementation-spec.md`'s revised Step 11 spells out the exact instruction; this
+design session does not edit the e2e file itself (out of `/sdd-design`'s scope) but the spec now
+requires the edit as part of the same implementation step, not a follow-up.
+
+**Advance-gate mapping (`canAdvance` decomposition)**: today's single step-1 gate (`canAdvance` when
+`step===1`) is `idValid && displayName.trim()!=='' && cooldownParsed.valid && exitCooldownParsed.valid`
+— one AND of 4 predicates gating one "Next" button. Under the native model each predicate becomes
+**that sub-screen's own, independent gate**:
+
+| Sub-screen | Field | Gate (unchanged predicate, reused verbatim) |
+|---|---|---|
+| 1 | Strategy ID | `idValid` (`STRATEGY_ID_RE.test(strategyId)`) |
+| 2 | Display name | `displayName.trim() !== ''` |
+| 3 | Re-entry cooldown (days) | `cooldownParsed.valid` (`parseCooldownDays(cooldownDaysRaw)`) |
+| 4 | Exit cooldown (days) | `exitCooldownParsed.valid` (`parseExitCooldownDays(exitCooldownDaysRaw)`) |
+
+None of the 4 parsing/validation functions change — only their scope narrows from "all 4 must hold
+before advancing past Step 1" to "each must hold before advancing past *that* sub-screen." This is a
+strictly finer-grained, and arguably more precise, gate than today's (today you cannot even reach the
+Exit cooldown sub-field until Re-entry cooldown is also already valid; under the new model you reach
+each field in sequence and are blocked only at the specific one that's invalid) — a natural, accepted
+side effect of adopting the primitive's own per-`Item` gating model, not a separately-designed UX
+change.
+
+**Error-jump mechanism, preserved**: today, `stepForError(msg): number` maps a server error message to
+an outer step (1-4), and the review step's `onClick` does `setStep(stepForError(serverError))`,
+bypassing `canAdvance` entirely (a direct, ungated jump — `StrategyWizard.tsx:314`). Extend
+`stepForError` to also return an inner sub-step when it targets Step 1:
+
+```
+type ErrorTarget = { step: number; identitySubStep?: 1 | 2 | 3 | 4 };
+function stepForError(msg: string): ErrorTarget {
+  const m = msg.toLowerCase();
+  if (m.includes('rule')) return { step: 3 };
+  if (m.includes('indicator') || m.includes('component') || m.includes('ref')) return { step: 2 };
+  if (m.includes('strategy_id')) return { step: 1, identitySubStep: 1 };
+  if (m.includes('display')) return { step: 1, identitySubStep: 2 };
+  if (m.includes('exit') && m.includes('cooldown')) return { step: 1, identitySubStep: 4 };
+  if (m.includes('cooldown')) return { step: 1, identitySubStep: 3 };
+  return { step: 4 };
+}
+```
+
+The click handler becomes `setStep(target.step); if (target.step === 1)
+setIdentitySubStep(target.identitySubStep ?? 1)` — the same **direct, ungated jump** semantics as
+today (still bypasses every sub-screen's own advance gate, exactly as it already bypasses `canAdvance`
+today), just landing one level deeper when the error is Step-1-shaped. No test currently exercises a
+Step-1-targeted error jump (the one covered test, "server validation error shows inline with a Go to
+Step link (AC-13)," uses the `invalid_ref` sentinel, which matches `'ref'` → Step 2, not Step 1 —
+confirmed by reading the test and `stepForError`'s existing branch order), so this extension adds no
+regression risk to existing coverage; it is forward-looking correctness for a code path the current
+suite doesn't reach.
+
+**Back navigation (new design choice, no e2e constraint found)**: no test in
+`strategy-authoring.spec.ts` exercises the `Back` button at all (confirmed by reading the whole file —
+zero `getByRole('button', {name:'Back'})` queries). Chosen: `identitySubStep` state persists across
+outer-step transitions (it is not reset to 1 when leaving/re-entering Step 1), so navigating outer
+`Back` from Step 2 to Step 1 lands on Step 1's **last** sub-screen (4, Exit cooldown) — standard "undo
+the most recent forward transition" wizard semantics. Sub-screen 1's own `Back`/`Previous` stays
+disabled, matching today's `disabled={step === 1}` (there is nothing before Step 1 in either model).
+
+**Controlled state, not `FormData`-uncontrolled submission**: Step 1's 4 fields keep being driven by
+`StrategyWizard`'s existing `useState` (`strategyId`/`displayName`/`cooldownDaysRaw`/
+`exitCooldownDaysRaw`) via controlled `value`/`onChange` on each `Questionnaire.Input`, **not** by
+reading `FormData` at a terminal submit. This is a deliberate, explicit choice: it preserves live,
+per-keystroke validation (`idValid`, `cooldownParsed`) and edit-mode pre-population/disabling
+(`initial?.strategyId`, `disabled={mode==='edit'}`) exactly as today, with zero behavior change to the
+parsing/validation functions themselves. Each field is still genuinely structured as one
+`Questionnaire.Item` = one `name` = one answer (satisfying "native Choice/Input answer model"
+structurally, matching the one-`Item`-one-`FormData`-key model this session verified) — using it as a
+controlled input rather than an uncontrolled `FormData`-read-at-submit input is a normal, supported mode
+for a controlled React form field and does not fight the primitive's structure. Flagged explicitly per
+root `CLAUDE.md` behavior #1 ("don't assume — ask, and surface tradeoffs") rather than silently picked.
+
+**Scope of the `Questionnaire.Root` instance**: Step 1's 4 sub-screens use their **own, separate**
+`Questionnaire.Root` instance (scoped to the Step 1 render branch only), distinct from whatever
+chrome-only `Questionnaire.Root`/`Item` wrapping Steps 2/3/4 end up needing per the original Chosen
+Approach #10 (still shell-only, still "wrap the existing step content in a minimal
+`Questionnaire.Root`/`Item` shell... only if required for `Progress`/`Next`/`Previous`/`Submit` to
+render at all" — unchanged). This keeps the two treatments (native-model Step 1 vs. chrome-only Steps
+2-4) structurally independent rather than one `Root` instance straddling two different usage models.
+
+**Constitution check (Round 3)**: no Floor (`F-*`) breach. **P-04** (phase-gate approval, recorded) —
+this round **is** the interactively-gated decision Round 1/2 lacked the tooling for: the user was asked
+directly and gave an explicit, literal-option answer, recorded here. **C-01** (evidence-cited) —
+honored: the corrected `FormData`/`Item` evidence is now sourced to two independent live `WebFetch`
+calls, recorded in `recon.md` § Dependencies, not asserted. **C-11**/**C-14** — honored: the pacing
+change and its e2e-update cost are stated explicitly, not hidden, and the consumer surface is unchanged
+(`/insights` strategy wizard, same file).
+
 ---
 
 ## Chosen Approach
@@ -193,15 +371,24 @@ confirmation in the final report rather than gated interactively.
    dependency-free path to this primitive; **pin it precisely** (`@shadcn/react@0.3.0`, not a caret
    range) given its pre-1.0/actively-changing status (verified against the live npm registry: created
    2026-06-26, last modified 2026-08-05 — 3 days before this design session).
-10. **FR-10 — SHELL ONLY (option a), for the *entire* wizard**, not just the RuleEditor step. Every
-    step is ruled out from (b) restructuring: Steps 2/3 fail `Questionnaire`'s single-scalar-answer-
-    per-`Item` model outright (dynamic `ComponentEditor` list; nested rule tree); Step 1's 4 fields are
-    the closest structural fit but splitting them into 4 separate `Questionnaire.Item`s would change
-    the wizard's step count/pacing — an Out-of-Scope UX redesign; Step 4 has no fields to collect and
-    trivially fits (a) via `Questionnaire.Submit`. `StrategyWizard.tsx` keeps its own `step`/component
-    React state exactly as today; `Questionnaire.Root`/`Item`/`Progress`/`Previous`/`Next`/`Submit`
-    supply only the chrome — `Questionnaire`'s own `FormData`-driven answer/validation model is not
-    used at all.
+10. **FR-10 — SPLIT DECISION (user-directed override, Round 3, 2026-08-08)**: **Step 1 restructures
+    onto `Questionnaire`'s native Choice/Input answer model** — 4 nested `Questionnaire.Item`
+    sub-screens, one per field (Strategy ID, Display name, Re-entry cooldown, Exit cooldown), each with
+    its own advance-gate and navigation, nested inside the outer "Step 1" so the outer `Step 1 —
+    Identity` heading and the 4-step (`STEPS.length`) framing are unchanged for Steps 2-4. See Round 3
+    for the full design: the nesting-vs-flattening decision, the `canAdvance`→per-sub-screen-gate
+    mapping, the extended `stepForError` jump, the Back-navigation choice, and the e2e-update
+    implications. **Steps 2/3/4 stay SHELL ONLY (option a)**, exactly as Round 2 concluded and
+    unchanged by this override: Step 2's dynamic `ComponentEditor` list and Step 3's two `RuleEditor`
+    instances (nested condition tree) both still fail `Questionnaire`'s single-scalar-answer-per-`Item`
+    model outright (unchanged evidence); Step 4 still has no fields to collect and trivially fits (a)
+    via `Questionnaire.Submit`. `StrategyWizard.tsx` keeps its own outer `step`/`setStep` React state as
+    the source of truth for Steps 2-4 (chrome only, per Round 2's "chrome only" framing — `Questionnaire`'s
+    own `FormData`-driven answer/validation model is not used there) **and** its own new
+    `identitySubStep` state for Step 1's inner navigation (native model, per Round 3, though still
+    controlled — not `FormData`-uncontrolled — for the reasons in Round 3). Two different
+    `Questionnaire` usages in one file, scoped to different render branches, not one model straddling
+    both.
 11. **FR-11** — replace `StrategyWizard.tsx:159-178`'s `<ol>` with `Questionnaire.Progress`. Preserve
     the `Next`/`Back`/`Create Strategy`/`Save Changes` button text (e2e-load-bearing,
     `e2e/insights/strategy-authoring.spec.ts`) on whichever elements the FR-10 shell renders them as
@@ -241,12 +428,21 @@ matching product-spec's `## Consumer Surface(s)` (C-14) exactly; `/trader` is to
   costs nothing extra (same transitive `@shadcn/react` dependency either way, confirmed via the live
   registry payload) and gives the already-styled, already-`data-slot`-convention-matching wrapper file
   for free, consistent with every other primitive in `src/components/ui/`.
-- **FR-10: restructure Step 1's 4 fields onto native `Questionnaire.Item`+`Input` answers while keeping
-  Steps 2/3 as shell-embedded custom content (a per-step hybrid)** — rejected: splitting Step 1 into 4
-  separate `Questionnaire.Item` screens changes the wizard's step count and pacing, which is a
-  flow/UX redesign product-spec's Out-of-Scope explicitly excludes; a hybrid would also make FR-11's
-  step indicator ambiguous (is a "step" a wizard step or a `Questionnaire.Item`?) for no benefit once
-  the full-wizard evidence is traced through.
+- **FR-10 (superseded by Round 3 — no longer rejected; see Chosen Approach #10 and Round 3)**: Round 2
+  originally rejected "restructure Step 1's 4 fields onto native `Questionnaire.Item`+`Input` answers
+  while keeping Steps 2/3 as shell-embedded custom content (a per-step hybrid)" on the grounds that
+  splitting Step 1 into 4 separate screens was a flow/UX redesign product-spec's Out-of-Scope
+  explicitly excluded, and that a hybrid would make FR-11's step indicator ambiguous. The user directly
+  overrode this for Step 1 in Round 3 (2026-08-08), explicitly accepting the pacing consequence and
+  resolving the step-indicator ambiguity via nesting (outer `Step {step}` framing unchanged; only Step
+  1's *inner* content gains its own sub-navigation) — see `product-spec.md`'s Out-of-Scope carve-out.
+  This entry is retained for the historical record only; it is **not** the current design.
+- **FR-10 (Round 3): flatten `StrategyWizard` into a fully independent 7-top-level-screen wizard** (no
+  outer Step 1 wrapper; Step 1's 4 sub-screens promoted to top-level steps 1-4, Steps 2/3/4 renumbered
+  5-7) — rejected: contradicts the user's own framing ("Steps 2-4 stay shell-only... unchanged"),
+  forces `getByText('Step 1 — Identity')`'s 7 e2e assertions to become 4 different heading texts for no
+  requested benefit, and forces Steps 2/3/4's already-shell-spec'd `STEPS.length`-4-denominator design
+  to be renumbered too — see Round 3 for the full nesting-vs-flattening reasoning.
 
 ## Open Risks
 
@@ -266,11 +462,16 @@ matching product-spec's `## Consumer Surface(s)` (C-14) exactly; `/trader` is to
   candidate low-risk follow-up (partial theming consistency without a full chart-library migration),
   not part of this feature; recommend a `docs/roadmap/ledger/insights.md` note so it isn't lost (the
   orchestrating session applies ledger writes per this session's constraints).
-- [ ] This entire design was produced without the interactive `AskUserQuestion` gate the orchestrating
-  session's instructions called for (no such tool, nor a `Task` tool for the `design-proposer`/
-  `design-adversary` subagents, was available here) — the user should explicitly confirm or override
-  the FR-5, FR-9, FR-10, FR-2 (recharts-version), and item-#12 (insights/page.tsx) decisions before
-  `/sdd-execute` runs any of them, exactly as the two named forks would have received via the gate.
+- [x] ~~This entire design was produced without the interactive `AskUserQuestion` gate...~~ **FR-10 is
+  now resolved**: the user was asked directly and gave an explicit override in Round 3 (2026-08-08) —
+  see Round 3 and Chosen Approach #10. **Still open** — Round 1/2's original caveat still applies to
+  everything *except* FR-10: the user should explicitly confirm or override the FR-5, FR-9, FR-2
+  (recharts-version), and item-#12 (insights/page.tsx) decisions before `/sdd-execute` runs any of them.
+- [ ] Round 3's Step 1 restructure requires rewriting `e2e/insights/strategy-authoring.spec.ts`'s
+  fill/click sequencing for every test that reaches past Step 1 (an interstitial `Next` click between
+  each of the 4 field fills, replacing the current single-click-after-filling-up-to-4-fields pattern) —
+  this is now a required part of `implementation-spec.md`'s revised Step 11, not optional polish; do not
+  land Step 11 without it, or the existing suite will fail against the restructured component.
 
 ## Constitution Rules Touched
 
@@ -291,10 +492,11 @@ matching product-spec's `## Consumer Surface(s)` (C-14) exactly; `/trader` is to
   session); the self-run Proposer/Adversary/Synthesis structure above preserves the *spirit* (competing
   positions argued from evidence, then reconciled by a single synthesizer) as closely as possible
   without the tooling.
-- `P-04` (phase-gate approval, recorded) — **not fully honored in the interactive sense**: the
-  approval gate that should have run via `AskUserQuestion` did not run (tool unavailable). Recorded
-  here and in the final report as an explicit deviation, per **P-03** ("no silent deviation — escalate,
-  never guess") — this design's forks are documented and flagged for the user's real sign-off rather
-  than silently treated as approved.
+- `P-04` (phase-gate approval, recorded) — **not fully honored in the interactive sense for Rounds
+  1-2**: the approval gate that should have run via `AskUserQuestion` did not run in this session (tool
+  unavailable). Recorded here and in the final report as an explicit deviation, per **P-03** ("no
+  silent deviation — escalate, never guess") — Round 1/2's forks are documented and flagged for the
+  user's real sign-off rather than silently treated as approved. **Round 3 is the honored case**: the
+  user was asked directly (outside this skill) and answered explicitly, satisfying P-04 for FR-10.
 - `F-11` (Floor rejection halts) — no Floor (`F-*`) violation was identified in either round; nothing
   here required halting the phase.
