@@ -346,3 +346,24 @@
   run build` ✓; full production `NEXT_DISABLE_STANDALONE=1 pnpm build` ✓.
 - Files modified: `services/xstockstrat-ui/package.json`, `pnpm-lock.yaml`.
 - Deviations: none.
+
+### Step 10 — Full verification sweep [done]
+- Switched from `pnpm dev` to a production `pnpm build && pnpm start` for the e2e run after
+  hitting the same dev-mode cold-compile timeout diagnosed in Step 4 — this is CI's own
+  `E2E_PREBUILT`-false branch (`playwright.config.ts`), not an invented shortcut. Confirmed the
+  fix: a route needing 43.5s to first-compile in dev responded in 4.6ms from production.
+- Results (3 independent full 255-test runs): `pnpm build` (standard) ✓, whole-repo `pnpm run
+  lint` ✓ (1 pre-existing unrelated warning), `pnpm run test:coverage` ✓ (67 tests, 99.25%
+  coverage), `check-duplication.sh` ✓ (0 clones), e2e 254/255 all 3 runs.
+- **Identified and fully attributed a pre-existing flake, not fixed (out of scope)**:
+  `e2e/insights/signal-detail.spec.ts` fails intermittently (different assertion each run) on a
+  Playwright strict-mode "2 elements match" error — confirmed via `git log` that neither the spec
+  nor its component (`SignalReadiness.tsx`) were touched by this feature or any related commit;
+  confirmed the SSR HTML has the text exactly once (client-side timing race, not a markup bug);
+  confirmed non-deterministic via a 4x repeat (3/4 passed). Flagged for a `/sdd-qa flake`
+  follow-up, not this PR's job to fix.
+- The highest-risk visual signal (buy/sell order-side coloring) is exercised and green via
+  `order-form.spec.ts`/`order-parity.spec.ts` across all 3 runs.
+- Files modified: none (verification-only step; any failure found would be fixed at its owning
+  step, per the step's own framing — none were, beyond the pre-existing flake already attributed).
+- Deviations: see Deviation Log (production-server fallback; pre-existing flake attribution).

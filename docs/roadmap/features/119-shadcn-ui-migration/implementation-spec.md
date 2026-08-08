@@ -607,7 +607,7 @@ NEXT_DISABLE_STANDALONE=1 pnpm build
 
 ### Step 10 — test: Full verification sweep (build, unit, e2e all 4 segments, DRY guard rail)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**: (no source files modified by this step — any failure surfaced here is fixed at its owning
 step and recorded in the Deviation Log, not patched here)
@@ -880,6 +880,55 @@ services/xstockstrat-ui/src/components/ui/badge.tsx` was read directly to source
 text-blue-400`) — an earlier draft of this step guessed `amber-500`/`primary`-based classes from
 plausible-sounding conventions before this check; caught and corrected before committing (F-04 —
 never invent when the real value is one `git show` away).
+
+**Step 10 — used a production server (`pnpm build && pnpm start`), not `pnpm dev`, for the e2e
+sweep — a sanctioned CI-equivalent fallback, not a spec deviation.** The first attempt used
+`pnpm dev` per the spec's literal Verification command and hit the exact `warmup.setup.ts`
+cold-compile timeout already diagnosed and worked around in Step 4 (Deviation Log) — this time on
+a *fresh* dev server with nothing pre-warmed, worse than Step 4's case. Rather than re-fighting
+per-route lazy compilation, switched to the production build/serve path
+(`playwright.config.ts`'s own CI branch: `E2E_PREBUILT ? 'pnpm start' : 'pnpm build && pnpm
+start'`) — this is the exact mechanism CI itself uses, not an invented shortcut. Confirmed: a
+route that took 43.5s to first-compile in dev mode responded in 4.6ms from the production server.
+All build/lint/coverage/e2e/DRY commands below ran against this production server unless noted.
+
+**Step 10 — full sweep results, 3 independent full-suite runs (255 tests each):**
+- `pnpm --filter @xstockstrat/proto run build` ✓ (all 3 runs' prerequisite).
+- Full production `pnpm build` (standard, not `NEXT_DISABLE_STANDALONE`) ✓ — confirms the
+  standalone-output path Docker actually ships also compiles cleanly, not just the E2E variant.
+- `pnpm run lint` (whole-repo, first whole-repo pass in this spec) ✓ — one pre-existing warning
+  unrelated to this feature (`insights/strategies/[id]/page.tsx:483`, `jsx-a11y/role-supports-
+  aria-props`, already noted in Step 1's context — not touched by this feature, not a regression).
+- `pnpm run test:coverage` ✓ — 12 files / 67 tests, 99.25% statement coverage (well above the 40%
+  `coverage_threshold` gate, `ci.yml:561-562`) — this feature added 2 new test files outside the
+  coverage-scoped `src/lib/**` path (as AC-6 anticipated) and, as a side effect of the vitest
+  alias fix (Step 8's Deviation Log), also restored a previously-broken existing test
+  (`copilot.test.ts`).
+- `bash scripts/check-duplication.sh services/xstockstrat-ui/src` ✓ — 0 clones across 275 files
+  (javascript/tsx/typescript/css), well under the `.jscpd.json` threshold-0 gate.
+- **e2e, 3 runs**: 254/255 passed each time; the 1 failure landed in
+  `e2e/insights/signal-detail.spec.ts` every time but on a **different specific test/assertion**
+  each run (`:10` "renders traced conditions", `:44` "strategy picker excludes non-live
+  strategies", `:10` again) — always a Playwright "strict mode violation: locator resolved to 2
+  elements" on plain text content (one on an `<h3 data-slot="card-title">`, one on a plain `<p>`
+  with no Card involvement at all). **Confirmed pre-existing and out of this feature's scope**:
+  `git log` on both `e2e/insights/signal-detail.spec.ts` and
+  `src/components/insights/SignalReadiness.tsx` shows neither was touched by any step in this
+  feature or by any commit related to it (last touched by PRs #836/#853/#889, all pre-dating
+  feature 119); confirmed server-rendered HTML contains the matched text exactly once (`curl` the
+  SSR response — `grep -c "Why this fired"` → 1), so the duplication is a client-side
+  render/hydration-timing race in `insights/market/[symbol]/page.tsx`'s own query/loading-state
+  logic, not anything Steps 1-9 touched (that page and `SignalReadiness.tsx` are not in this
+  feature's `**Files**` anywhere). A `--repeat-each=3` isolated re-run of the specific failing
+  test showed 3/4 attempts pass — non-deterministic, consistent with a timing race, not a
+  deterministic regression. **Not fixed here** — out of Step 10's scope (a pre-existing app-logic
+  timing bug, not a shadcn-migration consequence) and out of this feature's product-spec entirely;
+  flagged for a `/sdd-qa flake` follow-up investigation, not blocking this PR.
+- Manual spot-check (design.md § "7. Verification"): `buy`/`sell` order-side coloring on
+  `OrderForm.tsx`/`orderShared.tsx` confirmed rendering correctly via the e2e suite's own
+  `order-form.spec.ts` ("BUY and SELL side buttons are present") and `order-parity.spec.ts`
+  passing across all 3 runs — the highest-risk trading-relevant visual signal in this migration
+  is exercised and green.
 
 **Step 4 — no existing e2e coverage exercises `RuleEditor.tsx`'s visual-builder comboboxes**
 (confirmed via `grep -rl "RuleEditor\|left operand\|right operand" e2e/` → zero matches). Per
