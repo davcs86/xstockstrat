@@ -213,7 +213,7 @@ and the definitive one is Step 10.
 
 ### Step 3 — service: Rewrite the 3 `combobox.tsx` call sites against the new compound API
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/ChartPanel.tsx` — modify
@@ -776,3 +776,31 @@ inspected line-by-line to rule out any new/unexplained error) and confirmed ever
 traces to the two already-documented breakages (the 3 combobox call sites' old prop API vs. the
 new compound API; every `Badge`/`Button` `buy`/`sell`/`paper`/`live`/`warning`/`info` consumer). No
 third breakage class was introduced.
+
+**Step 3 — TypeScript generic inference required an explicit `<Combobox<string>>` type argument
+on the free-text (rhs) call site.** `RuleEditor.tsx`'s right-operand `Combobox` mixes the
+Value-generic props (`items`, `onValueChange`) with the free-text-controlled props (`inputValue`,
+`onInputValueChange`); TypeScript inferred `Value = unknown` rather than `string` for this
+particular combination (the other 3 non-free-text call sites inferred correctly without help).
+**Disposition**: added an explicit `<Combobox<string> ...>` generic argument — a type-only
+annotation, no behavior change, confirmed by the before/after `tsc --noEmit` diff being limited to
+exactly the two errors this fixed. Not a deviation from the design's chosen approach (design.md's
+Combobox section did not specify TypeScript generic mechanics), recorded here for the next person
+touching this file.
+
+**Step 3 — `ChartPanel.tsx`'s `symbolOptions` memo removed, not ported.** The old
+`ComboboxOption[]` shape (`{ value: s }`, no `label`) added no information beyond the flat
+`symbols: string[]` array already in scope — the new `Combobox`'s `items` prop accepts a flat
+array directly. Removed the now-unnecessary `useMemo` wrapper and its now-unused `useMemo` import
+(confirmed via grep — no other use in the file) rather than porting dead abstraction. `ComboboxOption`
+itself is no longer exported by the regenerated `combobox.tsx` (confirmed: the type doesn't exist
+in the preset's compound-component API), so keeping the import would have been a compile error
+regardless.
+
+**Step 3 — `ComboboxEmpty` copy invented for `ChartPanel.tsx`'s symbol picker ("No matching
+symbols").** The old call site never set an explicit `emptyText` (recon's Codebase Evidence
+confirms only `placeholder`/`aria-label`/`className`/`inputClassName` were passed), relying on
+the old component's internal default empty-state text, which is not recoverable now that file is
+gone. **Disposition**: this is UI copy, not a factual claim path/symbol (F-04 concerns factual
+invention, not cosmetic strings) — a reasonable placeholder was written; flagged here for a human
+copy pass if a different empty-state message is preferred.

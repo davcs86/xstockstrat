@@ -225,3 +225,28 @@
 - Deviations: see Deviation Log (3 entries — bare `tailwindcss` dep, `layout.tsx`/duplicate-utils
   side effects, hand-reconciled `globals.css`). No blocker raised — all resolved within Step 2's
   own scope per the disposition reasoning recorded.
+
+### Step 3 — Rewrite the 3 combobox.tsx call sites [done]
+- Read the regenerated `combobox.tsx` (Base UI `Combobox.Root` compound API) plus
+  `@base-ui/react`'s own type definitions (`ComboboxRoot.d.ts`, `AriaCombobox.d.ts`,
+  `ComboboxList.d.ts`) directly from `node_modules` before writing any call site — confirmed the
+  `items`/`value`/`onValueChange`/`inputValue`/`onInputValueChange`/`itemToStringLabel`/`limit`
+  prop shapes and the `ComboboxList`'s function-child render pattern (not guessed from design.md's
+  summary alone, per the step's own Instruction #1).
+- `ChartPanel.tsx`: `items={symbols}` (flat, replacing the now-unnecessary `symbolOptions` memo —
+  see Deviation Log), `limit={50}` (was `maxResults`), controlled `value`/`onValueChange`.
+- `ComponentEditor.tsx`: `items` = formula IDs, `itemToStringLabel` looks up the formula name,
+  `ComboboxItem` renders name + a muted formulaId hint (reproducing the old `label`/`hint` shape).
+- `RuleEditor.tsx` lhs: same strict-selection pattern as ComponentEditor. rhs (free text): a
+  controlled `inputValue`/`onInputValueChange` pair (every keystroke commits, reproducing
+  "typed text kept even if it matches no option") plus `onValueChange` for explicit item picks —
+  needed an explicit `<Combobox<string>>` generic argument for correct type inference (see
+  Deviation Log).
+- Verification: scoped `tsc --noEmit` on the 3 files → clean; scoped `eslint` → clean; full-repo
+  `tsc --noEmit` re-run and every remaining error file cross-checked against the known Step 7
+  variant-consumer list — confirmed zero new/unexplained errors, only the already-documented
+  Button/Badge breakage remains.
+- Files modified: `services/xstockstrat-ui/src/components/trader/ChartPanel.tsx`,
+  `src/components/insights/ComponentEditor.tsx`, `src/components/insights/RuleEditor.tsx`.
+- Deviations: see Deviation Log (3 entries — explicit generic argument, dropped dead
+  `symbolOptions` memo, invented empty-state copy for one call site).
