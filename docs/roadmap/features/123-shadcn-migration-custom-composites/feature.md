@@ -1,6 +1,6 @@
 # Feature: shadcn-migration-custom-composites
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/shadcn-migration-custom-composites`
 **Created**: 2026-08-08
 **Last Updated**: 2026-08-09
@@ -18,6 +18,7 @@
 | 2026-08-08 | `implementation-ready` (unchanged) | user override + this session | The user was asked directly whether FR-10 should really be shell-only for the entire wizard, and **overrode** it for Step 1 specifically: Step 1 restructures onto `Questionnaire`'s native Choice/Input answer model (4 nested sub-screens); Steps 2-4 stay shell-only, unchanged. Recorded as `design.md` § Round 3 (rewrote Chosen Approach #10 + the corresponding Rejected Alternatives entry), a corrected/sourced one-answer-per-`Item` citation appended to `recon.md` § Dependencies (two live `WebFetch` calls, replacing an earlier unsourced citation), `implementation-spec.md`'s old Step 11 split into a new Step 11 (Step 1 restructure) + Step 12 (Steps 2-4 shell + FR-11, unchanged content) with the former Step 12 (verification) renumbered to Step 13 (**Total Steps 12 → 13**), and `product-spec.md`'s Out-of-Scope clause given a narrow, cited exception for Step 1 only. FR-10 is now **fully resolved** and no longer needs interactive confirmation before `/sdd-execute`; FR-5, FR-9, FR-2 (recharts-version), and the `insights/page.tsx` Deferred Item are unaffected and still need it. |
 | 2026-08-09 | `implementation-ready` (unchanged) | user override (Round 4) + this session | The user was asked directly about the two remaining self-run-session decisions (FR-2's recharts-version handling, and whether to fold the `insights/page.tsx` Deferred Item into scope) and **overrode both**: (1) bump `recharts` to v3 (`^3.8.0`) repo-wide instead of hand-authoring `ui/chart.tsx` against the installed v2.12.7; (2) fold `insights/page.tsx:176-199`'s second "Score Trend" chart into this feature now, as new **FR-12**. Recorded as `design.md` § Round 4 (rewrote Chosen Approach #2, added Chosen Approach #12/FR-12, updated Rejected Alternatives and Open Risks; **Rounds 3 → 4**), `product-spec.md` (new FR-12 with its own acceptance-criteria line, Affected Services and Consumer Surface updated to include `insights/page.tsx`, FR-2 text corrected for the v3 bump), and `implementation-spec.md` (new Step 2 — repo-wide `recharts` bump + minimal `CartesianGrid` `xAxisId`/`yAxisId` fix on `EquityCurveChart.tsx`/`insights/page.tsx` to keep `pnpm build` green; new Step 7 — FR-12's `insights/page.tsx` migration; every subsequent step renumbered; **Total Steps 13 → 15**; the former `## Deferred Item` section retained only as a superseded historical record). Recon (`design.md` § Round 4) confirmed `EquityCurveChart.tsx`'s `Scatter` usage never used the removed `points` prop and neither file uses `activeIndex`/`Customized`/`ref.current.current` — the only real v3-breaking-change code fix needed in either existing chart is the `CartesianGrid` `xAxisId`/`yAxisId` addition. FR-2 and FR-12 are now **fully resolved**; only **FR-9** (the `@shadcn/react` CLI-vendored install path/version pin) remains adversarially-vetted but not live-gated. |
 | 2026-08-09 | `implementation-ready` → `in-progress` | /sdd-execute sequential | Branch created (`feature/shadcn-migration-custom-composites`, stacked on `feature/shadcn-migration-low-confidence`). A live confirmation attempt for FR-9 (the one remaining unconfirmed item) did not yield an interactive answer in this execute session; execution proceeds on `design.md`'s own already-adversarially-vetted Chosen Approach #9, with Step 12's own live-registry re-verification as the concrete mitigation (see Next Action note above). Execution begins against all 15 steps. |
+| 2026-08-09 | `in-progress` → `code-completed` | /sdd-execute sequential | All 15 steps done. Step 13 (FR-10 Step 1 restructure) found a genuine `Questionnaire.Next`/`Previous` single-item-visibility mismatch (resolved via a plain-`Button` `IdentityNav` helper) and a pre-existing latent edit-mode bug the restructuring surfaced (hyphenated legacy strategy IDs permanently blocking Next — fixed, scoped to create-mode only); captured a genuine red state (10 failed/8 passed) before rewriting the e2e spec's Step-1 click sequencing, then 23/23 green. Step 14 (FR-11 step indicator) found the identical registered-item-architecture mismatch applies to `Questionnaire.Progress`/outer nav too — resolved via the implementation spec's own built-in escape hatch (Progress adopted via a zero-item Root driven entirely by `children`; outer nav Buttons kept, no shell wrap needed). Step 15's whole-feature pass: `pnpm lint`/`build` clean, 43/43 across the three required e2e specs, plus a temporary (never-committed) Playwright script standing in for the manual-verification checklist on the four files with no e2e coverage — all passed, no defects found. Draft PR [#914](https://github.com/davcs86/xstockstrat/pull/914) ready to flip to ready-for-review. |
 
 ---
 
@@ -48,8 +49,9 @@ fits, extract a shared shadcn-primitive-based composite for the app's three repe
 
 ## Next Action
 
-`/sdd-review shadcn-migration-custom-composites impl-spec` — validate implementation spec, then
-`/sdd-execute shadcn-migration-custom-composites`.
+All 15 implementation steps are done (`code-completed`). Flip draft PR
+[#914](https://github.com/davcs86/xstockstrat/pull/914) to ready-for-review; this is the fourth and
+final feature in the 120→121→122→123 stacked sequence.
 
 **FR-5 is resolved** (2026-08-08, direct user confirmation: keep `lightweight-charts`, matching the
 self-run session's recommendation — see `design.md` § Chosen Approach #5 and the applied
@@ -66,10 +68,9 @@ Status History row above): `recharts` bumped to v3 (`^3.8.0`) repo-wide instead 
 `insights/page.tsx` Deferred Item is now in-scope as FR-12 (`implementation-spec.md` Step 7). No further
 confirmation needed for either.
 
-Execution in progress against Steps 1–15. Draft integration PR:
+All 15 steps are done and the whole-feature gate is green. Draft integration PR:
 [#914](https://github.com/davcs86/xstockstrat/pull/914) (stacked on
-`feature/shadcn-migration-low-confidence`), will flip to ready-for-review once all 15 steps land and
-the whole-feature gate is green.
+`feature/shadcn-migration-low-confidence`) is being flipped to ready-for-review.
 
 **Still not explicitly re-confirmed by the user** (adversarially vetted over 2 debate rounds with no
 Floor breach and no dissenting objection, but never put through a live `AskUserQuestion` gate — the

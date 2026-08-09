@@ -824,3 +824,51 @@
   set) early as a sanity check on this feature's cumulative changes — **21 passed (19.6s)**, no
   regressions.
 - Files modified: `src/components/insights/StrategyWizard.tsx`
+
+### Step 15 — whole-feature verification pass [done]
+- No code changes (per F-09, aggregation/verification only). Ran the automated command block
+  verbatim: `pnpm lint` — clean (same pre-existing unrelated `aria-selected` warning only, unrelated
+  to this feature). `NEXT_DISABLE_STANDALONE=1 pnpm build` — succeeded (already re-confirmed at Step
+  14's own verification, same code). `pnpm test:e2e -- e2e/insights/strategy-authoring.spec.ts
+  e2e/insights/backtest-coverage.spec.ts e2e/trader/chart-panel.spec.ts` — **43 passed (32.2s)**, zero
+  regressions across all three specs run together.
+- **Manual verification for the four files with no e2e selector coverage** (Acceptance Criteria #6):
+  since this session runs headless, "manual" verification was done via a temporary, uncommitted
+  Playwright spec (`e2e/_manual-verify-step15.spec.ts`, written, run, and deleted in this session —
+  never part of the diff) exercising the same checklist items the spec's own manual-verification
+  block lists, reusing the existing mock-backend/auth-cookie infra rather than a human clicking
+  through `pnpm dev`:
+  1. **`FormulaRunResult.tsx` sparkline (Step 5)**: stubbed `ExecuteFormula` to return a 7-point
+     numeric `value` output series; confirmed the `Passed` badge renders and a
+     `svg.recharts-surface` (the `ChartContainer`-wrapped sparkline) is visible in the Run panel.
+  2. **`OutputEditor.tsx` (Step 9)**: added two outputs, confirmed both `output name N` inputs
+     render, moved output 0 down (confirmed the index swap via `toHaveValue`), removed the resulting
+     index-1 row, confirmed the remaining row holds the expected value — add/move/remove all work.
+  3. **`ParameterEditor.tsx` (Step 10)**: added two parameters, confirmed the numeric Min/Max grid
+     shows for the default `INT` type (`parameter min 0` visible), moved parameter 0 down and
+     removed the vacated slot, confirmed the surviving row's value — add/move/remove/type-conditional
+     grid all work.
+  4. **`RuleEditor.tsx` visual-mode + JSON round-trip (Step 11)**: not re-checked separately — this
+     path is already fully exercised by `strategy-authoring.spec.ts`'s JSON-toggle assertions
+     (`getByRole('tab', {name:'JSON'})`, `getByLabel('Entry/Exit rule JSON')`), which is why the
+     manual-verification checklist's item 5 (visual-mode condition add/remove + JSON round-trip)
+     duplicates coverage that already exists — treated as already satisfied by Step 15's automated
+     e2e re-run above, not skipped.
+  5. **`insights/page.tsx` Score Trend chart (Step 7, FR-12)**: navigated to `/insights` with the
+     shared mock server's default (non-empty) `STRATEGY_SCORES` fixture, confirmed the "Score Trend"
+     `CardTitle` and a `svg.recharts-surface` render, hovered the chart's bounding-box center and
+     confirmed `ChartTooltipContent` renders text matching `/Score/` (the tooltip label, per
+     `SCORE_TREND_CONFIG`'s `score: { label: 'Score', ... }`). Then overrode
+     `AnalysisService/ListStrategies` to return an empty `strategies` array for one request and
+     confirmed the zero-state placeholder text ("Strategy scores will appear here once backtests are
+     run") renders instead.
+  All checks passed (`3 passed, 7.7s`). No defects found in any of the four files.
+- **Whole-feature result**: all 15 steps done, zero open regressions, zero unresolved findings. This
+  feature's genuine primitive-mismatch findings (Step 13's `Questionnaire.Next`/`Previous`
+  single-item-visibility bug + the edit-mode `idValid` latent bug it surfaced; Step 14's identical
+  registered-item-architecture mismatch for `Questionnaire.Progress`/outer nav) were each caught via
+  direct source verification before or immediately after writing code, resolved with documented,
+  narrowly-scoped deviations, and are fully covered by the automated e2e suite (23/23
+  strategy-authoring tests green) plus this step's manual-check equivalents for the remaining
+  no-coverage files.
+- Files modified: none (verification-only step)

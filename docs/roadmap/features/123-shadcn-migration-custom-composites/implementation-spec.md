@@ -1074,7 +1074,7 @@ pnpm test:e2e -- e2e/insights/strategy-authoring.spec.ts
 
 ### Step 15 — test: whole-feature verification pass
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - (no new files — this step verifies Steps 1–14's combined changes)
