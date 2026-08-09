@@ -586,7 +586,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -- e2e/insights/backtest-coverage.sp
 
 ### Step 13 — service: Create shared `FilterToolbar.tsx` (FR-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/FilterToolbar.tsx` — create
@@ -655,7 +655,7 @@ pnpm lint
 
 ### Step 14 — service: Wire `AccountsModule.tsx` and `OrderFilters.tsx` to `FilterToolbar` (FR-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/AccountsModule.tsx` — modify (lines 93-135, the
@@ -719,7 +719,7 @@ pnpm lint
 
 ### Step 15 — service: Broker/order-type/order-status coverage note for FR-12 (trading-domain gate)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**: none — this step is a verification-only confirmation, no new diff beyond Step 14's
 
@@ -763,7 +763,7 @@ diff <(grep -oE "BrokerType\.[A-Z]+" src/components/trader/AccountsModule.tsx | 
 
 ### Step 16 — test: e2e regression for FR-12 (FilterToolbar in AccountsModule + OrderFilters)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/account-selector.spec.ts` — verification-only unless a

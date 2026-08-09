@@ -399,3 +399,59 @@ repeated per step).
   e2e/insights/screener.spec.ts` — 30 passed, including the phone-frame no-overflow test (confirms
   the wrapper-div removal didn't regress horizontal scroll containment).
 - Files modified: none (verification-only, as specced)
+
+### Step 13 — Create shared FilterToolbar.tsx (FR-12) [done]
+- Slot-based component per design.md §4's approved shape: optional `search`, `filters` array
+  (rendered as `ui/select.tsx` `Select`s), optional `dateRange`, `activeFilterCount`, `onClear`,
+  `clearPlacement: 'inline' | 'trailing'`.
+- **One addition beyond the spec's literal prop list**: added an optional `className` per `filters`
+  entry, needed to preserve `AccountsModule.tsx`'s three distinct per-select widths
+  (`w-[110px]`/`w-[110px]`/`w-[120px]`) — the spec's `{value,onValueChange,options,ariaLabel}` shape
+  had no width slot, and dropping the widths would not be a like-for-like substitution. Optional, so
+  `OrderFilters.tsx`'s three selects (which had no fixed width) simply omit it.
+- **Lint fix**: `activeFilterCount` is part of the approved props surface (design.md §4) but neither
+  current `clearPlacement` mode reads it internally — `'inline'` callers own their own count/Clear-
+  button entirely outside `FilterToolbar` (`AccountsModule.tsx`'s `CardHeader`), and `'trailing'`
+  renders unconditionally (matching today's `OrderFilters.tsx` behavior, no gating). Left it in the
+  TS interface (callers must still pass it) but did not destructure it in the function body, with a
+  comment explaining why — avoids a real `@typescript-eslint/no-unused-vars` error without dropping
+  the design-approved prop.
+- Verification: `pnpm lint` clean (after the above fix); `test -f` + `grep "export function
+  FilterToolbar"` both pass.
+- Files created: `src/components/shared/FilterToolbar.tsx`
+
+### Step 14 — Wire AccountsModule.tsx and OrderFilters.tsx to FilterToolbar (FR-12) [done]
+- `AccountsModule.tsx`: replaced the inline toolbar `<div>` with `<FilterToolbar search={...}
+  filters={[broker, state, status]} activeFilterCount={activeFilterCount} onClear={...}
+  clearPlacement="inline" />`; the `CardHeader` count/Clear-button block was left untouched (already
+  `'inline'`-shaped). Dropped now-unused `Input`/`Select*`/`Search` imports.
+- `OrderFilters.tsx`: symbol stayed a sibling `Input` inside the retained `grid` div (free text, does
+  not fit `filters`' Select-shaped prop, per the step's own fallback instruction) alongside a single
+  `<FilterToolbar filters={[side, orderType, status]} dateRange={...} activeFilterCount={0}
+  onClear={reset} clearPlacement="trailing" />`. Dropped now-unused `Button`/`Select*` imports.
+- **Known, spec-mandated layout change** (not a defect): `FilterToolbar`'s own root is a
+  `flex flex-wrap` row (Step 13's instruction, design.md §4 — "not a grid"), so inside
+  `OrderFilters.tsx`'s 3-column grid the 5 side/type/status/from/to controls now render as one grid
+  cell (wrapping internally) rather than 5 separate grid cells each getting their own column
+  placement. This is the documented outcome of "OrderFilters.tsx's grid layout stays owned by that
+  call site around FilterToolbar" — recording it here since it's a real (if minor) visual reflow, not
+  because it's a bug.
+- Verification: `pnpm lint` clean; `grep -c "SelectTrigger"` → 0 in both files (all Selects now
+  render inside `FilterToolbar`).
+- Files modified: `src/components/trader/AccountsModule.tsx`, `src/components/trader/OrderFilters.tsx`
+
+### Step 15 — Broker/order-type/order-status coverage note for FR-12 [done]
+- Verification-only, no code change. Re-confirmed post-Step-14: `AccountsModule.tsx` still carries
+  both `BrokerType.ALPACA`/`BrokerType.IBKR`; `OrderFilters.tsx` still carries all 5 `PbOrderType`
+  values and all 7 `PbOrderStatus` values, all now surfaced through `FilterToolbar`'s `options` arrays
+  rather than inline `SelectItem`s but with zero enum values dropped, added, or reordered.
+- Files modified: none
+
+### Step 16 — e2e regression for FR-12 (FilterToolbar in AccountsModule + OrderFilters) [done]
+- No locator changes needed — both specs assert via accessible label/role/text
+  (`getByLabel`/`getByRole`), all of which pass straight through `FilterToolbar`'s `ariaLabel`/
+  `dateRange` props unchanged.
+- Verification: `pnpm build` clean; `pnpm test:e2e -- e2e/trader/account-selector.spec.ts
+  e2e/trader/orders.spec.ts` — 13 passed, including order-type/order-status-dependent tests
+  (`create form offers all 5 order types...`, `PENDING_APPROVAL is surfaced...`).
+- Files modified: none (verification-only, as specced)

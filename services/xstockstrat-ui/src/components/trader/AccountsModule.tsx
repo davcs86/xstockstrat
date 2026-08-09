@@ -6,10 +6,8 @@ import { BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
 import { CredentialStatus } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import { Input } from '../ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
-import { Search } from 'lucide-react';
+import { FilterToolbar } from '../shared/FilterToolbar';
 import { AccountRow, AddAccountForm } from './accountShared';
 
 type BrokerFilter = 'all' | 'alpaca' | 'ibkr';
@@ -91,48 +89,53 @@ export function AccountsModule() {
         </CardHeader>
         <CardContent className="space-y-4">
           {/* Filter toolbar */}
-          <div className="flex flex-wrap gap-2">
-            <div className="relative flex-1 min-w-[160px]">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
-              <Input
-                placeholder="Search by name…"
-                className="pl-8 h-8 text-sm"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-            </div>
-            <Select value={brokerFilter} onValueChange={(v) => setBrokerFilter(v as BrokerFilter)}>
-              <SelectTrigger className="w-[110px] h-8 text-sm">
-                <SelectValue placeholder="Broker" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All brokers</SelectItem>
-                <SelectItem value="alpaca">Alpaca</SelectItem>
-                <SelectItem value="ibkr">IBKR</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={activeFilter} onValueChange={(v) => setActiveFilter(v as ActiveFilter)}>
-              <SelectTrigger className="w-[110px] h-8 text-sm">
-                <SelectValue placeholder="State" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All states</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="disabled">Disabled</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
-              <SelectTrigger className="w-[120px] h-8 text-sm">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All statuses</SelectItem>
-                <SelectItem value="ok">OK</SelectItem>
-                <SelectItem value="unknown">Unknown</SelectItem>
-                <SelectItem value="invalid">Invalid</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <FilterToolbar
+            search={{ value: search, onChange: setSearch, placeholder: 'Search by name…' }}
+            filters={[
+              {
+                value: brokerFilter,
+                onValueChange: (v) => setBrokerFilter(v as BrokerFilter),
+                options: [
+                  { value: 'all', label: 'All brokers' },
+                  { value: 'alpaca', label: 'Alpaca' },
+                  { value: 'ibkr', label: 'IBKR' },
+                ],
+                ariaLabel: 'Broker',
+                className: 'w-[110px] h-8 text-sm',
+              },
+              {
+                value: activeFilter,
+                onValueChange: (v) => setActiveFilter(v as ActiveFilter),
+                options: [
+                  { value: 'all', label: 'All states' },
+                  { value: 'active', label: 'Active' },
+                  { value: 'disabled', label: 'Disabled' },
+                ],
+                ariaLabel: 'State',
+                className: 'w-[110px] h-8 text-sm',
+              },
+              {
+                value: statusFilter,
+                onValueChange: (v) => setStatusFilter(v as StatusFilter),
+                options: [
+                  { value: 'all', label: 'All statuses' },
+                  { value: 'ok', label: 'OK' },
+                  { value: 'unknown', label: 'Unknown' },
+                  { value: 'invalid', label: 'Invalid' },
+                ],
+                ariaLabel: 'Status',
+                className: 'w-[120px] h-8 text-sm',
+              },
+            ]}
+            activeFilterCount={activeFilterCount}
+            onClear={() => {
+              setSearch('');
+              setBrokerFilter('all');
+              setActiveFilter('all');
+              setStatusFilter('all');
+            }}
+            clearPlacement="inline"
+          />
 
           {/* Account list */}
           {accounts.length === 0 ? (
