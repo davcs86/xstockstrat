@@ -981,7 +981,9 @@ pnpm test:e2e -- e2e/insights/strategy-authoring.spec.ts   # expect all green �
 
 ### Step 14 — service: FR-10 (Steps 2-4) + FR-11 shell-wrap `StrategyWizard.tsx`'s Steps 2-4 and replace the outer step indicator with `Questionnaire.Progress`
 
-**Status**: `pending`
+**Status**: `done` (Instructions 1 and 4 implemented as specified; Instructions 2 and 3 resolved via
+their own built-in escape hatches rather than literal adoption — see context.md for the source-level
+verification that drove this)
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/StrategyWizard.tsx` — modify

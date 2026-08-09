@@ -7,7 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Questionnaire, QuestionnaireItem } from '@/components/ui/questionnaire';
+import {
+  Questionnaire,
+  QuestionnaireItem,
+  QuestionnaireProgress,
+} from '@/components/ui/questionnaire';
 import { cn } from '@/components/ui/utils';
 import { RuleEditor, summarizeRule } from '@/components/insights/RuleEditor';
 import {
@@ -194,27 +198,40 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
 
   return (
     <div className="max-w-2xl space-y-4">
-      {/* Step indicator */}
-      <ol className="flex flex-wrap gap-2 text-xs">
-        {STEPS.map((label, i) => {
-          const n = i + 1;
-          return (
-            <li
-              key={label}
-              className={cn(
-                'rounded-full px-3 py-1',
-                n === step
-                  ? 'bg-primary text-primary-foreground'
-                  : n < step
-                    ? 'bg-secondary text-foreground'
-                    : 'bg-secondary/40 text-muted-foreground',
-              )}
-            >
-              {n}. {label}
-            </li>
-          );
-        })}
-      </ol>
+      {/* FR-11: step indicator via Questionnaire.Progress. This Root registers no Items — the
+          primitive's own current/total tracking is per-Root item registration, and the outer
+          step/STEPS model spans Step 1's separate Root plus Steps 2-4's plain state, so adopting
+          Questionnaire.Root's own controlled item/onItemChange model here (the only way to get
+          its current/total to genuinely match our 4-step model) would repeat Step 13's
+          Next/Previous-visibility mismatch and is explicitly out of scope (Instruction 1). With
+          zero registered items, Progress's own aria-value* attributes are simply omitted
+          (total=0), so its `children` override — driven directly by the outer `step`/`STEPS`
+          state below — is the only rendered content; no misleading aria-valuetext is produced. */}
+      <Questionnaire onSubmit={(e) => e.preventDefault()}>
+        <QuestionnaireProgress
+          className="flex w-full min-w-0 flex-wrap gap-2 text-xs"
+          aria-label={`Step ${step} of ${STEPS.length}`}
+        >
+          {STEPS.map((label, i) => {
+            const n = i + 1;
+            return (
+              <span
+                key={label}
+                className={cn(
+                  'rounded-full px-3 py-1',
+                  n === step
+                    ? 'bg-primary text-primary-foreground'
+                    : n < step
+                      ? 'bg-secondary text-foreground'
+                      : 'bg-secondary/40 text-muted-foreground',
+                )}
+              >
+                {n}. {label}
+              </span>
+            );
+          })}
+        </QuestionnaireProgress>
+      </Questionnaire>
 
       <Card>
         <CardHeader>

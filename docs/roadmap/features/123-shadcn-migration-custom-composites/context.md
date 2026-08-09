@@ -755,3 +755,72 @@
   fixed edit-prepopulation tests.
 - Files modified: `src/components/insights/StrategyWizard.tsx`,
   `e2e/insights/strategy-authoring.spec.ts`
+
+### Step 14 — FR-10 (Steps 2-4) + FR-11 shell-wrap `StrategyWizard.tsx`'s Steps 2-4 and replace the outer step indicator with `Questionnaire.Progress` [done]
+- **Pre-implementation source-level verification (Instruction 2's own mandate — "verify against the
+  actual installed questionnaire.tsx, not assumed")**, continuing Step 13's discipline: traced
+  `Questionnaire.Progress`/`Next`/`Previous`/`Submit`'s compiled source. All four are gated by
+  `ne("Questionnaire.*")`, which throws unless nested in a `Questionnaire.Root`, and their
+  displayed/enabled state derives from that Root's own `current`/`total`/`first`/`last` — computed
+  purely from `Questionnaire.Item`s **registered inside that same Root** (`total` = count of
+  enabled registered items). Critically, `Root`'s `current`/`total` can only track our real outer
+  `step`/`STEPS.length` (4 steps) if the Root's `item` prop is **externally controlled** (`item={...}`,
+  with `onItemChange` wired) — the exact "Questionnaire.Root's own item/onItemChange/FormData-driven
+  answer-and-validation model" Instruction 1 **explicitly forbids** adopting for the outer shell.
+  Without that controlled wiring, a Root wrapping only Steps 2-4's content can register at most 3
+  items and never reflects Step 1 (which already has its own, separate Root per Step 13) — so
+  `Progress`'s `aria-valuetext`/`aria-valuenow` would describe a different, smaller, wrong scale
+  than the true 4-step model, and (verified from `dt`/`lt`/`mt`'s source) `Next`/`Previous` are
+  `visible = total > 1 && !last/!first` and `Submit` is `visible = total > 0 && last` — with only
+  ever one step's content mounted at a time (matching the existing `step === N && (...)` render
+  pattern), any such shell Root would register **1** item at a time, making `total === 1` always →
+  `Next`/`Previous` permanently hidden (the identical single-item-Root bug Step 13 already found and
+  documented, now reproduced for Steps 2-4 by the same underlying constraint) and `Submit` visible
+  on every step (wrong — it should only show on Step 4). This is a second, independent confirmation
+  that the primitive's registered-item architecture cannot represent an externally-owned multi-step
+  index without the forbidden controlled model — not a one-off Step 13 quirk.
+- **Resolution, applying Instruction 3's own built-in escape hatch** ("if ... [nav parts] do not
+  support a clean text override without fighting internal wiring, keep StrategyWizard's existing
+  Buttons ... use Questionnaire.Progress alone for FR-11's actual ask") **and extending the same
+  reasoning to Instruction 2's Root/Item wrap**, since both derive from the identical registered-item
+  state this session verified doesn't fit:
+  - **Instruction 1 (Progress) — adopted, literally**: replaced the `<ol>` step indicator with
+    `<Questionnaire onSubmit={(e) => e.preventDefault()}><QuestionnaireProgress>...</QuestionnaireProgress></Questionnaire>`.
+    This Root registers **zero** `Item`s — it exists solely to satisfy `Progress`'s "must be inside a
+    Root" requirement. With `total === 0`, `Progress`'s own `aria-valuemax`/`aria-valuemin`/
+    `aria-valuenow`/`aria-valuetext` all become `undefined` (omitted, not wrong) — `Progress`'s
+    `children` prop always overrides its internal default text (`children ?? f`), so the rendered
+    content is **entirely** driven by the outer `step`/`STEPS` state (the exact same pill-map JSX the
+    `<ol>` used, `<span>` instead of `<li>` since there's no longer a `<ul>`/`<ol>` parent), literally
+    satisfying Instruction 1's "driven by the existing outer step/STEPS.length state" — without ever
+    touching `item`/`onItemChange`.
+  - **Instruction 2 (wrap Steps 2-4 in a shell Root) — not applied**: unnecessary once Instruction 3's
+    nav swap is also not applied (below) — no consumer inside Steps 2-4's content needs Root/Item
+    presence, so no wrapping was added there. Steps 2-4's render branches (`ComponentEditor` list,
+    `RuleEditor` pair, Review summary) are untouched — matching design.md's own "shell only, chrome
+    only" framing for these three steps even more literally (no shell was needed at all).
+  - **Instruction 3 (swap outer nav Buttons for `Questionnaire.Previous`/`Next`/`Submit`) — not
+    applied**, via the instruction's own explicit escape hatch: confirmed via source (above) that these
+    parts cannot be wired to accurately gate on the real 4-step model without the forbidden
+    controlled-item architecture, and a naive 1-item-per-step shell would make `Next`/`Previous`
+    permanently hidden (matching Step 13's finding) while `Submit` shows on every step (wrong).
+    `StrategyWizard`'s existing `Back`/`Next`/`Create Strategy`/`Save Changes` `Button`s are unchanged.
+  - **Instruction 4 (no count/order/content change to Steps 2-4)**: satisfied trivially — no Steps 2-4
+    render code was touched at all.
+- Net effect: FR-11's literal ask (replace `<ol>` with `Questionnaire.Progress`) is fully satisfied;
+  the Steps-2-4 half of FR-10 (which design.md always scoped as "shell only," unlike Step 1's Round-3
+  override) contributes **zero** further `Questionnaire` adoption beyond Progress, because the
+  primitive has no part that fits an externally-owned, non-controlled multi-step index — a conclusion
+  the Instructions' own text already anticipated for nav (Instruction 3) and this session's source
+  verification now confirms applies identically to Progress's Root/Item requirement (Instruction 2).
+- Verification: `grep -n "<ol"` → no match (fully replaced). `grep -n "'Back'\|'Next'\|'Create
+  Strategy'\|'Save Changes'\|Go to Step"` → all four navigation/error-jump strings still present
+  verbatim. `pnpm lint` — clean (same pre-existing unrelated warning only). `NEXT_DISABLE_STANDALONE=1
+  pnpm build` — compiled successfully in ~33s, typecheck clean, full 39-route manifest.
+  `pnpm test:e2e -- e2e/insights/strategy-authoring.spec.ts` — **23 passed (22.7s)**, matching Step
+  13's baseline (the `<ol>`→`Questionnaire.Progress` swap is invisible to every e2e assertion, which
+  all target `CardTitle`'s `getByText('Step N — Label')`, unchanged). Also ran
+  `e2e/insights/backtest-coverage.spec.ts` + `e2e/trader/chart-panel.spec.ts` (Step 15's regression
+  set) early as a sanity check on this feature's cumulative changes — **21 passed (19.6s)**, no
+  regressions.
+- Files modified: `src/components/insights/StrategyWizard.tsx`
