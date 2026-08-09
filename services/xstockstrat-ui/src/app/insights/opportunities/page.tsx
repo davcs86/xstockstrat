@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { AppShell } from '@/components/insights/AppShell';
 import { Button } from '@/components/ui/button';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/components/ui/utils';
 import {
   Select,
@@ -119,8 +120,6 @@ export default function OpportunitiesPage() {
       .map((o) => o.symbol)
       .join(', ') || '—';
 
-  const toggleSource = (s: string) =>
-    setActiveSources((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
   // Persist a disposition against the stable server key; the invalidated read then drops the row.
   const act = (o: Opportunity, action: OpportunityAction) =>
     setAction.mutate({ opportunityKey: o.opportunityKey, action });
@@ -199,21 +198,22 @@ export default function OpportunitiesPage() {
             >
               All sources
             </button>
-            {sources.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => toggleSource(s)}
-                className={cn(
-                  'rounded-full border px-3 py-1 text-xs transition-colors',
-                  activeSources.includes(s)
-                    ? 'border-primary bg-primary/20 text-foreground'
-                    : 'border-border text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {s}
-              </button>
-            ))}
+            <ToggleGroup type="multiple" value={activeSources} onValueChange={setActiveSources}>
+              {sources.map((s) => (
+                <ToggleGroupItem
+                  key={s}
+                  value={s}
+                  className={cn(
+                    'rounded-full border px-3 py-1 text-xs transition-colors',
+                    activeSources.includes(s)
+                      ? 'border-primary bg-primary/20 text-foreground'
+                      : 'border-border text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {s}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
             <div className="ml-auto flex items-center gap-2">
               <Select value={actionFilter} onValueChange={setActionFilter}>
                 <SelectTrigger className="h-8 w-[130px]" aria-label="action filter">

@@ -6,6 +6,7 @@ import { StrategyOperation } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/components/ui/utils';
 import { RuleEditor, summarizeRule } from '@/components/insights/RuleEditor';
 import {
@@ -304,8 +305,8 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
               <RuleSummary label="Exit rule" value={exitRule} />
 
               {serverError && (
-                <div className="rounded-md border border-destructive p-2">
-                  <p className="text-xs text-destructive">{serverError}</p>
+                <Alert variant="destructive">
+                  <AlertDescription>{serverError}</AlertDescription>
                   <Button
                     type="button"
                     variant="link"
@@ -315,7 +316,7 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
                   >
                     Go to Step {stepForError(serverError)}
                   </Button>
-                </div>
+                </Alert>
               )}
             </div>
           )}

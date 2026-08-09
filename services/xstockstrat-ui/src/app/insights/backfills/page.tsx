@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { StatTile } from '@/components/shared/StatTile';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   AlertDialog,
   AlertDialogTrigger,
@@ -256,11 +257,7 @@ export default function BackfillsPage() {
                   onChange={(e) => setCreateEnd(e.target.value)}
                 />
                 <label className="flex items-center gap-2 text-xs text-muted-foreground sm:col-span-2">
-                  <input
-                    type="checkbox"
-                    checked={overwrite}
-                    onChange={(e) => setOverwrite(e.target.checked)}
-                  />
+                  <Checkbox checked={overwrite} onCheckedChange={(v) => setOverwrite(v === true)} />
                   Overwrite existing bars
                 </label>
                 <Button type="submit" disabled={trigger.isPending} className="sm:col-span-1">

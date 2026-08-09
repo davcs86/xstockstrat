@@ -1237,7 +1237,9 @@ cd services/xstockstrat-ui && pnpm build
 
 ### Step 26 — service: Wire Tabs to `config-ui/page.tsx`'s EnvModeSwitcher (FR-5)
 
-**Status**: `pending`
+**Status**: `done` (reverted — see Deviation Log / context.md Step 26-27: Radix Tabs.Trigger
+hardcodes `role="tab"`, which breaks `role="link"` when composed via `asChild`; kept the original
+plain-`Link` markup instead)
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/page.tsx` — modify (`EnvModeSwitcher`, `:60-118`)
@@ -1288,7 +1290,7 @@ pnpm build
 
 ### Step 27 — test: e2e regression for FR-5 (EnvModeSwitcher)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**: `services/xstockstrat-ui/e2e/config-ui/env-mode-switcher.spec.ts` — verification-only
 unless `asChild`'s role-forwarding doesn't hold as expected
@@ -1316,7 +1318,7 @@ Record actual pass/fail in `context.md`.
 
 ### Step 28 — service: Wire Toggle Group to `opportunities/page.tsx`'s source-filter pills (FR-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx` — modify (`:188-213`)
@@ -1359,7 +1361,7 @@ pnpm build
 
 ### Step 29 — test: e2e regression for FR-6 (opportunities source pills)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**: `services/xstockstrat-ui/e2e/insights/opportunities.spec.ts` — verification-only unless
 the role assumption doesn't hold
@@ -1384,7 +1386,7 @@ Record actual pass/fail in `context.md`.
 
 ### Step 30 — service: Wire Alert to BacktestDiagnostics.tsx and StrategyWizard.tsx (FR-7)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/BacktestDiagnostics.tsx` — modify (`:98-104`)
@@ -1429,7 +1431,7 @@ pnpm build
 
 ### Step 31 — test: e2e regression for FR-7 (BacktestDiagnostics + StrategyWizard)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**: `services/xstockstrat-ui/e2e/insights/backtest-coverage.spec.ts`,
 `services/xstockstrat-ui/e2e/insights/strategy-authoring.spec.ts` — verification-only
@@ -1451,7 +1453,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "backtest-coverage|Go to Step"
 
 ### Step 32 — service: Wire Checkbox to `backfills/page.tsx`'s "Overwrite existing bars" (FR-8)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/backfills/page.tsx` — modify (`:251-257`)
@@ -1482,7 +1484,7 @@ pnpm build
 
 ### Step 33 — test: build-only verification for FR-8 (no e2e coverage exists)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**: none
 
@@ -1504,7 +1506,7 @@ cd services/xstockstrat-ui && pnpm build
 
 ### Step 34 — service: Wire Collapsible (not Accordion — see Tranche 2 finding above) to LiveStrategiesPanel.tsx's detail panel (FR-9)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/LiveStrategiesPanel.tsx` — modify (`:88`, the
@@ -1543,7 +1545,7 @@ pnpm build
 
 ### Step 35 — test: build-only verification for FR-9 (no e2e coverage exists)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**: none
 

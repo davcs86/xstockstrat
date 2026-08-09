@@ -874,3 +874,33 @@ ambiguity is logged here).
   cases. Confirm the prop against the actual installed package (or the CLI-generated file, once
   added) before writing call-site code, exactly as this step's own instructions already required —
   the win here was following that instruction, not skipping it under time pressure.
+
+### 2026-08-09 — shadcn-migration-medium-confidence — execute (Steps 26-27)
+- **Mistake**: `implementation-spec.md`'s Step 26 gave a literal code sample wrapping a set of
+  full-page-navigation `<Link>`s in `Tabs`/`TabsList`/`TabsTrigger asChild` (`config-ui/page.tsx`'s
+  ENV/MODE switcher) to reproduce a segmented-control look. This compiled and looked identical
+  visually, but `@radix-ui/react-tabs@1.1.21`'s `TabsTrigger` hardcodes `role: "tab"` on its own
+  element (`index.mjs:114`); with `asChild`, Radix's Slot merges that explicit role onto the child
+  `<Link>`, overriding its implicit `role="link"` (an explicit ARIA role always wins over an
+  implicit one). `e2e/config-ui/env-mode-switcher.spec.ts`'s `getByRole('link', ...)` assertions
+  — all correctly written against the pre-migration DOM — failed 4/4 outright (not flaky, not
+  timing — "element(s) not found"), because the actual accessible role had silently become "tab".
+  Caught only by actually running the e2e suite against the real change (mandated by this step's
+  own TDD note: "expected-pass... run unmodified first and record the actual result, don't assume"),
+  not by reading `tabs.tsx`'s wrapper code or the shadcn docs, which don't surface Radix's internal
+  role hardcoding.
+- **Evidence**: `docs/roadmap/features/121-shadcn-migration-medium-confidence/context.md` Steps
+  26-27; `node_modules/.pnpm/@radix-ui+react-tabs@1.1.21.../dist/index.mjs:114`
+  (`role: "tab"`); `services/xstockstrat-ui/src/app/config-ui/page.tsx`'s reverted markup + inline
+  comment.
+- **Rule it implies**: a shadcn/Radix primitive whose whole purpose is to express a specific ARIA
+  role (`Tabs`→`role="tab"`, `RadioGroup`→`role="radio"`, etc.) will **assert that role on its
+  trigger element regardless of `asChild`**, because the role is the primitive's entire semantic
+  contract, not an incidental style choice. Wrapping a control in one of these primitives is safe
+  only when the control's real interaction model matches that role (client-side panel/option
+  switching) — if the control actually does something else (a full navigation, an arbitrary async
+  action), styling it to *look* like a tab/radio/etc. via CSS on the plain underlying element (as
+  the pre-migration code did) is correct; reaching for the ARIA-role-bearing primitive is not a
+  safe "just for the styling" substitution, even though it compiles cleanly and passes a build. This
+  generalizes the render-vs-asChild lesson above: verify a primitive's *behavioral* contract against
+  the actual use case, not just its *prop* API, before adopting it for a styling-only motive.

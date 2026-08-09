@@ -9,6 +9,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { Collapsible, CollapsibleContent } from '../ui/collapsible';
 
 interface LiveStrategiesPanelProps {
   /** When false, the live-toggle action column is hidden (admin-only, FR-10). */
@@ -87,7 +88,11 @@ export function LiveStrategiesPanel({ isAdmin }: LiveStrategiesPanelProps) {
             Could not update live status — admin scope required.
           </p>
         )}
-        {selectedId && <StrategyAlertFeed strategyId={selectedId} />}
+        <Collapsible open={!!selectedId} onOpenChange={(open) => !open && setSelectedId(null)}>
+          <CollapsibleContent>
+            {selectedId && <StrategyAlertFeed strategyId={selectedId} />}
+          </CollapsibleContent>
+        </Collapsible>
       </CardContent>
     </Card>
   );

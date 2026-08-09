@@ -589,3 +589,95 @@ repeated per step).
   system formulas, and no spec exercises `handleDeactivate`). Their only gate is the `pnpm build`
   type-check already run in Step 22, confirmed here for the acceptance-criterion-5 record.
 - Files modified: none
+
+### Step 26 — Wire Tabs to config-ui/page.tsx's EnvModeSwitcher (FR-5) [done, reverted]
+- Initial implementation: two `Tabs`/`TabsList`/`TabsTrigger asChild` blocks wrapping the existing
+  `Link`s, per the spec's literal code sample. `pnpm build`/`pnpm lint` both clean at that point.
+- **Real regression found in Step 27** (see below) — reverted this step's `Tabs` wrapping back to
+  the original plain `<Link>`/`<Badge>` markup, keeping only the `Tabs`/`TabsList`/`TabsTrigger`
+  import removed. Added an inline comment in `config-ui/page.tsx` explaining why (points here).
+- Files modified: `src/app/config-ui/page.tsx`
+
+### Step 27 — e2e regression for FR-5 (EnvModeSwitcher) [done]
+- **Ran unmodified against the initial Tabs-wrapped Step 26 — all 4 real assertions failed**
+  (`getByRole('link', {name: 'dev'})` etc. — "element(s) not found"). Root cause, confirmed by
+  reading the installed package directly (not assumed): `@radix-ui/react-tabs@1.1.21`'s
+  `TabsTrigger` hardcodes `role: "tab"` on its own element (`index.mjs:114`) — with `asChild`,
+  Radix's Slot merges ALL of `Tabs.Trigger`'s own props onto the child, including that explicit
+  `role="tab"`, which **overrides** the child `<Link>`'s implicit `role="link"` (an explicit ARIA
+  role attribute always wins over an element's implicit role). This is actually *correct* Tabs
+  behavior for a real client-side tab-panel switcher — the mismatch is that `EnvModeSwitcher` isn't
+  one: every "tab" click does a full page navigation via the `Link`'s `href` query params, not an
+  in-place panel swap. `Tabs`/`TabsTrigger` is a semantically wrong primitive for this control,
+  parallel to this same tranche's FR-9 Accordion→Collapsible finding (a structural/primitive-fit
+  mismatch discovered by actually exercising the primitive, not by reading its docs).
+- Per this step's own instruction ("fix Step 26's markup — do not rewrite the spec's `link` role
+  expectations, since the underlying element genuinely is still an anchor tag"), reverted Step 26
+  rather than touching the test.
+- Verification (after the revert): `pnpm build` clean; `pnpm test:e2e -g
+  "EnvModeSwitcher|opportunities|backtest-coverage|Go to Step"` — **28 passed, 0 failed** (bundled
+  with Steps 29/31's regressions since they share one test run this session).
+- Files modified: none (the fix landed in Step 26's own file)
+
+### Step 28 — Wire Toggle Group to opportunities/page.tsx's source-filter pills (FR-6) [done]
+- Replaced the per-item `<button onClick={() => toggleSource(s)}>` loop with `<ToggleGroup
+  type="multiple" value={activeSources} onValueChange={setActiveSources}>` wrapping
+  `ToggleGroupItem`s, preserving the exact `cn(...)` active/inactive classes per item. Removed the
+  now-unused `toggleSource` helper (confirmed via grep it had no other call sites) to avoid an
+  unused-var lint error. The "All sources" reset button stayed a plain `Button`, untouched, outside
+  the `ToggleGroup` — it clears the array rather than joining it.
+- Verification: `pnpm build` clean; `pnpm lint` clean.
+- Files modified: `src/app/insights/opportunities/page.tsx`
+
+### Step 29 — e2e regression for FR-6 (opportunities source pills) [done]
+- Confirmed empirically (not assumed): `type="multiple"` keeps each `ToggleGroupItem` as a native
+  `<button>` with `aria-pressed` (Root gets `role="toolbar"`, not `role="radio"` — that remap is
+  `type="single"`-only, per feature 120 Step 9's finding). `getByRole('button', {name: 'marketwatch'})`
+  continued to resolve correctly.
+- Verification: bundled into Step 27's run — 28 passed, including all 5
+  `e2e/insights/opportunities.spec.ts` cases (source-chip filter, snooze/dismiss persistence, etc.).
+- Files modified: none
+
+### Step 30 — Wire Alert to BacktestDiagnostics.tsx and StrategyWizard.tsx (FR-7) [done]
+- `BacktestDiagnostics.tsx`: `<p data-testid="no-trade-reason" ...>` → `<Alert
+  data-testid="no-trade-reason"><AlertDescription>{noTradeMsg}</AlertDescription></Alert>`, variant
+  `default` per spec (no destructive/warning tone for a no-trade notice).
+- `StrategyWizard.tsx`: the `border-destructive` `<div>` wrapper → `<Alert variant="destructive">`
+  wrapping `AlertDescription` + the existing "Go to Step N" `Button`, both unchanged internally.
+- Verification: `pnpm build` clean; `pnpm lint` clean.
+- Files modified: `src/components/insights/BacktestDiagnostics.tsx`,
+  `src/components/insights/StrategyWizard.tsx`
+
+### Step 31 — e2e regression for FR-7 (BacktestDiagnostics + StrategyWizard) [done]
+- No locator changes needed — `data-testid` and the inner `Button`'s role both forward through
+  `Alert`/`AlertDescription`'s prop spread unchanged.
+- Verification: bundled into Step 27's run — all 10 `backtest-coverage.spec.ts` cases and the
+  `strategy-authoring.spec.ts` "Go to Step" case passed.
+- Files modified: none
+
+### Step 32 — Wire Checkbox to backfills/page.tsx's "Overwrite existing bars" (FR-8) [done]
+- `<input type="checkbox" checked={overwrite} onChange={...} />` → `<Checkbox checked={overwrite}
+  onCheckedChange={(v) => setOverwrite(v === true)} />` inside the existing `<label>`, same
+  normalize-to-boolean pattern as feature 120 Step 24.
+- Verification: `pnpm build` clean; `pnpm lint` clean.
+- Files modified: `src/app/insights/backfills/page.tsx`
+
+### Step 33 — build-only verification for FR-8 (no e2e coverage exists) [done]
+- No code change. `pnpm build` (Step 32's build) is the gate — confirmed clean, recorded here per
+  spec.
+- Files modified: none
+
+### Step 34 — Wire Collapsible to LiveStrategiesPanel.tsx's detail panel (FR-9) [done]
+- `{selectedId && <StrategyAlertFeed strategyId={selectedId} />}` → `<Collapsible
+  open={!!selectedId} onOpenChange={(open) => !open && setSelectedId(null)}><CollapsibleContent>
+  {selectedId && <StrategyAlertFeed strategyId={selectedId} />}</CollapsibleContent></Collapsible>`
+  — same conditional-render outcome, `Collapsible`'s own open/close transition now applies. Uses
+  `Collapsible` (added by this feature's own FR-3), not `Accordion`, per this tranche's earlier
+  structural-fit finding (Accordion's Item/Content pairing can't wrap a shared below-table panel).
+- Verification: `pnpm build` clean; `pnpm lint` clean.
+- Files modified: `src/components/trader/LiveStrategiesPanel.tsx`
+
+### Step 35 — build-only verification for FR-9 (no e2e coverage exists) [done]
+- No code change. `pnpm build` (Step 34's build) is the gate — confirmed clean, recorded here per
+  spec.
+- Files modified: none
