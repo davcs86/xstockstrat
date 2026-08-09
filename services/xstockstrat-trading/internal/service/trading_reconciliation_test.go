@@ -185,6 +185,7 @@ func newTestReconciliationServiceWithIntents(brokers map[string]brokerPoolEntry,
 		credStatus:          make(map[string]int32),
 		halted:              make(map[string]bool),
 		haltReasons:         make(map[string]string),
+		haltedLastPolled:    make(map[string]time.Time),
 		reconcileCandidates: make(map[string]int),
 	}
 }
@@ -282,6 +283,98 @@ func TestReconcileTick_UnknownBrokerOrder_AlreadyHaltedAccount_DoesNotRefire(t *
 	// mismatch" CRITICAL alert — but neither must repeat on the 2nd/3rd tick.
 	if alertCount != 2 {
 		t.Errorf("EmitAlert called %d times across 3 ticks, want exactly 2 (both from the first tick only)", alertCount)
+	}
+}
+
+// TestReconcileTick_HaltedAccount_SkipsListOrdersWithinCooldown proves reconcileTick itself
+// (not just the finding/alert layer) stops calling the broker for an already-halted account
+// once shouldPollHaltedAccount's cooldown is active — the default
+// trading.reconciliation.halted_poll_interval_ms (5 min) means the 2nd tick, run immediately
+// after the 1st halts the account, must not poll again.
+func TestReconcileTick_HaltedAccount_SkipsListOrdersWithinCooldown(t *testing.T) {
+	var listOrdersCalls int
+	fb := &fakeReconciliationBroker{
+		listOrdersFn: func(ctx context.Context) ([]broker.BrokerOrder, error) {
+			listOrdersCalls++
+			return []broker.BrokerOrder{{BrokerOrderID: "bo-unknown", Status: "filled", FilledQty: 5}}, nil
+		},
+	}
+	svc := newTestReconciliationService(
+		map[string]brokerPoolEntry{"acct-1": {client: fb, userID: "u-1"}},
+		&fakeReconciliationPortfolioClient{}, &recordingLedgerClient{}, &fakeNotifyClient{}, noopAccountRepo{},
+	)
+
+	svc.reconcileTick(context.Background(), 0, 1.1) // halts the account
+	svc.reconcileTick(context.Background(), 0, 1.1) // run immediately after — still in cooldown
+
+	if !svc.isAccountHalted("acct-1") {
+		t.Fatal("expected the account to be halted after the first tick")
+	}
+	if listOrdersCalls != 1 {
+		t.Errorf("ListOrders called %d times across 2 ticks, want exactly 1 (2nd tick must skip a halted account within the cooldown)", listOrdersCalls)
+	}
+}
+
+// TestReconcileTick_HaltedAccount_PollsAgainAfterCooldownElapses proves the cooldown is a
+// throttle, not a permanent stop — once halted_poll_interval_ms has elapsed, the poller must
+// resume observing the account (e.g. to eventually notice a manual broker-dashboard order).
+func TestReconcileTick_HaltedAccount_PollsAgainAfterCooldownElapses(t *testing.T) {
+	var listOrdersCalls int
+	fb := &fakeReconciliationBroker{
+		listOrdersFn: func(ctx context.Context) ([]broker.BrokerOrder, error) {
+			listOrdersCalls++
+			return []broker.BrokerOrder{{BrokerOrderID: "bo-unknown", Status: "filled", FilledQty: 5}}, nil
+		},
+	}
+	svc := newTestReconciliationService(
+		map[string]brokerPoolEntry{"acct-1": {client: fb, userID: "u-1"}},
+		&fakeReconciliationPortfolioClient{}, &recordingLedgerClient{}, &fakeNotifyClient{}, noopAccountRepo{},
+	)
+
+	svc.reconcileTick(context.Background(), 0, 1.1) // halts the account, 1st poll
+	if listOrdersCalls != 1 {
+		t.Fatalf("ListOrders called %d times after the halting tick, want 1", listOrdersCalls)
+	}
+
+	// Backdate the last-polled timestamp past the default 300000ms (5 min) cooldown —
+	// simulates real time elapsing without a real sleep in the test.
+	svc.haltedMu.Lock()
+	svc.haltedLastPolled["acct-1"] = time.Now().Add(-6 * time.Minute)
+	svc.haltedMu.Unlock()
+
+	svc.reconcileTick(context.Background(), 0, 1.1)
+
+	if listOrdersCalls != 2 {
+		t.Errorf("ListOrders called %d times after the cooldown elapsed, want 2 (poller must resume)", listOrdersCalls)
+	}
+}
+
+// TestShouldPollHaltedAccount_ThrottlesAndRecovers unit-tests the throttle helper directly,
+// including the intervalMs<=0 "always poll" edge case (mirrors interval_ms's own convention
+// elsewhere in this poller) that reconcileTick's use of the live-read default can't easily
+// exercise (config.Watcher has no exported snapshot setter to inject 0 through).
+func TestShouldPollHaltedAccount_ThrottlesAndRecovers(t *testing.T) {
+	svc := &TradingService{halted: map[string]bool{}, haltedLastPolled: map[string]time.Time{}}
+
+	if !svc.shouldPollHaltedAccount("acct-1", 300000) {
+		t.Error("expected the first observation to poll")
+	}
+	if svc.shouldPollHaltedAccount("acct-1", 300000) {
+		t.Error("expected an immediate re-check to be throttled")
+	}
+
+	svc.haltedMu.Lock()
+	svc.haltedLastPolled["acct-1"] = time.Now().Add(-time.Hour)
+	svc.haltedMu.Unlock()
+	if !svc.shouldPollHaltedAccount("acct-1", 300000) {
+		t.Error("expected a poll once the interval has elapsed")
+	}
+
+	if !svc.shouldPollHaltedAccount("acct-2", 0) {
+		t.Error("expected intervalMs<=0 to always poll (1st call)")
+	}
+	if !svc.shouldPollHaltedAccount("acct-2", 0) {
+		t.Error("expected intervalMs<=0 to always poll (2nd call, no throttling)")
 	}
 }
 
