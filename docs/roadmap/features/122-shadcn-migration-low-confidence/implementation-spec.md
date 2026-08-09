@@ -739,7 +739,7 @@ caution).
 
 ### Step 9 — service: Wire Alert to OrderForm.tsx and EditOrderDialog.tsx (FR-1)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/OrderForm.tsx` — modify (`:217-219`)
@@ -807,7 +807,7 @@ pnpm build
 
 ### Step 10 — test: e2e regression for FR-1 (OrderForm.tsx)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**: `services/xstockstrat-ui/e2e/trader/order-form.spec.ts` — verification-only unless a
 locator breaks
@@ -832,7 +832,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -- e2e/trader/order-form.spec.ts
 
 ### Step 11 — test: build-only verification for FR-1 (EditOrderDialog.tsx, no e2e coverage exists)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**: none
 

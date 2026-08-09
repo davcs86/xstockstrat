@@ -571,3 +571,37 @@ decisions per FR, transcribed from `design.md` § Round 3/Round 4 at execute tim
   (Steps 9-12) was added to this spec *after* this step was originally written, so this gate does
   not cover FR-1 — Step 12 is the true whole-feature gate.
 - Files modified: none (verification-only)
+
+### Step 9 — Wire Alert to OrderForm.tsx and EditOrderDialog.tsx (FR-1) [done]
+- `OrderForm.tsx`: replaced the inline `<p className={...isErrorMsg...}>` (`:217-219`, pre-edit line
+  numbers) with `<Alert variant={isErrorMsg ? 'destructive' : 'default'}><AlertDescription
+  className={isErrorMsg ? undefined : 'text-buy'}>{message}</AlertDescription></Alert>` — matching
+  the spec's snippet exactly. Import added as `'../ui/alert'` (relative), not the spec's literal
+  `'@/components/ui/alert'` suggestion — this file's own `ui/*` imports (`card`, `button`, `input`,
+  `select`, `toggle-group`) are all relative, and the spec's own Instruction 2 for the sibling file
+  already applies this exact "match the file's existing import style" reasoning, so it's applied
+  here too for consistency rather than introducing the one `@/` alias among otherwise-relative `ui/*`
+  imports.
+- `EditOrderDialog.tsx`: replaced `{error && <p className="text-xs text-destructive">{error}</p>}`
+  (`:82`) with `<Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>`,
+  relative import matching the file's existing style, per the spec's own instruction.
+- No state/handler/other-markup changes in either file, per the step's scope.
+- Verification: `grep -n "Alert\b"` confirms both new imports + JSX usages. `pnpm lint` — clean
+  (same one pre-existing unrelated warning). `NEXT_DISABLE_STANDALONE=1 pnpm build` — succeeded,
+  full route manifest, no TS errors.
+- Files modified: `src/components/trader/OrderForm.tsx`, `src/components/trader/EditOrderDialog.tsx`
+
+### Step 10 — e2e regression for FR-1 (OrderForm.tsx) [done]
+- Ran `order-form.spec.ts` unmodified against Step 9's change — **12 passed** (no locator fixes
+  needed), including both text-content-based assertions Step 9's Codebase Evidence flagged as the
+  parity targets: "successful order submission shows orderId and status" and "failed order
+  submission shows error message". Confirms `getByText(...)` locators survive the `<p>` → `Alert`/
+  `AlertDescription` wrap unmodified, as expected (they match text content, not tag/class).
+- Files modified: none (verification-only; no locator broke, so no test edit was needed)
+
+### Step 11 — build-only verification for FR-1 (EditOrderDialog.tsx) [done]
+- No code change (verification-only step, per the spec's own note that `e2e/trader/order-ticket.spec.ts`
+  has zero assertions on this dialog's error text — confirmed again this session via the same grep
+  Step 9's Codebase Evidence used). Step 9's `pnpm build` run is the gate for this site; recorded as
+  its own step per acceptance criterion 5, mirroring sibling `121`'s Steps 33/35 pattern.
+- Files modified: none

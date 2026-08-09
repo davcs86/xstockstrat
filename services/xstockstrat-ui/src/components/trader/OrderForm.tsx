@@ -17,6 +17,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { ToggleGroup, ToggleGroupItem } from '../ui/toggle-group';
+import { Alert, AlertDescription } from '../ui/alert';
 
 type OrderSide = 'buy' | 'sell';
 type OrderType = 'market' | 'limit' | 'stop' | 'stop_limit' | 'trailing_stop';
@@ -215,7 +216,11 @@ export function OrderForm({ mode, initialSymbol }: OrderFormProps) {
           </Button>
 
           {message && (
-            <p className={`text-xs ${isErrorMsg ? 'text-destructive' : 'text-buy'}`}>{message}</p>
+            <Alert variant={isErrorMsg ? 'destructive' : 'default'}>
+              <AlertDescription className={isErrorMsg ? undefined : 'text-buy'}>
+                {message}
+              </AlertDescription>
+            </Alert>
           )}
           {!selectedAccountId && (
             <p className="text-xs text-muted-foreground">
