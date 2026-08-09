@@ -455,7 +455,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "order-form"
 
 ### Step 14 — service: Add ui/alert-dialog.tsx primitive + test (FR-3, FR-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/alert-dialog.tsx` — create

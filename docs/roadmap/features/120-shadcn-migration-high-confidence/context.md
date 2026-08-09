@@ -313,3 +313,16 @@
 - **Green**: updated the 2 exact-case lookups (L104-105) to `getByRole('radio', ...)`. Re-run:
   12/12 passed.
 - Files modified: `src/components/trader/OrderForm.tsx`, `e2e/trader/order-form.spec.ts`
+
+### Step 14 — Add ui/alert-dialog.tsx primitive + test (FR-3, FR-12) [done]
+- `npx shadcn@latest add alert-dialog` created `alert-dialog.tsx` but **also silently regenerated
+  `button.tsx`** (a dependency), dropping the app-specific `buy`/`sell` variant — the exact trap
+  `CLAUDE.md` § Styling documents ("always re-run the reconciliation step after"). Restored the
+  variant with its comment (in-scope maintenance, not opportunistic cleanup — `button.test.ts`
+  would have failed loudly had this gone unnoticed, confirming the regression guard works as
+  designed). Reformatted both files with prettier.
+- Created `alert-dialog.test.ts` — minimal presence test (no app-specific variant needed).
+- Verification: `pnpm test:unit` (72 passed) and `pnpm build` clean.
+- Files modified: `src/components/ui/alert-dialog.tsx` (create), `src/components/ui/alert-dialog.test.ts`
+  (create), `src/components/ui/button.tsx` (variant reconciliation — collateral of the CLI regenerate,
+  not a scope violation)
