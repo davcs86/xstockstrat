@@ -52,7 +52,6 @@ enforces (see `## Pointers`). Refresh by re-running `/context-constitution`.
 
 | Candidate | Why suspected | What would confirm it |
 |---|---|---|
-| "Return the bare domain message for a single-object read, a `*Response` wrapper only when >1 field" is the intended proto RPC-shape rule | `PlaceOrder/GetOrder→Order`, `GetBackfillStatus→BackfillJob` vs `List*→*Response`; enabled by buf lint exceptions `packages/proto/buf.yaml:10-11` | a maintainer ruling — exceptions exist (`ManageStrategy→StrategyDefinition`) so it isn't yet a clean rule |
 | Free-text `string` is reserved for genuinely open/runtime-registered sets only | `ExternalSignal.source`, `event_type`, `category` are operator-registered; but `side`/`rating`/`time_in_force` are closed sets left as strings | an owner decision on whether the closed-set strings are cleanup targets (see proto findings) |
 
 ## Pointers (already documented or CI-enforced — not restated here)

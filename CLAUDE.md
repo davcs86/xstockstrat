@@ -176,7 +176,7 @@ Config served by `xstockstrat-config` via `WatchConfig` RPC (gRPC 50060). Key ru
 
 **Full rules, global key table, and the per-feature registered-keys log** → `docs/patterns/config-governance.md`.
 
-Per-feature registered keys (065 cross-stock scoring, 068 backtest visualization, and every later feature) live in the **Per-Feature Registered Keys** log in `docs/patterns/config-governance.md` — retrieved on demand, not restated here.
+Per-feature registered keys live in the **Per-Feature Registered Keys** log in `docs/patterns/config-governance.md` — retrieved on demand, not restated here.
 
 ---
 
@@ -327,7 +327,7 @@ When modifying a service's `Dockerfile`, update the complete chain:
 5. **Commit as a single PR**
    - All three files (Dockerfile, service CLAUDE.md, docs pattern) in one commit
    - Commit message: "Update <service> Dockerfile and documentation" (or "Update Docker patterns" if pattern-wide)
-   - CI validates: Docker builds, lint checks, and documentation links
+   - CI validates: Docker builds and lint checks
 
 **Common updates:**
 

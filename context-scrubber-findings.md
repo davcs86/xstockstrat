@@ -5,8 +5,14 @@ consolidation** superseding both the 2026-08-02 full scan and this same day's ea
 scan. Every one of the 54 context targets (23 `CLAUDE.md` + 30 `context-constitution*.md` + `README.md`)
 plus all 15 repo skills and the `plugins/strat-lab/` reference files were freshly re-verified against
 current code via 8 parallel read-only auditors (10, counting the earlier same-day 15-target pass whose
-results are folded in unchanged since nothing in scope has moved since). This is `scan` mode — **nothing
-was trimmed**. Every row cites both the context line and the evidence it fails.
+results are folded in unchanged since nothing in scope has moved since). Every row cites both the
+context line and the evidence it fails.
+
+**Apply update (same day):** 9 clean, mechanical, pure-subtraction rows were applied in place —
+marked **✅ APPLIED** below wherever they appear. Everything else is still `scan`-only: stale citations
+and contradicted-by-code rows are never scrubber-trimmed by design (CF-N9), and the remaining
+restated/duplicate/JIT/bloat rows need a structural rewrite (a new pointer, a merged table, a judgment
+call on which copy to keep) rather than a pure deletion, so they were left for a deliberate follow-up.
 
 > ⚠ No security-*boundary*-contradicting rows found in this pass. Four still-open ⚠ security findings
 > (config-ui audit-route admin gap, identity's unsigned-token revoke, the fundsignal admin-bit
@@ -28,6 +34,7 @@ CF-1: never an invented token count).
 | Brittle / over-specified | 5 | ~60 | ≈ 3,600 |
 | Bloat / low-value prose | 5 | ~55 | ≈ 6,900 |
 | **Removable total** (restated + ~6 clean duplicates + bloat, excluding JIT bytes since a move isn't a deletion) | ~25 | ~35 | ≈ 12,800 |
+| **Applied this session** (subset of the above — pure subtractions, no new content needed) | 9 | ~30 | ≈ 4,300 |
 | Keep-but-verify (unconfirmed) | 15 | — | — |
 
 > The single highest-value fix in this whole report is still the fully-resolved 13-row MCP-tool-alignment
@@ -101,12 +108,12 @@ drifted. Grouped by target; the first 35 are unchanged from this session's earli
 
 | Context line | What restates it (free to read) | Why it fails | Suggested action |
 |---|---|---|---|
-| `xstockstrat-ledger/docs/context-constitution.md:16` (LEDGER-3) | this service's own `CLAUDE.md` § Live Streaming Architecture | verbatim mechanism match; LEDGER-3 adds the consumer-risk framing CLAUDE.md lacks | trim the mechanism restatement, keep only the added "why" |
+| `xstockstrat-ledger/docs/context-constitution.md:16` (LEDGER-3) | this service's own `CLAUDE.md` § Live Streaming Architecture | verbatim mechanism match; LEDGER-3 adds the consumer-risk framing CLAUDE.md lacks | ✅ **APPLIED** — trimmed the mechanism restatement, kept the added "why" |
 | `xstockstrat-identity/docs/context-constitution.md:17` (IDENTITY-4) | `CLAUDE.md`'s OAuth section (near-identical `aud`-bound-JWT sentence) | same fact, same wording | collapse to a Pointer |
 | `xstockstrat-identity/docs/context-constitution.md:14` (IDENTITY-1) | `CLAUDE.md`'s Config Keys note | partial overlap; IDENTITY-1 adds the PLAT-6-exception rationale | keep IDENTITY-1, trim the CLAUDE.md line to a pointer |
 | `xstockstrat-indicators/docs/context-constitution-findings.md:11` | `CLAUDE.md:64` (already self-flags "not yet enforced") | the finding's "docs claim it's real" framing is now stale | drop the row or move to Resolved |
-| `xstockstrat-analysis/docs/context-constitution.md:25` | `CLAUDE.md:201` (`analysis.strategy.scored` row) | adds nothing beyond CLAUDE.md's own row | replace with a one-line pointer |
-| `xstockstrat-analysis/docs/context-constitution.md:26` (gotcha) | `CLAUDE.md:167,193` (`get_int_present` rows) | verbatim overlap on the two specific keys | shorten to a pointer, keep only the file-wide claim |
+| `xstockstrat-analysis/docs/context-constitution.md:25` | `CLAUDE.md:201` (`analysis.strategy.scored` row) | adds nothing beyond CLAUDE.md's own row | ✅ **APPLIED** — replaced with a one-line pointer |
+| `xstockstrat-analysis/docs/context-constitution.md:26` (gotcha) | `CLAUDE.md:167,193` (`get_int_present` rows) | verbatim overlap on the two specific keys | ✅ **APPLIED** — shortened to a pointer, kept the file-wide claim |
 | `xstockstrat-analysis/docs/context-constitution.md:15` (ANALYSIS-2) | `CLAUDE.md:163` (identical formula) | some duplication is by design (CLAUDE.md points *to* ANALYSIS-2) | consider eliding from one side |
 | `xstockstrat-ingest/docs/context-constitution.md:14` (INGEST-1) | `backfill_jobs.py:1-6`, `backfill_chunks.py:1-7` docstrings | near word-for-word | keep if meant as a cross-file index; otherwise trim |
 | `xstockstrat-ingest/docs/context-constitution.md:15` (INGEST-2) | `backfill_jobs.py:11-12,53-56` comment | near word-for-word | same as above |
@@ -120,8 +127,8 @@ drifted. Grouped by target; the first 35 are unchanged from this session's earli
 
 | Context line | Duplicate location(s) | Which copy to keep | Suggested action |
 |---|---|---|---|
-| `packages/proto/docs/context-constitution.md:24` (Timeframe not interval-ordered) | root `docs/context-constitution.md:49` | root (cross-cutting) | **remove from proto** — clean, unflagged duplicate |
-| root `docs/context-constitution.md:55` (candidate: RPC bare-message-vs-wrapper) | `packages/proto/docs/context-constitution.md:32` | proto (proto-specific governance) | **remove from root** — clean, unflagged duplicate |
+| `packages/proto/docs/context-constitution.md:24` (Timeframe not interval-ordered) | root `docs/context-constitution.md:49` | root (cross-cutting) | ✅ **APPLIED** — removed from proto |
+| root `docs/context-constitution.md:55` (candidate: RPC bare-message-vs-wrapper) | `packages/proto/docs/context-constitution.md:32` | proto (proto-specific governance) | ✅ **APPLIED** — removed from root |
 | `packages/proto/CLAUDE.md:10` ("never Read/Grep `gen/`") | root `CLAUDE.md:464-466` (stated 3× — once per stub language) | root | intentional local-echo pattern for a package a reader opens directly — low priority |
 | `README.md:24-42` (Service Registry table) | root `CLAUDE.md` §Service Registry (same 12 rows minus Role) | root | **remove from README** — replace with a pointer (public front door makes full removal debatable — at minimum trim to names + link) |
 | `docs/roadmap/features/CLAUDE.md:13-24` (Feature Lifecycle Statuses, includes `design-approved`) | root `CLAUDE.md` §Feature Roadmap (same enum, **missing** `design-approved`) | `docs/roadmap/features/CLAUDE.md` (more complete) | **root's copy is the stale one** — either add `design-approved` to root or make root point at the features index instead of re-enumerating |
@@ -157,7 +164,7 @@ Routed to each target's findings log (or, for the plugin, its owner repo) — ne
 
 | Context line(s) | Why it's mis-placed | On-demand home | Suggested action |
 |---|---|---|---|
-| `xstockstrat-agent/docs/context-constitution-findings.md:27-52` (13-row "MCP tool ↔ backend alignment audit") | every row is now resolved; the full narrative already lives in a dedicated triage doc and the ledger | `docs/reports/2026-08-01-mcp-tools-alignment-triage.md`; `docs/roadmap/ledger/insights.md`/`fails.md` | move-to-pointer: replace 26 lines with "13/13 resolved, see triage report + ledger" |
+| `xstockstrat-agent/docs/context-constitution-findings.md:27-52` (13-row "MCP tool ↔ backend alignment audit") | every row is now resolved; the full narrative already lives in a dedicated triage doc and the ledger | `docs/reports/2026-08-01-mcp-tools-alignment-triage.md`; `docs/roadmap/ledger/insights.md`/`fails.md` | ✅ **APPLIED** — collapsed 26 lines to "13/13 resolved, see triage report + ledger" |
 | root `CLAUDE.md:209-252` (Connection Pool Budget, ~44 lines with full per-service table) | duplicates `docs/patterns/database.md` § Connection pooling almost entirely, per its own text ("Full rationale... → docs/patterns/database.md") | `docs/patterns/database.md` | shrink to the summary line + table, move the "Both environments route..." paragraph fully into the linked doc |
 | root `CLAUDE.md:304-337` (Dockerfile Update Workflow, 5 steps + "Common updates") | narrow, rarely-touched procedure | `docs/patterns/docker-build.md` | move-to-pointer, keep one line here |
 | `xstockstrat-agent/CLAUDE.md:102-131` (OAuth 2.1 edge auth, ~30 lines: full route table, RFC citations, path-insertion quirk) | narrow, only touched when modifying OAuth flow — mirrors how analysis already points scoring/warmup detail out to `docs/scoring.md`/`docs/warmup.md` | a new `docs/oauth.md` (doesn't exist yet) | medium confidence — this is also the primary security surface, some inlining may be intentional; a human call |
@@ -169,7 +176,7 @@ Routed to each target's findings log (or, for the plugin, its owner repo) — ne
 |---|---|---|---|
 | root `CLAUDE.md:304-337` (Dockerfile Update Workflow) | 5-step + 3-row checklist for what's fundamentally one idea | "Update the Dockerfile, the service's CLAUDE.md, and `docs/patterns/docker-build.md` together; test with `docker compose build --no-cache`" | trim to the heuristic |
 | root `CLAUDE.md:142-151` (Version Bump Workflow propagation table) | a long enumerated table for "bump it everywhere `grep` finds the old version, CI catches stragglers" (already stated at :153) | keep the proto-plugin row (genuinely non-obvious: CI installs its own copies), compress the rest | partial trim |
-| `docs/runbooks/CLAUDE.md:17` ("all twenty-two agent tools") | a hardcoded count that drifts on any tool add/remove — `docs/runbooks/mcp-tools.md` itself already documents only 21, missing `set_strategy_live` | "the agent's MCP tools" | drop the integer entirely |
+| `docs/runbooks/CLAUDE.md:17` ("all twenty-two agent tools") | a hardcoded count that drifts on any tool add/remove — `docs/runbooks/mcp-tools.md` itself already documents only 21, missing `set_strategy_live` | "the agent's MCP tools" | ✅ **APPLIED** — dropped the integer |
 | `plugins/strat-lab/skills/backtest/reference/output-handling.md:22-46` | brittle *and* obsolete — parses a file format feature 072 no longer produces | "read `summary['attachments']`; open the attached `EmbeddedResource` only for per-bar detail" | **upstream fix required** |
 | `plugins/strat-lab/skills/backtest/reference/aggregation.md:29-34` | per-file-load snippet assumes the obsolete file-parse source | "per-symbol scalars come from each call's inline summary" | **upstream fix required** |
 
@@ -177,10 +184,10 @@ Routed to each target's findings log (or, for the plugin, its owner repo) — ne
 
 | Context line(s) | Why it is filler | Suggested action |
 |---|---|---|
-| `xstockstrat-agent/docs/context-constitution-findings.md:27-52` | process narrative (dates, "Full triage: [...]", CF-N12 citation) is ~47% of the file's lines for content whose only remaining job is a pointer | trim (same fix as the JIT row above) |
+| `xstockstrat-agent/docs/context-constitution-findings.md:27-52` | process narrative (dates, "Full triage: [...]", CF-N12 citation) is ~47% of the file's lines for content whose only remaining job is a pointer | ✅ **APPLIED** (same edit as the JIT row above) |
 | `xstockstrat-notify/docs/context-constitution.md:15` (NOTIFY-2) | the rule's own "Why" column concedes the deviation is "harmless but out of style" — weak as a numbered binding rule | downgrade from a `NOTIFY-*` rule to a Pointers-table line |
-| root `CLAUDE.md:330` | "CI validates: Docker builds, lint checks, and documentation links" — there is no generic doc-link checker; the closest job (`check-context-map.sh`) validates something narrower | reword or cut the "documentation links" claim |
-| root `CLAUDE.md:179` | naming two arbitrary old feature examples ("065 cross-stock scoring, 068 backtest visualization") in a log that's grown well past both | just say "see the log below" |
+| root `CLAUDE.md:330` | "CI validates: Docker builds, lint checks, and documentation links" — there is no generic doc-link checker; the closest job (`check-context-map.sh`) validates something narrower | ✅ **APPLIED** — cut the "documentation links" claim |
+| root `CLAUDE.md:179` | naming two arbitrary old feature examples ("065 cross-stock scoring, 068 backtest visualization") in a log that's grown well past both | ✅ **APPLIED** — dropped the named examples |
 | `plugins/strat-lab/skills/backtest/reference/{verification,self-grill}.md` overlap | self-grill items 4-5 restate verification.md's window-artifact/ddof/NaN guidance near-verbatim — content itself still accurate, just duplicated | **upstream**: cross-reference instead of restating |
 
 ## Context budget (file-level)
