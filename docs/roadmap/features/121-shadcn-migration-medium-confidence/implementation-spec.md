@@ -261,7 +261,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -- e2e/insights/screener.spec.ts
 
 ### Step 5 — service: Add `ui/collapsible.tsx` primitive and convert the "Edit keys" disclosure (FR-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/collapsible.tsx` — create

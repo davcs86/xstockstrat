@@ -302,3 +302,14 @@ repeated per step).
 - Verification: `pnpm test:e2e -g "screener"` — 20 passed, 1 pre-existing unrelated flake
   (polling-timer test, retried and passed).
 - Files modified: `src/components/ui/slider.tsx`, `src/app/insights/screener/page.tsx`
+
+### Step 5 — Add ui/collapsible.tsx primitive and convert "Edit keys" disclosure (FR-3) [done]
+- `npx shadcn@latest add collapsible` (no `button.tsx` collateral). Made `Collapsible`
+  (`open={editing} onOpenChange={setEditing}`) the outer element of `AccountRow`'s return (carrying
+  the existing border/padding className), `CollapsibleTrigger asChild` wrapping the Edit-keys
+  `Button` (dropped the manual `onClick={() => setEditing(...)}`, now owned by
+  `open`/`onOpenChange`), `CollapsibleContent` wrapping the `account.isActive &&
+  <EditCredentialsForm .../>` conditional — same guard, same outcome.
+- Verification: `pnpm build` clean, `pnpm lint` clean.
+- Files modified: `src/components/ui/collapsible.tsx` (create), `src/components/ui/collapsible.test.ts`
+  (create), `src/components/trader/accountShared.tsx`

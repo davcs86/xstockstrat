@@ -22,6 +22,7 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
 } from '../ui/alert-dialog';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../ui/collapsible';
 import { CredentialStatusBadge } from './CredentialStatusBadge';
 import { brokerLabel } from '@/lib/brokers';
 
@@ -206,7 +207,11 @@ export function AccountRow({
   }
 
   return (
-    <div className={`rounded-md border ${className}${!account.isActive ? ' opacity-50' : ''}`}>
+    <Collapsible
+      open={editing}
+      onOpenChange={setEditing}
+      className={`rounded-md border ${className}${!account.isActive ? ' opacity-50' : ''}`}
+    >
       <div className="flex items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5 min-w-0">
           <span className="text-sm font-medium truncate">{account.displayName}</span>
@@ -218,9 +223,11 @@ export function AccountRow({
         </div>
         {account.isActive && (
           <div className="flex gap-1 shrink-0">
-            <Button size="sm" variant="ghost" onClick={() => setEditing((v) => !v)}>
-              Edit keys
-            </Button>
+            <CollapsibleTrigger asChild>
+              <Button size="sm" variant="ghost">
+                Edit keys
+              </Button>
+            </CollapsibleTrigger>
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <Button size="sm" variant="ghost">
@@ -248,10 +255,12 @@ export function AccountRow({
         )}
       </div>
 
-      {account.isActive && editing && (
-        <EditCredentialsForm account={account} onDone={() => setEditing(false)} />
-      )}
-    </div>
+      <CollapsibleContent>
+        {account.isActive && (
+          <EditCredentialsForm account={account} onDone={() => setEditing(false)} />
+        )}
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
