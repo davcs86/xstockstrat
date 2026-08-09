@@ -257,10 +257,10 @@
   neither executed): `trader/positions/[symbol]/page.tsx`, `trader/orders/[id]/page.tsx`,
   `trader/positions/page.tsx`, `trader/portfolio/page.tsx`. `096`'s own spec is additionally stale
   (Step 3 says "create" `positions/[symbol]/page.tsx`, which already exists on trunk at 515 lines).
-  **Not resolved this session** — this is a real cross-feature sequencing decision (which feature
-  executes first; whether to add a `merge-order.md` row per the `120↔121↔122` precedent) that needs
-  its own explicit call, not bundled into the impl-spec warning fixes. Flagging for the user before
-  `/sdd-execute` runs.
+  **Resolved**: user directed 124 to execute first. Added `merge-order.md` row: `096` blocked on
+  `124`, soft/rebase (not a field/config/migration collision) — 096 rebases against 124's landed
+  markup on the 4 shared files once 124's integration PR merges; 096's own stale "create" instruction
+  for `positions/[symbol]/page.tsx` needs a re-spec pass regardless.
 
 ## Session 2026-08-09T23:27:35Z — sdd-spec
 
