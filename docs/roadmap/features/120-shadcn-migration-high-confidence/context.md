@@ -411,3 +411,15 @@
   (2 passed, unrelated matches — confirms no e2e coverage exists for either checkbox site, per
   recon.md's lower-risk classification).
 - Files modified: `src/components/insights/FormulaWorkspace.tsx`, `src/components/insights/ParameterEditor.tsx`
+
+### Step 25 — Add ui/breadcrumb.tsx primitive + test (FR-7, FR-12) [done]
+- `npx shadcn@latest add breadcrumb` (did not touch `button.tsx`) — plain `nav`/`ol`/`li` markup,
+  no Radix dependency, confirming design.md's expectation.
+- **Finding for Step 29**: `Breadcrumb`'s root hardcodes `aria-label="breadcrumb"` (lowercase)
+  *before* `{...props}` spreads — a caller-supplied `aria-label` in props overrides it (JSX
+  attribute order), so `PlatformHeader.tsx`'s `aria-label="Breadcrumb"` (uppercase, what
+  `nav-reachability.spec.ts` targets) will forward correctly. Confirmed by reading the source, not
+  assumed — Step 29's own red run is still the authoritative confirmation per P-03.
+- Verification: `pnpm test:unit` (75 passed) and `pnpm build` clean.
+- Files modified: `src/components/ui/breadcrumb.tsx` (create), `src/components/ui/breadcrumb.test.ts`
+  (create)

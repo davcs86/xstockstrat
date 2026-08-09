@@ -769,7 +769,7 @@ cd services/xstockstrat-ui && pnpm build && pnpm test:e2e -g "formula" && pnpm t
 
 ### Step 25 — service: Add ui/breadcrumb.tsx primitive + test (FR-7, FR-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/breadcrumb.tsx` — create
