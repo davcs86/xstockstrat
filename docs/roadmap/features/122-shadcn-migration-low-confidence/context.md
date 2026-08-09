@@ -438,3 +438,23 @@ decisions per FR, transcribed from `design.md` § Round 3/Round 4 at execute tim
   printed, no type errors).
 - Files created: `src/components/ui/field.tsx`, `src/components/ui/label.tsx`. Files modified (CLI
   collateral, style-only): `src/components/ui/separator.tsx`.
+
+### Step 4 — EditCredentialsForm characterization e2e test [done]
+- Added `'Edit Credentials form closes on successful save (feature 122, FR-3 characterization)'` to
+  `account-selector.spec.ts`.
+- **Deviation from the step's literal locator instructions (reuse, not scope creep)**: the spec's
+  own Instructions proposed scoping via `page.locator('form').filter({ has: page.getByRole('button',
+  { name: 'Save keys' }) })`. Since this session's own prior work (feature 121, Step 6) already
+  solved the exact same "AddAccountForm and EditCredentialsForm render identical placeholders
+  simultaneously" ambiguity by adding a `data-testid="account-row-${account.id}"` to the row's
+  `Collapsible` root, this step reused that already-proven, already-landed scoping mechanism
+  (`page.getByTestId(...)`) instead of introducing a second, parallel locator strategy for the same
+  problem — one canonical scoping approach per this DRY-adjacent reasoning, not because the spec's
+  original approach was wrong.
+- Confirmed the unmount-vs-reset distinction empirically: asserted the row collapses back to its
+  "Edit keys" button (not a cleared-but-mounted field), matching `onDone`'s actual behavior
+  (`accountShared.tsx:141`/`:248`).
+- Verification: `pnpm test:e2e -- e2e/trader/account-selector.spec.ts` — **8 passed** (all pre-existing
+  tests + the new one), run against the **pre-migration** `EditCredentialsForm` — this green run is
+  the baseline design.md § FR-3 requires before Step 7 touches that function.
+- Files modified: `e2e/trader/account-selector.spec.ts`

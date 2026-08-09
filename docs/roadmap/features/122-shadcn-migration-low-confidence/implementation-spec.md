@@ -296,7 +296,7 @@ creep), and `pnpm lint`/`pnpm build` pass with the new unconsumed file present.
 
 ### Step 4 — test: Add EditCredentialsForm characterization e2e test (must pass pre-migration)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/account-selector.spec.ts` — modify (add one new test to the
