@@ -189,7 +189,60 @@ reflects real page position. All changes are frontend-only in `xstockstrat-ui`.
 - Not found: no dedicated fixture module for config-ui signal sources (inline in `e2e/mock-backend.ts`
   today) — acceptable per C-12's "first consumer stays inline" rule, not a gap to fix.
 
-## Recommended Scope
+## UPDATE 2026-08-09 (post-merge re-verification) — supersedes "Recommended Scope" below
+
+**Sibling features 121/122/123 landed in `main-dev` during this design session** (corrective PR #917,
+merged 2026-08-09T21:05:34Z — their code had been stuck on dead-ended stacked branches despite showing
+"Merged" on GitHub; `docs/roadmap/features/{121,122,123}-*/feature.md` still correctly read
+`code-completed`, not `launched` — only the code, not the lifecycle status, changed). This branch was
+re-merged with `origin/main-dev` to pick up the change. A full re-verification against the *current*
+working tree (not the implementation-spec.md text) found:
+
+- **FR-2** (Actions columns), **FR-3/FR-4** (e2e sweep/audit), **FR-6** (eyebrow label): completely
+  unaffected — all sites still exactly as originally scoped (minor line-number drift only).
+- **FR-5** (raw `<table>` elimination): **DONE** for both sites — `strategies/[id]/page.tsx:476-548`
+  and `screener/page.tsx:543-620` now render via `Table`/`TableRow`/`TableHead`/`TableCell`. **New
+  narrower gap found**: the "Past Runs" row (`strategies/[id]/page.tsx:490-506`) still carries a
+  redundant hand-rolled `role="button"`/`tabIndex={0}`/`onKeyDown` layer on top of the real `TableRow`
+  + `onClick` + `aria-selected` — the reference pattern (`LiveStrategiesPanel.tsx:47-50`,
+  `formulas/page.tsx:115-118`) uses none of those three. FR-5 narrows to: strip the redundant a11y
+  attrs from this one row.
+- **FR-7**: `AlertStream.tsx:50-55` **DONE** (`Badge`-driven, correctly keeps the corner-positioning
+  classes on the `Badge` itself) — drop from 124. `StrategyWizard.tsx` — 123 replaced the **outer**
+  `<ol>` wrapper with `<Questionnaire><QuestionnaireProgress>` (`:210-234`), but the **inner** per-step
+  pill (`:218-230`) is still the identical hand-rolled `<span>` with the same manual
+  `cn('rounded-full px-3 py-1', n===step ? ... )` badge-color logic — the earlier "architectural
+  conflict with 123" finding is **resolved by the actual landed code**: 123 only touched the outer
+  chrome, the inner color-logic pill is untouched and Badge-convertible with zero conflict.
+  `opportunities/page.tsx:348` and `market/[symbol]/page.tsx:147` — unaffected, still hand-rolled.
+- **FR-8**: partially done — the per-source pills are now `ToggleGroup type="multiple"`/
+  `ToggleGroupItem` (`opportunities/page.tsx:202-214`), but the "All sources" toggle
+  (`:189-200`) is still a separate hand-rolled `<button>` sitting *outside* the `ToggleGroup`. FR-8
+  narrows to: fold "All sources" into the `ToggleGroup` (or otherwise unify it).
+- **FR-9**: unaffected in substance; `authorized-apps/page.tsx`'s green-color-class lines shifted from
+  `174-175` to **`204-205`** (121's `Table`+`AlertDialog` conversion of this file added ~29 lines
+  above them). `ChartPanel.tsx:157`, `positions/[symbol]/page.tsx:317`, `market/[symbol]/page.tsx:200`
+  all unchanged.
+- **FR-10**: still fully needed, and **the sequencing/deferral problem from Rounds 1-2 is now moot** —
+  121 is physically in `main-dev`, so FR-10 specs directly against current code, no `merge-order.md`
+  dependency, no C-14 deferral, no wait. `PlatformHeader.tsx` (now 331 lines) confirmed:
+  - Two `NavigationMenu` regions now exist: `aria-label="Primary"` (`:189-218`, Row 1) and
+    `aria-label="Section"` (`:304-327`, Row 2, rendering `activeItems`).
+  - Row 2's `Breadcrumb` block (`:286-302`, `aria-label="Breadcrumb"`, rendering `activeGroup.label`/
+    `activeItem.label` via `BreadcrumbPage`) is **content-unchanged** from the original recon — 121's
+    Step 18/19 added the Section `NavigationMenu` immediately after it in the same row, separated by a
+    `<Separator orientation="vertical" className="h-4 mx-1" />` at `:303`, but did not touch the
+    Breadcrumb's own markup.
+  - No data dependency between the two (`activeItems` vs. `activeGroup`/`activeItem` are computed
+    independently, `:164-168`) — but they're both direct children of the same flex row
+    (`:285`, `className="hidden sm:flex items-center gap-2 px-4 sm:px-6 h-9 border-t border-border/60"`),
+    so removing the Breadcrumb block is a live "same file, same row" markup edit (what happens to the
+    now-orphaned `Separator` at `:303` and the row's layout), not a logical conflict.
+- **e2e**: `mobile-overflow.spec.ts` `ROUTES` and `nav-reachability.spec.ts`'s combined
+  `getByLabel('Breadcrumb')` assertion (`:70-71`) are both untouched by 121-123 — exactly as originally
+  found.
+
+## Recommended Scope (superseded in part by the UPDATE above — read that first)
 
 Given the confirmed overlaps above, the design phase (Phase 1) must decide, per FR, whether 124
 executes the site itself, defers to the sibling feature, or requires an explicit sequencing dependency
@@ -199,13 +252,14 @@ executes the site itself, defers to the sibling feature, or requires an explicit
   additions), FR-4 (horizontal-scroll audit), FR-6 (eyebrow label), FR-9 (2 cosmetic fixes): no
   confirmed overlap — safe to scope into 124 as written (with FR-2's `strategies/page.tsx` Deactivate
   citation corrected to `window.confirm`, not `AlertDialog`).
-- FR-5 (2 raw `<table>` sites), FR-7's `AlertStream.tsx` site: **already implemented by 121's spec** —
-  candidates to drop from 124 and defer to 121, unless the design explicitly decides 124 should
-  supersede and 121 should be trimmed instead (a cross-feature edit, needs its own sign-off).
-- FR-7's `StrategyWizard.tsx` site: **architecturally conflicts with 123's spec** (Badge vs.
-  `Questionnaire.Progress`) — drop from 124, defer entirely to 123.
-- FR-8 (`opportunities/page.tsx` `ToggleGroup`): genuinely unclaimed — keep in 124, correct the
-  "matches existing usage" citation to note this is the first `type="multiple"` call site.
-- FR-10 (breadcrumb repositioning): real file-level conflict with 121's Step 18 `NavigationMenu`
-  migration in the same render function — needs an explicit sequencing decision (124 after 121, or a
-  design that's resilient to whichever lands first) before `/sdd-spec` can write concrete steps.
+- FR-5 (2 raw `<table>` sites), FR-7's `AlertStream.tsx` site: ~~already implemented by 121's spec~~
+  **UPDATE: FR-5's table conversion is done; a narrower a11y-cleanup remains. FR-7's AlertStream site
+  is done, drop it.**
+- FR-7's `StrategyWizard.tsx` site: ~~architecturally conflicts with 123's spec~~ **UPDATE: no
+  conflict — 123 only touched the outer wrapper; the inner pill is untouched and still needs FR-7's
+  Badge conversion.**
+- FR-8 (`opportunities/page.tsx` `ToggleGroup`): ~~genuinely unclaimed~~ **UPDATE: mostly done; only
+  the "All sources" toggle remains unconverted.**
+- FR-10 (breadcrumb repositioning): ~~real file-level conflict with 121's Step 18... needs an explicit
+  sequencing decision~~ **UPDATE: 121 has landed — no sequencing dependency remains. FR-10 specs
+  directly against current `PlatformHeader.tsx`.**
