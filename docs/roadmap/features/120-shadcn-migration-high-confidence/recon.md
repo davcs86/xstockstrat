@@ -97,7 +97,14 @@ like-for-like markup substitution with no visual/behavioral redesign.
     `config-ui/audit/page.tsx:15-22` (no dedicated e2e spec found under `e2e/config-ui/` at all —
     this page may be untested by e2e), `SignalReadiness.tsx:71-82`, `insights/page.tsx:24-53`,
     `auth/login/page.tsx:33-43`, `FormulaWorkspace.tsx` checkbox/textareas,
-    `ParameterEditor.tsx:236-244`.
+    `ParameterEditor.tsx:236-244`, `CardNotice.tsx:4-22` (design.md round-2 separately verified
+    its 4 real consumers carry no e2e-load-bearing selectors — see design.md § Chosen Approach),
+    `SectionRenderer.tsx:110-123` (Alert `note` kind) and `SectionRenderer.tsx:64-71` (Progress
+    conviction bar) — **round-4 addition**: both `SectionRenderer.tsx` sites and `CardNotice.tsx`
+    were originally omitted from this list entirely (not even flagged as "lower risk"), which let
+    design.md's tier assignment silently skip all three until a round-4 completeness sweep caught
+    it (see design.md § Chosen Approach "Completeness check"). Listed here now so a future
+    `/sdd-spec` re-read of this file doesn't inherit the same gap.
 - **PlatformHeader.tsx sequencing**: confirmed no in-flight feature besides sibling `121` has a
   planned edit to this file (`096-position-and-order-detail-pages`, `implementation-ready`,
   cites it in `recon.md` for nav-context only — no match in its `implementation-spec.md`;

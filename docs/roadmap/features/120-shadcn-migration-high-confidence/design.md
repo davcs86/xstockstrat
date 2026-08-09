@@ -1,7 +1,7 @@
 # Design: shadcn-migration-high-confidence
 
 **Created**: 2026-08-08
-**Rounds**: 3 (full; termination: pending user approval)
+**Rounds**: 4 (full; termination: pending user approval)
 **Approved by**: _pending_
 **Grounded in**: recon.md
 
@@ -22,9 +22,10 @@ className, ...props })` + `cva()` + `cn()` from `ui/utils.ts` + `data-slot` prop
 `React.forwardRef`/`.displayName` (`recon.md` § Patterns to REUSE; this corrected a stale
 recipe in the original product-spec, now fixed in `product-spec.md` FR-12 directly).
 
-**Step ordering** (five tiers, each primitive interleaved with its lowest-risk consumer rather
-than all 8 primitives batched before any call site — this is the round-1→round-2 fix that
-closes the F-09 rework-after-close risk an all-primitives-first batch would create):
+**Step ordering** (four ordering tiers, each primitive interleaved with its lowest-risk consumer
+rather than all 8 primitives batched before any call site — this is the round-1→round-2 fix that
+closes the F-09 rework-after-close risk an all-primitives-first batch would create — plus one
+cross-cutting verification note that applies across tiers 2 and 4, not a fifth tier):
 
 1. **Warm-up — adopt-existing, zero primitive dependency, zero e2e risk**: FR-11 (Skeleton →
    `insights/page.tsx`, `auth/login/page.tsx`), FR-10 (Badge → `CopilotRail.tsx:124-126`, the
@@ -36,7 +37,11 @@ closes the F-09 rework-after-close risk an all-primitives-first batch would crea
    immediately followed by its lowest-risk / no-e2e-risk consumer wire-step, so an
    integration-fit mismatch (e.g. Accordion's default expand/collapse vs. `PlatformHeader.tsx`'s
    current mobile-nav UX; Alert Dialog's single-cancel vs. a two-step arm/confirm) surfaces
-   while that primitive's own step is still open, not three tiers later.
+   while that primitive's own step is still open, not three tiers later. **Exception: Toggle
+   Group.** Its only two consumers — `screener/page.tsx:348-378` and `OrderForm.tsx:144-157` —
+   are *both* confirmed e2e-risk (`recon.md` § Risks); there is no low-risk site to wire first.
+   Toggle Group's add-step (variant decision below) goes straight to tier 4's two-step split for
+   both consumers, with no interim wire in this tier (round-4 finding).
    - **Alert Dialog** wires first to `accountShared.tsx:213-245` — this is the **easier**,
      already-two-button (Confirm/Cancel) shape, a natural fit for
      `AlertDialogAction`/`AlertDialogCancel`; `OrdersTable.tsx:140-149`'s single
@@ -45,7 +50,7 @@ closes the F-09 rework-after-close risk an all-primitives-first batch would crea
      and is deliberately sequenced second, after the primitive is proven on the easy case.
      (Round 2's adversary caught the proposer's rationale reading backwards on this point —
      corrected here: `accountShared.tsx` is easier, not harder, and that's *why* it's first.)
-     **Round 3 finding**: `accountShared.tsx:196-243`'s `handleRemove` is `async` and the current
+     **Round 3 finding**: `accountShared.tsx:187-200`'s `handleRemove` is `async` and the current
      UI deliberately keeps both Confirm/Cancel visible-but-`disabled={removing}` across the
      in-flight `deregisterBrokerAccount` call. Radix's `AlertDialogAction` closes the dialog on
      click by **default** unless the consumer's own `onClick` calls `event.preventDefault()` to
@@ -54,7 +59,14 @@ closes the F-09 rework-after-close risk an all-primitives-first batch would crea
      equivalent) — not a naive `onClick={handleRemove}` — so the dialog doesn't unmount mid-flight
      and the existing disabled-during-removal UX survives the swap. Added as an explicit AC-6
      checklist item, not left implicit.
-   - **Alert** gets an app-specific `warning` `cva` variant (see Constitution Rules Touched /
+   - **Alert** wires first to `CardNotice.tsx:4-22` — round-2 verified (grep for its
+     rendered strings) that its 4 real consumers carry no e2e-load-bearing selectors, making
+     it Alert's low-risk first wire, the same role `accountShared.tsx` plays for Alert
+     Dialog above (round-4 finding: this was discussed at length below but never explicitly
+     placed in a tier — corrected here). `CopilotRail.tsx:149-165` and
+     `SectionRenderer.tsx:110-123` (both e2e-risk or no-e2e-risk per their own citations
+     below) follow in tiers 3/4. Alert gets an app-specific `warning` `cva` variant (see
+     Constitution Rules Touched /
      DRY below) reconciling the identical hand-rolled `border-yellow-500/40 bg-yellow-500/5`
      tone duplicated across `CopilotRail.tsx:151-154` and `SectionRenderer.tsx:113-116`
      (round-2 adversary finding, verified by reading both files) — both collapse onto
@@ -103,16 +115,27 @@ closes the F-09 rework-after-close risk an all-primitives-first batch would crea
    `FormulaReferencePanel.tsx`, `insights/market/[symbol]/page.tsx`,
    `trader/positions/[symbol]/page.tsx`, `ChartPanel.tsx` (Tabs); `NamespaceEditor.tsx`,
    `config-ui/audit/page.tsx` (Breadcrumb — no dedicated e2e spec exists for the audit page at
-   all); `SignalReadiness.tsx` (Progress); `ParameterEditor.tsx`, remaining `FormulaWorkspace.tsx`
+   all); `SignalReadiness.tsx`, `SectionRenderer.tsx:64-71` (Progress — round-4 finding: this
+   second `SectionRenderer.tsx` site was discussed in tier 2's variant decision above but never
+   placed in a tier; `recon.md` § Risks doesn't name it either, corrected there too);
+   `SectionRenderer.tsx:110-123` (Alert — same round-4 finding: discussed for its `warning`
+   variant reconciliation but never tiered; no e2e spec references its rendered content, per a
+   fresh grep, so it lands here); `ParameterEditor.tsx`, remaining `FormulaWorkspace.tsx`
    checkbox site (Checkbox); `PlatformHeader.tsx:209-253` (Accordion — zero e2e-selector hits,
    ships in its own step right after the Accordion primitive-add, ahead of Breadcrumb's
-   two-step below, since it needs no red/green round-trip).
+   two-step below, since it needs no red/green round-trip). As with all tier-3 sites, each step
+   still does a final targeted grep of its corresponding e2e spec file before marking done
+   (recon.md's own caveat — these greps are pattern-targeted, not exhaustive).
 4. **Confirmed e2e-risk call sites — mandatory two-step split** (component-swap step, then
    spec-update step — never merged into one): `RuleEditor.tsx` Tabs (`role=button` +
    `"JSON"`/`"Visual"` names, `aria-label`s on the textareas); `screener/page.tsx` Toggle Group
-   (`role=button` + `aria-label`s `"hard filter"`/`"rank only"`); `OrdersTable.tsx` Alert Dialog
+   (`role=button` + `aria-label`s `"hard filter"`/`"rank only"` **and** verify Radix's actual
+   rendered role — `role="radio"`/`"radiogroup"` vs. today's `role="button"` — against the
+   CLI-generated file rather than assuming it matches); `OrdersTable.tsx` Alert Dialog
    (`data-testid` `cancel-ord-filled`/`cancel-ord-new`); `OrderForm.tsx` Toggle Group
-   (exact-case `'BUY'`/`'SELL'` accessible names); `CopilotRail.tsx:149-165` Alert
+   (exact-case `'BUY'`/`'SELL'` accessible names **and** the same Radix-role verification as
+   `screener/page.tsx` above — both Toggle Group consumers need this check, not just one);
+   `CopilotRail.tsx:149-165` Alert
    (`data-testid` `copilot-concentration` — the FR-4 half, distinct from FR-10's Badge edit on
    `:124-126`, which already landed in the warm-up tier); `WatchlistReadiness.tsx` Progress
    (`data-testid` `readiness-row-*`/`in-queue`, **plus** verify the 0–1 float →
@@ -121,17 +144,33 @@ closes the F-09 rework-after-close risk an all-primitives-first batch would crea
    `transform`/`Indicator` sub-part rather than the current inline `style={{width}}`, since
    neither existing e2e coverage nor the round-2 debate checks bar-width/class, only row
    visibility); `PlatformHeader.tsx:260-269` Breadcrumb (`aria-label="Breadcrumb"` exact case —
-   verify shadcn's default wrapper case against the generated file, don't assume it matches).
+   verify shadcn's default wrapper case against the generated file; likely moot in practice
+   since `e2e/nav-reachability.spec.ts:70-71`'s `getByLabel('Breadcrumb')` has no `exact: true`
+   and Playwright's default label matching is case-insensitive substring, but confirm via the
+   mandatory unmodified-first-run below rather than skipping the check on that assumption).
    **Every step in this tier must run the *unmodified* e2e spec against the swapped markup
    first and record the actual pass/fail in `context.md` — even when the primitive is expected
    to preserve the selector (e.g. a `data-testid` the swap shouldn't disturb) — before touching
    the spec file.** This is mandatory, not conditional on the swap actually breaking something
    (P-06 audit-trail discipline; a silently-skipped "it'll probably still pass" assumption is
    the ledger's own recorded failure mode — `fails.md` 2026-07-29 074).
-5. Toggle Group's Radix role rendering (`role="radio"`/`"radiogroup"` vs. the current
-   `role="button"`) and Breadcrumb's default `aria-label` case are **not** assumed — both are
-   explicit per-step verification items against the CLI-generated file, alongside Progress's
-   two verification items above.
+
+**Cross-cutting verification note** (applies within tiers 2 and 4 above, not a fifth tier):
+Toggle Group's rendered ARIA role (both consumers, tier 4) and Breadcrumb's default
+`aria-label` case (tier 4) are not assumed — both are explicit per-step verification items
+against the CLI-generated file, alongside Progress's two verification items (tier 4,
+`WatchlistReadiness.tsx`). Round 3 correction: the underlying `radix-ui@^1.6.7` package is
+already an installed dependency (`recon.md`), so these facts live in a dependency already
+present, not in a file that "doesn't exist yet" — not blocking either way, since the mandatory
+tier-4 red-before-green step self-discovers any actual mismatch regardless.
+
+**Completeness check (round 4).** All 27 FR-1–FR-11 call-site occurrences in product-spec.md are
+now placed in exactly one of tiers 1–4 above (6 in tier 1's warm-up, verified by direct
+enumeration against product-spec.md's FR text). Round 4's adversary found 3 occurrences
+(`CardNotice.tsx`, and both `SectionRenderer.tsx` sites) that were discussed in the Chosen
+Approach's prose but never explicitly placed in a tier list — all 3 are now tiered above (tier 2
+for `CardNotice.tsx`, tier 3 for both `SectionRenderer.tsx` sites), and `recon.md` § Risks is
+amended to name both files so the gap doesn't silently recur at `/sdd-spec` time.
 
 ## Rejected Alternatives
 
@@ -222,10 +261,18 @@ closes the F-09 rework-after-close risk an all-primitives-first batch would crea
 
 ## Rounds
 
-**3** (full mode, mandated minimum of 2 met at round 2; round 3 requested by the user to close
-the remaining Open Risks before approval). Termination: round 3's adversary found no Floor
-breach and two concrete, non-cosmetic gaps (the `AlertDialogAction` async-close race on
-`accountShared.tsx`, and `CardNotice.tsx`'s missing `role="alert"`) — both resolved directly in
-this synthesis rather than requiring a fourth round. The remaining four items in the prior Open
-Risks list are now either closed with a concrete instruction or correctly reclassified as
-genuine per-step verification (not blocking design approval).
+**4** (full mode, mandated minimum of 2 met at round 2; rounds 3 and 4 both requested by the
+user to close remaining gaps before approval). Round 3: adversary found no Floor breach and two
+concrete, non-cosmetic gaps (the `AlertDialogAction` async-close race on `accountShared.tsx`,
+and `CardNotice.tsx`'s missing `role="alert"`) — both resolved directly in that round's
+synthesis. Round 4: a fresh full read-through (proposer) plus an independent verification sweep
+(adversary) found the design's "five tiers" framing was inaccurate (item 5 was a cross-cutting
+note, not a tier) and, more substantively, that 3 of the 27 FR-cited call-site occurrences
+(`CardNotice.tsx`, both `SectionRenderer.tsx` sites) were discussed in the prose but never
+explicitly placed in any tier — a completeness gap the adversary traced to `recon.md`'s own risk
+sweep never naming those files either. Termination: all 3 gaps closed via a full 27-occurrence
+cross-reference against tiers 1–4 (documented in the Chosen Approach's "Completeness check"
+note), the Toggle Group role-verification duplicated across both its consumers' tier-4 bullets,
+and the stale citation corrected. No Floor breach in either round. The design is not required to
+be perfect to approve — only free of Floor breaches and unresolved substantive risk — and round
+4's adversary confirmed no further systemic gap remains once the 27-occurrence count reconciles.
