@@ -316,7 +316,7 @@ All cases in `strategy-authoring.spec.ts` pass.
 
 ### Step 9 — service: Add ui/toggle-group.tsx primitive + buy/sell variant + test (FR-2, FR-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/toggle-group.tsx` — create

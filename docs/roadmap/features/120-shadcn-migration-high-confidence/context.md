@@ -275,3 +275,19 @@
   `getByLabel(...)` JSON-textarea calls needed no change.
 - Verification: `pnpm test:e2e -g "strategy-authoring"` — 23/23 passed (green).
 - Files modified: `e2e/insights/strategy-authoring.spec.ts`
+
+### Step 9 — Add ui/toggle-group.tsx primitive + buy/sell variant + test (FR-2, FR-12) [done]
+- `npx shadcn@latest add toggle-group` generated both `toggle-group.tsx` and `toggle.tsx` (the
+  latter not yet in the codebase — `ToggleGroupItem` composes `toggleVariants` from `toggle.tsx`).
+  Reformatted both with prettier (in-scope, same as Step 4).
+- **ARIA role finding (confirmed by reading `@radix-ui/react-toggle-group`'s source directly, not
+  assumed)**: for `type="single"`, the Root gets `role="radiogroup"` and each Item gets
+  `role="radio"` with `aria-checked` — Radix explicitly voids `aria-pressed` for single-type items.
+  Recorded here for both Toggle Group consumers (Steps 10-13).
+- Added the app-specific `buy`/`sell` variant to `toggleVariants` (shared by `Toggle` and
+  `ToggleGroupItem`) in `toggle.tsx`, using `data-[state=on]:` selectors (not `aria-pressed:`,
+  since single-type `ToggleGroupItem` never sets that attribute — `data-state` is set identically
+  by Radix for both the standalone `Toggle` and `ToggleGroupItem`).
+- Verification: `pnpm test:unit` (71 passed, incl. `toggle-group.test.ts`) and `pnpm build` clean.
+- Files modified: `src/components/ui/toggle-group.tsx` (create), `src/components/ui/toggle.tsx`
+  (create, app-specific variant added), `src/components/ui/toggle-group.test.ts` (create)
