@@ -998,7 +998,7 @@ cd services/xstockstrat-ui && pnpm build && pnpm test:e2e -g "market" && pnpm te
 
 ### Step 33 — test: WatchlistReadiness.tsx Progress swap — red
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/WatchlistReadiness.tsx` — modify
@@ -1027,7 +1027,7 @@ Record actual pass/fail in `context.md`. Also confirm by inspection (or a quick 
 
 ### Step 34 — test: WatchlistReadiness.tsx Progress swap — green
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/watchlists.spec.ts` — modify only if Step 33 recorded a failure

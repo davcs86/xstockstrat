@@ -491,3 +491,16 @@
 - Verification: `pnpm build` clean; `pnpm test:e2e -g "market"` (7 passed), `-g "mobile"`
   (18 passed).
 - Files modified: `src/components/insights/SignalReadiness.tsx`, `src/components/mobile/SectionRenderer.tsx`
+
+### Steps 33-34 — WatchlistReadiness.tsx Progress swap — red/green [done]
+- Renamed `barClass(r)` → `barVariant(r)` (returns `'buy'|'paper'|'sell'|'muted'` instead of a
+  class string) and replaced the two-div bar with `<Progress value={...} variant={barVariant(r)}>`
+  — using Step 31's app-specific variant rather than the hand-rolled `cn('h-full', barClass(r))`.
+- **Red** (unmodified `watchlists.spec.ts`): 11/11 passed unmodified — `readiness-row-${symbol}`
+  and `in-queue` `data-testid`s sit on the `<li>` and `Badge`, outside the swapped bar, confirmed
+  unaffected as recon.md anticipated. Recorded per P-06's mandatory-even-when-expected-to-pass
+  instruction.
+- **Green**: no spec change needed. Visual fill mechanism confirmed equivalent by inspection
+  (Step 31's `transform: translateX` vs the old inline `width` — both render the same percentage
+  fill for a given `value`).
+- Files modified: `src/components/insights/WatchlistReadiness.tsx`
