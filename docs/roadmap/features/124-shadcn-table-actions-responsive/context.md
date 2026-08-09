@@ -227,3 +227,51 @@
   durable artifacts, not this session's transcript. This is the mid-debate analog of Constitution
   **P-05** (incremental checkpointing "as they happen"), and is being promoted to a `docs/roadmap/ledger/insights.md`
   entry since it's a generalizable pattern, not specific to this feature.
+
+## Session 2026-08-09T23:27:35Z — sdd-spec
+
+- Generated `implementation-spec.md` with 24 steps (12 service/test pairs + a closing docs gate).
+  Status → `implementation-ready`.
+- `recon.md`/`design.md` were reused directly per the skill's Step 1.5 (both present,
+  `design-approved`); fresh grounding this session was reserved for exact current-tree line numbers
+  and two real further-drift corrections `recon.md`/`design.md` did not catch:
+  - **`insights/strategies/page.tsx`'s Deactivate action is now genuinely `AlertDialog`-gated**
+    (`:214-236`), not `window.confirm(...)` as both the product-spec and `design.md` state — a direct
+    read this session (confirmed via `Grep 'window.confirm|AlertDialog'`) found a full
+    `AlertDialog`/`AlertDialogTrigger`/`AlertDialogContent`/`AlertDialogDescription`/`AlertDialogAction`/
+    `AlertDialogCancel` composition already in place, presumably landed by a further sibling-feature
+    merge after `design.md` was written. Corrected in Step 3's Codebase Evidence; Step 3's Instructions
+    now route this site through the same `AlertDialog`-outside-`DropdownMenu` composition pattern as
+    `OrdersTable.tsx`'s Cancel, not a `window.confirm` special case.
+  - **`strategies/[id]/page.tsx`'s Past Runs row (`:490-506`) already has the correct
+    `role="button"`/`tabIndex`/`aria-selected`/`onClick`/`onKeyDown` triple** — `design.md`'s "strip
+    the redundant a11y attrs from this row" instruction is stale; a fresh full read found nothing
+    redundant to strip. Step 5 records this as a verified no-op for this one site (not a skipped
+    step) and only adds the keyboard triple to the two sites that genuinely lack it
+    (`LiveStrategiesPanel.tsx:47-51`, `formulas/page.tsx:115-119`).
+  - Every other FR-1 through FR-11 citation in `recon.md`/`design.md` was re-verified against direct
+    reads this session (all 14 FR-6 eyebrow sites, all 8 FR-10 breadcrumb sites, `PlatformHeader.tsx`'s
+    current line numbers, `toggle.tsx`/`badge.tsx`/`table.tsx`/`collapsible.tsx`/`breadcrumb.tsx`
+    source) and found accurate — no further drift.
+  - A live `WebFetch` against `ui.shadcn.com/docs/components/sidebar` (this session) confirmed the
+    `Sidebar` family's exported symbol set and `asChild`-based (not `render`-prop) composition for
+    `SidebarMenuButton`, consistent with `PlatformHeader.tsx`'s existing `NavigationMenuLink asChild`
+    convention — supplements `design.md`'s prior `sidebar.json` registry-dependency verification with
+    the actual component API shape, still flagged in Step 15/17 as needing a final confirm against the
+    CLI-generated file (not docs) before wiring, per the `fails.md` 2026-08-09 lesson on this exact
+    class of mistake (Step 17 of feature 121).
+  - `authorized-apps/page.tsx`'s green-token lines are confirmed at `204-205` (not the product-spec's
+    original `174-175`, matching `design.md`'s already-corrected citation).
+  - `FR-6`'s eyebrow component design decision (an `as`-polymorphic `Eyebrow` component, nested inside
+    `CardTitle` rather than replacing it for the 4 `CardTitle` sites) was made this session — `design.md`
+    named the component but not its exact API; documented in Step 11's Instructions with the CSS
+    specificity reasoning for why nesting inside `CardTitle` is safe.
+  - `PageBreadcrumb`'s exact shape (`{ariaLabel, items: {label, href?}[]}`) was likewise decided this
+    session, generalizing `NamespaceEditor.tsx`/`config-ui/audit/page.tsx`'s existing hand-rolled
+    pattern — `design.md` required the component exist with a mandatory `ariaLabel` prop but left its
+    full shape to `/sdd-spec`.
+  - For 3 of the 6 new `PageBreadcrumb` sites (`positions/[symbol]`, `market/[symbol]`, `orders/[id]`),
+    each currently has its own ad hoc back-link (`Button asChild "← Exposure"/"← Queue"`,
+    `BackToDashboardButton`) — Step 20 flags a keep-or-replace judgment call per site rather than
+    silently picking one, since removing a back-link could regress a mobile tap-target affordance the
+    breadcrumb link doesn't necessarily replicate.
