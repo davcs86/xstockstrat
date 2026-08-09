@@ -146,7 +146,7 @@ pnpm lint
 
 ### Step 2 — test: e2e regression for FR-1 (config-ui sources Active toggle)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/config-ui/sources.spec.ts` — modify (only if it needs a new

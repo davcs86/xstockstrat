@@ -279,3 +279,7 @@ repeated per step).
 - Verification: `pnpm lint` clean (1 pre-existing unrelated warning).
 - Files modified: `src/components/ui/switch.tsx` (create), `src/components/ui/switch.test.ts`
   (create), `src/app/config-ui/sources/page.tsx`
+
+### Step 2 — e2e regression for FR-1 (Switch) [done]
+- No existing test targeted the Active toggle (confirmed grep). Ran `pnpm test:e2e -g "config-ui"`
+  (49 passed) as the regression check. No spec change needed.
