@@ -204,10 +204,14 @@ pnpm run lint
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
-- `services/xstockstrat-ui/e2e/trader/*.spec.ts` — modify (whichever spec(s) drive `OrdersTable.tsx`'s
-  Edit/Cancel — identify via `grep -rln "cancel-\|edit-" e2e/trader/*.spec.ts`)
-- `services/xstockstrat-ui/e2e/config-ui/*.spec.ts` — modify (sources + namespace specs)
-- `services/xstockstrat-ui/e2e/insights/*.spec.ts` — modify (strategies list spec)
+- `services/xstockstrat-ui/e2e/trader/orders.spec.ts` — modify (`OrdersTable.tsx`'s Edit/Cancel;
+  confirmed via `grep -l "cancel-\|edit-" e2e/trader/*.spec.ts`)
+- `services/xstockstrat-ui/e2e/config-ui/sources.spec.ts` — modify (Disable/Enable/Edit, confirmed via
+  `Edit`/`Enable` button-role assertions at `:193,238`)
+- `services/xstockstrat-ui/e2e/config-ui/value-persists-after-save.spec.ts` — modify
+  (`NamespaceEditor`'s Edit/Save flow, confirmed via `Edit`/`Save` button-role assertions at `:34-70`)
+- `services/xstockstrat-ui/e2e/insights/strategy-authoring.spec.ts` — modify (strategies list
+  Edit/Deactivate, confirmed via `grep -l "Deactivate\|StrategyRow" e2e/insights/*.spec.ts`)
 
 **Reviewers**: xstockstrat-ui service owner — Trading UI correctness, config mutation safety
 
@@ -280,6 +284,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "order|config-ui/sources|namespac
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm test:e2e -g "live.strateg|formulas"
+pnpm run lint
 ```
 
 ---
@@ -308,6 +313,7 @@ asserts (row opens the alert feed / navigates to the formula detail page).
 **Verification**:
 ```bash
 cd services/xstockstrat-ui && pnpm test:e2e -g "live.strateg|formulas"
+pnpm run lint
 ```
 
 ---
@@ -492,6 +498,12 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "opportunities"
 
 **Reviewers**: xstockstrat-ui service owner — Trading UI correctness
 
+**Scope note**: this step touches 8 files (1 create + 7 modify), above the impl-spec criteria's
+5-file split-consideration threshold. Not split: all 8 changes are one atomic unit — a single shared
+literal replaced by a single new component across every one of its call sites — splitting by file
+would leave the literal partially eliminated mid-feature with no independent value at the split
+point, unlike a step that bundles genuinely separable concerns.
+
 **Codebase Evidence**:
 - Grep this session (`Grep 'font-mono text-\[9px\] font-semibold uppercase tracking-\[0\.13em\]
   text-muted-foreground' src`) confirms **exactly 14 occurrences across these 7 files**, at the exact
@@ -556,18 +568,22 @@ pnpm run lint
 **Status**: `pending`
 **Service**: `xstockstrat-ui`
 **Files**:
-- `services/xstockstrat-ui/e2e/trader/*.spec.ts`, `e2e/insights/*.spec.ts` — verify (whichever specs
-  already exercise the 7 touched pages)
+- `services/xstockstrat-ui/e2e/insights/signal-detail.spec.ts` — verify (`market/[symbol]/page.tsx`)
+- `services/xstockstrat-ui/e2e/trader/positions.spec.ts` — verify (`positions/page.tsx`)
+- `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — verify (`positions/[symbol]/page.tsx`)
+- `services/xstockstrat-ui/e2e/trader/portfolio.spec.ts` — verify (`portfolio/page.tsx`)
+- `services/xstockstrat-ui/e2e/trader/order-intent.spec.ts` — verify (`orders/[id]/page.tsx`)
+- `services/xstockstrat-ui/e2e/trader/order-ticket.spec.ts` — verify (`orders/[id]/page.tsx`)
 
 **Reviewers**: xstockstrat-ui service owner — Trading UI correctness
 
-**Codebase Evidence**: The 7 touched files are all already exercised by existing suites
-(`e2e/trader/{positions,position-detail,portfolio,order-detail}.spec.ts`,
-`e2e/insights/market-symbol.spec.ts` or equivalent — identify via `grep -rl
-"trader/positions\|trader/portfolio\|trader/orders\|insights/market" e2e/{trader,insights}` at
-execute time) — this is a pure text/label-preservation change (the eyebrow label text itself is
-unchanged, only its wrapping markup), so no new assertions are required; this step's job is running
-the existing suites and confirming zero regressions.
+**Codebase Evidence**: The 7 touched files (`market/[symbol]`, `positions/page.tsx`,
+`positions/[symbol]`, `portfolio/page.tsx`, `orders/[id]`, plus the shared `SignalReadiness.tsx`/
+`StatTile.tsx` components rendered on several of these pages) are exercised by the 6 specs above —
+confirmed via `grep -l "goto.*trader/orders/\|goto.*positions\|goto.*market"` against each file's
+`page.goto(...)` calls this session. This is a pure text/label-preservation change (the eyebrow label
+text itself is unchanged, only its wrapping markup), so no new assertions are required; this step's
+job is running the existing suites and confirming zero regressions.
 
 **TDD**: `N/A (no new behavior — regression-only verification)`
 
@@ -578,7 +594,7 @@ versa for the `CardTitle` sites) — fix in Step 11, not here.
 
 **Verification**:
 ```bash
-cd services/xstockstrat-ui && pnpm test:e2e -g "position|portfolio|order-detail|market"
+cd services/xstockstrat-ui && pnpm test:e2e -g "position|portfolio|order|market"
 ```
 
 ---
@@ -682,6 +698,12 @@ grep -n "chart-height\|useCandlestickChart" ../../docs/roadmap/features/124-shad
 - `services/xstockstrat-ui/src/components/ui/{button,separator,sheet,skeleton}.tsx` — verify / reconcile (existing registry dependencies)
 
 **Reviewers**: xstockstrat-ui service owner — Trading UI correctness
+
+**Scope note**: this step touches 7 files, above the 5-file split-consideration threshold. Not split:
+one CLI install (`npx shadcn add sidebar`) inherently produces this file set as a single atomic
+operation — `sidebar.tsx`/`tooltip.tsx`/the `use-mobile` hook are all created by the same command, and
+`button.tsx`/`separator.tsx`/`sheet.tsx`/`skeleton.tsx` are reconciled as a direct consequence of that
+one command's registry-dependency resolution, not independently choosable work.
 
 **Codebase Evidence**:
 - `Glob src/components/ui/sidebar.tsx`, `tooltip.tsx` → 0 hits each (confirmed absent); `Glob
@@ -954,6 +976,12 @@ pnpm run lint
 
 **Reviewers**: xstockstrat-ui service owner — Trading UI correctness
 
+**Scope note**: this step touches 8 files, above the 5-file split-consideration threshold. Not split:
+all 8 are one atomic component rollout — `PageBreadcrumb` only satisfies AC-9's "every new/migrated
+site checked together" requirement (see Step 21) if every site lands before the collision test runs;
+splitting across steps would leave some sites' collision-safety unverified mid-feature with no
+independent value at the split point.
+
 **Codebase Evidence**:
 - `NamespaceEditor.tsx:131-149` and `config-ui/audit/page.tsx:29-41` (both read in full) — the two
   existing hand-rolled instances Step 19's `PageBreadcrumb` component generalizes; migrate each to
@@ -1111,9 +1139,16 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "no horizontal overflow"
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mobile-overflow.spec.ts` — verify / extend (add a wide-content or tablet-width case per table found needing one)
-- Any table-bearing page found to overflow — modify (conditionally; not knowable until the audit runs)
+- Any of the 11 table-bearing pages listed in Codebase Evidence below, found by this step's own audit
+  (Instruction 1) to defeat `overflow-x-auto` — modify (conditionally)
 
 **Reviewers**: xstockstrat-ui service owner — Trading UI correctness
+
+**Scope note**: the second `**Files**` entry above is a placeholder, not an exact path — this is an
+investigative step by nature (FR-4's own Open Question: "which table, if any, actually overflows" is
+not knowable before the audit runs). Mitigated by enumerating the full closed candidate set (the 11
+pages below) rather than leaving it open-ended, and by Instruction 3's explicit "any table found...
+must be fixed... in the same step" requirement, so a real finding cannot be silently deferred.
 
 **Codebase Evidence**:
 - `src/components/ui/table.tsx:7-17` (read in full) — `Table`'s own wrapper: `<div
@@ -1156,7 +1191,9 @@ resulting fix's own red/green pair)`
 
 **Verification**:
 ```bash
-cd services/xstockstrat-ui && pnpm test:e2e -g "no horizontal overflow|tablet"
+cd services/xstockstrat-ui
+pnpm test:e2e -g "no horizontal overflow|tablet"
+pnpm run lint
 grep -n "FR-4\|horizontal-overflow audit" ../../docs/roadmap/features/124-shadcn-table-actions-responsive/context.md
 ```
 

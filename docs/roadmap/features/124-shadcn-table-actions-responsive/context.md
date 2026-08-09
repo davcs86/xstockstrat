@@ -228,6 +228,40 @@
   **P-05** (incremental checkpointing "as they happen"), and is being promoted to a `docs/roadmap/ledger/insights.md`
   entry since it's a generalizable pattern, not specific to this feature.
 
+## Session 2026-08-09T23:41:04Z — sdd-review impl-spec (advisory) + warnings fixed
+
+- Result: 0 blockers, 0 Floor risks, 7 warnings (advisory — did not block). All 7 fixed in this
+  session, by user direction ("fix all the warnings"):
+  - Step 4: wildcard `**Files**` entries (`e2e/trader/*.spec.ts`, `e2e/config-ui/*.spec.ts`,
+    `e2e/insights/*.spec.ts`) resolved to exact paths — `e2e/trader/orders.spec.ts`,
+    `e2e/config-ui/sources.spec.ts`, `e2e/config-ui/value-persists-after-save.spec.ts`,
+    `e2e/insights/strategy-authoring.spec.ts` (confirmed via direct grep for each site's
+    button-role/data-testid assertions). — [x] fixed
+  - Steps 5-6: missing `pnpm run lint` gate — added to both steps' Verification. — [x] fixed
+  - Step 11: >5 files (8) advisory — added an explicit scope note (atomic single-literal
+    single-component rollout; splitting has no independent value at any split point). — [x] fixed
+  - Step 12: wildcard `**Files**` entries resolved to exact paths — `e2e/insights/signal-detail.spec.ts`,
+    `e2e/trader/{positions,position-detail,portfolio,order-intent,order-ticket}.spec.ts` (confirmed via
+    each spec's `page.goto(...)` calls); also corrected the Verification `-g` filter from
+    `"...order-detail|market"` (no test title matches "order-detail" — the real titles are "Order
+    intent-state badge" / "Single Order ticket page") to `"...order|market"`. — [x] fixed
+  - Step 15: >5 files (7) advisory — added a scope note (one CLI install command inherently produces
+    this file set atomically). — [x] fixed
+  - Step 20: >5 files (8) advisory — added a scope note (AC-9's collision-safety guarantee only holds
+    once every site lands together, before Step 21's test runs). — [x] fixed
+  - Step 23: wildcard `**Files**` entry (conditional table pages) — clarified as an inherent
+    investigative placeholder (not knowable pre-audit), bounded by the 11-page candidate list already
+    in Codebase Evidence; added missing `pnpm run lint` gate. — [x] fixed
+- Overlap findings (advisory, not blocking — file-path collisions are ⚠ WARN in Mode B, not ✗ FAIL):
+  4 files collide with sibling feature `096-position-and-order-detail-pages` (`implementation-ready`,
+  neither executed): `trader/positions/[symbol]/page.tsx`, `trader/orders/[id]/page.tsx`,
+  `trader/positions/page.tsx`, `trader/portfolio/page.tsx`. `096`'s own spec is additionally stale
+  (Step 3 says "create" `positions/[symbol]/page.tsx`, which already exists on trunk at 515 lines).
+  **Not resolved this session** — this is a real cross-feature sequencing decision (which feature
+  executes first; whether to add a `merge-order.md` row per the `120↔121↔122` precedent) that needs
+  its own explicit call, not bundled into the impl-spec warning fixes. Flagging for the user before
+  `/sdd-execute` runs.
+
 ## Session 2026-08-09T23:27:35Z — sdd-spec
 
 - Generated `implementation-spec.md` with 24 steps (12 service/test pairs + a closing docs gate).
