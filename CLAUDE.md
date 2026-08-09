@@ -214,22 +214,14 @@ is set per service in code and overridable with the **`DB_POOL_MAX`** env var (G
 Python `asyncpg.create_pool(max_size=…)`, Node `pg.Pool({ max })`). **When adding a new DB-backed
 service or raising any *direct* service's pool, re-check this table so the direct total stays safe.**
 
-**`DB_POOL_MAX` is deliberately *not set* on the six pooled services** (`.do/app.*.yaml`): behind a
-PgBouncer transaction pool it governs only the client→pooler connection count, not scarce backend
-slots, so it's left at the code default (2). The backend cap for those six is the pool's own `size`,
-not `DB_POOL_MAX`. Raising it there is a safe concurrency knob that does **not** consume cluster slots;
-raising it on a **direct** service does.
-
-**Both environments route the six stateless-query Go/Python services through a per-database PgBouncer
-transaction pool** (`:25061`, pool `staging`/`production`) so their client-pool maxes multiplex onto a
-few backend connections and no longer spike the shared cluster during rolling deploys; config, ledger,
-the other Node leaves, and the `db-migrator` job stay on the direct port because they use
-`LISTEN`/`NOTIFY` or migration advisory locks. The budget below is still the conservative
-per-environment cap. Full rationale, the
-direct-vs-pooled split, and the `DB_PGBOUNCER` driver requirements → `docs/patterns/database.md`
-§ Connection pooling (PgBouncer). (One shared `db-s-1vcpu-1gb` cluster hosts **both** staging and
-production, so two environments deploying at once — the daily promotion — is what exhausts the ~22
-usable slots.)
+The six stateless-query Go/Python services route through a per-database PgBouncer transaction pool
+(`:25061`) instead of the direct cluster port, so their client-pool maxes multiplex onto a handful of
+backend connections and no longer spike the shared cluster during rolling deploys; `DB_POOL_MAX` is
+left unset on those six (it would only bound the client→pooler count, not a scarce backend slot).
+Config, ledger, the other Node leaves, and the `db-migrator` job stay direct because they need
+`LISTEN`/`NOTIFY` or migration advisory locks — theirs is the real backend-slot budget. Full
+rationale, the direct-vs-pooled split, and the `DB_PGBOUNCER` driver requirements →
+`docs/patterns/database.md` § Connection pooling (PgBouncer).
 
 | Service | Lang | Route | Pool max | Notes |
 |---|---|---|---|---|

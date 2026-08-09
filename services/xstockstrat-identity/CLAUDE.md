@@ -50,22 +50,14 @@ on `RefreshOAuthToken` revokes the presented token and inserts a new one). TTLs 
 ## Database / Migrations
 
 - `000_schema`, `001_identity_tables` (`users`, `api_keys`, `refresh_tokens`), `002_seed_admin`.
-  Note: `005_drop_api_keys` later drops `identity.api_keys` (the API-key feature was removed).
-- `003_oauth` (feature 049 Part B) — adds `identity.oauth_clients` (`client_id` PK, `redirect_uris
-  TEXT[]`, `client_name`, `created_at`) and `identity.oauth_auth_codes` (`code` PK = SHA-256 hash,
-  `client_id`/`user_id` FKs ON DELETE CASCADE, `redirect_uri`, `code_challenge`, `resource`,
-  `expires_at`, `consumed_at`, `created_at`; index on `client_id`). Refresh tokens are **not** a new
-  table — OAuth reuses `identity.refresh_tokens`.
-- `004_refresh_token_client` (feature 051) — adds `refresh_tokens.client_id` (FK → `oauth_clients`,
-  ON DELETE CASCADE; `NULL` = first-party user session, non-NULL = an OAuth-client grant) and
-  `refresh_tokens.last_used_at` (TIMESTAMPTZ, "last refreshed"), plus partial index
-  `idx_refresh_user_client (user_id, client_id) WHERE client_id IS NOT NULL`. OAuth refresh tokens
-  are now tagged with their `client_id` on mint (`ExchangeAuthCode`) and rotation
-  (`RefreshOAuthToken`) so `ListAuthorizedApps` / `RevokeAuthorizedApp` can list and revoke them
-  per-user.
-- `005_drop_api_keys` — drops `identity.api_keys` (and its index). The API-key RPCs
-  (`CreateApiKey`/`ValidateApiKey`/`ListApiKeys`/`RevokeApiKey`) were removed; nothing consumes
-  API keys anymore.
+- `003_oauth` (feature 049 Part B) — adds `identity.oauth_clients` + `identity.oauth_auth_codes`;
+  OAuth refresh tokens reuse `identity.refresh_tokens` (no new table).
+- `004_refresh_token_client` (feature 051) — tags `refresh_tokens` with `client_id`/`last_used_at`
+  so `ListAuthorizedApps`/`RevokeAuthorizedApp` can list and revoke per-user OAuth grants.
+- `005_drop_api_keys` — drops `identity.api_keys`; the API-key RPCs were removed and nothing
+  consumes API keys anymore.
+
+See `migrations/*.up.sql` for exact columns/constraints/indexes.
 
 ## Config Keys Consumed
 
