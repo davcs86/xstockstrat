@@ -225,3 +225,11 @@
 - Verification: `pnpm test:unit` (68 passed, full suite incl. `tabs.test.ts`) and `pnpm build` clean.
 - Files modified: `src/components/ui/tabs.tsx` (create), `src/components/ui/tabs.test.ts` (create)
 - Deviations: none.
+
+### Step 5 — Wire Tabs → FormulaReferencePanel.tsx (lowest-risk first wire) [done]
+- Replaced the `useState`-driven hand-rolled button strip + `{tab === 'x' && (...)}` conditional
+  blocks with `<Tabs>`/`<TabsList>`/`<TabsTrigger>`/`<TabsContent>`, one `TabsContent` per the four
+  existing panels (contract/libraries/limits/templates).
+- Verification: `pnpm build` clean; `pnpm test:e2e -g "formula"` (9 passed).
+- Files modified: `src/components/insights/FormulaReferencePanel.tsx`
+- Deviations: none.

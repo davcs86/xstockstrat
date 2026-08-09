@@ -196,7 +196,7 @@ Confirm `tabs.test.ts` passes and the full unit suite has no new failures (the a
 
 ### Step 5 — service: Wire Tabs → FormulaReferencePanel.tsx (lowest-risk first wire)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/FormulaReferencePanel.tsx` — modify
