@@ -15,6 +15,7 @@ import {
 import { cn } from '../ui/utils';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { Badge } from '../ui/badge';
 
 // The browser supplies a copilot-prefixed stream key; the BFF rewrites it to the per-user
 // thread server-side (the client never learns the user id). Any copilot: value works.
@@ -121,9 +122,9 @@ export function CopilotRail() {
         <div className="flex items-center gap-2">
           <Sparkle weight="fill" className="h-4 w-4 text-primary" />
           <span className="text-sm font-semibold">Copilot</span>
-          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+          <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">
             beta
-          </span>
+          </Badge>
         </div>
         <Button
           variant="ghost"
