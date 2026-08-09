@@ -278,6 +278,59 @@ digest's coverage — captured here instead):
   only `Breadcrumb` usage) — whichever `/sdd-spec` step executes second should expect to touch that
   block.
 
+## ADDENDUM 2026-08-09 (Round 4 consolidation — final FR-10/FR-11 resolutions)
+
+Round 4's adversary correctly found that Round 3's `nav-reachability.spec.ts` mechanism decision had
+been discussed but never written into this file — closing that gap here, plus three smaller
+resolutions, before `design.md` is written:
+
+- **FR-10 does NOT leave 15 other routes without a reachability guarantee.** `PlatformHeader.tsx`'s
+  Row 2 `Breadcrumb` block IS removed entirely (matches the product-spec's original ask — "move...
+  into each page's own layout", not "add a redundant second one alongside the shell's"). The
+  guarantee `nav-reachability.spec.ts:69-71` currently proves via `getByLabel('Breadcrumb')` against
+  all 15 `GROUPS` routes (`:15-51`) is **preserved via a different, already-existing mechanism**, not
+  dropped: `PlatformHeader.tsx:199-201` (`Primary` nav) and `:314` (`Section` nav) already set
+  `aria-current="page"` on the active link. The restructured assertion checks
+  `aria-current="page"` on those `Primary`/`Section` `NavigationMenu` links instead of scraping
+  Breadcrumb text — this is AC9's own anticipated "updated assertion strategy against wherever the
+  breadcrumb now lives" (`product-spec.md`), not a scope reduction. All 15 `GROUPS` routes keep an
+  automated "reflects the active screen" check; they just don't get the new `PageBreadcrumb`
+  component (which is reserved for the 8 detail/drill-down sites below) — consistent with AC9's "no
+  requirement to retrofit one everywhere."
+- **FR-10's `PageBreadcrumb` site count is settled at 8, not 7.** `insights/strategies/[id]/edit`
+  (confirmed real, distinct route via direct read: own `AppShell` wrap, own heading) has no
+  `layout.tsx` sibling — but neither does any of the other 6 already-agreed sites
+  (`market/[symbol]`, `positions/[symbol]`, `orders/[id]`, `formulas/[id]`, `strategies/[id]`); the
+  established convention (`NamespaceEditor.tsx:132-149`) is a directly-embedded per-page
+  `<Breadcrumb>`, not layout-derived, for any of these. Round 2's earlier exclusion rationale for
+  `edit` didn't actually distinguish it from the others — superseded. Final list: `strategies/[id]`,
+  `strategies/[id]/edit`, `formulas/[id]`, `positions/[symbol]`, `market/[symbol]`, `orders/[id]` (6
+  new) + `NamespaceEditor.tsx`/`config-ui/audit/page.tsx` (2 existing, migrated onto the shared
+  helper) = **8 total**.
+- **FR-11's SSR mobile-detection flash gets a named mitigation, not just a deferred check.** The
+  standard `use-mobile` hook pattern initializes `isMobile` to `undefined`/coerced-`false` until a
+  post-mount `useEffect` resolves it — confirmed this is a real SSR-vs-client divergence, not a
+  non-issue. Mitigation: keep `SidebarTrigger`'s visibility gated by the same pure-CSS `sm:hidden`
+  class the current trigger already uses (unchanged mechanism), so the trigger's presence is never
+  itself dependent on `useIsMobile()`'s resolution. Both `Sidebar`'s `open` (desktop) and `openMobile`
+  (mobile) start closed by default, so no sidebar panel renders visibly on first paint on any
+  viewport regardless of which branch `useIsMobile()` initially resolves to — the only latent edge
+  case is a user clicking the trigger inside the sub-hydration window on a fresh mobile load
+  (worst case: one open animation briefly renders in the wrong panel style before self-correcting),
+  accepted as a low-probability UX edge case rather than a guaranteed-every-load flash. Verify
+  empirically at `/sdd-spec`/execute time via a real-device or throttled-CPU manual check — a
+  hydration-waiting Playwright assertion cannot catch this class of issue by construction.
+- **FR-11↔FR-10 step order is arbitrary-but-safe, not a real dependency.** Confirmed: `sidebar`'s
+  registry dependencies (`button`, `separator`, `sheet`, `tooltip`, `input`, `use-mobile`, `skeleton`)
+  include no `dropdown-menu`, and `dropdown-menu`'s install touches nothing `sidebar` needs — either
+  FR order works; whichever runs second inherits the shared import-block cleanup
+  (`PlatformHeader.tsx:13-35`) symmetrically.
+- **FR-6-before-FR-10 hot-file note**: `/sdd-spec` must ground FR-10's step against a fresh read of
+  `market/[symbol]/page.tsx`/`positions/[symbol]/page.tsx`/`orders/[id]/page.tsx` at spec time, not
+  reuse this recon's pre-FR-6 line citations — FR-6's eyebrow extraction runs first on these same
+  files and will shift line numbers. Standard `/sdd-execute` per-step discovery practice; called out
+  explicitly here so it isn't silently assumed.
+
 ## Recommended Scope (superseded in part by the UPDATE above — read that first)
 
 Given the confirmed overlaps above, the design phase (Phase 1) must decide, per FR, whether 124

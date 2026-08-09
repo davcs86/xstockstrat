@@ -201,3 +201,29 @@
   `PlatformHeader.tsx` but share the top-of-file import block — sequencing note for `/sdd-spec`.
 - **Status**: design synthesis complete, pending final user approval gate before `design.md` is
   written and lifecycle advances to `design-approved`.
+
+## Session 2026-08-09T23:20:17Z — sdd-design Round 4 + completion
+
+- **Round 4** (design-proposer/design-adversary, consolidated whole-feature pass): proposer wrote the
+  full 11-FR "Chosen Approach" + a recommended `/sdd-spec` step order, surfacing cross-FR file
+  clustering not visible when each FR was reviewed alone (`market/[symbol]/page.tsx` touched by 4 FRs,
+  `positions/[symbol]/page.tsx` by 3, `orders/[id]/page.tsx` by 2). Adversary found one real gap: the
+  Round 3 decision to preserve `nav-reachability.spec.ts`'s guarantee for all 15 `GROUPS` routes via an
+  `aria-current`-based replacement assertion (not the shared `Breadcrumb` component) had been decided
+  verbally but never written into `recon.md`/`context.md` — so this round's adversary, reading only the
+  durable artifacts, correctly flagged FR-10's breadcrumb removal as apparently leaving 15 routes
+  without a reachability guarantee. Resolved by writing the mechanism into `recon.md`'s new ADDENDUM
+  (not a design change, a documentation-completeness fix). Also resolved in the same pass: FR-10's
+  `PageBreadcrumb` site count settled at 8 (adding `strategies/[id]/edit`, confirmed real via direct
+  read; Round 2's exclusion rationale for it didn't actually distinguish it from the other 6 agreed
+  sites); FR-11's SSR mobile-detection risk given a named mitigation (CSS-gated trigger visibility,
+  default-closed panel state) instead of a deferred "check later"; FR-10↔FR-11 step order confirmed
+  arbitrary-but-safe (no real dependency, contrary to the initial "must precede" framing).
+- **`design.md` written and approved.** Status: `spec-ready` → `design-approved`. 4 rounds total (full
+  mode). No Constitution Floor (`F-*`) breach at any point.
+- **Process lesson for the ledger**: a design decision reached through conversational back-and-forth
+  with the user or between debate rounds is not "settled" until it is written into `recon.md`/
+  `context.md`/`design.md` — a later round's adversary (or a future `/sdd-spec` session) only sees the
+  durable artifacts, not this session's transcript. This is the mid-debate analog of Constitution
+  **P-05** (incremental checkpointing "as they happen"), and is being promoted to a `docs/roadmap/ledger/insights.md`
+  entry since it's a generalizable pattern, not specific to this feature.

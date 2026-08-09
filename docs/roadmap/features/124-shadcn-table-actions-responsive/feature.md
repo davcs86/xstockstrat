@@ -1,6 +1,6 @@
 # Feature: shadcn-table-actions-responsive
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `design-approved`
 **Development Branch**: `feature/shadcn-table-actions-responsive`
 **Created**: 2026-08-09
 **Last Updated**: 2026-08-09
@@ -13,12 +13,15 @@
 |---|---|---|---|
 | 2026-08-09 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-09 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings; overlap collisions vs 120/121/123 noted, no blocking FAIL) |
+| 2026-08-09 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + design.md written. Mid-session: sibling features 121/122/123 landed in main-dev, resolving the deferral/sequencing debate; FR-11 (mobile Sidebar) added by explicit user direction and separately grounded/adversary-reviewed. |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon](recon.md) — grounded codebase dossier (includes two mid-debate UPDATE/ADDENDUM sections)
+- [Design](design.md) — debated, approved architecture
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec shadcn-table-actions-responsive`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -41,5 +44,4 @@ page position rather than just the active nav group.
 
 ## Next Action
 
-`/sdd-design shadcn-table-actions-responsive` — recon + design debate must resolve the overlap
-collisions against sibling features 120/121/123 (see context.md) before `/sdd-spec` runs.
+`/sdd-spec shadcn-table-actions-responsive` — generate implementation spec from the approved design.
