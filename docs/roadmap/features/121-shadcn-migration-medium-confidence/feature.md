@@ -55,7 +55,8 @@ consolidate two independently-duplicated non-primitive recipes (a bordered filte
 ## Next Action
 
 All 37 implementation steps are `done` and the whole-feature verification gate (Step 37) is green
-(`pnpm lint`/`pnpm build`/`pnpm test:unit` 85/85/`pnpm test:e2e` 256/256). Open the integration PR
-(stacked on `feature/shadcn-migration-high-confidence`, per the repo's stacked-PR convention), then
-promote to `launched` once merged. This feature's branch is stacked on sibling `120`'s branch, which
-has not yet merged to `main-dev` — the PR chain must land in order (`120` → `121` → `122` → `123`).
+(`pnpm lint`/`pnpm build`/`pnpm test:unit` 85/85/`pnpm test:e2e` 256/256). Integration PR:
+[#912](https://github.com/davcs86/xstockstrat/pull/912) (stacked on
+`feature/shadcn-migration-high-confidence`, ready for review). This feature's branch is stacked on
+sibling `120`'s branch, which has not yet merged to `main-dev` — the PR chain must land in order
+(`120` → `121` → `122` → `123`). Promote to `launched` once merged.
