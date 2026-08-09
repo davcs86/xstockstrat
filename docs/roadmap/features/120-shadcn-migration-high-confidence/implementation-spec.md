@@ -796,7 +796,7 @@ cd services/xstockstrat-ui && pnpm test:unit -- breadcrumb.test.ts && pnpm test:
 
 ### Step 26 — service: Wire Breadcrumb → NamespaceEditor.tsx and config-ui/audit/page.tsx (no-e2e-risk)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/[namespace]/NamespaceEditor.tsx` — modify

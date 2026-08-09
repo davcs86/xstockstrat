@@ -1,10 +1,24 @@
 'use client';
 
-import Link from 'next/link';
 import { formatDistanceToNow } from 'date-fns';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@/components/ui/table';
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbSeparator,
+  BreadcrumbPage,
+} from '@/components/ui/breadcrumb';
 import { useAuditLog } from '@/app/config-ui/hooks/useAuditLog';
 
 export default function AuditPage() {
@@ -13,13 +27,17 @@ export default function AuditPage() {
   return (
     <div className="space-y-4">
       {/* Breadcrumb */}
-      <div className="flex items-center gap-2">
-        <Link href="/config-ui" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
-          ← namespaces
-        </Link>
-        <span className="text-muted-foreground">/</span>
-        <h1 className="text-base font-semibold">Audit Log</h1>
-      </div>
+      <Breadcrumb>
+        <BreadcrumbList>
+          <BreadcrumbItem>
+            <BreadcrumbLink href="/config-ui">← namespaces</BreadcrumbLink>
+          </BreadcrumbItem>
+          <BreadcrumbSeparator />
+          <BreadcrumbItem>
+            <BreadcrumbPage>Audit Log</BreadcrumbPage>
+          </BreadcrumbItem>
+        </BreadcrumbList>
+      </Breadcrumb>
 
       {loading && <p className="text-muted-foreground text-sm">Loading…</p>}
 
@@ -52,16 +70,21 @@ export default function AuditPage() {
                     <TableCell className="hidden sm:table-cell font-mono text-destructive/80">
                       {e.oldValue || '—'}
                     </TableCell>
-                    <TableCell className="font-mono text-primary/80">
-                      {e.newValue}
-                    </TableCell>
+                    <TableCell className="font-mono text-primary/80">{e.newValue}</TableCell>
                     <TableCell className="hidden md:table-cell text-muted-foreground">
                       {e.changedBy}
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
                       <div className="flex gap-1">
-                        <Badge variant="secondary" className="text-xs">{e.environment}</Badge>
-                        <Badge variant={e.tradingMode === 'paper' ? 'paper' : 'live'} className="text-xs">{e.tradingMode}</Badge>
+                        <Badge variant="secondary" className="text-xs">
+                          {e.environment}
+                        </Badge>
+                        <Badge
+                          variant={e.tradingMode === 'paper' ? 'paper' : 'live'}
+                          className="text-xs"
+                        >
+                          {e.tradingMode}
+                        </Badge>
                       </div>
                     </TableCell>
                     <TableCell className="hidden xl:table-cell text-muted-foreground">

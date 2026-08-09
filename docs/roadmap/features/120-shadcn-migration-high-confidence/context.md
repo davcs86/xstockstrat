@@ -423,3 +423,13 @@
 - Verification: `pnpm test:unit` (75 passed) and `pnpm build` clean.
 - Files modified: `src/components/ui/breadcrumb.tsx` (create), `src/components/ui/breadcrumb.test.ts`
   (create)
+
+### Step 26 — Wire Breadcrumb → NamespaceEditor.tsx and config-ui/audit/page.tsx [done]
+- Replaced both byte-for-byte-identical `Link` + `/` + heading shapes with
+  `<Breadcrumb>`/`<BreadcrumbList>`/`<BreadcrumbItem>`/`<BreadcrumbLink>`/`<BreadcrumbSeparator>`/
+  `<BreadcrumbPage>`. Removed the now-unused `next/link` `Link` import from both files (each file's
+  own edit made it unused — in-scope). Kept the `env`/`mode` `Badge`s outside the `Breadcrumb` in
+  `NamespaceEditor.tsx`, unchanged.
+- Verification: `pnpm build` clean; `pnpm test:e2e -g "config-ui"` (49 passed — no dedicated spec
+  for the audit page, confirmed absent; the manual screenshot compare happens in Step 35).
+- Files modified: `src/app/config-ui/[namespace]/NamespaceEditor.tsx`, `src/app/config-ui/audit/page.tsx`
