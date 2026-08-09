@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import {
   Table,
   TableHeader,
@@ -502,12 +503,10 @@ export default function SourcesPage() {
             )}
 
             <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
+              <Switch
                 id="active-toggle"
                 checked={form.active}
-                onChange={(e) => setField('active', e.target.checked)}
-                className="h-4 w-4"
+                onCheckedChange={(v) => setField('active', v)}
               />
               <label htmlFor="active-toggle" className="text-sm">
                 Active

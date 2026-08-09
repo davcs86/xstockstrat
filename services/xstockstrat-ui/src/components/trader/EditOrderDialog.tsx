@@ -7,6 +7,7 @@ import { useReplaceOrder } from '@/hooks/useReplaceOrder';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../ui/sheet';
 import { Input } from '../ui/input';
 import { Button } from '../ui/button';
+import { Alert, AlertDescription } from '../ui/alert';
 
 interface EditOrderDialogProps {
   order: Order | null;
@@ -42,11 +43,16 @@ export function EditOrderDialog({ order, open, onOpenChange }: EditOrderDialogPr
       },
       {
         onSuccess: () => {
-          setQty(''); setLimitPrice(''); setStopPrice(''); setTimeInForce('');
+          setQty('');
+          setLimitPrice('');
+          setStopPrice('');
+          setTimeInForce('');
           onOpenChange(false);
         },
         onError: (err) => {
-          setError(err instanceof ConnectError ? (err as ConnectError).rawMessage : (err as Error).message);
+          setError(
+            err instanceof ConnectError ? (err as ConnectError).rawMessage : (err as Error).message,
+          );
         },
       },
     );
@@ -61,28 +67,62 @@ export function EditOrderDialog({ order, open, onOpenChange }: EditOrderDialogPr
         <form onSubmit={handleSubmit} className="space-y-3 mt-4">
           <p className="text-xs text-muted-foreground">
             Leave a field blank to keep its current value.
-            {isPartial && ' This order is partially filled — the quantity adjusts the remaining amount.'}
+            {isPartial &&
+              ' This order is partially filled — the quantity adjusts the remaining amount.'}
           </p>
           <label className="block text-xs font-medium text-muted-foreground">
             Quantity {`(current: ${order.qty})`}
-            <Input type="number" min="0" step="any" placeholder="New quantity" value={qty} onChange={(e) => setQty(e.target.value)} />
+            <Input
+              type="number"
+              min="0"
+              step="any"
+              placeholder="New quantity"
+              value={qty}
+              onChange={(e) => setQty(e.target.value)}
+            />
           </label>
           <label className="block text-xs font-medium text-muted-foreground">
             Limit price {order.limitPrice ? `(current: ${order.limitPrice})` : ''}
-            <Input type="number" min="0" step="any" placeholder="New limit price" value={limitPrice} onChange={(e) => setLimitPrice(e.target.value)} />
+            <Input
+              type="number"
+              min="0"
+              step="any"
+              placeholder="New limit price"
+              value={limitPrice}
+              onChange={(e) => setLimitPrice(e.target.value)}
+            />
           </label>
           <label className="block text-xs font-medium text-muted-foreground">
             Stop price {order.stopPrice ? `(current: ${order.stopPrice})` : ''}
-            <Input type="number" min="0" step="any" placeholder="New stop price" value={stopPrice} onChange={(e) => setStopPrice(e.target.value)} />
+            <Input
+              type="number"
+              min="0"
+              step="any"
+              placeholder="New stop price"
+              value={stopPrice}
+              onChange={(e) => setStopPrice(e.target.value)}
+            />
           </label>
           <label className="block text-xs font-medium text-muted-foreground">
             Time in force {order.timeInForce ? `(current: ${order.timeInForce})` : ''}
-            <Input placeholder="e.g. day, gtc" value={timeInForce} onChange={(e) => setTimeInForce(e.target.value)} />
+            <Input
+              placeholder="e.g. day, gtc"
+              value={timeInForce}
+              onChange={(e) => setTimeInForce(e.target.value)}
+            />
           </label>
-          {error && <p className="text-xs text-destructive">{error}</p>}
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
           <div className="flex gap-2 justify-end pt-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={isPending}>{isPending ? 'Saving…' : 'Save changes'}</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isPending}>
+              {isPending ? 'Saving…' : 'Save changes'}
+            </Button>
           </div>
         </form>
       </SheetContent>

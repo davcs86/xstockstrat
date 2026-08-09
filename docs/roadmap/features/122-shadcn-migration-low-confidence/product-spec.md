@@ -29,12 +29,12 @@ FR-1. Migrate `src/components/trader/OrderForm.tsx:215-217` and
 wrapping the existing message text unchanged. **Resolved 2026-08-09**: user-directed override
 (`design.md` § Round 4) — migrate both call sites, superseding this FR's original "evaluate, adopt
 only if it doesn't add unwanted visual weight, otherwise decline" framing and the design phase's own
-initial DECLINE decision. **Blocked on sibling `120-shadcn-migration-high-confidence` shipping
-`ui/alert.tsx`**: that primitive does not exist on `main-dev` today (120 is `implementation-ready`,
-not `code-completed`/`launched`), so no concrete migration steps exist yet in
-`implementation-spec.md` — per Constitution F-04 (never invent a file path), a follow-up
-`/sdd-spec` run generates them once `120` merges, mirroring sibling
-`121-shadcn-migration-medium-confidence`'s Tranche-2 pattern for its own primitive-dependent FRs.
+initial DECLINE decision. **Unblocked 2026-08-09**: this feature's branch is stacked on sibling
+`121-shadcn-migration-medium-confidence`'s branch, which is itself stacked on
+`120-shadcn-migration-high-confidence`'s — `ui/alert.tsx` is now confirmed present
+(`ls services/xstockstrat-ui/src/components/ui/`), so concrete migration steps are specced in this
+same pass (Steps 9-11), per the user's explicit direction, mirroring how sibling `121` re-specced
+its own Tranche 2 once its blocking primitives became available on its stacked branch.
 
 FR-2. Evaluate `src/components/auth/AuthForm.tsx:28-93` (`CredentialsForm` — local `useState` fields,
 manual `fetch` submit, inline `<p>` error text) against shadcn's current form-building primitive,
@@ -93,11 +93,9 @@ sites (`AuthForm.tsx`, `AddAccountForm`, `EditCredentialsForm`) adopt the full r
 - `xstockstrat-ui` — `src/components/trader/{OrderForm,EditOrderDialog,accountShared}.tsx`,
   `src/components/auth/AuthForm.tsx`; `src/components/ui/field.tsx` (corrected 2026-08-08 from
   the stale `form.tsx` naming — see FR-4) and `package.json`/`pnpm-lock.yaml`, since FR-4 has
-  triggered (all three FR-2/FR-3 call sites migrate). `src/components/ui/alert.tsx` also becomes
-  affected once FR-1 unblocks (**added 2026-08-09**, `design.md` § Round 4) — that file does not
-  exist on `main-dev` yet; it is added by sibling `120-shadcn-migration-high-confidence`, not this
-  feature, and `OrderForm.tsx`/`EditOrderDialog.tsx`'s actual edits are deferred to a follow-up
-  `/sdd-spec` run once it ships.
+  triggered (all three FR-2/FR-3 call sites migrate). `src/components/ui/alert.tsx` (owned by
+  sibling `120-shadcn-migration-high-confidence`, not this feature) is now consumed by
+  `OrderForm.tsx`/`EditOrderDialog.tsx` per FR-1's Steps 9-11 (**unblocked 2026-08-09**).
 
 ## Consumer Surface(s)
 
@@ -150,11 +148,10 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
   independently on functional/validation-shape merits, not for stylistic consistency) is preserved
   in `design.md`'s Rejected Alternatives for the record.
 - [x] **Resolved 2026-08-09 (user-directed override, `design.md` § Round 4)**: FR-1 migrates both
-  call sites onto `Alert`, superseding the design phase's earlier DECLINE decision — but is blocked
-  on sibling `120-shadcn-migration-high-confidence` shipping `ui/alert.tsx` (not yet on `main-dev`).
-  Per Constitution F-04, no concrete `implementation-spec.md` steps exist for FR-1 yet; a follow-up
-  `/sdd-spec` run is required once `120` merges. `docs/roadmap/features/merge-order.md` should carry
-  a `120` ↔ `122` blocking-dependency row alongside the existing `120` ↔ `121` row.
+  call sites onto `Alert`, superseding the design phase's earlier DECLINE decision. **Unblocked
+  2026-08-09**: this feature's branch stacks on `121`, which stacks on `120` — `ui/alert.tsx` is
+  confirmed present, so Steps 9-11 (added this session) migrate both call sites directly, no
+  follow-up `/sdd-spec` run needed.
 - [x] **Resolved by `/sdd-review`**: `grep -rn "react-hook-form\|from 'zod'\|\"zod\""
   services/xstockstrat-ui/src services/xstockstrat-ui/package.json` returns zero matches. Neither
   `react-hook-form` nor `zod` is present anywhere in `xstockstrat-ui` today, under any install

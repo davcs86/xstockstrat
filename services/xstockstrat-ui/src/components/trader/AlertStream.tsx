@@ -47,13 +47,12 @@ export function AlertStream() {
         <Button variant="outline" size="icon" className="relative">
           <Bell className="h-4 w-4" />
           {unread > 0 && (
-            <span
-              className={`absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold ${
-                hasHighSeverity ? 'bg-destructive text-white' : 'bg-primary text-primary-foreground'
-              }`}
+            <Badge
+              variant={hasHighSeverity ? 'destructive' : 'default'}
+              className="absolute -top-1 -right-1 h-4 min-w-4 justify-center px-1 text-[10px]"
             >
               {unread > 9 ? '9+' : unread}
-            </span>
+            </Badge>
           )}
         </Button>
       </SheetTrigger>
@@ -62,7 +61,12 @@ export function AlertStream() {
           <div className="flex items-center justify-between pr-6">
             <SheetTitle>Alerts</SheetTitle>
             {alerts.length > 0 && (
-              <Button variant="ghost" size="sm" onClick={() => setAlerts([])} className="text-muted-foreground text-xs h-7">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setAlerts([])}
+                className="text-muted-foreground text-xs h-7"
+              >
                 Clear all
               </Button>
             )}

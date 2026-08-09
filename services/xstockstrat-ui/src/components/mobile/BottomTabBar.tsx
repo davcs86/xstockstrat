@@ -3,6 +3,12 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { NAV_GROUPS } from '../shared/navGroups';
 import { cn } from '../ui/utils';
+import {
+  NavigationMenu,
+  NavigationMenuList,
+  NavigationMenuItem,
+  NavigationMenuLink,
+} from '../ui/navigation-menu';
 
 // The four primary groups (Decide/Discover/Engine/Book); Settings (index 4) stays desktop-only.
 const TABS = NAV_GROUPS.slice(0, 4);
@@ -25,32 +31,40 @@ function isGroupActive(pathname: string | null, hrefs: string[]): boolean {
 export function BottomTabBar() {
   const pathname = usePathname();
   return (
-    <nav
+    <NavigationMenu
       aria-label="Mobile primary"
       data-testid="mobile-tab-bar"
-      className="fixed inset-x-0 bottom-0 z-40 flex border-t border-border bg-background/95 backdrop-blur-sm sm:hidden"
+      viewport={false}
+      // max-w-none overrides ui/navigation-menu.tsx's default `max-w-max` root style — this bar
+      // is `fixed inset-x-0`, which needs to span edge-to-edge, not shrink to its own content.
+      className="fixed inset-x-0 bottom-0 z-40 flex max-w-none border-t border-border bg-background/95 backdrop-blur-sm sm:hidden"
     >
-      {TABS.map((group) => {
-        const href = group.items[0].href;
-        const active = isGroupActive(
-          pathname,
-          group.items.map((i) => i.href),
-        );
-        return (
-          <Link
-            key={group.key}
-            href={href}
-            aria-current={active ? 'page' : undefined}
-            className={cn(
-              'flex min-h-[56px] flex-1 flex-col items-center justify-center gap-0.5 text-[11px]',
-              active ? 'text-primary' : 'text-muted-foreground',
-            )}
-          >
-            {group.icon}
-            {group.label}
-          </Link>
-        );
-      })}
-    </nav>
+      <NavigationMenuList className="flex w-full gap-0">
+        {TABS.map((group) => {
+          const href = group.items[0].href;
+          const active = isGroupActive(
+            pathname,
+            group.items.map((i) => i.href),
+          );
+          return (
+            <NavigationMenuItem key={group.key} className="flex-1">
+              <NavigationMenuLink
+                asChild
+                aria-current={active ? 'page' : undefined}
+                className={cn(
+                  'flex min-h-[56px] flex-col items-center justify-center gap-0.5 text-[11px]',
+                  active ? 'text-primary' : 'text-muted-foreground',
+                )}
+              >
+                <Link href={href}>
+                  {group.icon}
+                  {group.label}
+                </Link>
+              </NavigationMenuLink>
+            </NavigationMenuItem>
+          );
+        })}
+      </NavigationMenuList>
+    </NavigationMenu>
   );
 }

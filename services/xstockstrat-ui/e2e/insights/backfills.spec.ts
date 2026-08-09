@@ -136,11 +136,13 @@ test.describe('Backfills page — list, create, cancel (AC-1/2/3)', () => {
       await fulfillJson(route, runningJob({ status: 'BACKFILL_STATUS_CANCELED' }));
     });
 
-    page.on('dialog', (d) => d.accept());
-
     await page.goto('/insights/backfills');
     await expect(page.getByText('running', { exact: true })).toBeVisible({ timeout: 20000 });
+    // Cancel now opens an AlertDialog (feature 121, FR-4) rather than a native window.confirm —
+    // click the trigger (unambiguous: only one "Cancel"-labeled button exists before the dialog
+    // opens), then the dialog's own Confirm action.
     await page.getByRole('button', { name: 'Cancel' }).click();
+    await page.getByRole('button', { name: 'Confirm' }).click();
     await expect(page.getByText('canceled', { exact: true })).toBeVisible();
   });
 });
