@@ -8,14 +8,14 @@ findings log.
 
 | What the docs say | What the code does | Evidence | Suggested action |
 |---|---|---|---|
-| 3 config keys `notify.stream.max_subscribers`, `notify.alert.retention_days`, `notify.alert.max_body_bytes` | None read by any code — no subscriber cap, no retention job, no body-size validation | `CLAUDE.md:48-50` (grep zero) | Wire or delete the keys |
+| 3 config keys `notify.stream.max_subscribers`, `notify.alert.retention_days`, `notify.alert.max_body_bytes` | None read by any code — no subscriber cap, no retention job, no body-size validation | `CLAUDE.md:70-72` (grep zero) | Wire or delete the keys |
 | CLAUDE.md dependency "xstockstrat-ledger — Emit alert lifecycle events" + `LEDGER_ENDPOINT` | No ledger client and no `LEDGER_ENDPOINT` read anywhere | `CLAUDE.md:39,57` vs `src/` (grep zero) | ✓ **RESOLVED** (2026-08-02 refresh) — the fictional `xstockstrat-ledger` dep + `LEDGER_ENDPOINT` were removed from the deps table (config + PostgreSQL only) |
 
 ## Latent bugs (looks broken, not merely non-obvious)
 
 | Issue | Impact | Evidence |
 |---|---|---|
-| Severity filter type/runtime mismatch: `StreamSubscriber.severities: number[]` vs the runtime string enum under `stringEnums`; the only test covers the numeric path | A subscriber that sets a `severities` filter compares string-vs-string, but the `number[]` annotation invites a "fix" that breaks the filter; CI won't catch it | `notifyServiceImpl.ts:12,167,63`, `notifyServiceImpl.test.ts:218-220` |
+| Severity filter type/runtime mismatch: `StreamSubscriber.severities: number[]` vs the runtime string enum under `stringEnums`; the only test covers the numeric path | A subscriber that sets a `severities` filter compares string-vs-string, but the `number[]` annotation invites a "fix" that breaks the filter; CI won't catch it | `notifyServiceImpl.ts:12,173`, `notifyServiceImpl.test.ts:295-303` |
 
 ## Dead / orphaned code
 
@@ -25,7 +25,7 @@ findings log.
 
 ## Open questions (unresolved *why* — needs a maintainer)
 
-- Fan-out ignores `call.write()` backpressure (drops only on thrown exception, no `drain`) — is unbounded per-slow-subscriber server-side buffering acceptable, or should an over-buffered subscriber be dropped? `notifyServiceImpl.ts:81` — status: **open**
+- Fan-out ignores `call.write()` backpressure (drops only on thrown exception, no `drain`) — is unbounded per-slow-subscriber server-side buffering acceptable, or should an over-buffered subscriber be dropped? `notifyServiceImpl.ts:86` — status: **open**
 
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

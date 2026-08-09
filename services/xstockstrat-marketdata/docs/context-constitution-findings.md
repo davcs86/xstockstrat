@@ -21,9 +21,12 @@ governance. Repo-wide defects (Go 1.22 doc-lie, `getEnvBool` dead) live in the r
 
 ## Open questions (unresolved *why* — needs a maintainer)
 
-- `config.Watcher.environment`/`.tradingMode` fields are declared and sent in every `WatchConfigRequest` but never assigned (always the zero enum) — should the config service receive real Environment/TradingMode here, or is UNSPECIFIED intentional? Same shape may exist in sibling Go services. `internal/config/config.go:54-56,166-168` — status: **open**
 - `fmp.getJSON` deliberately omits the URL from every error because it carries the `apikey` query param — confirm this "never log the URL" rule is a hard security invariant to enshrine (it also strips path/status detail from FMP errors). `internal/fmp/fmp_client.go:141` — status: **open**
-- gRPC keepalive magic values (`MaxConnectionIdle 60s / Time 30s / Timeout 10s`) — platform-standard (belongs in root governance) or marketdata-tuned? `cmd/server/main.go:144-148` — status: **open**
+- gRPC keepalive magic values (`MaxConnectionIdle 60s / Time 30s / Timeout 10s`) — platform-standard (belongs in root governance) or marketdata-tuned? `cmd/server/main.go:136-140` — status: **open**
+
+## Resolved
+
+- **`config.Watcher.environment`/`.tradingMode` fields declared and sent on every `WatchConfigRequest` but never assigned (always the zero enum)** — RESOLVED 2026-08-09 (fixed by commit `1413399`, 2026-08-07): `NewWatcher` now takes `applicationEnv, tradingMode string` params and calls `resolveEnvironment()`/`resolveTradingMode()` (`internal/config/config.go:84-85,94-108`, now enshrined as constitution MARKETDATA-7); `cmd/server/main.go` wires them from `cfg.ApplicationEnv`/`cfg.TradingMode`. Confirmed by reading current `config.go` and its `TestResolveEnvironment`/`TestResolveTradingMode` unit tests. This was a repo-wide SEV-1 (root PLAT-8/Gotchas), not marketdata-specific.
 
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

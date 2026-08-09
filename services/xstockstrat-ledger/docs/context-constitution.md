@@ -25,7 +25,7 @@ restate documented/CI-enforced rules (see `## Pointers`).
 
 | What | Where |
 |---|---|
-| Split pool: query pool max=1 + dedicated `EventNotifier` LISTEN conn = 2 total | `CLAUDE.md:33-49`, `src/index.ts:40-56`; root pool budget |
+| Split pool: query pool max=1 + dedicated `EventNotifier` LISTEN conn = 2 total | `CLAUDE.md:37-53`, `src/index.ts:40-56`; root pool budget |
 | Idempotent append via `ledger.idempotency_keys` regular table + one-txn claim | `CLAUDE.md:70-90`, `migrations/002_…up.sql:1-13` |
 | `toValidDate` guard against persisting a NaN timestamp | `src/grpc/ledgerServiceImpl.ts:299-302` (root PLAT-F2) |
 
