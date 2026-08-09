@@ -856,7 +856,7 @@ cd services/xstockstrat-ui && pnpm build
 
 ### Step 12 — test: Whole-feature (FR-1 + FR-2/FR-3/FR-4) verification gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**: none — verification-only, runs after Steps 1-11
 

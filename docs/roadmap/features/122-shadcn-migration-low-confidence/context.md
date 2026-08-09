@@ -605,3 +605,15 @@ decisions per FR, transcribed from `design.md` § Round 3/Round 4 at execute tim
   Step 9's Codebase Evidence used). Step 9's `pnpm build` run is the gate for this site; recorded as
   its own step per acceptance criterion 5, mirroring sibling `121`'s Steps 33/35 pattern.
 - Files modified: none
+
+### Step 12 — Whole-feature (FR-1 + FR-2/FR-3/FR-4) verification gate [done]
+- Ran the complete suite against the Step-11-complete tree: `pnpm lint` (clean, same one
+  pre-existing unrelated warning), `NEXT_DISABLE_STANDALONE=1 pnpm build` (succeeded, full route
+  manifest, no TS errors), `pnpm test:e2e` (full suite, no path filter) — **257 passed**, no skips,
+  no failures.
+- No cross-step interaction issues surfaced across the whole app beyond what Steps 8/10/11's
+  narrower gates already confirmed.
+- **All 12 steps done. Feature 122 (shadcn-migration-low-confidence) is code-complete** — both FR-1
+  (Alert on OrderForm/EditOrderDialog) and FR-2/FR-3/FR-4 (react-hook-form + zod + ui/field.tsx on
+  AuthForm/AddAccountForm/EditCredentialsForm) are landed and verified.
+- Files modified: none (verification-only)

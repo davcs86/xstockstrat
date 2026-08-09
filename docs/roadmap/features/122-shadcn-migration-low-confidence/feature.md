@@ -1,6 +1,6 @@
 # Feature: shadcn-migration-low-confidence
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/shadcn-migration-low-confidence`
 **Created**: 2026-08-08
 **Last Updated**: 2026-08-09
@@ -18,6 +18,7 @@
 | 2026-08-08 | `implementation-ready` (spec revised, no lifecycle change) | session (post-design.md Round 3) | implementation-spec.md's FR-2/FR-3/FR-4 steps rewritten to match design.md's Round 3 user-directed override (migrate all three call sites onto `ui/field.tsx`, not `ui/form.tsx`) — step count 3 → 8; design.md/recon.md unchanged (already final). **P-04 note**: this `implementation-ready` status now rests on a live-gated design for FR-2/FR-3/FR-4 (Round 3) — the row above (`design-approved → implementation-ready`) was stamped while that design was still provisional; Round 3 retroactively firms up the basis for these steps. FR-1's decline call remains a self-run Round 1/2 synthesis, never live-gated. |
 | 2026-08-09 | `implementation-ready` (design + specs amended, no lifecycle change) | session (design.md Round 4 override) | **FR-1's decline is overturned.** The user was asked directly and directed migrating both `OrderForm.tsx`/`EditOrderDialog.tsx` call sites onto `Alert`, once sibling `120-shadcn-migration-high-confidence` ships `ui/alert.tsx` (`ui/alert.tsx` does not exist on `main-dev` yet — `120` is `implementation-ready`, not `code-completed`/`launched`). `design.md` gained a `## Round 4 — user-directed override` section and updated Chosen Approach/Rejected Alternatives/Open Risks/Constitution sections; `product-spec.md`'s FR-1 text was corrected to state the migrate decision and the `120` dependency; `implementation-spec.md`'s header/Execution Summary/Step Dependencies/Step 1/Step 8 were updated to document the tranche split (FR-1 deliberately unspecced pending `120`, mirroring sibling `121`'s own Tranche-2 pattern for its FR-4–FR-9) — **step count stays 8, no new code steps added**, since FR-1's concrete steps cannot be written yet (Constitution F-04). **P-04 note**: FR-1 now has a live user gate (Round 4) — the last of this feature's four FRs to get one (FR-2/FR-3/FR-4 got theirs in Round 3). Recommended (not written this session, per task constraint): a `120` ↔ `122` blocking-dependency row in `docs/roadmap/features/merge-order.md`, alongside the existing `120` ↔ `121` row. |
 | 2026-08-09 | `implementation-ready` → `in-progress` | /sdd-execute sequential | User directed re-specing and executing FR-1 in this same pass (mirroring sibling `121`'s Tranche 2 pattern) — this feature's branch is stacked on `121`'s (itself stacked on `120`'s), and `ui/alert.tsx` is confirmed present. Added `implementation-spec.md` Steps 9-12 (FR-1 migration + e2e regression + build-only note + whole-feature gate), step count 8 → 12; `product-spec.md`'s FR-1/Affected Services/Open Questions updated to record "unblocked." `design.md` unchanged (§ Round 4 already recorded the migrate decision). Execution begins against all 12 steps. |
+| 2026-08-09 | `in-progress` → `code-completed` | /sdd-execute sequential | All 12 steps done: FR-2/FR-3/FR-4 (Steps 1-8 — `CredentialsForm`/`AddAccountForm`/`EditCredentialsForm` migrated to react-hook-form + zod + `ui/field.tsx`, sharing one `credentialSchema(brokerType)` factory) and FR-1 (Steps 9-12 — `OrderForm.tsx`/`EditOrderDialog.tsx` migrated to `Alert`/`AlertDescription`). Whole-feature gate green: `pnpm lint` clean, `pnpm build` succeeds, full `pnpm test:e2e` — **257 passed**, no skips/failures. Draft PR [#913](https://github.com/davcs86/xstockstrat/pull/913) flipped to ready-for-review. |
 
 ---
 
@@ -46,7 +47,7 @@ disproportionate weight (new dependencies, more code) for what each call site ac
 
 ## Next Action
 
-Execution in progress against Steps 1–12. Draft integration PR:
+All 12 steps done; whole-feature gate green (257/257 e2e). Integration PR
 [#913](https://github.com/davcs86/xstockstrat/pull/913) (stacked on
-`feature/shadcn-migration-medium-confidence`), will flip to ready-for-review once all 12 steps land
-and the whole-feature gate is green.
+`feature/shadcn-migration-medium-confidence`) flipped to ready-for-review. Awaiting review/merge,
+then promotion tracking per `docs/roadmap/features/merge-order.md`.
