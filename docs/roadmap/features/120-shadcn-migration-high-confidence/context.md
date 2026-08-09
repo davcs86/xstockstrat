@@ -433,3 +433,12 @@
 - Verification: `pnpm build` clean; `pnpm test:e2e -g "config-ui"` (49 passed — no dedicated spec
   for the audit page, confirmed absent; the manual screenshot compare happens in Step 35).
 - Files modified: `src/app/config-ui/[namespace]/NamespaceEditor.tsx`, `src/app/config-ui/audit/page.tsx`
+
+### Step 27 — Add ui/accordion.tsx primitive + test (FR-8, FR-12) [done]
+- `npx shadcn@latest add accordion` (did not touch `button.tsx`). **Finding for Step 28**:
+  `AccordionTrigger` already renders its own chevron (`IconChevronDown`/`IconChevronUp`, swapped
+  via `group-aria-expanded`) — confirms the hand-rolled `CaretDown` in `PlatformHeader.tsx` must be
+  dropped, not kept alongside, to avoid a doubled-chevron regression (AC-4).
+- Verification: `pnpm test:unit` (76 passed) and `pnpm build` clean.
+- Files modified: `src/components/ui/accordion.tsx` (create), `src/components/ui/accordion.test.ts`
+  (create)

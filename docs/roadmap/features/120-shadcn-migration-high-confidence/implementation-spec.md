@@ -827,7 +827,7 @@ No e2e spec exists for the audit page (confirmed) — the manual screenshot comp
 
 ### Step 27 — service: Add ui/accordion.tsx primitive + test (FR-8, FR-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/accordion.tsx` — create
