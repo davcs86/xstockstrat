@@ -61,7 +61,7 @@ async function fillToReview(
   await next.click();
   await page.getByRole('button', { name: 'Add component' }).click();
   await next.click();
-  const jsonButtons = page.getByRole('button', { name: 'JSON' });
+  const jsonButtons = page.getByRole('tab', { name: 'JSON' });
   await jsonButtons.nth(0).click();
   await page.getByLabel('Entry rule JSON').fill('{"op":"and","conditions":[]}');
   await jsonButtons.nth(1).click();
@@ -211,7 +211,7 @@ test.describe('Strategy authoring — UI', () => {
     await expect(next).toBeDisabled();
 
     // Switch both rule editors to JSON mode and type values (AC-9: JSON toggle).
-    const jsonButtons = page.getByRole('button', { name: 'JSON' });
+    const jsonButtons = page.getByRole('tab', { name: 'JSON' });
     await jsonButtons.nth(0).click();
     await page.getByLabel('Entry rule JSON').fill('{"op":"and","conditions":[]}');
     await jsonButtons.nth(1).click();
@@ -240,7 +240,7 @@ test.describe('Strategy authoring — UI', () => {
     await page.getByRole('button', { name: 'Add component' }).click();
     await next.click();
 
-    const jsonButtons = page.getByRole('button', { name: 'JSON' });
+    const jsonButtons = page.getByRole('tab', { name: 'JSON' });
     await jsonButtons.nth(0).click();
     await page.getByLabel('Entry rule JSON').fill('{"op":"and","conditions":[]}');
     await jsonButtons.nth(1).click();
