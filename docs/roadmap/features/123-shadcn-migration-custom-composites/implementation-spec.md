@@ -833,7 +833,7 @@ pnpm build
 
 ### Step 13 — service: FR-10 (Step 1) restructure `StrategyWizard.tsx`'s Step 1 onto `Questionnaire`'s native Choice/Input answer model
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/StrategyWizard.tsx` — modify

@@ -679,3 +679,79 @@
   `pnpm lint` — clean. `NEXT_DISABLE_STANDALONE=1 pnpm build` — succeeded, full route manifest, no
   TS errors (also the concrete proof the React-19-peer-range finding above doesn't break the build).
 - Files modified: `src/components/ui/questionnaire.tsx` (new), `package.json`, `pnpm-lock.yaml`
+
+### Step 13 — FR-10 (Step 1) restructure `StrategyWizard.tsx`'s Step 1 onto `Questionnaire`'s native Choice/Input answer model [done]
+- **Pre-implementation source-level finding, before writing any restructured code**: direct
+  inspection of the installed `@shadcn+react@0.3.0` compiled source (pretty-printed and grepped)
+  showed `Questionnaire.Next`/`Questionnaire.Previous` visibility is computed as
+  `total > 1 && !last` / `!first` (`Questionnaire.Submit` is `total > 0 && last`). A literal
+  one-`Questionnaire.Item`-per-`Questionnaire.Root` design — as design.md § Round 3's prose
+  describes for each of Step 1's 4 sub-screens — would make `Next` permanently hidden on every
+  sub-screen (a lone item is always both first and last, so `Submit` renders instead). This
+  contradicts the design's own stated intent of each sub-screen keeping its own Next/Back.
+  **Resolution**: use plain `Button`s (a new `IdentityNav` helper component: `Back`/`Next` pair,
+  `backDisabled`/`onBack`/`nextDisabled`/`onNext` props) for each sub-screen's navigation instead
+  of `Questionnaire.Next`/`Questionnaire.Previous`, while still using `Questionnaire`(Root)/
+  `QuestionnaireItem` for the field/fieldset semantics (confirmed correct for a single item — its
+  `active` state resolves via `activeItemName` falling back to `enabledItems[0]`). Added a
+  defensive `onSubmit={(e) => e.preventDefault()}` on each `Questionnaire` Root as a guard against
+  the underlying `<form>`'s native Enter-key submission, since we bypass the primitive's own Submit
+  handling. This is a deviation from design.md's literal prose but not from its actual intent
+  (independently-navigable sub-screens); documented inline in `StrategyWizard.tsx` and here per
+  P-03. Caught via proactive source inspection before writing broken code, not via a failing e2e
+  run — a stronger instance of this whole session's "verify against installed source" discipline.
+- Applied Instructions 1-8: added `identitySubStep` state (persists across outer-step transitions,
+  never reset except its initial value); hoisted + extended `stepForError`/`ErrorTarget` to the
+  `{ step; identitySubStep? }` shape; added the `IdentityNav` helper; replaced the flat Step 1
+  render branch with 4 conditional sub-screen blocks (Strategy ID → Display name → Re-entry
+  cooldown → Exit cooldown), each field's `value`/`onChange` unchanged from the pre-restructure
+  controlled state, every placeholder/label/error string preserved verbatim; updated the error-jump
+  `onClick` to also set `identitySubStep`; wrapped the outer Back/Next/Submit nav row in
+  `{step > 1 && (...)}` since Step 1's own sub-screens now own their navigation.
+- **Genuine red-state capture (Instruction 9, P-06)**: ran the *unmodified*
+  `e2e/insights/strategy-authoring.spec.ts` against the restructured component before touching the
+  spec file. Result: **10 failed, 8 passed, 1 interrupted, 4 did not run (5.0m)**. Every one of the
+  10 confirmed failures matched the expected symptom — a `getByPlaceholder(...)` call timing out or
+  finding no element because that field now lives on a sub-screen the old single-click sequence
+  never reached (e.g. `getByPlaceholder('SMA Crossover')` unreachable after only one `Next` click,
+  which now only advances Strategy ID → Display name, not Step 1 → Step 2) — not an unrelated
+  error. This is the genuine, expected-symptom red state Instruction 9 requires before rewriting
+  the spec.
+- **Spec rewrite**: rewrote the shared `fillToReview` helper and every inline Step-1 fill/click
+  sequence (wizard-gates test, server-error-jump test, formula-picker test, both negative-cooldown
+  tests, both edit-prepopulation tests, both "editing an unset strategy on an unrelated field"
+  tests, and the signal_params-preservation test) to insert a `next.click()` between each field
+  fill, matching the new sub-screen order (Strategy ID → Next → Display name → Next → Cooldown →
+  Next → Exit cooldown → Next → lands on outer Step 2). No `getByPlaceholder(...)` string or
+  `Next`/`Back` accessible name was changed, per Instruction 9's constraint.
+- **Second genuine finding, surfaced only by the rewritten spec's now-required navigation through
+  Step 1's sub-screens**: `edit pre-populates a non-default cooldown (AC-11)` and `edit
+  pre-populates a non-default exit cooldown` (mock fixtures `strat-cooldown-14` /
+  `strat-exit-cooldown-7`, both hyphenated ids) failed with a 30s timeout on the *first*
+  `next.click()` (sub-screen 1 → 2). Root cause: sub-screen 1's `Next` was gated
+  `nextDisabled={!idValid}` where `idValid = STRATEGY_ID_RE.test(strategyId)`
+  (`/^[a-z0-9_]+$/`, no hyphen) — applied **unconditionally**, including in edit mode, where the
+  Strategy ID `Input` is `disabled` and the value is server-sourced, immutable, pre-existing data
+  that may predate this client-side create-time format rule. This gate already existed
+  pre-Step-13 (feeding the outer `canAdvance`'s `step === 1` branch) but was never exercised by e2e
+  in edit mode, because Step 1 was previously one flat screen and no test needed to click Next to
+  reach the cooldown field — the mock-backend.ts comment on `strat_signal_universe`
+  ("id is underscore-only so it passes the wizard's id validation") independently confirms this was
+  a known, deliberately-avoided constraint, not a new one. This is a genuine, pre-existing,
+  previously-latent product bug (any real legacy strategy with a hyphenated id would already have
+  been unable to advance past Step 1 in edit mode before this feature), which Step 13's mandatory
+  sub-screen navigation now surfaces. **Fix** (in scope — directly required to make the
+  now-mandatory navigation path work, and a genuine defect, not a design preference): changed
+  sub-screen 1's gate to `nextDisabled={mode === 'create' && !idValid}` and the regex-format error
+  paragraph to `mode === 'create' && !idValid && strategyId !== ''` — the format rule only applies
+  when the user can actually edit the id; edit mode always allows Next past sub-screen 1 since the
+  field is immutable and its value came from the server. Did not touch `idValid`'s definition or
+  the (now-dead, since the outer nav row is hidden for `step === 1`) `canAdvance` step-1 branch —
+  out of this fix's narrow scope.
+- Verification: `pnpm lint` — clean (pre-existing unrelated `aria-selected` warning only).
+  `NEXT_DISABLE_STANDALONE=1 pnpm build` — compiled successfully, typecheck clean, full 39-route
+  manifest, no TS errors. `pnpm test:e2e -- e2e/insights/strategy-authoring.spec.ts` — **23 passed
+  (22.8s)**, matching the pre-migration baseline count with zero regressions, including both
+  fixed edit-prepopulation tests.
+- Files modified: `src/components/insights/StrategyWizard.tsx`,
+  `e2e/insights/strategy-authoring.spec.ts`
