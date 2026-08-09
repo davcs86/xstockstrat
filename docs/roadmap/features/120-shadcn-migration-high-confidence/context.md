@@ -100,3 +100,32 @@
 - Floor status: none unresolved.
 - Full mode (user-directed) — round 2 mandatory before the approval gate. Feeding this
   synthesis to round 2.
+
+## Session 2026-08-08 — sdd-design COMPLETION (design-approved)
+
+- Phase 0 Recon: `recon.md` (services: `xstockstrat-ui`; key reuse patterns: post-119
+  plain-function-component/`data-slot` shape for all 8 new primitives, `button.tsx`/`badge.tsx`'s
+  app-specific `cva` variant convention).
+- Phase 1 Grilling: **4 rounds** (full mode, user-directed to run 3 and 4 beyond the mandated
+  minimum of 2). Chosen approach: four ordering tiers (adopt-existing warm-up → per-primitive
+  add+lowest-risk-wire interleaved → remaining no-e2e-risk sites → confirmed e2e-risk sites via
+  mandatory red-before-green two-step), all 27 FR-cited call-site occurrences now explicitly
+  tiered. Rejected: batching all 8 primitives before any call-site validation (F-09 rework risk);
+  single-step component-swap+e2e-update (no red-before-green checkpoint); a bare-`Alert`
+  replacement of `CardNotice.tsx`'s wrapper (visual-chrome scope creep).
+  - Rounds 1-2: established the tier structure, fixed a scope gap (FR-12's primitive range
+    omitted FR-5 Checkbox) and a stale fallback-authoring recipe in `product-spec.md`.
+  - Round 3 (user-requested): closed two concrete, non-cosmetic bugs — `AlertDialogAction`'s
+    default auto-close racing `accountShared.tsx`'s async `handleRemove` (needs
+    `event.preventDefault()`); `CardNotice.tsx`'s Alert migration silently dropping
+    `role="alert"` on its `error` tone (needs an explicit `role` prop, independent of the
+    Card/CardContent chrome decision).
+  - Round 4 (user-requested): closed a completeness gap — 3 of the 27 FR-cited occurrences
+    (`CardNotice.tsx`, both `SectionRenderer.tsx` sites) were discussed in the design's prose but
+    never placed in a tier, traced back to `recon.md`'s own risk sweep never naming them either.
+    Also corrected the "five tiers" framing (item 5 was a cross-cutting note) and widened the
+    Toggle Group ARIA-role verification to both its consumers, not just one.
+- Constitution rules touched: C-01, C-10(a), C-14, DRY guard rail, F-09, P-06, P-03. Floor
+  breaches: none in any round.
+- Status: `spec-ready` → `design-approved`. Approved by user via `AskUserQuestion` after round 4.
+- Next: `/sdd-spec shadcn-migration-high-confidence`.
