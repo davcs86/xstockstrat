@@ -347,7 +347,7 @@ cd services/xstockstrat-ui && pnpm test:unit -- toggle-group.test.ts && pnpm tes
 
 ### Step 10 — test: screener/page.tsx Toggle Group swap — red
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/screener/page.tsx` — modify
@@ -375,7 +375,7 @@ Record actual pass/fail in `context.md`.
 
 ### Step 11 — test: screener/page.tsx Toggle Group swap — green
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/screener.spec.ts` — modify

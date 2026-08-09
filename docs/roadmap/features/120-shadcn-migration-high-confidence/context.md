@@ -291,3 +291,12 @@
 - Verification: `pnpm test:unit` (71 passed, incl. `toggle-group.test.ts`) and `pnpm build` clean.
 - Files modified: `src/components/ui/toggle-group.tsx` (create), `src/components/ui/toggle.tsx`
   (create, app-specific variant added), `src/components/ui/toggle-group.test.ts` (create)
+
+### Steps 10-11 — screener/page.tsx Toggle Group swap — red/green [done]
+- Replaced the raw hard/rank two-button `div` with `<ToggleGroup type="single" variant="outline">`/
+  `<ToggleGroupItem>`, preserving `aria-label="hard filter"`/`"rank only"` verbatim.
+- **Red** (unmodified `screener.spec.ts`): 1 failed / 20 passed — `getByRole('button', { name:
+  'hard filter' })` timed out, confirming Step 9's `role="radio"` finding.
+- **Green**: updated the one call site to `getByRole('radio', { name: 'hard filter' })`. Re-run:
+  21/21 passed.
+- Files modified: `src/app/insights/screener/page.tsx`, `e2e/insights/screener.spec.ts`
