@@ -292,3 +292,13 @@ repeated per step).
 - Verification: `pnpm lint` clean.
 - Files modified: `src/components/ui/slider.tsx` (create), `src/components/ui/slider.test.ts`
   (create), `src/app/insights/screener/page.tsx`
+
+### Step 4 — e2e regression for FR-2 (Slider) [done]
+- **Real regression found and fixed** — see implementation-spec.md's Deviation Log Step 4 entry:
+  implicit `<label>` text leaked onto Radix's hidden `SliderBubbleInput`, colliding with the numeric
+  mirror `Input`'s `aria-label="weight"`; separately `Slider`'s `aria-label` never reached the
+  visible `Thumb`. Fixed both (wrapping `<label>` → `<div>` in `screener/page.tsx`; `ui/slider.tsx`
+  now forwards `aria-label` to `Thumb`).
+- Verification: `pnpm test:e2e -g "screener"` — 20 passed, 1 pre-existing unrelated flake
+  (polling-timer test, retried and passed).
+- Files modified: `src/components/ui/slider.tsx`, `src/app/insights/screener/page.tsx`

@@ -376,7 +376,7 @@ export default function ScreenerPage() {
                     <span className="font-mono text-foreground">
                       {c.metricName} {comparatorGlyph(c.op)} {c.threshold}
                     </span>
-                    <label className="flex items-center gap-2">
+                    <div className="flex items-center gap-2">
                       <span>weight</span>
                       <Slider
                         aria-label="weight slider"
@@ -397,7 +397,7 @@ export default function ScreenerPage() {
                         value={c.weight}
                         onChange={(e) => updateCriterion(i, { weight: Number(e.target.value) })}
                       />
-                    </label>
+                    </div>
                     <span data-testid="weight-share" className="tabular-nums">
                       {(shares[i] * 100).toFixed(0)}% of weight
                     </span>
