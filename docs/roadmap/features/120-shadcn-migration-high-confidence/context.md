@@ -504,3 +504,22 @@
   (Step 31's `transform: translateX` vs the old inline `width` — both render the same percentage
   fill for a given `value`).
 - Files modified: `src/components/insights/WatchlistReadiness.tsx`
+
+### Step 35 — Full-suite verification + config-ui/audit manual screenshot compare [done]
+- `pnpm lint`: clean (1 pre-existing warning in an untouched file, `insights/strategies/[id]/page.tsx`).
+- `pnpm build`: clean.
+- `pnpm test:unit`: 80/80 passed.
+- `pnpm test:e2e` (full suite, first run): **2 failed** (`backfills.spec.ts` — see Deviation Log
+  Step 35 entry), 1 flaky (`signal-detail.spec.ts`, unrelated pre-existing timing flake — investigated,
+  not touched), 252 passed.
+- Fixed the `backfills.spec.ts` regression (root cause Steps 29-30's `BreadcrumbPage` `role="link"`
+  colliding with the Section sub-nav's real link on `/insights/strategies`) by scoping the test's
+  3 `getByRole('link', ...)` calls to the Section nav landmark.
+- `pnpm test:e2e` (full suite, second run): **255/255 passed**, no flakes.
+- **AC-3 greps** (no independent copies remain outside each primitive's own implementation):
+  `grep -rn "animate-pulse" src/app/insights/page.tsx src/app/auth/login/page.tsx` → no matches.
+  `grep -rn "overflow-hidden rounded-full bg-muted" src/components/insights/{SignalReadiness,WatchlistReadiness}.tsx src/components/mobile/SectionRenderer.tsx` → no matches.
+- **AC-6 manual screenshot compare** (`config-ui/audit/page.tsx`, no e2e spec exists): captured via
+  a throwaway Playwright spec (deleted after use) — page renders cleanly, breadcrumb reads
+  "← namespaces › Audit Log" matching the pre-migration structure, no visible layout/style
+  regression.

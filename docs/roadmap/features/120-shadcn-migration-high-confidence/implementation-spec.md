@@ -1053,7 +1053,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "watchlists"
 
 ### Step 35 — test: Full-suite verification + config-ui/audit manual screenshot compare
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**: none (verification-only step; no source changes)
 
@@ -1128,3 +1128,18 @@ fixed now (user confirmed via blocker `AskUserQuestion`, choosing to relabel the
 Breadcrumbs rather than loosen the test) — gave both page-level `Breadcrumb` instances an explicit,
 non-colliding `aria-label` ("Namespace path", "Audit log path"); re-ran both `nav-reachability`
 (2/2) and `config-ui` (49/49) green.
+
+**Step 35 (root cause: Steps 29-30)** — the full e2e suite surfaced a second `Breadcrumb`-role
+collision Steps 29-30's own targeted `-g "nav-reachability"` run didn't reach: `BreadcrumbPage`
+renders `role="link"` for the current-page crumb (shadcn's a11y pattern), and on `/insights/strategies`
+the crumb's label ("Strategies") duplicates the accessible name of the real, working sub-nav Link
+in `PlatformHeader.tsx`'s Row 2 — `backfills.spec.ts`'s unscoped `getByRole('link', { name:
+'Strategies' })` resolved 2 elements (2 failed tests). **Disposition**: fixed now (user confirmed
+via blocker `AskUserQuestion`) — scoped `backfills.spec.ts`'s 3 affected `getByRole('link', ...)`
+calls to the `Section` sub-nav landmark (`page.getByRole('navigation', { name: 'Section'
+}).getByRole('link', ...)`) rather than touching the primitive or `PlatformHeader.tsx`; re-ran
+`Backfills page` (7/7) then the full suite (255/255) green. A separate `signal-detail.spec.ts`
+flake (duplicate "Why this fired" heading, retried and passed on the first full-suite run,
+absent on the second) was investigated — the text appears exactly once in
+`SignalReadiness.tsx`'s source, so it is a pre-existing timing flake unrelated to this feature's
+changes; not touched, per the sequential-mode guidance to report known flakes rather than churn.
