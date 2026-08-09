@@ -12,10 +12,10 @@ import {
   buildConcentrationFlag,
   type QueueLike,
 } from '@/lib/copilot';
-import { cn } from '../ui/utils';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
+import { Alert, AlertTitle, AlertDescription } from '../ui/alert';
 
 // The browser supplies a copilot-prefixed stream key; the BFF rewrites it to the per-user
 // thread server-side (the client never learns the user id). Any copilot: value works.
@@ -148,21 +148,16 @@ export function CopilotRail() {
         </section>
 
         {flag && (
-          <section
-            className={cn(
-              'rounded-md border p-3',
-              flag.level === 'watch' ? 'border-yellow-500/40 bg-yellow-500/5' : 'bg-background',
-            )}
+          <Alert
+            variant={flag.level === 'watch' ? 'warning' : 'default'}
             data-testid="copilot-concentration"
           >
-            <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {flag.level === 'watch' && (
-                <Warning weight="fill" className="h-3.5 w-3.5 text-yellow-400" />
-              )}
+            <AlertTitle>
+              {flag.level === 'watch' && <Warning weight="fill" className="h-3.5 w-3.5" />}
               Concentration
-            </p>
-            <p className="text-sm">{flag.text}</p>
-          </section>
+            </AlertTitle>
+            <AlertDescription>{flag.text}</AlertDescription>
+          </Alert>
         )}
 
         <section>

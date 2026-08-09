@@ -658,7 +658,7 @@ cd services/xstockstrat-ui && pnpm build && pnpm test:e2e -g "mobile"
 
 ### Step 21 — test: CopilotRail.tsx Alert swap — red
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/copilot/CopilotRail.tsx` — modify
@@ -687,7 +687,7 @@ Record actual pass/fail in `context.md` — even if it passes unmodified, the ru
 
 ### Step 22 — test: CopilotRail.tsx Alert swap — green (confirm or fix)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/copilot.spec.ts` — modify only if Step 21 recorded a failure

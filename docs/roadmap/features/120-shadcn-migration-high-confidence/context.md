@@ -384,3 +384,14 @@
   original non-warn fallback.
 - Verification: `pnpm build` clean; `pnpm test:e2e -g "mobile"` (18 passed).
 - Files modified: `src/components/mobile/SectionRenderer.tsx`
+
+### Steps 21-22 — CopilotRail.tsx Alert swap — red/green [done]
+- Replaced the `<section>` with `<Alert variant={watch ? 'warning' : 'default'}
+  data-testid="copilot-concentration">`/`<AlertTitle>`/`<AlertDescription>`, preserving the
+  `data-testid` verbatim. Removed the now-unused `cn` import (this step's own edit made it
+  unused — in-scope per HARD CONSTRAINTS' own-lines lint exception).
+- **Red** (unmodified `copilot.spec.ts`): 4/4 passed — the CLI-generated `Alert` root spreads
+  `...props`, so `data-testid` forwards through as expected. Recorded per design.md's
+  mandatory-even-when-expected-to-pass instruction (P-06).
+- **Green**: no spec change needed (Step 22 is the recorded confirmation, not a no-op skip).
+- Files modified: `src/components/copilot/CopilotRail.tsx`
