@@ -87,7 +87,7 @@ whole-feature verification gate and must run last, after every other step (1–2
 
 ### Step 1 — service: Add `ui/switch.tsx` primitive and swap the config-ui sources "Active" checkbox (FR-1)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/switch.tsx` — create

@@ -16,6 +16,7 @@
 | 2026-08-08 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. **Caveat**: no `Task`/`AskUserQuestion` tools were available this session — the debate and the FR-13 keep-vs-replace call were self-run by one agent and not gated through an interactive user prompt. Needs explicit human/orchestrator re-affirmation (see design.md § Process Note and Open Risks). |
 | 2026-08-08 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 17 steps, covering only tranche 1 (FR-1/FR-2/FR-3/FR-10/FR-11/FR-12/FR-13 — no cross-feature dependency). FR-4–FR-9 deliberately left unspecced (F-04 — their target primitives don't exist on `main-dev` yet); re-run `/sdd-spec` once `120-shadcn-migration-high-confidence` merges. |
 | 2026-08-09 | `implementation-ready` (unchanged) | /sdd-execute sequential | Tranche 2 (FR-4–FR-9, Steps 22-37) spec'd against the stacked `120` branch per explicit user direction, ahead of `120`'s actual merge to `main-dev` — see implementation-spec.md's Tranche 2 section |
+| 2026-08-09 | `implementation-ready` → `in-progress` | /sdd-execute sequential | Step 1 (Switch adoption) landed |
 
 ---
 

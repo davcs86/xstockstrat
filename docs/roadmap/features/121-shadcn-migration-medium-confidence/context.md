@@ -265,3 +265,17 @@ they are a fully-reasoned recommendation, not a confirmed one.
   pair per P-06's mandatory-even-when-expected-to-pass rule; FR-7/FR-8/FR-9 have no e2e-risk.
 - No status change to `feature.md` (still `implementation-ready` — this is a spec amendment, not a
   lifecycle transition; execution starts fresh against all 37 steps next).
+
+## Session 2026-08-09 — sdd-execute sequential (execution)
+
+Verification fallback carried over from feature 120: `CI=1 E2E_PREBUILT=1 NEXT_DISABLE_STANDALONE=1
+PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium` for all e2e runs (logged once, not
+repeated per step).
+
+### Step 1 — Add ui/switch.tsx primitive and swap config-ui sources "Active" checkbox (FR-1) [done]
+- `npx shadcn@latest add switch` (did not touch `button.tsx`). No app-specific variant.
+- Swapped the raw checkbox for `<Switch checked={form.active} onCheckedChange={(v) =>
+  setField('active', v)} />`, same `id`/`htmlFor` pairing.
+- Verification: `pnpm lint` clean (1 pre-existing unrelated warning).
+- Files modified: `src/components/ui/switch.tsx` (create), `src/components/ui/switch.test.ts`
+  (create), `src/app/config-ui/sources/page.tsx`
