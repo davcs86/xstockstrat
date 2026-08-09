@@ -470,3 +470,17 @@
   instruction.
 - **Green**: no spec change needed.
 - Files modified: `src/components/shared/PlatformHeader.tsx`
+
+### Step 31 — Add ui/progress.tsx primitive + buy/paper/sell/muted variant + test (FR-9, FR-12) [done]
+- `npx shadcn@latest add progress` — the CLI-generated file has **no `cva()`/variant system at
+  all**, just a plain component; added `progressIndicatorVariants` (`cva`) myself, applied to the
+  `Indicator` sub-part, promoting `WatchlistReadiness.tsx`'s `barClass(r)` firing-state taxonomy
+  (buy=firing, paper=partially-passing, sell=not-passing, muted=no-data) into the shared variant.
+- **Fill-mechanism finding**: the primitive drives the fill via `Indicator`'s inline `style={{
+  transform: translateX(-${100-value}%) }}`, **not** this codebase's current inline `style={{
+  width }}` — confirmed by reading the generated file. Consumers pass `value` (0-100), unchanged
+  from the current `Math.round(conviction * 100)` call sites; the primitive's own transform math
+  handles the visual fill, no caller-side change needed beyond the prop rename.
+- Verification: `pnpm test:unit` (80 passed) and `pnpm build` clean.
+- Files modified: `src/components/ui/progress.tsx` (create), `src/components/ui/progress.test.ts`
+  (create)

@@ -937,7 +937,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "nav-reachability"
 
 ### Step 31 — service: Add ui/progress.tsx primitive + buy/paper/sell/muted variant + test (FR-9, FR-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/progress.tsx` — create
