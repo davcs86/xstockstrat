@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { CaretRight, Warning } from '@phosphor-icons/react';
 import { EnumBadge } from '@/lib/opportunityShared';
 import { cn } from '../ui/utils';
+import { Alert, AlertDescription } from '../ui/alert';
 import type { Section } from './sections';
 
 // Every interactive row is at least 44px tall (FR-16 tap-target floor).
@@ -109,17 +110,10 @@ function SectionItem({ section: s }: { section: Section }) {
 
     case 'note':
       return (
-        <div
-          className={cn(
-            'flex items-start gap-2 rounded-md border p-3 text-sm',
-            s.tone === 'warn' ? 'border-yellow-500/40 bg-yellow-500/5' : 'bg-card',
-          )}
-        >
-          {s.tone === 'warn' && (
-            <Warning weight="fill" className="mt-0.5 h-4 w-4 shrink-0 text-yellow-400" />
-          )}
-          <span>{s.text}</span>
-        </div>
+        <Alert variant={s.tone === 'warn' ? 'warning' : 'default'} className="text-sm">
+          {s.tone === 'warn' && <Warning weight="fill" className="h-4 w-4" />}
+          <AlertDescription>{s.text}</AlertDescription>
+        </Alert>
       );
 
     case 'action':

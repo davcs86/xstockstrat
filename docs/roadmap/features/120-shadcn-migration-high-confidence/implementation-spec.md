@@ -631,7 +631,7 @@ Confirm none of the 4 consumers' e2e coverage breaks (OrderBook, PortfolioPanel,
 
 ### Step 20 — service: Wire Alert → SectionRenderer.tsx 'note' section kind (remaining no-e2e-risk)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/mobile/SectionRenderer.tsx` — modify

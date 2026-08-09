@@ -376,3 +376,11 @@
 - Verification: `pnpm build` clean; `pnpm test:e2e -g "portfolio"` (12 passed), `-g "orders"`
   (14 passed) — covers `OrderBook.tsx`, `PortfolioPanel.tsx`, trader/portfolio page consumers.
 - Files modified: `src/components/shared/CardNotice.tsx`
+
+### Step 20 — Wire Alert → SectionRenderer.tsx 'note' section kind [done]
+- Replaced the raw `<div>` with `<Alert variant={warn ? 'warning' : 'default'}>`/
+  `<AlertDescription>`, closing the second half of the `CopilotRail.tsx`/`SectionRenderer.tsx`
+  duplicated tone (design.md round-2 DRY finding); `default` variant's `bg-card` matches the
+  original non-warn fallback.
+- Verification: `pnpm build` clean; `pnpm test:e2e -g "mobile"` (18 passed).
+- Files modified: `src/components/mobile/SectionRenderer.tsx`
