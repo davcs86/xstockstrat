@@ -267,7 +267,7 @@ pnpm build # confirms the file type-checks cleanly against the installed rechart
 
 ### Step 4 — service: FR-3 migrate `EquityCurveChart.tsx` onto `ui/chart.tsx`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/EquityCurveChart.tsx` — modify

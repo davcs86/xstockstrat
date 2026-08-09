@@ -479,3 +479,36 @@
   manifest, no TS errors — confirms the file type-checks cleanly against the installed recharts v3.
 - Files modified: `src/components/ui/chart.tsx` (new), `package.json` (recharts constraint restored
   to `^3.10.1` after the CLI's transient reset)
+
+### Step 4 — FR-3 migrate `EquityCurveChart.tsx` onto `ui/chart.tsx` [done]
+- Captured red-before-green baseline (P-06): ran `e2e/insights/backtest-coverage.spec.ts` against the
+  pre-migration tree — **11 passed**.
+- Replaced `ResponsiveContainer`+`ComposedChart` wrapper with `ChartContainer` (config = one entry per
+  `series[i].symbol`, `color: LINE_COLORS[i % LINE_COLORS.length]` — same palette, unchanged); used
+  `className="aspect-auto h-[260px] w-full"` to override `ChartContainer`'s default `aspect-video`
+  (tailwind-merge dedups the conflicting `aspect-*` utility) and reproduce the original fixed
+  `height={260}` sizing.
+- **`CurveTooltip` per Instruction 2's fallback clause**: `ChartTooltipContent`'s default rendering
+  cannot express the trade-marker branch's full custom payload layout (entry/exit/qty/pnl) — kept a
+  thin wrapper that renders the marker branch exactly as before (verbatim JSX, `data-testid`s
+  unchanged) and delegates only the plain-curve branch to `ChartTooltipContent`, via its
+  `labelFormatter` (reproduces the date row) and `formatter` (reproduces the `{symbol}: {fmtY(value)}`
+  colored-by-series row, since `ChartTooltipContent`'s default per-item render has no equivalent
+  dollar/percent formatting and `formatter` fully replaces its indicator+label+value markup for that
+  row — matching original behavior, which also had no indicator dot).
+- **Fix during verification**: the initial `payload={payload as Parameters<typeof
+  ChartTooltipContent>[0]['payload']}` cast failed `pnpm build`'s type-check —
+  `TooltipEntry[]` doesn't sufficiently overlap with Recharts' real `Payload[]` type (missing
+  `graphicalItemId`). Fixed per TS's own suggested remedy: cast through `unknown` first
+  (`payload as unknown as Parameters<...>['payload']`) — this is a type-level bridge between two
+  different tooltip-payload type surfaces (our loose custom shape vs. the library's precise generic),
+  not a runtime behavior change; `next lint` alone did not catch this (only the full `pnpm build`
+  type-check did), confirming the step's own two-command verification sequence is both needed.
+- Kept the `Scatter` trade-marker overlay as direct `recharts` usage inside `ChartContainer`, per
+  Instruction 4 — `ui/chart.tsx` is a composition layer, not a replacement for `recharts`' own API.
+- Verification: `pnpm lint` — clean. `NEXT_DISABLE_STANDALONE=1 pnpm build` — succeeded (after the
+  cast fix), full route manifest. `pnpm test:e2e -- e2e/insights/backtest-coverage.spec.ts` —
+  **11 passed** (same count as baseline, no regression) — including "opening a past run renders
+  persisted metrics, time-axis curve, and trade markers," the test most directly exercising the
+  tooltip/marker rendering this step touched.
+- Files modified: `src/components/insights/EquityCurveChart.tsx`
