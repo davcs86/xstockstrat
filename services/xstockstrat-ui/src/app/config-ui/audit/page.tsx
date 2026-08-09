@@ -26,8 +26,9 @@ export default function AuditPage() {
 
   return (
     <div className="space-y-4">
-      {/* Breadcrumb */}
-      <Breadcrumb>
+      {/* Breadcrumb — aria-label deliberately distinct from PlatformHeader's own "Breadcrumb"
+          landmark, see NamespaceEditor.tsx's identical note. */}
+      <Breadcrumb aria-label="Audit log path">
         <BreadcrumbList>
           <BreadcrumbItem>
             <BreadcrumbLink href="/config-ui">← namespaces</BreadcrumbLink>

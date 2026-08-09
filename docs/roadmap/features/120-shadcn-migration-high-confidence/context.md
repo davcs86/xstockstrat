@@ -442,3 +442,19 @@
 - Verification: `pnpm test:unit` (76 passed) and `pnpm build` clean.
 - Files modified: `src/components/ui/accordion.tsx` (create), `src/components/ui/accordion.test.ts`
   (create)
+
+### Step 28 — Wire Accordion → PlatformHeader.tsx mobile nav groups [done]
+- Replaced the `expanded`-state-driven `NAV_GROUPS.map` button/chevron block with `<Accordion
+  type="single" collapsible value={expanded} onValueChange={(v) => setExpanded(v ?? '')}>`.
+  Dropped the hand-rolled `CaretDown` entirely (Step 27's finding: `AccordionTrigger` renders its
+  own chevron) — removed the now-unused `CaretDown` import.
+- **Deviation surfaced (root cause Step 26, caught here)**: `nav-reachability.spec.ts` failed —
+  `getByLabel('Breadcrumb')` resolved 2 elements on `/config-ui/audit` and `/config-ui/<ns>`
+  (PlatformHeader's own span + Step 26's new page-level `Breadcrumb`, colliding case-insensitively).
+  Raised as a blocker; user chose to relabel the page-level Breadcrumbs (`aria-label="Namespace
+  path"` / `"Audit log path"`) rather than loosen the test. Re-ran green. Full detail in the
+  Deviation Log.
+- Verification: `pnpm build` clean; `pnpm test:e2e -g "nav-reachability"` (2 passed, after fix),
+  `-g "config-ui"` (49 passed, confirming the relabel didn't break anything else).
+- Files modified: `src/components/shared/PlatformHeader.tsx`,
+  `src/app/config-ui/[namespace]/NamespaceEditor.tsx`, `src/app/config-ui/audit/page.tsx`

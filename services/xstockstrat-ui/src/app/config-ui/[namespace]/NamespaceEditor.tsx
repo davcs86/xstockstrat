@@ -130,7 +130,11 @@ export function NamespaceEditor({ namespace, env, mode, nativeEnv }: Props) {
     <div className="space-y-4">
       {/* Breadcrumb */}
       <div className="flex flex-wrap items-center gap-2">
-        <Breadcrumb>
+        {/* aria-label deliberately distinct from PlatformHeader's own "Breadcrumb" landmark —
+            Playwright's getByLabel substring-matches case-insensitively, and a duplicate
+            "breadcrumb" label here would make nav-reachability.spec.ts's header lookup
+            ambiguous on this route. */}
+        <Breadcrumb aria-label="Namespace path">
           <BreadcrumbList>
             <BreadcrumbItem>
               <BreadcrumbLink href={`/config-ui?env=${env}&mode=${mode}`}>

@@ -854,7 +854,7 @@ cd services/xstockstrat-ui && pnpm test:unit -- accordion.test.ts && pnpm test:u
 
 ### Step 28 — service: Wire Accordion → PlatformHeader.tsx mobile nav groups
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx` — modify
@@ -1115,3 +1115,16 @@ against it — a missed evidence gap, not caught until Step 6's own e2e run. **D
 now (user confirmed via blocker `AskUserQuestion`) — updated the 3 assertions to
 `getByRole('tab', ...)` matching Radix `TabsTrigger`'s actual rendered role; re-ran green
 (11/11 passed).
+
+**Step 28 (root cause: Step 26)** — Step 26's `Breadcrumb` wiring in `NamespaceEditor.tsx`/
+`config-ui/audit/page.tsx` used the primitive's default `aria-label="breadcrumb"` (lowercase),
+which collides with `PlatformHeader.tsx`'s own `aria-label="Breadcrumb"` span under Playwright's
+case-insensitive substring `getByLabel` match — `nav-reachability.spec.ts` resolved 2 elements on
+those routes instead of 1. Not caught by Step 26's own `-g "config-ui"` verification (that spec
+lives outside the `config-ui/` e2e folder); surfaced only when Step 28's `-g "nav-reachability"`
+verification walked those routes. This is the ambiguity design.md flagged as "likely moot" for the
+Step 29/30 pair — it was not moot, and struck one step earlier than anticipated. **Disposition**:
+fixed now (user confirmed via blocker `AskUserQuestion`, choosing to relabel the page-level
+Breadcrumbs rather than loosen the test) — gave both page-level `Breadcrumb` instances an explicit,
+non-colliding `aria-label` ("Namespace path", "Audit log path"); re-ran both `nav-reachability`
+(2/2) and `config-ui` (49/49) green.

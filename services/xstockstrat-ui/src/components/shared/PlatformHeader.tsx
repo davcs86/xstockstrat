@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { List, CaretDown, Lightning, Sparkle } from '@phosphor-icons/react';
+import { List, Lightning, Sparkle } from '@phosphor-icons/react';
 import { cn } from '../ui/utils';
 import { Button } from '../ui/button';
 import { ChromeProvider, useChrome } from '@/context/ChromeContext';
@@ -19,6 +19,7 @@ import {
   SheetTrigger,
 } from '../ui/sheet';
 import { Separator } from '../ui/separator';
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '../ui/accordion';
 
 // Physical routes are UNCHANGED (/trader | /insights | /config-ui | /accounts); the
 // Decide / Discover / Engine / Book grouping is a presentation layer over them (feature 083,
@@ -206,30 +207,27 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
                   xstockstrat
                 </SheetTitle>
               </SheetHeader>
-              <nav aria-label="Mobile" className="mt-6 flex flex-col gap-1">
-                {NAV_GROUPS.map((group) => {
-                  const isOpen = expanded === group.key;
-                  return (
-                    <div key={group.key} className="flex flex-col">
-                      <button
-                        type="button"
-                        aria-expanded={isOpen}
-                        onClick={() => setExpanded((prev) => (prev === group.key ? '' : group.key))}
+              <nav aria-label="Mobile" className="mt-6">
+                <Accordion
+                  type="single"
+                  collapsible
+                  value={expanded}
+                  onValueChange={(v) => setExpanded(v ?? '')}
+                >
+                  {NAV_GROUPS.map((group) => (
+                    <AccordionItem key={group.key} value={group.key}>
+                      <AccordionTrigger
                         className={cn(
-                          'flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-colors text-left',
                           group.key === activeGroup.key
                             ? 'bg-accent text-foreground font-medium'
-                            : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
+                            : 'text-muted-foreground',
                         )}
                       >
                         {group.icon}
                         <span className="flex-1">{group.label}</span>
-                        <CaretDown
-                          className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')}
-                        />
-                      </button>
-                      {isOpen && (
-                        <div className="ml-4 mt-1 flex flex-col gap-1 border-l border-border pl-3">
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        <div className="flex flex-col gap-1">
                           {visibleItems(group.items).map((sub) => (
                             <SheetClose asChild key={sub.href}>
                               <Link
@@ -246,10 +244,10 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
                             </SheetClose>
                           ))}
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
               </nav>
             </SheetContent>
           </Sheet>
