@@ -101,8 +101,8 @@ test.describe('OrderForm', () => {
   });
 
   test('BUY and SELL side buttons are present', async ({ page }) => {
-    await expect(page.getByRole('button', { name: 'BUY', exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'SELL', exact: true })).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'BUY', exact: true })).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'SELL', exact: true })).toBeVisible();
   });
 
   test('clientOrderId nonce is reused on a failed resubmit, rotated after success', async ({

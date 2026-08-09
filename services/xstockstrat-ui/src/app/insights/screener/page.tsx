@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/components/ui/utils';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
   useScreenSymbols,
   useScreenSymbolsPoll,
@@ -346,36 +347,19 @@ export default function ScreenerPage() {
                       onChange={(e) => updateCriterion(i, { threshold: Number(e.target.value) })}
                     />
                     {/* Hard/rank segmented toggle (FR-2) → hardFilter. */}
-                    <div className="inline-flex overflow-hidden rounded-md border border-border">
-                      <button
-                        type="button"
-                        aria-label="hard filter"
-                        aria-pressed={c.hardFilter}
-                        className={cn(
-                          'px-2.5 py-1.5 text-xs',
-                          c.hardFilter
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-background text-muted-foreground',
-                        )}
-                        onClick={() => updateCriterion(i, { hardFilter: true })}
-                      >
+                    <ToggleGroup
+                      type="single"
+                      variant="outline"
+                      value={c.hardFilter ? 'hard' : 'rank'}
+                      onValueChange={(v) => v && updateCriterion(i, { hardFilter: v === 'hard' })}
+                    >
+                      <ToggleGroupItem value="hard" aria-label="hard filter">
                         hard
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="rank only"
-                        aria-pressed={!c.hardFilter}
-                        className={cn(
-                          'px-2.5 py-1.5 text-xs',
-                          !c.hardFilter
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-background text-muted-foreground',
-                        )}
-                        onClick={() => updateCriterion(i, { hardFilter: false })}
-                      >
+                      </ToggleGroupItem>
+                      <ToggleGroupItem value="rank" aria-label="rank only">
                         rank
-                      </button>
-                    </div>
+                      </ToggleGroupItem>
+                    </ToggleGroup>
                     <Button
                       variant="destructive"
                       size="sm"

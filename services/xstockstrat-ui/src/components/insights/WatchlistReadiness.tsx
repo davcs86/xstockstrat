@@ -3,6 +3,7 @@ import { useQueries } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { cn } from '@/components/ui/utils';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import {
   Select,
   SelectContent,
@@ -23,11 +24,11 @@ type StrategyDef = { strategyId: string; displayName?: string; liveEnabled: bool
 const hasData = (r: Readiness) => r.totalConditions > 0;
 
 /** Green = firing (all pass), paper = partway, sell = none pass, muted = no data (feature 083/097). */
-function barClass(r: Readiness): string {
-  if (!hasData(r)) return 'bg-muted-foreground/40';
-  if (isFiring(r)) return 'bg-buy';
-  if (r.passingConditions > 0) return 'bg-paper';
-  return 'bg-sell';
+function barVariant(r: Readiness): 'buy' | 'paper' | 'sell' | 'muted' {
+  if (!hasData(r)) return 'muted';
+  if (isFiring(r)) return 'buy';
+  if (r.passingConditions > 0) return 'paper';
+  return 'sell';
 }
 
 /** The first not-yet-passing condition — what's holding the signal back. */
@@ -199,12 +200,11 @@ export function WatchlistReadiness({
               >
                 <span className="w-14 font-mono font-semibold">{r.symbol}</span>
                 <div className="flex items-center gap-2">
-                  <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className={cn('h-full', barClass(r))}
-                      style={{ width: `${Math.round(r.conviction * 100)}%` }}
-                    />
-                  </div>
+                  <Progress
+                    value={Math.round(r.conviction * 100)}
+                    className="h-1.5 w-20"
+                    variant={barVariant(r)}
+                  />
                   <span
                     className={cn(
                       'w-16 font-mono tabular-nums',

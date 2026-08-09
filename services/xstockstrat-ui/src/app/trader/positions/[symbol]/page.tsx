@@ -9,6 +9,7 @@ import { usePosition, usePortfolio } from '@/hooks/usePortfolio';
 import { useOrders } from '@/hooks/useOrders';
 import { useCandlestickChart } from '@/hooks/useCandlestickChart';
 import { type Timeframe, TIMEFRAMES, TIMEFRAME_ENUM, mapBars } from '@/lib/chart';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { marketDataClient } from '@/lib/browserClients/marketDataClient';
 import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
 import { openR, fmtR, sideLabel } from '@/lib/positionRisk';
@@ -299,21 +300,15 @@ function PositionBody({
                     {hasStop ? ` · stop ${fmtUsd(position.stopPrice)}` : ''} · last{' '}
                     {fmtUsd(position.currentPrice)}
                   </span>
-                  <div className="flex gap-1">
-                    {TIMEFRAMES.map(({ value, label }) => (
-                      <button
-                        key={value}
-                        onClick={() => onTimeframe(value)}
-                        className={`min-h-[32px] rounded px-2.5 py-1 font-mono text-xs transition-colors ${
-                          timeframe === value
-                            ? 'bg-primary text-primary-foreground'
-                            : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
+                  <Tabs value={timeframe} onValueChange={(v) => onTimeframe(v as Timeframe)}>
+                    <TabsList>
+                      {TIMEFRAMES.map(({ value, label }) => (
+                        <TabsTrigger key={value} value={value}>
+                          {label}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </Tabs>
                 </div>
               </div>
             </CardHeader>

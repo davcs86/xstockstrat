@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 import {
   Select,
   SelectContent,
@@ -70,12 +71,11 @@ export function SignalReadiness({ symbol }: { symbol: string }) {
         ) : (
           <div className="space-y-3">
             <div className="flex items-center gap-3">
-              <div className="h-2 w-40 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full bg-primary"
-                  style={{ width: `${Math.round(readiness.conviction * 100)}%` }}
-                />
-              </div>
+              <Progress
+                value={Math.round(readiness.conviction * 100)}
+                className="h-2 w-40"
+                variant="default"
+              />
               <span className="font-mono tabular-nums text-sm">
                 {readiness.passingConditions}/{readiness.totalConditions} conditions
               </span>

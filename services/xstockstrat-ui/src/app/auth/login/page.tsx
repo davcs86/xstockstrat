@@ -2,6 +2,7 @@
 import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { AuthCardShell, CredentialsForm } from '@/components/auth/AuthForm';
+import { Skeleton } from '@/components/ui/skeleton';
 
 // FR-3: only allow redirects back into one of the known basePaths.
 function safeRedirect(target: string | null): string {
@@ -34,9 +35,9 @@ function LoginSkeleton() {
   return (
     <AuthCardShell title="xstockstrat Platform">
       <div className="space-y-4">
-        <div className="h-10 rounded-md bg-secondary animate-pulse" />
-        <div className="h-10 rounded-md bg-secondary animate-pulse" />
-        <div className="h-10 rounded-md bg-secondary/80 animate-pulse" />
+        <Skeleton className="h-10 bg-secondary" />
+        <Skeleton className="h-10 bg-secondary" />
+        <Skeleton className="h-10 bg-secondary/80" />
       </div>
     </AuthCardShell>
   );
