@@ -129,3 +129,48 @@
   breaches: none in any round.
 - Status: `spec-ready` → `design-approved`. Approved by user via `AskUserQuestion` after round 4.
 - Next: `/sdd-spec shadcn-migration-high-confidence`.
+
+## Session 2026-08-09 — sdd-spec
+
+- Generated `implementation-spec.md` with **36 steps**. Status → `implementation-ready`.
+- All 27 FR-cited call sites re-verified directly against current `main-dev` (Read, not just
+  recon.md's citations) — every line range in product-spec.md FR-1 through FR-11 matched the actual
+  file content, including the FR-5 off-by-one (`FormulaWorkspace.tsx:278-285`) and the two
+  post-119 line-range corrections in FR-1/FR-6 (`ChartPanel.tsx`, `RuleEditor.tsx`). All 7 e2e spec
+  citations recon.md flagged as load-bearing (`strategy-authoring.spec.ts`, `screener.spec.ts`,
+  `orders.spec.ts`, `order-form.spec.ts`, `copilot.spec.ts`, `watchlists.spec.ts`,
+  `nav-reachability.spec.ts`) were independently re-read and confirmed to match recon.md's
+  line:content citations exactly.
+- Step structure follows design.md's four tiers converted to concrete numbered steps: Steps 1-3
+  (warm-up: Skeleton, Badge, Textarea), Steps 4-34 (8 new primitives in FR order — each add-step
+  bundles the primitive file + its FR-12 `<name>.test.ts` in one step, immediately followed by its
+  lowest-risk wire, then remaining no-e2e-risk wires, then any confirmed e2e-risk call site as a
+  mandatory two-step red/green pair per P-06), Step 35 (full-suite verification + the AC-6 manual
+  screenshot compare for `config-ui/audit/page.tsx`, which has no e2e spec), Step 36 (context.md
+  documentation of every red-before-green outcome, per AC-6).
+- Key sequencing decisions made at spec time (not individually pinned by design.md, so documented
+  here for traceability):
+  - Toggle Group's app-specific `buy`/`sell` variant lands with the primitive-add (Step 9), since
+    both its consumers are tier-4/e2e-risk with no interim low-risk wire — confirmed against
+    design.md's explicit "no interim wire in this tier" carve-out.
+  - Checkbox's two consumers (`FormulaWorkspace.tsx`, `ParameterEditor.tsx`) are both no-e2e-risk,
+    so they are wired together in one step (Step 24) rather than split into a "first wire" +
+    "remaining" pair — design.md's tier-3 text lists both together under "remaining," which reads
+    as both landing in the same no-e2e-risk pass.
+  - `PlatformHeader.tsx`'s FR-7 (Breadcrumb) and FR-8 (Accordion) are interleaved as Steps 25-30 in
+    the exact order design.md specifies: Breadcrumb add → Breadcrumb's no-e2e-risk wire
+    (`NamespaceEditor.tsx`, `config-ui/audit/page.tsx`) → Accordion add → Accordion's wire
+    (`PlatformHeader.tsx` mobile nav) → Breadcrumb's tier-4 pair (`PlatformHeader.tsx` desktop
+    breadcrumb) — Accordion's wire intentionally lands ahead of Breadcrumb's own tier-4 pair on the
+    same file, per design.md's explicit note that Accordion "ships... ahead of Breadcrumb's
+    two-step... since it needs no red/green round-trip."
+- Three items are deliberately left as **execute-time verification, not spec-time assertions**
+  (per P-03 — do not assert an unconfirmed fact): (1) Toggle Group's actual rendered ARIA role
+  (`role="button"` vs `"radio"`/`"radiogroup"`) — Step 9 instructs confirming this against the
+  CLI-generated file; (2) Breadcrumb's default `aria-label` case/forwarding on `PlatformHeader.tsx`
+  — Step 29's red run is the confirmation, not an assumption; (3) Progress's fill mechanism (inline
+  `style={{width}}` vs a Radix `Indicator` `transform`) — Step 31 instructs confirming this before
+  Steps 32-34 consume it.
+- No design/scope deviation from `design.md`/`product-spec.md` — this session only converted the
+  approved tiers into concrete, evidence-cited numbered steps.
+- Next: `/sdd-review shadcn-migration-high-confidence impl-spec`.
