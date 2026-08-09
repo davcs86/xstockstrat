@@ -91,3 +91,55 @@
   1-4 by priority/confidence; (4) "add 4" — the previously-proposed-optional category folded in as FR-9;
   (5) "reposition the breadcrumb from the subnav to the actual page layout" — a new, separately-verified
   FR-10, not from the audit.
+
+## Session 2026-08-09T19:52:31Z — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Criteria pass (spec-reviewer): PASS WITH WARNINGS, no Constitution Floor (F-*) breach.
+  - Finding A: FR-2's `insights/strategies/page.tsx` Deactivate site uses `window.confirm(...)`,
+    not an `AlertDialog` as stated — no `AlertDialog` import exists in that file. Only
+    `OrdersTable.tsx`'s Cancel action is genuinely `AlertDialog`-gated. Fix this citation in
+    `/sdd-design`/`/sdd-spec`.
+  - Finding B: FR-9's `authorized-apps/page.tsx` line citation is off by one — correct lines are
+    `174` (`text-green-600`) and `175` (`bg-green-600`), not `175,179` (179 is the *Unreachable*
+    branch's `bg-destructive`, unrelated).
+  - Finding C: FR-6's "14 places across 9 files" tally is inconsistent with the codebase — a fresh
+    grep found 14 occurrences across only **7** files, with `positions/[symbol]/page.tsx` at **6**
+    occurrences (lines 250, 261, 406, 452, 477, 498), not 5. Recount before `/sdd-spec` enumerates
+    call sites.
+  - Finding D: both "Known trap" ledger citations for the "matches the handoff" insights.md entry
+    should read **2026-08-06**, not 2026-08-08 (feature 083 attribution is correct, only the date
+    is wrong).
+  - Open Questions' 3 unresolved `- [ ]` items are consistent with this feature lineage's
+    established convention of deferring genuine design forks to `/sdd-design` — not a blocking
+    gap.
+- Overlap pass (feature-overlap): COLLISIONS FOUND against sibling shadcn-migration features.
+  **No FAIL-level overlap** (no identical config key) so this does not block the gate per Mode A's
+  severity table — but the collisions are substantive enough that `/sdd-design` MUST resolve them
+  before `/sdd-spec` runs, not just note them:
+  - **Confirmed against current main-dev code** (checked directly, not just the sibling specs):
+    121 (`implementation-ready`) and 123 (`implementation-ready`) have NOT yet executed — the raw
+    `<table>` in `screener/page.tsx:536` and `strategies/[id]/page.tsx:469`, the hand-rolled
+    `AlertStream.tsx` unread badge, the hand-rolled `StrategyWizard.tsx` step-indicator `<ol>`, and
+    the hand-rolled `opportunities/page.tsx` source-filter buttons are all still present exactly as
+    124's FRs describe.
+  - FR-5 (both raw `<table>` sites) duplicates 121's own FR-11 (near-identical line ranges, same
+    conversion). 124's premise that these "slipped past feature 121's Table consolidation" is
+    false — 121 already plans to fix them, it just hasn't executed yet.
+  - FR-7's `AlertStream.tsx` site and FR-8's `opportunities/page.tsx` `ToggleGroup` site likewise
+    duplicate 121's FR-6/one of its Badge-conversion FRs on the same lines.
+  - `StrategyWizard.tsx:159-178` step-indicator: FR-7's Badge-driven fix targets the **same lines**
+    123's FR-11 targets with an **incompatible target architecture** (Badge-driven vs. a
+    Questionnaire-based shell) — a genuine design conflict, not just a rebase risk.
+  - `OrdersTable.tsx` Cancel action and `PlatformHeader.tsx` breadcrumb (FR-2, FR-10) sit in
+    regions 120 (`code-completed`, already merged to main-dev per `e4dbc0f`) and 121 already
+    touch/plan to touch — sequencing risk, not a content conflict, since 120's part is already
+    merged.
+  - **Decision needed from `/sdd-design`'s recon+debate**: for each duplicated FR (FR-5's two
+    table sites, FR-7's `AlertStream.tsx` site, FR-8's `opportunities/page.tsx` site), either (a)
+    drop it from 124 and let 121 own it, re-adding only if 121 is abandoned/rescoped, or (b) keep
+    it in 124 and have 124 explicitly supersede/absorb that slice of 121's scope, with 121's own
+    spec trimmed to match. Do not implement both. For `StrategyWizard.tsx`, resolve the
+    Badge-driven vs. Questionnaire-shell fork directly against 123 before either spec locks in a
+    transformation. This is now the primary open question `/sdd-design`'s Phase 1 grilling must
+    settle — not a secondary risk note.

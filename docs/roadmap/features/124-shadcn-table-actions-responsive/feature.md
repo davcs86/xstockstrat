@@ -1,6 +1,6 @@
 # Feature: shadcn-table-actions-responsive
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/shadcn-table-actions-responsive`
 **Created**: 2026-08-09
 **Last Updated**: 2026-08-09
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-09 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-09 | `draft` → `spec-ready` | /sdd-review | Product spec approved (7 warnings; overlap collisions vs 120/121/123 noted, no blocking FAIL) |
 
 ---
 
@@ -40,4 +41,5 @@ page position rather than just the active nav group.
 
 ## Next Action
 
-`/sdd-review shadcn-table-actions-responsive product-spec` — AI review of product spec before running `/sdd-spec`.
+`/sdd-design shadcn-table-actions-responsive` — recon + design debate must resolve the overlap
+collisions against sibling features 120/121/123 (see context.md) before `/sdd-spec` runs.
