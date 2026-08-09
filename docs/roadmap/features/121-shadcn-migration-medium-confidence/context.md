@@ -164,6 +164,34 @@ they are a fully-reasoned recommendation, not a confirmed one.
     14 does not invent one; it passes `activeFilterCount={0}` so `FilterToolbar`'s `'trailing'`
     Clear-button placement stays unconditional, matching today's actual behavior exactly.
 
+## Session 2026-08-08 — user-directed design override (Round 3)
+
+- **Traceability backfill**: this entry documents the override conversation the subsequent
+  "implementation-spec.md amendment" session (below) referenced as already-settled ground truth in
+  `design.md`/`recon.md` but never itself logged here — added retroactively per this repo's
+  append-only session-log convention (`docs/roadmap/features/CLAUDE.md` § Key Rules #1) and a
+  round-4 cross-check audit (run against sibling feature `120`, then swept across all four
+  siblings) that caught the gap.
+- The prior `sdd-design` session (self-run, no `AskUserQuestion` tool available in that execution
+  environment) recommended **KEEP AS-IS** for FR-13 — flagged throughout `design.md`/`recon.md` as
+  provisional pending real user confirmation.
+- The orchestrating session (which does have `AskUserQuestion`) put this fork to the actual user
+  directly: "121 FR-13: replace PlatformHeader.tsx/BottomTabBar.tsx's hand-built nav with a Radix
+  Navigation Menu primitive, or keep as-is?" User's answer: **"Replace with Navigation Menu"** —
+  overriding the self-run recommendation.
+- Verified live (`WebFetch`, `https://ui.shadcn.com/r/styles/radix-rhea/navigation-menu.json` and
+  `https://ui.shadcn.com/docs/components/navigation-menu`) that `NavigationMenuLink` is usable
+  standalone inside `NavigationMenuItem` with no `Trigger`/`Content` dropdown pairing — confirming
+  the primitive fits this feature's flat, route-based nav shape.
+- `design.md` was rewritten with a `## Round 3 — user-directed override` section recording the
+  decision and the concrete migration design (which `PlatformHeader.tsx`/`BottomTabBar.tsx` regions
+  move, which stay — the mobile Sheet nav is out of scope); `recon.md` gained a Round 3 addendum
+  with the supporting PlatformHeader/BottomTabBar/e2e-selector evidence. `product-spec.md`'s FR-13
+  text was also corrected in this backfill session (it still read "Evaluate (not mandate)... arguably
+  fine as-is" — the pre-override framing — until now) to state the replace decision directly, and
+  `feature.md`'s Artifacts/Next Action sections had their stale "needs human re-affirmation" language
+  removed (caught by the same round-4 cross-check audit).
+
 ## Session 2026-08-08 — implementation-spec.md amendment for FR-13 (Round 3 override)
 
 - **Trigger**: `design.md` and `recon.md` were already updated in a prior session to record the

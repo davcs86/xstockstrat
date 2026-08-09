@@ -169,6 +169,45 @@
   merging Step 3 if `121` has landed changes to that function by then.
 - Feature status: `design-approved` → `implementation-ready`.
 
+## Session 2026-08-08 — user-directed design override (Round 3)
+
+- **Traceability backfill**: this entry documents the override conversation that the subsequent
+  "implementation-spec.md rewritten" session (below) referenced as already-settled ground truth in
+  `design.md`/`recon.md` but never itself logged here — added retroactively per this repo's
+  append-only session-log convention (`docs/roadmap/features/CLAUDE.md` § Key Rules #1) and the
+  round-4 cross-check audit that caught the gap on feature `120`'s sibling review.
+- The orchestrating session's earlier round-2 design synthesis (self-run, no `AskUserQuestion` tool
+  available in that execution environment) recommended declining `AuthForm.tsx` and
+  `EditCredentialsForm`, migrating only `AddAccountForm`, and adding `react-hook-form` alone (no
+  `zod`, no Form primitive) — flagged throughout `design.md`/`recon.md` as provisional pending real
+  user confirmation.
+- The orchestrating session (which does have `AskUserQuestion`) put this fork to the actual user
+  directly: "AuthForm.tsx and accountShared.tsx's two credential forms — adopt react-hook-form, and
+  if so where?" User's answer: **"Migrate all three call sites"** — overriding the narrower
+  recommendation.
+- During redesign, a factual correction surfaced independently: live `WebFetch` verification
+  (`https://ui.shadcn.com/docs/components/field`, `https://ui.shadcn.com/docs/forms/react-hook-form`)
+  found shadcn's current recommended form-building primitive is `ui/field.tsx`
+  (`Field`/`FieldLabel`/`FieldContent`/`FieldDescription`/`FieldError`/`FieldGroup`/etc.,
+  framework-agnostic), not the `ui/form.tsx`/`Form`/`FormField`/`FormItem`/`FormControl`/
+  `FormMessage`/`useFormContext` pattern the original product-spec.md named — that pattern is
+  shadcn's now-superseded convention. Also identified: 3 dependencies needed
+  (`react-hook-form`+`zod`+`@hookform/resolvers/zod`), not the 2 the product spec anticipated.
+  `design.md` was rewritten with a `## Round 3 — user-directed override` section recording both the
+  scope override and the primitive correction; `recon.md` gained a Round 3 addendum with the
+  supporting evidence.
+- **Correction to a claim in the subsequent session's own log**: the "implementation-spec.md
+  rewritten" session below states `product-spec.md`'s FR-4 text "is corrected in place... to match
+  this verified-current reality." That correction was **not actually made** at the time (caught by
+  the round-4 cross-check audit) — `product-spec.md` still named the stale `ui/form.tsx` primitive
+  until this backfill session applied the fix directly (see the same-date product-spec.md edit
+  below).
+- Applied directly in this session: corrected `product-spec.md`'s FR-2 (primitive name + resolution
+  note), FR-3 (resolution note), FR-4 (primitive name, dependency count, resolution note), Affected
+  Services (primitive name), and Open Question #1 (checked off, resolution recorded) to actually
+  match `design.md`'s Round 3 decision — closing the gap the earlier session's log had incorrectly
+  claimed was already closed.
+
 ## Session 2026-08-08 — implementation-spec.md rewritten for design.md's Round 3 override
 
 - **Trigger**: `design.md` and `recon.md` had already been finalized (in an earlier session) to

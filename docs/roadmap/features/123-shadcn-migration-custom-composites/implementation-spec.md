@@ -684,12 +684,18 @@ pnpm build
 - `recon.md` § Dependencies (updated 2026-08-08, Round 3) — the two-live-`WebFetch`-verified
   one-answer-per-`Item` evidence (`FormData.get`/`getAll`, `fieldset` structure, no multi-independent-
   `Input`-per-`Item` pattern) that drives the 4-sub-screen split.
-- `e2e/insights/strategy-authoring.spec.ts` (grepped this session) — `getByText('Step 1 — Identity')`
-  appears 7 times (`:55` in the shared `fillToReview` helper, plus `:194`, `:234`, `:262`, `:273`,
-  `:329`, `:341`, `:421`, `:433`, `:444` across the standalone tests) — all must resolve unchanged
-  (the outer `CardTitle` stays `Step {step} — {STEPS[step-1]}`, unconditional on the new inner
-  sub-step). Every Step-1 fill sequence (the `fillToReview` helper `:48-72`, plus the inline sequences
-  in the wizard-gates test `:186-227`, the server-error-jump test `:229-255`, the edit-prepopulation
+- `e2e/insights/strategy-authoring.spec.ts` (re-verified 2026-08-09 via direct grep, correcting an
+  earlier miscount of 7) — `getByText('Step 1 — Identity')` appears **12 times**: `:55` in the shared
+  `fillToReview` helper, plus `:194`, `:234`, `:262`, `:273`, `:329`, `:341`, `:352`, `:375`, `:421`,
+  `:433`, `:444` across the standalone tests — all must resolve unchanged (the outer `CardTitle`
+  stays `Step {step} — {STEPS[step-1]}`, unconditional on the new inner sub-step). Two of the
+  previously-uncited occurrences (`:352`, `:444` — "editing an unset strategy on an unrelated field")
+  today do only a single `next.click()` to leave Step 1 and must become a multi-click sequence like
+  the others once Step 1 is 4 sub-screens; Instruction #9 below is written broadly enough ("every
+  inline Step-1 fill/click sequence," "both cooldown/exit-cooldown `test.describe` blocks") to cover
+  these two without a separate instruction. Every Step-1 fill sequence (the `fillToReview` helper
+  `:48-72`, plus the inline sequences in the wizard-gates test `:186-227`, the server-error-jump test
+  `:229-255`, the edit-prepopulation
   test `:257-266`, the formula-picker test `:268-291`, and both cooldown-suite `test.describe` blocks
   `:300-457`) needs the interstitial-`Next`-click rewrite `design.md` § Round 3 specifies.
 

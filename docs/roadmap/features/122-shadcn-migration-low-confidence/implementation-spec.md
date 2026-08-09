@@ -469,9 +469,10 @@ Connect-RPC call safety
 - design.md § FR-4: schema for the Alpaca branch — `{ apiKey: z.string().min(1, msg), apiSecret:
   z.string().min(1, msg) }`; for the IBKR branch — `{ consumerKey, accessToken, accessTokenSecret,
   ibkrAccountId }` each `z.string().min(1, msg)` (`accountShared.tsx:20-27`'s `CredentialState`
-  fields, IBKR branch confirmed 4 fields at `:62-91` (post-Step-3 line numbers may shift slightly —
-  re-grep before editing), Alpaca branch 2 fields at `:96-112`). `displayName` also required
-  (existing native `required`, `:297-302`).
+  fields, IBKR branch confirmed 4 fields at `:62-94`, Alpaca branch 2 fields at `:96-112`).
+  `displayName` also required (existing native `required`, `:297-302`). `CredentialFields` itself
+  (`:51-113`) is not edited by this step — only `AddAccountForm`'s call site changes — so no
+  line-number drift is expected here.
 - `ui/select.tsx` (function-component + `data-slot`, no `forwardRef`) is the closest existing
   structural precedent for a controlled compound component in this codebase (recon.md); no
   `forwardRef`-based component should be introduced here either, matching the post-119 convention

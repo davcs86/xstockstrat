@@ -86,12 +86,16 @@ N Selects + active-filter count + "Clear filters") and replace the two independe
 This is a DRY consolidation, not a shadcn primitive gap — shadcn's Data Table recipe does not ship a
 standalone filter-toolbar component to import.
 
-FR-13. Evaluate (not mandate) replacing the hand-built nav rows in
-`src/components/shared/PlatformHeader.tsx:156-291` and `src/components/mobile/BottomTabBar.tsx:25-56`
-with a Radix `Navigation Menu`-based `ui/navigation-menu.tsx`. The audit rated this medium confidence
-and noted these are route-based navigation (not shadcn's dropdown-mega-menu use case) — arguably fine
-as-is. `/sdd-design` should make the keep-vs-replace call explicitly and record the rationale in
-`design.md` rather than defaulting to "replace everything."
+FR-13. Replace the hand-built nav rows in `src/components/shared/PlatformHeader.tsx:170-190,271-287`
+(desktop Primary/Section navs) and `src/components/mobile/BottomTabBar.tsx:28-54` with a Radix
+`Navigation Menu`-based `ui/navigation-menu.tsx`. The audit rated this medium confidence and noted
+these are route-based navigation (not shadcn's dropdown-mega-menu use case), and `/sdd-design`'s
+initial (self-run, not user-gated) recommendation was to keep the hand-built version as-is —
+**resolved 2026-08-08 by a live user decision to replace** (see `design.md` § Round 3), overriding
+that recommendation. `NavigationMenuLink` is usable standalone (no `Trigger`/`Content` dropdown
+pairing needed) for this flat, route-based nav shape. The mobile Sheet nav
+(`PlatformHeader.tsx:195-255`, disclosure/accordion behavior) is out of scope for this FR — only the
+two desktop `<nav>` regions and `BottomTabBar.tsx`'s flat nav are replaced.
 
 FR-14. Every new `ui/*` file added under this feature matches the **existing post-119 primitives'
 actual output shape**: a plain function component (`function X({ className, ...props })`), `cva()` +

@@ -16,10 +16,11 @@ present but bypassed (Textarea, Badge, Skeleton) — to replace the 27 hand-roll
 tiered. Steps 1-3 are the zero-primitive-dependency, zero-e2e-risk warm-up (adopt Skeleton/Badge/
 Textarea). Steps 4-34 cover the 8 new primitives in FR order (Tabs, Toggle Group, Alert Dialog, Alert,
 Checkbox, Breadcrumb, Accordion, Progress); each primitive's add-step is immediately followed by its
-lowest-risk consumer wire, then any remaining no-e2e-risk consumers, then — for the 6 call sites
-`recon.md` § Risks confirmed carry a load-bearing e2e selector (`RuleEditor.tsx` Tabs, `screener/
+lowest-risk consumer wire, then any remaining no-e2e-risk consumers, then — for the 7 call sites
+(across 6 primitives — Toggle Group has two, `screener/page.tsx` and `OrderForm.tsx`) `recon.md` §
+Risks confirmed carry a load-bearing e2e selector (`RuleEditor.tsx` Tabs, `screener/
 page.tsx` + `OrderForm.tsx` Toggle Group, `OrdersTable.tsx` Alert Dialog, `CopilotRail.tsx` Alert,
-`WatchlistReadiness.tsx` Progress, `PlatformHeader.tsx` Breadcrumb — 7 sites total) — a **mandatory
+`WatchlistReadiness.tsx` Progress, `PlatformHeader.tsx` Breadcrumb) — a **mandatory
 two-step split** (Constitution P-06): step A swaps the markup and runs the *unmodified* e2e spec,
 recording the actual pass/fail; step B updates the spec's selectors to match the new Radix-based DOM.
 `PlatformHeader.tsx`'s two FRs (Breadcrumb FR-7, Accordion FR-8) are interleaved as adjacent steps
@@ -256,7 +257,7 @@ cd services/xstockstrat-ui && pnpm build && pnpm test:e2e -g "chart-panel" && pn
 
 **Codebase Evidence**:
 - `src/components/insights/RuleEditor.tsx:114-151` — `mode` state (`'visual' | 'json'`), `switchTo()` handler.
-- `src/components/insights/RuleEditor.tsx:156-174` — the Visual/JSON button pair: `<Button type="button" size="sm" variant={mode === 'visual' ? 'default' : 'outline'} onClick={() => switchTo('visual')}>Visual</Button>` / the `JSON` twin.
+- `src/components/insights/RuleEditor.tsx:157-174` — the Visual/JSON button pair (the wrapper `<div>` spans `:157-175`; the two `<Button>` elements themselves are `:157-174`): `<Button type="button" size="sm" variant={mode === 'visual' ? 'default' : 'outline'} onClick={() => switchTo('visual')}>Visual</Button>` / the `JSON` twin.
 - `e2e/insights/strategy-authoring.spec.ts:64` — `const jsonButtons = page.getByRole('button', { name: 'JSON' });` then `.nth(0)`/`.nth(1)` (also L214, L243) — this selector currently matches because the buttons are literal `<Button>` (shadcn `Button` renders `<button>`, `role="button"` implicit).
 - `radix-ui@^1.6.7` is already an installed dependency (`package.json:47`, recon.md § Codebase Map) — Radix's `Tabs.Trigger` renders with `role="tab"` inside a `role="tablist"`/`Tabs.List`, not `role="button"` — this is the mandatory verification item design.md flags (§ Cross-cutting verification note), to be confirmed against the actual CLI-generated `tabs.tsx` from Step 4, not assumed.
 
@@ -996,7 +997,7 @@ cd services/xstockstrat-ui && pnpm build && pnpm test:e2e -g "market" && pnpm te
 **Reviewers**: xstockstrat-ui service owner — Trading UI correctness, analytics display accuracy
 
 **Codebase Evidence**:
-- `src/components/insights/WatchlistReadiness.tsx:195-225` — full `<li data-testid={\`readiness-row-${binding.symbol}\`}>` row, including the bar (L202-207, cited in Step 31) and the `queued && <Badge variant="info" data-testid="in-queue">in queue</Badge>` (L221-225).
+- `src/components/insights/WatchlistReadiness.tsx:195-237` — the full `<li data-testid={\`readiness-row-${binding.symbol}\`}>` row (verified: the `<li>` block actually closes at L237, not L225 as an earlier citation had it), including the bar (L202-207, cited in Step 31) and the `queued && <Badge variant="info" data-testid="in-queue">in queue</Badge>` (L221-225) — Step 33's actual edit targets only L202-207, this range is cited for row-scope context only.
 - `e2e/insights/watchlists.spec.ts:25,42-140,203,236` — extensive `getByTestId(\`readiness-row-${symbol}\`)` / `'in-queue'` usage — these `data-testid`s are on the `<li>` and the `Badge`, **not** on the Progress bar itself, so they are not directly at risk from the Progress swap — but design.md flags the row's overall structure as e2e-risk because the bar sits inside the same `<li>` these tests scope into.
 
 **TDD**: red-green required — red half.

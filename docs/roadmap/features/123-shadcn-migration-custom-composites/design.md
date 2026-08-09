@@ -1,7 +1,8 @@
 # Design: shadcn-migration-custom-composites
 
 **Created**: 2026-08-08
-**Rounds**: 2 (full; termination: approved — see note on interactive gating below)
+**Rounds**: 3 (full; termination: approved — see note on interactive gating below; round 3 is the
+2026-08-08 user-directed FR-10 override, see § Round 3 below)
 **Approved by**: synthesized by this session against strong recon evidence; **the two genuine
 architecture forks (FR-5, FR-9/FR-10) and the recon-discovered third recharts consumer were meant to
 be gated via `AskUserQuestion` per the orchestrating session's instructions, but no `AskUserQuestion`
@@ -195,7 +196,9 @@ inside outer Step 1**, not flatten the wizard into 7 top-level screens. Reasons:
    most naturally as Steps 2/3/4 keeping their identity as steps 2/3/4 (`STEPS` array, `Step {step} —
    {STEPS[step-1]}` numbering, `Questionnaire.Progress` denominator of 4). Flattening would renumber
    them to 5/6/7, contradicting "unchanged."
-2. `e2e/insights/strategy-authoring.spec.ts` asserts `getByText('Step 1 — Identity')` **7 times** across
+2. `e2e/insights/strategy-authoring.spec.ts` asserts `getByText('Step 1 — Identity')` **12 times**
+   (re-verified 2026-08-09 via direct grep — `:55,194,234,262,273,329,341,352,375,421,433,444` —
+   correcting this design's earlier miscount of 7) across
    the file (the shared `fillToReview` helper plus the wizard-gates test, the server-error-jump test,
    the edit-prepopulation test, the formula-picker test, and both cooldown-suite negative-value tests)
    as the entry gate before interacting with Step 1's fields. Nesting keeps the outer `CardTitle`'s
@@ -440,7 +443,7 @@ matching product-spec's `## Consumer Surface(s)` (C-14) exactly; `/trader` is to
 - **FR-10 (Round 3): flatten `StrategyWizard` into a fully independent 7-top-level-screen wizard** (no
   outer Step 1 wrapper; Step 1's 4 sub-screens promoted to top-level steps 1-4, Steps 2/3/4 renumbered
   5-7) — rejected: contradicts the user's own framing ("Steps 2-4 stay shell-only... unchanged"),
-  forces `getByText('Step 1 — Identity')`'s 7 e2e assertions to become 4 different heading texts for no
+  forces `getByText('Step 1 — Identity')`'s 12 e2e assertions to become 4 different heading texts for no
   requested benefit, and forces Steps 2/3/4's already-shell-spec'd `STEPS.length`-4-denominator design
   to be renumbered too — see Round 3 for the full nesting-vs-flattening reasoning.
 
@@ -451,10 +454,10 @@ matching product-spec's `## Consumer Surface(s)` (C-14) exactly; `/trader` is to
   `/sdd-execute` runs the CLI `add questionnaire` step (per the `trader-chart-panel` /
   `unified-login-page` ledger pattern: re-verify a fast-moving external dependency right before use,
   not just at design time) — to be addressed at the FR-9 implementation step.
-- [ ] `services/xstockstrat-ui/CLAUDE.md` § Styling sanctioned-exception note for FR-5 (text drafted
-  above under Chosen Approach #5) must actually be added by the orchestrating session (this session's
-  constraints prohibit editing that file) — to be addressed before this feature is considered
-  code-completed, or a future audit re-flags `ChartPanel.tsx`.
+- [x] `services/xstockstrat-ui/CLAUDE.md` § Styling sanctioned-exception note for FR-5 — **applied
+  2026-08-08** by the orchestrating session (verified present: a "Sanctioned exception —
+  `ChartPanel.tsx` stays on `lightweight-charts`" paragraph citing "feature 123 design decision,
+  2026-08-08", matching the text drafted under Chosen Approach #5 verbatim). No longer outstanding.
 - [ ] `insights/page.tsx`'s second `recharts` `LineChart` (Chosen Approach #12) — needs the
   orchestrating session's explicit confirmation before `/sdd-spec` turns it into concrete steps; not
   yet approved scope.

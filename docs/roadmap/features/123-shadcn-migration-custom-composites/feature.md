@@ -49,14 +49,19 @@ fits, extract a shared shadcn-primitive-based composite for the app's three repe
 `/sdd-review shadcn-migration-custom-composites impl-spec` — validate implementation spec, then
 `/sdd-execute shadcn-migration-custom-composites`.
 
-**Still needs the user's explicit confirmation before `/sdd-execute` runs any step** — this was never
-resolved (no `AskUserQuestion`/`Task` tool was available in the `/sdd-design` session that produced
-`design.md`): the FR-5 (`lightweight-charts` "keep"), FR-9 (CLI-vendored `@shadcn/react` install path,
-pinned to an exact version) decisions in `design.md` § Chosen Approach, plus FR-2's recharts-version
-handling (hand-author against v2, don't bump to v3). Additionally, `implementation-spec.md`'s
-`## Deferred Item` — whether to fold `src/app/insights/page.tsx`'s second `recharts` chart into this
-feature's scope — was deliberately **not** turned into a step and needs the user's decision (fold in
-now via a product-spec amendment, or leave for a later feature).
+**FR-5 is resolved** (2026-08-08, direct user confirmation: keep `lightweight-charts`, matching the
+self-run session's recommendation — see `design.md` § Chosen Approach #5 and the applied
+`services/xstockstrat-ui/CLAUDE.md` § Styling sanctioned-exception note).
+
+**Still not explicitly re-confirmed by the user** (adversarially vetted over 2 debate rounds with no
+Floor breach and no dissenting objection, but never put through a live `AskUserQuestion` gate — the
+`/sdd-design` session that produced `design.md` had neither `AskUserQuestion` nor `Task` available):
+FR-9's CLI-vendored `@shadcn/react` install path (pinned to an exact version) and FR-2's
+recharts-version handling (hand-author against the installed v2, don't bump to v3) — both in
+`design.md` § Chosen Approach. Additionally, `implementation-spec.md`'s `## Deferred Item` — whether
+to fold `src/app/insights/page.tsx`'s second `recharts` chart into this feature's scope — was
+deliberately **not** turned into a step and needs the user's decision (fold in now via a
+product-spec amendment, or leave for a later feature).
 
 **FR-10 is resolved** (2026-08-08, direct user override — see `design.md` § Round 3 and the Status
 History row above): Step 1 restructures onto `Questionnaire`'s native Choice/Input answer model (4

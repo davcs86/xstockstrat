@@ -287,3 +287,33 @@
   and found no mention of `ChartPanel.tsx`, `lightweight-charts`, or "feature 123").
 - Next: still `/sdd-review shadcn-migration-custom-composites impl-spec`, then (once FR-5/FR-9/FR-2/
   Deferred Item are also confirmed or overridden) `/sdd-execute shadcn-migration-custom-composites`.
+
+## Session 2026-08-09 — cross-check audit reconciliation
+
+- A round-4 cross-check audit (originally run against sibling `120`, then swept across all four
+  shadcn-migration siblings for correctness/coherence) found three real gaps in this feature's
+  artifacts, all fixed in this session:
+  1. **FR-5 confirmed by the user, not reflected anywhere**: the orchestrating session's consolidated
+     `AskUserQuestion` gate (which resolved 121's FR-13 and 122's FR-2/3/4 overrides) also covered
+     this feature's FR-5 — user chose **"Keep lightweight-charts (Recommended)"**, matching the
+     self-run session's own recommendation. `feature.md`'s Next Action still listed FR-5 among items
+     "never resolved... needs the user's explicit confirmation" — corrected to state it's resolved.
+  2. **The FR-5 `services/xstockstrat-ui/CLAUDE.md` § Styling sanctioned-exception note was applied**
+     by the orchestrating session (in the same batch as 121/122's shared-file reconciliation,
+     2026-08-08) but no session here ever recorded that, and `design.md`'s Open Risks still showed it
+     as an unchecked `[ ]` "must actually be added" item — checked off with a note confirming the
+     applied text matches Chosen Approach #5 verbatim.
+  3. **`design.md`'s `**Rounds**` header still said 2** despite the document containing a full
+     `## Round 3 — user-directed override` section (the FR-10 override) — corrected to 3.
+  4. **e2e-occurrence count was wrong**: both `design.md` and `implementation-spec.md` claimed
+     `getByText('Step 1 — Identity')` appears "7 times" in `e2e/insights/strategy-authoring.spec.ts`;
+     a direct grep found **12** real occurrences (`:55,194,234,262,273,329,341,352,375,421,433,444`).
+     `implementation-spec.md`'s own citation list was additionally internally miscounted (listed 10
+     line numbers while calling it "7"). Both docs corrected with the complete, verified list; the
+     two previously-uncited occurrences (`:352`, `:444`) were checked against Step 11's Instruction #9
+     and confirmed already covered by its broad wording ("every inline Step-1 fill/click sequence"),
+     so no instruction-scope change was needed, only the evidence citation.
+- FR-9's install path/version-pin and FR-2's recharts-version handling remain adversarially-vetted
+  but not live-user-gated (unchanged from before this session) — `feature.md` Next Action now
+  distinguishes these explicitly from the now-resolved FR-5, rather than grouping all three under one
+  "never resolved" umbrella.

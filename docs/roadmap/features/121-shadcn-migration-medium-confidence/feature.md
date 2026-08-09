@@ -22,7 +22,9 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Recon](recon.md) — codebase dossier (Phase 0)
-- [Design](design.md) — approved architecture (Phase 1) — **see § Process Note: FR-13 call needs human re-affirmation**
+- [Design](design.md) — approved architecture (Phase 1). FR-13's original self-run "keep as-is"
+  recommendation (see § Process Note) was superseded 2026-08-08 by a live user decision to
+  **replace** — see § Round 3, resolved and no longer outstanding.
 - [Implementation Spec](implementation-spec.md) — 21 steps, tranche 1 only (FR-1/FR-2/FR-3/FR-10/FR-11/FR-12/FR-13); FR-13 (Steps 17-20) migrates `PlatformHeader.tsx`/`BottomTabBar.tsx` onto `NavigationMenu`, per `design.md`'s Round 3 user-directed override; FR-4–FR-9 deferred to a re-spec after `120` merges
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -45,9 +47,7 @@ consolidate two independently-duplicated non-primitive recipes (a bordered filte
 ## Next Action
 
 `/sdd-review shadcn-migration-medium-confidence impl-spec` — validate implementation spec, then
-`/sdd-execute shadcn-migration-medium-confidence`. **Outstanding**: design.md's FR-13 keep-vs-replace
-call (self-run debate, not interactively gated — see design.md § Process Note) still needs explicit
-human/orchestrator re-affirmation; the implementation spec proceeded on it as design.md's stated
-Chosen Approach but flags it again in its Execution Summary. Also note: this spec covers tranche 1
-only (7 of 13 FRs) — FR-4 through FR-9 require a follow-up `/sdd-spec` run after
-`120-shadcn-migration-high-confidence` merges to `main-dev`.
+`/sdd-execute shadcn-migration-medium-confidence`. FR-13's keep-vs-replace call was re-affirmed by
+the user 2026-08-08 (chose **replace** — see design.md § Round 3); no longer outstanding. Note: this
+spec covers tranche 1 only (7 of 13 FRs) — FR-4 through FR-9 require a follow-up `/sdd-spec` run
+after `120-shadcn-migration-high-confidence` merges to `main-dev`.
