@@ -174,3 +174,43 @@
 - No design/scope deviation from `design.md`/`product-spec.md` — this session only converted the
   approved tiers into concrete, evidence-cited numbered steps.
 - Next: `/sdd-review shadcn-migration-high-confidence impl-spec`.
+
+## Session 2026-08-09 — sdd-execute sequential (Steps 1-3)
+
+- **Verification fallback (applies for the rest of this feature)**: `pnpm test:e2e` under plain
+  `pnpm dev` hits the sandboxed environment's on-demand-route-compilation timeout (Playwright's local
+  10s test timeout vs. Next dev's first-hit JIT compile) — the exact "Playwright dev-server harness
+  times out" case `reference/sequential-mode.md`'s verification fallbacks anticipates. Switched to the
+  CI-equivalent path for every e2e run this feature: `CI=1 E2E_PREBUILT=1 NEXT_DISABLE_STANDALONE=1
+  PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium`, with `pnpm build` run once under
+  `NEXT_DISABLE_STANDALONE=1` beforehand so `pnpm start` can serve it. This mirrors `playwright.config.ts`'s
+  own documented CI path (build once, serve production bundle, wider CI timeouts) — not a weakened
+  check. Logged once here per the sanctioned staging exception; not repeated per step below.
+
+### Step 1 — Adopt Skeleton in insights/page.tsx and auth/login/page.tsx (FR-11) [done]
+- Replaced the raw `animate-pulse` div in `insights/page.tsx` (equity-curve loading placeholder) and
+  the three raw `animate-pulse` divs in `auth/login/page.tsx` with `<Skeleton>`, using `className`
+  overrides (`cn()`/`twMerge` confirmed a caller `bg-*` class replaces the base `bg-muted`).
+- Verification: `pnpm build` clean; `pnpm test:e2e -g "insights"` (112 passed) and `-g "auth"` (41
+  passed) — no spec asserts on the old `animate-pulse` markup.
+- Files modified: `src/app/insights/page.tsx`, `src/app/auth/login/page.tsx`
+- Deviations: none (beyond the session-level verification fallback above).
+
+### Step 2 — Adopt Badge for CopilotRail.tsx "beta" pill (FR-10) [done]
+- Replaced the raw `<span>` pill with `<Badge variant="secondary" className="text-[10px] uppercase
+  tracking-wide">` — `secondary` chosen over `outline` as the closer match to the original
+  `bg-muted`/`text-muted-foreground` filled look (`outline` is border-only/transparent).
+- Verification: `pnpm build` clean; `pnpm test:e2e -g "copilot"` (4 passed) — `copilot.spec.ts`
+  asserts on `copilot-queue-summary`/`copilot-concentration`/rail visibility testids, not the beta
+  pill's markup, confirmed unaffected.
+- Files modified: `src/components/copilot/CopilotRail.tsx`
+- Deviations: none.
+
+### Step 3 — Adopt Textarea in FormulaWorkspace.tsx and RuleEditor.tsx (FR-6) [done]
+- Replaced all three raw `<textarea>` elements (`FormulaWorkspace.tsx` Description + Input-JSON
+  fields, `RuleEditor.tsx` JSON mode) with `<Textarea>`, passing each site's own `min-h-*`/tone
+  modifier via `className`. `RuleEditor.tsx`'s `aria-label={\`${label} JSON\`}` preserved verbatim.
+- Verification: `pnpm build` clean; `pnpm test:e2e -g "strategy-authoring"` (23 passed) and
+  `-g "formula"` (9 passed) — `getByLabel('Entry rule JSON')`/`'Exit rule JSON'` still resolve.
+- Files modified: `src/components/insights/FormulaWorkspace.tsx`, `src/components/insights/RuleEditor.tsx`
+- Deviations: none.

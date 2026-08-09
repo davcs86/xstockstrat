@@ -67,7 +67,7 @@ route). Step 36 records the AC-6 per-primitive migration summary in `context.md`
 
 ### Step 1 — service: Adopt Skeleton in insights/page.tsx and auth/login/page.tsx (FR-11)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/page.tsx` — modify
@@ -97,7 +97,7 @@ Confirm no new build/type errors and the existing e2e suite for `/insights` and 
 
 ### Step 2 — service: Adopt Badge for CopilotRail.tsx "beta" pill (FR-10)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/copilot/CopilotRail.tsx` — modify
@@ -124,7 +124,7 @@ cd services/xstockstrat-ui && pnpm build && pnpm test:e2e -g "copilot"
 
 ### Step 3 — service: Adopt Textarea in FormulaWorkspace.tsx and RuleEditor.tsx (FR-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/FormulaWorkspace.tsx` — modify
