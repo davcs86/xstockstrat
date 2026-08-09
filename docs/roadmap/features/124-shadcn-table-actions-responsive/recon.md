@@ -242,6 +242,42 @@ working tree (not the implementation-spec.md text) found:
   `getByLabel('Breadcrumb')` assertion (`:70-71`) are both untouched by 121-123 — exactly as originally
   found.
 
+## ADDENDUM 2026-08-09 (FR-11, mobile Sidebar — added mid-design, user-directed)
+
+Grounded directly (this FR was added after the initial recon pass, so it has none of the discovery
+digest's coverage — captured here instead):
+
+- **Current mobile hamburger menu**: `PlatformHeader.tsx`'s `PlatformHeaderInner`, `sm:hidden` trigger
+  → `Sheet side="left"` → `SheetHeader`/`SheetTitle` → `Accordion type="single" collapsible` over
+  `NAV_GROUPS`, one `AccordionItem` per group, `visibleItems(group.items)` (the `adminOnly` filter,
+  `:167,258`) rendering each item as a `SheetClose asChild`-wrapped `Link`. State:
+  `const [expanded, setExpanded] = useState<string>(activeGroup.key)` (`:165`) drives which group is
+  open, defaulting to the active one.
+- **`ui/collapsible.tsx` already exists** (added by feature 121/122's merge) — reusable for FR-11's
+  single-open-group requirement without vendoring a new primitive.
+- **`ui/tooltip.tsx` and a `use-mobile`/`useIsMobile` hook do NOT exist** in this repo
+  (`Glob` confirmed 0 hits for both). Verified via `ui.shadcn.com/r/styles/new-york-v4/sidebar.json`'s
+  `registryDependencies`: `button`, `separator`, `sheet`, `tooltip`, `input`, `use-mobile`, `skeleton`
+  — so `npx shadcn add sidebar` will create `tooltip.tsx` and a `use-mobile` hook as byproducts, and
+  will touch `button.tsx`/`separator.tsx`/`sheet.tsx`/`input.tsx`/`skeleton.tsx` (all already vendored
+  by feature 120) as registry dependencies — subject to the same collateral-regeneration
+  reconciliation trap (`services/xstockstrat-ui/CLAUDE.md` § Styling) FR-1 already accounts for.
+  `button.tsx:25-26` confirmed still carries the `buy`/`sell` variants that must survive the install.
+- **No SSR-safe mobile detection today**: current trigger uses pure Tailwind `sm:hidden` (SSR-safe,
+  no hydration flash possible). shadcn's `Sidebar` decides mobile-vs-desktop via a client-side
+  `useIsMobile()` (`window.matchMedia`) hook, which cannot resolve during SSR — a plausible
+  flash-of-wrong-chrome regression a hydration-waiting Playwright assertion won't catch. Same
+  "regression invisible to a targeted e2e run" shape as the ledger's `fails.md` 2026-08-09 breadcrumb
+  entry and `insights.md` 2026-08-06/08-08 overflow entries.
+- **No existing e2e coverage of the hamburger/Sheet menu** — `e2e/mobile.spec.ts` only tests
+  `BottomTabBar` (confirmed via full read). FR-11 adds net-new coverage, not an update to existing
+  assertions.
+- **Sequencing risk with FR-10**: FR-10 (Row 2, `:284-328`) and FR-11 (Row 1, `:223-280`) touch
+  disjoint render regions of the same file, but both make imports in the shared top-of-file import
+  block (`:13-29`) dead (FR-11 removes the file's only `Sheet`/`Accordion` usage; FR-10 may remove its
+  only `Breadcrumb` usage) — whichever `/sdd-spec` step executes second should expect to touch that
+  block.
+
 ## Recommended Scope (superseded in part by the UPDATE above — read that first)
 
 Given the confirmed overlaps above, the design phase (Phase 1) must decide, per FR, whether 124

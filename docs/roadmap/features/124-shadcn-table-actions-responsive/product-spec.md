@@ -140,14 +140,55 @@ its `SheetContent`/`Accordion` nav-group listing) with the actual shadcn `Sideba
 (`npx shadcn@latest add sidebar`, CLI-vendored following this repo's established pattern —
 `components.json`, preset `bLTl5gh6` — same as FR-1), using `collapsible="offcanvas"` mode (which
 itself renders as a `Sheet` on mobile, so this is a primitive swap onto the purpose-built component
-for exactly this pattern, not a new interaction model). `SidebarHeader` replaces the current
-`SheetHeader`/`SheetTitle`; `SidebarContent`/`SidebarGroup`/`SidebarMenu`/`SidebarMenuButton` replace
-the hand-rolled `Accordion` nav-group/item listing (preserving every `NAV_GROUPS` entry, including
-Settings, and the existing active-route highlighting); close-on-navigate is wired via `useSidebar()`'s
-`setOpenMobile(false)`, mirroring the current `SheetClose asChild` behavior. This is distinct from
-`BottomTabBar` (the fixed bottom tab bar covering the four primary groups), which is unaffected and
-out of scope here. No existing e2e spec covers this hamburger/Sheet menu (verified: `e2e/mobile.spec.ts`
-only tests `BottomTabBar`) — this FR adds new coverage rather than updating existing assertions.
+for exactly this pattern, not a new interaction model).
+
+**Verified registry dependencies** (`ui.shadcn.com/r/styles/new-york-v4/sidebar.json`, checked
+2026-08-09): the `sidebar` install pulls in `button`, `separator`, `sheet`, `tooltip`, `input`,
+`use-mobile`, `skeleton` as `registryDependencies` — `button`/`separator`/`sheet`/`skeleton` already
+exist in this repo (all vendored by feature 120) and are subject to the same
+collateral-regeneration reconciliation step FR-1 already calls out
+(`services/xstockstrat-ui/CLAUDE.md` § Styling — re-apply the app-specific `buy`/`sell` `Button`
+variants, `buttons.tsx:25-26`, and the `Badge` functional variants, after the install; verify via
+`button.test.ts`/`badge.test.ts`, same as AC-1). **`ui/tooltip.tsx` and a `use-mobile`/`useIsMobile`
+hook do not exist in this repo today and will be created by this install** — this supersedes the
+product-spec's earlier Out-of-Scope claim that there's "no live `tooltip.tsx` gap to close": that
+claim was true of hand-rolled tooltip patterns (still true — none exist), but `tooltip.tsx` itself
+now lands as a byproduct of FR-11, not a standalone FR. No functional-variant reconciliation is
+needed for `tooltip.tsx`/`use-mobile` since neither existed before (no app customization to lose).
+
+**Single-open-group behavior**: the current `Accordion type="single" collapsible` (`:238-243`) keeps
+exactly one nav group expanded at a time, defaulting to the group matching the active route
+(`useState<string>(activeGroup.key)`, `:165`). Base `SidebarGroup`/`SidebarMenu` render an
+always-expanded flat list with no equivalent — reproduce the current behavior by wrapping each
+`SidebarGroup` in the already-vendored `Collapsible`/`CollapsibleTrigger`/`CollapsibleContent`
+(`src/components/ui/collapsible.tsx`, added by feature 121/122 — no new primitive needed), keeping
+the existing `expanded`/`setExpanded` controlled-state pattern.
+
+`SidebarHeader` replaces the current `SheetHeader`/`SheetTitle`; `SidebarContent` (wrapping the
+`Collapsible`-driven `SidebarGroup`s above) replaces the hand-rolled `Accordion` nav-group/item
+listing — preserving every `NAV_GROUPS` entry **visible under the existing `visibleItems`/
+`adminOnly` filter** (`:167,258` — e.g. the admin-only `Backfills` item stays hidden from
+non-admins; this FR must not leak it) and the existing active-route highlighting; close-on-navigate
+is wired via `useSidebar()`'s `setOpenMobile(false)`, mirroring the current `SheetClose asChild`
+behavior. This is distinct from `BottomTabBar` (the fixed bottom tab bar covering the four primary
+groups), which is unaffected and out of scope here.
+
+**Mobile-detection risk to verify at `/sdd-spec`/execute time**: the current trigger is always in the
+DOM, hidden purely via Tailwind `sm:hidden` — SSR and first client paint render identically. shadcn's
+`Sidebar` branches its mobile-vs-desktop rendering via a client-side `useIsMobile()`
+(`window.matchMedia`-backed) hook from the newly-vendored `use-mobile` hook, which cannot resolve
+during SSR — a plausible flash-of-wrong-chrome on first paint that a hydration-waiting Playwright
+assertion won't catch. `/sdd-spec` must name an explicit check for this (not just "renders correctly
+once queried").
+
+No existing e2e spec covers the current hamburger/Sheet menu (verified: `e2e/mobile.spec.ts` only
+tests `BottomTabBar`) — this FR adds new coverage rather than updating existing assertions, including
+an explicit non-admin-session assertion that `Backfills` stays absent.
+
+**Sequencing note**: FR-10 and FR-11 edit disjoint render regions of `PlatformHeader.tsx` (Row 1 vs.
+Row 2) but both make imports at the top of the file dead (FR-11 removes the file's only `Sheet`*/
+`Accordion`* usage; FR-10 may remove its only `Breadcrumb`* usage) — `/sdd-spec` should expect
+whichever step executes second to touch the shared import block (`:13-29`).
 
 ## Out of Scope
 
@@ -157,8 +198,10 @@ only tests `BottomTabBar`) — this FR adds new coverage rather than updating ex
   no multi-button Actions column or raw `<table>` was found on them during story-writing.
 - Non-table row-action UI (e.g. card-based lists, the opportunities ranked queue itself) — FR-2 is
   scoped to `ui/table.tsx`-based Actions columns only.
-- A `ui/tooltip.tsx` primitive — none exists today and the audit found nothing hand-rolling one, so
-  there is no live gap to close.
+- A hand-rolled tooltip pattern needing consolidation onto a `ui/tooltip.tsx` primitive — none exists
+  today and the audit found nothing hand-rolling one. (`ui/tooltip.tsx` itself does land as a
+  registry-dependency byproduct of FR-11's `Sidebar` install — see FR-11 — but that's incidental
+  vendoring, not a gap this feature is closing.)
 - `globals.css` — audited and found clean (pure theme-token mapping, zero hand-written component
   rules); no changes needed.
 - Any change to `Sheet`/`AlertDialog`/`Skeleton` usage — the audit found modal/overlay/loading
@@ -239,10 +282,16 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
    (`e2e/breadcrumb.spec.ts`) and a full e2e-suite run as the closing gate (per the recon's own risk
    note and the ledger's "only caught by a later full-suite run" pattern).
 10. `pnpm lint` and `NEXT_DISABLE_STANDALONE=1 pnpm build` stay clean throughout.
-11. FR-11: `src/components/ui/sidebar.tsx` exists (CLI-vendored) and the mobile hamburger menu renders
-    via `Sidebar collapsible="offcanvas"` instead of the hand-built `Sheet`+`Accordion`, with every
-    `NAV_GROUPS` entry (including Settings) reachable, active-route highlighting preserved, and
-    close-on-navigate working (new e2e coverage, since none existed before this FR).
+11. FR-11: `src/components/ui/sidebar.tsx` exists (CLI-vendored), along with its registry-dependency
+    byproducts (`tooltip.tsx`, a `use-mobile`/`useIsMobile` hook); `button.test.ts`/`badge.test.ts`
+    still pass unchanged after the install (the `buy`/`sell`/functional-variant reconciliation check,
+    same as AC-1). The mobile hamburger menu renders via `Sidebar collapsible="offcanvas"` instead of
+    the hand-built `Sheet`+`Accordion`, with every `NAV_GROUPS` entry **visible under the existing
+    `visibleItems`/`adminOnly` filter** reachable (a non-admin session's e2e assertion confirms
+    `Backfills` stays absent), single-open-group behavior preserved via `Collapsible` (not flattened
+    to always-expanded), active-route highlighting preserved, and close-on-navigate working (new e2e
+    coverage, since none existed before this FR). The SSR/first-paint mobile-detection risk (FR-11's
+    own note) is explicitly checked, not assumed away.
 
 ## Open Questions
 

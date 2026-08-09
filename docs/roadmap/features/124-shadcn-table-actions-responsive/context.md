@@ -143,3 +143,61 @@
     Badge-driven vs. Questionnaire-shell fork directly against 123 before either spec locks in a
     transformation. This is now the primary open question `/sdd-design`'s Phase 1 grilling must
     settle — not a secondary risk note.
+
+## Session 2026-08-09T22:00:41Z — sdd-design Phase 1 (rounds 1-3) + FR-11 addition
+
+- **Rounds 1-2** (design-proposer/design-adversary): debated whether 124 should defer FR-5 (both raw
+  `<table>` sites) and part of FR-7 (`AlertStream.tsx`) to sibling `121` (already implementing them
+  identically), drop FR-7's `StrategyWizard.tsx` site to `123` (apparent architecture conflict:
+  Badge vs. `Questionnaire.Progress`), and sequence FR-10 (breadcrumb) to execute only after `121`
+  lands (its Step 18 `NavigationMenu` migration rewrites an adjacent region of
+  `PlatformHeader.tsx`). Round 2 adopted this repo's own `merge-order.md` F-04 tranche-split
+  precedent (rows 55/57) for FR-10's deferral. Round 2 adversary found: the sequencing mechanism was
+  too weak (soft PR-time warning vs. a real block), the blocking chain was deeper than stated
+  (transitively through `120` reaching `launched`), the breadcrumb collision-test design was
+  unfalsifiable, and a wrong Constitution ID (`C-14`) was cited for the required sign-off.
+- **Mid-debate discovery, materially changing the design**: sibling features `121`/`122`/`123` —
+  which the whole Round 1-2 deferral/sequencing debate was built around — turned out to already be
+  **merged into `main-dev`** (corrective PR #917, merged 2026-08-09T21:05:34Z; their actual code had
+  been stuck on dead-ended stacked branches despite each PR showing "Merged" on GitHub — `feature.md`
+  correctly still read `code-completed`, not `launched`, throughout). This branch was re-merged with
+  `origin/main-dev` to pick up the change (commit `a135014`). A full re-verification against the
+  *current* working tree (not spec text) found:
+  - FR-5's raw-`<table>` conversion: **done** for both sites. New narrower gap: the "Past Runs" row
+    still carries a redundant `role="button"`/`tabIndex`/`onKeyDown` layer the reference pattern
+    lacks. **User decision**: raise the floor (add keyboard support to `LiveStrategiesPanel.tsx`/
+    `formulas/page.tsx`) rather than strip it from the row that has it — no capability regresses.
+  - FR-7's `AlertStream.tsx`: **done**. `StrategyWizard.tsx`: `123` only replaced the OUTER `<ol>`
+    wrapper with `Questionnaire`/`QuestionnaireProgress` — the INNER per-step `<span>` pill is
+    untouched and still hand-rolled. The Round 1-2 "architectural conflict with 123" finding was
+    **resolved by the actual landed code**: no conflict, FR-7 just retargets to the inner pill.
+  - FR-8: per-source `ToggleGroup` conversion **done**; only the "All sources" toggle remains.
+  - FR-10: **no sequencing dependency remains** — `121` is physically in `main-dev`. Round 3
+    re-specced FR-10 directly against current `PlatformHeader.tsx` (Row 2 Breadcrumb `:286-302` +
+    orphaned Separator `:303` both removed; new shared `PageBreadcrumb`, 7 sites).
+- **Round 3** (re-grounded proposer/adversary): confirmed the above and fixed two more issues the
+  adversary caught by reading source directly rather than trusting the proposal's claims: (1) FR-8's
+  proposed `data-state`+`toggleVariants` styling mechanism was **verifiably broken** —
+  `toggle.tsx`'s `outline` variant has no `data-[state=on]` selector at all; corrected to
+  `aria-pressed`, which the base class does key off. (2) FR-10's collision-test plan covered only 1
+  of 7 new `PageBreadcrumb` sites; extended to require a full e2e-suite gate for the rest, per this
+  same feature's own product-spec "Known trap" note and the recon's risk section.
+- **FR-11 added mid-design** (user-directed, not from the audit or the original story): migrate the
+  mobile hamburger menu from hand-built `Sheet`+`Accordion` onto the actual shadcn `Sidebar`
+  primitive (`collapsible="offcanvas"`, which already renders as a `Sheet` on mobile internally).
+  A dedicated adversary pass (since this FR post-dated the original recon) found real gaps before
+  they reached `/sdd-spec`: (1) no collateral-regeneration reconciliation clause, despite `sidebar`'s
+  registry dependencies including already-vendored `button.tsx` (holds the `buy`/`sell` variants);
+  (2) `tooltip.tsx` and a `use-mobile` hook — confirmed absent today — will be created as
+  registry-dependency byproducts, directly contradicting the product-spec's prior Out-of-Scope claim
+  ("no tooltip.tsx gap"), now corrected; (3) the current `Accordion`'s single-open-group behavior has
+  no base-`Sidebar` equivalent — resolved by reusing the already-vendored `ui/collapsible.tsx`
+  (feature 121/122), not adding a new primitive; (4) AC wording was ambiguous about the `adminOnly`
+  filter, risking a literal implementation leaking the admin-only `Backfills` link; (5) a real
+  SSR/first-paint mobile-detection risk (`useIsMobile()`'s `matchMedia` vs. the current pure-CSS
+  `sm:hidden`) that a hydration-waiting e2e assertion won't catch — flagged for explicit
+  `/sdd-spec`/execute-time verification, not assumed away. All five folded into `product-spec.md`
+  FR-11/AC-11 and `recon.md`'s new ADDENDUM section. FR-10/FR-11 touch disjoint render regions of
+  `PlatformHeader.tsx` but share the top-of-file import block — sequencing note for `/sdd-spec`.
+- **Status**: design synthesis complete, pending final user approval gate before `design.md` is
+  written and lifecycle advances to `design-approved`.
