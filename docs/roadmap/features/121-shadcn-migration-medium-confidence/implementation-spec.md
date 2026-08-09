@@ -1566,7 +1566,7 @@ cd services/xstockstrat-ui && pnpm build
 
 ### Step 36 — test: Tranche 2 targeted e2e sweep (FR-4 through FR-9 combined)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**: none — verification-only
 
@@ -1589,7 +1589,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "authorized-apps|backfills|watchl
 
 ### Step 37 — test: Whole-feature (Tranche 1 + 2) verification gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**: none — verification-only, runs after Steps 1-36
 

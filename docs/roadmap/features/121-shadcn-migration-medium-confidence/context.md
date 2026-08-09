@@ -681,3 +681,44 @@ repeated per step).
 - No code change. `pnpm build` (Step 34's build) is the gate — confirmed clean, recorded here per
   spec.
 - Files modified: none
+
+### Step 36 — Tranche 2 targeted e2e sweep (FR-4 through FR-9 combined) [done]
+- Ran the combined grep-pattern set from every tranche-2 step's own verification
+  (`authorized-apps|backfills|watchlists|EnvModeSwitcher|opportunities|backtest-coverage|Go to
+  Step|formulas|strategies`) together to catch any cross-step interaction.
+- Verification: **72 passed, 0 failed** (49.1s).
+- Files modified: none
+
+### Step 37 — Whole-feature (Tranche 1 + 2) verification gate [done]
+- `pnpm lint` clean (same one pre-existing unrelated warning as every prior step).
+- `pnpm test:unit` — **24 test files, 85 tests, all passed** (includes the new
+  `navigation-menu.test.ts` from Step 17 alongside every other primitive's regression guard).
+- `pnpm build` clean.
+- `pnpm test:e2e` (full suite, no filter) — **256 passed, 0 failed** (2.8m). No environmental
+  false-starts this run (ports confirmed free via `ss -ltn` before launching, learned from Step 21's
+  stray-process issue).
+- All 37 steps across both tranches (FR-1 through FR-13) verified together. Feature 121 is
+  code-complete.
+- Files modified: none (verification-only, as specced)
+
+## Feature summary (post-execution)
+
+All 37 implementation-spec steps landed across 2 tranches:
+- **Tranche 1** (Steps 1-21): FR-1 Switch, FR-2 Slider, FR-3 Collapsible, FR-10 Badge reuse (2
+  sites, 1 kept as a documented hand-rolled exception), FR-11 Table reuse (2 sites), FR-12 shared
+  `FilterToolbar.tsx` (new component, 2 call sites), FR-13 `NavigationMenu` (replacing the original
+  design.md KEEP-AS-IS recommendation per the user's Round 3 override — `PlatformHeader.tsx` +
+  `BottomTabBar.tsx`).
+- **Tranche 2** (Steps 22-37, added mid-session per user direction to cover FR-4 through FR-9 in
+  this same pass): FR-4 `AlertDialog` (5 `window.confirm()` sites), FR-5 `Tabs` for
+  `EnvModeSwitcher` (**reverted** — see Steps 26-27, a genuine primitive/role mismatch), FR-6
+  `ToggleGroup` (opportunities source pills), FR-7 `Alert` (2 sites), FR-8 `Checkbox` (1 site), FR-9
+  `Collapsible` (substituted for the product-spec's original "Accordion" framing — a structural-fit
+  finding, not a design.md revision).
+- **Two primitive-fit findings that changed the plan mid-execution**, both logged in
+  `docs/roadmap/ledger/fails.md` for sibling features: (1) `NavigationMenuLink` uses classic Radix
+  `asChild`, not the `render` prop design.md assumed (Step 17); (2) `Tabs.Trigger` hardcodes
+  `role="tab"`, which breaks `role="link"` when `asChild`-wrapping a full-page-navigation `Link` —
+  reverted `EnvModeSwitcher` to plain `Link`s (Steps 26-27).
+- **One new shared component**: `src/components/shared/FilterToolbar.tsx` (FR-12).
+- Final state: `pnpm lint`/`pnpm build`/`pnpm test:unit`/`pnpm test:e2e` all clean (Step 37).
