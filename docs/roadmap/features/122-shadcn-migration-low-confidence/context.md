@@ -334,3 +334,107 @@
 - No git commands were run this session (per task constraint) — no branch/commit/push performed.
 - Status: `implementation-ready` (unchanged — this was a design/spec amendment, not a new SDD
   phase).
+
+## Session 2026-08-09 — /sdd-execute sequential — FR-1 re-spec (Steps 9-12 added)
+
+- **Trigger**: user, at this feature's start-of-execution checkpoint, directed re-specing and
+  executing FR-1 in this same pass rather than deferring it — mirroring sibling
+  `121-shadcn-migration-medium-confidence`'s own Tranche 2 precedent. This feature's branch
+  (`feature/shadcn-migration-low-confidence`) is stacked on `feature/shadcn-migration-medium-
+  confidence`, itself stacked on `feature/shadcn-migration-high-confidence` — confirmed via `ls
+  services/xstockstrat-ui/src/components/ui/` that `alert.tsx` is now present (added by `120`).
+- Read `OrderForm.tsx:217-219` and `EditOrderDialog.tsx:82` fresh (not recon.md citations —
+  recon.md predates this addendum). Added Steps 9-12 to `implementation-spec.md`. Total steps 8 →
+  12.
+- **Notable finding**: `alert.tsx` has no "buy"/success `cva` variant — only `default`/
+  `destructive`/`warning`. `OrderForm.tsx`'s success-path message (`text-buy`) needs an explicit
+  `AlertDescription` className override (`default`'s own color is `text-muted-foreground`, which
+  would silently drop the buy-green coloring if not overridden); the error path needs no override
+  since `alert.tsx`'s `destructive` variant already colors `AlertDescription` via its own
+  `*:data-[slot=alert-description]:text-destructive/90` rule.
+- **e2e-risk findings** (grounded, not assumed): `OrderForm.tsx`'s two message assertions
+  (`order-form.spec.ts`'s success/error tests) use `getByText(...)` — text-content-based, not
+  class/tag-based — so expected-pass, but still gets a real run per P-06 (Step 10). `grep`-confirmed
+  zero e2e coverage of `EditOrderDialog.tsx`'s error `<p>` (`order-ticket.spec.ts` only checks the
+  trigger button) — Step 11 is build-only.
+- `design.md` was **not** modified — § Round 4 already recorded the migrate-both-sites decision;
+  this session only wrote the concrete steps that decision required, per the same "design.md is
+  read-only ground truth for a spec-amendment session" convention the earlier Round-3/Round-4
+  sessions in this file established.
+- `product-spec.md`'s FR-1/Affected Services/Open Questions sections updated to record "unblocked"
+  (was "blocked on 120").
+- Status: `implementation-ready` → `in-progress` (execution begins next against all 12 steps).
+
+## Session 2026-08-09 — sdd-execute sequential (execution)
+
+Verification fallback carried over from siblings 120/121: `CI=1 E2E_PREBUILT=1
+NEXT_DISABLE_STANDALONE=1 PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium` for all
+e2e runs (logged once, not repeated per step).
+
+## FR Decisions (AC-1) — Round 3 + Round 4 update
+
+This section supersedes the original (never-written) Step 1 entry with the current, live-gated
+decisions per FR, transcribed from `design.md` § Round 3/Round 4 at execute time (this repo's
+`context.md` is append-only — no prior entry is deleted).
+
+1. **FR-1 — MIGRATE (Round 4 user-directed override; supersedes the original Round 1/2 DECLINE)**
+   (`OrderForm.tsx:217-219`, `EditOrderDialog.tsx:82`): the user directly overrode Round 1/2's
+   decline and directed migration of both Alert-shaped call sites onto `ui/alert.tsx` (design.md §
+   Round 4). `ui/alert.tsx` is confirmed present on this feature's stacked branch (added by sibling
+   `120-shadcn-migration-high-confidence`) — unblocked as of this same session (see the FR-1
+   re-spec entry above), so this feature's Steps 9-11 migrate both call sites directly.
+2. **FR-2 — MIGRATE (Round 3 override; supersedes Round 2's decline)** (`AuthForm.tsx:28-93`,
+   `CredentialsForm`): the user directly overrode Round 2's narrower recommendation and directed
+   migration of all three Form-shaped call sites (design.md § Round 3). Moves to `useForm` +
+   `Controller` + a `zod` schema (`email` format + required, `password` required) +
+   `Field`/`FieldLabel`/`FieldError`; the network/server-error path (`fetch` failure) stays a local
+   `error` state, not a zod-expressible field error.
+3. **FR-3 — MIGRATE BOTH (Round 3 override; supersedes Round 2's split)**: `AddAccountForm`
+   (`accountShared.tsx:259-332`) migrates (unchanged from Round 2 — justified by
+   `e2e/trader/account-selector.spec.ts:63-92`'s existing reset-on-success assertion).
+   `EditCredentialsForm` (`accountShared.tsx:116-167`) **also migrates** — Round 2's reason to
+   decline (no e2e parity coverage) is resolved, not waived: a new characterization e2e test is
+   added and proven green **before** this consumer's migration (Step 4, ahead of Step 7), per
+   design.md § FR-3's red-before-green safety net for a call site that submits a mutating
+   `updateBrokerAccountCredentials` gRPC call against live broker secrets. `CredentialFields` itself
+   (`accountShared.tsx:51-113`) stays unchanged — both consumers bridge it to `react-hook-form` via
+   `Controller` at their own call site.
+4. **FR-4 — triggers at full breadth, on a corrected primitive**: three dependencies
+   (`react-hook-form`, `zod`, `@hookform/resolvers/zod`) wired to `ui/field.tsx` (`Field`/
+   `FieldLabel`/`FieldContent`/`FieldDescription`/`FieldError`/`FieldGroup`/`FieldSet`/`FieldLegend`/
+   `FieldTitle`/`FieldSeparator`) — not `ui/form.tsx`, which is shadcn's superseded pattern (recon.md
+   § Round 3 addendum).
+
+### Step 1 — record FR decisions [done]
+- Appended the `## FR Decisions (AC-1) — Round 3 + Round 4 update` section above.
+- Verification: `grep -n "## FR Decisions"` → 1 match with all 4 items present.
+
+### Step 2 — add react-hook-form, zod, @hookform/resolvers [done]
+- `pnpm add react-hook-form zod @hookform/resolvers` from `services/xstockstrat-ui/`. Resolved
+  versions (per this step's instruction 3, for Steps 3/5-7/9 to verify their API surface against,
+  not whatever version upstream docs describe): **react-hook-form@7.85.0**, **zod@4.4.3**,
+  **@hookform/resolvers@5.7.1**.
+- Pre-existing, unrelated peer-dependency warnings surfaced during install (not introduced by this
+  step): `@connectrpc/connect`↔`@bufbuild/protobuf` version mismatch (`packages/proto/gen/ts`),
+  `@base-ui/react`↔`date-fns` version mismatch (`xstockstrat-ui`) — both predate this feature.
+- Verification: `grep` on `package.json` for all three keys → present; `pnpm-lock.yaml` shows
+  resolved semvers for all three.
+- Files modified: `services/xstockstrat-ui/package.json`, `pnpm-lock.yaml`
+
+### Step 3 — add ui/field.tsx primitive [done]
+- `npx shadcn@latest add field --yes --overwrite` succeeded. Generated 2 files
+  (`field.tsx`, plus a new dependency `label.tsx` the CLI added automatically — `FieldLabel` wraps
+  `Label`) and **regenerated `separator.tsx` as collateral** (style-only: double-quotes/no-semicolons
+  reformat, zero functional change, no `cva` variant to lose — `separator.tsx` has none). All three
+  reformatted with `prettier --write` to match repo convention.
+- Confirmed exports: `Field`, `FieldLabel`, `FieldDescription`, `FieldError`, `FieldGroup`,
+  `FieldLegend`, `FieldSeparator`, `FieldSet`, `FieldContent`, `FieldTitle` — matches recon.md's
+  addendum exactly. `FieldError` accepts an `errors?: Array<{message?: string}|undefined>` prop —
+  a direct fit for react-hook-form's `fieldState.error`. No `forwardRef`, `data-slot` per sub-part,
+  confirmed post-119 shape.
+- No `ui/field.test.ts` written — per this step's own TDD note, no `cva()`-variant logic to guard,
+  verified via the migrated call sites' e2e/lint/build in Steps 5-7/9 instead.
+- Verification: `pnpm lint` clean; `pnpm build` clean (compiled successfully, full route summary
+  printed, no type errors).
+- Files created: `src/components/ui/field.tsx`, `src/components/ui/label.tsx`. Files modified (CLI
+  collateral, style-only): `src/components/ui/separator.tsx`.
