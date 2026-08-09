@@ -145,7 +145,7 @@ test.describe('Screener', () => {
     await page.goto('/insights/screener');
 
     // Default is rank (hardFilter false); switch to hard, then scan.
-    await page.getByRole('button', { name: 'hard filter' }).click();
+    await page.getByRole('radio', { name: 'hard filter' }).click();
     await page.getByTestId('run-screen').click();
     await expect(page.getByTestId('screen-results')).toBeVisible({ timeout: 10000 });
 
