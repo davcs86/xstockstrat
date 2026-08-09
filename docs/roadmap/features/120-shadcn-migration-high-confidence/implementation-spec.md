@@ -968,7 +968,7 @@ cd services/xstockstrat-ui && pnpm test:unit -- progress.test.ts && pnpm test:un
 
 ### Step 32 — service: Wire Progress → SignalReadiness.tsx and SectionRenderer.tsx (no-e2e-risk)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/SignalReadiness.tsx` — modify

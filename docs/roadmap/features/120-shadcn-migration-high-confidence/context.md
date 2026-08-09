@@ -484,3 +484,10 @@
 - Verification: `pnpm test:unit` (80 passed) and `pnpm build` clean.
 - Files modified: `src/components/ui/progress.tsx` (create), `src/components/ui/progress.test.ts`
   (create)
+
+### Step 32 — Wire Progress → SignalReadiness.tsx and SectionRenderer.tsx [done]
+- Replaced both static (`variant="default"`) two-div bars with `<Progress value={...}
+  variant="default">`, using Step 31's confirmed `value` (0-100) prop.
+- Verification: `pnpm build` clean; `pnpm test:e2e -g "market"` (7 passed), `-g "mobile"`
+  (18 passed).
+- Files modified: `src/components/insights/SignalReadiness.tsx`, `src/components/mobile/SectionRenderer.tsx`

@@ -4,6 +4,7 @@ import { CaretRight, Warning } from '@phosphor-icons/react';
 import { EnumBadge } from '@/lib/opportunityShared';
 import { cn } from '../ui/utils';
 import { Alert, AlertDescription } from '../ui/alert';
+import { Progress } from '../ui/progress';
 import type { Section } from './sections';
 
 // Every interactive row is at least 44px tall (FR-16 tap-target floor).
@@ -63,12 +64,11 @@ function SectionItem({ section: s }: { section: Section }) {
           </div>
           <div className="flex items-center gap-2">
             {typeof s.conviction === 'number' && (
-              <div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full bg-primary"
-                  style={{ width: `${Math.round(s.conviction * 100)}%` }}
-                />
-              </div>
+              <Progress
+                value={Math.round(s.conviction * 100)}
+                className="h-1.5 w-16"
+                variant="default"
+              />
             )}
             {s.href && <CaretRight className="h-4 w-4 shrink-0 text-muted-foreground" />}
           </div>
