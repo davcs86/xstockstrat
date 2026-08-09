@@ -517,3 +517,17 @@ repeated per step).
   route: `pnpm test:e2e -- e2e/mobile.spec.ts e2e/insights/backfills.spec.ts` (both reference nav
   landmarks) — 10 passed, no regressions.
 - Files modified: none (verification-only, as specced)
+
+### Step 21 — Whole-feature verification gate (tranche 1, acceptance criterion 5) [done]
+- `pnpm lint` clean (same one pre-existing unrelated warning as every prior step).
+- `pnpm build` clean.
+- `pnpm test:e2e` (full suite, no filter): two false-start failures before the real result, both
+  environmental (stray leftover processes from earlier steps' background/foreground build-and-test
+  cycles this session, not code defects): (1) `EADDRINUSE 127.0.0.1:3000` — a `next start` from a
+  prior background verification hadn't been reaped; killed the stray `pnpm start`/`next-server`
+  processes (`ss -ltnp`/`ps aux` located PIDs 22459/22494/22495). (2) `EADDRINUSE 127.0.0.1:9091` —
+  the mock gRPC backend's port, self-resolved (no listener found on retry) between attempts. Third
+  run, clean ports confirmed via `ss -ltn` beforehand: **256 passed, 0 failed** (2.6m).
+- All 20 tranche-1 steps (FR-1/2/3/10/11/12/13) verified together with zero cross-step interaction
+  failures — the mandated whole-feature gate before tranche 2 starts.
+- Files modified: none (verification-only, as specced)

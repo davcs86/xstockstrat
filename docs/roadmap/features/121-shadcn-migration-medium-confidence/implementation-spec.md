@@ -1028,7 +1028,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -- e2e/nav-reachability.spec.ts
 
 ### Step 21 — test: Whole-feature verification gate (acceptance criterion 5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**: none — verification-only, runs after Steps 1–20
 
