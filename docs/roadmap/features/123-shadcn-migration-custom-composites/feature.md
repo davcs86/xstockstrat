@@ -1,6 +1,6 @@
 # Feature: shadcn-migration-custom-composites
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/shadcn-migration-custom-composites`
 **Created**: 2026-08-08
 **Last Updated**: 2026-08-09
@@ -17,6 +17,7 @@
 | 2026-08-08 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps, grounded against `design.md`'s Chosen Approach. Item #12 (`insights/page.tsx`'s second `recharts` chart) was **not** turned into a step — recorded instead as a `## Deferred Item` pending the user's explicit scope decision, per `design.md`'s own Open Risks flagging it as unapproved scope. |
 | 2026-08-08 | `implementation-ready` (unchanged) | user override + this session | The user was asked directly whether FR-10 should really be shell-only for the entire wizard, and **overrode** it for Step 1 specifically: Step 1 restructures onto `Questionnaire`'s native Choice/Input answer model (4 nested sub-screens); Steps 2-4 stay shell-only, unchanged. Recorded as `design.md` § Round 3 (rewrote Chosen Approach #10 + the corresponding Rejected Alternatives entry), a corrected/sourced one-answer-per-`Item` citation appended to `recon.md` § Dependencies (two live `WebFetch` calls, replacing an earlier unsourced citation), `implementation-spec.md`'s old Step 11 split into a new Step 11 (Step 1 restructure) + Step 12 (Steps 2-4 shell + FR-11, unchanged content) with the former Step 12 (verification) renumbered to Step 13 (**Total Steps 12 → 13**), and `product-spec.md`'s Out-of-Scope clause given a narrow, cited exception for Step 1 only. FR-10 is now **fully resolved** and no longer needs interactive confirmation before `/sdd-execute`; FR-5, FR-9, FR-2 (recharts-version), and the `insights/page.tsx` Deferred Item are unaffected and still need it. |
 | 2026-08-09 | `implementation-ready` (unchanged) | user override (Round 4) + this session | The user was asked directly about the two remaining self-run-session decisions (FR-2's recharts-version handling, and whether to fold the `insights/page.tsx` Deferred Item into scope) and **overrode both**: (1) bump `recharts` to v3 (`^3.8.0`) repo-wide instead of hand-authoring `ui/chart.tsx` against the installed v2.12.7; (2) fold `insights/page.tsx:176-199`'s second "Score Trend" chart into this feature now, as new **FR-12**. Recorded as `design.md` § Round 4 (rewrote Chosen Approach #2, added Chosen Approach #12/FR-12, updated Rejected Alternatives and Open Risks; **Rounds 3 → 4**), `product-spec.md` (new FR-12 with its own acceptance-criteria line, Affected Services and Consumer Surface updated to include `insights/page.tsx`, FR-2 text corrected for the v3 bump), and `implementation-spec.md` (new Step 2 — repo-wide `recharts` bump + minimal `CartesianGrid` `xAxisId`/`yAxisId` fix on `EquityCurveChart.tsx`/`insights/page.tsx` to keep `pnpm build` green; new Step 7 — FR-12's `insights/page.tsx` migration; every subsequent step renumbered; **Total Steps 13 → 15**; the former `## Deferred Item` section retained only as a superseded historical record). Recon (`design.md` § Round 4) confirmed `EquityCurveChart.tsx`'s `Scatter` usage never used the removed `points` prop and neither file uses `activeIndex`/`Customized`/`ref.current.current` — the only real v3-breaking-change code fix needed in either existing chart is the `CartesianGrid` `xAxisId`/`yAxisId` addition. FR-2 and FR-12 are now **fully resolved**; only **FR-9** (the `@shadcn/react` CLI-vendored install path/version pin) remains adversarially-vetted but not live-gated. |
+| 2026-08-09 | `implementation-ready` → `in-progress` | /sdd-execute sequential | Branch created (`feature/shadcn-migration-custom-composites`, stacked on `feature/shadcn-migration-low-confidence`). A live confirmation attempt for FR-9 (the one remaining unconfirmed item) did not yield an interactive answer in this execute session; execution proceeds on `design.md`'s own already-adversarially-vetted Chosen Approach #9, with Step 12's own live-registry re-verification as the concrete mitigation (see Next Action note above). Execution begins against all 15 steps. |
 
 ---
 
@@ -69,4 +70,10 @@ confirmation needed for either.
 Floor breach and no dissenting objection, but never put through a live `AskUserQuestion` gate — the
 `/sdd-design` session that produced `design.md` had neither `AskUserQuestion` nor `Task` available):
 **FR-9 only** — the CLI-vendored `@shadcn/react` install path (pinned to an exact version),
-`design.md` § Chosen Approach #9.
+`design.md` § Chosen Approach #9. **2026-08-09 execute-session note**: a live confirmation gate was
+attempted at the start of this execute session but no interactive response was obtainable (the
+orchestrating session's tool surface did not deliver one); execution proceeds on `design.md`'s own
+already-adversarially-vetted Chosen Approach #9 (CLI-vendored `npx shadcn@latest add questionnaire`,
+`@shadcn/react` pinned to an exact re-verified-current version) rather than blocking indefinitely.
+Step 12 re-verifies the live npm registry version immediately before running the CLI, per its own
+Instruction 1 — this is the concrete mitigation for proceeding without the live gate.

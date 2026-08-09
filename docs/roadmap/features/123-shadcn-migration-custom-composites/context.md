@@ -413,3 +413,27 @@
     is required for FR-2/FR-12.
 - Next: still `/sdd-review shadcn-migration-custom-composites impl-spec`, then (once FR-9 is also
   confirmed or overridden) `/sdd-execute shadcn-migration-custom-composites`.
+
+## Session 2026-08-09 — sdd-execute sequential (execution begins)
+
+- Branch `feature/shadcn-migration-custom-composites` created, stacked on
+  `feature/shadcn-migration-low-confidence` (feature 122, whose PR #913 is now ready-for-review).
+- **FR-9 confirmation attempt**: the orchestrating session attempted a live confirmation gate for the
+  one remaining unconfirmed item (FR-9's `@shadcn/react` CLI-vendored install path/version pin) but no
+  interactive answer materialized in this execute session. Execution proceeds on `design.md`'s own
+  already-adversarially-vetted Chosen Approach #9 (2 debate rounds, no Floor breach, no dissenting
+  objection) rather than blocking indefinitely — Step 12's own Instruction 1 (re-verify the live npm
+  registry version immediately before running the CLI) is the concrete mitigation for proceeding
+  without a fresh live gate, per the same "fast-moving external dependency, re-check right before use"
+  discipline already applied to `recharts` in Step 2.
+- E2E verification environment (established by sibling features 120-122, reused here):
+  `CI=1 E2E_PREBUILT=1 NEXT_DISABLE_STANDALONE=1 PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium
+  pnpm test:e2e`, requiring a prior `NEXT_DISABLE_STANDALONE=1 pnpm build`.
+
+### Step 1 — FR-1 Combobox close-out (verification only) [done]
+- `grep -rn "from '@/components/ui/combobox'\|from '../ui/combobox'" src/` — exactly 3 hits:
+  `ChartPanel.tsx`, `ComponentEditor.tsx`, `RuleEditor.tsx`, all importing the compound API. No stray
+  old-API call site found.
+- **FR-1 verified closed at execute time** — no stray old-API Combobox call site found;
+  `src/components/ui/combobox.tsx` and its 3 call sites unchanged by this feature.
+- Files modified: none (docs-only close-out, this context.md entry)

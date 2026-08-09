@@ -87,7 +87,7 @@ Alternatives: replacing `ChartPanel.tsx`'s `lightweight-charts` chart). This mat
 
 ### Step 1 — docs: FR-1 Combobox close-out (verification only, no code change)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `docs/roadmap/features/123-shadcn-migration-custom-composites/context.md` — modify (append
