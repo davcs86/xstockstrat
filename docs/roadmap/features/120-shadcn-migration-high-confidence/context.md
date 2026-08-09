@@ -300,3 +300,16 @@
 - **Green**: updated the one call site to `getByRole('radio', { name: 'hard filter' })`. Re-run:
   21/21 passed.
 - Files modified: `src/app/insights/screener/page.tsx`, `e2e/insights/screener.spec.ts`
+
+### Steps 12-13 — OrderForm.tsx Toggle Group swap — red/green [done]
+- Replaced the Buy/Sell `<Button>` pair with `<ToggleGroup type="single" variant="outline">`/
+  `<ToggleGroupItem variant="buy"|"sell">`, using Step 9's app-specific variant; exact-case
+  `'BUY'`/`'SELL'` label text preserved.
+- **Red** (unmodified `order-form.spec.ts`): 1 failed / 11 passed —
+  `getByRole('button', { name: 'BUY', exact: true })` not found (role now `radio`). The three
+  case-insensitive `.getByRole('button', { name: /buy|sell/i }).last()` submit-button lookups were
+  unaffected — with the toggle no longer matching `role="button"` at all, `.last()` now resolves
+  unambiguously to the real submit button (an improvement, not a break).
+- **Green**: updated the 2 exact-case lookups (L104-105) to `getByRole('radio', ...)`. Re-run:
+  12/12 passed.
+- Files modified: `src/components/trader/OrderForm.tsx`, `e2e/trader/order-form.spec.ts`

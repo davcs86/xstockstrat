@@ -401,7 +401,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "screener"
 
 ### Step 12 — test: OrderForm.tsx Toggle Group swap — red
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/OrderForm.tsx` — modify
@@ -429,7 +429,7 @@ Record actual pass/fail in `context.md`.
 
 ### Step 13 — test: OrderForm.tsx Toggle Group swap — green
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/order-form.spec.ts` — modify
