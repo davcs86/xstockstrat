@@ -17,6 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/components/ui/utils';
+import { Textarea } from '@/components/ui/textarea';
 import { RULE_FUNCTIONS, fnPhrase, type RuleFn, type OperandRef } from '@/lib/strategyCatalog';
 
 // Condition-tree schema accepted by the analysis evaluator (evaluator.py):
@@ -324,11 +325,9 @@ export function RuleEditor({ value, onChange, label, operands }: RuleEditorProps
           </Button>
         </div>
       ) : (
-        <textarea
+        <Textarea
           aria-label={`${label} JSON`}
-          className={cn(
-            'flex min-h-[140px] w-full rounded-md border border-input bg-secondary px-3 py-2 font-mono text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
-          )}
+          className={cn('min-h-[140px] bg-secondary font-mono text-sm')}
           placeholder='{ "op": "AND", "conditions": [ { "fn": ">", "lhs": "sma_fast", "rhs": "sma_slow" } ] }'
           value={value}
           onChange={(e) => onChange(e.target.value)}

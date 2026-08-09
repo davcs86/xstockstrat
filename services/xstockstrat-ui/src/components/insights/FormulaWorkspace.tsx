@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -251,8 +252,8 @@ export function FormulaWorkspace({
                 </div>
                 <div>
                   <label className="mb-1 block text-xs text-muted-foreground">Description</label>
-                  <textarea
-                    className="flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  <Textarea
+                    className="min-h-[60px]"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="What it computes and the inputs it expects"
@@ -348,8 +349,8 @@ export function FormulaWorkspace({
                 <label className="mb-1 block text-xs text-muted-foreground">
                   Input data (JSON) — available as <code className="text-foreground">data</code>
                 </label>
-                <textarea
-                  className="flex min-h-[120px] w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                <Textarea
+                  className="min-h-[120px] font-mono text-xs"
                   value={jsonInput}
                   onChange={(e) => setJsonInput(e.target.value)}
                   spellCheck={false}
