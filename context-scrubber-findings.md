@@ -8,11 +8,16 @@ current code via 8 parallel read-only auditors (10, counting the earlier same-da
 results are folded in unchanged since nothing in scope has moved since). Every row cites both the
 context line and the evidence it fails.
 
-**Apply update (same day):** 9 clean, mechanical, pure-subtraction rows were applied in place —
-marked **✅ APPLIED** below wherever they appear. Everything else is still `scan`-only: stale citations
-and contradicted-by-code rows are never scrubber-trimmed by design (CF-N9), and the remaining
-restated/duplicate/JIT/bloat rows need a structural rewrite (a new pointer, a merged table, a judgment
-call on which copy to keep) rather than a pure deletion, so they were left for a deliberate follow-up.
+**Apply update (same day):** 9 clean, mechanical, pure-subtraction rows were applied immediately —
+marked **✅ APPLIED** below wherever they appear. The remaining restated/duplicate/JIT/bloat rows
+needed a structural rewrite (a new pointer, a merged table, a judgment call on which copy to keep)
+rather than a pure deletion, so they went through a follow-up **interactive fix pass**: each judgment
+call was put to the user via 4 batches of questions, and every explicit choice (not just the
+recommended option — several times the user picked the non-default) was applied. **28 rows are now
+✅ APPLIED** in total; a small number were explicitly reviewed and left as-is per the user's choice
+(marked **left as-is** with the reason). Stale citations and contradicted-by-code rows are still
+never scrubber-trimmed by design (CF-N9) — those remain `scan`-only, routed to `/context-constitution`
+and the plugin owner respectively.
 
 > ⚠ No security-*boundary*-contradicting rows found in this pass. Four still-open ⚠ security findings
 > (config-ui audit-route admin gap, identity's unsigned-token revoke, the fundsignal admin-bit
@@ -34,7 +39,9 @@ CF-1: never an invented token count).
 | Brittle / over-specified | 5 | ~60 | ≈ 3,600 |
 | Bloat / low-value prose | 5 | ~55 | ≈ 6,900 |
 | **Removable total** (restated + ~6 clean duplicates + bloat, excluding JIT bytes since a move isn't a deletion) | ~25 | ~35 | ≈ 12,800 |
-| **Applied this session** (subset of the above — pure subtractions, no new content needed) | 9 | ~30 | ≈ 4,300 |
+| **Applied same-day** (pure subtractions, no new content needed) | 9 | ~30 | ≈ 4,300 |
+| **Applied via interactive follow-up** (structural rewrites: new pointers, merged tables, judgment calls — 4 user-decision batches) | 19 | — | — |
+| **Applied total** | 28 | — | — |
 | Keep-but-verify (unconfirmed) | 15 | — | — |
 
 > The single highest-value fix in this whole report is still the fully-resolved 13-row MCP-tool-alignment
@@ -111,7 +118,7 @@ drifted. Grouped by target; the first 35 are unchanged from this session's earli
 | `xstockstrat-ledger/docs/context-constitution.md:16` (LEDGER-3) | this service's own `CLAUDE.md` § Live Streaming Architecture | verbatim mechanism match; LEDGER-3 adds the consumer-risk framing CLAUDE.md lacks | ✅ **APPLIED** — trimmed the mechanism restatement, kept the added "why" |
 | `xstockstrat-identity/docs/context-constitution.md:17` (IDENTITY-4) | `CLAUDE.md`'s OAuth section (near-identical `aud`-bound-JWT sentence) | same fact, same wording | ✅ **APPLIED** — CLAUDE.md's OAuth section now points at IDENTITY-4 instead of restating it |
 | `xstockstrat-identity/docs/context-constitution.md:14` (IDENTITY-1) | `CLAUDE.md`'s Config Keys note | partial overlap; IDENTITY-1 adds the PLAT-6-exception rationale | ✅ **APPLIED** — kept IDENTITY-1 in full, trimmed the CLAUDE.md Config Keys note to a pointer |
-| `xstockstrat-indicators/docs/context-constitution-findings.md:11` | `CLAUDE.md:64` (already self-flags "not yet enforced") | the finding's "docs claim it's real" framing is now stale | drop the row or move to Resolved |
+| `xstockstrat-indicators/docs/context-constitution-findings.md:11` | `CLAUDE.md:64` (already self-flags "not yet enforced") | the finding's "docs claim it's real" framing is now stale | ✅ **APPLIED** — moved to `## Resolved` with a note that CLAUDE.md now self-documents the gap |
 | `xstockstrat-analysis/docs/context-constitution.md:25` | `CLAUDE.md:201` (`analysis.strategy.scored` row) | adds nothing beyond CLAUDE.md's own row | ✅ **APPLIED** — replaced with a one-line pointer |
 | `xstockstrat-analysis/docs/context-constitution.md:26` (gotcha) | `CLAUDE.md:167,193` (`get_int_present` rows) | verbatim overlap on the two specific keys | ✅ **APPLIED** — shortened to a pointer, kept the file-wide claim |
 | `xstockstrat-analysis/docs/context-constitution.md:15` (ANALYSIS-2) | `CLAUDE.md:163` (identical formula) | some duplication is by design (CLAUDE.md points *to* ANALYSIS-2) | ✅ **APPLIED** — elided the formula from CLAUDE.md, kept it only in ANALYSIS-2 |
@@ -119,7 +126,7 @@ drifted. Grouped by target; the first 35 are unchanged from this session's earli
 | `xstockstrat-ingest/docs/context-constitution.md:15` (INGEST-2) | `backfill_jobs.py:11-12,53-56` comment | near word-for-word | ✅ **APPLIED** — trimmed to a shorter pointer at the docstring |
 | `xstockstrat-agent/CLAUDE.md:133-140` | `app/client.py:878-889` (`get_config_value` docstring) | the feature-093 environment-scoping paragraph paraphrases the docstring 1:1 | ✅ **APPLIED** — shrunk to a pointer, kept the config-key table |
 | `xstockstrat-config/CLAUDE.md:38-52` (Critical Invariant #7) | `src/grpc/authz.ts:29-97` (JSDoc + `INTERNAL_CALLER_ALLOWLIST`) | structure/allowlist example verified verbatim in both | acceptable overlap (this is the canonical doc site) — low priority |
-| `docs/CLAUDE.md:19-42` ("Common Scenarios → Right File") | root `CLAUDE.md` Context Guide + the child indexes (`patterns/`, `runbooks/`, `setup/CLAUDE.md`) | an agent following any single link gets the same routing for free | delete or shrink to only cross-directory scenarios no single child index covers |
+| `docs/CLAUDE.md:19-42` ("Common Scenarios → Right File") | root `CLAUDE.md` Context Guide + the child indexes (`patterns/`, `runbooks/`, `setup/CLAUDE.md`) | an agent following any single link gets the same routing for free | ✅ **APPLIED** — every row mapped to one file in one subdirectory (zero genuinely cross-directory scenarios survived the filter), so the table was replaced with a pointer to the child indexes |
 | `packages/proto/CLAUDE.md:7` | root `CLAUDE.md:39` ("single source of truth for all gRPC/Protobuf contracts") | verbatim phrase | harmless one-liner intro — low priority |
 | `packages/otel/CLAUDE.md:7-9` | `docs/patterns/observability.md:5-6` (local-dev vs. production OTLP routing) | identical split stated in both | low-value churn to fix — verified accurate, not urgent |
 
@@ -130,19 +137,19 @@ drifted. Grouped by target; the first 35 are unchanged from this session's earli
 | `packages/proto/docs/context-constitution.md:24` (Timeframe not interval-ordered) | root `docs/context-constitution.md:49` | root (cross-cutting) | ✅ **APPLIED** — removed from proto |
 | root `docs/context-constitution.md:55` (candidate: RPC bare-message-vs-wrapper) | `packages/proto/docs/context-constitution.md:32` | proto (proto-specific governance) | ✅ **APPLIED** — removed from root |
 | `packages/proto/CLAUDE.md:10` ("never Read/Grep `gen/`") | root `CLAUDE.md:464-466` (stated 3× — once per stub language) | root | intentional local-echo pattern for a package a reader opens directly — low priority |
-| `README.md:24-42` (Service Registry table) | root `CLAUDE.md` §Service Registry (same 12 rows minus Role) | root | **remove from README** — replace with a pointer (public front door makes full removal debatable — at minimum trim to names + link) |
+| `README.md:24-42` (Service Registry table) | root `CLAUDE.md` §Service Registry (same 12 rows minus Role) | root | ✅ **APPLIED** — trimmed README to names + a pointer to CLAUDE.md §Service Registry for the detail |
 | `docs/roadmap/features/CLAUDE.md:13-24` (Feature Lifecycle Statuses, includes `design-approved`) | root `CLAUDE.md` §Feature Roadmap (same enum, **missing** `design-approved`) | `docs/roadmap/features/CLAUDE.md` (more complete) | ✅ **APPLIED** — replaced root's enum enumeration with a pointer to `docs/roadmap/features/CLAUDE.md` |
 | root `docs/context-constitution.md:46` (Python config zero-trap gotcha) | root `docs/context-constitution-findings.md` CF-N10 row | — | explicitly cross-referenced by the authors ("also logged as a defect... and here as the fix") — intentional, low actionability |
 | `xstockstrat-portfolio/docs/context-constitution.md:24` (gotcha) | `xstockstrat-portfolio/docs/context-constitution-findings.md:10` | — | explicitly cross-referenced — low actionability |
 | `xstockstrat-notify/docs/context-constitution.md:21-22` (gotchas) | `xstockstrat-notify/docs/context-constitution-findings.md:14-18,28` | — | explicitly cross-referenced both directions — low actionability |
-| `xstockstrat-agent/docs/context-constitution.md:26` (AGENT-3b) | the feature-111 scar bullet, same file | AGENT-3b (standing rule) | scar could shrink to "see AGENT-3b" + the historical delta |
+| `xstockstrat-agent/docs/context-constitution.md:26` (AGENT-3b) | the feature-111 scar bullet, same file | AGENT-3b (standing rule) | **left as-is** — this rule+narrative split is a repo-wide pattern used elsewhere (e.g. CONFIG-6/CONFIG-7 + the `#884` scar); the scar's forensic detail isn't redundant with the rule's forward-looking statement |
 | `xstockstrat-analysis/docs/context-constitution.md:20,29` (ANALYSIS-7 + `63a3655` gotcha) | same file | ANALYSIS-7 (standing rule) | cross-referenced by design; scar restates rather than adds |
 | `xstockstrat-config/CLAUDE.md:38-52` | `xstockstrat-config/docs/context-constitution.md` PLAT-9 gotcha (which itself says "already documented in this service's own CLAUDE.md item 7") | CLAUDE.md (this is the primary doc site) | self-acknowledged, intentional — low actionability |
 | `xstockstrat-config/CLAUDE.md:67` ("DELTA ... FULL namespace ... wholesale replace") | CONFIG-1 (same invariant, same wording) — stated a **third** time in the CLAUDE.md constitution-pointer summary too | CLAUDE.md body | ✅ **APPLIED** — CONFIG-1's Rule cell now points at CLAUDE.md § WatchConfig Flow instead of restating the mechanism; the constitution-pointer summary line is untouched (protected sentinel, CF-N11) |
 | `xstockstrat-identity/CLAUDE.md:80` | IDENTITY-1 (`docs/context-constitution.md:14`) | either | ✅ **APPLIED** — same edit as the IDENTITY-1 row above |
 | `xstockstrat-analysis/CLAUDE.md:167,193` | `docs/context-constitution.md`'s `get_int_present` gotcha | CLAUDE.md (per-key table is the right home) | same underlying fact stated 3× total — trim the constitution copy (see Restated above) |
-| `README.md:28-41` (service/port table) | root `CLAUDE.md` §Service Registry | root | defensible (public front door) but will drift — trim to names + link |
-| `docs/CLAUDE.md:21-43` (route table) | root Context Guide + child indexes | root | third place the same routes are maintained |
+| `README.md:28-41` (service/port table) | root `CLAUDE.md` §Service Registry | root | ✅ **APPLIED** — same edit as the README Service Registry row above |
+| `docs/CLAUDE.md:21-43` (route table) | root Context Guide + child indexes | root | ✅ **APPLIED** — same edit as the "Common Scenarios → Right File" row above |
 
 ## Contradicted by code
 
