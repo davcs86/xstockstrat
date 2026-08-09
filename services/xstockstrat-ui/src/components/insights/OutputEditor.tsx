@@ -1,8 +1,9 @@
 'use client';
 import type { MessageInitShape } from '@bufbuild/protobuf';
-import { ArrowDown, ArrowUp, Plus, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { RepeatableRowList } from '@/components/shared/RepeatableRowList';
 import { useListEditor } from '@/hooks/useListEditor';
 import {
   FormulaOutputSchema,
@@ -54,55 +55,59 @@ export function OutputEditor({ value, onChange }: OutputEditorProps) {
         <code className="text-foreground">upper</code>) to reference them in strategy rules as{' '}
         <code className="text-foreground">ref.series</code>.
       </p>
-      {value.map((o, i) => (
-        <div key={i} className="flex items-center gap-2">
-          <Input
-            aria-label={`output name ${i}`}
-            placeholder="name (e.g. upper)"
-            value={o.name}
-            onChange={(e) => update(i, { name: e.target.value })}
-          />
-          <Input
-            aria-label={`output description ${i}`}
-            placeholder="description"
-            value={o.description}
-            onChange={(e) => update(i, { description: e.target.value })}
-          />
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            aria-label={`move output up ${i}`}
-            onClick={() => move(i, -1)}
-            disabled={i === 0}
-          >
-            <ArrowUp className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            aria-label={`move output down ${i}`}
-            onClick={() => move(i, 1)}
-            disabled={i === value.length - 1}
-          >
-            <ArrowDown className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            aria-label={`remove output ${i}`}
-            onClick={() => remove(i)}
-          >
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-      ))}
-      <Button type="button" size="sm" variant="outline" onClick={add}>
-        <Plus className="mr-1.5 h-4 w-4" />
-        Add output
-      </Button>
+      <RepeatableRowList
+        items={value}
+        onAdd={add}
+        addLabel="Add output"
+        onUpdate={update}
+        onRemove={remove}
+        onMove={move}
+        renderRow={(o, i, ctx) => (
+          <div className="flex items-center gap-2">
+            <Input
+              aria-label={`output name ${i}`}
+              placeholder="name (e.g. upper)"
+              value={o.name}
+              onChange={(e) => ctx.update({ name: e.target.value })}
+            />
+            <Input
+              aria-label={`output description ${i}`}
+              placeholder="description"
+              value={o.description}
+              onChange={(e) => ctx.update({ description: e.target.value })}
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              aria-label={`move output up ${i}`}
+              onClick={() => ctx.move?.(-1)}
+              disabled={i === 0}
+            >
+              <ArrowUp className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              aria-label={`move output down ${i}`}
+              onClick={() => ctx.move?.(1)}
+              disabled={i === value.length - 1}
+            >
+              <ArrowDown className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              aria-label={`remove output ${i}`}
+              onClick={ctx.remove}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+        )}
+      />
     </div>
   );
 }
