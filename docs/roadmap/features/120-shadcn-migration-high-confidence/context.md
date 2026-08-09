@@ -255,3 +255,23 @@
   `-g "positions"` (12 passed), `-g "market"` (7 passed).
 - Files modified: `src/app/insights/market/[symbol]/page.tsx`, `src/app/trader/positions/[symbol]/page.tsx`,
   `src/components/trader/ChartPanel.tsx`, `e2e/trader/chart-panel.spec.ts`
+- Deviations: see Deviation Log entry above.
+
+### Step 7 — RuleEditor.tsx Tabs swap — red [done]
+- Replaced the two `<Button>` (Visual/JSON) with `<Tabs>`/`<TabsList>`/`<TabsTrigger>`, `onValueChange`
+  routed through the existing `switchTo` guard (preserves the JSON→visual parse-error check). Wrapped
+  the visual builder and the JSON `Textarea` (from Step 3) each in `<TabsContent>`.
+  Removed the wrapper div: `strategy-authoring.spec.ts`'s `getByLabel('Entry rule JSON')`/`'Exit rule JSON'`
+  calls target the `Textarea`'s `aria-label`, unaffected.
+- **Red run (unmodified `strategy-authoring.spec.ts`)**: 6 failed / 17 passed. Failure mode:
+  `page.getByRole('button', { name: 'JSON' })` (helper `fillToReview` L64 + two inline call sites
+  L214, L243) no longer resolves — Radix `Tabs.Trigger` renders `role="tab"`, confirming design.md's
+  flagged-unverified ARIA question.
+- Files modified: `src/components/insights/RuleEditor.tsx`
+
+### Step 8 — RuleEditor.tsx Tabs swap — green [done]
+- Updated all 3 `getByRole('button', { name: 'JSON' })` call sites (L64/214/243) to
+  `getByRole('tab', { name: 'JSON' })`. The paired `.nth(0)`/`.nth(1)` Visual/JSON pattern and the
+  `getByLabel(...)` JSON-textarea calls needed no change.
+- Verification: `pnpm test:e2e -g "strategy-authoring"` — 23/23 passed (green).
+- Files modified: `e2e/insights/strategy-authoring.spec.ts`

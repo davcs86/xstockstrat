@@ -257,7 +257,7 @@ cd services/xstockstrat-ui && pnpm build && pnpm test:e2e -g "chart-panel" && pn
 
 ### Step 7 — test: RuleEditor.tsx Tabs swap — red (unmodified spec against new markup)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/RuleEditor.tsx` — modify
@@ -288,7 +288,7 @@ Record the actual pass/fail in `context.md` (per design.md's mandatory instructi
 
 ### Step 8 — test: RuleEditor.tsx Tabs swap — green (update spec selectors)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/strategy-authoring.spec.ts` — modify
