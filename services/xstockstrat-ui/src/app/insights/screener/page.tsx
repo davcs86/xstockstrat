@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/components/ui/utils';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Slider } from '@/components/ui/slider';
 import {
   useScreenSymbols,
   useScreenSymbolsPoll,
@@ -377,15 +378,14 @@ export default function ScreenerPage() {
                     </span>
                     <label className="flex items-center gap-2">
                       <span>weight</span>
-                      <input
-                        type="range"
+                      <Slider
                         aria-label="weight slider"
                         min={0}
                         max={1}
                         step={0.05}
-                        value={c.weight}
-                        onChange={(e) => updateCriterion(i, { weight: Number(e.target.value) })}
-                        className="w-28 accent-primary"
+                        value={[c.weight]}
+                        onValueChange={([v]) => updateCriterion(i, { weight: v })}
+                        className="w-28"
                       />
                       <Input
                         aria-label="weight"

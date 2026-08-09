@@ -183,7 +183,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -- e2e/config-ui/sources.spec.ts
 
 ### Step 3 — service: Add `ui/slider.tsx` primitive and swap the screener weight range input (FR-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/slider.tsx` — create

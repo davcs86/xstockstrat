@@ -283,3 +283,12 @@ repeated per step).
 ### Step 2 — e2e regression for FR-1 (Switch) [done]
 - No existing test targeted the Active toggle (confirmed grep). Ran `pnpm test:e2e -g "config-ui"`
   (49 passed) as the regression check. No spec change needed.
+
+### Step 3 — Add ui/slider.tsx primitive and swap screener weight range input (FR-2) [done]
+- `npx shadcn@latest add slider` (no `button.tsx` collateral). Range input was at `:380-388` (line
+  drift from product-spec's `396-405` — earlier feature-120/121 edits to this file shifted it).
+  `Slider` is array-valued; `onValueChange={([v]) => ...}` matches `updateCriterion`'s shape.
+  `aria-label="weight slider"` preserved (the paired numeric `Input` mirror at `:390-399` untouched).
+- Verification: `pnpm lint` clean.
+- Files modified: `src/components/ui/slider.tsx` (create), `src/components/ui/slider.test.ts`
+  (create), `src/app/insights/screener/page.tsx`
