@@ -23,24 +23,9 @@
 
 ## Service Registry
 
-Backend services are **gRPC-only** — the frontends and the MCP agent call them over gRPC and re-expose HTTP to browsers/external clients themselves.
+Backend services are **gRPC-only** — the frontends and the MCP agent call them over gRPC and re-expose HTTP to browsers/external clients themselves. 10 gRPC microservices (`xstockstrat-trading`, `-portfolio`, `-marketdata`, `-indicators`, `-ingest`, `-analysis`, `-ledger`, `-identity`, `-notify`, `-config`) plus the `xstockstrat-ui` Next.js frontend and the `xstockstrat-agent` MCP server.
 
-| Service | Language | gRPC | HTTP |
-|---|---|---|---|
-| xstockstrat-trading | Go | 50051 | — |
-| xstockstrat-portfolio | Go | 50052 | — |
-| xstockstrat-marketdata | Go | 50053 | — |
-| xstockstrat-indicators | Python | 50054 | — |
-| xstockstrat-ingest | Python | 50055 | — |
-| xstockstrat-analysis | Python | 50056 | — |
-| xstockstrat-ledger | Node.js | 50057 | — |
-| xstockstrat-identity | Node.js | 50058 | — |
-| xstockstrat-notify | Node.js | 50059 | — |
-| xstockstrat-config | Node.js | 50060 | — |
-| xstockstrat-ui | Next.js | — | 3000 |
-| xstockstrat-agent | Python (MCP) | — | 9000 |
-
-Full details (roles, dependencies, config keys) → [`CLAUDE.md`](CLAUDE.md).
+Languages, ports, roles, dependencies, and config keys → [`CLAUDE.md`](CLAUDE.md) § Service Registry.
 
 ---
 

@@ -1,6 +1,8 @@
 # Feature: shadcn-migration-high-confidence
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: d5763e05e9750931610d809c6b4edd7fd810525e
+**Launched date**: 2026-08-09
 **Development Branch**: `feature/shadcn-migration-high-confidence`
 **Created**: 2026-08-08
 **Last Updated**: 2026-08-09
@@ -18,6 +20,7 @@
 | 2026-08-09 | `implementation-ready` → `in-progress` | /sdd-execute sequential | Step 1 (Skeleton adoption) landed |
 | 2026-08-09 | `in-progress` → `code-completed` | /sdd-execute sequential | All 36 steps done; full suite green (255/255 e2e, 80/80 unit); ready for integration PR |
 
+| 2026-08-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #916; committed d5763e05e9750931610d809c6b4edd7fd810525e |
 ---
 
 ## Artifacts

@@ -35,9 +35,8 @@ The former HTTP/Connect-RPC server on `8058` (and the `src/connect/` Connect rou
 Identity is the durable OAuth state store + token mint behind the MCP agent's stateless OAuth 2.1
 HTTP facade. `RegisterOAuthClient` (RFC 7591 DCR, https-only public client) and `GetOAuthClient`
 manage `identity.oauth_clients`; `IssueAuthCode`/`ExchangeAuthCode` use `identity.oauth_auth_codes`
-(single-use, 60s TTL, PKCE S256, exact redirect match). The OAuth **access token is an `aud`-bound
-JWT** (`TokenClaims.aud` = the agent resource URI, RFC 8707) minted with the standard claim shape;
-`ValidateToken` surfaces `aud`. The OAuth **refresh token reuses `identity.refresh_tokens`** (rotation
+(single-use, 60s TTL, PKCE S256, exact redirect match). The OAuth access token's `aud`-binding
+contract is IDENTITY-4 in `docs/context-constitution.md`. The OAuth **refresh token reuses `identity.refresh_tokens`** (rotation
 on `RefreshOAuthToken` revokes the presented token and inserts a new one). TTLs reuse
 `identity.jwt.access_ttl_seconds` / `identity.jwt.refresh_ttl_seconds`.
 
@@ -51,22 +50,14 @@ on `RefreshOAuthToken` revokes the presented token and inserts a new one). TTLs 
 ## Database / Migrations
 
 - `000_schema`, `001_identity_tables` (`users`, `api_keys`, `refresh_tokens`), `002_seed_admin`.
-  Note: `005_drop_api_keys` later drops `identity.api_keys` (the API-key feature was removed).
-- `003_oauth` (feature 049 Part B) — adds `identity.oauth_clients` (`client_id` PK, `redirect_uris
-  TEXT[]`, `client_name`, `created_at`) and `identity.oauth_auth_codes` (`code` PK = SHA-256 hash,
-  `client_id`/`user_id` FKs ON DELETE CASCADE, `redirect_uri`, `code_challenge`, `resource`,
-  `expires_at`, `consumed_at`, `created_at`; index on `client_id`). Refresh tokens are **not** a new
-  table — OAuth reuses `identity.refresh_tokens`.
-- `004_refresh_token_client` (feature 051) — adds `refresh_tokens.client_id` (FK → `oauth_clients`,
-  ON DELETE CASCADE; `NULL` = first-party user session, non-NULL = an OAuth-client grant) and
-  `refresh_tokens.last_used_at` (TIMESTAMPTZ, "last refreshed"), plus partial index
-  `idx_refresh_user_client (user_id, client_id) WHERE client_id IS NOT NULL`. OAuth refresh tokens
-  are now tagged with their `client_id` on mint (`ExchangeAuthCode`) and rotation
-  (`RefreshOAuthToken`) so `ListAuthorizedApps` / `RevokeAuthorizedApp` can list and revoke them
-  per-user.
-- `005_drop_api_keys` — drops `identity.api_keys` (and its index). The API-key RPCs
-  (`CreateApiKey`/`ValidateApiKey`/`ListApiKeys`/`RevokeApiKey`) were removed; nothing consumes
-  API keys anymore.
+- `003_oauth` (feature 049 Part B) — adds `identity.oauth_clients` + `identity.oauth_auth_codes`;
+  OAuth refresh tokens reuse `identity.refresh_tokens` (no new table).
+- `004_refresh_token_client` (feature 051) — tags `refresh_tokens` with `client_id`/`last_used_at`
+  so `ListAuthorizedApps`/`RevokeAuthorizedApp` can list and revoke per-user OAuth grants.
+- `005_drop_api_keys` — drops `identity.api_keys`; the API-key RPCs were removed and nothing
+  consumes API keys anymore.
+
+See `migrations/*.up.sql` for exact columns/constraints/indexes.
 
 ## Config Keys Consumed
 
@@ -77,7 +68,7 @@ Namespace: `identity`
 | `identity.jwt.access_ttl_seconds` | int | `900` | Access token TTL (15 min) |
 | `identity.jwt.refresh_ttl_seconds` | int | `2592000` | Refresh token TTL (30 days) |
 
-> The JWT signing key is **not** a config key — it is read from the `JWT_SECRET` env var (`src/grpc/identityServiceImpl.ts:30-31`, throws if unset), not served by xstockstrat-config.
+> The JWT signing key's env-only sourcing (never config) is IDENTITY-1 in `docs/context-constitution.md`.
 
 ## Webhooks
 

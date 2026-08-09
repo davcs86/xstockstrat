@@ -118,7 +118,16 @@ type TradingService struct {
 	// Seeded from the DB in LoadBrokerPool. Mirrors credStatus/credStatusMu's shape.
 	halted      map[string]bool
 	haltReasons map[string]string
-	haltedMu    sync.Mutex
+	// haltedLastPolled records when reconcileTick last polled the broker for an already-
+	// halted account, so it can be throttled to trading.reconciliation.halted_poll_interval_ms
+	// (a slower cadence than the ordinary tick interval) instead of the full-rate poll a
+	// still-tradeable account gets — an already-halted account can't place new orders
+	// regardless (isAccountHalted gates PlaceOrder/ReplaceOrder), so there is no need to
+	// re-check broker state at the same frequency. Set the instant an account becomes
+	// halted (haltAccount) so the cooldown starts immediately rather than after one more
+	// free poll.
+	haltedLastPolled map[string]time.Time
+	haltedMu         sync.Mutex
 	// flattenInFlight dedups the protection-window watchdog's per-bracket flatten
 	// goroutines — a slow flatten must not be re-triggered by the next tick.
 	flattenInFlight   map[string]bool
@@ -185,6 +194,7 @@ func NewTradingService(
 		credSkipLoggedAt:    make(map[string]time.Time),
 		halted:              make(map[string]bool),
 		haltReasons:         make(map[string]string),
+		haltedLastPolled:    make(map[string]time.Time),
 		flattenInFlight:     make(map[string]bool),
 		reconcileCandidates: make(map[string]int),
 	}, nil
@@ -1324,7 +1334,18 @@ func (s *TradingService) clearReconciliationCandidate(key string) {
 // emitReconciliationFinding records a real (past-grace-window) mismatch: a ledger event, a
 // CRITICAL alert, and the ordinary per-account halt (feature 030's mechanism, reused — no
 // SetConfig/authz call for this common case; that is Step 19's rare systemic escalation).
+//
+// No-ops once the account is already halted: isAccountHalted already gates PlaceOrder/
+// ReplaceOrder for every halt source, so a later finding against an already-halted account
+// changes no trading behavior — only a human clearing the halt (a manual DB edit; nothing in
+// this service ever un-halts) can resume it. Without this guard, an account with a handful of
+// pre-existing broker orders the poller can never learn about (see LoadInflightOrders, which
+// only hydrates NEW/PARTIALLY_FILLED orders) re-triggers this full sequence — ledger event,
+// CRITICAL alert, ERROR log — every reconciliation tick, forever, for the same orders.
 func (s *TradingService) emitReconciliationFinding(ctx context.Context, accountID, mismatchClass, orderID string, expected, brokerReported float64) {
+	if s.isAccountHalted(accountID) {
+		return
+	}
 	s.emitLedgerEvent(ctx, "reconciliation.mismatch_found", fmt.Sprintf("account:%s", accountID), map[string]interface{}{
 		"mismatch_class":  mismatchClass,
 		"order_id":        orderID,
@@ -1389,6 +1410,13 @@ func (s *TradingService) reconcileTick(ctx context.Context, graceTicks int, syst
 
 	for accountID, entry := range brokerMap {
 		if credentialsKnownInvalid(credStatus[accountID]) {
+			continue
+		}
+		// An already-halted account can't place new orders regardless of what this tick
+		// finds (isAccountHalted gates PlaceOrder/ReplaceOrder), so poll it at a slower,
+		// configurable cadence instead of the ordinary tick rate — cuts needless broker API
+		// load while still eventually noticing broker-side drift on it.
+		if s.isAccountHalted(accountID) && !s.shouldPollHaltedAccount(accountID, s.haltedPollInterval()) {
 			continue
 		}
 
@@ -1822,6 +1850,18 @@ func (s *TradingService) brokerCallTimeout() time.Duration {
 	return time.Duration(ms) * time.Millisecond
 }
 
+// haltedPollInterval is how often reconcileTick re-polls an already-halted account's broker
+// state (trading.reconciliation.halted_poll_interval_ms, default 300000 ms / 5 min) — read
+// live, like brokerCallTimeout above. Unlike graceTicks/systemicThresholdPct (see
+// reconcileTick's own doc comment for why those are hoisted explicit parameters instead),
+// this value has no test that needs to substitute an arbitrary override through
+// config.Watcher's absent snapshot setter: the default itself is what a hand-constructed
+// service in tests gets, and shouldPollHaltedAccount's own throttle/edge-case behavior is
+// unit-tested directly against an explicit intervalMs argument.
+func (s *TradingService) haltedPollInterval() float64 {
+	return s.cfgW.GetFloat("trading.reconciliation.halted_poll_interval_ms", 300000)
+}
+
 // credSkipLogInterval throttles the per-account "skipping invalid credentials"
 // warning so a persistently invalid account is visible without logging every cycle.
 const credSkipLogInterval = 15 * time.Minute
@@ -2050,6 +2090,28 @@ func (s *TradingService) isAccountHalted(accountID string) bool {
 	return s.halted[accountID]
 }
 
+// shouldPollHaltedAccount reports whether reconcileTick should poll the broker for an
+// already-halted account this tick, throttling to intervalMs
+// (trading.reconciliation.halted_poll_interval_ms) instead of the ordinary tick rate — an
+// already-halted account can't place new orders regardless (isAccountHalted gates
+// PlaceOrder/ReplaceOrder), so there is no need to re-check its broker state at full
+// frequency, only to eventually notice broker-side drift (e.g. a manual order placed via
+// the broker's own dashboard). Records now as the new last-polled time whenever it returns
+// true, including the first observation (intervalMs <= 0 always polls, matching
+// StartReconciliationPoller's own "<=0 disables the override" convention for interval_ms).
+func (s *TradingService) shouldPollHaltedAccount(accountID string, intervalMs float64) bool {
+	now := time.Now()
+	s.haltedMu.Lock()
+	defer s.haltedMu.Unlock()
+	if intervalMs > 0 {
+		if last, seen := s.haltedLastPolled[accountID]; seen && now.Sub(last) < time.Duration(intervalMs)*time.Millisecond {
+			return false
+		}
+	}
+	s.haltedLastPolled[accountID] = now
+	return true
+}
+
 // haltReason returns the last-recorded reason for an account's halt (empty if none).
 func (s *TradingService) haltReason(accountID string) string {
 	s.haltedMu.Lock()
@@ -2063,11 +2125,27 @@ func (s *TradingService) haltReason(accountID string) string {
 // failure (fail-safe — the halt itself must never be undone by a persistence
 // hiccup; this differs from validateAndRecordCredential's own rollback-on-failure,
 // which is a deliberate, different choice for that unrelated concern).
+//
+// An already-halted account short-circuits before the DB write/alert/error-log: nothing
+// in this service ever clears halted (resuming trading is a manual DB edit — see
+// TestLoadBrokerPool_HydratesHaltedFromDB), so once set, re-running the full sequence for
+// every later finding is pure noise, not a new signal — e.g. the reconciliation poller
+// (StartReconciliationPoller) re-observing the same handful of pre-existing broker orders
+// as "unknown" every tick previously re-halted, re-alerted (CRITICAL), and re-logged at
+// ERROR indefinitely for an account that was already halted.
 func (s *TradingService) haltAccount(ctx context.Context, accountID, reason string, haltSource int32) {
 	now := time.Now().UTC()
 	s.haltedMu.Lock()
+	if s.halted[accountID] {
+		s.haltedMu.Unlock()
+		return
+	}
 	s.halted[accountID] = true
 	s.haltReasons[accountID] = reason
+	// Start the halted-account poll cooldown now, not on the next tick — otherwise
+	// reconcileTick would still poll this account at full rate for one more tick before
+	// shouldPollHaltedAccount's first observation kicks in.
+	s.haltedLastPolled[accountID] = now
 	s.haltedMu.Unlock()
 
 	dbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
