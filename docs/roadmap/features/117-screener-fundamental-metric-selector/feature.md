@@ -1,6 +1,8 @@
 # Feature: screener-fundamental-metric-selector
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: fb8a987e22cd4cd242fcc9077e0a1d312a89bb1f
+**Launched date**: 2026-08-09
 **Development Branch**: `feature/screener-fundamental-metric-selector`
 **Created**: 2026-08-07
 **Last Updated**: 2026-08-07
@@ -17,6 +19,7 @@
 | 2026-08-07 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 3 steps (strategyCatalog.ts catalog, page.tsx select conversion, screener.spec.ts e2e coverage). |
 | 2026-08-07 | `implementation-ready` → `code-completed` | manual execute | All 3 steps done on the harness branch `claude/fundamentals-selector-audit-egeez2` (single-branch mandate, no per-step PRs). TDD red→green verified literally via `git stash`. `tsc --noEmit`/`pnpm run lint` clean; 12/12 `screener.spec.ts` e2e tests pass. No spec deviations. |
 
+| 2026-08-09 | `code-completed` → `launched` | CI workflow | Promoted via PR #908; committed fb8a987e22cd4cd242fcc9077e0a1d312a89bb1f |
 ---
 
 ## Artifacts

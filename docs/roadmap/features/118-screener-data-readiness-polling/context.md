@@ -387,3 +387,10 @@ Next: Step 1.
   earlier this session via dedicated debug runs — not a regression from this merge).
 - Committed the merge (`b7332f2`) and pushed. Updated `merge-order.md`'s row: Resolved `No` → `Yes`.
 - PR #903 is now clear to merge once its CI passes.
+
+## Session 2026-08-09 (CI: feature status automation)
+
+- Promotion PR #908 merged to main
+- Feature promoted and committed: fb8a987e22cd4cd242fcc9077e0a1d312a89bb1f
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-09

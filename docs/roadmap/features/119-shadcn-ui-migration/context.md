@@ -407,3 +407,10 @@
   impl-spec review were resolved before execution began).
 - Status: `implementation-ready` → `in-progress` (step 1) → `code-completed` (step 11, this entry).
 - Next: open the integration PR to `main-dev`.
+
+## Session 2026-08-09 (CI: feature status automation)
+
+- Promotion PR #908 merged to main
+- Feature promoted and committed: fb8a987e22cd4cd242fcc9077e0a1d312a89bb1f
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-09
