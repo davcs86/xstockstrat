@@ -458,3 +458,28 @@ decisions per FR, transcribed from `design.md` § Round 3/Round 4 at execute tim
   tests + the new one), run against the **pre-migration** `EditCredentialsForm` — this green run is
   the baseline design.md § FR-3 requires before Step 7 touches that function.
 - Files modified: `e2e/trader/account-selector.spec.ts`
+
+### Step 5 — Migrate `AuthForm.tsx`'s `CredentialsForm` to react-hook-form + zod + ui/field.tsx [done]
+- Verified `react-hook-form@7.85.0`/`@hookform/resolvers@5.7.1`/`zod@4.4.3` API surfaces directly
+  against installed type defs before writing any call code (ledger 2026-08-05 trap). Found zod v4's
+  `.string().email()` is `@deprecated` in favor of the top-level `z.email(msg)` — used the latter.
+- Replaced the four `useState` calls with a single `useForm<CredentialsValues>({ resolver:
+  zodResolver(credentialsSchema), defaultValues: {...} })`. `credentialsSchema` = `z.object({ email:
+  z.email(...), password: z.string().min(1, ...) })` — message text chosen to preserve AC2's "same
+  validation messages" intent (equivalent wording to the native browser messages, not new stricter
+  copy).
+- Both `Input`s bridged via `Controller` (`render={({ field, fieldState }) => ...}`), wrapped in
+  `Field`/`FieldError` (`errors={[fieldState.error]}`) — `Input` itself stays non-form-aware, matching
+  the pattern design.md specifies for Step 6/7's `CredentialFields` consumers.
+- Kept a local `error` state for the submit-level `fetch` failure path only (network/server error,
+  not zod-expressible); `formState.isSubmitting` replaces manual `loading` for the
+  disabled/label-swap behavior. `onSuccess()` call and error-rendering markup/classes unchanged.
+  `AuthCardShell` and both consumer pages untouched, per the step's scope.
+- No new DOM e2e coverage added (design.md § FR-2: zero DOM e2e existed pre-migration, and no new
+  user-visible behavior was introduced) — verification is lint/build + the two existing
+  `e2e/auth.spec.ts` API-level assertions, per the step's TDD refactor-escape-hatch note.
+- Verification: `pnpm lint` — clean (only the one pre-existing unrelated warning in
+  `strategies/[id]/page.tsx`). `NEXT_DISABLE_STANDALONE=1 pnpm build` — succeeded, full route
+  manifest, no TS errors. `pnpm test:e2e -- e2e/auth.spec.ts` — **10 passed**, including both
+  API-level `POST /api/auth/login` assertions unmodified (AC5 satisfied).
+- Files modified: `src/components/auth/AuthForm.tsx`

@@ -6,9 +6,13 @@
 // and the on-success behavior (redirect vs. agent callback).
 
 import { useState } from 'react';
+import { useForm, Controller } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Field, FieldError } from '@/components/ui/field';
 
 /** Centered card shell used by both auth pages. */
 export function AuthCardShell({ title, children }: { title: string; children: React.ReactNode }) {
@@ -24,6 +28,15 @@ export function AuthCardShell({ title, children }: { title: string; children: Re
   );
 }
 
+// FR-2 (feature 122): email format + required, password required — reproduces the native
+// type="email"/required checks with equivalent messages, not new stricter copy.
+const credentialsSchema = z.object({
+  email: z.email('Enter a valid email address'),
+  password: z.string().min(1, 'Password is required'),
+});
+
+type CredentialsValues = z.infer<typeof credentialsSchema>;
+
 /** Email/password form that authenticates against /api/auth/login and calls onSuccess. */
 export function CredentialsForm({
   submitLabel,
@@ -34,20 +47,24 @@ export function CredentialsForm({
   loadingLabel: string;
   onSuccess: () => void;
 }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  // Submit-level network/server error — not zod-expressible, kept as local state.
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const {
+    control,
+    handleSubmit,
+    formState: { isSubmitting },
+  } = useForm<CredentialsValues>({
+    resolver: zodResolver(credentialsSchema),
+    defaultValues: { email: '', password: '' },
+  });
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function onSubmit(values: CredentialsValues) {
     setError('');
-    setLoading(true);
     try {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(values),
       });
       if (res.ok) {
         onSuccess();
@@ -57,36 +74,40 @@ export function CredentialsForm({
       }
     } catch {
       setError('Network error. Please try again.');
-    } finally {
-      setLoading(false);
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="space-y-2">
-        <Input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          disabled={loading}
-        />
-      </div>
-      <div className="space-y-2">
-        <Input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          disabled={loading}
-        />
-      </div>
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <Controller
+        control={control}
+        name="email"
+        render={({ field, fieldState }) => (
+          <Field>
+            <Input type="email" placeholder="Email" required disabled={isSubmitting} {...field} />
+            <FieldError errors={[fieldState.error]} />
+          </Field>
+        )}
+      />
+      <Controller
+        control={control}
+        name="password"
+        render={({ field, fieldState }) => (
+          <Field>
+            <Input
+              type="password"
+              placeholder="Password"
+              required
+              disabled={isSubmitting}
+              {...field}
+            />
+            <FieldError errors={[fieldState.error]} />
+          </Field>
+        )}
+      />
       {error && <p className="text-sm text-destructive">{error}</p>}
-      <Button type="submit" className="w-full" disabled={loading}>
-        {loading ? loadingLabel : submitLabel}
+      <Button type="submit" className="w-full" disabled={isSubmitting}>
+        {isSubmitting ? loadingLabel : submitLabel}
       </Button>
     </form>
   );

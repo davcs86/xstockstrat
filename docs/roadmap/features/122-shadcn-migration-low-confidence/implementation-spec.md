@@ -391,7 +391,7 @@ Playwright, so the new test's override does not leak into the existing one.
 
 ### Step 5 — service: Migrate `AuthForm.tsx`'s `CredentialsForm` to react-hook-form + zod + ui/field.tsx
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/auth/AuthForm.tsx` — modify
