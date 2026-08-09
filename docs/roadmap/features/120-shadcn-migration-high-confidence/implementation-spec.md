@@ -155,7 +155,7 @@ Confirm `getByLabel('Entry rule JSON')`/`'Exit rule JSON'` still resolve (the ar
 
 ### Step 4 — service: Add ui/tabs.tsx primitive + regression test (FR-1, FR-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/tabs.tsx` — create

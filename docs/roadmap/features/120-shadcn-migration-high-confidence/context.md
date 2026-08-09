@@ -214,3 +214,14 @@
   `-g "formula"` (9 passed) — `getByLabel('Entry rule JSON')`/`'Exit rule JSON'` still resolve.
 - Files modified: `src/components/insights/FormulaWorkspace.tsx`, `src/components/insights/RuleEditor.tsx`
 - Deviations: none.
+
+### Step 4 — Add ui/tabs.tsx primitive + regression test (FR-1, FR-12) [done]
+- `npx shadcn@latest add tabs` succeeded (CLI has network access in this environment). Generated file
+  matched the expected shape (plain function components, `data-slot`, no `forwardRef`) but used
+  double-quote/no-semicolon style — reformatted with `prettier --write` on just this file to match
+  the rest of the codebase (in-scope per HARD CONSTRAINTS' lint/format-on-own-lines exception).
+  No app-specific variant added (design.md — none of Tabs' 5 consumers need order-side/status
+  coloring). Minimal presence test created (`tabs.test.ts`).
+- Verification: `pnpm test:unit` (68 passed, full suite incl. `tabs.test.ts`) and `pnpm build` clean.
+- Files modified: `src/components/ui/tabs.tsx` (create), `src/components/ui/tabs.test.ts` (create)
+- Deviations: none.
