@@ -25,9 +25,12 @@
 
 ## Summary
 
-Adopt the shadcn/ui `DropdownMenu` primitive for table row "Actions" columns that currently render
-multiple inline buttons side-by-side, and close the remaining horizontal-overflow gaps in
-table-bearing pages not yet covered by the existing `e2e/mobile-overflow.spec.ts` phone-viewport sweep.
+Fifth feature in the shadcn/ui migration lineage (119–123): adopt `DropdownMenu` for table "Actions"
+columns, close the remaining `e2e/mobile-overflow.spec.ts` coverage/horizontal-scroll gaps, eliminate
+the two raw `<table>`s and other hand-rolled styling (badge/toggle-pill duplication, a 14-site repeated
+label className, two small cosmetic fixes) an audit found left over from the prior series, and
+reposition the shared shell's generic breadcrumb into each page's own layout so it reflects actual
+page position rather than just the active nav group.
 
 ## Reviewers
 
