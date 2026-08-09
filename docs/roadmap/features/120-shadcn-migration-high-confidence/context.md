@@ -326,3 +326,16 @@
 - Files modified: `src/components/ui/alert-dialog.tsx` (create), `src/components/ui/alert-dialog.test.ts`
   (create), `src/components/ui/button.tsx` (variant reconciliation — collateral of the CLI regenerate,
   not a scope violation)
+
+### Step 15 — Wire Alert Dialog → accountShared.tsx AccountRow (lowest-risk first wire) [done]
+- Replaced the `confirming` state machine (Remove button → inline Confirm/Cancel block) with
+  `<AlertDialog>`/`<AlertDialogTrigger asChild>`/`<AlertDialogContent>`. Removed `confirming`
+  `useState` entirely — `AlertDialogTrigger` now owns the open state natively.
+- **Mandatory `event.preventDefault()`** applied inside `AlertDialogAction`'s `onClick` (design.md
+  round-3 finding) — stops Radix's default auto-close so the dialog stays open with Confirm/Cancel
+  `disabled={removing}` across the async `handleRemove()` call, matching pre-migration UX. Verified
+  by code inspection (Radix's documented `AlertDialogAction` auto-close behavior + the `disabled`
+  prop staying applied while `removing` is true) — no dedicated e2e spec exercises `AccountRow`'s
+  remove flow to assert against directly (confirmed no test broke).
+- Verification: `pnpm build` clean; `pnpm test:e2e -g "accounts"` (17 passed).
+- Files modified: `src/components/trader/accountShared.tsx`

@@ -483,7 +483,7 @@ cd services/xstockstrat-ui && pnpm test:unit -- alert-dialog.test.ts && pnpm tes
 
 ### Step 15 — service: Wire Alert Dialog → accountShared.tsx AccountRow (lowest-risk first wire)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/accountShared.tsx` — modify

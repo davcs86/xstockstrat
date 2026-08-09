@@ -14,6 +14,14 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '../ui/alert-dialog';
 import { CredentialStatusBadge } from './CredentialStatusBadge';
 import { brokerLabel } from '@/lib/brokers';
 
@@ -180,7 +188,6 @@ export function AccountRow({
 }) {
   const { accounts, selectedAccountId, setSelectedAccountId, refreshAccounts } =
     useAccountContext();
-  const [confirming, setConfirming] = React.useState(false);
   const [editing, setEditing] = React.useState(false);
   const [removing, setRemoving] = React.useState(false);
 
@@ -195,7 +202,6 @@ export function AccountRow({
       }
     } finally {
       setRemoving(false);
-      setConfirming(false);
     }
   }
 
@@ -210,39 +216,37 @@ export function AccountRow({
           </Badge>
           <CredentialStatusBadge status={account.credentialStatus} />
         </div>
-        {account.isActive && !confirming && (
+        {account.isActive && (
           <div className="flex gap-1 shrink-0">
             <Button size="sm" variant="ghost" onClick={() => setEditing((v) => !v)}>
               Edit keys
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setConfirming(true)}>
-              Remove
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button size="sm" variant="ghost">
+                  Remove
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogDescription>
+                  Deregister {account.displayName}? In-flight orders will complete but no new orders
+                  can be placed.
+                </AlertDialogDescription>
+                <AlertDialogCancel disabled={removing}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={removing}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleRemove();
+                  }}
+                >
+                  Confirm
+                </AlertDialogAction>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         )}
       </div>
-
-      {account.isActive && confirming && (
-        <div className="mt-2 flex flex-col items-end gap-1">
-          <p className="text-xs text-destructive text-right">
-            Deregister {account.displayName}? In-flight orders will complete but no new orders can
-            be placed.
-          </p>
-          <div className="flex gap-1">
-            <Button size="sm" variant="destructive" onClick={handleRemove} disabled={removing}>
-              Confirm
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setConfirming(false)}
-              disabled={removing}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      )}
 
       {account.isActive && editing && (
         <EditCredentialsForm account={account} onDone={() => setEditing(false)} />
