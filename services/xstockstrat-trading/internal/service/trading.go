@@ -1324,7 +1324,18 @@ func (s *TradingService) clearReconciliationCandidate(key string) {
 // emitReconciliationFinding records a real (past-grace-window) mismatch: a ledger event, a
 // CRITICAL alert, and the ordinary per-account halt (feature 030's mechanism, reused — no
 // SetConfig/authz call for this common case; that is Step 19's rare systemic escalation).
+//
+// No-ops once the account is already halted: isAccountHalted already gates PlaceOrder/
+// ReplaceOrder for every halt source, so a later finding against an already-halted account
+// changes no trading behavior — only a human clearing the halt (a manual DB edit; nothing in
+// this service ever un-halts) can resume it. Without this guard, an account with a handful of
+// pre-existing broker orders the poller can never learn about (see LoadInflightOrders, which
+// only hydrates NEW/PARTIALLY_FILLED orders) re-triggers this full sequence — ledger event,
+// CRITICAL alert, ERROR log — every reconciliation tick, forever, for the same orders.
 func (s *TradingService) emitReconciliationFinding(ctx context.Context, accountID, mismatchClass, orderID string, expected, brokerReported float64) {
+	if s.isAccountHalted(accountID) {
+		return
+	}
 	s.emitLedgerEvent(ctx, "reconciliation.mismatch_found", fmt.Sprintf("account:%s", accountID), map[string]interface{}{
 		"mismatch_class":  mismatchClass,
 		"order_id":        orderID,
@@ -2063,9 +2074,21 @@ func (s *TradingService) haltReason(accountID string) string {
 // failure (fail-safe — the halt itself must never be undone by a persistence
 // hiccup; this differs from validateAndRecordCredential's own rollback-on-failure,
 // which is a deliberate, different choice for that unrelated concern).
+//
+// An already-halted account short-circuits before the DB write/alert/error-log: nothing
+// in this service ever clears halted (resuming trading is a manual DB edit — see
+// TestLoadBrokerPool_HydratesHaltedFromDB), so once set, re-running the full sequence for
+// every later finding is pure noise, not a new signal — e.g. the reconciliation poller
+// (StartReconciliationPoller) re-observing the same handful of pre-existing broker orders
+// as "unknown" every tick previously re-halted, re-alerted (CRITICAL), and re-logged at
+// ERROR indefinitely for an account that was already halted.
 func (s *TradingService) haltAccount(ctx context.Context, accountID, reason string, haltSource int32) {
 	now := time.Now().UTC()
 	s.haltedMu.Lock()
+	if s.halted[accountID] {
+		s.haltedMu.Unlock()
+		return
+	}
 	s.halted[accountID] = true
 	s.haltReasons[accountID] = reason
 	s.haltedMu.Unlock()

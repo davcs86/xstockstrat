@@ -178,7 +178,13 @@ consecutive ticks before it becomes a real finding — a routine partial fill or
 resolves on its own with no ledger event and no halt (self-heal). A real finding emits
 `reconciliation.mismatch_found`, a CRITICAL alert, and routes to the **ordinary, per-account**
 halt (`HaltSource_HALT_SOURCE_RECONCILIATION`, reusing feature 030's `broker_accounts.halted`
-mechanism). Only a **rare, systemic** finding — `trading.reconciliation.systemic_threshold_pct`
+mechanism). `emitReconciliationFinding`/`haltAccount` no-op once the account is already halted
+(any source) — an account with a broker order the platform can never learn about (e.g. one that
+reached a terminal state before `LoadInflightOrders`, which only hydrates NEW/PARTIALLY_FILLED
+orders, last ran) would otherwise re-fire the ledger event, CRITICAL alert, and ERROR log every
+tick, indefinitely, for the same order; nothing in this service ever clears a halt (resuming is a
+manual DB edit), so a later finding against an already-halted account changes no trading behavior.
+Only a **rare, systemic** finding — `trading.reconciliation.systemic_threshold_pct`
 or more of registered accounts erroring/unreachable in one tick — escalates platform-wide to
 `platform.trading_state=REDUCE_ONLY` via `xstockstrat-config`'s internal-caller authz channel
 (`x-internal-caller`, distinct from the human-role `x-access-scope` header; see

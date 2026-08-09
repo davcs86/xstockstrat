@@ -235,6 +235,56 @@ func TestReconcileTick_UnknownBrokerOrder_DetectedRegardlessOfFillState(t *testi
 	}
 }
 
+// TestReconcileTick_UnknownBrokerOrder_AlreadyHaltedAccount_DoesNotRefire is a regression test
+// for the observed production bug: a broker order the platform can never learn about (see
+// LoadInflightOrders, which only hydrates NEW/PARTIALLY_FILLED orders) keeps showing up in every
+// ListOrders call, so with no dedup, every tick re-emitted a ledger event, a CRITICAL alert, and
+// an ERROR "account halted" log for an account already halted from the previous tick — forever.
+// After the first tick halts the account, later ticks observing the exact same unknown order
+// must be no-ops.
+func TestReconcileTick_UnknownBrokerOrder_AlreadyHaltedAccount_DoesNotRefire(t *testing.T) {
+	fb := &fakeReconciliationBroker{
+		listOrdersFn: func(ctx context.Context) ([]broker.BrokerOrder, error) {
+			// Same broker order ID every tick — mirrors a pre-existing order the platform's
+			// in-memory state never learns about.
+			return []broker.BrokerOrder{{BrokerOrderID: "bo-perpetually-unknown", Status: "filled", FilledQty: 5}}, nil
+		},
+	}
+	ledger := &recordingLedgerClient{}
+	notify := &fakeNotifyClient{}
+	svc := newTestReconciliationService(
+		map[string]brokerPoolEntry{"acct-1": {client: fb, userID: "u-1"}},
+		&fakeReconciliationPortfolioClient{}, ledger, notify, noopAccountRepo{},
+	)
+
+	// graceTicks=0 → every tick's first observation is immediately a real finding.
+	for i := 0; i < 3; i++ {
+		svc.reconcileTick(context.Background(), 0, 1.1)
+	}
+
+	if !svc.isAccountHalted("acct-1") {
+		t.Fatal("expected the account to be halted after the first tick")
+	}
+	mismatchCount := 0
+	for _, e := range ledger.eventTypes() {
+		if e == "reconciliation.mismatch_found" {
+			mismatchCount++
+		}
+	}
+	if mismatchCount != 1 {
+		t.Errorf("reconciliation.mismatch_found emitted %d times across 3 ticks, want exactly 1 (no re-fire for an already-halted account)", mismatchCount)
+	}
+	notify.mu.Lock()
+	alertCount := len(notify.calls)
+	notify.mu.Unlock()
+	// The first tick's halt legitimately fires two distinct alerts — haltAccount's own
+	// "Account halted" CRITICAL alert, plus emitReconciliationFinding's "Broker state
+	// mismatch" CRITICAL alert — but neither must repeat on the 2nd/3rd tick.
+	if alertCount != 2 {
+		t.Errorf("EmitAlert called %d times across 3 ticks, want exactly 2 (both from the first tick only)", alertCount)
+	}
+}
+
 func TestReconcileTick_PartialFillWithinGraceWindow_NoFindingNoHalt(t *testing.T) {
 	svc := newTestReconciliationService(
 		map[string]brokerPoolEntry{"acct-1": {client: &fakeReconciliationBroker{
