@@ -694,7 +694,7 @@ pnpm build
 
 ### Step 11 — service: FR-6 + FR-8c bind `RuleEditor.tsx`'s conditions to `useListEditor` and migrate onto `RepeatableRowList`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/RuleEditor.tsx` — modify

@@ -611,3 +611,36 @@
   (add/move/remove for both, numeric Min/Max grid show/hide for `ParameterEditor`) deferred to
   Step 15.
 - Files modified: `src/components/insights/ParameterEditor.tsx`
+
+### Step 11 — FR-6 + FR-8c bind `RuleEditor.tsx`'s conditions to `useListEditor` + `RepeatableRowList` [done]
+- Captured red-before-green baseline (P-06): ran `e2e/insights/strategy-authoring.spec.ts` against
+  the pre-migration tree — **23 passed**.
+- Added `useListEditor<Condition>(tree.conditions, (next) => updateTree({...tree, conditions: next}),
+  () => ({lhs:'', fn:'>', rhs:''}))` inside `RuleEditor`, matching `design.md`'s Chosen Approach #6
+  exactly — the `makeEmpty` literal is the same one the removed inline "Add condition" handler used,
+  so the empty-row shape is unchanged. `Condition`'s flat-array shape (confirmed by recon/design) made
+  this a direct bind, no hook generalization needed.
+  Replaced the `tree.conditions.map(...)` block + "Add condition" `Button` with
+  `<RepeatableRowList items={tree.conditions} onAdd={addCondition} addLabel="Add condition"
+  onUpdate={updateCondition} onRemove={removeCondition} renderRow={...} />` — **no `onMove` passed**,
+  since `RuleEditor`'s conditions have no move-up/move-down today (order is semantically irrelevant
+  under `AND`/`OR`); `ctx.move` is correctly `undefined` in `renderRow`, and no move buttons render
+  (`RepeatableRowList`'s optional-move-controls design, confirmed working end-to-end for the first
+  time by a real consumer).
+- `renderRow` reproduces the exact current row verbatim: lhs `Combobox` (strict-select,
+  `aria-label="left operand"`), comparator `Select` (`aria-label="comparator"`), rhs `Combobox`
+  (free-text via `inputValue`/`onInputValueChange`, `aria-label="right operand"`), `Remove`-only
+  `Button` — all bridged through `ctx.update`/`ctx.remove` instead of the removed inline
+  `tree.conditions[i] = {...}`/`.filter(...)` logic.
+- Did **not** touch `RuleEditor.tsx`'s JSON-mode `<Textarea>` branch (disjoint, owned by sibling
+  feature `120`) — confirmed via `grep` that `Textarea`/JSON-mode code is unchanged.
+- Verification: `grep` confirms no leftover `tree.conditions.filter`/literal-push logic (fully
+  replaced), all 3 `aria-label`s present, JSON-mode textarea untouched. `pnpm lint` — clean.
+  `NEXT_DISABLE_STANDALONE=1 pnpm build` — succeeded (this build ran unusually slowly — several
+  minutes — but completed clean with no errors; not a hang, confirmed via `ps`/`.next/` mtime checks
+  while waiting). `pnpm test:e2e -- e2e/insights/strategy-authoring.spec.ts` — **23 passed**, same
+  count as baseline, no regression — including the JSON-mode/textarea assertions that act as the
+  regression guard for `RuleEditor`'s overall wiring even though no assertion targets the visual-mode
+  rows directly.
+- **Row-editor composite group (FR-6/FR-7/FR-8, Steps 8-11) is now complete.**
+- Files modified: `src/components/insights/RuleEditor.tsx`

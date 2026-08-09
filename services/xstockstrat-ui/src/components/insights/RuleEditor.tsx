@@ -19,6 +19,8 @@ import {
 import { cn } from '@/components/ui/utils';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { RepeatableRowList } from '@/components/shared/RepeatableRowList';
+import { useListEditor } from '@/hooks/useListEditor';
 import { RULE_FUNCTIONS, fnPhrase, type RuleFn, type OperandRef } from '@/lib/strategyCatalog';
 
 // Condition-tree schema accepted by the analysis evaluator (evaluator.py):
@@ -132,6 +134,18 @@ export function RuleEditor({ value, onChange, label, operands }: RuleEditorProps
     onChange(serialize(next, refNames));
   }
 
+  // FR-6/FR-8c: conditions is already a flat array, bound directly — no generalization
+  // of the hook needed. Replaces the ad hoc updateTree-based add/remove logic below.
+  const {
+    update: updateCondition,
+    add: addCondition,
+    remove: removeCondition,
+  } = useListEditor<Condition>(
+    tree.conditions,
+    (next) => updateTree({ ...tree, conditions: next }),
+    () => ({ lhs: '', fn: '>', rhs: '' }),
+  );
+
   function switchTo(next: 'visual' | 'json') {
     if (next === mode) return;
     if (next === 'visual') {
@@ -191,127 +205,89 @@ export function RuleEditor({ value, onChange, label, operands }: RuleEditorProps
               </p>
             )}
 
-            {tree.conditions.map((cond, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <Combobox
-                  items={refOptions.map((o) => o.value)}
-                  value={cond.lhs || null}
-                  itemToStringLabel={(v) => refOptions.find((o) => o.value === v)?.label ?? v}
-                  onValueChange={(v) => {
-                    const lhs = v ?? '';
-                    const conditions = [...tree.conditions];
-                    conditions[i] = { ...cond, lhs };
-                    updateTree({ ...tree, conditions });
-                  }}
-                >
-                  <ComboboxInput
-                    aria-label="left operand"
-                    placeholder="component"
-                    showTrigger={false}
-                  />
-                  <ComboboxContent>
-                    <ComboboxEmpty>No components — add one in Step 2</ComboboxEmpty>
-                    <ComboboxList>
-                      {(v) => {
-                        const o = refOptions.find((r) => r.value === v);
-                        return (
-                          <ComboboxItem key={v} value={v}>
-                            {o?.label ?? v}
-                            {o?.hint && (
-                              <span className="ml-2 text-xs text-muted-foreground">{o.hint}</span>
-                            )}
-                          </ComboboxItem>
-                        );
-                      }}
-                    </ComboboxList>
-                  </ComboboxContent>
-                </Combobox>
-                <Select
-                  value={cond.fn}
-                  onValueChange={(v) => {
-                    const conditions = [...tree.conditions];
-                    conditions[i] = { ...cond, fn: v as RuleFn };
-                    updateTree({ ...tree, conditions });
-                  }}
-                >
-                  <SelectTrigger className="h-10 w-44" aria-label="comparator">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {RULE_FUNCTIONS.map((f) => (
-                      <SelectItem key={f.fn} value={f.fn}>
-                        {f.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Combobox<string>
-                  items={refOptions.map((o) => o.value)}
-                  itemToStringLabel={(v) => refOptions.find((o) => o.value === v)?.label ?? v}
-                  inputValue={cond.rhs}
-                  onInputValueChange={(rhs) => {
-                    const conditions = [...tree.conditions];
-                    conditions[i] = { ...cond, rhs };
-                    updateTree({ ...tree, conditions });
-                  }}
-                  onValueChange={(v) => {
-                    const rhs = v ?? '';
-                    const conditions = [...tree.conditions];
-                    conditions[i] = { ...cond, rhs };
-                    updateTree({ ...tree, conditions });
-                  }}
-                >
-                  <ComboboxInput
-                    aria-label="right operand"
-                    placeholder="component or number"
-                    showTrigger={false}
-                  />
-                  <ComboboxContent>
-                    <ComboboxEmpty>Type a number, or pick a component</ComboboxEmpty>
-                    <ComboboxList>
-                      {(v) => {
-                        const o = refOptions.find((r) => r.value === v);
-                        return (
-                          <ComboboxItem key={v} value={v}>
-                            {o?.label ?? v}
-                            {o?.hint && (
-                              <span className="ml-2 text-xs text-muted-foreground">{o.hint}</span>
-                            )}
-                          </ComboboxItem>
-                        );
-                      }}
-                    </ComboboxList>
-                  </ComboboxContent>
-                </Combobox>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() =>
-                    updateTree({
-                      ...tree,
-                      conditions: tree.conditions.filter((_, j) => j !== i),
-                    })
-                  }
-                >
-                  Remove
-                </Button>
-              </div>
-            ))}
-
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                updateTree({
-                  ...tree,
-                  conditions: [...tree.conditions, { lhs: '', fn: '>', rhs: '' }],
-                })
-              }
-            >
-              Add condition
-            </Button>
+            <RepeatableRowList
+              items={tree.conditions}
+              onAdd={addCondition}
+              addLabel="Add condition"
+              onUpdate={updateCondition}
+              onRemove={removeCondition}
+              renderRow={(cond, i, ctx) => (
+                <div className="flex items-center gap-2">
+                  <Combobox
+                    items={refOptions.map((o) => o.value)}
+                    value={cond.lhs || null}
+                    itemToStringLabel={(v) => refOptions.find((o) => o.value === v)?.label ?? v}
+                    onValueChange={(v) => ctx.update({ lhs: v ?? '' })}
+                  >
+                    <ComboboxInput
+                      aria-label="left operand"
+                      placeholder="component"
+                      showTrigger={false}
+                    />
+                    <ComboboxContent>
+                      <ComboboxEmpty>No components — add one in Step 2</ComboboxEmpty>
+                      <ComboboxList>
+                        {(v) => {
+                          const o = refOptions.find((r) => r.value === v);
+                          return (
+                            <ComboboxItem key={v} value={v}>
+                              {o?.label ?? v}
+                              {o?.hint && (
+                                <span className="ml-2 text-xs text-muted-foreground">{o.hint}</span>
+                              )}
+                            </ComboboxItem>
+                          );
+                        }}
+                      </ComboboxList>
+                    </ComboboxContent>
+                  </Combobox>
+                  <Select value={cond.fn} onValueChange={(v) => ctx.update({ fn: v as RuleFn })}>
+                    <SelectTrigger className="h-10 w-44" aria-label="comparator">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {RULE_FUNCTIONS.map((f) => (
+                        <SelectItem key={f.fn} value={f.fn}>
+                          {f.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Combobox<string>
+                    items={refOptions.map((o) => o.value)}
+                    itemToStringLabel={(v) => refOptions.find((o) => o.value === v)?.label ?? v}
+                    inputValue={cond.rhs}
+                    onInputValueChange={(rhs) => ctx.update({ rhs })}
+                    onValueChange={(v) => ctx.update({ rhs: v ?? '' })}
+                  >
+                    <ComboboxInput
+                      aria-label="right operand"
+                      placeholder="component or number"
+                      showTrigger={false}
+                    />
+                    <ComboboxContent>
+                      <ComboboxEmpty>Type a number, or pick a component</ComboboxEmpty>
+                      <ComboboxList>
+                        {(v) => {
+                          const o = refOptions.find((r) => r.value === v);
+                          return (
+                            <ComboboxItem key={v} value={v}>
+                              {o?.label ?? v}
+                              {o?.hint && (
+                                <span className="ml-2 text-xs text-muted-foreground">{o.hint}</span>
+                              )}
+                            </ComboboxItem>
+                          );
+                        }}
+                      </ComboboxList>
+                    </ComboboxContent>
+                  </Combobox>
+                  <Button type="button" size="sm" variant="ghost" onClick={ctx.remove}>
+                    Remove
+                  </Button>
+                </div>
+              )}
+            />
           </div>
         </TabsContent>
 
