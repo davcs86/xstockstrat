@@ -514,7 +514,7 @@ Manually confirm (or add an assertion if `e2e/trader/accounts.spec.ts` — or wh
 
 ### Step 16 — test: OrdersTable.tsx Alert Dialog swap — red
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/OrdersTable.tsx` — modify
@@ -545,7 +545,7 @@ Record actual pass/fail in `context.md`.
 
 ### Step 17 — test: OrdersTable.tsx Alert Dialog swap — green (restructure the spec)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/orders.spec.ts` — modify

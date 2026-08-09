@@ -339,3 +339,17 @@
   remove flow to assert against directly (confirmed no test broke).
 - Verification: `pnpm build` clean; `pnpm test:e2e -g "accounts"` (17 passed).
 - Files modified: `src/components/trader/accountShared.tsx`
+
+### Steps 16-17 — OrdersTable.tsx Alert Dialog swap — red/green (harder shape) [done]
+- Replaced the single label-toggling `Button` (`'Cancel'`↔`'Confirm'`) + `pendingCancel` arm/confirm
+  state machine with `<AlertDialog>` — trigger keeps `data-testid={cancel-<id>}` and stays labeled
+  "Cancel"; the dialog exposes two new elements (`cancel-<id>-dismiss`, `cancel-<id>-confirm`).
+  Removed `pendingCancel` `useState` and `handleCancel` entirely.
+- **Red** (unmodified `orders.spec.ts`): 1 failed / 13 passed — the 'Cancel requires a confirmation
+  step' test expected the trigger's own text to become 'Confirm'; it no longer does (opens a dialog
+  instead). The disabled-state test (`cancel-ord-filled`) was unaffected, as anticipated.
+- **Green**: restructured the test to assert two distinct elements — trigger visible/labeled
+  'Cancel' → click → dialog's `cancel-ord-new-confirm` visible → click → `cancelRequested` polls
+  true. This is the "fuller test restructure" design.md's Open Risks flagged (not a simple
+  role-selector swap like the other pairs). Re-run: 14/14 passed.
+- Files modified: `src/components/trader/OrdersTable.tsx`, `e2e/trader/orders.spec.ts`
