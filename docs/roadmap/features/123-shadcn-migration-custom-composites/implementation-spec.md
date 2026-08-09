@@ -530,7 +530,7 @@ pnpm build
 
 ### Step 8 — service: FR-7 extract `src/components/shared/RepeatableRowList.tsx`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/RepeatableRowList.tsx` — create

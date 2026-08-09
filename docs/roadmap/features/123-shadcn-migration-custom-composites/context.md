@@ -563,3 +563,28 @@
   "Score Trend"/"chartData"/"topStrategy" across `e2e/`) — manual verification deferred to Step 15.
 - **Chart-consolidation group (FR-1/FR-2/FR-3/FR-4/FR-5/FR-12, Steps 1-7) is now complete.**
 - Files modified: `src/app/insights/page.tsx`
+
+### Step 8 — FR-7 extract `src/components/shared/RepeatableRowList.tsx` [done]
+- Created the generic composite: `{ items, onAdd, addLabel, onUpdate, onRemove, onMove?, renderRow }`
+  props (the spec's own suggested shape was explicitly "an implementation detail, not load-bearing" —
+  chose explicit `onUpdate`/`onRemove`/`onMove` props over baking index-binding into the caller, since
+  `RepeatableRowList` itself must not call `useListEditor` per Instruction 3; each consumer's own
+  `useListEditor` supplies these raw index-parameterized functions, and this component binds them
+  per-row internally before handing the row-scoped `ctx` to `renderRow`).
+  `move` is `undefined` (not merely disabled) on `ctx` when the consumer omits `onMove` — satisfies
+  the "optional move controls, not forced on every row" requirement for `RuleEditor`'s conditions
+  (Step 11), which have no move-up/move-down concept.
+  Each row wrapped in a keyed `<Fragment>` (index as key) since `renderRow` returns a bare
+  `ReactNode`, not a pre-keyed element.
+- Add button built from the existing `Button` primitive (`variant="outline"`, `Plus` icon,
+  `{addLabel}` text) — consolidates the pattern already duplicated across
+  `OutputEditor.tsx:102-105`/`ParameterEditor.tsx:255-258` (DRY guard rail), confirmed by direct
+  read this session before writing the composite.
+- No new shadcn primitive introduced — built entirely from `Button` (already installed), matching
+  product-spec FR-7's own framing that no "list editor"/"rule builder" registry recipe exists to
+  install.
+- Verification: `test -f` confirms the file exists. `grep` confirms `export function
+  RepeatableRowList` present. `pnpm lint` — clean (same one pre-existing unrelated warning). No
+  `pnpm build` run yet, per the step's own Verification block (this component has no consumers wired
+  until Steps 9-11) — will be exercised by those steps' own build runs.
+- Files modified: `src/components/shared/RepeatableRowList.tsx` (new)
