@@ -512,3 +512,23 @@
   persisted metrics, time-axis curve, and trade markers," the test most directly exercising the
   tooltip/marker rendering this step touched.
 - Files modified: `src/components/insights/EquityCurveChart.tsx`
+
+### Step 5 — FR-4 migrate `FormulaRunResult.tsx`'s `Sparkline` onto `ui/chart.tsx` [done]
+- Replaced the inline-SVG `Sparkline` (fixed 140×30, hand-normalized `<polyline>`) with a `recharts`
+  `LineChart` (hidden `XAxis`/`YAxis` via `hide`, no `CartesianGrid`, no `Tooltip` — matching the
+  original no-axis look) wrapped in `ChartContainer`. Single-entry `ChartConfig` (`value`) drives the
+  line's `stroke="var(--color-value)"` in place of the original `stroke="currentColor"` +
+  `className="text-primary"` — `color: 'var(--primary)'` in the config resolves to the same design
+  token, not a new color.
+  `values: number[]` converted to `{ i, value }[]` point objects (index as x), fed to the `LineChart`'s
+  `data` prop, per Instruction 2.
+  `OutputRow`'s call site (`{series && <Sparkline values={series} />}`) and the `asNumberArray` gate
+  are unchanged — only `Sparkline`'s internal implementation changed, per Instruction 3.
+- No `data-testid` added or needed (none existed before — confirmed again this session) — this
+  migration is presentation-parity only, per Acceptance Criteria #6's explicit no-e2e-coverage
+  call-out for this file.
+- Verification: `grep` confirms the `<svg>`/`<polyline>` implementation is fully removed (not a dead
+  code path). `pnpm lint` — clean. `NEXT_DISABLE_STANDALONE=1 pnpm build` — succeeded, full route
+  manifest, no TS errors. Manual dev-server verification deferred to Step 15's whole-feature manual
+  check (per this step's own Verification note — no e2e coverage exists to gate on individually).
+- Files modified: `src/components/insights/FormulaRunResult.tsx`

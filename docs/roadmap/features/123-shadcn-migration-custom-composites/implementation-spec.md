@@ -335,7 +335,7 @@ pnpm test:e2e -- e2e/insights/backtest-coverage.spec.ts
 
 ### Step 5 — service: FR-4 migrate `FormulaRunResult.tsx`'s `Sparkline` onto `ui/chart.tsx`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/FormulaRunResult.tsx` — modify

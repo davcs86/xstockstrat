@@ -1,28 +1,35 @@
 'use client';
+import { Line, LineChart, XAxis, YAxis } from 'recharts';
 import type { ExecuteFormulaResponse } from '@xstockstrat/proto/indicators/v1/indicators_pb';
 import { Badge } from '@/components/ui/badge';
+import { ChartContainer, type ChartConfig } from '@/components/ui/chart';
 import { EXIT_REASON } from './formulaReference';
 
-/** Tiny inline sparkline for numeric output series — no chart dependency. */
+// Single-series sparkline config (feature 123 FR-4) — 'value' color mirrors the original
+// `text-primary`/`currentColor` styling via the design token, not a new color.
+const SPARKLINE_CONFIG: ChartConfig = {
+  value: { label: 'Value', color: 'var(--primary)' },
+};
+
+/** Tiny inline sparkline for numeric output series. */
 function Sparkline({ values }: { values: number[] }) {
   if (values.length < 2) return null;
-  const w = 140;
-  const h = 30;
-  const pad = 2;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const span = max - min || 1;
-  const points = values
-    .map((v, i) => {
-      const x = pad + (i / (values.length - 1)) * (w - 2 * pad);
-      const y = pad + (1 - (v - min) / span) * (h - 2 * pad);
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(' ');
+  const data = values.map((value, i) => ({ i, value }));
   return (
-    <svg width={w} height={h} className="text-primary shrink-0" aria-hidden>
-      <polyline points={points} fill="none" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
+    <ChartContainer config={SPARKLINE_CONFIG} className="aspect-auto h-[30px] w-[140px] shrink-0">
+      <LineChart data={data} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+        <XAxis dataKey="i" hide />
+        <YAxis hide domain={['dataMin', 'dataMax']} />
+        <Line
+          dataKey="value"
+          type="monotone"
+          stroke="var(--color-value)"
+          strokeWidth={1.5}
+          dot={false}
+          isAnimationActive={false}
+        />
+      </LineChart>
+    </ChartContainer>
   );
 }
 
