@@ -46,5 +46,7 @@ disproportionate weight (new dependencies, more code) for what each call site ac
 
 ## Next Action
 
-`/sdd-execute shadcn-migration-low-confidence` for Steps 1–12 (FR-1/FR-2/FR-3/FR-4, all specced —
-FR-1 unblocked 2026-08-09, see Status History).
+Execution in progress against Steps 1–12. Draft integration PR:
+[#913](https://github.com/davcs86/xstockstrat/pull/913) (stacked on
+`feature/shadcn-migration-medium-confidence`), will flip to ready-for-review once all 12 steps land
+and the whole-feature gate is green.
