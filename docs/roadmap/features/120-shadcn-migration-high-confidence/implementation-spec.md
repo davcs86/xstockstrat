@@ -573,7 +573,7 @@ All cases in `orders.spec.ts` pass, including the restructured cancel-confirmati
 
 ### Step 18 — service: Add ui/alert.tsx primitive + warning variant + test (FR-4, FR-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/alert.tsx` — create

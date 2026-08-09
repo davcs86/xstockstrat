@@ -353,3 +353,15 @@
   true. This is the "fuller test restructure" design.md's Open Risks flagged (not a simple
   role-selector swap like the other pairs). Re-run: 14/14 passed.
 - Files modified: `src/components/trader/OrdersTable.tsx`, `e2e/trader/orders.spec.ts`
+
+### Step 18 — Add ui/alert.tsx primitive + warning variant + test (FR-4, FR-12) [done]
+- `npx shadcn@latest add alert` (did not touch `button.tsx` this time — no shared-dependency
+  collateral). **Finding**: the CLI-generated `Alert` root already sets `role="alert"`
+  unconditionally (not conditional on variant) — this preempts the round-3 design.md concern about
+  `CardNotice.tsx`'s error tone needing an explicit `role` prop; Step 19 only needs to confirm this,
+  not add it.
+- Added the app-specific `warning` variant (`border-yellow-500/40 bg-yellow-500/5`, the tone
+  duplicated across `CopilotRail.tsx`/`SectionRenderer.tsx`). Had to also export `alertVariants`
+  (not exported by the CLI's default file) for the regression test to import it.
+- Verification: `pnpm test:unit` (73 passed) and `pnpm build` clean.
+- Files modified: `src/components/ui/alert.tsx` (create), `src/components/ui/alert.test.ts` (create)
