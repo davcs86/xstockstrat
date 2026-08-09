@@ -169,7 +169,16 @@ Confirm `getByLabel('Entry rule JSON')`/`'Exit rule JSON'` still resolve (the ar
 - `src/components/ui/button.test.ts:1-16` — mirrored test shape: `import { describe, expect, it } from 'vitest'`, assert on the exported `cva` variants function's output string.
 - `ls services/xstockstrat-ui/src/components/ui/*.tsx` (recon.md § Codebase Map) — `tabs.tsx` confirmed **absent** today.
 
-**TDD**: red-green required — `tabs.test.ts` imports `./tabs`, which does not exist before this step (red: module-not-found), then `tabs.tsx` is authored (green).
+**TDD**: `red N/A — mechanical regression guard, not a true red-green cycle` (corrected 2026-08-09,
+round-4 cross-check audit finding: the prior wording claimed `tabs.test.ts` proves a
+module-not-found red before `tabs.tsx` exists, but Instructions 1 and 3 below author the primitive
+*before* the test file — by construction, no red state is ever produced by following the
+Instructions in order). `tabs.test.ts` is instead a same-step mechanical guard, matching FR-12's
+"survives a future `apply --preset` re-run" intent — it locks in the primitive's exported surface
+immediately after creation. If a genuine captured-red sequence is preferred, write `tabs.test.ts`
+first (Instruction 3 before Instruction 1) — that import would fail to resolve until `tabs.tsx`
+exists, giving a real red — but the Instructions below are not sequenced that way; do not claim red
+was captured unless the executor actually reorders and records it.
 
 **Instructions**:
 1. Run `npx shadcn@latest add tabs` from `services/xstockstrat-ui/` against the existing `components.json` preset. If the CLI is unavailable in the execution environment, hand-author `tabs.tsx` matching `select.tsx`'s shape: `'use client'`, `import { Tabs as TabsPrimitive } from 'radix-ui'`, plain function components (`Tabs`, `TabsList`, `TabsTrigger`, `TabsContent`) each with `data-slot="tabs-*"`, using `cn()` from `@/components/ui/utils` for class merging — **not** `React.forwardRef`/`.displayName` — and note the fallback in `context.md` (product-spec.md FR-12).
@@ -321,7 +330,7 @@ All cases in `strategy-authoring.spec.ts` pass.
 - `src/components/ui/button.test.ts:1-16` — mirrored variant-test shape.
 - Both Toggle Group consumers (`screener/page.tsx`, `OrderForm.tsx`) are confirmed e2e-risk (recon.md § Risks) — no low-risk first wire exists, so this primitive goes straight to the two tier-4 pairs (Steps 10-13), no interim wire step.
 
-**TDD**: red-green required — `toggle-group.test.ts` imports `./toggle-group` before it exists (red), then the primitive is authored (green).
+**TDD**: `red N/A — mechanical regression guard, not a true red-green cycle` (corrected 2026-08-09: Instructions author `toggle-group.tsx` before `toggle-group.test.ts`, so no module-not-found red is ever produced by construction — see Step 4's identical correction for the full rationale). Same-step guard locking in the `buy`/`sell` variant surface.
 
 **Instructions**:
 1. Run `npx shadcn@latest add toggle-group`. Fallback: hand-author matching `select.tsx`'s shape (`import { ToggleGroup as ToggleGroupPrimitive } from 'radix-ui'`, plain functions, `data-slot`, no forwardRef).
@@ -459,7 +468,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "order-form"
 - `src/components/ui/sheet.tsx:65-72` — reuse-a-`Button`-for-dismiss precedent: `<Button variant="ghost" ... size="icon-sm"><IconX /></Button>` inside `SheetPrimitive.Close asChild` — same reuse pattern applies to `AlertDialogCancel`/`AlertDialogAction`.
 - No app-specific variant needed — Alert Dialog is one of the 5 primitives getting a minimal presence test only (design.md § Chosen Approach).
 
-**TDD**: red-green required.
+**TDD**: `red N/A — mechanical regression guard, not a true red-green cycle` (corrected 2026-08-09: the primitive is authored before `alert-dialog.test.ts`, so no module-not-found red is ever produced by construction — see Step 4's identical correction for the full rationale).
 
 **Instructions**:
 1. Run `npx shadcn@latest add alert-dialog`. Fallback: hand-author matching `sheet.tsx`'s shape (`import { AlertDialog as AlertDialogPrimitive } from 'radix-ui'`, plain functions, `data-slot`, reuse `Button` for `AlertDialogCancel`/`AlertDialogAction` per `sheet.tsx`'s close-button precedent).
@@ -577,7 +586,7 @@ All cases in `orders.spec.ts` pass, including the restructured cancel-confirmati
 - `src/components/mobile/SectionRenderer.tsx:112-116` — `className={cn('flex items-start gap-2 rounded-md border p-3 text-sm', s.tone === 'warn' ? 'border-yellow-500/40 bg-yellow-500/5' : 'bg-card')}`.
 - `src/components/ui/badge.tsx:25` — precedent for the same yellow tone already named `warning` on `Badge`: `warning: 'border-transparent bg-yellow-500/20 text-yellow-400'`.
 
-**TDD**: red-green required.
+**TDD**: `red N/A — mechanical regression guard, not a true red-green cycle` (corrected 2026-08-09: the primitive is authored before `alert.test.ts`, so no module-not-found red is ever produced by construction — see Step 4's identical correction). Same-step guard locking in the `warning` variant.
 
 **Instructions**:
 1. Run `npx shadcn@latest add alert`. Fallback: hand-author matching `badge.tsx`'s cva shape (plain function, `data-slot="alert"`, `cn()` merge).
@@ -716,7 +725,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "copilot"
 - `src/components/ui/select.tsx:1-11` — shape to match (`import { Checkbox as CheckboxPrimitive } from 'radix-ui'`, plain function, `data-slot="checkbox"`).
 - No app-specific variant needed (design.md — one of the 5 minimal-test primitives).
 
-**TDD**: red-green required.
+**TDD**: `red N/A — mechanical regression guard, not a true red-green cycle` (corrected 2026-08-09: the primitive is authored before `checkbox.test.ts`, so no module-not-found red is ever produced by construction — see Step 4's identical correction).
 
 **Instructions**:
 1. Run `npx shadcn@latest add checkbox`. Fallback: hand-author matching `select.tsx`'s shape.
@@ -772,7 +781,7 @@ cd services/xstockstrat-ui && pnpm build && pnpm test:e2e -g "formula" && pnpm t
 - No app-specific variant needed (design.md — minimal-test primitive).
 - `src/components/ui/select.tsx:1-11` — shape to match.
 
-**TDD**: red-green required.
+**TDD**: `red N/A — mechanical regression guard, not a true red-green cycle` (corrected 2026-08-09: the primitive is authored before `breadcrumb.test.ts`, so no module-not-found red is ever produced by construction — see Step 4's identical correction).
 
 **Instructions**:
 1. Run `npx shadcn@latest add breadcrumb`. Fallback: hand-author matching `select.tsx`'s shape (Breadcrumb has no Radix primitive dependency in the standard shadcn recipe — it is typically plain `nav`/`ol`/`li` markup with `data-slot`s; confirm against the CLI-generated file or the hand-authored fallback's own equivalent structure).
@@ -830,7 +839,7 @@ No e2e spec exists for the audit page (confirmed) — the manual screenshot comp
 - No app-specific variant needed (design.md — minimal-test primitive).
 - `src/components/ui/select.tsx:1-11` — shape to match.
 
-**TDD**: red-green required.
+**TDD**: `red N/A — mechanical regression guard, not a true red-green cycle` (corrected 2026-08-09: the primitive is authored before `accordion.test.ts`, so no module-not-found red is ever produced by construction — see Step 4's identical correction).
 
 **Instructions**:
 1. Run `npx shadcn@latest add accordion`. Fallback: hand-author matching `select.tsx`'s shape (`import { Accordion as AccordionPrimitive } from 'radix-ui'`, plain functions, `data-slot`).
@@ -942,7 +951,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "nav-reachability"
 - `src/components/mobile/SectionRenderer.tsx:65-70` — `<div className="h-1.5 w-16 overflow-hidden rounded-full bg-muted"><div className="h-full bg-primary" style={{ width: \`${Math.round(s.conviction * 100)}%\` }} /></div>` — same static shape as `SignalReadiness.tsx`, stays `variant="default"`.
 - `src/components/ui/badge.tsx:21-24` — same `buy`/`sell`/`paper` design tokens the Progress variant reuses.
 
-**TDD**: red-green required.
+**TDD**: `red N/A — mechanical regression guard, not a true red-green cycle` (corrected 2026-08-09: the primitive is authored before `progress.test.ts`, so no module-not-found red is ever produced by construction — see Step 4's identical correction).
 
 **Instructions**:
 1. Run `npx shadcn@latest add progress`. Fallback: hand-author matching `select.tsx`'s shape (`import { Progress as ProgressPrimitive } from 'radix-ui'`).

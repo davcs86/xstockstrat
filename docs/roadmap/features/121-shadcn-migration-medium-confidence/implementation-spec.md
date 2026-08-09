@@ -22,6 +22,12 @@ into one shared `FilterToolbar`, and migrates `PlatformHeader.tsx`'s/`BottomTabB
 nav onto the new `navigation-menu` primitive. All work lands in `services/xstockstrat-ui/` only; no
 proto, config, or DB changes.
 
+**P-04 note (added 2026-08-09, round-4 cross-check audit)**: only FR-13 (Steps 17-20) went through
+a real, recorded user gate (`design.md` § Round 3 — REPLACE). Steps 1-16 (FR-1/2/3/10/11/12) rest
+on Rounds 1-2's self-run design debate, never independently re-confirmed by the user — see
+`design.md`'s Constitution Rules Touched § P-04 for the full caveat. `/sdd-execute`'s own per-step
+confirmation gate is the next checkpoint before any of these steps actually get built.
+
 **Tranche 2 — deliberately NOT specced here.** FR-4 through FR-9 consume `ui/alert-dialog.tsx`,
 `ui/tabs.tsx`, `ui/toggle-group.tsx`, `ui/alert.tsx`, `ui/checkbox.tsx`, `ui/accordion.tsx` — a fresh
 `ls services/xstockstrat-ui/src/components/ui/` this session confirms **none of these six exist yet**
@@ -982,10 +988,12 @@ contract)
   `Content` pairing) renders an anchor-equivalent element, not a `button`/`menuitem`, so
   `role=navigation`/`role=link`/`aria-current` are preservable without a spec rewrite — this step
   exists to verify that claim against the real Steps 18-19 markup, not assume it holds.
-- This is this feature's own red-before-green discipline applied to a markup-only swap: role/label
-  -based selectors are the ones acceptance criterion 5 says should survive a markup swap unmodified
-  (the identical pattern this spec already uses in Steps 2/4/6/9/12/16), so the correct verification
-  order is run the existing suite first against Steps 18-19's changes, not rewrite the spec
+- This is a regression check, not a literal red-before-green cycle (corrected 2026-08-09, round-4
+  cross-check audit finding: nothing here is expected to go red by design — role/label-based
+  selectors are the ones acceptance criterion 5 says should survive a markup swap unmodified, the
+  identical pattern this spec already uses in Steps 2/4/6/9/12/16), so the correct verification
+  order is run the existing suite first against Steps 18-19's changes to confirm they still pass, not
+  rewrite the spec
   pre-emptively.
 
 **TDD**: N/A (regression check over an already-existing, role/label-based suite — same pattern as

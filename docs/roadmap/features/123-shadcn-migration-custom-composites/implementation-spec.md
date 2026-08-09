@@ -700,7 +700,14 @@ pnpm build
   `:300-457`) needs the interstitial-`Next`-click rewrite `design.md` § Round 3 specifies.
 
 **TDD**: `red-green required` — this step changes real interactive behavior (Step 1's navigation
-granularity) with direct, extensive e2e coverage.
+granularity) with direct, extensive e2e coverage. **Genuine red state, not just a final-state
+check** (round-4 cross-check audit correction, 2026-08-09): Instruction 9 below requires running
+the *unmodified* `strategy-authoring.spec.ts` against the *restructured* component (after
+Instructions 1-8, before rewriting the spec) and recording the actual failure — the old spec's
+single-click-then-assert sequences will fail against the new multi-screen Step 1, for the expected
+reason (missing interstitial `Next` clicks), not a different one. Only then does the spec get
+rewritten to green. This mirrors sibling `120`'s tier-4 mandatory "run unmodified, record actual
+pass/fail" two-step discipline.
 
 **Instructions**:
 1. Add a new `identitySubStep` state (`useState<1|2|3|4>(1)`) alongside the existing `step` state.
@@ -744,7 +751,13 @@ granularity) with direct, extensive e2e coverage.
 8. Sub-screen 1's own `Back`/`Previous` stays disabled (nothing precedes Step 1). Back from outer Step 2
    lands on Step 1's sub-screen 4 (`identitySubStep` was left at `4` when Step 1 completed, per
    Instruction #1's persistence).
-9. **Update `e2e/insights/strategy-authoring.spec.ts`** per `design.md` § Round 3's "e2e-update
+9. **First, capture red**: after Instructions 1-8 land (the component restructured, the spec file
+   still untouched), run `pnpm test:e2e -- e2e/insights/strategy-authoring.spec.ts` against the
+   *unmodified* spec and record the actual failures in `context.md` (which tests fail, and confirm
+   they fail on the expected symptom — a field fill landing on the wrong sub-screen or a `Next`
+   click not yet inserted — not on an unrelated error). This is the genuine red state Instruction 9
+   as a whole is gated on producing; do not skip straight to writing the passing version.
+   **Then update** `e2e/insights/strategy-authoring.spec.ts` per `design.md` § Round 3's "e2e-update
    implication": rewrite the shared `fillToReview` helper and every inline Step-1 fill/click sequence
    to insert a `next.click()` between each field fill (fields left blank, e.g. cooldown/exit-cooldown in
    several tests, can be skipped over with a bare `next.click()` since blank is still a valid gate —
@@ -752,7 +765,7 @@ granularity) with direct, extensive e2e coverage.
    Do **not** change any `getByPlaceholder(...)` string or the `Next`/`Back` accessible names. Re-run
    every affected test (both cooldown/exit-cooldown `test.describe` blocks, the two negative-cooldown
    tests, the edit-prepopulation test, the server-error-jump test, the formula-picker test) and confirm
-   each passes against the restructured component.
+   each now passes (green) against the restructured component.
 
 **Verification**:
 ```bash
@@ -763,12 +776,14 @@ grep -n "'e.g. sma_crossover'\|'SMA Crossover'\|'31 (default)'\|'0 (default)'" s
 # expect: all 4 placeholders still present verbatim
 pnpm lint
 pnpm build
-pnpm test:e2e -- e2e/insights/strategy-authoring.spec.ts
-# red-before-green (P-06): the pre-Step-11 tree's spec passes today only in its *pre-Instruction-9*
-# form; after Instruction #9's e2e rewrite lands alongside the component change, this is the concrete
-# regression guard for the whole restructure — every getByText('Step 1 — Identity'), every
-# getByPlaceholder, and every Next/Back/Create Strategy/Save Changes/Go to Step assertion must still
-# pass, now via the new multi-click sequencing.
+# red-before-green (P-06), genuine capture: after Instructions 1-8, BEFORE touching the spec file,
+# run the unmodified spec and record the actual (expected) failures in context.md:
+pnpm test:e2e -- e2e/insights/strategy-authoring.spec.ts   # expect real failures — record which, and why
+# THEN apply Instruction 9's spec rewrite, and re-run for the green state:
+pnpm test:e2e -- e2e/insights/strategy-authoring.spec.ts   # expect all green — the concrete regression
+# guard for the whole restructure: every getByText('Step 1 — Identity'), every getByPlaceholder, and
+# every Next/Back/Create Strategy/Save Changes/Go to Step assertion must pass via the new multi-click
+# sequencing.
 ```
 
 ---

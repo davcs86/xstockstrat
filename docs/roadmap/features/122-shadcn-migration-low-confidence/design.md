@@ -289,15 +289,28 @@ in the PR description as a design choice the user did not separately confirm.
   (`e2e/fixtures/accounts.ts`, per `INVENTORY.md:14`); `EditCredentialsForm`'s new
   characterization e2e test (§ FR-3) also reuses those same canonical fixtures — no new inline
   literals proposed for either.
-- `P-01`/`P-02` — **Rounds 1–2 not fully honored in the mechanical sense**: no `Task` tool was
-  available to spawn isolated `design-proposer`/`design-adversary` subagents, so both roles were
-  argued directly by the orchestrating session. The two-round, propose→attack→synthesize structure
-  was still followed in full (see `context.md`). Round 3 is not an adversarial round (see above),
-  so P-01/P-02 do not apply to it.
+- `P-01` — **fully honored throughout**: the orchestrating session held sole write/commit/branch
+  authority in every round; no subagent ever wrote to a file. (Corrected 2026-08-09 — an earlier
+  version of this bullet lumped P-01 in with P-02's real gap below; P-01 itself was never at risk.)
+- `P-02` — **Rounds 1–2 not fully honored in the mechanical sense**: no `Task` tool was available to
+  spawn isolated `design-proposer`/`design-adversary` subagents, so both roles were argued directly
+  by the orchestrating session instead of two genuinely isolated agents. The two-round,
+  propose→attack→synthesize structure was still followed in full (see `context.md`). Round 3 is not
+  an adversarial round (see above), so P-02 doesn't apply to it either way.
 - `P-04` — **now honored** for FR-2/FR-3/FR-4: Round 3 is a live, recorded user decision that
   overrides Round 2's autonomous synthesis. This is exactly the kind of confirmation Round 2's own
   Open Risks flagged as missing (the prior version of this file said "not honored as a live user
   gate" — that gap is what Round 3 closes for these three FRs; FR-1's "decline" call remains a
-  Round 1/2 self-run synthesis, not a live-gated one).
+  Round 1/2 self-run synthesis, not a live-gated one). **Note (2026-08-09 cross-check audit)**: P-04
+  also requires the phase-gate transition be recorded as a `feature.md` Status History row, not only
+  a `context.md` session entry — `feature.md`'s history table was missing the
+  `design-approved → implementation-ready` row the `/sdd-spec` session's `context.md` entry
+  describes; added retroactively (see `feature.md`).
+- `P-06` (red-before-green) — **honored, and previously uncited despite being this design's central
+  mechanism**: Step 4 (a new characterization test, proven green against pre-migration code) gates
+  Step 7 (`EditCredentialsForm`'s migration) — the `tdd-gate.md` refactor escape hatch, cited by name
+  11 times across `design.md`/`implementation-spec.md`, is precisely P-06's documented alternative
+  to literal red-then-green for a behavior-preserving change. Added to this list 2026-08-09 (round-4
+  cross-check audit finding) — the reasoning was always correct, only the ID citation was missing.
 - `F-11` (Floor) — no Floor breach identified in either round. This is a client-side UI wiring
   change with no DB/proto/migration/direct-push surface.

@@ -241,6 +241,19 @@ user directive) that it is warranted.
   REUSE confirms `e2e/fixtures/INVENTORY.md` already carries fixtures for every domain object this
   feature's e2e specs touch (accounts, orders, strategies, watchlists) — no new fixture module
   expected; `/sdd-spec` re-confirms per-step.
+- `P-04` (phase-gate approval, recorded) — **added 2026-08-09 (round-4 cross-check audit finding)**,
+  previously omitted from this list despite being the exact subject of this feature's design history.
+  **Only partially honored**: Round 3's FR-13 decision (keep vs. replace) went through a real,
+  recorded `AskUserQuestion` gate — P-04 is satisfied for FR-13 specifically. **FR-1/FR-2/FR-3/
+  FR-10/FR-11/FR-12 — the bulk of this feature's scope, Steps 1–16 of `implementation-spec.md` —
+  were never re-gated.** They rest entirely on Rounds 1-2's self-run debate (no `Task`/
+  `AskUserQuestion` tool available in that session — see § Process Note above), which was
+  explicitly flagged there as provisional pending real confirmation, and that confirmation never
+  came for anything except FR-13. This includes real design choices an independent reviewer might
+  contest: `FilterToolbar`'s slot-based shape (vs. a layout-mode-switch), the Badge/Table reuse
+  calls, and the `AccountSelector.tsx` status-dot fallback decision. `/sdd-execute`'s own per-step
+  confirmation gate provides a second checkpoint before any of these actually get built, but the
+  *design* itself should not be read as fully P-04-compliant.
 - `F-*` (Floor) — none breached. No proto, migration, or config-key change; no security/auth
   surface touched; no applied migration edited.
 

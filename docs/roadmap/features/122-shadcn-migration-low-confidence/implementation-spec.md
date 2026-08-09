@@ -54,7 +54,10 @@ FR-2/FR-3/FR-4 block.
 - Step 7 (`EditCredentialsForm` migration) additionally requires Step 4: the new characterization
   e2e test must exist and be proven green against the **pre-migration** code before Step 7 changes
   that code — this is design.md § FR-3's explicit red-before-green (here: green-before-and-after)
-  sequencing decision, restated as an Open Risk in design.md.
+  sequencing decision, restated as an Open Risk in design.md. Step 7 also requires Step 6's
+  `credentialSchema` factory (added there, imported here) — both consumers of `CredentialFields`
+  share one schema, not two independently-authored ones (DRY guard rail; round-4 cross-check audit
+  finding, 2026-08-09).
 - Step 8 requires Steps 1–7 complete: it is the single final verification gate for the whole
   FR-2/FR-3/FR-4 block.
 - No step depends on sibling feature `120-shadcn-migration-high-confidence` (`ui/alert.tsx`) — FR-1
@@ -473,6 +476,14 @@ Connect-RPC call safety
   `displayName` also required (existing native `required`, `:297-302`). `CredentialFields` itself
   (`:51-113`) is not edited by this step — only `AddAccountForm`'s call site changes — so no
   line-number drift is expected here.
+- **DRY guard rail (round-4 cross-check audit finding, 2026-08-09)**: `AddAccountForm` (this step)
+  and `EditCredentialsForm` (Step 7) both need the identical broker-conditional required-field
+  schema above — `CredentialState`/`buildCredentialsJson` (`:19-48`) are already the single source
+  of truth for this field list (per this file's own header comment, `:3-6`: "exist in exactly one
+  place"). Writing the schema independently at each consumer's call site would duplicate that list
+  a second and third time — exactly what the DRY guard rail exists to prevent (see
+  `docs/patterns/dry-guard-rail.md`). **This step adds one shared schema factory**, not two
+  independent schemas — see Instruction 2 below.
 - `ui/select.tsx` (function-component + `data-slot`, no `forwardRef`) is the closest existing
   structural precedent for a controlled compound component in this codebase (recon.md); no
   `forwardRef`-based component should be introduced here either, matching the post-119 convention
@@ -488,9 +499,22 @@ pre-migration tree) and after the change (confirm it stays green).`
 **Instructions**:
 1. **Do not assume the installed packages' exact API before checking what Step 2 installed** — same
    caution as Step 5, instruction 1.
-2. Rewrite `AddAccountForm` (`accountShared.tsx:259-332`) to source `displayName`, `brokerType`, and
+2. **Add one shared `credentialSchema(brokerType: BrokerType)` factory function**, co-located with
+   `CredentialState`/`buildCredentialsJson` (`accountShared.tsx:19-48`, immediately after
+   `buildCredentialsJson`) — not exported per-consumer, exported once from `accountShared.tsx` and
+   imported by both this step's `AddAccountForm` and Step 7's `EditCredentialsForm`. It returns the
+   Alpaca-branch `z.object({ apiKey: z.string().min(1, msg), apiSecret: z.string().min(1, msg) })`
+   or the IBKR-branch `z.object({ consumerKey, accessToken, accessTokenSecret, ibkrAccountId })`
+   (each `z.string().min(1, msg)`) per the Codebase Evidence above, switching on `brokerType` the
+   same way `buildCredentialsJson` already does — this is the single place the field list is
+   expressed as a schema, mirroring how `CredentialState`/`CredentialFields` are already the single
+   place it's expressed as a type/renderer. Neither this step nor Step 7 writes its own inline
+   schema.
+3. Rewrite `AddAccountForm` (`accountShared.tsx:259-332`) to source `displayName`, `brokerType`, and
    `creds` from a single `react-hook-form` form instance instead of four separate `useState` calls,
-   preserving every one of these observable behaviors unchanged (AC2 — "same submit flow"):
+   using `credentialSchema(brokerType)` (Instruction 2) as the credentials portion of the form's
+   resolver schema, preserving every one of these observable behaviors unchanged (AC2 — "same
+   submit flow"):
    - `displayName` keeps its `required` HTML constraint (`<Input required placeholder="Display
      name" .../>` at `:297-302`) — do not drop the native `required` attribute even though the zod
      schema also validates it, so browser-level constraint-validation behavior is byte-identical.
@@ -517,9 +541,11 @@ pre-migration tree) and after the change (confirm it stays green).`
      via the form instance's reset mechanism (whatever the installed version's API calls it — see
      instruction 1) so `account-selector.spec.ts:92`'s post-submit `''` assertion on the API Key
      field continues to pass.
-3. Do not touch `CredentialFields` (`:51-113`), `buildCredentialsJson` (`:39-48`), `AccountRow`
-   (`:174-252`), `EditCredentialsForm` (`:116-167` — that is Step 7's scope), `AccountManagementPanel.tsx`,
-   or `AccountsModule.tsx`.
+4. Do not modify `CredentialFields` (`:51-113`) or `buildCredentialsJson` (`:39-48`) themselves —
+   Instruction 2 only *adds* the new `credentialSchema` factory immediately after
+   `buildCredentialsJson`, it does not edit either existing function. Also do not touch `AccountRow`
+   (`:174-252`), `EditCredentialsForm` (`:116-167` — that is Step 7's scope),
+   `AccountManagementPanel.tsx`, or `AccountsModule.tsx`.
 
 **Verification**:
 ```
@@ -579,8 +605,11 @@ pre-existing one, per design.md § FR-3's explicit sequencing decision.`
 1. **Do not assume the installed packages' exact API before checking what Step 2 installed** — same
    caution as Steps 5 and 6.
 2. Rewrite `EditCredentialsForm` (`accountShared.tsx:116-167`) to source `creds` from a single
-   `react-hook-form` form instance instead of `useState`, preserving every one of these observable
-   behaviors unchanged (AC2 — "same submit flow"):
+   `react-hook-form` form instance instead of `useState`, using the **shared `credentialSchema
+   (brokerType)` factory Step 6 added** (co-located with `CredentialState`/`buildCredentialsJson`,
+   `accountShared.tsx:19-48`) as the form's resolver schema — **do not write a second, independent
+   schema for this consumer**; import and reuse Step 6's factory exactly as `AddAccountForm` does.
+   Preserve every one of these observable behaviors unchanged (AC2 — "same submit flow"):
    - `CredentialFields` (`:155`) keeps its existing `value`/`onChange`-controlled-component call
      contract unchanged — bridge via `Controller` render props at this call site only, same pattern
      as Step 6's `AddAccountForm`. Do not rewrite `CredentialFields` itself.

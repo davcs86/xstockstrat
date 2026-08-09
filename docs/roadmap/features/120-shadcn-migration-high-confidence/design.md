@@ -239,19 +239,37 @@ amended to name both files so the gap doesn't silently recur at `/sdd-spec` time
   `path:line`; FR-6/FR-9's imprecise "identical" wording already corrected in `product-spec.md`;
   `CardNotice.tsx`'s real consumer graph now named here instead of left as an unverified
   "every touched file" claim.
-- `C-10(a)` (integration completeness — reachability) — honored by: no new routes/pages; every
-  touched file is already reachable (product-spec.md § Consumer Surface(s), reaffirmed in
-  Chosen Approach above).
+- `C-10` (integration completeness across shared/duplicated surfaces) — **corrected 2026-08-09**:
+  this feature's core obligation is the *general* C-10 clause (a surface duplicated across code
+  paths must have every instance updated and proven with a test), not sub-clause (a) specifically
+  (new-route nav registration, which doesn't apply here — no new routes exist). Honored by: the
+  `CardNotice.tsx` 4-consumer sweep, the 2 byte-identical + 1 structurally-different Breadcrumb
+  sites, the triplicated Progress bar, and the 3 Textarea sites all getting updated together, with
+  Step 35's grep proving no leftover duplicate markup survives (AC-3).
 - `C-14` (consumer surface named) — honored by: Chosen Approach's opening line naming the exact
-  UI segments; no Agent-surface or backend change.
-- **DRY guard rail** — honored by: the Alert `warning` variant decision (closes the
-  CopilotRail/SectionRenderer tone duplication) and the Progress `buy`/`paper`/`sell`/`muted`
-  variant decision (closes the WatchlistReadiness taxonomy duplication risk), both instead of
-  leaving hand-rolled conditional classNames on top of the migrated primitives.
+  UI segments. **Note**: C-14's literal trigger is "changes backend behavior with an end-user-
+  visible consequence" — this feature has zero backend changes, so citing C-14 here is a defensive
+  over-application (harmless, since product-spec's Consumer Surface(s) section is filled out
+  regardless of whether C-14 strictly requires it for a pure-frontend change), not a strict
+  necessity.
+- **DRY guard rail** — honored by three app-specific `cva` variant reconciliations, not two:
+  the Alert `warning` variant (closes the CopilotRail/SectionRenderer tone duplication), the
+  Progress `buy`/`paper`/`sell`/`muted` variant (closes the WatchlistReadiness taxonomy
+  duplication risk — grounded in `WatchlistReadiness.tsx:26-31`'s `barClass()`, which has no
+  Badge/Button precedent for the "muted" token specifically, unlike buy/sell/paper which do), and
+  **Toggle Group's `buy`/`sell` variant** for `OrderForm.tsx` (mirroring `button.tsx:22-25`/
+  `badge.tsx:19-20` — omitted from this list until this 2026-08-09 correction, though always
+  present in the Chosen Approach itself), all instead of leaving hand-rolled conditional
+  classNames on top of the migrated primitives.
 - `F-09` (step immutability during execution / Deviation Log discipline) — honored by:
   interleaving primitive-add with first-wire (tier 2) instead of batching all 8 primitives
   first, so an integration-fit mismatch is caught while the relevant step is still open rather
   than forcing a late patch step.
+- `P-04` (phase-gate approval, recorded) / `P-05` (incremental checkpointing) — honored by:
+  `feature.md`'s Status History row per phase transition, and `context.md`'s per-round session
+  entries recording each round's outcome as it happened, not batched to session end. Added to
+  this list 2026-08-09 — always honored in practice, previously just not named alongside sibling
+  process rules P-06/P-03.
 - `P-06` (red-before-green) — honored by: the mandatory unmodified-spec-run-and-record
   instruction on every tier-4 two-step, explicit and non-optional rather than assumed.
 - `P-03` (no invented facts / no unverified absence claims) — honored by: `CardNotice.tsx`'s

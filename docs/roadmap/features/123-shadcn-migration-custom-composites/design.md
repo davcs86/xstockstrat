@@ -15,13 +15,22 @@ forks would have received via the interactive gate. Flagged prominently in the f
 orchestrating session.
 **Grounded in**: recon.md
 
-**Update (Round 3, 2026-08-08)**: FR-10 has since been resolved via the user's direct, explicit answer
-— the orchestrating session asked the user directly (this document's own header note, above, flagged
-exactly this need) and the user overrode Round 2's "shell only for the entire wizard" synthesis for
-**Step 1 specifically**. See `## Round 3 — user-directed override` below and the rewritten
-`## Chosen Approach` #10. FR-5, FR-9, and FR-2's recharts-version handling, plus the Chosen Approach #12
-/ Deferred Item (`insights/page.tsx`'s second chart), remain exactly as before and still await the
-user's explicit confirmation.
+**Update (Round 3, 2026-08-08)**: both named forks have since been resolved via the user's direct,
+explicit answers — the orchestrating session asked the user directly (this document's own header
+note, above, flagged exactly this need):
+- **FR-5**: user confirmed **keep `lightweight-charts`**, matching this session's Round 1/2
+  recommendation. No longer awaiting confirmation — see the applied
+  `services/xstockstrat-ui/CLAUDE.md` § Styling sanctioned-exception note.
+- **FR-10**: user overrode Round 2's "shell only for the entire wizard" synthesis for **Step 1
+  specifically**. See `## Round 3 — user-directed override` below and the rewritten
+  `## Chosen Approach` #10.
+
+**Still not explicitly re-confirmed by the user** (adversarially vetted over 2 rounds with no Floor
+breach or dissent, but never put through the live gate since neither was a named fork the
+orchestrating session's consolidated question set covered): FR-9's CLI-vendored `@shadcn/react`
+install path and version pin, FR-2's recharts-version handling (hand-author against installed v2,
+don't bump to v3), and the Chosen Approach #12 / Deferred Item (`insights/page.tsx`'s second chart)
+— these three remain exactly as before.
 
 ---
 
@@ -465,11 +474,14 @@ matching product-spec's `## Consumer Surface(s)` (C-14) exactly; `/trader` is to
   candidate low-risk follow-up (partial theming consistency without a full chart-library migration),
   not part of this feature; recommend a `docs/roadmap/ledger/insights.md` note so it isn't lost (the
   orchestrating session applies ledger writes per this session's constraints).
-- [x] ~~This entire design was produced without the interactive `AskUserQuestion` gate...~~ **FR-10 is
-  now resolved**: the user was asked directly and gave an explicit override in Round 3 (2026-08-08) —
-  see Round 3 and Chosen Approach #10. **Still open** — Round 1/2's original caveat still applies to
-  everything *except* FR-10: the user should explicitly confirm or override the FR-5, FR-9, FR-2
-  (recharts-version), and item-#12 (insights/page.tsx) decisions before `/sdd-execute` runs any of them.
+- [x] ~~This entire design was produced without the interactive `AskUserQuestion` gate...~~ **FR-5 and
+  FR-10 are now resolved**: the user was asked both directly (via the orchestrating session's
+  consolidated gate, 2026-08-08) — FR-5 confirmed as-recommended (keep `lightweight-charts`), FR-10
+  overridden for Step 1 specifically (Round 3, Chosen Approach #10). **Still open** — FR-9's install
+  path/version pin, FR-2's recharts-version handling, and item-#12 (`insights/page.tsx`'s second
+  chart) were not part of that consolidated question set and remain adversarially-vetted but not
+  live-gated; the user should explicitly confirm or override these three before `/sdd-execute` runs
+  any of them.
 - [ ] Round 3's Step 1 restructure requires rewriting `e2e/insights/strategy-authoring.spec.ts`'s
   fill/click sequencing for every test that reaches past Step 1 (an interstitial `Next` click between
   each of the 4 field fills, replacing the current single-click-after-filling-up-to-4-fields pattern) —
@@ -481,10 +493,18 @@ matching product-spec's `## Consumer Surface(s)` (C-14) exactly; `/trader` is to
 - `C-01` (zero-assumption / evidence-cited steps) — honored: every recon claim above cites `path:line`
   or a live-fetched registry URL; the `@shadcn/react` maturity claim is cited to the live npm registry
   response, not assumed from the docs page alone.
-- `C-10` (integration completeness across shared/duplicated surfaces) — honored by explicitly
-  surfacing the third `recharts` consumer (`insights/page.tsx`) rather than letting FR-2's "consolidate
-  charting approaches" premise silently stop at the two files product-spec names; flagged as an open
-  risk pending confirmation rather than silently folded in or silently ignored.
+- `C-11` (no feature implementation without minimum SDD grounding) — honored: the full pipeline ran
+  in order (`/sdd-story` → `/sdd-review` → `/sdd-design` full mode → `/sdd-spec`) before any
+  implementation write; status is still `implementation-ready`, not `in-progress`. Cited inline in
+  Round 3's own "Constitution check" (§ Round 3 below) but omitted from this aggregate list until
+  this 2026-08-09 correction — the aggregate list was written before Round 3 was appended and never
+  reconciled against it.
+- `C-10` (integration completeness across shared/duplicated surfaces) — **partially honored, not
+  fully "honored" as originally worded here**: the third `recharts` consumer (`insights/page.tsx`)
+  is surfaced rather than hidden (satisfying **P-03**'s "no silent deviation"), but C-10 itself
+  requires *updating* every instance, which this consumer has not yet had — it's correctly deferred
+  pending the user's confirmation (the Deferred Item), not yet C-10-complete. Corrected 2026-08-09;
+  the prior wording overstated completion.
 - `C-14` (name the consumer surface) — honored: Chosen Approach states the consumer surface matches
   product-spec's `## Consumer Surface(s)` exactly, and flags that item #12 (if confirmed) would touch
   the `/insights` dashboard specifically, not a new segment.
