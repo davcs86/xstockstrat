@@ -130,7 +130,7 @@ cd services/xstockstrat-ui && grep -rn "from '@/components/ui/combobox'\|from '.
 
 ### Step 2 — service: FR-2 bump `recharts` to v3 repo-wide (dependency bump + minimal build-green fix)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/package.json` — modify (`recharts` `^2.12.7` → `^3.8.0`)

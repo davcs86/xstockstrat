@@ -66,6 +66,11 @@ Status History row above): `recharts` bumped to v3 (`^3.8.0`) repo-wide instead 
 `insights/page.tsx` Deferred Item is now in-scope as FR-12 (`implementation-spec.md` Step 7). No further
 confirmation needed for either.
 
+Execution in progress against Steps 1–15. Draft integration PR:
+[#914](https://github.com/davcs86/xstockstrat/pull/914) (stacked on
+`feature/shadcn-migration-low-confidence`), will flip to ready-for-review once all 15 steps land and
+the whole-feature gate is green.
+
 **Still not explicitly re-confirmed by the user** (adversarially vetted over 2 debate rounds with no
 Floor breach and no dissenting objection, but never put through a live `AskUserQuestion` gate — the
 `/sdd-design` session that produced `design.md` had neither `AskUserQuestion` nor `Task` available):

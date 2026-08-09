@@ -132,7 +132,12 @@ export function EquityCurveChart({
         <div data-testid="equity-curve-chart">
           <ResponsiveContainer width="100%" height={260}>
             <ComposedChart>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(222 20% 14%)" />
+              <CartesianGrid
+                xAxisId={0}
+                yAxisId={0}
+                strokeDasharray="3 3"
+                stroke="hsl(222 20% 14%)"
+              />
               <XAxis
                 dataKey="t"
                 type="number"

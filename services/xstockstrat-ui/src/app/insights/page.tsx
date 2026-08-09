@@ -175,7 +175,12 @@ function InsightsDashboard() {
               <CardContent>
                 <ResponsiveContainer width="100%" height={240}>
                   <LineChart data={chartData(strategies?.strategies ?? [])}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(222 20% 14%)" />
+                    <CartesianGrid
+                      xAxisId={0}
+                      yAxisId={0}
+                      strokeDasharray="3 3"
+                      stroke="hsl(222 20% 14%)"
+                    />
                     <XAxis dataKey="label" tick={{ fill: 'hsl(215 16% 47%)', fontSize: 11 }} />
                     <YAxis tick={{ fill: 'hsl(215 16% 47%)', fontSize: 11 }} domain={[0, 100]} />
                     <Tooltip

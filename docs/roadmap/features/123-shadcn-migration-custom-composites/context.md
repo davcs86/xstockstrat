@@ -437,3 +437,22 @@
 - **FR-1 verified closed at execute time** — no stray old-API Combobox call site found;
   `src/components/ui/combobox.tsx` and its 3 call sites unchanged by this feature.
 - Files modified: none (docs-only close-out, this context.md entry)
+
+### Step 2 — FR-2 bump `recharts` to v3 repo-wide [done]
+- Re-verified the live npm registry (`registry.npmjs.org/recharts/latest`) per Instruction 1: current
+  latest is **3.10.1**, newer than the `3.8.0` the design phase (2026-08-08/09) cited — used the
+  re-verified current version, per the step's own "redo this check right before use" instruction.
+  `package.json`'s `recharts` entry: `^2.12.7` → `^3.10.1`.
+- `pnpm install` regenerated `pnpm-lock.yaml` (`recharts 2.15.4` → `3.10.1` in the resolved tree). Peer
+  dependency warnings surfaced (`@connectrpc/connect`↔`@bufbuild/protobuf`, `@base-ui/react`↔`date-fns`)
+  are pre-existing and unrelated to this bump — not introduced by it.
+- Added `xAxisId={0} yAxisId={0}` to the `CartesianGrid` in `EquityCurveChart.tsx:135` and
+  `insights/page.tsx:178` (v3 makes these props required; both files' axes are unid'd/default-id-`0`,
+  so this is a required-prop satisfaction, not a behavior change) — the **only** source change in
+  either file this step makes, per the instruction not to perform their full `ChartContainer`
+  migrations here (Steps 4/7).
+- Verification: `pnpm lint` — clean (same one pre-existing unrelated warning).
+  `NEXT_DISABLE_STANDALONE=1 pnpm build` — succeeded, full route manifest, no TS errors — confirms the
+  repo is buildable on `recharts` v3 before any `ChartContainer` migration lands (Steps 3-7).
+- Files modified: `package.json`, `pnpm-lock.yaml`, `src/components/insights/EquityCurveChart.tsx`,
+  `src/app/insights/page.tsx`
