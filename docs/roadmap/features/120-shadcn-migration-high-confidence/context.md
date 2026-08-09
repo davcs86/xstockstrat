@@ -603,3 +603,10 @@ start) rather than per-step deviations. 5 total blockers were raised and resolve
 all logged in the Deviation Log above.
 
 Feature status: all 36 steps `done`. Lifecycle → `code-completed` (see feature.md).
+
+## Session 2026-08-09 (CI: feature status automation)
+
+- Promotion PR #916 merged to main
+- Feature promoted and committed: d5763e05e9750931610d809c6b4edd7fd810525e
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-09
