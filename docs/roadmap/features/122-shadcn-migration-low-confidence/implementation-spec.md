@@ -598,7 +598,7 @@ be unaffected by construction — confirm, don't assume).
 
 ### Step 7 — service: Migrate `EditCredentialsForm` to react-hook-form + zod + ui/field.tsx
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/accountShared.tsx` — modify

@@ -527,3 +527,32 @@ decisions per FR, transcribed from `design.md` § Round 3/Round 4 at execute tim
   clears credential fields on success" (AC2 proof) and the Step 4 `EditCredentialsForm`
   characterization test (unaffected, as expected — this step doesn't touch `EditCredentialsForm`).
 - Files modified: `src/components/trader/accountShared.tsx`
+
+### Step 7 — Migrate `EditCredentialsForm` to react-hook-form + zod + ui/field.tsx [done]
+- Reused Step 6's shared `credentialSchema(brokerType)` factory directly (no second schema written).
+  Unlike `AddAccountForm`, this consumer's broker is a fixed prop (`account.brokerType`), not
+  user-selectable, so the ref-indirection Step 6 needed to track a live broker change is unnecessary
+  here — a static `zodResolver(credentialSchema(account.brokerType))` is correct as-is.
+  `useForm<CredentialState>`'s generic *is* `CredentialState` directly (no `displayName`/`brokerType`
+  wrapper type needed, unlike Step 6's `AddAccountValues`), since this form has no other fields.
+- Same `useWatch`(tuple of the 6 credential field names) + `setValue`-per-key `handleCredsChange`
+  bridge as Step 6, to keep `CredentialFields`'s existing `value`/`onChange` contract unchanged.
+- Preserved the exact success-path order Step 4's characterization test depends on:
+  `reset(EMPTY_CREDENTIALS)` → `await refreshAccounts()` → `onDone()` (was `setCreds(EMPTY_CREDENTIALS)`
+  → `refreshAccounts()` → `onDone()`) — `onDone` is `AccountRow`'s unmount trigger
+  (`() => setEditing(false)`), so this ordering is the parity-critical part, not just the reset
+  mechanism swap. Kept the unmount-cleanup effect, now `reset(EMPTY_CREDENTIALS)` via `[reset]` deps
+  (stable reference) instead of `[]` — behaviorally equivalent (runs once, cleans up on unmount).
+  Submit-level `error` state (network/gRPC failure, not zod-expressible) kept separate and rendered
+  unchanged. `CredentialFields`, `buildCredentialsJson`, `AccountRow`'s own state, `AddAccountForm`
+  untouched, per the step's scope.
+- TDD: `red N/A` per the step's own escape hatch — Step 4's characterization test is the
+  purpose-built baseline (captured green there, against pre-migration code) this step is gated on
+  keeping green, per design.md § FR-3's explicit sequencing (this is the higher-risk half of FR-3 —
+  a mutating call overwriting live broker secrets).
+- Verification: `pnpm lint` — clean (same one pre-existing unrelated warning).
+  `NEXT_DISABLE_STANDALONE=1 pnpm build` — succeeded, full route manifest, no TS errors.
+  `pnpm test:e2e -- e2e/trader/account-selector.spec.ts` — **8 passed**, including Step 4's
+  characterization test (the concrete AC2/FR-3 parity proof) and Step 6's "Add Account form clears
+  credential fields on success" (unaffected, as expected — this step doesn't touch `AddAccountForm`).
+- Files modified: `src/components/trader/accountShared.tsx`

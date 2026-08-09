@@ -160,44 +160,89 @@ export function EditCredentialsForm({
   onDone: () => void;
 }) {
   const { refreshAccounts } = useAccountContext();
-  const [creds, setCreds] = React.useState<CredentialState>(EMPTY_CREDENTIALS);
-  const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const {
+    control,
+    handleSubmit,
+    setValue,
+    reset,
+    formState: { isSubmitting },
+  } = useForm<CredentialState>({
+    // Shared with Step 6's AddAccountForm (accountShared.tsx credentialSchema factory) — this
+    // consumer's broker is a fixed prop, not user-selectable, so (unlike AddAccountForm) a static
+    // call is enough; no ref/watch indirection needed to track a changing broker.
+    resolver: zodResolver(credentialSchema(account.brokerType)),
+    defaultValues: EMPTY_CREDENTIALS,
+  });
 
-  React.useEffect(() => () => setCreds(EMPTY_CREDENTIALS), []);
+  // Watched only to drive CredentialFields' controlled `value` prop — bridges the individual
+  // RHF-registered fields back into its existing creds/onChange contract (CredentialFields itself
+  // stays react-hook-form-unaware), same pattern as Step 6's AddAccountForm.
+  const creds = useWatch({
+    control,
+    name: [
+      'apiKey',
+      'apiSecret',
+      'consumerKey',
+      'accessToken',
+      'accessTokenSecret',
+      'ibkrAccountId',
+    ],
+  });
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitting(true);
+  React.useEffect(() => () => reset(EMPTY_CREDENTIALS), [reset]);
+
+  function handleCredsChange(next: CredentialState) {
+    setValue('apiKey', next.apiKey);
+    setValue('apiSecret', next.apiSecret);
+    setValue('consumerKey', next.consumerKey);
+    setValue('accessToken', next.accessToken);
+    setValue('accessTokenSecret', next.accessTokenSecret);
+    setValue('ibkrAccountId', next.ibkrAccountId);
+  }
+
+  async function onSubmit(values: CredentialState) {
     setError(null);
     try {
       await tradingClient.updateBrokerAccountCredentials({
         accountId: account.id,
-        credentialsJson: buildCredentialsJson(account.brokerType, creds),
+        credentialsJson: buildCredentialsJson(account.brokerType, values),
       });
-      setCreds(EMPTY_CREDENTIALS);
+      reset(EMPTY_CREDENTIALS);
       await refreshAccounts();
       onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update credentials');
-    } finally {
-      setSubmitting(false);
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-2 space-y-2 rounded-md border border-dashed p-2">
+    <form
+      onSubmit={handleSubmit(onSubmit)}
+      className="mt-2 space-y-2 rounded-md border border-dashed p-2"
+    >
       <p className="text-xs text-muted-foreground">
         Enter new {brokerLabel(account.brokerType)} secrets to replace the stored ones. They are
         validated against the broker on save.
       </p>
-      <CredentialFields brokerType={account.brokerType} creds={creds} onChange={setCreds} />
+      <CredentialFields
+        brokerType={account.brokerType}
+        creds={{
+          apiKey: creds[0] ?? '',
+          apiSecret: creds[1] ?? '',
+          consumerKey: creds[2] ?? '',
+          accessToken: creds[3] ?? '',
+          accessTokenSecret: creds[4] ?? '',
+          ibkrAccountId: creds[5] ?? '',
+        }}
+        onChange={handleCredsChange}
+      />
       {error && <p className="text-xs text-destructive">{error}</p>}
       <div className="flex gap-1">
-        <Button type="submit" size="sm" disabled={submitting}>
-          {submitting ? 'Saving...' : 'Save keys'}
+        <Button type="submit" size="sm" disabled={isSubmitting}>
+          {isSubmitting ? 'Saving...' : 'Save keys'}
         </Button>
-        <Button type="button" size="sm" variant="ghost" onClick={onDone} disabled={submitting}>
+        <Button type="button" size="sm" variant="ghost" onClick={onDone} disabled={isSubmitting}>
           Cancel
         </Button>
       </div>
