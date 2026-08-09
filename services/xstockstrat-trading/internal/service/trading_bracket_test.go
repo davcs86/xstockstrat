@@ -580,7 +580,7 @@ func TestHaltAccount_SetsInMemoryBeforeReleasingMutexThenWritesDB(t *testing.T) 
 	}}
 	svc := &TradingService{
 		cfgW: &config.Watcher{}, accountRepo: accounts, notify: &fakeNotifyClient{},
-		halted: map[string]bool{}, haltReasons: map[string]string{},
+		halted: map[string]bool{}, haltReasons: map[string]string{}, haltedLastPolled: map[string]time.Time{},
 	}
 
 	done := make(chan struct{})
@@ -609,7 +609,7 @@ func TestHaltAccount_DBWriteFailureDoesNotRollBack(t *testing.T) {
 	}}
 	svc := &TradingService{
 		cfgW: &config.Watcher{}, accountRepo: accounts, notify: &fakeNotifyClient{},
-		halted: map[string]bool{}, haltReasons: map[string]string{},
+		halted: map[string]bool{}, haltReasons: map[string]string{}, haltedLastPolled: map[string]time.Time{},
 	}
 	svc.haltAccount(context.Background(), "acct-1", "test reason", int32(tradingv1.HaltSource_HALT_SOURCE_BRACKET_PROTECTION))
 	if !svc.isAccountHalted("acct-1") {

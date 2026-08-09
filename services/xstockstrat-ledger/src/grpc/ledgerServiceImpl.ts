@@ -168,7 +168,7 @@ export class LedgerServiceImpl {
 
       callback(null, {
         events: rows.map(rowToEvent),
-        page: { nextPageToken: hasMore ? rows[rows.length - 1].event_id : '' },
+        page: { nextPageToken: hasMore ? rows[rows.length - 1].event_id : '', totalCount: rows.length },
       });
     } catch (err: any) {
       callback({ code: 13, message: err.message });
