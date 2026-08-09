@@ -23,33 +23,62 @@ more indirection) than the one-line hand-rolled code it would replace.
 
 ## Functional Requirements
 
-FR-1. Evaluate `src/components/trader/OrderForm.tsx:215-217` and
+FR-1. Migrate `src/components/trader/OrderForm.tsx:215-217` and
 `src/components/trader/EditOrderDialog.tsx:82` — one-line inline success/error text (`text-destructive`
-/ `text-buy` paragraphs, no boxed container) the audit rated a loose match for `Alert`. If
-`120-shadcn-migration-high-confidence` has already shipped `ui/alert.tsx`, adopt it here **only if**
-doing so doesn't add unwanted visual weight to a compact order-entry form; otherwise record the
-decision to leave the plain text as-is and why (e.g. a boxed alert is disproportionate for a one-line
-inline field message next to a submit button).
+/ `text-buy` paragraphs, no boxed container) the audit rated a loose match for `Alert` — onto `Alert`,
+wrapping the existing message text unchanged. **Resolved 2026-08-09**: user-directed override
+(`design.md` § Round 4) — migrate both call sites, superseding this FR's original "evaluate, adopt
+only if it doesn't add unwanted visual weight, otherwise decline" framing and the design phase's own
+initial DECLINE decision. **Blocked on sibling `120-shadcn-migration-high-confidence` shipping
+`ui/alert.tsx`**: that primitive does not exist on `main-dev` today (120 is `implementation-ready`,
+not `code-completed`/`launched`), so no concrete migration steps exist yet in
+`implementation-spec.md` — per Constitution F-04 (never invent a file path), a follow-up
+`/sdd-spec` run generates them once `120` merges, mirroring sibling
+`121-shadcn-migration-medium-confidence`'s Tranche-2 pattern for its own primitive-dependent FRs.
 
 FR-2. Evaluate `src/components/auth/AuthForm.tsx:28-93` (`CredentialsForm` — local `useState` fields,
-manual `fetch` submit, inline `<p>` error text) against shadcn's `Form` recipe (react-hook-form + zod +
-`FormField`/`FormMessage` wiring). Record whether adopting it is worth the new
-`react-hook-form`/`zod` dependencies for this one two-field login form, or whether the existing manual
-`useState` + `Input`/`Button` composition (already using the repo's `ui/input.tsx`/`ui/button.tsx`) is
-the appropriately minimal implementation.
+manual `fetch` submit, inline `<p>` error text) against shadcn's current form-building primitive,
+`ui/field.tsx` (`Field`/`FieldLabel`/`FieldContent`/`FieldDescription`/`FieldError`/`FieldGroup`/etc. —
+corrected 2026-08-08 from this FR's original `Form`/`FormField`/`FormItem`/`FormControl`/`FormMessage`
+naming, which described shadcn's now-superseded pattern; see `design.md` § Round 3 and `recon.md` §
+Round 3 addendum for the live-verified correction), combined with `react-hook-form`'s own
+`Controller`/`useForm` directly. Record whether adopting it is worth the new
+`react-hook-form`/`zod`/`@hookform/resolvers/zod` dependencies for this one two-field login form, or
+whether the existing manual `useState` + `Input`/`Button` composition (already using the repo's
+`ui/input.tsx`/`ui/button.tsx`) is the appropriately minimal implementation. **Resolved 2026-08-08**:
+user-directed override — migrate (see design.md § Round 3).
 
-FR-3. Evaluate `src/components/trader/accountShared.tsx`'s `CredentialFields`/`buildCredentialsJson`
-(broker-conditional controlled inputs, manual submit handler calling the gRPC client directly) against
-the same `Form` recipe. Record the same migrate-or-decline decision, noting that this form's
+FR-3. Evaluate `src/components/trader/accountShared.tsx`'s `CredentialFields`
+(`accountShared.tsx:51-113` — broker-conditional controlled inputs, `BrokerType.IBKR` vs. the
+Alpaca default branch) and `buildCredentialsJson` (`accountShared.tsx:39-48`) against the same
+`ui/field.tsx`-based recipe (see FR-2's correction above). `CredentialFields` is a shared
+field-rendering component with **two** independent consumers, each owning its own manual submit
+handler that calls `tradingClient` directly: `EditCredentialsForm` (`accountShared.tsx:116-167`,
+calls `updateBrokerAccountCredentials`) and `AddAccountForm` (`accountShared.tsx:259-332`, calls
+`registerBrokerAccount`). Record the same migrate-or-decline decision, noting that this form's
 broker-conditional field set (per-broker required/optional credential fields) is a more complex
 validation shape than `AuthForm`'s two static fields — react-hook-form + zod's schema-per-broker
-validation may be a stronger fit here even if FR-2 declines.
+validation may be a stronger fit here even if FR-2 declines. Both `BrokerType` values in the proto
+(`BROKER_TYPE_ALPACA`, `BROKER_TYPE_IBKR` — `packages/proto/common/v1/common.proto:66-67`) are the
+full enum; whichever decision is made (migrate or decline) must preserve both branches'
+existing required-field behavior unchanged — this feature does not alter broker credential
+storage or validation semantics, only the widget wiring that renders and submits them.
+**Resolved 2026-08-08**: user-directed override — migrate **both** consumers (`CredentialFields`
+itself stays a plain controlled component; each consumer bridges it via `Controller` at its own
+call site rather than `CredentialFields` becoming context-aware — see `design.md` § Round 3).
 
-FR-4. If FR-2 and/or FR-3 conclude adoption is warranted, add `react-hook-form` and `zod` to
-`services/xstockstrat-ui/package.json`, add `src/components/ui/form.tsx` (the shadcn `Form` primitive:
-`Form`, `FormField`, `FormItem`, `FormLabel`, `FormControl`, `FormMessage`, wired to
-`react-hook-form`'s `useFormContext`), and migrate the accepted call site(s) onto it. If both decline,
-this FR is a no-op and the feature ships with zero new dependencies.
+FR-4. If FR-2 and/or FR-3 conclude adoption is warranted, add `react-hook-form`, `zod`, and
+`@hookform/resolvers/zod` to `services/xstockstrat-ui/package.json`, add
+`src/components/ui/field.tsx` (shadcn's current form-building primitive — `Field`, `FieldLabel`,
+`FieldContent`, `FieldDescription`, `FieldError`, `FieldGroup`, `FieldSet`, `FieldLegend`,
+`FieldTitle`, `FieldSeparator` — framework-agnostic, combined with `react-hook-form`'s own
+`Controller`/`useForm` directly; **corrected 2026-08-08** from this FR's original
+`src/components/ui/form.tsx`/`Form`/`FormField`/`FormItem`/`FormControl`/`FormMessage`/
+`useFormContext` naming, which named shadcn's now-superseded pattern — verified live against
+`https://ui.shadcn.com/docs/components/field` and `https://ui.shadcn.com/docs/forms/react-hook-form`,
+see `design.md` § Round 3 and `recon.md` § Round 3 addendum), and migrate the accepted call
+site(s) onto it. **Resolved 2026-08-08**: FR-2 and FR-3 both concluded migrate — all three call
+sites (`AuthForm.tsx`, `AddAccountForm`, `EditCredentialsForm`) adopt the full recipe.
 
 ## Out of Scope
 
@@ -62,8 +91,13 @@ this FR is a no-op and the feature ships with zero new dependencies.
 ## Affected Services
 
 - `xstockstrat-ui` — `src/components/trader/{OrderForm,EditOrderDialog,accountShared}.tsx`,
-  `src/components/auth/AuthForm.tsx`; conditionally `src/components/ui/form.tsx` and
-  `package.json`/`pnpm-lock.yaml` if FR-4 triggers.
+  `src/components/auth/AuthForm.tsx`; `src/components/ui/field.tsx` (corrected 2026-08-08 from
+  the stale `form.tsx` naming — see FR-4) and `package.json`/`pnpm-lock.yaml`, since FR-4 has
+  triggered (all three FR-2/FR-3 call sites migrate). `src/components/ui/alert.tsx` also becomes
+  affected once FR-1 unblocks (**added 2026-08-09**, `design.md` § Round 4) — that file does not
+  exist on `main-dev` yet; it is added by sibling `120-shadcn-migration-high-confidence`, not this
+  feature, and `OrderForm.tsx`/`EditOrderDialog.tsx`'s actual edits are deferred to a follow-up
+  `/sdd-spec` run once it ships.
 
 ## Consumer Surface(s)
 
@@ -110,10 +144,19 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Open Questions
 
-- [ ] Should FR-2 and FR-3 be decided independently, or does adopting `react-hook-form`/`zod` for one
-  obligate reusing it for the other (avoiding "form library A here, manual state there" inconsistency)?
-  Route to `/sdd-design` — this is exactly the kind of design-fork the SDD gate exists to surface
-  rather than guess at.
-- [ ] Confirm no other `xstockstrat-ui` code already depends on `react-hook-form` or `zod` under a
-  different install path before FR-4 adds them fresh (`grep -r "react-hook-form\|from 'zod'"
-  services/xstockstrat-ui/src`) — the audit's dependency sweep did not check `zod` specifically.
+- [x] **Resolved 2026-08-08 (user-directed override, `design.md` § Round 3)**: FR-2 and FR-3 are
+  both migrated together — moot in practice as an "independent vs. coupled" question once the
+  override settled on migrating every call site, but the original design-time reasoning (evaluate
+  independently on functional/validation-shape merits, not for stylistic consistency) is preserved
+  in `design.md`'s Rejected Alternatives for the record.
+- [x] **Resolved 2026-08-09 (user-directed override, `design.md` § Round 4)**: FR-1 migrates both
+  call sites onto `Alert`, superseding the design phase's earlier DECLINE decision — but is blocked
+  on sibling `120-shadcn-migration-high-confidence` shipping `ui/alert.tsx` (not yet on `main-dev`).
+  Per Constitution F-04, no concrete `implementation-spec.md` steps exist for FR-1 yet; a follow-up
+  `/sdd-spec` run is required once `120` merges. `docs/roadmap/features/merge-order.md` should carry
+  a `120` ↔ `122` blocking-dependency row alongside the existing `120` ↔ `121` row.
+- [x] **Resolved by `/sdd-review`**: `grep -rn "react-hook-form\|from 'zod'\|\"zod\""
+  services/xstockstrat-ui/src services/xstockstrat-ui/package.json` returns zero matches. Neither
+  `react-hook-form` nor `zod` is present anywhere in `xstockstrat-ui` today, under any install
+  path or transitive re-export. If FR-4 triggers, both are genuinely new dependencies with no
+  existing precedent to reconcile against.

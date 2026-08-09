@@ -1,6 +1,6 @@
 # Feature: shadcn-migration-medium-confidence
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/shadcn-migration-medium-confidence`
 **Created**: 2026-08-08
 **Last Updated**: 2026-08-08
@@ -12,13 +12,20 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-08 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-08 | `draft` → `spec-ready` | /sdd-review | Product spec approved (0 warnings after fixes — FR-14 primitive-shape claim corrected, both Open Questions resolved with grepped evidence) |
+| 2026-08-08 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. **Caveat**: no `Task`/`AskUserQuestion` tools were available this session — the debate and the FR-13 keep-vs-replace call were self-run by one agent and not gated through an interactive user prompt. Needs explicit human/orchestrator re-affirmation (see design.md § Process Note and Open Risks). |
+| 2026-08-08 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 17 steps, covering only tranche 1 (FR-1/FR-2/FR-3/FR-10/FR-11/FR-12/FR-13 — no cross-feature dependency). FR-4–FR-9 deliberately left unspecced (F-04 — their target primitives don't exist on `main-dev` yet); re-run `/sdd-spec` once `120-shadcn-migration-high-confidence` merges. |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec shadcn-migration-medium-confidence`_
+- [Recon](recon.md) — codebase dossier (Phase 0)
+- [Design](design.md) — approved architecture (Phase 1). FR-13's original self-run "keep as-is"
+  recommendation (see § Process Note) was superseded 2026-08-08 by a live user decision to
+  **replace** — see § Round 3, resolved and no longer outstanding.
+- [Implementation Spec](implementation-spec.md) — 21 steps, tranche 1 only (FR-1/FR-2/FR-3/FR-10/FR-11/FR-12/FR-13); FR-13 (Steps 17-20) migrates `PlatformHeader.tsx`/`BottomTabBar.tsx` onto `NavigationMenu`, per `design.md`'s Round 3 user-directed override; FR-4–FR-9 deferred to a re-spec after `120` merges
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -39,4 +46,8 @@ consolidate two independently-duplicated non-primitive recipes (a bordered filte
 
 ## Next Action
 
-`/sdd-review shadcn-migration-medium-confidence product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-review shadcn-migration-medium-confidence impl-spec` — validate implementation spec, then
+`/sdd-execute shadcn-migration-medium-confidence`. FR-13's keep-vs-replace call was re-affirmed by
+the user 2026-08-08 (chose **replace** — see design.md § Round 3); no longer outstanding. Note: this
+spec covers tranche 1 only (7 of 13 FRs) — FR-4 through FR-9 require a follow-up `/sdd-spec` run
+after `120-shadcn-migration-high-confidence` merges to `main-dev`.

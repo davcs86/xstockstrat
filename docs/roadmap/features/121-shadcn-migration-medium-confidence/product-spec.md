@@ -86,17 +86,27 @@ N Selects + active-filter count + "Clear filters") and replace the two independe
 This is a DRY consolidation, not a shadcn primitive gap — shadcn's Data Table recipe does not ship a
 standalone filter-toolbar component to import.
 
-FR-13. Evaluate (not mandate) replacing the hand-built nav rows in
-`src/components/shared/PlatformHeader.tsx:156-291` and `src/components/mobile/BottomTabBar.tsx:25-56`
-with a Radix `Navigation Menu`-based `ui/navigation-menu.tsx`. The audit rated this medium confidence
-and noted these are route-based navigation (not shadcn's dropdown-mega-menu use case) — arguably fine
-as-is. `/sdd-design` should make the keep-vs-replace call explicitly and record the rationale in
-`design.md` rather than defaulting to "replace everything."
+FR-13. Replace the hand-built nav rows in `src/components/shared/PlatformHeader.tsx:170-190,271-287`
+(desktop Primary/Section navs) and `src/components/mobile/BottomTabBar.tsx:28-54` with a Radix
+`Navigation Menu`-based `ui/navigation-menu.tsx`. The audit rated this medium confidence and noted
+these are route-based navigation (not shadcn's dropdown-mega-menu use case), and `/sdd-design`'s
+initial (self-run, not user-gated) recommendation was to keep the hand-built version as-is —
+**resolved 2026-08-08 by a live user decision to replace** (see `design.md` § Round 3), overriding
+that recommendation. `NavigationMenuLink` is usable standalone (no `Trigger`/`Content` dropdown
+pairing needed) for this flat, route-based nav shape. The mobile Sheet nav
+(`PlatformHeader.tsx:195-255`, disclosure/accordion behavior) is out of scope for this FR — only the
+two desktop `<nav>` regions and `BottomTabBar.tsx`'s flat nav are replaced.
 
-FR-14. Every new `ui/*` file added under this feature follows the existing hand-authored conventions
-in the repo (`cva` + the underlying `@radix-ui/react-*` primitive + `cn()` from `ui/utils.ts` +
-`React.forwardRef` + `displayName`), matching `ui/badge.tsx`, `ui/select.tsx`, and `ui/sheet.tsx` in
-style.
+FR-14. Every new `ui/*` file added under this feature matches the **existing post-119 primitives'
+actual output shape**: a plain function component (`function X({ className, ...props })`), `cva()` +
+`cn()` from `ui/utils.ts`, `data-slot` props — **not** `React.forwardRef`/`displayName`. None of the
+seven existing primitives use the `forwardRef` pattern (verified 2026-08-08 against
+`ui/badge.tsx`, `ui/select.tsx`, `ui/sheet.tsx` — no `forwardRef`/`displayName` occurrences in any of
+the three), and sibling `120-shadcn-migration-high-confidence`'s recon.md/product-spec.md FR-12
+independently confirms the same shape. Any app-specific `cva` variant this feature's primitives need
+(mirroring the `buy`/`sell`/`paper`/`live` pattern on `ui/badge.tsx:19-24`) is marked `// app-specific`
+and covered by a `<name>.test.ts` asserting it survives a future `apply --preset` re-run, matching
+`button.test.ts`/`badge.test.ts`.
 
 ## Out of Scope
 
@@ -157,16 +167,27 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Open Questions
 
-- [ ] **Merge order.** FR-4 through FR-9 consume primitives (`alert-dialog`, `tabs`, `toggle-group`,
-  `alert`, `checkbox`, `accordion`) that `120-shadcn-migration-high-confidence` adds — this feature
-  cannot land those steps until `120-shadcn-migration-high-confidence` merges (or `/sdd-spec` sequences
-  its own local copy and reconciles at integration). Register this dependency in
-  `docs/roadmap/features/merge-order.md` at `/sdd-spec` time. FR-1/FR-2/FR-3/FR-10/FR-11/FR-12/FR-13
-  have no such dependency and could land independently if the two features are reordered.
+- [x] **Merge order — confirmed, not yet registered centrally.** FR-4 through FR-9 consume primitives
+  (`alert-dialog`, `tabs`, `toggle-group`, `alert`, `checkbox`, `accordion`) that
+  `120-shadcn-migration-high-confidence` adds — this feature cannot land those steps until
+  `120-shadcn-migration-high-confidence` merges (or `/sdd-spec` sequences its own local copy and
+  reconciles at integration). This is now a **known, documented dependency** (design.md records the
+  rationale; `docs/roadmap/features/merge-order.md` gets the actual blocking-dependency row added
+  centrally, after all four sibling shadcn-migration features have run `/sdd-design` — see this
+  feature's `context.md` for the exact recommended row text). FR-1/FR-2/FR-3/FR-10/FR-11/FR-12/FR-13
+  have no such dependency and can land independently if the two features are reordered — confirmed by
+  re-checking each of those seven FRs' file:line citations: none reference a primitive `120` adds.
   Note: `119` itself is already taken on `main-dev` by the unrelated `119-shadcn-ui-migration` — the
   dependency here is on `120`, not `119`.
-- [ ] Per the same e2e-parity caution as `120-shadcn-migration-high-confidence`'s Open Questions (`docs/roadmap/ledger/fails.md`,
-  2026-08-05 — align-frontend-e2e-bff-mocks — duplication), grep each touched file's `e2e/**/*.spec.ts`
-  for assertions on `window.confirm` (Playwright's `page.on('dialog', ...)` handler) before migrating
-  FR-4 — those five specs must be rewritten to interact with the new `AlertDialog` instead of
-  intercepting the browser dialog.
+- [x] **e2e window.confirm coverage — grepped 2026-08-08.** `grep -rn "window.confirm\|page.on('dialog'"
+  services/xstockstrat-ui/e2e/` finds `page.on('dialog', ...)` interception at exactly 3 of the 5 FR-4
+  call sites: `e2e/accounts/authorized-apps.spec.ts:61` (revoke authorized app),
+  `e2e/insights/backfills.spec.ts:126` (cancel backfill), `e2e/insights/watchlists.spec.ts:51` (delete
+  watchlist) — all three must be rewritten to interact with `AlertDialog` instead of intercepting the
+  browser dialog. The other two FR-4 sites have **no existing e2e coverage** of the confirm flow at all:
+  `formulas/[id]/page.tsx:22`'s delete (`e2e/insights/formulas.spec.ts` only asserts the Delete button
+  is absent for read-only system formulas — `formulas.spec.ts:62` — it never exercises the delete path)
+  and `strategies/page.tsx:53-57`'s deactivate (no `Deactivate`/`handleDeactivate` hit anywhere under
+  `e2e/`). Those two are a pre-existing test gap, not a migration regression risk, and are out of this
+  feature's scope to backfill (like-for-like substitution only, per Out of Scope) — noted here so
+  `/sdd-execute` doesn't mistake "no e2e failure" for "no e2e coverage."

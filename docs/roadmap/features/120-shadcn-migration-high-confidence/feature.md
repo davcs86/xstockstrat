@@ -1,9 +1,9 @@
 # Feature: shadcn-migration-high-confidence
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/shadcn-migration-high-confidence`
 **Created**: 2026-08-08
-**Last Updated**: 2026-08-08
+**Last Updated**: 2026-08-09
 
 ---
 
@@ -12,13 +12,18 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-08 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-08 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
+| 2026-08-08 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + design.md written |
+| 2026-08-09 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 36 steps |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec shadcn-migration-high-confidence`_
+- [Recon](recon.md) — grounded codebase dossier
+- [Design](design.md) — debated, approved architecture
+- [Implementation Spec](implementation-spec.md) — 36 numbered steps, evidence-cited
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -38,4 +43,4 @@ reimplementations a full-codebase audit found across the trader/insights/config-
 
 ## Next Action
 
-`/sdd-review shadcn-migration-high-confidence product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-review shadcn-migration-high-confidence impl-spec` — validate implementation spec, then `/sdd-execute shadcn-migration-high-confidence`
