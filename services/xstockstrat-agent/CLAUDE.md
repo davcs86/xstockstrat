@@ -106,7 +106,8 @@ endpoint, and is **stateless**: all durable OAuth state (clients, auth codes, re
 in `xstockstrat-identity`, reached over gRPC, with the only cross-request linkage an HMAC-signed
 `txn` blob carried in URLs — so `instance_count > 1` is safe. The MCP endpoint requires an
 **`aud`-bound JWT** (`aud` == `AGENT_PUBLIC_URL`). Full route table, the `aud`-binding contract, and
-the RFC 8414/9728 discovery path-insertion quirk → `docs/oauth.md`.
+the RFC 8414/9728 discovery path-insertion quirk live on-demand in this service's `docs/` folder
+(**`oauth.md`**).
 
 ## Config Keys Consumed
 
