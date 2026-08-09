@@ -91,4 +91,35 @@ test.describe('AccountSelector', () => {
     // Credential fields should be cleared after successful registration
     await expect(page.getByPlaceholder('API Key')).toHaveValue('', { timeout: 5000 });
   });
+
+  test('Edit keys expands and collapses the credential form (feature 121, FR-3)', async ({
+    page,
+  }) => {
+    await page.route(
+      '**/xstockstrat.trading.v1.TradingService/ListBrokerAccounts',
+      async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ accounts: [BROKER_ACCOUNT_ALPACA] }),
+        });
+      },
+    );
+    await addAuthCookie(page);
+    await page.goto('/trader/accounts');
+
+    // Scope to this account's row (data-testid, feature 121 FR-3) — the page also renders a
+    // standalone "Add Account" form with its own "API Key" field, so an unscoped
+    // getByPlaceholder('API Key') would be ambiguous once the row's own credential form expands.
+    const row = page.getByTestId(`account-row-${BROKER_ACCOUNT_ALPACA.id}`);
+    const editKeysBtn = row.getByRole('button', { name: 'Edit keys' });
+    await expect(editKeysBtn).toBeVisible({ timeout: 5000 });
+    await expect(row.getByPlaceholder('API Key')).not.toBeVisible();
+
+    await editKeysBtn.click();
+    await expect(row.getByPlaceholder('API Key')).toBeVisible();
+
+    await editKeysBtn.click();
+    await expect(row.getByPlaceholder('API Key')).not.toBeVisible();
+  });
 });

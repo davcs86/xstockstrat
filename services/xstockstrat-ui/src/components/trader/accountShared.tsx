@@ -210,6 +210,7 @@ export function AccountRow({
     <Collapsible
       open={editing}
       onOpenChange={setEditing}
+      data-testid={`account-row-${account.id}`}
       className={`rounded-md border ${className}${!account.isActive ? ' opacity-50' : ''}`}
     >
       <div className="flex items-center justify-between gap-2">

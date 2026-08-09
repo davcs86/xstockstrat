@@ -315,7 +315,7 @@ pnpm lint
 
 ### Step 6 — test: e2e regression for FR-3 (Edit keys disclosure)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/account-selector.spec.ts` — modify (only if it drives

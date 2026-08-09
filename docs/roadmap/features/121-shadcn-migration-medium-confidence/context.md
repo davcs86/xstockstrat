@@ -313,3 +313,27 @@ repeated per step).
 - Verification: `pnpm build` clean, `pnpm lint` clean.
 - Files modified: `src/components/ui/collapsible.tsx` (create), `src/components/ui/collapsible.test.ts`
   (create), `src/components/trader/accountShared.tsx`
+
+### Step 6 — e2e regression for FR-3 (Edit keys disclosure) [done]
+- No existing test targeted the Edit-keys disclosure (confirmed grep, per implementation-spec's
+  Step 6 rationale — this is the one FR-3 case that needed a net-new assertion rather than a
+  vacuous pass, since the DOM shape actually changed). Added
+  `'Edit keys expands and collapses the credential form (feature 121, FR-3)'` to
+  `e2e/trader/account-selector.spec.ts`.
+- **Locator-scoping iteration** (not a functional regression — the underlying DOM was correct
+  throughout): the page renders two independent "API Key" placeholder fields — `AccountRow`'s own
+  (behind Edit keys) and the always-visible standalone "Add Account" form's, both built from the
+  shared `CredentialFields` component — plus a second "Alpaca Paper" text occurrence in the header's
+  account `<Select>` value display. Text/role-based scoping attempts (`div:has-text(displayName)`,
+  `.filter({has: getByRole('button', {name:'Edit keys'})})`) each resolved to the wrong element or
+  stayed ambiguous. Root-caused via a throwaway debug spec dumping `body` innerHTML (created and
+  deleted, not part of this diff) — confirmed the nesting itself was fine, the ambiguity was purely
+  in the test's own selectors.
+- **Fix**: added a stable `data-testid={\`account-row-${account.id}\`}` to the `Collapsible` root in
+  `AccountRow` (`accountShared.tsx`) and rewrote the test to scope every assertion through
+  `page.getByTestId(...)`. This is a minimal, targeted test-hook addition consistent with the
+  DRY guard rail (one shared identifier, not a new pattern).
+- Verification: `pnpm build` clean; `pnpm test:e2e -g "account-selector"` — 7 passed (incl. new
+  test); broader `pnpm test:e2e -g "accounts"` sweep — 18 passed, no regressions.
+- Files modified: `src/components/trader/accountShared.tsx` (added `data-testid`),
+  `e2e/trader/account-selector.spec.ts` (new test)
