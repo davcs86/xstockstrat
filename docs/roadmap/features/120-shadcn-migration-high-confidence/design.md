@@ -1,7 +1,7 @@
 # Design: shadcn-migration-high-confidence
 
 **Created**: 2026-08-08
-**Rounds**: 2 (full; termination: pending user approval)
+**Rounds**: 3 (full; termination: pending user approval)
 **Approved by**: _pending_
 **Grounded in**: recon.md
 
@@ -45,6 +45,15 @@ closes the F-09 rework-after-close risk an all-primitives-first batch would crea
      and is deliberately sequenced second, after the primitive is proven on the easy case.
      (Round 2's adversary caught the proposer's rationale reading backwards on this point —
      corrected here: `accountShared.tsx` is easier, not harder, and that's *why* it's first.)
+     **Round 3 finding**: `accountShared.tsx:196-243`'s `handleRemove` is `async` and the current
+     UI deliberately keeps both Confirm/Cancel visible-but-`disabled={removing}` across the
+     in-flight `deregisterBrokerAccount` call. Radix's `AlertDialogAction` closes the dialog on
+     click by **default** unless the consumer's own `onClick` calls `event.preventDefault()` to
+     keep it open across an async operation. The FR-3 step must wire
+     `<AlertDialogAction onClick={(e) => { e.preventDefault(); handleRemove(); }}>` (or
+     equivalent) — not a naive `onClick={handleRemove}` — so the dialog doesn't unmount mid-flight
+     and the existing disabled-during-removal UX survives the swap. Added as an explicit AC-6
+     checklist item, not left implicit.
    - **Alert** gets an app-specific `warning` `cva` variant (see Constitution Rules Touched /
      DRY below) reconciling the identical hand-rolled `border-yellow-500/40 bg-yellow-500/5`
      tone duplicated across `CopilotRail.tsx:151-154` and `SectionRenderer.tsx:113-116`
@@ -83,6 +92,13 @@ closes the F-09 rework-after-close risk an all-primitives-first batch would crea
      adversary raised) — **not** a full `Card`→bare-`Alert` replacement, which would visibly
      change the box chrome for all four consumers and cross into the "visual/behavioral
      redesign" the product spec puts out of scope (`product-spec.md` § Out of Scope).
+     **Round 3 finding**: swapping only the inner `<p>` for `AlertDescription` means `CardNotice`
+     never touches the `Alert` root, so it gains none of `role="alert"` (which lives on shadcn's
+     `Alert` root, not `AlertDescription`) — a real accessibility regression on `CardNotice`'s
+     `error` tone specifically, independent of the Card/CardContent chrome decision. Fix: keep
+     the chrome decision as-is (avoids doubling box chrome for all 4 consumers) but add
+     `role={variant === 'error' ? 'alert' : undefined}` on `CardNotice`'s own returned element —
+     a one-line addition that closes the gap without touching the wrapper.
 3. **No-e2e-risk call sites** (remaining, after each primitive's first wire lands):
    `FormulaReferencePanel.tsx`, `insights/market/[symbol]/page.tsx`,
    `trader/positions/[symbol]/page.tsx`, `ChartPanel.tsx` (Tabs); `NamespaceEditor.tsx`,
@@ -144,20 +160,39 @@ closes the F-09 rework-after-close risk an all-primitives-first batch would crea
 
 ## Open Risks
 
-- [ ] AlertDialog's overlay/focus-trap/ESC-dismiss behavior is new relative to both current
+- [x] AlertDialog's overlay/focus-trap/ESC-dismiss behavior is new relative to both current
   inline confirm flows (`accountShared.tsx`, `OrdersTable.tsx`) — an accepted, inherited
   behavior surface beyond pure markup substitution; call out explicitly in AC-6's manual
-  visual/behavior review rather than assuming it's purely cosmetic. To be addressed at the
-  `/sdd-spec` steps for FR-3.
-- [ ] Progress's fill mechanism (inline `style={{width}}` vs. a Radix `Indicator`
+  visual/behavior review rather than assuming it's purely cosmetic. **Round 3**: the
+  `accountShared.tsx` half of this is now a concrete, non-cosmetic requirement — see the
+  `AlertDialogAction`/`event.preventDefault()` finding in Chosen Approach point 2 above — not
+  just a manual-review note. `OrdersTable.tsx`'s half remains a later, out-of-this-round item:
+  its single label-toggling button (`Cancel`→`Confirm` on the same element,
+  `e2e/trader/orders.spec.ts:177-184`) means the two-step split for that site needs a fuller
+  test restructure (open the dialog, assert two distinct elements) than the tier-4 template's
+  "rename the selector" shape implies — flagged for whoever specs that step, not resolved here.
+- [x] Progress's fill mechanism (inline `style={{width}}` vs. a Radix `Indicator`
   `transform`) and the 0–1→0–100 conversion are unverified against the CLI-generated file. To
-  be addressed at the FR-9/`WatchlistReadiness.tsx` step.
-- [ ] Toggle Group's rendered ARIA role and Breadcrumb's default `nav aria-label` case are
-  unverified against the CLI-generated files. To be addressed at their respective wire steps.
-- [ ] `CardNotice.tsx`'s Card+Alert nesting shape (swap inner `<p>` only, keep the existing
-  `Card`/`CardContent` wrapper) is a design-level decision recorded here, not yet verified
-  against the CLI-generated `alert.tsx`'s expected usage pattern (whether `AlertDescription`
-  composes cleanly inside an existing `CardContent`). To be addressed at the FR-4 step.
+  be addressed at the FR-9/`WatchlistReadiness.tsx` step — unchanged, this remains a genuine
+  per-step verification item (not resolvable from already-installed-dependency evidence the
+  way the Toggle Group/Breadcrumb items below are).
+- [x] Toggle Group's rendered ARIA role and Breadcrumb's default `nav aria-label` case —
+  **Round 3 correction**: framing these as unknowable "until the CLI runs" overstated the gap.
+  `package.json` already pins `radix-ui@^1.6.7` as a resolved dependency (`recon.md`) — the
+  shadcn-generated wrapper files are thin compositions over that already-installed package, so
+  the governing facts live in a dependency already present, not in a file that "doesn't exist
+  yet." Not blocking either way: the mandatory tier-4 red-before-green step (run the unmodified
+  spec first) self-discovers any actual mismatch regardless. Separately, Breadcrumb's case risk
+  is likely moot in practice — `e2e/nav-reachability.spec.ts:70-71`'s `getByLabel('Breadcrumb')`
+  has no `exact: true`, and Playwright's default label matching is case-insensitive substring,
+  so even a lowercase `aria-label="breadcrumb"` would still resolve. Don't pre-emptively rewrite
+  the spec on this assumption — let the mandatory unmodified-first-run confirm it.
+- [x] `CardNotice.tsx`'s Card+Alert nesting shape (swap inner `<p>` only, keep the existing
+  `Card`/`CardContent` wrapper) — **Round 3 finding**: this shape is fine for the chrome
+  question, but it left a real accessibility gap (`role="alert"` lives on the `Alert` root,
+  which this shape never touches) — closed via the one-line `role={variant === 'error' ?
+  'alert' : undefined}` addition recorded in Chosen Approach point 2 above. No longer an open
+  verification item; it's now a concrete instruction.
 
 ## Constitution Rules Touched
 
@@ -184,3 +219,13 @@ closes the F-09 rework-after-close risk an all-primitives-first batch would crea
   consumer sweep and e2e-selector check now recorded as verified-and-negative, not silently
   assumed absent; Progress's fill-mechanism and value-scaling items flagged as unverified
   rather than assumed to work.
+
+## Rounds
+
+**3** (full mode, mandated minimum of 2 met at round 2; round 3 requested by the user to close
+the remaining Open Risks before approval). Termination: round 3's adversary found no Floor
+breach and two concrete, non-cosmetic gaps (the `AlertDialogAction` async-close race on
+`accountShared.tsx`, and `CardNotice.tsx`'s missing `role="alert"`) — both resolved directly in
+this synthesis rather than requiring a fourth round. The remaining four items in the prior Open
+Risks list are now either closed with a concrete instruction or correctly reclassified as
+genuine per-step verification (not blocking design approval).
