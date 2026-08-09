@@ -1077,7 +1077,7 @@ panel rather than a multi-item accordion. Steps 34-35 below implement this subst
 
 ### Step 22 — service: Wire Alert Dialog to the five `window.confirm()` sites (FR-4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/WatchlistDetail.tsx` — modify (delete button, `:178-186`)
@@ -1160,7 +1160,7 @@ pnpm build
 
 ### Step 23 — test: red run for the 3 e2e-covered FR-4 sites (authorized-apps, backfills, watchlists)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/accounts/authorized-apps.spec.ts` — modify
@@ -1189,7 +1189,7 @@ Record actual pass/fail in `context.md`.
 
 ### Step 24 — test: green fix for the 3 e2e-covered FR-4 sites
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**: same 3 spec files as Step 23
 
@@ -1213,7 +1213,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "authorized-apps|backfills|watchl
 
 ### Step 25 — docs: Record the 2 e2e-uncovered FR-4 sites (formulas delete, strategies deactivate)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**: none — verification-only
 

@@ -531,3 +531,61 @@ repeated per step).
 - All 20 tranche-1 steps (FR-1/2/3/10/11/12/13) verified together with zero cross-step interaction
   failures — the mandated whole-feature gate before tranche 2 starts.
 - Files modified: none (verification-only, as specced)
+
+## Tranche 2 (FR-4 through FR-9) execution
+
+### Step 22 — Wire Alert Dialog to the five window.confirm() sites (FR-4) [done]
+- All 5 sites converted to the established `AlertDialog`/`AlertDialogTrigger asChild`/
+  `AlertDialogContent`/`AlertDialogDescription`/`AlertDialogCancel`/`AlertDialogAction` pattern
+  (same shape as feature 120 Step 14 and this feature's own Step 5 `accountShared.tsx` usage — no
+  `Header`/`Footer`, description + Cancel + Action directly): `WatchlistDetail.tsx` delete,
+  `FormulaWorkspace.tsx` delete, `strategies/page.tsx`'s `StrategyRow` deactivate,
+  `backfills/page.tsx` cancel, `authorized-apps/page.tsx` disconnect. Each page-level handler had its
+  `window.confirm(...) ... return;` guard stripped, leaving only the mutation call.
+- `WatchlistDetail.tsx`'s `onDelete` prop signature simplified from `(watchlistId, name) => void` to
+  `(watchlistId) => void` — the dialog now owns the confirm message (using `watchlist.name` directly
+  from the component's own props), so the page no longer needs `name` threaded through just to build
+  a confirm string.
+- Verification: `grep -rn "window.confirm"` across all 7 touched files → zero hits; `pnpm build` —
+  compiled successfully, zero type errors; `pnpm lint` clean.
+- Files modified: `src/components/insights/WatchlistDetail.tsx`,
+  `src/app/insights/watchlists/page.tsx`, `src/components/insights/FormulaWorkspace.tsx`,
+  `src/app/insights/formulas/[id]/page.tsx`, `src/app/insights/strategies/page.tsx`,
+  `src/app/insights/backfills/page.tsx`, `src/app/accounts/authorized-apps/page.tsx`
+
+### Step 23 — red run for the 3 e2e-covered FR-4 sites [done]
+- Ran `authorized-apps.spec.ts`/`backfills.spec.ts`/`watchlists.spec.ts` unmodified against Step 22.
+  **3 failed, exactly as predicted**: each `page.on('dialog', d => d.accept())` site's click now only
+  opens the `AlertDialog` (no browser-native dialog to auto-accept), so the mutation never fires and
+  the post-action assertion times out. Recorded failure detail:
+  - `authorized-apps.spec.ts:66` — `getByText('Claude.ai (E2E)')` expected count 0, got 2 (the row's
+    own text plus the now-open dialog's description text, which also names the app).
+  - `backfills.spec.ts:144` — `getByText('canceled', {exact:true})` never appears (job stays
+    `running`; the Cancel click only opened the dialog).
+  - `watchlists.spec.ts:54` — the empty-state text never appears (list never actually deleted).
+- Verification: `pnpm test:e2e -g "authorized-apps|backfills|watchlists"` — 3 failed / 21 passed (the
+  3 failures are exactly the 3 sites Step 22 flagged, no other regressions).
+- Files modified: none (this step only ran the existing specs to record the red state)
+
+### Step 24 — green fix for the 3 e2e-covered FR-4 sites [done]
+- All 3 specs updated to the same pattern: click the trigger button → click
+  `getByRole('button', {name: 'Confirm'})` → assert the original outcome. Removed the 3
+  `page.on('dialog', ...)` registrations (no longer relevant — no native dialog exists).
+- **Note for future e2e authors on this feature**: the AlertDialog's trigger button and its own
+  `AlertDialogCancel` share the literal label "Cancel" at 2 of these 5 sites
+  (`backfills/page.tsx`'s Cancel-the-job button vs. the dialog's own Cancel-the-dialog button). Not
+  an actual test-locator collision here (only one "Cancel" exists before the dialog opens, so the
+  trigger click is unambiguous; the tests never need to click the dialog's own Cancel), but worth
+  flagging for the next spec that touches this site.
+- Verification: `pnpm test:e2e -g "authorized-apps|backfills|watchlists"` — **24 passed, 0 failed**
+  (red→green pair complete, P-06 satisfied).
+- Files modified: `e2e/accounts/authorized-apps.spec.ts`, `e2e/insights/backfills.spec.ts`,
+  `e2e/insights/watchlists.spec.ts`
+
+### Step 25 — record the 2 e2e-uncovered FR-4 sites [done]
+- No code change (verification-only per spec). The 2 sites without confirm-flow e2e coverage —
+  `formulas/[id]/page.tsx` delete and `strategies/page.tsx` deactivate — remain a pre-existing test
+  gap (not introduced by this feature; `formulas.spec.ts` only asserts Delete is absent for read-only
+  system formulas, and no spec exercises `handleDeactivate`). Their only gate is the `pnpm build`
+  type-check already run in Step 22, confirmed here for the acceptance-criterion-5 record.
+- Files modified: none

@@ -71,8 +71,7 @@ export default function WatchlistsPage() {
     );
   }
 
-  function handleDelete(watchlistId: string, name: string) {
-    if (!window.confirm(`Delete watchlist "${name}"? This cannot be undone.`)) return;
+  function handleDelete(watchlistId: string) {
     deleteWl.mutate(watchlistId);
   }
 

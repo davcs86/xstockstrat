@@ -16,7 +16,11 @@ const AGENT_HEALTH_BFF = '/accounts/api/agent-health';
 // Stub the agent-health probe so the reachable/unreachable indicator is deterministic.
 async function stubAgentHealth(page: Page, reachable: boolean): Promise<void> {
   await page.route(AGENT_HEALTH_BFF, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ reachable }) }),
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ reachable }),
+    }),
   );
 }
 
@@ -27,7 +31,9 @@ test.describe('Accounts — My Authorized Apps', () => {
     expect(res.headers()['location'] ?? '').toContain('/auth/login');
   });
 
-  test('authenticated session renders the authorized-apps table via the real BFF', async ({ page }) => {
+  test('authenticated session renders the authorized-apps table via the real BFF', async ({
+    page,
+  }) => {
     await addAuthCookie(page);
     await stubAgentHealth(page, false);
     await page.goto('/accounts/authorized-apps');
@@ -49,25 +55,46 @@ test.describe('Accounts — My Authorized Apps', () => {
     await page.route(APPS_BFF, async (route) => {
       const method = route.request().method();
       if (method === 'POST') {
-        return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ success: true }) });
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ success: true }),
+        });
       }
       listCalls += 1;
-      const apps = listCalls === 1
-        ? [{ clientId: 'oauthc_e2e', clientName: 'Claude.ai (E2E)', authorizedAt: new Date().toISOString(), lastUsedAt: null, redirectUris: ['https://claude.ai/cb'] }]
-        : [];
-      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ apps }) });
+      const apps =
+        listCalls === 1
+          ? [
+              {
+                clientId: 'oauthc_e2e',
+                clientName: 'Claude.ai (E2E)',
+                authorizedAt: new Date().toISOString(),
+                lastUsedAt: null,
+                redirectUris: ['https://claude.ai/cb'],
+              },
+            ]
+          : [];
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ apps }),
+      });
     });
 
-    page.on('dialog', (dialog) => dialog.accept());
     await page.goto('/accounts/authorized-apps');
     await expect(page.getByText('Claude.ai (E2E)')).toBeVisible();
 
+    // Disconnect now opens an AlertDialog (feature 121, FR-4) rather than a native
+    // window.confirm — click the trigger, then the dialog's own Confirm action.
     await page.getByRole('button', { name: 'Disconnect' }).click();
+    await page.getByRole('button', { name: 'Confirm' }).click();
     await expect(page.getByText('Claude.ai (E2E)')).toHaveCount(0);
     await expect(page.getByText("haven't authorized any apps")).toBeVisible();
   });
 
-  test('Connect section shows the agent URL, a copy control, and a reachable indicator', async ({ page }) => {
+  test('Connect section shows the agent URL, a copy control, and a reachable indicator', async ({
+    page,
+  }) => {
     await addAuthCookie(page);
     await stubAgentHealth(page, true);
     await page.goto('/accounts/authorized-apps');

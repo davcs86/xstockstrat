@@ -15,6 +15,14 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
 import { useStrategies } from '@/hooks/useStrategies';
 import { useStrategyDefinitions, useManageStrategy } from '@/hooks/useStrategyDefinitions';
 import { useIsAdmin } from '@/hooks/useLiveStrategies';
@@ -50,13 +58,6 @@ export default function StrategiesPage() {
     : null;
 
   function handleDeactivate(strategyId: string) {
-    if (
-      !window.confirm(
-        `Deactivate strategy "${strategyId}"? It will no longer appear in the active list.`,
-      )
-    ) {
-      return;
-    }
     manage.mutate({ operation: StrategyOperation.DEACTIVATE, definition: { strategyId } });
   }
 
@@ -210,9 +211,29 @@ function StrategyRow({
               Edit
             </Button>
             {d.active && (
-              <Button size="sm" variant="ghost" disabled={deactivating} onClick={onDeactivate}>
-                Deactivate
-              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button size="sm" variant="ghost" disabled={deactivating}>
+                    Deactivate
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogDescription>
+                    Deactivate strategy &quot;{d.strategyId}&quot;? It will no longer appear in the
+                    active list.
+                  </AlertDialogDescription>
+                  <AlertDialogCancel disabled={deactivating}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    disabled={deactivating}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      onDeactivate();
+                    }}
+                  >
+                    Confirm
+                  </AlertDialogAction>
+                </AlertDialogContent>
+              </AlertDialog>
             )}
           </>
         ) : (

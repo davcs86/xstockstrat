@@ -12,6 +12,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
+import {
   useAddWatchlistSymbols,
   useRemoveWatchlistSymbols,
   useUpdateWatchlist,
@@ -48,7 +56,7 @@ export function WatchlistDetail({
   onDelete,
 }: {
   watchlist: WatchlistLike;
-  onDelete: (watchlistId: string, name: string) => void;
+  onDelete: (watchlistId: string) => void;
 }) {
   const addSymbols = useAddWatchlistSymbols();
   const removeSymbols = useRemoveWatchlistSymbols();
@@ -176,14 +184,27 @@ export function WatchlistDetail({
               Build from screener
             </Link>
           </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => onDelete(watchlist.watchlistId, watchlist.name)}
-            aria-label={`Delete ${watchlist.name}`}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" size="sm" aria-label={`Delete ${watchlist.name}`}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogDescription>
+                Delete watchlist &quot;{watchlist.name}&quot;? This cannot be undone.
+              </AlertDialogDescription>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => {
+                  e.preventDefault();
+                  onDelete(watchlist.watchlistId);
+                }}
+              >
+                Confirm
+              </AlertDialogAction>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
 
