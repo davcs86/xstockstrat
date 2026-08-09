@@ -35,9 +35,8 @@ The former HTTP/Connect-RPC server on `8058` (and the `src/connect/` Connect rou
 Identity is the durable OAuth state store + token mint behind the MCP agent's stateless OAuth 2.1
 HTTP facade. `RegisterOAuthClient` (RFC 7591 DCR, https-only public client) and `GetOAuthClient`
 manage `identity.oauth_clients`; `IssueAuthCode`/`ExchangeAuthCode` use `identity.oauth_auth_codes`
-(single-use, 60s TTL, PKCE S256, exact redirect match). The OAuth **access token is an `aud`-bound
-JWT** (`TokenClaims.aud` = the agent resource URI, RFC 8707) minted with the standard claim shape;
-`ValidateToken` surfaces `aud`. The OAuth **refresh token reuses `identity.refresh_tokens`** (rotation
+(single-use, 60s TTL, PKCE S256, exact redirect match). The OAuth access token's `aud`-binding
+contract is IDENTITY-4 in `docs/context-constitution.md`. The OAuth **refresh token reuses `identity.refresh_tokens`** (rotation
 on `RefreshOAuthToken` revokes the presented token and inserts a new one). TTLs reuse
 `identity.jwt.access_ttl_seconds` / `identity.jwt.refresh_ttl_seconds`.
 
@@ -77,7 +76,7 @@ Namespace: `identity`
 | `identity.jwt.access_ttl_seconds` | int | `900` | Access token TTL (15 min) |
 | `identity.jwt.refresh_ttl_seconds` | int | `2592000` | Refresh token TTL (30 days) |
 
-> The JWT signing key is **not** a config key — it is read from the `JWT_SECRET` env var (`src/grpc/identityServiceImpl.ts:30-31`, throws if unset), not served by xstockstrat-config.
+> The JWT signing key's env-only sourcing (never config) is IDENTITY-1 in `docs/context-constitution.md`.
 
 ## Webhooks
 

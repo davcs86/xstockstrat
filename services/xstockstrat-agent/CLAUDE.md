@@ -132,12 +132,8 @@ discovery/endpoint URLs (in DO it is `${APP_URL}/agent`).
 
 ## Config Keys Consumed
 
-Namespace: `agent` (resolved via one-shot `GetConfig` → `client.get_config_value(key,
-namespace="agent", environment=<resolved>, trading_mode=<resolved>)`). **Feature 093:** the read is
-now **environment-scoped** (`namespace`/`environment` are required — the old signature hardcoded
-`namespace="agent"` and sent no environment, so a production agent read the dev row) and projects the
-**active oneof** stringified (a `float`/`bool` key like `signal.alert_threshold` used to read back as
-`None`); a transport failure is surfaced, not swallowed to `None`.
+Namespace: `agent`, resolved via `client.get_config_value()` — env-scoped since feature 093; see
+its docstring for the read signature and oneof-stringify behavior.
 
 | Key | Type | Default | Description |
 |---|---|---|---|
