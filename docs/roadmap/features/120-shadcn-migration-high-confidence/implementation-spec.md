@@ -713,7 +713,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "copilot"
 
 ### Step 23 — service: Add ui/checkbox.tsx primitive + test (FR-5, FR-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/checkbox.tsx` — create

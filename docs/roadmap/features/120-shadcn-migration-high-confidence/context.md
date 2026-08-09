@@ -395,3 +395,10 @@
   mandatory-even-when-expected-to-pass instruction (P-06).
 - **Green**: no spec change needed (Step 22 is the recorded confirmation, not a no-op skip).
 - Files modified: `src/components/copilot/CopilotRail.tsx`
+
+### Step 23 — Add ui/checkbox.tsx primitive + test (FR-5, FR-12) [done]
+- `npx shadcn@latest add checkbox` (did not touch `button.tsx`). No app-specific variant needed.
+  Reformatted with prettier; created minimal presence test.
+- Verification: `pnpm test:unit` (74 passed) and `pnpm build` clean.
+- Files modified: `src/components/ui/checkbox.tsx` (create), `src/components/ui/checkbox.test.ts`
+  (create)
