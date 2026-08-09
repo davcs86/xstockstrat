@@ -523,3 +523,83 @@
   a throwaway Playwright spec (deleted after use) — page renders cleanly, breadcrumb reads
   "← namespaces › Audit Log" matching the pre-migration structure, no visible layout/style
   regression.
+
+### Step 36 — Per-primitive migration summary (AC-6) [done]
+
+All 36 steps landed on `feature/shadcn-migration-high-confidence`. Per-primitive summary:
+
+**Skeleton** (adopted, Step 1) — `insights/page.tsx`, `auth/login/page.tsx`. No e2e risk. Green.
+
+**Badge** (adopted, Step 2) — `CopilotRail.tsx` "beta" pill (`variant="secondary"`). No e2e risk. Green.
+
+**Textarea** (adopted, Step 3) — `FormulaWorkspace.tsx` (×2), `RuleEditor.tsx`. `aria-label`
+preserved verbatim (e2e-load-bearing). Green, no red/green pair needed (no role/selector change).
+
+**Tabs** (Steps 4-8) — 5 call sites: `FormulaReferencePanel.tsx`, `insights/market/[symbol]`,
+`trader/positions/[symbol]`, `ChartPanel.tsx` (no-risk), `RuleEditor.tsx` (red/green pair).
+- Step 6 deviation: `ChartPanel.tsx` was mis-classified no-risk; `chart-panel.spec.ts` broke
+  (`role="button"` → `role="tab"`), fixed.
+- Step 7-8 red/green: `strategy-authoring.spec.ts`'s 3 `getByRole('button', {name:'JSON'})` calls
+  → `getByRole('tab', ...)`. Confirmed Radix role: **`role="tab"`**.
+
+**Toggle Group** (Steps 9-13) — 2 e2e-risk-only consumers, both tier-4 pairs, no interim wire.
+App-specific `buy`/`sell` variant on `toggle.tsx`'s shared `toggleVariants`.
+- `screener/page.tsx` (hard/rank): `getByRole('button', ...)` → `getByRole('radio', ...)`.
+- `OrderForm.tsx` (BUY/SELL): same role fix; the 3 case-insensitive `.last()` submit-button
+  lookups were unaffected (an improvement — no longer ambiguous).
+- Confirmed Radix role for `type="single"`: **`role="radiogroup"`/`role="radio"`**, `aria-checked`
+  not `aria-pressed` (read from `@radix-ui/react-toggle-group` source directly).
+
+**Alert Dialog** (Steps 14-17) — `accountShared.tsx` (easier, no risk) then `OrdersTable.tsx`
+(harder — single toggling button → two distinct elements).
+- `accountShared.tsx`: mandatory `event.preventDefault()` in `AlertDialogAction`'s `onClick`
+  (design.md round-3) keeps the dialog open across the async `handleRemove()` call.
+- `OrdersTable.tsx` red/green: `orders.spec.ts`'s toggling-text assertion restructured into
+  trigger-visible → click → confirm-visible → click, per design.md's anticipated "fuller test
+  restructure."
+- Collateral: `npx shadcn@latest add alert-dialog` silently regenerated `button.tsx`, dropping the
+  `buy`/`sell` variant (the documented CLAUDE.md trap) — caught and restored.
+
+**Alert** (Steps 18-22) — `CardNotice.tsx`, `SectionRenderer.tsx` 'note', `CopilotRail.tsx`
+(red/green, expected-pass). App-specific `warning` variant collapses the
+`CopilotRail.tsx`/`SectionRenderer.tsx` duplicated yellow tone.
+- `CardNotice.tsx`: kept the `Card`/`CardContent` wrapper (design.md round-2 — avoids visual
+  chrome redesign); added `role={variant==='error' ? 'alert' : undefined}` on `Card` (round-3 —
+  `AlertDescription` alone doesn't carry the `Alert` root's `role="alert"`).
+- `CopilotRail.tsx` red/green: passed unmodified (`data-testid` forwards through `...props`).
+
+**Checkbox** (Steps 23-24) — `FormulaWorkspace.tsx`, `ParameterEditor.tsx`. No e2e risk.
+`onCheckedChange` (`boolean | 'indeterminate'`) normalized to boolean at both call sites.
+
+**Breadcrumb** (Steps 25-26, 29-30) — `NamespaceEditor.tsx`, `config-ui/audit/page.tsx` (no risk),
+`PlatformHeader.tsx` desktop crumb (red/green, expected-pass, per design.md's "likely moot" call
+— correct there, but not for the page-level sites, see below).
+- Two real deviations surfaced from this primitive's roll-out, both fixed same-session:
+  (1) Step 26's page-level Breadcrumbs' default `aria-label="breadcrumb"` collided with
+  `PlatformHeader.tsx`'s own `aria-label="Breadcrumb"` under Playwright's case-insensitive
+  `getByLabel` — caught in Step 28, fixed via distinct labels ("Namespace path", "Audit log path").
+  (2) `BreadcrumbPage`'s `role="link"` (the current-page crumb) collided with a real sub-nav Link
+  of the same name on `/insights/strategies` — caught in Step 35's full-suite run (not by any
+  single step's targeted verification), fixed by scoping `backfills.spec.ts`'s locators to the
+  Section sub-nav landmark.
+
+**Accordion** (Steps 27-28) — `PlatformHeader.tsx` mobile nav groups. No e2e risk. Dropped the
+hand-rolled `CaretDown` (Accordion's own `AccordionTrigger` supplies a chevron, confirmed by
+reading the generated file — avoided a doubled-chevron regression).
+
+**Progress** (Steps 31-34) — `SignalReadiness.tsx`, `SectionRenderer.tsx` (no risk, `variant="default"`),
+`WatchlistReadiness.tsx` (red/green, expected-pass). App-specific `buy`/`paper`/`sell`/`muted`
+variant promotes `WatchlistReadiness.tsx`'s `barClass()` firing-state taxonomy (renamed
+`barVariant()`).
+- Confirmed fill mechanism: `Indicator`'s `transform: translateX(-${100-value}%)`, not the
+  codebase's prior inline `style={{width}}` — value (0-100) unchanged at every call site.
+- The CLI-generated `progress.tsx` shipped with **no `cva()`/variant system at all**; the variant
+  infrastructure itself was hand-authored (not a regenerate-reconciliation, a from-scratch addition).
+
+**Cross-cutting**: this session's dev-server e2e timeout led to a standing CI-equivalent
+verification fallback (`CI=1 E2E_PREBUILT=1 NEXT_DISABLE_STANDALONE=1`, logged once at session
+start) rather than per-step deviations. 5 total blockers were raised and resolved via
+`AskUserQuestion` across the run (Steps 6, 28, 35 ×2, plus the mode-entry/per-feature confirms) —
+all logged in the Deviation Log above.
+
+Feature status: all 36 steps `done`. Lifecycle → `code-completed` (see feature.md).

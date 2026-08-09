@@ -1,6 +1,6 @@
 # Implementation Spec: shadcn-migration-high-confidence
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-08-09
 **Feature**: `docs/roadmap/features/120-shadcn-migration-high-confidence/feature.md`
 **Total Steps**: 36
@@ -1080,7 +1080,7 @@ All green, no new lint/build errors, full e2e suite passes. Screenshot compariso
 
 ### Step 36 — docs: Record per-primitive migration summary in context.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/roadmap/features/120-shadcn-migration-high-confidence/context.md` — modify

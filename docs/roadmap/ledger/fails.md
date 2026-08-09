@@ -38,6 +38,28 @@ ambiguity is logged here).
 - **Evidence**: `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go` `ListPositions` (omitted the broker columns); `internal/service/portfolio_service.go` `ListPositions` vs `buildAccountPortfolio`; PR #735.
 - **Rule it implies**: **C-10(b)** — a displayed value with an authoritative source must be surfaced by *every* RPC/read path that exposes it, with a parity test across paths.
 
+### 2026-08-09 — shadcn-migration-high-confidence — assumption
+- **Mistake**: shadcn's `Breadcrumb`/`BreadcrumbPage` primitive collided with `getByRole`/`getByLabel`
+  Playwright locators **twice** in the same feature, each time only caught by a *later* step's
+  verification, not the wiring step's own targeted run: (1) the page-level `Breadcrumb`'s default
+  `aria-label="breadcrumb"` (lowercase) case-insensitively substring-matched the shell's own
+  `aria-label="Breadcrumb"` landmark under `getByLabel`, ambiguating `nav-reachability.spec.ts`
+  (caught 2 steps later); (2) `BreadcrumbPage`'s built-in `role="link"` on the current-page crumb
+  collided with a real, working nav `Link` of the same accessible name elsewhere on the same page,
+  ambiguating an unrelated spec (`backfills.spec.ts`) under `getByRole('link', ...)` (only caught by
+  the feature's full-suite closing gate, not any single step). Both are inherent to the primitive
+  (not a caller mistake) — every future page that wires a `Breadcrumb` alongside an existing
+  labeled/linked nav region risks the same collision, and a step's own narrowly-scoped `-g` e2e run
+  will not reliably catch it.
+- **Evidence**: feature 120 Deviation Log, Step 28 and Step 35 entries; `docs/roadmap/features/120-shadcn-migration-high-confidence/context.md` Steps 26/28/35.
+- **Rule it implies**: when wiring `Breadcrumb` (or any primitive with a built-in implicit role/label
+  on a "current"/"active" state — `BreadcrumbPage`'s `role="link"` is the concrete instance so far),
+  grep the e2e suite for `getByRole`/`getByLabel` locators matching the same page's other visible
+  labels/links *before* declaring the step's e2e risk "none," not just the FR-cited file's own specs
+  — and run at least once against a broader `-g` scope (or the full suite) before marking such a step
+  done, since the collision surfaces on a *different* spec than the one testing the changed component.
+  Relevant to sibling features 121/122/123 (same primitive set, same shell).
+
 ### 2026-08-08 — shadcn-migration-medium/low/custom-composites (121/122/123) — assumption
 - **Mistake**: Three `/sdd-design` sessions for sibling features were delegated to independently-spawned `general-purpose` subagents in parallel, on the assumption they would have the same tool access as a top-level orchestrator (`Task`/`AskUserQuestion`, per the SDD skill's own P-01/P-02/P-04 requirements). All three reported — correctly and prominently, not silently — that neither tool was available in their execution environment, so each self-ran both the proposer and adversary debate roles internally and self-decided every genuine architecture fork (121's Navigation Menu keep-vs-replace, 122's Form-library scope, 123's chart-library and Questionnaire shell-vs-restructure decisions) instead of running real adversarial debate + a live human gate. When the orchestrating session then surfaced all four forks to the actual user, 3 of 4 self-reasoned recommendations were overridden — confirming the self-run debates, while well-evidenced, converged on different answers than a real human gate produced.
 - **Evidence**: `docs/roadmap/features/121-shadcn-migration-medium-confidence/design.md` § Process Note; `docs/roadmap/features/122-shadcn-migration-low-confidence/design.md` header note; `docs/roadmap/features/123-shadcn-migration-custom-composites/design.md` header note — all three dated 2026-08-08.
