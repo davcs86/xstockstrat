@@ -540,3 +540,26 @@
 - `git diff --stat` on `ChartPanel.tsx`/`useCandlestickChart.ts` — no changes to either, confirming
   the "keep" decision was not accompanied by a stray edit.
 - Files modified: none
+
+### Step 7 — FR-12 migrate `insights/page.tsx`'s "Score Trend" chart onto `ui/chart.tsx` [done]
+- Replaced `ResponsiveContainer`+`LineChart` wrapper with `ChartContainer` (single-entry `ChartConfig`
+  — `{ score: { label: 'Score', color: 'hsl(163 100% 44%)' } }`, reusing the existing fixed `Line`
+  stroke color unchanged, no dynamic per-symbol loop needed unlike Step 4's `EquityCurveChart.tsx`).
+- Replaced the built-in `Tooltip`'s `contentStyle`/`labelStyle`/`formatter` props with
+  `<Tooltip content={<ChartTooltipContent />} />` — **no custom `formatter`/`labelFormatter` needed**:
+  `ChartTooltipContent`'s default per-item lookup (`nameKey ?? item.name ?? item.dataKey` = `"score"`)
+  already resolves to the config's `label: 'Score'`, and `chartData()` already rounds the score to an
+  integer (`Math.round((s.overallScore ?? 0) * 100)`) before it reaches the chart, so the default
+  `.toLocaleString()` value rendering already matches the original `v.toFixed(0)` output — simpler
+  than Step 4's `EquityCurveChart.tsx` tooltip, which needed a custom `formatter` for its
+  dollar/percent-mode value formatting.
+- Carried forward Step 2's `CartesianGrid` `xAxisId={0} yAxisId={0}` fix unchanged.
+  `chartData()` and the `strategies?.strategies ?? []` data source completely untouched. Empty-state
+  paragraph ("Strategy scores will appear here once backtests are run") unchanged.
+- Verification: `grep` confirms `ChartContainer`/`ChartTooltipContent` present and
+  `contentStyle`/`labelStyle` fully removed (not dead code). `pnpm lint` — clean.
+  `NEXT_DISABLE_STANDALONE=1 pnpm build` — succeeded, full route manifest, no TS errors. No e2e
+  coverage exists for this file (confirmed again this session, zero matches for
+  "Score Trend"/"chartData"/"topStrategy" across `e2e/`) — manual verification deferred to Step 15.
+- **Chart-consolidation group (FR-1/FR-2/FR-3/FR-4/FR-5/FR-12, Steps 1-7) is now complete.**
+- Files modified: `src/app/insights/page.tsx`

@@ -447,7 +447,7 @@ git diff --stat services/xstockstrat-ui/src/components/trader/ChartPanel.tsx ser
 
 ### Step 7 — service: FR-12 migrate `insights/page.tsx`'s "Score Trend" chart onto `ui/chart.tsx` (added 2026-08-09)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/page.tsx` — modify
