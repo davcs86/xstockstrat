@@ -602,7 +602,7 @@ cd services/xstockstrat-ui && pnpm test:unit -- alert.test.ts && pnpm test:unit 
 
 ### Step 19 — service: Wire Alert → CardNotice.tsx (lowest-risk first wire)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/CardNotice.tsx` — modify

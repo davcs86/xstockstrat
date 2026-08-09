@@ -365,3 +365,14 @@
   (not exported by the CLI's default file) for the regression test to import it.
 - Verification: `pnpm test:unit` (73 passed) and `pnpm build` clean.
 - Files modified: `src/components/ui/alert.tsx` (create), `src/components/ui/alert.test.ts` (create)
+
+### Step 19 — Wire Alert → CardNotice.tsx (lowest-risk first wire) [done]
+- Replaced the inner `<p>` with `<AlertDescription>`; kept the existing `<Card><CardContent
+  className="pt-5">` wrapper unchanged (design.md round-2 — a full `Alert`-root replacement would
+  change box chrome for all 4 real consumers). Added `role={variant === 'error' ? 'alert' :
+  undefined}` on `CardNotice`'s own `Card` element (design.md round-3 fix) — confirmed still needed
+  after Step 18's finding: `Alert`'s `role="alert"` lives on the `Alert` root, which this wiring
+  does not use (only `AlertDescription`), so the manual `role` prop is not redundant.
+- Verification: `pnpm build` clean; `pnpm test:e2e -g "portfolio"` (12 passed), `-g "orders"`
+  (14 passed) — covers `OrderBook.tsx`, `PortfolioPanel.tsx`, trader/portfolio page consumers.
+- Files modified: `src/components/shared/CardNotice.tsx`
