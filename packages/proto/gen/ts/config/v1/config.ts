@@ -239,13 +239,24 @@ export interface ListKeysResponse {
 export interface ConfigKeyMeta {
   key: string;
   description: string;
+  /**
+   * The declared/seed default for this key — metadata only (CONFIG-2: runtime resolution
+   * never reads this column). Does NOT track live edits; use current_value for that.
+   */
   defaultValue: string;
   isSecret: boolean;
   consumingService: string;
   environment: Environment;
   tradingMode: TradingMode;
   /** optional; absent = no validation */
-  validation?: ValidationRule | undefined;
+  validation?:
+    | ValidationRule
+    | undefined;
+  /**
+   * The row's live value_data — what SetConfig writes and WatchConfig/GetConfig serve.
+   * This is what a config-ui "Value" column must display and prefill for editing.
+   */
+  currentValue: string;
 }
 
 function createBaseWatchConfigRequest(): WatchConfigRequest {
@@ -1546,6 +1557,7 @@ function createBaseConfigKeyMeta(): ConfigKeyMeta {
     environment: Environment.ENVIRONMENT_UNSPECIFIED,
     tradingMode: TradingMode.TRADING_MODE_UNSPECIFIED,
     validation: undefined,
+    currentValue: "",
   };
 }
 
@@ -1574,6 +1586,9 @@ export const ConfigKeyMeta: MessageFns<ConfigKeyMeta> = {
     }
     if (message.validation !== undefined) {
       ValidationRule.encode(message.validation, writer.uint32(66).fork()).join();
+    }
+    if (message.currentValue !== "") {
+      writer.uint32(74).string(message.currentValue);
     }
     return writer;
   },
@@ -1649,6 +1664,14 @@ export const ConfigKeyMeta: MessageFns<ConfigKeyMeta> = {
           message.validation = ValidationRule.decode(reader, reader.uint32());
           continue;
         }
+        case 9: {
+          if (tag !== 74) {
+            break;
+          }
+
+          message.currentValue = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1686,6 +1709,11 @@ export const ConfigKeyMeta: MessageFns<ConfigKeyMeta> = {
         ? tradingModeFromJSON(object.trading_mode)
         : TradingMode.TRADING_MODE_UNSPECIFIED,
       validation: isSet(object.validation) ? ValidationRule.fromJSON(object.validation) : undefined,
+      currentValue: isSet(object.currentValue)
+        ? globalThis.String(object.currentValue)
+        : isSet(object.current_value)
+        ? globalThis.String(object.current_value)
+        : "",
     };
   },
 
@@ -1715,6 +1743,9 @@ export const ConfigKeyMeta: MessageFns<ConfigKeyMeta> = {
     if (message.validation !== undefined) {
       obj.validation = ValidationRule.toJSON(message.validation);
     }
+    if (message.currentValue !== "") {
+      obj.currentValue = message.currentValue;
+    }
     return obj;
   },
 
@@ -1733,6 +1764,7 @@ export const ConfigKeyMeta: MessageFns<ConfigKeyMeta> = {
     message.validation = (object.validation !== undefined && object.validation !== null)
       ? ValidationRule.fromPartial(object.validation)
       : undefined;
+    message.currentValue = object.currentValue ?? "";
     return message;
   },
 };

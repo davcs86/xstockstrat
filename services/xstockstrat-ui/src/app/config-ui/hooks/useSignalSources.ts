@@ -19,7 +19,13 @@ export function useSignalSources(): {
       const weightKey = (c.keys ?? []).find((k) => k.key === 'analysis.signals.source_weights');
       let weights: Record<string, number> = {};
       if (weightKey) {
-        try { weights = JSON.parse(weightKey.defaultValue); } catch { /* no-op */ }
+        // currentValue is the live value_data (what an admin edit actually wrote);
+        // defaultValue is just the seed metadata and never reflects a saved edit (CONFIG-2).
+        try {
+          weights = JSON.parse(weightKey.currentValue);
+        } catch {
+          /* no-op */
+        }
       }
       return { sources: s.sources ?? [], weights };
     },

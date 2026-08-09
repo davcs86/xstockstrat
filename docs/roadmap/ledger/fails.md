@@ -38,6 +38,11 @@ ambiguity is logged here).
 - **Evidence**: `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go` `ListPositions` (omitted the broker columns); `internal/service/portfolio_service.go` `ListPositions` vs `buildAccountPortfolio`; PR #735.
 - **Rule it implies**: **C-10(b)** — a displayed value with an authoritative source must be surfaced by *every* RPC/read path that exposes it, with a parity test across paths.
 
+### 2026-08-08 — shadcn-migration-medium/low/custom-composites (121/122/123) — assumption
+- **Mistake**: Three `/sdd-design` sessions for sibling features were delegated to independently-spawned `general-purpose` subagents in parallel, on the assumption they would have the same tool access as a top-level orchestrator (`Task`/`AskUserQuestion`, per the SDD skill's own P-01/P-02/P-04 requirements). All three reported — correctly and prominently, not silently — that neither tool was available in their execution environment, so each self-ran both the proposer and adversary debate roles internally and self-decided every genuine architecture fork (121's Navigation Menu keep-vs-replace, 122's Form-library scope, 123's chart-library and Questionnaire shell-vs-restructure decisions) instead of running real adversarial debate + a live human gate. When the orchestrating session then surfaced all four forks to the actual user, 3 of 4 self-reasoned recommendations were overridden — confirming the self-run debates, while well-evidenced, converged on different answers than a real human gate produced.
+- **Evidence**: `docs/roadmap/features/121-shadcn-migration-medium-confidence/design.md` § Process Note; `docs/roadmap/features/122-shadcn-migration-low-confidence/design.md` header note; `docs/roadmap/features/123-shadcn-migration-custom-composites/design.md` header note — all three dated 2026-08-08.
+- **Rule it implies**: a nested subagent (one spawned by another subagent, rather than by the top-level orchestrator) cannot assume it has `Task` (further subagent-spawning) or `AskUserQuestion` tool access even when its agent type nominally grants "all tools." Before delegating an entire `/sdd-design` (or any skill requiring P-04 human gating) to a parallel subagent, the orchestrator must either (a) keep the design phase's genuine architecture-fork decisions and final approval gate at its own level (only delegating recon/mechanical work to the subagent), or (b) explicitly verify the subagent's tool access first and treat any self-run gate as provisional, surfacing every fork to the real user before treating the subagent's output as final — never as a substitute for the live gate.
+
 ### 2026-07-01 — 060-screener-engine — assumption
 - **Mistake**: Features that add a UI page (058 watchlists, 060 screener) assumed shipping the route + BFF + backend was enough; neither spec mentioned the shared nav, so the pages existed but were unreachable from the sidebar (`PLATFORM_SUBNAV`). The nav is a horizontal surface owned by feature 045, and vertically-scoped feature specs never listed registering into it — and no test asserted nav reachability.
 - **Evidence**: `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx` `PLATFORM_SUBNAV` (missing `screener`/`watchlists`); 058/060 specs contain no `PLATFORM_SUBNAV`/nav reference; PR #735.
@@ -771,3 +776,52 @@ ambiguity is logged here).
   quietly bypass the assertion, and add a positive "the thing under test actually ran"
   assertion (a mock call-count check) alongside any negative "no exception" assertion so a
   silent bypass fails loudly instead of passing vacuously.
+
+### 2026-08-08 — screener-data-readiness-polling — design
+- **Mistake**: a design proposal for a Screener recheck/polling feature narrowed the recheck
+  request to only the still-pending symbols to save quota — the same bug class as the
+  `fix-mcp-screener-correctness` entry above (`coverage_gaps` computed after truncation), just
+  relocated from server-side rank/floor truncation to client-side symbol narrowing. Any
+  universe-relative diagnostic (here, `_normalize_universe`'s min-max score, `screener.py:388-416`)
+  silently breaks when computed from a truncated/narrowed subset instead of the original full
+  scan — in the common one-symbol-still-pending case, `lo == hi` for every criterion and every
+  score collapses to a content-free `0.5`. Caught by the design-adversary before implementation,
+  not by a later test or review.
+- **Evidence**: `docs/roadmap/features/118-screener-data-readiness-polling/design.md` §
+  Chosen Approach / Rejected Alternatives; the design-adversary's round-1 objection (context.md
+  "sdd-design (quick)" session).
+- **Rule it implies**: this generalizes the `fix-mcp-screener-correctness` rule beyond
+  truncation specifically — **any value computed relative to a result set's full membership**
+  (universe-relative normalization, cross-row ranking, a percentile, a min/max) must be
+  recomputed from the *original* full set whenever a "just re-check a subset" optimization is
+  proposed, not from the subset alone, regardless of which layer (server truncation vs. client
+  narrowing) does the subsetting. Worth promoting to a Constitution ID if this recurs a third
+  time in a different feature.
+
+### 2026-08-08 — screener-data-readiness-polling — execute (Step 2)
+- **Mistake**: a `useEffect` meant to fire "once per poll attempt" was keyed on
+  `[poll.data, poll.error]` (a TanStack `useQuery` result's data/error fields) instead of
+  `[poll.dataUpdatedAt, poll.errorUpdatedAt]`. TanStack Query's structural sharing reuses the
+  previous `data` object reference when a new response is deeply equal to the last one — and for
+  this feature that's the *normal* case, not an edge case: a still-pending row comes back
+  byte-identical on every 60s retry until the underlying data resolves. The effect fired once on
+  the first response and then never again for identical-valued retries, freezing the page-level
+  attempt counter at 1 forever, even though the query's own internal counter (used inside
+  `refetchInterval`) correctly kept incrementing and correctly stopped polling at the cap. Net
+  effect: the UI silently claimed "Checking… attempt 1 of 5" forever instead of ever showing
+  "Gave up" — a dishonest-status bug in a feature whose entire purpose is honest status. Caught by
+  actually running the (not-yet-committed) Step 3 Playwright suite against the real
+  implementation as the TDD-gate green run, not by design review or a code read.
+- **Evidence**: `docs/roadmap/features/118-screener-data-readiness-polling/implementation-spec.md`
+  Deviation Log, "Step 2"; `services/xstockstrat-ui/src/app/insights/screener/page.tsx` (the fixed
+  `useEffect`); `e2e/insights/screener.spec.ts`'s two cap-exhaustion tests.
+- **Rule it implies**: any effect (or other reference-identity-keyed logic) that must fire once
+  **per fetch attempt** on a TanStack `useQuery`/`useInfiniteQuery` result must key on a
+  timestamp field (`dataUpdatedAt`/`errorUpdatedAt`) or an explicit counter
+  (`dataUpdateCount`/`errorUpdateCount`), never on `data`/`error` object identity — structural
+  sharing collapses identical-valued responses to the same reference by design, and "the response
+  didn't change" is often the expected, repeated case for a polling/recheck feature, not a rare
+  one. A design or spec review reading the hook code in isolation is unlikely to catch this
+  because the bug only manifests when a real request/response round-trip actually happens with
+  repeated identical payloads — it requires exercising the real behavior, not just reading the
+  wiring.

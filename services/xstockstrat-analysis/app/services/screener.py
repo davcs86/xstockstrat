@@ -8,8 +8,16 @@ NOT touch ``RunBacktest``/``ScoreStrategy`` (FR-8).
 
 Fundamental criteria consume marketdata's cached ``GetFundamentalsMulti`` (feature 059). When
 that RPC is unavailable — FMP disabled by default (``FailedPrecondition``), quota-exhausted, or
-the method absent — those criteria are reported **skipped** (absent from ``criterion_scores``,
-never failing the scan), satisfying FR-5's graceful degradation.
+the method absent — a symbol needing a fundamental criterion is reported
+``SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`` (``passed=False``, no score) rather than a misleading
+``OK``/passed result: a hard filter can never be confirmed passing on data that was never
+fetched, and a criterion silently missing from ``criterion_scores`` with no other signal made the
+whole screen look inert to the caller (bug fix — previously this degraded *too* gracefully: the
+scan always reported OK/passed=true regardless of whether any fundamental criterion was ever
+evaluated). The same fail-closed rule applies per-symbol when fundamentals were fetched for the
+batch but a specific symbol's value is still missing (e.g. FMP omitted that symbol, or the metric
+is an ``extra_metrics`` key that symbol doesn't carry): a hard-filter criterion with no raw value
+never silently passes.
 """
 
 import asyncio
@@ -126,11 +134,14 @@ class ScreenerEngine:
 
         # feature 090 (AC-4): coverage_gaps come from the FULL sorted list, BEFORE min_conviction
         # and rank_limit truncation — an INSUFFICIENT_DATA symbol ranked below the cut must still
-        # surface its gap so the caller knows to backfill it.
+        # surface its gap so the caller knows to backfill it. `HasField` excludes the
+        # fundamentals-unavailable INSUFFICIENT_DATA case (no CoverageGap — that message is
+        # bars-specific; see `_eval_symbol`), so this list stays exactly the bars-backfill signal
+        # it always was.
         coverage_gaps = [
             r.gap
             for r in results
-            if r.status == analysis_pb2.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA
+            if r.status == analysis_pb2.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA and r.HasField("gap")
         ]
 
         # feature 090 (AC-2): honor min_conviction as a hard floor. `r.score` is a min-max
@@ -207,6 +218,15 @@ class ScreenerEngine:
             )
             return row
 
+        # A fundamental criterion was requested but the whole-batch fetch failed/was disabled
+        # (FR-5) — bail the same way the bars-insufficient case does, rather than silently
+        # scoring the symbol on zero evaluated criteria and reporting it OK/passed (bug fix; see
+        # module docstring). No CoverageGap: that message is bars-specific.
+        needs_fundamentals = any(c.kind in _FUNDAMENTAL_KINDS for c in criteria)
+        if needs_fundamentals and not fundamentals_available:
+            row["status"] = analysis_pb2.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA
+            return row
+
         # 2. Signals for the source-weighted blend (same path as backtest).
         signals_map = await self._fetch_signals(symbol, request, propagation_meta)
         if signals_map:
@@ -216,14 +236,13 @@ class ScreenerEngine:
                     signals_map, latest_bar, list(request.signal_sources), self._source_weights
                 )
 
-        # 3. Per-criterion raw values + hard-filter gating.
+        # 3. Per-criterion raw values + hard-filter gating. `needs_fundamentals` already
+        # guaranteed fundamentals_available above when any FUNDAMENTAL criterion is present.
         for c in criteria:
             if c.kind in _FUNDAMENTAL_KINDS:
-                if not fundamentals_available:
-                    continue  # skipped (FR-5) — absent from raws/passes
                 raw = self._fundamental_value(fundamentals.get(symbol.upper()), c.metric_name)
                 if raw is None:
-                    continue  # metric missing → skipped
+                    continue  # this symbol's value missing (e.g. FMP omitted it) → skipped
             elif c.kind in _TECHNICAL_KINDS:
                 raw = await self._technical_value(c, symbol, closes, propagation_meta)
                 if raw is None:
@@ -398,12 +417,14 @@ class ScreenerEngine:
 
     def _build_result(self, row, criteria, request, norm):
         if row["status"] == analysis_pb2.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA:
-            return analysis_pb2.ScreenResult(
+            result = analysis_pb2.ScreenResult(
                 symbol=row["symbol"],
                 status=row["status"],
-                gap=row["gap"],
                 passed=False,
             )
+            if row["gap"] is not None:
+                result.gap.CopyFrom(row["gap"])
+            return result
 
         criterion_scores = {}
         weighted_sum = 0.0
@@ -413,7 +434,12 @@ class ScreenerEngine:
 
         for c in criteria:
             if c.ref_name not in row["raws"]:
-                continue  # skipped
+                # Skipped (this symbol's value was unavailable) — never counts toward the score,
+                # and a hard filter can't be confirmed passing on data that was never evaluated
+                # (bug fix; see module docstring) — fail closed rather than silently passing.
+                if c.hard_filter:
+                    passed = False
+                continue
             sub = norm.get(c.ref_name, {}).get(row["symbol"], 0.5)
             criterion_scores[c.ref_name] = sub
             w = c.weight if c.weight > 0 else 1.0

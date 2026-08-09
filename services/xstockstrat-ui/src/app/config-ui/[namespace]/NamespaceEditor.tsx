@@ -73,6 +73,7 @@ export function NamespaceEditor({ namespace, env, mode, nativeEnv }: Props) {
     key: string;
     description: string;
     defaultValue: string;
+    currentValue: string;
     isSecret: boolean;
     consumingService: string;
     environment: number;
@@ -204,7 +205,7 @@ export function NamespaceEditor({ namespace, env, mode, nativeEnv }: Props) {
                       ) : k.isSecret ? (
                         <span className="text-muted-foreground italic text-xs">[secret]</span>
                       ) : (
-                        <span className="text-foreground/80">{k.defaultValue || '—'}</span>
+                        <span className="text-foreground/80">{k.currentValue || '—'}</span>
                       )}
                     </TableCell>
                     <TableCell className="hidden md:table-cell text-muted-foreground text-xs">
@@ -218,7 +219,7 @@ export function NamespaceEditor({ namespace, env, mode, nativeEnv }: Props) {
                             size="sm"
                             onClick={() => {
                               setEditingKey(k.key);
-                              setEditValue(k.defaultValue);
+                              setEditValue(k.currentValue);
                               setEditReason('');
                             }}
                             className="h-7 px-2 text-xs text-primary hover:text-primary"

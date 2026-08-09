@@ -122,10 +122,14 @@ async def test_insufficient_bars_returns_gap():
     assert len(resp.coverage_gaps) == 1
 
 
-# ── Acceptance #4 / FR-5: fundamentals skipped when RPC unavailable ────────────
+# ── Bug fix: fundamentals unavailable must never report OK/passed=true ─────────
+# (previously the scan degraded silently: a fundamental criterion whose data source was
+# unavailable was dropped from criterion_scores but the result still reported OK/passed=true —
+# indistinguishable from "this candidate genuinely passed", which made the screener look inert
+# no matter what fundamental criterion/value a caller picked.)
 
 
-async def test_fundamental_criterion_skipped_when_unavailable():
+async def test_fundamentals_unavailable_yields_insufficient_data():
     md = AsyncMock()
     md.GetBars = AsyncMock(return_value=bars([1.0, 2.0, 3.0]))
 
@@ -150,10 +154,72 @@ async def test_fundamental_criterion_skipped_when_unavailable():
     resp = await engine.screen(req)
     assert len(resp.results) == 1
     r = resp.results[0]
-    # Skipped: absent from criterion_scores, scan completes, symbol not failed by the filter.
     assert "cheap" not in r.criterion_scores
-    assert r.status == analysis_pb2.SCREEN_RESULT_STATUS_OK
-    assert r.passed is True
+    assert r.status == analysis_pb2.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA
+    assert r.passed is False
+    # Not a bars gap — fundamentals unavailability carries no CoverageGap.
+    assert resp.coverage_gaps == []
+
+
+async def test_fundamentals_unavailable_bails_even_for_rank_only_criteria():
+    """`needs_fundamentals` doesn't check hard_filter — a rank-only fundamental criterion with no
+    data source is just as unable to contribute a score as a hard-filter one."""
+    md = AsyncMock()
+    md.GetBars = AsyncMock(return_value=bars([1.0, 2.0, 3.0]))
+    md.GetFundamentalsMulti = AsyncMock(side_effect=grpc.RpcError())
+    ind = AsyncMock()
+    engine = make_engine(md, ind)
+
+    req = analysis_pb2.ScreenSymbolsRequest(
+        symbols=["AAA"],
+        criteria=[
+            analysis_pb2.ScreenCriterion(
+                ref_name="cheap",
+                kind=analysis_pb2.SCREEN_KIND_FUNDAMENTAL,
+                metric_name="pe_ratio",
+                op=analysis_pb2.COMPARATOR_LT,
+                threshold=20.0,
+                hard_filter=False,
+            )
+        ],
+    )
+    resp = await engine.screen(req)
+    assert resp.results[0].status == analysis_pb2.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA
+
+
+async def test_fundamental_hard_filter_missing_for_one_symbol_fails_closed():
+    """Fundamentals ARE available for the batch, but the source omitted one symbol — that
+    symbol's hard filter must fail closed rather than silently pass."""
+    md = AsyncMock()
+    md.GetBars = AsyncMock(return_value=bars([1.0, 2.0, 3.0]))
+    md.GetFundamentalsMulti = AsyncMock(
+        return_value=SimpleNamespace(
+            fundamentals=[marketdata_pb2.Fundamentals(symbol="AAA", pe_ratio=15.0)]
+        )
+    )
+    ind = AsyncMock()
+    engine = make_engine(md, ind)
+
+    req = analysis_pb2.ScreenSymbolsRequest(
+        symbols=["AAA", "BBB"],  # the fundamentals source only returned AAA
+        criteria=[
+            analysis_pb2.ScreenCriterion(
+                ref_name="cheap",
+                kind=analysis_pb2.SCREEN_KIND_FUNDAMENTAL,
+                metric_name="pe_ratio",
+                op=analysis_pb2.COMPARATOR_LT,
+                threshold=20.0,
+                hard_filter=True,
+            )
+        ],
+    )
+    resp = await engine.screen(req)
+    by_symbol = {r.symbol: r for r in resp.results}
+    assert by_symbol["AAA"].passed is True  # evaluated normally: 15 < 20
+    assert "cheap" not in by_symbol["BBB"].criterion_scores  # skipped for BBB specifically
+    # Not a whole-batch outage — BBB still reports OK, just fails the filter it couldn't verify.
+    assert by_symbol["BBB"].status == analysis_pb2.SCREEN_RESULT_STATUS_OK
+    assert by_symbol["BBB"].passed is False
 
 
 # ── FR-6: universe min-max normalization ──────────────────────────────────────

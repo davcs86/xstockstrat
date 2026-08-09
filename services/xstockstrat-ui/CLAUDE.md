@@ -24,6 +24,47 @@ proxy was removed in the same feature.
 
 Node.js 22, Next.js 15 (App Router, React 18), TypeScript. Package manager: pnpm 9.15.0.
 
+## Styling
+
+Tailwind v4 (CSS-first config — no `tailwind.config.js`; theme tokens live in `src/app/globals.css`'s
+`@theme inline` block, which maps color/font/radius/animation names onto this app's own `:root`
+color-role custom properties). PostCSS plugin: `@tailwindcss/postcss`. shadcn/ui manages
+`src/components/ui/` primitives via `components.json` (feature 119 — migrated from a hand-rolled
+Tailwind v3 + individual-`@radix-ui/*`-packages setup to the official shadcn CLI, adopting preset
+`bLTl5gh6` (style `radix-rhea`); dark-only, no light-mode toggle, no preserved legacy branding —
+theme values come entirely from the preset).
+
+- **Adding a primitive not yet in `src/components/ui/`**: `npx shadcn@latest add <name>`.
+- **Re-applying/updating the preset**: `printf 'y\n' | npx shadcn@latest apply --preset bLTl5gh6 --yes`
+  — `components.json` must already exist (it does) or this hangs on an unsuppressable prompt;
+  `apply --preset` also needs a piped `y` on stdin even with `--yes` to clear a confirmation prompt.
+  This **overwrites every listed primitive file wholesale**, including this app's functional
+  variant additions below — always re-run the reconciliation step (next bullet) after.
+- **Functional variant customizations** (`buy`/`sell` on `Button`, `buy`/`sell`/`paper`/`live`/
+  `warning`/`info` on `Badge` — order-side/paper-trading/status coloring, not part of the shadcn
+  preset's own variant set) are hand-added back into each regenerated file's `cva()` `variants`
+  object after any `add`/`apply --preset` run, marked with an `// app-specific` comment. A
+  mechanical regression guard (`src/components/ui/button.test.ts`, `badge.test.ts`) asserts these
+  keys render their expected classes — it fails loudly if a future regenerate silently drops them.
+- `combobox.tsx` is a full Base-UI (`@base-ui/react`) compound component (`Combobox`/
+  `ComboboxInput`/`ComboboxContent`/`ComboboxList`/`ComboboxItem`/etc.), not the simple
+  single-prop wrapper this app used before feature 119 — see its 3 call sites
+  (`components/trader/ChartPanel.tsx`, `components/insights/{ComponentEditor,RuleEditor}.tsx`)
+  for the controlled-`value`/`onValueChange` (strict) and controlled-`inputValue`/
+  `onInputValueChange` (free-text) usage patterns.
+- `vitest.config.ts` sets `resolve.alias: { '@': './src' }` — required because Vite/Vitest does
+  not read `tsconfig.json`'s `paths` automatically the way Next's own bundler does, and the
+  shadcn-CLI-regenerated `components/ui/*` files use `@/...` alias imports (the old hand-rolled
+  files used relative imports, which never needed this).
+- **Sanctioned exception — `ChartPanel.tsx` stays on `lightweight-charts`.** `ChartPanel.tsx` (and
+  its siblings via the shared `useCandlestickChart.ts` hook — `trader/positions/[symbol]/page.tsx`,
+  `insights/market/[symbol]/page.tsx`) intentionally stays on `lightweight-charts` rather than
+  `recharts`/`ui/chart.tsx` (feature 123 design decision, 2026-08-08): `recharts` has no
+  first-party OHLCV candlestick geometry, the hook has 3 shared consumers across `/trader` and
+  `/insights`, and `e2e/trader/chart-panel.spec.ts` depends on `lightweight-charts`'s own injected
+  `.tv-lightweight-charts` DOM class as an async-readiness signal. Do not re-flag this as an
+  unconsolidated charting approach in a future audit.
+
 ## Docker Build Pattern
 
 Next.js pattern — see `docs/patterns/docker-build.md`. Multi-stage `node:22-alpine` build
