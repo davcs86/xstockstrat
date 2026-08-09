@@ -847,3 +847,30 @@ ambiguity is logged here).
   because the bug only manifests when a real request/response round-trip actually happens with
   repeated identical payloads — it requires exercising the real behavior, not just reading the
   wiring.
+
+### 2026-08-09 — shadcn-migration-medium-confidence — execute (Step 17)
+- **Mistake**: `design.md` (§ Round 3 override, FR-13) assumed a not-yet-installed shadcn
+  primitive's polymorphic-slot API — `NavigationMenuLink render={<Link href="..." />}` — by pattern
+  -matching this codebase's `combobox.tsx`, which is a **Base UI** (`@base-ui/react`) compound
+  component using the newer `render`-prop convention. `navigation-menu.tsx` is not Base UI: the
+  `radix-ui` unified npm package's `navigation-menu` entrypoint is a 3-line re-export of
+  `@radix-ui/react-navigation-menu@1.2.22`, which is the **classic** Radix Primitives API —
+  `forwardRef`-built, `asChild`-based, zero `render` occurrences anywhere in its compiled source.
+  `design.md` itself had already flagged this exact pairing as "not independently confirmed for
+  `navigation-menu.tsx` specifically" (a real, useful hedge — recon.md's live `WebFetch` against
+  shadcn's docs confirmed *standalone Link usage* but never checked *which prop API* backs it), and
+  the implementation-spec's Step 17 instructed verifying it against the CLI-generated file before
+  use — which is what caught it before any wiring was written on the wrong assumption.
+- **Evidence**: `docs/roadmap/features/121-shadcn-migration-medium-confidence/context.md` Step 17;
+  `node_modules/.pnpm/@radix-ui+react-navigation-menu@1.2.22.../dist/index.mjs:372,804` (`forwardRef`
+  + `var Link = NavigationMenuLink`); `services/xstockstrat-ui/src/components/shared/
+  PlatformHeader.tsx`'s Step 18 `asChild` usage.
+- **Rule it implies**: in a shadcn-CLI-based codebase mixing two component families (this app has
+  both classic Radix primitives like `select.tsx`/`dialog.tsx` and Base UI compounds like
+  `combobox.tsx`/`input-group.tsx`), never assume a not-yet-installed primitive's polymorphic-render
+  API from a sibling primitive already in the codebase — the two families use different prop names
+  (`asChild` vs `render`) for the same concept, and picking the wrong one silently fails at runtime
+  (the child never actually renders as the intended element) rather than at compile time in most
+  cases. Confirm the prop against the actual installed package (or the CLI-generated file, once
+  added) before writing call-site code, exactly as this step's own instructions already required —
+  the win here was following that instruction, not skipping it under time pressure.

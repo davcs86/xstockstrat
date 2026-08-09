@@ -27,6 +27,12 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from '../ui/breadcrumb';
+import {
+  NavigationMenu,
+  NavigationMenuList,
+  NavigationMenuItem,
+  NavigationMenuLink,
+} from '../ui/navigation-menu';
 
 // Physical routes are UNCHANGED (/trader | /insights | /config-ui | /accounts); the
 // Decide / Discover / Engine / Book grouping is a presentation layer over them (feature 083,
@@ -175,27 +181,41 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
 
         <Separator orientation="vertical" className="h-6 hidden sm:block" />
 
-        <nav aria-label="Primary" className="hidden sm:flex items-center gap-1 flex-1">
-          {NAV_GROUPS.map((group) => {
-            const isActive = group.key === activeGroup.key;
-            return (
-              <Link
-                key={group.key}
-                href={group.items[0].href}
-                aria-current={isActive ? 'page' : undefined}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors border-l-2',
-                  isActive
-                    ? 'bg-accent text-foreground font-medium border-primary'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent/50 border-transparent',
-                )}
-              >
-                {group.icon}
-                {group.label}
-              </Link>
-            );
-          })}
-        </nav>
+        {/* asChild + a nested Link (not a `render` prop) — @radix-ui/react-navigation-menu@1.2.22
+            (the version this radix-ui unified package re-exports) is the classic forwardRef/
+            asChild-based API, not the newer render-prop-based one design.md assumed; verified via
+            the installed package source (zero "render" occurrences, NavigationMenuLink built with
+            forwardRef) — see 121-shadcn-migration-medium-confidence context.md Step 18. */}
+        <NavigationMenu
+          aria-label="Primary"
+          viewport={false}
+          className="hidden sm:flex items-center gap-1 flex-1"
+        >
+          <NavigationMenuList className="gap-1">
+            {NAV_GROUPS.map((group) => {
+              const isActive = group.key === activeGroup.key;
+              return (
+                <NavigationMenuItem key={group.key}>
+                  <NavigationMenuLink
+                    asChild
+                    aria-current={isActive ? 'page' : undefined}
+                    className={cn(
+                      'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm transition-colors border-l-2',
+                      isActive
+                        ? 'bg-accent text-foreground font-medium border-primary'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-accent/50 border-transparent',
+                    )}
+                  >
+                    <Link href={group.items[0].href}>
+                      {group.icon}
+                      {group.label}
+                    </Link>
+                  </NavigationMenuLink>
+                </NavigationMenuItem>
+              );
+            })}
+          </NavigationMenuList>
+        </NavigationMenu>
 
         <div className="flex items-center gap-2 ml-auto">
           {actions}
@@ -281,23 +301,30 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
           </BreadcrumbList>
         </Breadcrumb>
         <Separator orientation="vertical" className="h-4 mx-1" />
-        <nav aria-label="Section" className="flex items-center gap-1 overflow-x-auto">
-          {activeItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              aria-current={isItemActive(pathname, item) ? 'page' : undefined}
-              className={cn(
-                'px-2.5 py-1 rounded-md text-xs whitespace-nowrap transition-colors',
-                isItemActive(pathname, item)
-                  ? 'text-foreground font-medium bg-accent/60'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
-              )}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
+        <NavigationMenu
+          aria-label="Section"
+          viewport={false}
+          className="flex items-center gap-1 overflow-x-auto"
+        >
+          <NavigationMenuList className="gap-1">
+            {activeItems.map((item) => (
+              <NavigationMenuItem key={item.href}>
+                <NavigationMenuLink
+                  asChild
+                  aria-current={isItemActive(pathname, item) ? 'page' : undefined}
+                  className={cn(
+                    'px-2.5 py-1 rounded-md text-xs whitespace-nowrap transition-colors',
+                    isItemActive(pathname, item)
+                      ? 'text-foreground font-medium bg-accent/60'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
+                  )}
+                >
+                  <Link href={item.href}>{item.label}</Link>
+                </NavigationMenuLink>
+              </NavigationMenuItem>
+            ))}
+          </NavigationMenuList>
+        </NavigationMenu>
       </div>
     </header>
   );

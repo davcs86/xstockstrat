@@ -800,7 +800,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -- e2e/trader/account-selector.spec.
 
 ### Step 17 — service: Add `ui/navigation-menu.tsx` primitive (FR-13)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/navigation-menu.tsx` — create
@@ -861,7 +861,7 @@ pnpm lint
 
 ### Step 18 — service: Migrate `PlatformHeader.tsx`'s two desktop nav regions onto `NavigationMenu` (FR-13)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx` — modify (desktop row-1
@@ -931,7 +931,7 @@ pnpm lint
 
 ### Step 19 — service: Migrate `BottomTabBar.tsx`'s flat nav onto `NavigationMenu` (FR-13)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/mobile/BottomTabBar.tsx` — modify (`:25-56`; the nav
@@ -978,7 +978,7 @@ pnpm lint
 
 ### Step 20 — test: e2e regression for FR-13 (`nav-reachability.spec.ts` against the `NavigationMenu` swap)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/nav-reachability.spec.ts` — verification-only unless a selector

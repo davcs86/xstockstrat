@@ -455,3 +455,65 @@ repeated per step).
   e2e/trader/orders.spec.ts` — 13 passed, including order-type/order-status-dependent tests
   (`create form offers all 5 order types...`, `PENDING_APPROVAL is surfaced...`).
 - Files modified: none (verification-only, as specced)
+
+### Step 17 — Add ui/navigation-menu.tsx primitive (FR-13) [done]
+- `npx shadcn@latest add navigation-menu --yes --overwrite` succeeded, no collateral damage
+  (`git status --short` confirmed only the new file). Reformatted with `prettier --write` to match
+  repo convention (CLI output uses double quotes/no semicolons). No `forwardRef`/`displayName`,
+  confirmed post-119 shape. `@tabler/icons-react` (used by the generated `NavigationMenuTrigger`'s
+  chevron) was already a dependency (`package.json:35`) — no new install needed.
+- **Real finding, resolves the step's own flagged unknown**: `design.md`/`recon.md` assumed
+  `NavigationMenuLink` takes a `render={<Link .../>}` prop (the Base UI/newer-radix-ui pattern this
+  codebase's `combobox.tsx` uses). Verified directly against the installed package this session:
+  `radix-ui@1.6.7`'s `navigation-menu.mjs` is a 3-line re-export of `@radix-ui/react-navigation-menu`
+  (`export * from "@radix-ui/react-navigation-menu"`), and that package (`@1.2.22`) is the **classic**
+  Radix Primitives API — `grep -c render` on its `index.mjs` → 0 hits; `NavigationMenuLink` is built
+  with `React.forwardRef` and re-exported as `Link` (`index.mjs:372,804`). It supports `asChild`, not
+  `render`. Steps 18-19 use `<NavigationMenuLink asChild>` wrapping a plain `<Link>`, not the
+  `render={<Link .../>}` shape design.md assumed. Documented inline in `PlatformHeader.tsx` with a
+  comment pointing here.
+- Verification: `pnpm vitest run src/components/ui/navigation-menu.test.ts` — 2 passed; `pnpm lint`
+  clean.
+- Files created: `src/components/ui/navigation-menu.tsx`, `src/components/ui/navigation-menu.test.ts`
+
+### Step 18 — Migrate PlatformHeader.tsx's two desktop nav regions onto NavigationMenu (FR-13) [done]
+- Row-1 Primary and Row-2 Section `<nav>` blocks both swapped for
+  `NavigationMenu`/`NavigationMenuList`/`NavigationMenuItem`/`NavigationMenuLink asChild` wrapping a
+  `Link`, preserving `aria-current` and every existing `cn(...)` active/inactive class verbatim (Slot
+  cloning via `asChild` forwards `aria-current`/`className` onto the rendered `<a>` exactly as the
+  original direct-`Link` markup did). `aria-label="Breadcrumb"` span (sibling `120`'s FR-7) and the
+  mobile `Sheet` (sibling `120`'s FR-8) both untouched.
+- **Deviation (visual-fidelity fix, not spec-mandated, not scope creep)**: added `className="gap-1"`
+  to both `NavigationMenuList`s. The step's instructions put `gap-1` on the outer `NavigationMenu`
+  wrapper (matching the original `<nav className="... gap-1">"`), but `NavigationMenu`'s only child is
+  `NavigationMenuList` — the actual `<ul>`/`<li>` item spacing is governed by `NavigationMenuList`'s
+  own default (`gap-0`, `navigation-menu.tsx:39`), so the outer `gap-1` alone would not reproduce the
+  original inter-link spacing. Added `gap-1` directly to `NavigationMenuList` to close that gap.
+- Verification: `pnpm lint` clean; all 3 `aria-label` grep checks pass (Primary/Section present,
+  Breadcrumb untouched).
+- Files modified: `src/components/shared/PlatformHeader.tsx`
+
+### Step 19 — Migrate BottomTabBar.tsx's flat nav onto NavigationMenu (FR-13) [done]
+- Same `NavigationMenu`/`NavigationMenuList`/`NavigationMenuItem`/`NavigationMenuLink asChild`
+  pattern; `flex-1` moved from the `Link` onto `NavigationMenuItem` per the step's instructions (the
+  four tabs now split width via the `<li>`, not the anchor).
+- **Deviation (functional fix, not spec-mandated)**: `ui/navigation-menu.tsx`'s `NavigationMenu` root
+  defaults to `max-w-max` (content-sized). This bar is `fixed inset-x-0 bottom-0` — with a
+  content-capped max-width it would not span edge-to-edge on wider phone viewports (unlike
+  `PlatformHeader.tsx`'s two navs, where a sibling `ml-auto`/normal-flow layout absorbs the same
+  default harmlessly). Added `max-w-none` to the passed `className` to override it, with an inline
+  comment explaining why. Verified via `e2e/mobile.spec.ts`'s "bottom tab bar is visible with four
+  ≥44px targets" test (Step 20's sweep) — confirms the bar still spans and tap targets are correct.
+- Verification: `pnpm lint` clean; `data-testid`/`aria-label` grep checks pass.
+- Files modified: `src/components/mobile/BottomTabBar.tsx`
+
+### Step 20 — e2e regression for FR-13 (nav-reachability.spec.ts) [done]
+- No locator changes needed. `pnpm build` initially produced a truncated `.next` (background-process
+  interruption unrelated to the code change — a `next build` run was killed mid-way by an earlier
+  container/session hiccup this session had seen before; a clean `rm -rf .next` + rebuild fixed it,
+  confirmed via a present `.next/BUILD_ID`).
+- Verification: `pnpm test:e2e -- e2e/nav-reachability.spec.ts` — 2 passed (the full C-10(a) walk).
+  Extra regression sweep beyond the step's own scope, given this touches the shared shell on every
+  route: `pnpm test:e2e -- e2e/mobile.spec.ts e2e/insights/backfills.spec.ts` (both reference nav
+  landmarks) — 10 passed, no regressions.
+- Files modified: none (verification-only, as specced)
