@@ -368,3 +368,34 @@ repeated per step).
 - Verification: `pnpm build` clean; `pnpm test:e2e -- e2e/trader/alert-stream.spec.ts
   e2e/trader/account-selector.spec.ts` — 12 passed.
 - Files modified: `e2e/trader/alert-stream.spec.ts`
+
+### Step 10 — Route strategies/[id]/page.tsx's Past Runs table through ui/table.tsx (FR-11) [done]
+- Imported `Table/TableHeader/TableBody/TableRow/TableHead/TableCell`; swapped the raw
+  `<table>/<thead>/<tbody>` for the primitive equivalents, carrying every existing prop verbatim on
+  the body row (`data-testid="past-run-row"`, `role="button"`, `tabIndex`, `aria-selected`, `onClick`,
+  `onKeyDown`, `cn(...)` className) and every cell's className.
+- **Deviation from the step's literal instructions (not scope creep — same fix Step 11 explicitly
+  mandates for the sibling table)**: dropped the manual `<div className="overflow-x-auto">` wrapper.
+  `Table` already renders its own `data-slot="table-container"` div with `overflow-x-auto`
+  (`table.tsx:9`), so keeping the outer div would double-wrap the same scroll behavior — the same
+  CF-N4 redundancy Step 11's own Codebase Evidence calls out for `screener/page.tsx`. Applied here for
+  consistency since the same primitive produces the same wrapper either way.
+- Verification: `pnpm lint` clean; `grep "<table\b"` → none remain.
+- Files modified: `src/app/insights/strategies/[id]/page.tsx`
+
+### Step 11 — Route screener/page.tsx's results grid through ui/table.tsx (FR-11) [done]
+- Same primitive swap; reused the single `ui/table` import line per the step's instruction. Dropped
+  the manual `<div className="w-full overflow-x-auto">` wrapper as directed (Table's own container
+  div supersedes it) — the "Wide table → scroll horizontally" comment above it still applies verbatim
+  since `Table` still provides that behavior, just via its own wrapper now.
+- Verification: `pnpm lint` clean; `grep "<table\b"` → none remain;
+  `data-testid="screen-results"` preserved on `Table`.
+- Files modified: `src/app/insights/screener/page.tsx`
+
+### Step 12 — e2e regression for FR-11 (Past Runs + screener results tables) [done]
+- No locator changes needed — both specs assert via `data-testid`/role/text, all forwarded unchanged
+  through `Table`'s prop passthrough, per the step's own evidence.
+- Verification: `pnpm build` clean; `pnpm test:e2e -- e2e/insights/backtest-coverage.spec.ts
+  e2e/insights/screener.spec.ts` — 30 passed, including the phone-frame no-overflow test (confirms
+  the wrapper-div removal didn't regress horizontal scroll containment).
+- Files modified: none (verification-only, as specced)

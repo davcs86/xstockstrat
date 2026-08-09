@@ -6,6 +6,14 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@/components/ui/table';
 import { cn } from '@/components/ui/utils';
 import { ConnectError } from '@connectrpc/connect';
 import { formatSymbolYears, isNotFoundError } from '@/lib/scoreDisplay';
@@ -465,81 +473,79 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                   <CardTitle>Past Runs</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-xs text-muted-foreground">
-                          <th className="py-1.5 pr-3 font-medium">When</th>
-                          <th className="py-1.5 pr-3 font-medium">Symbols</th>
-                          <th className="py-1.5 pr-3 font-medium">Range</th>
-                          <th className="py-1.5 pr-3 font-medium text-right">Return</th>
-                          <th className="py-1.5 pr-3 font-medium text-right">Sharpe</th>
-                          <th className="py-1.5 pr-3 font-medium text-right">Trades</th>
-                          <th className="py-1.5 font-medium text-right">Run score</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {pastRuns.map((run) => (
-                          <tr
-                            key={run.backtestId}
-                            data-testid="past-run-row"
-                            role="button"
-                            tabIndex={0}
-                            aria-selected={selectedRunId === run.backtestId}
-                            onClick={() => setSelectedRunId(run.backtestId)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault();
-                                setSelectedRunId(run.backtestId);
-                              }
-                            }}
+                  <Table className="w-full text-sm">
+                    <TableHeader>
+                      <TableRow className="text-left text-xs text-muted-foreground">
+                        <TableHead className="py-1.5 pr-3 font-medium">When</TableHead>
+                        <TableHead className="py-1.5 pr-3 font-medium">Symbols</TableHead>
+                        <TableHead className="py-1.5 pr-3 font-medium">Range</TableHead>
+                        <TableHead className="py-1.5 pr-3 font-medium text-right">Return</TableHead>
+                        <TableHead className="py-1.5 pr-3 font-medium text-right">Sharpe</TableHead>
+                        <TableHead className="py-1.5 pr-3 font-medium text-right">Trades</TableHead>
+                        <TableHead className="py-1.5 font-medium text-right">Run score</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pastRuns.map((run) => (
+                        <TableRow
+                          key={run.backtestId}
+                          data-testid="past-run-row"
+                          role="button"
+                          tabIndex={0}
+                          aria-selected={selectedRunId === run.backtestId}
+                          onClick={() => setSelectedRunId(run.backtestId)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault();
+                              setSelectedRunId(run.backtestId);
+                            }
+                          }}
+                          className={cn(
+                            'border-t border-border cursor-pointer hover:bg-secondary/60',
+                            selectedRunId === run.backtestId && 'bg-secondary',
+                          )}
+                        >
+                          <TableCell className="py-1.5 pr-3 text-muted-foreground whitespace-nowrap">
+                            {timestampToDate(run.completedAt)?.toLocaleString() ?? '—'}
+                          </TableCell>
+                          <TableCell className="py-1.5 pr-3 font-mono text-xs">
+                            {run.symbols.join(', ') || '—'}
+                          </TableCell>
+                          {/* feature 065: the range each run covered; legacy rows have none. */}
+                          <TableCell className="py-1.5 pr-3 text-xs text-muted-foreground whitespace-nowrap">
+                            {run.rangeStart && run.rangeEnd
+                              ? `${timestampToDate(run.rangeStart)!
+                                  .toISOString()
+                                  .slice(0, 10)}–${timestampToDate(run.rangeEnd)!
+                                  .toISOString()
+                                  .slice(0, 10)}`
+                              : '—'}
+                          </TableCell>
+                          <TableCell
                             className={cn(
-                              'border-t border-border cursor-pointer hover:bg-secondary/60',
-                              selectedRunId === run.backtestId && 'bg-secondary',
+                              'py-1.5 pr-3 text-right tabular-nums',
+                              (run.totalReturn ?? 0) >= 0 ? 'text-buy' : 'text-destructive',
                             )}
                           >
-                            <td className="py-1.5 pr-3 text-muted-foreground whitespace-nowrap">
-                              {timestampToDate(run.completedAt)?.toLocaleString() ?? '—'}
-                            </td>
-                            <td className="py-1.5 pr-3 font-mono text-xs">
-                              {run.symbols.join(', ') || '—'}
-                            </td>
-                            {/* feature 065: the range each run covered; legacy rows have none. */}
-                            <td className="py-1.5 pr-3 text-xs text-muted-foreground whitespace-nowrap">
-                              {run.rangeStart && run.rangeEnd
-                                ? `${timestampToDate(run.rangeStart)!
-                                    .toISOString()
-                                    .slice(0, 10)}–${timestampToDate(run.rangeEnd)!
-                                    .toISOString()
-                                    .slice(0, 10)}`
-                                : '—'}
-                            </td>
-                            <td
-                              className={cn(
-                                'py-1.5 pr-3 text-right tabular-nums',
-                                (run.totalReturn ?? 0) >= 0 ? 'text-buy' : 'text-destructive',
-                              )}
-                            >
-                              {((run.totalReturn ?? 0) * 100).toFixed(2)}%
-                            </td>
-                            <td className="py-1.5 pr-3 text-right tabular-nums">
-                              {(run.sharpeRatio ?? 0).toFixed(2)}
-                            </td>
-                            <td className="py-1.5 pr-3 text-right tabular-nums">
-                              {String(run.totalTrades ?? 0)}
-                            </td>
-                            <td className="py-1.5 text-right tabular-nums">
-                              {run.rating ? (
-                                <span className="font-semibold text-buy">{run.rating}</span>
-                              ) : (
-                                '—'
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                            {((run.totalReturn ?? 0) * 100).toFixed(2)}%
+                          </TableCell>
+                          <TableCell className="py-1.5 pr-3 text-right tabular-nums">
+                            {(run.sharpeRatio ?? 0).toFixed(2)}
+                          </TableCell>
+                          <TableCell className="py-1.5 pr-3 text-right tabular-nums">
+                            {String(run.totalTrades ?? 0)}
+                          </TableCell>
+                          <TableCell className="py-1.5 text-right tabular-nums">
+                            {run.rating ? (
+                              <span className="font-semibold text-buy">{run.rating}</span>
+                            ) : (
+                              '—'
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </CardContent>
               </Card>
             )}

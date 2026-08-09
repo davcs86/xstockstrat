@@ -461,7 +461,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -- e2e/trader/alert-stream.spec.ts e
 
 ### Step 10 — service: Route `strategies/[id]/page.tsx`'s Past Runs table through `ui/table.tsx` (FR-11)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx` — modify (lines 469-541)
@@ -506,7 +506,7 @@ pnpm lint
 
 ### Step 11 — service: Route `screener/page.tsx`'s results grid through `ui/table.tsx` (FR-11)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/screener/page.tsx` — modify (lines 552-626 — the
@@ -552,7 +552,7 @@ pnpm lint
 
 ### Step 12 — test: e2e regression for FR-11 (Past Runs + screener results tables)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/backtest-coverage.spec.ts` — verification-only
