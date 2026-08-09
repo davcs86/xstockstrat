@@ -456,3 +456,26 @@
   repo is buildable on `recharts` v3 before any `ChartContainer` migration lands (Steps 3-7).
 - Files modified: `package.json`, `pnpm-lock.yaml`, `src/components/insights/EquityCurveChart.tsx`,
   `src/app/insights/page.tsx`
+
+### Step 3 — FR-2 add `src/components/ui/chart.tsx` (CLI-vendored) [done]
+- Ran `npx shadcn@latest add chart` against the existing `components.json` preset — landed cleanly,
+  no hand-adaptation needed (per `design.md`'s Round 4 override, now that v3 is installed).
+- **Collateral note**: the CLI's own install step reset `package.json`'s `recharts` entry from Step
+  2's `^3.10.1` back down to `^3.8.0` (the registry item's own declared dependency version) — reverted
+  back to `^3.10.1` to keep Step 2's live-re-verified decision intact (both ranges resolve
+  compatibly, since `^3.8.0` also permits `3.10.1`, but the written constraint should reflect what was
+  actually verified). No other `ui/*` files were touched by this CLI run (only `add chart`, not
+  `apply --preset` — the wholesale-overwrite collateral risk `services/xstockstrat-ui/CLAUDE.md`
+  documents for the preset-apply command doesn't apply to a single `add`).
+- Confirmed the generated file's shape: `data-slot="chart"` convention, plain function components
+  (`ChartContainer`, `ChartTooltipContent`, `ChartLegendContent`), no `forwardRef` — matches
+  `button.tsx`'s post-119 primitive shape. Exports all four required: `ChartContainer`, `ChartTooltip`,
+  `ChartTooltipContent`, `ChartLegend`, `ChartLegendContent`, `ChartStyle` (plus the `ChartConfig`
+  type). Imports `TooltipValueType` directly from `'recharts'` — confirms the v3-only import gap
+  Round 2 originally flagged is resolved by the bump, not by omission, as `design.md` § Round 4
+  predicted.
+- Verification: `test -f` confirms the file exists at the expected path. `pnpm lint` — clean (same
+  one pre-existing unrelated warning). `NEXT_DISABLE_STANDALONE=1 pnpm build` — succeeded, full route
+  manifest, no TS errors — confirms the file type-checks cleanly against the installed recharts v3.
+- Files modified: `src/components/ui/chart.tsx` (new), `package.json` (recharts constraint restored
+  to `^3.10.1` after the CLI's transient reset)

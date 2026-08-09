@@ -212,7 +212,7 @@ pnpm build
 
 ### Step 3 — service: FR-2 add `src/components/ui/chart.tsx` (CLI-vendored, run as-is against recharts v3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/chart.tsx` — create
