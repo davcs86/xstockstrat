@@ -483,3 +483,47 @@ decisions per FR, transcribed from `design.md` § Round 3/Round 4 at execute tim
   manifest, no TS errors. `pnpm test:e2e -- e2e/auth.spec.ts` — **10 passed**, including both
   API-level `POST /api/auth/login` assertions unmodified (AC5 satisfied).
 - Files modified: `src/components/auth/AuthForm.tsx`
+
+### Step 6 — Migrate `AddAccountForm` to react-hook-form + zod + ui/field.tsx [done]
+- Added the shared `credentialSchema(brokerType: BrokerType)` factory (`accountShared.tsx`,
+  immediately after `buildCredentialsJson`, per the DRY guard-rail finding recorded in the spec) —
+  a single zod-schema expression of `CredentialState`'s broker-conditional required fields, exported
+  once and reused by this step's `AddAccountForm` and Step 7's `EditCredentialsForm`. Fields outside
+  the selected broker's branch stay unconstrained `z.string()` (not absent) so the schema's inferred
+  type always matches the full `CredentialState` shape — avoids a `z.object().and()` intersection,
+  which would've made the two branches' field sets awkward to reconcile against one form-values type.
+- **Deviation/addition beyond the step's literal instructions — dynamic-resolver-schema mechanism**:
+  the spec didn't prescribe *how* to make the zod resolver track the user's live broker selection
+  (a real gap, since `AddAccountForm`'s broker is form state, unlike Step 7's `EditCredentialsForm`
+  where the broker is a fixed prop). Verified via direct read of the installed
+  `react-hook-form@7.85.0` source (`dist/index.esm.mjs`, unminified) that `control._options = props`
+  is reassigned on **every** render unconditionally — confirming the common "recompute schema each
+  render" pattern is safe — but chose a **ref-based lazy resolver** instead
+  (`resolver: (values, context, options) => zodResolver(addAccountSchema(brokerTypeRef.current))
+  (values, context, options)`, with `brokerTypeRef.current` updated in the broker `Select`'s
+  `onValueChange`): this decouples correctness from React's render-timing/batching between the
+  Select's `onValueChange` firing and the next render committing, which the render-recompute
+  approach would otherwise depend on implicitly. `useWatch({control, name:'brokerType'})` is still
+  used, but only to drive `CredentialFields`' rendered field set (cosmetic), not validation.
+- `useWatch({control, name: [...6 credential field names]})` (tuple-overload, confirmed via
+  `useWatch.d.ts`) bridges the individual RHF-registered credential fields into the `creds`/
+  `onChange`-controlled-component contract `CredentialFields` still expects unchanged — `setValue`
+  per key on `onChange`, matching Step 5's "bridge via bindings, don't make the child hook-form-aware"
+  pattern. Confirmed `.merge()` (not `.and()`) is the correct non-deprecated zod v4 `ZodObject` method
+  for combining `{displayName, brokerType}` with `credentialSchema(...)`'s output object.
+- `displayName`'s native `required` HTML attribute preserved unchanged alongside the zod
+  `min(1, ...)` check, per the step's explicit instruction (byte-identical constraint-validation
+  behavior). Broker `Select`'s reset-to-`EMPTY_CREDENTIALS` behavior on every broker change
+  preserved (`handleCredsChange(EMPTY_CREDENTIALS)` in `onValueChange`). Full field reset on
+  successful submit replicated via `reset({...EMPTY_CREDENTIALS, displayName:'', brokerType:'1'})`
+  in place of the four manual `setState` calls. `CredentialFields`/`buildCredentialsJson` themselves
+  untouched, per the step's scope.
+- TDD: `red N/A` per the step's own escape-hatch note — `account-selector.spec.ts:63-92` (the AC2
+  parity target) already passed pre-migration; captured green both before (Step 5's baseline run)
+  and after this step's change.
+- Verification: `pnpm lint` — clean (same one pre-existing unrelated warning).
+  `NEXT_DISABLE_STANDALONE=1 pnpm build` — succeeded, full route manifest, no TS errors.
+  `pnpm test:e2e -- e2e/trader/account-selector.spec.ts` — **8 passed**, including "Add Account form
+  clears credential fields on success" (AC2 proof) and the Step 4 `EditCredentialsForm`
+  characterization test (unaffected, as expected — this step doesn't touch `EditCredentialsForm`).
+- Files modified: `src/components/trader/accountShared.tsx`

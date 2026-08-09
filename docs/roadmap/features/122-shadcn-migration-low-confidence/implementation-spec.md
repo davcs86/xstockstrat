@@ -473,7 +473,7 @@ regression here would indicate a behavior change, not a test-shape mismatch.
 
 ### Step 6 — service: Migrate `AddAccountForm` to react-hook-form + zod + ui/field.tsx
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/accountShared.tsx` — modify
