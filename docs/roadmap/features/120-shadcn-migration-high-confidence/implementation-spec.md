@@ -883,7 +883,7 @@ cd services/xstockstrat-ui && pnpm build && pnpm test:e2e -g "nav-reachability"
 
 ### Step 29 — test: PlatformHeader.tsx desktop Breadcrumb swap — red
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx` — modify
@@ -911,7 +911,7 @@ Record actual pass/fail in `context.md`.
 
 ### Step 30 — test: PlatformHeader.tsx desktop Breadcrumb swap — green
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/nav-reachability.spec.ts` — modify only if Step 29 recorded a failure

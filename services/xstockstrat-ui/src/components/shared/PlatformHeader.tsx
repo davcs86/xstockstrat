@@ -20,6 +20,13 @@ import {
 } from '../ui/sheet';
 import { Separator } from '../ui/separator';
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '../ui/accordion';
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '../ui/breadcrumb';
 
 // Physical routes are UNCHANGED (/trader | /insights | /config-ui | /accounts); the
 // Decide / Discover / Engine / Book grouping is a presentation layer over them (feature 083,
@@ -256,15 +263,23 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
 
       {/* Row 2 — breadcrumb + the active group's item links */}
       <div className="hidden sm:flex items-center gap-2 px-4 sm:px-6 h-9 border-t border-border/60">
-        <span className="text-xs text-muted-foreground shrink-0" aria-label="Breadcrumb">
-          <span className="text-muted-foreground">{activeGroup.label}</span>
-          {activeItem && (
-            <>
-              <span className="mx-1.5 opacity-50">/</span>
-              <span className="text-foreground font-medium">{activeItem.label}</span>
-            </>
-          )}
-        </span>
+        <Breadcrumb aria-label="Breadcrumb" className="text-xs shrink-0">
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbPage>{activeGroup.label}</BreadcrumbPage>
+            </BreadcrumbItem>
+            {activeItem && (
+              <>
+                <BreadcrumbSeparator />
+                <BreadcrumbItem>
+                  <BreadcrumbPage className="text-foreground font-medium">
+                    {activeItem.label}
+                  </BreadcrumbPage>
+                </BreadcrumbItem>
+              </>
+            )}
+          </BreadcrumbList>
+        </Breadcrumb>
         <Separator orientation="vertical" className="h-4 mx-1" />
         <nav aria-label="Section" className="flex items-center gap-1 overflow-x-auto">
           {activeItems.map((item) => (

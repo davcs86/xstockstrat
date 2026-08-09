@@ -458,3 +458,15 @@
   `-g "config-ui"` (49 passed, confirming the relabel didn't break anything else).
 - Files modified: `src/components/shared/PlatformHeader.tsx`,
   `src/app/config-ui/[namespace]/NamespaceEditor.tsx`, `src/app/config-ui/audit/page.tsx`
+
+### Steps 29-30 — PlatformHeader.tsx desktop Breadcrumb swap — red/green [done]
+- Replaced the `<span aria-label="Breadcrumb">` label-only breadcrumb with `<Breadcrumb
+  aria-label="Breadcrumb">`/`<BreadcrumbList>`/`<BreadcrumbItem>`/`<BreadcrumbPage>` — confirmed
+  the explicit `aria-label` prop (spread after the component's hardcoded default) overrides to the
+  capital-B form `nav-reachability.spec.ts` targets, per Step 25's finding.
+- **Red** (unmodified `nav-reachability.spec.ts`): 2/2 passed unmodified — design.md's
+  "likely moot in practice" call was correct this time (unlike Step 28's page-level collision,
+  which was the actual surfaced risk). Recorded per P-06's mandatory-even-when-expected-to-pass
+  instruction.
+- **Green**: no spec change needed.
+- Files modified: `src/components/shared/PlatformHeader.tsx`
