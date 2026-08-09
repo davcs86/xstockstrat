@@ -19,6 +19,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
 import { FormulaEditor } from '@/components/insights/FormulaEditor';
 import { FormulaReferencePanel } from '@/components/insights/FormulaReferencePanel';
 import { FormulaRunResult } from '@/components/insights/FormulaRunResult';
@@ -204,9 +212,28 @@ export function FormulaWorkspace({
             {showReference ? 'Hide reference' : 'Reference'}
           </Button>
           {onDelete && !readOnly && (
-            <Button variant="destructive" size="sm" onClick={onDelete} disabled={deleting}>
-              {deleting ? 'Deleting…' : 'Delete'}
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm" disabled={deleting}>
+                  {deleting ? 'Deleting…' : 'Delete'}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogDescription>
+                  Delete this formula? This cannot be undone.
+                </AlertDialogDescription>
+                <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={deleting}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onDelete();
+                  }}
+                >
+                  Confirm
+                </AlertDialogAction>
+              </AlertDialogContent>
+            </AlertDialog>
           )}
           <Button variant="ghost" size="sm" onClick={onCancel}>
             {readOnly ? 'Back' : 'Cancel'}

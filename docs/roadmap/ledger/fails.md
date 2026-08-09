@@ -847,3 +847,60 @@ ambiguity is logged here).
   because the bug only manifests when a real request/response round-trip actually happens with
   repeated identical payloads — it requires exercising the real behavior, not just reading the
   wiring.
+
+### 2026-08-09 — shadcn-migration-medium-confidence — execute (Step 17)
+- **Mistake**: `design.md` (§ Round 3 override, FR-13) assumed a not-yet-installed shadcn
+  primitive's polymorphic-slot API — `NavigationMenuLink render={<Link href="..." />}` — by pattern
+  -matching this codebase's `combobox.tsx`, which is a **Base UI** (`@base-ui/react`) compound
+  component using the newer `render`-prop convention. `navigation-menu.tsx` is not Base UI: the
+  `radix-ui` unified npm package's `navigation-menu` entrypoint is a 3-line re-export of
+  `@radix-ui/react-navigation-menu@1.2.22`, which is the **classic** Radix Primitives API —
+  `forwardRef`-built, `asChild`-based, zero `render` occurrences anywhere in its compiled source.
+  `design.md` itself had already flagged this exact pairing as "not independently confirmed for
+  `navigation-menu.tsx` specifically" (a real, useful hedge — recon.md's live `WebFetch` against
+  shadcn's docs confirmed *standalone Link usage* but never checked *which prop API* backs it), and
+  the implementation-spec's Step 17 instructed verifying it against the CLI-generated file before
+  use — which is what caught it before any wiring was written on the wrong assumption.
+- **Evidence**: `docs/roadmap/features/121-shadcn-migration-medium-confidence/context.md` Step 17;
+  `node_modules/.pnpm/@radix-ui+react-navigation-menu@1.2.22.../dist/index.mjs:372,804` (`forwardRef`
+  + `var Link = NavigationMenuLink`); `services/xstockstrat-ui/src/components/shared/
+  PlatformHeader.tsx`'s Step 18 `asChild` usage.
+- **Rule it implies**: in a shadcn-CLI-based codebase mixing two component families (this app has
+  both classic Radix primitives like `select.tsx`/`dialog.tsx` and Base UI compounds like
+  `combobox.tsx`/`input-group.tsx`), never assume a not-yet-installed primitive's polymorphic-render
+  API from a sibling primitive already in the codebase — the two families use different prop names
+  (`asChild` vs `render`) for the same concept, and picking the wrong one silently fails at runtime
+  (the child never actually renders as the intended element) rather than at compile time in most
+  cases. Confirm the prop against the actual installed package (or the CLI-generated file, once
+  added) before writing call-site code, exactly as this step's own instructions already required —
+  the win here was following that instruction, not skipping it under time pressure.
+
+### 2026-08-09 — shadcn-migration-medium-confidence — execute (Steps 26-27)
+- **Mistake**: `implementation-spec.md`'s Step 26 gave a literal code sample wrapping a set of
+  full-page-navigation `<Link>`s in `Tabs`/`TabsList`/`TabsTrigger asChild` (`config-ui/page.tsx`'s
+  ENV/MODE switcher) to reproduce a segmented-control look. This compiled and looked identical
+  visually, but `@radix-ui/react-tabs@1.1.21`'s `TabsTrigger` hardcodes `role: "tab"` on its own
+  element (`index.mjs:114`); with `asChild`, Radix's Slot merges that explicit role onto the child
+  `<Link>`, overriding its implicit `role="link"` (an explicit ARIA role always wins over an
+  implicit one). `e2e/config-ui/env-mode-switcher.spec.ts`'s `getByRole('link', ...)` assertions
+  — all correctly written against the pre-migration DOM — failed 4/4 outright (not flaky, not
+  timing — "element(s) not found"), because the actual accessible role had silently become "tab".
+  Caught only by actually running the e2e suite against the real change (mandated by this step's
+  own TDD note: "expected-pass... run unmodified first and record the actual result, don't assume"),
+  not by reading `tabs.tsx`'s wrapper code or the shadcn docs, which don't surface Radix's internal
+  role hardcoding.
+- **Evidence**: `docs/roadmap/features/121-shadcn-migration-medium-confidence/context.md` Steps
+  26-27; `node_modules/.pnpm/@radix-ui+react-tabs@1.1.21.../dist/index.mjs:114`
+  (`role: "tab"`); `services/xstockstrat-ui/src/app/config-ui/page.tsx`'s reverted markup + inline
+  comment.
+- **Rule it implies**: a shadcn/Radix primitive whose whole purpose is to express a specific ARIA
+  role (`Tabs`→`role="tab"`, `RadioGroup`→`role="radio"`, etc.) will **assert that role on its
+  trigger element regardless of `asChild`**, because the role is the primitive's entire semantic
+  contract, not an incidental style choice. Wrapping a control in one of these primitives is safe
+  only when the control's real interaction model matches that role (client-side panel/option
+  switching) — if the control actually does something else (a full navigation, an arbitrary async
+  action), styling it to *look* like a tab/radio/etc. via CSS on the plain underlying element (as
+  the pre-migration code did) is correct; reaching for the ARIA-role-bearing primitive is not a
+  safe "just for the styling" substitution, even though it compiles cleanly and passes a build. This
+  generalizes the render-vs-asChild lesson above: verify a primitive's *behavioral* contract against
+  the actual use case, not just its *prop* API, before adopting it for a styling-only motive.

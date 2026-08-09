@@ -19,7 +19,6 @@ export default function FormulaDetailPage({ params }: { params: Promise<{ id: st
       : (updateMut.error?.message ?? null);
 
   function handleDelete() {
-    if (!window.confirm('Delete this formula? This cannot be undone.')) return;
     deleteMut.mutate(
       { formulaId: id, userId: '' },
       { onSuccess: () => router.push('/insights/formulas') },

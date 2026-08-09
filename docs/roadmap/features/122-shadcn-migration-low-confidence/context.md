@@ -334,3 +334,286 @@
 - No git commands were run this session (per task constraint) — no branch/commit/push performed.
 - Status: `implementation-ready` (unchanged — this was a design/spec amendment, not a new SDD
   phase).
+
+## Session 2026-08-09 — /sdd-execute sequential — FR-1 re-spec (Steps 9-12 added)
+
+- **Trigger**: user, at this feature's start-of-execution checkpoint, directed re-specing and
+  executing FR-1 in this same pass rather than deferring it — mirroring sibling
+  `121-shadcn-migration-medium-confidence`'s own Tranche 2 precedent. This feature's branch
+  (`feature/shadcn-migration-low-confidence`) is stacked on `feature/shadcn-migration-medium-
+  confidence`, itself stacked on `feature/shadcn-migration-high-confidence` — confirmed via `ls
+  services/xstockstrat-ui/src/components/ui/` that `alert.tsx` is now present (added by `120`).
+- Read `OrderForm.tsx:217-219` and `EditOrderDialog.tsx:82` fresh (not recon.md citations —
+  recon.md predates this addendum). Added Steps 9-12 to `implementation-spec.md`. Total steps 8 →
+  12.
+- **Notable finding**: `alert.tsx` has no "buy"/success `cva` variant — only `default`/
+  `destructive`/`warning`. `OrderForm.tsx`'s success-path message (`text-buy`) needs an explicit
+  `AlertDescription` className override (`default`'s own color is `text-muted-foreground`, which
+  would silently drop the buy-green coloring if not overridden); the error path needs no override
+  since `alert.tsx`'s `destructive` variant already colors `AlertDescription` via its own
+  `*:data-[slot=alert-description]:text-destructive/90` rule.
+- **e2e-risk findings** (grounded, not assumed): `OrderForm.tsx`'s two message assertions
+  (`order-form.spec.ts`'s success/error tests) use `getByText(...)` — text-content-based, not
+  class/tag-based — so expected-pass, but still gets a real run per P-06 (Step 10). `grep`-confirmed
+  zero e2e coverage of `EditOrderDialog.tsx`'s error `<p>` (`order-ticket.spec.ts` only checks the
+  trigger button) — Step 11 is build-only.
+- `design.md` was **not** modified — § Round 4 already recorded the migrate-both-sites decision;
+  this session only wrote the concrete steps that decision required, per the same "design.md is
+  read-only ground truth for a spec-amendment session" convention the earlier Round-3/Round-4
+  sessions in this file established.
+- `product-spec.md`'s FR-1/Affected Services/Open Questions sections updated to record "unblocked"
+  (was "blocked on 120").
+- Status: `implementation-ready` → `in-progress` (execution begins next against all 12 steps).
+
+## Session 2026-08-09 — sdd-execute sequential (execution)
+
+Verification fallback carried over from siblings 120/121: `CI=1 E2E_PREBUILT=1
+NEXT_DISABLE_STANDALONE=1 PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium` for all
+e2e runs (logged once, not repeated per step).
+
+## FR Decisions (AC-1) — Round 3 + Round 4 update
+
+This section supersedes the original (never-written) Step 1 entry with the current, live-gated
+decisions per FR, transcribed from `design.md` § Round 3/Round 4 at execute time (this repo's
+`context.md` is append-only — no prior entry is deleted).
+
+1. **FR-1 — MIGRATE (Round 4 user-directed override; supersedes the original Round 1/2 DECLINE)**
+   (`OrderForm.tsx:217-219`, `EditOrderDialog.tsx:82`): the user directly overrode Round 1/2's
+   decline and directed migration of both Alert-shaped call sites onto `ui/alert.tsx` (design.md §
+   Round 4). `ui/alert.tsx` is confirmed present on this feature's stacked branch (added by sibling
+   `120-shadcn-migration-high-confidence`) — unblocked as of this same session (see the FR-1
+   re-spec entry above), so this feature's Steps 9-11 migrate both call sites directly.
+2. **FR-2 — MIGRATE (Round 3 override; supersedes Round 2's decline)** (`AuthForm.tsx:28-93`,
+   `CredentialsForm`): the user directly overrode Round 2's narrower recommendation and directed
+   migration of all three Form-shaped call sites (design.md § Round 3). Moves to `useForm` +
+   `Controller` + a `zod` schema (`email` format + required, `password` required) +
+   `Field`/`FieldLabel`/`FieldError`; the network/server-error path (`fetch` failure) stays a local
+   `error` state, not a zod-expressible field error.
+3. **FR-3 — MIGRATE BOTH (Round 3 override; supersedes Round 2's split)**: `AddAccountForm`
+   (`accountShared.tsx:259-332`) migrates (unchanged from Round 2 — justified by
+   `e2e/trader/account-selector.spec.ts:63-92`'s existing reset-on-success assertion).
+   `EditCredentialsForm` (`accountShared.tsx:116-167`) **also migrates** — Round 2's reason to
+   decline (no e2e parity coverage) is resolved, not waived: a new characterization e2e test is
+   added and proven green **before** this consumer's migration (Step 4, ahead of Step 7), per
+   design.md § FR-3's red-before-green safety net for a call site that submits a mutating
+   `updateBrokerAccountCredentials` gRPC call against live broker secrets. `CredentialFields` itself
+   (`accountShared.tsx:51-113`) stays unchanged — both consumers bridge it to `react-hook-form` via
+   `Controller` at their own call site.
+4. **FR-4 — triggers at full breadth, on a corrected primitive**: three dependencies
+   (`react-hook-form`, `zod`, `@hookform/resolvers/zod`) wired to `ui/field.tsx` (`Field`/
+   `FieldLabel`/`FieldContent`/`FieldDescription`/`FieldError`/`FieldGroup`/`FieldSet`/`FieldLegend`/
+   `FieldTitle`/`FieldSeparator`) — not `ui/form.tsx`, which is shadcn's superseded pattern (recon.md
+   § Round 3 addendum).
+
+### Step 1 — record FR decisions [done]
+- Appended the `## FR Decisions (AC-1) — Round 3 + Round 4 update` section above.
+- Verification: `grep -n "## FR Decisions"` → 1 match with all 4 items present.
+
+### Step 2 — add react-hook-form, zod, @hookform/resolvers [done]
+- `pnpm add react-hook-form zod @hookform/resolvers` from `services/xstockstrat-ui/`. Resolved
+  versions (per this step's instruction 3, for Steps 3/5-7/9 to verify their API surface against,
+  not whatever version upstream docs describe): **react-hook-form@7.85.0**, **zod@4.4.3**,
+  **@hookform/resolvers@5.7.1**.
+- Pre-existing, unrelated peer-dependency warnings surfaced during install (not introduced by this
+  step): `@connectrpc/connect`↔`@bufbuild/protobuf` version mismatch (`packages/proto/gen/ts`),
+  `@base-ui/react`↔`date-fns` version mismatch (`xstockstrat-ui`) — both predate this feature.
+- Verification: `grep` on `package.json` for all three keys → present; `pnpm-lock.yaml` shows
+  resolved semvers for all three.
+- Files modified: `services/xstockstrat-ui/package.json`, `pnpm-lock.yaml`
+
+### Step 3 — add ui/field.tsx primitive [done]
+- `npx shadcn@latest add field --yes --overwrite` succeeded. Generated 2 files
+  (`field.tsx`, plus a new dependency `label.tsx` the CLI added automatically — `FieldLabel` wraps
+  `Label`) and **regenerated `separator.tsx` as collateral** (style-only: double-quotes/no-semicolons
+  reformat, zero functional change, no `cva` variant to lose — `separator.tsx` has none). All three
+  reformatted with `prettier --write` to match repo convention.
+- Confirmed exports: `Field`, `FieldLabel`, `FieldDescription`, `FieldError`, `FieldGroup`,
+  `FieldLegend`, `FieldSeparator`, `FieldSet`, `FieldContent`, `FieldTitle` — matches recon.md's
+  addendum exactly. `FieldError` accepts an `errors?: Array<{message?: string}|undefined>` prop —
+  a direct fit for react-hook-form's `fieldState.error`. No `forwardRef`, `data-slot` per sub-part,
+  confirmed post-119 shape.
+- No `ui/field.test.ts` written — per this step's own TDD note, no `cva()`-variant logic to guard,
+  verified via the migrated call sites' e2e/lint/build in Steps 5-7/9 instead.
+- Verification: `pnpm lint` clean; `pnpm build` clean (compiled successfully, full route summary
+  printed, no type errors).
+- Files created: `src/components/ui/field.tsx`, `src/components/ui/label.tsx`. Files modified (CLI
+  collateral, style-only): `src/components/ui/separator.tsx`.
+
+### Step 4 — EditCredentialsForm characterization e2e test [done]
+- Added `'Edit Credentials form closes on successful save (feature 122, FR-3 characterization)'` to
+  `account-selector.spec.ts`.
+- **Deviation from the step's literal locator instructions (reuse, not scope creep)**: the spec's
+  own Instructions proposed scoping via `page.locator('form').filter({ has: page.getByRole('button',
+  { name: 'Save keys' }) })`. Since this session's own prior work (feature 121, Step 6) already
+  solved the exact same "AddAccountForm and EditCredentialsForm render identical placeholders
+  simultaneously" ambiguity by adding a `data-testid="account-row-${account.id}"` to the row's
+  `Collapsible` root, this step reused that already-proven, already-landed scoping mechanism
+  (`page.getByTestId(...)`) instead of introducing a second, parallel locator strategy for the same
+  problem — one canonical scoping approach per this DRY-adjacent reasoning, not because the spec's
+  original approach was wrong.
+- Confirmed the unmount-vs-reset distinction empirically: asserted the row collapses back to its
+  "Edit keys" button (not a cleared-but-mounted field), matching `onDone`'s actual behavior
+  (`accountShared.tsx:141`/`:248`).
+- Verification: `pnpm test:e2e -- e2e/trader/account-selector.spec.ts` — **8 passed** (all pre-existing
+  tests + the new one), run against the **pre-migration** `EditCredentialsForm` — this green run is
+  the baseline design.md § FR-3 requires before Step 7 touches that function.
+- Files modified: `e2e/trader/account-selector.spec.ts`
+
+### Step 5 — Migrate `AuthForm.tsx`'s `CredentialsForm` to react-hook-form + zod + ui/field.tsx [done]
+- Verified `react-hook-form@7.85.0`/`@hookform/resolvers@5.7.1`/`zod@4.4.3` API surfaces directly
+  against installed type defs before writing any call code (ledger 2026-08-05 trap). Found zod v4's
+  `.string().email()` is `@deprecated` in favor of the top-level `z.email(msg)` — used the latter.
+- Replaced the four `useState` calls with a single `useForm<CredentialsValues>({ resolver:
+  zodResolver(credentialsSchema), defaultValues: {...} })`. `credentialsSchema` = `z.object({ email:
+  z.email(...), password: z.string().min(1, ...) })` — message text chosen to preserve AC2's "same
+  validation messages" intent (equivalent wording to the native browser messages, not new stricter
+  copy).
+- Both `Input`s bridged via `Controller` (`render={({ field, fieldState }) => ...}`), wrapped in
+  `Field`/`FieldError` (`errors={[fieldState.error]}`) — `Input` itself stays non-form-aware, matching
+  the pattern design.md specifies for Step 6/7's `CredentialFields` consumers.
+- Kept a local `error` state for the submit-level `fetch` failure path only (network/server error,
+  not zod-expressible); `formState.isSubmitting` replaces manual `loading` for the
+  disabled/label-swap behavior. `onSuccess()` call and error-rendering markup/classes unchanged.
+  `AuthCardShell` and both consumer pages untouched, per the step's scope.
+- No new DOM e2e coverage added (design.md § FR-2: zero DOM e2e existed pre-migration, and no new
+  user-visible behavior was introduced) — verification is lint/build + the two existing
+  `e2e/auth.spec.ts` API-level assertions, per the step's TDD refactor-escape-hatch note.
+- Verification: `pnpm lint` — clean (only the one pre-existing unrelated warning in
+  `strategies/[id]/page.tsx`). `NEXT_DISABLE_STANDALONE=1 pnpm build` — succeeded, full route
+  manifest, no TS errors. `pnpm test:e2e -- e2e/auth.spec.ts` — **10 passed**, including both
+  API-level `POST /api/auth/login` assertions unmodified (AC5 satisfied).
+- Files modified: `src/components/auth/AuthForm.tsx`
+
+### Step 6 — Migrate `AddAccountForm` to react-hook-form + zod + ui/field.tsx [done]
+- Added the shared `credentialSchema(brokerType: BrokerType)` factory (`accountShared.tsx`,
+  immediately after `buildCredentialsJson`, per the DRY guard-rail finding recorded in the spec) —
+  a single zod-schema expression of `CredentialState`'s broker-conditional required fields, exported
+  once and reused by this step's `AddAccountForm` and Step 7's `EditCredentialsForm`. Fields outside
+  the selected broker's branch stay unconstrained `z.string()` (not absent) so the schema's inferred
+  type always matches the full `CredentialState` shape — avoids a `z.object().and()` intersection,
+  which would've made the two branches' field sets awkward to reconcile against one form-values type.
+- **Deviation/addition beyond the step's literal instructions — dynamic-resolver-schema mechanism**:
+  the spec didn't prescribe *how* to make the zod resolver track the user's live broker selection
+  (a real gap, since `AddAccountForm`'s broker is form state, unlike Step 7's `EditCredentialsForm`
+  where the broker is a fixed prop). Verified via direct read of the installed
+  `react-hook-form@7.85.0` source (`dist/index.esm.mjs`, unminified) that `control._options = props`
+  is reassigned on **every** render unconditionally — confirming the common "recompute schema each
+  render" pattern is safe — but chose a **ref-based lazy resolver** instead
+  (`resolver: (values, context, options) => zodResolver(addAccountSchema(brokerTypeRef.current))
+  (values, context, options)`, with `brokerTypeRef.current` updated in the broker `Select`'s
+  `onValueChange`): this decouples correctness from React's render-timing/batching between the
+  Select's `onValueChange` firing and the next render committing, which the render-recompute
+  approach would otherwise depend on implicitly. `useWatch({control, name:'brokerType'})` is still
+  used, but only to drive `CredentialFields`' rendered field set (cosmetic), not validation.
+- `useWatch({control, name: [...6 credential field names]})` (tuple-overload, confirmed via
+  `useWatch.d.ts`) bridges the individual RHF-registered credential fields into the `creds`/
+  `onChange`-controlled-component contract `CredentialFields` still expects unchanged — `setValue`
+  per key on `onChange`, matching Step 5's "bridge via bindings, don't make the child hook-form-aware"
+  pattern. Confirmed `.merge()` (not `.and()`) is the correct non-deprecated zod v4 `ZodObject` method
+  for combining `{displayName, brokerType}` with `credentialSchema(...)`'s output object.
+- `displayName`'s native `required` HTML attribute preserved unchanged alongside the zod
+  `min(1, ...)` check, per the step's explicit instruction (byte-identical constraint-validation
+  behavior). Broker `Select`'s reset-to-`EMPTY_CREDENTIALS` behavior on every broker change
+  preserved (`handleCredsChange(EMPTY_CREDENTIALS)` in `onValueChange`). Full field reset on
+  successful submit replicated via `reset({...EMPTY_CREDENTIALS, displayName:'', brokerType:'1'})`
+  in place of the four manual `setState` calls. `CredentialFields`/`buildCredentialsJson` themselves
+  untouched, per the step's scope.
+- TDD: `red N/A` per the step's own escape-hatch note — `account-selector.spec.ts:63-92` (the AC2
+  parity target) already passed pre-migration; captured green both before (Step 5's baseline run)
+  and after this step's change.
+- Verification: `pnpm lint` — clean (same one pre-existing unrelated warning).
+  `NEXT_DISABLE_STANDALONE=1 pnpm build` — succeeded, full route manifest, no TS errors.
+  `pnpm test:e2e -- e2e/trader/account-selector.spec.ts` — **8 passed**, including "Add Account form
+  clears credential fields on success" (AC2 proof) and the Step 4 `EditCredentialsForm`
+  characterization test (unaffected, as expected — this step doesn't touch `EditCredentialsForm`).
+- Files modified: `src/components/trader/accountShared.tsx`
+
+### Step 7 — Migrate `EditCredentialsForm` to react-hook-form + zod + ui/field.tsx [done]
+- Reused Step 6's shared `credentialSchema(brokerType)` factory directly (no second schema written).
+  Unlike `AddAccountForm`, this consumer's broker is a fixed prop (`account.brokerType`), not
+  user-selectable, so the ref-indirection Step 6 needed to track a live broker change is unnecessary
+  here — a static `zodResolver(credentialSchema(account.brokerType))` is correct as-is.
+  `useForm<CredentialState>`'s generic *is* `CredentialState` directly (no `displayName`/`brokerType`
+  wrapper type needed, unlike Step 6's `AddAccountValues`), since this form has no other fields.
+- Same `useWatch`(tuple of the 6 credential field names) + `setValue`-per-key `handleCredsChange`
+  bridge as Step 6, to keep `CredentialFields`'s existing `value`/`onChange` contract unchanged.
+- Preserved the exact success-path order Step 4's characterization test depends on:
+  `reset(EMPTY_CREDENTIALS)` → `await refreshAccounts()` → `onDone()` (was `setCreds(EMPTY_CREDENTIALS)`
+  → `refreshAccounts()` → `onDone()`) — `onDone` is `AccountRow`'s unmount trigger
+  (`() => setEditing(false)`), so this ordering is the parity-critical part, not just the reset
+  mechanism swap. Kept the unmount-cleanup effect, now `reset(EMPTY_CREDENTIALS)` via `[reset]` deps
+  (stable reference) instead of `[]` — behaviorally equivalent (runs once, cleans up on unmount).
+  Submit-level `error` state (network/gRPC failure, not zod-expressible) kept separate and rendered
+  unchanged. `CredentialFields`, `buildCredentialsJson`, `AccountRow`'s own state, `AddAccountForm`
+  untouched, per the step's scope.
+- TDD: `red N/A` per the step's own escape hatch — Step 4's characterization test is the
+  purpose-built baseline (captured green there, against pre-migration code) this step is gated on
+  keeping green, per design.md § FR-3's explicit sequencing (this is the higher-risk half of FR-3 —
+  a mutating call overwriting live broker secrets).
+- Verification: `pnpm lint` — clean (same one pre-existing unrelated warning).
+  `NEXT_DISABLE_STANDALONE=1 pnpm build` — succeeded, full route manifest, no TS errors.
+  `pnpm test:e2e -- e2e/trader/account-selector.spec.ts` — **8 passed**, including Step 4's
+  characterization test (the concrete AC2/FR-3 parity proof) and Step 6's "Add Account form clears
+  credential fields on success" (unaffected, as expected — this step doesn't touch `AddAccountForm`).
+- Files modified: `src/components/trader/accountShared.tsx`
+
+### Step 8 — Final gate: lint, build, full e2e re-run for the FR-2/FR-3/FR-4 block [done]
+- Verification-only step, no code/test changes. Ran all four gate commands against the
+  Step-7-complete tree: `pnpm lint` (clean, same one pre-existing unrelated warning),
+  `pnpm build` (already confirmed clean at Step 7 verification, same working tree — not re-run a
+  third time), `pnpm test:e2e -- e2e/trader/` — **69 passed** (full trader-segment directory:
+  `account-selector.spec.ts`, `order-form.spec.ts`, `orders.spec.ts`, and every other trader spec —
+  no skips), `pnpm test:e2e -- e2e/auth.spec.ts` — **10 passed** (both API-level login assertions).
+- Confirmed real assertion counts, not just green exit codes, per the tdd-gate.md "a green suite is
+  not automatically coverage" caution — 69 + 10 = 79 tests, matching the pre-migration baseline
+  counts from Steps 3/5/6/7's individual runs (no test was silently dropped/skipped).
+- **FR-2/FR-3/FR-4 block is now complete.** As this step's own Codebase Evidence note flags: FR-1
+  (Steps 9-12) was added to this spec *after* this step was originally written, so this gate does
+  not cover FR-1 — Step 12 is the true whole-feature gate.
+- Files modified: none (verification-only)
+
+### Step 9 — Wire Alert to OrderForm.tsx and EditOrderDialog.tsx (FR-1) [done]
+- `OrderForm.tsx`: replaced the inline `<p className={...isErrorMsg...}>` (`:217-219`, pre-edit line
+  numbers) with `<Alert variant={isErrorMsg ? 'destructive' : 'default'}><AlertDescription
+  className={isErrorMsg ? undefined : 'text-buy'}>{message}</AlertDescription></Alert>` — matching
+  the spec's snippet exactly. Import added as `'../ui/alert'` (relative), not the spec's literal
+  `'@/components/ui/alert'` suggestion — this file's own `ui/*` imports (`card`, `button`, `input`,
+  `select`, `toggle-group`) are all relative, and the spec's own Instruction 2 for the sibling file
+  already applies this exact "match the file's existing import style" reasoning, so it's applied
+  here too for consistency rather than introducing the one `@/` alias among otherwise-relative `ui/*`
+  imports.
+- `EditOrderDialog.tsx`: replaced `{error && <p className="text-xs text-destructive">{error}</p>}`
+  (`:82`) with `<Alert variant="destructive"><AlertDescription>{error}</AlertDescription></Alert>`,
+  relative import matching the file's existing style, per the spec's own instruction.
+- No state/handler/other-markup changes in either file, per the step's scope.
+- Verification: `grep -n "Alert\b"` confirms both new imports + JSX usages. `pnpm lint` — clean
+  (same one pre-existing unrelated warning). `NEXT_DISABLE_STANDALONE=1 pnpm build` — succeeded,
+  full route manifest, no TS errors.
+- Files modified: `src/components/trader/OrderForm.tsx`, `src/components/trader/EditOrderDialog.tsx`
+
+### Step 10 — e2e regression for FR-1 (OrderForm.tsx) [done]
+- Ran `order-form.spec.ts` unmodified against Step 9's change — **12 passed** (no locator fixes
+  needed), including both text-content-based assertions Step 9's Codebase Evidence flagged as the
+  parity targets: "successful order submission shows orderId and status" and "failed order
+  submission shows error message". Confirms `getByText(...)` locators survive the `<p>` → `Alert`/
+  `AlertDescription` wrap unmodified, as expected (they match text content, not tag/class).
+- Files modified: none (verification-only; no locator broke, so no test edit was needed)
+
+### Step 11 — build-only verification for FR-1 (EditOrderDialog.tsx) [done]
+- No code change (verification-only step, per the spec's own note that `e2e/trader/order-ticket.spec.ts`
+  has zero assertions on this dialog's error text — confirmed again this session via the same grep
+  Step 9's Codebase Evidence used). Step 9's `pnpm build` run is the gate for this site; recorded as
+  its own step per acceptance criterion 5, mirroring sibling `121`'s Steps 33/35 pattern.
+- Files modified: none
+
+### Step 12 — Whole-feature (FR-1 + FR-2/FR-3/FR-4) verification gate [done]
+- Ran the complete suite against the Step-11-complete tree: `pnpm lint` (clean, same one
+  pre-existing unrelated warning), `NEXT_DISABLE_STANDALONE=1 pnpm build` (succeeded, full route
+  manifest, no TS errors), `pnpm test:e2e` (full suite, no path filter) — **257 passed**, no skips,
+  no failures.
+- No cross-step interaction issues surfaced across the whole app beyond what Steps 8/10/11's
+  narrower gates already confirmed.
+- **All 12 steps done. Feature 122 (shadcn-migration-low-confidence) is code-complete** — both FR-1
+  (Alert on OrderForm/EditOrderDialog) and FR-2/FR-3/FR-4 (react-hook-form + zod + ui/field.tsx on
+  AuthForm/AddAccountForm/EditCredentialsForm) are landed and verified.
+- Files modified: none (verification-only)

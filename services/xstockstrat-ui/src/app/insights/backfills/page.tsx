@@ -7,6 +7,15 @@ import { Badge } from '@/components/ui/badge';
 import { StatTile } from '@/components/shared/StatTile';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
 import {
   useBackfillJobs,
   useCancelBackfill,
@@ -125,7 +134,6 @@ export default function BackfillsPage() {
   }
 
   function handleCancel(job: BackfillJob) {
-    if (!window.confirm(`Cancel backfill ${job.jobId}? Completed-chunk bars are kept.`)) return;
     cancel.mutate({ jobId: job.jobId });
   }
 
@@ -249,11 +257,7 @@ export default function BackfillsPage() {
                   onChange={(e) => setCreateEnd(e.target.value)}
                 />
                 <label className="flex items-center gap-2 text-xs text-muted-foreground sm:col-span-2">
-                  <input
-                    type="checkbox"
-                    checked={overwrite}
-                    onChange={(e) => setOverwrite(e.target.checked)}
-                  />
+                  <Checkbox checked={overwrite} onCheckedChange={(v) => setOverwrite(v === true)} />
                   Overwrite existing bars
                 </label>
                 <Button type="submit" disabled={trigger.isPending} className="sm:col-span-1">
@@ -322,14 +326,30 @@ export default function BackfillsPage() {
                         </p>
                       </div>
                       {isAdmin && isCancelable(job.status) && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={cancel.isPending}
-                          onClick={() => handleCancel(job)}
-                        >
-                          Cancel
-                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button size="sm" variant="outline" disabled={cancel.isPending}>
+                              Cancel
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogDescription>
+                              Cancel backfill {job.jobId}? Completed-chunk bars are kept.
+                            </AlertDialogDescription>
+                            <AlertDialogCancel disabled={cancel.isPending}>
+                              Cancel
+                            </AlertDialogCancel>
+                            <AlertDialogAction
+                              disabled={cancel.isPending}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handleCancel(job);
+                              }}
+                            >
+                              Confirm
+                            </AlertDialogAction>
+                          </AlertDialogContent>
+                        </AlertDialog>
                       )}
                     </div>
                   </CardContent>

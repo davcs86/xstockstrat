@@ -2,6 +2,7 @@
 import { useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { cn } from '@/components/ui/utils';
 import type { SymbolDiagnostics } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { BarAction, NoTradeReason } from '@xstockstrat/proto/analysis/v1/analysis_pb';
@@ -96,12 +97,9 @@ function SymbolTable({ sd }: { sd: SymbolDiagnostics }) {
         </span>
       </div>
       {noTradeMsg && (
-        <p
-          data-testid="no-trade-reason"
-          className="rounded-md bg-secondary px-3 py-2 text-sm text-foreground"
-        >
-          {noTradeMsg}
-        </p>
+        <Alert data-testid="no-trade-reason">
+          <AlertDescription>{noTradeMsg}</AlertDescription>
+        </Alert>
       )}
       <div
         ref={parentRef}

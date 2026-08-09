@@ -1,12 +1,15 @@
 'use client';
 import { useState } from 'react';
-import { OrderSide as PbOrderSide, OrderType as PbOrderType, OrderStatus as PbOrderStatus } from '@xstockstrat/proto/trading/v1/trading_pb';
+import {
+  OrderSide as PbOrderSide,
+  OrderType as PbOrderType,
+  OrderStatus as PbOrderStatus,
+} from '@xstockstrat/proto/trading/v1/trading_pb';
 import { timestampFromDate } from '@bufbuild/protobuf/wkt';
 import type { OrderFilters } from '@/hooks/useOrders';
 import { Card, CardContent } from '../ui/card';
 import { Input } from '../ui/input';
-import { Button } from '../ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { FilterToolbar } from '../shared/FilterToolbar';
 
 // Sentinel string values for the "any" option in each select (empty SelectItem values
 // are not allowed by Radix). They map back to "no filter on this dimension".
@@ -55,7 +58,16 @@ export function OrderFiltersPanel({ onChange }: OrderFiltersProps) {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
 
-  const emit = (overrides?: Partial<{ symbol: string; side: string; orderType: string; status: string; from: string; to: string }>) => {
+  const emit = (
+    overrides?: Partial<{
+      symbol: string;
+      side: string;
+      orderType: string;
+      status: string;
+      from: string;
+      to: string;
+    }>,
+  ) => {
     const s = overrides?.symbol ?? symbol;
     const sd = overrides?.side ?? side;
     const ot = overrides?.orderType ?? orderType;
@@ -78,7 +90,12 @@ export function OrderFiltersPanel({ onChange }: OrderFiltersProps) {
   };
 
   const reset = () => {
-    setSymbol(''); setSide(ANY); setOrderType(ANY); setStatus(ANY); setFrom(''); setTo('');
+    setSymbol('');
+    setSide(ANY);
+    setOrderType(ANY);
+    setStatus(ANY);
+    setFrom('');
+    setTo('');
     onChange({});
   };
 
@@ -92,46 +109,61 @@ export function OrderFiltersPanel({ onChange }: OrderFiltersProps) {
             value={symbol}
             onChange={(e) => setSymbol(e.target.value)}
             onBlur={() => emit()}
-            onKeyDown={(e) => { if (e.key === 'Enter') emit(); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') emit();
+            }}
             aria-label="Filter by symbol"
           />
 
-          <Select value={side} onValueChange={(v) => { setSide(v); emit({ side: v }); }}>
-            <SelectTrigger aria-label="Filter by side"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {SIDE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
-
-          <Select value={orderType} onValueChange={(v) => { setOrderType(v); emit({ orderType: v }); }}>
-            <SelectTrigger aria-label="Filter by order type"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {TYPE_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
-
-          <Select value={status} onValueChange={(v) => { setStatus(v); emit({ status: v }); }}>
-            <SelectTrigger aria-label="Filter by status"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {STATUS_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-            </SelectContent>
-          </Select>
-
-          <Input
-            type="date"
-            value={from}
-            onChange={(e) => { setFrom(e.target.value); emit({ from: e.target.value }); }}
-            aria-label="Filter from date"
+          {/* side/order-type/status Selects + date range render inside FilterToolbar (FR-12) —
+              symbol stays a sibling Input here since it's free text, not a Select (see
+              121-shadcn-migration-medium-confidence implementation-spec.md Step 14). */}
+          <FilterToolbar
+            filters={[
+              {
+                value: side,
+                onValueChange: (v) => {
+                  setSide(v);
+                  emit({ side: v });
+                },
+                options: SIDE_OPTIONS,
+                ariaLabel: 'Filter by side',
+              },
+              {
+                value: orderType,
+                onValueChange: (v) => {
+                  setOrderType(v);
+                  emit({ orderType: v });
+                },
+                options: TYPE_OPTIONS,
+                ariaLabel: 'Filter by order type',
+              },
+              {
+                value: status,
+                onValueChange: (v) => {
+                  setStatus(v);
+                  emit({ status: v });
+                },
+                options: STATUS_OPTIONS,
+                ariaLabel: 'Filter by status',
+              },
+            ]}
+            dateRange={{
+              from,
+              to,
+              onFromChange: (v) => {
+                setFrom(v);
+                emit({ from: v });
+              },
+              onToChange: (v) => {
+                setTo(v);
+                emit({ to: v });
+              },
+            }}
+            activeFilterCount={0}
+            onClear={reset}
+            clearPlacement="trailing"
           />
-          <Input
-            type="date"
-            value={to}
-            onChange={(e) => { setTo(e.target.value); emit({ to: e.target.value }); }}
-            aria-label="Filter to date"
-          />
-        </div>
-        <div className="mt-3 flex justify-end">
-          <Button type="button" variant="outline" size="sm" onClick={reset}>Clear filters</Button>
         </div>
       </CardContent>
     </Card>

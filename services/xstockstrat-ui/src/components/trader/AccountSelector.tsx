@@ -71,6 +71,8 @@ export function AccountSelector() {
         <Link href="/trader/accounts">
           <Settings className="h-4 w-4" />
           {hasCredentialIssue && (
+            // no clean shadcn-primitive fit — Badge's box model is sized for padded text, see
+            // 121-shadcn-migration-medium-confidence design.md §2
             <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-destructive" />
           )}
         </Link>

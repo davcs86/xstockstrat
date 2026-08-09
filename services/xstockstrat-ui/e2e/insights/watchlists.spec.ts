@@ -47,9 +47,10 @@ test.describe('Watchlists (insights)', () => {
     await expect(page.getByTestId('readiness-row-AAPL')).toHaveCount(0, { timeout: 5000 });
     await expect(page.getByTestId('readiness-row-MSFT')).toBeVisible();
 
-    // Delete the list (confirm() auto-accepted).
-    page.on('dialog', (d) => d.accept());
+    // Delete the list — opens an AlertDialog (feature 121, FR-4) rather than a native
+    // window.confirm — click the trigger, then the dialog's own Confirm action.
     await page.getByRole('button', { name: 'Delete My List' }).click();
+    await page.getByRole('button', { name: 'Confirm' }).click();
     await expect(page.getByRole('heading', { name: 'My List' })).toHaveCount(0, { timeout: 5000 });
     await expect(page.getByText('No watchlists yet. Create one above.')).toBeVisible({
       timeout: 5000,
