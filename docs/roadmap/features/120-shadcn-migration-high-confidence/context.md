@@ -233,3 +233,25 @@
 - Verification: `pnpm build` clean; `pnpm test:e2e -g "formula"` (9 passed).
 - Files modified: `src/components/insights/FormulaReferencePanel.tsx`
 - Deviations: none.
+
+### Step 6 — Wire Tabs → remaining timeframe-switcher consumers [done]
+- Replaced the hand-rolled `{TIMEFRAMES.map(...)}` button strip with `<Tabs>`/`<TabsList>`/
+  `<TabsTrigger>` (no `TabsContent` — chart/content stays unconditionally rendered outside the
+  switcher) in `insights/market/[symbol]/page.tsx`, `trader/positions/[symbol]/page.tsx`, and
+  `components/trader/ChartPanel.tsx`.
+- **Deviation (recon.md/design.md evidence gap)**: `ChartPanel.tsx` was classified "no e2e-risk"
+  (recon.md § Risks), but `e2e/trader/chart-panel.spec.ts` has 3 assertions
+  (`getByRole('button', { name: '15m'|'1h'|'1d' })`) against this exact timeframe switcher — a real
+  missed e2e-risk site, not caught until this step's own verification run (Radix `TabsTrigger`
+  renders `role="tab"`, breaking the `'button'` role lookups). Raised as a blocker per
+  `reference/sequential-mode.md` §5.7; user chose "fix now" — updated `chart-panel.spec.ts`'s 3
+  assertions from `getByRole('button', ...)` to `getByRole('tab', ...)`. Re-ran: 11/11 passed. This
+  was effectively an unplanned red→green pair folded into this step rather than split into two,
+  since the fix was a single mechanical role-selector change, not a structural test rewrite.
+  **Ledger candidate**: recon.md's e2e-risk sweep should re-check every file a hand-rolled control
+  appears in, not just the FR-cited file, when a shared component (`ChartPanel.tsx`'s timeframe
+  switcher pattern) repeats across trader/insights.
+- Verification: `pnpm build` clean; `pnpm test:e2e -g "chart-panel"` (11 passed, after fix),
+  `-g "positions"` (12 passed), `-g "market"` (7 passed).
+- Files modified: `src/app/insights/market/[symbol]/page.tsx`, `src/app/trader/positions/[symbol]/page.tsx`,
+  `src/components/trader/ChartPanel.tsx`, `e2e/trader/chart-panel.spec.ts`

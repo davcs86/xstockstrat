@@ -226,7 +226,7 @@ cd services/xstockstrat-ui && pnpm build && pnpm test:e2e -g "formula"
 
 ### Step 6 — service: Wire Tabs → remaining no-e2e-risk timeframe-switcher consumers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/market/[symbol]/page.tsx` — modify
@@ -1109,4 +1109,9 @@ Confirm the new session entry names every primitive and every red-before-green o
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+**Step 6** — `ChartPanel.tsx`'s timeframe switcher was classified "no e2e-risk" in recon.md § Risks,
+but `e2e/trader/chart-panel.spec.ts` has 3 assertions (`getByRole('button', { name: '15m'|'1h'|'1d' })`)
+against it — a missed evidence gap, not caught until Step 6's own e2e run. **Disposition**: fixed
+now (user confirmed via blocker `AskUserQuestion`) — updated the 3 assertions to
+`getByRole('tab', ...)` matching Radix `TabsTrigger`'s actual rendered role; re-ran green
+(11/11 passed).

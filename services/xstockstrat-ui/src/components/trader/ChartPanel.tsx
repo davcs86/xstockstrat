@@ -14,6 +14,7 @@ import {
   ComboboxEmpty,
 } from '../ui/combobox';
 import { type Timeframe, TIMEFRAMES, TIMEFRAME_ENUM, mapBars } from '@/lib/chart';
+import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 import { useCandlestickChart } from '@/hooks/useCandlestickChart';
 
 type BarCount = 50 | 100 | 200;
@@ -115,21 +116,15 @@ export function ChartPanel() {
           )}
 
           {/* Timeframe switcher */}
-          <div className="flex gap-1">
-            {TIMEFRAMES.map(({ value, label }) => (
-              <button
-                key={value}
-                onClick={() => setTimeframe(value)}
-                className={`px-2 py-0.5 rounded text-xs font-mono transition-colors ${
-                  timeframe === value
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <Tabs value={timeframe} onValueChange={(v) => setTimeframe(v as Timeframe)}>
+            <TabsList>
+              {TIMEFRAMES.map(({ value, label }) => (
+                <TabsTrigger key={value} value={value}>
+                  {label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
 
           {/* Bar count selector */}
           <Select
