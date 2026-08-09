@@ -644,3 +644,38 @@
   rows directly.
 - **Row-editor composite group (FR-6/FR-7/FR-8, Steps 8-11) is now complete.**
 - Files modified: `src/components/insights/RuleEditor.tsx`
+
+### Step 12 — FR-9 install the shadcn `Questionnaire` primitive (CLI-vendored) [done]
+- **Re-verified before running the CLI (Instruction 1)**: `@shadcn/react` latest on the live npm
+  registry is still **0.3.0** (unchanged from design time). Live-fetched
+  `ui.shadcn.com/docs/react/questionnaire` and confirmed the subcomponent API
+  (`Root`/`Progress`/`Item`/`Title`/`Description`/`Choices`/`Choice`/`ChoiceInput`/`ChoiceLabel`/
+  `ChoiceShortcut`/`Input`/`Error`/`Previous`/`Skip`/`Next`/`Submit`) and the one-Choices-group-OR-one-
+  Input-per-`Item` / `FormData.get`/`getAll` answer model are unchanged from `recon.md`'s cited
+  evidence — no material API drift, proceeded per Instruction 1's own escape hatch.
+- Ran `npx shadcn@latest add questionnaire`. The CLI prompted an overwrite confirmation for
+  `button.tsx` (a bundled dependency of the registry item, unrelated to `Questionnaire` itself) —
+  answered **no** (piped `n`) to preserve this app's `buy`/`sell` functional-variant customizations,
+  per `services/xstockstrat-ui/CLAUDE.md`'s documented collateral-regeneration trap. Confirmed via
+  `git diff --stat` that `button.tsx` has zero changes.
+- Pinned `@shadcn/react` to the exact version `"0.3.0"` (no caret range) in `package.json`, per
+  Instruction 3, and re-ran `pnpm install` to regenerate `pnpm-lock.yaml` consistently.
+- **New finding, not previously flagged**: `pnpm install` surfaced a peer-dependency warning —
+  `@shadcn/react@0.3.0` declares `peerDependencies: { "react": ">=19", "@types/react": ">=19" }`,
+  but this repo is pinned to React 18.3.1. Investigated directly rather than trusting the declared
+  range: grepped the installed package's compiled `dist/questionnaire/index.js` for React-19-only
+  APIs (`use()`, `useActionState`, `useFormStatus`, `useOptimistic`) — zero matches; the only hooks
+  used are `useCallback`/`useContext`/`useId`/`useLayoutEffect`/`useMemo`/`useRef`/`useState`, all
+  React-18-compatible. The declared `>=19` peer range appears to reflect the shadcn ecosystem's
+  demo-app default target, not an actual runtime dependency on React 19 APIs — confirmed safe to
+  proceed under this repo's pinned React 18 stack. `pnpm install` succeeds with only a warning (not
+  a hard failure), and the subsequent `pnpm build` compiled clean, corroborating this.
+- Confirmed `src/components/ui/questionnaire.tsx`'s import for the icon (`recon.md`'s flagged risk)
+  resolved to `IconCheck` from `@tabler/icons-react` — the CLI's icon-library substitution worked
+  correctly (matching `combobox.tsx`'s prior migration), **not** the raw shadcn-demo-app
+  `IconPlaceholder` path recon flagged as a fallback risk.
+- Verification: `test -f` confirms the file exists. `grep` confirms no `IconPlaceholder` import and
+  the exact `"@shadcn/react": "0.3.0"` pin (no range). `pnpm install --frozen-lockfile` — consistent.
+  `pnpm lint` — clean. `NEXT_DISABLE_STANDALONE=1 pnpm build` — succeeded, full route manifest, no
+  TS errors (also the concrete proof the React-19-peer-range finding above doesn't break the build).
+- Files modified: `src/components/ui/questionnaire.tsx` (new), `package.json`, `pnpm-lock.yaml`

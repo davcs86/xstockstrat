@@ -766,7 +766,7 @@ pnpm test:e2e -- e2e/insights/strategy-authoring.spec.ts
 
 ### Step 12 — service: FR-9 install the shadcn `Questionnaire` primitive (CLI-vendored)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/questionnaire.tsx` — create (CLI-generated)
