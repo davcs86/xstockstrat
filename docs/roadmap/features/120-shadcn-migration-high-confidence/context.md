@@ -402,3 +402,12 @@
 - Verification: `pnpm test:unit` (74 passed) and `pnpm build` clean.
 - Files modified: `src/components/ui/checkbox.tsx` (create), `src/components/ui/checkbox.test.ts`
   (create)
+
+### Step 24 — Wire Checkbox → FormulaWorkspace.tsx and ParameterEditor.tsx [done]
+- Replaced both raw `<input type="checkbox">` elements with `<Checkbox
+  onCheckedChange={(checked) => ... checked === true}>` (Radix passes `boolean | 'indeterminate'`,
+  normalized to boolean). `ParameterEditor.tsx`'s indexed `aria-label` preserved exactly.
+- Verification: `pnpm build` clean; `pnpm test:e2e -g "formula"` (9 passed), `-g "parameter"`
+  (2 passed, unrelated matches — confirms no e2e coverage exists for either checkbox site, per
+  recon.md's lower-risk classification).
+- Files modified: `src/components/insights/FormulaWorkspace.tsx`, `src/components/insights/ParameterEditor.tsx`

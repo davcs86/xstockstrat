@@ -740,7 +740,7 @@ cd services/xstockstrat-ui && pnpm test:unit -- checkbox.test.ts && pnpm test:un
 
 ### Step 24 — service: Wire Checkbox → FormulaWorkspace.tsx and ParameterEditor.tsx
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/FormulaWorkspace.tsx` — modify

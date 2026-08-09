@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -277,10 +278,9 @@ export function FormulaWorkspace({
                   </p>
                 </div>
                 <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={isPublic}
-                    onChange={(e) => setIsPublic(e.target.checked)}
+                    onCheckedChange={(checked) => setIsPublic(checked === true)}
                   />
                   Public (visible to all users)
                 </label>
