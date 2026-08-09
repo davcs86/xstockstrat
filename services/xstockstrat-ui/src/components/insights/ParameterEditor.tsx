@@ -1,10 +1,11 @@
 'use client';
 import type { MessageInitShape } from '@bufbuild/protobuf';
 import type { Value } from '@bufbuild/protobuf/wkt';
-import { ArrowDown, ArrowUp, Plus, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import { RepeatableRowList } from '@/components/shared/RepeatableRowList';
 import { useListEditor } from '@/hooks/useListEditor';
 import {
   Select,
@@ -147,115 +148,119 @@ export function ParameterEditor({ value, onChange }: ParameterEditorProps) {
           <code className="text-foreground">params[&quot;name&quot;]</code>.
         </p>
       )}
-      {value.map((p, i) => {
-        const numeric = isNumericType(p.type);
-        return (
-          <div key={i} className="space-y-2 rounded-md border border-border p-3">
-            <div className="flex items-center gap-2">
-              <Input
-                aria-label={`parameter name ${i}`}
-                placeholder="name (e.g. period)"
-                value={p.name}
-                onChange={(e) => update(i, { name: e.target.value })}
-              />
-              <Select
-                value={String(p.type)}
-                onValueChange={(v) => update(i, { type: Number(v) as ParameterType })}
-              >
-                <SelectTrigger className="w-32" aria-label={`parameter type ${i}`}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {TYPE_OPTIONS.map((o) => (
-                    <SelectItem key={o.value} value={String(o.value)}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                aria-label={`move parameter up ${i}`}
-                onClick={() => move(i, -1)}
-                disabled={i === 0}
-              >
-                <ArrowUp className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                aria-label={`move parameter down ${i}`}
-                onClick={() => move(i, 1)}
-                disabled={i === value.length - 1}
-              >
-                <ArrowDown className="h-4 w-4" />
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                aria-label={`remove parameter ${i}`}
-                onClick={() => remove(i)}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <div>
-                <label className="mb-1 block text-xs text-muted-foreground">Default</label>
+      <RepeatableRowList
+        items={value}
+        onAdd={add}
+        addLabel="Add parameter"
+        onUpdate={update}
+        onRemove={remove}
+        onMove={move}
+        renderRow={(p, i, ctx) => {
+          const numeric = isNumericType(p.type);
+          return (
+            <div className="space-y-2 rounded-md border border-border p-3">
+              <div className="flex items-center gap-2">
                 <Input
-                  aria-label={`parameter default ${i}`}
-                  value={p.default}
-                  onChange={(e) => update(i, { default: e.target.value })}
+                  aria-label={`parameter name ${i}`}
+                  placeholder="name (e.g. period)"
+                  value={p.name}
+                  onChange={(e) => ctx.update({ name: e.target.value })}
                 />
+                <Select
+                  value={String(p.type)}
+                  onValueChange={(v) => ctx.update({ type: Number(v) as ParameterType })}
+                >
+                  <SelectTrigger className="w-32" aria-label={`parameter type ${i}`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TYPE_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={String(o.value)}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  aria-label={`move parameter up ${i}`}
+                  onClick={() => ctx.move?.(-1)}
+                  disabled={i === 0}
+                >
+                  <ArrowUp className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  aria-label={`move parameter down ${i}`}
+                  onClick={() => ctx.move?.(1)}
+                  disabled={i === value.length - 1}
+                >
+                  <ArrowDown className="h-4 w-4" />
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  aria-label={`remove parameter ${i}`}
+                  onClick={ctx.remove}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
-              {numeric && (
-                <>
-                  <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">Min</label>
-                    <Input
-                      aria-label={`parameter min ${i}`}
-                      type="number"
-                      value={p.min}
-                      onChange={(e) => update(i, { min: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs text-muted-foreground">Max</label>
-                    <Input
-                      aria-label={`parameter max ${i}`}
-                      type="number"
-                      value={p.max}
-                      onChange={(e) => update(i, { max: e.target.value })}
-                    />
-                  </div>
-                </>
-              )}
-              <label className="flex items-end gap-2 text-xs">
-                <Checkbox
-                  aria-label={`parameter required ${i}`}
-                  checked={p.required}
-                  onCheckedChange={(checked) => update(i, { required: checked === true })}
-                />
-                Required
-              </label>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">Default</label>
+                  <Input
+                    aria-label={`parameter default ${i}`}
+                    value={p.default}
+                    onChange={(e) => ctx.update({ default: e.target.value })}
+                  />
+                </div>
+                {numeric && (
+                  <>
+                    <div>
+                      <label className="mb-1 block text-xs text-muted-foreground">Min</label>
+                      <Input
+                        aria-label={`parameter min ${i}`}
+                        type="number"
+                        value={p.min}
+                        onChange={(e) => ctx.update({ min: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-muted-foreground">Max</label>
+                      <Input
+                        aria-label={`parameter max ${i}`}
+                        type="number"
+                        value={p.max}
+                        onChange={(e) => ctx.update({ max: e.target.value })}
+                      />
+                    </div>
+                  </>
+                )}
+                <label className="flex items-end gap-2 text-xs">
+                  <Checkbox
+                    aria-label={`parameter required ${i}`}
+                    checked={p.required}
+                    onCheckedChange={(checked) => ctx.update({ required: checked === true })}
+                  />
+                  Required
+                </label>
+              </div>
+              <Input
+                aria-label={`parameter description ${i}`}
+                placeholder="description"
+                value={p.description}
+                onChange={(e) => ctx.update({ description: e.target.value })}
+              />
             </div>
-            <Input
-              aria-label={`parameter description ${i}`}
-              placeholder="description"
-              value={p.description}
-              onChange={(e) => update(i, { description: e.target.value })}
-            />
-          </div>
-        );
-      })}
-      <Button type="button" size="sm" variant="outline" onClick={add}>
-        <Plus className="mr-1.5 h-4 w-4" />
-        Add parameter
-      </Button>
+          );
+        }}
+      />
     </div>
   );
 }

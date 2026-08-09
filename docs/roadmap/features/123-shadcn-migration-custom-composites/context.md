@@ -588,3 +588,26 @@
   `pnpm build` run yet, per the step's own Verification block (this component has no consumers wired
   until Steps 9-11) — will be exercised by those steps' own build runs.
 - Files modified: `src/components/shared/RepeatableRowList.tsx` (new)
+
+### Step 9 — FR-8a migrate `OutputEditor.tsx` onto `RepeatableRowList` [done]
+- Replaced the `value.map(...)` row block + trailing "Add output" `Button` with
+  `<RepeatableRowList items={value} onAdd={add} addLabel="Add output" onUpdate={update}
+  onRemove={remove} onMove={move} renderRow={...} />` — kept the existing `useListEditor` destructure
+  unchanged, only the JSX consuming it changed. All 5 `aria-label` templates preserved verbatim
+  (`output name {i}`, `output description {i}`, `move output up/down {i}`, `remove output {i}`).
+- Files modified: `src/components/insights/OutputEditor.tsx`
+
+### Step 10 — FR-8b migrate `ParameterEditor.tsx` onto `RepeatableRowList` [done]
+- Same pattern as Step 9, for the two-tier row shape (header row + conditional numeric grid +
+  trailing description `Input`) — confirms `RepeatableRowList`'s render-prop takes full control of a
+  row's own JSX regardless of shape, as Step 8 designed. All 10 `aria-label` templates preserved
+  verbatim.
+- Ran Steps 9 and 10's builds together (both touch disjoint files, same verification gate) to save a
+  build cycle.
+- Verification (both steps): `grep` confirms `RepeatableRowList` import + all `aria-label` templates
+  present in both files. `pnpm lint` — clean. `NEXT_DISABLE_STANDALONE=1 pnpm build` — succeeded,
+  full route manifest, no TS errors. No e2e coverage exists for either file (confirmed by
+  `e2e/insights/formulas.spec.ts`'s 64 lines having no row-level selector) — manual verification
+  (add/move/remove for both, numeric Min/Max grid show/hide for `ParameterEditor`) deferred to
+  Step 15.
+- Files modified: `src/components/insights/ParameterEditor.tsx`

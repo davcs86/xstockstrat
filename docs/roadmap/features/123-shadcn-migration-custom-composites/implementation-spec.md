@@ -595,7 +595,7 @@ pnpm lint
 
 ### Step 9 — service: FR-8a migrate `OutputEditor.tsx` onto `RepeatableRowList` + `useListEditor`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/OutputEditor.tsx` — modify
@@ -644,7 +644,7 @@ pnpm build
 
 ### Step 10 — service: FR-8b migrate `ParameterEditor.tsx` onto `RepeatableRowList` + `useListEditor`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/ParameterEditor.tsx` — modify
