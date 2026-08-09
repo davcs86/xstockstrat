@@ -353,7 +353,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -- e2e/trader/account-selector.spec.
 
 ### Step 7 — service: Route `AlertStream.tsx`'s unread-count pill through `Badge` (FR-10)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/AlertStream.tsx` — modify (lines 46-58)
@@ -390,7 +390,7 @@ pnpm lint
 
 ### Step 8 — service: Resolve `AccountSelector.tsx`'s status dot — `Badge` or documented exception (FR-10)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/AccountSelector.tsx` — modify (lines 64-77)
@@ -431,7 +431,7 @@ pnpm lint
 
 ### Step 9 — test: e2e regression for FR-10 (AlertStream + AccountSelector badges)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/alert-stream.spec.ts` — verification-only unless an

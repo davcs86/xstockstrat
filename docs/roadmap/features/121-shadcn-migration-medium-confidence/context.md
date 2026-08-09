@@ -337,3 +337,34 @@ repeated per step).
   test); broader `pnpm test:e2e -g "accounts"` sweep — 18 passed, no regressions.
 - Files modified: `src/components/trader/accountShared.tsx` (added `data-testid`),
   `e2e/trader/account-selector.spec.ts` (new test)
+
+### Step 7 — Route AlertStream.tsx's unread-count pill through Badge (FR-10) [done]
+- Replaced the hand-rolled `<span>` (lines 50-57) with `<Badge variant={hasHighSeverity ?
+  'destructive' : 'default'} className="absolute -top-1 -right-1 h-4 min-w-4 justify-center px-1
+  text-[10px]">{unread > 9 ? '9+' : unread}</Badge>` per spec, same positioning/sizing overrides
+  via `className`.
+- Verification: `pnpm lint` clean.
+- Files modified: `src/components/trader/AlertStream.tsx`
+
+### Step 8 — Resolve AccountSelector.tsx's status dot — Badge or documented exception (FR-10) [done]
+- Evaluated per `design.md` §2's deferred call: `badge.tsx`'s `destructive` variant is
+  `bg-destructive/10 text-destructive` (translucent, sized for padded text — `h-5 w-fit ... rounded-2xl
+  px-2 py-0.5`), not a solid 2px dot. Reproducing the current solid `bg-destructive` dot would need a
+  larger override set (`h-2 w-2 min-w-0 rounded-full p-0 border-0 bg-destructive`, ~9 classes) than the
+  existing 6-class hand-rolled span — **hand-rolled span kept**, per Step 8's explicit fallback
+  criterion. Added the one-line `// no clean shadcn-primitive fit ...` comment pointing at design.md §2.
+- Verification: `pnpm lint` clean.
+- Files modified: `src/components/trader/AccountSelector.tsx` (comment only, markup unchanged)
+
+### Step 9 — e2e regression for FR-10 (AlertStream + AccountSelector badges) [done]
+- `account-selector.spec.ts`: no locator changes needed (Step 8 left `AccountSelector.tsx`'s markup
+  unchanged).
+- `alert-stream.spec.ts`: one real fix — `'high-severity alerts use destructive badge colour'` used a
+  class-based locator (`page.locator('span.bg-destructive')`) that broke once the pill became a
+  `Badge` (whose `destructive` variant renders `bg-destructive/10`, not the literal `bg-destructive`
+  class the old hand-rolled span had). Rewrote to `page.locator('span[data-slot="badge"]
+  [data-variant="destructive"]')`, scoping on Badge's own semantic attributes instead of a
+  transitional utility class.
+- Verification: `pnpm build` clean; `pnpm test:e2e -- e2e/trader/alert-stream.spec.ts
+  e2e/trader/account-selector.spec.ts` — 12 passed.
+- Files modified: `e2e/trader/alert-stream.spec.ts`

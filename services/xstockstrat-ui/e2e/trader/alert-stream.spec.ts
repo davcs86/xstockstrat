@@ -14,7 +14,12 @@ test.describe('AlertStream', () => {
   test('bell icon is visible on the page', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto('/trader');
-    await expect(page.locator('button').filter({ has: page.locator('svg') }).first()).toBeVisible();
+    await expect(
+      page
+        .locator('button')
+        .filter({ has: page.locator('svg') })
+        .first(),
+    ).toBeVisible();
   });
 
   test('badge shows 3 after stream completes', async ({ page }) => {
@@ -39,8 +44,12 @@ test.describe('AlertStream', () => {
   test('high-severity alerts use destructive badge colour', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto('/trader');
-    // alert-stream-002 has severity 4 (CRITICAL) → hasHighSeverity=true → bg-destructive class
-    await expect(page.locator('span.bg-destructive')).toBeVisible({ timeout: 10000 });
+    // alert-stream-002 has severity 4 (CRITICAL) → hasHighSeverity=true → Badge variant="destructive"
+    // (feature 121 FR-10: swapped from a raw bg-destructive span to ui/Badge, which sets
+    // data-variant rather than a stable literal background class — scope on that instead).
+    await expect(page.locator('span[data-slot="badge"][data-variant="destructive"]')).toBeVisible({
+      timeout: 10000,
+    });
   });
 
   test('Clear all button resets the badge', async ({ page }) => {
