@@ -692,7 +692,7 @@ it should be unaffected by construction.
 
 ### Step 8 — service: Final gate — lint, build, and full e2e re-run for the FR-2/FR-3/FR-4 block
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**: none (verification-only step; no code or test changes)
 

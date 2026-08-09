@@ -556,3 +556,18 @@ decisions per FR, transcribed from `design.md` § Round 3/Round 4 at execute tim
   characterization test (the concrete AC2/FR-3 parity proof) and Step 6's "Add Account form clears
   credential fields on success" (unaffected, as expected — this step doesn't touch `AddAccountForm`).
 - Files modified: `src/components/trader/accountShared.tsx`
+
+### Step 8 — Final gate: lint, build, full e2e re-run for the FR-2/FR-3/FR-4 block [done]
+- Verification-only step, no code/test changes. Ran all four gate commands against the
+  Step-7-complete tree: `pnpm lint` (clean, same one pre-existing unrelated warning),
+  `pnpm build` (already confirmed clean at Step 7 verification, same working tree — not re-run a
+  third time), `pnpm test:e2e -- e2e/trader/` — **69 passed** (full trader-segment directory:
+  `account-selector.spec.ts`, `order-form.spec.ts`, `orders.spec.ts`, and every other trader spec —
+  no skips), `pnpm test:e2e -- e2e/auth.spec.ts` — **10 passed** (both API-level login assertions).
+- Confirmed real assertion counts, not just green exit codes, per the tdd-gate.md "a green suite is
+  not automatically coverage" caution — 69 + 10 = 79 tests, matching the pre-migration baseline
+  counts from Steps 3/5/6/7's individual runs (no test was silently dropped/skipped).
+- **FR-2/FR-3/FR-4 block is now complete.** As this step's own Codebase Evidence note flags: FR-1
+  (Steps 9-12) was added to this spec *after* this step was originally written, so this gate does
+  not cover FR-1 — Step 12 is the true whole-feature gate.
+- Files modified: none (verification-only)
