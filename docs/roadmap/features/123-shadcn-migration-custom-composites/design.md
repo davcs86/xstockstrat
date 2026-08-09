@@ -1,8 +1,9 @@
 # Design: shadcn-migration-custom-composites
 
 **Created**: 2026-08-08
-**Rounds**: 3 (full; termination: approved — see note on interactive gating below; round 3 is the
-2026-08-08 user-directed FR-10 override, see § Round 3 below)
+**Rounds**: 4 (full; termination: approved — see note on interactive gating below; round 3 is the
+2026-08-08 user-directed FR-10 override, see § Round 3 below; round 4 is the 2026-08-09 user-directed
+recharts-v3-bump + Deferred-Item-fold-in override, see § Round 4 below)
 **Approved by**: synthesized by this session against strong recon evidence; **the two genuine
 architecture forks (FR-5, FR-9/FR-10) and the recon-discovered third recharts consumer were meant to
 be gated via `AskUserQuestion` per the orchestrating session's instructions, but no `AskUserQuestion`
@@ -25,12 +26,17 @@ note, above, flagged exactly this need):
   specifically**. See `## Round 3 — user-directed override` below and the rewritten
   `## Chosen Approach` #10.
 
-**Still not explicitly re-confirmed by the user** (adversarially vetted over 2 rounds with no Floor
-breach or dissent, but never put through the live gate since neither was a named fork the
-orchestrating session's consolidated question set covered): FR-9's CLI-vendored `@shadcn/react`
-install path and version pin, FR-2's recharts-version handling (hand-author against installed v2,
-don't bump to v3), and the Chosen Approach #12 / Deferred Item (`insights/page.tsx`'s second chart)
-— these three remain exactly as before.
+**Update (Round 4, 2026-08-09)**: both of the two remaining self-run-session decisions have since been
+resolved via the user's direct, explicit answers — the orchestrating session asked the user directly:
+- **FR-2**: user overrode this session's "hand-author against installed v2" recommendation and
+  **directed a repo-wide `recharts` v2→v3 bump** instead. No longer awaiting confirmation — see
+  `## Round 4 — user-directed override` below and the rewritten `## Chosen Approach` #2.
+- **Chosen Approach #12 / Deferred Item**: user confirmed **fold `insights/page.tsx`'s second chart
+  into this feature now**, as new FR-12. See `## Round 4` below and the new `## Chosen Approach` #12/FR-12.
+
+**Still not explicitly re-confirmed by the user**: FR-9's CLI-vendored `@shadcn/react` install path and
+version pin remains exactly as before — the only item from the original self-run design session still
+awaiting a live gate.
 
 ---
 
@@ -337,12 +343,26 @@ change and its e2e-update cost are stated explicitly, not hidden, and the consum
 
 1. **FR-1** — verification-only close-out, no code change (already confirmed in `context.md`'s
    `sdd-review` session and re-confirmed in `recon.md`).
-2. **FR-2** — hand-author `src/components/ui/chart.tsx`, adapted from the shadcn `radix-rhea` registry
-   item (fetched live, `recon.md` § Patterns to REUSE) but targeting the *installed*
-   `recharts@^2.12.7` (drop the v3-only `initialDimension` prop and `TooltipValueType` import). Same
+2. **FR-2 — REVISED (Round 4, user-directed override, 2026-08-09)**: **bump `recharts` to v3
+   (`^3.8.0`) repo-wide** in `package.json`/`pnpm-lock.yaml`, then add `src/components/ui/chart.tsx` by
+   running `npx shadcn@latest add chart` **as-is** against the `radix-rhea` registry item (fetched live,
+   `recon.md` § Patterns to REUSE) — no more omitting `initialDimension`/`TooltipValueType`, since those
+   were only gaps for the *new* file against the previously-installed v2; with v3 installed the CLI's
+   own registry payload is directly compatible and needs no hand-adaptation. Same
    `ChartContainer`/`ChartConfig`/`ChartStyle`/`ChartTooltipContent`/`ChartLegendContent` composition
    shape as upstream, same `data-slot` / plain-function-component convention as every other
    `ui/*` primitive in this repo (`recon.md` Codebase Map — `button.tsx:39-46`).
+   **The real v3 migration work this bump requires is in the two already-shipped charts, not the new
+   file** (see `## Round 4` above for the full recon): `EquityCurveChart.tsx:135` and
+   `insights/page.tsx:177` both need `xAxisId={0} yAxisId={0}` added to their `CartesianGrid` (v3 makes
+   these props required; neither file sets them today) — a small, mechanical, concrete code change,
+   landed immediately in the dependency-bump step so `pnpm build` stays green before either file's own
+   `ChartContainer` migration (FR-3/FR-12) lands. `EquityCurveChart.tsx`'s `Scatter` usage (`:165-186`)
+   does **not** use the removed `points` prop (uses `data`/`dataKey`/`shape` instead) and needs no
+   change; neither file uses `activeIndex`, `Customized`, or a `ref.current.current` `ResponsiveContainer`
+   pattern. `FormulaRunResult.tsx` has zero `recharts` usage today (confirmed: exactly 2 files repo-wide
+   import from `'recharts'` — `EquityCurveChart.tsx` and `insights/page.tsx`, not this one) — its FR-4
+   migration writes new v3-targeted code directly, with no legacy exposure to fix.
 3. **FR-3** — migrate `EquityCurveChart.tsx` onto `ChartContainer` with a `ChartConfig` built at render
    time (one entry per `series[i].symbol`, matching the existing dynamic-line-count pattern). Preserve
    `data-testid`s `equity-curve-chart`, `curve-tooltip`, `marker-tooltip`, `trade-marker`,
@@ -407,27 +427,39 @@ change and its e2e-update cost are stated explicitly, not hidden, and the consum
     (`Questionnaire.Next`/`Questionnaire.Previous`/`Questionnaire.Submit`, with `children` overriding
     each part's own default text per the registry file's `children ?? 'Next'`-style fallback pattern
     confirmed in `recon.md`).
-12. **Recon-discovered scope question (not a literal FR)**: `src/app/insights/page.tsx:176-199`'s
-    dashboard "Score Trend" `LineChart` is a same-shape `recharts` duplication FR-2's Problem
-    Statement describes but product-spec's Affected Services never names. **Recommended**: fold it
-    into FR-3-shaped scope during `/sdd-spec` as a small additional step (same
-    `ChartContainer`/`ChartConfig` pattern, no dynamic series, materially simpler than
-    `EquityCurveChart.tsx`) — but this is flagged for the orchestrating session's explicit
-    confirmation, not silently implemented, since it expands product-spec's already-`/sdd-review`-
-    approved Affected Services list.
+12. **FR-12 — NEW (Round 4, user-directed override, 2026-08-09; formerly "Chosen Approach #12 /
+    Deferred Item")**: migrate `src/app/insights/page.tsx:176-199`'s dashboard "Score Trend"
+    `LineChart` onto `ui/chart.tsx`'s `ChartContainer` + `ChartTooltipContent`, same pattern as FR-3/
+    FR-4. Per the `## Round 4` recon above: single series (`score`, `chartData()` at `:215-223`),
+    reusing the `useStrategies()` data this page already fetches (`:78`) — no new data-fetching hook.
+    Add `xAxisId={0} yAxisId={0}` to the `CartesianGrid` at `:177` (already landed in the dependency-
+    bump step, carried forward unchanged here). Replace the built-in `contentStyle`/`labelStyle`/
+    `formatter` `Tooltip` (`:180-191`) with `ChartTooltipContent`, matching FR-3's CSS-variable-driven
+    theming. Single-entry `ChartConfig` (one `score` series) — no dynamic per-symbol config-building
+    loop needed, unlike FR-3. No e2e selector exists for this chart today (confirmed via grep across
+    `e2e/`), so — like FR-4 and FR-8 — this migration relies on manual verification, not e2e regression
+    protection.
 
 This is a UI-only, single-service change; the consumer surface is `/insights` (formula workspace, rule
-editor, strategy wizard, backtest equity-curve/sparkline displays) and, only for the FR-9/10/11
-Questionnaire shell and (if the recon-discovered item above is confirmed) the `/insights` dashboard —
-matching product-spec's `## Consumer Surface(s)` (C-14) exactly; `/trader` is touched only by FR-5's
-"keep" decision (no code change there beyond the CLAUDE.md note).
+editor, strategy wizard, backtest equity-curve/sparkline displays, and — per FR-12 above — the
+`/insights` dashboard's Score Trend card) and, only for the FR-9/10/11 Questionnaire shell, matching
+product-spec's `## Consumer Surface(s)` (C-14) exactly; `/trader` is touched only by FR-5's "keep"
+decision (no code change there beyond the CLAUDE.md note).
 
 ## Rejected Alternatives
 
-- **FR-2: bump `recharts` to `3.8.0` to match the CLI registry exactly** — rejected: scope-creeps a
-  major dependency upgrade into a UI-consolidation feature that explicitly isn't a redesign, risks
-  regressing two already-shipped charts for no requirement this feature has, when the v2-vs-v3 gap in
-  the one new file is two small, mechanical omissions.
+- **FR-2 (superseded by Round 4 — no longer rejected; see Chosen Approach #2 and Round 4)**: Round 2
+  originally rejected "bump `recharts` to `3.8.0` to match the CLI registry exactly," reasoning it
+  scope-creeps a major dependency upgrade into a UI-consolidation feature for no requirement this
+  feature had, when the v2-vs-v3 gap in the one new file was two small, mechanical omissions. The user
+  directly overrode this in Round 4 (2026-08-09), choosing the repo-wide bump over hand-authoring
+  against a version the CLI's own `apply --preset` re-run would eventually overwrite anyway. This entry
+  is retained for the historical record only; it is **not** the current design.
+- **FR-2 (Round 4): hand-author `ui/chart.tsx` against installed v2, defer the bump indefinitely** —
+  rejected under the user's override: perpetuates the exact `apply --preset`-overwrite risk Round 1's
+  Adversary originally flagged (§ Round 1), with no expiration — every future primitive-refresh remains
+  a silent-overwrite hazard for as long as the hand-authored file stays on v2. The user chose to close
+  this gap now rather than carry it forward as permanent tech debt.
 - **FR-5: migrate `ChartPanel.tsx` (and siblings) onto `recharts` via a custom `Customized`/`Bar`-shape
   candlestick composition** — rejected: `recharts` has no first-party OHLCV geometry (would be built
   from scratch on the highest-consequence chart in the app), the shared hook has 3 consumers not 1,
@@ -467,26 +499,37 @@ matching product-spec's `## Consumer Surface(s)` (C-14) exactly; `/trader` is to
   2026-08-08** by the orchestrating session (verified present: a "Sanctioned exception —
   `ChartPanel.tsx` stays on `lightweight-charts`" paragraph citing "feature 123 design decision,
   2026-08-08", matching the text drafted under Chosen Approach #5 verbatim). No longer outstanding.
-- [ ] `insights/page.tsx`'s second `recharts` `LineChart` (Chosen Approach #12) — needs the
-  orchestrating session's explicit confirmation before `/sdd-spec` turns it into concrete steps; not
-  yet approved scope.
+- [x] `insights/page.tsx`'s second `recharts` `LineChart` (Chosen Approach #12) — **resolved 2026-08-09
+  (Round 4)**: user confirmed folding this in now, as new FR-12. See `## Round 4` and the rewritten
+  Chosen Approach #12 above; `implementation-spec.md`'s `## Deferred Item` section is correspondingly
+  replaced with a real step.
 - [ ] `useCandlestickChart.ts`'s hardcoded hex color literals vs. this app's CSS custom properties — a
   candidate low-risk follow-up (partial theming consistency without a full chart-library migration),
   not part of this feature; recommend a `docs/roadmap/ledger/insights.md` note so it isn't lost (the
   orchestrating session applies ledger writes per this session's constraints).
-- [x] ~~This entire design was produced without the interactive `AskUserQuestion` gate...~~ **FR-5 and
-  FR-10 are now resolved**: the user was asked both directly (via the orchestrating session's
-  consolidated gate, 2026-08-08) — FR-5 confirmed as-recommended (keep `lightweight-charts`), FR-10
-  overridden for Step 1 specifically (Round 3, Chosen Approach #10). **Still open** — FR-9's install
-  path/version pin, FR-2's recharts-version handling, and item-#12 (`insights/page.tsx`'s second
-  chart) were not part of that consolidated question set and remain adversarially-vetted but not
-  live-gated; the user should explicitly confirm or override these three before `/sdd-execute` runs
-  any of them.
+- [x] ~~This entire design was produced without the interactive `AskUserQuestion` gate...~~ **FR-5,
+  FR-10, FR-2, and item-#12/FR-12 are now resolved**: the user was asked directly (via the
+  orchestrating session's consolidated gate, 2026-08-08, and the Round 4 follow-up gate, 2026-08-09) —
+  FR-5 confirmed as-recommended (keep `lightweight-charts`), FR-10 overridden for Step 1 specifically
+  (Round 3, Chosen Approach #10), FR-2 overridden to bump `recharts` to v3 repo-wide (Round 4, Chosen
+  Approach #2), and item-#12 confirmed folded in as new FR-12 (Round 4, Chosen Approach #12). **Still
+  open** — only FR-9's `@shadcn/react` install path/version pin was not part of either consolidated
+  question set and remains adversarially-vetted but not live-gated; the user should explicitly confirm
+  or override it before `/sdd-execute` runs that step.
 - [ ] Round 3's Step 1 restructure requires rewriting `e2e/insights/strategy-authoring.spec.ts`'s
   fill/click sequencing for every test that reaches past Step 1 (an interstitial `Next` click between
   each of the 4 field fills, replacing the current single-click-after-filling-up-to-4-fields pattern) —
-  this is now a required part of `implementation-spec.md`'s revised Step 11, not optional polish; do not
-  land Step 11 without it, or the existing suite will fail against the restructured component.
+  this is now a required part of `implementation-spec.md`'s Step 13 (renumbered from Step 11 per Round
+  4's new dependency-bump/FR-12 steps), not optional polish; do not land that step without it, or the
+  existing suite will fail against the restructured component.
+- [ ] **Round 4**: `recharts@3.8.0` was the version this feature's own live registry-payload fetches
+  cited (Round 1/2) — re-verify it is still the current 3.x release immediately before
+  `/sdd-execute` runs the dependency-bump step, per the same `trader-chart-panel`/`@shadcn/react`
+  ledger pattern already applied to FR-9 (a fast-moving external dependency must be re-checked right
+  before use, not just at design time). Pin an exact minor/patch in `package.json` if the team wants
+  reproducibility, or a caret range consistent with this repo's existing `recharts` pin style
+  (`^2.12.7` today) — either is acceptable; not a Commandment-level decision like `@shadcn/react`'s
+  pre-1.0 pin, since `recharts` is a mature, 1.0+ library.
 
 ## Constitution Rules Touched
 
@@ -519,7 +562,126 @@ matching product-spec's `## Consumer Surface(s)` (C-14) exactly; `/trader` is to
   1-2**: the approval gate that should have run via `AskUserQuestion` did not run in this session (tool
   unavailable). Recorded here and in the final report as an explicit deviation, per **P-03** ("no
   silent deviation — escalate, never guess") — Round 1/2's forks are documented and flagged for the
-  user's real sign-off rather than silently treated as approved. **Round 3 is the honored case**: the
-  user was asked directly (outside this skill) and answered explicitly, satisfying P-04 for FR-10.
+  user's real sign-off rather than silently treated as approved. **Rounds 3 and 4 are the honored
+  cases**: the user was asked directly (outside this skill) and answered explicitly, satisfying P-04
+  for FR-10 (Round 3) and for FR-2/FR-12 (Round 4).
 - `F-11` (Floor rejection halts) — no Floor (`F-*`) violation was identified in either round; nothing
   here required halting the phase.
+
+---
+
+## Round 4 — user-directed override
+
+**Trigger**: the orchestrating session asked the user directly, 2026-08-09, about the two remaining
+self-run-session decisions this document's header still listed as "adversarially vetted but not
+live-gated": FR-2's recharts-version handling, and whether to fold `insights/page.tsx`'s second
+`recharts` `LineChart` (Chosen Approach #12 / the `## Deferred Item` in `implementation-spec.md`) into
+this feature now. The user gave two explicit overrides:
+
+1. **Bump `recharts` to v3 repo-wide**, overriding Round 2's "hand-author `ui/chart.tsx` against the
+   installed v2.12.7, don't bump" synthesis (Chosen Approach #2 prior to this round). The user's
+   reasoning, as relayed by the orchestrating session: the CLI-vendored-source convention this repo
+   already uses for every other `ui/*` primitive (`services/xstockstrat-ui/CLAUDE.md` § Styling —
+   `npx shadcn@latest add <name>`) should not be undermined by hand-authoring one primitive against a
+   deliberately-stale major version; a future `apply --preset` re-run would still silently overwrite a
+   hand-authored `chart.tsx` with the v3-targeted registry version regardless (the exact risk Round 1's
+   Adversary flagged and Round 2 accepted as a tradeoff) — bumping removes that tradeoff entirely rather
+   than accepting it.
+2. **Fold in the Deferred Item now**: `src/app/insights/page.tsx:176-199`'s second, independent
+   hand-rolled `recharts` `LineChart` ("Score Trend" dashboard card) — previously left out of scope
+   pending confirmation (Chosen Approach #12, `implementation-spec.md`'s `## Deferred Item`) — is now
+   in-scope for this feature as new **FR-12**.
+
+**Verified recharts v2→v3 breaking changes** (live-fetched by the orchestrating session, 2026-08-09 —
+this round uses this as the authoritative source rather than re-deriving from the registry-payload diff
+Round 2 performed against the single new `chart.tsx` file):
+
+- Minimum versions: React 16.8+, TypeScript 5.x+, Node 18+, target changed to ES6 (drops ES5
+  polyfills). Removed dependencies `recharts-scale`/`react-smooth` (functionality now internal).
+- `CategoricalChartState` no longer exists (was passed to event handlers/`Customized`; replaced by
+  hooks like `useActiveTooltipLabel`). `<Customized />` no longer receives extra state props.
+- Removed props: `Scatter`'s `points` prop; `Area`'s `points` prop; `Legend`'s `payload` prop;
+  `activeIndex` removed from all components (use Tooltip instead); `animateNewValues` removed from
+  Area/Scatter/Funnel; `Pie`'s `blendStroke` removed (use `stroke="none"`); `Reference*`'s
+  `alwaysShow`/`isFront` removed.
+- `ResponsiveContainer`: `ref.current.current` nesting removed (flattened).
+- Tooltip: the custom-content prop type renamed `TooltipProps` → `TooltipContentProps`; `label` now
+  accepts `undefined | string | number` (was string-only).
+- `CartesianGrid`: new *required* `xAxisId`/`yAxisId` props.
+- `YAxis`: multiple axes now render alphabetically by ID, not by render order.
+- New in v3 (not breaking): tooltip `portal` prop, accessibility layer on by default, polar multi-axis
+  support, `width="auto"` on axes, `symlog` scale.
+
+**Recon against the actual codebase (this round, both migration targets read in full — the real v3
+migration work per the header note above, since bumping `recharts` touches every existing consumer, not
+just the one new `chart.tsx` file Round 2 diffed)**:
+
+- **`EquityCurveChart.tsx`** (`services/xstockstrat-ui/src/components/insights/EquityCurveChart.tsx`):
+  - `Scatter` (`:165-186`) — uses `data`/`dataKey`/`shape` (a custom render-prop for trade markers),
+    **does not use the removed `points` prop at all**. No code change required for this breaking change.
+  - No `activeIndex`, no `Customized`, no `ref.current.current` `ResponsiveContainer` usage anywhere in
+    the file (`ResponsiveContainer` at `:133` is a plain `width="100%" height={260}` call, no `ref`).
+  - `CartesianGrid` (`:135`) has **no `xAxisId`/`yAxisId`** — this **is** a real v3-breaking-change
+    exposure: v3 makes these required. Needs `xAxisId={0} yAxisId={0}` added, matching the file's own
+    unid'd `XAxis`/`YAxis` (`:136-150`, which use the implicit default axis id `0`) so the grid still
+    aligns with the same axes it does today.
+  - Hand-rolled `CurveTooltip` (`:45-91`) has its own local `TooltipEntry` interface — it does **not**
+    import `TooltipProps`/`TooltipContentProps` from `recharts` at all, so the type-rename breaking
+    change has no import to fix here. FR-3's own migration (below) replaces this tooltip with
+    `ui/chart.tsx`'s v3-native `ChartTooltipContent` anyway, so this is moot post-migration.
+  - **Net**: one real, mechanical v3 fix needed — the `CartesianGrid` `xAxisId`/`yAxisId` addition.
+    Everything else in this file either isn't exposed to the listed breaking changes or is already
+    being rewritten by FR-3's planned `ChartContainer` migration regardless of the version bump.
+- **`FormulaRunResult.tsx`** (`services/xstockstrat-ui/src/components/insights/FormulaRunResult.tsx`):
+  confirmed via direct read — **this file has zero `recharts` usage today** (the current `Sparkline` is
+  hand-rolled inline SVG, `:7-27`). FR-4's migration introduces its first `recharts` usage as new code,
+  written directly against v3 from the start (hidden axes, no `CartesianGrid` per FR-4's own spec) — so
+  there is no legacy v2-vs-v3 exposure to fix here at all, only "write v3-correct code," which was
+  already FR-4's plan.
+  - Confirmed via grep: `services/xstockstrat-ui/src` has **exactly 2** files importing from
+    `'recharts'` today — `EquityCurveChart.tsx` and `insights/page.tsx` — `FormulaRunResult.tsx` is not
+    among them.
+- **`insights/page.tsx`** (the Deferred Item, now FR-12 — recon in full below).
+
+**Recon: `insights/page.tsx:176-199`'s "Score Trend" `LineChart`** (the Deferred Item, folded in as
+FR-12 per override #2 above) — exact current shape, confirmed via direct read of the whole 224-line
+file:
+- **Location**: `InsightsDashboard`'s second dashboard card (`:154-208`), titled dynamically
+  (`{topStrategy ? \`${topStrategy.strategyId} — Score Trend\` : 'Equity Curve'}`, `:159-161`).
+- **Data source**: `chartData(strategies?.strategies ?? [])` (`:215-223`), a local pure function —
+  `StrategyScore[]` → `{ label: string; score: number }[]`, `label` = first 8 chars of `strategyId`
+  (or a placeholder `S1..S5` array of zeros when there are no strategies yet), `score` = `overallScore`
+  rounded to 0-100. `strategies` itself comes from `useStrategies()` (`:78`), the same hook the
+  "Strategy Scores" card (`:93-152`) already uses — **no new data-fetching hook needed**.
+  - **Series count**: exactly **one** (`score`), unlike `EquityCurveChart.tsx`'s dynamic per-symbol
+    multi-line count — confirming `design.md`'s prior characterization ("materially simpler than
+    `EquityCurveChart.tsx`, closer to a straight FR-4-style migration," though this one does keep
+    `CartesianGrid`/axes/`Tooltip`, unlike FR-4's axis-hidden sparkline).
+  - **Axes**: `XAxis dataKey="label"` (`:178`), `YAxis domain={[0, 100]}` (`:179`) — both plain, fixed
+    domain, no dynamic scaling logic.
+  - **`CartesianGrid`** (`:177`) — same missing-`xAxisId`/`yAxisId` exposure as `EquityCurveChart.tsx`
+    above; same fix (`xAxisId={0} yAxisId={0}`).
+  - **Tooltip** (`:180-191`): built-in `contentStyle`/`labelStyle`/`formatter` props (hard-coded
+    hex/hsl values matching the file's own inline theming, not CSS custom properties) — **no custom
+    `content` component**, so no `TooltipProps`/`TooltipContentProps` import to rename. Migrating onto
+    `ui/chart.tsx`'s `ChartTooltipContent` replaces this with the CSS-variable-driven shared tooltip,
+    same as FR-3/FR-4's pattern.
+  - **`Line`** (`:192-198`): single series, `dataKey="score"`, fixed `stroke`/`dot` colors (not
+    per-symbol like `EquityCurveChart.tsx`'s `LINE_COLORS` cycling) — a single-entry `ChartConfig` is
+    sufficient, no dynamic-config-building loop needed.
+  - **`ResponsiveContainer`** (`:175-200`): plain `width="100%" height={240}`, no `ref` — same as the
+    other two charts, no `ref.current.current` exposure.
+  - **No `Scatter`, no `activeIndex`, no `Customized`** anywhere in this file.
+  - **No e2e coverage**: confirmed via grep across `services/xstockstrat-ui/e2e/` for "Score Trend",
+    "insights/page", "chartData", "topStrategy" — zero matches. This dashboard chart has no
+    e2e-load-bearing selector today, matching FR-4/FR-8's existing "manual verification only" pattern
+    (product-spec Acceptance Criteria #6) rather than FR-3's e2e-protected pattern.
+
+**Constitution check (Round 4)**: no Floor (`F-*`) breach. **P-04** (phase-gate approval, recorded) —
+honored: both overrides were the user's direct, literal answers to the orchestrating session's question,
+recorded here. **C-01** (evidence-cited) — the breaking-changes list is cited to the orchestrating
+session's live fetch (not re-derived by this design session, per its explicit instruction), and every
+codebase claim above cites a `path:line` this session read directly. **C-11**/**C-14** — honored: the
+FR-12 scope expansion and its consumer-surface addition (`insights/page.tsx`, same `/insights` segment,
+no new route) are stated explicitly and folded into `product-spec.md`'s Affected Services /
+Consumer Surface in the same session, not silently assumed.

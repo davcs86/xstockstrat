@@ -2,7 +2,8 @@
 
 **Status**: `pending`
 **Created**: 2026-08-08
-**Last Updated**: 2026-08-08
+**Last Updated**: 2026-08-09 (FR-1 Round 4 override documented — tranche split added; no new steps,
+step count unchanged at 8; see Execution Summary and Step 1)
 **Feature**: `docs/roadmap/features/122-shadcn-migration-low-confidence/feature.md`
 **Total Steps**: 8
 **Feature Branch**: `feature/shadcn-migration-low-confidence`
@@ -12,9 +13,7 @@
 ## Execution Summary
 
 design.md's Round 3 (a live, recorded user override of Round 2's autonomous, narrower synthesis —
-see design.md § Round 3) supersedes this spec's original 3-step shape. FR-1 (`OrderForm.tsx`/
-`EditOrderDialog.tsx`) still declines both call sites — unaffected by the override, `ui/alert.tsx`
-still doesn't exist in trunk. **FR-2/FR-3 now both migrate, at full breadth**: `AuthForm.tsx`'s
+see design.md § Round 3) supersedes this spec's original 3-step shape. **FR-2/FR-3 now both migrate, at full breadth**: `AuthForm.tsx`'s
 `CredentialsForm` (Round 2 had declined it), and **both** consumers of `accountShared.tsx`'s
 `CredentialFields` — `AddAccountForm` (Round 2's only accepted call site) **and**
 `EditCredentialsForm` (Round 2 had declined it for lack of e2e coverage; the override adds a new
@@ -25,10 +24,27 @@ spec's original breadth, on a corrected primitive**: three dependencies (`react-
 named but which a live doc verification (recon.md's 2026-08-08 addendum) found is shadcn's *older*,
 now-superseded pattern.
 
+**FR-1 (`OrderForm.tsx`/`EditOrderDialog.tsx`) now also migrates (design.md § Round 4,
+2026-08-09) — deliberately NOT specced here.** The user directly overrode the design phase's earlier
+DECLINE for FR-1: both call sites are to wrap their existing message text in `Alert` once sibling
+`120-shadcn-migration-high-confidence` ships `ui/alert.tsx`. A fresh `ls
+services/xstockstrat-ui/src/components/ui/` this session confirms `alert.tsx` **does not exist yet**
+on `main-dev` (current inventory: `badge, button, card, combobox, input-group, input, select,
+separator, sheet, skeleton, table, textarea, utils` + their `.test.ts` guards). Writing concrete
+steps against that path now would violate **F-04** (never invent a file path). **Re-run
+`/sdd-spec shadcn-migration-low-confidence` after `120` merges to `main-dev`** to plan FR-1's
+migration with grounded evidence for the primitive it adds; `docs/roadmap/features/merge-order.md`
+should carry this as a registered blocking-dependency row alongside the existing `120` ↔ `121` row
+— this feature's own precedent for the identical situation, see that feature's
+`implementation-spec.md` header. FR-2/FR-3/FR-4 above have no such dependency (`ui/field.tsx` is a
+new primitive this feature adds itself, not one owned by a sibling) and are specced at full breadth
+in Steps 2–8 below.
+
 Because AC-1 still requires each FR's decision recorded in `context.md` *before* any code is
-written for that item, Step 1 remains a `docs` step, now updated to record FR-1's unchanged decline
-and FR-2/FR-3/FR-4's overridden migrate decisions (citing design.md § Round 3 as the P-04 approval
-record). Steps 2–3 add the shared scaffolding both migrations need (dependencies, then the
+written for that item, Step 1 remains a `docs` step, now updated to record FR-1's overridden migrate
+decision (blocked on `120`) alongside FR-2/FR-3/FR-4's overridden migrate decisions (citing
+design.md § Round 3 for FR-2/FR-3/FR-4 and § Round 4 for FR-1 as the P-04 approval records). Steps
+2–3 add the shared scaffolding both migrations need (dependencies, then the
 `ui/field.tsx` primitive) before any call site is touched, per the ledger's 2026-08-05
 (`trader-chart-panel`) trap: Step 2's Instructions install the three packages only and defer the
 exact `useForm`/`Controller`/`zodResolver` call shape to the steps that actually call them, after a
@@ -44,8 +60,8 @@ FR-2/FR-3/FR-4 block.
 
 ## Step Dependencies
 
-- Steps 2, 3, and 4 each require Step 1: AC-1 requires the FR-1/FR-2/FR-3 decisions (now: decline/
-  migrate/migrate) recorded in `context.md` before any code-bearing step runs.
+- Steps 2, 3, and 4 each require Step 1: AC-1 requires the FR-1/FR-2/FR-3 decisions (now: migrate
+  (blocked on `120`)/migrate/migrate) recorded in `context.md` before any code-bearing step runs.
 - Steps 5, 6, and 7 (the three migrations) each require **both** Step 2 (dependencies installed —
   their code imports `react-hook-form`/`zod`/`@hookform/resolvers/zod`) and Step 3 (`ui/field.tsx`
   exists — their JSX renders `Field`/`FieldLabel`/`FieldError`). Steps 2 and 3 do not depend on each
@@ -60,9 +76,11 @@ FR-2/FR-3/FR-4 block.
   finding, 2026-08-09).
 - Step 8 requires Steps 1–7 complete: it is the single final verification gate for the whole
   FR-2/FR-3/FR-4 block.
-- No step depends on sibling feature `120-shadcn-migration-high-confidence` (`ui/alert.tsx`) — FR-1
-  declines regardless of 120's status (design.md § Chosen Approach), so this feature has zero
-  cross-feature merge-order dependency there.
+- **No step (1–8) in this spec depends on sibling feature `120-shadcn-migration-high-confidence`.**
+  FR-1's migration (design.md § Round 4) does depend on `120` shipping `ui/alert.tsx`, but FR-1 has
+  **deliberately no steps in this spec** (see Execution Summary's tranche-split paragraph) — that
+  dependency attaches to a future `/sdd-spec` re-run, not to any step below. Register the `120` ↔
+  `122` dependency in `docs/roadmap/features/merge-order.md`.
 - **Elevated overlap risk with sibling `121-shadcn-migration-medium-confidence`** (draft as of the
   `sdd-review product-spec` session — see `context.md`'s overlap scan): that feature's own FR touches
   `accountShared.tsx:116-167` (`EditCredentialsForm`) for a Collapsible/"Edit keys" expand-collapse
@@ -75,7 +93,7 @@ FR-2/FR-3/FR-4 block.
 
 ---
 
-### Step 1 — docs: Record FR-1/FR-2/FR-3/FR-4 decisions in context.md (Round 3 override)
+### Step 1 — docs: Record FR-1/FR-2/FR-3/FR-4 decisions in context.md (Round 3 + Round 4 overrides)
 
 **Status**: `pending`
 **Service**: `docs/roadmap/features/122-shadcn-migration-low-confidence/`
@@ -85,28 +103,38 @@ FR-2/FR-3/FR-4 block.
 **Reviewers**: none
 
 **Codebase Evidence**:
-- Decisions to transcribe are fully argued in `design.md` § Chosen Approach (lines 18–149), §
-  Rejected Alternatives (lines 158–202), and § Round 3 (lines 204–248) of this feature's own
-  directory — confirmed present via the Read in this session.
+- Decisions to transcribe are fully argued in `design.md` § Chosen Approach (lines 18–149+, FR-1's
+  MIGRATE-blocked-on-120 rewrite included), § Rejected Alternatives, § Round 3, and § Round 4 (the
+  FR-1 override) of this feature's own directory — confirmed present via the Read in this session.
 - AC-1 (`product-spec.md:111-112`): "Each of FR-1/FR-2/FR-3 has a recorded decision (migrate or
   decline) with a one-paragraph rationale in `context.md`, before any code is written for that
   item."
-- `design.md` § Round 3 (lines 204–248) is the live, recorded **P-04** user approval this step
-  transcribes for FR-2/FR-3/FR-4 — the prior implementation-spec.md's Step 1 recorded these as
-  provisional/autonomous (no live user gate); that is now superseded.
+- `design.md` § Round 3 is the live, recorded **P-04** user approval this step transcribes for
+  FR-2/FR-3/FR-4 — the prior implementation-spec.md's Step 1 recorded these as provisional/
+  autonomous (no live user gate); that is now superseded. `design.md` § Round 4 (2026-08-09) is the
+  separate, later live **P-04** user approval this step transcribes for FR-1 — it supersedes the
+  Round 1/2 DECLINE this step's own original text recorded.
+- Confirmed this session: `ls services/xstockstrat-ui/src/components/ui/` still shows no
+  `alert.tsx` — FR-1's migrate decision is recorded now, but its actual code steps stay unspecced
+  (see Execution Summary's tranche-split paragraph and Step Dependencies) until sibling `120` ships
+  it.
 
 **TDD**: `N/A (docs-only, no executable logic)`
 
 **Instructions**:
-Append a `## FR Decisions (AC-1) — Round 3 update` section to `context.md` with one entry per FR,
-each a short paragraph (not a copy-paste of design.md — a reader-facing summary citing it), and an
-explicit note that this supersedes the original Step 1 entry (do not delete the original entry —
-`context.md` is append-only):
+Append a `## FR Decisions (AC-1) — Round 3 + Round 4 update` section to `context.md` with one entry
+per FR, each a short paragraph (not a copy-paste of design.md — a reader-facing summary citing it),
+and an explicit note that this supersedes the original Step 1 entry (do not delete the original
+entry — `context.md` is append-only):
 
-1. **FR-1 — DECLINE, unchanged** (`OrderForm.tsx:216`, `EditOrderDialog.tsx:82`): `ui/alert.tsx`
-   still does not exist in trunk (sibling `120-shadcn-migration-high-confidence` is still
-   `spec-ready`); unaffected by the Round 3 override, which named only the three Form-shaped call
-   sites. No code changes.
+1. **FR-1 — MIGRATE, blocked on sibling `120` (Round 4 override; supersedes the original Round 1/2
+   DECLINE)** (`OrderForm.tsx:216`, `EditOrderDialog.tsx:82`): the user directly overrode Round 1/2's
+   decline and directed migration of both Alert-shaped call sites onto `ui/alert.tsx` (design.md §
+   Round 4). `ui/alert.tsx` still does not exist in trunk today (sibling
+   `120-shadcn-migration-high-confidence` is `implementation-ready`, not `code-completed`/
+   `launched`) — per Constitution F-04, no concrete migration steps are written in this spec; a
+   follow-up `/sdd-spec` run plans them once `120` merges. No code changes in this feature's
+   current 8 steps.
 2. **FR-2 — MIGRATE (Round 3 override; supersedes Round 2's decline)** (`AuthForm.tsx:28-93`,
    `CredentialsForm`): the user directly overrode Round 2's narrower recommendation and directed
    migration of all three Form-shaped call sites (design.md § Round 3). Moves to `useForm` +
@@ -133,7 +161,7 @@ explicit note that this supersedes the original Step 1 entry (do not delete the 
    "fix the spec, don't paper over drift" convention (already applied in recon.md's addendum).
 
 **Verification**:
-`grep -n "## FR Decisions (AC-1) — Round 3 update" docs/roadmap/features/122-shadcn-migration-low-confidence/context.md`
+`grep -n "## FR Decisions (AC-1) — Round 3 + Round 4 update" docs/roadmap/features/122-shadcn-migration-low-confidence/context.md`
 returns one match, and the section contains all four numbered items above (manual read-through —
 this is a docs step, no automated check applies).
 
@@ -666,11 +694,14 @@ it should be unaffected by construction.
 **Codebase Evidence**:
 - AC5 (`product-spec.md:119-120`): "`pnpm lint` and `pnpm build` pass; `pnpm test:e2e` passes for
   every spec covering a touched component." Steps 5–7 each verified their own touched call site;
-  this step is the consolidated final check across all three plus FR-1's (zero-diff) declines.
+  this step is the consolidated final check across all three, plus FR-1 (which this spec produces
+  zero diff for — its migration is unspecced pending sibling `120`, see Execution Summary — not
+  because it declined).
 - Touched-component spec inventory for this block: `e2e/auth.spec.ts` (Step 5, `AuthForm`),
   `e2e/trader/account-selector.spec.ts` (Steps 4, 6, 7 — `AddAccountForm` and
-  `EditCredentialsForm`). FR-1 produced zero diff (Step 1's decision), so `e2e/trader/order-form.spec.ts`
-  and any `EditOrderDialog`-adjacent spec are unaffected by construction — re-run them anyway as a
+  `EditCredentialsForm`). FR-1 produces zero diff in this spec (Step 1 records the migrate decision,
+  but no code steps exist for it yet), so `e2e/trader/order-form.spec.ts` and any
+  `EditOrderDialog`-adjacent spec are unaffected by construction — re-run them anyway as a
   regression backstop, not because this feature touched them.
 - `e2e/trader/orders.spec.ts` exercises account-row-adjacent flows (per the original spec's Step 3
   evidence) — re-run as part of the full `e2e/trader/` directory check below, since `AccountRow`

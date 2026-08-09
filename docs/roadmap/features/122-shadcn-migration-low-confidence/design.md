@@ -1,28 +1,47 @@
 # Design: shadcn-migration-low-confidence
 
 **Created**: 2026-08-08
-**Rounds**: 3 (full; termination: approved — Round 3 is a user-directed override, see § Round 3
-below, not a further adversarial round)
+**Rounds**: 4 (full; termination: approved — Rounds 3 and 4 are user-directed overrides, see §
+Round 3 and § Round 4 below, not further adversarial rounds)
 **Approved by**: Rounds 1–2 were an autonomous synthesis (no `AskUserQuestion`/`Task` tool
 available that session — see the Round 1–2 history preserved in `context.md`). **Round 3 is a
 live, recorded user decision**: the user was shown Round 2's narrower recommendation directly and
-explicitly overrode it to migrate all three call sites onto the full recipe. This satisfies
-Constitution **P-04** as a recorded user approval for FR-2/FR-3/FR-4 — the thing Round 2's Open
-Risks flagged as missing. FR-1 is unaffected by the override (still declined; see below).
-**Grounded in**: recon.md (including its 2026-08-08 Addendum, appended for this round)
+explicitly overrode it to migrate all three Form-shaped call sites onto the full recipe. This
+satisfies Constitution **P-04** as a recorded user approval for FR-2/FR-3/FR-4 — the thing Round 2's
+Open Risks flagged as missing. FR-1 was unaffected by Round 3 (still declined at that point; see
+below). **Round 4 is a second, separate live, recorded user decision**: the user was shown FR-1's
+decline decision directly and explicitly overrode it to migrate both Alert-shaped call sites once
+sibling `120-shadcn-migration-high-confidence` ships `ui/alert.tsx`. This satisfies Constitution
+**P-04** as a recorded user approval for FR-1 — the last of this feature's four FRs to get a live
+user gate.
+**Grounded in**: recon.md (including its 2026-08-08 Addendum, appended for Round 3)
 
 ---
 
 ## Chosen Approach
 
-**FR-1 (Alert-shaped inline messages) — DECLINE both call sites.**
-`OrderForm.tsx:215-217` and `EditOrderDialog.tsx:82` keep their plain `<p>` text unchanged.
-`ui/alert.tsx` does not exist in trunk today (recon.md § FR-1 call sites — sibling
-`120-shadcn-migration-high-confidence` is `spec-ready`, not `code-completed`); hand-authoring an
-Alert-shaped wrapper ahead of 120 risks a second, likely-divergent primitive that 120 would later
-need to reconcile — exactly the near-term duplication the shadcn audit and the DRY guard rail
-exist to avoid. This also matches the audit's own "loose match" rating and FR-1's own example
-rationale (a boxed alert is disproportionate next to a compact order-entry submit button).
+**FR-1 (Alert-shaped inline messages) — MIGRATE both call sites, blocked on sibling `120` shipping
+`ui/alert.tsx` (Round 4 user-directed override; supersedes the Round 1–2 DECLINE below).**
+`OrderForm.tsx:215-217` and `EditOrderDialog.tsx:82` will wrap their existing message text in
+`Alert` once `ui/alert.tsx` exists on `main-dev`. `ui/alert.tsx` does not exist in trunk today
+(recon.md § FR-1 call sites — sibling `120-shadcn-migration-high-confidence` is
+`implementation-ready`, not `code-completed`/`launched`) — see § Round 4 below for the override and
+the resulting cross-feature dependency. The concrete migration steps are deliberately **not**
+written in `implementation-spec.md` yet (Constitution **F-04** — never invent a file path/shape for
+a primitive that doesn't exist); a follow-up `/sdd-spec` run generates them once `120` ships
+`ui/alert.tsx`, mirroring sibling `121-shadcn-migration-medium-confidence`'s own Tranche-2 pattern
+for its FR-4–FR-9 (`121`'s `implementation-spec.md` header).
+
+**FR-1 original Round 1–2 reasoning (DECLINE) — SUPERSEDED by Round 4's user override, kept for the
+record.** Rounds 1–2 concluded, autonomously, that both call sites should keep their plain `<p>`
+text unchanged, because `ui/alert.tsx` did not exist in trunk and hand-authoring an Alert-shaped
+wrapper ahead of 120 risked a second, likely-divergent primitive that 120 would later need to
+reconcile — exactly the near-term duplication the shadcn audit and the DRY guard rail exist to
+avoid; this also matched the audit's own "loose match" rating and FR-1's own example rationale (a
+boxed alert is disproportionate next to a compact order-entry submit button). That reasoning is not
+itself wrong — it is *why* Round 4's migration is sequenced as "blocked on 120," not executed
+immediately by hand-authoring a local wrapper now — it was simply overridden on the end-state
+question (migrate vs. decline) by a decision Rounds 1–2 didn't have the tool to solicit.
 
 **FR-2/FR-3 independence — SUPERSEDED by Round 3's user override.** Round 2 decided each
 independently on its own complexity/duplication merits; the user has since explicitly directed
@@ -141,7 +160,9 @@ corrected: `react-hook-form` + `zod` + `@hookform/resolvers/zod` + `ui/field.tsx
 (`AddAccountForm`/`EditCredentialsForm`, account management panel and full accounts page) and the
 root `/auth/login` + OAuth agent-authorize pages (`AuthForm`'s `CredentialsForm`) —
 already-shipped, already-reachable UI; no new routes, no nav registration needed (C-10(a) does not
-apply). `OrderForm`/`EditOrderDialog` (FR-1) remain declined, unaffected by the override.
+apply). `OrderForm`/`EditOrderDialog` (FR-1) also reach the `/trader` segment (order entry) — the
+migration is now directed (Round 4) but blocked pending sibling `120`'s `ui/alert.tsx`; no concrete
+steps exist for it yet (see § Round 4).
 
 **Regression-test shape**: all three migrated components are JSX with a `useForm` hook, not
 `cva()`-variants functions — none fit the `button.test.ts`/`badge.test.ts` pattern (recon.md's
@@ -188,11 +209,24 @@ AC5.
   onto `react-hook-form`, only its two consumers do, so making it context-aware would add an
   indirection layer with no consumer needing it directly (both bridge via `Controller` at their
   own call site instead).
+- **~~Decline both FR-1 call sites (keep `OrderForm.tsx`/`EditOrderDialog.tsx`'s plain `<p>` text
+  unchanged)~~ — Round 1/2 decision, OVERRULED by Round 4.** Rounds 1–2's reasoning (avoid
+  hand-authoring a divergent primitive ahead of 120; the audit's own "loose match" rating; a boxed
+  alert being disproportionate next to a compact submit button) was sound for an autonomous design
+  decision made without the ability to ask; it is superseded by an explicit user directive to
+  migrate once 120 ships `ui/alert.tsx` — the same category of override that settled FR-2/FR-3/FR-4
+  in Round 3. The underlying near-term-duplication concern is not discarded, only redirected: it is
+  now *why* the migration is sequenced as "blocked on 120" (see next bullet) rather than executed by
+  hand-authoring a local wrapper immediately.
 - **Hand-author a local Alert-shaped wrapper for FR-1 now, ahead of sibling 120** — still rejected,
-  unaffected by the override (FR-1 is not part of the user's directive): would create a second,
-  likely-divergent "Alert" implementation 120 would later need to reconcile or replace; the audit
-  itself rated this a loose match, and the soft dependency on 120 (product-spec.md's own wording)
-  permits declining regardless of 120's status.
+  and still the operative reason FR-1's migration is sequenced as "blocked on 120" rather than
+  executed immediately (Round 4 changed *whether* to migrate, not *how safely* to sequence it,
+  mirroring how Round 3 changed FR-3's scope without touching its own sequencing/testing cautions):
+  hand-authoring now would create a second, likely-divergent "Alert" implementation 120 would later
+  need to reconcile or replace; the audit itself rated this a loose match. product-spec.md's original
+  "soft dependency, decline regardless of 120's status" wording is superseded by Round 4 for the
+  *decline* half of that sentence — declining outright is no longer an option — but the wisdom of not
+  hand-authoring ahead of 120 stands unchanged.
 - **Migrate `EditCredentialsForm` without adding new e2e coverage first (accept the risk)** —
   rejected (Round 3, new alternative): considered as the minimal-diff option once the override put
   this consumer in scope, but rejected because `EditCredentialsForm` submits a mutating call
@@ -247,6 +281,51 @@ tradeoff). Constitution **P-04** is satisfied for FR-2/FR-3/FR-4 as of this roun
 the `EditCredentialsForm` e2e-coverage sequencing decision (§ FR-3 above) should still be surfaced
 in the PR description as a design choice the user did not separately confirm.
 
+FR-1 (`OrderForm.tsx`/`EditOrderDialog.tsx`, declined at the time of this round) was correctly out
+of scope here — the user's Round 3 directive named only the three Form-shaped call sites. FR-1 was
+separately revisited and overridden afterward; see § Round 4 below.
+
+## Round 4 — user-directed override (FR-1)
+
+Rounds 1–2 (`context.md`'s Phase 1 record) concluded, autonomously, that FR-1 should **decline**:
+`OrderForm.tsx:215-217` and `EditOrderDialog.tsx:82` keep their plain `<p>` text, because
+`ui/alert.tsx` did not exist in trunk and hand-authoring a local Alert-shaped wrapper ahead of
+sibling `120-shadcn-migration-high-confidence` risked a second, divergent primitive `120` would
+later need to reconcile. That reasoning was sound as an autonomous decision made without the
+ability to ask (the same caveat that applied to Round 2's FR-2/FR-3 narrowing before Round 3, see
+above) — but it was never a live, recorded user choice under Constitution **P-04**. Round 3 did not
+touch FR-1, since the user's directive at that time named only the three Form-shaped call sites.
+
+**The user was asked directly and overrode the decline.** Shown FR-1's decline decision, the user
+explicitly directed: migrate both `OrderForm.tsx:215-217` and `EditOrderDialog.tsx:82` onto `Alert`
+once sibling `120-shadcn-migration-high-confidence` ships `ui/alert.tsx`. This is not this design
+phase re-arguing itself to a different conclusion — the Round 1/2 reasoning (avoid hand-authoring a
+divergent primitive ahead of 120) remains correct and is *why* the migration is sequenced as
+"blocked on 120" rather than executed immediately; the override changes the end-state decision
+(migrate, not decline) while leaving the sequencing concern (don't hand-author ahead of 120) intact.
+Per this repo's root behavior 1 ("don't assume — ask, and surface tradeoffs"), once asked, the
+answer governs.
+
+**`ui/alert.tsx` still does not exist in trunk as of this round** — sibling
+`120-shadcn-migration-high-confidence` is `implementation-ready`, not `code-completed`/`launched`
+(re-confirmed this session: `ls services/xstockstrat-ui/src/components/ui/` shows no `alert.tsx`
+among `badge, button, card, combobox, input-group, input, select, separator, sheet, skeleton,
+table, textarea, utils`). Per Constitution **F-04** (never invent a file path) and this repo's own
+established precedent for exactly this situation — sibling `121-shadcn-migration-medium-confidence`'s
+`implementation-spec.md` deliberately does **not** spec concrete steps for its own FR-4 through FR-9,
+which consume six primitives `120` hasn't shipped yet, instead documenting the tranche split in its
+header and leaving a fresh `/sdd-spec` run for after `120` merges — this design applies the
+identical pattern to FR-1: the migrate decision is recorded here and in `product-spec.md`/
+`context.md` now, but `implementation-spec.md` gets no new steps citing `ui/alert.tsx`'s exact
+shape/exports until `120` actually ships it. `docs/roadmap/features/merge-order.md` should carry a
+`120` ↔ `122` blocking-dependency row alongside the existing `120` ↔ `121` row (reported to the
+orchestrating session, not written directly — see this session's final report).
+
+This satisfies Constitution **P-04** as a recorded user approval for FR-1 — the last of this
+feature's four FRs to get a live user gate (FR-2/FR-3/FR-4 got theirs in Round 3). No further
+`AskUserQuestion` gate is needed before a future `/sdd-spec` run plans FR-1's concrete steps once
+`120` ships `ui/alert.tsx`.
+
 ## Open Risks
 
 - [x] ~~FR-2/FR-3 independence and the FR-4 narrowing are provisional, not user-confirmed~~ —
@@ -275,12 +354,19 @@ in the PR description as a design choice the user did not separately confirm.
   § FR-2 above: no new user-visible behavior is introduced that would need new coverage), but if a
   reviewer disagrees, adding a minimal DOM-level e2e spec for the login form is the fallback,
   flagged here rather than silently assumed sufficient.
+- [ ] **FR-1's migration is blocked on sibling `120-shadcn-migration-high-confidence` shipping
+  `ui/alert.tsx`** — resolved as a *decision* by Round 4 (migrate, not decline), but not yet
+  *executable*: `ui/alert.tsx` does not exist on `main-dev` today, so no concrete
+  `implementation-spec.md` steps can be written for it without inventing a file path/shape
+  (Constitution F-04). A follow-up `/sdd-spec` run is required once `120` merges to `main-dev` and
+  `ui/alert.tsx` actually exists, mirroring sibling `121`'s Tranche-2 pattern for its own FR-4–FR-9.
+  `docs/roadmap/features/merge-order.md` should carry a `120` ↔ `122` blocking-dependency row.
 
 ## Constitution Rules Touched
 
-- `C-11` — honored: this design phase (`/sdd-design` full mode, Rounds 1–2, plus the Round 3
-  user-directed override recorded here) ran before any implementation write, per the mandatory SDD
-  entry point.
+- `C-11` — honored: this design phase (`/sdd-design` full mode, Rounds 1–2, plus the Round 3 and
+  Round 4 user-directed overrides recorded here) ran before any implementation write, per the
+  mandatory SDD entry point.
 - `C-14` — honored: Chosen Approach states the consumer surface (`/trader` segment plus the root
   `/auth/login` + OAuth agent-authorize pages, all already-reachable, no new routes) for every FR
   decision, migrate or decline.
@@ -295,22 +381,27 @@ in the PR description as a design choice the user did not separately confirm.
 - `P-02` — **Rounds 1–2 not fully honored in the mechanical sense**: no `Task` tool was available to
   spawn isolated `design-proposer`/`design-adversary` subagents, so both roles were argued directly
   by the orchestrating session instead of two genuinely isolated agents. The two-round,
-  propose→attack→synthesize structure was still followed in full (see `context.md`). Round 3 is not
-  an adversarial round (see above), so P-02 doesn't apply to it either way.
-- `P-04` — **now honored** for FR-2/FR-3/FR-4: Round 3 is a live, recorded user decision that
-  overrides Round 2's autonomous synthesis. This is exactly the kind of confirmation Round 2's own
-  Open Risks flagged as missing (the prior version of this file said "not honored as a live user
-  gate" — that gap is what Round 3 closes for these three FRs; FR-1's "decline" call remains a
-  Round 1/2 self-run synthesis, not a live-gated one). **Note (2026-08-09 cross-check audit)**: P-04
-  also requires the phase-gate transition be recorded as a `feature.md` Status History row, not only
-  a `context.md` session entry — `feature.md`'s history table was missing the
-  `design-approved → implementation-ready` row the `/sdd-spec` session's `context.md` entry
-  describes; added retroactively (see `feature.md`).
+  propose→attack→synthesize structure was still followed in full (see `context.md`). Rounds 3 and 4
+  are not adversarial rounds (see above), so P-02 doesn't apply to either of them either way.
+- `P-04` — **now honored for all four FRs**: Round 3 is a live, recorded user decision that
+  overrides Round 2's autonomous synthesis for FR-2/FR-3/FR-4; Round 4 is a second, separate live,
+  recorded user decision that overrides Rounds 1–2's autonomous synthesis for FR-1. This is exactly
+  the kind of confirmation Round 2's own Open Risks flagged as missing (the prior version of this
+  file said "not honored as a live user gate" — Round 3 closed that gap for three FRs, Round 4
+  closes it for the fourth). **Note (2026-08-09 cross-check audit)**: P-04 also requires the
+  phase-gate transition be recorded as a `feature.md` Status History row, not only a `context.md`
+  session entry — `feature.md`'s history table was missing the `design-approved →
+  implementation-ready` row the `/sdd-spec` session's `context.md` entry describes; added
+  retroactively (see `feature.md`).
 - `P-06` (red-before-green) — **honored, and previously uncited despite being this design's central
   mechanism**: Step 4 (a new characterization test, proven green against pre-migration code) gates
   Step 7 (`EditCredentialsForm`'s migration) — the `tdd-gate.md` refactor escape hatch, cited by name
   11 times across `design.md`/`implementation-spec.md`, is precisely P-06's documented alternative
   to literal red-then-green for a behavior-preserving change. Added to this list 2026-08-09 (round-4
   cross-check audit finding) — the reasoning was always correct, only the ID citation was missing.
-- `F-11` (Floor) — no Floor breach identified in either round. This is a client-side UI wiring
+- `F-04` (never invent a file path) — **honored by Round 4's own sequencing**: FR-1's migrate
+  decision is recorded now, but no `implementation-spec.md` step cites `ui/alert.tsx`'s exact
+  shape/exports, since that file does not exist on `main-dev` yet. This mirrors sibling `121`'s
+  Tranche-2 pattern for its own FR-4–FR-9 (see § Round 4 above).
+- `F-11` (Floor) — no Floor breach identified in any round. This is a client-side UI wiring
   change with no DB/proto/migration/direct-push surface.

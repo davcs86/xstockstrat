@@ -270,3 +270,67 @@
   the step-count change, no lifecycle transition), and this file were touched.
 - No git commands were run this session (per task constraint) — no branch/commit/push performed.
 - Status: `implementation-ready` (unchanged — this was a spec revision, not a new SDD phase).
+
+## Session 2026-08-09 — user-directed design override (Round 4) — FR-1
+
+- **Trigger**: FR-1 (`OrderForm.tsx:215-217`, `EditOrderDialog.tsx:82`) was previously decided
+  DECLINE both call sites (Rounds 1–2, self-run, no `AskUserQuestion` tool available in that
+  session — see the "sdd-design" session entry above). The user has now been asked directly and
+  overridden this decision: **migrate both to `Alert` once sibling
+  `120-shadcn-migration-high-confidence` ships `ui/alert.tsx`.** This entry documents that override
+  and everything it changed, mirroring how sibling `121-shadcn-migration-medium-confidence`'s own
+  Round 3 override (its FR-13) is documented in its `context.md` — same tone/format, applied to this
+  feature's FR-1.
+- **The dependency is real and unmet today**: re-confirmed this session via `ls
+  services/xstockstrat-ui/src/components/ui/` — `alert.tsx` is not present (current inventory:
+  `badge, button, card, combobox, input-group, input, select, separator, sheet, skeleton, table,
+  textarea, utils` + their `.test.ts` guards). Sibling `120-shadcn-migration-high-confidence`, the
+  feature that adds `ui/alert.tsx` (its FR-1–FR-4/FR-7–FR-9 batch), is `implementation-ready` —
+  not `code-completed`/`launched`.
+- **Pattern applied**: per Constitution **F-04** (never invent a file path) and this repo's own
+  established precedent for exactly this situation — sibling `121`'s `implementation-spec.md`
+  deliberately does **not** spec concrete steps for its own FR-4 through FR-9 (which consume six
+  `120`-owned primitives), instead documenting the tranche split in its header and leaving a fresh
+  `/sdd-spec` run for after `120` merges — this session applied the identical pattern to FR-1: the
+  migrate decision is recorded now, in `design.md`/`product-spec.md`/`context.md`/`feature.md`, but
+  no new `implementation-spec.md` steps cite `ui/alert.tsx`'s exact shape/exports. A follow-up
+  `/sdd-spec shadcn-migration-low-confidence` run is needed once `120` merges to `main-dev` and
+  `ui/alert.tsx` actually exists.
+- **Files changed this session** (all within this feature's own directory; no git commands run, per
+  task constraint):
+  - `design.md` — FR-1's Chosen Approach rewritten from DECLINE to MIGRATE-blocked-on-120; the
+    original Round 1/2 DECLINE reasoning is preserved (not deleted), marked superseded; added a
+    `## Round 4 — user-directed override` section (mirroring § Round 3's structure) recording the
+    override, the re-confirmed `ui/alert.tsx` absence, and the F-04/Tranche-split reasoning; updated
+    Rejected Alternatives with a new `~~Decline both FR-1 call sites~~ — OVERRULED by Round 4` entry
+    (the "hand-author ahead of 120" rejection itself stays rejected, now framed as the reason the
+    migration is *sequenced* as blocked-on-120 rather than as the reason to decline); updated
+    Consumer Surface, Open Risks (new unresolved item for the `120` dependency), and Constitution
+    Rules Touched (`P-04` now honored for all four FRs; added `F-04`; header Rounds count 3 → 4).
+  - `product-spec.md` — FR-1's text rewritten from "evaluate... adopt only if..." to the migrate
+    decision plus the `120` dependency; Affected Services gained a note that `ui/alert.tsx` becomes
+    affected once FR-1 unblocks; Open Questions gained a new resolved entry recording the override.
+  - `implementation-spec.md` — **no new steps; step count stays 8.** Header gained a "Last Updated"
+    note; Execution Summary gained a paragraph documenting the FR-1 tranche split (mirroring `121`'s
+    header wording); Step Dependencies' stale "FR-1 declines, zero cross-feature dependency" line was
+    corrected to state the dependency is real but attaches to a future `/sdd-spec` re-run, not to any
+    of the 8 existing steps; Step 1's Codebase Evidence/Instructions/Verification were updated to
+    record the FR-1 override entry alongside the FR-2/FR-3/FR-4 entries (append-only `context.md`
+    section header renamed `## FR Decisions (AC-1) — Round 3 + Round 4 update` for this run's
+    transcription, done in this same session as part of the actual Step-1 execution — see below);
+    Step 8's Codebase Evidence corrected "FR-1 (zero-diff) declines" language to "FR-1 produces zero
+    diff in this spec because it's unspecced, not because it declined."
+  - `feature.md` — added a Status History row for this override (no lifecycle transition —
+    `implementation-ready` unchanged, same convention `121` used for its own Round 3
+    implementation-spec amendment); updated `**Last Updated**`; Next Action gained a note about the
+    future `/sdd-spec` re-run needed for FR-1.
+  - `context.md` (this file) — this entry.
+- **Recommended `merge-order.md` entry (not written this session, per task constraint — reported to
+  the orchestrating session)**: a new `120` ↔ `122` blocking-dependency row, mirroring the existing
+  `120` ↔ `121` row registered for `121`'s own FR-4–FR-9 Tranche 2 — `120-shadcn-migration-high-confidence`
+  must merge to `main-dev` (and ship `ui/alert.tsx`) before `122-shadcn-migration-low-confidence`'s
+  FR-1 can be specced and executed. This feature's other seven steps (FR-2/FR-3/FR-4, Steps 1–8) have
+  no such dependency and are not blocked by this row.
+- No git commands were run this session (per task constraint) — no branch/commit/push performed.
+- Status: `implementation-ready` (unchanged — this was a design/spec amendment, not a new SDD
+  phase).

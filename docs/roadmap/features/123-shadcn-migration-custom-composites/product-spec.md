@@ -43,7 +43,13 @@ that becomes an in-scope fix; otherwise this FR is a documentation-only close-ou
 FR-2. Add `src/components/ui/chart.tsx` (`npx shadcn@latest add chart` against the existing
 `components.json` preset — the official shadcn `Chart` primitive: `ChartContainer` +
 `ChartTooltipContent` + `ChartLegendContent`, a thin composition layer over `recharts` driven by CSS
-custom properties, not a wrapper that locks out `recharts`'s own API).
+custom properties, not a wrapper that locks out `recharts`'s own API). **Bump `recharts` to v3 repo-wide
+as part of this FR** (2026-08-09, user-directed override — `design.md` § Round 4): the shadcn `chart`
+registry item targets `recharts@3.8.0`, and this repo's existing `recharts@^2.12.7` install predates it;
+run the CLI as-is against the bumped version rather than hand-adapting the registry file against v2.
+This touches the two already-shipped `recharts` consumers (`EquityCurveChart.tsx`, `insights/page.tsx`
+— see FR-3 and new FR-12), not just this new file; `design.md` § Round 4 records the concrete
+v3-breaking-change exposure found in each.
 
 FR-3. Migrate `src/components/insights/EquityCurveChart.tsx` (composed `recharts` line/scatter chart
 with a hand-rolled `CurveTooltip`) onto `ui/chart.tsx`'s `ChartContainer`/`ChartTooltipContent`,
@@ -112,6 +118,16 @@ FR-11. Replace `StrategyWizard.tsx:159-178`'s hand-rolled `<ol>` step indicator 
 complete/upcoming tone via a `cn()` ternary) with `Questionnaire.Progress` (or the composed shell
 resulting from FR-10's decision).
 
+### Dashboard second-chart consolidation (added 2026-08-09, user-directed fold-in)
+
+FR-12. Migrate `src/app/insights/page.tsx:176-199`'s dashboard "Score Trend" `LineChart` (a second,
+independent hand-rolled `recharts` chart — same charting-fragmentation shape FR-2's Problem Statement
+describes, discovered during `/sdd-design` recon but originally left as a `## Deferred Item` pending
+confirmation) onto `ui/chart.tsx`'s `ChartContainer`/`ChartTooltipContent`, same pattern as FR-3/FR-4.
+The user was asked directly and confirmed folding this into the current feature rather than deferring it
+to a later one (`design.md` § Round 4). Single series (`score`), reuses the `useStrategies()` data this
+page already fetches — no new data-fetching hook, no dynamic per-symbol config.
+
 ## Out of Scope
 
 - The high/medium/low-confidence occurrences already covered by
@@ -136,10 +152,12 @@ resulting from FR-10's decision).
 ## Affected Services
 
 - `xstockstrat-ui` — `src/components/insights/{EquityCurveChart,FormulaRunResult,OutputEditor,
-  ParameterEditor,RuleEditor,StrategyWizard}.tsx`, `src/components/trader/ChartPanel.tsx` (FR-5
-  decision only), `src/hooks/useListEditor.ts`; new files `src/components/ui/chart.tsx`,
-  `src/components/shared/RepeatableRowList.tsx`, and (pending FR-9's install-path confirmation) either
-  `src/components/ui/questionnaire.tsx` or a new `@shadcn/react` dependency in `package.json`.
+  ParameterEditor,RuleEditor,StrategyWizard}.tsx`, `src/app/insights/page.tsx` (FR-12, added
+  2026-08-09), `src/components/trader/ChartPanel.tsx` (FR-5 decision only), `src/hooks/useListEditor.ts`,
+  `package.json`/`pnpm-lock.yaml` (FR-2's repo-wide `recharts` v2→v3 bump, added 2026-08-09); new files
+  `src/components/ui/chart.tsx`, `src/components/shared/RepeatableRowList.tsx`, and (pending FR-9's
+  install-path confirmation) either `src/components/ui/questionnaire.tsx` or a new `@shadcn/react`
+  dependency in `package.json`.
 
 ## Consumer Surface(s)
 
@@ -147,9 +165,9 @@ _Constitution **C-14**._
 
 - [x] **UI** — `xstockstrat-ui` `/insights` segment: the strategy wizard (`strategies/new`), formula
   workspace (`OutputEditor`/`ParameterEditor` consumers), rule editor (used by both formula and
-  strategy authoring), backtest equity-curve display, formula run-result sparkline. `/trader` segment
-  only if FR-5 decides to touch `ChartPanel.tsx`. All within already-shipped, already-reachable pages —
-  no new routes.
+  strategy authoring), backtest equity-curve display, formula run-result sparkline, and (FR-12, added
+  2026-08-09) the `/insights` dashboard's "Score Trend" card. `/trader` segment only if FR-5 decides to
+  touch `ChartPanel.tsx`. All within already-shipped, already-reachable pages — no new routes.
 - [ ] **Agent** — not applicable.
 - [ ] **None**.
 
@@ -177,8 +195,10 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 1. `context.md` records the Combobox close-out (FR-1) with confirmation that all three call sites use
    the current compound API — or, if a stray old-API call site is found, a fix for it.
-2. `src/components/ui/chart.tsx` exists; `EquityCurveChart.tsx` and `FormulaRunResult.tsx`'s sparkline
-   both render through it with no hand-rolled tooltip/SVG chart code remaining in either file.
+2. `src/components/ui/chart.tsx` exists; `EquityCurveChart.tsx`, `FormulaRunResult.tsx`'s sparkline,
+   and (FR-12, added 2026-08-09) `insights/page.tsx`'s "Score Trend" chart all render through it with no
+   hand-rolled tooltip/SVG/`contentStyle`-prop chart code remaining in any of the three. `recharts` is
+   `^3.8.0` (or later 3.x) repo-wide in `package.json` (FR-2, added 2026-08-09) — not `^2.12.7`.
 3. FR-5's `lightweight-charts` keep-vs-replace decision is recorded in `design.md` with rationale; if
    "keep," `services/xstockstrat-ui/CLAUDE.md` § Styling documents it as a sanctioned exception.
 4. `src/components/shared/RepeatableRowList.tsx` exists; `OutputEditor.tsx`, `ParameterEditor.tsx`, and
@@ -193,12 +213,14 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
    `JSON`-mode toggle button and `getByLabel('Entry rule JSON')`/`'Exit rule JSON')`),
    `e2e/insights/backtest-coverage.spec.ts` (`getByTestId('equity-curve-chart')`), and
    `e2e/trader/chart-panel.spec.ts` (`getByTestId('chart-container')` — see Open Questions for why this
-   spec also bears on the FR-5 decision). `FormulaRunResult.tsx`'s sparkline and
-   `OutputEditor.tsx`/`ParameterEditor.tsx`'s row add/move/remove controls have **no e2e selector
-   coverage today** (confirmed by grep — `e2e/insights/formulas.spec.ts` never interacts with a formula
-   row), so FR-4 and FR-8's migrations for those three files rely on manual verification, not e2e
-   regression protection; `/sdd-design` or `/sdd-spec` should flag this gap explicitly rather than
-   silently assume e2e coverage exists.
+   spec also bears on the FR-5 decision). `FormulaRunResult.tsx`'s sparkline,
+   `OutputEditor.tsx`/`ParameterEditor.tsx`'s row add/move/remove controls, and (FR-12, added
+   2026-08-09) `insights/page.tsx`'s "Score Trend" chart have **no e2e selector coverage today**
+   (confirmed by grep — `e2e/insights/formulas.spec.ts` never interacts with a formula row; a repo-wide
+   grep for "Score Trend"/"chartData"/"topStrategy" across `e2e/` returns zero matches), so FR-4, FR-8,
+   and FR-12's migrations for those four files rely on manual verification, not e2e regression
+   protection; `/sdd-design` or `/sdd-spec` should flag this gap explicitly rather than silently assume
+   e2e coverage exists.
 
 ## Open Questions
 
