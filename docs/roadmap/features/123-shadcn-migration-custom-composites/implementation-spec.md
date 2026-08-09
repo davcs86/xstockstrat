@@ -393,7 +393,7 @@ pnpm build
 
 ### Step 6 — docs: FR-5 record the `lightweight-charts` "keep" decision as a sanctioned exception
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/CLAUDE.md` — modify (§ Styling)

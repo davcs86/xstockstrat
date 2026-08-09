@@ -532,3 +532,11 @@
   manifest, no TS errors. Manual dev-server verification deferred to Step 15's whole-feature manual
   check (per this step's own Verification note — no e2e coverage exists to gate on individually).
 - Files modified: `src/components/insights/FormulaRunResult.tsx`
+
+### Step 6 — FR-5 record `lightweight-charts` "keep" decision [done]
+- No-op confirmation, per the step's own instructions: `services/xstockstrat-ui/CLAUDE.md` § Styling
+  already carries the sanctioned-exception paragraph verbatim (applied 2026-08-08, per the earlier
+  cross-check audit session) — re-confirmed present this session via grep.
+- `git diff --stat` on `ChartPanel.tsx`/`useCandlestickChart.ts` — no changes to either, confirming
+  the "keep" decision was not accompanied by a stray edit.
+- Files modified: none
