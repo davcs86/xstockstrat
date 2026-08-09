@@ -238,3 +238,30 @@ they are a fully-reasoned recommendation, not a confirmed one.
   feature's Round 3 record; this session only brought `implementation-spec.md` (and the one
   `feature.md` cross-reference) into agreement with them.
 - No git commands were run this session.
+
+## Session 2026-08-09 — /sdd-execute sequential — Tranche 2 spec (FR-4 through FR-9)
+
+- **Trigger**: user, mid-execution of this feature (branch stacked on `120-shadcn-migration-
+  high-confidence`, which had just reached `code-completed`), directed a full re-spec of FR-4
+  through FR-9 rather than deferring them to a later `/sdd-spec` run — the six primitives they need
+  (`alert-dialog`/`tabs`/`toggle-group`/`alert`/`checkbox`/`accordion`) are confirmed present on
+  this stacked branch (`ls src/components/ui/`, this session).
+- Read every FR-4–FR-9 target file fresh (not recon.md citations — recon.md predates this tranche)
+  and added Steps 22-37 to `implementation-spec.md` (see file's own Tranche 2 section for the full
+  evidence). Total steps 21 → 37.
+- **Notable finding**: FR-9's product-spec description ("row-click reveals a detail panel") doesn't
+  structurally fit `Accordion` — `LiveStrategiesPanel.tsx`'s detail panel is one shared panel below
+  the whole table (driven by a single `selectedId`), not per-row inline content, and an
+  `AccordionContent` can't render outside a `<table>` while its `Item` wraps a `<tr>`. Substituted
+  `Collapsible` (added by this same feature's FR-3) instead — same panel-open/close outcome, honest
+  primitive fit. Logged as a spec-time correction, not a design.md revision (design.md never
+  detailed FR-9 to this level).
+- **e2e-risk findings** (grounded, not assumed): 3 of FR-4's 5 `window.confirm()` sites have
+  `page.on('dialog')` interception (will break, needs red/green — Steps 23-24); FR-5's
+  `env-mode-switcher.spec.ts` and FR-6's `opportunities.spec.ts` are expected-pass (Tabs `asChild`
+  preserves the child `Link`'s `role="link"`; Radix `ToggleGroup type="multiple"` keeps
+  `role="button"`, confirmed by reading `@radix-ui/react-toggle-group`'s source directly, mirroring
+  feature 120's Step 9 finding for `type="single"`'s `role="radio"`) but still get a real red/green
+  pair per P-06's mandatory-even-when-expected-to-pass rule; FR-7/FR-8/FR-9 have no e2e-risk.
+- No status change to `feature.md` (still `implementation-ready` — this is a spec amendment, not a
+  lifecycle transition; execution starts fresh against all 37 steps next).
