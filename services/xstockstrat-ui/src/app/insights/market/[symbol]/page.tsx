@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { ConnectError } from '@connectrpc/connect';
 import { marketDataClient } from '@/lib/browserClients/marketDataClient';
 import { type Timeframe, TIMEFRAMES, TIMEFRAME_ENUM, type Bar, mapBars } from '@/lib/chart';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useCandlestickChart } from '@/hooks/useCandlestickChart';
 import { SignalReadiness } from '@/components/insights/SignalReadiness';
 import { SignalOrderTicket } from '@/components/insights/SignalOrderTicket';
@@ -180,21 +181,15 @@ export default function MarketSymbolPage() {
               <CardHeader>
                 <div className="flex items-center justify-between flex-wrap gap-3">
                   <CardTitle className="text-base">Price</CardTitle>
-                  <div className="flex gap-1">
-                    {TIMEFRAMES.map(({ value, label }) => (
-                      <button
-                        key={value}
-                        onClick={() => setTimeframe(value)}
-                        className={`px-2.5 py-1 rounded text-xs font-mono transition-colors ${
-                          timeframe === value
-                            ? 'bg-primary text-primary-foreground'
-                            : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
+                  <Tabs value={timeframe} onValueChange={(v) => setTimeframe(v as Timeframe)}>
+                    <TabsList>
+                      {TIMEFRAMES.map(({ value, label }) => (
+                        <TabsTrigger key={value} value={value}>
+                          {label}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </Tabs>
                 </div>
               </CardHeader>
               <CardContent>

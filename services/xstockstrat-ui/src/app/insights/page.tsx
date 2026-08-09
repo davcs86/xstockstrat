@@ -15,6 +15,7 @@ import { AppShell } from '@/components/insights/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { AccountPortfolioSelector } from '@/components/insights/AccountPortfolioSelector';
 import { useStrategies } from '@/hooks/useStrategies';
 import { useStrategyDefinitions } from '@/hooks/useStrategyDefinitions';
@@ -42,7 +43,7 @@ function DashboardSkeleton() {
                 <CardTitle>Equity Curve</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="h-60 rounded-md bg-secondary/40 animate-pulse" />
+                <Skeleton className="h-60" />
               </CardContent>
             </Card>
           </div>

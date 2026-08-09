@@ -8,9 +8,11 @@ also recorded at the root.
 
 | What the docs say | What the code does | Evidence | Suggested action |
 |---|---|---|---|
-| CLAUDE.md documents 9 `ingest.signals.*` config keys (per-source enabled, default_window_days, default_conviction, dedup_window_hours) | None are read anywhere | `CLAUDE.md` config table (grep zero in `app/`) | Wire them or delete |
-| `ingest.backfill.default_timeframe` documented | No reader; servicer falls back to `"1d"` literally | `CLAUDE.md` config table vs `servicer.py:64` | Remove the key |
-| CLAUDE.md "Ledger Events Emitted" lists `ingest.data.normalized`; `NormalizeRawData` docstring says "into ledger events" | Handler only counts rows; no ledger `AppendEvent`, no persistence | `CLAUDE.md` vs `servicer.py:599-611` | Implement or correct |
+| `ingest.backfill.default_timeframe` documented | No reader; servicer falls back to `"1d"` literally | `CLAUDE.md` config table vs `servicer.py:114,490` | Remove the key |
+| CLAUDE.md "Ledger Events Emitted" lists `ingest.data.normalized`; `NormalizeRawData` docstring says "into ledger events" | Handler only counts rows; no ledger `AppendEvent`, no persistence | `CLAUDE.md` vs `servicer.py:665-678` | Implement or correct |
+
+**Reframed (2026-08-09 refresh, no longer accurate as originally written):**
+- ~~CLAUDE.md documents 9 `ingest.signals.*` config keys (per-source enabled, default_window_days, default_conviction, dedup_window_hours) — none read anywhere~~ — **stale premise**: CLAUDE.md today documents only **one** `ingest.signals.*` key (`dedup_window_hours`), and it **is** read (`app/config/watcher.py:163-164`) and consumed (`servicer.py:803`, feature 111's dedup claim). The other 8 keys this row originally described are no longer in CLAUDE.md at all — there is nothing left to wire or delete. Dropped.
 
 ## Dead / orphaned code
 
@@ -23,7 +25,7 @@ also recorded at the root.
 
 | Issue | Impact | Evidence |
 |---|---|---|
-| **`ConfigWatcher` carries indicators identity**: module docstring "Config watcher for xstockstrat-**indicators**" and `client_id=f"indicators-{id(self)}"` | ingest registers with the config service under an "indicators-…" client id (copy-paste) | `app/config/watcher.py:36` |
+| **`ConfigWatcher` carries indicators identity**: module docstring "Config watcher for xstockstrat-**indicators**" and `client_id=f"indicators-{id(self)}"` | ingest registers with the config service under an "indicators-…" client id (copy-paste) | `app/config/watcher.py:61` |
 
 ---
 _Surfaced by [context-forge](https://github.com/davcs86/agent-plugins). Defects to action, not rules. Re-run `/context-constitution` to refresh._

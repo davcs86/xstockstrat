@@ -12,9 +12,10 @@ import {
   buildConcentrationFlag,
   type QueueLike,
 } from '@/lib/copilot';
-import { cn } from '../ui/utils';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { Badge } from '../ui/badge';
+import { Alert, AlertTitle, AlertDescription } from '../ui/alert';
 
 // The browser supplies a copilot-prefixed stream key; the BFF rewrites it to the per-user
 // thread server-side (the client never learns the user id). Any copilot: value works.
@@ -121,9 +122,9 @@ export function CopilotRail() {
         <div className="flex items-center gap-2">
           <Sparkle weight="fill" className="h-4 w-4 text-primary" />
           <span className="text-sm font-semibold">Copilot</span>
-          <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+          <Badge variant="secondary" className="text-[10px] uppercase tracking-wide">
             beta
-          </span>
+          </Badge>
         </div>
         <Button
           variant="ghost"
@@ -147,21 +148,16 @@ export function CopilotRail() {
         </section>
 
         {flag && (
-          <section
-            className={cn(
-              'rounded-md border p-3',
-              flag.level === 'watch' ? 'border-yellow-500/40 bg-yellow-500/5' : 'bg-background',
-            )}
+          <Alert
+            variant={flag.level === 'watch' ? 'warning' : 'default'}
             data-testid="copilot-concentration"
           >
-            <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              {flag.level === 'watch' && (
-                <Warning weight="fill" className="h-3.5 w-3.5 text-yellow-400" />
-              )}
+            <AlertTitle>
+              {flag.level === 'watch' && <Warning weight="fill" className="h-3.5 w-3.5" />}
               Concentration
-            </p>
-            <p className="text-sm">{flag.text}</p>
-          </section>
+            </AlertTitle>
+            <AlertDescription>{flag.text}</AlertDescription>
+          </Alert>
         )}
 
         <section>

@@ -132,17 +132,17 @@ test.describe('ChartPanel component — trading dashboard', () => {
     // no backend support and are intentionally not offered.
     const labels = ['15m', '1h', '1d'];
     for (const label of labels) {
-      await expect(page.getByRole('button', { name: label, exact: true })).toBeVisible({
+      await expect(page.getByRole('tab', { name: label, exact: true })).toBeVisible({
         timeout: 10000,
       });
     }
     for (const label of ['10m', '30m', '1w', '1mo']) {
-      await expect(page.getByRole('button', { name: label, exact: true })).toHaveCount(0);
+      await expect(page.getByRole('tab', { name: label, exact: true })).toHaveCount(0);
     }
   });
 
   test('1d is the active timeframe by default', async ({ page }) => {
-    const dayButton = page.getByRole('button', { name: '1d' });
+    const dayButton = page.getByRole('tab', { name: '1d' });
     await expect(dayButton).toBeVisible({ timeout: 10000 });
   });
 
@@ -203,7 +203,7 @@ test.describe('ChartPanel component — trading dashboard', () => {
       page.locator('[data-testid="chart-container"] .tv-lightweight-charts'),
     ).toBeVisible({ timeout: 10000 });
 
-    await page.getByRole('button', { name: '1h', exact: true }).click();
+    await page.getByRole('tab', { name: '1h', exact: true }).click();
 
     // 1h is the timeframe clicked above — hardcoded, not derived from TIMEFRAME_ENUM, so this
     // can never assert the map against itself (feature 080 AC-8).

@@ -16,27 +16,9 @@ Operational runbooks, one-time setup guides, implementation roadmap, and reusabl
 
 ---
 
-## Common Scenarios → Right File
+## Finding the Right File
 
-| I need to… | File |
-|---|---|
-| Build or modify a Next.js frontend (auth, middleware, routes) | `patterns/frontend-auth.md` |
-| Other Next.js frontend work (basePath, Suspense, Radix hydration, middleware matcher, app icons, PR stacking) | `patterns/nextjs-frontends.md` |
-| Understand the legacy nginx routing (removed by feature 045) | `patterns/nginx-routing.md` (deprecated — historical reference) |
-| Add header propagation to a new backend service | `patterns/header-propagation.md` |
-| Triage and fix a bug (SEV-1 hotfix, config fix, or SDD path) | `runbooks/bug-triage.md` |
-| View the production hotfix incident history | `runbooks/hotfix-log.md` |
-| Roll out a config change safely | `runbooks/config-rollout.md` |
-| Understand the approval process for proto/config changes | `runbooks/approval-flow.md` |
-| Add Polygon, Tiingo, or a newsletter signal source | `runbooks/add-data-source.md` |
-| Backfill historical OHLCV bars | `runbooks/historical-backfill.md` |
-| Build and register a custom indicator formula | `runbooks/indicator-builder.md` |
-| Add mocked/dummy data to a test (fixtures, catalog, `/sdd-qa` skill) | `patterns/test-data-inventory.md` |
-| Manage a v1→v2 proto migration | `runbooks/proto-versioning.md` |
-| Start a new feature branch or deploy to production | `runbooks/feature-workflow.md` |
-| Seed golang-migrate state on an existing database | `runbooks/db-seed-migration-state.md` |
-| Set up Alpaca API keys | `setup/alpaca.md` |
-| Create DO App Platform dev/prod apps | `setup/digitalocean.md` |
-| Wire OpenTelemetry to Grafana Cloud | `setup/grafana-cloud.md` |
-| See the full implementation plan and phase status | `roadmap/implementation-roadmap.md` |
-| Understand why a Phase 3–7 service was built a certain way | `roadmap/phase[3-7]-deviations.md` |
+Every scenario below routed to one file inside one of the four subdirectories above — and each of
+those subdirectories' own `CLAUDE.md` index already maps its files to use cases at least as
+specifically. Open the subdirectory that matches your task (Quick Reference table above) and read
+its index rather than a separate scenario table here.

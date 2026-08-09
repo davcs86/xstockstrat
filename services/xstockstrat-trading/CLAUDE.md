@@ -84,6 +84,7 @@ All config values are served by **xstockstrat-config** namespace `trading`.
 | `trading.reconciliation.interval_ms` | float | `60000` | Interval for the broker-state-reconciliation poller (`reconcileTick`). Read live on every cycle. |
 | `trading.reconciliation.grace_ticks` | int | `1` | Consecutive ticks a mismatch must persist before it's a real finding (not a benign propagation delay). |
 | `trading.reconciliation.systemic_threshold_pct` | float | `0.5` | Share of accounts erroring/unprotected in one tick that escalates to `platform.trading_state=REDUCE_ONLY`. |
+| `trading.reconciliation.halted_poll_interval_ms` | float | `300000` (5 min) | Cooldown between `reconcileTick` broker polls (`ListOrders`/`GetPositions`) for an **already-halted** account — slower than the ordinary `interval_ms` cadence, since a halted account can't place new orders regardless (`isAccountHalted` gates `PlaceOrder`/`ReplaceOrder`) and only needs occasional re-observation to notice broker-side drift (e.g. a manual dashboard order). Read live on every cycle; `<= 0` disables the throttle (polls every tick, matching `interval_ms`'s own convention). |
 
 `trading.broker.timeout_ms` also bounds each broker REST call made by `syncPositions` (an explicit
 per-call `context` deadline, matching the credential-health poller), so a black-holed connection can
@@ -178,7 +179,17 @@ consecutive ticks before it becomes a real finding — a routine partial fill or
 resolves on its own with no ledger event and no halt (self-heal). A real finding emits
 `reconciliation.mismatch_found`, a CRITICAL alert, and routes to the **ordinary, per-account**
 halt (`HaltSource_HALT_SOURCE_RECONCILIATION`, reusing feature 030's `broker_accounts.halted`
-mechanism). Only a **rare, systemic** finding — `trading.reconciliation.systemic_threshold_pct`
+mechanism). `emitReconciliationFinding`/`haltAccount` no-op once the account is already halted
+(any source) — an account with a broker order the platform can never learn about (e.g. one that
+reached a terminal state before `LoadInflightOrders`, which only hydrates NEW/PARTIALLY_FILLED
+orders, last ran) would otherwise re-fire the ledger event, CRITICAL alert, and ERROR log every
+tick, indefinitely, for the same order; nothing in this service ever clears a halt (resuming is a
+manual DB edit), so a later finding against an already-halted account changes no trading behavior.
+`reconcileTick` itself also throttles the broker calls (`ListOrders`/`GetPositions`) for an
+already-halted account to `trading.reconciliation.halted_poll_interval_ms` (default 5 min) instead
+of the ordinary `interval_ms` cadence (`shouldPollHaltedAccount`) — still eventually observing the
+account (e.g. a manual broker-dashboard order), just not at full rate for one that already can't
+trade. Only a **rare, systemic** finding — `trading.reconciliation.systemic_threshold_pct`
 or more of registered accounts erroring/unreachable in one tick — escalates platform-wide to
 `platform.trading_state=REDUCE_ONLY` via `xstockstrat-config`'s internal-caller authz channel
 (`x-internal-caller`, distinct from the human-role `x-access-scope` header; see

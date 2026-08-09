@@ -4,6 +4,7 @@ import type { Value } from '@bufbuild/protobuf/wkt';
 import { ArrowDown, ArrowUp, Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useListEditor } from '@/hooks/useListEditor';
 import {
   Select,
@@ -234,11 +235,10 @@ export function ParameterEditor({ value, onChange }: ParameterEditorProps) {
                 </>
               )}
               <label className="flex items-end gap-2 text-xs">
-                <input
-                  type="checkbox"
+                <Checkbox
                   aria-label={`parameter required ${i}`}
                   checked={p.required}
-                  onChange={(e) => update(i, { required: e.target.checked })}
+                  onCheckedChange={(checked) => update(i, { required: checked === true })}
                 />
                 Required
               </label>

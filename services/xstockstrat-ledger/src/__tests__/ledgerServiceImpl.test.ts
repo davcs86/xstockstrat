@@ -192,6 +192,26 @@ describe('queryEvents', () => {
       });
     });
   });
+
+  // Regression: page.totalCount must always be a number. Before the fix, the
+  // response's `page` object omitted `totalCount` entirely, leaving it
+  // `undefined` — ts-proto's grpc-js serializer rejects an undefined int32
+  // field with "invalid int32: undefined", surfacing to callers (e.g.
+  // xstockstrat-portfolio's HydrateStops) as an Internal error.
+  it('sets page.totalCount to a number so the int32 field encodes', async () => {
+    const impl = makeImpl([makeRow({ event_id: 'e1' }), makeRow({ event_id: 'e2' })]);
+    if (!impl) return;
+    const call = makeCall({ page: { pageSize: 100 } });
+
+    await new Promise<void>((resolve, reject) => {
+      impl.queryEvents(call, (err: any, resp: any) => {
+        if (err) return reject(err);
+        assert.strictEqual(typeof resp.page.totalCount, 'number');
+        assert.strictEqual(resp.page.totalCount, 2);
+        resolve();
+      });
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------

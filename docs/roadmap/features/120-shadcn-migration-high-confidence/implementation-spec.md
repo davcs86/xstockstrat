@@ -1,6 +1,6 @@
 # Implementation Spec: shadcn-migration-high-confidence
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-08-09
 **Feature**: `docs/roadmap/features/120-shadcn-migration-high-confidence/feature.md`
 **Total Steps**: 36
@@ -67,7 +67,7 @@ route). Step 36 records the AC-6 per-primitive migration summary in `context.md`
 
 ### Step 1 — service: Adopt Skeleton in insights/page.tsx and auth/login/page.tsx (FR-11)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/page.tsx` — modify
@@ -97,7 +97,7 @@ Confirm no new build/type errors and the existing e2e suite for `/insights` and 
 
 ### Step 2 — service: Adopt Badge for CopilotRail.tsx "beta" pill (FR-10)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/copilot/CopilotRail.tsx` — modify
@@ -124,7 +124,7 @@ cd services/xstockstrat-ui && pnpm build && pnpm test:e2e -g "copilot"
 
 ### Step 3 — service: Adopt Textarea in FormulaWorkspace.tsx and RuleEditor.tsx (FR-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/FormulaWorkspace.tsx` — modify
@@ -155,7 +155,7 @@ Confirm `getByLabel('Entry rule JSON')`/`'Exit rule JSON'` still resolve (the ar
 
 ### Step 4 — service: Add ui/tabs.tsx primitive + regression test (FR-1, FR-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/tabs.tsx` — create
@@ -196,7 +196,7 @@ Confirm `tabs.test.ts` passes and the full unit suite has no new failures (the a
 
 ### Step 5 — service: Wire Tabs → FormulaReferencePanel.tsx (lowest-risk first wire)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/FormulaReferencePanel.tsx` — modify
@@ -226,7 +226,7 @@ cd services/xstockstrat-ui && pnpm build && pnpm test:e2e -g "formula"
 
 ### Step 6 — service: Wire Tabs → remaining no-e2e-risk timeframe-switcher consumers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/market/[symbol]/page.tsx` — modify
@@ -257,7 +257,7 @@ cd services/xstockstrat-ui && pnpm build && pnpm test:e2e -g "chart-panel" && pn
 
 ### Step 7 — test: RuleEditor.tsx Tabs swap — red (unmodified spec against new markup)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/RuleEditor.tsx` — modify
@@ -288,7 +288,7 @@ Record the actual pass/fail in `context.md` (per design.md's mandatory instructi
 
 ### Step 8 — test: RuleEditor.tsx Tabs swap — green (update spec selectors)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/strategy-authoring.spec.ts` — modify
@@ -316,7 +316,7 @@ All cases in `strategy-authoring.spec.ts` pass.
 
 ### Step 9 — service: Add ui/toggle-group.tsx primitive + buy/sell variant + test (FR-2, FR-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/toggle-group.tsx` — create
@@ -347,7 +347,7 @@ cd services/xstockstrat-ui && pnpm test:unit -- toggle-group.test.ts && pnpm tes
 
 ### Step 10 — test: screener/page.tsx Toggle Group swap — red
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/screener/page.tsx` — modify
@@ -375,7 +375,7 @@ Record actual pass/fail in `context.md`.
 
 ### Step 11 — test: screener/page.tsx Toggle Group swap — green
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/screener.spec.ts` — modify
@@ -401,7 +401,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "screener"
 
 ### Step 12 — test: OrderForm.tsx Toggle Group swap — red
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/OrderForm.tsx` — modify
@@ -429,7 +429,7 @@ Record actual pass/fail in `context.md`.
 
 ### Step 13 — test: OrderForm.tsx Toggle Group swap — green
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/order-form.spec.ts` — modify
@@ -455,7 +455,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "order-form"
 
 ### Step 14 — service: Add ui/alert-dialog.tsx primitive + test (FR-3, FR-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/alert-dialog.tsx` — create
@@ -483,7 +483,7 @@ cd services/xstockstrat-ui && pnpm test:unit -- alert-dialog.test.ts && pnpm tes
 
 ### Step 15 — service: Wire Alert Dialog → accountShared.tsx AccountRow (lowest-risk first wire)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/accountShared.tsx` — modify
@@ -514,7 +514,7 @@ Manually confirm (or add an assertion if `e2e/trader/accounts.spec.ts` — or wh
 
 ### Step 16 — test: OrdersTable.tsx Alert Dialog swap — red
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/OrdersTable.tsx` — modify
@@ -545,7 +545,7 @@ Record actual pass/fail in `context.md`.
 
 ### Step 17 — test: OrdersTable.tsx Alert Dialog swap — green (restructure the spec)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/orders.spec.ts` — modify
@@ -573,7 +573,7 @@ All cases in `orders.spec.ts` pass, including the restructured cancel-confirmati
 
 ### Step 18 — service: Add ui/alert.tsx primitive + warning variant + test (FR-4, FR-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/alert.tsx` — create
@@ -602,7 +602,7 @@ cd services/xstockstrat-ui && pnpm test:unit -- alert.test.ts && pnpm test:unit 
 
 ### Step 19 — service: Wire Alert → CardNotice.tsx (lowest-risk first wire)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/CardNotice.tsx` — modify
@@ -631,7 +631,7 @@ Confirm none of the 4 consumers' e2e coverage breaks (OrderBook, PortfolioPanel,
 
 ### Step 20 — service: Wire Alert → SectionRenderer.tsx 'note' section kind (remaining no-e2e-risk)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/mobile/SectionRenderer.tsx` — modify
@@ -658,7 +658,7 @@ cd services/xstockstrat-ui && pnpm build && pnpm test:e2e -g "mobile"
 
 ### Step 21 — test: CopilotRail.tsx Alert swap — red
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/copilot/CopilotRail.tsx` — modify
@@ -687,7 +687,7 @@ Record actual pass/fail in `context.md` — even if it passes unmodified, the ru
 
 ### Step 22 — test: CopilotRail.tsx Alert swap — green (confirm or fix)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/copilot.spec.ts` — modify only if Step 21 recorded a failure
@@ -713,7 +713,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "copilot"
 
 ### Step 23 — service: Add ui/checkbox.tsx primitive + test (FR-5, FR-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/checkbox.tsx` — create
@@ -740,7 +740,7 @@ cd services/xstockstrat-ui && pnpm test:unit -- checkbox.test.ts && pnpm test:un
 
 ### Step 24 — service: Wire Checkbox → FormulaWorkspace.tsx and ParameterEditor.tsx
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/FormulaWorkspace.tsx` — modify
@@ -769,7 +769,7 @@ cd services/xstockstrat-ui && pnpm build && pnpm test:e2e -g "formula" && pnpm t
 
 ### Step 25 — service: Add ui/breadcrumb.tsx primitive + test (FR-7, FR-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/breadcrumb.tsx` — create
@@ -796,7 +796,7 @@ cd services/xstockstrat-ui && pnpm test:unit -- breadcrumb.test.ts && pnpm test:
 
 ### Step 26 — service: Wire Breadcrumb → NamespaceEditor.tsx and config-ui/audit/page.tsx (no-e2e-risk)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/[namespace]/NamespaceEditor.tsx` — modify
@@ -827,7 +827,7 @@ No e2e spec exists for the audit page (confirmed) — the manual screenshot comp
 
 ### Step 27 — service: Add ui/accordion.tsx primitive + test (FR-8, FR-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/accordion.tsx` — create
@@ -854,7 +854,7 @@ cd services/xstockstrat-ui && pnpm test:unit -- accordion.test.ts && pnpm test:u
 
 ### Step 28 — service: Wire Accordion → PlatformHeader.tsx mobile nav groups
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx` — modify
@@ -883,7 +883,7 @@ cd services/xstockstrat-ui && pnpm build && pnpm test:e2e -g "nav-reachability"
 
 ### Step 29 — test: PlatformHeader.tsx desktop Breadcrumb swap — red
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx` — modify
@@ -911,7 +911,7 @@ Record actual pass/fail in `context.md`.
 
 ### Step 30 — test: PlatformHeader.tsx desktop Breadcrumb swap — green
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/nav-reachability.spec.ts` — modify only if Step 29 recorded a failure
@@ -937,7 +937,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "nav-reachability"
 
 ### Step 31 — service: Add ui/progress.tsx primitive + buy/paper/sell/muted variant + test (FR-9, FR-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/progress.tsx` — create
@@ -968,7 +968,7 @@ cd services/xstockstrat-ui && pnpm test:unit -- progress.test.ts && pnpm test:un
 
 ### Step 32 — service: Wire Progress → SignalReadiness.tsx and SectionRenderer.tsx (no-e2e-risk)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/SignalReadiness.tsx` — modify
@@ -998,7 +998,7 @@ cd services/xstockstrat-ui && pnpm build && pnpm test:e2e -g "market" && pnpm te
 
 ### Step 33 — test: WatchlistReadiness.tsx Progress swap — red
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/WatchlistReadiness.tsx` — modify
@@ -1027,7 +1027,7 @@ Record actual pass/fail in `context.md`. Also confirm by inspection (or a quick 
 
 ### Step 34 — test: WatchlistReadiness.tsx Progress swap — green
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/watchlists.spec.ts` — modify only if Step 33 recorded a failure
@@ -1053,7 +1053,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "watchlists"
 
 ### Step 35 — test: Full-suite verification + config-ui/audit manual screenshot compare
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**: none (verification-only step; no source changes)
 
@@ -1080,7 +1080,7 @@ All green, no new lint/build errors, full e2e suite passes. Screenshot compariso
 
 ### Step 36 — docs: Record per-primitive migration summary in context.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/roadmap/features/120-shadcn-migration-high-confidence/context.md` — modify
@@ -1109,4 +1109,37 @@ Confirm the new session entry names every primitive and every red-before-green o
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+**Step 6** — `ChartPanel.tsx`'s timeframe switcher was classified "no e2e-risk" in recon.md § Risks,
+but `e2e/trader/chart-panel.spec.ts` has 3 assertions (`getByRole('button', { name: '15m'|'1h'|'1d' })`)
+against it — a missed evidence gap, not caught until Step 6's own e2e run. **Disposition**: fixed
+now (user confirmed via blocker `AskUserQuestion`) — updated the 3 assertions to
+`getByRole('tab', ...)` matching Radix `TabsTrigger`'s actual rendered role; re-ran green
+(11/11 passed).
+
+**Step 28 (root cause: Step 26)** — Step 26's `Breadcrumb` wiring in `NamespaceEditor.tsx`/
+`config-ui/audit/page.tsx` used the primitive's default `aria-label="breadcrumb"` (lowercase),
+which collides with `PlatformHeader.tsx`'s own `aria-label="Breadcrumb"` span under Playwright's
+case-insensitive substring `getByLabel` match — `nav-reachability.spec.ts` resolved 2 elements on
+those routes instead of 1. Not caught by Step 26's own `-g "config-ui"` verification (that spec
+lives outside the `config-ui/` e2e folder); surfaced only when Step 28's `-g "nav-reachability"`
+verification walked those routes. This is the ambiguity design.md flagged as "likely moot" for the
+Step 29/30 pair — it was not moot, and struck one step earlier than anticipated. **Disposition**:
+fixed now (user confirmed via blocker `AskUserQuestion`, choosing to relabel the page-level
+Breadcrumbs rather than loosen the test) — gave both page-level `Breadcrumb` instances an explicit,
+non-colliding `aria-label` ("Namespace path", "Audit log path"); re-ran both `nav-reachability`
+(2/2) and `config-ui` (49/49) green.
+
+**Step 35 (root cause: Steps 29-30)** — the full e2e suite surfaced a second `Breadcrumb`-role
+collision Steps 29-30's own targeted `-g "nav-reachability"` run didn't reach: `BreadcrumbPage`
+renders `role="link"` for the current-page crumb (shadcn's a11y pattern), and on `/insights/strategies`
+the crumb's label ("Strategies") duplicates the accessible name of the real, working sub-nav Link
+in `PlatformHeader.tsx`'s Row 2 — `backfills.spec.ts`'s unscoped `getByRole('link', { name:
+'Strategies' })` resolved 2 elements (2 failed tests). **Disposition**: fixed now (user confirmed
+via blocker `AskUserQuestion`) — scoped `backfills.spec.ts`'s 3 affected `getByRole('link', ...)`
+calls to the `Section` sub-nav landmark (`page.getByRole('navigation', { name: 'Section'
+}).getByRole('link', ...)`) rather than touching the primitive or `PlatformHeader.tsx`; re-ran
+`Backfills page` (7/7) then the full suite (255/255) green. A separate `signal-detail.spec.ts`
+flake (duplicate "Why this fired" heading, retried and passed on the first full-suite run,
+absent on the second) was investigated — the text appears exactly once in
+`SignalReadiness.tsx`'s source, so it is a pre-existing timing flake unrelated to this feature's
+changes; not touched, per the sequential-mode guidance to report known flakes rather than churn.

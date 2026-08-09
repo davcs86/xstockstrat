@@ -9,6 +9,13 @@ import { useCancelOrder } from '@/hooks/useCancelOrder';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/table';
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '../ui/alert-dialog';
 import { EditOrderDialog } from './EditOrderDialog';
 import { QueryStateMessages } from '../shared/QueryStateMessages';
 import {
@@ -51,19 +58,8 @@ export function OrdersTable({
   const liveUpdates = useOrderUpdates();
   const { mutate: cancelOrder } = useCancelOrder();
   const [editing, setEditing] = useState<Order | null>(null);
-  const [pendingCancel, setPendingCancel] = useState<string | null>(null);
 
   const merged = orders.map((o) => liveUpdates[o.orderId] ?? o);
-
-  const handleCancel = (orderId: string) => {
-    // Two-step confirmation (FR-5): first click arms, second click confirms.
-    if (pendingCancel !== orderId) {
-      setPendingCancel(orderId);
-      return;
-    }
-    cancelOrder({ orderId });
-    setPendingCancel(null);
-  };
 
   return (
     <Card>
@@ -137,16 +133,30 @@ export function OrdersTable({
                       >
                         Edit
                       </Button>
-                      <Button
-                        type="button"
-                        variant={pendingCancel === order.orderId ? 'destructive' : 'outline'}
-                        size="sm"
-                        disabled={isTerminal}
-                        onClick={() => handleCancel(order.orderId)}
-                        data-testid={`cancel-${order.orderId}`}
-                      >
-                        {pendingCancel === order.orderId ? 'Confirm' : 'Cancel'}
-                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={isTerminal}
+                            data-testid={`cancel-${order.orderId}`}
+                          >
+                            Cancel
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogCancel data-testid={`cancel-${order.orderId}-dismiss`}>
+                            Dismiss
+                          </AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={() => cancelOrder({ orderId: order.orderId })}
+                            data-testid={`cancel-${order.orderId}-confirm`}
+                          >
+                            Confirm
+                          </AlertDialogAction>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </TableCell>
                   </TableRow>
                 );

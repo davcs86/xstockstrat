@@ -1,12 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { ConnectError } from '@connectrpc/connect';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbSeparator,
+  BreadcrumbPage,
+} from '@/components/ui/breadcrumb';
 import {
   Table,
   TableHeader,
@@ -123,16 +130,23 @@ export function NamespaceEditor({ namespace, env, mode, nativeEnv }: Props) {
     <div className="space-y-4">
       {/* Breadcrumb */}
       <div className="flex flex-wrap items-center gap-2">
-        <Link
-          href={`/config-ui?env=${env}&mode=${mode}`}
-          className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          ← namespaces
-        </Link>
-        <span className="text-muted-foreground">/</span>
-        <h1 className="text-base font-semibold">
-          <span className="text-primary font-mono">{namespace}</span>
-        </h1>
+        {/* aria-label deliberately distinct from PlatformHeader's own "Breadcrumb" landmark —
+            Playwright's getByLabel substring-matches case-insensitively, and a duplicate
+            "breadcrumb" label here would make nav-reachability.spec.ts's header lookup
+            ambiguous on this route. */}
+        <Breadcrumb aria-label="Namespace path">
+          <BreadcrumbList>
+            <BreadcrumbItem>
+              <BreadcrumbLink href={`/config-ui?env=${env}&mode=${mode}`}>
+                ← namespaces
+              </BreadcrumbLink>
+            </BreadcrumbItem>
+            <BreadcrumbSeparator />
+            <BreadcrumbItem>
+              <BreadcrumbPage className="font-mono text-primary">{namespace}</BreadcrumbPage>
+            </BreadcrumbItem>
+          </BreadcrumbList>
+        </Breadcrumb>
         <div className="flex gap-1.5 ml-1">
           <Badge variant="secondary" className="text-xs">
             {env}
