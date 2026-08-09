@@ -131,6 +131,24 @@ per-segment breadcrumb helper vs. each page owning its own trail; whether `Platf
 trace of a breadcrumb after this change; how the nav-group/item context is threaded to a page that
 still wants it) is left to `/sdd-design` — see Open Questions.
 
+### Mobile navigation sidebar
+
+FR-11 (added mid-design, 2026-08-09, user-directed). Replace the mobile hamburger menu's current
+hand-built `Sheet` + `Accordion` implementation
+(`src/components/shared/PlatformHeader.tsx`'s `PlatformHeaderInner`, the `sm:hidden` trigger button and
+its `SheetContent`/`Accordion` nav-group listing) with the actual shadcn `Sidebar` primitive
+(`npx shadcn@latest add sidebar`, CLI-vendored following this repo's established pattern —
+`components.json`, preset `bLTl5gh6` — same as FR-1), using `collapsible="offcanvas"` mode (which
+itself renders as a `Sheet` on mobile, so this is a primitive swap onto the purpose-built component
+for exactly this pattern, not a new interaction model). `SidebarHeader` replaces the current
+`SheetHeader`/`SheetTitle`; `SidebarContent`/`SidebarGroup`/`SidebarMenu`/`SidebarMenuButton` replace
+the hand-rolled `Accordion` nav-group/item listing (preserving every `NAV_GROUPS` entry, including
+Settings, and the existing active-route highlighting); close-on-navigate is wired via `useSidebar()`'s
+`setOpenMobile(false)`, mirroring the current `SheetClose asChild` behavior. This is distinct from
+`BottomTabBar` (the fixed bottom tab bar covering the four primary groups), which is unaffected and
+out of scope here. No existing e2e spec covers this hamburger/Sheet menu (verified: `e2e/mobile.spec.ts`
+only tests `BottomTabBar`) — this FR adds new coverage rather than updating existing assertions.
+
 ## Out of Scope
 
 - Sorting, filtering, pagination, or column-visibility toggles for any table.
@@ -192,21 +210,39 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
    scenario, and whether any fix was needed); any table found to overflow is fixed and covered by a
    new or extended assertion, not just noted.
 5. Zero raw `<table>` elements remain outside `src/components/ui/table.tsx` (`grep -rn "<table\b" src
-   | grep -v components/ui/table.tsx` returns nothing) and the FR-5 sites' clickable-row behavior is
-   unchanged (verified by existing/updated e2e).
+   | grep -v components/ui/table.tsx` returns nothing — **confirmed already true**, sibling features
+   121/122/123 converted both FR-5 sites before this feature executes). The three clickable-row sites
+   (`strategies/[id]/page.tsx`'s Past Runs row, `LiveStrategiesPanel.tsx`, `insights/formulas/page.tsx`)
+   are made **consistent by adding** keyboard activation (`role="button"`/`tabIndex`/`onKeyDown`) to the
+   two sites that currently lack it, not by removing it from the one that has it — no clickable-row
+   capability regresses.
 6. The FR-6 shared label component exists and every one of the 14 cited sites uses it — a follow-up
    grep for the raw literal className string outside the new component returns nothing.
-7. The FR-7/FR-8 sites render via `Badge`/`ToggleGroup` respectively, with unchanged visible behavior
-   (verified by existing/updated e2e where coverage exists, or FR-4-style manual/scripted verification
-   where it doesn't).
+7. `AlertStream.tsx`'s unread badge is **already** `Badge`-driven (done by sibling work) — this FR now
+   covers only: `StrategyWizard.tsx`'s inner per-step pill (`Badge`-driven, nested inside the
+   sibling-added `QuestionnaireProgress` wrapper), the two remaining hand-rolled source pills
+   (`opportunities/page.tsx:348`, `market/[symbol]/page.tsx:147` → `Badge`), and FR-8's "All sources"
+   toggle (restyled via `toggleVariants`/`aria-pressed`, verified against the primitive's actual `cva`
+   definition rather than an untested `data-state` assumption — the per-source pills are already
+   `ToggleGroup`-driven by sibling work). Unchanged visible behavior throughout (verified by
+   existing/updated e2e where coverage exists, or FR-4-style manual/scripted verification where it
+   doesn't).
 8. FR-9's two fixes land only where verified safe per FR-9's own qualifier; any site left unchanged is
    documented with why in `context.md`.
 9. FR-10: `nav-reachability.spec.ts`'s "breadcrumb reflects the active screen" guarantee is preserved
-   (via an updated assertion strategy against wherever the breadcrumb now lives) for every route in its
-   existing `GROUPS` table; every page that previously had no breadcrumb at all does not regress (no
-   requirement to retrofit one everywhere unless `/sdd-design` scopes that in); no `aria-label`/
-   `role="link"` collision reintroduces the exact fails.md 2026-08-09 defect class.
+   via a restructured assertion (shell-level `aria-current="page"` checks against the Primary/Section
+   nav, since the shell no longer renders a shared `Breadcrumb`) for every route in its existing
+   `GROUPS` table; every page that previously had no breadcrumb at all does not regress (no requirement
+   to retrofit one everywhere). Collision-safety (no `aria-label`/`role="link"` collision reintroducing
+   the exact fails.md 2026-08-09 defect class) is verified for **every** new/migrated `PageBreadcrumb`
+   site, not just one representative case — both a deliberately-constructed collision-scenario test
+   (`e2e/breadcrumb.spec.ts`) and a full e2e-suite run as the closing gate (per the recon's own risk
+   note and the ledger's "only caught by a later full-suite run" pattern).
 10. `pnpm lint` and `NEXT_DISABLE_STANDALONE=1 pnpm build` stay clean throughout.
+11. FR-11: `src/components/ui/sidebar.tsx` exists (CLI-vendored) and the mobile hamburger menu renders
+    via `Sidebar collapsible="offcanvas"` instead of the hand-built `Sheet`+`Accordion`, with every
+    `NAV_GROUPS` entry (including Settings) reachable, active-route highlighting preserved, and
+    close-on-navigate working (new e2e coverage, since none existed before this FR).
 
 ## Open Questions
 
