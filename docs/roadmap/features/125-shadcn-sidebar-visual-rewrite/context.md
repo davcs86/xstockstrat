@@ -43,3 +43,18 @@
   grouping) and interaction (chevron rotation on toggle) within the existing mobile-offcanvas
   surface — visibility/placement (offcanvas vs. rail) is a separate, explicitly out-of-scope axis.
   No FRs changed; this was a framing/emphasis fix, not a scope fix.
+
+## Session 2026-08-10T08:00:00Z — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Criteria pass (spec-reviewer): PASS WITH WARNINGS. No Floor (F-*) or Commandment (C-*) breach.
+  Every code reference verified live (`PlatformHeader.tsx`, `ui/sidebar.tsx`'s unused
+  `SidebarMenuSub*`/`SidebarGroupLabel` exports, `navGroups.tsx`). Warnings: (1) Acceptance
+  Criteria 1-4/6 are qualitative/visual rather than quantitative — inherent to a visual/interaction
+  rewrite, not a defect; (2) the two Open Questions (More-overflow scope, section-label boundary)
+  remain unchecked at product-spec stage, each with a stated design-time resolution path —
+  consistent with feature 124's own precedent. Both non-blocking.
+- Overlap findings: none (CLEAN). Feature 125 touches only `PlatformHeader.tsx`/`ui/sidebar.tsx` in
+  `xstockstrat-ui`; every other feature that recently touched those files (120/121/122/123/124) is
+  already merged to `main-dev`, confirmed directly against the live code. No merge-order entry
+  required — no in-flight collision to record.

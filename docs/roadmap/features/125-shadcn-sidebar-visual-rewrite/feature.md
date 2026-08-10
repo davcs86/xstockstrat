@@ -1,6 +1,6 @@
 # Feature: shadcn-sidebar-visual-rewrite
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/shadcn-sidebar-visual-rewrite`
 **Created**: 2026-08-10
 **Last Updated**: 2026-08-10
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-10 | `idea` → `draft` | /sdd-story | Product spec generated from a user story + attached screen-recording comparing our live mobile offcanvas Sidebar against shadcn's own reference Sidebar example. |
+| 2026-08-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved: PASS WITH WARNINGS (spec-reviewer — no blockers; qualitative visual ACs and 2 deferred Open Questions flagged, both with stated design-time resolution paths, consistent with feature 124 precedent) + overlap scan CLEAN (feature-overlap — no collisions; 121/122/123/124's shared `PlatformHeader.tsx`/`ui/sidebar.tsx` touches all already merged to `main-dev`). |
 
 ---
 
@@ -38,4 +39,4 @@ list that never used those already-vendored primitives.
 
 ## Next Action
 
-`/sdd-review shadcn-sidebar-visual-rewrite product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design shadcn-sidebar-visual-rewrite` — recon + adversarial design debate
