@@ -24,6 +24,9 @@ test.describe('Signal detail readiness', () => {
     await expect(page.getByText('rsi', { exact: false })).toBeVisible();
     // The picker reflects the threaded strategy.
     await expect(page.getByText('Live Test Strategy')).toBeVisible();
+    // The opportunity's source renders as a Badge (FR-7) — exact match to disambiguate from the
+    // meta-info line below, which also joins in the same source string.
+    await expect(page.getByText('unusual_whales', { exact: true })).toBeVisible();
 
     // Strategy track-record block (GetStrategyAnalytics): signals 30d 42, hit rate 62%, expectancy 0.35.
     const record = page.getByTestId('strategy-track-record');

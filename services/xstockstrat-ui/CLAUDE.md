@@ -24,6 +24,57 @@ proxy was removed in the same feature.
 
 Node.js 22, Next.js 15 (App Router, React 18), TypeScript. Package manager: pnpm 9.15.0.
 
+## Styling
+
+Tailwind v4 (CSS-first config — no `tailwind.config.js`; theme tokens live in `src/app/globals.css`'s
+`@theme inline` block, which maps color/font/radius/animation names onto this app's own `:root`
+color-role custom properties). PostCSS plugin: `@tailwindcss/postcss`. shadcn/ui manages
+`src/components/ui/` primitives via `components.json` (feature 119 — migrated from a hand-rolled
+Tailwind v3 + individual-`@radix-ui/*`-packages setup to the official shadcn CLI, adopting preset
+`bLTl5gh6` (style `radix-rhea`); dark-only, no light-mode toggle, no preserved legacy branding —
+theme values come entirely from the preset).
+
+- **Adding a primitive not yet in `src/components/ui/`**: `npx shadcn@latest add <name>`.
+- **Re-applying/updating the preset**: `printf 'y\n' | npx shadcn@latest apply --preset bLTl5gh6 --yes`
+  — `components.json` must already exist (it does) or this hangs on an unsuppressable prompt;
+  `apply --preset` also needs a piped `y` on stdin even with `--yes` to clear a confirmation prompt.
+  This **overwrites every listed primitive file wholesale**, including this app's functional
+  variant additions below — always re-run the reconciliation step (next bullet) after.
+- **Functional variant customizations** (`buy`/`sell` on `Button`, `buy`/`sell`/`paper`/`live`/
+  `warning`/`info` on `Badge` — order-side/paper-trading/status coloring, not part of the shadcn
+  preset's own variant set) are hand-added back into each regenerated file's `cva()` `variants`
+  object after any `add`/`apply --preset` run, marked with an `// app-specific` comment. A
+  mechanical regression guard (`src/components/ui/button.test.ts`, `badge.test.ts`) asserts these
+  keys render their expected classes — it fails loudly if a future regenerate silently drops them.
+- **`sidebar.tsx`'s `data-active` fix** (feature 126): `SidebarMenuButton`/`SidebarMenuSubButton`
+  set `data-active={isActive || undefined}`, not the bare `isActive` boolean — marked
+  `// app-specific`. The vendored file's own `data-active:bg-sidebar-accent` Tailwind variant is a
+  bare (unbracketed) data-attribute selector, which matches on attribute **presence**, not its
+  string value — `data-active="false"` still satisfies `[data-active]`. Passing the raw boolean
+  renders the attribute unconditionally (React stringifies `false` to `"false"` for custom `data-*`
+  attributes, it does not omit it), so every row was permanently painted with the accent
+  background regardless of actual active state. `isActive || undefined` omits the attribute
+  entirely when inactive, restoring the intended distinction. Re-apply after any future
+  `apply --preset` regeneration, same as the functional-variant bullet above.
+- `combobox.tsx` is a full Base-UI (`@base-ui/react`) compound component (`Combobox`/
+  `ComboboxInput`/`ComboboxContent`/`ComboboxList`/`ComboboxItem`/etc.), not the simple
+  single-prop wrapper this app used before feature 119 — see its 3 call sites
+  (`components/trader/ChartPanel.tsx`, `components/insights/{ComponentEditor,RuleEditor}.tsx`)
+  for the controlled-`value`/`onValueChange` (strict) and controlled-`inputValue`/
+  `onInputValueChange` (free-text) usage patterns.
+- `vitest.config.ts` sets `resolve.alias: { '@': './src' }` — required because Vite/Vitest does
+  not read `tsconfig.json`'s `paths` automatically the way Next's own bundler does, and the
+  shadcn-CLI-regenerated `components/ui/*` files use `@/...` alias imports (the old hand-rolled
+  files used relative imports, which never needed this).
+- **Sanctioned exception — `ChartPanel.tsx` stays on `lightweight-charts`.** `ChartPanel.tsx` (and
+  its siblings via the shared `useCandlestickChart.ts` hook — `trader/positions/[symbol]/page.tsx`,
+  `insights/market/[symbol]/page.tsx`) intentionally stays on `lightweight-charts` rather than
+  `recharts`/`ui/chart.tsx` (feature 123 design decision, 2026-08-08): `recharts` has no
+  first-party OHLCV candlestick geometry, the hook has 3 shared consumers across `/trader` and
+  `/insights`, and `e2e/trader/chart-panel.spec.ts` depends on `lightweight-charts`'s own injected
+  `.tv-lightweight-charts` DOM class as an async-readiness signal. Do not re-flag this as an
+  unconsolidated charting approach in a future audit.
+
 ## Docker Build Pattern
 
 Next.js pattern — see `docs/patterns/docker-build.md`. Multi-stage `node:22-alpine` build
@@ -91,6 +142,27 @@ The physical routes/segments above are **unchanged**; feature 083 layers an oppo
 - **Non-happy states** — shared `src/components/ui/skeleton.tsx` (`Skeleton`) +
   `src/components/shared/EmptyState.tsx`; per-card errors reuse the existing `CardNotice` /
   `QueryStateMessages` (DRY).
+- **Mobile offcanvas nav (feature 124)** — `PlatformHeader`'s Row 1 hamburger menu is a real
+  vendored `ui/sidebar.tsx` (`Sidebar collapsible="offcanvas"`), not `Sheet`+`Accordion`. The whole
+  `SidebarProvider`/trigger/panel subtree is wrapped in `sm:hidden` (not just the trigger) —
+  `Sidebar`'s desktop/non-mobile branch renders off-screen via a negative `left` offset, not
+  `display:none`, so without the wrapper its full nav content stays in the DOM and accessibility
+  tree at `sm:`+ widths, duplicating Row 2's real `Section` nav links. `SidebarProvider` also needs
+  `defaultOpen={false}` (a mobile-only offcanvas menu must start collapsed on desktop) and a
+  `className="w-auto min-h-0"` override (the primitive's own wrapper defaults to
+  `flex min-h-svh w-full`, sized for a page-level root, not an inline Row 1 subtree).
+  `PlatformHeader`'s own Row 2 shared `Breadcrumb` landmark was removed — pages render their own via
+  `src/components/shared/PageBreadcrumb.tsx` (`{ariaLabel, items: {label, href?}[]}`) instead.
+  Each `NAV_GROUPS` entry renders as `SidebarGroup > SidebarGroupContent > SidebarMenu >
+  SidebarMenuItem > Collapsible(className="group/collapsible") > CollapsibleTrigger(SidebarMenuButton)
+  and CollapsibleContent(SidebarMenuSub > SidebarMenuSubItem)` (feature 126) — matching shadcn's own
+  reference "Collapsible SidebarMenu" composition exactly, not a flattened shortcut. The chevron's
+  rotation keys off `group-data-[state=open]/collapsible:rotate-90`, scoped to the `Collapsible`
+  root's own `data-state` (Radix reflects it there directly), not `SidebarMenuButton`'s pre-existing
+  `group/menu-button` name. Row styling is deliberately flat/typographic (font-weight + color for
+  the active group, no persistent background fill) to match shadcn's own docs-site sidebar rather
+  than a filled-pill-button look — see the `data-active` fix above, which was the actual root cause
+  of the pill look, not a styling choice.
 
 ## Dependencies
 
@@ -240,3 +312,6 @@ Requires backend gRPC services on 50051–50060 (and TimescaleDB for the config-
 | Copilot rail (083) | `src/components/copilot/CopilotRail.tsx`, `src/context/ChromeContext.tsx`, `src/lib/copilot.ts` |
 | Mobile companion (083) | `src/components/mobile/{SectionRenderer,BottomTabBar}.tsx`, `sections.ts` |
 | State primitives (083) | `src/components/ui/skeleton.tsx`, `src/components/shared/EmptyState.tsx` |
+| Mobile offcanvas nav (124) | `src/components/ui/sidebar.tsx`, `src/hooks/use-mobile.ts` |
+| Page breadcrumb (124) | `src/components/shared/PageBreadcrumb.tsx` |
+| Shared eyebrow label (124) | `src/components/shared/Eyebrow.tsx` |

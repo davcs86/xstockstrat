@@ -1,12 +1,20 @@
 'use client';
 
 import { useState } from 'react';
+import { EllipsisVertical } from 'lucide-react';
 import { ConnectError } from '@connectrpc/connect';
 import type { JsonObject } from '@bufbuild/protobuf';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 import {
   Table,
   TableHeader,
@@ -335,19 +343,25 @@ export default function SourcesPage() {
                   </TableCell>
                   <TableCell>{weights[src.slug] ?? 1.0}</TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={saving}
-                        onClick={() => handleToggle(src)}
-                      >
-                        {src.active ? 'Disable' : 'Enable'}
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => openEdit(src)}>
-                        Edit
-                      </Button>
-                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Actions"
+                          data-testid={`actions-${src.slug}`}
+                        >
+                          <EllipsisVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem disabled={saving} onClick={() => handleToggle(src)}>
+                          {src.active ? 'Disable' : 'Enable'}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => openEdit(src)}>Edit</DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               ))}
@@ -502,12 +516,10 @@ export default function SourcesPage() {
             )}
 
             <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
+              <Switch
                 id="active-toggle"
                 checked={form.active}
-                onChange={(e) => setField('active', e.target.checked)}
-                className="h-4 w-4"
+                onCheckedChange={(v) => setField('active', v)}
               />
               <label htmlFor="active-toggle" className="text-sm">
                 Active

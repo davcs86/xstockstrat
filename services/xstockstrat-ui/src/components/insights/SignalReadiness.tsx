@@ -2,6 +2,8 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Eyebrow } from '@/components/shared/Eyebrow';
+import { Progress } from '@/components/ui/progress';
 import {
   Select,
   SelectContent,
@@ -70,12 +72,11 @@ export function SignalReadiness({ symbol }: { symbol: string }) {
         ) : (
           <div className="space-y-3">
             <div className="flex items-center gap-3">
-              <div className="h-2 w-40 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full bg-primary"
-                  style={{ width: `${Math.round(readiness.conviction * 100)}%` }}
-                />
-              </div>
+              <Progress
+                value={Math.round(readiness.conviction * 100)}
+                className="h-2 w-40"
+                variant="default"
+              />
               <span className="font-mono tabular-nums text-sm">
                 {readiness.passingConditions}/{readiness.totalConditions} conditions
               </span>
@@ -107,9 +108,9 @@ export function SignalReadiness({ symbol }: { symbol: string }) {
 
         {strategyId && analytics && (
           <div className="mt-4 border-t border-border pt-3" data-testid="strategy-track-record">
-            <p className="mb-2 font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
+            <Eyebrow as="p" className="mb-2">
               Strategy track record
-            </p>
+            </Eyebrow>
             <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm sm:grid-cols-4">
               <Metric label="Signals 30d" value={String(analytics.signals30d)} />
               <Metric label="Taken" value={String(analytics.taken)} />

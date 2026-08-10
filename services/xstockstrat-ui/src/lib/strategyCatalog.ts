@@ -7,8 +7,10 @@
  *     `app/services/indicators_engine.py` (`INDICATOR_REGISTRY` + each `_fn` default).
  *   - Rule condition functions: `xstockstrat-analysis`
  *     `app/services/evaluator.py` (`_SUPPORTED_FNS`).
+ *   - Fundamental metric names: `xstockstrat-analysis`
+ *     `app/services/screener.py` (`_FUNDAMENTAL_FIELDS`).
  *
- * Keep this file in sync with those two sources of truth.
+ * Keep this file in sync with those three sources of truth.
  */
 
 import { ComponentKind } from '@xstockstrat/proto/analysis/v1/analysis_pb';
@@ -124,6 +126,33 @@ export function defaultParamsFor(name: string): Record<string, number> {
   if (!ind) return {};
   return Object.fromEntries(ind.params.map((p) => [p.key, p.default]));
 }
+
+export type FundamentalMetric = {
+  /** Canonical name sent as `ScreenCriterion.metric_name` (matches `_FUNDAMENTAL_FIELDS`). */
+  name: string;
+  description: string;
+};
+
+// Mirrors _FUNDAMENTAL_FIELDS in xstockstrat-analysis app/services/screener.py.
+export const FUNDAMENTAL_METRICS: FundamentalMetric[] = [
+  { name: 'market_cap', description: 'Market cap' },
+  { name: 'pe_ratio', description: 'P/E ratio' },
+  { name: 'pb_ratio', description: 'P/B ratio' },
+  { name: 'dividend_yield', description: 'Dividend yield' },
+  { name: 'eps', description: 'EPS' },
+  { name: 'beta', description: 'Beta' },
+  { name: 'roe', description: 'ROE' },
+  { name: 'debt_to_equity', description: 'Debt/equity' },
+  { name: 'price', description: 'Price' },
+  { name: 'year_high', description: '52-week high' },
+  { name: 'year_low', description: '52-week low' },
+];
+
+// Order-independent default (design.md § Chosen Approach point 3) — never
+// `FUNDAMENTAL_METRICS[0].name`; `pe_ratio` staying the default is load-bearing for FR-3.
+export const DEFAULT_FUNDAMENTAL_METRIC = FUNDAMENTAL_METRICS.find(
+  (m) => m.name === 'pe_ratio',
+)!.name;
 
 // Condition functions supported by the evaluator (_SUPPORTED_FNS).
 export type RuleFn = '>' | '<' | '>=' | '<=' | 'crosses_above' | 'crosses_below';

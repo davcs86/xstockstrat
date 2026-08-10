@@ -1,17 +1,9 @@
 'use client';
 import { useMemo } from 'react';
-import {
-  CartesianGrid,
-  ComposedChart,
-  Line,
-  ResponsiveContainer,
-  Scatter,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { CartesianGrid, ComposedChart, Line, Scatter, Tooltip, XAxis, YAxis } from 'recharts';
 import type { SymbolDiagnostics, TradeRecord } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { ChartContainer, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import {
   buildEquitySeries,
   buildTradeMarkers,
@@ -40,8 +32,9 @@ interface TooltipEntry {
   color?: string;
 }
 
-/** Shared tooltip: a trade-marker point renders the full trade payload (FR-4); a plain
- * curve point renders date + equity/return. */
+/** Shared tooltip: a trade-marker point renders the full trade payload (FR-4, unchanged, since
+ * `ChartTooltipContent`'s default rendering can't express this branch without a custom override);
+ * a plain curve point delegates to `ui/chart.tsx`'s `ChartTooltipContent`. */
 function CurveTooltip({
   active,
   payload,
@@ -52,17 +45,16 @@ function CurveTooltip({
   mode: 'absolute' | 'normalized';
 }) {
   if (!active || !payload?.length) return null;
-  const fmtY = (v: number) =>
-    mode === 'absolute' ? `$${Math.round(v).toLocaleString()}` : `${v.toFixed(2)}%`;
   const marker = payload
     .map((p) => p.payload)
     .find((p): p is TradeMarker & { t: number } => !!p && 'kind' in p);
-  return (
-    <div
-      data-testid="curve-tooltip"
-      className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-md"
-    >
-      {marker ? (
+
+  if (marker) {
+    return (
+      <div
+        data-testid="curve-tooltip"
+        className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-md"
+      >
         <div className="space-y-0.5" data-testid="marker-tooltip">
           <p className="font-semibold">
             {marker.kind === 'entry' ? 'Entry' : 'Exit'} — {marker.symbol} ({marker.side})
@@ -76,16 +68,25 @@ function CurveTooltip({
             P&L ${marker.pnl.toFixed(2)}
           </p>
         </div>
-      ) : (
-        <div className="space-y-0.5">
-          <p className="text-muted-foreground">{fmtDay((payload[0].payload as { t: number }).t)}</p>
-          {payload.map((p, i) => (
-            <p key={i} style={{ color: p.color }}>
-              {p.name}: {typeof p.value === 'number' ? fmtY(p.value) : p.value}
-            </p>
-          ))}
-        </div>
-      )}
+      </div>
+    );
+  }
+
+  const fmtY = (v: number) =>
+    mode === 'absolute' ? `$${Math.round(v).toLocaleString()}` : `${v.toFixed(2)}%`;
+
+  return (
+    <div data-testid="curve-tooltip">
+      <ChartTooltipContent
+        active={active}
+        payload={payload as unknown as Parameters<typeof ChartTooltipContent>[0]['payload']}
+        labelFormatter={() => fmtDay((payload[0].payload as { t: number }).t)}
+        formatter={(value, name, item) => (
+          <span className="flex-1" style={{ color: (item as { color?: string }).color }}>
+            {name}: {typeof value === 'number' ? fmtY(value) : value}
+          </span>
+        )}
+      />
     </div>
   );
 }
@@ -107,6 +108,18 @@ export function EquityCurveChart({
     const curve = buildEquitySeries(diagnostics);
     return { ...curve, markers: buildTradeMarkers(trades, curve.series) };
   }, [diagnostics, trades]);
+
+  // One ChartConfig entry per symbol line, colors matching LINE_COLORS unchanged (FR-3).
+  const chartConfig: ChartConfig = useMemo(
+    () =>
+      Object.fromEntries(
+        series.map((s, i) => [
+          s.symbol,
+          { label: s.symbol, color: LINE_COLORS[i % LINE_COLORS.length] },
+        ]),
+      ),
+    [series],
+  );
 
   if (!hasEquityData(diagnostics)) {
     return (
@@ -130,9 +143,14 @@ export function EquityCurveChart({
       </CardHeader>
       <CardContent>
         <div data-testid="equity-curve-chart">
-          <ResponsiveContainer width="100%" height={260}>
+          <ChartContainer config={chartConfig} className="aspect-auto h-[260px] w-full">
             <ComposedChart>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(222 20% 14%)" />
+              <CartesianGrid
+                xAxisId={0}
+                yAxisId={0}
+                strokeDasharray="3 3"
+                stroke="hsl(222 20% 14%)"
+              />
               <XAxis
                 dataKey="t"
                 type="number"
@@ -185,7 +203,7 @@ export function EquityCurveChart({
                 }}
               />
             </ComposedChart>
-          </ResponsiveContainer>
+          </ChartContainer>
         </div>
       </CardContent>
     </Card>

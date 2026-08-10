@@ -11,6 +11,7 @@ import { POSITION_RISK_FLAG, EnumBadge, type EnumRender } from '@/lib/opportunit
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { StatTile } from '@/components/shared/StatTile';
+import { Eyebrow } from '@/components/shared/Eyebrow';
 import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
 import { formatLastRun } from '@/lib/formatLastRun';
 import { usePositionLineage } from '@/hooks/usePositionLineage';
@@ -519,9 +520,9 @@ export default function PositionsPage() {
 
               {/* Exit rule / factor (risk framing). */}
               <div>
-                <p className="mb-2 font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
+                <Eyebrow as="p" className="mb-2">
                   Position risk
-                </p>
+                </Eyebrow>
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                   <dt className="text-muted-foreground">Factor</dt>
                   <dd className="text-right">{selected.factor || 'Unclassified'}</dd>
@@ -536,9 +537,9 @@ export default function PositionsPage() {
 
               {/* Broker-reported values (read-only mirror — C-10(b): the broker owns the P&L). */}
               <div>
-                <p className="mb-2 font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
+                <Eyebrow as="p" className="mb-2">
                   Reported by broker
-                </p>
+                </Eyebrow>
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                   <dt className="text-muted-foreground">Qty</dt>
                   <dd className="text-right tabular-nums">{selected.qty}</dd>

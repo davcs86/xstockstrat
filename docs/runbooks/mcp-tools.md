@@ -406,8 +406,8 @@ supply a `component` dict (same shape as a strategy component: `ref_name` / `kin
 `_build_component` and sends it, so `SCREEN_KIND_TECHNICAL_FORMULA` /
 `SCREEN_KIND_TECHNICAL_INDICATOR` criteria are **scored** (feature 090). An unknown fundamental
 `metric_name` — a typo of a closed field, or an open metric that no scanned symbol carries — is
-**rejected with `INVALID_ARGUMENT`** rather than silently skipped (only enforceable when
-fundamentals are available; a degraded scan still skips them).
+**rejected with `INVALID_ARGUMENT`** (only enforceable when fundamentals are available at all —
+see the `status` note below for when they aren't).
 
 **Return**
 
@@ -420,7 +420,7 @@ fundamentals are available; a degraded scan still skips them).
 }
 ```
 
-`status` is the `ScreenResultStatus` name (`SCREEN_RESULT_STATUS_OK` | `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`); `coverage_gaps` lists symbols lacking enough data to screen, each with its `timeframe` (enum name) and `bars_have`/`bars_need` (int64 as JSON **strings**, matching `run_backtest`). Gaps are computed **before** `rank_limit` truncation (feature 090), so an under-covered symbol ranked below the cut still appears.
+`status` is the `ScreenResultStatus` name (`SCREEN_RESULT_STATUS_OK` | `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA`). A symbol is `SCREEN_RESULT_STATUS_INSUFFICIENT_DATA` (`passed: false`, no score, absent from `criterion_scores`) whenever a requested criterion could not be evaluated for lack of underlying data — too few bars for a technical criterion, **or** the fundamentals source (FMP) being disabled/erroring/quota-exhausted while a fundamental criterion was requested (bug fix: a scan used to report these as `OK`/`passed: true` with the criterion simply missing from `criterion_scores`, indistinguishable from a candidate that genuinely passed). `coverage_gaps` covers **only the bars case** — each entry carries `timeframe` (enum name) and `bars_have`/`bars_need` (int64 as JSON **strings**, matching `run_backtest`) — a fundamentals-unavailable result has no `CoverageGap` (that message is bars-specific) and so never appears there. When fundamentals ARE available for the batch but a specific symbol's value is still missing (e.g. the source omitted that symbol), only that symbol's hard-filter criteria fail closed (`passed: false`) — its `status` stays `OK` since it isn't a whole-batch outage. Gaps are computed **before** `rank_limit` truncation (feature 090), so an under-covered symbol ranked below the cut still appears.
 
 **Errors**
 
@@ -473,6 +473,7 @@ gate.
 | `exit_rule` | `string` | No | JSON-encoded condition tree |
 | `signal_params` | `object` | No | Optional signal-weighting params |
 | `cooldown_days` | `int` | No | Per-symbol re-entry cooldown in calendar days. Omit → platform default (31); `0` → no cooldown; negative rejected |
+| `exit_cooldown_days` | `int` | No | Per-symbol minimum holding period in calendar days before `exit_rule` may fire a sell. Omit → platform default (0, no minimum hold); `0` → no minimum hold (current behavior); negative rejected |
 | `clear_fields` | `string[]` | No | Field names to **erase** on `update`, e.g. `["exit_rule"]`. The only way to blank a rule or revert `cooldown_days` to the platform default |
 
 **Return**
@@ -487,15 +488,16 @@ gate.
 |---|---|
 | Invalid definition (unknown indicator, bad rule JSON, undefined ref_name) | `invalid argument` (INVALID_ARGUMENT) |
 | Negative `cooldown_days` | `invalid argument` (INVALID_ARGUMENT) |
+| Negative `exit_cooldown_days` | `invalid argument` (INVALID_ARGUMENT) |
 | `update` with no fields and no `clear_fields` | `ValueError` raised client-side, before any RPC |
 | An `update` that would empty `components` or blank a rule without naming it for erasure | `invalid argument` (INVALID_ARGUMENT) — the server refuses; the message names `update_mask` as the escape hatch |
 | `update`/`deactivate`/`reactivate` on unknown strategy | `strategy not found` (NOT_FOUND) |
 | `register` on an existing strategy_id (active or deactivated) | `strategy already exists` (ALREADY_EXISTS) |
 
 **Effect on the derived grade.** Changing a scoring-relevant field (`components`, rules,
-`cooldown_days`, `signal_params`) changes the strategy's definition fingerprint, so its derived
-grade is cleared until a fresh backtest supplies new evidence. A rename does **not** — the
-fingerprint excludes `display_name`.
+`cooldown_days`, `exit_cooldown_days`, `signal_params`) changes the strategy's definition
+fingerprint, so its derived grade is cleared until a fresh backtest supplies new evidence. A
+rename does **not** — the fingerprint excludes `display_name`.
 
 ---
 
@@ -530,7 +532,9 @@ directly:
 ```
 
 `cooldown_days` is omitted when unset (platform default applies) and present when explicitly set —
-including an explicit `0`, which means "no cooldown".
+including an explicit `0`, which means "no cooldown". `exit_cooldown_days` follows the same
+presence rule — omitted when unset, present (including an explicit `0`, "no minimum hold") when
+explicitly set.
 
 **Errors**
 

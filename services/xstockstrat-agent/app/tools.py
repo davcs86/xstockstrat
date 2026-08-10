@@ -466,7 +466,12 @@ def register_tools(server: MCPServer) -> None:
             (bool), "status"}], "coverage_gaps": [{"symbol", "timeframe", "bars_have",
             "bars_need"}]}. coverage_gaps now carries the full gap detail (bars_have/bars_need as
             JSON strings — int64) and is computed BEFORE rank truncation, so an under-covered
-            symbol ranked below the cut still surfaces. Filter candidates on `passed`."""
+            symbol ranked below the cut still surfaces (bars gaps only — see next line for
+            fundamentals). A result is "SCREEN_RESULT_STATUS_INSUFFICIENT_DATA" (passed=false, no
+            score, its ref_name absent from criterion_scores) whenever a requested criterion
+            couldn't be evaluated for lack of data — too few bars, or the fundamentals source
+            (FMP) unavailable while a fundamental criterion was requested; it is never reported
+            OK/passed just because a criterion had no data. Filter candidates on `passed`."""
         return await client.screen_symbols(
             symbols=symbols,
             criteria=criteria,
@@ -488,6 +493,7 @@ def register_tools(server: MCPServer) -> None:
         exit_rule: str | None = None,
         signal_params: dict | None = None,
         cooldown_days: int | None = None,
+        exit_cooldown_days: int | None = None,
         clear_fields: list[str] | None = None,
     ) -> dict:
         """Register/update/deactivate/reactivate a stored strategy in xstockstrat-analysis.
@@ -528,6 +534,9 @@ def register_tools(server: MCPServer) -> None:
         signal_params: optional signal-weighting params.
         cooldown_days: optional per-symbol re-entry cooldown in calendar days — omit → platform
             default (31); 0 → no cooldown; negative → rejected (INVALID_ARGUMENT).
+        exit_cooldown_days: optional per-symbol minimum holding period in calendar days before
+            exit_rule may fire a sell — omit → platform default (0, no minimum hold); 0 → no
+            minimum hold (immediate exit permitted); negative → rejected (INVALID_ARGUMENT).
         clear_fields: optional list of field names to ERASE, e.g. ['exit_rule']. Use this to
             blank a rule or to revert cooldown_days to the platform default — passing a field
             with no value cannot express "erase" on its own.
@@ -540,8 +549,8 @@ def register_tools(server: MCPServer) -> None:
         wiped them. Call get_strategy first if you want to see the current definition.
 
         Note: changing any scoring-relevant field (components, rules, cooldown_days,
-        signal_params) changes the strategy's definition fingerprint, so its derived grade is
-        cleared until a fresh backtest supplies new evidence. A rename does not.
+        exit_cooldown_days, signal_params) changes the strategy's definition fingerprint, so its
+        derived grade is cleared until a fresh backtest supplies new evidence. A rename does not.
 
         LIFECYCLE (feature 089): 'deactivate' is reversible via 'reactivate' (sets active=true and
         re-validates the stored definition — a reactivate can fail INVALID_ARGUMENT if a referenced
@@ -565,6 +574,7 @@ def register_tools(server: MCPServer) -> None:
             "exit_rule": exit_rule,
             "signal_params": signal_params,
             "cooldown_days": cooldown_days,
+            "exit_cooldown_days": exit_cooldown_days,
         }
         mask = [name for name, value in supplied.items() if value is not None]
         for name in mask:
@@ -936,8 +946,8 @@ def register_tools(server: MCPServer) -> None:
         """Fetch a stored strategy's full definition from xstockstrat-analysis (read-only).
         strategy_id: the strategy identifier, e.g. 'range_mean_reversion_v3'.
         Returns the complete stored definition — display_name, every component with its
-        formula_id and params, entry_rule/exit_rule, signal_params, cooldown_days, and the
-        active/live_enabled flags.
+        formula_id and params, entry_rule/exit_rule, signal_params, cooldown_days,
+        exit_cooldown_days, and the active/live_enabled flags.
         Use this before editing a strategy to see what is actually stored, and after editing to
         verify the change landed. Keys are snake_case, matching manage_strategy's input, so a
         fetch → edit → resend round-trip works directly."""

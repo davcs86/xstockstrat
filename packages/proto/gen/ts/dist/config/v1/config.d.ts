@@ -110,6 +110,10 @@ export interface ListKeysResponse {
 export interface ConfigKeyMeta {
     key: string;
     description: string;
+    /**
+     * The declared/seed default for this key — metadata only (CONFIG-2: runtime resolution
+     * never reads this column). Does NOT track live edits; use current_value for that.
+     */
     defaultValue: string;
     isSecret: boolean;
     consumingService: string;
@@ -117,6 +121,11 @@ export interface ConfigKeyMeta {
     tradingMode: TradingMode;
     /** optional; absent = no validation */
     validation?: ValidationRule | undefined;
+    /**
+     * The row's live value_data — what SetConfig writes and WatchConfig/GetConfig serve.
+     * This is what a config-ui "Value" column must display and prefill for editing.
+     */
+    currentValue: string;
 }
 export declare const WatchConfigRequest: MessageFns<WatchConfigRequest>;
 export declare const ConfigSnapshot: MessageFns<ConfigSnapshot>;

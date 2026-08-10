@@ -1,23 +1,34 @@
 'use client';
 import { useQueries } from '@tanstack/react-query';
+import { X } from 'lucide-react';
 import { cn } from '@/components/ui/utils';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { ConditionState } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { analysisClient } from '@/lib/browserClients/analysisClient';
 import { isFiring, rollupReadiness } from '@/lib/readinessRollup';
+import { UNBOUND, toApiStrategyId } from '@/hooks/useWatchlists';
 
 type EvaluateReadinessResult = Awaited<ReturnType<typeof analysisClient.evaluateReadiness>>;
 type Readiness = EvaluateReadinessResult['readiness'][number];
 type Binding = { symbol: string; strategyId: string };
+type StrategyDef = { strategyId: string; displayName?: string; liveEnabled: boolean };
 
 const hasData = (r: Readiness) => r.totalConditions > 0;
 
 /** Green = firing (all pass), paper = partway, sell = none pass, muted = no data (feature 083/097). */
-function barClass(r: Readiness): string {
-  if (!hasData(r)) return 'bg-muted-foreground/40';
-  if (isFiring(r)) return 'bg-buy';
-  if (r.passingConditions > 0) return 'bg-paper';
-  return 'bg-sell';
+function barVariant(r: Readiness): 'buy' | 'paper' | 'sell' | 'muted' {
+  if (!hasData(r)) return 'muted';
+  if (isFiring(r)) return 'buy';
+  if (r.passingConditions > 0) return 'paper';
+  return 'sell';
 }
 
 /** The first not-yet-passing condition — what's holding the signal back. */
@@ -35,6 +46,72 @@ function stateLabel(r: Readiness): string {
 }
 
 /**
+ * Remove + rebind controls for one readiness row (feature 110, FR-1/FR-2) — shared by the bound
+ * and unbound row branches below. Stateless (no internal `useState`, matches this file's own
+ * "never a fabricated binding" discipline). `strategies` is the full, unfiltered list; this
+ * component replicates the live-strategy filter (+ keep the currently-bound strategy visible even
+ * if it's gone non-live) that `WatchlistDetail.tsx`'s own `strategyOptions()` already applies to
+ * the chip row this replaces, so relocating the control doesn't silently drop that behavior.
+ * `onRebind`'s `onValueChange` is the ONE place the Select's UNBOUND sentinel is translated to the
+ * wire-level '' strategyId before calling back up.
+ */
+function BindingRowControls({
+  symbol,
+  strategyId,
+  strategies,
+  onRebind,
+  onRemove,
+  disabled,
+}: {
+  symbol: string;
+  strategyId: string;
+  strategies: StrategyDef[];
+  onRebind: (symbol: string, strategyId: string) => void;
+  onRemove: (symbol: string) => void;
+  disabled: boolean;
+}) {
+  const liveStrategies = strategies.filter((s) => s.liveEnabled);
+  const options =
+    !strategyId || liveStrategies.some((s) => s.strategyId === strategyId)
+      ? liveStrategies
+      : [...liveStrategies, ...strategies.filter((s) => s.strategyId === strategyId)];
+  return (
+    <div className="flex items-center gap-2">
+      <Select
+        value={strategyId || UNBOUND}
+        onValueChange={(v) => onRebind(symbol, toApiStrategyId(v))}
+        disabled={disabled}
+      >
+        <SelectTrigger className="h-7 w-32 text-xs" aria-label={`Strategy for ${symbol}`}>
+          <SelectValue placeholder="Bind a strategy…">
+            {options.find((s) => s.strategyId === strategyId)?.displayName ||
+              strategyId ||
+              undefined}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={UNBOUND}>Unbound</SelectItem>
+          {options.map((s) => (
+            <SelectItem key={s.strategyId} value={s.strategyId}>
+              {s.displayName || s.strategyId}
+              {!s.liveEnabled ? ' (non-live)' : ''}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <button
+        type="button"
+        aria-label={`Remove ${symbol}`}
+        onClick={() => onRemove(symbol)}
+        disabled={disabled}
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
+
+/**
  * Per-watchlist readiness overlay (feature 083/098, per-symbol bindings by feature 097). Each
  * symbol is evaluated against **its own bound strategy** (FR-6) — the transient whole-list
  * `useState('')` strategy picker is gone. Symbols are grouped by their bound `strategyId` and one
@@ -46,9 +123,17 @@ function stateLabel(r: Readiness): string {
 export function WatchlistReadiness({
   bindings,
   inQueue,
+  strategies,
+  onRemoveSymbol,
+  onRebindSymbol,
+  disabled = false,
 }: {
   bindings: Binding[];
   inQueue?: Set<string>;
+  strategies: StrategyDef[];
+  onRemoveSymbol: (symbol: string) => void;
+  onRebindSymbol: (symbol: string, strategyId: string) => void;
+  disabled?: boolean;
 }) {
   const bound = bindings.filter((b) => b.strategyId);
   const unbound = bindings.filter((b) => !b.strategyId);
@@ -114,16 +199,12 @@ export function WatchlistReadiness({
                 data-testid={`readiness-row-${binding.symbol}`}
               >
                 <span className="w-14 font-mono font-semibold">{r.symbol}</span>
-                <span className="w-40 truncate font-mono text-[10px] text-muted-foreground">
-                  {binding.strategyId}
-                </span>
                 <div className="flex items-center gap-2">
-                  <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className={cn('h-full', barClass(r))}
-                      style={{ width: `${Math.round(r.conviction * 100)}%` }}
-                    />
-                  </div>
+                  <Progress
+                    value={Math.round(r.conviction * 100)}
+                    className="h-1.5 w-20"
+                    variant={barVariant(r)}
+                  />
                   <span
                     className={cn(
                       'w-16 font-mono tabular-nums',
@@ -145,6 +226,14 @@ export function WatchlistReadiness({
                 <span className="ml-auto truncate font-mono text-muted-foreground">
                   {blockingCondition(r)}
                 </span>
+                <BindingRowControls
+                  symbol={binding.symbol}
+                  strategyId={binding.strategyId}
+                  strategies={strategies}
+                  onRebind={onRebindSymbol}
+                  onRemove={onRemoveSymbol}
+                  disabled={disabled}
+                />
               </li>
             );
           })}
@@ -160,6 +249,14 @@ export function WatchlistReadiness({
             <span className="text-muted-foreground/60" data-testid={`unbound-${b.symbol}`}>
               not evaluated — bind a strategy
             </span>
+            <BindingRowControls
+              symbol={b.symbol}
+              strategyId={b.strategyId}
+              strategies={strategies}
+              onRebind={onRebindSymbol}
+              onRemove={onRemoveSymbol}
+              disabled={disabled}
+            />
           </li>
         ))}
       </ul>

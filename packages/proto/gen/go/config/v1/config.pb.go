@@ -835,17 +835,22 @@ func (x *ListKeysResponse) GetKeys() []*ConfigKeyMeta {
 }
 
 type ConfigKeyMeta struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Key              string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	Description      string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	DefaultValue     string                 `protobuf:"bytes,3,opt,name=default_value,json=defaultValue,proto3" json:"default_value,omitempty"`
-	IsSecret         bool                   `protobuf:"varint,4,opt,name=is_secret,json=isSecret,proto3" json:"is_secret,omitempty"`
-	ConsumingService string                 `protobuf:"bytes,5,opt,name=consuming_service,json=consumingService,proto3" json:"consuming_service,omitempty"`
-	Environment      v1.Environment         `protobuf:"varint,6,opt,name=environment,proto3,enum=xstockstrat.common.v1.Environment" json:"environment,omitempty"`
-	TradingMode      v1.TradingMode         `protobuf:"varint,7,opt,name=trading_mode,json=tradingMode,proto3,enum=xstockstrat.common.v1.TradingMode" json:"trading_mode,omitempty"`
-	Validation       *ValidationRule        `protobuf:"bytes,8,opt,name=validation,proto3" json:"validation,omitempty"` // optional; absent = no validation
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Key         string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	// The declared/seed default for this key — metadata only (CONFIG-2: runtime resolution
+	// never reads this column). Does NOT track live edits; use current_value for that.
+	DefaultValue     string          `protobuf:"bytes,3,opt,name=default_value,json=defaultValue,proto3" json:"default_value,omitempty"`
+	IsSecret         bool            `protobuf:"varint,4,opt,name=is_secret,json=isSecret,proto3" json:"is_secret,omitempty"`
+	ConsumingService string          `protobuf:"bytes,5,opt,name=consuming_service,json=consumingService,proto3" json:"consuming_service,omitempty"`
+	Environment      v1.Environment  `protobuf:"varint,6,opt,name=environment,proto3,enum=xstockstrat.common.v1.Environment" json:"environment,omitempty"`
+	TradingMode      v1.TradingMode  `protobuf:"varint,7,opt,name=trading_mode,json=tradingMode,proto3,enum=xstockstrat.common.v1.TradingMode" json:"trading_mode,omitempty"`
+	Validation       *ValidationRule `protobuf:"bytes,8,opt,name=validation,proto3" json:"validation,omitempty"` // optional; absent = no validation
+	// The row's live value_data — what SetConfig writes and WatchConfig/GetConfig serve.
+	// This is what a config-ui "Value" column must display and prefill for editing.
+	CurrentValue  string `protobuf:"bytes,9,opt,name=current_value,json=currentValue,proto3" json:"current_value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ConfigKeyMeta) Reset() {
@@ -934,6 +939,13 @@ func (x *ConfigKeyMeta) GetValidation() *ValidationRule {
 	return nil
 }
 
+func (x *ConfigKeyMeta) GetCurrentValue() string {
+	if x != nil {
+		return x.CurrentValue
+	}
+	return ""
+}
+
 var File_config_v1_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_config_proto_rawDesc = "" +
@@ -998,7 +1010,7 @@ const file_config_v1_config_proto_rawDesc = "" +
 	"\venvironment\x18\x02 \x01(\x0e2\".xstockstrat.common.v1.EnvironmentR\venvironment\x12E\n" +
 	"\ftrading_mode\x18\x03 \x01(\x0e2\".xstockstrat.common.v1.TradingModeR\vtradingMode\"L\n" +
 	"\x10ListKeysResponse\x128\n" +
-	"\x04keys\x18\x01 \x03(\v2$.xstockstrat.config.v1.ConfigKeyMetaR\x04keys\"\x86\x03\n" +
+	"\x04keys\x18\x01 \x03(\v2$.xstockstrat.config.v1.ConfigKeyMetaR\x04keys\"\xab\x03\n" +
 	"\rConfigKeyMeta\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12#\n" +
@@ -1009,7 +1021,8 @@ const file_config_v1_config_proto_rawDesc = "" +
 	"\ftrading_mode\x18\a \x01(\x0e2\".xstockstrat.common.v1.TradingModeR\vtradingMode\x12E\n" +
 	"\n" +
 	"validation\x18\b \x01(\v2%.xstockstrat.config.v1.ValidationRuleR\n" +
-	"validation*\x94\x01\n" +
+	"validation\x12#\n" +
+	"\rcurrent_value\x18\t \x01(\tR\fcurrentValue*\x94\x01\n" +
 	"\x10ConfigUpdateType\x12\"\n" +
 	"\x1eCONFIG_UPDATE_TYPE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bCONFIG_UPDATE_TYPE_SNAPSHOT\x10\x01\x12\x1c\n" +

@@ -16,6 +16,8 @@ import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { ToggleGroup, ToggleGroupItem } from '../ui/toggle-group';
+import { Alert, AlertDescription } from '../ui/alert';
 
 type OrderSide = 'buy' | 'sell';
 type OrderType = 'market' | 'limit' | 'stop' | 'stop_limit' | 'trailing_stop';
@@ -142,19 +144,20 @@ export function OrderForm({ mode, initialSymbol }: OrderFormProps) {
           />
 
           {/* Buy / Sell toggle */}
-          <div className="grid grid-cols-2 gap-2">
-            {(['buy', 'sell'] as OrderSide[]).map((s) => (
-              <Button
-                key={s}
-                type="button"
-                variant={side === s ? (s === 'buy' ? 'buy' : 'sell') : 'outline'}
-                onClick={() => setSide(s)}
-                className="w-full"
-              >
-                {s.toUpperCase()}
-              </Button>
-            ))}
-          </div>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            value={side}
+            onValueChange={(v) => v && setSide(v as OrderSide)}
+            className="grid grid-cols-2 gap-2"
+          >
+            <ToggleGroupItem value="buy" variant="buy">
+              BUY
+            </ToggleGroupItem>
+            <ToggleGroupItem value="sell" variant="sell">
+              SELL
+            </ToggleGroupItem>
+          </ToggleGroup>
 
           <Select value={orderType} onValueChange={(v) => setOrderType(v as OrderType)}>
             <SelectTrigger>
@@ -213,7 +216,11 @@ export function OrderForm({ mode, initialSymbol }: OrderFormProps) {
           </Button>
 
           {message && (
-            <p className={`text-xs ${isErrorMsg ? 'text-destructive' : 'text-buy'}`}>{message}</p>
+            <Alert variant={isErrorMsg ? 'destructive' : 'default'}>
+              <AlertDescription className={isErrorMsg ? undefined : 'text-buy'}>
+                {message}
+              </AlertDescription>
+            </Alert>
           )}
           {!selectedAccountId && (
             <p className="text-xs text-muted-foreground">

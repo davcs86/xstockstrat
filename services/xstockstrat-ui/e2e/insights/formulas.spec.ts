@@ -27,6 +27,28 @@ test.describe('Formula management UI', () => {
     await expect(page.getByText('RSI Divergence')).toBeVisible();
   });
 
+  test('a row navigates to the formula detail page via Enter (FR-5 keyboard activation)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.route(
+      '**/xstockstrat.indicators.v1.IndicatorsService/ListFormulas',
+      async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ formulas: FORMULAS, totalCount: FORMULAS.length }),
+        });
+      },
+    );
+    await page.goto('/insights/formulas');
+    const row = page.locator('[role="button"]', { hasText: 'RSI Divergence' });
+    await expect(row).toBeVisible({ timeout: 10000 });
+    await row.focus();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/\/insights\/formulas\/f-rsi/);
+  });
+
   test('new formula page renders the create form', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto('/insights/formulas/new');

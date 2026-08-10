@@ -1,8 +1,7 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { Trash2, X, Search } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { Trash2, Search, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -13,9 +12,19 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
+import {
   useAddWatchlistSymbols,
   useRemoveWatchlistSymbols,
   useUpdateWatchlist,
+  UNBOUND,
+  toApiStrategyId,
   type WatchlistBindingInput,
 } from '@/hooks/useWatchlists';
 import { useStrategyDefinitions } from '@/hooks/useStrategyDefinitions';
@@ -35,9 +44,6 @@ type WatchlistLike = {
   bindings?: Binding[];
 };
 
-// Radix Select forbids an empty-string item value, so an unbound symbol uses this sentinel.
-const UNBOUND = '__unbound__';
-
 /**
  * Detail pane for the selected watchlist (feature 098, per-symbol bindings by feature 097). Owns
  * the symbol-chip CRUD, an inline per-symbol strategy binding editor, the "Build from screener"
@@ -50,7 +56,7 @@ export function WatchlistDetail({
   onDelete,
 }: {
   watchlist: WatchlistLike;
-  onDelete: (watchlistId: string, name: string) => void;
+  onDelete: (watchlistId: string) => void;
 }) {
   const addSymbols = useAddWatchlistSymbols();
   const removeSymbols = useRemoveWatchlistSymbols();
@@ -61,15 +67,16 @@ export function WatchlistDetail({
   // default) also admits paused/never-enabled/test strategies. An already-bound strategy that
   // is no longer live stays visible (labeled) so its existing binding doesn't appear to vanish.
   const liveStrategies = allStrategies.filter((s) => s.liveEnabled);
-  function strategyOptions(boundStrategyId: string) {
-    if (!boundStrategyId || liveStrategies.some((s) => s.strategyId === boundStrategyId)) {
-      return liveStrategies;
-    }
-    const bound = allStrategies.find((s) => s.strategyId === boundStrategyId);
-    return bound ? [...liveStrategies, bound] : liveStrategies;
-  }
   const { data: oppData } = useOpportunities();
   const [symbolInput, setSymbolInput] = useState('');
+  const [addStrategyId, setAddStrategyId] = useState(UNBOUND);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState(watchlist.name);
+  // Layer 1 of the concurrency guard (design.md §5) — disables every in-pane control while any of
+  // this component's own mutations is in flight, closing all 4 write-pairings (rebind/rebind,
+  // rebind/rename, rebind/remove, rename/remove). Layer 2 (Step 8) covers the cross-instance case.
+  const writeInFlight =
+    addSymbols.isPending || removeSymbols.isPending || updateWatchlist.isPending;
 
   const inQueue = new Set((oppData?.opportunities ?? []).map((o) => o.symbol.toUpperCase()));
 
@@ -83,11 +90,16 @@ export function WatchlistDetail({
   function handleAddSymbol() {
     const raw = symbolInput.trim();
     if (!raw) return;
-    // Allow comma/space-separated entry; server uppercases + de-dupes. Added unbound.
+    // Allow comma/space-separated entry; server uppercases + de-dupes.
     const symbols = raw.split(/[\s,]+/).filter(Boolean);
     if (symbols.length === 0) return;
+    const strategyId = toApiStrategyId(addStrategyId);
     addSymbols.mutate(
-      { watchlistId: watchlist.watchlistId, symbols },
+      {
+        watchlistId: watchlist.watchlistId,
+        symbols,
+        bindings: symbols.map((s) => ({ symbol: s, strategyId })),
+      },
       { onSuccess: () => setSymbolInput('') },
     );
   }
@@ -106,11 +118,60 @@ export function WatchlistDetail({
     });
   }
 
+  // Commit the rename only if the trimmed draft is non-empty and actually changed. Sends the
+  // FULL current bindings/description unchanged (same fails-080 invariant as setBinding, FR-6).
+  function commitRename() {
+    const trimmed = nameDraft.trim();
+    if (trimmed && trimmed !== watchlist.name) {
+      updateWatchlist.mutate({
+        watchlistId: watchlist.watchlistId,
+        name: trimmed,
+        description: watchlist.description ?? '',
+        bindings,
+      });
+    }
+    setIsEditingName(false);
+  }
+
+  function cancelRename() {
+    setNameDraft(watchlist.name);
+    setIsEditingName(false);
+  }
+
   return (
     <div className="p-4">
       <div className="mb-3 flex items-start justify-between">
         <div>
-          <h2 className="font-semibold">{watchlist.name}</h2>
+          {isEditingName ? (
+            <Input
+              autoFocus
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              onBlur={commitRename}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitRename();
+                if (e.key === 'Escape') cancelRename();
+              }}
+              aria-label="Watchlist name"
+              className="h-8 max-w-xs font-semibold"
+              disabled={writeInFlight}
+            />
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <h2 className="font-semibold">{watchlist.name}</h2>
+              <button
+                type="button"
+                aria-label={`Rename ${watchlist.name}`}
+                onClick={() => {
+                  setNameDraft(watchlist.name);
+                  setIsEditingName(true);
+                }}
+                disabled={writeInFlight}
+              >
+                <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
+            </div>
+          )}
           {watchlist.description && (
             <p className="text-sm text-muted-foreground">{watchlist.description}</p>
           )}
@@ -123,58 +184,31 @@ export function WatchlistDetail({
               Build from screener
             </Link>
           </Button>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => onDelete(watchlist.watchlistId, watchlist.name)}
-            aria-label={`Delete ${watchlist.name}`}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive" size="sm" aria-label={`Delete ${watchlist.name}`}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogDescription>
+                Delete watchlist &quot;{watchlist.name}&quot;? This cannot be undone.
+              </AlertDialogDescription>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={(e) => {
+                  e.preventDefault();
+                  onDelete(watchlist.watchlistId);
+                }}
+              >
+                Confirm
+              </AlertDialogAction>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
 
-      {/* Per-symbol rows: symbol chip + remove + an inline strategy-binding Select (FR-6). */}
-      <div className="mb-3 space-y-1.5" data-testid="symbol-list">
-        {bindings.length === 0 && <span className="text-sm text-muted-foreground">No symbols</span>}
-        {bindings.map((b) => (
-          <div
-            key={b.symbol}
-            className="flex items-center gap-2"
-            data-testid={`binding-${b.symbol}`}
-          >
-            <Badge variant="info" className="gap-1">
-              {b.symbol}
-              <button
-                type="button"
-                aria-label={`Remove ${b.symbol}`}
-                onClick={() =>
-                  removeSymbols.mutate({ watchlistId: watchlist.watchlistId, symbols: [b.symbol] })
-                }
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </Badge>
-            <Select
-              value={b.strategyId || UNBOUND}
-              onValueChange={(v) => setBinding(b.symbol, v === UNBOUND ? '' : v)}
-            >
-              <SelectTrigger className="h-7 w-48 text-xs" aria-label={`Strategy for ${b.symbol}`}>
-                <SelectValue placeholder="Bind a strategy…" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={UNBOUND}>Unbound</SelectItem>
-                {strategyOptions(b.strategyId).map((s) => (
-                  <SelectItem key={s.strategyId} value={s.strategyId}>
-                    {s.displayName || s.strategyId}
-                    {!s.liveEnabled ? ' (non-live)' : ''}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        ))}
-      </div>
+      {bindings.length === 0 && <p className="mb-3 text-sm text-muted-foreground">No symbols</p>}
 
       <div className="flex items-center gap-2">
         <Input
@@ -183,13 +217,36 @@ export function WatchlistDetail({
           onKeyDown={(e) => e.key === 'Enter' && handleAddSymbol()}
           placeholder="Add symbols (e.g. AAPL MSFT)"
           className="max-w-xs"
+          disabled={writeInFlight}
         />
-        <Button size="sm" variant="default" onClick={handleAddSymbol}>
+        <Select value={addStrategyId} onValueChange={setAddStrategyId} disabled={writeInFlight}>
+          <SelectTrigger className="h-9 w-40 text-xs" aria-label="Strategy for new symbols">
+            <SelectValue placeholder="Unbound" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={UNBOUND}>Unbound</SelectItem>
+            {liveStrategies.map((s) => (
+              <SelectItem key={s.strategyId} value={s.strategyId}>
+                {s.displayName || s.strategyId}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button size="sm" variant="default" onClick={handleAddSymbol} disabled={writeInFlight}>
           Add
         </Button>
       </div>
 
-      <WatchlistReadiness bindings={bindings} inQueue={inQueue} />
+      <WatchlistReadiness
+        bindings={bindings}
+        inQueue={inQueue}
+        strategies={allStrategies}
+        onRemoveSymbol={(symbol) =>
+          removeSymbols.mutate({ watchlistId: watchlist.watchlistId, symbols: [symbol] })
+        }
+        onRebindSymbol={setBinding}
+        disabled={writeInFlight}
+      />
     </div>
   );
 }

@@ -27,6 +27,54 @@ async function stubListFormulas(page: Page): Promise<void> {
   });
 }
 
+// Capture the exact ManageStrategy payload the wizard submits (browser → BFF), then stub a
+// success. Module-scope (feature 116) so both the re-entry-cooldown and exit-cooldown
+// test.describe blocks below can share it.
+async function captureManageStrategy(page: Page): Promise<() => Record<string, unknown> | null> {
+  let captured: Record<string, unknown> | null = null;
+  await page.route('**/xstockstrat.analysis.v1.AnalysisService/ManageStrategy', async (route) => {
+    captured = JSON.parse(route.request().postData() ?? '{}');
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ strategyId: 'cool_test' }),
+    });
+  });
+  return () => captured;
+}
+
+// Module-scope (feature 116) so both test.describe blocks below can share it. `exitCooldown`
+// defaults to '' (unfilled) so the pre-existing feature-069 call sites are unaffected.
+async function fillToReview(
+  page: Page,
+  id: string,
+  display: string,
+  cooldown: string,
+  exitCooldown: string = '',
+): Promise<void> {
+  await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
+  const next = page.getByRole('button', { name: 'Next', exact: true });
+  // FR-10 (Round 3): Step 1 is 4 native sub-screens, one per field — a Next click between each.
+  await page.getByPlaceholder('e.g. sma_crossover').fill(id);
+  await next.click(); // sub-screen 2 — display name
+  await page.getByPlaceholder('SMA Crossover').fill(display);
+  await next.click(); // sub-screen 3 — cooldown
+  if (cooldown !== '') await page.getByPlaceholder('31 (default)').fill(cooldown);
+  await next.click(); // sub-screen 4 — exit cooldown
+  if (exitCooldown !== '') await page.getByPlaceholder('0 (default)').fill(exitCooldown);
+  await next.click(); // → Step 2 — Components
+  await page.getByRole('button', { name: 'Add component' }).click();
+  await next.click();
+  const jsonButtons = page.getByRole('tab', { name: 'JSON' });
+  await jsonButtons.nth(0).click();
+  await page.getByLabel('Entry rule JSON').fill('{"op":"and","conditions":[]}');
+  await jsonButtons.nth(1).click();
+  await page.getByLabel('Exit rule JSON').fill('{"op":"or","conditions":[]}');
+  await next.click();
+  // feature 097: the "Signal Params" step is gone — Rules → Review directly.
+  await expect(page.getByText('Step 4 — Review')).toBeVisible();
+}
+
 test.describe('Strategy authoring — insights BFF', () => {
   test('manageStrategy register is denied for non-admin', async ({ page }) => {
     await addAuthCookie(page);
@@ -47,6 +95,30 @@ test.describe('Strategy authoring — insights BFF', () => {
     });
     expect(result.status).not.toBe(200);
     expect(result.body.toLowerCase()).toContain('permission');
+  });
+
+  test('strategies list Actions menu: Edit navigates to the edit page (FR-2)', async ({ page }) => {
+    await addAdminCookie(page);
+    await page.goto('/insights/strategies');
+    await page.getByTestId('actions-strat-live-001').click();
+    await page.getByRole('menuitem', { name: 'Edit' }).click();
+    await expect(page).toHaveURL(/\/insights\/strategies\/strat-live-001\/edit/);
+  });
+
+  test('strategies list Actions menu: Deactivate requires confirmation then calls ManageStrategy (FR-2)', async ({
+    page,
+  }) => {
+    await addAdminCookie(page);
+    await page.goto('/insights/strategies');
+    const reqPromise = page.waitForRequest(
+      (r) => r.url().includes('/ManageStrategy') && r.method() === 'POST',
+    );
+    await page.getByTestId('actions-strat-live-001').click();
+    await page.getByRole('menuitem', { name: 'Deactivate' }).click();
+    await expect(page.getByText(/Deactivate strategy/)).toBeVisible();
+    await page.getByRole('button', { name: 'Confirm' }).click();
+    const body = (await reqPromise).postData() ?? '';
+    expect(body).toContain('DEACTIVATE');
   });
 
   test('manageStrategy register succeeds for admin', async ({ page }) => {
@@ -146,13 +218,24 @@ test.describe('Strategy authoring — UI', () => {
     await stubListFormulas(page);
     await page.goto('/insights/strategies/new');
 
-    // Step 1 — Identity. Next disabled until valid id + display name.
+    // Step 1 — Identity, sub-screen 1 (Strategy ID). Next disabled until a valid id (FR-10, Round 3).
     await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
+    // The step-indicator pill row renders via Badge (FR-7), current step highlighted.
+    await expect(page.getByText('1. Identity')).toBeVisible();
     const next = page.getByRole('button', { name: 'Next', exact: true });
     await expect(next).toBeDisabled();
     await page.getByPlaceholder('e.g. sma_crossover').fill('sma_crossover');
+    await expect(next).toBeEnabled();
+    await next.click();
+
+    // Sub-screen 2 (Display name). Next disabled until non-empty.
+    await expect(next).toBeDisabled();
     await page.getByPlaceholder('SMA Crossover').fill('SMA Crossover');
     await expect(next).toBeEnabled();
+    await next.click();
+
+    // Sub-screens 3 (cooldown) and 4 (exit cooldown) are both optional — left blank, Next enabled.
+    await next.click();
     await next.click();
 
     // Step 2 — Components. Next disabled until ≥1 component (AC-11).
@@ -167,7 +250,7 @@ test.describe('Strategy authoring — UI', () => {
     await expect(next).toBeDisabled();
 
     // Switch both rule editors to JSON mode and type values (AC-9: JSON toggle).
-    const jsonButtons = page.getByRole('button', { name: 'JSON' });
+    const jsonButtons = page.getByRole('tab', { name: 'JSON' });
     await jsonButtons.nth(0).click();
     await page.getByLabel('Entry rule JSON').fill('{"op":"and","conditions":[]}');
     await jsonButtons.nth(1).click();
@@ -188,15 +271,18 @@ test.describe('Strategy authoring — UI', () => {
     await page.goto('/insights/strategies/new');
 
     await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
-    await page.getByPlaceholder('e.g. sma_crossover').fill('invalid_ref'); // sentinel → mock errors
-    await page.getByPlaceholder('SMA Crossover').fill('Invalid Ref Strategy');
     const next = page.getByRole('button', { name: 'Next', exact: true });
-    await next.click();
+    await page.getByPlaceholder('e.g. sma_crossover').fill('invalid_ref'); // sentinel → mock errors
+    await next.click(); // sub-screen 2 — display name
+    await page.getByPlaceholder('SMA Crossover').fill('Invalid Ref Strategy');
+    await next.click(); // sub-screen 3 — cooldown
+    await next.click(); // sub-screen 4 — exit cooldown
+    await next.click(); // → Step 2 — Components
 
     await page.getByRole('button', { name: 'Add component' }).click();
     await next.click();
 
-    const jsonButtons = page.getByRole('button', { name: 'JSON' });
+    const jsonButtons = page.getByRole('tab', { name: 'JSON' });
     await jsonButtons.nth(0).click();
     await page.getByLabel('Entry rule JSON').fill('{"op":"and","conditions":[]}');
     await jsonButtons.nth(1).click();
@@ -227,9 +313,13 @@ test.describe('Strategy authoring — UI', () => {
     await page.goto('/insights/strategies/new');
 
     await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
+    const next = page.getByRole('button', { name: 'Next', exact: true });
     await page.getByPlaceholder('e.g. sma_crossover').fill('with_formula');
+    await next.click(); // sub-screen 2 — display name
     await page.getByPlaceholder('SMA Crossover').fill('With Formula');
-    await page.getByRole('button', { name: 'Next', exact: true }).click();
+    await next.click(); // sub-screen 3 — cooldown
+    await next.click(); // sub-screen 4 — exit cooldown
+    await next.click(); // → Step 2 — Components
 
     await page.getByRole('button', { name: 'Add component' }).click();
     // Switch the component kind to Custom formula to reveal the picker.
@@ -254,44 +344,6 @@ test.describe('Strategy authoring — UI', () => {
  * must NOT gain cooldown_days: 0. No "0 → 31" collapse is asserted anywhere.
  */
 test.describe('Strategy authoring — re-entry cooldown (feature 069)', () => {
-  // Capture the exact ManageStrategy payload the wizard submits (browser → BFF), then stub a success.
-  async function captureManageStrategy(page: Page): Promise<() => Record<string, unknown> | null> {
-    let captured: Record<string, unknown> | null = null;
-    await page.route('**/xstockstrat.analysis.v1.AnalysisService/ManageStrategy', async (route) => {
-      captured = JSON.parse(route.request().postData() ?? '{}');
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ strategyId: 'cool_test' }),
-      });
-    });
-    return () => captured;
-  }
-
-  async function fillToReview(
-    page: Page,
-    id: string,
-    display: string,
-    cooldown: string,
-  ): Promise<void> {
-    await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
-    await page.getByPlaceholder('e.g. sma_crossover').fill(id);
-    await page.getByPlaceholder('SMA Crossover').fill(display);
-    if (cooldown !== '') await page.getByPlaceholder('31 (default)').fill(cooldown);
-    const next = page.getByRole('button', { name: 'Next', exact: true });
-    await next.click();
-    await page.getByRole('button', { name: 'Add component' }).click();
-    await next.click();
-    const jsonButtons = page.getByRole('button', { name: 'JSON' });
-    await jsonButtons.nth(0).click();
-    await page.getByLabel('Entry rule JSON').fill('{"op":"and","conditions":[]}');
-    await jsonButtons.nth(1).click();
-    await page.getByLabel('Exit rule JSON').fill('{"op":"or","conditions":[]}');
-    await next.click();
-    // feature 097: the "Signal Params" step is gone — Rules → Review directly.
-    await expect(page.getByText('Step 4 — Review')).toBeVisible();
-  }
-
   test('create with a blank cooldown omits cooldownDays from the payload', async ({ page }) => {
     await addAdminCookie(page);
     await stubListFormulas(page);
@@ -321,11 +373,14 @@ test.describe('Strategy authoring — re-entry cooldown (feature 069)', () => {
     await stubListFormulas(page);
     await page.goto('/insights/strategies/new');
     await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
+    const next = page.getByRole('button', { name: 'Next', exact: true });
     await page.getByPlaceholder('e.g. sma_crossover').fill('cool_neg');
+    await next.click(); // sub-screen 2 — display name
     await page.getByPlaceholder('SMA Crossover').fill('Cool Neg');
+    await next.click(); // sub-screen 3 — cooldown
     await page.getByPlaceholder('31 (default)').fill('-5');
     await expect(page.getByText('cooldown days must be a non-negative integer')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Next', exact: true })).toBeDisabled();
+    await expect(next).toBeDisabled();
   });
 
   test('edit pre-populates a non-default cooldown (AC-11)', async ({ page }) => {
@@ -333,6 +388,9 @@ test.describe('Strategy authoring — re-entry cooldown (feature 069)', () => {
     await stubListFormulas(page);
     await page.goto('/insights/strategies/strat-cooldown-14/edit');
     await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
+    const next = page.getByRole('button', { name: 'Next', exact: true });
+    await next.click(); // sub-screen 2 — display name (pre-populated)
+    await next.click(); // sub-screen 3 — cooldown
     await expect(page.getByPlaceholder('31 (default)')).toHaveValue('14');
   });
 
@@ -344,11 +402,14 @@ test.describe('Strategy authoring — re-entry cooldown (feature 069)', () => {
     const getCaptured = await captureManageStrategy(page);
     await page.goto('/insights/strategies/strat_unset/edit'); // getStrategy leaves cooldown unset
     await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
-    await expect(page.getByPlaceholder('31 (default)')).toHaveValue(''); // stays blank
-    // Change an unrelated field (display name) and save.
-    await page.getByPlaceholder('SMA Crossover').fill('Renamed Only');
     const next = page.getByRole('button', { name: 'Next', exact: true });
-    await next.click(); // Step 2 (component pre-populated)
+    await next.click(); // sub-screen 2 — display name
+    // Change an unrelated field (display name) and continue.
+    await page.getByPlaceholder('SMA Crossover').fill('Renamed Only');
+    await next.click(); // sub-screen 3 — cooldown
+    await expect(page.getByPlaceholder('31 (default)')).toHaveValue(''); // stays blank
+    await next.click(); // sub-screen 4 — exit cooldown
+    await next.click(); // → Step 2 (component pre-populated)
     await next.click(); // Step 3 (rules pre-populated)
     await next.click(); // Step 4 (Review — feature 097: no Signal Params step)
     await page.getByRole('button', { name: 'Save Changes' }).click();
@@ -367,10 +428,13 @@ test.describe('Strategy authoring — re-entry cooldown (feature 069)', () => {
     // strat_signal_universe/edit → getStrategy returns signal_params: { symbols: ["AAPL","MSFT"] }.
     await page.goto('/insights/strategies/strat_signal_universe/edit');
     await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
+    const next = page.getByRole('button', { name: 'Next', exact: true });
+    await next.click(); // sub-screen 2 — display name
     // Change only the display name, then walk to Review and save.
     await page.getByPlaceholder('SMA Crossover').fill('Universe Renamed');
-    const next = page.getByRole('button', { name: 'Next', exact: true });
-    await next.click(); // Step 2
+    await next.click(); // sub-screen 3 — cooldown
+    await next.click(); // sub-screen 4 — exit cooldown
+    await next.click(); // → Step 2
     await next.click(); // Step 3
     await next.click(); // Step 4 Review
     await page.getByRole('button', { name: 'Save Changes' }).click();
@@ -378,6 +442,86 @@ test.describe('Strategy authoring — re-entry cooldown (feature 069)', () => {
     const def = getCaptured()!.definition as Record<string, unknown>;
     const signalParams = def.signalParams as { symbols?: unknown } | undefined;
     expect(signalParams?.symbols).toEqual(['AAPL', 'MSFT']);
+  });
+});
+
+test.describe('Strategy authoring — exit cooldown (feature 116)', () => {
+  test('create with a blank exit cooldown omits exitCooldownDays from the payload', async ({
+    page,
+  }) => {
+    await addAdminCookie(page);
+    await stubListFormulas(page);
+    const getCaptured = await captureManageStrategy(page);
+    await page.goto('/insights/strategies/new');
+    await fillToReview(page, 'exit_blank', 'Exit Blank', '', ''); // blank exit cooldown
+    await page.getByRole('button', { name: 'Create Strategy' }).click();
+    await expect.poll(getCaptured).not.toBeNull();
+    const def = getCaptured()!.definition as Record<string, unknown>;
+    expect(def.exitCooldownDays).toBeUndefined();
+  });
+
+  test('create with an explicit 0 sends exitCooldownDays: 0', async ({ page }) => {
+    await addAdminCookie(page);
+    await stubListFormulas(page);
+    const getCaptured = await captureManageStrategy(page);
+    await page.goto('/insights/strategies/new');
+    await fillToReview(page, 'exit_zero', 'Exit Zero', '', '0'); // explicit no minimum hold
+    await page.getByRole('button', { name: 'Create Strategy' }).click();
+    await expect.poll(getCaptured).not.toBeNull();
+    const def = getCaptured()!.definition as Record<string, unknown>;
+    expect(def.exitCooldownDays).toBe(0);
+  });
+
+  test('a negative exit cooldown blocks advancing past Step 1', async ({ page }) => {
+    await addAdminCookie(page);
+    await stubListFormulas(page);
+    await page.goto('/insights/strategies/new');
+    await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
+    const next = page.getByRole('button', { name: 'Next', exact: true });
+    await page.getByPlaceholder('e.g. sma_crossover').fill('exit_neg');
+    await next.click(); // sub-screen 2 — display name
+    await page.getByPlaceholder('SMA Crossover').fill('Exit Neg');
+    await next.click(); // sub-screen 3 — cooldown
+    await next.click(); // sub-screen 4 — exit cooldown
+    await page.getByPlaceholder('0 (default)').fill('-5');
+    await expect(page.getByText('exit cooldown days must be a non-negative integer')).toBeVisible();
+    await expect(next).toBeDisabled();
+  });
+
+  test('edit pre-populates a non-default exit cooldown', async ({ page }) => {
+    await addAdminCookie(page);
+    await stubListFormulas(page);
+    await page.goto('/insights/strategies/strat-exit-cooldown-7/edit');
+    await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
+    const next = page.getByRole('button', { name: 'Next', exact: true });
+    await next.click(); // sub-screen 2 — display name
+    await next.click(); // sub-screen 3 — cooldown
+    await next.click(); // sub-screen 4 — exit cooldown
+    await expect(page.getByPlaceholder('0 (default)')).toHaveValue('7');
+  });
+
+  test('editing an unset strategy on an unrelated field does not write exitCooldownDays', async ({
+    page,
+  }) => {
+    await addAdminCookie(page);
+    await stubListFormulas(page);
+    const getCaptured = await captureManageStrategy(page);
+    await page.goto('/insights/strategies/strat_unset/edit'); // getStrategy leaves exit cooldown unset
+    await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
+    const next = page.getByRole('button', { name: 'Next', exact: true });
+    await next.click(); // sub-screen 2 — display name
+    // Change an unrelated field (display name) and continue.
+    await page.getByPlaceholder('SMA Crossover').fill('Renamed Only');
+    await next.click(); // sub-screen 3 — cooldown
+    await next.click(); // sub-screen 4 — exit cooldown
+    await expect(page.getByPlaceholder('0 (default)')).toHaveValue(''); // stays blank
+    await next.click(); // → Step 2 (component pre-populated)
+    await next.click(); // Step 3 (rules pre-populated)
+    await next.click(); // Step 4 (Review — feature 097: no Signal Params step)
+    await page.getByRole('button', { name: 'Save Changes' }).click();
+    await expect.poll(getCaptured).not.toBeNull();
+    const def = getCaptured()!.definition as Record<string, unknown>;
+    expect(def.exitCooldownDays).toBeUndefined();
   });
 });
 

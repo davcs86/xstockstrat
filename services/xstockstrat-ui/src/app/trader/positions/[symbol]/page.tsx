@@ -2,13 +2,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
 import { AppShell } from '@/components/trader/AppShell';
 import { useAccountContext } from '@/context/AccountContext';
 import { usePosition, usePortfolio } from '@/hooks/usePortfolio';
 import { useOrders } from '@/hooks/useOrders';
 import { useCandlestickChart } from '@/hooks/useCandlestickChart';
 import { type Timeframe, TIMEFRAMES, TIMEFRAME_ENUM, mapBars } from '@/lib/chart';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { marketDataClient } from '@/lib/browserClients/marketDataClient';
 import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
 import { openR, fmtR, sideLabel } from '@/lib/positionRisk';
@@ -28,6 +28,8 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { StatTile } from '@/components/shared/StatTile';
+import { Eyebrow } from '@/components/shared/Eyebrow';
+import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
 import {
   Table,
   TableHeader,
@@ -131,14 +133,12 @@ export default function PositionDetailPage() {
   return (
     <AppShell>
       <div className="p-4 sm:p-6 space-y-4">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/trader/positions" className="flex items-center gap-1.5">
-              <ArrowLeft className="h-4 w-4" />
-              Exposure
-            </Link>
-          </Button>
-        </div>
+        {/* FR-10b: replaces the prior ad hoc "← Exposure" Button asChild back-link — keeping
+            both would duplicate an identically-labeled "Exposure" link on the page. */}
+        <PageBreadcrumb
+          ariaLabel="Position path"
+          items={[{ label: 'Exposure', href: '/trader/positions' }, { label: symbol }]}
+        />
 
         {isLoading && (
           <div className="space-y-3" data-testid="position-loading">
@@ -246,9 +246,7 @@ function PositionBody({
         </div>
         <div className="flex items-center gap-6">
           <div className="text-right">
-            <div className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-              Unrealized
-            </div>
+            <Eyebrow>Unrealized</Eyebrow>
             <div className={`font-mono text-2xl tabular-nums ${pnlClass(position.unrealizedPnl)}`}>
               {fmtSignedUsd(position.unrealizedPnl)}
             </div>
@@ -257,9 +255,7 @@ function PositionBody({
             </div>
           </div>
           <div className="text-right">
-            <div className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-              Open R
-            </div>
+            <Eyebrow>Open R</Eyebrow>
             <div className={`font-mono text-2xl tabular-nums ${r === null ? '' : pnlClass(r)}`}>
               {fmtR(r)}
             </div>
@@ -299,21 +295,15 @@ function PositionBody({
                     {hasStop ? ` · stop ${fmtUsd(position.stopPrice)}` : ''} · last{' '}
                     {fmtUsd(position.currentPrice)}
                   </span>
-                  <div className="flex gap-1">
-                    {TIMEFRAMES.map(({ value, label }) => (
-                      <button
-                        key={value}
-                        onClick={() => onTimeframe(value)}
-                        className={`min-h-[32px] rounded px-2.5 py-1 font-mono text-xs transition-colors ${
-                          timeframe === value
-                            ? 'bg-primary text-primary-foreground'
-                            : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground'
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
+                  <Tabs value={timeframe} onValueChange={(v) => onTimeframe(v as Timeframe)}>
+                    <TabsList>
+                      {TIMEFRAMES.map(({ value, label }) => (
+                        <TabsTrigger key={value} value={value}>
+                          {label}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </Tabs>
                 </div>
               </div>
             </CardHeader>
@@ -408,8 +398,8 @@ function PositionBody({
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-                Risk &amp; exit
+              <CardTitle>
+                <Eyebrow as="span">Risk &amp; exit</Eyebrow>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -454,8 +444,8 @@ function PositionBody({
 
           <Card>
             <CardHeader>
-              <CardTitle className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-                Manage
+              <CardTitle>
+                <Eyebrow as="span">Manage</Eyebrow>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -479,8 +469,8 @@ function PositionBody({
           {owningStrategy && (
             <Card>
               <CardHeader>
-                <CardTitle className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-                  Why it&apos;s held
+                <CardTitle>
+                  <Eyebrow as="span">Why it&apos;s held</Eyebrow>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
@@ -500,8 +490,8 @@ function PositionBody({
 
           <Card>
             <CardHeader>
-              <CardTitle className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-                Broker
+              <CardTitle>
+                <Eyebrow as="span">Broker</Eyebrow>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">

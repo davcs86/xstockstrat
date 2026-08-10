@@ -36,6 +36,9 @@ def make_servicer() -> AnalysisServicer:
     cfg.get_float = MagicMock(side_effect=lambda key, default=0.0: default)
     cfg.get_str = MagicMock(side_effect=lambda key, default="": default)
     cfg.get_int = MagicMock(side_effect=lambda key, default=0: default)
+    # feature 116: get_int_present (not get_int) is used for exit_cooldown_days' platform
+    # default, since a configured 0 is meaningful and must not be zero-trapped.
+    cfg.get_int_present = MagicMock(side_effect=lambda key, default: default)
     return AnalysisServicer(
         cfg,
         marketdata_channel=MagicMock(),
@@ -968,8 +971,9 @@ class TestScreenSymbols:
         assert resp.results[0].status == analysis_pb2.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA
 
     @pytest.mark.asyncio
-    async def test_fundamental_skipped_when_rpc_absent(self):
-        """FR-5: a fundamental hard-filter is skipped (scan completes) when fundamentals fail."""
+    async def test_fundamental_unavailable_yields_insufficient_data_not_a_silent_pass(self):
+        """Bug fix: a fundamental criterion whose data source failed must report
+        INSUFFICIENT_DATA/passed=false, never a misleading OK/passed=true."""
         import grpc
         from gen.analysis.v1 import analysis_pb2
 
@@ -993,7 +997,8 @@ class TestScreenSymbols:
         resp = await svc.ScreenSymbols(req, self._ctx())
         assert len(resp.results) == 1
         assert "cheap" not in resp.results[0].criterion_scores
-        assert resp.results[0].passed is True
+        assert resp.results[0].status == analysis_pb2.SCREEN_RESULT_STATUS_INSUFFICIENT_DATA
+        assert resp.results[0].passed is False
 
     @pytest.mark.asyncio
     async def test_unknown_metric_aborts_invalid_argument(self):
@@ -2530,6 +2535,82 @@ class TestBacktestCooldown:
         result = await svc.ManageStrategy(req, context=_admin_ctx())
         assert result.strategy_id == "sma_x"
 
+    @pytest.mark.asyncio
+    async def test_exit_platform_default_zero_is_a_noop(self):
+        """AC-2: exit_cooldown_days unset (platform default 0) behaves exactly as before."""
+        svc = make_servicer()
+        decisions = _decisions(40, entries=(1,), exits=(2,))
+        definition = _valid_definition()  # exit_cooldown_days unset → default 0
+        trades, _, _, _ = await _run_evaluated(svc, definition, decisions, 40)
+        assert len(trades) == 1
+        assert trades[0].exit_time.seconds == _cooldown_bar(100.0, 2).time.seconds
+
+    @pytest.mark.asyncio
+    async def test_exit_suppressed_while_min_hold_active(self):
+        """An exit signal inside the minimum-hold window is gated; the next one fires."""
+        svc = make_servicer()
+        definition = _valid_definition()
+        definition.exit_cooldown_days = 5
+        # entry@1, exit signal@2 (1 day after entry — inside the 5-day min hold, gated),
+        # exit signal@10 (9 days after entry — window elapsed, fires).
+        decisions = _decisions(40, entries=(1,), exits=(2, 10))
+        trades, _, _, _ = await _run_evaluated(svc, definition, decisions, 40)
+        assert len(trades) == 1
+        assert trades[0].exit_time.seconds == _cooldown_bar(100.0, 10).time.seconds
+
+    @pytest.mark.asyncio
+    async def test_exit_allowed_once_min_hold_elapses(self):
+        """An exit signal exactly at the minimum-hold boundary fires (half-open window)."""
+        svc = make_servicer()
+        definition = _valid_definition()
+        definition.exit_cooldown_days = 5
+        # entry@1, exit signal@6 — exactly 5 days after entry, the boundary is allowed.
+        decisions = _decisions(40, entries=(1,), exits=(6,))
+        trades, _, _, _ = await _run_evaluated(svc, definition, decisions, 40)
+        assert len(trades) == 1
+        assert trades[0].exit_time.seconds == _cooldown_bar(100.0, 6).time.seconds
+
+    def test_fingerprint_changes_with_exit_cooldown_days(self):
+        """AC-9 (FR-9): differing exit_cooldown_days yield different fingerprints."""
+        from app.handlers.servicer import _definition_fingerprint
+
+        base = {"entry_rule": "x"}
+        assert _definition_fingerprint(base) != _definition_fingerprint(
+            {**base, "exit_cooldown_days": 14}
+        )
+
+    @pytest.mark.asyncio
+    async def test_manage_strategy_rejects_negative_exit_cooldown(self):
+        """FR-2: ManageStrategy register aborts INVALID_ARGUMENT on a negative exit cooldown."""
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.create = AsyncMock(return_value=_row_for(_valid_definition()))
+        definition = _valid_definition()
+        definition.exit_cooldown_days = -1
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_REGISTER, definition=definition
+        )
+        ctx = _admin_ctx()
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(req, ctx)
+        code, _ = ctx.abort.await_args.args
+        assert code == grpc.StatusCode.INVALID_ARGUMENT
+
+    @pytest.mark.asyncio
+    async def test_manage_strategy_accepts_zero_exit_cooldown(self):
+        """Explicit exit_cooldown_days=0 passes write-time validation (register proceeds)."""
+        svc = make_servicer()
+        definition = _valid_definition()
+        definition.exit_cooldown_days = 0
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
+        svc._strategies_repo.create = AsyncMock(return_value=_row_for(definition))
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_REGISTER, definition=definition
+        )
+        result = await svc.ManageStrategy(req, context=_admin_ctx())
+        assert result.strategy_id == "sma_x"
+
 
 # ---------------------------------------------------------------------------
 # feature 070 — partial strategy update (update_mask)
@@ -2630,6 +2711,35 @@ class TestPartialStrategyUpdate:
             _masked_req(paths=["cooldown_days"]), context=_admin_ctx()
         )
         assert not result.HasField("cooldown_days")
+
+    @pytest.mark.asyncio
+    async def test_exit_cooldown_only_update_preserves_components_and_rules(self):
+        """feature 116, mirrors test_cooldown_only_update_preserves_components_and_rules."""
+        svc = make_servicer()
+        stored = _stored_row()
+        repo = _stub_update_repo(svc, stored)
+
+        req = _masked_req(paths=["exit_cooldown_days"], exit_cooldown_days=5)
+        result = await svc.ManageStrategy(req, context=_admin_ctx())
+
+        assert result.exit_cooldown_days == 5
+        assert [c.ref_name for c in result.components] == ["z"]
+        assert result.components[0].indicator == "SMA"
+        assert json.loads(result.entry_rule) == {"fn": "<", "lhs": "z", "rhs": -1.0}
+        assert json.loads(result.exit_rule) == {"fn": ">", "lhs": "z", "rhs": 1.0}
+        assert result.display_name == "Range MR v3"
+        repo.update_locked.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_exit_cooldown_days_can_be_cleared_back_to_platform_default(self):
+        """feature 116, mirrors test_cooldown_days_can_be_cleared_back_to_platform_default."""
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row())
+
+        result = await svc.ManageStrategy(
+            _masked_req(paths=["exit_cooldown_days"]), context=_admin_ctx()
+        )
+        assert not result.HasField("exit_cooldown_days")
 
     @pytest.mark.asyncio
     async def test_maskless_update_is_still_a_full_replace(self):

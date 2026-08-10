@@ -49,7 +49,7 @@ test.describe('Positions reconciliation status + halt display', () => {
 
     // The recency line is suppressed while a mismatch is unresolved (page.tsx's "no noise when
     // healthy" gate), so the healthy-case recency text must not render.
-    await expect(page.getByText('Exposure').first()).toBeVisible({ timeout: 30000 });
+    await expect(page.getByRole('heading', { name: 'Exposure' })).toBeVisible({ timeout: 30000 });
     await expect(page.getByText(/last run (just now|\d+[mhd] ago)/)).not.toBeVisible();
   });
 

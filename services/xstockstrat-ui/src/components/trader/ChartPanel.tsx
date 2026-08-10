@@ -1,12 +1,20 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { marketDataClient } from '@/lib/browserClients/marketDataClient';
 import { ConnectError } from '@connectrpc/connect';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
-import { Combobox, type ComboboxOption } from '../ui/combobox';
+import {
+  Combobox,
+  ComboboxInput,
+  ComboboxContent,
+  ComboboxList,
+  ComboboxItem,
+  ComboboxEmpty,
+} from '../ui/combobox';
 import { type Timeframe, TIMEFRAMES, TIMEFRAME_ENUM, mapBars } from '@/lib/chart';
+import { Tabs, TabsList, TabsTrigger } from '../ui/tabs';
 import { useCandlestickChart } from '@/hooks/useCandlestickChart';
 
 type BarCount = 50 | 100 | 200;
@@ -26,13 +34,6 @@ export function ChartPanel() {
   const [barCount, setBarCount] = useState<BarCount>(100);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // The tradable US-equity universe is ~10k symbols; map once so the picker
-  // isn't rebuilding option objects on every keystroke/render.
-  const symbolOptions = useMemo<ComboboxOption[]>(
-    () => symbols.map((s) => ({ value: s })),
-    [symbols],
-  );
 
   // Load symbol list on mount
   useEffect(() => {
@@ -90,33 +91,40 @@ export function ChartPanel() {
               so the ~10k-symbol universe stays responsive. */}
           {symbols.length > 0 && (
             <Combobox
-              value={symbol}
-              onChange={setSymbol}
-              options={symbolOptions}
-              maxResults={50}
-              placeholder="Symbol"
-              aria-label="Chart symbol"
-              className="w-28"
-              inputClassName="h-7 text-xs"
-            />
+              items={symbols}
+              value={symbol || null}
+              onValueChange={(value) => setSymbol(value ?? '')}
+              limit={50}
+            >
+              <ComboboxInput
+                placeholder="Symbol"
+                aria-label="Chart symbol"
+                showTrigger={false}
+                className="w-28 h-7 text-xs"
+              />
+              <ComboboxContent>
+                <ComboboxEmpty>No matching symbols</ComboboxEmpty>
+                <ComboboxList>
+                  {(item) => (
+                    <ComboboxItem key={item} value={item}>
+                      {item}
+                    </ComboboxItem>
+                  )}
+                </ComboboxList>
+              </ComboboxContent>
+            </Combobox>
           )}
 
           {/* Timeframe switcher */}
-          <div className="flex gap-1">
-            {TIMEFRAMES.map(({ value, label }) => (
-              <button
-                key={value}
-                onClick={() => setTimeframe(value)}
-                className={`px-2 py-0.5 rounded text-xs font-mono transition-colors ${
-                  timeframe === value
-                    ? 'bg-primary text-primary-foreground'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+          <Tabs value={timeframe} onValueChange={(v) => setTimeframe(v as Timeframe)}>
+            <TabsList>
+              {TIMEFRAMES.map(({ value, label }) => (
+                <TabsTrigger key={value} value={value}>
+                  {label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
 
           {/* Bar count selector */}
           <Select

@@ -2,19 +2,13 @@
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Suspense } from 'react';
 import Link from 'next/link';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { AppShell } from '@/components/insights/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ChartContainer, ChartTooltipContent, type ChartConfig } from '@/components/ui/chart';
 import { AccountPortfolioSelector } from '@/components/insights/AccountPortfolioSelector';
 import { useStrategies } from '@/hooks/useStrategies';
 import { useStrategyDefinitions } from '@/hooks/useStrategyDefinitions';
@@ -42,7 +36,7 @@ function DashboardSkeleton() {
                 <CardTitle>Equity Curve</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="h-60 rounded-md bg-secondary/40 animate-pulse" />
+                <Skeleton className="h-60" />
               </CardContent>
             </Card>
           </div>
@@ -59,6 +53,12 @@ export default function Page() {
     </Suspense>
   );
 }
+
+// Score Trend chart config (feature 123 FR-12) — single series, color matches the original
+// fixed Line stroke unchanged.
+const SCORE_TREND_CONFIG: ChartConfig = {
+  score: { label: 'Score', color: 'hsl(163 100% 44%)' },
+};
 
 function InsightsDashboard() {
   const searchParams = useSearchParams();
@@ -172,23 +172,20 @@ function InsightsDashboard() {
                 </div>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={240}>
+                <ChartContainer
+                  config={SCORE_TREND_CONFIG}
+                  className="aspect-auto h-[240px] w-full"
+                >
                   <LineChart data={chartData(strategies?.strategies ?? [])}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(222 20% 14%)" />
+                    <CartesianGrid
+                      xAxisId={0}
+                      yAxisId={0}
+                      strokeDasharray="3 3"
+                      stroke="hsl(222 20% 14%)"
+                    />
                     <XAxis dataKey="label" tick={{ fill: 'hsl(215 16% 47%)', fontSize: 11 }} />
                     <YAxis tick={{ fill: 'hsl(215 16% 47%)', fontSize: 11 }} domain={[0, 100]} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: 'hsl(222 47% 7%)',
-                        border: '1px solid hsl(222 20% 14%)',
-                        borderRadius: 8,
-                      }}
-                      labelStyle={{ color: 'hsl(215 16% 47%)' }}
-                      formatter={(v: unknown) => [
-                        typeof v === 'number' ? `${v.toFixed(0)}` : '0',
-                        'Score',
-                      ]}
-                    />
+                    <Tooltip content={<ChartTooltipContent />} />
                     <Line
                       type="monotone"
                       dataKey="score"
@@ -197,7 +194,7 @@ function InsightsDashboard() {
                       strokeWidth={2}
                     />
                   </LineChart>
-                </ResponsiveContainer>
+                </ChartContainer>
                 {(strategies?.strategies ?? []).length === 0 && (
                   <p className="text-xs text-muted-foreground text-center mt-2">
                     Strategy scores will appear here once backtests are run

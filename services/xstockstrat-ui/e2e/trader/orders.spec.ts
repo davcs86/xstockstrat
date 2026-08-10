@@ -168,18 +168,34 @@ test.describe('Orders management page', () => {
   });
 
   test('Edit is enabled for NEW/PARTIALLY_FILLED and disabled for FILLED', async ({ page }) => {
+    // Actions are consolidated behind a per-row kebab menu (FR-2) — open each row's menu before
+    // checking its item state.
+    await page.getByTestId('actions-ord-new').click();
     await expect(page.getByTestId('edit-ord-new')).toBeEnabled({ timeout: 10000 });
+    await expect(page.getByTestId('cancel-ord-new')).toBeEnabled();
+    await page.keyboard.press('Escape');
+
+    await page.getByTestId('actions-ord-partial').click();
     await expect(page.getByTestId('edit-ord-partial')).toBeEnabled();
+    await page.keyboard.press('Escape');
+
+    await page.getByTestId('actions-ord-filled').click();
     await expect(page.getByTestId('edit-ord-filled')).toBeDisabled();
     await expect(page.getByTestId('cancel-ord-filled')).toBeDisabled();
+    await page.keyboard.press('Escape');
   });
 
   test('Cancel requires a confirmation step then issues CancelOrder', async ({ page }) => {
+    // The trigger opens a dialog rather than toggling its own text (Alert Dialog swap,
+    // feature 120) — assert two distinct elements (trigger, then the dialog's confirm
+    // action), not a single element's changing text. Actions are behind a kebab menu (FR-2).
+    await page.getByTestId('actions-ord-new').click({ timeout: 10000 });
     const cancelBtn = page.getByTestId('cancel-ord-new');
-    await expect(cancelBtn).toHaveText('Cancel', { timeout: 10000 });
+    await expect(cancelBtn).toHaveText('Cancel');
     await cancelBtn.click();
-    await expect(cancelBtn).toHaveText('Confirm');
-    await cancelBtn.click();
+    const confirmBtn = page.getByTestId('cancel-ord-new-confirm');
+    await expect(confirmBtn).toBeVisible();
+    await confirmBtn.click();
     await expect.poll(() => cancelRequested).toBe(true);
   });
 

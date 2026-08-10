@@ -120,6 +120,7 @@ to the frontends and the agent.
 | ruff | latest | Python lint + format |
 | Playwright | — | E2E tests for the consolidated `xstockstrat-ui` (all three segments) |
 | Vitest | ^3 | Unit (logic) tests for `xstockstrat-ui` — node-environment `src/**/*.test.ts`, coverage scoped to `src/lib/**` (feature 065); complements Playwright e2e |
+| Tailwind | 4 | `xstockstrat-ui` only — CSS-first `@theme` convention (`src/app/globals.css`), no `tailwind.config.js`; shadcn/ui CLI (`components.json`) manages `src/components/ui/` primitives — see `services/xstockstrat-ui/CLAUDE.md` § Styling |
 
 **Python uv lock rule**: After any change to a Python service's `pyproject.toml` (adding, removing, or updating a dependency), run `uv lock` inside that service directory and commit the updated `uv.lock` in the same PR. Never leave `uv.lock` out of sync with `pyproject.toml` — the `python-lint` job runs `uv lock --check` per service. (That gate was added 2026-07-27; before then this sentence claimed an enforcement that did not exist, and a stale lock surfaced only at Docker build time, where `uv sync --frozen` fails the image instead of the PR.)
 
@@ -147,6 +148,7 @@ To change a language or tool version:
 | Node.js | `.github/workflows/ci.yml` (`node-version`), Node/Next service Dockerfiles (`FROM node:X-alpine`) |
 | pnpm | `package.json` (`packageManager`), `.github/workflows/ci.yml` (`pnpm@X`), Node service Dockerfiles |
 | Proto plugins (`protoc-gen-go`, `protoc-gen-go-grpc`, `protoc-gen-connect-go`) | `Dockerfile.codegen` (§"Go proto plugins") **and** `.github/workflows/ci.yml` `proto-freshness` job's "Install Go proto plugins" step — these two are the *only* places these pins live and CI's `proto-freshness` job installs its own copies rather than building `Dockerfile.codegen`, so it will not catch a drift between them. Bump both in the same PR; verify with an empty `git diff packages/proto/gen/` after `./scripts/buf-gen.sh` (see `docs/runbooks/codegen-toolchain-host-setup.md`) |
+| Tailwind | `services/xstockstrat-ui/package.json` (`tailwindcss`, `@tailwindcss/postcss`), `postcss.config.js` — devDependency, not a Docker base image, so no Dockerfile pin to update |
 
 1. Open a PR — CI will catch any missed files.
 
@@ -174,7 +176,7 @@ Config served by `xstockstrat-config` via `WatchConfig` RPC (gRPC 50060). Key ru
 
 **Full rules, global key table, and the per-feature registered-keys log** → `docs/patterns/config-governance.md`.
 
-Per-feature registered keys (065 cross-stock scoring, 068 backtest visualization, and every later feature) live in the **Per-Feature Registered Keys** log in `docs/patterns/config-governance.md` — retrieved on demand, not restated here.
+Per-feature registered keys live in the **Per-Feature Registered Keys** log in `docs/patterns/config-governance.md` — retrieved on demand, not restated here.
 
 ---
 
@@ -212,22 +214,14 @@ is set per service in code and overridable with the **`DB_POOL_MAX`** env var (G
 Python `asyncpg.create_pool(max_size=…)`, Node `pg.Pool({ max })`). **When adding a new DB-backed
 service or raising any *direct* service's pool, re-check this table so the direct total stays safe.**
 
-**`DB_POOL_MAX` is deliberately *not set* on the six pooled services** (`.do/app.*.yaml`): behind a
-PgBouncer transaction pool it governs only the client→pooler connection count, not scarce backend
-slots, so it's left at the code default (2). The backend cap for those six is the pool's own `size`,
-not `DB_POOL_MAX`. Raising it there is a safe concurrency knob that does **not** consume cluster slots;
-raising it on a **direct** service does.
-
-**Both environments route the six stateless-query Go/Python services through a per-database PgBouncer
-transaction pool** (`:25061`, pool `staging`/`production`) so their client-pool maxes multiplex onto a
-few backend connections and no longer spike the shared cluster during rolling deploys; config, ledger,
-the other Node leaves, and the `db-migrator` job stay on the direct port because they use
-`LISTEN`/`NOTIFY` or migration advisory locks. The budget below is still the conservative
-per-environment cap. Full rationale, the
-direct-vs-pooled split, and the `DB_PGBOUNCER` driver requirements → `docs/patterns/database.md`
-§ Connection pooling (PgBouncer). (One shared `db-s-1vcpu-1gb` cluster hosts **both** staging and
-production, so two environments deploying at once — the daily promotion — is what exhausts the ~22
-usable slots.)
+The six stateless-query Go/Python services route through a per-database PgBouncer transaction pool
+(`:25061`) instead of the direct cluster port, so their client-pool maxes multiplex onto a handful of
+backend connections and no longer spike the shared cluster during rolling deploys; `DB_POOL_MAX` is
+left unset on those six (it would only bound the client→pooler count, not a scarce backend slot).
+Config, ledger, the other Node leaves, and the `db-migrator` job stay direct because they need
+`LISTEN`/`NOTIFY` or migration advisory locks — theirs is the real backend-slot budget. Full
+rationale, the direct-vs-pooled split, and the `DB_PGBOUNCER` driver requirements →
+`docs/patterns/database.md` § Connection pooling (PgBouncer).
 
 | Service | Lang | Route | Pool max | Notes |
 |---|---|---|---|---|
@@ -325,7 +319,7 @@ When modifying a service's `Dockerfile`, update the complete chain:
 5. **Commit as a single PR**
    - All three files (Dockerfile, service CLAUDE.md, docs pattern) in one commit
    - Commit message: "Update <service> Dockerfile and documentation" (or "Update Docker patterns" if pattern-wide)
-   - CI validates: Docker builds, lint checks, and documentation links
+   - CI validates: Docker builds and lint checks
 
 **Common updates:**
 
@@ -409,7 +403,7 @@ Phases 0–7 are all **DONE** — see `docs/roadmap/implementation-roadmap.md` f
 
 Active and completed feature implementations are tracked under `docs/roadmap/features/`. Feature directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a zero-padded sequence number. **Numbering rule:** the next number is `max(existing NNN) + 1` — never reuse a number, never backfill a gap, and once a feature reaches `launched` its number is immutable. If two `/sdd-story` runs race and collide on a number, renumber the later one to the next free `NNN` (see `docs/runbooks/feature-workflow.md` § Feature Numbering). Git branches use only the slug: `feature/<slug>`. Each feature directory contains:
 
-- `feature.md` — lifecycle status (`idea`/`draft`/`spec-ready`/`implementation-ready`/`in-progress`/`code-completed`/`launched`/`rolled-back`/`demoted/canceled`), links to all artifacts
+- `feature.md` — lifecycle status (see `docs/roadmap/features/CLAUDE.md` § Feature Lifecycle Statuses for the full enum), links to all artifacts
 - `product-spec.md` — requirements, affected services, governance gates
 - `implementation-spec.md` — numbered steps with concrete code references and statuses
 - `context.md` — append-only session log of decisions, deviations, files modified

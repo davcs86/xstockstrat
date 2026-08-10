@@ -5,15 +5,19 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { AppShell } from '@/components/insights/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConnectError } from '@connectrpc/connect';
 import { marketDataClient } from '@/lib/browserClients/marketDataClient';
 import { type Timeframe, TIMEFRAMES, TIMEFRAME_ENUM, type Bar, mapBars } from '@/lib/chart';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useCandlestickChart } from '@/hooks/useCandlestickChart';
 import { SignalReadiness } from '@/components/insights/SignalReadiness';
 import { SignalOrderTicket } from '@/components/insights/SignalOrderTicket';
 import { OPPORTUNITY_ACTION, EnumBadge } from '@/lib/opportunityShared';
 import { useOpportunities, useStrategyAnalytics } from '@/hooks/useOpportunities';
+import { Eyebrow } from '@/components/shared/Eyebrow';
+import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
 
 /** `HH:MM` local time from a protobuf-es Timestamp ({ seconds: bigint }); null when unset. */
 function validUntilLabel(validUntil: { seconds: bigint } | undefined): string | null {
@@ -25,9 +29,7 @@ function validUntilLabel(validUntil: { seconds: bigint } | undefined): string | 
 function HeaderStat({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
     <div className="text-right">
-      <div className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-        {label}
-      </div>
+      <Eyebrow>{label}</Eyebrow>
       <div className={`font-mono text-2xl tabular-nums leading-tight ${tone ?? 'text-foreground'}`}>
         {value}
       </div>
@@ -112,6 +114,13 @@ export default function MarketSymbolPage() {
   return (
     <AppShell>
       <div className="p-4 sm:p-6 space-y-4">
+        {/* FR-10b: kept alongside the existing "← Queue" back-link below rather than replacing it
+            — their labels ("Opportunities" vs "Queue") don't collide, and signal-detail.spec.ts
+            already asserts a `Queue`-named link that a replacement would break. */}
+        <PageBreadcrumb
+          ariaLabel="Signal path"
+          items={[{ label: 'Opportunities', href: '/insights/opportunities' }, { label: symbol }]}
+        />
         {/* Signal-detail header (handoff: ← Queue · symbol + action + price · CONVICTION / EDGE). */}
         <Card>
           <CardHeader>
@@ -143,9 +152,9 @@ export default function MarketSymbolPage() {
                     </span>
                   )}
                   {opportunity?.source && (
-                    <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+                    <Badge variant="outline" className="text-[11px] text-muted-foreground">
                       {opportunity.source}
-                    </span>
+                    </Badge>
                   )}
                 </div>
                 {metaBits.length > 0 && (
@@ -180,21 +189,15 @@ export default function MarketSymbolPage() {
               <CardHeader>
                 <div className="flex items-center justify-between flex-wrap gap-3">
                   <CardTitle className="text-base">Price</CardTitle>
-                  <div className="flex gap-1">
-                    {TIMEFRAMES.map(({ value, label }) => (
-                      <button
-                        key={value}
-                        onClick={() => setTimeframe(value)}
-                        className={`px-2.5 py-1 rounded text-xs font-mono transition-colors ${
-                          timeframe === value
-                            ? 'bg-primary text-primary-foreground'
-                            : 'text-muted-foreground hover:text-foreground hover:bg-accent/50'
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
+                  <Tabs value={timeframe} onValueChange={(v) => setTimeframe(v as Timeframe)}>
+                    <TabsList>
+                      {TIMEFRAMES.map(({ value, label }) => (
+                        <TabsTrigger key={value} value={value}>
+                          {label}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </Tabs>
                 </div>
               </CardHeader>
               <CardContent>

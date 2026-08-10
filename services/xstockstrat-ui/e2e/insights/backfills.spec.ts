@@ -49,8 +49,17 @@ test.describe('Backfills page — admin visibility (FR-7)', () => {
     // Backfills lives under the Engine group (feature 083 shell); its sub-nav shows on any
     // Engine route. Allow for on-demand route compilation + the /api/auth/me admin fetch.
     await page.goto('/insights/strategies');
-    await expect(page.getByRole('link', { name: 'Strategies' })).toBeVisible({ timeout: 20000 });
-    await expect(page.getByRole('link', { name: 'Backfills' })).toBeVisible({ timeout: 20000 });
+    // Scoped to the Section sub-nav (not the breadcrumb, feature 120) — PlatformHeader.tsx's
+    // migrated Breadcrumb renders its current-page crumb with role="link" too (shadcn's a11y
+    // pattern for a non-interactive crumb), so an unscoped getByRole('link', { name: 'Strategies' })
+    // is ambiguous on this exact route (the crumb's label matches the active sub-nav item).
+    const sectionNav = page.getByRole('navigation', { name: 'Section' });
+    await expect(sectionNav.getByRole('link', { name: 'Strategies' })).toBeVisible({
+      timeout: 20000,
+    });
+    await expect(sectionNav.getByRole('link', { name: 'Backfills' })).toBeVisible({
+      timeout: 20000,
+    });
 
     await page.goto('/insights/backfills');
     await expect(page.getByRole('heading', { name: 'Backfills' })).toBeVisible({ timeout: 20000 });
@@ -67,9 +76,13 @@ test.describe('Backfills page — admin visibility (FR-7)', () => {
     await stubList(page);
 
     // Positive control: the Engine sub-nav is rendered (Strategies present) but Backfills is gated out.
+    // Scoped to the Section sub-nav (not the breadcrumb) — see the sibling test's note above.
     await page.goto('/insights/strategies');
-    await expect(page.getByRole('link', { name: 'Strategies' })).toBeVisible({ timeout: 20000 });
-    await expect(page.getByRole('link', { name: 'Backfills' })).toHaveCount(0);
+    const sectionNav = page.getByRole('navigation', { name: 'Section' });
+    await expect(sectionNav.getByRole('link', { name: 'Strategies' })).toBeVisible({
+      timeout: 20000,
+    });
+    await expect(sectionNav.getByRole('link', { name: 'Backfills' })).toHaveCount(0);
 
     await page.goto('/insights/backfills');
     await expect(page.getByRole('heading', { name: 'Backfills' })).toBeVisible({ timeout: 20000 });
@@ -123,11 +136,13 @@ test.describe('Backfills page — list, create, cancel (AC-1/2/3)', () => {
       await fulfillJson(route, runningJob({ status: 'BACKFILL_STATUS_CANCELED' }));
     });
 
-    page.on('dialog', (d) => d.accept());
-
     await page.goto('/insights/backfills');
     await expect(page.getByText('running', { exact: true })).toBeVisible({ timeout: 20000 });
+    // Cancel now opens an AlertDialog (feature 121, FR-4) rather than a native window.confirm —
+    // click the trigger (unambiguous: only one "Cancel"-labeled button exists before the dialog
+    // opens), then the dialog's own Confirm action.
     await page.getByRole('button', { name: 'Cancel' }).click();
+    await page.getByRole('button', { name: 'Confirm' }).click();
     await expect(page.getByText('canceled', { exact: true })).toBeVisible();
   });
 });

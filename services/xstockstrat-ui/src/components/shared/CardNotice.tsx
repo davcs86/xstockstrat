@@ -1,4 +1,5 @@
 import { Card, CardContent } from '../ui/card';
+import { AlertDescription } from '../ui/alert';
 
 /** A single-line message wrapped in a Card — used for portfolio loading/unavailable states. */
 export function CardNotice({
@@ -9,13 +10,13 @@ export function CardNotice({
   variant?: 'muted' | 'error';
 }) {
   return (
-    <Card>
+    <Card role={variant === 'error' ? 'alert' : undefined}>
       <CardContent className="pt-5">
-        <p
-          className={`text-sm ${variant === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}
+        <AlertDescription
+          className={variant === 'error' ? 'text-destructive' : 'text-muted-foreground'}
         >
           {children}
-        </p>
+        </AlertDescription>
       </CardContent>
     </Card>
   );

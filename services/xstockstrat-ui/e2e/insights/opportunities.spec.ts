@@ -105,4 +105,19 @@ test.describe('Opportunities queue', () => {
     await expect(card(page, 'AAPL')).toBeVisible({ timeout: 8000 });
     await expect(card(page, 'MSFT')).toBeHidden();
   });
+
+  test('each card shows its source as a Badge (FR-7)', async ({ page }) => {
+    await expect(card(page, 'MSFT').getByText('marketwatch')).toBeVisible();
+  });
+
+  test('"All sources" exposes aria-pressed and folds into the ToggleGroup styling (FR-8)', async ({
+    page,
+  }) => {
+    const allSources = page.getByRole('button', { name: 'All sources' });
+    await expect(allSources).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: 'marketwatch' }).click();
+    await expect(allSources).toHaveAttribute('aria-pressed', 'false');
+    await allSources.click();
+    await expect(allSources).toHaveAttribute('aria-pressed', 'true');
+  });
 });

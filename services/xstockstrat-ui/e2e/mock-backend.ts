@@ -43,6 +43,7 @@ import {
   positionForSymbol,
   ORDERS,
   orderForId,
+  CONFIG_KEY_FIXTURES,
 } from './fixtures';
 
 export const TRADER_MOCK_PORT = 9091;
@@ -799,6 +800,9 @@ export async function startMockBackend(): Promise<void> {
             // Feature 069: only this id carries a non-default cooldown (edit-prepopulation e2e);
             // every other id leaves cooldownDays unset so the "edit unset strategy" case stays honest.
             ...(req.strategyId === 'strat-cooldown-14' ? { cooldownDays: 14 } : {}),
+            // Feature 116: only this id carries a non-default exit cooldown (edit-prepopulation e2e);
+            // every other id leaves exitCooldownDays unset so the "edit unset strategy" case stays honest.
+            ...(req.strategyId === 'strat-exit-cooldown-7' ? { exitCooldownDays: 7 } : {}),
             // Feature 097: this id carries a signal_params symbol universe so the wizard's
             // preserve-on-save regression guard (ANALYSIS-3) has real symbols to protect. The id
             // is underscore-only so it passes the wizard's id validation and Next can advance.
@@ -833,63 +837,28 @@ export async function startMockBackend(): Promise<void> {
   });
 
   // ── Port 9093 — Config-UI segment ───────────────────────────────────────
+  // configValueOverrides holds any SetConfig writes made during a test, keyed by bare key
+  // (CONFIG_KEY_FIXTURES keys are unique across this mock's namespaces), seeded lazily from
+  // each row's defaultValue — mirroring value_data vs. default_value on the real service's
+  // config.config_values table, so listKeys() reflects a save the same way the real service
+  // does (the display-never-updates regression this mock exists to catch).
+  const configValueOverrides = new Map<string, string>();
+
   const configUiHandler = connectNodeAdapter({
     routes(router) {
       router.service(ConfigService, {
         async listKeys() {
           return {
-            keys: [
-              {
-                key: 'platform.log_level',
-                description: 'Global log level for all services',
-                defaultValue: 'info',
-                isSecret: false,
-                consumingService: 'all',
-                environment: 1,
-                tradingMode: 0,
-              },
-              {
-                key: 'platform.maintenance_mode',
-                description: 'Halts all trading operations when true',
-                defaultValue: 'false',
-                isSecret: false,
-                consumingService: 'all',
-                environment: 1,
-                tradingMode: 0,
-              },
-              {
-                key: 'platform.trading_state',
-                description: 'Richer halt state: ACTIVE | REDUCE_ONLY | HALTED',
-                defaultValue: 'ACTIVE',
-                isSecret: false,
-                consumingService: 'xstockstrat-trading',
-                environment: 1,
-                tradingMode: 1,
-              },
-              {
-                key: 'secret.alpaca_api_key',
-                description: 'Alpaca API key for live trading',
-                defaultValue: '[secret]',
-                isSecret: true,
-                consumingService: 'trading',
-                environment: 2,
-                tradingMode: 2,
-              },
-              {
-                key: 'analysis.signals.source_weights',
-                description: 'JSON weight map for signal sources',
-                defaultValue: '{}',
-                isSecret: false,
-                consumingService: 'xstockstrat-analysis',
-                environment: 1,
-                tradingMode: 0,
-                validation: { valueType: 1, minValue: 0.0, maxValue: 1.0 },
-              },
-            ],
+            keys: CONFIG_KEY_FIXTURES.map((k) => ({
+              ...k,
+              currentValue: configValueOverrides.get(k.key) ?? k.defaultValue,
+            })),
           };
         },
-        async setConfig() {
-          return {};
+        async setConfig(req) {
+          const written = req.value?.value?.case === 'stringVal' ? req.value.value.value : '';
+          configValueOverrides.set(req.key, written);
+          return { version: '1', updatedAt: { seconds: BigInt(0), nanos: 0 } };
         },
         // feature 102 — trader/positions reads platform.trading_state via traderConfigClient
         // (unified across the CONFIG_ENDPOINT port; see playwright.config.ts). Default: ACTIVE

@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Trash2, Play } from 'lucide-react';
 import { ConnectError } from '@connectrpc/connect';
 import { AppShell } from '@/components/insights/AppShell';
@@ -15,12 +15,32 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { cn } from '@/components/ui/utils';
-import { useScreenSymbols } from '@/hooks/useScreenSymbols';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Slider } from '@/components/ui/slider';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@/components/ui/table';
+import {
+  useScreenSymbols,
+  useScreenSymbolsPoll,
+  MAX_POLL_ATTEMPTS,
+  type ScreenSymbolsInput,
+  type ScreenSymbolsResult,
+} from '@/hooks/useScreenSymbols';
 import { useWatchlists, useCreateWatchlist, useAddWatchlistSymbols } from '@/hooks/useWatchlists';
 import { normalizeWeights } from '@/lib/screenWeights';
 import { formatLastRun } from '@/lib/formatLastRun';
 import { scoreColor } from '@/lib/scoreDisplay';
-import { BUILTIN_INDICATORS } from '@/lib/strategyCatalog';
+import {
+  BUILTIN_INDICATORS,
+  FUNDAMENTAL_METRICS,
+  DEFAULT_FUNDAMENTAL_METRIC,
+} from '@/lib/strategyCatalog';
 import {
   Comparator,
   ComponentKind,
@@ -63,11 +83,23 @@ function comparatorGlyph(op: Comparator): string {
   return COMPARATOR_LABELS.find((c) => c.value === op)?.label ?? '?';
 }
 
+// Feature 118: merges a poll response into the displayed results by symbol, preserving row order
+// (avoids the table visibly reordering every 60s) — safe because every poll response is a full,
+// correctly-normalized result set for the identical symbol+criteria universe, not a partial one to
+// reconcile (design.md § Chosen Approach — full-scan recheck, never narrowed).
+function mergeResultsBySymbol(
+  current: ScreenSymbolsResult['results'],
+  incoming: ScreenSymbolsResult['results'],
+): ScreenSymbolsResult['results'] {
+  const bySymbol = new Map(incoming.map((r) => [r.symbol, r]));
+  return current.map((r) => bySymbol.get(r.symbol) ?? r);
+}
+
 function newCriterion(i: number): CriterionRow {
   return {
     refName: `c${i}`,
     kind: ScreenKind.FUNDAMENTAL,
-    metricName: 'pe_ratio',
+    metricName: DEFAULT_FUNDAMENTAL_METRIC,
     op: Comparator.LT,
     threshold: 20,
     weight: 1,
@@ -89,6 +121,12 @@ export default function ScreenerPage() {
   // Save-as-watchlist inline name panel (FR-5) + add-top-N target (FR-6).
   const [saveName, setSaveName] = useState('');
   const [targetListId, setTargetListId] = useState('');
+  // Feature 118 — background data-readiness polling state.
+  const [results, setResults] = useState<ScreenSymbolsResult['results']>([]);
+  const [scanGeneration, setScanGeneration] = useState(0);
+  const [lastScanReq, setLastScanReq] = useState<ScreenSymbolsInput | null>(null);
+  const [pollingEnabled, setPollingEnabled] = useState(true);
+  const [pollAttempts, setPollAttempts] = useState(0);
 
   const errorMessage =
     screen.error instanceof ConnectError
@@ -110,38 +148,79 @@ export default function ScreenerPage() {
   function runScan() {
     const symbols = symbolsText.split(/[\s,]+/).filter(Boolean);
     if (symbols.length === 0) return;
-    screen.mutate(
-      {
-        symbols,
-        criteria: criteria.map((c) => {
-          const base = {
-            refName: c.refName,
-            kind: c.kind,
-            op: c.op,
-            threshold: c.threshold,
-            weight: c.weight,
-            hardFilter: c.hardFilter,
+    const req: ScreenSymbolsInput = {
+      symbols,
+      criteria: criteria.map((c) => {
+        const base = {
+          refName: c.refName,
+          kind: c.kind,
+          op: c.op,
+          threshold: c.threshold,
+          weight: c.weight,
+          hardFilter: c.hardFilter,
+        };
+        if (c.kind === ScreenKind.TECHNICAL_INDICATOR) {
+          // Route through `component` (not `metricName`) so the engine actually computes the
+          // indicator from bars — a bare metric_name only resolves fundamentals fields.
+          return {
+            ...base,
+            component: {
+              refName: c.refName,
+              kind: ComponentKind.BUILTIN_INDICATOR,
+              indicator: c.metricName.toUpperCase(),
+            },
           };
-          if (c.kind === ScreenKind.TECHNICAL_INDICATOR) {
-            // Route through `component` (not `metricName`) so the engine actually computes the
-            // indicator from bars — a bare metric_name only resolves fundamentals fields.
-            return {
-              ...base,
-              component: {
-                refName: c.refName,
-                kind: ComponentKind.BUILTIN_INDICATOR,
-                indicator: c.metricName.toUpperCase(),
-              },
-            };
-          }
-          return { ...base, metricName: c.metricName };
-        }),
+        }
+        return { ...base, metricName: c.metricName };
+      }),
+    };
+    // Feature 118 — scan-generation guard: bump before mutate so a still-in-flight poll from a
+    // superseded scan is orphaned; reset per-scan polling state so a stopped/exhausted previous
+    // scan's status never leaks into the new one (closes the "stale permanent opt-out" gap).
+    setScanGeneration((g) => g + 1);
+    setLastScanReq(null);
+    setPollAttempts(0);
+    setPollingEnabled(true);
+    screen.mutate(req, {
+      onSuccess: (data) => {
+        setLastRun({ at: new Date(), count: symbols.length });
+        setResults(data.results);
+        setLastScanReq(req);
       },
-      { onSuccess: () => setLastRun({ at: new Date(), count: symbols.length }) },
-    );
+    });
   }
 
-  const results = screen.data?.results ?? [];
+  // INSUFFICIENT_DATA has two distinct causes the backend already tells apart (see
+  // services/xstockstrat-analysis/app/services/screener.py): too few bars for a technical
+  // criterion (carries a `gap`) vs. the fundamentals data source being unavailable (no `gap`).
+  // Both drive the background auto-recheck uniformly (feature 118, FR-3).
+  const pendingRows = results.filter((r) => r.status === ScreenResultStatus.INSUFFICIENT_DATA);
+  const pendingFundamentals = pendingRows.filter((r) => !r.gap);
+
+  const poll = useScreenSymbolsPoll(
+    lastScanReq,
+    scanGeneration,
+    pollingEnabled && lastScanReq !== null && pendingRows.length > 0,
+  );
+
+  useEffect(() => {
+    // Keyed on `dataUpdatedAt`/`errorUpdatedAt` (always-fresh timestamps), NOT `poll.data`/
+    // `poll.error` object identity. TanStack Query's structural sharing reuses the previous `data`
+    // reference when a new response is deeply equal to the last one — and that's the *normal* case
+    // here: a still-pending row comes back byte-identical on every retry until it resolves. Keying
+    // on `poll.data` would make this effect fire once and never again for identical retries,
+    // freezing `pollAttempts` and leaving the UI stuck on "Checking…" forever even after the query
+    // internally gave up (caught by running the Step 3 suite against this implementation — see
+    // context.md). Also covers the erroring-poll case (mirrors the hook's own attempt-counting,
+    // dataUpdateCount + errorUpdateCount, Step 1 §5) the same way.
+    if (poll.dataUpdatedAt === 0 && poll.errorUpdatedAt === 0) return;
+    if (poll.data !== undefined) {
+      setResults((prev) => mergeResultsBySymbol(prev, poll.data!.results));
+    }
+    setPollAttempts((n) => n + 1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [poll.dataUpdatedAt, poll.errorUpdatedAt]);
+
   const hasHardFilter = criteria.some((c) => c.hardFilter);
   // "Save as watchlist" seeds the passing subset when a hard filter is active, else all results (FR-5).
   const saveSymbols = (hasHardFilter ? results.filter((r) => r.passed) : results).map(
@@ -215,7 +294,7 @@ export default function ScreenerPage() {
                         const metricName =
                           kind === ScreenKind.TECHNICAL_INDICATOR
                             ? BUILTIN_INDICATORS[0].name
-                            : 'pe_ratio';
+                            : DEFAULT_FUNDAMENTAL_METRIC;
                         updateCriterion(i, { kind, metricName });
                       }}
                     >
@@ -239,12 +318,21 @@ export default function ScreenerPage() {
                         ))}
                       </select>
                     ) : (
-                      <Input
-                        aria-label="metric"
-                        className="w-40 font-mono"
+                      <Select
                         value={c.metricName}
-                        onChange={(e) => updateCriterion(i, { metricName: e.target.value })}
-                      />
+                        onValueChange={(v) => updateCriterion(i, { metricName: v })}
+                      >
+                        <SelectTrigger aria-label="metric" className="h-9 w-40 font-mono">
+                          <SelectValue placeholder="Select a metric…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {FUNDAMENTAL_METRICS.map((m) => (
+                            <SelectItem key={m.name} value={m.name}>
+                              {m.name} — {m.description}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     )}
                     <select
                       aria-label="comparator"
@@ -268,36 +356,19 @@ export default function ScreenerPage() {
                       onChange={(e) => updateCriterion(i, { threshold: Number(e.target.value) })}
                     />
                     {/* Hard/rank segmented toggle (FR-2) → hardFilter. */}
-                    <div className="inline-flex overflow-hidden rounded-md border border-border">
-                      <button
-                        type="button"
-                        aria-label="hard filter"
-                        aria-pressed={c.hardFilter}
-                        className={cn(
-                          'px-2.5 py-1.5 text-xs',
-                          c.hardFilter
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-background text-muted-foreground',
-                        )}
-                        onClick={() => updateCriterion(i, { hardFilter: true })}
-                      >
+                    <ToggleGroup
+                      type="single"
+                      variant="outline"
+                      value={c.hardFilter ? 'hard' : 'rank'}
+                      onValueChange={(v) => v && updateCriterion(i, { hardFilter: v === 'hard' })}
+                    >
+                      <ToggleGroupItem value="hard" aria-label="hard filter">
                         hard
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="rank only"
-                        aria-pressed={!c.hardFilter}
-                        className={cn(
-                          'px-2.5 py-1.5 text-xs',
-                          !c.hardFilter
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-background text-muted-foreground',
-                        )}
-                        onClick={() => updateCriterion(i, { hardFilter: false })}
-                      >
+                      </ToggleGroupItem>
+                      <ToggleGroupItem value="rank" aria-label="rank only">
                         rank
-                      </button>
-                    </div>
+                      </ToggleGroupItem>
+                    </ToggleGroup>
                     <Button
                       variant="destructive"
                       size="sm"
@@ -313,17 +384,16 @@ export default function ScreenerPage() {
                     <span className="font-mono text-foreground">
                       {c.metricName} {comparatorGlyph(c.op)} {c.threshold}
                     </span>
-                    <label className="flex items-center gap-2">
+                    <div className="flex items-center gap-2">
                       <span>weight</span>
-                      <input
-                        type="range"
+                      <Slider
                         aria-label="weight slider"
                         min={0}
                         max={1}
                         step={0.05}
-                        value={c.weight}
-                        onChange={(e) => updateCriterion(i, { weight: Number(e.target.value) })}
-                        className="w-28 accent-primary"
+                        value={[c.weight]}
+                        onValueChange={([v]) => updateCriterion(i, { weight: v })}
+                        className="w-28"
                       />
                       <Input
                         aria-label="weight"
@@ -335,7 +405,7 @@ export default function ScreenerPage() {
                         value={c.weight}
                         onChange={(e) => updateCriterion(i, { weight: Number(e.target.value) })}
                       />
-                    </label>
+                    </div>
                     <span data-testid="weight-share" className="tabular-nums">
                       {(shares[i] * 100).toFixed(0)}% of weight
                     </span>
@@ -425,6 +495,43 @@ export default function ScreenerPage() {
             {createWl.error && (
               <p className="mb-2 text-sm text-destructive">{(createWl.error as Error).message}</p>
             )}
+            {pendingFundamentals.length > 0 && (
+              <p data-testid="fundamentals-pending-banner" className="mb-2 text-sm text-yellow-500">
+                Fundamentals data isn&apos;t available right now for{' '}
+                {pendingFundamentals.length === results.length
+                  ? 'any symbol'
+                  : `${pendingFundamentals.length} of ${results.length} symbols`}{' '}
+                — re-run this scan later once it is.
+              </p>
+            )}
+            {pendingRows.length > 0 && pollingEnabled && pollAttempts < MAX_POLL_ATTEMPTS && (
+              <div
+                data-testid="screener-checking"
+                className="mb-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground"
+              >
+                <span>
+                  Checking for updated data… (attempt{' '}
+                  {Math.min(pollAttempts + 1, MAX_POLL_ATTEMPTS)} of {MAX_POLL_ATTEMPTS})
+                </span>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  data-testid="stop-polling"
+                  onClick={() => setPollingEnabled(false)}
+                >
+                  Stop checking
+                </Button>
+              </div>
+            )}
+            {pendingRows.length > 0 && pollingEnabled && pollAttempts >= MAX_POLL_ATTEMPTS && (
+              <p
+                data-testid="screener-polling-gave-up"
+                className="mb-2 text-sm text-muted-foreground"
+              >
+                Gave up checking — {pendingRows.length} of {results.length} symbols are still not
+                available. Run the scan again later to retry.
+              </p>
+            )}
           </>
         )}
 
@@ -433,73 +540,84 @@ export default function ScreenerPage() {
             <CardContent className="p-0">
               {/* Wide table → scroll horizontally within its own container so the phone frame
                   never overflows (the results table has 10 columns). */}
-              <div className="w-full overflow-x-auto">
-                <table className="w-full text-sm min-w-[640px]" data-testid="screen-results">
-                  <thead>
-                    <tr className="border-b text-left text-muted-foreground">
-                      <th className="p-3 whitespace-nowrap">Rank</th>
-                      <th className="p-3">Symbol</th>
-                      <th className="p-3">Score</th>
-                      {/* feature 083 (FR-8) raw columns. ATR is a close-only approximation. */}
-                      <th className="p-3">P/E</th>
-                      <th className="p-3">RSI</th>
-                      <th className="p-3" title="ATR is a close-only approximation (not exact)">
-                        ATR
-                      </th>
-                      <th className="p-3 whitespace-nowrap">Rev growth</th>
-                      <th className="p-3">Held</th>
-                      <th className="p-3">Passed</th>
-                      <th className="p-3">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {results.map((r, i) => (
-                      <tr key={r.symbol} className="border-b" data-testid="result-row">
-                        <td className="p-3">{i + 1}</td>
-                        <td className="p-3 font-mono font-medium">{r.symbol}</td>
-                        <td className="p-3 font-mono tabular-nums font-semibold">
-                          {/* Colored strength dot via the canonical scoreColor helper (FR-7, DRY). */}
-                          <span className="inline-flex items-center gap-1.5">
-                            <span
-                              aria-hidden
-                              className={cn(
-                                'inline-block h-2 w-2 rounded-full bg-current',
-                                scoreColor(r.score),
-                              )}
-                            />
-                            <span className={scoreColor(r.score)}>{r.score.toFixed(3)}</span>
-                          </span>
-                        </td>
-                        <td className="p-3 font-mono tabular-nums">
-                          {r.pe ? r.pe.toFixed(1) : '—'}
-                        </td>
-                        <td className="p-3 font-mono tabular-nums">
-                          {r.rsi ? r.rsi.toFixed(0) : '—'}
-                        </td>
-                        <td className="p-3 font-mono tabular-nums">
-                          {r.atr ? r.atr.toFixed(2) : '—'}
-                        </td>
-                        <td className="p-3 font-mono tabular-nums">
-                          {r.revGrowth ? `${(r.revGrowth * 100).toFixed(1)}%` : '—'}
-                        </td>
-                        <td className="p-3">
-                          {r.held ? <Badge variant="paper">Held</Badge> : '—'}
-                        </td>
-                        <td className="p-3">{r.passed ? '✓' : '—'}</td>
-                        <td className="p-3">
-                          {r.status === ScreenResultStatus.INSUFFICIENT_DATA ? (
+              <Table className="min-w-[640px]" data-testid="screen-results">
+                <TableHeader>
+                  <TableRow className="border-b text-left text-muted-foreground">
+                    <TableHead className="p-3 whitespace-nowrap">Rank</TableHead>
+                    <TableHead className="p-3">Symbol</TableHead>
+                    <TableHead className="p-3">Score</TableHead>
+                    {/* feature 083 (FR-8) raw columns. ATR is a close-only approximation. */}
+                    <TableHead className="p-3">P/E</TableHead>
+                    <TableHead className="p-3">RSI</TableHead>
+                    <TableHead
+                      className="p-3"
+                      title="ATR is a close-only approximation (not exact)"
+                    >
+                      ATR
+                    </TableHead>
+                    <TableHead className="p-3 whitespace-nowrap">Rev growth</TableHead>
+                    <TableHead className="p-3">Held</TableHead>
+                    <TableHead className="p-3">Passed</TableHead>
+                    <TableHead className="p-3">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {results.map((r, i) => (
+                    <TableRow key={r.symbol} className="border-b" data-testid="result-row">
+                      <TableCell className="p-3">{i + 1}</TableCell>
+                      <TableCell className="p-3 font-mono font-medium">{r.symbol}</TableCell>
+                      <TableCell className="p-3 font-mono tabular-nums font-semibold">
+                        {/* Colored strength dot via the canonical scoreColor helper (FR-7, DRY). */}
+                        <span className="inline-flex items-center gap-1.5">
+                          <span
+                            aria-hidden
+                            className={cn(
+                              'inline-block h-2 w-2 rounded-full bg-current',
+                              scoreColor(r.score),
+                            )}
+                          />
+                          <span className={scoreColor(r.score)}>{r.score.toFixed(3)}</span>
+                        </span>
+                      </TableCell>
+                      <TableCell className="p-3 font-mono tabular-nums">
+                        {r.pe ? r.pe.toFixed(1) : '—'}
+                      </TableCell>
+                      <TableCell className="p-3 font-mono tabular-nums">
+                        {r.rsi ? r.rsi.toFixed(0) : '—'}
+                      </TableCell>
+                      <TableCell className="p-3 font-mono tabular-nums">
+                        {r.atr ? r.atr.toFixed(2) : '—'}
+                      </TableCell>
+                      <TableCell className="p-3 font-mono tabular-nums">
+                        {r.revGrowth ? `${(r.revGrowth * 100).toFixed(1)}%` : '—'}
+                      </TableCell>
+                      <TableCell className="p-3">
+                        {r.held ? <Badge variant="paper">Held</Badge> : '—'}
+                      </TableCell>
+                      <TableCell className="p-3">{r.passed ? '✓' : '—'}</TableCell>
+                      <TableCell className="p-3">
+                        {r.status === ScreenResultStatus.INSUFFICIENT_DATA ? (
+                          r.gap ? (
                             <Badge variant="warning" data-testid="insufficient-data">
                               Insufficient data
                             </Badge>
                           ) : (
-                            <Badge variant="info">OK</Badge>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                            <Badge
+                              variant="warning"
+                              data-testid="fundamentals-pending"
+                              title="The fundamentals data source is currently unavailable — this candidate will be re-scored on a later scan once it's back."
+                            >
+                              Fundamentals pending
+                            </Badge>
+                          )
+                        ) : (
+                          <Badge variant="info">OK</Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         )}

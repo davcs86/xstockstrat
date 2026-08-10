@@ -1269,43 +1269,139 @@ reusing.
 - **Evidence**: `docs/roadmap/features/098-screener-watchlist-fidelity/implementation-spec.md:265-269` (Deviation Log, pruned by this archival); `services/xstockstrat-ui/src/app/insights/watchlists/page.tsx` (`pendingSelectRef`).
 - **Rule it implies**: for any "create → auto-select" flow built on invalidate+refetch mutations, defer the post-create selection assignment until the refetched collection actually contains the new id — never set it synchronously in `onSuccess` if a reconcile/default-selection effect also runs on that same collection.
 
-### 2026-08-07 — exactly-once-order-intent — design
-- **Pattern**: Extends the 2026-07-27 "a mock that echoes a request field back tests nothing" entry with its inverse failure mode: a dedup mock that makes its response **genuinely depend on** a request field (via an in-memory map, to prove the field is honored) must not let that dependency change a value another spec in the same suite hard-asserts as a literal. `startMockBackend()` runs once for the whole Playwright run (`e2e/global-setup.ts`), so a mock's in-memory state is shared/persistent across every spec file and worker, not reset per test — a counter-based id scheme introduced to prove dedup silently made an unrelated spec's hard-coded assertion depend on cross-file execution order.
-- **Evidence**: `services/xstockstrat-ui/e2e/mock-backend.ts` `placeOrder` (feature 101, Step 20) — the dedup `Map` stores the full response object keyed by `clientOrderId`, but the non-repeat-call `orderId` stays the fixed `'mock-order-001'` literal that `order-form.spec.ts` asserts.
-- **Rule it implies**: when adding request-dependent branching to a shared mock handler, grep the whole e2e suite for hard-coded literals of that handler's current response *before* changing how those values are generated — a dedup/branching proof needs a distinguishing side channel (a map, a call count) but must not change the steady-state response value(s) other specs already depend on.
+### 2026-08-07 — exit-cooldown — design
+- **Pattern**: An entry-side gate on an edge-triggered state machine (feature 069's re-entry cooldown: `if not in_position and latest.entry:`) is naturally reachable after a restart even when the restart-state default is wrong, because "not in position" is exactly the default. A gate on the *opposite* transition (this feature's exit-side cooldown: `elif in_position and latest.exit:`) is NOT — if the durable "am I in position" state defaults to `False` post-restart, the exit branch becomes permanently unreachable for a genuinely-open pair, silently disabling both the gate and the transition's alert. This asymmetry is invisible until a second gate is added on the transition the first one didn't cover; feature 069 never needed to solve it because its gate was on the "safe by default" side.
+- **Evidence**: `docs/roadmap/features/116-exit-cooldown/design.md` § Chosen Approach ("Live loop — bar-replay for the common case"), rounds 1-2 of the design debate (`context.md` 2026-08-07 sdd-design session).
+- **Rule it implies**: before adding a gate to the "unsafe by default" side of an edge-triggered restart-state machine (i.e. the branch that requires `in_position`/similar to be `True` to even run), verify the state it reads is actually durable across a restart — an entry-side precedent gating the opposite transition is not evidence the state is durable, only that its own gate didn't need it to be.
 
-### 2026-08-07 — stop-loss-bracket-orders — design
-- **Pattern**: `design.md` assumed IBKR's OCA (One-Cancels-All) bracket linkage uses a client-settable
-  `OCAGroup` string field, by analogy with the pattern most broker APIs use. IBKR's real Client Portal
-  Web API has no such field — grouping is done by submitting the linked legs together as a JSON array
-  to `POST /iserver/account/{id}/orders`, each with `isSingleGroup: true`; parent/child linkage is via
-  `parentId` on the child equal to the parent's own client-set `cOID`. Found only by going back to
-  primary/near-primary sources (IBKR's own "How to Code an OCA/Bracket Order" articles, corroborated
-  against a third-party generated API client's field reference) instead of trusting the by-analogy
-  assumption through to implementation. **Caveat**: this was verified against published API
-  documentation only — this feature's execution could not exercise a live IBKR paper account, so the
-  mechanism is unverified against real broker behavior as of this entry.
-- **Evidence**: `docs/roadmap/features/030-stop-loss-bracket-orders/implementation-spec.md` Step 7's
-  Codebase Evidence and Deviation Log entry; `services/xstockstrat-trading/internal/broker/ibkr.go`
-  `SubmitBracketLegs`.
-- **Rule it implies**: for any broker-API integration design decision that assumes "it probably works
-  like every other broker" without an explicit citation, treat that assumption as unverified and
-  re-confirm it against the specific broker's own documentation before implementation — a plausible,
-  common-pattern guess is not evidence.
+### 2026-08-07 — exit-cooldown — reuse
+- **Pattern**: When a live-state-reconstruction problem needs to attribute an event to a strategy/owner, check which of the platform's own domain objects actually carries that attribution before designing a backfill — `portfolio.Position` (broker holdings) has no `strategy_id`, but `trading.Order` (the order that created the position) does, because attribution happens at order-placement time, not at position-valuation time. The same "can't attribute a position to a strategy" limitation the codebase already declined to fabricate for feature 083 (`services/xstockstrat-analysis/CLAUDE.md`'s Decide-surface RPCs, "held positions carry no portfolio strategy, so none is fabricated (P-03)") does NOT extend to orders — reaching one layer further back in the data model found real, non-fabricated attribution where the more obvious lookup (the position itself) had none.
+- **Evidence**: `docs/roadmap/features/116-exit-cooldown/design.md` § Chosen Approach ("Live loop — boot-time backfill"); `packages/proto/portfolio/v1/portfolio.proto:43-73` (no `strategy_id`) vs. `packages/proto/trading/v1/trading.proto:47` (`Order.strategy_id`); rounds 2-3 of the design debate.
+- **Rule it implies**: when P-03 blocks fabricating an attribution from one domain object, check the object one layer upstream/downstream in the data flow (the order that created a position, the signal that created an order, etc.) before accepting the gap — the attribution may exist there even when it's absent at the layer that seemed most direct.
 
-### 2026-08-07 — fix-mcp-target-user-authz — design
-- **Pattern**: When closing an authz-shaped defect by removing a caller-suppliable identity
-  parameter, prefer a **required parameter with no default** over both (a) silently keeping the old
-  permissive default and (b) silently hard-flipping to a new restrictive default. Both silent
-  options fail *quietly* — an omitted argument keeps working but does something the caller didn't
-  ask for (either re-shipping the vulnerability's shape, or narrowing behavior for a legitimate
-  caller recon couldn't rule out). A required parameter with no default fails *loud* (a schema/type
-  error) at the exact call sites that need to state their intent explicitly, closing the same hole
-  without silently changing anyone's observed behavior.
-- **Evidence**: `docs/roadmap/features/111-fix-mcp-target-user-authz/design.md` § Rejected
-  Alternatives ("Hard-flip `emit_alert`'s default..." rejected in round 2 in favor of `broadcast:
-  bool` required, no default); `context.md` § Session 2026-08-07 — sdd-design.
-- **Rule it implies**: when a design round is choosing between two silent defaults for a
-  behavior-changing parameter, check whether a required (no-default) parameter closes the same gap
-  — it usually does, at zero extra implementation cost, and turns an unverifiable-blast-radius
-  question into a caught-at-call-site error instead of a guess either way.
+### 2026-08-08 — screener-data-readiness-polling — reuse
+- **Pattern**: for a "keep re-checking until it resolves, then merge into a live table" background-poll feature built on TanStack Query, two things paired well: (1) a scan-generation counter (`useState` int bumped on every fresh scan, passed into the poll `useQuery`'s `queryKey`) that orphans an in-flight poll from a superseded scan without any manual cancellation; (2) counting attempts off `dataUpdatedAt`/`errorUpdatedAt` timestamps rather than `data`/`error` object identity, since structural sharing collapses identical-valued retries — see the paired `fails.md` entry (same date) for why identity-keying breaks. Both are small, generic, and reusable by any future "keep polling a mutation-shaped RPC until some rows resolve" feature in this codebase.
+- **Evidence**: `services/xstockstrat-ui/src/hooks/useScreenSymbols.ts` (`useScreenSymbolsPoll`), `services/xstockstrat-ui/src/app/insights/screener/page.tsx` (`scanGeneration`, the poll-merge `useEffect`); `docs/roadmap/features/118-screener-data-readiness-polling/design.md` § Chosen Approach.
+- **Rule it implies**: for the next "background recheck until resolved" feature on a TanStack-backed page, reach for this pair (generation-keyed `queryKey` + timestamp-keyed effect) directly rather than re-deriving it.
+
+### 2026-08-08 — shadcn-ui-migration — reuse
+- **Pattern**: `services/xstockstrat-ui`'s Vitest config (`vitest.config.ts`) never configured `resolve.alias` for the `@/*` path mapping `tsconfig.json` declares — harmless while every unit-testable file used relative imports, but the moment any file in a unit test's import graph switches to `@/...`-style imports (this feature: the shadcn CLI regenerates `src/components/ui/*` with alias imports, replacing the old relative ones), Vitest fails to resolve them even though Next's own bundler (which reads `tsconfig.json` `paths` automatically) is unaffected — the two build tools silently diverge on the exact same source tree. This broke not just the new test files but an unrelated pre-existing test (`copilot.test.ts`) whose import graph happened to touch `badge.tsx`.
+- **Evidence**: `services/xstockstrat-ui/vitest.config.ts` (`resolve.alias`); `docs/roadmap/features/119-shadcn-ui-migration/implementation-spec.md` Step 8's Deviation Log.
+- **Rule it implies**: any future change that shifts a file under `src/` from relative to `@/...`-alias imports (a codegen regeneration, a refactor, a new generated primitive) should re-run the full Vitest suite, not just the files the change directly touches — the failure surfaces on whichever *other* file's import graph happens to reach the changed one, not on the changed file itself. `vitest.config.ts`'s `resolve.alias` should mirror `tsconfig.json`'s `paths` exactly; verify they haven't drifted before assuming a Vitest resolution failure is a real code bug.
+
+### 2026-08-08 — shadcn-migration-medium-confidence — reuse
+- **Pattern**: When two DRY-consolidation targets (here: `AccountsModule.tsx`/`OrderFilters.tsx` filter toolbars) look identical at a glance but differ in real layout details (search box presence, active-filter-count badge, Clear-button placement), resist a `layout: 'modeA'|'modeB'` variant-enum shared component — it collapses into "two components behind a switch," not a real consolidation. Instead build the shared piece as a **slot-based** component that owns only the genuinely-identical inner controls, and let each call site keep owning its own surrounding chrome (Card/CardHeader/etc.), parameterizing only the one or two things that are truly a binary choice.
+- **Evidence**: `docs/roadmap/features/121-shadcn-migration-medium-confidence/design.md` § Chosen Approach point 4, § Rejected Alternatives (first bullet).
+- **Rule it implies**: reinforces the DRY guard rail — check for an existing primitive/variant match before adding a new one, and prefer a slot-based shared component over a layout-mode-switch when two call sites' chrome genuinely differs.
+
+### 2026-08-08 — shadcn-migration-low-confidence — reuse
+- **Pattern**: A product spec named a specific shadcn primitive (`ui/form.tsx` with `Form`/`FormField`/`FormItem`/`FormControl`/`FormMessage`, wired to `useFormContext`) based on documentation current at story-writing time. By the time `/sdd-design` ran, live verification (fetching `https://ui.shadcn.com/docs/components/field` and the react-hook-form integration guide) found shadcn's actual current-recommended primitive had changed to a different, framework-agnostic `ui/field.tsx` family (`Field`/`FieldLabel`/`FieldDescription`/`FieldError`/`FieldGroup`/etc.), combined with `react-hook-form`'s own `Controller`/`useForm` directly rather than a `FormField`-wraps-`useFormContext` indirection layer.
+- **Evidence**: `docs/roadmap/features/122-shadcn-migration-low-confidence/design.md` § Round 3, `recon.md` § Round 3 addendum (both citing live `WebFetch` verification, 2026-08-08).
+- **Rule it implies**: for any feature naming a specific external library's primitive/component/API by name in its product spec, `/sdd-design` should live-verify that name against the library's current docs/registry before treating it as ground truth — a fast-moving ecosystem (shadcn's registry, in this case) can rename or replace its own recommended pattern between story-writing and design time, and a stale name silently baked into an implementation spec produces code against a primitive that no longer matches upstream guidance.
+
+### 2026-08-08 — shadcn-migration-custom-composites — reuse
+- **Pattern**: When a design decision (a shell-vs-restructure fork, here FR-10's Questionnaire shell decision) is later overridden by the user for only *part* of a component, nest the restructured part inside the unchanged outer step-count/heading framing rather than flattening the whole component to match the restructured part's new shape. Nesting keeps existing e2e text-based selectors (`getByText('Step N — ...')`, step-count assertions) valid without a rewrite, at the cost of only rewriting the fill/click *sequencing* inside the restructured part, not the assertions around it.
+- **Evidence**: `docs/roadmap/features/123-shadcn-migration-custom-composites/design.md` § Round 3 (Step 1 restructured into 4 nested `Questionnaire.Item` sub-screens inside an unchanged outer "Step 1 — Identity" heading, while Steps 2-4 keep their existing step-number identity).
+- **Rule it implies**: when a partial-scope override changes one part of an already-speced component's internal structure, check whether nesting the change inside the unchanged outer framing preserves more of the existing e2e contract than flattening does — the nesting choice is often the lower-e2e-risk option even when it's structurally less "clean."
+
+### 2026-08-08 — shadcn-migration-custom-composites — reuse (candidate follow-up, not this feature's scope)
+- **Pattern**: `useCandlestickChart.ts` hardcodes this app's dark-theme colors as literal hex values (`#22c55e`/`#ef4444`/`#94a3b8`/etc.) rather than reading the app's CSS custom properties, the same way `ui/chart.tsx`'s `ChartContainer`/`ChartConfig` composition does for the `recharts`-based charts. Swapping the hardcoded hex for the CSS variables would get `ChartPanel.tsx` (which stays on `lightweight-charts`, see the FR-5 sanctioned exception in `services/xstockstrat-ui/CLAUDE.md` § Styling) partial visual theming consistency with the rest of the app's charts, without a full chart-library migration.
+- **Evidence**: `docs/roadmap/features/123-shadcn-migration-custom-composites/design.md` § Round 2 (FR-5 discussion) and Open Risks; `services/xstockstrat-ui/src/hooks/useCandlestickChart.ts`.
+- **Rule it implies**: a candidate low-risk follow-up feature, not a rule to apply now — recorded here so it isn't lost, since it surfaced during design but is explicitly out of this feature's scope.
+
+### 2026-08-09 — shadcn-migration-custom-composites — design
+- **Pattern**: A design initially avoided bumping a shared dependency (`recharts` v2→v3) to control blast radius, hand-authoring a new primitive (`ui/chart.tsx`) against the older installed version instead of the shadcn registry's v3-targeted reference file. But this repo's CLI-vendored-primitive convention means that hand-authored file will eventually be silently overwritten by the newer version anyway on a future `apply --preset` re-run (`services/xstockstrat-ui/CLAUDE.md` § Styling) — the "safer, smaller" choice was actually deferring the same work to an unplanned future moment, not avoiding it. When put to the user directly, the tradeoff was surfaced explicitly and the user chose to bump early (closing the gap now, with a scoped recon of the two existing chart files' actual v3-breaking-change exposure) rather than carry it as latent tech debt.
+- **Evidence**: `docs/roadmap/features/123-shadcn-migration-custom-composites/design.md` § Round 4 (FR-2's recharts v3 bump); the recon found only one real code fix needed across both existing `recharts` consumers (`CartesianGrid`'s new-required `xAxisId`/`yAxisId` props) — the two v3-specific bits the original hand-authoring plan meant to omit (`initialDimension`, `TooltipValueType`) turned out to be the smaller half of the real exposure, not the whole of it.
+- **Rule it implies**: when a design avoids a dependency bump specifically because a CLI-vendored primitive would otherwise need hand-authoring against a newer version, check whether the repo's own re-apply convention (`apply --preset`) means that avoidance is temporary, not permanent — and surface that framing explicitly at the design-fork decision point rather than defaulting to "smaller diff now" without naming the deferred cost.
+
+### 2026-08-09 — shadcn-table-actions-responsive — design
+- **Pattern**: A design decision reached verbally between debate rounds (e.g. resolved directly in a
+  proposer/adversary round's returned text, or agreed with the user in conversation) is not "settled"
+  until it is written into `recon.md`/`context.md`/`design.md`. A later round's adversary subagent —
+  or a future `/sdd-spec` session — only ever reads the durable artifacts, never this session's
+  transcript. Concretely: Round 3 decided to replace `nav-reachability.spec.ts`'s shared-`Breadcrumb`
+  assertion with an `aria-current`-based one (preserving the reachability guarantee for every route
+  once the shared breadcrumb was removed), but that mechanism was only ever stated in the round's
+  returned text, never written to `recon.md`. Round 4's adversary, reading only `recon.md`, correctly
+  flagged the breadcrumb removal as an apparent regression for 15 routes — a false alarm caused
+  entirely by the missing checkpoint, not a real design flaw.
+- **Evidence**: `docs/roadmap/features/124-shadcn-table-actions-responsive/context.md` § Session
+  2026-08-09T23:20:17Z; `recon.md`'s "ADDENDUM 2026-08-09 (Round 4 consolidation)" section, added
+  specifically to close this gap before `design.md` was written.
+- **Rule it implies**: this is the mid-debate analog of Constitution **P-05** (incremental
+  checkpointing "as they happen") — the orchestrator must write each round's mechanism decisions into
+  `recon.md`/`context.md` before spawning the next round's subagents, not just carry them forward in
+  its own synthesis. A subagent's "regression" finding should first be checked against "was this
+  decision actually written down anywhere it could read it?" before being treated as a real design gap.
+
+### 2026-08-10 — shadcn-sidebar-visual-rewrite — design
+- **Pattern**: An "ARIA-association" fix (`aria-labelledby` linking a container to its visible
+  label) is not a producer-contract claim just because the reference is a syntactically valid,
+  non-duplicate IDREF — check the *referencing* element's actual (often implicit) ARIA role first.
+  `ui/sidebar.tsx`'s `SidebarGroup` renders a bare `<div>` with no explicit `role`, which resolves
+  to the implicit role `generic` — an element excluded from accessible-name computation per
+  WAI-ARIA, so `aria-labelledby` on it likely wouldn't reach assistive tech even though the id
+  reference itself is perfectly valid HTML. The design round nearly shipped the "valid IDREF"
+  check as if it proved the fix worked, until the adversary traced the actual role. The design was
+  then simplified further, not just patched: since each interactive child (`SidebarMenuButton`)
+  already computes a correct, distinct accessible name from its own visible text, the whole
+  `aria-labelledby`/`role="group"` mechanism was dropped rather than fixed — a shared, identical
+  accessible name across N sibling containers adds real implementation complexity (id-plumbing, an
+  ordering invariant to maintain) for an accessibility improvement that, once actually exposed,
+  tells a screen-reader user nothing beyond what they already hear from each interactive child.
+- **Evidence**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/context.md` § Session
+  2026-08-10T11:00:00Z (Round 3 adversary + orchestrator synthesis); `design.md` § Rejected
+  Alternatives (third bullet).
+- **Rule it implies**: before treating any `aria-*` wiring onto a shadcn/Radix-vendored primitive
+  as "fixed," check the actual rendered element's role (explicit or implicit) — a `<div>`-based
+  primitive (`SidebarGroup`, and likely siblings in the same vendored family) needs an explicit
+  `role` before an `aria-labelledby`/`aria-describedby` reference onto it means anything to
+  assistive tech. And before adding that `role`, ask whether the interactive descendants already
+  provide the accessible name a screen-reader user needs — duplicating it at a wrapping-container
+  level may be complexity without a real accessibility win. This generalizes the "demonstration is
+  not a producer-contract claim" family already in `fails.md` (2026-07-27/29/08-05) to ARIA
+  wiring specifically, not just runtime/API behavior.
+
+### 2026-08-10 — shadcn-sidebar-visual-rewrite — reuse
+- **Pattern**: a genuine, live-browser Playwright red-before-green cycle IS practical in the
+  execute sandbox for `xstockstrat-ui`, even though the default `pnpm exec playwright test <file>`
+  invocation is not — the difference is the `setup` project's `warmup.setup.ts`, which pre-fetches
+  **21** routes serially (each up to ~90s to compile in dev mode on first hit). The fix: run with
+  `--project=chromium --no-deps` (skips the `setup` project dependency entirely) and manually
+  pre-warm only the specific route(s) the target spec actually visits via a plain `curl` carrying a
+  hand-signed test JWT cookie (same secret/shape as `e2e/helpers/auth.ts`'s `signTestJwt` —
+  `jose`'s `SignJWT`, `test-jwt-secret-for-e2e-tests-min32c`). Total cost: ~10-30s per route,
+  one-time, then the actual test run completes in well under a minute.
+- **Evidence**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/implementation-spec.md` §
+  Deviation Log, Step 3 (Attempt 2); `context.md` Step 3 entry — achieved a real RED (3 failures,
+  right reasons) then GREEN (9/9 passed in 18.2s) this way, after Attempt 1's full-suite run timed
+  out.
+- **Rule it implies**: a future `xstockstrat-ui` `test`-step's TDD gate should default to the
+  scoped `--project=chromium --no-deps` + targeted-route-pre-warm technique rather than the default
+  `playwright test <file>` invocation, whenever the spec under test touches only a handful of
+  routes (most single-feature specs do) — reserve the `tsc`+`lint`+`--list` fallback (`fails.md`
+  2026-08-10, corrected same-day) for when even the scoped, pre-warmed run still times out, not as
+  the first resort.
+
+### 2026-08-10 — unified-symbol-page — design
+- **Pattern**: A page rendered under one segment (`/trader`) CAN safely reuse another segment's
+  existing browser-client-and-hooks (bound to `/insights/api`) without a new BFF registration,
+  verified — not assumed — against four independent facts: (1) the client's `baseUrl` is
+  root-relative (`/insights/api`), so a browser `fetch()` from any page resolves same-origin, not
+  cross-origin; (2) the DO App Platform ingress has exactly one catch-all rule routing both
+  segments' `/api` paths to the same component (`.do/app.yaml`); (3) the session cookie is set with
+  `path: '/'`, not segment-scoped (`auth.ts`); (4) the BFF's `requireSession` re-verifies the
+  session on every dispatch regardless of which router handled it (`bffShared.ts`). Once all four
+  hold, cross-segment reuse is strictly cheaper than dual-registering a one-line `forward()` wrapper
+  in the second segment's BFF for every RPC the new page needs.
+- **Evidence**: `docs/roadmap/features/125-unified-symbol-page/design.md` § Chosen Approach (BFF
+  wiring); design.md round 3's adversary verification against `services/xstockstrat-ui/src/lib/
+  bffShared.ts`, `src/lib/auth.ts`, `src/middleware.ts`, `.do/app.yaml`; round 5's adversary
+  re-confirmed the same four facts independently before the debate closed.
+- **Rule it implies**: before choosing between "dual-register in the new segment's BFF" and "reuse
+  the other segment's browser client directly," check these four facts explicitly (root-relative
+  baseUrl, single-origin ingress, unscoped session cookie, per-dispatch session re-check) rather than
+  defaulting to dual-registration for consistency or assuming cross-segment calls are unsafe by
+  default. When adopted, document the exception in the service's own `CLAUDE.md` (the "one client
+  per segment" convention) in the same PR, so a future reader has the verified justification instead
+  of an unexplained deviation.

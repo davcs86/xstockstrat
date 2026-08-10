@@ -10,6 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -17,6 +19,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
 import { FormulaEditor } from '@/components/insights/FormulaEditor';
 import { FormulaReferencePanel } from '@/components/insights/FormulaReferencePanel';
 import { FormulaRunResult } from '@/components/insights/FormulaRunResult';
@@ -202,9 +212,28 @@ export function FormulaWorkspace({
             {showReference ? 'Hide reference' : 'Reference'}
           </Button>
           {onDelete && !readOnly && (
-            <Button variant="destructive" size="sm" onClick={onDelete} disabled={deleting}>
-              {deleting ? 'Deleting…' : 'Delete'}
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm" disabled={deleting}>
+                  {deleting ? 'Deleting…' : 'Delete'}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogDescription>
+                  Delete this formula? This cannot be undone.
+                </AlertDialogDescription>
+                <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={deleting}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onDelete();
+                  }}
+                >
+                  Confirm
+                </AlertDialogAction>
+              </AlertDialogContent>
+            </AlertDialog>
           )}
           <Button variant="ghost" size="sm" onClick={onCancel}>
             {readOnly ? 'Back' : 'Cancel'}
@@ -251,8 +280,8 @@ export function FormulaWorkspace({
                 </div>
                 <div>
                   <label className="mb-1 block text-xs text-muted-foreground">Description</label>
-                  <textarea
-                    className="flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  <Textarea
+                    className="min-h-[60px]"
                     value={description}
                     onChange={(e) => setDescription(e.target.value)}
                     placeholder="What it computes and the inputs it expects"
@@ -276,10 +305,9 @@ export function FormulaWorkspace({
                   </p>
                 </div>
                 <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
+                  <Checkbox
                     checked={isPublic}
-                    onChange={(e) => setIsPublic(e.target.checked)}
+                    onCheckedChange={(checked) => setIsPublic(checked === true)}
                   />
                   Public (visible to all users)
                 </label>
@@ -348,8 +376,8 @@ export function FormulaWorkspace({
                 <label className="mb-1 block text-xs text-muted-foreground">
                   Input data (JSON) — available as <code className="text-foreground">data</code>
                 </label>
-                <textarea
-                  className="flex min-h-[120px] w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                <Textarea
+                  className="min-h-[120px] font-mono text-xs"
                   value={jsonInput}
                   onChange={(e) => setJsonInput(e.target.value)}
                   spellCheck={false}

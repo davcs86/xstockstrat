@@ -23,6 +23,9 @@ skill).
 | Watchlists (stateful mock) | `mockWatchlists`, `MockWatchlist`, `MockBinding` (per-symbol `(symbol, strategyId)` bindings + `UpdateWatchlist` route, feature 097) | `e2e/helpers/watchlistMock.ts` | `xstockstrat.portfolio.v1.Watchlist` CRUD RPCs | `e2e/insights/watchlists.spec.ts`, `e2e/insights/screener.spec.ts` (Save/Add-top-N, feature 098) |
 | Positions | `POSITION_AAPL` (`stopOrderId`/`takeProfitOrderId` set, feature 030), `POSITION_MSFT` (both omitted — exercises the em-dash "no active bracket" fallback), `POSITIONS`, `positionForSymbol` | `e2e/fixtures/positions.ts` | `xstockstrat.portfolio.v1.Position` | `e2e/mock-backend.ts` (`listPositions`, `getPosition`), `e2e/trader/{positions,position-detail,valuation-parity}.spec.ts` |
 | Orders (shared mock set) | `ORDER_FILLED`, `ORDER_WORKING`, `ORDER_UNKNOWN_INTENT` (`intentState=4/UNKNOWN`, feature 101), `ORDERS`, `orderForId` | `e2e/fixtures/orders.ts` | `xstockstrat.trading.v1.Order` | `e2e/mock-backend.ts` (`listOrders`, `getOrder`), `e2e/trader/{order-ticket,order-intent}.spec.ts` |
+| Config key SetConfig payload | `setConfigPayload` | `e2e/fixtures/configKeys.ts` | `xstockstrat.config.v1.SetConfigRequest` | `e2e/config-ui/api-smoke.spec.ts` |
+| Config key ListKeys metadata rows | `CONFIG_KEY_FIXTURES` | `e2e/fixtures/configKeys.ts` | `xstockstrat.config.v1.ConfigKeyMeta` | `e2e/mock-backend.ts` (`ConfigService.listKeys` — spreads each row + computes `currentValue` from a `configValueOverrides` map that `setConfig` writes into, so a save is visible to the next `listKeys` the same way `value_data` vs. `default_value` works on the real service), `e2e/config-ui/{api-smoke,value-persists-after-save,reason-capture,env-gate}.spec.ts` |
+| Screener results (scenario rows) | `fundamentalsPendingRow`, `barsInsufficientRow`, `resolvedRow` (single-arg factories) | `e2e/fixtures/screenResults.ts` | `xstockstrat.analysis.v1.ScreenResult` | `e2e/insights/screener.spec.ts` (feature 118 background data-readiness polling suite) |
 
 ## Recurring sentinel ids (stay inline, but are reserved)
 
@@ -37,6 +40,7 @@ other meanings; don't rename without updating every listed site.
 | `strat-history-001` | Strategy with persisted score + backtest run history | `e2e/mock-backend.ts` |
 | `invalid_ref` | `ManageStrategy` throws INVALID_ARGUMENT (wizard error path) | `e2e/mock-backend.ts`, `e2e/insights/strategy-authoring.spec.ts` |
 | `READY1` / `WATCH1` / `QUIET1` / `NODATA1` | `evaluateReadiness` forces the ready / watching / quiet / no-data bucket for that symbol (feature 098 rollup e2e) — never AAPL/MSFT so other specs' default 2/3 shape is untouched | `e2e/mock-backend.ts` (`READINESS_BUCKET_OVERRIDE`), `e2e/insights/watchlists.spec.ts` |
+| `strat-exit-cooldown-7` | `GetStrategy` returns a non-default `exitCooldownDays: 7` (edit-prepopulation e2e, feature 116) | `e2e/mock-backend.ts`, `e2e/insights/strategy-authoring.spec.ts` |
 
 ## Not yet centralized
 
@@ -52,9 +56,7 @@ a fixture module and register it above (never copy-paste it into a second site).
 | Alerts (stream + list) | `e2e/mock-backend.ts` (`streamAlerts`, `listAlerts`) |
 | OHLCV bars / assets | `e2e/mock-backend.ts` (`getBars`, `listAssets`) — bars carry the canonical `timeframe: '1d'` **plus** `timeframeEnum` (feature 080) |
 | Backtest diagnostics + run history | `e2e/mock-backend.ts` (`runBacktest` sentinel branches, `listBacktests`) — the coverage-gap half was centralized by feature 071; the `strat-diag-001` / `strat-formula-error-001` diagnostics and the run-history rows are still inline |
-| Screener results | `e2e/mock-backend.ts` (`screenSymbols`) |
 | Editable strategy components (`getStrategy`) | `e2e/mock-backend.ts` |
-| Config keys | `e2e/mock-backend.ts` (`listKeys`) |
 | Signal sources | `e2e/mock-backend.ts` (`listSignalSources`, `manageSignalSource`) |
 | OAuth authorized apps | `e2e/mock-backend.ts` (`listAuthorizedApps`) |
 | Backfill jobs | `e2e/insights/backfills.spec.ts` (`runningJob()` factory) — carries **both** `timeframe: '1d'` and `timeframeEnum: 'TIMEFRAME_1DAY'` (feature 080) |

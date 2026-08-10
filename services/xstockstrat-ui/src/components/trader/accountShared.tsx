@@ -6,6 +6,9 @@
 // place (DRY guard rail — see docs/patterns/dry-guard-rail.md).
 
 import React from 'react';
+import { useForm, Controller, useWatch } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { z } from 'zod';
 import { useAccountContext } from '@/context/AccountContext';
 import { tradingClient } from '@/lib/browserClients/tradingClient';
 import { BrokerType } from '@xstockstrat/proto/common/v1/common_pb';
@@ -14,6 +17,16 @@ import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { Field, FieldError } from '../ui/field';
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '../ui/alert-dialog';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../ui/collapsible';
 import { CredentialStatusBadge } from './CredentialStatusBadge';
 import { brokerLabel } from '@/lib/brokers';
 
@@ -45,6 +58,32 @@ export function buildCredentialsJson(brokerType: BrokerType, creds: CredentialSt
         ibkr_account_id: creds.ibkrAccountId,
       })
     : JSON.stringify({ api_key: creds.apiKey, api_secret: creds.apiSecret });
+}
+
+// feature 122 FR-3/FR-4: the single zod-schema expression of CredentialState's broker-conditional
+// required fields, shared by AddAccountForm and EditCredentialsForm (DRY guard rail — do not write
+// an independent schema at either consumer's call site). Fields outside the given broker's branch
+// stay unconstrained `z.string()` rather than absent, so the schema's inferred type always matches
+// the full `CredentialState` shape.
+export function credentialSchema(brokerType: BrokerType) {
+  const requiredMsg = 'This field is required';
+  return brokerType === BrokerType.IBKR
+    ? z.object({
+        apiKey: z.string(),
+        apiSecret: z.string(),
+        consumerKey: z.string().min(1, requiredMsg),
+        accessToken: z.string().min(1, requiredMsg),
+        accessTokenSecret: z.string().min(1, requiredMsg),
+        ibkrAccountId: z.string().min(1, requiredMsg),
+      })
+    : z.object({
+        apiKey: z.string().min(1, requiredMsg),
+        apiSecret: z.string().min(1, requiredMsg),
+        consumerKey: z.string(),
+        accessToken: z.string(),
+        accessTokenSecret: z.string(),
+        ibkrAccountId: z.string(),
+      });
 }
 
 /** Broker-type-specific secret inputs, shared by the add and edit forms. */
@@ -121,44 +160,89 @@ export function EditCredentialsForm({
   onDone: () => void;
 }) {
   const { refreshAccounts } = useAccountContext();
-  const [creds, setCreds] = React.useState<CredentialState>(EMPTY_CREDENTIALS);
-  const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const {
+    control,
+    handleSubmit,
+    setValue,
+    reset,
+    formState: { isSubmitting },
+  } = useForm<CredentialState>({
+    // Shared with Step 6's AddAccountForm (accountShared.tsx credentialSchema factory) — this
+    // consumer's broker is a fixed prop, not user-selectable, so (unlike AddAccountForm) a static
+    // call is enough; no ref/watch indirection needed to track a changing broker.
+    resolver: zodResolver(credentialSchema(account.brokerType)),
+    defaultValues: EMPTY_CREDENTIALS,
+  });
 
-  React.useEffect(() => () => setCreds(EMPTY_CREDENTIALS), []);
+  // Watched only to drive CredentialFields' controlled `value` prop — bridges the individual
+  // RHF-registered fields back into its existing creds/onChange contract (CredentialFields itself
+  // stays react-hook-form-unaware), same pattern as Step 6's AddAccountForm.
+  const creds = useWatch({
+    control,
+    name: [
+      'apiKey',
+      'apiSecret',
+      'consumerKey',
+      'accessToken',
+      'accessTokenSecret',
+      'ibkrAccountId',
+    ],
+  });
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitting(true);
+  React.useEffect(() => () => reset(EMPTY_CREDENTIALS), [reset]);
+
+  function handleCredsChange(next: CredentialState) {
+    setValue('apiKey', next.apiKey);
+    setValue('apiSecret', next.apiSecret);
+    setValue('consumerKey', next.consumerKey);
+    setValue('accessToken', next.accessToken);
+    setValue('accessTokenSecret', next.accessTokenSecret);
+    setValue('ibkrAccountId', next.ibkrAccountId);
+  }
+
+  async function onSubmit(values: CredentialState) {
     setError(null);
     try {
       await tradingClient.updateBrokerAccountCredentials({
         accountId: account.id,
-        credentialsJson: buildCredentialsJson(account.brokerType, creds),
+        credentialsJson: buildCredentialsJson(account.brokerType, values),
       });
-      setCreds(EMPTY_CREDENTIALS);
+      reset(EMPTY_CREDENTIALS);
       await refreshAccounts();
       onDone();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update credentials');
-    } finally {
-      setSubmitting(false);
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-2 space-y-2 rounded-md border border-dashed p-2">
+    <form
+      onSubmit={handleSubmit(onSubmit)}
+      className="mt-2 space-y-2 rounded-md border border-dashed p-2"
+    >
       <p className="text-xs text-muted-foreground">
         Enter new {brokerLabel(account.brokerType)} secrets to replace the stored ones. They are
         validated against the broker on save.
       </p>
-      <CredentialFields brokerType={account.brokerType} creds={creds} onChange={setCreds} />
+      <CredentialFields
+        brokerType={account.brokerType}
+        creds={{
+          apiKey: creds[0] ?? '',
+          apiSecret: creds[1] ?? '',
+          consumerKey: creds[2] ?? '',
+          accessToken: creds[3] ?? '',
+          accessTokenSecret: creds[4] ?? '',
+          ibkrAccountId: creds[5] ?? '',
+        }}
+        onChange={handleCredsChange}
+      />
       {error && <p className="text-xs text-destructive">{error}</p>}
       <div className="flex gap-1">
-        <Button type="submit" size="sm" disabled={submitting}>
-          {submitting ? 'Saving...' : 'Save keys'}
+        <Button type="submit" size="sm" disabled={isSubmitting}>
+          {isSubmitting ? 'Saving...' : 'Save keys'}
         </Button>
-        <Button type="button" size="sm" variant="ghost" onClick={onDone} disabled={submitting}>
+        <Button type="button" size="sm" variant="ghost" onClick={onDone} disabled={isSubmitting}>
           Cancel
         </Button>
       </div>
@@ -180,7 +264,6 @@ export function AccountRow({
 }) {
   const { accounts, selectedAccountId, setSelectedAccountId, refreshAccounts } =
     useAccountContext();
-  const [confirming, setConfirming] = React.useState(false);
   const [editing, setEditing] = React.useState(false);
   const [removing, setRemoving] = React.useState(false);
 
@@ -195,12 +278,16 @@ export function AccountRow({
       }
     } finally {
       setRemoving(false);
-      setConfirming(false);
     }
   }
 
   return (
-    <div className={`rounded-md border ${className}${!account.isActive ? ' opacity-50' : ''}`}>
+    <Collapsible
+      open={editing}
+      onOpenChange={setEditing}
+      data-testid={`account-row-${account.id}`}
+      className={`rounded-md border ${className}${!account.isActive ? ' opacity-50' : ''}`}
+    >
       <div className="flex items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5 min-w-0">
           <span className="text-sm font-medium truncate">{account.displayName}</span>
@@ -210,44 +297,46 @@ export function AccountRow({
           </Badge>
           <CredentialStatusBadge status={account.credentialStatus} />
         </div>
-        {account.isActive && !confirming && (
+        {account.isActive && (
           <div className="flex gap-1 shrink-0">
-            <Button size="sm" variant="ghost" onClick={() => setEditing((v) => !v)}>
-              Edit keys
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setConfirming(true)}>
-              Remove
-            </Button>
+            <CollapsibleTrigger asChild>
+              <Button size="sm" variant="ghost">
+                Edit keys
+              </Button>
+            </CollapsibleTrigger>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button size="sm" variant="ghost">
+                  Remove
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogDescription>
+                  Deregister {account.displayName}? In-flight orders will complete but no new orders
+                  can be placed.
+                </AlertDialogDescription>
+                <AlertDialogCancel disabled={removing}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={removing}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleRemove();
+                  }}
+                >
+                  Confirm
+                </AlertDialogAction>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         )}
       </div>
 
-      {account.isActive && confirming && (
-        <div className="mt-2 flex flex-col items-end gap-1">
-          <p className="text-xs text-destructive text-right">
-            Deregister {account.displayName}? In-flight orders will complete but no new orders can
-            be placed.
-          </p>
-          <div className="flex gap-1">
-            <Button size="sm" variant="destructive" onClick={handleRemove} disabled={removing}>
-              Confirm
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setConfirming(false)}
-              disabled={removing}
-            >
-              Cancel
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {account.isActive && editing && (
-        <EditCredentialsForm account={account} onDone={() => setEditing(false)} />
-      )}
-    </div>
+      <CollapsibleContent>
+        {account.isActive && (
+          <EditCredentialsForm account={account} onDone={() => setEditing(false)} />
+        )}
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -256,76 +345,139 @@ export function AccountRow({
  * owns its form state and registers via the trading client. `className` tunes the form layout
  * per host.
  */
+type AddAccountValues = { displayName: string; brokerType: string } & CredentialState;
+
+function addAccountSchema(brokerType: BrokerType) {
+  return z
+    .object({
+      displayName: z.string().min(1, 'Display name is required'),
+      brokerType: z.string(),
+    })
+    .merge(credentialSchema(brokerType));
+}
+
 export function AddAccountForm({ className = 'space-y-3' }: { className?: string }) {
   const { setSelectedAccountId, refreshAccounts } = useAccountContext();
-  const [displayName, setDisplayName] = React.useState('');
-  const [brokerType, setBrokerType] = React.useState<string>('1');
-  const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [creds, setCreds] = React.useState<CredentialState>(EMPTY_CREDENTIALS);
+  // The broker select determines which credential fields are required, so the resolver schema is
+  // broker-dependent. Read via a ref (updated by the Select's onValueChange below) rather than
+  // baking the initial broker into the schema passed to useForm: the resolver function is invoked
+  // fresh on every validation, so this always validates against the currently-selected broker
+  // without needing to reconstruct/rewire the form instance when the broker changes.
+  const brokerTypeRef = React.useRef<BrokerType>(BrokerType.ALPACA);
+  const {
+    control,
+    handleSubmit,
+    setValue,
+    reset,
+    formState: { isSubmitting },
+  } = useForm<AddAccountValues>({
+    resolver: (values, context, options) =>
+      zodResolver(addAccountSchema(brokerTypeRef.current))(values, context, options),
+    defaultValues: { displayName: '', brokerType: '1', ...EMPTY_CREDENTIALS },
+  });
 
-  React.useEffect(() => () => setCreds(EMPTY_CREDENTIALS), []);
+  // Watched only to drive CredentialFields' rendered field set — validation reads brokerTypeRef
+  // above, not this value, so a re-render lag between the two is harmless.
+  const brokerType = useWatch({ control, name: 'brokerType' });
+  const creds = useWatch({
+    control,
+    name: [
+      'apiKey',
+      'apiSecret',
+      'consumerKey',
+      'accessToken',
+      'accessTokenSecret',
+      'ibkrAccountId',
+    ],
+  });
 
-  async function handleAddAccount(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitting(true);
+  React.useEffect(
+    () => () => reset({ displayName: '', brokerType: '1', ...EMPTY_CREDENTIALS }),
+    [reset],
+  );
+
+  function handleCredsChange(next: CredentialState) {
+    setValue('apiKey', next.apiKey);
+    setValue('apiSecret', next.apiSecret);
+    setValue('consumerKey', next.consumerKey);
+    setValue('accessToken', next.accessToken);
+    setValue('accessTokenSecret', next.accessTokenSecret);
+    setValue('ibkrAccountId', next.ibkrAccountId);
+  }
+
+  async function onSubmit(values: AddAccountValues) {
     setError(null);
     try {
-      const brokerTypeNum = parseInt(brokerType, 10) as BrokerType;
+      const brokerTypeNum = parseInt(values.brokerType, 10) as BrokerType;
       // is_paper is omitted — the server derives it from the deployment environment.
       const { account } = await tradingClient.registerBrokerAccount({
-        displayName,
+        displayName: values.displayName,
         brokerType: brokerTypeNum,
-        credentialsJson: buildCredentialsJson(brokerTypeNum, creds),
+        credentialsJson: buildCredentialsJson(brokerTypeNum, values),
       });
       await refreshAccounts();
       if (account?.id) {
         setSelectedAccountId(account.id);
       }
-      setDisplayName('');
-      setBrokerType('1');
-      setCreds(EMPTY_CREDENTIALS);
+      reset({ displayName: '', brokerType: '1', ...EMPTY_CREDENTIALS });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to add account');
-    } finally {
-      setSubmitting(false);
     }
   }
 
   return (
-    <form onSubmit={handleAddAccount} className={className}>
-      <Input
-        placeholder="Display name"
-        value={displayName}
-        onChange={(e) => setDisplayName(e.target.value)}
-        required
+    <form onSubmit={handleSubmit(onSubmit)} className={className}>
+      <Controller
+        control={control}
+        name="displayName"
+        render={({ field, fieldState }) => (
+          <Field>
+            <Input placeholder="Display name" required disabled={isSubmitting} {...field} />
+            <FieldError errors={[fieldState.error]} />
+          </Field>
+        )}
       />
-      <Select
-        value={brokerType}
-        onValueChange={(v) => {
-          setBrokerType(v);
-          setCreds(EMPTY_CREDENTIALS);
-        }}
-      >
-        <SelectTrigger>
-          <SelectValue placeholder="Broker" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="1">Alpaca</SelectItem>
-          <SelectItem value="2">IBKR</SelectItem>
-        </SelectContent>
-      </Select>
+      <Controller
+        control={control}
+        name="brokerType"
+        render={({ field }) => (
+          <Select
+            value={field.value}
+            onValueChange={(v) => {
+              field.onChange(v);
+              brokerTypeRef.current = parseInt(v, 10) as BrokerType;
+              handleCredsChange(EMPTY_CREDENTIALS);
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Broker" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">Alpaca</SelectItem>
+              <SelectItem value="2">IBKR</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
+      />
 
       <CredentialFields
-        brokerType={parseInt(brokerType, 10) as BrokerType}
-        creds={creds}
-        onChange={setCreds}
+        brokerType={parseInt(brokerType ?? '1', 10) as BrokerType}
+        creds={{
+          apiKey: creds[0] ?? '',
+          apiSecret: creds[1] ?? '',
+          consumerKey: creds[2] ?? '',
+          accessToken: creds[3] ?? '',
+          accessTokenSecret: creds[4] ?? '',
+          ibkrAccountId: creds[5] ?? '',
+        }}
+        onChange={handleCredsChange}
       />
 
       {error && <p className="text-xs text-destructive">{error}</p>}
 
-      <Button type="submit" className="w-full" disabled={submitting}>
-        {submitting ? 'Adding...' : 'Add Account'}
+      <Button type="submit" className="w-full" disabled={isSubmitting}>
+        {isSubmitting ? 'Adding...' : 'Add Account'}
       </Button>
     </form>
   );

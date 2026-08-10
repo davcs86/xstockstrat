@@ -12,7 +12,8 @@ test.describe('Feature 100 — config-ui reason capture', () => {
     await page.getByText('platform.log_level').waitFor();
 
     const row = page.locator('tr', { hasText: 'platform.log_level' });
-    await row.getByRole('button', { name: 'Edit' }).click();
+    await row.getByRole('button', { name: 'Actions' }).click();
+    await page.getByRole('menuitem', { name: 'Edit' }).click();
     await row.getByPlaceholder('Reason for this change').fill('routine debug toggle — TICKET-999');
 
     const reqPromise = page.waitForRequest(
@@ -32,7 +33,8 @@ test.describe('Feature 100 — config-ui reason capture', () => {
     await page.getByText('platform.log_level').waitFor();
 
     const row = page.locator('tr', { hasText: 'platform.log_level' });
-    await row.getByRole('button', { name: 'Edit' }).click();
+    await row.getByRole('button', { name: 'Actions' }).click();
+    await page.getByRole('menuitem', { name: 'Edit' }).click();
     // Leave the reason field blank.
 
     const reqPromise = page.waitForRequest(
@@ -51,7 +53,8 @@ test.describe('Feature 100 — config-ui reason capture', () => {
     await page.getByText('platform.trading_state').waitFor();
 
     const row = page.locator('tr', { hasText: 'platform.trading_state' });
-    await row.getByRole('button', { name: 'Edit' }).click();
+    await row.getByRole('button', { name: 'Actions' }).click();
+    await page.getByRole('menuitem', { name: 'Edit' }).click();
     // Leave the reason field blank.
 
     let sawSetConfig = false;
