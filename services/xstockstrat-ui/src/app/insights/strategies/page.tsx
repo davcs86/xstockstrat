@@ -1,7 +1,8 @@
 'use client';
+import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Plus } from 'lucide-react';
+import { Plus, EllipsisVertical } from 'lucide-react';
 import { AppShell } from '@/components/insights/AppShell';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -16,8 +17,13 @@ import {
   TableCell,
 } from '@/components/ui/table';
 import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
+import {
   AlertDialog,
-  AlertDialogTrigger,
   AlertDialogContent,
   AlertDialogDescription,
   AlertDialogAction,
@@ -168,6 +174,7 @@ function StrategyRow({
   onDeactivate: () => void;
 }) {
   const { data: a } = useStrategyAnalytics(d.strategyId);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const state = !d.active ? 'Off' : d.liveEnabled ? 'Active' : 'Paused';
   const stateVariant = !d.active ? 'secondary' : d.liveEnabled ? 'buy' : 'warning';
   return (
@@ -207,34 +214,53 @@ function StrategyRow({
       <TableCell className="text-right whitespace-nowrap">
         {isAdmin ? (
           <>
-            <Button size="sm" variant="outline" className="mr-1" onClick={onEdit}>
-              Edit
-            </Button>
-            {d.active && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button size="sm" variant="ghost" disabled={deactivating}>
-                    Deactivate
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogDescription>
-                    Deactivate strategy &quot;{d.strategyId}&quot;? It will no longer appear in the
-                    active list.
-                  </AlertDialogDescription>
-                  <AlertDialogCancel disabled={deactivating}>Cancel</AlertDialogCancel>
-                  <AlertDialogAction
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Actions"
+                  data-testid={`actions-${d.strategyId}`}
+                >
+                  <EllipsisVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={onEdit}>Edit</DropdownMenuItem>
+                {d.active && (
+                  <DropdownMenuItem
                     disabled={deactivating}
-                    onClick={(e) => {
+                    variant="destructive"
+                    onSelect={(e) => {
                       e.preventDefault();
-                      onDeactivate();
+                      setConfirmOpen(true);
                     }}
                   >
-                    Confirm
-                  </AlertDialogAction>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
+                    Deactivate
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+              <AlertDialogContent>
+                <AlertDialogDescription>
+                  Deactivate strategy &quot;{d.strategyId}&quot;? It will no longer appear in the
+                  active list.
+                </AlertDialogDescription>
+                <AlertDialogCancel disabled={deactivating}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={deactivating}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    onDeactivate();
+                    setConfirmOpen(false);
+                  }}
+                >
+                  Confirm
+                </AlertDialogAction>
+              </AlertDialogContent>
+            </AlertDialog>
           </>
         ) : (
           <Link

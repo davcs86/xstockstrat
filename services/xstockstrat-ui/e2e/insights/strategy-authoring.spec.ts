@@ -97,6 +97,30 @@ test.describe('Strategy authoring — insights BFF', () => {
     expect(result.body.toLowerCase()).toContain('permission');
   });
 
+  test('strategies list Actions menu: Edit navigates to the edit page (FR-2)', async ({ page }) => {
+    await addAdminCookie(page);
+    await page.goto('/insights/strategies');
+    await page.getByTestId('actions-strat-live-001').click();
+    await page.getByRole('menuitem', { name: 'Edit' }).click();
+    await expect(page).toHaveURL(/\/insights\/strategies\/strat-live-001\/edit/);
+  });
+
+  test('strategies list Actions menu: Deactivate requires confirmation then calls ManageStrategy (FR-2)', async ({
+    page,
+  }) => {
+    await addAdminCookie(page);
+    await page.goto('/insights/strategies');
+    const reqPromise = page.waitForRequest(
+      (r) => r.url().includes('/ManageStrategy') && r.method() === 'POST',
+    );
+    await page.getByTestId('actions-strat-live-001').click();
+    await page.getByRole('menuitem', { name: 'Deactivate' }).click();
+    await expect(page.getByText(/Deactivate strategy/)).toBeVisible();
+    await page.getByRole('button', { name: 'Confirm' }).click();
+    const body = (await reqPromise).postData() ?? '';
+    expect(body).toContain('DEACTIVATE');
+  });
+
   test('manageStrategy register succeeds for admin', async ({ page }) => {
     await addAdminCookie(page);
     await page.goto('/insights/strategies');
@@ -196,6 +220,8 @@ test.describe('Strategy authoring — UI', () => {
 
     // Step 1 — Identity, sub-screen 1 (Strategy ID). Next disabled until a valid id (FR-10, Round 3).
     await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
+    // The step-indicator pill row renders via Badge (FR-7), current step highlighted.
+    await expect(page.getByText('1. Identity')).toBeVisible();
     const next = page.getByRole('button', { name: 'Next', exact: true });
     await expect(next).toBeDisabled();
     await page.getByPlaceholder('e.g. sma_crossover').fill('sma_crossover');

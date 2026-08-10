@@ -47,7 +47,15 @@ export function LiveStrategiesPanel({ isAdmin }: LiveStrategiesPanelProps) {
                 <TableRow
                   key={s.strategyId}
                   className="cursor-pointer"
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setSelectedId(s.strategyId)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setSelectedId(s.strategyId);
+                    }
+                  }}
                 >
                   <TableCell>{s.displayName || s.strategyId}</TableCell>
                   <TableCell>

@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { AppShell } from '@/components/insights/AppShell';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/components/ui/utils';
@@ -29,6 +30,16 @@ import { StatTile } from '@/components/shared/StatTile';
 
 type SortKey = 'conviction' | 'expiry';
 const NINETY_MIN_MS = 90 * 60 * 1000;
+
+/** Shared pill styling for the source-filter row ("All sources" + each `ToggleGroupItem`, FR-8). */
+function sourceFilterPillClass(active: boolean): string {
+  return cn(
+    'rounded-full border px-3 py-1 text-xs transition-colors',
+    active
+      ? 'border-primary bg-primary/20 text-foreground'
+      : 'border-border text-muted-foreground hover:text-foreground',
+  );
+}
 
 /** `HH:MM` local expiry from a protobuf-es Timestamp ({ seconds: bigint }); `—` when unset. */
 function expiresLabel(validUntil: { seconds: bigint } | undefined): string {
@@ -189,12 +200,8 @@ export default function OpportunitiesPage() {
             <button
               type="button"
               onClick={() => setActiveSources([])}
-              className={cn(
-                'rounded-full border px-3 py-1 text-xs transition-colors',
-                activeSources.length === 0
-                  ? 'border-primary bg-primary/20 text-foreground'
-                  : 'border-border text-muted-foreground hover:text-foreground',
-              )}
+              aria-pressed={activeSources.length === 0}
+              className={sourceFilterPillClass(activeSources.length === 0)}
             >
               All sources
             </button>
@@ -203,12 +210,7 @@ export default function OpportunitiesPage() {
                 <ToggleGroupItem
                   key={s}
                   value={s}
-                  className={cn(
-                    'rounded-full border px-3 py-1 text-xs transition-colors',
-                    activeSources.includes(s)
-                      ? 'border-primary bg-primary/20 text-foreground'
-                      : 'border-border text-muted-foreground hover:text-foreground',
-                  )}
+                  className={sourceFilterPillClass(activeSources.includes(s))}
                 >
                   {s}
                 </ToggleGroupItem>
@@ -345,9 +347,9 @@ function OpportunityCard({
           <span className="font-mono font-semibold">{o.symbol}</span>
           <EnumBadge render={OPPORTUNITY_ACTION[o.action]} />
           {o.source && (
-            <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+            <Badge variant="outline" className="text-[11px] text-muted-foreground">
               {o.source}
-            </span>
+            </Badge>
           )}
           {o.strategyId && (
             <span className="font-mono text-xs text-muted-foreground">{o.strategyId}</span>

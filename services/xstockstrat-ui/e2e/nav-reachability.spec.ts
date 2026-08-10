@@ -4,11 +4,17 @@ import { addAdminCookie } from './helpers/auth';
 /**
  * Nav-reachability (C-10(a), feature 083 Step 21). Closes the fails.md 2026-07-01 060 trap: a
  * screen must be reachable by WALKING the rendered Decide/Discover/Engine/Book (+ Settings)
- * shell — not by direct-URL — and the breadcrumb must reflect the active screen. Admin cookie
- * so the admin-gated surfaces (e.g. Backfills) are exercised too.
+ * shell — not by direct-URL — and the active tab/item must carry `aria-current="page"`. Admin
+ * cookie so the admin-gated surfaces (e.g. Backfills) are exercised too.
  *
- * Scope (impl-spec P-06/F-05): nav reachability + breadcrumb presence only, against the Step-20
- * placeholder/real routes. Per-screen CONTENT reachability (Signal detail, Backtest) is
+ * feature 124 (FR-10a): the shared `PlatformHeader`-level `Breadcrumb` landmark this spec used
+ * to assert against was removed (moved into each page's own `PageBreadcrumb`, FR-10b) — the
+ * active-screen assertion below now uses the `aria-current="page"` markers already present on
+ * both the `Primary` and `Section` nav links (`PlatformHeader.tsx`), per design.md's Round 4
+ * resolution.
+ *
+ * Scope (impl-spec P-06/F-05): nav reachability + active-marker presence only, against the
+ * Step-20 placeholder/real routes. Per-screen CONTENT reachability (Signal detail, Backtest) is
  * re-asserted in Step 26 once the real screens land.
  */
 
@@ -63,12 +69,22 @@ test.describe('nav reachability', () => {
     for (const group of GROUPS) {
       // Walk to the group from the rendered shell (not by direct URL).
       await primary.getByRole('link', { name: group.tab, exact: true }).click();
+      await expect(primary.getByRole('link', { name: group.tab, exact: true })).toHaveAttribute(
+        'aria-current',
+        'page',
+      );
       for (const item of group.items) {
         await section.getByRole('link', { name: item.label, exact: true }).click();
         await expect(page).toHaveURL(new RegExp(`${item.href}(/|$|\\?)`));
-        // The route resolved (not a 404) and the breadcrumb reflects the active screen.
-        await expect(page.getByLabel('Breadcrumb')).toContainText(item.label);
-        await expect(page.getByLabel('Breadcrumb')).toContainText(group.tab);
+        // The route resolved (not a 404) and the active tab/item both carry aria-current="page".
+        await expect(section.getByRole('link', { name: item.label, exact: true })).toHaveAttribute(
+          'aria-current',
+          'page',
+        );
+        await expect(primary.getByRole('link', { name: group.tab, exact: true })).toHaveAttribute(
+          'aria-current',
+          'page',
+        );
       }
     }
   });
