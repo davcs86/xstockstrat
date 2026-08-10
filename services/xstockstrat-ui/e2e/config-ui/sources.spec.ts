@@ -190,7 +190,9 @@ test.describe('Feature 088 — honest signal-source verbs (form → mask)', () =
     await expect(page.getByRole('heading', { name: 'Signal Sources' })).toBeVisible({
       timeout: 15000,
     });
-    await page.getByRole('button', { name: 'Edit' }).first().click();
+    // Actions are consolidated behind a per-row kebab menu (FR-2).
+    await page.getByRole('button', { name: 'Actions' }).first().click();
+    await page.getByRole('menuitem', { name: 'Edit' }).click();
     // Change the display name only; do NOT type a credential.
     const nameInput = page.getByPlaceholder('Display name');
     await nameInput.fill('Renamed Source');
@@ -235,7 +237,8 @@ test.describe('Feature 088 — honest signal-source verbs (form → mask)', () =
     const reqPromise = page.waitForRequest(
       (r) => r.url().includes('/ManageSignalSource') && r.method() === 'POST',
     );
-    await page.getByRole('button', { name: 'Enable' }).first().click();
+    await page.getByRole('button', { name: 'Actions' }).first().click();
+    await page.getByRole('menuitem', { name: 'Enable' }).click();
     const body = (await reqPromise).postData() ?? '';
     expect(body).toContain('reactivate');
   });

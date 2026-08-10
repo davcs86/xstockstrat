@@ -15,7 +15,8 @@ test.describe('NamespaceEditor — non-native environment gate', () => {
 
     await expect(page.getByText(/native environment is/i)).toBeVisible();
 
-    await page.getByRole('button', { name: 'Edit' }).first().click();
+    await page.getByRole('button', { name: 'Actions' }).first().click();
+    await page.getByRole('menuitem', { name: 'Edit' }).click();
     await expect(page.getByRole('button', { name: 'Save' })).toBeDisabled();
   });
 
@@ -25,7 +26,8 @@ test.describe('NamespaceEditor — non-native environment gate', () => {
 
     await expect(page.getByText(/native environment is/i)).toHaveCount(0);
 
-    await page.getByRole('button', { name: 'Edit' }).first().click();
+    await page.getByRole('button', { name: 'Actions' }).first().click();
+    await page.getByRole('menuitem', { name: 'Edit' }).click();
     await expect(page.getByRole('button', { name: 'Save' })).toBeEnabled();
   });
 });

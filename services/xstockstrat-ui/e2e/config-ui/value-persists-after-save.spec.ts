@@ -31,7 +31,10 @@ test.describe('config-ui — a saved value replaces the displayed value (not the
     const row = page.locator('tr', { hasText: 'platform.trading_state' });
     await expect(row.getByRole('cell', { name: 'ACTIVE', exact: true })).toBeVisible();
 
-    await row.getByRole('button', { name: 'Edit' }).click();
+    // Read-only-state Edit is behind a kebab menu (FR-2); Save/Cancel stay inline once editing
+    // (not menu-gated — they're the primary action for a field being actively edited).
+    await row.getByRole('button', { name: 'Actions' }).click();
+    await page.getByRole('menuitem', { name: 'Edit' }).click();
     await row.locator('input').first().fill('REDUCE_ONLY');
     // trading_state requires a non-empty reason (NamespaceEditor.handleSave) before Save calls SetConfig.
     await row.getByPlaceholder('Reason for this change').fill('e2e: verify save reflects');
@@ -44,12 +47,13 @@ test.describe('config-ui — a saved value replaces the displayed value (not the
 
     // The row must exit edit mode and show the SAVED value — this is the assertion that
     // fails against the pre-fix code (it would show 'ACTIVE', the untouched seed default).
-    await expect(row.getByRole('button', { name: 'Edit' })).toBeVisible();
+    await expect(row.getByRole('button', { name: 'Actions' })).toBeVisible();
     await expect(row.getByRole('cell', { name: 'REDUCE_ONLY', exact: true })).toBeVisible();
     await expect(row.getByRole('cell', { name: 'ACTIVE', exact: true })).toHaveCount(0);
 
     // Re-editing must prefill from the saved value, not silently fall back to the default.
-    await row.getByRole('button', { name: 'Edit' }).click();
+    await row.getByRole('button', { name: 'Actions' }).click();
+    await page.getByRole('menuitem', { name: 'Edit' }).click();
     await expect(row.locator('input').first()).toHaveValue('REDUCE_ONLY');
   });
 
@@ -62,7 +66,8 @@ test.describe('config-ui — a saved value replaces the displayed value (not the
     const row = page.locator('tr', { hasText: 'platform.maintenance_mode' });
     await expect(row.getByRole('cell', { name: 'false', exact: true })).toBeVisible();
 
-    await row.getByRole('button', { name: 'Edit' }).click();
+    await row.getByRole('button', { name: 'Actions' }).click();
+    await page.getByRole('menuitem', { name: 'Edit' }).click();
     await row.locator('input').first().fill('true');
     const respPromise = page.waitForResponse(
       (r) => r.url().includes('/SetConfig') && r.status() === 200,
@@ -82,7 +87,8 @@ test.describe('config-ui — a saved value replaces the displayed value (not the
     await page.goto(ANALYSIS_NAMESPACE_PAGE);
 
     const row = page.locator('tr', { hasText: 'analysis.signals.source_weights' });
-    await row.getByRole('button', { name: 'Edit' }).click();
+    await row.getByRole('button', { name: 'Actions' }).click();
+    await page.getByRole('menuitem', { name: 'Edit' }).click();
     await row.locator('input').first().fill('{"example_simple_email": 0.75}');
 
     const respPromise = page.waitForResponse(
