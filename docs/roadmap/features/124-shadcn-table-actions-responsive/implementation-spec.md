@@ -412,7 +412,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "strategy-authoring|opportunities
 
 ### Step 9 — service: Fold "All sources" into the `ToggleGroup` styling (FR-8)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx` — modify (lines 188-200)
@@ -456,7 +456,7 @@ pnpm run lint
 
 ### Step 10 — test: e2e for the "All sources" toggle (FR-8 / AC-7)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/opportunities.spec.ts` — modify
@@ -1246,3 +1246,29 @@ commit instead of getting its own. No code/verification impact — Step 2 did no
 the status flip, and its own commit correctly reported "nothing to commit" as a result. Being more
 careful from Step 3 onward: flip a step's status immediately before that step's own commit, not in
 advance.
+
+### Step 9 — mechanism deviation from design.md (grounded at implementation time)
+**Disposition**: resolved by re-grounding against current code; no behavior/visual regression.
+`design.md`'s Round 3 plan (and this step's own **Instructions**, written from that plan) called for
+swapping the raw `<button>` for `ui/toggle.tsx`'s `Toggle` component, relying on `toggleVariants`'
+`aria-pressed:bg-muted` base class for active-state styling. At implementation time, re-reading the
+**current** `ToggleGroupItem` call site (`opportunities/page.tsx:201-216`, confirmed landed by sibling
+features 121/122/123 after design.md's Round 3 was written) showed it does **not** use the `Toggle`
+primitive's own `data-[state=on]`/`aria-pressed` variant mechanism at all — both it and "All sources"
+already share one identical manual `cn()` literal
+(`'rounded-full border px-3 py-1 text-xs transition-colors', <active> ? 'border-primary bg-primary/20
+text-foreground' : 'border-border text-muted-foreground hover:text-foreground'`). Swapping only "All
+sources" to `Toggle`'s own `aria-pressed:bg-muted` styling would have made the two pills' active-state
+look diverge (`bg-muted` vs `bg-primary/20`) for the first time, despite `design.md` explicitly wanting
+them "verify visually ... still visually distinguishable ... matches the original ... intent closely
+enough."
+**What shipped instead**: extracted the identical literal into one local helper,
+`sourceFilterPillClass(active: boolean): string`, called by both "All sources" and `ToggleGroupItem`
+(DRY guard rail — same literal, now one home), and added `aria-pressed={activeSources.length === 0}`
+directly to the "All sources" `<button>` (no primitive swap needed — `aria-pressed` is a plain HTML
+attribute). This satisfies FR-8/AC-7's actual requirement (`aria-pressed` exposed, folds into the same
+visual styling as the `ToggleGroup` pills) while keeping the already-working, already-shared visual
+mechanism unchanged instead of introducing a second one. TDD: Step 10's e2e test was confirmed RED
+against pre-Step-9 markup (`toHaveAttribute('aria-pressed', 'true')` found nothing — the button never
+set the attribute), then GREEN after this change; full `opportunities.spec.ts` (13/13) and `pnpm lint`
+both clean.

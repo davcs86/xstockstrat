@@ -388,6 +388,29 @@
   strategy-authoring}.spec.ts`
 - Deviations: none
 
+### Step 9 + 10 — Fold "All sources" into the ToggleGroup styling (FR-8 / AC-7) [done]
+- Re-read the current `ToggleGroupItem` call site (`opportunities/page.tsx:201-216`) at implementation
+  time and found it does **not** use `ui/toggle.tsx`'s own `data-[state=on]`/`aria-pressed:bg-muted`
+  variant mechanism — both it and "All sources" already share one identical manual `cn()` literal.
+  `design.md`'s Round 3 plan (swap "All sources" to the `Toggle` primitive, relying on its
+  `aria-pressed:bg-muted` base class) would have made the two pills' active-state styling diverge for
+  the first time (`bg-muted` vs the shared `bg-primary/20`), contradicting design.md's own "still
+  visually distinguishable ... matches the original intent" requirement. Shipped instead: extracted the
+  shared literal into one local helper `sourceFilterPillClass(active: boolean): string` used by both
+  "All sources" and `ToggleGroupItem` (DRY — one home for the duplicated literal), and added
+  `aria-pressed={activeSources.length === 0}` directly to the "All sources" `<button>` — no primitive
+  swap needed since `aria-pressed` is a plain HTML attribute. Recorded in full in
+  `implementation-spec.md`'s Deviation Log (Step 9 entry).
+- **TDD**: `red-green required`. Step 10's e2e test (`opportunities.spec.ts` — asserts `aria-pressed`
+  toggles `true`/`false`/`true` across "All sources" ↔ a source-chip click) confirmed RED against
+  pre-Step-9 markup (`toHaveAttribute('aria-pressed', 'true')` found nothing — plain `<button>` never
+  set the attribute), then GREEN after Step 9's change. Full `opportunities.spec.ts`: **13/13 passed**.
+  `pnpm lint`: clean (one pre-existing unrelated warning in `strategies/[id]/page.tsx:490`, not touched
+  by this step).
+- Files modified: `src/app/insights/opportunities/page.tsx`, `e2e/insights/opportunities.spec.ts`
+- Deviations: mechanism deviation from design.md's Round 3 plan, recorded above and in
+  `implementation-spec.md`'s Deviation Log.
+
 ## Session 2026-08-09T23:27:35Z — sdd-spec
 
 - Generated `implementation-spec.md` with 24 steps (12 service/test pairs + a closing docs gate).

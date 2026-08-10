@@ -31,6 +31,16 @@ import { StatTile } from '@/components/shared/StatTile';
 type SortKey = 'conviction' | 'expiry';
 const NINETY_MIN_MS = 90 * 60 * 1000;
 
+/** Shared pill styling for the source-filter row ("All sources" + each `ToggleGroupItem`, FR-8). */
+function sourceFilterPillClass(active: boolean): string {
+  return cn(
+    'rounded-full border px-3 py-1 text-xs transition-colors',
+    active
+      ? 'border-primary bg-primary/20 text-foreground'
+      : 'border-border text-muted-foreground hover:text-foreground',
+  );
+}
+
 /** `HH:MM` local expiry from a protobuf-es Timestamp ({ seconds: bigint }); `—` when unset. */
 function expiresLabel(validUntil: { seconds: bigint } | undefined): string {
   if (!validUntil || !validUntil.seconds) return '—';
@@ -190,12 +200,8 @@ export default function OpportunitiesPage() {
             <button
               type="button"
               onClick={() => setActiveSources([])}
-              className={cn(
-                'rounded-full border px-3 py-1 text-xs transition-colors',
-                activeSources.length === 0
-                  ? 'border-primary bg-primary/20 text-foreground'
-                  : 'border-border text-muted-foreground hover:text-foreground',
-              )}
+              aria-pressed={activeSources.length === 0}
+              className={sourceFilterPillClass(activeSources.length === 0)}
             >
               All sources
             </button>
@@ -204,12 +210,7 @@ export default function OpportunitiesPage() {
                 <ToggleGroupItem
                   key={s}
                   value={s}
-                  className={cn(
-                    'rounded-full border px-3 py-1 text-xs transition-colors',
-                    activeSources.includes(s)
-                      ? 'border-primary bg-primary/20 text-foreground'
-                      : 'border-border text-muted-foreground hover:text-foreground',
-                  )}
+                  className={sourceFilterPillClass(activeSources.includes(s))}
                 >
                   {s}
                 </ToggleGroupItem>
