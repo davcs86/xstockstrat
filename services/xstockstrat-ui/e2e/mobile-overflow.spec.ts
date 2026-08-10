@@ -76,6 +76,50 @@ test.describe('wide-content overflow at the lg grid-split breakpoint (FR-4)', ()
     await page.waitForTimeout(800);
 
     const overflow = await horizontalOverflow(page);
+
+    // TEMP DIAGNOSTIC (feature 124): this test fails only in CI (18px), never locally — dump the
+    // real offending elements from the actual CI browser so the cause can be pinpointed instead
+    // of guessed at. Remove once root-caused.
+    if (overflow > 1) {
+      const diag = await page.evaluate(() => {
+        const clientWidth = document.documentElement.clientWidth;
+        const offenders: { tag: string; id: string; cls: string; right: number }[] = [];
+        document.querySelectorAll('body *').forEach((el) => {
+          const rect = el.getBoundingClientRect();
+          if (rect.right > clientWidth + 1 && rect.width > 0) {
+            // Skip elements nested inside their own horizontal-scroll container — expected.
+            let scrollable = false;
+            let p: HTMLElement | null = el.parentElement;
+            while (p) {
+              const cs = getComputedStyle(p);
+              if (cs.overflowX === 'auto' || cs.overflowX === 'scroll') {
+                scrollable = true;
+                break;
+              }
+              p = p.parentElement;
+            }
+            if (!scrollable) {
+              offenders.push({
+                tag: el.tagName,
+                id: (el as HTMLElement).id,
+                cls: (el as HTMLElement).className?.toString().slice(0, 100) ?? '',
+                right: rect.right,
+              });
+            }
+          }
+        });
+        offenders.sort((a, b) => b.right - a.right);
+        return {
+          clientWidth,
+          scrollWidth: document.documentElement.scrollWidth,
+          innerWidth: window.innerWidth,
+          offenders: offenders.slice(0, 10),
+        };
+      });
+      // eslint-disable-next-line no-console
+      console.log('OVERFLOW_DIAG', JSON.stringify(diag, null, 2));
+    }
+
     expect(
       overflow,
       `page body scrolls horizontally by ${overflow}px at 1024px on /trader/orders`,
