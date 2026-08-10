@@ -130,7 +130,7 @@ grep -n "sectionStart" src/components/shared/navGroups.tsx
 
 ### Step 2 — service: chevron, `SidebarMenuSub` nesting, and section labels in `PlatformHeader.tsx`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx` — modify

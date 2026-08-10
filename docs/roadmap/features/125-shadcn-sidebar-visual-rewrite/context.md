@@ -312,3 +312,19 @@
   value is set on exactly the intended group object.
 - Files modified: `services/xstockstrat-ui/src/components/shared/navGroups.tsx`
 - Deviations: none
+
+### Step 2 — chevron, SidebarMenuSub nesting, section labels in PlatformHeader.tsx [done]
+- Added `CaretRight` to the icon import; swapped `SidebarGroupContent, SidebarMenu, SidebarMenuItem`
+  for `SidebarGroupLabel, SidebarMenuSub, SidebarMenuSubItem, SidebarMenuSubButton` in the
+  `../ui/sidebar` import; `MobileNavLink` now renders `SidebarMenuSubButton`; the `NAV_GROUPS.map`
+  render block wraps each iteration in a keyed `React.Fragment` rendering an optional
+  `SidebarGroupLabel` (from `group.sectionStart`) as a sibling of the unchanged `SidebarGroup`,
+  adds the rotating `CaretRight` chevron inside `SidebarMenuButton`
+  (`group-data-[state=open]/menu-button:rotate-90`), and nests `SidebarMenuSub`/`SidebarMenuSubItem`
+  directly inside `CollapsibleContent` (no wrapper). `tsc --noEmit` clean; `pnpm run lint` clean
+  (one pre-existing, unrelated warning in `strategies/[id]/page.tsx`, present before this feature —
+  same warning feature 124's PR documented). Both grep checks confirm exactly as specified: the new
+  primitives appear, and `SidebarGroupContent`/non-Sub `SidebarMenu`/`SidebarMenuItem` are fully
+  gone from this file.
+- Files modified: `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx`
+- Deviations: none
