@@ -1201,7 +1201,7 @@ grep -n "FR-4\|horizontal-overflow audit" ../../docs/roadmap/features/124-shadcn
 
 ### Step 24 — docs: Closing gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - None (verification-only step; no new files)

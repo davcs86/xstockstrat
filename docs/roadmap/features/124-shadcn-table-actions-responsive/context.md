@@ -693,6 +693,24 @@
   merely 'could be tighter'"; since none was found, the `min-w-0` addition here is a documented
   defensive consistency fix, not a regression fix, and is reported as such rather than overstated.
 
+### Step 24 — Closing gate [done]
+- Ran the full lint/build/e2e suite one final time against the fully-merged tree (all 24 steps
+  landed): `pnpm run lint` — clean (only the one pre-existing, unrelated `strategies/[id]/page.tsx`
+  warning present since before this feature). `NEXT_DISABLE_STANDALONE=1 pnpm build` — succeeds.
+  `pnpm test:e2e` (full chromium suite) — **283 passed, 1 flaky** (`signal-detail.spec.ts`'s "renders
+  traced conditions for the threaded strategy" — the same pre-existing, self-recovering-on-retry
+  flake this session already observed and documented earlier; not a regression from this feature's
+  changes). Zero hard failures.
+  - Confirmed the AC-8 (FR-9 chart-height, Step 13/14) and AC-4 (FR-4 horizontal-overflow, Step 23)
+    determination records both exist in this file (verified via grep before marking this step done,
+    per the step's own instruction).
+- All 11 FRs (FR-1 through FR-11) landed: DropdownMenu Actions columns (FR-1/2), keyboard-accessible
+  clickable rows (FR-5), Badge-driven pills incl. the DRY'd source-filter toggle (FR-7/8), shared
+  `Eyebrow` component (FR-6), FR-9 cosmetic fixes, mobile `Sidebar` replacing Sheet+Accordion
+  (FR-11), `PageBreadcrumb` replacing the shared shell landmark (FR-10), extended mobile-overflow
+  route sweep (FR-3), and the horizontal-overflow audit (FR-4).
+- Feature ready for merge-order check and the integration PR.
+
 ### Step 21 (post-commit) — full-suite gate surfaced a second latent test-quality defect [done]
 - After committing Steps 20+21, the mandated full-suite run (Step 21's own closing-gate instruction,
   run in the background) reported **1 genuine failure**: `e2e/trader/positions-reconciliation.spec.ts`

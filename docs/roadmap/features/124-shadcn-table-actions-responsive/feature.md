@@ -1,9 +1,9 @@
 # Feature: shadcn-table-actions-responsive
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `claude/implement-124-e48xkn` (harness-assigned; see note below)
 **Created**: 2026-08-09
-**Last Updated**: 2026-08-09
+**Last Updated**: 2026-08-10
 
 ---
 
@@ -16,6 +16,7 @@
 | 2026-08-09 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + design.md written. Mid-session: sibling features 121/122/123 landed in main-dev, resolving the deferral/sequencing debate; FR-11 (mobile Sidebar) added by explicit user direction and separately grounded/adversary-reviewed. |
 | 2026-08-09 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 24 steps. Fresh grounding this session found two further post-design.md drifts (`insights/strategies/page.tsx` Deactivate is now genuinely `AlertDialog`-gated, not `window.confirm`; `strategies/[id]/page.tsx`'s Past Runs row already carries the correct keyboard triple, no strip needed) — both corrected in the spec's Codebase Evidence rather than carried forward unverified. |
 | 2026-08-10 | `implementation-ready` → `in-progress` | /sdd-execute (sequential) | Step 1 (vendor `dropdown-menu.tsx`) completed. |
+| 2026-08-10 | `in-progress` → `code-completed` | /sdd-execute (sequential) | All 24 steps landed. Closing gate: `pnpm lint` clean, `pnpm build` succeeds, full e2e suite 283/284 passed (1 pre-existing self-recovering flake, not a regression). Two implementation-time deviations from `design.md` (Step 9's DRY source-pill mechanism, Step 15/17's `SidebarProvider` desktop-DOM-footprint fix) recorded in `implementation-spec.md`'s Deviation Log. Ready for merge-order check + integration PR. |
 
 ---
 
