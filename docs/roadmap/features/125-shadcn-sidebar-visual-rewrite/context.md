@@ -328,3 +328,27 @@
   gone from this file.
 - Files modified: `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx`
 - Deviations: none
+
+### Step 3 — update mobile-sidebar.spec.ts for the new structure [done]
+- Added 3 new tests per spec: chevron `data-state`/`rotate-90` transition, `SidebarMenuSub`
+  structural presence, and the two section labels' visibility. Left the existing 6 tests
+  (`:23-113`) unmodified, including the active-highlight test per Step 2 Instruction 5.
+- **TDD**: attempted a genuine red-before-green cycle — snapshotted the pre-Step-1/2
+  `PlatformHeader.tsx`/`navGroups.tsx` via `git show 9ddee29:...`, swapped them into the working
+  tree with the new test file, and ran `pnpm exec playwright test mobile-sidebar.spec.ts`. Could
+  not capture a real RED: this sandbox's Next.js dev-mode compiler took 88.6s to compile a single
+  route (13,610 modules) on first hit, and `warmup.setup.ts` needs 21 such compiles before the
+  real assertions even start — genuinely impractical inside any reasonable step budget (confirmed
+  via `ps`: `next-server` pegged near 100% CPU, not hung, just slow; 4 CPU/15GB available).
+  **Fell back to the sequential-mode pre-authorized substitute**: `pnpm exec tsc --noEmit` (clean)
+  + `pnpm run lint` (clean, one pre-existing unrelated warning) + `playwright test --list` (all 9
+  tests — 6 existing + 3 new — register and parse correctly, ruling out the "silently-zero-
+  assertions" trap). Full detail + what this does/doesn't prove: `implementation-spec.md` §
+  Deviation Log, Step 3. Logged a fresh `fails.md` entry (2026-08-10, category `assumption`) since
+  this is a distinct, likely-recurring sandbox-capability gap for any future `xstockstrat-ui`
+  `test` step, not a one-off. **This is the single biggest open risk carried into the checkpoint
+  and the integration PR's CI run — flagging prominently, not burying it.**
+- Files modified: `services/xstockstrat-ui/e2e/mobile-sidebar.spec.ts`
+- Deviations: see `implementation-spec.md` § Deviation Log, Step 3 (CI-equivalent fallback,
+  pre-authorized without asking per sequential mode; still surfaced explicitly here and at the
+  next checkpoint per P-03).

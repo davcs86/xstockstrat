@@ -904,3 +904,30 @@ ambiguity is logged here).
   safe "just for the styling" substitution, even though it compiles cleanly and passes a build. This
   generalizes the render-vs-asChild lesson above: verify a primitive's *behavioral* contract against
   the actual use case, not just its *prop* API, before adopting it for a styling-only motive.
+
+### 2026-08-10 — shadcn-sidebar-visual-rewrite — assumption
+- **Mistake**: A `test` step's Verification section assumed a local Playwright red-before-green run
+  against `pnpm dev` was practical in the execute sandbox. It wasn't: `xstockstrat-ui`'s dev-mode
+  on-demand compiler took **88.6s to compile a single route** (`/config-ui/sources`, 13,610
+  modules) on first hit in this sandbox, and `warmup.setup.ts` pre-warms 21 routes — Next.js
+  compiles them serially regardless of the test's own `Promise.allSettled` parallel fetch, so the
+  warmup step alone would need many minutes just to reach the point where the actual test's
+  assertions could run. Confirmed via `ps`/CPU inspection this is genuine compile slowness (4 CPU /
+  15GB available, `next-server` pegged near 100% CPU), not a hang or a defect in the feature's code.
+  Fell back to the documented `tsc --noEmit` + `pnpm run lint` + `playwright test --list` substitute
+  (`reference/sequential-mode.md`'s pre-authorized Playwright fallback) — sound for type/lint/
+  test-registration confidence, but genuinely does **not** verify any runtime DOM/CSS/ARIA behavior
+  (chevron rotation, `data-state` transitions, new element presence). Real verification only happens
+  once CI runs the suite against a **production** bundle (`pnpm build && pnpm start` — no on-demand
+  compilation), per `docs/roadmap/features/125-shadcn-sidebar-visual-rewrite/implementation-spec.md`
+  Deviation Log, Step 3.
+- **Evidence**: `docs/roadmap/features/125-shadcn-sidebar-visual-rewrite/implementation-spec.md` §
+  Deviation Log (Step 3); `context.md` session `sdd-execute (sequential)` step-loop entry.
+- **Rule it implies**: this generalizes the `fails.md` 2026-08-05 `frontend-reverse-proxy` sandbox-
+  capability-gap pattern (there: Docker unavailable) to a second, distinct axis — **the execute
+  sandbox's Next.js dev-mode compiler is too slow for a full `pnpm dev`-backed Playwright run**, not
+  just occasionally unavailable. A `xstockstrat-ui` `test`-step spec should not assume a live
+  dev-server e2e run will complete inside a normal step's time budget; plan for the `tsc --noEmit` +
+  `pnpm run lint` + `--list` fallback as the *expected* sandbox outcome for now, and treat the
+  integration PR's CI run (production bundle, not dev-mode) as the actual first red/green signal —
+  not something to silently skip mentioning when the sandbox happens to cooperate on a smaller spec.

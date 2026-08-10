@@ -111,4 +111,44 @@ test.describe('Mobile offcanvas sidebar (FR-11b)', () => {
       'true',
     );
   });
+
+  test('a group trigger flips data-state and rotates its chevron on expand', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/insights/opportunities');
+    await page.getByRole('button', { name: 'Open menu' }).click();
+    const panel = page.getByRole('dialog');
+
+    const trigger = panel.getByRole('button', { name: 'Discover' });
+    const chevron = trigger.locator('svg').last();
+    await expect(trigger).toHaveAttribute('data-state', 'closed');
+    await expect(chevron).not.toHaveClass(/rotate-90/);
+
+    await trigger.click();
+    await expect(trigger).toHaveAttribute('data-state', 'open');
+    await expect(chevron).toHaveClass(/rotate-90/);
+  });
+
+  test('sub-items render via SidebarMenuSub once a group is expanded', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/insights/opportunities');
+    await page.getByRole('button', { name: 'Open menu' }).click();
+    const panel = page.getByRole('dialog');
+
+    await openGroup(panel, 'Discover');
+    await expect(panel.locator('[data-slot="sidebar-menu-sub"]')).toBeVisible();
+  });
+
+  test('Navigate and Settings section labels render', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/insights/opportunities');
+    await page.getByRole('button', { name: 'Open menu' }).click();
+    const panel = page.getByRole('dialog');
+
+    await expect(
+      panel.locator('[data-slot="sidebar-group-label"]', { hasText: 'Navigate' }),
+    ).toBeVisible();
+    await expect(
+      panel.locator('[data-slot="sidebar-group-label"]', { hasText: 'Settings' }),
+    ).toBeVisible();
+  });
 });

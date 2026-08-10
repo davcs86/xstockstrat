@@ -302,7 +302,7 @@ grep -n "SidebarGroupContent\|SidebarMenu,\|SidebarMenuItem" src/components/shar
 
 ### Step 3 — test: update `mobile-sidebar.spec.ts` for the new structure
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mobile-sidebar.spec.ts` — modify
@@ -481,4 +481,40 @@ visual result is recorded.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Step 3 — Playwright e2e run substituted with CI-equivalent fallback
+
+**Disposition**: CI-equivalent fallback (sequential-mode verification fallback, pre-authorized
+without asking per `reference/sequential-mode.md` § Sequential-mode verification fallbacks).
+
+**What happened**: attempted a genuine red-before-green Playwright run per the step's own
+Verification section — snapshotted the pre-Step-1/2 versions of `PlatformHeader.tsx`/
+`navGroups.tsx` via `git show 9ddee29:...` (Step 2's parent commit), swapped them in with the new
+test file in place, and ran `pnpm exec playwright test mobile-sidebar.spec.ts`. The Next.js dev
+server (`pnpm dev`, `reuseExistingServer`) came up, but individual route compiles are extremely
+slow in this sandbox — `/config-ui/sources` alone took **88.6s to compile 13,610 modules** on
+first hit — and `warmup.setup.ts` fetches 21 routes, compiled serially by the dev server despite
+`Promise.allSettled`'s parallel fetch. The warmup test itself timed out (10s default, then 60s
+with `--timeout=60000 --workers=1`, still exceeded) before a single real assertion in
+`mobile-sidebar.spec.ts` ran. Confirmed via `ps`/log inspection this is a genuine compile-speed
+limitation (4 CPU / 15GB available, `next-server` process pegged near 100% CPU while compiling —
+not a hang, just slow), not a defect introduced by this feature's code.
+
+**Fallback applied**: `pnpm exec tsc --noEmit` (clean) + `pnpm run lint` (clean, one pre-existing
+unrelated warning) + `pnpm exec playwright test mobile-sidebar.spec.ts --list` (confirms all 9
+tests — 6 existing + 3 new — register and parse correctly as valid Playwright syntax, addressing
+the `fails.md` 2026-07-29/074 "a green suite that executes zero assertions proves nothing" trap by
+at minimum confirming the cases are real and would run, not silently skipped).
+
+**What this does NOT prove**: none of chevron rotation (`rotate-90` class + `data-state`
+transition), `SidebarMenuSub` DOM presence, or the two section labels' actual rendering was
+verified against a live browser. This is a genuine confidence gap versus a true red-before-green
+cycle — flagged prominently at the next checkpoint, not just logged here. CI (which builds a
+production bundle via `pnpm build && pnpm start`, not the slow dev-mode on-demand compiler) is
+expected to run this suite successfully; the integration PR's CI run is where this gets its first
+real, complete verification, and any failure there must be treated as seriously as a local RED
+result would have been.
+
+**Ledger relevance**: this is the same "frontend-reverse-proxy" sandbox-capability class flagged in
+`fails.md` (2026-08-05) and independently anticipated by `implementation-spec.md` Step 4's own
+Instruction 4 for the manual visual check — worth a fresh ledger entry scoped to Playwright dev-mode
+compile time specifically (see context.md for the proposed entry).
