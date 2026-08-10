@@ -1229,4 +1229,10 @@ pnpm test:e2e
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Step 2 — process-only deviation
+**Disposition**: minor, non-blocking. Steps 1 and 2's `**Status**` flips were both made before Step
+1's commit (rather than one status edit per commit), so Step 2's status change rode along in Step 1's
+commit instead of getting its own. No code/verification impact — Step 2 did no file changes besides
+the status flip, and its own commit correctly reported "nothing to commit" as a result. Being more
+careful from Step 3 onward: flip a step's status immediately before that step's own commit, not in
+advance.
