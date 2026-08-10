@@ -1314,3 +1314,19 @@ both the visual and accessibility trees at `sm:`+ widths, not just repositioning
 `sm:hidden` previously only on `MobileNavTrigger` was removed as redundant. Re-verified: the full
 `breadcrumb.spec.ts` (10/10) and the mandated full-suite gate (Step 21's own instruction) both green
 after the fix.
+
+### Step 21 (continued) — the full-suite gate itself caught a second, pre-existing latent defect
+**Disposition**: fixed in the test, not the feature code — a genuine test-quality gap the `sm:hidden`
+fix above exposed, not a regression it caused.
+Before the `sm:hidden` fix, the mobile sidebar's off-screen desktop copy was positioned out of the
+viewport but **not** `display:none` — Playwright's `toBeVisible()` does not check viewport position,
+only CSS `display`/`visibility` and a non-empty bounding box, so that off-screen element still counted
+as "visible." `e2e/trader/positions-reconciliation.spec.ts`'s `getByText('Exposure').first()` therefore
+silently matched the sidebar's own "Exposure" nav link (which sits earlier in DOM order than the
+page's real `<h1>Exposure</h1>`, since `PlatformHeader` renders before `<main>`) and reported it as
+visible — the test was passing without exercising what it claimed to. Once `sm:hidden` correctly hid
+that duplicate, `.first()` still resolved to the same (now genuinely hidden) element and the test
+failed for the first time — surfacing the pre-existing fragility rather than introducing a new one.
+**Fix**: `getByText('Exposure').first()` → `getByRole('heading', {name: 'Exposure'})`, matching the
+already-correct convention `positions.spec.ts:37` uses for the identical heading. Re-ran the full
+suite: **all green**.

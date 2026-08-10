@@ -639,6 +639,26 @@
 - Deviations: the `Sidebar` DOM-footprint fix, recorded above and in `implementation-spec.md`'s
   Deviation Log.
 
+### Step 21 (post-commit) — full-suite gate surfaced a second latent test-quality defect [done]
+- After committing Steps 20+21, the mandated full-suite run (Step 21's own closing-gate instruction,
+  run in the background) reported **1 genuine failure**: `e2e/trader/positions-reconciliation.spec.ts`
+  ("shows an unresolved-mismatch marker...") — `getByText('Exposure').first()` resolved to the mobile
+  sidebar's own off-screen "Exposure" `SidebarMenuButton` link (earlier in DOM order than the page's
+  real `<h1>Exposure</h1>`) and reported it as hidden. Root cause: before the `sm:hidden` fix, that
+  same element was positioned off-screen but not `display:none`, so Playwright's `toBeVisible()`
+  (which doesn't check viewport position) reported it visible — the test was **already** matching the
+  wrong element and passing without exercising its real intent; the `sm:hidden` fix didn't break
+  anything, it just made the pre-existing mismatch visible for the first time. Fixed the test:
+  `getByText('Exposure').first()` → `getByRole('heading', {name: 'Exposure'})`, the same pattern
+  `positions.spec.ts:37` already uses correctly for the identical heading.
+- The run's other reported item, `signal-detail.spec.ts`'s "renders traced conditions" test, was
+  marked **flaky** (failed once, passed on retry) in the same run — a pre-existing, unrelated
+  self-recovering flake (matches this session's earlier Step 7/8 note about the same file's flake
+  history), not a new regression.
+- Re-ran the full suite after the fix: **all green**.
+- Files modified: `e2e/trader/positions-reconciliation.spec.ts`
+- Deviations: none (fixing a test-quality gap surfaced by, not caused by, this feature's own change)
+
 ## Session 2026-08-09T23:27:35Z — sdd-spec
 
 - Generated `implementation-spec.md` with 24 steps (12 service/test pairs + a closing docs gate).
