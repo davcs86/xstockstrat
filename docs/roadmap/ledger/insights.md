@@ -1313,3 +1313,95 @@ reusing.
 - **Pattern**: A design initially avoided bumping a shared dependency (`recharts` v2→v3) to control blast radius, hand-authoring a new primitive (`ui/chart.tsx`) against the older installed version instead of the shadcn registry's v3-targeted reference file. But this repo's CLI-vendored-primitive convention means that hand-authored file will eventually be silently overwritten by the newer version anyway on a future `apply --preset` re-run (`services/xstockstrat-ui/CLAUDE.md` § Styling) — the "safer, smaller" choice was actually deferring the same work to an unplanned future moment, not avoiding it. When put to the user directly, the tradeoff was surfaced explicitly and the user chose to bump early (closing the gap now, with a scoped recon of the two existing chart files' actual v3-breaking-change exposure) rather than carry it as latent tech debt.
 - **Evidence**: `docs/roadmap/features/123-shadcn-migration-custom-composites/design.md` § Round 4 (FR-2's recharts v3 bump); the recon found only one real code fix needed across both existing `recharts` consumers (`CartesianGrid`'s new-required `xAxisId`/`yAxisId` props) — the two v3-specific bits the original hand-authoring plan meant to omit (`initialDimension`, `TooltipValueType`) turned out to be the smaller half of the real exposure, not the whole of it.
 - **Rule it implies**: when a design avoids a dependency bump specifically because a CLI-vendored primitive would otherwise need hand-authoring against a newer version, check whether the repo's own re-apply convention (`apply --preset`) means that avoidance is temporary, not permanent — and surface that framing explicitly at the design-fork decision point rather than defaulting to "smaller diff now" without naming the deferred cost.
+
+### 2026-08-09 — shadcn-table-actions-responsive — design
+- **Pattern**: A design decision reached verbally between debate rounds (e.g. resolved directly in a
+  proposer/adversary round's returned text, or agreed with the user in conversation) is not "settled"
+  until it is written into `recon.md`/`context.md`/`design.md`. A later round's adversary subagent —
+  or a future `/sdd-spec` session — only ever reads the durable artifacts, never this session's
+  transcript. Concretely: Round 3 decided to replace `nav-reachability.spec.ts`'s shared-`Breadcrumb`
+  assertion with an `aria-current`-based one (preserving the reachability guarantee for every route
+  once the shared breadcrumb was removed), but that mechanism was only ever stated in the round's
+  returned text, never written to `recon.md`. Round 4's adversary, reading only `recon.md`, correctly
+  flagged the breadcrumb removal as an apparent regression for 15 routes — a false alarm caused
+  entirely by the missing checkpoint, not a real design flaw.
+- **Evidence**: `docs/roadmap/features/124-shadcn-table-actions-responsive/context.md` § Session
+  2026-08-09T23:20:17Z; `recon.md`'s "ADDENDUM 2026-08-09 (Round 4 consolidation)" section, added
+  specifically to close this gap before `design.md` was written.
+- **Rule it implies**: this is the mid-debate analog of Constitution **P-05** (incremental
+  checkpointing "as they happen") — the orchestrator must write each round's mechanism decisions into
+  `recon.md`/`context.md` before spawning the next round's subagents, not just carry them forward in
+  its own synthesis. A subagent's "regression" finding should first be checked against "was this
+  decision actually written down anywhere it could read it?" before being treated as a real design gap.
+
+### 2026-08-10 — shadcn-sidebar-visual-rewrite — design
+- **Pattern**: An "ARIA-association" fix (`aria-labelledby` linking a container to its visible
+  label) is not a producer-contract claim just because the reference is a syntactically valid,
+  non-duplicate IDREF — check the *referencing* element's actual (often implicit) ARIA role first.
+  `ui/sidebar.tsx`'s `SidebarGroup` renders a bare `<div>` with no explicit `role`, which resolves
+  to the implicit role `generic` — an element excluded from accessible-name computation per
+  WAI-ARIA, so `aria-labelledby` on it likely wouldn't reach assistive tech even though the id
+  reference itself is perfectly valid HTML. The design round nearly shipped the "valid IDREF"
+  check as if it proved the fix worked, until the adversary traced the actual role. The design was
+  then simplified further, not just patched: since each interactive child (`SidebarMenuButton`)
+  already computes a correct, distinct accessible name from its own visible text, the whole
+  `aria-labelledby`/`role="group"` mechanism was dropped rather than fixed — a shared, identical
+  accessible name across N sibling containers adds real implementation complexity (id-plumbing, an
+  ordering invariant to maintain) for an accessibility improvement that, once actually exposed,
+  tells a screen-reader user nothing beyond what they already hear from each interactive child.
+- **Evidence**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/context.md` § Session
+  2026-08-10T11:00:00Z (Round 3 adversary + orchestrator synthesis); `design.md` § Rejected
+  Alternatives (third bullet).
+- **Rule it implies**: before treating any `aria-*` wiring onto a shadcn/Radix-vendored primitive
+  as "fixed," check the actual rendered element's role (explicit or implicit) — a `<div>`-based
+  primitive (`SidebarGroup`, and likely siblings in the same vendored family) needs an explicit
+  `role` before an `aria-labelledby`/`aria-describedby` reference onto it means anything to
+  assistive tech. And before adding that `role`, ask whether the interactive descendants already
+  provide the accessible name a screen-reader user needs — duplicating it at a wrapping-container
+  level may be complexity without a real accessibility win. This generalizes the "demonstration is
+  not a producer-contract claim" family already in `fails.md` (2026-07-27/29/08-05) to ARIA
+  wiring specifically, not just runtime/API behavior.
+
+### 2026-08-10 — shadcn-sidebar-visual-rewrite — reuse
+- **Pattern**: a genuine, live-browser Playwright red-before-green cycle IS practical in the
+  execute sandbox for `xstockstrat-ui`, even though the default `pnpm exec playwright test <file>`
+  invocation is not — the difference is the `setup` project's `warmup.setup.ts`, which pre-fetches
+  **21** routes serially (each up to ~90s to compile in dev mode on first hit). The fix: run with
+  `--project=chromium --no-deps` (skips the `setup` project dependency entirely) and manually
+  pre-warm only the specific route(s) the target spec actually visits via a plain `curl` carrying a
+  hand-signed test JWT cookie (same secret/shape as `e2e/helpers/auth.ts`'s `signTestJwt` —
+  `jose`'s `SignJWT`, `test-jwt-secret-for-e2e-tests-min32c`). Total cost: ~10-30s per route,
+  one-time, then the actual test run completes in well under a minute.
+- **Evidence**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/implementation-spec.md` §
+  Deviation Log, Step 3 (Attempt 2); `context.md` Step 3 entry — achieved a real RED (3 failures,
+  right reasons) then GREEN (9/9 passed in 18.2s) this way, after Attempt 1's full-suite run timed
+  out.
+- **Rule it implies**: a future `xstockstrat-ui` `test`-step's TDD gate should default to the
+  scoped `--project=chromium --no-deps` + targeted-route-pre-warm technique rather than the default
+  `playwright test <file>` invocation, whenever the spec under test touches only a handful of
+  routes (most single-feature specs do) — reserve the `tsc`+`lint`+`--list` fallback (`fails.md`
+  2026-08-10, corrected same-day) for when even the scoped, pre-warmed run still times out, not as
+  the first resort.
+
+### 2026-08-10 — unified-symbol-page — design
+- **Pattern**: A page rendered under one segment (`/trader`) CAN safely reuse another segment's
+  existing browser-client-and-hooks (bound to `/insights/api`) without a new BFF registration,
+  verified — not assumed — against four independent facts: (1) the client's `baseUrl` is
+  root-relative (`/insights/api`), so a browser `fetch()` from any page resolves same-origin, not
+  cross-origin; (2) the DO App Platform ingress has exactly one catch-all rule routing both
+  segments' `/api` paths to the same component (`.do/app.yaml`); (3) the session cookie is set with
+  `path: '/'`, not segment-scoped (`auth.ts`); (4) the BFF's `requireSession` re-verifies the
+  session on every dispatch regardless of which router handled it (`bffShared.ts`). Once all four
+  hold, cross-segment reuse is strictly cheaper than dual-registering a one-line `forward()` wrapper
+  in the second segment's BFF for every RPC the new page needs.
+- **Evidence**: `docs/roadmap/features/125-unified-symbol-page/design.md` § Chosen Approach (BFF
+  wiring); design.md round 3's adversary verification against `services/xstockstrat-ui/src/lib/
+  bffShared.ts`, `src/lib/auth.ts`, `src/middleware.ts`, `.do/app.yaml`; round 5's adversary
+  re-confirmed the same four facts independently before the debate closed.
+- **Rule it implies**: before choosing between "dual-register in the new segment's BFF" and "reuse
+  the other segment's browser client directly," check these four facts explicitly (root-relative
+  baseUrl, single-origin ingress, unscoped session cookie, per-dispatch session re-check) rather than
+  defaulting to dual-registration for consistency or assuming cross-segment calls are unsafe by
+  default. When adopted, document the exception in the service's own `CLAUDE.md` (the "one client
+  per segment" convention) in the same PR, so a future reader has the verified justification instead
+  of an unexplained deviation.

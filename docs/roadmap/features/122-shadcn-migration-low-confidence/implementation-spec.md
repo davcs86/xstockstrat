@@ -2,10 +2,11 @@
 
 **Status**: `pending`
 **Created**: 2026-08-08
-**Last Updated**: 2026-08-09 (FR-1 Round 4 override documented — tranche split added; no new steps,
-step count unchanged at 8; see Execution Summary and Step 1)
+**Last Updated**: 2026-08-09 (FR-1 unblocked — `ui/alert.tsx` confirmed present on this stacked
+branch; Steps 9-12 added covering FR-1's migration + verification + whole-feature gate; step count
+8 → 12)
 **Feature**: `docs/roadmap/features/122-shadcn-migration-low-confidence/feature.md`
-**Total Steps**: 8
+**Total Steps**: 12
 **Feature Branch**: `feature/shadcn-migration-low-confidence`
 
 ---
@@ -25,20 +26,23 @@ named but which a live doc verification (recon.md's 2026-08-08 addendum) found i
 now-superseded pattern.
 
 **FR-1 (`OrderForm.tsx`/`EditOrderDialog.tsx`) now also migrates (design.md § Round 4,
-2026-08-09) — deliberately NOT specced here.** The user directly overrode the design phase's earlier
-DECLINE for FR-1: both call sites are to wrap their existing message text in `Alert` once sibling
-`120-shadcn-migration-high-confidence` ships `ui/alert.tsx`. A fresh `ls
-services/xstockstrat-ui/src/components/ui/` this session confirms `alert.tsx` **does not exist yet**
-on `main-dev` (current inventory: `badge, button, card, combobox, input-group, input, select,
-separator, sheet, skeleton, table, textarea, utils` + their `.test.ts` guards). Writing concrete
-steps against that path now would violate **F-04** (never invent a file path). **Re-run
-`/sdd-spec shadcn-migration-low-confidence` after `120` merges to `main-dev`** to plan FR-1's
-migration with grounded evidence for the primitive it adds; `docs/roadmap/features/merge-order.md`
-should carry this as a registered blocking-dependency row alongside the existing `120` ↔ `121` row
-— this feature's own precedent for the identical situation, see that feature's
-`implementation-spec.md` header. FR-2/FR-3/FR-4 above have no such dependency (`ui/field.tsx` is a
-new primitive this feature adds itself, not one owned by a sibling) and are specced at full breadth
-in Steps 2–8 below.
+2026-08-09) — specced below as Steps 9-11.** The user directly overrode the design phase's earlier
+DECLINE for FR-1: both call sites wrap their existing message text in `Alert`. This feature's branch
+is stacked on `feature/shadcn-migration-medium-confidence`, itself stacked on
+`feature/shadcn-migration-high-confidence` — a fresh `ls services/xstockstrat-ui/src/components/ui/`
+this session confirms `alert.tsx` **is now present** (added by `120`), so per the user's explicit
+direction to re-spec and execute FR-1 in this same pass (mirroring how sibling
+`121-shadcn-migration-medium-confidence` re-specced its own Tranche 2 once its blocking primitives
+became available on its stacked branch), concrete steps are added: Step 9 (service) migrates both
+call sites, Step 10 (test) runs the e2e regression for `OrderForm.tsx` (which has real e2e coverage:
+`order-form.spec.ts`'s success/error message assertions), Step 11 (test) is a build-only
+verification note for `EditOrderDialog.tsx` (confirmed no e2e coverage of its error-message
+rendering). Step 12 is the new whole-feature (FR-1 + FR-2/FR-3/FR-4) verification gate, superseding
+the narrower Step 8 (kept as-is below — Step 8 already ran and passed against FR-2/FR-3/FR-4 before
+FR-1 was added; Step 12 is the final all-inclusive re-run). FR-2/FR-3/FR-4 above have no
+cross-feature primitive dependency (`ui/field.tsx` is a new primitive this feature adds itself, not
+one owned by a sibling) and are specced at full breadth in Steps 2–8 below, unchanged by this
+addendum.
 
 Because AC-1 still requires each FR's decision recorded in `context.md` *before* any code is
 written for that item, Step 1 remains a `docs` step, now updated to record FR-1's overridden migrate
@@ -76,11 +80,14 @@ FR-2/FR-3/FR-4 block.
   finding, 2026-08-09).
 - Step 8 requires Steps 1–7 complete: it is the single final verification gate for the whole
   FR-2/FR-3/FR-4 block.
-- **No step (1–8) in this spec depends on sibling feature `120-shadcn-migration-high-confidence`.**
-  FR-1's migration (design.md § Round 4) does depend on `120` shipping `ui/alert.tsx`, but FR-1 has
-  **deliberately no steps in this spec** (see Execution Summary's tranche-split paragraph) — that
-  dependency attaches to a future `/sdd-spec` re-run, not to any step below. Register the `120` ↔
-  `122` dependency in `docs/roadmap/features/merge-order.md`.
+- **Steps 9-11 (FR-1) depend only on Step 1** (the recorded FR-1 decision) and on `ui/alert.tsx`
+  existing on this stacked branch (confirmed present, owned by sibling
+  `120-shadcn-migration-high-confidence`) — they do not depend on any of Steps 2-8 (FR-1 touches
+  `OrderForm.tsx`/`EditOrderDialog.tsx`, disjoint files from FR-2/FR-3/FR-4's `AuthForm.tsx`/
+  `accountShared.tsx`). Step 10 requires Step 9 (the e2e regression runs against the migrated
+  markup). Step 11 requires Step 9 (the build-only gate runs against the migrated markup).
+- **Step 12 requires Steps 1-11 complete**: the whole-feature (FR-1 + FR-2/FR-3/FR-4) verification
+  gate, superseding Step 8's narrower FR-2/FR-3/FR-4-only scope.
 - **Elevated overlap risk with sibling `121-shadcn-migration-medium-confidence`** (draft as of the
   `sdd-review product-spec` session — see `context.md`'s overlap scan): that feature's own FR touches
   `accountShared.tsx:116-167` (`EditCredentialsForm`) for a Collapsible/"Edit keys" expand-collapse
@@ -95,7 +102,7 @@ FR-2/FR-3/FR-4 block.
 
 ### Step 1 — docs: Record FR-1/FR-2/FR-3/FR-4 decisions in context.md (Round 3 + Round 4 overrides)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/roadmap/features/122-shadcn-migration-low-confidence/`
 **Files**:
 - `docs/roadmap/features/122-shadcn-migration-low-confidence/context.md` — modify
@@ -169,7 +176,7 @@ this is a docs step, no automated check applies).
 
 ### Step 2 — service: Add `react-hook-form`, `zod`, `@hookform/resolvers/zod` to xstockstrat-ui
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/package.json` — modify
@@ -227,7 +234,7 @@ empty).
 
 ### Step 3 — service: Add the `ui/field.tsx` shadcn primitive
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/field.tsx` — create
@@ -289,7 +296,7 @@ creep), and `pnpm lint`/`pnpm build` pass with the new unconsumed file present.
 
 ### Step 4 — test: Add EditCredentialsForm characterization e2e test (must pass pre-migration)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/account-selector.spec.ts` — modify (add one new test to the
@@ -384,7 +391,7 @@ Playwright, so the new test's override does not leak into the existing one.
 
 ### Step 5 — service: Migrate `AuthForm.tsx`'s `CredentialsForm` to react-hook-form + zod + ui/field.tsx
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/auth/AuthForm.tsx` — modify
@@ -466,7 +473,7 @@ regression here would indicate a behavior change, not a test-shape mismatch.
 
 ### Step 6 — service: Migrate `AddAccountForm` to react-hook-form + zod + ui/field.tsx
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/accountShared.tsx` — modify
@@ -591,7 +598,7 @@ be unaffected by construction — confirm, don't assume).
 
 ### Step 7 — service: Migrate `EditCredentialsForm` to react-hook-form + zod + ui/field.tsx
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/accountShared.tsx` — modify
@@ -685,7 +692,7 @@ it should be unaffected by construction.
 
 ### Step 8 — service: Final gate — lint, build, and full e2e re-run for the FR-2/FR-3/FR-4 block
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**: none (verification-only step; no code or test changes)
 
@@ -694,15 +701,15 @@ it should be unaffected by construction.
 **Codebase Evidence**:
 - AC5 (`product-spec.md:119-120`): "`pnpm lint` and `pnpm build` pass; `pnpm test:e2e` passes for
   every spec covering a touched component." Steps 5–7 each verified their own touched call site;
-  this step is the consolidated final check across all three, plus FR-1 (which this spec produces
-  zero diff for — its migration is unspecced pending sibling `120`, see Execution Summary — not
-  because it declined).
+  this step is the consolidated final check across all three FR-2/FR-3/FR-4 call sites. (**Note**:
+  at the time this step was written, FR-1 had no code steps in this spec — Steps 9-11 were added
+  afterward once `ui/alert.tsx` became available on this stacked branch. This step ran and passed
+  before that addition; Step 12 is the true whole-feature gate covering FR-1 too.)
 - Touched-component spec inventory for this block: `e2e/auth.spec.ts` (Step 5, `AuthForm`),
   `e2e/trader/account-selector.spec.ts` (Steps 4, 6, 7 — `AddAccountForm` and
-  `EditCredentialsForm`). FR-1 produces zero diff in this spec (Step 1 records the migrate decision,
-  but no code steps exist for it yet), so `e2e/trader/order-form.spec.ts` and any
-  `EditOrderDialog`-adjacent spec are unaffected by construction — re-run them anyway as a
-  regression backstop, not because this feature touched them.
+  `EditCredentialsForm`). `e2e/trader/order-form.spec.ts` and any `EditOrderDialog`-adjacent spec
+  are unaffected by this step's own scope (FR-2/FR-3/FR-4 only) — re-run them anyway as a
+  regression backstop, not because this step's own changes touched them.
 - `e2e/trader/orders.spec.ts` exercises account-row-adjacent flows (per the original spec's Step 3
   evidence) — re-run as part of the full `e2e/trader/` directory check below, since `AccountRow`
   (`accountShared.tsx:174-252`) itself is unchanged but renders the now-migrated
@@ -727,6 +734,147 @@ All four commands in Instructions must exit 0, with no skipped/pending tests in 
 (confirm actual assertion counts, not just a green exit code — per
 `.claude/skills/sdd-execute/reference/tdd-gate.md`'s "a green suite is not automatically coverage"
 caution).
+
+---
+
+### Step 9 — service: Wire Alert to OrderForm.tsx and EditOrderDialog.tsx (FR-1)
+
+**Status**: `done`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/components/trader/OrderForm.tsx` — modify (`:217-219`)
+- `services/xstockstrat-ui/src/components/trader/EditOrderDialog.tsx` — modify (`:82`)
+
+**Reviewers**: `xstockstrat-ui` service owner — Trading UI correctness
+
+**Codebase Evidence** (re-read this session):
+- `OrderForm.tsx:217-219` — `{message && (<p className={\`text-xs ${isErrorMsg ? 'text-destructive' :
+  'text-buy'}\`}>{message}</p>)}`. `message`/`isErrorMsg` are `useState` (`:70-71`); success renders
+  `text-buy` (e.g. "Order placed: mock-order-001 (FILLED) — qty 5, stop 148.25"), failure renders
+  `text-destructive` (e.g. "Insufficient buying power"). `alert.tsx` has no "buy"/success variant —
+  only `default`/`destructive`/`warning` — so the success case needs an explicit `AlertDescription`
+  className override (`alert.tsx`'s own default is `text-muted-foreground`, which would silently
+  drop the `text-buy` coloring if not overridden).
+- `e2e/trader/order-form.spec.ts:65-81,83-101` — two tests assert this paragraph's text content via
+  `getByText(...)` (not a class-based locator): "successful order submission shows orderId and
+  status" and "failed order submission shows error message". Both should survive a like-for-like
+  `Alert` wrap since they match text content, not the `<p>` tag or its class.
+- `EditOrderDialog.tsx:82` — `{error && <p className="text-xs text-destructive">{error}</p>}`.
+  `error` is `useState` (`:26`), only ever the destructive/error case (success closes the sheet via
+  `onOpenChange(false)`, `:46` — no inline success message exists at this site).
+- `e2e/trader/order-ticket.spec.ts` (the only spec referencing this dialog) only asserts the "Edit
+  order" trigger button's visibility (`:23,36`) — no assertion targets this error `<p>`, confirmed
+  via grep this session (zero hits for "error"/"destructive"/"Save changes").
+
+**TDD**: expected-pass e2e-risk site for `OrderForm.tsx` (Step 10 runs the real suite, doesn't
+assume); `EditOrderDialog.tsx` has no e2e coverage of this element (Step 11, build-only).
+
+**Instructions**:
+1. `OrderForm.tsx`: import `{ Alert, AlertDescription } from '@/components/ui/alert'`. Replace the
+   `<p>` (`:217-219`) with:
+   ```tsx
+   {message && (
+     <Alert variant={isErrorMsg ? 'destructive' : 'default'}>
+       <AlertDescription className={isErrorMsg ? undefined : 'text-buy'}>
+         {message}
+       </AlertDescription>
+     </Alert>
+   )}
+   ```
+   `variant="destructive"` already colors `AlertDescription` via `alert.tsx`'s own
+   `*:data-[slot=alert-description]:text-destructive/90` rule — no extra className needed for the
+   error case. The success case needs the explicit `text-buy` override since `default` has no such
+   rule.
+2. `EditOrderDialog.tsx`: import `{ Alert, AlertDescription } from '../ui/alert'` (matching this
+   file's existing relative-import style, e.g. `'../ui/input'`). Replace the `<p>` (`:82`) with:
+   ```tsx
+   {error && (
+     <Alert variant="destructive">
+       <AlertDescription>{error}</AlertDescription>
+     </Alert>
+   )}
+   ```
+3. Do not touch either file's state management, submit handlers, or any other markup.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && grep -n "Alert\b" src/components/trader/OrderForm.tsx src/components/trader/EditOrderDialog.tsx
+pnpm lint
+pnpm build
+```
+
+---
+
+### Step 10 — test: e2e regression for FR-1 (OrderForm.tsx)
+
+**Status**: `done`
+**Service**: `xstockstrat-ui`
+**Files**: `services/xstockstrat-ui/e2e/trader/order-form.spec.ts` — verification-only unless a
+locator breaks
+
+**Reviewers**: `xstockstrat-ui` service owner — Trading UI correctness
+
+**Codebase Evidence**: Step 9's evidence — both assertions use `getByText(...)`, text-content-based,
+not class- or tag-based.
+
+**TDD**: expected-pass e2e-risk pair — run unmodified first and record the actual result, per P-06,
+same pattern used throughout this feature's siblings (120/121) for `asChild`/primitive-swap sites.
+
+**Instructions**: Run `order-form.spec.ts` unmodified against Step 9. If a case fails, fix Step 9's
+markup (the text content must render identically) rather than the test's locator.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && pnpm test:e2e -- e2e/trader/order-form.spec.ts
+```
+
+---
+
+### Step 11 — test: build-only verification for FR-1 (EditOrderDialog.tsx, no e2e coverage exists)
+
+**Status**: `done`
+**Service**: `xstockstrat-ui`
+**Files**: none
+
+**Reviewers**: none
+
+**Codebase Evidence**: Step 9's confirmed-absent grep (`e2e/trader/order-ticket.spec.ts` has zero
+assertions on this dialog's error text).
+
+**TDD**: N/A.
+
+**Instructions**: No code change — `pnpm build` (already run in Step 9) is the gate; recorded as its
+own step so acceptance criterion 5 isn't silently assumed satisfied for this site, mirroring sibling
+`121`'s Steps 33/35 pattern for its own no-e2e-coverage sites.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && pnpm build
+```
+
+---
+
+### Step 12 — test: Whole-feature (FR-1 + FR-2/FR-3/FR-4) verification gate
+
+**Status**: `done`
+**Service**: `xstockstrat-ui`
+**Files**: none — verification-only, runs after Steps 1-11
+
+**Reviewers**: `xstockstrat-ui` service owner — full review scope (final gate)
+
+**Codebase Evidence**: same AC5 as Step 8, now covering the full 4-FR feature scope (Steps 1-7
+FR-2/FR-3/FR-4 + Steps 9-11 FR-1).
+
+**TDD**: N/A.
+
+**Instructions**: No code change. Run the complete lint/build/e2e suite once every step in this spec
+(1-11) has landed, to catch any cross-step interaction Steps 8/10/11's narrower checks might have
+missed individually.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && pnpm lint && pnpm build && pnpm test:e2e
+```
 
 ---
 

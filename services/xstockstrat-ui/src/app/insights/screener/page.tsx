@@ -16,6 +16,15 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/components/ui/utils';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Slider } from '@/components/ui/slider';
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
+} from '@/components/ui/table';
 import {
   useScreenSymbols,
   useScreenSymbolsPoll,
@@ -375,17 +384,16 @@ export default function ScreenerPage() {
                     <span className="font-mono text-foreground">
                       {c.metricName} {comparatorGlyph(c.op)} {c.threshold}
                     </span>
-                    <label className="flex items-center gap-2">
+                    <div className="flex items-center gap-2">
                       <span>weight</span>
-                      <input
-                        type="range"
+                      <Slider
                         aria-label="weight slider"
                         min={0}
                         max={1}
                         step={0.05}
-                        value={c.weight}
-                        onChange={(e) => updateCriterion(i, { weight: Number(e.target.value) })}
-                        className="w-28 accent-primary"
+                        value={[c.weight]}
+                        onValueChange={([v]) => updateCriterion(i, { weight: v })}
+                        className="w-28"
                       />
                       <Input
                         aria-label="weight"
@@ -397,7 +405,7 @@ export default function ScreenerPage() {
                         value={c.weight}
                         onChange={(e) => updateCriterion(i, { weight: Number(e.target.value) })}
                       />
-                    </label>
+                    </div>
                     <span data-testid="weight-share" className="tabular-nums">
                       {(shares[i] * 100).toFixed(0)}% of weight
                     </span>
@@ -532,83 +540,84 @@ export default function ScreenerPage() {
             <CardContent className="p-0">
               {/* Wide table → scroll horizontally within its own container so the phone frame
                   never overflows (the results table has 10 columns). */}
-              <div className="w-full overflow-x-auto">
-                <table className="w-full text-sm min-w-[640px]" data-testid="screen-results">
-                  <thead>
-                    <tr className="border-b text-left text-muted-foreground">
-                      <th className="p-3 whitespace-nowrap">Rank</th>
-                      <th className="p-3">Symbol</th>
-                      <th className="p-3">Score</th>
-                      {/* feature 083 (FR-8) raw columns. ATR is a close-only approximation. */}
-                      <th className="p-3">P/E</th>
-                      <th className="p-3">RSI</th>
-                      <th className="p-3" title="ATR is a close-only approximation (not exact)">
-                        ATR
-                      </th>
-                      <th className="p-3 whitespace-nowrap">Rev growth</th>
-                      <th className="p-3">Held</th>
-                      <th className="p-3">Passed</th>
-                      <th className="p-3">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {results.map((r, i) => (
-                      <tr key={r.symbol} className="border-b" data-testid="result-row">
-                        <td className="p-3">{i + 1}</td>
-                        <td className="p-3 font-mono font-medium">{r.symbol}</td>
-                        <td className="p-3 font-mono tabular-nums font-semibold">
-                          {/* Colored strength dot via the canonical scoreColor helper (FR-7, DRY). */}
-                          <span className="inline-flex items-center gap-1.5">
-                            <span
-                              aria-hidden
-                              className={cn(
-                                'inline-block h-2 w-2 rounded-full bg-current',
-                                scoreColor(r.score),
-                              )}
-                            />
-                            <span className={scoreColor(r.score)}>{r.score.toFixed(3)}</span>
-                          </span>
-                        </td>
-                        <td className="p-3 font-mono tabular-nums">
-                          {r.pe ? r.pe.toFixed(1) : '—'}
-                        </td>
-                        <td className="p-3 font-mono tabular-nums">
-                          {r.rsi ? r.rsi.toFixed(0) : '—'}
-                        </td>
-                        <td className="p-3 font-mono tabular-nums">
-                          {r.atr ? r.atr.toFixed(2) : '—'}
-                        </td>
-                        <td className="p-3 font-mono tabular-nums">
-                          {r.revGrowth ? `${(r.revGrowth * 100).toFixed(1)}%` : '—'}
-                        </td>
-                        <td className="p-3">
-                          {r.held ? <Badge variant="paper">Held</Badge> : '—'}
-                        </td>
-                        <td className="p-3">{r.passed ? '✓' : '—'}</td>
-                        <td className="p-3">
-                          {r.status === ScreenResultStatus.INSUFFICIENT_DATA ? (
-                            r.gap ? (
-                              <Badge variant="warning" data-testid="insufficient-data">
-                                Insufficient data
-                              </Badge>
-                            ) : (
-                              <Badge
-                                variant="warning"
-                                data-testid="fundamentals-pending"
-                                title="The fundamentals data source is currently unavailable — this candidate will be re-scored on a later scan once it's back."
-                              >
-                                Fundamentals pending
-                              </Badge>
-                            )
+              <Table className="min-w-[640px]" data-testid="screen-results">
+                <TableHeader>
+                  <TableRow className="border-b text-left text-muted-foreground">
+                    <TableHead className="p-3 whitespace-nowrap">Rank</TableHead>
+                    <TableHead className="p-3">Symbol</TableHead>
+                    <TableHead className="p-3">Score</TableHead>
+                    {/* feature 083 (FR-8) raw columns. ATR is a close-only approximation. */}
+                    <TableHead className="p-3">P/E</TableHead>
+                    <TableHead className="p-3">RSI</TableHead>
+                    <TableHead
+                      className="p-3"
+                      title="ATR is a close-only approximation (not exact)"
+                    >
+                      ATR
+                    </TableHead>
+                    <TableHead className="p-3 whitespace-nowrap">Rev growth</TableHead>
+                    <TableHead className="p-3">Held</TableHead>
+                    <TableHead className="p-3">Passed</TableHead>
+                    <TableHead className="p-3">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {results.map((r, i) => (
+                    <TableRow key={r.symbol} className="border-b" data-testid="result-row">
+                      <TableCell className="p-3">{i + 1}</TableCell>
+                      <TableCell className="p-3 font-mono font-medium">{r.symbol}</TableCell>
+                      <TableCell className="p-3 font-mono tabular-nums font-semibold">
+                        {/* Colored strength dot via the canonical scoreColor helper (FR-7, DRY). */}
+                        <span className="inline-flex items-center gap-1.5">
+                          <span
+                            aria-hidden
+                            className={cn(
+                              'inline-block h-2 w-2 rounded-full bg-current',
+                              scoreColor(r.score),
+                            )}
+                          />
+                          <span className={scoreColor(r.score)}>{r.score.toFixed(3)}</span>
+                        </span>
+                      </TableCell>
+                      <TableCell className="p-3 font-mono tabular-nums">
+                        {r.pe ? r.pe.toFixed(1) : '—'}
+                      </TableCell>
+                      <TableCell className="p-3 font-mono tabular-nums">
+                        {r.rsi ? r.rsi.toFixed(0) : '—'}
+                      </TableCell>
+                      <TableCell className="p-3 font-mono tabular-nums">
+                        {r.atr ? r.atr.toFixed(2) : '—'}
+                      </TableCell>
+                      <TableCell className="p-3 font-mono tabular-nums">
+                        {r.revGrowth ? `${(r.revGrowth * 100).toFixed(1)}%` : '—'}
+                      </TableCell>
+                      <TableCell className="p-3">
+                        {r.held ? <Badge variant="paper">Held</Badge> : '—'}
+                      </TableCell>
+                      <TableCell className="p-3">{r.passed ? '✓' : '—'}</TableCell>
+                      <TableCell className="p-3">
+                        {r.status === ScreenResultStatus.INSUFFICIENT_DATA ? (
+                          r.gap ? (
+                            <Badge variant="warning" data-testid="insufficient-data">
+                              Insufficient data
+                            </Badge>
                           ) : (
-                            <Badge variant="info">OK</Badge>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                            <Badge
+                              variant="warning"
+                              data-testid="fundamentals-pending"
+                              title="The fundamentals data source is currently unavailable — this candidate will be re-scored on a later scan once it's back."
+                            >
+                              Fundamentals pending
+                            </Badge>
+                          )
+                        ) : (
+                          <Badge variant="info">OK</Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </CardContent>
           </Card>
         )}

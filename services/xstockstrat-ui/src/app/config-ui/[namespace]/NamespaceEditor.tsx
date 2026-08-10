@@ -1,19 +1,19 @@
 'use client';
 
 import { useState } from 'react';
+import { EllipsisVertical } from 'lucide-react';
 import { ConnectError } from '@connectrpc/connect';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
-  Breadcrumb,
-  BreadcrumbList,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbSeparator,
-  BreadcrumbPage,
-} from '@/components/ui/breadcrumb';
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
+import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
 import {
   Table,
   TableHeader,
@@ -130,23 +130,13 @@ export function NamespaceEditor({ namespace, env, mode, nativeEnv }: Props) {
     <div className="space-y-4">
       {/* Breadcrumb */}
       <div className="flex flex-wrap items-center gap-2">
-        {/* aria-label deliberately distinct from PlatformHeader's own "Breadcrumb" landmark —
-            Playwright's getByLabel substring-matches case-insensitively, and a duplicate
-            "breadcrumb" label here would make nav-reachability.spec.ts's header lookup
-            ambiguous on this route. */}
-        <Breadcrumb aria-label="Namespace path">
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink href={`/config-ui?env=${env}&mode=${mode}`}>
-                ← namespaces
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage className="font-mono text-primary">{namespace}</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
+        <PageBreadcrumb
+          ariaLabel="Namespace path"
+          items={[
+            { label: '← namespaces', href: `/config-ui?env=${env}&mode=${mode}` },
+            { label: namespace },
+          ]}
+        />
         <div className="flex gap-1.5 ml-1">
           <Badge variant="secondary" className="text-xs">
             {env}
@@ -228,18 +218,31 @@ export function NamespaceEditor({ namespace, env, mode, nativeEnv }: Props) {
                     <TableCell>
                       <div className="flex items-center gap-1">
                         {!k.isSecret && editingKey !== k.key && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setEditingKey(k.key);
-                              setEditValue(k.currentValue);
-                              setEditReason('');
-                            }}
-                            className="h-7 px-2 text-xs text-primary hover:text-primary"
-                          >
-                            Edit
-                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                aria-label="Actions"
+                                data-testid={`actions-${k.key}`}
+                              >
+                                <EllipsisVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setEditingKey(k.key);
+                                  setEditValue(k.currentValue);
+                                  setEditReason('');
+                                }}
+                              >
+                                Edit
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         )}
                         {editingKey === k.key && (
                           <>

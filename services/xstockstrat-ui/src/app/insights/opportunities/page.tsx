@@ -3,7 +3,9 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { AppShell } from '@/components/insights/AppShell';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/components/ui/utils';
 import {
   Select,
@@ -28,6 +30,16 @@ import { StatTile } from '@/components/shared/StatTile';
 
 type SortKey = 'conviction' | 'expiry';
 const NINETY_MIN_MS = 90 * 60 * 1000;
+
+/** Shared pill styling for the source-filter row ("All sources" + each `ToggleGroupItem`, FR-8). */
+function sourceFilterPillClass(active: boolean): string {
+  return cn(
+    'rounded-full border px-3 py-1 text-xs transition-colors',
+    active
+      ? 'border-primary bg-primary/20 text-foreground'
+      : 'border-border text-muted-foreground hover:text-foreground',
+  );
+}
 
 /** `HH:MM` local expiry from a protobuf-es Timestamp ({ seconds: bigint }); `—` when unset. */
 function expiresLabel(validUntil: { seconds: bigint } | undefined): string {
@@ -119,8 +131,6 @@ export default function OpportunitiesPage() {
       .map((o) => o.symbol)
       .join(', ') || '—';
 
-  const toggleSource = (s: string) =>
-    setActiveSources((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
   // Persist a disposition against the stable server key; the invalidated read then drops the row.
   const act = (o: Opportunity, action: OpportunityAction) =>
     setAction.mutate({ opportunityKey: o.opportunityKey, action });
@@ -190,30 +200,22 @@ export default function OpportunitiesPage() {
             <button
               type="button"
               onClick={() => setActiveSources([])}
-              className={cn(
-                'rounded-full border px-3 py-1 text-xs transition-colors',
-                activeSources.length === 0
-                  ? 'border-primary bg-primary/20 text-foreground'
-                  : 'border-border text-muted-foreground hover:text-foreground',
-              )}
+              aria-pressed={activeSources.length === 0}
+              className={sourceFilterPillClass(activeSources.length === 0)}
             >
               All sources
             </button>
-            {sources.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => toggleSource(s)}
-                className={cn(
-                  'rounded-full border px-3 py-1 text-xs transition-colors',
-                  activeSources.includes(s)
-                    ? 'border-primary bg-primary/20 text-foreground'
-                    : 'border-border text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {s}
-              </button>
-            ))}
+            <ToggleGroup type="multiple" value={activeSources} onValueChange={setActiveSources}>
+              {sources.map((s) => (
+                <ToggleGroupItem
+                  key={s}
+                  value={s}
+                  className={sourceFilterPillClass(activeSources.includes(s))}
+                >
+                  {s}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
             <div className="ml-auto flex items-center gap-2">
               <Select value={actionFilter} onValueChange={setActionFilter}>
                 <SelectTrigger className="h-8 w-[130px]" aria-label="action filter">
@@ -345,9 +347,9 @@ function OpportunityCard({
           <span className="font-mono font-semibold">{o.symbol}</span>
           <EnumBadge render={OPPORTUNITY_ACTION[o.action]} />
           {o.source && (
-            <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+            <Badge variant="outline" className="text-[11px] text-muted-foreground">
               {o.source}
-            </span>
+            </Badge>
           )}
           {o.strategyId && (
             <span className="font-mono text-xs text-muted-foreground">{o.strategyId}</span>

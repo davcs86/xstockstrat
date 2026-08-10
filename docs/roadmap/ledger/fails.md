@@ -847,3 +847,201 @@ ambiguity is logged here).
   because the bug only manifests when a real request/response round-trip actually happens with
   repeated identical payloads — it requires exercising the real behavior, not just reading the
   wiring.
+
+### 2026-08-09 — shadcn-migration-medium-confidence — execute (Step 17)
+- **Mistake**: `design.md` (§ Round 3 override, FR-13) assumed a not-yet-installed shadcn
+  primitive's polymorphic-slot API — `NavigationMenuLink render={<Link href="..." />}` — by pattern
+  -matching this codebase's `combobox.tsx`, which is a **Base UI** (`@base-ui/react`) compound
+  component using the newer `render`-prop convention. `navigation-menu.tsx` is not Base UI: the
+  `radix-ui` unified npm package's `navigation-menu` entrypoint is a 3-line re-export of
+  `@radix-ui/react-navigation-menu@1.2.22`, which is the **classic** Radix Primitives API —
+  `forwardRef`-built, `asChild`-based, zero `render` occurrences anywhere in its compiled source.
+  `design.md` itself had already flagged this exact pairing as "not independently confirmed for
+  `navigation-menu.tsx` specifically" (a real, useful hedge — recon.md's live `WebFetch` against
+  shadcn's docs confirmed *standalone Link usage* but never checked *which prop API* backs it), and
+  the implementation-spec's Step 17 instructed verifying it against the CLI-generated file before
+  use — which is what caught it before any wiring was written on the wrong assumption.
+- **Evidence**: `docs/roadmap/features/121-shadcn-migration-medium-confidence/context.md` Step 17;
+  `node_modules/.pnpm/@radix-ui+react-navigation-menu@1.2.22.../dist/index.mjs:372,804` (`forwardRef`
+  + `var Link = NavigationMenuLink`); `services/xstockstrat-ui/src/components/shared/
+  PlatformHeader.tsx`'s Step 18 `asChild` usage.
+- **Rule it implies**: in a shadcn-CLI-based codebase mixing two component families (this app has
+  both classic Radix primitives like `select.tsx`/`dialog.tsx` and Base UI compounds like
+  `combobox.tsx`/`input-group.tsx`), never assume a not-yet-installed primitive's polymorphic-render
+  API from a sibling primitive already in the codebase — the two families use different prop names
+  (`asChild` vs `render`) for the same concept, and picking the wrong one silently fails at runtime
+  (the child never actually renders as the intended element) rather than at compile time in most
+  cases. Confirm the prop against the actual installed package (or the CLI-generated file, once
+  added) before writing call-site code, exactly as this step's own instructions already required —
+  the win here was following that instruction, not skipping it under time pressure.
+
+### 2026-08-10 — unified-symbol-page — design
+- **Mistake**: A design that **consolidates several existing per-entity pages into one** inherited
+  the narrowest source page's existence-gate as the gate for the *entire consolidated page* — round
+  1–3 of the debate kept `/trader/positions/[symbol]`'s original all-or-nothing pattern (no position
+  found → render only an `EmptyState`, stop) without questioning it, even though the whole point of
+  the new sections being added (Opportunity/Readiness/Fundamentals/Screening/Backtests/Backfill) was
+  to serve symbols the user does **not** hold — exactly the case the inherited gate excludes. Three
+  rounds of otherwise-rigorous adversarial review (each catching real, unrelated defects) missed
+  this because each was scoped to reviewing *changes* to the proposal, not re-deriving the page's
+  reachability from the product spec's own Problem Statement. Only round 4's adversary, prompted to
+  re-check reachability specifically, caught that the feature's headline content would be
+  unreachable for its stated primary audience.
+- **Evidence**: `docs/roadmap/features/125-unified-symbol-page/design.md` § Chosen Approach ("Page
+  structure — sections gate independently of position existence"), § Rejected Alternatives ("096's
+  original all-or-nothing position gate"); `context.md` § Session 2026-08-10 (sdd-design), round 4.
+- **Rule it implies**: when a design **reuses an existing page as the base for a consolidation
+  feature**, explicitly re-derive which of the base page's existing conditional-render gates still
+  make sense once new, differently-scoped sections are added — an entity-existence gate (position
+  found/not-found) that was correct for the base page's original narrower purpose can silently
+  exclude a *new* section's entire intended audience. A design round should ask "does every new
+  section render for the audience its own FR describes, independent of the base page's original
+  gate?" as a named check, not rely on catching it incidentally during an unrelated objection pass.
+
+### 2026-08-10 — unified-symbol-page — assumption
+- **Mistake**: Within a single design debate, an unverified claim survived from one round into the
+  next **twice**, each time used to justify a real architectural decision before being caught by the
+  following round's adversary: (1) round 1 proposed reusing `ScreenResult.gap`/`criterion_scores` as
+  a "safe" single-symbol screening mitigation without checking those fields actually existed or
+  carried the claimed meaning — both were wrong (`gap` is an unrelated backfill date-range;
+  `criterion_scores` is fed by the exact broken normalization the mitigation claimed to avoid); (2)
+  round 3 justified adopting cross-segment BFF-client reuse partly by citing "`listBacktests` is
+  already dual-registered in both `traderBff.ts` and `insightsBff.ts`" as precedent — grep-verified
+  false in round 3's own adversary pass (`listBacktests` exists only in `insightsBff.ts`). Both
+  false claims were internally generated by the debate's own proposer role (not carried in from
+  recon or the product spec), and both survived exactly one round before a dedicated adversarial
+  re-verification pass caught them — the debate protocol's structure (adversary attacks the
+  proposal, not just the objections) is what caught it, but the claims themselves originated inside
+  the "trusted" synthesis a proposer round produces.
+- **Evidence**: `docs/roadmap/features/125-unified-symbol-page/design.md` § Rejected Alternatives
+  ("Reusing `ScreenResult.gap`/`criterion_scores`..."); `context.md` § Session 2026-08-10
+  (sdd-design), round 1→2 and round 2→3 transitions.
+- **Rule it implies**: extends the recurring "verify a claim against the actual codebase before
+  treating it as ground truth" family (2026-07-27/072, 2026-07-30/080, 2026-08-06/mcp-config-
+  management) into the design-debate protocol itself — a proposer round's own citations are not
+  exempt from verification just because they originated inside the "trusted" design process rather
+  than from an external source; each adversary round should spot-check at least one load-bearing
+  factual claim from the *current* proposal against the actual code, not only attack the proposal's
+  architecture-level reasoning.
+
+### 2026-08-09 — shadcn-migration-medium-confidence — execute (Steps 26-27)
+- **Mistake**: `implementation-spec.md`'s Step 26 gave a literal code sample wrapping a set of
+  full-page-navigation `<Link>`s in `Tabs`/`TabsList`/`TabsTrigger asChild` (`config-ui/page.tsx`'s
+  ENV/MODE switcher) to reproduce a segmented-control look. This compiled and looked identical
+  visually, but `@radix-ui/react-tabs@1.1.21`'s `TabsTrigger` hardcodes `role: "tab"` on its own
+  element (`index.mjs:114`); with `asChild`, Radix's Slot merges that explicit role onto the child
+  `<Link>`, overriding its implicit `role="link"` (an explicit ARIA role always wins over an
+  implicit one). `e2e/config-ui/env-mode-switcher.spec.ts`'s `getByRole('link', ...)` assertions
+  — all correctly written against the pre-migration DOM — failed 4/4 outright (not flaky, not
+  timing — "element(s) not found"), because the actual accessible role had silently become "tab".
+  Caught only by actually running the e2e suite against the real change (mandated by this step's
+  own TDD note: "expected-pass... run unmodified first and record the actual result, don't assume"),
+  not by reading `tabs.tsx`'s wrapper code or the shadcn docs, which don't surface Radix's internal
+  role hardcoding.
+- **Evidence**: `docs/roadmap/features/121-shadcn-migration-medium-confidence/context.md` Steps
+  26-27; `node_modules/.pnpm/@radix-ui+react-tabs@1.1.21.../dist/index.mjs:114`
+  (`role: "tab"`); `services/xstockstrat-ui/src/app/config-ui/page.tsx`'s reverted markup + inline
+  comment.
+- **Rule it implies**: a shadcn/Radix primitive whose whole purpose is to express a specific ARIA
+  role (`Tabs`→`role="tab"`, `RadioGroup`→`role="radio"`, etc.) will **assert that role on its
+  trigger element regardless of `asChild`**, because the role is the primitive's entire semantic
+  contract, not an incidental style choice. Wrapping a control in one of these primitives is safe
+  only when the control's real interaction model matches that role (client-side panel/option
+  switching) — if the control actually does something else (a full navigation, an arbitrary async
+  action), styling it to *look* like a tab/radio/etc. via CSS on the plain underlying element (as
+  the pre-migration code did) is correct; reaching for the ARIA-role-bearing primitive is not a
+  safe "just for the styling" substitution, even though it compiles cleanly and passes a build. This
+  generalizes the render-vs-asChild lesson above: verify a primitive's *behavioral* contract against
+  the actual use case, not just its *prop* API, before adopting it for a styling-only motive.
+
+### 2026-08-10 — shadcn-sidebar-visual-rewrite — assumption
+- **Mistake**: A `test` step's Verification section assumed a local Playwright red-before-green run
+  against `pnpm dev` was practical in the execute sandbox. It wasn't: `xstockstrat-ui`'s dev-mode
+  on-demand compiler took **88.6s to compile a single route** (`/config-ui/sources`, 13,610
+  modules) on first hit in this sandbox, and `warmup.setup.ts` pre-warms 21 routes — Next.js
+  compiles them serially regardless of the test's own `Promise.allSettled` parallel fetch, so the
+  warmup step alone would need many minutes just to reach the point where the actual test's
+  assertions could run. Confirmed via `ps`/CPU inspection this is genuine compile slowness (4 CPU /
+  15GB available, `next-server` pegged near 100% CPU), not a hang or a defect in the feature's code.
+  Fell back to the documented `tsc --noEmit` + `pnpm run lint` + `playwright test --list` substitute
+  (`reference/sequential-mode.md`'s pre-authorized Playwright fallback) — sound for type/lint/
+  test-registration confidence, but genuinely does **not** verify any runtime DOM/CSS/ARIA behavior
+  (chevron rotation, `data-state` transitions, new element presence). Real verification only happens
+  once CI runs the suite against a **production** bundle (`pnpm build && pnpm start` — no on-demand
+  compilation), per `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/implementation-spec.md`
+  Deviation Log, Step 3.
+- **Evidence**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/implementation-spec.md` §
+  Deviation Log (Step 3); `context.md` session `sdd-execute (sequential)` step-loop entry.
+- **Rule it implies**: this generalizes the `fails.md` 2026-08-05 `frontend-reverse-proxy` sandbox-
+  capability-gap pattern (there: Docker unavailable) to a second, distinct axis — **the execute
+  sandbox's Next.js dev-mode compiler is too slow for a full `pnpm dev`-backed Playwright run**, not
+  just occasionally unavailable. A `xstockstrat-ui` `test`-step spec should not assume a live
+  dev-server e2e run will complete inside a normal step's time budget; plan for the `tsc --noEmit` +
+  `pnpm run lint` + `--list` fallback as the *expected* sandbox outcome for now, and treat the
+  integration PR's CI run (production bundle, not dev-mode) as the actual first red/green signal —
+  not something to silently skip mentioning when the sandbox happens to cooperate on a smaller spec.
+
+### 2026-08-10 — shadcn-sidebar-visual-rewrite — assumption (corrects the entry immediately above, same session)
+- **Mistake**: the entry directly above concluded a live-browser red-before-green run was
+  impractical in this sandbox and fell back to `tsc`/`lint`/`--list` only. That conclusion was
+  **too pessimistic** — it generalized from the *full* `warmup.setup.ts` (21 routes, serially
+  compiled, ~90s each in the worst case) to "any live e2e run is impractical here," when the real
+  constraint is narrower: **only the untargeted, full-suite warmup is impractical**. A *scoped* run
+  — `playwright test <file> --project=chromium --no-deps` (skips the `setup` project's 21-route
+  dependency entirely) plus manually pre-warming just the 1-2 routes the target spec actually
+  visits (a plain `curl` with a hand-signed test JWT cookie, ~10-30s per route on first hit) — is
+  fully practical and completed a genuine RED (3 real failures, right reasons) then GREEN (9/9
+  pass) cycle in well under a minute once warm. The step was re-verified this way and marked `done`
+  on the real result, not the fallback.
+- **Evidence**: same feature's `implementation-spec.md` § Deviation Log, Step 3 (updated with the
+  corrected narrative); `context.md` Step 3 entry.
+- **Rule it implies**: before concluding "this sandbox can't run Playwright e2e for this
+  `xstockstrat-ui` feature," try the narrow path first: `--project=chromium --no-deps` to skip
+  `warmup.setup.ts`'s full route sweep, plus a manual `curl`-with-signed-JWT pre-warm of only the
+  specific route(s) the target spec visits. Reserve the `tsc`+`lint`+`--list` fallback for when
+  even that scoped, pre-warmed run still times out — not as the first resort the moment the full
+  suite is slow.
+
+### 2026-08-10 — shadcn-sidebar-visual-rewrite — assumption
+- **Mistake**: a Playwright assertion checking a Tailwind `rotate-90` utility's effect via
+  `expect(locator).toHaveCSS('transform', ...)` silently and consistently read `"none"` in both the
+  pre- and post-toggle state — not because the CSS rule wasn't applied, but because **Tailwind v4's
+  bare `rotate-*`/`scale-*`/`translate-*` utilities set the standalone CSS `rotate`/`scale`/
+  `translate` property directly**, not the composed `transform` property, unless the separate
+  `.transform` utility class is also present to fold them in (confirmed by reading the generated
+  stylesheet rule directly: `.group-data-[state=open]/menu-button:rotate-90:is(:where(.group/
+  menu-button)[data-state="open"] *) { rotate: 90deg; }` — no `transform` property anywhere in that
+  rule). The class list and `data-state` attribute were both correct at every step; only the test's
+  chosen CSS property to inspect was wrong, which read as a false implementation bug until the
+  actual generated CSS was inspected directly (`document.styleSheets` + `getComputedStyle().rotate`).
+- **Evidence**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/implementation-spec.md` §
+  Deviation Log, Step 3; `services/xstockstrat-ui/e2e/mobile-sidebar.spec.ts`'s chevron test
+  (`toHaveCSS('rotate', ...)`, not `'transform'`).
+- **Rule it implies**: in this codebase (Tailwind v4), a Playwright/e2e assertion verifying a bare
+  rotate/scale/translate utility's effect must check `getComputedStyle`'s own `rotate`/`scale`/
+  `translate` property, not `transform` — `transform` only reflects these utilities when the
+  element *also* carries the `.transform` class. When a rotation/scale assertion mysteriously stays
+  "none"/unset on both sides of a toggle, inspect the actual generated stylesheet rule
+  (`document.styleSheets`) before assuming the underlying app code is broken.
+
+### 2026-08-10 — shadcn-sidebar-visual-rewrite — assumption
+- **Mistake**: a 3-round design debate (feature 126) approved an implementation of shadcn's
+  "Collapsible SidebarMenu" pattern that verified its **visual styling** against the reference
+  (`ui.shadcn.com/docs/components/sidebar`) but never checked the reference's **actual DOM
+  composition**. The result omitted the `SidebarMenu`/`SidebarMenuItem` wrapper shadcn's own
+  pattern always includes, and reused an unrelated `group/menu-button` name for the chevron's
+  scope instead of the reference's own `group/collapsible`. Neither `design-proposer` nor
+  `design-adversary` fetched the live shadcn docs page in any round — all cited evidence was
+  `recon.md`'s codebase citations, which by construction can only describe the *consuming*
+  codebase, never the external reference it's supposed to match. The gap surfaced only when the
+  user compared a rendered screenshot against the real reference page after implementation.
+- **Evidence**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/design.md` § ADDENDUM
+  2026-08-10; `context.md` post-checkpoint session entries.
+- **Rule it implies**: when a feature's explicit acceptance criterion is "match an external
+  reference" (a live docs page, a design system, another product's UI), the design-phase debate
+  must ground at least one round's evidence in the **actual reference itself** — a live fetch of
+  its real markup/composition, not just its rendered visual description — not only in this
+  codebase's own `recon.md` citations. `recon.md` can prove what *our* code does; it can never
+  prove what the *reference* does. A future `/sdd-design` round debating an external-reference-match
+  feature should include a `WebFetch`/reference-inspection step in Phase 0 Recon, not defer that
+  check to a human eyeballing a screenshot after the code already shipped.

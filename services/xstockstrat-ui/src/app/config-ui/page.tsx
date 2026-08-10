@@ -69,6 +69,14 @@ function EnvModeSwitcher({
   return (
     <div className="flex flex-wrap items-center gap-2 text-xs">
       <span className="text-muted-foreground font-medium">ENV:</span>
+      {/* Not wrapped in ui/tabs.tsx (feature 121 FR-5): Radix Tabs.Trigger hardcodes role="tab"
+          (@radix-ui/react-tabs@1.1.21 index.mjs:114) which asChild merges onto the child <Link>,
+          overriding its implicit role="link" — semantically wrong here since a click does a full
+          page navigation via the href's query params, not a client-side tab-panel switch. Found via
+          Step 27's e2e run (e2e/config-ui/env-mode-switcher.spec.ts's role="link" assertions all
+          failed against the Tabs-wrapped version); reverted per that step's own instruction to fix
+          the markup, not the test. See 121-shadcn-migration-medium-confidence context.md Step 26/27
+          and design.md's parallel FR-9 Accordion→Collapsible primitive-fit finding. */}
       <div className="flex gap-1">
         {['dev', 'production'].map((e) =>
           e === nativeEnv ? (

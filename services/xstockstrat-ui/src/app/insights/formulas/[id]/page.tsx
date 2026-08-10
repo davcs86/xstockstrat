@@ -5,6 +5,7 @@ import { ConnectError } from '@connectrpc/connect';
 import { AppShell } from '@/components/insights/AppShell';
 import { FormulaWorkspace } from '@/components/insights/FormulaWorkspace';
 import { useFormula, useUpdateFormula, useDeleteFormula } from '@/hooks/useFormulas';
+import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
 
 export default function FormulaDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -19,7 +20,6 @@ export default function FormulaDetailPage({ params }: { params: Promise<{ id: st
       : (updateMut.error?.message ?? null);
 
   function handleDelete() {
-    if (!window.confirm('Delete this formula? This cannot be undone.')) return;
     deleteMut.mutate(
       { formulaId: id, userId: '' },
       { onSuccess: () => router.push('/insights/formulas') },
@@ -48,7 +48,11 @@ export default function FormulaDetailPage({ params }: { params: Promise<{ id: st
 
   return (
     <AppShell>
-      <div className="p-4 sm:p-6">
+      <div className="p-4 sm:p-6 space-y-4">
+        <PageBreadcrumb
+          ariaLabel="Formula path"
+          items={[{ label: 'Formulas', href: '/insights/formulas' }, { label: formula.name }]}
+        />
         <FormulaWorkspace
           // Re-mount (reset local edits) when navigating between formulas.
           key={formula.formulaId}

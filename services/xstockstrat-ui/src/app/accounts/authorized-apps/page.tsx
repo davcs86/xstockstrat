@@ -2,13 +2,24 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { KeyRound, Copy, Check } from 'lucide-react';
-import {
-  Card, CardHeader, CardTitle, CardDescription, CardContent,
-} from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
-  Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
+  Table,
+  TableHeader,
+  TableBody,
+  TableRow,
+  TableHead,
+  TableCell,
 } from '@/components/ui/table';
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
 import { useAgentUrl } from '../AgentUrlContext';
 
 interface AuthorizedApp {
@@ -69,9 +80,6 @@ export default function AuthorizedAppsPage() {
   }, []);
 
   async function handleDisconnect(app: AuthorizedApp) {
-    if (!window.confirm(`Disconnect "${app.clientName}"? It will lose access until you re-authorize it.`)) {
-      return;
-    }
     setRevoking(app.clientId);
     try {
       const res = await fetch('/accounts/api/authorized-apps', {
@@ -109,8 +117,9 @@ export default function AuthorizedAppsPage() {
         <CardHeader>
           <CardTitle>Authorized apps</CardTitle>
           <CardDescription>
-            OAuth apps (e.g. Claude.ai) you have connected to the xstockstrat MCP agent. Disconnecting
-            an app revokes its refresh token; its existing access token expires shortly after.
+            OAuth apps (e.g. Claude.ai) you have connected to the xstockstrat MCP agent.
+            Disconnecting an app revokes its refresh token; its existing access token expires
+            shortly after.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -140,14 +149,35 @@ export default function AuthorizedAppsPage() {
                     <TableCell>{formatDate(app.authorizedAt)}</TableCell>
                     <TableCell>{formatDate(app.lastUsedAt)}</TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        disabled={revoking === app.clientId}
-                        onClick={() => handleDisconnect(app)}
-                      >
-                        {revoking === app.clientId ? 'Disconnecting…' : 'Disconnect'}
-                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="destructive"
+                            size="sm"
+                            disabled={revoking === app.clientId}
+                          >
+                            {revoking === app.clientId ? 'Disconnecting…' : 'Disconnect'}
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogDescription>
+                            Disconnect &quot;{app.clientName}&quot;? It will lose access until you
+                            re-authorize it.
+                          </AlertDialogDescription>
+                          <AlertDialogCancel disabled={revoking === app.clientId}>
+                            Cancel
+                          </AlertDialogCancel>
+                          <AlertDialogAction
+                            disabled={revoking === app.clientId}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleDisconnect(app);
+                            }}
+                          >
+                            Confirm
+                          </AlertDialogAction>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -171,8 +201,8 @@ export default function AuthorizedAppsPage() {
             {reachable === null ? (
               <span className="text-sm text-muted-foreground">Checking…</span>
             ) : reachable ? (
-              <span className="inline-flex items-center gap-1 text-sm text-green-600">
-                <span className="h-2 w-2 rounded-full bg-green-600" /> Reachable
+              <span className="inline-flex items-center gap-1 text-sm text-buy">
+                <span className="h-2 w-2 rounded-full bg-buy" /> Reachable
               </span>
             ) : (
               <span className="inline-flex items-center gap-1 text-sm text-destructive">
@@ -190,7 +220,13 @@ export default function AuthorizedAppsPage() {
                 aria-label="MCP connector URL"
                 className="flex-1 rounded-md border border-input bg-muted px-3 py-2 font-mono text-xs"
               />
-              <Button type="button" variant="outline" size="sm" onClick={copyAgentUrl} disabled={!agentUrl}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={copyAgentUrl}
+                disabled={!agentUrl}
+              >
                 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 <span className="ml-1">{copied ? 'Copied' : 'Copy'}</span>
               </Button>

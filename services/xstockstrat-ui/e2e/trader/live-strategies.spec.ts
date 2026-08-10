@@ -97,3 +97,18 @@ test.describe('Live Strategies BFF', () => {
     expect((strategyAlert!.tags as string[]) ?? []).toContain('strategy_id:strat-live-001');
   });
 });
+
+test.describe('LiveStrategiesPanel — clickable row keyboard activation (FR-5)', () => {
+  test('a row opens the alert feed via Enter, matching the existing click behavior', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/trader');
+
+    const row = page.locator('[role="button"]', { hasText: 'Live Test Strategy' });
+    await expect(row).toBeVisible({ timeout: 10000 });
+    await row.focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByText('Recent strategy alerts — strat-live-001')).toBeVisible();
+  });
+});

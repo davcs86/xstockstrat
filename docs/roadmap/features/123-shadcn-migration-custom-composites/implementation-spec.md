@@ -87,7 +87,7 @@ Alternatives: replacing `ChartPanel.tsx`'s `lightweight-charts` chart). This mat
 
 ### Step 1 — docs: FR-1 Combobox close-out (verification only, no code change)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `docs/roadmap/features/123-shadcn-migration-custom-composites/context.md` — modify (append
@@ -130,7 +130,7 @@ cd services/xstockstrat-ui && grep -rn "from '@/components/ui/combobox'\|from '.
 
 ### Step 2 — service: FR-2 bump `recharts` to v3 repo-wide (dependency bump + minimal build-green fix)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/package.json` — modify (`recharts` `^2.12.7` → `^3.8.0`)
@@ -212,7 +212,7 @@ pnpm build
 
 ### Step 3 — service: FR-2 add `src/components/ui/chart.tsx` (CLI-vendored, run as-is against recharts v3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/chart.tsx` — create
@@ -267,7 +267,7 @@ pnpm build # confirms the file type-checks cleanly against the installed rechart
 
 ### Step 4 — service: FR-3 migrate `EquityCurveChart.tsx` onto `ui/chart.tsx`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/EquityCurveChart.tsx` — modify
@@ -335,7 +335,7 @@ pnpm test:e2e -- e2e/insights/backtest-coverage.spec.ts
 
 ### Step 5 — service: FR-4 migrate `FormulaRunResult.tsx`'s `Sparkline` onto `ui/chart.tsx`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/FormulaRunResult.tsx` — modify
@@ -393,7 +393,7 @@ pnpm build
 
 ### Step 6 — docs: FR-5 record the `lightweight-charts` "keep" decision as a sanctioned exception
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/CLAUDE.md` — modify (§ Styling)
@@ -447,7 +447,7 @@ git diff --stat services/xstockstrat-ui/src/components/trader/ChartPanel.tsx ser
 
 ### Step 7 — service: FR-12 migrate `insights/page.tsx`'s "Score Trend" chart onto `ui/chart.tsx` (added 2026-08-09)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/page.tsx` — modify
@@ -530,7 +530,7 @@ pnpm build
 
 ### Step 8 — service: FR-7 extract `src/components/shared/RepeatableRowList.tsx`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/RepeatableRowList.tsx` — create
@@ -595,7 +595,7 @@ pnpm lint
 
 ### Step 9 — service: FR-8a migrate `OutputEditor.tsx` onto `RepeatableRowList` + `useListEditor`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/OutputEditor.tsx` — modify
@@ -644,7 +644,7 @@ pnpm build
 
 ### Step 10 — service: FR-8b migrate `ParameterEditor.tsx` onto `RepeatableRowList` + `useListEditor`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/ParameterEditor.tsx` — modify
@@ -694,7 +694,7 @@ pnpm build
 
 ### Step 11 — service: FR-6 + FR-8c bind `RuleEditor.tsx`'s conditions to `useListEditor` and migrate onto `RepeatableRowList`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/RuleEditor.tsx` — modify
@@ -766,7 +766,7 @@ pnpm test:e2e -- e2e/insights/strategy-authoring.spec.ts
 
 ### Step 12 — service: FR-9 install the shadcn `Questionnaire` primitive (CLI-vendored)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/questionnaire.tsx` — create (CLI-generated)
@@ -833,7 +833,7 @@ pnpm build
 
 ### Step 13 — service: FR-10 (Step 1) restructure `StrategyWizard.tsx`'s Step 1 onto `Questionnaire`'s native Choice/Input answer model
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/StrategyWizard.tsx` — modify
@@ -981,7 +981,9 @@ pnpm test:e2e -- e2e/insights/strategy-authoring.spec.ts   # expect all green �
 
 ### Step 14 — service: FR-10 (Steps 2-4) + FR-11 shell-wrap `StrategyWizard.tsx`'s Steps 2-4 and replace the outer step indicator with `Questionnaire.Progress`
 
-**Status**: `pending`
+**Status**: `done` (Instructions 1 and 4 implemented as specified; Instructions 2 and 3 resolved via
+their own built-in escape hatches rather than literal adoption — see context.md for the source-level
+verification that drove this)
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/StrategyWizard.tsx` — modify
@@ -1072,7 +1074,7 @@ pnpm test:e2e -- e2e/insights/strategy-authoring.spec.ts
 
 ### Step 15 — test: whole-feature verification pass
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - (no new files — this step verifies Steps 1–14's combined changes)

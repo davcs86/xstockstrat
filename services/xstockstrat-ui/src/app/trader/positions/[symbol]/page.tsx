@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
 import { AppShell } from '@/components/trader/AppShell';
 import { useAccountContext } from '@/context/AccountContext';
 import { usePosition, usePortfolio } from '@/hooks/usePortfolio';
@@ -29,6 +28,8 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { StatTile } from '@/components/shared/StatTile';
+import { Eyebrow } from '@/components/shared/Eyebrow';
+import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
 import {
   Table,
   TableHeader,
@@ -132,14 +133,12 @@ export default function PositionDetailPage() {
   return (
     <AppShell>
       <div className="p-4 sm:p-6 space-y-4">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/trader/positions" className="flex items-center gap-1.5">
-              <ArrowLeft className="h-4 w-4" />
-              Exposure
-            </Link>
-          </Button>
-        </div>
+        {/* FR-10b: replaces the prior ad hoc "← Exposure" Button asChild back-link — keeping
+            both would duplicate an identically-labeled "Exposure" link on the page. */}
+        <PageBreadcrumb
+          ariaLabel="Position path"
+          items={[{ label: 'Exposure', href: '/trader/positions' }, { label: symbol }]}
+        />
 
         {isLoading && (
           <div className="space-y-3" data-testid="position-loading">
@@ -247,9 +246,7 @@ function PositionBody({
         </div>
         <div className="flex items-center gap-6">
           <div className="text-right">
-            <div className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-              Unrealized
-            </div>
+            <Eyebrow>Unrealized</Eyebrow>
             <div className={`font-mono text-2xl tabular-nums ${pnlClass(position.unrealizedPnl)}`}>
               {fmtSignedUsd(position.unrealizedPnl)}
             </div>
@@ -258,9 +255,7 @@ function PositionBody({
             </div>
           </div>
           <div className="text-right">
-            <div className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-              Open R
-            </div>
+            <Eyebrow>Open R</Eyebrow>
             <div className={`font-mono text-2xl tabular-nums ${r === null ? '' : pnlClass(r)}`}>
               {fmtR(r)}
             </div>
@@ -403,8 +398,8 @@ function PositionBody({
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-                Risk &amp; exit
+              <CardTitle>
+                <Eyebrow as="span">Risk &amp; exit</Eyebrow>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -449,8 +444,8 @@ function PositionBody({
 
           <Card>
             <CardHeader>
-              <CardTitle className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-                Manage
+              <CardTitle>
+                <Eyebrow as="span">Manage</Eyebrow>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -474,8 +469,8 @@ function PositionBody({
           {owningStrategy && (
             <Card>
               <CardHeader>
-                <CardTitle className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-                  Why it&apos;s held
+                <CardTitle>
+                  <Eyebrow as="span">Why it&apos;s held</Eyebrow>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
@@ -495,8 +490,8 @@ function PositionBody({
 
           <Card>
             <CardHeader>
-              <CardTitle className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-                Broker
+              <CardTitle>
+                <Eyebrow as="span">Broker</Eyebrow>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">

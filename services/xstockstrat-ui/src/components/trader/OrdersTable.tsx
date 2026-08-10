@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
+import { EllipsisVertical } from 'lucide-react';
 import type { Order } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { OrderStatus, OrderType } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { BASE_PATH_INSIGHTS } from '@/lib/basepath';
@@ -10,8 +11,13 @@ import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/table';
 import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '../ui/dropdown-menu';
+import {
   AlertDialog,
-  AlertDialogTrigger,
   AlertDialogContent,
   AlertDialogAction,
   AlertDialogCancel,
@@ -58,6 +64,7 @@ export function OrdersTable({
   const liveUpdates = useOrderUpdates();
   const { mutate: cancelOrder } = useCancelOrder();
   const [editing, setEditing] = useState<Order | null>(null);
+  const [cancelling, setCancelling] = useState<Order | null>(null);
 
   const merged = orders.map((o) => liveUpdates[o.orderId] ?? o);
 
@@ -122,41 +129,39 @@ export function OrdersTable({
                       {placedLabel(order.createdAt)}
                     </TableCell>
                     <TableCell className="text-right whitespace-nowrap">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="mr-1"
-                        disabled={isTerminal}
-                        onClick={() => setEditing(order)}
-                        data-testid={`edit-${order.orderId}`}
-                      >
-                        Edit
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
                           <Button
                             type="button"
-                            variant="outline"
-                            size="sm"
+                            variant="ghost"
+                            size="icon"
+                            aria-label="Actions"
+                            data-testid={`actions-${order.orderId}`}
+                          >
+                            <EllipsisVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
                             disabled={isTerminal}
+                            onClick={() => setEditing(order)}
+                            data-testid={`edit-${order.orderId}`}
+                          >
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            disabled={isTerminal}
+                            variant="destructive"
+                            onSelect={(e) => {
+                              e.preventDefault();
+                              setCancelling(order);
+                            }}
                             data-testid={`cancel-${order.orderId}`}
                           >
                             Cancel
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogCancel data-testid={`cancel-${order.orderId}-dismiss`}>
-                            Dismiss
-                          </AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => cancelOrder({ orderId: order.orderId })}
-                            data-testid={`cancel-${order.orderId}-confirm`}
-                          >
-                            Confirm
-                          </AlertDialogAction>
-                        </AlertDialogContent>
-                      </AlertDialog>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 );
@@ -175,6 +180,27 @@ export function OrdersTable({
           if (!o) setEditing(null);
         }}
       />
+      <AlertDialog
+        open={!!cancelling}
+        onOpenChange={(o) => {
+          if (!o) setCancelling(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogCancel data-testid={`cancel-${cancelling?.orderId}-dismiss`}>
+            Dismiss
+          </AlertDialogCancel>
+          <AlertDialogAction
+            onClick={() => {
+              if (cancelling) cancelOrder({ orderId: cancelling.orderId });
+              setCancelling(null);
+            }}
+            data-testid={`cancel-${cancelling?.orderId}-confirm`}
+          >
+            Confirm
+          </AlertDialogAction>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

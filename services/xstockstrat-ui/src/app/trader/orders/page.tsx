@@ -41,14 +41,22 @@ export default function OrdersPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          <div className="lg:col-span-4">
+          {/* min-w-0: the sibling grid item to the one below — same hazard, same fix (a CI-only
+              failure surfaced this one wasn't covered by the original FR-4 audit, which only
+              traced Table-bearing ancestor chains; OrderForm has no Table but shares the row). */}
+          <div className="lg:col-span-4 min-w-0">
             {/* OrderForm reads useSearchParams (the ?symbol quick-trade deep link), which
                 Next.js requires to be wrapped in a Suspense boundary for prerendering. */}
             <Suspense fallback={null}>
               <OrderForm mode={mode} />
             </Suspense>
           </div>
-          <div className="lg:col-span-8 space-y-4">
+          {/* min-w-0: without it, a grid item's default min-width:auto can prevent OrdersTable's
+              own overflow-x-auto wrapper (ui/table.tsx) from ever shrinking below its 10-column
+              intrinsic width, pushing overflow onto the page instead of staying contained here —
+              same defensive pattern already used at strategies/[id] Past Runs and
+              positions/[symbol] Orders & fills (FR-4 audit, feature 124). */}
+          <div className="lg:col-span-8 space-y-4 min-w-0">
             <OrderFiltersPanel onChange={setFilters} />
             <OrdersTable
               orders={data?.orders ?? []}
