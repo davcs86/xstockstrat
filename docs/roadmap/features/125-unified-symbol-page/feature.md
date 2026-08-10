@@ -14,6 +14,7 @@
 | 2026-08-10 | `idea` → `draft` | /sdd-story | Product spec generated. Reshapes what was originally scoped as 096 (single Position page + single Order ticket page, now already shipped — see 096's corrected status) into one unified per-symbol page that also pulls in trade entry, opportunity/conviction, indicators, fundamentals, screening, backtesting, and backfill info. |
 | 2026-08-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved — PASS WITH WARNINGS (no blocker, no Floor breach). Warnings addressed inline: FR-3 now states fill-status handling is unmodified (C-5); Open Questions gained a lead-in directing `/sdd-design` to close all six items explicitly and to re-check `main-dev`'s current `PlatformHeader.tsx`/`OrderForm.tsx` before citing lines (overlap scan found both mid-edit on in-flight, unmerged shadcn-migration PRs #912/#913 — no blocking collision, just staleness risk). No proto/config-key/migration overlap with any other feature. |
 | 2026-08-10 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full — hard cap reached) and approved; recon.md + design.md written. Chosen: `/trader/positions/[symbol]` reused in place as the sole unified route; `/insights/market/[symbol]` becomes a redirect; `/trader/orders/[id]` stays standalone. Sections gate independently of position existence (fixed an inherited all-or-nothing gate that would have made the feature's own headline content unreachable for unheld symbols). Additive `ScreenResult` proto fields for single-symbol screening (avoids a confirmed universe-normalization collapse). Cross-segment BFF client reuse formally adopted as a sanctioned exception (user decision) with `services/xstockstrat-ui/CLAUDE.md` to be amended in the same PR. Pre-existing `GetPosition` account_id bug fixed in-scope. Two false citations caught and corrected mid-debate (round 1's screener field claim, round 3's BFF dual-registration claim). No Floor breach in any round; product-spec.md corrected in lockstep (FR-7/FR-9/FR-10/Proto Contract Changes, all Open Questions closed). |
+| 2026-08-10 | `design-approved` (unchanged — design.md amended, not re-gated) | /sdd-design | User explicitly overrode the design skill's 5-round hard cap for 2 more rounds (a skill-authored process limit, not a Constitution Floor item — the override asked for more scrutiny, not less). Round 6 immediately justified it: found `EvaluateReadiness`/`SignalReadiness` has a real, live `NOT_FOUND` path (stale `?strategy=` param) the round-5-approved design's own "page-wide sweep" had falsely claimed didn't exist — a third false claim caught mid-debate. Round 7 (final, user's stated ceiling) fixed it plus a `usePosition` `refetchInterval` gap, added the verbatim `CLAUDE.md` sanctioned-exception text, and cross-referenced it from `nextjs-frontends.md`. Two remaining test-coverage gaps (relocate `signal-detail.spec.ts` rather than re-run it; a paired NotFound test for `SignalReadiness`) recorded as named Open Risks in design.md rather than requiring a round 8. No Floor breach in any of the 7 rounds. |
 
 ---
 
@@ -21,7 +22,8 @@
 
 - [Product Spec](product-spec.md) — requirements and governance
 - [Recon](recon.md) — grounded codebase dossier
-- [Design](design.md) — debated (5 rounds), approved architecture
+- [Design](design.md) — debated (7 rounds — 5 to the design skill's normal cap, 2 more under an
+  explicit user override), approved architecture
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec unified-symbol-page`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -53,6 +55,9 @@ post-design.md — the proto change and `GetPosition` fix are now confirmed, not
 
 `/sdd-spec unified-symbol-page` — generate the implementation spec from the approved design.
 Note for that pass: the analysis-service `ScreenResult` proto step (design.md) is a hard predecessor
-to the UI screening step; the `GetPosition` account_id fix is the first backend step; and
+to the UI screening step; the `GetPosition` account_id fix is the first backend step;
 `services/xstockstrat-ui/CLAUDE.md` needs its cross-segment-client-reuse exception documented in the
-same PR as the first step that relies on it.
+same PR as the first step that relies on it, cross-referenced from `nextjs-frontends.md` (which also
+needs its adjacent stale "two BFF files"/nginx text fixed in the same edit, plus a
+`/context-scrubber scan`); `e2e/insights/signal-detail.spec.ts` needs relocation/rewrite (not a
+re-run) against the new route; and `SignalReadiness`'s new NotFound branch needs its own paired test.

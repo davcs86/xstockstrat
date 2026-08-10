@@ -160,6 +160,57 @@
   with their design.md resolutions.
 - Status: `spec-ready` → `design-approved`.
 
+## Session 2026-08-10T03:00:00Z — sdd-design rounds 6–7 (user-overridden round cap)
+
+- After design.md was written, approved, committed (`362ca9e`), and pushed, the user directly and
+  repeatedly asked to exceed the design skill's normal 5-round hard cap ("override limit to 7
+  rounds," then "do override it"). Honored: the round cap is a skill-authored process/convergence
+  mechanism (`.claude/skills/sdd-design/reference/grilling-protocol.md` § "hard cap 5"), not a
+  Constitution Floor (`F-*`) item — Floor rules are genuinely non-overridable (F-11), but this isn't
+  one, and the override asked for *more* scrutiny, not less, so honoring it carried no
+  correctness/safety risk.
+- **Round 6 justified the override immediately.** A full proposer→adversary cycle restated the
+  entire approved design, with the proposer specifically expanding the two items round 5 had
+  resolved without a full adversarial cycle (the cross-segment BFF decision's exact `CLAUDE.md`
+  amendment text, and the render-order fix's page-wide "no other section has this hazard" sweep).
+  Round 6's adversary independently re-verified everything rather than trusting the restatement, and
+  found the sweep's central claim was **false**: `EvaluateReadiness` has a real, live `NOT_FOUND`
+  path (a stale/bookmarked `?strategy=` param reaching `SignalReadiness`), and the reused-as-is
+  component's current error handling has *no* NotFound-vs-generic distinction at all — strictly
+  worse than the position page's pre-fix state. Also found: `usePosition`'s `refetchInterval` would
+  poll a confirmed-NotFound position forever (the round-5 retry-suppression fix only stopped
+  in-attempt retries, not the outer loop); the `services/xstockstrat-ui/CLAUDE.md` amendment had no
+  cross-reference from the canonical `nextjs-frontends.md` doc that states the rule it excepts
+  (itself already a recorded, unfixed `fails.md` staleness gap); and a minor ingress-routing
+  precision issue in the amendment's own justification text.
+- **Round 7 (final, the user's stated ceiling) closed all five findings**: `useReadiness`/
+  `SignalReadiness` get the identical `isNotFoundError` treatment as `usePosition`; Backtests section
+  scope clarified as history-list-only (no `GetBacktest`/detail view — that stays exclusively on
+  `/insights/strategies/[id]`); `usePosition`'s `refetchInterval` gated off on confirmed NotFound;
+  a `nextjs-frontends.md` cross-reference footnote specified; the ingress-routing text reworded for
+  precision.
+- **Round 7's adversary still found two real, code-verified gaps** (no Floor breach): (1)
+  `e2e/insights/signal-detail.spec.ts` mostly asserts on `insights/market/[symbol]`'s own page-shell
+  markup — which this design deletes — so "re-run existing coverage" for the `SignalReadiness` fix
+  is insufficient; it needs relocation/rewrite against the new route, not a re-run. (2) The new
+  NotFound branch needs its own paired test (mirroring `backtest-coverage.spec.ts`'s
+  `run-detail-empty` pattern), not just old-coverage re-run. Given this was the final round available
+  (user's explicit 7-round ceiling, no round 8), the adversary itself recommended — and the
+  orchestrator followed — closing these as **named Open Risks with target steps** in design.md
+  rather than requiring further debate, satisfying P-03 (no silent deviation) since `/sdd-spec` will
+  read them as concrete step-level obligations, not lose them.
+- **design.md updated in place** (not re-approved from scratch — the round 5 approval stands; rounds
+  6–7 amended and strengthened it): header updated to 7 rounds with the override rationale; Chosen
+  Approach gained the `useReadiness`/`SignalReadiness` fix, the Backtests-scope clarification, the
+  `refetchInterval` fix, the verbatim `CLAUDE.md` amendment text + its placement, and the
+  `nextjs-frontends.md` cross-reference + orchestrator decision to fix its adjacent stale text in the
+  same edit; Rejected Alternatives gained the recon.md origin citation for the dual-registration
+  option; Open Risks gained three new items (spec relocation, paired NotFound test, stale-text
+  co-fix) and closed the already-resolved FR-9 item; Constitution Rules Touched updated (C-01 now
+  cites three caught-and-corrected false claims, not two; F-11 updated to 7 rounds).
+- No further product-spec.md changes needed this session — rounds 6–7 only affected design.md-level
+  implementation detail, not FRs/ACs.
+
 ## Open Threads (from design.md Open Risks — target steps TBD at /sdd-spec)
 
 - [ ] Opportunity-selection tie-breaking for a symbol with multiple watchlist-relevant `Opportunity`
@@ -171,9 +222,16 @@
 - [ ] `services/xstockstrat-ui/CLAUDE.md`'s cross-segment-client-reuse exception must be written in
   the same step/PR as the first code that relies on it, or the exception has no recorded
   justification for a future reader.
-- [ ] FR-9's narrower backtest-coverage wording — already corrected in product-spec.md this session;
-  no further action needed unless `/sdd-spec` finds the wording insufficient.
 - [ ] Always-fully-rendered composite page (7+ sections firing RPCs on every visit) — performance/UX
   risk named but not stress-tested in the design debate; flag as a pre-launch QA check.
+- [ ] `e2e/insights/signal-detail.spec.ts` needs relocation/rewrite (not a re-run) against
+  `/trader/positions/[symbol]` once `insights/market/[symbol]/page.tsx` is deleted — most of its
+  assertions target page-shell markup that won't exist at the new URL in the same form.
+- [ ] `SignalReadiness`'s new NotFound branch needs a dedicated paired test (mirroring
+  `backtest-coverage.spec.ts`'s `run-detail-empty` pattern), not just a re-run of pre-existing
+  coverage.
+- [ ] `nextjs-frontends.md`'s cross-reference footnote must land alongside a fix to the adjacent,
+  already-recorded stale "two BFF files"/nginx text (`fails.md` 2026-08-05) in the same edit, plus
+  the root-`CLAUDE.md`-mandated `/context-scrubber scan` since that file is being touched.
 
 **Next**: `/sdd-spec unified-symbol-page`.

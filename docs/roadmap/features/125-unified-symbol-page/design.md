@@ -1,8 +1,12 @@
 # Design: unified-symbol-page
 
 **Created**: 2026-08-10
-**Rounds**: 5 (full; termination: approved — round cap reached, remaining items resolved by user
-decision + mechanical fix rather than a 6th round, which the debate protocol does not permit)
+**Rounds**: 7 (full; termination: approved. Rounds 1–5 ran to the design skill's normal hard cap;
+the user then **explicitly overrode that cap** — a skill-authored process/convergence mechanism, not
+a Constitution Floor (`F-*`) item, so honoring the override carries no correctness/safety risk the
+way overriding an actual Floor rule would — for rounds 6–7, up to the user's stated 7-round ceiling.
+Round 6 justified the override immediately: its adversary found a real, previously-approved-and-
+missed defect. See `context.md` § Session 2026-08-10 for the full override rationale.)
 **Approved by**: user @ 2026-08-10
 **Grounded in**: recon.md
 
@@ -83,7 +87,38 @@ make this feature's headline content unreachable for its intended audience. **Fi
   EmptyState/`CardNotice` branch; only a genuinely different error (timeout, 5xx) still shows the
   error paragraph. `usePosition` also adopts the same `retry: (failureCount, err) =>
   !isNotFoundError(err) && failureCount < 1` guard `useStrategies.ts:54-67` already uses, so a
-  NotFound doesn't burn a wasted retry before the fix even applies.
+  NotFound doesn't burn a wasted retry before the fix even applies. **Extended (round 7)**:
+  `usePosition`'s `refetchInterval: 10_000` is also made a function gated on NotFound —
+  `refetchInterval: (query) => (isNotFoundError(query.state.error) ? false : 10_000)` — because the
+  retry guard alone only suppresses in-attempt retries, not the outer 10s polling loop; round 6's
+  adversary caught that a confirmed-NotFound position would otherwise poll `GetPosition` forever
+  against a symbol that will never resolve. This mirrors the repo's own precedent: neither
+  `useStrategyReport` nor `useBacktestDetail` (`useStrategies.ts:39-67`) declares `refetchInterval`
+  at all once they're NotFound-aware.
+- **`SignalReadiness`/`useReadiness` get the identical `isNotFoundError` treatment (round 6–7).**
+  `EvaluateReadiness` genuinely aborts `grpc.StatusCode.NOT_FOUND` when `strategy_id` doesn't resolve
+  (`servicer.py:1971-1976`) — reachable because `SignalReadiness.tsx:32` seeds `strategyId` directly
+  from `searchParams?.get('strategy')`, an externally-controllable/bookmarkable value (a stale,
+  deleted, or renamed `?strategy=` on the unified page hits this). Round 6's adversary found the
+  reused-as-is component's current handling (`error ? <p>Failed to evaluate readiness.</p> : ...`,
+  `SignalReadiness.tsx:65-66`) has **no** NotFound-vs-generic distinction at all — strictly worse
+  than the position page's pre-fix state, not equivalent to it, and this was missed by the original
+  design despite the sweep round 6 requested explicitly claiming to have checked it. Fixed:
+  `useReadiness` (`hooks/useOpportunities.ts:45-51`) gets the same `retry` guard + `isNotFound`
+  return field as `useBacktestDetail` (`useStrategies.ts:60-67`); `SignalReadiness.tsx` destructures
+  `isNotFound` and branches to a distinct "This strategy no longer exists — pick another." message
+  before the generic error paragraph. `SignalReadiness` is a **shared** component (also mounted on
+  `insights/market/[symbol]` today, though that page is deleted by this design's own route
+  decision) — one change, not a fork; see Open Risks for the paired test-coverage obligation this
+  creates.
+- **Backtests section is explicitly a history LIST only — no embedded per-run detail view (round
+  7, resolving an ambiguity round 6 flagged).** Confirmed against FR-9/AC-6 (product-spec.md): "lists
+  past runs... offers a way to trigger a new run" never says "view a run's detail." The design uses
+  only `useBacktestHistory` (list-shaped, no NotFound semantics, `useStrategies.ts:39-49`) —
+  `GetBacktest`/`useBacktestDetail` (the one hook on this page's dependency graph that already had
+  NotFound handling) stays exclusively on the existing `/insights/strategies/[id]` page
+  (`insights/strategies/[id]/page.tsx:49,76-81`), which is unaffected by this feature. No deep-link
+  to a specific run exists there today (accepted, out-of-scope gap, not silently built around).
 - **Trade widget renders unconditionally** — reusing `OrderForm` (`components/trader/OrderForm.tsx:41-48`)
   directly under `/trader`'s ambient `AccountProvider` (`app/trader/providers.tsx:6,13`), no
   `SignalOrderTicket`-style own-wrapper needed. A symbol with no position is exactly when a trader
@@ -127,24 +162,52 @@ rather than the debate itself, made explicitly at the round-5 gate. Concretely:
   `useOpportunities`/`useReadiness`/`useStrategyAnalytics`, `useScreenSymbols`,
   `useBacktestHistory`/`useBacktestDetail`/`useRunBacktest`, `useBackfillJobs`, `useWatchlists` — with
   **zero new `traderBff.ts` registrations** for any of them.
-- This is safe (verified directly against code in round 3, not assumed): `analysisClient.ts` /
-  `insightsIngestClient.ts` / `insightsPortfolioClient.ts` all bind a **root-relative**
-  `baseUrl: '/insights/api'`, so a browser `fetch()` issued from a page rendered at
-  `/trader/positions/AAPL` resolves same-origin, not cross-origin (no CORS). `.do/app.yaml`'s
-  ingress has exactly two rules (`/agent` → agent, `/` catch-all → `xstockstrat-ui`) — both
-  `/trader/api` and `/insights/api` are served by the same DO component. `auth.ts:41-52`'s session
-  cookies are set with `path: '/'`, not segment-scoped. `bffShared.ts`'s `requireSession`
-  independently re-verifies the cookie on every dispatch regardless of which BFF router handled it.
+- This is safe (verified directly against code in rounds 3 **and** 6, independently — not assumed
+  either time): `analysisClient.ts` / `insightsIngestClient.ts` / `insightsPortfolioClient.ts` all
+  bind a **root-relative** `baseUrl: '/insights/api'`, so a browser `fetch()` issued from a page
+  rendered at `/trader/positions/AAPL` resolves same-origin, not cross-origin (no CORS). **No
+  segment-specific ingress routing exists** (reworded, round 7, for precision — round 3–5's phrasing
+  overstated the routing rule's specificity): `.do/app.yaml`'s single `/` catch-all (everything but
+  `/agent`) routes to `xstockstrat-ui`, so `/trader/api` and `/insights/api` are always served by the
+  same component. `auth.ts:41-52`'s session cookies are set with `path: '/'`, not segment-scoped.
+  `bffShared.ts`'s `requireSession` independently re-verifies the cookie on every dispatch regardless
+  of which BFF router handled it.
 - `GetFundamentals` is the **one** genuinely new registration — it exists in neither BFF today
   (confirmed absent from both `traderBff.ts:103-106` and `insightsBff.ts:85-91`), so there is no
   existing registration to reuse either way. It's added to `traderBff.ts` using the already-imported
   same-segment `marketDataClient`, mirroring the existing `getBars` entry (`traderBff.ts:104`).
 - **`services/xstockstrat-ui/CLAUDE.md`'s "a browser component imports only the client for its
-  segment" rule is amended in the same PR** to add a sanctioned-exception bullet for this feature —
-  mirroring the file's existing precedent for the `ChartPanel.tsx`/`lightweight-charts`-across-
-  segments exception — stating the exact safety argument above (root-relative baseUrl + `path=/`
-  cookie + same DO ingress origin + per-request `requireSession`) so a future reader doesn't have to
-  re-derive it.
+  segment" rule is amended in the same PR** to add a sanctioned-exception bullet, placed directly
+  after the file's existing `ChartPanel.tsx`/`lightweight-charts` sanctioned-exception bullet
+  (`CLAUDE.md:59-66`, before `## Docker Build Pattern` at line 68), same format — verbatim text
+  (round 6–7, verified in place against the live file):
+
+  > **Sanctioned exception — the unified `/trader/positions/[symbol]` page reuses `/insights`-segment
+  > browser clients.** `analysisClient`, `insightsIngestClient`, and `insightsPortfolioClient` (all
+  > `baseUrl: '/insights/api'`) are called directly from this `/trader`-segment page rather than
+  > re-registered in `traderBff.ts` (feature 125 design decision, 2026-08-10): the base URLs are
+  > root-relative so the browser `fetch()` stays same-origin regardless of which segment rendered the
+  > page; no segment-specific ingress routing exists — `.do/app.yaml`'s single `/` catch-all routes
+  > both `/trader/api` and `/insights/api` to the same DO component; the session cookie is
+  > `path: '/'`, not segment-scoped; and `bffShared.ts`'s `requireSession` re-checks the session on
+  > every dispatch independent of which BFF router handled it. This trades `/trader`'s BFF
+  > self-containment for avoiding duplicate one-line `forward()` registrations — do not re-flag this
+  > as an architecture violation in a future audit; do not treat it as precedent for arbitrary
+  > cross-segment reuse without re-verifying these four facts still hold.
+
+  **Cross-referenced (round 7)** from `docs/patterns/nextjs-frontends.md` §10 — a one-line footnote
+  under "Each frontend has two BFF files" (`nextjs-frontends.md:280-282`), immediately before the
+  fenced code block, pointing to the `CLAUDE.md` bullet above. Round 6's adversary found the
+  canonical pattern doc states this BFF-self-containment rule as "non-negotiable"
+  (`nextjs-frontends.md:256`) with no pointer to the exception — a future reader consulting the more
+  authoritative doc would never discover it. **Also found (round 6, unresolved by this feature)**:
+  `nextjs-frontends.md`'s surrounding "two BFF files"/nginx-forwarding text is itself a pre-existing,
+  already-recorded stale-doc gap (`fails.md` 2026-08-05, `ui-consolidation-nextjs`, still unfixed as
+  of this design) — footnoting a paragraph already flagged as drifted risks the footnote reading as
+  endorsing stale context. **Decided by the orchestrator at the round-7 close** (no round 8
+  available): the implementation step that adds the footnote must also correct the immediately
+  surrounding stale "two BFF files"/nginx-forwarding text in the same edit, not leave the footnote to
+  sit beside uncorrected drift — see Open Risks.
 - **Rejected**: dual-registering all seven-plus RPCs in `traderBff.ts` as one-line `forward()`
   duplicates of what `insightsBff.ts` already has — the adversary's own recommended default, and the
   more conventional choice, but the user explicitly chose the leaner cross-segment-reuse path given
@@ -248,11 +311,11 @@ old bookmarks/external links), not a distinct surface.
   just the watchlist-bound one); rejected in favor of the zero-backend-change client-side filter
   (option (a)) per "write the minimum that solves the stated problem," with the fuller option
   recorded as a named follow-up rather than built now.
-- **Dual-registering every needed RPC in `traderBff.ts`** — the conventional, most-consistent-with-
-  existing-architecture choice and the adversary's own recommended default; rejected by explicit user
-  decision at the round-5 gate in favor of the leaner, already-proven-safe cross-segment client reuse
-  (see Chosen Approach § BFF wiring) — an explicit trade of `/trader` BFF self-containment for less
-  duplicated registration surface.
+- **Dual-registering every needed RPC in `traderBff.ts`** — recon's own original recommendation
+  (`recon.md:156-158`, "all through `traderBff.ts`...") and independently the adversary's recommended
+  default; rejected by explicit user decision at the round-5 gate in favor of the leaner,
+  already-proven-safe cross-segment client reuse (see Chosen Approach § BFF wiring) — an explicit
+  trade of `/trader` BFF self-containment for less duplicated registration surface.
 - **`GetPosition` account_id fix deferred to a separate `/sdd-triage` bug fix** — rejected: the same
   call chain this feature already touches, and FR-14's own acceptance criterion depends on it.
 - **096's original all-or-nothing position gate** (full-page `EmptyState` on not-found, everything
@@ -278,22 +341,44 @@ old bookmarks/external links), not a distinct surface.
   land in the same PR as the code that relies on it, or a future reader/reviewer has no written
   justification for why this page's hooks look cross-segment. Target: the same step that wires the
   first reused cross-segment hook.
-- [ ] **FR-9's narrower backtest coverage** (watchlist-bound-strategy-or-owning-strategy only, not
-  every strategy platform-wide) must be reflected in product-spec.md's FR-9/AC-6 wording in the same
-  PR as this design.md, per this repo's rule that a scope-narrowing spec change gets the spec updated,
-  not silently shipped — target: the product-spec correction step, done alongside this design's
-  approval.
+- [x] ~~FR-9's narrower backtest coverage~~ — **Done**: reflected in product-spec.md's FR-9/AC-6
+  wording in the same session as this design.
 - [ ] **Performance/UX of an always-fully-rendered composite page** (7+ sections, each firing its own
   RPC, on every visit regardless of position) was named by round 4's proposer as a risk but not
   stress-tested in this design debate — each section reuses an already-cheap, already-existing RPC,
   so the risk is judged low, but flagged as a named QA check before launch rather than assumed away.
+- [ ] **`e2e/insights/signal-detail.spec.ts` needs relocation/rewrite, not a re-run (round 6, real
+  gap).** This spec asserts almost entirely on `insights/market/[symbol]`'s own page-shell markup
+  (the Queue back-link, opportunity action badge, CONVICTION/Edge(BT) header stats) — markup that
+  lives in the page this design deletes, not in `SignalReadiness.tsx`. Once that page becomes a pure
+  redirect, most of this spec's assertions target markup that no longer exists at the new URL in the
+  same form; "re-run existing coverage" (the original framing) is insufficient — it needs to be moved
+  and rewritten against `/trader/positions/[symbol]`, verifying both the header enrichment and the
+  readiness panel render correctly at the new route. Target: the implementation step that deletes
+  `insights/market/[symbol]/page.tsx`.
+- [ ] **`SignalReadiness`'s new NotFound branch needs its own paired test, not just old-coverage
+  re-run (round 6).** Mirror `useBacktestDetail`'s existing dedicated NotFound assertion
+  (`e2e/insights/backtest-coverage.spec.ts:189-197`, the `run-detail-empty` testid pattern) — a new
+  test asserting the "This strategy no longer exists" message actually renders for a stale
+  `?strategy=` param, not merely a re-run of pre-existing (and, per the item above, largely
+  page-shell-scoped) coverage. Target: the same step as the `useReadiness`/`SignalReadiness` fix.
+- [ ] **`nextjs-frontends.md`'s footnote must land alongside a fix to the stale text it sits next to,
+  not beside it (round 6–7, orchestrator decision recorded above).** The surrounding "two BFF
+  files"/nginx-forwarding paragraph (`nextjs-frontends.md:280-298`) is a pre-existing, already-
+  recorded ledger fail (`fails.md` 2026-08-05, `ui-consolidation-nextjs`) that remains unfixed today.
+  Touching this file also triggers root `CLAUDE.md`'s Teardown obligation (`/context-scrubber scan`)
+  before the PR ships. Target: the step that adds the cross-reference footnote must correct the
+  adjacent stale text in the same edit and run the Teardown scan.
 
 ## Constitution Rules Touched
 
 - **C-01** (zero-assumption / evidence-cited) — honored: every claim in this design cites `recon.md`
-  path:line evidence; two factually-wrong citations surfaced during the debate itself (round 1's
-  "reuse gap/threshold," round 3's "listBacktests is dual-registered") were caught and corrected
-  before approval, not shipped.
+  path:line evidence; **three** factually-wrong claims surfaced during the debate and were caught and
+  corrected before approval, not shipped — round 1's "reuse gap/threshold" (wrong field), round 3's
+  "listBacktests is dual-registered" (grep-false), and round 5→6's "no other section has NotFound
+  semantics" page-wide-sweep claim (missed `EvaluateReadiness`'s real `NOT_FOUND` path) — the last one
+  caught only because the user-extended round 6 re-ran the sweep instead of trusting the prior
+  round's self-report.
 - **C-08** (test-step pairing) — honored: the `GetPosition` account_id fix is paired with an explicit
   Go regression test named in the Chosen Approach, not left implicit.
 - **C-09** (proto verification) — honored: the additive `ScreenResult` fields require `buf lint`/
@@ -316,5 +401,6 @@ old bookmarks/external links), not a distinct surface.
   (fundamentals fixture absence, no watchlist-membership RPC, `ListBacktestsRequest`'s missing symbol
   field) rather than an invented citation; the debate's own self-correction of two false citations
   (round 1, round 3) is this rule operating as designed.
-- **F-11** (Floor rejection halts) — honored trivially: no Floor breach was flagged by either
-  adversary in any of the 5 rounds.
+- **F-11** (Floor rejection halts) — honored trivially: no Floor breach was flagged by any adversary
+  in any of the 7 rounds (5 to the design skill's normal cap, 2 more under the user's explicit
+  override).
