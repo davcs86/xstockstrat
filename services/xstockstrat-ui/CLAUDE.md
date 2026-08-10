@@ -46,7 +46,7 @@ theme values come entirely from the preset).
   object after any `add`/`apply --preset` run, marked with an `// app-specific` comment. A
   mechanical regression guard (`src/components/ui/button.test.ts`, `badge.test.ts`) asserts these
   keys render their expected classes — it fails loudly if a future regenerate silently drops them.
-- **`sidebar.tsx`'s `data-active` fix** (feature 125): `SidebarMenuButton`/`SidebarMenuSubButton`
+- **`sidebar.tsx`'s `data-active` fix** (feature 126): `SidebarMenuButton`/`SidebarMenuSubButton`
   set `data-active={isActive || undefined}`, not the bare `isActive` boolean — marked
   `// app-specific`. The vendored file's own `data-active:bg-sidebar-accent` Tailwind variant is a
   bare (unbracketed) data-attribute selector, which matches on attribute **presence**, not its
@@ -155,7 +155,7 @@ The physical routes/segments above are **unchanged**; feature 083 layers an oppo
   `src/components/shared/PageBreadcrumb.tsx` (`{ariaLabel, items: {label, href?}[]}`) instead.
   Each `NAV_GROUPS` entry renders as `SidebarGroup > SidebarGroupContent > SidebarMenu >
   SidebarMenuItem > Collapsible(className="group/collapsible") > CollapsibleTrigger(SidebarMenuButton)
-  + CollapsibleContent(SidebarMenuSub > SidebarMenuSubItem)` (feature 125) — matching shadcn's own
+  and CollapsibleContent(SidebarMenuSub > SidebarMenuSubItem)` (feature 126) — matching shadcn's own
   reference "Collapsible SidebarMenu" composition exactly, not a flattened shortcut. The chevron's
   rotation keys off `group-data-[state=open]/collapsible:rotate-90`, scoped to the `Collapsible`
   root's own `data-state` (Radix reflects it there directly), not `SidebarMenuButton`'s pre-existing

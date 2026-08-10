@@ -2,7 +2,7 @@
 
 **Status**: `complete`
 **Created**: 2026-08-10
-**Feature**: `docs/roadmap/features/125-shadcn-sidebar-visual-rewrite/feature.md`
+**Feature**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/feature.md`
 **Total Steps**: 4
 **Feature Branch**: `claude/implement-124-e48xkn` (harness-assigned; see `feature.md`)
 
@@ -105,7 +105,7 @@ consumes it).
      items: NavItem[];
      /**
       * Text for a muted, non-interactive SidebarGroupLabel rendered immediately before this
-      * group in the mobile offcanvas nav (FR-3, feature 125). Purely visual — no id, no
+      * group in the mobile offcanvas nav (FR-3, feature 126). Purely visual — no id, no
       * aria-labelledby. Invariant: must be set on the FIRST NAV_GROUPS entry of the section it
       * starts, or the label silently attaches to the wrong group — not enforced at compile/
       * runtime, only by this comment.
@@ -417,7 +417,7 @@ pnpm test:e2e
 **Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
-- `docs/roadmap/features/125-shadcn-sidebar-visual-rewrite/context.md` — modify (records the
+- `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/context.md` — modify (records the
   pass/fail note + screenshot reference)
 
 **Reviewers**: none

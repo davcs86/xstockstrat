@@ -1349,7 +1349,7 @@ reusing.
   accessible name across N sibling containers adds real implementation complexity (id-plumbing, an
   ordering invariant to maintain) for an accessibility improvement that, once actually exposed,
   tells a screen-reader user nothing beyond what they already hear from each interactive child.
-- **Evidence**: `docs/roadmap/features/125-shadcn-sidebar-visual-rewrite/context.md` § Session
+- **Evidence**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/context.md` § Session
   2026-08-10T11:00:00Z (Round 3 adversary + orchestrator synthesis); `design.md` § Rejected
   Alternatives (third bullet).
 - **Rule it implies**: before treating any `aria-*` wiring onto a shadcn/Radix-vendored primitive
@@ -1372,7 +1372,7 @@ reusing.
   hand-signed test JWT cookie (same secret/shape as `e2e/helpers/auth.ts`'s `signTestJwt` —
   `jose`'s `SignJWT`, `test-jwt-secret-for-e2e-tests-min32c`). Total cost: ~10-30s per route,
   one-time, then the actual test run completes in well under a minute.
-- **Evidence**: `docs/roadmap/features/125-shadcn-sidebar-visual-rewrite/implementation-spec.md` §
+- **Evidence**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/implementation-spec.md` §
   Deviation Log, Step 3 (Attempt 2); `context.md` Step 3 entry — achieved a real RED (3 failures,
   right reasons) then GREEN (9/9 passed in 18.2s) this way, after Attempt 1's full-suite run timed
   out.

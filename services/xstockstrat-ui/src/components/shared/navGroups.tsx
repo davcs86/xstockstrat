@@ -26,7 +26,7 @@ export interface NavGroup {
   items: NavItem[];
   /**
    * Text for a muted, non-interactive SidebarGroupLabel rendered immediately before this
-   * group in the mobile offcanvas nav (FR-3, feature 125). Purely visual — no id, no
+   * group in the mobile offcanvas nav (FR-3, feature 126). Purely visual — no id, no
    * aria-labelledby. Invariant: must be set on the FIRST NAV_GROUPS entry of the section it
    * starts, or the label silently attaches to the wrong group — not enforced at compile/
    * runtime, only by this comment.

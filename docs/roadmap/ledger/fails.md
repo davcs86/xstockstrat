@@ -968,9 +968,9 @@ ambiguity is logged here).
   test-registration confidence, but genuinely does **not** verify any runtime DOM/CSS/ARIA behavior
   (chevron rotation, `data-state` transitions, new element presence). Real verification only happens
   once CI runs the suite against a **production** bundle (`pnpm build && pnpm start` — no on-demand
-  compilation), per `docs/roadmap/features/125-shadcn-sidebar-visual-rewrite/implementation-spec.md`
+  compilation), per `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/implementation-spec.md`
   Deviation Log, Step 3.
-- **Evidence**: `docs/roadmap/features/125-shadcn-sidebar-visual-rewrite/implementation-spec.md` §
+- **Evidence**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/implementation-spec.md` §
   Deviation Log (Step 3); `context.md` session `sdd-execute (sequential)` step-loop entry.
 - **Rule it implies**: this generalizes the `fails.md` 2026-08-05 `frontend-reverse-proxy` sandbox-
   capability-gap pattern (there: Docker unavailable) to a second, distinct axis — **the execute
@@ -1014,7 +1014,7 @@ ambiguity is logged here).
   rule). The class list and `data-state` attribute were both correct at every step; only the test's
   chosen CSS property to inspect was wrong, which read as a false implementation bug until the
   actual generated CSS was inspected directly (`document.styleSheets` + `getComputedStyle().rotate`).
-- **Evidence**: `docs/roadmap/features/125-shadcn-sidebar-visual-rewrite/implementation-spec.md` §
+- **Evidence**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/implementation-spec.md` §
   Deviation Log, Step 3; `services/xstockstrat-ui/e2e/mobile-sidebar.spec.ts`'s chevron test
   (`toHaveCSS('rotate', ...)`, not `'transform'`).
 - **Rule it implies**: in this codebase (Tailwind v4), a Playwright/e2e assertion verifying a bare
@@ -1025,7 +1025,7 @@ ambiguity is logged here).
   (`document.styleSheets`) before assuming the underlying app code is broken.
 
 ### 2026-08-10 — shadcn-sidebar-visual-rewrite — assumption
-- **Mistake**: a 3-round design debate (feature 125) approved an implementation of shadcn's
+- **Mistake**: a 3-round design debate (feature 126) approved an implementation of shadcn's
   "Collapsible SidebarMenu" pattern that verified its **visual styling** against the reference
   (`ui.shadcn.com/docs/components/sidebar`) but never checked the reference's **actual DOM
   composition**. The result omitted the `SidebarMenu`/`SidebarMenuItem` wrapper shadcn's own
@@ -1035,7 +1035,7 @@ ambiguity is logged here).
   `recon.md`'s codebase citations, which by construction can only describe the *consuming*
   codebase, never the external reference it's supposed to match. The gap surfaced only when the
   user compared a rendered screenshot against the real reference page after implementation.
-- **Evidence**: `docs/roadmap/features/125-shadcn-sidebar-visual-rewrite/design.md` § ADDENDUM
+- **Evidence**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/design.md` § ADDENDUM
   2026-08-10; `context.md` post-checkpoint session entries.
 - **Rule it implies**: when a feature's explicit acceptance criterion is "match an external
   reference" (a live docs page, a design system, another product's UI), the design-phase debate

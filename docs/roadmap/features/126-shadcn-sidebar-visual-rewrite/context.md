@@ -1,8 +1,8 @@
 # Context: shadcn-sidebar-visual-rewrite
 
-**Feature**: `docs/roadmap/features/125-shadcn-sidebar-visual-rewrite/feature.md`
-**Product Spec**: `docs/roadmap/features/125-shadcn-sidebar-visual-rewrite/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/125-shadcn-sidebar-visual-rewrite/implementation-spec.md`
+**Feature**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/feature.md`
+**Product Spec**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/implementation-spec.md`
 
 ---
 
@@ -384,7 +384,7 @@
     its button's text (the accepted design.md trade-off) reads unambiguously as a label, not a
     second interactive control, confirming that trade-off held up visually as reasoned.
   - No escalation needed — no design decision (label wording, structure) required revisiting.
-- Files modified: `docs/roadmap/features/125-shadcn-sidebar-visual-rewrite/context.md` (this entry)
+- Files modified: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/context.md` (this entry)
 - Deviations: none.
 
 ## Session 2026-08-10T17:00:00Z — post-checkpoint user visual review + correction
@@ -463,5 +463,5 @@ that check to a post-implementation human screenshot comparison.
 **Files modified this session**: `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx`,
 `services/xstockstrat-ui/src/components/ui/sidebar.tsx`, `services/xstockstrat-ui/e2e/
 mobile-sidebar.spec.ts`, `services/xstockstrat-ui/CLAUDE.md`,
-`docs/roadmap/features/125-shadcn-sidebar-visual-rewrite/{design.md,implementation-spec.md,
+`docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/{design.md,implementation-spec.md,
 context.md}`, `docs/roadmap/ledger/fails.md`.
