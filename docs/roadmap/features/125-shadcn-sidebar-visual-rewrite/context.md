@@ -58,3 +58,43 @@
   `xstockstrat-ui`; every other feature that recently touched those files (120/121/122/123/124) is
   already merged to `main-dev`, confirmed directly against the live code. No merge-order entry
   required — no in-flight collision to record.
+
+## Session 2026-08-10T09:00:00Z — sdd-design Phase 0 + Phase 1 Round 1
+
+- Phase 0 Recon: wrote `recon.md` (service: `xstockstrat-ui`). Key finds: the vendored
+  `SidebarMenuSub*`/`SidebarGroupLabel` primitives are unused but already fully styled; a
+  reusable rotating-chevron idiom already exists at `navigation-menu.tsx:74-77`; feature 124's
+  "keyboard-accessible row" behavior is inherited from Radix, not custom app code — nothing to
+  preserve beyond not disturbing `CollapsibleTrigger`; `mobile-sidebar.spec.ts:102-113`'s
+  active-trigger/active-link assertions are a hard constraint any restructuring must survive or
+  explicitly update in the same PR.
+- Phase 1 Round 1 — Proposer: single rotating `CaretRight` (phosphor-icons) on `SidebarMenuButton`
+  via its own `group/menu-button` scope; `SidebarMenuSub*` swap for sub-items; FR-3 resolved by
+  **merging** `NAV_GROUPS.slice(0, 4)` into one outer `SidebarGroup` with a `"Platform"`
+  `SidebarGroupLabel`, Settings rendered separately below a `SidebarSeparator`, no new
+  `navGroups.tsx` field; "More" overflow explicitly out of scope.
+- Phase 1 Round 1 — Adversary (NEEDS WORK, no Floor breach): the chevron's `aria-hidden` fix is
+  confirmed accname-safe (Phosphor's `IconBase` emits no `<title>` unless `alt` is passed). But
+  **merging the four groups into one `SidebarGroup` loses `SidebarContent`'s `gap-2` inter-group
+  spacing** (`sidebar.tsx:356`) — a real visual regression the proposal didn't evidence against.
+  Also flagged: merging forces a duplicated ~15-line render block (once for the merged `.map`,
+  once for standalone Settings) unless factored into a shared helper (DRY guard rail); leaving
+  Settings unlabeled is a partial-AC-3-compliance judgment call stated as settled rather than
+  explicitly flagged for sign-off; FR-5/AC-6's *new* assertions (rotate state, `SidebarMenuSub`
+  structure) weren't concretely named, only the *existing*-locator risk was; `SidebarSeparator`
+  needs a new import (trivial); the `"Platform"` label text itself is an unexamined content choice.
+  Adversary's suggested alternative: **don't merge the groups** — render a standalone
+  `SidebarGroupLabel` "Platform" as a leading sibling in `SidebarContent`, ahead of the *unchanged*
+  5-group `.map`, then a `SidebarSeparator`, then Settings' own group as today. Avoids the spacing
+  loss and the duplication risk in one move.
+- **Known-trap discipline** (per the `insights.md` 2026-08-09 entry cited in `recon.md`): recording
+  this synthesis here, before Round 2 spawns, specifically to avoid the mid-round-decision-lost gap
+  that previously caused a false-alarm regression in this same `sidebar.tsx`/`PlatformHeader.tsx`
+  family during feature 124.
+- Floor status: no `F-*` breach. Gate presented to user; full mode requires ≥2 rounds, so Round 2
+  is mandatory regardless of the user's answer — offered "Run another round" and "Inject a
+  constraint / steer" only (no Approve option yet, per the grilling protocol).
+- **User steer**: "give settings it's own label too" — resolves the open Settings-labeling
+  objection from Round 1: Settings gets its own `SidebarGroupLabel` (not just a bare
+  `SidebarSeparator`), satisfying AC-3's "label (or labels)" wording without a partial-compliance
+  judgment call. Feeding this into Round 2 as a hard constraint on the proposer.
