@@ -98,3 +98,60 @@
   objection from Round 1: Settings gets its own `SidebarGroupLabel` (not just a bare
   `SidebarSeparator`), satisfying AC-3's "label (or labels)" wording without a partial-compliance
   judgment call. Feeding this into Round 2 as a hard constraint on the proposer.
+
+## Session 2026-08-10T10:00:00Z — sdd-design Phase 1 Round 2
+
+- Round 2 — Proposer: rejects Round 1's group-merge outright. All 5 `NAV_GROUPS` keep their own
+  unchanged `SidebarGroup`; two `SidebarGroupLabel`s ("Navigate", "Settings") render as siblings
+  inside `SidebarContent`, gated by `group.key` inside the existing unchanged `.map` — zero
+  render-block duplication, `SidebarContent`'s `gap-2` (`sidebar.tsx:356`) applies uniformly since
+  nothing is merged. `MobileNavLink` swaps `SidebarMenuButton` → `SidebarMenuSubButton`. Chevron
+  mechanism carried forward unchanged from Round 1. Proposer self-flagged two unresolved risks:
+  the `SidebarGroupContent` wrapper choice (no in-repo precedent for `SidebarMenuSub`'s parent
+  chain) and "Settings" label text literally duplicating its own trigger button's text.
+- Round 2 — Adversary (NEEDS WORK, no Floor breach): (1) the `group.key === 'decide'`/`'settings'`
+  string-literal gating silently resolves product-spec's own Open Question (new `navGroups.tsx`
+  field vs. presentational-only) without saying so, and is fragile to reordering; (2) splitting
+  `SidebarGroupLabel` out as a sibling of 4 separate `SidebarGroup`s forfeits ARIA
+  group/label association (no `aria-labelledby`) that shadcn's canonical nested structure
+  provides for free; (3) the `data-open`-driven chevron rotation is inherited from Round 1
+  unverified specifically against `CollapsibleTrigger` — corroborated by precedent across 6+
+  other vendored primitives sharing the same `radix-ui` package, but the ledger's "a demonstration
+  is not a producer-contract claim" pattern (fails.md 2026-07-27/29/08-05) applies; (4) both
+  proposer-self-flagged risks (wrapper choice, label duplication) are unresolved, not just noted;
+  (5) no visual/screenshot verification step exists anywhere for a feature whose core acceptance
+  criterion is inherently visual.
+- **Synthesis (orchestrator) — current best approach**, resolving every Round 2 objection:
+  - Replace the `group.key` string-literal gate with an explicit `sectionStart?: string` field on
+    `NavGroup` (`navGroups.tsx:22-27`) — e.g. `sectionStart: 'Navigate'` on the `decide` group,
+    `sectionStart: 'Settings'` on the `settings` group — closing OQ-2 explicitly (a real data-model
+    decision, not an implicit one) and removing the reorder-fragility.
+  - Add `aria-labelledby` on each `SidebarGroup` pointing at its preceding label's `id` when one
+    precedes it, closing the ARIA-association gap.
+  - Drop the `SidebarGroupContent` wrapper inside `CollapsibleContent` — render
+    `CollapsibleContent > SidebarMenuSub > SidebarMenuSubItem` directly, matching shadcn's
+    canonical nesting rather than an unprecedented wrapper combo (resolves the proposer's own
+    flagged risk with a smaller diff, not a bigger one).
+  - Chevron mechanism: no separate manual verification required — the proposed e2e `data-state`
+    before/after assertion **is** the verification, enforced by Constitution **P-06** (red-before-
+    green): if the `CollapsibleTrigger`/`data-open` assumption is wrong, the RED step fails loudly
+    before any GREEN implementation lands.
+  - "Settings" label duplicating its own trigger text: accepted as a documented, intentional
+    trade-off — the user gave an explicit instruction ("give Settings its own label too"); a muted
+    small-caps section label above a bold pill button repeating the same word is a common enough
+    UI pattern, and second-guessing explicit user direction on wording is out of scope for this
+    synthesis. Recorded as an accepted Open Risk, not silently dropped.
+  - New requirement added to the chosen approach: an explicit visual verification step (a
+    Playwright screenshot assertion, or at minimum a recorded manual-review checkpoint in
+    `context.md`) before the integration PR — this feature's central acceptance criterion
+    ("match shadcn's own reference example") is inherently visual and nothing in either round's
+    proposal verified it.
+  - Floor status: no `F-*` breach in either round.
+- Gate presented to user: `R = 2` meets full mode's mandated minimum, so **Approve** is now
+  offered alongside **Run another round** and **Inject a constraint / steer**.
+- **User chose**: "Run another round" (no specific steer given). Round 3 will pressure-test the
+  orchestrator's own Round 2 synthesis rather than re-litigate settled ground: firm up the
+  `sectionStart` field's concrete shape/values on `NavGroup`, ground the visual-verification
+  requirement in whatever screenshot/snapshot tooling (if any) already exists in this repo's e2e
+  conventions rather than leaving it abstract, and confirm the `aria-labelledby` wiring is
+  concretely specified (which element gets the `id`, which gets the `aria-labelledby`).
