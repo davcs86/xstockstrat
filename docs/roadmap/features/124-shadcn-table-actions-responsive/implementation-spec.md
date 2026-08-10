@@ -1135,7 +1135,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "no horizontal overflow"
 
 ### Step 23 — test: Horizontal-overflow audit + fix (FR-4 / AC-4)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mobile-overflow.spec.ts` — verify / extend (add a wide-content or tablet-width case per table found needing one)

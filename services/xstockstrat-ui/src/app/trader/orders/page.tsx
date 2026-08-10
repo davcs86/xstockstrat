@@ -48,7 +48,12 @@ export default function OrdersPage() {
               <OrderForm mode={mode} />
             </Suspense>
           </div>
-          <div className="lg:col-span-8 space-y-4">
+          {/* min-w-0: without it, a grid item's default min-width:auto can prevent OrdersTable's
+              own overflow-x-auto wrapper (ui/table.tsx) from ever shrinking below its 10-column
+              intrinsic width, pushing overflow onto the page instead of staying contained here —
+              same defensive pattern already used at strategies/[id] Past Runs and
+              positions/[symbol] Orders & fills (FR-4 audit, feature 124). */}
+          <div className="lg:col-span-8 space-y-4 min-w-0">
             <OrderFiltersPanel onChange={setFilters} />
             <OrdersTable
               orders={data?.orders ?? []}

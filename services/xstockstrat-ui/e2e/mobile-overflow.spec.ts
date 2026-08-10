@@ -57,3 +57,28 @@ for (const route of ROUTES) {
     ).toBeLessThanOrEqual(1);
   });
 }
+
+/**
+ * FR-4 wide-content audit (feature 124): a 390px phone frame collapses every `grid`/`flex-row`
+ * layout to a single column (below the `lg` breakpoint, 1024px), so it never exercises a
+ * flex/grid item that's missing `min-w-0` — the one class defeating `Table`'s own built-in
+ * `overflow-x-auto` wrapper (`ui/table.tsx`'s `data-slot="table-container"`). `/trader/orders`
+ * only splits into its `grid-cols-1 lg:grid-cols-12` layout at `lg:`+, where `OrdersTable`'s own
+ * widest columns ("From signal") also become visible — the actual worst case, not an invented one.
+ */
+test.describe('wide-content overflow at the lg grid-split breakpoint (FR-4)', () => {
+  test.use({ viewport: { width: 1024, height: 900 } });
+
+  test('no horizontal overflow at 1024px — /trader/orders', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/trader/orders');
+    await page.waitForLoadState('networkidle').catch(() => {});
+    await page.waitForTimeout(800);
+
+    const overflow = await horizontalOverflow(page);
+    expect(
+      overflow,
+      `page body scrolls horizontally by ${overflow}px at 1024px on /trader/orders`,
+    ).toBeLessThanOrEqual(1);
+  });
+});

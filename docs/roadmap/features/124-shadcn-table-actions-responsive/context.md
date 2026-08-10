@@ -656,6 +656,43 @@
 - Files modified: `e2e/mobile-overflow.spec.ts`
 - Deviations: none
 
+### Step 23 — Horizontal-overflow audit + fix (FR-4 / AC-4) [done]
+- **Audit (Instruction 1)**: checked all 11 table-bearing pages' `Table`-to-page ancestor chains for
+  a flex/grid ancestor missing `min-w-0`. `ui/table.tsx`'s `Table` always self-wraps in
+  `overflow-x-auto`, so the risk is specifically a flex/grid ITEM ancestor with `min-width: auto`
+  (the default) refusing to shrink below its content's intrinsic width, which pushes overflow onto
+  the whole page instead of staying inside the table's own scroll container.
+  - **9 of 11 SAFE**: `config-ui/sources`, `NamespaceEditor`, `insights/strategies`,
+    `insights/screener` (10-col table, deliberately `min-w-[640px]`, but its `Card` ancestor chain
+    up to the page root is plain block, no flex/grid), `insights/formulas`, `LiveStrategiesPanel`,
+    `config-ui/audit`, `authorized-apps` — all sit under plain block (`Card`'s own `flex flex-col`
+    doesn't create the horizontal-squeeze hazard) ancestors, not a flex-row/grid.
+  - **2 of 11 SAFE-BY-DESIGN**: `strategies/[id]` Past Runs and `positions/[symbol]` Orders & fills
+    both sit inside a `flex`/`grid` row layout but already carry an explicit `min-w-0` on the
+    relevant item — the correct established pattern.
+  - **1 of 11 a real gap**: `OrdersTable` (rendered via `trader/orders/page.tsx`) sits in a
+    `grid grid-cols-1 lg:grid-cols-12` row as `lg:col-span-8`, with **no `min-w-0`** — the one
+    inconsistent site versus the other two correctly-guarded flex/grid table sites.
+- **Live-tested before deciding (Instruction 2/3), not just theorized**: added a
+  `viewport: {width: 1024, height: 900}` test for `/trader/orders` (the `lg` breakpoint, 1024px,
+  where the grid actually splits into columns AND `OrdersTable`'s widest column, "From signal",
+  becomes visible — the genuine worst case here, not an arbitrary 768px pick) and ran it **against
+  the unfixed code first**: it **passed** — the current mock `ORDERS` fixture's content isn't wide
+  enough to actually trip the missing-`min-w-0` hazard at 1024px. Reporting this honestly rather
+  than claiming a regression that wasn't observed: **no live page-overflow defect was found**.
+  Added `min-w-0` to the grid item anyway, purely for **consistency with the codebase's own
+  established pattern** (the other 2 flex/grid table sites both carry it defensively) — a one-class,
+  zero-risk change that closes the one inconsistent site before future content growth (a longer
+  order id, an added column) could silently trip it. Reran after the change: still green (the fix
+  is a no-op at current content widths, as expected, and doesn't regress anything).
+- **Verification**: `pnpm test:e2e -g "no horizontal overflow|1024px"` — **21/21 passed**. `pnpm
+  lint`/`pnpm build` clean.
+- Files modified: `src/app/trader/orders/page.tsx` (`min-w-0` on the grid item),
+  `e2e/mobile-overflow.spec.ts` (new `test.describe` block, 1024px)
+- Deviations: none — the audit's own instruction framed the fix bar as "an actual regression, not
+  merely 'could be tighter'"; since none was found, the `min-w-0` addition here is a documented
+  defensive consistency fix, not a regression fix, and is reported as such rather than overstated.
+
 ### Step 21 (post-commit) — full-suite gate surfaced a second latent test-quality defect [done]
 - After committing Steps 20+21, the mandated full-suite run (Step 21's own closing-gate instruction,
   run in the background) reported **1 genuine failure**: `e2e/trader/positions-reconciliation.spec.ts`
