@@ -1,0 +1,94 @@
+{
+  "skill_name": "form4-enhanced-ingest",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Ingest Form 4 insider transactions from the last 2 days",
+      "expected_output": "JSON report containing: total_filings_processed (>=10), transactions_extracted (>=15), signals_ingested (count of conviction >= 0.6 only), high_conviction_signals list (all with conviction >= 0.6), skipped_signals (all below 0.6 with reasons), conviction_distribution breakdown, errors array (may include network timeouts), timing_seconds. Every entry in high_conviction_signals should then be reflected in a real ingest_signal call, reported as ingested or deduplicated.",
+      "files": [],
+      "assertions": [
+        {
+          "id": "has_required_fields",
+          "description": "Report contains all required top-level fields",
+          "check": "JSON keys present: total_filings_processed, transactions_extracted, signals_ingested, signals_below_threshold, high_conviction_signals, skipped_signals, conviction_distribution, errors, timing_seconds"
+        },
+        {
+          "id": "threshold_strictly_enforced",
+          "description": "No signals ingested below conviction threshold (0.6)",
+          "check": "Every signal in high_conviction_signals has conviction >= 0.6; signals_ingested == high_conviction_signals.length"
+        },
+        {
+          "id": "skipped_signals_logged",
+          "description": "Signals below threshold are tracked in skipped_signals",
+          "check": "signals_below_threshold == skipped_signals.length; each skipped signal has reason field"
+        },
+        {
+          "id": "distribution_accurate",
+          "description": "Conviction distribution tallies match ingested + skipped",
+          "check": "sum(conviction_distribution.values()) == signals_ingested + signals_below_threshold"
+        },
+        {
+          "id": "real_ingest_calls_made",
+          "description": "The skill actually calls the ingest_signal MCP tool for each high-conviction signal rather than only reporting the script's dry-run scoring",
+          "check": "For each entry in high_conviction_signals, an ingest_signal(source=<resolved slug>, symbol=entry.symbol, ...) call was made, and its signal_id/deduplicated result was reflected in the final summary"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Form 4 insider ingestion for the last 1 day",
+      "expected_output": "All transactions scored and filtered to conviction threshold (0.6). Report should show: signals_ingested containing only high-conviction signals, signals_below_threshold with count and list of rejected transactions, conviction_distribution reflecting all transactions (both ingested and skipped).",
+      "files": [],
+      "assertions": [
+        {
+          "id": "high_conviction_only_ingested",
+          "description": "All ingested signals meet conviction threshold (0.6+)",
+          "check": "signals_ingested == high_conviction_signals.length AND min(high_conviction_signals[*].conviction) >= 0.6"
+        },
+        {
+          "id": "distribution_distribution_correct",
+          "description": "Distribution buckets sum correctly",
+          "check": "sum of all conviction_distribution buckets == signals_ingested + signals_below_threshold == transactions_extracted"
+        },
+        {
+          "id": "timing_reasonable",
+          "description": "Execution completes in reasonable time (< 300 seconds)",
+          "check": "timing_seconds < 300"
+        },
+        {
+          "id": "signal_source_checked_not_registered",
+          "description": "The skill checks whether sec_form4_insider is registered but never calls manage_signal_source itself — registration is a one-time admin prerequisite, not something this skill does on the user's behalf",
+          "check": "list_signal_sources is called at most once per run; manage_signal_source is never called by the skill; if the source is missing or inactive, the skill stops and reports the exact manage_signal_source call for an admin to run instead of ingesting"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Ingest form4 signals with extended timeout (timeout=30 seconds)",
+      "expected_output": "Graceful handling of Yahoo Finance timeouts and data unavailability. Report shows: some signals may still ingest at reduced conviction (base score only, no Yahoo boosts) if conviction still meets 0.6 threshold, errors array logs timeout/unavailability events, skipped_signals includes transactions that fell below 0.6 due to lack of enrichment data.",
+      "files": [],
+      "assertions": [
+        {
+          "id": "graceful_fallback_on_timeout",
+          "description": "Signals can ingest even if Yahoo Finance data unavailable, as long as conviction >= 0.6",
+          "check": "signals_ingested > 0 even if errors contain Yahoo/timeout references"
+        },
+        {
+          "id": "error_logging_present",
+          "description": "Timeout/network errors are logged in errors array",
+          "check": "If Yahoo Finance is unreachable, errors array contains references to 'timeout', 'Yahoo', or 'unavailable'"
+        },
+        {
+          "id": "threshold_still_applied",
+          "description": "Even with missing data, 0.6 threshold is strictly enforced",
+          "check": "All signals in high_conviction_signals have conviction >= 0.6; all signals in skipped_signals have conviction < 0.6"
+        },
+        {
+          "id": "no_double_alert",
+          "description": "The skill does not call emit_alert for a signal it already sent through ingest_signal (which auto-alerts at >= 0.6 itself)",
+          "check": "No emit_alert call shares a symbol+direction+timeframe with an ingest_signal call from the same run"
+        }
+      ]
+    }
+  ]
+}
