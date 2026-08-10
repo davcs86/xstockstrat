@@ -7,12 +7,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import {
   Questionnaire,
   QuestionnaireItem,
   QuestionnaireProgress,
 } from '@/components/ui/questionnaire';
-import { cn } from '@/components/ui/utils';
 import { RuleEditor, summarizeRule } from '@/components/insights/RuleEditor';
 import {
   ComponentEditor,
@@ -215,19 +215,13 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
           {STEPS.map((label, i) => {
             const n = i + 1;
             return (
-              <span
+              <Badge
                 key={label}
-                className={cn(
-                  'rounded-full px-3 py-1',
-                  n === step
-                    ? 'bg-primary text-primary-foreground'
-                    : n < step
-                      ? 'bg-secondary text-foreground'
-                      : 'bg-secondary/40 text-muted-foreground',
-                )}
+                variant={n === step ? 'default' : 'secondary'}
+                className={n > step ? 'opacity-40' : undefined}
               >
                 {n}. {label}
-              </span>
+              </Badge>
             );
           })}
         </QuestionnaireProgress>

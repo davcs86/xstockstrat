@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
 import { AppShell } from '@/components/insights/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ConnectError } from '@connectrpc/connect';
 import { marketDataClient } from '@/lib/browserClients/marketDataClient';
@@ -144,9 +145,9 @@ export default function MarketSymbolPage() {
                     </span>
                   )}
                   {opportunity?.source && (
-                    <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+                    <Badge variant="outline" className="text-[11px] text-muted-foreground">
                       {opportunity.source}
-                    </span>
+                    </Badge>
                   )}
                 </div>
                 {metaBits.length > 0 && (

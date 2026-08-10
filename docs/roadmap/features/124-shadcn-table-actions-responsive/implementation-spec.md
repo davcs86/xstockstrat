@@ -320,7 +320,7 @@ pnpm run lint
 
 ### Step 7 — service: `Badge`-driven `StrategyWizard` pill + 2 source pills (FR-7)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/StrategyWizard.tsx` — modify (lines 214-233, inner per-step pill)
@@ -384,7 +384,7 @@ pnpm run lint
 
 ### Step 8 — test: Verify unchanged visible behavior for FR-7 sites (AC-7)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/strategy-authoring.spec.ts` — verify (existing coverage of the wizard step indicator, if any)

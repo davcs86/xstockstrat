@@ -367,6 +367,27 @@
 - Deviations: none (the Step 5/6 ordering slip is a process note, not a spec deviation — no scope or
   behavior changed)
 
+### Step 7 + 8 — Badge-driven StrategyWizard pill + 2 source pills (FR-7 / AC-7) [done]
+- `StrategyWizard.tsx`'s inner per-step `<span>` → `<Badge variant={n===step?'default':'secondary'}
+  className={n>step?'opacity-40':undefined}>` (no new `cva` variant — a `className` override composes
+  cleanly via `Badge`'s own `cn()` merge; no second "upcoming/dimmed" consumer found elsewhere, so the
+  DRY guard rail's "promote to a variant" threshold isn't met). `cn` import removed (no longer used in
+  this file after the swap). `opportunities/page.tsx:348` and `market/[symbol]/page.tsx:147`'s
+  identical hand-rolled source pills → `Badge variant="outline"` with the same `text-[11px]
+  text-muted-foreground` override preserving the original size/color exactly.
+- **TDD**: `N/A` per the spec's own declaration (pure visual refactor, no behavior change) —
+  implemented directly, then added one visible-text assertion per site (none of the 3 target specs
+  had one before): `opportunities.spec.ts` ("each card shows its source as a Badge"),
+  `signal-detail.spec.ts` (source Badge, `{exact: true}` — needed to disambiguate from a **pre-existing**
+  duplication where `market/[symbol]/page.tsx`'s `metaBits` line also joins in the same source string,
+  caught by Playwright's own strict-mode violation on first run, not anticipated in advance),
+  `strategy-authoring.spec.ts` ("1. Identity" pill text). GREEN: **39/39 passed**
+  (`-g "strategy-authoring|opportunities|Signal detail"`).
+- Files modified: `src/components/insights/StrategyWizard.tsx`, `src/app/insights/opportunities/page.tsx`,
+  `src/app/insights/market/[symbol]/page.tsx`, `e2e/insights/{opportunities,signal-detail,
+  strategy-authoring}.spec.ts`
+- Deviations: none
+
 ## Session 2026-08-09T23:27:35Z — sdd-spec
 
 - Generated `implementation-spec.md` with 24 steps (12 service/test pairs + a closing docs gate).

@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { AppShell } from '@/components/insights/AppShell';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/components/ui/utils';
@@ -345,9 +346,9 @@ function OpportunityCard({
           <span className="font-mono font-semibold">{o.symbol}</span>
           <EnumBadge render={OPPORTUNITY_ACTION[o.action]} />
           {o.source && (
-            <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground">
+            <Badge variant="outline" className="text-[11px] text-muted-foreground">
               {o.source}
-            </span>
+            </Badge>
           )}
           {o.strategyId && (
             <span className="font-mono text-xs text-muted-foreground">{o.strategyId}</span>
