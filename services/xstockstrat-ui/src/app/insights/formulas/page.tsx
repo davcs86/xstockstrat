@@ -115,12 +115,22 @@ export default function FormulasPage() {
                     <TableRow
                       key={f.formulaId}
                       className="cursor-pointer"
+                      role="button"
+                      tabIndex={0}
                       onClick={() => router.push(`/insights/formulas/${f.formulaId}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          router.push(`/insights/formulas/${f.formulaId}`);
+                        }
+                      }}
                     >
                       <TableCell>
                         <p className="font-medium text-foreground">{f.name}</p>
                         {f.description && (
-                          <p className="mt-0.5 line-clamp-1 text-muted-foreground">{f.description}</p>
+                          <p className="mt-0.5 line-clamp-1 text-muted-foreground">
+                            {f.description}
+                          </p>
                         )}
                       </TableCell>
                       <TableCell>

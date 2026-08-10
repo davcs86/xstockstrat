@@ -342,6 +342,31 @@
   reason-capture}.spec.ts`, `e2e/insights/strategy-authoring.spec.ts`
 - Deviations: NamespaceEditor scope narrowing (recorded above, user-approved before implementation)
 
+### Step 5 + 6 — Keyboard-accessible clickable rows (FR-5 / AC-5) [done]
+- `strategies/[id]/page.tsx`'s Past Runs row already carries the correct `role="button"`/`tabIndex`/
+  `onKeyDown` triple (re-confirmed, no change) — added `role="button"`/`tabIndex={0}`/`onKeyDown`
+  (Enter/Space → the same handler as `onClick`) to `LiveStrategiesPanel.tsx` and
+  `insights/formulas/page.tsx`'s clickable `TableRow`s, matching that reference pattern exactly.
+  Neither site adds `aria-selected` (no selection-state concept at either site, per Step 5's own
+  qualifier).
+- **Process note**: implemented Step 5's code before writing Step 6's test (wrong TDD order). Fixed
+  properly rather than rationalizing a "red N/A" — stashed the Step 5 diff, wrote Step 6's 2 new e2e
+  cases, confirmed RED against the reverted code, popped the stash to reapply Step 5, confirmed GREEN.
+- **Coverage gap found**: neither target file had ANY existing e2e coverage of the click path
+  (`e2e/trader/live-strategies.spec.ts` is entirely BFF-level `page.evaluate`+`fetch`;
+  `e2e/insights/formulas.spec.ts` only asserts the list renders) — both Step 6 cases are net-new, not
+  retrofits, matching FR-5's own AC — Step 5's "keyboard-accessible" claim needed a fresh assertion to
+  be meaningful, not just a markup diff.
+- **TDD red→green**: RED (pre-Step-5 code, via `git stash`) — both new cases failed (`row` locator not
+  found / activation not wired), 1 unrelated pre-existing flake (`signal-detail.spec.ts`'s strict-mode
+  locator ambiguity) self-recovered on retry — not connected to this change. GREEN (post-Step-5,
+  `CI=1 E2E_PREBUILT=1`): **12/12 passed** (`-g "live.strateg|formulas"`), including both new cases.
+- Files modified: `src/components/trader/LiveStrategiesPanel.tsx`,
+  `src/app/insights/formulas/page.tsx`, `e2e/trader/live-strategies.spec.ts`,
+  `e2e/insights/formulas.spec.ts`
+- Deviations: none (the Step 5/6 ordering slip is a process note, not a spec deviation — no scope or
+  behavior changed)
+
 ## Session 2026-08-09T23:27:35Z — sdd-spec
 
 - Generated `implementation-spec.md` with 24 steps (12 service/test pairs + a closing docs gate).

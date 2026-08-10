@@ -241,7 +241,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "order|config-ui/sources|namespac
 
 ### Step 5 — service: Keyboard-accessible clickable rows (FR-5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx` — modify (lines 490-506, Past Runs row)
@@ -291,7 +291,7 @@ pnpm run lint
 
 ### Step 6 — test: Keyboard-activation e2e for the 2 newly-accessible rows (FR-5 / AC-5)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/live-strategies.spec.ts` — modify (add keyboard-activation case)
