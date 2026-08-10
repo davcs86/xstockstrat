@@ -1,6 +1,6 @@
 # Feature: shadcn-sidebar-visual-rewrite
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `claude/implement-124-e48xkn` (harness-assigned; see note below)
 **Created**: 2026-08-10
 **Last Updated**: 2026-08-10
@@ -17,6 +17,7 @@
 | 2026-08-10 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 4 steps. Corrected design.md's stated chevron mechanism: verified against the installed `@radix-ui/react-collapsible` source that `CollapsibleTrigger` emits `data-state`, never a literal `data-open` attribute, so `sidebarMenuButtonVariants`'s `data-open:*` classes (`sidebar.tsx:449`) are dead CSS with no producer — the working in-file precedent is `sidebar.tsx:215`'s `group-data-[side=right]:rotate-180` bracket syntax; the spec uses `group-data-[state=open]/menu-button:rotate-90` instead. Also corrected design.md's proposed red-before-green proof: a bare `data-state` transition assertion already passes on `main-dev` (Collapsible/CollapsibleTrigger predate this feature), so the genuine FR-1 red/green proof is a `rotate-90` class assertion on the chevron icon itself, added alongside the `data-state` check. |
 | 2026-08-10 | `implementation-ready` (unchanged) | /sdd-execute (sequential) | Corrected **Development Branch** from the nominal `feature/shadcn-sidebar-visual-rewrite` (never created — no code work had happened yet) to the actual harness-assigned session branch `claude/implement-124-e48xkn`, which already carries every SDD artifact this feature has produced so far and is up to date with `origin/main-dev`. Same sanctioned pattern feature 124 used. |
 | 2026-08-10 | `implementation-ready` → `in-progress` | /sdd-execute (sequential) | Step 1 (add `sectionStart` field to `NavGroup`) done. |
+| 2026-08-10 | `in-progress` → `code-completed` | /sdd-execute (sequential) | All 4 steps landed. Steps 1-2 straightforward. Step 3 (e2e coverage): first Playwright attempt fell back to `tsc`+`lint`+`--list` after `warmup.setup.ts`'s 21-route pre-warm timed out; a scoped retry (`--project=chromium --no-deps` + manually pre-warming just the 2 routes this spec visits) got a genuine RED→GREEN cycle, catching and fixing a real test bug along the way (Tailwind v4 sets the standalone `rotate` CSS property for a bare `rotate-90` utility, not `transform`) — final result 9/9 passed. Step 4 (manual visual check): PASS against all three criteria, screenshot sent to user. Closed the impl-spec review's one unaddressed warning (`pnpm build` now run, succeeds). Two `fails.md` entries added (scoped-e2e-run technique, Tailwind v4 rotate/transform gotcha). No out-of-scope changes; no Floor breach. Ready for the integration PR. |
 
 ---
 

@@ -1,10 +1,10 @@
 # Implementation Spec: shadcn-sidebar-visual-rewrite
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-08-10
 **Feature**: `docs/roadmap/features/125-shadcn-sidebar-visual-rewrite/feature.md`
 **Total Steps**: 4
-**Feature Branch**: `feature/shadcn-sidebar-visual-rewrite`
+**Feature Branch**: `claude/implement-124-e48xkn` (harness-assigned; see `feature.md`)
 
 ---
 
@@ -414,7 +414,7 @@ pnpm test:e2e
 
 ### Step 4 — docs: manual visual-verification checkpoint
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `docs/roadmap/features/125-shadcn-sidebar-visual-rewrite/context.md` — modify (records the

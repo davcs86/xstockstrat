@@ -243,9 +243,8 @@
     — [x] resolved (reviewer judged justified, correctly cites P-03/F-09 for follow-up).
   - Cross-cutting: AC-5 (product-spec) requires `pnpm lint && pnpm build` + full `pnpm test:e2e` to
     pass, but no step's Verification runs `pnpm build` (only `tsc --noEmit` + lint + e2e) —
-    **[ ] unaddressed** — `/sdd-execute` should run `pnpm build` at some point before closing the
-    feature (e.g. alongside Step 2's or Step 3's verification, or as a final pre-integration-PR
-    check) to fully satisfy AC-5, and announce this at its first checkpoint.
+    **[x] resolved** — ran `NEXT_DISABLE_STANDALONE=1 pnpm build` at the feature-end checkpoint
+    (after Step 4); succeeds cleanly, all routes compile. AC-5 fully satisfied.
 
 ## Session 2026-08-10T13:00:00Z — sdd-spec
 
@@ -355,3 +354,35 @@
 - Deviations: none in the final state (genuine red-before-green achieved). The Deviation Log
   documents the two intermediate missteps (Attempt 1's premature fallback, the wrong CSS property)
   and how each was corrected, per P-03 — not because either is still open.
+
+### Step 4 — manual visual-verification checkpoint [done]
+- Since Step 3's scoped run proved this sandbox *can* run a live browser (Attempt 1's "sandbox
+  can't do it" conclusion was superseded), performed the actual visual check rather than escalating
+  Step 4 as a blocker per its own Instruction 4 fallback.
+- Added a temporary `page.screenshot({ path: 'sidebar-visual-check.png', fullPage: true })` inside
+  the "sub-items render via SidebarMenuSub" test (after `openGroup(panel, 'Discover')`), ran it via
+  `pnpm exec playwright test mobile-sidebar.spec.ts --project=chromium --no-deps -g "sub-items
+  render via SidebarMenuSub"`, captured the panel at the `390×844` viewport with Decide collapsed
+  and Discover expanded (single-open-group behavior — expanding Discover closed Decide, the
+  previously-default-open group). Removed the temporary line immediately after — confirmed via
+  `git diff` the test file exactly matches its Step 3-committed state, no screenshot code shipped.
+  Screenshot archived at the session scratchpad (`feature-125-sidebar-visual-check.png`) and sent
+  to the user directly.
+- **Verdict against the three criteria (Instruction 2): PASS.**
+  - (a) Chevron rotation reads as an expand/collapse affordance: Discover (open, showing
+    Watchlists/Screener) shows a visibly rotated caret distinct from Engine/Book/Settings'
+    (collapsed) unrotated right-pointing carets — not merely decorative.
+  - (b) Sub-items visibly indented, distinct weight from top-level buttons: Watchlists/Screener
+    render narrower, indented, and in a lighter pill style clearly subordinate to the full-width
+    bold Discover button above them. Minor cosmetic note (non-blocking, not one of the three
+    pass/fail criteria): the `SidebarMenuSub` connecting-line rail (`border-l border-sidebar-border`
+    per `sidebar.tsx:599`) is present but visually subtle against this dark theme at screenshot
+    compression — the indentation/weight distinction alone already satisfies the criterion.
+  - (c) "Navigate"/"Settings" section labels read as muted headers, not confusingly-worded buttons:
+    both render as small, muted, non-pill, non-bold text clearly visually distinct from the bold
+    full-width pill buttons below them — including "Settings," which despite literally repeating
+    its button's text (the accepted design.md trade-off) reads unambiguously as a label, not a
+    second interactive control, confirming that trade-off held up visually as reasoned.
+  - No escalation needed — no design decision (label wording, structure) required revisiting.
+- Files modified: `docs/roadmap/features/125-shadcn-sidebar-visual-rewrite/context.md` (this entry)
+- Deviations: none.
