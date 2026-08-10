@@ -19,6 +19,16 @@ Discover) render at the same visual weight and indentation as the group button i
 nesting cue — a functionally correct but visually flat menu that doesn't match the
 shadcn-idiomatic hierarchy the vendored primitives were built for.
 
+**This feature is scoped to layout and interaction, not visibility.** Whether the Sidebar is
+offcanvas (current, mobile-only) or persistently on-screen (a desktop "rail") is an orthogonal
+question about *where/when* the panel is shown, and is explicitly not what this feature changes —
+see Out of Scope. What's in scope is *how* the panel's own contents are arranged and behave once
+it's open: the chevron disclosure affordance and its rotation on toggle, and the indented
+`SidebarMenuSub` nesting for sub-items. Framing this as an "always visible" ask would be the wrong
+read of the video comparison and of shadcn's reference example alike — its rail mode is one
+configuration of the same underlying layout/interaction primitives this feature targets, not the
+point of the comparison.
+
 ## User Story
 
 As a mobile user of any `xstockstrat-ui` segment (`/trader`, `/insights`, `/config-ui`,
@@ -59,10 +69,14 @@ not just left passing by accident.
 
 - shadcn's reference example's organization/team switcher and user-account footer widgets — this
   Sidebar has neither concept; nothing in our platform maps to them today.
-- Icon-collapse desktop "rail" mode. Our desktop nav is a separate mechanism (`PlatformHeader`'s
-  Row 1/Row 2 `NavigationMenu`), not this `Sidebar` — the vendored `Sidebar` is mobile-offcanvas
-  (`collapsible="offcanvas"`, wrapped `sm:hidden`) only. Confirm at design time whether any part of
-  this rewrite should touch the desktop nav; the working assumption is no.
+- Icon-collapse desktop "rail" mode — i.e. making the Sidebar persistently/always visible on
+  desktop instead of mobile-offcanvas-only. This is excluded because it's a *visibility/placement*
+  question (where the panel lives), not a *layout/interaction* one (how its contents are arranged
+  and behave) — the actual subject of this feature. Our desktop nav is already a separate
+  mechanism (`PlatformHeader`'s Row 1/Row 2 `NavigationMenu`), not this `Sidebar` — the vendored
+  `Sidebar` stays mobile-offcanvas (`collapsible="offcanvas"`, wrapped `sm:hidden`) only. Confirm
+  at design time whether any part of this rewrite should touch the desktop nav; the working
+  assumption is no.
 - A "More" overflow affordance for a long item list. The current item count (4 expandable groups +
   pinned Settings) doesn't yet justify one — flagged as an Open Question below rather than an FR,
   so design can confirm or drop it rather than build overflow handling for a list that doesn't

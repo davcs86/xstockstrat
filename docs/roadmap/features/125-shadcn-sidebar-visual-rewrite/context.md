@@ -36,3 +36,10 @@
   a "More" overflow affordance given the current small item count) recorded explicitly in the
   product spec rather than left implicit, per the user's own framing of the request ("confirm
   during design").
+- **User correction**: "the always visible is not the point, but the layout and interaction are" —
+  sharpened the Problem Statement and the icon-collapse-rail Out of Scope bullet so the spec can't
+  be misread as asking for a persistently-visible/desktop-rail Sidebar. The scope is layout
+  (chevron disclosure affordance, `SidebarMenuSub`-based nesting/indentation, section-label
+  grouping) and interaction (chevron rotation on toggle) within the existing mobile-offcanvas
+  surface — visibility/placement (offcanvas vs. rail) is a separate, explicitly out-of-scope axis.
+  No FRs changed; this was a framing/emphasis fix, not a scope fix.
