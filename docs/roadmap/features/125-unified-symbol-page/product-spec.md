@@ -71,12 +71,16 @@ unbound. Raw indicator values beyond per-strategy readiness (`ComputeIndicator`)
 scope** — no UI surface exposes those generically today and this feature does not add one (flag
 any real need for that as a named follow-up, don't build it here).
 
-FR-7. **Fundamentals** (watchlist symbols only): show whatever fundamentals data the platform
-already computes for the symbol (`RunFundamentalsScan`/`FundamentalsScanSummary` on
-`AnalysisService`, launched by features 062/063). **This is new UI work, not reuse** — no page
-today calls these RPCs or displays fundamentals detail; the Screener only uses fundamentals as
-scoring *criteria*, with a "pending" banner when data isn't available. If the symbol has no
-fundamentals data, show that explicitly rather than an empty gap.
+FR-7. **Fundamentals** (watchlist symbols only): show the symbol's fundamentals ratios/metrics via
+`GetFundamentals` on `MarketDataService` (`xstockstrat-marketdata`) — **corrected by `/sdd-design`
+Phase 0 recon**: the original draft of this FR cited `RunFundamentalsScan`/`FundamentalsScanSummary`
+on `AnalysisService`, which is **admin-scope-gated and side-effecting** (triggers a live FMP rescan
+and emits signals) and cannot be called from an ordinary trader's page view. `GetFundamentals` is a
+plain, ungated, read-through cache over the same underlying data (`analysis`'s own
+fundamentals-signal producer reads through this exact RPC) — see recon.md. **This is new UI/BFF
+work, not reuse** — no page today calls it or displays fundamentals detail; the Screener only uses
+fundamentals as scoring *criteria*, with a "pending" banner when data isn't available. If the symbol
+has no fundamentals data, show that explicitly rather than an empty gap.
 
 FR-8. **Screening tools** (non-watchlist symbols only): if the symbol is **not** on any watchlist,
 let the user run/see a screening evaluation for it in place. **This is also new UI work** — today
@@ -93,9 +97,11 @@ to relevant backtest runs (e.g. via the strategy's universe/watchlist binding) b
 be scoped as an implementation step — do not assume a trivial filter exists.
 
 FR-10. **Backfill info**: show the symbol's ingested OHLCV date-range coverage, dates only, no
-chart. The existing `/insights/backfills` page already renders this per-job with a client-side
-symbol filter over `GetBackfillStatus` — this section reuses that same data, scoped display-side
-to the current symbol; low risk, no new RPC anticipated.
+chart. **Corrected by recon**: the relevant RPC is `ListBackfillJobs`, which already has a
+**server-side** `symbol` filter (`/insights/backfills` already calls it this way) — not
+`GetBackfillStatus`, which only looks up a single job by id with no symbol param. This section
+reuses `ListBackfillJobs(symbol=X)` and reduces the returned jobs' date ranges into a display
+summary client-side; low risk, no new RPC anticipated.
 
 FR-11. **Section visibility**: exactly one of {Opportunity/conviction + Indicators + Fundamentals}
 or {Screening tools} renders, gated on watchlist membership — never both, never neither. Watchlist
@@ -137,11 +143,20 @@ Exposure and Portfolio exactly, same as 096 already guarantees for its own page 
   the trader BFF (fundamentals, symbol-scoped backtests, watchlist-membership lookup), nav
   registration, repointing existing callers.
 - `xstockstrat-analysis` — read-only consumer via existing RPCs (`ListOpportunities`,
-  `EvaluateReadiness`, `RunFundamentalsScan`/`FundamentalsScanSummary`, `RunBacktest` + backtest
-  history/detail). No proto change anticipated unless design-phase recon finds a genuine gap.
+  `EvaluateReadiness`, `ScreenSymbols`, `RunBacktest` + backtest history/detail). Backtest-to-symbol
+  mapping may need an additive `symbol` filter field on `ListBacktestsRequest` — see recon.md
+  Dependencies; otherwise no proto change anticipated.
+- `xstockstrat-marketdata` — read-only consumer via existing `GetFundamentals`/`GetFundamentalsMulti`
+  (corrected Affected Services entry — recon found this, not `xstockstrat-analysis`, is the
+  fundamentals RPC this feature needs; see FR-7). Already implicitly a dependency via `GetBars` for
+  the entry-to-stop chart 096 already ships.
 - `xstockstrat-portfolio` — read-only consumer via existing RPCs (`GetPosition`, `ListWatchlists`
-  for the new membership lookup).
-- `xstockstrat-ingest` — read-only consumer via existing `GetBackfillStatus`.
+  for the new membership lookup). Recon also found a pre-existing latent gap in `GetPosition`
+  (ignores `account_id`, unlike `ListPositions`) — flagged for the design phase, not introduced by
+  this feature.
+- `xstockstrat-ingest` — read-only consumer via existing `ListBackfillJobs` (already has a
+  server-side `symbol` filter — corrected from the original draft's `GetBackfillStatus` citation,
+  which is a single-job lookup with no symbol param; see recon.md).
 - `xstockstrat-trading` — read-only consumer via existing `ListOrders`; write path via the existing
   order-placement flow the reused `OrderForm` already calls.
 - `xstockstrat-indicators` — not directly called by this feature (readiness goes through
@@ -163,12 +178,20 @@ _Constitution **C-14**._
 
 ## Proto Contract Changes
 
-- [ ] No proto changes required — **provisionally**. Every RPC named in the FRs above already
-  exists (`GetPosition`, `ListOrders`, `ListOpportunities`, `EvaluateReadiness`,
-  `RunFundamentalsScan`, `RunBacktest` + history/detail, `GetBackfillStatus`, `ListWatchlists`).
-  What's unconfirmed is whether each is already wired through the relevant BFF (trader vs.
-  insights) for this new page's needs, or needs an **additive** BFF method only (no proto change) —
-  resolve at `/sdd-design` Phase 0 recon before assuming "reuse" is free for every section.
+_Updated by `/sdd-design` Phase 0 recon (2026-08-10) — see recon.md Dependencies for full detail._
+
+- [x] **No proto changes required** for Positions, Orders, Trade widget, Opportunity/conviction,
+  Readiness, Fundamentals, or Backfill — confirmed every RPC needed already exists with the exact
+  fields required (`GetPosition`, `ListOrders`, `PlaceOrder`, `ListOpportunities`,
+  `EvaluateReadiness`, `GetFundamentals`/`GetFundamentalsMulti`, `ListBackfillJobs`). All of these
+  need only additive BFF registration (mostly in `traderBff.ts`, since some are currently wired only
+  in `insightsBff.ts`) — no schema/contract change.
+- [ ] **One optional proto field is a live option for Backtesting**: `ListBacktestsRequest` has no
+  `symbol` filter today. The underlying DB column (`analysis.backtest_runs.symbols`) already exists,
+  so adding an optional `symbol` field + a `WHERE $n = ANY(symbols)` clause is small and additive —
+  but a genuine alternative (filtering client-side against the one strategy a watchlist binding
+  names) needs zero proto change at the cost of only covering that one strategy. **Decide in Phase 1**
+  (see Open Questions).
 
 ## Config Key Changes
 
@@ -212,41 +235,54 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Open Questions
 
-_Per `/sdd-review` (2026-08-10, PASS WITH WARNINGS): the six items below are genuine
-architecture-level forks, not silently-skipped ambiguities — `/sdd-design`'s Phase 0 recon and
-proposer-vs-adversary debate must explicitly close **every** unchecked item before design.md is
-written, not just the ones that happen to come up naturally. `/sdd-design`'s recon must also
-re-check `main-dev`'s current state of `PlatformHeader.tsx` and `OrderForm.tsx` before citing any
-line numbers — the overlap scan found both files are mid-edit on the in-flight, not-yet-merged
-shadcn-migration PRs #912 (`121`) and #913 (`122`); no collision blocks this feature today, but a
-line citation taken now could already be stale by the time `/sdd-spec` runs._
+_Per `/sdd-review` (2026-08-10, PASS WITH WARNINGS): the items below are genuine architecture-level
+forks, not silently-skipped ambiguities. `/sdd-design` Phase 0 recon (2026-08-10, see recon.md)
+resolved several with grounded evidence and narrowed the rest to concrete options — the
+proposer-vs-adversary debate (Phase 1) makes the final call on anything still unchecked._
 
 - [x] ~~Segment placement~~ — **Resolved** (user, 2026-08-10): the unified page lives under
   `/trader`. `/insights/market/[symbol]` most likely redirects to it; `/trader` already has
   `AccountProvider`, so the trade widget (FR-4) no longer needs 083's own-`AccountProvider` wrapper
-  pattern — it can consume the ambient one directly. `/sdd-design` still resolves the exact final
-  route and redirect mechanics (see below), not the segment itself.
-- [ ] **Fate of the three source pages** (FR-1): `/insights/market/[symbol]` most likely redirects
-  to the new page (per the placement decision above); whether `/trader/positions/[symbol]` and
+  pattern — it can consume the ambient one directly (recon confirmed no `AccountProvider` mount
+  exists under `/insights`).
+- [x] ~~`main-dev` staleness re-check for `PlatformHeader.tsx`/`OrderForm.tsx`~~ — **Done** (recon,
+  2026-08-10): both files' current content confirmed and cited in recon.md's Codebase Map; PRs
+  #912/#913's merge status could not be confirmed (the discovery subagent has no Bash/git access),
+  so `/sdd-spec` must re-verify line numbers immediately before citing them, not rely on recon's.
+- [x] ~~Watchlist-membership lookup~~ — **Resolved** (recon, 2026-08-10): no dedicated RPC exists;
+  reuse the existing `useWatchlists()` hook (already fetches all watchlists with `bindings[]`
+  populated) and scan client-side. Cheap given `portfolio.watchlist.max_per_user` caps at 50.
+- [x] ~~Backfill RPC~~ — **Resolved/corrected** (recon, 2026-08-10): `ListBackfillJobs(symbol=X)`
+  already has server-side filtering; folded into FR-10 (the original FR-10 wrongly cited
+  `GetBackfillStatus`, a single-job lookup with no symbol param).
+- [x] ~~Fundamentals RPC~~ — **Resolved/corrected** (recon, 2026-08-10): `GetFundamentals` on
+  `xstockstrat-marketdata`, not `RunFundamentalsScan` on `xstockstrat-analysis` (which is
+  admin-gated and side-effecting — would have been a real bug if built as originally specced).
+  Folded into FR-7 and Affected Services.
+- [ ] **Fate of the three source pages** (FR-1): whether `/trader/positions/[symbol]` and
   `/trader/orders/[id]` are replaced in place (same paths, new content) or superseded by a new path
   with those two redirecting is still a design-phase decision. The Order ticket in particular might
   reasonably stay reachable standalone since not every order maps to "the" position view for its
-  symbol (e.g. a closed position's historical order) — resolve in `/sdd-design`. Affects every
-  existing linker (Exposure, Portfolio, order lists, Opportunity cards) and the C-10(a)
-  reachability test surface.
-- [ ] **Backtest-to-symbol mapping** (FR-9): backtests are strategy-scoped today with no symbol
-  filter. Recon must determine whether a strategy's universe/watchlist binding can derive "backtests
-  relevant to this symbol" cleanly, or whether this needs a new filter parameter.
-- [ ] **Fundamentals and Screening-tools sections are net-new UI**, not reuse (FR-7, FR-8) — do not
-  let `/sdd-spec` scope these as trivial display-only steps; they need their own BFF wiring design.
-- [ ] **Watchlist-membership lookup** (FR-11): no existing code answers "is symbol X on any of my
-  watchlists" — confirm at design time whether this is cheap client-side (fetch all watchlists,
-  check bindings) or needs a dedicated read.
-- [ ] **Any other useful data currently missing** (the user's own item 10): `/sdd-design`'s Phase 0
-  recon should inventory further symbol-relevant data the platform already computes but shows
-  nowhere (mirroring what this spec found for fundamentals) — but only wire what needs zero new
-  backend computation (P-03); anything requiring new computation is a named follow-up, not this
-  feature's scope.
+  symbol (e.g. a closed position's historical order) — resolve in Phase 1. Affects the 4 concrete
+  existing-linker call sites recon found (`orders/[id]/page.tsx:191`, `positions/[symbol]/page.tsx:390`,
+  `orderShared.tsx:94`, `opportunities/page.tsx:129-130`) and the C-10(a) reachability test surface.
+- [ ] **Backtest-to-symbol mapping** (FR-9): recon narrowed this to two concrete options — (a)
+  client-side filter of `ListBacktests(strategy_id)` against the watchlist binding's one strategy
+  (zero backend change, narrower coverage) vs. (b) an additive `symbol` field on
+  `ListBacktestsRequest` backed by the already-existing `analysis.backtest_runs.symbols` DB column
+  (small proto change, full coverage across every strategy that included the symbol). Phase 1 picks.
+- [ ] **Single-symbol screening must not surface `ScreenResult.score`** (FR-8) — recon confirmed a
+  live, unguarded bug-class trap: `ScreenSymbols` with exactly one symbol collapses every criterion's
+  universe-relative normalization to a content-free `0.5` (`screener.py:388-416`, matching
+  `fails.md` 2026-08-08). Phase 1 must design the single-symbol section around raw per-criterion
+  `gap`/threshold values, never the composite score, or find another way to avoid the collapse.
+- [ ] **Pre-existing `GetPosition` `account_id` gap** (found by recon, not introduced by this
+  feature): fix it as an in-scope side-fix in 125 (same call chain 125 already touches), or route it
+  through `/sdd-triage` first as its own fix. Phase 1 decides; either way it must not ship
+  unaddressed once design.md is written.
+- [ ] **Any other useful data currently missing** (the user's own item 10): recon's per-service
+  survey already inventoried each section's data source; if Phase 1 spots a further gap, name it as
+  a follow-up rather than silently expanding this feature's scope (P-03).
 
 ### Known traps (from the Ledger — read before designing)
 
@@ -259,6 +295,12 @@ line citation taken now could already be stale by the time `/sdd-spec` runs._
 - **fails.md 2026-07-01 (056-open-positions-ui)**: a position's valuation must be surfaced
   identically by *every* read path (C-10(b)) — this feature adds a third path (after Exposure and
   Portfolio) and must be parity-tested against both, not just one.
+- **fails.md 2026-08-08 (screener-data-readiness-polling)**: any value computed relative to a
+  result set's full membership (universe-relative normalization, cross-row ranking, a percentile,
+  a min/max) breaks when computed from a narrowed/single-item subset instead of the original full
+  set — confirmed live and unguarded in `ScreenSymbols`' `_normalize_universe` for FR-8's
+  single-symbol case (recon, 2026-08-10). Design the single-symbol screening section around raw
+  per-criterion values, never the composite `score`.
 - **fails.md 2026-07-01 (060-screener-engine)**: a new UI page is unreachable unless it's
   registered in the shared nav with a reachability test — do not let this ship linked only from the
   pages it replaces.
