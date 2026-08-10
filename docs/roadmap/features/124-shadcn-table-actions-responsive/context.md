@@ -300,6 +300,48 @@
 - Files modified: none (verify only)
 - Deviations: none
 
+### Step 3 + 4 — Convert 4 Actions columns to DropdownMenu + e2e coverage (FR-2 / AC-2) [done]
+- **User decision before implementation**: `NamespaceEditor.tsx`'s Save/Cancel pair (shown while
+  actively editing an Input field) stays inline, not menu-gated — only the read-only Edit trigger
+  converts to `DropdownMenu`. See implementation-spec.md Deviation Log for the full rationale.
+- **Design choices made at implementation time**: `OrdersTable.tsx`'s Cancel (`AlertDialog`-gated) and
+  `insights/strategies/page.tsx`'s Deactivate (`AlertDialog`-gated) both use the "controlled
+  `AlertDialog` outside the menu, opened via `DropdownMenuItem`'s `onSelect={e.preventDefault();
+  setX(...)}`" pattern — avoids the Radix footgun where a `DropdownMenu` closes before a nested
+  `AlertDialogTrigger`'s click can propagate. `OrdersTable.tsx` lifts `cancelling` state to the table
+  level (mirroring the existing `editing`/`EditOrderDialog` pattern — one dialog instance outside the
+  row map); `StrategyRow` keeps `confirmOpen` local (it's already a per-row component instance).
+  Trigger icon: `lucide-react`'s `EllipsisVertical` (repo-wide dominant convention — 20 files use
+  `lucide-react` vs. 4 using `@phosphor-icons/react`, the latter confined to the shell). Every trigger
+  gets both `aria-label="Actions"` (consistent accessible name) and a per-row `data-testid` (e.g.
+  `actions-${order.orderId}`) for precise e2e targeting.
+- **TDD red→green**: modified/added 14 e2e assertions across 6 spec files (`e2e/trader/orders.spec.ts`
+  ×2, `e2e/config-ui/sources.spec.ts` ×2, `e2e/config-ui/value-persists-after-save.spec.ts` ×3,
+  `e2e/config-ui/env-gate.spec.ts` ×2, `e2e/config-ui/reason-capture.spec.ts` ×3, plus 2 net-new cases
+  in `e2e/insights/strategy-authoring.spec.ts` for the strategies-list Edit/Deactivate click path,
+  which had **zero prior DOM-click coverage** — confirmed via grep, the only existing "deactivate"
+  reference in that file was a BFF-level `fetch()` test, not a UI click). Also swapped
+  `getByRole('button', {name:'Edit'/'Enable'/...})` → open-menu-then-`getByRole('menuitem', ...)` where
+  the action's own role changed from `button` to `menuitem`.
+  - RED (pre-implementation, `CI=1 E2E_PREBUILT=1` against a fresh build): exactly the 14 modified/new
+    assertions failed (`waiting for getByTestId('actions-...')` / `getByRole('button', {name:
+    'Actions'})` — the trigger didn't exist yet), 0 unexpected failures.
+  - GREEN (post-implementation, same harness): **121/121 passed** across the full affected-file sweep
+    (`-g "order|config-ui/sources|namespace|strateg|reason capture|saved value"`), including all 14
+    modified/new cases and zero regressions in the other 107.
+- **Environment note**: this sandbox's pre-installed Chromium build (`chromium-1194`) doesn't match
+  the pinned `@playwright/test` version's expected build (`1217`) — set
+  `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome` for both
+  `global-setup.ts` and `playwright.config.ts`'s chromium project (both already honor this same env
+  var, per the `insights.md` 2026-08-02 lesson this repo already learned from). Also used the
+  documented `CI=1 E2E_PREBUILT=1 NEXT_DISABLE_STANDALONE=1` fallback (build once, `next start`
+  instead of `next dev`'s on-demand compile) to avoid the on-demand-compile timeout this sandbox hits.
+- Files modified: `src/components/trader/OrdersTable.tsx`, `src/app/config-ui/sources/page.tsx`,
+  `src/app/config-ui/[namespace]/NamespaceEditor.tsx`, `src/app/insights/strategies/page.tsx`,
+  `e2e/trader/orders.spec.ts`, `e2e/config-ui/{sources,value-persists-after-save,env-gate,
+  reason-capture}.spec.ts`, `e2e/insights/strategy-authoring.spec.ts`
+- Deviations: NamespaceEditor scope narrowing (recorded above, user-approved before implementation)
+
 ## Session 2026-08-09T23:27:35Z — sdd-spec
 
 - Generated `implementation-spec.md` with 24 steps (12 service/test pairs + a closing docs gate).

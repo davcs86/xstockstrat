@@ -126,7 +126,7 @@ pnpm run lint
 
 ### Step 3 — service: Convert 4 Actions columns to `DropdownMenu` (FR-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/OrdersTable.tsx` — modify (lines 124-160)
@@ -201,7 +201,7 @@ pnpm run lint
 
 ### Step 4 — test: e2e coverage for the 4 DropdownMenu conversions (FR-2 / AC-2)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/orders.spec.ts` — modify (`OrdersTable.tsx`'s Edit/Cancel;
@@ -1228,6 +1228,16 @@ pnpm test:e2e
 ---
 
 ## Deviation Log
+
+### Step 3 — NamespaceEditor.tsx scope narrowing (user-directed)
+**Disposition**: resolved via `AskUserQuestion` before implementation (not a silent deviation).
+`NamespaceEditor.tsx` is not a pure read-only Actions column like the other 3 FR-2 sites — its
+Save/Cancel pair appears alongside actively-edited `Input` fields (`autoFocus`), on a config-mutation
+critical path. Converting Save/Cancel into `DropdownMenu` items would hide the primary save action
+behind an extra click on every edit. User chose: convert only the read-only Edit trigger to
+`DropdownMenu`; Save/Cancel stay direct inline `Button`s once a row enters edit mode. `AC-2`'s
+"preserve every action's exact existing behavior" is satisfied for Edit (now menu-gated, matching the
+other 3 sites) and literally unchanged for Save/Cancel (untouched markup).
 
 ### Step 2 — process-only deviation
 **Disposition**: minor, non-blocking. Steps 1 and 2's `**Status**` flips were both made before Step
