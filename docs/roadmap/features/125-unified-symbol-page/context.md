@@ -235,3 +235,58 @@
   the root-`CLAUDE.md`-mandated `/context-scrubber scan` since that file is being touched.
 
 **Next**: `/sdd-spec unified-symbol-page`.
+
+---
+
+## Session 2026-08-10T04:00:00Z — sdd-spec
+
+- Generated `implementation-spec.md` with **26 steps**, consuming `recon.md` + `design.md` per the
+  Step 1.5 flow (both present — no fresh discovery subagents spawned; re-verified every recon/design
+  citation myself by direct `Read`/`grep` against the live tree instead, per design.md's explicit
+  staleness-recheck directive for `PlatformHeader.tsx`/`OrderForm.tsx`). Status:
+  `design-approved` → `implementation-ready`.
+- **Re-verification result: no drift found.** Every recon.md/design.md `path:line` citation checked
+  (`PlatformHeader.tsx:106-107`, `BottomTabBar.tsx:18-20`, `OrderForm.tsx:41-48`, `traderBff.ts:103-106`,
+  `insightsBff.ts:85-91`, `portfolio_service.go:462-469`/`portfolio_repo.go:61-92`,
+  `screener.py:388-475`, `analysis.proto` `ScreenResult`/`ListBacktestsRequest`/`BacktestRunSummary`,
+  `marketdata_handler.go:159-183`, `ingest servicer.py:585-621`, `useOpportunities.ts:45-51`,
+  `useStrategies.ts:22-67`, `scoreDisplay.ts:36-38`, `usePortfolio.ts:65-83`, `CLAUDE.md:59-68`,
+  `nextjs-frontends.md:280-298`, `app/page.tsx`, `CardNotice.tsx`, `INVENTORY.md`, `mock-backend.ts`,
+  `position-detail.spec.ts`, `signal-detail.spec.ts`, `backtest-coverage.spec.ts:191-198`,
+  `nav-reachability.spec.ts`, `valuation-parity.spec.ts`) matched the live file exactly — the
+  shadcn-migration PRs #912/#913 flagged as unmerged-and-risky at `/sdd-review` time had, by this
+  session, already landed cleanly with no citation breakage.
+- **One new finding beyond recon/design** (folded into Step 14's Codebase Evidence, not silently
+  assumed): `GetFundamentals`'s "no data for this symbol" case does **not** surface as gRPC
+  `NotFound` the way every other section's error handling on this page assumes. Traced through
+  `fmp_client.go:63-72` (a plain Go error, "fmp: no fundamentals for %q") →
+  `marketdata_service.go`'s `resolveFundamentals` (wraps as `CodeUnavailable`) — plus two other
+  possible codes (`CodeFailedPrecondition` when FMP is disabled, `CodeResourceExhausted` under quota
+  exhaustion with no cached row). FR-7's "show that explicitly" therefore must treat **any** error as
+  the no-data case, not special-case `NotFound` via `isNotFoundError` like every other section does —
+  written explicitly into Step 14's Instructions so this isn't silently copy-pasted wrong from the
+  `SignalReadiness`/`usePosition` pattern.
+- **Two `useBackfillJobs`/`useScreenSymbols` findings that simplified the spec** versus recon's
+  original Recommended Scope: both hooks already call their cross-segment browser clients
+  (`insightsIngestClient`/`analysisClient`) directly — recon's step-8/step-6 language ("new BFF
+  registration... `listBackfillJobs`") predates design.md's round-5 cross-segment-reuse decision and
+  is superseded by it. Steps 20-21 (Backfill) and 16-17 (Screening) need **zero** new `traderBff.ts`
+  registrations; only Step 14 (Fundamentals, `GetFundamentals`) is genuinely new BFF wiring, exactly
+  as design.md's Chosen Approach states.
+- **Exact enumeration completed** for design.md's Open Risk "chart-hoist caption/meta-line refactor
+  is an enumerable, must-not-miss diff (~6 `position.`-reading references)": confirmed **6** in the
+  price-chart `Card` (lines 299, 300, 301, 321, 325, 330) plus a **7th** in a different Card (Orders &
+  fills' `CardTitle`, line 340, `position.symbol` → the page-level `symbol` local) — all 7 named
+  explicitly in Step 8's Instructions so none can be missed silently.
+- **One spec-level structural addition not explicit in design.md**, flagged as such rather than
+  silently invented: a minimal top-level symbol heading (Step 8, point 5) is needed once the
+  position-specific header stays gated but other sections mount unconditionally — otherwise an
+  unheld symbol's page has no visible title at all. Design.md's own Open Risks entry explicitly
+  deferred this exact class of mechanical decision to spec time ("flagged as a step-level checklist
+  item... not a further design decision"), so this is filled in per that instruction, not a departure
+  from it.
+- **Reviewers table finalized** in `feature.md` — deduplicated across all 26 steps per
+  `docs/runbooks/reviewer-registry.md`'s governance matrix; unchanged in substance from the
+  design-approved snapshot, reworded to cite exact step numbers.
+
+**Next**: `/sdd-review unified-symbol-page impl-spec`.
