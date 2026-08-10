@@ -689,7 +689,7 @@ grep -n "chart-height\|useCandlestickChart" ../../docs/roadmap/features/124-shad
 
 ### Step 15 — service: Vendor `sidebar.tsx` + registry byproducts (FR-11a)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/sidebar.tsx` — create
@@ -753,7 +753,7 @@ git status --short src/components/ui/ src/hooks/
 
 ### Step 16 — test: Verify FR-11a reconciliation guards pass unchanged (AC-11)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/button.test.ts` — verify only

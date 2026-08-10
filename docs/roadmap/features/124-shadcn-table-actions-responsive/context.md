@@ -467,6 +467,55 @@
   changes — verification only, folded into this entry)
 - Deviations: none (Step 14's own TDD declaration governs, mirroring the Step 11/12 precedent)
 
+### Step 15 + 16 — Vendor `sidebar.tsx` + registry byproducts, reconciliation guard (FR-11a / AC-11) [done]
+- `npx shadcn@latest add sidebar` created `src/components/ui/{sidebar,tooltip}.tsx` +
+  `src/hooks/use-mobile.ts` (net-new); updated `separator.tsx`/`input.tsx`/`skeleton.tsx`/`sheet.tsx`
+  (formatting-only diffs — no app-specific markers found in any of the 4, confirmed by diff read);
+  **skipped** `button.tsx` (registry content already matched, from an earlier partial CLI invocation
+  in this same step whose first prompt — the `buy`/`sell`-bearing `button.tsx` overwrite — the
+  session had already confirmed before switching to a fully-piped `yes` re-run). Caught via the same
+  `git diff` reconciliation discipline as Step 1: `button.tsx`'s `buy`/`sell` variants (with their
+  `// app-specific` comment) were gone after the overwrite; re-applied verbatim, updating the comment
+  to note this third re-application. `badge.tsx` untouched (not a `sidebar` registry dependency,
+  confirmed by empty diff).
+- **Ground-truthed the installed `sidebar.tsx` file itself (not docs) before Step 17 wires it**, per
+  Step 15 Instruction 4 / the `fails.md` 2026-08-09 lesson:
+  - `useSidebar()`/`SidebarContext` shape confirmed: `{state, open, setOpen, openMobile,
+    setOpenMobile, isMobile, toggleSidebar}` — matches the `WebFetch`-sourced shape from `design.md`.
+  - **`Sidebar`'s mobile/desktop split is driven by `useIsMobile()` (client-only, `useEffect`+
+    `matchMedia`, `768px` breakpoint, returns `false` during SSR/first paint) — not by the
+    `collapsible` prop alone.** When `isMobile` is true it renders wrapped in `<Sheet
+    open={openMobile} onOpenChange={setOpenMobile}>`; when false, a `fixed`-positioned desktop panel
+    that's `md:flex`-visible unless the ancestor's `data-collapsible="offcanvas"` (set only when
+    `state === "collapsed"`, i.e. `open === false`) pushes it off-screen via a negative `left` offset
+    and zero-width gap.
+  - **Grounded implementation requirement for Step 17 (not explicit in `design.md`'s text, but a
+    correctness requirement for a mobile-only sidebar): `SidebarProvider` must be given
+    `defaultOpen={false}`.** With the shadcn default (`defaultOpen=true`), an untouched desktop `open`
+    state would leave the desktop non-mobile branch **expanded** — a real `fixed`, `md:flex`-visible
+    panel sitting in the DOM near Row 1, since nothing on desktop ever calls `setOpen` (only the
+    hidden-on-`sm:`+ trigger's `toggleSidebar()` does, and that's mobile-gated to `setOpenMobile`).
+    `defaultOpen={false}` keeps the desktop branch `collapsed`/`offcanvas` (off-screen, zero-width,
+    `fixed` so no layout impact) in both the pre-hydration SSR paint (`isMobile` false → desktop
+    branch, but collapsed) and the post-hydration mobile paint (`isMobile` true → Sheet branch,
+    closed by default) — no visible flash or duplicate desktop panel either way. This composes with
+    (not replaces) the already-planned CSS-only `sm:hidden` trigger-visibility SSR mitigation — two
+    complementary details, not a conflict.
+  - `SidebarMenuButton`'s `isActive` prop already renders `data-active` wired to
+    `data-active:bg-sidebar-accent data-active:font-medium data-active:text-sidebar-accent-foreground`
+    — Step 17 Instruction 6's active-route highlighting needs only `isActive={isItemActive(...)}`, no
+    manual className ternary.
+  - `SidebarMenuButton`'s `tooltip` prop (collapsed-icon-mode only) renders `<Tooltip>` conditionally
+    — our mobile-only offcanvas usage never passes `tooltip`, so no `<TooltipProvider>` app-wrapper is
+    needed despite the CLI's install-time reminder to add one.
+- **Verification**: `test -f sidebar.tsx && test -f tooltip.tsx` — both created. `pnpm lint`/`pnpm
+  build` clean. Step 16's reconciliation guard: `pnpm run test:unit` — **85/85 passed** (includes
+  `button.test.ts` 2/2, `badge.test.ts` 3/3).
+- Files modified: `src/components/ui/{sidebar,tooltip}.tsx` (create), `src/hooks/use-mobile.ts`
+  (create), `src/components/ui/{button,separator,input,skeleton,sheet}.tsx` (reconcile)
+- Deviations: none — the `button.tsx` reconciliation-miss was caught and fixed within this same step
+  (not a residual gap), consistent with the Step 1/15-instruction-mandated discipline.
+
 ## Session 2026-08-09T23:27:35Z — sdd-spec
 
 - Generated `implementation-spec.md` with 24 steps (12 service/test pairs + a closing docs gate).
