@@ -56,3 +56,16 @@
   (written by `/sdd-design`).
 
 **Next**: `/sdd-review unified-symbol-page product-spec`, then `/sdd-design unified-symbol-page`.
+
+---
+
+## Session 2026-08-10T01:00:00Z — segment-placement decision + sdd-review product-spec
+
+- **User resolved the segment-placement Open Question**: the unified page lives under `/trader`
+  (not `/insights`), and `/insights/market/[symbol]` most likely redirects to it. Folded into
+  FR-1, Consumer Surface(s), and Open Questions in product-spec.md — the placement fork is closed;
+  only the exact final route and redirect mechanics for the three source pages remain for
+  `/sdd-design`. One direct consequence noted: `/trader` already provides `AccountProvider`, so the
+  trade widget (FR-4) no longer needs 083's own-wrapper pattern — it can consume the ambient
+  provider directly.
+- Ran `/sdd-review unified-symbol-page product-spec` (spec-reviewer + feature-overlap subagents).

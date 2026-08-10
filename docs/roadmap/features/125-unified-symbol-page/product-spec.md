@@ -26,15 +26,19 @@ can research, decide, and act on a symbol without hopping between pages.
 
 ## Functional Requirements
 
-FR-1. A single route consolidates the content of **three existing per-symbol/per-order surfaces**
-into one page: `/trader/positions/[symbol]` (position, risk sidebar, entry-to-stop chart,
-orders-and-fills table — feature 096), `/trader/orders/[id]` (single-order ticket grammar, also
-feature 096), and `/insights/market/[symbol]` (opportunity/conviction header, per-strategy
-condition readiness via `SignalReadiness`, and an already-embedded trade widget — feature 083).
-Exact final route, and whether the three source pages are removed, redirected, or kept as
-deep-links, is a **design-phase decision** (see Open Questions) — 096's pages are less than two
-weeks old and already linked from Exposure/Portfolio/order lists; 083's page is linked from every
-Opportunity card.
+FR-1. A single route under **`/trader`** consolidates the content of **three existing
+per-symbol/per-order surfaces** into one page: `/trader/positions/[symbol]` (position, risk
+sidebar, entry-to-stop chart, orders-and-fills table — feature 096), `/trader/orders/[id]`
+(single-order ticket grammar, also feature 096), and `/insights/market/[symbol]`
+(opportunity/conviction header, per-strategy condition readiness via `SignalReadiness`, and an
+already-embedded trade widget — feature 083). **Segment placement is decided** (user, 2026-08-10):
+the page lives under `/trader`, not `/insights` — resolves the architecture fork the first version
+of this spec left open. `/insights/market/[symbol]` likely redirects to the new `/trader` page
+rather than staying a separate surface; exact redirect behavior and the new route's final path
+(and whether it reuses `/trader/positions/[symbol]` in place or introduces a new path with the two
+096 routes redirecting to it) are design-phase decisions — 096's pages are less than two weeks old
+and already linked from Exposure/Portfolio/order lists; 083's page is linked from every Opportunity
+card, so every one of those callers needs to be repointed regardless of the exact path chosen.
 
 FR-2. **Positions**: if the user holds a position in the symbol, show it — reuse 096's existing
 Position fields, risk sidebar (stop meter, risk-at-stop, exit rule, factor/flag), and entry-to-stop
@@ -145,11 +149,12 @@ Exposure and Portfolio exactly, same as 096 already guarantees for its own page 
 
 _Constitution **C-14**._
 
-- [x] **UI** — this feature is entirely UI-surfaced. It spans **both** `/trader` and `/insights`
-  segments today (the three pages it consolidates live one in `/trader`, two in `/insights`), which
-  is itself an open architectural question — see Open Questions. Wherever it lands, it must be
-  reachable per **C-10(a)** (registered in `PLATFORM_SUBNAV`, and `NAV_GROUPS` if it needs a
-  top-level entry).
+- [x] **UI** — `/trader` segment (decided, see FR-1). The three pages being consolidated currently
+  live one in `/trader`, two in `/insights`; the new unified page lands in `/trader`, and
+  `/insights/market/[symbol]` most likely redirects to it rather than remaining a separate surface
+  (exact redirect mechanics are a design-phase detail, not an open architecture question anymore).
+  Must be reachable per **C-10(a)** (registered in `PLATFORM_SUBNAV`, and `NAV_GROUPS` if it needs a
+  top-level entry) from both segments' navs during/after the transition.
 - [ ] **Agent** — no new MCP tool anticipated; existing tools (`run_backtest`,
   `trigger_backfill`/`get_backfill_status`) are unaffected.
 - [ ] **None** — n/a, this is a UI feature.
@@ -205,15 +210,19 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Open Questions
 
-- [ ] **Segment placement.** The three pages being consolidated span `/trader` (096, has
-  `AccountProvider`) and `/insights` (083, wraps its own `AccountProvider` just to embed the trade
-  widget). Where does the unified page live — `/trader`, `/insights`, or a route that isn't
-  strictly under either? This is a genuine architecture fork; resolve it in `/sdd-design`'s
-  proposer-vs-adversary debate, not by default.
-- [ ] **Fate of the three source pages** (FR-1): removed, redirected, or kept as deep-links (e.g.
-  the Order ticket might reasonably stay standalone since not every order maps to "the" position
-  view for its symbol). Affects every existing linker (Exposure, Portfolio, order lists, Opportunity
-  cards) and the C-10(a) reachability test surface.
+- [x] ~~Segment placement~~ — **Resolved** (user, 2026-08-10): the unified page lives under
+  `/trader`. `/insights/market/[symbol]` most likely redirects to it; `/trader` already has
+  `AccountProvider`, so the trade widget (FR-4) no longer needs 083's own-`AccountProvider` wrapper
+  pattern — it can consume the ambient one directly. `/sdd-design` still resolves the exact final
+  route and redirect mechanics (see below), not the segment itself.
+- [ ] **Fate of the three source pages** (FR-1): `/insights/market/[symbol]` most likely redirects
+  to the new page (per the placement decision above); whether `/trader/positions/[symbol]` and
+  `/trader/orders/[id]` are replaced in place (same paths, new content) or superseded by a new path
+  with those two redirecting is still a design-phase decision. The Order ticket in particular might
+  reasonably stay reachable standalone since not every order maps to "the" position view for its
+  symbol (e.g. a closed position's historical order) — resolve in `/sdd-design`. Affects every
+  existing linker (Exposure, Portfolio, order lists, Opportunity cards) and the C-10(a)
+  reachability test surface.
 - [ ] **Backtest-to-symbol mapping** (FR-9): backtests are strategy-scoped today with no symbol
   filter. Recon must determine whether a strategy's universe/watchlist binding can derive "backtests
   relevant to this symbol" cleanly, or whether this needs a new filter parameter.
