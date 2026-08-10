@@ -484,7 +484,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "opportunities"
 
 ### Step 11 — service: Shared `Eyebrow` component + 14-site conversion (FR-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/Eyebrow.tsx` — create
@@ -565,7 +565,7 @@ pnpm run lint
 
 ### Step 12 — test: Verify Eyebrow conversion is visually inert (FR-6 / AC-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/signal-detail.spec.ts` — verify (`market/[symbol]/page.tsx`)

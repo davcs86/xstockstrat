@@ -11,6 +11,7 @@ import { useCancelOrder } from '@/hooks/useCancelOrder';
 import { OrderType, OrderStatus, IntentState } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { TradingMode } from '@xstockstrat/proto/common/v1/common_pb';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Eyebrow } from '@/components/shared/Eyebrow';
 import { Button } from '@/components/ui/button';
 import {
   TYPE_LABEL,
@@ -169,8 +170,8 @@ export default function OrderDetailPage() {
               <div className="space-y-4">
                 <Card>
                   <CardHeader>
-                    <CardTitle className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-                      Order preview
+                    <CardTitle>
+                      <Eyebrow as="span">Order preview</Eyebrow>
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-1.5 text-sm">

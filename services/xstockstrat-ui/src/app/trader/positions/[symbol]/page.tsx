@@ -29,6 +29,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { StatTile } from '@/components/shared/StatTile';
+import { Eyebrow } from '@/components/shared/Eyebrow';
 import {
   Table,
   TableHeader,
@@ -247,9 +248,7 @@ function PositionBody({
         </div>
         <div className="flex items-center gap-6">
           <div className="text-right">
-            <div className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-              Unrealized
-            </div>
+            <Eyebrow>Unrealized</Eyebrow>
             <div className={`font-mono text-2xl tabular-nums ${pnlClass(position.unrealizedPnl)}`}>
               {fmtSignedUsd(position.unrealizedPnl)}
             </div>
@@ -258,9 +257,7 @@ function PositionBody({
             </div>
           </div>
           <div className="text-right">
-            <div className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-              Open R
-            </div>
+            <Eyebrow>Open R</Eyebrow>
             <div className={`font-mono text-2xl tabular-nums ${r === null ? '' : pnlClass(r)}`}>
               {fmtR(r)}
             </div>
@@ -403,8 +400,8 @@ function PositionBody({
         <div className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-                Risk &amp; exit
+              <CardTitle>
+                <Eyebrow as="span">Risk &amp; exit</Eyebrow>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -449,8 +446,8 @@ function PositionBody({
 
           <Card>
             <CardHeader>
-              <CardTitle className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-                Manage
+              <CardTitle>
+                <Eyebrow as="span">Manage</Eyebrow>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -474,8 +471,8 @@ function PositionBody({
           {owningStrategy && (
             <Card>
               <CardHeader>
-                <CardTitle className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-                  Why it&apos;s held
+                <CardTitle>
+                  <Eyebrow as="span">Why it&apos;s held</Eyebrow>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
@@ -495,8 +492,8 @@ function PositionBody({
 
           <Card>
             <CardHeader>
-              <CardTitle className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-                Broker
+              <CardTitle>
+                <Eyebrow as="span">Broker</Eyebrow>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">

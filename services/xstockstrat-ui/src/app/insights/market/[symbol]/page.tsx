@@ -16,6 +16,7 @@ import { SignalReadiness } from '@/components/insights/SignalReadiness';
 import { SignalOrderTicket } from '@/components/insights/SignalOrderTicket';
 import { OPPORTUNITY_ACTION, EnumBadge } from '@/lib/opportunityShared';
 import { useOpportunities, useStrategyAnalytics } from '@/hooks/useOpportunities';
+import { Eyebrow } from '@/components/shared/Eyebrow';
 
 /** `HH:MM` local time from a protobuf-es Timestamp ({ seconds: bigint }); null when unset. */
 function validUntilLabel(validUntil: { seconds: bigint } | undefined): string | null {
@@ -27,9 +28,7 @@ function validUntilLabel(validUntil: { seconds: bigint } | undefined): string | 
 function HeaderStat({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
     <div className="text-right">
-      <div className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-        {label}
-      </div>
+      <Eyebrow>{label}</Eyebrow>
       <div className={`font-mono text-2xl tabular-nums leading-tight ${tone ?? 'text-foreground'}`}>
         {value}
       </div>

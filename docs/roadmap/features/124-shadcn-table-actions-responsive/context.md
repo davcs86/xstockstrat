@@ -411,6 +411,33 @@
 - Deviations: mechanism deviation from design.md's Round 3 plan, recorded above and in
   `implementation-spec.md`'s Deviation Log.
 
+### Step 11 + 12 — Shared `Eyebrow` component + 14-site conversion, regression verify (FR-6 / AC-6) [done]
+- Created `src/components/shared/Eyebrow.tsx`: `{ as?: 'div'|'p'|'dt'|'span'; className?; children }`
+  (default `as: 'div'`), rendering via a small `as`-keyed tag lookup + `cn()` merge, mirroring
+  `StatTile.tsx`'s convention. Converted all 14 sites across 7 files: 4 `CardTitle` sites (nested
+  `<Eyebrow as="span">` inside `CardTitle`, preserving `CardTitle`'s own `h3`/`data-slot` semantics —
+  its default `className` still applies, the nested span's own explicit classes win via CSS
+  specificity for the properties they set), 2 `div` sites → bare `<Eyebrow>`, 3 `p` sites → `<Eyebrow
+  as="p" className="mb-2">` (extra margin preserved), 2 `dt`/`div` sites in `portfolio/page.tsx` and
+  `positions/[symbol]/page.tsx` → `<Eyebrow as="dt">`/`<Eyebrow>`. Confirmed via grep: zero remaining
+  occurrences of the literal outside `Eyebrow.tsx`.
+- **TDD**: the step's own header says `red-green required`, but its instructions describe a pure
+  text/label-preserving markup change with no new assertion to write — Step 12 (the paired test step)
+  explicitly declares `N/A (no new behavior — regression-only verification)` and its own Instructions
+  are "run the existing suite, a failure means Step 11 broke something." Followed Step 12's own stated
+  interpretation (not a deviation — it's what the paired step itself specifies): ran the 7 touched
+  pages' full existing e2e coverage before relying on it as the gate, which is the regression-guard
+  equivalent of red-before-green for a change with no new observable behavior to assert.
+- **Verification**: `grep` confirms 0 remaining literal sites; `pnpm lint` clean (only the
+  pre-existing unrelated `strategies/[id]/page.tsx:490` warning); `pnpm build` succeeds; Step 12's
+  full target suite (`signal-detail`, `positions`, `position-detail`, `portfolio`, `order-intent`,
+  `order-ticket` specs) — **16/16 passed**, zero regressions.
+- Files modified: `src/components/shared/Eyebrow.tsx` (create), `src/components/shared/StatTile.tsx`,
+  `src/components/insights/SignalReadiness.tsx`, `src/app/trader/orders/[id]/page.tsx`,
+  `src/app/trader/portfolio/page.tsx`, `src/app/trader/positions/[symbol]/page.tsx`,
+  `src/app/trader/positions/page.tsx`, `src/app/insights/market/[symbol]/page.tsx`
+- Deviations: none (Step 12's own TDD declaration governs; see above)
+
 ## Session 2026-08-09T23:27:35Z — sdd-spec
 
 - Generated `implementation-spec.md` with 24 steps (12 service/test pairs + a closing docs gate).
