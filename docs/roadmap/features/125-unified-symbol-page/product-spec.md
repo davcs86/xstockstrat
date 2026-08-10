@@ -46,6 +46,8 @@ chart.
 
 FR-3. **Orders**: list open + historical orders for the symbol (reuse the existing
 `ListOrders(symbol)` filter and 096's ticket-grammar field grid + Edit/Cancel for working orders).
+Fill-status/lifecycle handling (partial vs. full fill, working vs. terminal state) is **unmodified**
+— reused verbatim from 096's existing field grid, not touched by this feature.
 
 FR-4. **Trade widget**: an inline order-entry form to place a new order for the symbol without
 leaving the page. Reuse the existing `OrderForm` component (`components/trader/OrderForm.tsx`) the
@@ -209,6 +211,15 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
    backing RPC/response field.
 
 ## Open Questions
+
+_Per `/sdd-review` (2026-08-10, PASS WITH WARNINGS): the six items below are genuine
+architecture-level forks, not silently-skipped ambiguities — `/sdd-design`'s Phase 0 recon and
+proposer-vs-adversary debate must explicitly close **every** unchecked item before design.md is
+written, not just the ones that happen to come up naturally. `/sdd-design`'s recon must also
+re-check `main-dev`'s current state of `PlatformHeader.tsx` and `OrderForm.tsx` before citing any
+line numbers — the overlap scan found both files are mid-edit on the in-flight, not-yet-merged
+shadcn-migration PRs #912 (`121`) and #913 (`122`); no collision blocks this feature today, but a
+line citation taken now could already be stale by the time `/sdd-spec` runs._
 
 - [x] ~~Segment placement~~ — **Resolved** (user, 2026-08-10): the unified page lives under
   `/trader`. `/insights/market/[symbol]` most likely redirects to it; `/trader` already has

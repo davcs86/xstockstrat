@@ -1,6 +1,6 @@
 # Feature: unified-symbol-page
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/unified-symbol-page`
 **Created**: 2026-08-10
 **Last Updated**: 2026-08-10
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-10 | `idea` → `draft` | /sdd-story | Product spec generated. Reshapes what was originally scoped as 096 (single Position page + single Order ticket page, now already shipped — see 096's corrected status) into one unified per-symbol page that also pulls in trade entry, opportunity/conviction, indicators, fundamentals, screening, backtesting, and backfill info. |
+| 2026-08-10 | `draft` → `spec-ready` | /sdd-review | Product spec approved — PASS WITH WARNINGS (no blocker, no Floor breach). Warnings addressed inline: FR-3 now states fill-status handling is unmodified (C-5); Open Questions gained a lead-in directing `/sdd-design` to close all six items explicitly and to re-check `main-dev`'s current `PlatformHeader.tsx`/`OrderForm.tsx` before citing lines (overlap scan found both mid-edit on in-flight, unmerged shadcn-migration PRs #912/#913 — no blocking collision, just staleness risk). No proto/config-key/migration overlap with any other feature. |
 
 ---
 
@@ -46,4 +47,8 @@ expectation based on the product spec's Affected Services — confirm/replace at
 
 ## Next Action
 
-`/sdd-review unified-symbol-page product-spec` — AI review of product spec before running /sdd-design.
+`/sdd-design unified-symbol-page` — recon + adversarial design debate. Six Open Questions in
+product-spec.md (fate of the three source pages, backtest-to-symbol mapping, fundamentals/screening
+BFF wiring, watchlist-membership lookup shape, "other missing data" inventory, plus re-checking
+`main-dev`'s current `PlatformHeader.tsx`/`OrderForm.tsx` against in-flight PRs #912/#913) must all
+be resolved before design.md is written.

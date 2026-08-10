@@ -69,3 +69,22 @@
   trade widget (FR-4) no longer needs 083's own-wrapper pattern — it can consume the ambient
   provider directly.
 - Ran `/sdd-review unified-symbol-page product-spec` (spec-reviewer + feature-overlap subagents).
+  **Result: PASS WITH WARNINGS**, no blocking overlap. Status: draft → spec-ready.
+  - Criteria pass: every named RPC/component/route/proto field verified against the codebase; all
+    core criteria, C-10(a)/(b), and C-14 satisfied. Two advisory warnings, both addressed inline in
+    product-spec.md: (1) trading-domain C-5 — added an explicit sentence to FR-3 that fill-status
+    handling is unmodified/reused verbatim from 096; (2) Open Questions criterion — gained a lead-in
+    directing `/sdd-design` to close all six remaining items explicitly (not just the ones that come
+    up naturally), matching the established "defer genuine architecture forks to design" pattern
+    also used by peer spec 095.
+  - Overlap pass: no proto/config-key/migration collisions with any feature. Two **advisory**
+    file-level heads-ups: `OrderForm.tsx` (FR-4) and `PlatformHeader.tsx` (FR-13) are both mid-edit
+    on the in-flight, not-yet-merged shadcn-migration PRs #912 (`121`) and #913 (`122`, stacked on
+    120/121). Not a blocker — no line citations exist yet to go stale — but folded into the Open
+    Questions lead-in so `/sdd-design`'s recon re-checks current `main-dev` state (and whether
+    #912/#913 have merged by then) before citing any line numbers. Overlap agent recommended
+    deferring any `merge-order.md` entry until `/sdd-design` produces concrete file/line citations —
+    not added now.
+  - Warnings: fill-status clarity (FR-3), Open Questions closure directive (addressed above).
+  - Overlap findings: `OrderForm.tsx`/`PlatformHeader.tsx` advisory heads-up (addressed above); no
+    blocking collisions.
