@@ -826,3 +826,10 @@
     `BackToDashboardButton`) — Step 20 flags a keep-or-replace judgment call per site rather than
     silently picking one, since removing a back-link could regress a mobile tap-target affordance the
     breadcrumb link doesn't necessarily replicate.
+
+## Session 2026-08-10 (CI: feature status automation)
+
+- Promotion PR #923 merged to main
+- Feature promoted and committed: be21f3389151ccac1bfd68e7aa96d73d3d4efd78
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-10

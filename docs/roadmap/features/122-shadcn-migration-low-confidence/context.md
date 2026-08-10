@@ -617,3 +617,10 @@ decisions per FR, transcribed from `design.md` § Round 3/Round 4 at execute tim
   (Alert on OrderForm/EditOrderDialog) and FR-2/FR-3/FR-4 (react-hook-form + zod + ui/field.tsx on
   AuthForm/AddAccountForm/EditCredentialsForm) are landed and verified.
 - Files modified: none (verification-only)
+
+## Session 2026-08-10 (CI: feature status automation)
+
+- Promotion PR #923 merged to main
+- Feature promoted and committed: be21f3389151ccac1bfd68e7aa96d73d3d4efd78
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-10

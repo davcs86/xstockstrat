@@ -722,3 +722,10 @@ All 37 implementation-spec steps landed across 2 tranches:
   reverted `EnvModeSwitcher` to plain `Link`s (Steps 26-27).
 - **One new shared component**: `src/components/shared/FilterToolbar.tsx` (FR-12).
 - Final state: `pnpm lint`/`pnpm build`/`pnpm test:unit`/`pnpm test:e2e` all clean (Step 37).
+
+## Session 2026-08-10 (CI: feature status automation)
+
+- Promotion PR #923 merged to main
+- Feature promoted and committed: be21f3389151ccac1bfd68e7aa96d73d3d4efd78
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-10
