@@ -105,7 +105,9 @@ test.describe('Mobile offcanvas sidebar (FR-11b)', () => {
     await page.getByRole('button', { name: 'Open menu' }).click();
     const panel = page.getByRole('dialog');
 
-    await expect(panel.getByRole('button', { name: 'Decide' })).toHaveClass(/bg-accent/);
+    // Active-group highlighting is typography-driven (font-weight + color), not a persistent
+    // background fill — matches shadcn's own docs-nav styling rather than a filled pill button.
+    await expect(panel.getByRole('button', { name: 'Decide' })).toHaveClass(/font-medium/);
     await expect(panel.getByRole('link', { name: 'Opportunities' })).toHaveAttribute(
       'data-active',
       'true',

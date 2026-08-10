@@ -386,3 +386,82 @@
   - No escalation needed — no design decision (label wording, structure) required revisiting.
 - Files modified: `docs/roadmap/features/125-shadcn-sidebar-visual-rewrite/context.md` (this entry)
 - Deviations: none.
+
+## Session 2026-08-10T17:00:00Z — post-checkpoint user visual review + correction
+
+At the feature-end checkpoint, presented the completed 4-step implementation for the integration
+PR. The user pushed back on the visual result (Step 4's screenshot), leading to a substantive
+correction cycle before the integration PR could proceed. Full narrative (fully argued in
+sequence, no step skipped):
+
+1. **Initial pushback**: "the always visible is not the point... looks like collapsible sections
+   over a sheet component" — comparing our render against `ui.shadcn.com/docs/components/radix/
+   sidebar`. Fetched the live page (`WebFetch`) rather than relying on memory: confirmed
+   "collapsible groups are the exception, not the rule" in shadcn's own docs, and that top-level
+   items are normally plain flat rows.
+2. **Deeper structural check**: fetched the exact "Collapsible SidebarGroup" example code and
+   found shadcn's canonical composition nests `Collapsible` inside `SidebarMenuItem` (itself inside
+   `SidebarMenu`) — our implementation nested it directly inside `SidebarGroup`, skipping that
+   wrapper entirely. Presented this diagnosis with a 3-way scope question (fix now / broader
+   rework / follow-up feature).
+3. **User confirmed the exact fix**: pasted the literal `SidebarMenu > SidebarMenuItem >
+   SidebarMenuButton (+ SidebarMenuSub for the nested case)` structure to use. Asked one
+   confirming question (flat-vs-collapsible for single-item groups) — user clarified their actual
+   point was narrower: "we don't need the Collapsible, CollapsibleTrigger or CollapsibleContent
+   wrappers" (initially read as removing interactivity entirely — asked a clarifying question with
+   a concrete before/after preview).
+4. **User reframed once more**: "the problem is the styling on the collapsible sections... I want
+   something slick like the documentation page." Fetched `ui.shadcn.com/docs` itself (the docs
+   site's own live nav, not a component-page code sample) for a concrete "slick" reference:
+   confirmed it's plain-text rows, typography-driven active/hover state, no persistent background
+   pills. Proposed a concrete restyle plan (flatten `SidebarMenuButton`, drop the persistent
+   `bg-accent` active fill, verify `SidebarMenuSub`'s connecting line contrast) and got approval.
+5. **Implemented**: `SidebarMenu`/`SidebarMenuItem` wrapper added, chevron scope renamed to
+   `group/collapsible` (matching shadcn's own naming, not a borrowed precedent), active-group
+   styling changed to `rounded-md` + `font-medium text-foreground` (no persistent fill). `tsc`/lint
+   clean. Full e2e re-run (`--project=chromium --no-deps --workers=1`) found ONE real regression:
+   `mobile-sidebar.spec.ts:108`'s `toHaveClass(/bg-accent/)` assertion, now correctly failing since
+   the persistent fill was deliberately removed — fixed the assertion to `/font-medium/`, re-ran
+   clean (one unrelated flake, passed on isolated retry and full re-run).
+6. **Screenshot sent — still didn't look right.** The restyled screenshot looked visually identical
+   to before (still a solid pill background on every row). Root-caused via direct
+   `getComputedStyle` measurement (`Engine` button, `data-active="false"`, background =
+   `oklch(0.268...)` = `--sidebar-accent` — should be transparent when inactive): a real bug in the
+   **vendored primitive** (`ui/sidebar.tsx`), not our styling at all — `data-active={isActive}`
+   always renders the attribute (React stringifies `false` to `"false"`, doesn't omit it), and
+   Tailwind's bare `data-active:bg-sidebar-accent` variant matches on attribute *presence*, not its
+   value. Confirmed identically on `SidebarMenuSubButton`. Confirmed via grep this feature's
+   `PlatformHeader.tsx` is the *only* consumer of either component. Asked before touching the
+   vendored file (touching it needs documenting per the `button.tsx`/`badge.tsx` reconciliation
+   convention) — user approved. Fixed: `data-active={isActive || undefined}` at both sites in
+   `sidebar.tsx`, documented in `xstockstrat-ui/CLAUDE.md`. Re-verified full suite (9/9 green,
+   isolated flake retry only), captured a new screenshot — dramatic visual improvement, flat
+   typography-driven rows matching the shadcn docs-nav aesthetic.
+7. **One more visual question**: the panel appeared not to reach the full viewport height in the
+   screenshot (a card and a floating circular button visible below/around the panel's apparent
+   bottom edge). Measured directly via Playwright (`boundingBox()`): panel height = 844px, exactly
+   matching the 844px viewport — genuinely full-height. Root-caused the visual artifact: (a) the
+   floating "N" circle is Next.js's own dev-mode toolbar indicator (`<nextjs-portal>`), dev-server
+   only, never present in the production build; (b) the screenshot used `fullPage: true`, which
+   captures the entire scrollable *document*, not just the viewport — since the sidebar overlay is
+   `fixed`-positioned (correctly scoped to the viewport only), a full-page capture reveals page
+   content below the fold that the overlay was never meant to cover. Re-captured with
+   `fullPage: false` (viewport-only) — clean, no artifact, no gap. Confirmed with the user: not a
+   real bug.
+8. **User signed off** on the corrected result. Proceeding to finalize documentation
+   (`design.md` ADDENDUM, `implementation-spec.md` Deviation Log, `xstockstrat-ui/CLAUDE.md`, this
+   entry — all done as of this session) and a final `pnpm build` re-verification before the
+   integration PR.
+
+**Ledger writes**: `fails.md` — "shadcn-sidebar-visual-rewrite — assumption" (2026-08-10, third
+entry that date): the 3-round design debate verified the reference's *visual styling* but never
+its *actual DOM composition*, because no round fetched the live shadcn docs page — all evidence
+was `recon.md` citations, which can only describe our own codebase. Proposes future
+external-reference-match features include a live-reference-fetch step in Phase 0 Recon, not defer
+that check to a post-implementation human screenshot comparison.
+
+**Files modified this session**: `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx`,
+`services/xstockstrat-ui/src/components/ui/sidebar.tsx`, `services/xstockstrat-ui/e2e/
+mobile-sidebar.spec.ts`, `services/xstockstrat-ui/CLAUDE.md`,
+`docs/roadmap/features/125-shadcn-sidebar-visual-rewrite/{design.md,implementation-spec.md,
+context.md}`, `docs/roadmap/ledger/fails.md`.

@@ -171,3 +171,58 @@ automated e2e assertions pass and before the integration PR opens.
   implementation lands.
 - `F-11` (Floor rejection halts) — honored by: no `F-*` violation was flagged by either adversary
   across all 3 rounds; nothing to halt.
+
+---
+
+## ADDENDUM 2026-08-10 (post-implementation, user visual review)
+
+The 3-round debate above approved a design that turned out, on the user's own visual review of
+the implemented result against the real shadcn Sidebar docs, to have two real gaps neither the
+debate nor `/sdd-spec`'s grounding caught. Recorded here per the `insights.md` 2026-08-09
+`shadcn-table-actions-responsive` lesson (mid-process decisions must be written down, not left in
+conversation) — this correction happened during `/sdd-execute`, after the feature-end checkpoint,
+triggered by the user comparing a screenshot against `ui.shadcn.com/docs/components/sidebar`
+directly (something no debate round or `/sdd-spec` grounding pass had done — every round checked
+the *visual styling* of the reference, never its actual DOM composition or the docs site's own
+live nav styling).
+
+**Gap 1 — missing `SidebarMenu`/`SidebarMenuItem` wrapper.** The Chosen Approach above (FR-1/FR-2)
+composed `SidebarGroup > Collapsible > CollapsibleTrigger(SidebarMenuButton) >
+CollapsibleContent(SidebarMenuSub)` directly — omitting the `SidebarMenu`/`SidebarMenuItem`
+(`<ul>`/`<li>`) wrapper shadcn's own "Collapsible SidebarMenu" reference pattern always includes.
+**Corrected** to `SidebarGroup > SidebarGroupContent > SidebarMenu > SidebarMenuItem > Collapsible
+> ...` (verbatim structure the user supplied, sourced from shadcn's own component tree). The
+chevron's group-scope class also moved from reusing `SidebarMenuButton`'s pre-existing
+`group/menu-button` name to a dedicated `group/collapsible` set on the `Collapsible` root itself —
+matching shadcn's own "Collapsible SidebarGroup" doc example's naming exactly, not a lookalike
+assembled from a different precedent in the file.
+
+**Gap 2 — a real bug in the vendored primitive, misread as a styling choice.** The user's
+complaint ("looks like collapsible sections over a sheet, not a slick shadcn sidebar") traced back
+not to any FR-1/FR-2/FR-3 decision above, but to `ui/sidebar.tsx` itself:
+`SidebarMenuButton`/`SidebarMenuSubButton` render `data-active={isActive}` unconditionally, and
+`sidebarMenuButtonVariants`'s bare `data-active:bg-sidebar-accent` Tailwind variant matches on
+attribute **presence**, not value — `data-active="false"` still satisfies `[data-active]`. Every
+row was therefore permanently painted with the accent background regardless of actual state,
+which is what read as "chunky pill buttons" rather than shadcn's own flat, typography-driven
+docs-nav look. **Fixed** in the vendored file: `data-active={isActive || undefined}` at both call
+sites, documented in `xstockstrat-ui/CLAUDE.md`'s functional-variant-customization list (survives
+a future `apply --preset` regeneration the same way the `button.tsx`/`badge.tsx` customizations
+do). This was never a design-level decision to revisit — none of the 3 rounds' Chosen Approach or
+Rejected Alternatives touched `data-active` semantics at all; it was a latent primitive bug,
+uncovered only once someone looked at real rendered pixels next to the real reference.
+
+**What did NOT change**: the "no group merge" decision (Round 1's core finding), the
+`sectionStart`-driven purely-visual section labels (Round 3's settled ARIA-scope-vs-complexity
+trade-off), the "Settings" label wording trade-off, and the ordering-invariant JSDoc mitigation —
+all still hold exactly as approved. This addendum corrects composition and a primitive defect, not
+the feature's core visual-hierarchy decisions.
+
+**Process lesson** (candidate for a fresh `insights.md`/`fails.md` entry, see `context.md`): a
+design debate that verifies a proposal's *visual styling* against a reference without also
+checking the reference's *actual DOM composition* (component tree, not just how it looks) can
+approve a structurally-incomplete design that happens to look "close enough" until someone
+compares rendered output pixel-by-pixel. Neither `design-proposer` nor `design-adversary` fetched
+`ui.shadcn.com`'s live docs pages in any of the 3 rounds — all evidence was `recon.md`'s codebase
+citations, which by construction can only describe *our own* code, never the reference it's
+supposed to match.

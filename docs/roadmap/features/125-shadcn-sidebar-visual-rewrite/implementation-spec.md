@@ -481,6 +481,55 @@ visual result is recorded.
 
 ## Deviation Log
 
+### Step 2 — post-checkpoint correction: SidebarMenu/SidebarMenuItem wrapper + data-active primitive bug
+
+**Disposition**: resolved — code corrected, re-verified, user-confirmed via screenshot. This
+deviation happened **after** the feature-end checkpoint (all 4 steps already `done`), triggered by
+the user reviewing the Step 4 screenshot against the real shadcn reference page. Recorded against
+Step 2 since that's the step whose actual code changed; `design.md`'s ADDENDUM (2026-08-10) has
+the full design-level narrative — this entry is the implementation-level summary.
+
+**What changed** (both in `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx`,
+beyond Step 2's original `**Files**`/`**Instructions**` — which remain immutable per **F-09**):
+1. Wrapped each group's `Collapsible` in `SidebarGroup > SidebarGroupContent > SidebarMenu >
+   SidebarMenuItem`, matching shadcn's own "Collapsible SidebarMenu" reference composition exactly
+   (the user supplied the exact structure, sourced from the live shadcn component tree) — the
+   original implementation nested `Collapsible` directly inside `SidebarGroup`, omitting the
+   `SidebarMenu`/`SidebarMenuItem` (`<ul>`/`<li>`) wrapper.
+2. Moved the chevron's rotation scope from `SidebarMenuButton`'s pre-existing `group/menu-button`
+   name to a dedicated `group/collapsible` class set on the `Collapsible` root itself — matching
+   shadcn's own naming convention, not a reused precedent from a different part of the file.
+3. Restyled `SidebarMenuButton`'s active-group indicator from a persistent `bg-accent
+   text-foreground font-medium` fill to `rounded-md` + `font-medium text-foreground` (typography
+   only, no background) — closer to shadcn's own docs-site nav styling.
+
+**Also found and fixed — a real bug in the vendored primitive** (`services/xstockstrat-ui/src/
+components/ui/sidebar.tsx`, not this step's originally-scoped file): `SidebarMenuButton`/
+`SidebarMenuSubButton` rendered `data-active={isActive}` unconditionally. Tailwind's bare
+`data-active:bg-sidebar-accent` variant matches on attribute *presence*, not value —
+`data-active="false"` still satisfies `[data-active]` — so every row (not just the truly active
+one) was permanently painted with the accent background. This, not item 3 above, was the actual
+root cause of the "chunky pill button" look the user flagged; item 3's restyle alone did not fix
+it (confirmed via direct `getComputedStyle` measurement before and after). Fixed:
+`data-active={isActive || undefined}` at both call sites, omitting the attribute entirely when
+inactive. Documented in `xstockstrat-ui/CLAUDE.md`'s functional-variant-customization list so it
+survives a future `apply --preset` regeneration. Confirmed via grep this file is the *only*
+consumer of `SidebarMenuButton`/`SidebarMenuSubButton` in the codebase — no blast radius beyond
+this feature's own surface.
+
+**Test changes**: `mobile-sidebar.spec.ts:108`'s pre-existing active-highlight assertion
+(`toHaveClass(/bg-accent/)`) updated to `toHaveClass(/font-medium/)`, matching the new
+typography-only active indicator — the only test assertion the restyle required changing. Full
+9-test suite re-verified green (`--project=chromium --no-deps --workers=1`) after both the
+structural and primitive fixes; one unrelated flake (`page.goto` timeout under 2-worker
+contention) reproduced once, passed cleanly in isolation and on a full single-worker re-run.
+
+**Screenshot re-verification**: two follow-up screenshots taken (structural fix alone, then with
+the primitive fix) — the second shows the flat, typography-driven look matching the shadcn docs
+nav aesthetic the user asked for. A separate visual question the user raised (the panel appearing
+to not cover full viewport height) was investigated and found to be a screenshot-capture artifact,
+not a real bug — see the note in `context.md`.
+
 ### Step 3 — Playwright e2e: first attempt fell back, then a scoped retry got a genuine red/green cycle
 
 **Disposition**: resolved — genuine red-before-green captured. (First attempt fell back to a

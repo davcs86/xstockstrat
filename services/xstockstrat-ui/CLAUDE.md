@@ -46,6 +46,16 @@ theme values come entirely from the preset).
   object after any `add`/`apply --preset` run, marked with an `// app-specific` comment. A
   mechanical regression guard (`src/components/ui/button.test.ts`, `badge.test.ts`) asserts these
   keys render their expected classes — it fails loudly if a future regenerate silently drops them.
+- **`sidebar.tsx`'s `data-active` fix** (feature 125): `SidebarMenuButton`/`SidebarMenuSubButton`
+  set `data-active={isActive || undefined}`, not the bare `isActive` boolean — marked
+  `// app-specific`. The vendored file's own `data-active:bg-sidebar-accent` Tailwind variant is a
+  bare (unbracketed) data-attribute selector, which matches on attribute **presence**, not its
+  string value — `data-active="false"` still satisfies `[data-active]`. Passing the raw boolean
+  renders the attribute unconditionally (React stringifies `false` to `"false"` for custom `data-*`
+  attributes, it does not omit it), so every row was permanently painted with the accent
+  background regardless of actual active state. `isActive || undefined` omits the attribute
+  entirely when inactive, restoring the intended distinction. Re-apply after any future
+  `apply --preset` regeneration, same as the functional-variant bullet above.
 - `combobox.tsx` is a full Base-UI (`@base-ui/react`) compound component (`Combobox`/
   `ComboboxInput`/`ComboboxContent`/`ComboboxList`/`ComboboxItem`/etc.), not the simple
   single-prop wrapper this app used before feature 119 — see its 3 call sites
@@ -143,6 +153,16 @@ The physical routes/segments above are **unchanged**; feature 083 layers an oppo
   `flex min-h-svh w-full`, sized for a page-level root, not an inline Row 1 subtree).
   `PlatformHeader`'s own Row 2 shared `Breadcrumb` landmark was removed — pages render their own via
   `src/components/shared/PageBreadcrumb.tsx` (`{ariaLabel, items: {label, href?}[]}`) instead.
+  Each `NAV_GROUPS` entry renders as `SidebarGroup > SidebarGroupContent > SidebarMenu >
+  SidebarMenuItem > Collapsible(className="group/collapsible") > CollapsibleTrigger(SidebarMenuButton)
+  + CollapsibleContent(SidebarMenuSub > SidebarMenuSubItem)` (feature 125) — matching shadcn's own
+  reference "Collapsible SidebarMenu" composition exactly, not a flattened shortcut. The chevron's
+  rotation keys off `group-data-[state=open]/collapsible:rotate-90`, scoped to the `Collapsible`
+  root's own `data-state` (Radix reflects it there directly), not `SidebarMenuButton`'s pre-existing
+  `group/menu-button` name. Row styling is deliberately flat/typographic (font-weight + color for
+  the active group, no persistent background fill) to match shadcn's own docs-site sidebar rather
+  than a filled-pill-button look — see the `data-active` fix above, which was the actual root cause
+  of the pill look, not a styling choice.
 
 ## Dependencies
 

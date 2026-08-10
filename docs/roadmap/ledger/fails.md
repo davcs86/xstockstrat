@@ -974,3 +974,25 @@ ambiguity is logged here).
   element *also* carries the `.transform` class. When a rotation/scale assertion mysteriously stays
   "none"/unset on both sides of a toggle, inspect the actual generated stylesheet rule
   (`document.styleSheets`) before assuming the underlying app code is broken.
+
+### 2026-08-10 — shadcn-sidebar-visual-rewrite — assumption
+- **Mistake**: a 3-round design debate (feature 125) approved an implementation of shadcn's
+  "Collapsible SidebarMenu" pattern that verified its **visual styling** against the reference
+  (`ui.shadcn.com/docs/components/sidebar`) but never checked the reference's **actual DOM
+  composition**. The result omitted the `SidebarMenu`/`SidebarMenuItem` wrapper shadcn's own
+  pattern always includes, and reused an unrelated `group/menu-button` name for the chevron's
+  scope instead of the reference's own `group/collapsible`. Neither `design-proposer` nor
+  `design-adversary` fetched the live shadcn docs page in any round — all cited evidence was
+  `recon.md`'s codebase citations, which by construction can only describe the *consuming*
+  codebase, never the external reference it's supposed to match. The gap surfaced only when the
+  user compared a rendered screenshot against the real reference page after implementation.
+- **Evidence**: `docs/roadmap/features/125-shadcn-sidebar-visual-rewrite/design.md` § ADDENDUM
+  2026-08-10; `context.md` post-checkpoint session entries.
+- **Rule it implies**: when a feature's explicit acceptance criterion is "match an external
+  reference" (a live docs page, a design system, another product's UI), the design-phase debate
+  must ground at least one round's evidence in the **actual reference itself** — a live fetch of
+  its real markup/composition, not just its rendered visual description — not only in this
+  codebase's own `recon.md` citations. `recon.md` can prove what *our* code does; it can never
+  prove what the *reference* does. A future `/sdd-design` round debating an external-reference-match
+  feature should include a `WebFetch`/reference-inspection step in Phase 0 Recon, not defer that
+  check to a human eyeballing a screenshot after the code already shipped.
