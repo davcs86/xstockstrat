@@ -779,12 +779,14 @@ once after (confirm green).
 **TDD**: `red-green required`
 
 **Instructions**:
-1. Add a `isSymbolWatchlisted` computation from `useWatchlists()`'s `data.watchlists[].bindings[]`
-   (or `.symbols[]`, whichever the current `ListWatchlistsResult` shape exposes per
-   `insightsPortfolioClient.listWatchlists`'s generated response — verify the exact field name at
-   execute time against the generated TS type, do not assume `bindings` vs `symbols`), scanning for
-   the page's `symbol`. Also derive the **matching binding's `strategyId`** (if any) for reuse by
-   Step 18's backtest-strategy precedence.
+1. Add an `isSymbolWatchlisted` computation from `useWatchlists()`'s `data.watchlists[].bindings[]`
+   — confirmed authoritative at `packages/proto/portfolio/v1/portfolio.proto:190` (`repeated
+   WatchlistBinding bindings = 8`; "when present it supersedes `symbols`"). The flat
+   `data.watchlists[].symbols[]` (`portfolio.proto:186`, field 5) is `[deprecated = true]` — check it
+   only as a fallback for a watchlist whose `bindings[]` is empty (a legacy record predating feature
+   097), never as the primary source. Scan for the page's `symbol` across both. Also derive the
+   **matching binding's `strategyId`** (if any) for reuse by Step 18's backtest-strategy precedence —
+   a symbol found only via the legacy `symbols[]` fallback has no `strategyId` (unbound).
 2. Gate the watchlist-conditional split (FR-11) on `isSymbolWatchlisted` alone — never on `position`:
    when true, render Opportunity/conviction + Readiness + (Step 14's) Fundamentals; when false,
    render (Step 16's) Screening. Exactly one side renders — while `useWatchlists` is loading, render
@@ -1112,12 +1114,18 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "Single Position page"
 3. Render the filtered list (backtest id, status, key metrics — total return, Sharpe, win rate,
    matching the summary fields already on `BacktestRunSummary`) as a simple history table/list — no
    embedded detail view, no `GetBacktest` call.
-4. Add a "Run new backtest" action calling `useRunBacktest().mutate({ strategyId: resolvedStrategyId,
-   symbols: [symbol], ... })` (other `RunBacktestRequest` fields — date range, capital — per whatever
-   minimal defaults the existing Screener/Strategy-detail backtest-trigger UIs already default to;
-   confirm the request shape against `RunBacktestRequest` at execute time rather than guessing every
-   field). On success, invalidate/refetch the history query so the new run appears without a manual
-   reload.
+4. Add a "Run new backtest" action calling `useRunBacktest().mutate({ strategyIdRef:
+   resolvedStrategyId, symbols: [symbol], initialCapital: <number>, range: { start: <Timestamp>, end:
+   <Timestamp> } })` — field names and shape confirmed at `RunBacktestRequest`
+   (`packages/proto/analysis/v1/analysis.proto:44-53`: `strategy_id_ref` field 6 takes precedence
+   over legacy `strategy_id`/`strategy_params`; `symbols` field 3; `initial_capital` field 4; `range`
+   field 2, a `xstockstrat.common.v1.TimeRange`), matching the exact call shape already proven at
+   `insights/strategies/[id]/page.tsx:96-102`. Reuse that page's same default range/capital seed
+   (`start: '2024-01-01'`, `end: '2024-12-31'`, `initial_capital: '100000'`,
+   `insights/strategies/[id]/page.tsx:69-71`) rather than inventing new defaults — a minimal inline
+   form (or a fixed default with no form, if the design favors a single "Run" button) is an execute-
+   time UI-polish choice, not a field-shape ambiguity. On success, invalidate/refetch the history
+   query so the new run appears without a manual reload.
 
 **Verification**:
 ```bash
@@ -1178,20 +1186,24 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "Single Position page"
   registration needed** — this hook is directly reusable as-is, unlike recon.md's Recommended Scope
   originally suggested (superseded by design.md's round-5 cross-segment-reuse decision, which this
   hook already satisfies via `insightsIngestClient`).
-- `ListBackfillJobsResponse.jobs[]` (`BackfillJob`) fields available for date-range reduction —
-  confirm exact field names (`range`/`start`/`end` or similar) against the generated TS type at
-  execute time; `insights/backfills/page.tsx`'s existing render of job rows is the reference for
-  field names already proven to exist.
+- `ListBackfillJobsResponse.jobs[]` (`BackfillJob`) field names confirmed at
+  `packages/proto/ingest/v1/ingest.proto:27-43`: each job carries one `range` field (field 4, a
+  `xstockstrat.common.v1.TimeRange`), not a per-symbol range — `TimeRange` itself
+  (`packages/proto/common/v1/common.proto:42-45`) is `{ start: Timestamp, end: Timestamp }` (camelCase
+  `start`/`end` in the generated TS). `status` (field 5, `BackfillStatus`) distinguishes
+  completed/running/failed jobs for the reduction below. `insights/backfills/page.tsx`'s existing
+  render of job rows is the reference for how these fields are already consumed today.
 
 **TDD**: `red-green required`
 
 **Instructions**:
-Call `useBackfillJobs({ symbol })`, reduce the returned `jobs[]`'s date ranges into a compact display
-summary (e.g. min start / max end across completed jobs, or a per-job list if reduction proves
-non-trivial for overlapping/gapped ranges — the exact reduction shape is this step's own minimal
-design choice, per FR-10's "dates only, no chart" scope). Render this in a Backfill section,
-unconditional (not watchlist-gated — FR-10 applies to any symbol). Empty `jobs[]` renders an explicit
-"no ingested coverage" state, not a blank gap.
+Call `useBackfillJobs({ symbol })`, reduce the returned `jobs[]` into a compact display summary:
+across jobs with `status` = completed, take `min(job.range.start)` / `max(job.range.end)` as the
+symbol's overall covered range; if reduction across overlapping/gapped ranges proves non-trivial for
+a clean single min/max (e.g. genuinely disjoint coverage windows), fall back to a per-job list instead
+— the exact reduction shape is this step's own minimal design choice, per FR-10's "dates only, no
+chart" scope. Render this in a Backfill section, unconditional (not watchlist-gated — FR-10 applies
+to any symbol). Empty `jobs[]` renders an explicit "no ingested coverage" state, not a blank gap.
 
 **Verification**:
 ```bash

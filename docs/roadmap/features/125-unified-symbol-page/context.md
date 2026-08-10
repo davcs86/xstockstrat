@@ -290,3 +290,36 @@
   design-approved snapshot, reworded to cite exact step numbers.
 
 **Next**: `/sdd-review unified-symbol-page impl-spec`.
+
+---
+
+## Session 2026-08-10T04:00:00Z — sdd-review impl-spec (advisory)
+
+- Result: 0 blockers, 3 warnings (advisory — did not block; no Floor risk). 23/26 steps clean on
+  first pass. Overlap: **CLEAN** — no other feature is currently `implementation-ready`/
+  `in-progress`; the shadcn-migration PRs (#912/#913/#914) flagged as in-flight during the
+  product-spec review have since merged to `main-dev`, and this spec's own citations already match
+  current trunk (confirmed independently by both the criteria and overlap subagents).
+- All 3 warnings were the same shape — a step deferred a proto field-name confirmation to execute
+  time despite the field being directly greppable at spec-write time (minor **C-01** softness,
+  correctly hedged per **P-03**, not a fabrication). **Resolved immediately, not left `[ ]
+  unaddressed`** — all 26 steps are still `pending` (execution hasn't started), so per F-09's own
+  scope ("step bodies are immutable **during execution**") editing Instructions now is in-bounds,
+  not a violation:
+  - [x] Step 12: `useWatchlists()`'s membership field confirmed as `bindings[]` (authoritative,
+    `portfolio.proto:190`) with the deprecated flat `symbols[]` (`portfolio.proto:186`) only as a
+    fallback for pre-097 legacy records — Instructions rewritten to state this precisely instead of
+    "verify at execute time."
+  - [x] Step 18: `RunBacktestRequest`'s exact field shape confirmed (`strategy_id_ref`/`symbols`/
+    `initial_capital`/`range`, `analysis.proto:44-53`) and matched against the proven call shape
+    already live at `insights/strategies/[id]/page.tsx:96-102`, including that page's own default
+    range/capital seed to reuse rather than inventing new defaults.
+  - [x] Step 20: `BackfillJob.range` (a single job-wide `TimeRange`, `ingest.proto:27-43`) and
+    `TimeRange{start,end}` (`common.proto:42-45`) confirmed — Instructions now name the exact
+    reduction fields (`status`-filtered `min(range.start)`/`max(range.end)`) instead of a vague
+    "confirm field names at execute time."
+- Overlap findings: none. (Noted in passing, out of scope for this session: features 121/123's
+  `feature.md` still read `code-completed` even though their code is verifiably already merged to
+  `main-dev` — a stale-status gap worth a future `/sdd-status` refresh, not this feature's to fix.)
+
+**Next**: `/sdd-execute unified-symbol-page`.
