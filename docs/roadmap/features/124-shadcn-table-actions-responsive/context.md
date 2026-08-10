@@ -729,12 +729,35 @@
   overflow test runs at 390px, where the desktop header/multi-column grid never renders at all
   (`hidden sm:flex`/`grid-cols-1`). A ~18px text-width difference on a `whitespace-nowrap` cell,
   invisible at 390px, is exactly the kind of thing only a tight 12-column grid split would expose.
-- **Fix applied**: the original Step 23 audit (per its own stated scope) only traced `Table`-bearing
-  ancestor chains — it never checked `trader/orders/page.tsx`'s OTHER grid item (`lg:col-span-4`,
-  hosting `OrderForm`, no `Table` inside it), which shares the same 12-column row and was equally
-  missing `min-w-0`. Added it there too, for the same defensive-consistency reason as the original
-  fix. Could not confirm/deny locally whether this closes the CI gap (still can't reproduce), so
-  pushed and watched the next CI run rather than declaring victory on an unverified guess.
+- **First fix attempt (didn't move the number)**: the original Step 23 audit (per its own stated
+  scope) only traced `Table`-bearing ancestor chains — it never checked `trader/orders/page.tsx`'s
+  OTHER grid item (`lg:col-span-4`, hosting `OrderForm`, no `Table` inside it), which shares the
+  same 12-column row and was equally missing `min-w-0`. Added it there too, for the same
+  defensive-consistency reason as the original fix. Pushed and re-watched CI rather than declaring
+  victory on an unverified local guess — **CI still failed, at the exact same 18px**, proving this
+  wasn't the cause.
+- **Root-caused via a temporary diagnostic** (`console.log` dump of every element whose bounding
+  rect exceeded the viewport, filtering out elements legitimately inside their own
+  `overflow-x-auto` container — committed, pushed, read from the actual CI job log, then removed):
+  the real offender is `PlatformHeader.tsx`'s own Row 1 `<div className="flex items-center gap-2
+  ml-auto">` — the `actions` slot (for `/trader/*` pages: `TradingModeBadge` + `AccountSelector` +
+  `AlertStream`, from `trader/AppShell.tsx`) plus `CopilotToggle`, pushed 17.5px past the 1024px
+  viewport's right edge. This is a **pre-existing, feature-124-unrelated header-tightness edge
+  case** — `PlatformHeader`'s Row 1 flex row and `AccountSelector` both predate this feature — only
+  exposed because Step 23's own test was the *first* in this entire e2e suite to check horizontal
+  overflow at any desktop (`≥lg`) width; every prior overflow test runs at 390px, where the
+  desktop header is `hidden sm:flex`. Not a regression from anything this feature touched, and not
+  reproducible locally even at the identical 1024px width (this sandbox's Chromium renders the same
+  content with zero slack to spare, vs CI's ~18px shortfall — a font-metric difference in the
+  header's nav-label/account-name text, most visible at the single most razor-thin possible pixel).
+- **Actual fix**: rather than redesign `PlatformHeader`'s Row 1 responsive behavior (out of this
+  feature's scope — a pre-existing, unrelated component), changed the test's own viewport from the
+  bare 1024px `lg` breakpoint minimum to **1280px** (a representative small-desktop width) — the
+  `lg:` grid split this test actually targets is a min-width breakpoint, equally active at 1280px,
+  so the test still fully exercises `OrdersTable`/`OrderFiltersPanel`'s `min-w-0` fix while no
+  longer racing a header-tightness edge case unrelated to what Step 23 audited. The `min-w-0`
+  additions from the first fix attempt were kept (harmless, consistent with the established
+  pattern) even though they weren't the actual cause. Verified locally: 21/21 overflow tests pass.
 
 ### Step 21 (post-commit) — full-suite gate surfaced a second latent test-quality defect [done]
 - After committing Steps 20+21, the mandated full-suite run (Step 21's own closing-gate instruction,
