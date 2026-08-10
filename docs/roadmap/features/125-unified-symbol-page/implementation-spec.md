@@ -473,60 +473,69 @@ findings it reports against these two files are fixed before this step is marked
 **Reviewers**: `xstockstrat-ui` (service owner) — Trading UI correctness, Connect-RPC call safety,
 order-mutation (trade widget) safety, no fabricated data (P-03)
 
-**Codebase Evidence** (all confirmed by direct read of the live file, superseding recon.md's
-line citations per design.md's staleness-recheck directive — no drift found against recon, but
-verified fresh here):
-- Full current structure: `trader/positions/[symbol]/page.tsx:1-537`. `usePosition` call at line 52;
-  `usePortfolio` at line 54; `useOrders(mode, selectedAccountId, { symbol })` **already fetched
-  unconditionally** at the page's top level, line 56 — only its *rendering* is nested inside the
-  position-gated `PositionBody` (the "Orders & fills" `Card`, lines 337-399).
-- The bars-fetch `useEffect` (lines 80-130) **already runs unconditionally** at the top level, keyed
-  on `[symbol, timeframe, avg, stop, seriesRef]` — `avg`/`stop` (lines 77-78) are already computed
+**Codebase Evidence** (re-verified fresh by direct read of the live file **after** feature 124
+`shadcn-table-actions-responsive` merged to `main-dev` — that feature touched this exact file and
+shifted every line number below from the original recon/design citations; corrected here):
+- Full current structure: `trader/positions/[symbol]/page.tsx:1-532`. `usePosition` call at line 53;
+  `usePortfolio` at line 55; `useOrders(mode, selectedAccountId, { symbol })` **already fetched
+  unconditionally** at the page's top level, line 57 — only its *rendering* is nested inside the
+  position-gated `PositionBody` (the "Orders & fills" `Card`, lines 332-394).
+- **Real precondition change from feature 124 (FR-10b), not just a line shift**: this step's
+  original instructions assumed a "keep the existing `Button asChild ... Link ... Exposure`
+  back-link unchanged" precedent. That back-link **no longer exists** — feature 124 replaced it with
+  a `<PageBreadcrumb ariaLabel="Position path" items={[{ label: 'Exposure', href: '/trader/positions'
+  }, { label: symbol }]} />` (lines 138-141, import at line 32), per the file's own comment at
+  lines 136-137 ("replaces the prior ad hoc '← Exposure' Button asChild back-link"). Point 5's
+  instructions below are revised to build on `PageBreadcrumb`, not the old back-link.
+- The bars-fetch `useEffect` (lines 81-131) **already runs unconditionally** at the top level, keyed
+  on `[symbol, timeframe, avg, stop, seriesRef]` — `avg`/`stop` (lines 78-79) are already computed
   safely (`Number(position?.avgEntryPrice ?? 0)`) and no-op cleanly with no position. Only the chart
-  `Card` JSX (lines 293-335) is nested inside the position-gated `PositionBody`.
-- Render-order bug confirmed live: `{error && <p>...Failed to load position...</p>}` (line 150) is
-  checked **before** the `EmptyState` branch (lines 153-167) — a `NotFound` `error` (the common case
-  for a never-held/watchlist-research symbol) hits the error paragraph, not the intended empty state.
-- Exact enumerated `position.`-reading references inside the chart `Card` (lines 293-335) that must
+  `Card` JSX (lines 288-330) is nested inside the position-gated `PositionBody`.
+- Render-order bug confirmed live: the error paragraph (`{error && (` at line 149, the `<p>Failed to
+  load position...</p>` at line 150, closing `)}` at line 151 — now split across 3 lines, not the
+  single line the original citation assumed) is checked **before** the `EmptyState` branch (lines
+  152-166) — a `NotFound` `error` (the common case for a never-held/watchlist-research symbol) hits
+  the error paragraph, not the intended empty state.
+- Exact enumerated `position.`-reading references inside the chart `Card` (lines 288-330) that must
   move to top-level locals once the Card is hoisted out of `PositionBody` (whose `position` prop is
   currently non-optional, so a raw `position.foo` read crashes once this Card renders unconditionally
-  with `position` possibly `undefined`) — **6 references, confirmed by direct read**:
-  1. Line 299: `fmtUsd(position.avgEntryPrice)` (caption "avg …")
-  2. Line 300: `fmtUsd(position.stopPrice)` (caption "· stop …", inside the `hasStop` ternary)
-  3. Line 301: `fmtUsd(position.currentPrice)` (caption "· last …")
-  4. Line 321: `fmtUsd(position.avgEntryPrice)` (meta-line "— — avg cost …")
-  5. Line 325: `fmtUsd(position.stopPrice)` (meta-line "— — stop …", inside `hasStop &&`)
-  6. Line 330: `fmtPct(position.stopDistancePct)` (meta-line "distance to stop …", inside `hasStop &&`)
-- `hasStop` itself (currently computed inside `PositionBody` at line 210 as
+  with `position` possibly `undefined`) — **6 references, re-confirmed by direct read post-124**:
+  1. Line 294: `fmtUsd(position.avgEntryPrice)` (caption "avg …")
+  2. Line 295: `fmtUsd(position.stopPrice)` (caption "· stop …", inside the `hasStop` ternary)
+  3. Line 296: `fmtUsd(position.currentPrice)` (caption "· last …")
+  4. Line 316: `fmtUsd(position.avgEntryPrice)` (meta-line "— — avg cost …")
+  5. Line 320: `fmtUsd(position.stopPrice)` (meta-line "— — stop …", inside `hasStop &&`)
+  6. Line 325: `fmtPct(position.stopDistancePct)` (meta-line "distance to stop …", inside `hasStop &&`)
+- `hasStop` itself (currently computed inside `PositionBody` at line 209 as
   `Number(position.stopPrice ?? 0) > 0`) must also move to the top level, computed safely as
-  `Number(position?.stopPrice ?? 0) > 0` (mirroring the existing `avg`/`stop` pattern at lines 77-78).
+  `Number(position?.stopPrice ?? 0) > 0` (mirroring the existing `avg`/`stop` pattern at lines 78-79).
 - A 7th reference, in a **different** Card (Orders & fills, not the chart) that this refactor also
-  hoists: line 340's `<CardTitle>Orders &amp; fills · {position.symbol}</CardTitle>` reads
+  hoists: line 335's `<CardTitle>Orders &amp; fills · {position.symbol}</CardTitle>` reads
   `position.symbol` — once this Card mounts independent of `position`, use the page-level `symbol`
-  local (already computed at line 48 from `params`, always available) instead — strictly simpler,
+  local (already computed at line 49 from `params`, always available) instead — strictly simpler,
   since it's the exact same string `position.symbol` would hold when a position exists.
 - No page-level symbol heading currently exists **outside** the position-gated header block
-  (lines 220-269, itself full of `position.`-only fields — qty, side, day P&L — correctly staying
+  (lines 220-264, itself full of `position.`-only fields — qty, side, day P&L — correctly staying
   gated, unlike the chart/orders Cards above). For an unheld symbol to have any visible page title,
   a minimal top-level heading using the already-available `symbol` local is needed — this is a
   mechanical consequence of "sections render independent of position" (design.md's stated intent)
   that design.md's own Open Risks entry explicitly left to be worked out at spec/implementation time
   ("flagged as a step-level checklist item for implementation-spec.md, not a further design
-  decision"). Precedent for a compact symbol-only header: `insights/market/[symbol]/page.tsx:126-157`
-  (a `CardTitle` + optional badges) — do not port that page's opportunity-specific chrome, only the
-  minimal "show the symbol" shape, since the richer version already exists in the position-gated
-  header for the held case.
+  decision"). The `PageBreadcrumb` (lines 138-141, see above) already ends in `{ label: symbol }` —
+  a minimal `<h1>` sibling right below it is enough; do not port
+  `insights/market/[symbol]/page.tsx`'s richer opportunity-specific header chrome (CardTitle +
+  badges), since the richer version already exists in the position-gated header for the held case.
 - `CardNotice` precedent confirmed: `services/xstockstrat-ui/src/components/shared/CardNotice.tsx`
   (`{children, variant}`), used identically at `trader/portfolio/page.tsx:152`
-  (`<CardNotice>No open positions...</CardNotice>`).
+  (`<CardNotice>No open positions...</CardNotice>` — re-verified unaffected by feature 124).
 - `isNotFoundError` helper confirmed: `services/xstockstrat-ui/src/lib/scoreDisplay.ts:36-38`
   (`err instanceof ConnectError && err.code === Code.NotFound`), already imported and used by
   `useStrategies.ts:3,34` (`useStrategyReport`'s `retry: (failureCount, err) =>
   !isNotFoundError(err) && failureCount < 1` at line 34) and `useStrategies.ts:64`
-  (`useBacktestDetail`'s identical retry guard).
+  (`useBacktestDetail`'s identical retry guard) — this file is unaffected by feature 124.
 - `usePosition` confirmed at `hooks/usePortfolio.ts:65-83` — currently no `retry` option (default
   TanStack retry applies) and a fixed `refetchInterval: 10_000` (line 81) that never stops, even for
-  a confirmed-`NotFound` position.
+  a confirmed-`NotFound` position — this file is unaffected by feature 124.
 - Trade widget reuse: `OrderForm({ mode, initialSymbol })` confirmed at
   `components/trader/OrderForm.tsx:41-48`; ambient `AccountProvider` under `/trader` confirmed at
   `app/trader/providers.tsx:6,13` (mounted once for the whole segment) — so this page needs no
@@ -540,12 +549,12 @@ In `trader/positions/[symbol]/page.tsx`:
 
 1. **Top-level locals** — add `const last = Number(position?.currentPrice ?? 0);` and
    `const hasStop = Number(position?.stopPrice ?? 0) > 0;` next to the existing `avg`/`stop` locals
-   (lines 77-78), so all four price-caption inputs are computed once, safely, regardless of whether
+   (lines 78-79), so all four price-caption inputs are computed once, safely, regardless of whether
    `position` exists.
 2. **Render-order fix** — reorder the branches so a `NotFound`-classified `error` routes to the
    inline notice branch, not the generic error paragraph: replace the unconditional
-   `{error && <p>Failed to load position: {error.message}</p>}` (line 150) with a check that only
-   renders the error paragraph when `error` is present **and** `!isNotFoundError(error)`; the
+   `{error && (<p>Failed to load position: {error.message}</p>)}` (lines 149-151) with a check that
+   only renders the error paragraph when `error` is present **and** `!isNotFoundError(error)`; the
    not-found case falls through to a `CardNotice` (see point 4).
 3. **`usePosition` NotFound handling** (`hooks/usePortfolio.ts:65-83`) — add
    `retry: (failureCount, err) => !isNotFoundError(err) && failureCount < 1` (import
@@ -554,38 +563,39 @@ In `trader/positions/[symbol]/page.tsx`:
    `useStrategies.ts`'s existing pattern exactly (this hook is used only by this page and
    `usePortfolio`'s other exports are untouched).
 4. **Hoist the position-not-found branch to a compact inline notice** — replace the full-page
-   `EmptyState` block (lines 153-167) with a `CardNotice` (import from
+   `EmptyState` block (lines 152-166) with a `CardNotice` (import from
    `@/components/shared/CardNotice`) reading `No {mode} position in {symbol}` — same copy the
    `EmptyState` used — occupying only its own slot in the page's vertical flow, not a page takeover.
    Keep the `selectedAccountId`-conditional description text as a second line inside the same
    `CardNotice` if the component's children accept multiple nodes, or fold it into one sentence.
 5. **Add a minimal top-level symbol heading**, rendered unconditionally (not gated on `position`),
-   above the position-conditional slot — a small `<h1>`/`CardTitle`-equivalent showing just `symbol`
-   (no position-derived fields), so an unheld symbol's page has a title. Keep the existing
-   `Button asChild ... Link href="/trader/positions" ... Exposure` back-link (lines 136-141)
-   above it, unchanged.
-6. **Hoist the price-chart `Card`** (currently lines 293-335, inside `PositionBody`) to the page's
+   right below the `PageBreadcrumb` block — a small `<h1>`/`CardTitle`-equivalent showing just
+   `symbol` (no position-derived fields), so an unheld symbol's page has a title. **Feature 124
+   replaced the old "Exposure" back-link `Button`/`Link` with `<PageBreadcrumb>`** (lines 138-141,
+   already ending in `{ label: symbol }`) — keep `PageBreadcrumb` unchanged; this heading is new,
+   additive JSX beneath it, not a modification of the breadcrumb itself.
+6. **Hoist the price-chart `Card`** (currently lines 288-330, inside `PositionBody`) to the page's
    top level, rendered unconditionally. Replace all 6 enumerated `position.`-reads (Codebase Evidence
    above) with the top-level `avg`/`stop`/`last`/`hasStop` locals from point 1. The `last` caption
    (currently "· last {fmtUsd(position.currentPrice)}") should render conditionally on `last > 0`
    (mirroring the existing `hasStop &&` pattern), so it degrades gracefully rather than showing
    "$0.00" for an unheld symbol.
-7. **Hoist the Orders & fills `Card`** (currently lines 337-399, inside `PositionBody`) to the page's
-   top level, rendered unconditionally — it already reads only `orders` (top-level, line 56-57) and
-   `working` (currently computed inside `PositionBody` at line 214-216 from `orders`; move this
+7. **Hoist the Orders & fills `Card`** (currently lines 332-394, inside `PositionBody`) to the page's
+   top level, rendered unconditionally — it already reads only `orders` (top-level, lines 57-58) and
+   `working` (currently computed inside `PositionBody` at lines 213-215 from `orders`; move this
    computation to the top level too, since it no longer depends on anything from `PositionBody`).
-   Change the `CardTitle`'s `{position.symbol}` (line 340) to the top-level `symbol` local (point 5).
+   Change the `CardTitle`'s `{position.symbol}` (line 335) to the top-level `symbol` local (point 5).
 8. **Mount the Trade widget** — add a new, always-rendered `Card` (or inline section) containing
    `<OrderForm mode={mode} initialSymbol={symbol} />` (import from `@/components/trader/OrderForm`),
    consuming the page's ambient `mode`/`symbol` locals directly — no `AccountProvider` wrapper needed
    (already provided by `app/trader/providers.tsx`). Place it near the Trade/Manage area of the page
    (e.g. where the existing "Manage" sidebar card's Add/Trim/Move-stop/Close buttons already live,
-   lines 450-472 — those buttons deep-link to `/trader?symbol=...`; leave them as-is, the new
+   lines 445-467 — those buttons deep-link to `/trader?symbol=...`; leave them as-is, the new
    `OrderForm` is an *inline* alternative to that navigation, not a replacement for it).
 9. **`PositionBody`'s remaining scope** — after hoisting the chart, Orders & fills, and computing
    `hasStop`/`working` at the top level, `PositionBody` retains only the genuinely position-specific
-   UI: the stat-tile header (lines 220-291), the Risk & exit / Manage / Why-it's-held / Broker
-   sidebar (lines 402-514). Its `position: Position` prop type stays non-optional (unchanged) since
+   UI: the stat-tile header (lines 220-286), the Risk & exit / Manage / Why-it's-held / Broker
+   sidebar (lines 397-509). Its `position: Position` prop type stays non-optional (unchanged) since
    it is only ever invoked from inside the position-conditional branch (point 4's `CardNotice`
    sibling), same as today.
 
@@ -668,12 +678,15 @@ Run once against the pre-Step-8 tree (confirm red), once after (confirm green).
   `services/xstockstrat-analysis/app/handlers/servicer.py:1971-1976` — `context.abort(
   grpc.StatusCode.NOT_FOUND, f"strategy '{request.strategy_id}' not found")` when
   `self._strategies_repo.get_by_id(request.strategy_id)` returns `None`.
-- Reachable because `SignalReadiness.tsx:32` seeds `strategyId` directly from
-  `searchParams?.get('strategy') ?? ''` — an externally-controllable/bookmarkable value.
+- Reachable because `SignalReadiness.tsx:33` seeds `strategyId` directly from
+  `searchParams?.get('strategy') ?? ''` — an externally-controllable/bookmarkable value. (Line
+  re-verified post-feature-124: `SignalReadiness.tsx` shifted +1 line vs. the original design.md
+  citation; `useOpportunities.ts` is unaffected by feature 124, still exactly as cited below.)
 - `useReadiness` confirmed at `hooks/useOpportunities.ts:45-51` — currently has **no** `retry` option
   and no `isNotFound` return field.
-- `SignalReadiness.tsx:65-66`'s current error branch: `error ? <p className="text-sm
-  text-sell">Failed to evaluate readiness.</p> : ...` — no NotFound-vs-generic distinction.
+- `SignalReadiness.tsx:66-67`'s current error branch (ternary chain, re-verified): `... : error ? <p
+  className="text-sm text-sell">Failed to evaluate readiness.</p> : ...` — no NotFound-vs-generic
+  distinction.
 - Precedent to mirror: `useBacktestDetail` (`hooks/useStrategies.ts:54-67`) — `retry: (failureCount,
   err) => !isNotFoundError(err) && failureCount < 1` plus a returned `isNotFound: isNotFoundError(
   query.error)` field (line 66).
@@ -690,10 +703,10 @@ raw `useQuery(...)` result directly — change it to destructure and spread, sam
 `useBacktestDetail`).
 
 In `SignalReadiness.tsx`, destructure the new `isNotFound` field from `useReadiness`'s return (line
-34: `const { data, isLoading, error } = useReadiness(...)` → add `isNotFound`), and branch before the
-generic error paragraph (lines 65-66): when `isNotFound`, render a distinct message — "This strategy
-no longer exists — pick another." — instead of "Failed to evaluate readiness."; the generic error
-paragraph remains for any other error.
+35: `const { data, isLoading, error } = useReadiness(...)` → add `isNotFound`), and branch before the
+generic error paragraph (line 67, inside the existing ternary chain starting at line 60): when
+`isNotFound`, render a distinct message — "This strategy no longer exists — pick another." — instead
+of "Failed to evaluate readiness."; the generic error paragraph remains for any other error.
 
 **Verification**:
 ```bash
@@ -759,22 +772,26 @@ once after (confirm green).
   membership RPC exists (recon.md Risks, re-confirmed — no new grep hit for one).
 - `useOpportunities(minConviction)` confirmed at `hooks/useOpportunities.ts:16-22` — `analysisClient`
   bound to `/insights/api` (browser client, cross-segment-safe per Step 7's documented exception).
-- Opportunity-selection precedent to replicate, confirmed at
-  `insights/market/[symbol]/page.tsx:93-98`: `matches.find(o => o.strategyId ===
-  threadedStrategy) ?? matches[0]` — resolves design.md's Open Risk ("Opportunity-selection
-  tie-breaking... not fully specified... To be resolved at `/sdd-spec`") by replicating the existing,
-  already-shipped tie-break rule verbatim rather than inventing a new one.
+- Opportunity-selection precedent to replicate, re-verified post-feature-124 at
+  `insights/market/[symbol]/page.tsx:94-99`: `matches.find(o => o.strategyId ===
+  threadedStrategy) ?? matches[0]` (the `.find` line itself is at line 98) — resolves design.md's
+  Open Risk ("Opportunity-selection tie-breaking... not fully specified... To be resolved at
+  `/sdd-spec`") by replicating the existing, already-shipped tie-break rule verbatim rather than
+  inventing a new one.
 - `SignalReadiness` component (Step 10's NotFound-fixed version) mounts the same way
-  `insights/market/[symbol]/page.tsx:209-211` already does:
-  `<Suspense fallback={...}><SignalReadiness symbol={symbol} /></Suspense>` (it reads
-  `useSearchParams()` internally, hence the `Suspense` wrap).
+  `insights/market/[symbol]/page.tsx:217-219` already does (line shifted +8 from the original
+  citation — this file gained a `PageBreadcrumb` insertion from feature 124, same as the trader
+  positions page):
+  `<Suspense fallback={<div className="h-24" />}><SignalReadiness symbol={symbol} /></Suspense>` (it
+  reads `useSearchParams()` internally, hence the `Suspense` wrap).
 - `OPPORTUNITY_ACTION`/`EnumBadge` render maps confirmed at `src/lib/opportunityShared.tsx` (imported
-  by `insights/market/[symbol]/page.tsx:16` — same import this step reuses).
+  by `insights/market/[symbol]/page.tsx:17` — same import this step reuses; shifted +1 from the
+  original citation).
 - `Opportunity.conviction` is a deterministic **ordinal**, not a probability — per its own proto
   comment (`packages/proto/analysis/v1/analysis.proto`, cited in product-spec's Known Traps /
   `fails.md` 2026-08-05 `023-position-sizing-engine`) — display it exactly as
-  `insights/market/[symbol]/page.tsx:104` already does (`Math.round(opportunity.conviction * 100)`),
-  never re-labeled as a percentage confidence.
+  `insights/market/[symbol]/page.tsx:105` already does (`Math.round(opportunity.conviction * 100)`,
+  shifted +1 from the original citation), never re-labeled as a percentage confidence.
 
 **TDD**: `red-green required`
 
@@ -797,9 +814,11 @@ once after (confirm green).
    `insights/market`'s `threadedStrategy` URL param, since this page has no `?strategy=` threading
    concept of its own for Opportunity selection). Render conviction, action tag (`EnumBadge` +
    `OPPORTUNITY_ACTION`), thesis/source/strategy/expiry fields exactly as
-   `insights/market/[symbol]/page.tsx:104-111,128-156` shows them today. When no matching
-   `Opportunity` exists for a watchlisted symbol, show an explicit no-data state (P-03) — never
-   an empty gap.
+   `insights/market/[symbol]/page.tsx:105-112,136-165` shows them today (re-verified post-feature-124;
+   shifted +1/+8 respectively from the original citation, same dual-shift pattern as the `Suspense`
+   mount above — everything before this page's own `PageBreadcrumb` insertion shifted +1, everything
+   in/after its JSX `return` shifted +8). When no matching `Opportunity` exists for a watchlisted
+   symbol, show an explicit no-data state (P-03) — never an empty gap.
 4. **Readiness section**: mount `<SignalReadiness symbol={symbol} />` inside a `Suspense` boundary,
    as above. `SignalReadiness` internally resolves its own strategy (via `?strategy=` or its picker)
    — no new plumbing needed from this page beyond the `symbol` prop, matching how
@@ -1090,10 +1109,11 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "Single Position page"
   11, `repeated string`) — the client-side filter target.
 - Strategy-source precedence confirmed as decided by design.md: `watchlistBinding.strategyId ||
   owningStrategy` — `owningStrategy` is **already computed** at
-  `trader/positions/[symbol]/page.tsx:61-67` (derived from the symbol's orders, most-frequent
-  non-empty `strategyId`), unchanged by this feature — Step 8 preserves this computation as-is at the
-  page's top level. `watchlistBinding.strategyId` is Step 12's own gating output (the matched
-  binding's `strategyId`, when the symbol is watchlisted).
+  `trader/positions/[symbol]/page.tsx:62-68` (re-verified post-feature-124, was cited as `61-67`;
+  derived from the symbol's orders, most-frequent non-empty `strategyId`), unchanged by this
+  feature — Step 8 preserves this computation as-is at the page's top level.
+  `watchlistBinding.strategyId` is Step 12's own gating output (the matched binding's
+  `strategyId`, when the symbol is watchlisted).
 - Design.md explicitly scopes this section to **history-list-only** — no embedded per-run detail
   view. `GetBacktest`/`useBacktestDetail` stays exclusively on `/insights/strategies/[id]`
   (confirmed unaffected, per `insights/strategies/[id]/page.tsx:49,76-81` — not touched by this
@@ -1275,11 +1295,17 @@ inbound link is repointed, not just the primary one
   ```
   An unconditional Server Component `redirect()`, no `'use client'`.
 - The sole real caller confirmed via `grep -rn "insights/market"
-  services/xstockstrat-ui/src --include=*.tsx --include=*.ts`: `opportunities/page.tsx:129-130`
+  services/xstockstrat-ui/src --include=*.tsx --include=*.ts` (re-run post-feature-124):
+  `opportunities/page.tsx:140-141` (shifted from the original `129-130` citation — feature 124 added
+  markup above this ternary; the site itself is unchanged) —
   (`? /insights/market/${o.symbol}?strategy=${o.strategyId} : /insights/market/${o.symbol}`). The
-  three other sites design.md's round-3 originally flagged were re-verified by this feature's own
-  fresh grep and found to already point at `/trader/positions/[symbol]` or `/trader/orders/[id]`
-  (untouched routes) — no other repoint needed.
+  grep now returns 6 line-hits across 3 files, not 4 — `PlatformHeader.tsx:103-104` and
+  `BottomTabBar.tsx:18-19` each contribute 2 hits (their nav-special-case comment line also contains
+  the literal string "insights/market", in addition to the `if` condition itself) — but the **site
+  count is unchanged**: 1 real caller (here) + 2 nav special-cases (Step 23). The three other sites
+  design.md's round-3 originally flagged were re-verified by this feature's own fresh grep and found
+  to already point at `/trader/positions/[symbol]` or `/trader/orders/[id]` (untouched routes) — no
+  other repoint needed.
 - Query-string forwarding requirement: the caller's `?strategy=${o.strategyId}` must survive the
   redirect hop (feeds `SignalReadiness`'s `?strategy=` seed on the destination page, per Step 10-12).
 
@@ -1294,9 +1320,10 @@ against that later step's assertions rather than a standalone unit proof.
    read `searchParams` prop and rebuild the query string, or use `redirect()` with the constructed
    target URL including `?strategy=...` when present). Delete every other symbol/import from the
    file — this becomes a redirect-only stub, mirroring `app/page.tsx`'s minimalism.
-2. In `opportunities/page.tsx`, change the link-target construction at lines 129-130 from
-   `/insights/market/${o.symbol}` (and its `?strategy=` variant) to `/trader/positions/${o.symbol}`,
-   preserving the same `?strategy=${o.strategyId}` conditional query-string logic unchanged.
+2. In `opportunities/page.tsx`, change the link-target construction at lines 140-141 (re-verified
+   post-feature-124; shifted from the original `129-130` citation) from `/insights/market/${o.symbol}`
+   (and its `?strategy=` variant) to `/trader/positions/${o.symbol}`, preserving the same
+   `?strategy=${o.strategyId}` conditional query-string logic unchanged.
 
 **Verification**:
 ```bash
@@ -1322,12 +1349,13 @@ surfaces are updated together (the exact class of gap `fails.md` 2026-08-05
 `shadcn-migration-high-confidence` and this repo's nav-reachability convention exist to catch)
 
 **Codebase Evidence**:
-- Desktop special-case confirmed at `PlatformHeader.tsx:106-107`:
+- Desktop special-case confirmed at `PlatformHeader.tsx:103-104` (re-verified post-feature-124;
+  shifted from the original `106-107` citation):
   ```tsx
   // Dynamic Decide routes (e.g. /insights/market/[symbol]) resolve to the Decide group.
   if (pathname?.startsWith('/insights/market')) return { group: NAV_GROUPS[0] };
   ```
-  inside `resolveActive` (function spans lines 101-109).
+  inside `resolveActive` (function spans lines 98-106, shifted from `101-109`).
 - Mobile special-case confirmed at `BottomTabBar.tsx:18-20`:
   ```tsx
   // Signal detail lives under /insights/market — it belongs to Decide (mirrors the desktop shell).
@@ -1346,7 +1374,8 @@ surfaces are updated together (the exact class of gap `fails.md` 2026-08-05
 
 **Instructions**:
 1. Delete the `if (pathname?.startsWith('/insights/market')) return { group: NAV_GROUPS[0] };` line
-   and its preceding comment from `resolveActive` in `PlatformHeader.tsx` (lines 106-107).
+   and its preceding comment from `resolveActive` in `PlatformHeader.tsx` (lines 103-104, re-verified
+   post-feature-124; shifted from the original `106-107` citation).
 2. Delete the equivalent block from `isGroupActive` in `BottomTabBar.tsx` (lines 18-20) — after
    deletion, `isGroupActive`'s remaining `return hrefs.some(...)` logic (lines 21-23) is unchanged and
    already handles `/trader/positions/[symbol]` correctly (it's a `book`-group href).
@@ -1369,13 +1398,30 @@ Confirm both grep calls return no hits (the special-cases and their comments are
 
 **Reviewers**: `xstockstrat-ui` (service owner)
 
-**Codebase Evidence**:
-- Existing file confirmed 75 lines, one `test.describe`, desktop-only — walks `Primary`/`Section`
-  `NavigationMenu` landmarks (`getByRole('navigation', { name: 'Primary' | 'Section' })`), asserting
-  breadcrumb text via `getByLabel('Breadcrumb')`. No mobile/viewport-scoped assertion exists.
+**Codebase Evidence** (re-verified fresh — feature 124 already changed this file's own assertion
+mechanism, not just line numbers; the original citation below is corrected, not merely renumbered):
+- Existing file confirmed **92 lines** (not the originally-cited 75), one `test.describe('nav
+  reachability', ...)` with a single test, desktop-only. Its own docblock (lines 4-18) explains why:
+  **feature 124 (FR-10a) already removed the shared `PlatformHeader`-level `Breadcrumb` landmark**
+  this spec's original `getByLabel('Breadcrumb')` locator depended on (moved into each page's own
+  `PageBreadcrumb`, FR-10b) — the file's assertions were **already rewritten by feature 124** to use
+  `aria-current="page"` on the `Primary`/`Section` nav links instead, per design.md's own Round 4
+  resolution (a case where a sibling feature's design anticipated and pre-solved this exact gap).
+  **This step therefore does not need to invent a new assertion mechanism** — only apply the
+  already-established `aria-current` pattern to the new route.
+- Current mechanism (lines 59-90): `primary = page.getByRole('navigation', { name: 'Primary' })`,
+  `section = page.getByRole('navigation', { name: 'Section' })`; for each `GROUPS` entry, click the
+  `Primary` tab link, assert `aria-current="page"` on it, then for each item click the `Section` link
+  and assert `aria-current="page"` on both the item and its parent tab.
+- The `GROUPS` array (lines 21-57) drives the walk via **static nav-menu items only** — `book`'s
+  entries are `Exposure` (`/trader/positions`), `Portfolio` (`/trader/portfolio`), `Orders`
+  (`/trader/orders`). There is no nav-menu item for a dynamic route like
+  `/trader/positions/[symbol]` (nav links only reach list pages) — proving this feature's new route
+  resolves to the `book` group requires a **direct navigation** + `aria-current` assertion, not a
+  simulated nav-menu click, since no menu link points at it.
 - `BottomTabBar` confirmed `sm:hidden` (only rendered/visible below the `sm` breakpoint) with
   `data-testid="mobile-tab-bar"` (`BottomTabBar.tsx:36`) and per-tab `aria-current="page"` when
-  active (`BottomTabBar.tsx:53`).
+  active (`BottomTabBar.tsx:53`) — both re-verified unaffected by feature 124.
 - No dedicated mobile-viewport Playwright project exists in `playwright.config.ts` (confirmed —
   only `Desktop Chrome`/`Desktop Firefox` devices registered) — a mobile assertion must set its own
   viewport inline via `page.setViewportSize(...)`.
@@ -1389,12 +1435,15 @@ of a similar special-case, or the Step 23 deletion being applied to only one of 
 
 **Instructions**:
 Add a new test asserting `/trader/positions/AAPL` resolves to the `book` group on **both** surfaces
-in the same test run:
-- Desktop (default viewport): navigate to `/trader/positions/AAPL`, assert
-  `getByLabel('Breadcrumb')` contains "Book".
+in the same test run, using the file's own already-established `aria-current` mechanism (do not
+reintroduce a `getByLabel('Breadcrumb')` locator — that landmark no longer exists, feature 124):
+- Desktop (default viewport): navigate directly to `/trader/positions/AAPL` (no nav-menu item exists
+  for a dynamic route, so this is a direct `page.goto`, not a simulated click), assert
+  `page.getByRole('navigation', { name: 'Primary' }).getByRole('link', { name: 'Book', exact: true })`
+  has `aria-current="page"`.
 - Mobile: `page.setViewportSize({ width: 375, height: 800 })` (below the Tailwind `sm` 640px
   breakpoint), reload/re-navigate to `/trader/positions/AAPL`, assert
-  `getByTestId('mobile-tab-bar').getByRole('link', { name: 'Book' })` has `aria-current="page"`.
+  `page.getByTestId('mobile-tab-bar').getByRole('link', { name: 'Book' })` has `aria-current="page"`.
 
 Also assert `/insights/market/AAPL` (now a redirect, Step 22) lands on `/trader/positions/AAPL`
 (`await expect(page).toHaveURL(/\/trader\/positions\/AAPL/)`), proving the redirect + the deleted
@@ -1418,11 +1467,12 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "nav reachability"
 **Reviewers**: `xstockstrat-ui` (service owner)
 
 **Codebase Evidence**:
-- `signal-detail.spec.ts` confirmed 55 lines, 3 tests, full read — nearly every assertion targets
-  page-shell markup unique to the now-deleted `insights/market/[symbol]/page.tsx`: the "Queue"
-  back-link (`getByRole('link', { name: /Queue/ })`), the header's "Conviction"/"Edge (BT)" stat
-  labels, `getByText('2/3 conditions')` (readiness conviction, which **does** still exist —
-  `SignalReadiness.tsx:79-81` — since that component is reused unchanged), the strategy-track-record
+- `signal-detail.spec.ts` confirmed **59 lines** (re-verified post-feature-124; shifted from the
+  originally-cited 55), 3 tests, full read — nearly every assertion targets page-shell markup unique
+  to the now-deleted `insights/market/[symbol]/page.tsx`: the "Queue" back-link (`getByRole('link', {
+  name: /Queue/ })`), the header's "Conviction"/"Edge (BT)" stat labels, `getByText('2/3 conditions')`
+  (readiness conviction, which **does** still exist — `SignalReadiness.tsx:80-82`, shifted from the
+  originally-cited `79-81` — since that component is reused unchanged), the strategy-track-record
   block (`getByTestId('strategy-track-record')`, also unchanged — same component). Per design.md's
   Open Risk, this is genuinely "move and rewrite," not "re-run": the Queue back-link and
   CONVICTION/EDGE header stats are page-shell chrome that does not exist in this form on
@@ -1473,8 +1523,11 @@ ls e2e/insights/signal-detail.spec.ts 2>&1  # expect "No such file or directory"
   AAPL's `+$100.00` unrealized P&L is identical on `/trader/portfolio` (`PORTFOLIO_ALPACA`) and
   `/trader/positions` (`POSITIONS`/`POSITION_AAPL`) — two read paths. FR-14 requires this feature add
   a **third**: `/trader/positions/AAPL` (this feature's own unified page), which already shows
-  `position.unrealizedPnl` (confirmed at `positions/[symbol]/page.tsx:253-258`, unchanged by Step 8's
-  refactor — that stat-tile block stays inside the position-gated `PositionBody`).
+  `position.unrealizedPnl` (re-verified post-feature-124 at `positions/[symbol]/page.tsx:248-256`,
+  target text render at line 251 — shifted from the originally-cited `253-258`; unchanged by Step 8's
+  refactor either way, since that header block stays inside the position-gated `PositionBody`).
+  A second instance also exists in the stat-tile grid (`StatTile` at line 277) — the e2e's
+  `.first()` pattern (Instructions below) already accounts for multiple on-page matches.
 
 **TDD**: `red-green required` — this test would already pass today for the pre-125 `/trader/positions/
 [symbol]` page (096 already ties to the same `GetPosition` fixture), so red-before-green here means:

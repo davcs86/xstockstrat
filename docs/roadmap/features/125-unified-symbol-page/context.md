@@ -323,3 +323,56 @@
   `main-dev` — a stale-status gap worth a future `/sdd-status` refresh, not this feature's to fix.)
 
 **Next**: `/sdd-execute unified-symbol-page`.
+
+---
+
+## Session 2026-08-10T00:00:00Z — post-`main-dev`-merge citation refresh (manual, in lieu of `/sdd-spec`)
+
+- **Trigger**: after the impl-spec review pass above, this branch had drifted from `main-dev` —
+  feature 124 (`shadcn-table-actions-responsive`, a different, larger shadcn migration) merged in
+  the interim. User said "fix the merge conflicts." Fetched and merged `origin/main-dev`; one real
+  conflict (`docs/roadmap/ledger/insights.md`, append-only — resolved by keeping both features'
+  entries in chronological order, this feature's 2026-08-10 entry after 124's 2026-08-09 one).
+- Feature 124's diff rewrote several `xstockstrat-ui` files this feature's `design.md`/
+  `implementation-spec.md` cite by exact line number — flagged proactively before the user asked.
+  Offered two options: (1) trust `/sdd-execute`'s own per-step discovery to catch drift at run
+  time, or (2) re-run `/sdd-spec` now to refresh every citation up front. **User chose (2).**
+- Two attempts to have the forked `/sdd-spec` skill actually perform this re-verification both
+  failed — each time it read `context.md`, saw the feature already `implementation-ready`, and
+  declined ("nothing to do"), even with an explicit instruction on the second attempt. Abandoned
+  re-invoking the skill; did the citation-freshness sweep directly in the main session instead: a
+  `codebase-discovery` subagent reported drift across the 12 `xstockstrat-ui` files feature 124
+  touched, then every citation in `implementation-spec.md` referencing those files (plus, for due
+  diligence, every citation in the backend-only Steps 1-6, confirmed untouched by 124's UI-only
+  diff, and Step 7's doc citations, also confirmed unchanged) was re-verified against the current
+  tree and fixed with `Edit`, cross-checking Card/section boundaries via direct file reads where
+  the subagent's report didn't give exact ranges.
+- **Steps repaired** (mechanical line-shift only, unless noted): 8, 10, 11, 12, 18 (one more
+  citation — `owningStrategy`'s `useMemo`, `page.tsx:61-67` → `62-68` — caught in this session's
+  own final sweep, not the earlier pass), 22, 23, 25, 26.
+- **Steps with a real precondition/methodology break, not just renumbering**:
+  - Step 8: the old "Exposure" back-`Link` the Instructions assumed no longer exists — feature 124
+    (FR-10b) replaced it with a `<PageBreadcrumb>` component. Instructions rewritten to build the
+    new symbol heading below `PageBreadcrumb`, not modify a link that isn't there.
+  - Step 24: the `getByLabel('Breadcrumb')` locator the Instructions assumed no longer exists —
+    feature 124 (FR-10a) removed the shared `PlatformHeader`-level `Breadcrumb` landmark entirely
+    and moved the reachability proof onto `aria-current="page"` on the `Primary`/`Section` nav
+    links (`nav-reachability.spec.ts`'s own docblock records this). Instructions rewritten to use
+    the `aria-current` mechanism for the new `/trader/positions/AAPL` route assertion, and to note
+    explicitly that a direct `page.goto` is required (no nav-menu link exists for a dynamic route).
+- **Confirmed unaffected, no change needed**: Step 9 (`mock-backend.ts:231-234`,
+  `OrderForm.tsx:55-65` — both re-verified via direct grep, exact match). Steps 1-6 (proto/
+  `screener.py`/`portfolio_service.go`/`portfolio_repo.go` — backend-only, outside feature 124's
+  UI-only diff; every cited line re-verified by grep, exact match, including the
+  `portfolio_repo_test.go` existence check Step 6 flagged as unconfirmed — it exists). Step 7
+  (`services/xstockstrat-ui/CLAUDE.md` lines 59/68, `docs/patterns/nextjs-frontends.md` lines
+  3/12-17/282-287/291-298 — all re-verified by grep, exact match). Steps 13-21's own Codebase
+  Evidence cite functions/proto fields, not `page.tsx` line ranges (their one `page.tsx` line
+  citation, Step 18's `owningStrategy`, is listed above under repaired steps).
+- All 26 steps now re-verified against the post-feature-124 `main-dev` tip. No further staleness
+  found in this sweep.
+- Overlap findings: none new.
+
+**Next**: `/sdd-execute unified-symbol-page` — pending explicit user confirmation to proceed (the
+"2" instruction that triggered this session was scoped to the citation refresh, not to launching
+execution).
