@@ -221,3 +221,38 @@
 - [ ] `sectionStart`'s ordering invariant (must be set on the first `NAV_GROUPS` entry of the
   section it starts) is documented only via JSDoc, not enforced — low blast radius (visual-only
   misplacement). To be addressed at the `/sdd-spec` step that adds the field.
+
+## Session 2026-08-10T13:00:00Z — sdd-spec
+
+- Generated `implementation-spec.md` with 4 steps (navGroups field → PlatformHeader rewrite →
+  e2e test → manual visual checkpoint). Status → `implementation-ready`.
+- Key codebase findings:
+  - **Corrected design.md's stated chevron mechanism.** design.md's Chosen Approach cited
+    `sidebarMenuButtonVariants`'s `data-open:*` classes (`sidebar.tsx:449`) as the thing that
+    would drive the chevron rotation. Verified against the actually-installed
+    `@radix-ui/react-collapsible@1.1.20` source
+    (`node_modules/.pnpm/@radix-ui+react-collapsible@1.1.20.../dist/index.mjs:68`) —
+    `CollapsibleTrigger` emits `data-state="open"|"closed"`, never a literal `data-open`
+    attribute, so those `data-open:*` classes have no producer anywhere in this codebase today
+    (dead CSS) — a "demonstration is not a producer-contract claim" instance (ledger `fails.md`
+    recurring pattern). The real, working in-file precedent is `sidebar.tsx:215`'s
+    `group-data-[side=right]:rotate-180` (bracket syntax against a real attribute value).
+    `implementation-spec.md` Step 2 uses `group-data-[state=open]/menu-button:rotate-90` instead
+    (90°, not 180° — `CaretRight` is a right-pointing caret, so 90° produces the conventional
+    downward "expanded" caret, unlike `navigation-menu.tsx`'s down-pointing `IconChevronDown`
+    which needs 180° to flip).
+  - **Corrected design.md's proposed red-before-green proof for FR-1.** design.md's FR-5 item 1
+    proposed a bare `data-state` `'closed'→'open'` transition assertion as the chevron's
+    red-before-green proof. Verified this would already pass on `main-dev` today —
+    `Collapsible`/`CollapsibleTrigger` already wrap every group's `SidebarMenuButton`
+    (`PlatformHeader.tsx:278-293`, unchanged by this feature) — so it is not actually red before
+    Step 2. `implementation-spec.md` Step 3 adds a `rotate-90` class assertion on the chevron
+    icon itself alongside the `data-state` check, since only the class assertion has no producer
+    until Step 2 lands.
+  - `SidebarGroupContent`/`SidebarMenu`(non-Sub)/`SidebarMenuItem`(non-Sub)/`MobileNavLink` are
+    all used **only** inside `PlatformHeader.tsx`'s mobile block — confirmed via repo-wide grep —
+    so Step 2's import/JSX swap is self-contained, no cross-file impact.
+  - `group.sectionStart` (Step 1) is itself the entire "which group gets a preceding label"
+    derivation once ARIA-association was dropped in design.md's Round 3 — no separate
+    `groupsWithSection` lookup structure is needed; inline `{group.sectionStart && <SidebarGroupLabel>...}`
+    suffices (root `CLAUDE.md` "write the minimum" guardrail).
