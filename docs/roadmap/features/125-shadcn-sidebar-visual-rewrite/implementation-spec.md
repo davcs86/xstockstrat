@@ -59,7 +59,7 @@ during execute.
 
 ### Step 1 — service: add `sectionStart` field to `NavGroup`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/navGroups.tsx` — modify

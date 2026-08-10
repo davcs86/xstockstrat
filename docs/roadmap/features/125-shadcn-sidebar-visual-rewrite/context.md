@@ -281,3 +281,34 @@
     derivation once ARIA-association was dropped in design.md's Round 3 — no separate
     `groupsWithSection` lookup structure is needed; inline `{group.sectionStart && <SidebarGroupLabel>...}`
     suffices (root `CLAUDE.md` "write the minimum" guardrail).
+
+## Session 2026-08-10T14:00:00Z — sdd-execute (sequential) boot
+
+- BOOT SEQUENCE B3: `feature/shadcn-sidebar-visual-rewrite` does not exist on origin (never
+  created — no code work had happened yet). Fell back toward `origin/main-dev`, but none of this
+  feature's spec files exist there either (the feature never merged). Resolved by loading
+  authoritative spec files from `origin/claude/implement-124-e48xkn` instead — the actual
+  harness-assigned session branch, confirmed byte-identical to the local working tree and already
+  carrying every artifact this feature has produced (product-spec.md through
+  implementation-spec.md). Same resolution feature 124 used for the identical situation.
+- Corrected `feature.md`'s **Development Branch** field to `claude/implement-124-e48xkn`
+  (harness-assigned; see note) to match reality, added an explanatory note, logged a Status
+  History row. No lifecycle status change (stays `implementation-ready`).
+- Confirmed `origin/main-dev` (`b70b645`) is an ancestor of the current branch — already up to
+  date, no merge needed for the re-spec gate's `main-dev`-sync step.
+- Sequential mode entry confirmation: user agreed. Proceeding to the re-spec gate (§5.3).
+- Re-spec gate (§5.3): codebase-discovery re-validated all 4 steps' Codebase Evidence against the
+  live tree — every `path:line` citation matched exactly, no drift, no `## Not found`. No re-spec
+  needed (directive: none).
+- Up-front confirm (§5.4): user proceeded. Plan: Steps 1-4, all surface `ui`, one checkpoint
+  expected at feature end (4 steps ≤ 5 cap, no surface boundary — all four are `xstockstrat-ui`).
+- Tooling setup (steps 1-4): node22 ✓ v22.22.2 · pnpm ✓ 9.15.0 · tsc ✓ · next/lint ✓ · playwright ✓
+  · chromium ✓ (pre-provisioned `/opt/pw-browsers`). Nothing installed — all present.
+
+### Step 1 — add `sectionStart` field to `NavGroup` [done]
+- Added the optional `sectionStart?: string` field to `NavGroup` with the JSDoc-documented
+  ordering invariant; set `'Navigate'` on `decide`, `'Settings'` on `settings`; `discover`/`engine`/
+  `book` untouched. `pnpm exec tsc --noEmit` clean; grep confirms the field appears once and each
+  value is set on exactly the intended group object.
+- Files modified: `services/xstockstrat-ui/src/components/shared/navGroups.tsx`
+- Deviations: none
