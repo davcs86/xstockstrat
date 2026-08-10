@@ -27,7 +27,16 @@ if [ -d "$_UI_DIR/node_modules/.bin" ]; then
   fi
 fi
 
-SKILLS_DIR="${CLAUDE_PROJECT_DIR:-$(git -C "$(dirname "$0")" rev-parse --show-toplevel)}/.claude/skills"
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git -C "$(dirname "$0")" rev-parse --show-toplevel)}"
+SKILLS_DIR="$PROJECT_DIR/.claude/skills"
+HOOKS_DIR="$PROJECT_DIR/.claude/hooks"
+
+# Check for code-completed features that need archiving (optional reporting)
+if [ -f "$HOOKS_DIR/check-code-completed-features.sh" ]; then
+  echo ""
+  bash "$HOOKS_DIR/check-code-completed-features.sh" || true
+  echo ""
+fi
 
 [ -d "$SKILLS_DIR" ] || exit 0
 
