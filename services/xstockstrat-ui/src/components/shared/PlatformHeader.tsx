@@ -3,7 +3,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { List, Lightning, Sparkle } from '@phosphor-icons/react';
+import { List, Lightning, Sparkle, CaretRight } from '@phosphor-icons/react';
 import { cn } from '../ui/utils';
 import { Button } from '../ui/button';
 import { ChromeProvider, useChrome } from '@/context/ChromeContext';
@@ -17,9 +17,13 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarMenu,
   SidebarMenuItem,
   SidebarMenuButton,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
   useSidebar,
 } from '../ui/sidebar';
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../ui/collapsible';
@@ -168,9 +172,9 @@ function MobileNavLink({
 }) {
   const { setOpenMobile } = useSidebar();
   return (
-    <SidebarMenuButton asChild isActive={isActive} onClick={() => setOpenMobile(false)}>
+    <SidebarMenuSubButton asChild isActive={isActive} onClick={() => setOpenMobile(false)}>
       <Link href={href}>{label}</Link>
-    </SidebarMenuButton>
+    </SidebarMenuSubButton>
   );
 }
 
@@ -274,40 +278,61 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
                 <nav aria-label="Mobile">
                   <SidebarContent>
                     {NAV_GROUPS.map((group) => (
-                      <SidebarGroup key={group.key}>
-                        <Collapsible
-                          open={expanded === group.key}
-                          onOpenChange={(open) => setExpanded(open ? group.key : '')}
-                        >
-                          <CollapsibleTrigger asChild>
-                            <SidebarMenuButton
-                              className={cn(
-                                group.key === activeGroup.key
-                                  ? 'bg-accent text-foreground font-medium'
-                                  : 'text-muted-foreground',
-                              )}
-                            >
-                              {group.icon}
-                              <span className="flex-1">{group.label}</span>
-                            </SidebarMenuButton>
-                          </CollapsibleTrigger>
-                          <CollapsibleContent>
-                            <SidebarGroupContent>
-                              <SidebarMenu>
-                                {visibleItems(group.items).map((sub) => (
-                                  <SidebarMenuItem key={sub.href}>
-                                    <MobileNavLink
-                                      href={sub.href}
-                                      label={sub.label}
-                                      isActive={isItemActive(pathname, sub)}
-                                    />
-                                  </SidebarMenuItem>
-                                ))}
-                              </SidebarMenu>
-                            </SidebarGroupContent>
-                          </CollapsibleContent>
-                        </Collapsible>
-                      </SidebarGroup>
+                      <React.Fragment key={group.key}>
+                        {group.sectionStart && (
+                          <SidebarGroupLabel>{group.sectionStart}</SidebarGroupLabel>
+                        )}
+                        <SidebarGroup>
+                          <SidebarGroupContent>
+                            <SidebarMenu>
+                              <SidebarMenuItem>
+                                {/* group/collapsible on the Collapsible root itself (not
+                                    group/menu-button) — matches shadcn's own "Collapsible
+                                    SidebarMenu" reference composition exactly. Radix's
+                                    Collapsible.Root reflects data-state on itself, so the chevron's
+                                    group-data-[state=open]/collapsible: selector picks it up the
+                                    same way it would off CollapsibleTrigger. */}
+                                <Collapsible
+                                  className="group/collapsible"
+                                  open={expanded === group.key}
+                                  onOpenChange={(open) => setExpanded(open ? group.key : '')}
+                                >
+                                  <CollapsibleTrigger asChild>
+                                    <SidebarMenuButton
+                                      className={cn(
+                                        'rounded-md',
+                                        group.key === activeGroup.key
+                                          ? 'font-medium text-foreground'
+                                          : 'text-muted-foreground',
+                                      )}
+                                    >
+                                      {group.icon}
+                                      <span className="flex-1">{group.label}</span>
+                                      <CaretRight
+                                        className="h-4 w-4 shrink-0 transition-transform duration-300 group-data-[state=open]/collapsible:rotate-90"
+                                        aria-hidden="true"
+                                      />
+                                    </SidebarMenuButton>
+                                  </CollapsibleTrigger>
+                                  <CollapsibleContent>
+                                    <SidebarMenuSub>
+                                      {visibleItems(group.items).map((sub) => (
+                                        <SidebarMenuSubItem key={sub.href}>
+                                          <MobileNavLink
+                                            href={sub.href}
+                                            label={sub.label}
+                                            isActive={isItemActive(pathname, sub)}
+                                          />
+                                        </SidebarMenuSubItem>
+                                      ))}
+                                    </SidebarMenuSub>
+                                  </CollapsibleContent>
+                                </Collapsible>
+                              </SidebarMenuItem>
+                            </SidebarMenu>
+                          </SidebarGroupContent>
+                        </SidebarGroup>
+                      </React.Fragment>
                     ))}
                   </SidebarContent>
                 </nav>

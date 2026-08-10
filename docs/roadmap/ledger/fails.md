@@ -953,3 +953,95 @@ ambiguity is logged here).
   safe "just for the styling" substitution, even though it compiles cleanly and passes a build. This
   generalizes the render-vs-asChild lesson above: verify a primitive's *behavioral* contract against
   the actual use case, not just its *prop* API, before adopting it for a styling-only motive.
+
+### 2026-08-10 — shadcn-sidebar-visual-rewrite — assumption
+- **Mistake**: A `test` step's Verification section assumed a local Playwright red-before-green run
+  against `pnpm dev` was practical in the execute sandbox. It wasn't: `xstockstrat-ui`'s dev-mode
+  on-demand compiler took **88.6s to compile a single route** (`/config-ui/sources`, 13,610
+  modules) on first hit in this sandbox, and `warmup.setup.ts` pre-warms 21 routes — Next.js
+  compiles them serially regardless of the test's own `Promise.allSettled` parallel fetch, so the
+  warmup step alone would need many minutes just to reach the point where the actual test's
+  assertions could run. Confirmed via `ps`/CPU inspection this is genuine compile slowness (4 CPU /
+  15GB available, `next-server` pegged near 100% CPU), not a hang or a defect in the feature's code.
+  Fell back to the documented `tsc --noEmit` + `pnpm run lint` + `playwright test --list` substitute
+  (`reference/sequential-mode.md`'s pre-authorized Playwright fallback) — sound for type/lint/
+  test-registration confidence, but genuinely does **not** verify any runtime DOM/CSS/ARIA behavior
+  (chevron rotation, `data-state` transitions, new element presence). Real verification only happens
+  once CI runs the suite against a **production** bundle (`pnpm build && pnpm start` — no on-demand
+  compilation), per `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/implementation-spec.md`
+  Deviation Log, Step 3.
+- **Evidence**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/implementation-spec.md` §
+  Deviation Log (Step 3); `context.md` session `sdd-execute (sequential)` step-loop entry.
+- **Rule it implies**: this generalizes the `fails.md` 2026-08-05 `frontend-reverse-proxy` sandbox-
+  capability-gap pattern (there: Docker unavailable) to a second, distinct axis — **the execute
+  sandbox's Next.js dev-mode compiler is too slow for a full `pnpm dev`-backed Playwright run**, not
+  just occasionally unavailable. A `xstockstrat-ui` `test`-step spec should not assume a live
+  dev-server e2e run will complete inside a normal step's time budget; plan for the `tsc --noEmit` +
+  `pnpm run lint` + `--list` fallback as the *expected* sandbox outcome for now, and treat the
+  integration PR's CI run (production bundle, not dev-mode) as the actual first red/green signal —
+  not something to silently skip mentioning when the sandbox happens to cooperate on a smaller spec.
+
+### 2026-08-10 — shadcn-sidebar-visual-rewrite — assumption (corrects the entry immediately above, same session)
+- **Mistake**: the entry directly above concluded a live-browser red-before-green run was
+  impractical in this sandbox and fell back to `tsc`/`lint`/`--list` only. That conclusion was
+  **too pessimistic** — it generalized from the *full* `warmup.setup.ts` (21 routes, serially
+  compiled, ~90s each in the worst case) to "any live e2e run is impractical here," when the real
+  constraint is narrower: **only the untargeted, full-suite warmup is impractical**. A *scoped* run
+  — `playwright test <file> --project=chromium --no-deps` (skips the `setup` project's 21-route
+  dependency entirely) plus manually pre-warming just the 1-2 routes the target spec actually
+  visits (a plain `curl` with a hand-signed test JWT cookie, ~10-30s per route on first hit) — is
+  fully practical and completed a genuine RED (3 real failures, right reasons) then GREEN (9/9
+  pass) cycle in well under a minute once warm. The step was re-verified this way and marked `done`
+  on the real result, not the fallback.
+- **Evidence**: same feature's `implementation-spec.md` § Deviation Log, Step 3 (updated with the
+  corrected narrative); `context.md` Step 3 entry.
+- **Rule it implies**: before concluding "this sandbox can't run Playwright e2e for this
+  `xstockstrat-ui` feature," try the narrow path first: `--project=chromium --no-deps` to skip
+  `warmup.setup.ts`'s full route sweep, plus a manual `curl`-with-signed-JWT pre-warm of only the
+  specific route(s) the target spec visits. Reserve the `tsc`+`lint`+`--list` fallback for when
+  even that scoped, pre-warmed run still times out — not as the first resort the moment the full
+  suite is slow.
+
+### 2026-08-10 — shadcn-sidebar-visual-rewrite — assumption
+- **Mistake**: a Playwright assertion checking a Tailwind `rotate-90` utility's effect via
+  `expect(locator).toHaveCSS('transform', ...)` silently and consistently read `"none"` in both the
+  pre- and post-toggle state — not because the CSS rule wasn't applied, but because **Tailwind v4's
+  bare `rotate-*`/`scale-*`/`translate-*` utilities set the standalone CSS `rotate`/`scale`/
+  `translate` property directly**, not the composed `transform` property, unless the separate
+  `.transform` utility class is also present to fold them in (confirmed by reading the generated
+  stylesheet rule directly: `.group-data-[state=open]/menu-button:rotate-90:is(:where(.group/
+  menu-button)[data-state="open"] *) { rotate: 90deg; }` — no `transform` property anywhere in that
+  rule). The class list and `data-state` attribute were both correct at every step; only the test's
+  chosen CSS property to inspect was wrong, which read as a false implementation bug until the
+  actual generated CSS was inspected directly (`document.styleSheets` + `getComputedStyle().rotate`).
+- **Evidence**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/implementation-spec.md` §
+  Deviation Log, Step 3; `services/xstockstrat-ui/e2e/mobile-sidebar.spec.ts`'s chevron test
+  (`toHaveCSS('rotate', ...)`, not `'transform'`).
+- **Rule it implies**: in this codebase (Tailwind v4), a Playwright/e2e assertion verifying a bare
+  rotate/scale/translate utility's effect must check `getComputedStyle`'s own `rotate`/`scale`/
+  `translate` property, not `transform` — `transform` only reflects these utilities when the
+  element *also* carries the `.transform` class. When a rotation/scale assertion mysteriously stays
+  "none"/unset on both sides of a toggle, inspect the actual generated stylesheet rule
+  (`document.styleSheets`) before assuming the underlying app code is broken.
+
+### 2026-08-10 — shadcn-sidebar-visual-rewrite — assumption
+- **Mistake**: a 3-round design debate (feature 126) approved an implementation of shadcn's
+  "Collapsible SidebarMenu" pattern that verified its **visual styling** against the reference
+  (`ui.shadcn.com/docs/components/sidebar`) but never checked the reference's **actual DOM
+  composition**. The result omitted the `SidebarMenu`/`SidebarMenuItem` wrapper shadcn's own
+  pattern always includes, and reused an unrelated `group/menu-button` name for the chevron's
+  scope instead of the reference's own `group/collapsible`. Neither `design-proposer` nor
+  `design-adversary` fetched the live shadcn docs page in any round — all cited evidence was
+  `recon.md`'s codebase citations, which by construction can only describe the *consuming*
+  codebase, never the external reference it's supposed to match. The gap surfaced only when the
+  user compared a rendered screenshot against the real reference page after implementation.
+- **Evidence**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/design.md` § ADDENDUM
+  2026-08-10; `context.md` post-checkpoint session entries.
+- **Rule it implies**: when a feature's explicit acceptance criterion is "match an external
+  reference" (a live docs page, a design system, another product's UI), the design-phase debate
+  must ground at least one round's evidence in the **actual reference itself** — a live fetch of
+  its real markup/composition, not just its rendered visual description — not only in this
+  codebase's own `recon.md` citations. `recon.md` can prove what *our* code does; it can never
+  prove what the *reference* does. A future `/sdd-design` round debating an external-reference-match
+  feature should include a `WebFetch`/reference-inspection step in Phase 0 Recon, not defer that
+  check to a human eyeballing a screenshot after the code already shipped.

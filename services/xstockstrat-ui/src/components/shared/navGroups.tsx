@@ -24,6 +24,14 @@ export interface NavGroup {
   label: string;
   icon: React.ReactNode;
   items: NavItem[];
+  /**
+   * Text for a muted, non-interactive SidebarGroupLabel rendered immediately before this
+   * group in the mobile offcanvas nav (FR-3, feature 126). Purely visual — no id, no
+   * aria-labelledby. Invariant: must be set on the FIRST NAV_GROUPS entry of the section it
+   * starts, or the label silently attaches to the wrong group — not enforced at compile/
+   * runtime, only by this comment.
+   */
+  sectionStart?: string;
 }
 
 export const HOME_HREF = '/insights/opportunities';
@@ -36,6 +44,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: 'Decide',
     icon: <Target className="h-4 w-4" weight="bold" />,
     items: [{ label: 'Opportunities', href: '/insights/opportunities' }],
+    sectionStart: 'Navigate',
   },
   {
     key: 'discover',
@@ -71,6 +80,7 @@ export const NAV_GROUPS: NavGroup[] = [
     key: 'settings',
     label: 'Settings',
     icon: <GearSix className="h-4 w-4" weight="bold" />,
+    sectionStart: 'Settings',
     items: [
       { label: 'Trader home', href: '/trader', match: 'exact' },
       { label: 'Insights home', href: '/insights', match: 'exact' },

@@ -1334,6 +1334,55 @@ reusing.
   its own synthesis. A subagent's "regression" finding should first be checked against "was this
   decision actually written down anywhere it could read it?" before being treated as a real design gap.
 
+### 2026-08-10 — shadcn-sidebar-visual-rewrite — design
+- **Pattern**: An "ARIA-association" fix (`aria-labelledby` linking a container to its visible
+  label) is not a producer-contract claim just because the reference is a syntactically valid,
+  non-duplicate IDREF — check the *referencing* element's actual (often implicit) ARIA role first.
+  `ui/sidebar.tsx`'s `SidebarGroup` renders a bare `<div>` with no explicit `role`, which resolves
+  to the implicit role `generic` — an element excluded from accessible-name computation per
+  WAI-ARIA, so `aria-labelledby` on it likely wouldn't reach assistive tech even though the id
+  reference itself is perfectly valid HTML. The design round nearly shipped the "valid IDREF"
+  check as if it proved the fix worked, until the adversary traced the actual role. The design was
+  then simplified further, not just patched: since each interactive child (`SidebarMenuButton`)
+  already computes a correct, distinct accessible name from its own visible text, the whole
+  `aria-labelledby`/`role="group"` mechanism was dropped rather than fixed — a shared, identical
+  accessible name across N sibling containers adds real implementation complexity (id-plumbing, an
+  ordering invariant to maintain) for an accessibility improvement that, once actually exposed,
+  tells a screen-reader user nothing beyond what they already hear from each interactive child.
+- **Evidence**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/context.md` § Session
+  2026-08-10T11:00:00Z (Round 3 adversary + orchestrator synthesis); `design.md` § Rejected
+  Alternatives (third bullet).
+- **Rule it implies**: before treating any `aria-*` wiring onto a shadcn/Radix-vendored primitive
+  as "fixed," check the actual rendered element's role (explicit or implicit) — a `<div>`-based
+  primitive (`SidebarGroup`, and likely siblings in the same vendored family) needs an explicit
+  `role` before an `aria-labelledby`/`aria-describedby` reference onto it means anything to
+  assistive tech. And before adding that `role`, ask whether the interactive descendants already
+  provide the accessible name a screen-reader user needs — duplicating it at a wrapping-container
+  level may be complexity without a real accessibility win. This generalizes the "demonstration is
+  not a producer-contract claim" family already in `fails.md` (2026-07-27/29/08-05) to ARIA
+  wiring specifically, not just runtime/API behavior.
+
+### 2026-08-10 — shadcn-sidebar-visual-rewrite — reuse
+- **Pattern**: a genuine, live-browser Playwright red-before-green cycle IS practical in the
+  execute sandbox for `xstockstrat-ui`, even though the default `pnpm exec playwright test <file>`
+  invocation is not — the difference is the `setup` project's `warmup.setup.ts`, which pre-fetches
+  **21** routes serially (each up to ~90s to compile in dev mode on first hit). The fix: run with
+  `--project=chromium --no-deps` (skips the `setup` project dependency entirely) and manually
+  pre-warm only the specific route(s) the target spec actually visits via a plain `curl` carrying a
+  hand-signed test JWT cookie (same secret/shape as `e2e/helpers/auth.ts`'s `signTestJwt` —
+  `jose`'s `SignJWT`, `test-jwt-secret-for-e2e-tests-min32c`). Total cost: ~10-30s per route,
+  one-time, then the actual test run completes in well under a minute.
+- **Evidence**: `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/implementation-spec.md` §
+  Deviation Log, Step 3 (Attempt 2); `context.md` Step 3 entry — achieved a real RED (3 failures,
+  right reasons) then GREEN (9/9 passed in 18.2s) this way, after Attempt 1's full-suite run timed
+  out.
+- **Rule it implies**: a future `xstockstrat-ui` `test`-step's TDD gate should default to the
+  scoped `--project=chromium --no-deps` + targeted-route-pre-warm technique rather than the default
+  `playwright test <file>` invocation, whenever the spec under test touches only a handful of
+  routes (most single-feature specs do) — reserve the `tsc`+`lint`+`--list` fallback (`fails.md`
+  2026-08-10, corrected same-day) for when even the scoped, pre-warmed run still times out, not as
+  the first resort.
+
 ### 2026-08-10 — unified-symbol-page — design
 - **Pattern**: A page rendered under one segment (`/trader`) CAN safely reuse another segment's
   existing browser-client-and-hooks (bound to `/insights/api`) without a new BFF registration,
