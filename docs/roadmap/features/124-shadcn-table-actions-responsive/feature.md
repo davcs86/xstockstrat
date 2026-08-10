@@ -1,7 +1,7 @@
 # Feature: shadcn-table-actions-responsive
 
 **Lifecycle Status**: `implementation-ready`
-**Development Branch**: `feature/shadcn-table-actions-responsive`
+**Development Branch**: `claude/implement-124-e48xkn` (harness-assigned; see note below)
 **Created**: 2026-08-09
 **Last Updated**: 2026-08-09
 

@@ -262,6 +262,19 @@
   markup on the 4 shared files once 124's integration PR merges; 096's own stale "create" instruction
   for `positions/[symbol]/page.tsx` needs a re-spec pass regardless.
 
+## Session 2026-08-10T00:03:00Z — sdd-execute sequential (boot)
+
+- **Branch-naming deviation, recorded before execution starts**: `feature.md`'s `**Development
+  Branch**` named the standard SDD convention `feature/shadcn-table-actions-responsive`, which does
+  not exist on `origin` (all of this feature's recon/design/spec work happened on the harness-assigned
+  session branch `claude/implement-124-e48xkn`). This session's harness instructions hard-pin work to
+  that branch and explicitly forbid pushing to a different one. Per root `CLAUDE.md` § Branch
+  Strategy, `claude/*` branches are the repo's own sanctioned pattern for harness-assigned work
+  (branch from and PR into `main-dev`) — not an ad hoc workaround. `feature.md`'s `**Development
+  Branch**` field updated to `claude/implement-124-e48xkn` to match reality, so `/sdd-execute`
+  references a branch that actually exists. Sequential mode's single integration PR at the end will be
+  `claude/implement-124-e48xkn` → `main-dev`.
+
 ## Session 2026-08-09T23:27:35Z — sdd-spec
 
 - Generated `implementation-spec.md` with 24 steps (12 service/test pairs + a closing docs gate).
