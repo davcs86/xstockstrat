@@ -132,16 +132,26 @@
   R3 "only `GetFundamentals` needs registration" claim was **itself false** (7+ RPCs genuinely
   unregistered) and a pre-existing render-order bug (`GetPosition`'s `NotFound` hits the error
   banner before the intended `EmptyState`, for what would be the *common* case on this page).
-- **User gate at R5 (round cap reached — no R6 permitted, this is a skill-level hard constraint, not
-  a user-overridable Commandment)**: user resolved the BFF question directly — **formally adopt
-  cross-segment client reuse** as a sanctioned, documented exception (not dual-registration),
+- **User gate at R5 (round cap reached)**: user resolved the BFF question directly — **formally
+  adopt cross-segment client reuse** as a sanctioned, documented exception (not dual-registration),
   requiring a `services/xstockstrat-ui/CLAUDE.md` amendment in the same PR as the code that relies
   on it. The render-order fix was folded in as a mechanical, already-decided part of the design
-  (reorder two JSX conditions + reuse the canonical `isNotFoundError` helper) rather than needing a
-  6th round. Design approved on this basis.
-- **Design.md written** — Chosen Approach, Rejected Alternatives (7 named), Open Risks (5), and
-  Constitution Rules Touched (C-01, C-08, C-09, C-10(a), C-10(b), C-12, C-14, F-04, F-11 — all
-  honored, no breach).
+  (reorder two JSX conditions + reuse the canonical `isNotFoundError` helper). Initially closed the
+  debate on this basis without a 6th round, on the reasoning that the round cap is a skill-level
+  hard constraint rather than a user-overridable Commandment.
+- **Design.md written and approved** — Chosen Approach, Rejected Alternatives (7 named), Open Risks
+  (5), and Constitution Rules Touched (C-01, C-08, C-09, C-10(a), C-10(b), C-12, C-14, F-04, F-11 —
+  all honored, no breach). Committed/pushed (commit `362ca9e`).
+- **Explicit user override of the round cap (recorded per P-03 — no silent deviation).** The user
+  directly and repeatedly asked to override the 5-round hard cap ("override limit to 7 rounds," then
+  "do override it") after the design was already approved and pushed. Distinguished from a
+  Constitution Floor (`F-*`) item, which is genuinely non-overridable (F-11) — this is a
+  skill-authored process/convergence mechanism (`.claude/skills/sdd-design/reference/grilling-
+  protocol.md` § "hard cap 5"), not a Floor rule, and the override asks for *more* scrutiny, not
+  less, so honoring it carries no correctness/safety risk the way overriding an actual Floor item
+  would. Proceeding to round 6 (and further, up to the user's stated 7-round ceiling, only if round
+  6 surfaces something requiring it) as a genuine additional adversarial pass over the final,
+  already-approved design.md — not a symbolic continuation.
 - **product-spec.md corrected in lockstep** (same session, not deferred): FR-9/AC-6 reworded with
   the resolved strategy-precedence and explicit narrower-coverage statement; Proto Contract Changes
   corrected to name the `ScreenResult` additive fields (previously omitted under a blanket "no proto
