@@ -601,7 +601,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "position|portfolio|order|market"
 
 ### Step 13 — service: FR-9 cosmetic fixes (green token + chart-height audit)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/accounts/authorized-apps/page.tsx` — modify (lines 204-205)
@@ -660,7 +660,7 @@ pnpm run lint
 
 ### Step 14 — test: Verify FR-9 fixes (AC-8)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/accounts/authorized-apps.spec.ts` — verify (Reachable status still renders correctly)

@@ -438,6 +438,35 @@
   `src/app/trader/positions/page.tsx`, `src/app/insights/market/[symbol]/page.tsx`
 - Deviations: none (Step 12's own TDD declaration governs; see above)
 
+### Step 13 + 14 — FR-9 cosmetic fixes: green token swap + chart-height audit (AC-8) [done]
+- `authorized-apps/page.tsx:204-205` (Reachable branch): `text-green-600`→`text-buy`,
+  `bg-green-600`→`bg-buy` — 2 literal token swaps, no structural change. Confirmed
+  `market/[symbol]/page.tsx:138` already uses `text-buy`/`text-destructive` for the identical
+  positive/negative meaning, so `text-buy` is this app's established semantic token, not an invented
+  substitution.
+- **Chart-height sites — no code change (documented per FR-9's own qualifier)**: all 3 sites
+  (`ChartPanel.tsx:29`+`:157` → `useCandlestickChart(320)`/`style={{height:320}}`;
+  `positions/[symbol]/page.tsx:71`+`:314` → `useCandlestickChart(260)`/`style={{height:260}}`;
+  `market/[symbol]/page.tsx:45`+`:200` → `useCandlestickChart(480)`/`style={{height:480}}`) pass the
+  *same* numeric literal to both the JSX `style` and the `useCandlestickChart(N)` hook argument
+  (itself feeding `lightweight-charts`' `createChart({height})`). A bare Tailwind height class on the
+  `div` would decouple that literal from the hook's own argument — two independent places to keep in
+  sync instead of one shared `N` — which is exactly the drift FR-9 says not to risk. Left all 3
+  unchanged, confirmed by direct read this session (line numbers for the `positions/[symbol]` and
+  `market/[symbol]` style sites are `314`/`200` respectively, not the spec's `317`/`200` — the former a
+  minor drift from intervening line shifts, inconsequential to the determination). This is a
+  documented "no code change" outcome per `design.md`'s Open Risk ("may net to zero code changes...
+  acceptable, not incomplete work"), not a skipped step.
+- **TDD**: Step 13's header says `red-green required (green-token fix only)`, but per Step 14's own
+  N/A declaration this is a token-only visual change with no new Playwright-assertable behavior
+  (color is not directly assertable without a computed-style check) — followed Step 14's own stated
+  gate: run the existing `authorized-apps` suite and confirm the Reachable state's render is
+  unaffected. **6/6 passed**. `grep` confirms zero remaining `text-green-600`/`bg-green-600` in the
+  file; `pnpm lint`/`pnpm build` clean.
+- Files modified: `src/app/accounts/authorized-apps/page.tsx` (Step 13 only; Step 14 made no file
+  changes — verification only, folded into this entry)
+- Deviations: none (Step 14's own TDD declaration governs, mirroring the Step 11/12 precedent)
+
 ## Session 2026-08-09T23:27:35Z — sdd-spec
 
 - Generated `implementation-spec.md` with 24 steps (12 service/test pairs + a closing docs gate).
