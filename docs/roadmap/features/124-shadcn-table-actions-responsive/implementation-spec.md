@@ -780,7 +780,7 @@ pnpm run lint
 
 ### Step 17 — service: Replace mobile `Sheet`+`Accordion` with `Sidebar collapsible="offcanvas"` (FR-11b)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx` — modify (Row 1, lines 220-281 + import block lines 13-29)
@@ -854,7 +854,7 @@ pnpm run lint
 
 ### Step 18 — test: New e2e coverage for the mobile `Sidebar` (FR-11 / AC-11)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mobile-sidebar.spec.ts` — create
@@ -1272,3 +1272,22 @@ mechanism unchanged instead of introducing a second one. TDD: Step 10's e2e test
 against pre-Step-9 markup (`toHaveAttribute('aria-pressed', 'true')` found nothing — the button never
 set the attribute), then GREEN after this change; full `opportunities.spec.ts` (13/13) and `pnpm lint`
 both clean.
+
+### Step 17 — `SidebarProvider`'s default wrapper sizing broke Row 1's flex layout (found via failing e2e, not by inspection)
+**Disposition**: resolved by an explicit `className` override; no design.md mechanism deviation —
+the vendored primitive itself needed defensive scoping design.md couldn't have specified (it doesn't
+inspect `SidebarProvider`'s literal className string).
+`SidebarProvider`'s generated wrapper `<div>` (`sidebar.tsx:128-147`) carries
+`"group/sidebar-wrapper flex min-h-svh w-full has-data-[variant=inset]:bg-sidebar"` — sized for its
+intended use as the app's page-level root, not for being nested inline inside Row 1's own
+`<div className="flex items-center gap-2 ml-auto">`. Wiring it in as originally planned (no override)
+passed `pnpm build`/`pnpm lint` cleanly but broke Step 18's own new e2e coverage: Playwright reported
+the "Open menu" trigger button as "outside of the viewport" — `min-h-svh` (100% of the small viewport
+height) on a `<div>` nested mid-header stretched that flex item far taller than Row 1's `h-[49px]`,
+pushing the trigger button below the visible fold. **Fix**: `<SidebarProvider defaultOpen={false}
+className="w-auto min-h-0">` — `cn()`'s tailwind-merge resolves the conflicting `min-h-*`/`w-*` groups
+in the passed `className`'s favor over the component's own base classes, neutralizing the page-root
+sizing while keeping `SidebarProvider`'s actual job (mounting `SidebarContext`) intact. Caught by
+running Step 18's e2e against the real implementation (not just `build`/`lint`, which are blind to
+runtime layout) — reinforces why the TDD gate requires an actual browser run, not just a type-check,
+for layout-sensitive vendored-primitive wiring.

@@ -11,15 +11,19 @@ import { CopilotRail } from '../copilot/CopilotRail';
 import { BottomTabBar } from '../mobile/BottomTabBar';
 import { NAV_GROUPS, HOME_HREF, type SubNavItem, type NavItem, type NavGroup } from './navGroups';
 import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '../ui/sheet';
+  SidebarProvider,
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  useSidebar,
+} from '../ui/sidebar';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../ui/collapsible';
 import { Separator } from '../ui/separator';
-import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '../ui/accordion';
 import {
   Breadcrumb,
   BreadcrumbList,
@@ -144,6 +148,40 @@ function CopilotToggle() {
 }
 
 /**
+ * Mobile hamburger trigger (FR-11b) — a plain `useSidebar().toggleSidebar()` call. Not
+ * `SidebarTrigger` itself: that component hardcodes its own icon/label and doesn't accept
+ * children, and this shell keeps the existing `List` glyph rather than adopting shadcn's
+ * `IconLayoutSidebar` default.
+ */
+function MobileNavTrigger({ className }: { className?: string }) {
+  const { toggleSidebar } = useSidebar();
+  return (
+    <Button variant="ghost" size="icon" className={className} onClick={toggleSidebar}>
+      <List className="h-5 w-5" />
+      <span className="sr-only">Open menu</span>
+    </Button>
+  );
+}
+
+/** A mobile nav item that closes the offcanvas panel on navigate (mirrors the old `SheetClose`). */
+function MobileNavLink({
+  href,
+  label,
+  isActive,
+}: {
+  href: string;
+  label: string;
+  isActive: boolean;
+}) {
+  const { setOpenMobile } = useSidebar();
+  return (
+    <SidebarMenuButton asChild isActive={isActive} onClick={() => setOpenMobile(false)}>
+      <Link href={href}>{label}</Link>
+    </SidebarMenuButton>
+  );
+}
+
+/**
  * PlatformHeader mounts the ChromeProvider so every segment shares the Copilot rail state, and
  * renders the rail alongside the header chrome (default off — FR-4).
  */
@@ -220,64 +258,59 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
         <div className="flex items-center gap-2 ml-auto">
           {actions}
           <CopilotToggle />
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="sm:hidden">
-                <List className="h-5 w-5" />
-                <span className="sr-only">Open menu</span>
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="overflow-y-auto">
-              <SheetHeader>
-                <SheetTitle className="flex items-center gap-2 text-primary">
-                  <Lightning className="h-5 w-5" weight="fill" />
-                  xstockstrat
-                </SheetTitle>
-              </SheetHeader>
-              <nav aria-label="Mobile" className="mt-6">
-                <Accordion
-                  type="single"
-                  collapsible
-                  value={expanded}
-                  onValueChange={(v) => setExpanded(v ?? '')}
-                >
+          {/* SidebarProvider's own wrapper defaults to `flex min-h-svh w-full` (a page-root
+              sizing meant to wrap the whole app) — overridden here since it's scoped narrowly
+              around just the Row 1 trigger+panel pair, not the page (design.md's named
+              constraint: must not disturb Row 1's own flex layout). */}
+          <SidebarProvider defaultOpen={false} className="w-auto min-h-0">
+            <MobileNavTrigger className="sm:hidden" />
+            <Sidebar side="left" collapsible="offcanvas">
+              <SidebarHeader className="flex-row items-center gap-2 px-3 py-3 text-primary">
+                <Lightning className="h-5 w-5" weight="fill" />
+                xstockstrat
+              </SidebarHeader>
+              <nav aria-label="Mobile">
+                <SidebarContent>
                   {NAV_GROUPS.map((group) => (
-                    <AccordionItem key={group.key} value={group.key}>
-                      <AccordionTrigger
-                        className={cn(
-                          group.key === activeGroup.key
-                            ? 'bg-accent text-foreground font-medium'
-                            : 'text-muted-foreground',
-                        )}
+                    <SidebarGroup key={group.key}>
+                      <Collapsible
+                        open={expanded === group.key}
+                        onOpenChange={(open) => setExpanded(open ? group.key : '')}
                       >
-                        {group.icon}
-                        <span className="flex-1">{group.label}</span>
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <div className="flex flex-col gap-1">
-                          {visibleItems(group.items).map((sub) => (
-                            <SheetClose asChild key={sub.href}>
-                              <Link
-                                href={sub.href}
-                                className={cn(
-                                  'px-3 py-2 rounded-md text-sm transition-colors',
-                                  isItemActive(pathname, sub)
-                                    ? 'bg-accent text-foreground font-medium'
-                                    : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
-                                )}
-                              >
-                                {sub.label}
-                              </Link>
-                            </SheetClose>
-                          ))}
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
+                        <CollapsibleTrigger asChild>
+                          <SidebarMenuButton
+                            className={cn(
+                              group.key === activeGroup.key
+                                ? 'bg-accent text-foreground font-medium'
+                                : 'text-muted-foreground',
+                            )}
+                          >
+                            {group.icon}
+                            <span className="flex-1">{group.label}</span>
+                          </SidebarMenuButton>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <SidebarGroupContent>
+                            <SidebarMenu>
+                              {visibleItems(group.items).map((sub) => (
+                                <SidebarMenuItem key={sub.href}>
+                                  <MobileNavLink
+                                    href={sub.href}
+                                    label={sub.label}
+                                    isActive={isItemActive(pathname, sub)}
+                                  />
+                                </SidebarMenuItem>
+                              ))}
+                            </SidebarMenu>
+                          </SidebarGroupContent>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    </SidebarGroup>
                   ))}
-                </Accordion>
+                </SidebarContent>
               </nav>
-            </SheetContent>
-          </Sheet>
+            </Sidebar>
+          </SidebarProvider>
         </div>
       </div>
 

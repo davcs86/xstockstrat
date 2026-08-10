@@ -516,6 +516,50 @@
 - Deviations: none — the `button.tsx` reconciliation-miss was caught and fixed within this same step
   (not a residual gap), consistent with the Step 1/15-instruction-mandated discipline.
 
+### Step 17 + 18 — Mobile `Sheet`+`Accordion` → `Sidebar collapsible="offcanvas"`, new e2e (FR-11b / AC-11) [done]
+- Replaced Row 1's `Sheet`/`SheetContent`/`SheetHeader`/`SheetTitle`/`SheetClose` +
+  `Accordion`/`AccordionItem`/`AccordionTrigger`/`AccordionContent` combo with
+  `SidebarProvider`/`Sidebar side="left" collapsible="offcanvas"`/`SidebarHeader`/`SidebarContent`
+  (wrapped in a `<nav aria-label="Mobile">` for landmark parity — `SidebarContent` itself renders a
+  plain `div`) / per-group `Collapsible`/`CollapsibleTrigger`/`CollapsibleContent` (reusing the
+  existing `expanded`/`setExpanded` state verbatim — single-open-group semantics unchanged) /
+  `SidebarGroupContent`/`SidebarMenu`/`SidebarMenuItem`/`SidebarMenuButton`.
+  - `SidebarTrigger` itself hardcodes its own icon (`IconLayoutSidebar`) and sr-only label and
+    accepts no children/`asChild` — added a local `MobileNavTrigger` (`useSidebar().toggleSidebar()`
+    + the existing `List` icon) instead, preserving the exact prior trigger look rather than
+    adopting shadcn's default glyph.
+  - Close-on-navigate: a local `MobileNavLink` (`useSidebar().setOpenMobile(false)` on click,
+    wrapping a `Link` via `SidebarMenuButton asChild`) mirrors the old `SheetClose asChild` pattern.
+    `CollapsibleTrigger asChild` wrapping `SidebarMenuButton` (neither forwards a ref) follows the
+    same no-forwardRef-but-works precedent already established at `accountShared.tsx:302`
+    (`CollapsibleTrigger asChild` wrapping the equally ref-less `Button`).
+  - Active-route highlighting: `SidebarMenuButton`'s own `isActive` prop (confirmed in Step 15/16's
+    ground-truth read) already wires `data-active` to the right styling — no manual className
+    ternary needed for nav items; the group trigger keeps the prior manual ternary since
+    `SidebarMenuButton`'s own `data-active` styling is item-level, not group-level.
+- **Deviation (recorded in `implementation-spec.md`'s Deviation Log): `SidebarProvider`'s generated
+  wrapper defaults to `flex min-h-svh w-full`** — a page-root sizing that, wired in unmodified,
+  passed `build`/`lint` but broke Step 18's own e2e (`min-h-svh` stretched the wrapper far past Row
+  1's `h-[49px]`, pushing the trigger below the viewport — Playwright reported it "outside of the
+  viewport"). Fixed with `<SidebarProvider defaultOpen={false} className="w-auto min-h-0">`
+  (tailwind-merge resolves the conflict in the passed className's favor). Caught only by running the
+  real e2e against the real implementation, not by `build`/`lint` alone.
+- **TDD**: wrote Step 18's `e2e/mobile-sidebar.spec.ts` (7 tests: reachability across all 5 groups,
+  non-admin/admin Backfills gating, close-on-navigate, single-open-group, active highlighting), ran
+  it against pre-Step-17 markup (`git stash` on `PlatformHeader.tsx`) — RED: only the `data-active`
+  assertion failed (6/7 incidentally passed since the old Sheet/Accordion markup already satisfied
+  dialog-role/button-role/link-role structure) — confirmed the test targets genuinely new behavior,
+  not a tautology. Restored Step 17's code (`git stash pop`), fixed the `openGroup` test helper to
+  check `aria-expanded` before clicking (blindly clicking the already-expanded default "Decide" group
+  first would toggle it closed — a test-authoring bug caught by the RED run, not a product bug), then
+  hit the `SidebarProvider` sizing issue above, fixed it, reran: **GREEN, 7/7**. Full regression sweep
+  after: `mobile.spec.ts` + `nav-reachability.spec.ts` + `mobile-overflow.spec.ts` — **19/19 passed**;
+  `pnpm lint`/`pnpm build` clean; full e2e suite run in background for final confirmation before commit.
+- Files modified: `src/components/shared/PlatformHeader.tsx`; created
+  `e2e/mobile-sidebar.spec.ts`
+- Deviations: `SidebarProvider` sizing override, recorded above and in `implementation-spec.md`'s
+  Deviation Log.
+
 ## Session 2026-08-09T23:27:35Z — sdd-spec
 
 - Generated `implementation-spec.md` with 24 steps (12 service/test pairs + a closing docs gate).
