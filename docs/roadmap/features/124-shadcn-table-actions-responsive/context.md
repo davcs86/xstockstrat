@@ -560,6 +560,33 @@
 - Deviations: `SidebarProvider` sizing override, recorded above and in `implementation-spec.md`'s
   Deviation Log.
 
+### Step 19 — Remove shared `Breadcrumb`, add `PageBreadcrumb` component (FR-10a)
+- Created `src/components/shared/PageBreadcrumb.tsx`: `{ariaLabel: string; items: {label, href?}[]}`
+  — no default `ariaLabel` (the collision-avoidance mechanism itself). Generalizes
+  `NamespaceEditor.tsx`'s existing hand-rolled `Breadcrumb`/`BreadcrumbSeparator` structure
+  (siblings inside `BreadcrumbList`, not nested — `BreadcrumbSeparator` is its own `<li>`, so
+  nesting it inside `BreadcrumbItem`'s `<li>` would be invalid HTML; fixed during writing via a
+  `Fragment`-per-item + trailing separator, not the nested-inside shape I drafted first).
+- Removed `PlatformHeader.tsx`'s Row 2 `<Breadcrumb aria-label="Breadcrumb">...</Breadcrumb>` block
+  and its trailing vertical `Separator` — Row 2 is now just the `Section` `NavigationMenu`, unchanged.
+  Removed the now-dead `Breadcrumb`/`BreadcrumbList`/`BreadcrumbItem`/`BreadcrumbPage`/
+  `BreadcrumbSeparator` import. `activeItem` (from `resolveActive(pathname)`) became unused once its
+  only consumer (the removed Breadcrumb block) was gone — destructuring narrowed to `{ group:
+  activeGroup }` rather than leaving a dead binding.
+- `e2e/nav-reachability.spec.ts`: replaced the two `getByLabel('Breadcrumb')` assertions with
+  `aria-current="page"` checks against the just-clicked `Primary`/`Section` links — the mechanism
+  already present at `PlatformHeader.tsx` before this step (nothing new to wire), per design.md's
+  Round 4 resolution.
+- **TDD**: confirmed RED properly via `git stash` — stashed only the test file, kept the
+  `PlatformHeader.tsx` Breadcrumb removal, ran the **old** `getByLabel('Breadcrumb')` assertions
+  against the new markup: failed as expected (`element(s) not found`). Restored the updated test,
+  reran: **GREEN, 2/2** (including the `[setup]` warmup task). `grep` confirms zero
+  `aria-label="Breadcrumb"` remaining in `PlatformHeader.tsx`; `pnpm lint` clean.
+- Files modified: `src/components/shared/PageBreadcrumb.tsx` (create),
+  `src/components/shared/PlatformHeader.tsx`, `e2e/nav-reachability.spec.ts`
+- Deviations: none (the `BreadcrumbSeparator` nesting fix was caught and corrected while writing
+  the new component, before any commit — not a residual gap)
+
 ## Session 2026-08-09T23:27:35Z — sdd-spec
 
 - Generated `implementation-spec.md` with 24 steps (12 service/test pairs + a closing docs gate).

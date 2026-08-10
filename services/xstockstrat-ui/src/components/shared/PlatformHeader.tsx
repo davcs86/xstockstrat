@@ -25,13 +25,6 @@ import {
 import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../ui/collapsible';
 import { Separator } from '../ui/separator';
 import {
-  Breadcrumb,
-  BreadcrumbList,
-  BreadcrumbItem,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from '../ui/breadcrumb';
-import {
   NavigationMenu,
   NavigationMenuList,
   NavigationMenuItem,
@@ -199,7 +192,7 @@ export function PlatformHeader(props: PlatformHeaderProps) {
 function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
   const pathname = usePathname();
   const isAdmin = useHeaderIsAdmin();
-  const { group: activeGroup, item: activeItem } = resolveActive(pathname);
+  const { group: activeGroup } = resolveActive(pathname);
   const [expanded, setExpanded] = React.useState<string>(activeGroup.key);
   // Admin-only entries (Backfills, FR-7) are hidden from non-admins.
   const visibleItems = (items: NavItem[]) => items.filter((i) => !i.adminOnly || isAdmin);
@@ -314,26 +307,9 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
         </div>
       </div>
 
-      {/* Row 2 — breadcrumb + the active group's item links */}
+      {/* Row 2 — the active group's item links (FR-10a: the shared Breadcrumb landmark moved
+          into each page's own layout as PageBreadcrumb) */}
       <div className="hidden sm:flex items-center gap-2 px-4 sm:px-6 h-9 border-t border-border/60">
-        <Breadcrumb aria-label="Breadcrumb" className="text-xs shrink-0">
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbPage>{activeGroup.label}</BreadcrumbPage>
-            </BreadcrumbItem>
-            {activeItem && (
-              <>
-                <BreadcrumbSeparator />
-                <BreadcrumbItem>
-                  <BreadcrumbPage className="text-foreground font-medium">
-                    {activeItem.label}
-                  </BreadcrumbPage>
-                </BreadcrumbItem>
-              </>
-            )}
-          </BreadcrumbList>
-        </Breadcrumb>
-        <Separator orientation="vertical" className="h-4 mx-1" />
         <NavigationMenu
           aria-label="Section"
           viewport={false}

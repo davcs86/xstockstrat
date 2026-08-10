@@ -891,7 +891,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "mobile-sidebar"
 
 ### Step 19 — service: Remove `PlatformHeader`'s shared `Breadcrumb` + add `PageBreadcrumb` component (FR-10a)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/PageBreadcrumb.tsx` — create
