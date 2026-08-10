@@ -1314,6 +1314,26 @@ reusing.
 - **Evidence**: `docs/roadmap/features/123-shadcn-migration-custom-composites/design.md` § Round 4 (FR-2's recharts v3 bump); the recon found only one real code fix needed across both existing `recharts` consumers (`CartesianGrid`'s new-required `xAxisId`/`yAxisId` props) — the two v3-specific bits the original hand-authoring plan meant to omit (`initialDimension`, `TooltipValueType`) turned out to be the smaller half of the real exposure, not the whole of it.
 - **Rule it implies**: when a design avoids a dependency bump specifically because a CLI-vendored primitive would otherwise need hand-authoring against a newer version, check whether the repo's own re-apply convention (`apply --preset`) means that avoidance is temporary, not permanent — and surface that framing explicitly at the design-fork decision point rather than defaulting to "smaller diff now" without naming the deferred cost.
 
+### 2026-08-09 — shadcn-table-actions-responsive — design
+- **Pattern**: A design decision reached verbally between debate rounds (e.g. resolved directly in a
+  proposer/adversary round's returned text, or agreed with the user in conversation) is not "settled"
+  until it is written into `recon.md`/`context.md`/`design.md`. A later round's adversary subagent —
+  or a future `/sdd-spec` session — only ever reads the durable artifacts, never this session's
+  transcript. Concretely: Round 3 decided to replace `nav-reachability.spec.ts`'s shared-`Breadcrumb`
+  assertion with an `aria-current`-based one (preserving the reachability guarantee for every route
+  once the shared breadcrumb was removed), but that mechanism was only ever stated in the round's
+  returned text, never written to `recon.md`. Round 4's adversary, reading only `recon.md`, correctly
+  flagged the breadcrumb removal as an apparent regression for 15 routes — a false alarm caused
+  entirely by the missing checkpoint, not a real design flaw.
+- **Evidence**: `docs/roadmap/features/124-shadcn-table-actions-responsive/context.md` § Session
+  2026-08-09T23:20:17Z; `recon.md`'s "ADDENDUM 2026-08-09 (Round 4 consolidation)" section, added
+  specifically to close this gap before `design.md` was written.
+- **Rule it implies**: this is the mid-debate analog of Constitution **P-05** (incremental
+  checkpointing "as they happen") — the orchestrator must write each round's mechanism decisions into
+  `recon.md`/`context.md` before spawning the next round's subagents, not just carry them forward in
+  its own synthesis. A subagent's "regression" finding should first be checked against "was this
+  decision actually written down anywhere it could read it?" before being treated as a real design gap.
+
 ### 2026-08-10 — unified-symbol-page — design
 - **Pattern**: A page rendered under one segment (`/trader`) CAN safely reuse another segment's
   existing browser-client-and-hooks (bound to `/insights/api`) without a new BFF registration,

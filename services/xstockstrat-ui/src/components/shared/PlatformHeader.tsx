@@ -11,22 +11,19 @@ import { CopilotRail } from '../copilot/CopilotRail';
 import { BottomTabBar } from '../mobile/BottomTabBar';
 import { NAV_GROUPS, HOME_HREF, type SubNavItem, type NavItem, type NavGroup } from './navGroups';
 import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from '../ui/sheet';
+  SidebarProvider,
+  Sidebar,
+  SidebarHeader,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuItem,
+  SidebarMenuButton,
+  useSidebar,
+} from '../ui/sidebar';
+import { Collapsible, CollapsibleTrigger, CollapsibleContent } from '../ui/collapsible';
 import { Separator } from '../ui/separator';
-import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '../ui/accordion';
-import {
-  Breadcrumb,
-  BreadcrumbList,
-  BreadcrumbItem,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from '../ui/breadcrumb';
 import {
   NavigationMenu,
   NavigationMenuList,
@@ -144,6 +141,40 @@ function CopilotToggle() {
 }
 
 /**
+ * Mobile hamburger trigger (FR-11b) — a plain `useSidebar().toggleSidebar()` call. Not
+ * `SidebarTrigger` itself: that component hardcodes its own icon/label and doesn't accept
+ * children, and this shell keeps the existing `List` glyph rather than adopting shadcn's
+ * `IconLayoutSidebar` default.
+ */
+function MobileNavTrigger({ className }: { className?: string }) {
+  const { toggleSidebar } = useSidebar();
+  return (
+    <Button variant="ghost" size="icon" className={className} onClick={toggleSidebar}>
+      <List className="h-5 w-5" />
+      <span className="sr-only">Open menu</span>
+    </Button>
+  );
+}
+
+/** A mobile nav item that closes the offcanvas panel on navigate (mirrors the old `SheetClose`). */
+function MobileNavLink({
+  href,
+  label,
+  isActive,
+}: {
+  href: string;
+  label: string;
+  isActive: boolean;
+}) {
+  const { setOpenMobile } = useSidebar();
+  return (
+    <SidebarMenuButton asChild isActive={isActive} onClick={() => setOpenMobile(false)}>
+      <Link href={href}>{label}</Link>
+    </SidebarMenuButton>
+  );
+}
+
+/**
  * PlatformHeader mounts the ChromeProvider so every segment shares the Copilot rail state, and
  * renders the rail alongside the header chrome (default off — FR-4).
  */
@@ -161,7 +192,7 @@ export function PlatformHeader(props: PlatformHeaderProps) {
 function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
   const pathname = usePathname();
   const isAdmin = useHeaderIsAdmin();
-  const { group: activeGroup, item: activeItem } = resolveActive(pathname);
+  const { group: activeGroup } = resolveActive(pathname);
   const [expanded, setExpanded] = React.useState<string>(activeGroup.key);
   // Admin-only entries (Backfills, FR-7) are hidden from non-admins.
   const visibleItems = (items: NavItem[]) => items.filter((i) => !i.adminOnly || isAdmin);
@@ -220,87 +251,75 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
         <div className="flex items-center gap-2 ml-auto">
           {actions}
           <CopilotToggle />
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="sm:hidden">
-                <List className="h-5 w-5" />
-                <span className="sr-only">Open menu</span>
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="overflow-y-auto">
-              <SheetHeader>
-                <SheetTitle className="flex items-center gap-2 text-primary">
+          {/* SidebarProvider's own wrapper defaults to `flex min-h-svh w-full` (a page-root
+              sizing meant to wrap the whole app) — overridden here since it's scoped narrowly
+              around just the Row 1 trigger+panel pair, not the page (design.md's named
+              constraint: must not disturb Row 1's own flex layout). */}
+          {/* `sm:hidden` on the whole subtree (not just the trigger): `Sidebar`'s desktop/
+              non-mobile branch renders off-screen via a negative `left` offset, not
+              `display:none` — without this wrapper its full nav content (every group, not just
+              the expanded one — Radix Collapsible keeps closed content mounted) stays in the DOM
+              and the accessibility tree at `sm:`+ widths, duplicating every link Row 2's real
+              `Section` nav already exposes (found via breadcrumb.spec.ts's collision coverage,
+              FR-10/AC-9 Step 21 — not anticipated by design.md, which predates this FR-11
+              addition). `display:none` removes the whole subtree from both. */}
+          <div className="sm:hidden">
+            <SidebarProvider defaultOpen={false} className="w-auto min-h-0">
+              <MobileNavTrigger />
+              <Sidebar side="left" collapsible="offcanvas">
+                <SidebarHeader className="flex-row items-center gap-2 px-3 py-3 text-primary">
                   <Lightning className="h-5 w-5" weight="fill" />
                   xstockstrat
-                </SheetTitle>
-              </SheetHeader>
-              <nav aria-label="Mobile" className="mt-6">
-                <Accordion
-                  type="single"
-                  collapsible
-                  value={expanded}
-                  onValueChange={(v) => setExpanded(v ?? '')}
-                >
-                  {NAV_GROUPS.map((group) => (
-                    <AccordionItem key={group.key} value={group.key}>
-                      <AccordionTrigger
-                        className={cn(
-                          group.key === activeGroup.key
-                            ? 'bg-accent text-foreground font-medium'
-                            : 'text-muted-foreground',
-                        )}
-                      >
-                        {group.icon}
-                        <span className="flex-1">{group.label}</span>
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <div className="flex flex-col gap-1">
-                          {visibleItems(group.items).map((sub) => (
-                            <SheetClose asChild key={sub.href}>
-                              <Link
-                                href={sub.href}
-                                className={cn(
-                                  'px-3 py-2 rounded-md text-sm transition-colors',
-                                  isItemActive(pathname, sub)
-                                    ? 'bg-accent text-foreground font-medium'
-                                    : 'text-muted-foreground hover:text-foreground hover:bg-accent/50',
-                                )}
-                              >
-                                {sub.label}
-                              </Link>
-                            </SheetClose>
-                          ))}
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
-              </nav>
-            </SheetContent>
-          </Sheet>
+                </SidebarHeader>
+                <nav aria-label="Mobile">
+                  <SidebarContent>
+                    {NAV_GROUPS.map((group) => (
+                      <SidebarGroup key={group.key}>
+                        <Collapsible
+                          open={expanded === group.key}
+                          onOpenChange={(open) => setExpanded(open ? group.key : '')}
+                        >
+                          <CollapsibleTrigger asChild>
+                            <SidebarMenuButton
+                              className={cn(
+                                group.key === activeGroup.key
+                                  ? 'bg-accent text-foreground font-medium'
+                                  : 'text-muted-foreground',
+                              )}
+                            >
+                              {group.icon}
+                              <span className="flex-1">{group.label}</span>
+                            </SidebarMenuButton>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <SidebarGroupContent>
+                              <SidebarMenu>
+                                {visibleItems(group.items).map((sub) => (
+                                  <SidebarMenuItem key={sub.href}>
+                                    <MobileNavLink
+                                      href={sub.href}
+                                      label={sub.label}
+                                      isActive={isItemActive(pathname, sub)}
+                                    />
+                                  </SidebarMenuItem>
+                                ))}
+                              </SidebarMenu>
+                            </SidebarGroupContent>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      </SidebarGroup>
+                    ))}
+                  </SidebarContent>
+                </nav>
+              </Sidebar>
+            </SidebarProvider>
+          </div>
         </div>
       </div>
 
-      {/* Row 2 — breadcrumb + the active group's item links */}
+      {/* Row 2 — the active group's item links (FR-10a: the shared Breadcrumb landmark moved
+          into each page's own layout as PageBreadcrumb) */}
       <div className="hidden sm:flex items-center gap-2 px-4 sm:px-6 h-9 border-t border-border/60">
-        <Breadcrumb aria-label="Breadcrumb" className="text-xs shrink-0">
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbPage>{activeGroup.label}</BreadcrumbPage>
-            </BreadcrumbItem>
-            {activeItem && (
-              <>
-                <BreadcrumbSeparator />
-                <BreadcrumbItem>
-                  <BreadcrumbPage className="text-foreground font-medium">
-                    {activeItem.label}
-                  </BreadcrumbPage>
-                </BreadcrumbItem>
-              </>
-            )}
-          </BreadcrumbList>
-        </Breadcrumb>
-        <Separator orientation="vertical" className="h-4 mx-1" />
         <NavigationMenu
           aria-label="Section"
           viewport={false}

@@ -1,4 +1,5 @@
 import { cn } from '../ui/utils';
+import { Eyebrow } from './Eyebrow';
 
 // Nocturne "kicker stat" tile (feature 083): a mono uppercase kicker label, a large tabular
 // value tinted by semantic tone, and an optional sub line. Single source of truth for the
@@ -18,9 +19,7 @@ export function StatTile({
 }) {
   return (
     <div className="border-r border-border px-4 py-3 last:border-r-0">
-      <div className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-        {label}
-      </div>
+      <Eyebrow>{label}</Eyebrow>
       <div
         className={cn(
           'mt-1 font-mono font-semibold tabular-nums',

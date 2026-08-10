@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Eyebrow } from '@/components/shared/Eyebrow';
 import { Progress } from '@/components/ui/progress';
 import {
   Select,
@@ -107,9 +108,9 @@ export function SignalReadiness({ symbol }: { symbol: string }) {
 
         {strategyId && analytics && (
           <div className="mt-4 border-t border-border pt-3" data-testid="strategy-track-record">
-            <p className="mb-2 font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
+            <Eyebrow as="p" className="mb-2">
               Strategy track record
-            </p>
+            </Eyebrow>
             <dl className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm sm:grid-cols-4">
               <Metric label="Signals 30d" value={String(analytics.signals30d)} />
               <Metric label="Taken" value={String(analytics.taken)} />

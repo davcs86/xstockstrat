@@ -26,6 +26,7 @@ import { useIsAdmin } from '@/hooks/useLiveStrategies';
 import { BacktestStatus } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { BacktestDiagnostics } from '@/components/insights/BacktestDiagnostics';
 import { EquityCurveChart } from '@/components/insights/EquityCurveChart';
+import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
 
 // feature 064: cap the backtest range to 2 calendar years (matches the analysis service cap).
 const MAX_RANGE_DAYS = 730;
@@ -127,7 +128,11 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
   return (
     <AppShell>
       <div className="p-4 sm:p-6 space-y-4">
-        <div className="mb-2">
+        <div className="mb-2 space-y-1">
+          <PageBreadcrumb
+            ariaLabel="Strategy path"
+            items={[{ label: 'Strategies', href: '/insights/strategies' }, { label: id }]}
+          />
           <h1 className="text-xl font-bold tracking-tight font-mono">{id}</h1>
         </div>
 

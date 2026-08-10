@@ -132,6 +132,17 @@ The physical routes/segments above are **unchanged**; feature 083 layers an oppo
 - **Non-happy states** — shared `src/components/ui/skeleton.tsx` (`Skeleton`) +
   `src/components/shared/EmptyState.tsx`; per-card errors reuse the existing `CardNotice` /
   `QueryStateMessages` (DRY).
+- **Mobile offcanvas nav (feature 124)** — `PlatformHeader`'s Row 1 hamburger menu is a real
+  vendored `ui/sidebar.tsx` (`Sidebar collapsible="offcanvas"`), not `Sheet`+`Accordion`. The whole
+  `SidebarProvider`/trigger/panel subtree is wrapped in `sm:hidden` (not just the trigger) —
+  `Sidebar`'s desktop/non-mobile branch renders off-screen via a negative `left` offset, not
+  `display:none`, so without the wrapper its full nav content stays in the DOM and accessibility
+  tree at `sm:`+ widths, duplicating Row 2's real `Section` nav links. `SidebarProvider` also needs
+  `defaultOpen={false}` (a mobile-only offcanvas menu must start collapsed on desktop) and a
+  `className="w-auto min-h-0"` override (the primitive's own wrapper defaults to
+  `flex min-h-svh w-full`, sized for a page-level root, not an inline Row 1 subtree).
+  `PlatformHeader`'s own Row 2 shared `Breadcrumb` landmark was removed — pages render their own via
+  `src/components/shared/PageBreadcrumb.tsx` (`{ariaLabel, items: {label, href?}[]}`) instead.
 
 ## Dependencies
 
@@ -281,3 +292,6 @@ Requires backend gRPC services on 50051–50060 (and TimescaleDB for the config-
 | Copilot rail (083) | `src/components/copilot/CopilotRail.tsx`, `src/context/ChromeContext.tsx`, `src/lib/copilot.ts` |
 | Mobile companion (083) | `src/components/mobile/{SectionRenderer,BottomTabBar}.tsx`, `sections.ts` |
 | State primitives (083) | `src/components/ui/skeleton.tsx`, `src/components/shared/EmptyState.tsx` |
+| Mobile offcanvas nav (124) | `src/components/ui/sidebar.tsx`, `src/hooks/use-mobile.ts` |
+| Page breadcrumb (124) | `src/components/shared/PageBreadcrumb.tsx` |
+| Shared eyebrow label (124) | `src/components/shared/Eyebrow.tsx` |

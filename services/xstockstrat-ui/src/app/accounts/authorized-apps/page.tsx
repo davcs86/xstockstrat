@@ -201,8 +201,8 @@ export default function AuthorizedAppsPage() {
             {reachable === null ? (
               <span className="text-sm text-muted-foreground">Checking…</span>
             ) : reachable ? (
-              <span className="inline-flex items-center gap-1 text-sm text-green-600">
-                <span className="h-2 w-2 rounded-full bg-green-600" /> Reachable
+              <span className="inline-flex items-center gap-1 text-sm text-buy">
+                <span className="h-2 w-2 rounded-full bg-buy" /> Reachable
               </span>
             ) : (
               <span className="inline-flex items-center gap-1 text-sm text-destructive">

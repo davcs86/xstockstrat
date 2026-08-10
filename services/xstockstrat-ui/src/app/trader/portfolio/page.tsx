@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { StatTile } from '@/components/shared/StatTile';
 import { CardNotice } from '@/components/shared/CardNotice';
+import { Eyebrow } from '@/components/shared/Eyebrow';
 import {
   Table,
   TableHeader,
@@ -145,9 +146,9 @@ export default function PortfolioPage() {
 
             {/* Broker-reported positions (selected account) */}
             <div>
-              <p className="mb-2 font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
+              <Eyebrow as="p" className="mb-2">
                 Positions · reported by broker
-              </p>
+              </Eyebrow>
               {positions.length === 0 ? (
                 <CardNotice>No open positions in the selected account.</CardNotice>
               ) : (
@@ -224,9 +225,7 @@ function Field({
 }) {
   return (
     <div className="flex flex-col">
-      <dt className="font-mono text-[9px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
-        {label}
-      </dt>
+      <Eyebrow as="dt">{label}</Eyebrow>
       <dd className={`tabular-nums ${valueClass ?? ''}`}>{value}</dd>
     </div>
   );
