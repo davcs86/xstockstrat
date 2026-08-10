@@ -1094,7 +1094,7 @@ pnpm test:e2e   # full suite, chromium — the mandated closing gate for this FR
 
 ### Step 22 — test: Extend `mobile-overflow.spec.ts` route sweep (FR-3 / AC-3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mobile-overflow.spec.ts` — modify (lines 12-27, `ROUTES`)

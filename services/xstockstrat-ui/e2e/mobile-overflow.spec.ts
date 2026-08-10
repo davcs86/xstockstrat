@@ -24,6 +24,13 @@ const ROUTES: { path: string; admin?: boolean }[] = [
   { path: '/insights' },
   { path: '/config-ui' },
   { path: '/accounts/mcp-tools' },
+  // FR-3: gap-closing entries (feature 124) — routes touched by this feature's Table/DropdownMenu
+  // conversions that weren't in the original sweep.
+  { path: '/accounts/authorized-apps' },
+  { path: '/insights/formulas' },
+  { path: '/config-ui/audit' },
+  { path: '/config-ui/platform' },
+  { path: '/trader/positions/AAPL' },
 ];
 
 async function horizontalOverflow(page: Page): Promise<number> {

@@ -639,6 +639,23 @@
 - Deviations: the `Sidebar` DOM-footprint fix, recorded above and in `implementation-spec.md`'s
   Deviation Log.
 
+### Step 22 — Extend `mobile-overflow.spec.ts` route sweep (FR-3 / AC-3) [done]
+- Added the 5 gap-closing entries to `ROUTES`: `/accounts/authorized-apps`, `/insights/formulas`,
+  `/config-ui/audit`, `/config-ui/platform`, `/trader/positions/AAPL` — all `addAuthCookie` (none
+  admin-gated per `navGroups.tsx`).
+- **TDD**: per the step's own note, there's no "pre-addition" state to run red against (the routes
+  simply don't exist in `ROUTES` yet) — red-before-green here means confirming each new test executes
+  a real measurement, not a vacuous pass on a blank/404 page. Ran a throwaway scripted check
+  (`document.body.innerText` length + sample) against all 5 new routes before trusting the green
+  overflow result: all rendered substantive real content (232–1174 chars of visible text each,
+  matching their expected page content — e.g. `/config-ui/platform` showed the namespace's key/value
+  table, `/trader/positions/AAPL` showed the Exposure detail page), ruling out a false pass from an
+  error page or empty shell. Deleted the throwaway spec after confirming.
+- **Verification**: `pnpm test:e2e -g "no horizontal overflow"` — **20/20 passed** (14 original + 5
+  new + 1 setup task).
+- Files modified: `e2e/mobile-overflow.spec.ts`
+- Deviations: none
+
 ### Step 21 (post-commit) — full-suite gate surfaced a second latent test-quality defect [done]
 - After committing Steps 20+21, the mandated full-suite run (Step 21's own closing-gate instruction,
   run in the background) reported **1 genuine failure**: `e2e/trader/positions-reconciliation.spec.ts`
