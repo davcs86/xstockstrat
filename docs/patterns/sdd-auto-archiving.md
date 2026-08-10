@@ -1,28 +1,34 @@
 # SDD Auto-Archiving: Automated Feature Cleanup
 
-When an SDD feature reaches `code-completed` and is eventually promoted to `launched` in production, it should be archived to synthesize terminal reasoning and prune specs. This document covers the automated archiving system.
+When an SDD feature reaches `code-completed` and is eventually promoted to `launched` in production, it is **automatically archived** to synthesize terminal reasoning and prune specs. This document covers the automated archiving system.
 
 ---
 
 ## Quick Start
 
-After a feature is promoted to `main` via `/promote` and reaches `launched` status:
+### Automatic Archiving (Default)
+Features are automatically archived within 1 hour of reaching `launched` status. A routine runs every hour to detect and archive all launched-not-archived features.
 
-```bash
-/sdd-archiver-auto
-```
+**No action needed** — archiving happens automatically.
 
-Or manually for a single feature:
+### Manual Archiving (On Demand)
+To archive a single feature immediately:
 
 ```bash
 /sdd-archiver <slug>
+```
+
+Or to trigger a manual scan/archive pass:
+
+```bash
+/sdd-archiver-auto
 ```
 
 ---
 
 ## Architecture Overview
 
-### Three-Layer Detection & Notification
+### Three-Layer Automatic Archiving
 
 The automation system works in layers:
 
@@ -31,12 +37,17 @@ The automation system works in layers:
    Output: summary of code-completed and launched-not-archived features.
 
 2. **Feature Edit Hook** (`.claude/hooks/on-feature-md-edit.sh`)  
-   When you edit a `feature.md` file and transition a feature to `code-completed` or `launched`, the hook immediately notifies you.  
-   Output: suggests next action (verify merge order, run archiver, etc.)
+   When you edit a `feature.md` file and transition a feature to `launched`:
+   - Immediately queues the feature for archiving
+   - Notifies you that auto-archiving will trigger within the hour  
+   Output: "Auto-archiving will trigger on next check (within 1 hour)"
 
-3. **Scheduled Routine** (optional; requires `mcp__Claude_Code_Remote__create_trigger`)  
-   Periodic check (daily, weekly, or on-demand) to find and archive all pending features.  
-   Output: archives pending features automatically.
+3. **Scheduled Auto-Archive Routine** (always-on)  
+   Runs every hour at :15 past the hour (UTC).
+   - Scans for all `launched` features without `Archived:` field
+   - Automatically runs `/sdd-archiver <slug>` for each found feature
+   - Runs in a fresh session (doesn't interfere with user work)
+   - Silent when no features found; logs when archives complete
 
 ### Feature Lifecycle & Archiving Timeline
 
@@ -72,89 +83,85 @@ Archived (terminal state)
 
 ## Setup & Configuration
 
-### Automatic Detection (Always On)
+### Automatic Archiving (Always Active)
 
-By default, the automation detects and reports findings:
+The system is fully automatic and requires **no setup**:
 
-1. **SessionStart**: Run `check-code-completed-features.sh`
-   - Scan for code-completed features
-   - Scan for launched-but-not-archived features
-   - Output suggestions
+1. **SessionStart Detection** — Enabled by default
+   - Runs `check-code-completed-features.sh` on every session start
+   - Reports code-completed and launched-not-archived features
+   - Built into `.claude/hooks/session-start.sh`
 
-2. **Feature Edit**: When you update `feature.md`
-   - Detect status transitions
-   - Output next-step suggestions
+2. **Feature Edit Hook** — Enabled by default
+   - Triggers when you update `feature.md`
+   - Detects transitions to `launched` status
+   - Queues the feature for auto-archiving
+   - Built into `.claude/settings.json` PostToolUse hook
 
-No additional setup needed — these are built into `.claude/settings.json` and `session-start.sh`.
+3. **Hourly Auto-Archive Routine** — Enabled by default ✓
+   - **Trigger**: `SDD Auto-Archive: Launched Features`
+   - **Schedule**: Every hour at :15 past the hour (UTC)
+   - **Action**: Automatically archives all launched-not-archived features
+   - **Session**: Runs in a fresh session (doesn't interfere with your work)
+   - **Notifications**: Silent (no email/push alerts)
 
-### Optional: Scheduled Routine (Automatic Archiving)
+**No manual setup required** — when a feature reaches `launched`, it will be automatically archived within the hour.
 
-To archive features automatically on a schedule (e.g., daily), create a Routine from the Claude Code interface or API:
+### Optional: Modify Archiving Frequency
 
-#### Setup via Claude Code Web UI:
+If you want to change the archiving schedule (e.g., every 6 hours, daily, etc.), you can update the routine from Claude Code:
 
-1. Go to **Settings → Routines** (or `/routines` in chat)
-2. Click **+ Create Routine**
-3. Fill in:
-   - **Name**: "Daily SDD Archive"
-   - **Schedule**: `0 9 * * *` (9 AM UTC daily; adjust timezone)
-   - **Prompt**: `/sdd-archiver-auto`
-4. Save
-
-The routine will fire at the scheduled time and automatically archive all pending features.
-
-#### Setup via API/Script:
-
-```bash
-curl -X POST https://api.claude.ai/v1/routines \
-  -H "Authorization: Bearer $CLAUDE_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Daily SDD Archive Check",
-    "cron_expression": "0 9 * * *",
-    "prompt": "/sdd-archiver-auto",
-    "session_id": "your-session-id"
-  }'
-```
-
-#### Cron Expression Reference
-
-- `0 9 * * *` — 9 AM UTC daily
-- `0 9 * * 1` — 9 AM UTC every Monday (weekday archiving)
-- `0 0 * * 0` — Midnight UTC every Sunday (weekend batch)
-- `0 */6 * * *` — Every 6 hours (0, 6, 12, 18 UTC)
+1. Go to **Settings → Routines** (or visit `/routines` in chat)
+2. Find **"SDD Auto-Archive: Launched Features"**
+3. Edit the `cron_expression`:
+   - `0 * * * *` — Every hour (current)
+   - `0 */6 * * *` — Every 6 hours
+   - `0 9 * * *` — 9 AM UTC daily
+   - `0 0 * * 0` — Midnight UTC weekly (Sundays)
 
 ---
 
 ## Workflow Examples
 
-### Example 1: Feature Promoted to Production
+### Example 1: Feature Promoted to Production (Automatic Archiving)
 
 **Step 1**: Run `/promote` to merge feature from main-dev to main  
 → Feature status becomes `launched`
 
-**Step 2**: Session detects it (SessionStart hook or automatic)  
-→ Output: "Launched features ready for archiving: <slug>"
+**Step 2**: Feature Edit Hook detects `launched` transition (automatic)  
+→ Output: "Feature 'xyz' reached launched status"  
+→ Output: "Auto-archiving will trigger on next check (within 1 hour)"
 
-**Step 3**: Run `/sdd-archiver-auto` or `/sdd-archiver <slug>`  
-→ Synthesizes terminal reasoning and archives the feature
+**Step 3**: Hourly routine runs and archives automatically  
+→ `/sdd-archiver-auto` executes
+→ Feature is synthesized and archived
+→ No user action needed ✓
 
-### Example 2: Scheduled Daily Archiving
+### Example 2: Real-Time Feedback from Edit Hook
 
-**Setup**: Create a routine that runs at 9 AM UTC daily  
-→ Routine fires, runs `/sdd-archiver-auto`
+When you manually update a feature's status to `launched` in `feature.md`:
 
-**Behavior**:
-- Scans all features with `launched` status
-- Checks which ones are not yet archived
-- Archives each one (synthesis + spec pruning)
-- Logs results
+```
+**Lifecycle Status**: `launched`
+```
 
-Result: No manual archiving needed; features clean up automatically after promotion.
+**Immediate feedback** (from on-feature-md-edit.sh hook):
+```
+[feature-md-edit] ✓ Feature 'my-feature' reached launched status
+[feature-md-edit] → Auto-archiving will trigger on next check (within 1 hour)
+```
+
+**Within the hour**, the automatic routine archives it.
 
 ### Example 3: Manual Archiving on Demand
 
-You've promoted a feature and want to archive it immediately:
+If you want to archive a feature immediately (don't wait for the hourly routine):
+
+```bash
+/sdd-archiver <slug>
+```
+
+Or trigger a manual scan:
 
 ```bash
 /sdd-archiver-auto
@@ -162,10 +169,13 @@ You've promoted a feature and want to archive it immediately:
 
 Output:
 ```
-Found 1 launched feature ready for archiving:
+Found 2 launched features ready for archiving:
   - 045-ui-consolidation-nextjs
+  - 052-portfolio-risk-alerts
 Running /sdd-archiver 045-ui-consolidation-nextjs...
 ✓ Archived: synthesis → context.md + Ledger insights(1)/fails(0); pruned 2 specs
+Running /sdd-archiver 052-portfolio-risk-alerts...
+✓ Archived: synthesis → context.md + Ledger insights(2)/fails(1); pruned 2 specs
 ```
 
 ---
@@ -224,14 +234,14 @@ Running /sdd-archiver 045-ui-consolidation-nextjs...
 
 ## Implementation Notes
 
-### Why Archive After `launched`, Not `code-completed`?
+### Why Automatic Archiving Happens After `launched`, Not `code-completed`?
 
-Archiving is a terminal operation: it synthesizes the feature's final reasoning and prunes specs. A feature shouldn't be archived until:
+Archiving is a terminal operation: it synthesizes the feature's final reasoning and prunes specs. A feature is only archived when:
 1. All implementation is done (`code-completed`)
 2. All testing is done (merged to main-dev, integration tested)
-3. It's live in production (`launched`)
+3. **It's live in production** (`launched`) ← Automatic archiving triggers here
 
-At that point, the feature is stable and the synthesis won't change. Archiving prematurely (at `code-completed`) would mean re-archiving after promotion, which is wasteful.
+Once a feature reaches `launched`, it's stable and the synthesis is final. The system automatically archives it within the hour, with no user intervention needed. This happens immediately after promotion, minimizing manual cleanup work.
 
 ### Hooks vs. Skills
 
