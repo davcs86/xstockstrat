@@ -274,6 +274,31 @@
   Branch**` field updated to `claude/implement-124-e48xkn` to match reality, so `/sdd-execute`
   references a branch that actually exists. Sequential mode's single integration PR at the end will be
   `claude/implement-124-e48xkn` → `main-dev`.
+- Re-spec gate: `main-dev` already up to date (no new commits since the earlier mid-design merge).
+  Spot-checked spec evidence against current codebase (primitive absence/presence for
+  `dropdown-menu`/`sidebar`/`tooltip` vs. presence for `collapsible`/`badge`/`toggle`/`table`/
+  `breadcrumb`/`navigation-menu`/`questionnaire`; key line anchors across `OrdersTable.tsx`,
+  `strategies/[id]/page.tsx`, `PlatformHeader.tsx`, `authorized-apps/page.tsx`) — all exact matches,
+  no drift, no re-spec needed (directive: none).
+- Tooling setup (all 24 steps are `xstockstrat-ui`): node 22.22.2 ✓ · pnpm 9.15.0 ✓ · Chromium
+  pre-installed ✓ · `pnpm install --frozen-lockfile` run (52.4s, no errors).
+- User confirmed mode-entry (§5.1b) and the per-feature up-front proceed (§5.4). Starting step loop.
+
+### Step 1 — Vendor `dropdown-menu.tsx` (FR-1) [done]
+- `npx shadcn@latest add dropdown-menu` created exactly one file, `dropdown-menu.tsx` — no other
+  `src/components/ui/*` file touched (confirmed via `git status` diff before/after), so no
+  collateral-regeneration reconciliation was needed for this install (unlike Step 15's `sidebar`
+  install, which does touch `button.tsx`/etc.). Trigger composition confirmed classic Radix `asChild`
+  (not Base UI `render`-prop), matching Step 3's plan.
+- Files modified: `services/xstockstrat-ui/src/components/ui/dropdown-menu.tsx` (create)
+- Deviations: none
+
+### Step 2 — Verify reconciliation guards pass unchanged (FR-1 / AC-1) [done]
+- `pnpm run test:unit` — 85/85 passed (24 files), including `button.test.ts` (2) and `badge.test.ts`
+  (3). `pnpm run lint` — clean except one pre-existing warning (`jsx-a11y/role-supports-aria-props` at
+  `strategies/[id]/page.tsx:490`, predates this feature — Step 5 addresses it later).
+- Files modified: none (verify only)
+- Deviations: none
 
 ## Session 2026-08-09T23:27:35Z — sdd-spec
 

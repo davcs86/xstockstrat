@@ -45,7 +45,7 @@ touches `src/lib/**`, `pnpm test:unit`) plus the `pnpm run lint` gate.
 
 ### Step 1 — service: Vendor `dropdown-menu.tsx` (FR-1)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/dropdown-menu.tsx` — create (CLI-generated)
@@ -96,7 +96,7 @@ git status --short src/components/ui/
 
 ### Step 2 — test: Verify reconciliation guards pass unchanged (FR-1 / AC-1)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/button.test.ts` — verify only (no edit expected)
