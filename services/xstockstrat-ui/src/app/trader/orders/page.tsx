@@ -41,7 +41,10 @@ export default function OrdersPage() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          <div className="lg:col-span-4">
+          {/* min-w-0: the sibling grid item to the one below — same hazard, same fix (a CI-only
+              failure surfaced this one wasn't covered by the original FR-4 audit, which only
+              traced Table-bearing ancestor chains; OrderForm has no Table but shares the row). */}
+          <div className="lg:col-span-4 min-w-0">
             {/* OrderForm reads useSearchParams (the ?symbol quick-trade deep link), which
                 Next.js requires to be wrapped in a Suspense boundary for prerendering. */}
             <Suspense fallback={null}>

@@ -711,6 +711,31 @@
   route sweep (FR-3), and the horizontal-overflow audit (FR-4).
 - Feature ready for merge-order check and the integration PR.
 
+### Post-PR CI fix — `trader/orders` 1024px overflow test failed in CI, not locally
+- PR #919's "Frontend E2E (shard 2/2)" check failed on the exact new Step 23 test
+  (`mobile-overflow.spec.ts` 1024px case), reporting a consistent, deterministic 18px page-level
+  horizontal overflow on `/trader/orders` — reproduced identically on 2 separate CI runs (two
+  different commits), never once locally across multiple repeated local runs (0px overflow every
+  time, `document.documentElement.scrollWidth === clientWidth` exactly).
+- Investigated via a throwaway debug spec dumping `getBoundingClientRect()` for every element whose
+  `right` edge exceeded the viewport, plus header/nav-specific measurements: confirmed locally the
+  desktop `PlatformHeader` Row 1/`Primary` nav and the `OrdersTable`'s own scroll container all fit
+  exactly within 1024px with zero slack — ruling out the mobile Sidebar (already `sm:hidden`-gated,
+  confirmed inert at this width) and the header/nav as the source.
+- **Root cause (most likely): a CI-vs-local Chromium font-rendering difference** — this repo has no
+  bundled/embedded webfont, so system font-fallback metrics differ between this sandbox's Chromium
+  and the GitHub Actions Ubuntu runner's Chromium, and this new 1024px test is the **first** overflow
+  test in the entire suite to ever exercise the page at a desktop (`≥lg`) width — every other
+  overflow test runs at 390px, where the desktop header/multi-column grid never renders at all
+  (`hidden sm:flex`/`grid-cols-1`). A ~18px text-width difference on a `whitespace-nowrap` cell,
+  invisible at 390px, is exactly the kind of thing only a tight 12-column grid split would expose.
+- **Fix applied**: the original Step 23 audit (per its own stated scope) only traced `Table`-bearing
+  ancestor chains — it never checked `trader/orders/page.tsx`'s OTHER grid item (`lg:col-span-4`,
+  hosting `OrderForm`, no `Table` inside it), which shares the same 12-column row and was equally
+  missing `min-w-0`. Added it there too, for the same defensive-consistency reason as the original
+  fix. Could not confirm/deny locally whether this closes the CI gap (still can't reproduce), so
+  pushed and watched the next CI run rather than declaring victory on an unverified guess.
+
 ### Step 21 (post-commit) — full-suite gate surfaced a second latent test-quality defect [done]
 - After committing Steps 20+21, the mandated full-suite run (Step 21's own closing-gate instruction,
   run in the background) reported **1 genuine failure**: `e2e/trader/positions-reconciliation.spec.ts`
