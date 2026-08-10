@@ -1333,3 +1333,31 @@ reusing.
   `recon.md`/`context.md` before spawning the next round's subagents, not just carry them forward in
   its own synthesis. A subagent's "regression" finding should first be checked against "was this
   decision actually written down anywhere it could read it?" before being treated as a real design gap.
+
+### 2026-08-10 — shadcn-sidebar-visual-rewrite — design
+- **Pattern**: An "ARIA-association" fix (`aria-labelledby` linking a container to its visible
+  label) is not a producer-contract claim just because the reference is a syntactically valid,
+  non-duplicate IDREF — check the *referencing* element's actual (often implicit) ARIA role first.
+  `ui/sidebar.tsx`'s `SidebarGroup` renders a bare `<div>` with no explicit `role`, which resolves
+  to the implicit role `generic` — an element excluded from accessible-name computation per
+  WAI-ARIA, so `aria-labelledby` on it likely wouldn't reach assistive tech even though the id
+  reference itself is perfectly valid HTML. The design round nearly shipped the "valid IDREF"
+  check as if it proved the fix worked, until the adversary traced the actual role. The design was
+  then simplified further, not just patched: since each interactive child (`SidebarMenuButton`)
+  already computes a correct, distinct accessible name from its own visible text, the whole
+  `aria-labelledby`/`role="group"` mechanism was dropped rather than fixed — a shared, identical
+  accessible name across N sibling containers adds real implementation complexity (id-plumbing, an
+  ordering invariant to maintain) for an accessibility improvement that, once actually exposed,
+  tells a screen-reader user nothing beyond what they already hear from each interactive child.
+- **Evidence**: `docs/roadmap/features/125-shadcn-sidebar-visual-rewrite/context.md` § Session
+  2026-08-10T11:00:00Z (Round 3 adversary + orchestrator synthesis); `design.md` § Rejected
+  Alternatives (third bullet).
+- **Rule it implies**: before treating any `aria-*` wiring onto a shadcn/Radix-vendored primitive
+  as "fixed," check the actual rendered element's role (explicit or implicit) — a `<div>`-based
+  primitive (`SidebarGroup`, and likely siblings in the same vendored family) needs an explicit
+  `role` before an `aria-labelledby`/`aria-describedby` reference onto it means anything to
+  assistive tech. And before adding that `role`, ask whether the interactive descendants already
+  provide the accessible name a screen-reader user needs — duplicating it at a wrapping-container
+  level may be complexity without a real accessibility win. This generalizes the "demonstration is
+  not a producer-contract claim" family already in `fails.md` (2026-07-27/29/08-05) to ARIA
+  wiring specifically, not just runtime/API behavior.

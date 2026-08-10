@@ -155,3 +155,69 @@
   requirement in whatever screenshot/snapshot tooling (if any) already exists in this repo's e2e
   conventions rather than leaving it abstract, and confirm the `aria-labelledby` wiring is
   concretely specified (which element gets the `id`, which gets the `aria-labelledby`).
+
+## Session 2026-08-10T11:00:00Z — sdd-design Phase 1 Round 3
+
+- Round 3 — Proposer (firms up items 2/3/7, carries 1/4/5/6 forward unchanged): `sectionStart?:
+  string` added to `NavGroup` (`navGroups.tsx:22-27`), set on `decide`→`'Navigate'` and
+  `settings`→`'Settings'`; a precomputed `groupsWithSection` derivation (carry-forward loop over
+  `NAV_GROUPS`) drives which group gets a preceding `SidebarGroupLabel`; **every** group under a
+  section (not just the first) gets `aria-labelledby` pointing at that section's label `id` —
+  static string ids judged safe (single-mount panel, no dup-id risk). `SidebarGroupContent`
+  wrapper dropped per the settled Item 4. Visual verification: grepped `e2e/` and
+  `playwright.config.ts` for screenshot/snapshot tooling — **none exists anywhere in this
+  codebase** — proposed a manual-verification checklist step (not new snapshot infra, per root
+  CLAUDE.md's minimalism principle) recording pass/fail + deviations in `context.md`.
+- Round 3 — Adversary (NEEDS WORK, no Floor breach): **`SidebarGroup` renders with no explicit
+  `role`** (`sidebar.tsx:364-372`, a bare `<div>`) — implicit role `generic`, which is excluded
+  from accessible-name computation per WAI-ARIA. `aria-labelledby` on a `role=generic` element is
+  not reliably exposed to assistive tech — the "valid IDREF, no dup id" check the proposer ran
+  confirms syntactic validity, not that it actually reaches AT (the same "demonstration ≠
+  producer-contract" shape ledger-flagged 4 times already: fails.md 2026-07-27/29/08-05,
+  2026-08-09 `shadcn-migration-high-confidence`). Even granting a `role="group"` fix, giving 4
+  sibling groups the **identical** accessible name ("Navigate") adds no real value beyond what
+  each `SidebarMenuButton`'s own already-correct accessible name (its visible trigger text)
+  provides — proposed simpler alternative: **drop the `aria-labelledby`/id-sharing mechanism
+  entirely, keep `SidebarGroupLabel` purely visual.** Also flagged: the `sectionStart` derivation's
+  carry-forward loop depends on an **undocumented ordering invariant** (a `sectionStart`-bearing
+  group must be first in its section) with no compile/test-time signal if violated — `NAV_GROUPS`
+  is already order-significant for a second consumer (`BottomTabBar.slice(0,4)`,
+  `navGroups.tsx:31-32`). Minor: Item 7's manual checkpoint produces only a boolean, no durable
+  artifact to re-check against later.
+- **Synthesis (orchestrator) — final chosen approach**:
+  - **Section labels become purely visual** — no `id`, no `aria-labelledby`, no `role="group"`.
+    Adopting the adversary's simpler alternative: `SidebarGroup`'s implicit `generic` role means
+    the ARIA-association mechanism likely wouldn't reach assistive tech as designed even with the
+    fix, and each `SidebarMenuButton` already computes a correct, distinct accessible name from its
+    own visible text — a shared, identical accessible name across 4 siblings adds complexity
+    (id-plumbing, `groupsWithSection` derivation, an ordering invariant to maintain) without a
+    real accessibility win. Per root CLAUDE.md's "write the minimum that solves the stated
+    problem": FR-3 asks for a visual, non-interactive section label — satisfied without the ARIA
+    machinery. This also resolves Round 3's ordering-invariant objection for free, since dropping
+    `aria-labelledby` removes the only consumer of the id-derivation that depended on it — the
+    `sectionStart` field + `groupsWithSection` derivation (which group gets a preceding label) is
+    still needed and kept, just without producing an `id`/`aria-labelledby` pair.
+  - `sectionStart?: string` on `NavGroup` gets a JSDoc comment documenting the ordering invariant
+    (must be set on the first `NAV_GROUPS` entry of the section it starts) as a documentation-only
+    mitigation, since the mechanism's blast radius is now visual-only (a misplaced label), not an
+    invalid-ARIA-reference risk.
+  - Item 7: the manual-verification checkpoint captures a saved screenshot (attached to
+    `context.md` or the integration PR) alongside the pass/fail note — not the boolean alone.
+  - Items 1 (no merge), 4 (`SidebarMenuSub` nests directly), 5 (chevron mechanism, e2e-verified),
+    6 (Settings label duplication, accepted trade-off) carried forward unchanged from Round 2 —
+    none challenged in Round 3.
+  - Floor status: no `F-*` breach across all 3 rounds.
+- Gate presented to user (R=3, ≥ mandated minimum): **user approved.** `design.md` written.
+- Status: `spec-ready` → `design-approved`.
+
+## Open Threads
+
+- [ ] Visual read of the purely-visual two-`SidebarGroupLabel` structure is unprecedented in this
+  codebase (no prior screenshot/example of "label → single-collapsible-row group" vs. shadcn's
+  canonical "label → multiple flat items"). To be addressed at the `/sdd-spec` step that performs
+  the manual visual-verification checkpoint (screenshot + pass/fail note).
+- [ ] "Settings" label text duplicates its own trigger button's text — accepted trade-off per
+  explicit user instruction, not to be silently reworded at `/sdd-spec`/implementation time.
+- [ ] `sectionStart`'s ordering invariant (must be set on the first `NAV_GROUPS` entry of the
+  section it starts) is documented only via JSDoc, not enforced — low blast radius (visual-only
+  misplacement). To be addressed at the `/sdd-spec` step that adds the field.
