@@ -44,3 +44,33 @@ Append-only session log. **Read this before touching any feature file.**
   steps), this context.md.
 - Delivery: implemented directly in this session (frontend-only, additive) rather than as separate
   per-step PRs, then one integration PR to `main-dev`. Recorded as a sequential-mode consolidation.
+
+---
+
+## Session — 2026-08-10 (status correction, discovered while starting a follow-up feature)
+
+- A user asked to reshape this feature into one unified per-symbol page. Before writing a new
+  product spec, checked out `feature/position-and-order-detail-pages` to continue from it and
+  found it 95 commits behind `main-dev`; merging surfaced conflicts because **the same files this
+  branch's own commit `4a10ceb` touches were already shipped to `main-dev` via PR #855
+  (`7f6f65e`)** on 2026-08-02 — the same day this spec was written. `feature.md`/
+  `implementation-spec.md` were never updated past `implementation-ready`/all-`pending`, so this
+  feature has actually been **live in production since PR #875 promoted it to `main` on
+  2026-08-06** (commit `c1d1882`) while its tracking docs said otherwise for over a week.
+- Root cause: the delivery note above ("implemented directly in this session... one integration
+  PR to main-dev") never flipped the implementation-spec.md step statuses to `done` or feature.md
+  to `code-completed` before the integration PR merged, so CI's `ci-validate-feature-status.yml`
+  — which only auto-promotes features already at `code-completed` when a promotion PR merges —
+  silently skipped this feature at promotion time (2026-08-06).
+- **Fix (user-approved)**: corrected `feature.md` to `launched` (`Committed to main: c1d1882`,
+  `Launched date: 2026-08-06`) and all 6 `implementation-spec.md` steps to `done`, using the exact
+  fields/format CI's automation would have written, with an explicit deviation-log entry
+  documenting this was a retroactive doc fix, not new work. No code changed by this correction.
+- **Consequence for the follow-up feature**: it is not building two new pages from scratch — it
+  consolidates two already-live production pages (`/trader/positions/[symbol]`,
+  `/trader/orders/[id]`) plus new scope into one unified per-symbol page. Per user decision, it
+  gets its **own new feature number** rather than reusing this slug (096's code already shipped
+  under its original narrower scope, so repurposing this directory would misrepresent what
+  actually happened). See `docs/roadmap/features/` for the new feature's directory.
+- This `feature/position-and-order-detail-pages` branch is now superseded by `main-dev` and not
+  used further; no more commits are planned against it.
