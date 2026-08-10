@@ -222,6 +222,31 @@
   section it starts) is documented only via JSDoc, not enforced — low blast radius (visual-only
   misplacement). To be addressed at the `/sdd-spec` step that adds the field.
 
+## Session 2026-08-10T13:00:00Z — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 3 warnings (advisory — did not block). Overlap: CLEAN (no collisions vs. the
+  only other `implementation-ready` feature, 096 — disjoint file sets).
+- Criteria pass (spec-reviewer): every `path:line` citation across all 4 steps independently
+  spot-checked against live code and found exact, including a third-party dependency version
+  (`@radix-ui/react-collapsible@1.1.20`) cross-checked via `pnpm-lock.yaml`. No `F-*` Floor risk
+  anywhere in this spec (no migration/proto/config/gRPC-header surface touched). Noted the spec
+  demonstrates real diligence, independently re-verifying and correcting two claims inherited from
+  `design.md` (the chevron's actual CSS mechanism, the red-before-green proof) rather than trusting
+  them at face value.
+- Unresolved ⚠ carried into execution:
+  - Step 3: `impl-spec-criteria.md`'s coverage-threshold criterion doesn't map cleanly onto a
+    Playwright e2e step (this service's CI coverage gate is vitest-unit-scoped to `src/lib/**`, per
+    `xstockstrat-ui/CLAUDE.md`) — [x] resolved (reviewer judged not a genuine gap; no action needed).
+  - Step 4: the manual-verification checkpoint's Verification is prose, not a bash command — a
+    deliberate, well-reasoned deviation (no screenshot-regression tooling exists anywhere in this
+    codebase; building one for a single feature was explicitly rejected in `design.md` as overbuilt)
+    — [x] resolved (reviewer judged justified, correctly cites P-03/F-09 for follow-up).
+  - Cross-cutting: AC-5 (product-spec) requires `pnpm lint && pnpm build` + full `pnpm test:e2e` to
+    pass, but no step's Verification runs `pnpm build` (only `tsc --noEmit` + lint + e2e) —
+    **[ ] unaddressed** — `/sdd-execute` should run `pnpm build` at some point before closing the
+    feature (e.g. alongside Step 2's or Step 3's verification, or as a final pre-integration-PR
+    check) to fully satisfy AC-5, and announce this at its first checkpoint.
+
 ## Session 2026-08-10T13:00:00Z — sdd-spec
 
 - Generated `implementation-spec.md` with 4 steps (navGroups field → PlatformHeader rewrite →
