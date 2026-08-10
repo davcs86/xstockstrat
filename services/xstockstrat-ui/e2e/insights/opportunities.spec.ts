@@ -105,4 +105,8 @@ test.describe('Opportunities queue', () => {
     await expect(card(page, 'AAPL')).toBeVisible({ timeout: 8000 });
     await expect(card(page, 'MSFT')).toBeHidden();
   });
+
+  test('each card shows its source as a Badge (FR-7)', async ({ page }) => {
+    await expect(card(page, 'MSFT').getByText('marketwatch')).toBeVisible();
+  });
 });

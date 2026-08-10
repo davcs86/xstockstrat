@@ -220,6 +220,8 @@ test.describe('Strategy authoring — UI', () => {
 
     // Step 1 — Identity, sub-screen 1 (Strategy ID). Next disabled until a valid id (FR-10, Round 3).
     await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
+    // The step-indicator pill row renders via Badge (FR-7), current step highlighted.
+    await expect(page.getByText('1. Identity')).toBeVisible();
     const next = page.getByRole('button', { name: 'Next', exact: true });
     await expect(next).toBeDisabled();
     await page.getByPlaceholder('e.g. sma_crossover').fill('sma_crossover');
