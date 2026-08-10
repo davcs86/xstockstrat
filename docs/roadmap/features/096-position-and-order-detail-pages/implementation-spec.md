@@ -1,6 +1,6 @@
 # Implementation Spec: position-and-order-detail-pages
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-08-02
 **Feature**: `docs/roadmap/features/096-position-and-order-detail-pages/feature.md`
 **Total Steps**: 6
@@ -32,7 +32,7 @@ tool. No internal-only backend change.
 
 ### Step 1 — service: extract shared position-risk display helpers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/positionRisk.ts` — create
@@ -57,7 +57,7 @@ tool. No internal-only backend change.
 
 ### Step 2 — service: expose GetPosition via trader BFF + usePosition hook
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/traderBff.ts` — modify (add `getPosition` to the `PortfolioService` block)
@@ -82,7 +82,7 @@ tool. No internal-only backend change.
 
 ### Step 3 — service: dedicated single-Position page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — create
@@ -111,7 +111,7 @@ tool. No internal-only backend change.
 
 ### Step 4 — service: single-Order ticket page (upgrade in place)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/orders/[id]/page.tsx` — modify
@@ -136,7 +136,7 @@ tool. No internal-only backend change.
 
 ### Step 5 — service: link Exposure + Portfolio rows to the Position page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/page.tsx` — modify (row → `/trader/positions/[symbol]`; keep Sheet as quick peek + add "Open full view" link)
@@ -161,7 +161,7 @@ tool. No internal-only backend change.
 
 ### Step 6 — test: getPosition mock, page specs, warmup, verification gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify (add `getPosition` to the `PortfolioService` mock)
@@ -192,3 +192,16 @@ tool. No internal-only backend change.
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### 2026-08-10 — retroactive status correction (no code change)
+
+All 6 steps were implemented directly in the 2026-08-02 authoring session (see context.md) and
+shipped as PR #855 (`7f6f65e`), merged straight to `main-dev` rather than through the normal
+per-step `/sdd-execute` flow. This spec's step statuses were never flipped to `done` at the time,
+so the feature stayed at `implementation-ready` for over a week after the code was live in
+production (promoted to `main` via PR #875, commit `c1d1882`, 2026-08-06). All 6 steps are marked
+`done` here to match reality — verified against the shipped diff (PR #855): `lib/positionRisk.ts`
+(Step 1), `traderBff.ts`/`usePortfolio.ts` `getPosition`/`usePosition` (Step 2),
+`trader/positions/[symbol]/page.tsx` (Step 3), `trader/orders/[id]/page.tsx` (Step 4), Exposure/
+Portfolio row links (Step 5), and `mock-backend.ts`/fixtures/specs/warmup routes (Step 6) are all
+present on `main-dev` as of this correction.

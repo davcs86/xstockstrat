@@ -1382,3 +1382,26 @@ reusing.
   routes (most single-feature specs do) — reserve the `tsc`+`lint`+`--list` fallback (`fails.md`
   2026-08-10, corrected same-day) for when even the scoped, pre-warmed run still times out, not as
   the first resort.
+
+### 2026-08-10 — unified-symbol-page — design
+- **Pattern**: A page rendered under one segment (`/trader`) CAN safely reuse another segment's
+  existing browser-client-and-hooks (bound to `/insights/api`) without a new BFF registration,
+  verified — not assumed — against four independent facts: (1) the client's `baseUrl` is
+  root-relative (`/insights/api`), so a browser `fetch()` from any page resolves same-origin, not
+  cross-origin; (2) the DO App Platform ingress has exactly one catch-all rule routing both
+  segments' `/api` paths to the same component (`.do/app.yaml`); (3) the session cookie is set with
+  `path: '/'`, not segment-scoped (`auth.ts`); (4) the BFF's `requireSession` re-verifies the
+  session on every dispatch regardless of which router handled it (`bffShared.ts`). Once all four
+  hold, cross-segment reuse is strictly cheaper than dual-registering a one-line `forward()` wrapper
+  in the second segment's BFF for every RPC the new page needs.
+- **Evidence**: `docs/roadmap/features/125-unified-symbol-page/design.md` § Chosen Approach (BFF
+  wiring); design.md round 3's adversary verification against `services/xstockstrat-ui/src/lib/
+  bffShared.ts`, `src/lib/auth.ts`, `src/middleware.ts`, `.do/app.yaml`; round 5's adversary
+  re-confirmed the same four facts independently before the debate closed.
+- **Rule it implies**: before choosing between "dual-register in the new segment's BFF" and "reuse
+  the other segment's browser client directly," check these four facts explicitly (root-relative
+  baseUrl, single-origin ingress, unscoped session cookie, per-dispatch session re-check) rather than
+  defaulting to dual-registration for consistency or assuming cross-segment calls are unsafe by
+  default. When adopted, document the exception in the service's own `CLAUDE.md` (the "one client
+  per segment" convention) in the same PR, so a future reader has the verified justification instead
+  of an unexplained deviation.
