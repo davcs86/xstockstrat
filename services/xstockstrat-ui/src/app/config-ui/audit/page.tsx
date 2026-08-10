@@ -11,14 +11,7 @@ import {
   TableHead,
   TableCell,
 } from '@/components/ui/table';
-import {
-  Breadcrumb,
-  BreadcrumbList,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbSeparator,
-  BreadcrumbPage,
-} from '@/components/ui/breadcrumb';
+import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
 import { useAuditLog } from '@/app/config-ui/hooks/useAuditLog';
 
 export default function AuditPage() {
@@ -26,19 +19,10 @@ export default function AuditPage() {
 
   return (
     <div className="space-y-4">
-      {/* Breadcrumb — aria-label deliberately distinct from PlatformHeader's own "Breadcrumb"
-          landmark, see NamespaceEditor.tsx's identical note. */}
-      <Breadcrumb aria-label="Audit log path">
-        <BreadcrumbList>
-          <BreadcrumbItem>
-            <BreadcrumbLink href="/config-ui">← namespaces</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem>
-            <BreadcrumbPage>Audit Log</BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
+      <PageBreadcrumb
+        ariaLabel="Audit log path"
+        items={[{ label: '← namespaces', href: '/config-ui' }, { label: 'Audit Log' }]}
+      />
 
       {loading && <p className="text-muted-foreground text-sm">Loading…</p>}
 

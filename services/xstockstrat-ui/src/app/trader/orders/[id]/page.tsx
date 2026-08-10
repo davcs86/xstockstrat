@@ -12,6 +12,7 @@ import { OrderType, OrderStatus, IntentState } from '@xstockstrat/proto/trading/
 import { TradingMode } from '@xstockstrat/proto/common/v1/common_pb';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Eyebrow } from '@/components/shared/Eyebrow';
+import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
 import { Button } from '@/components/ui/button';
 import {
   TYPE_LABEL,
@@ -72,6 +73,10 @@ export default function OrderDetailPage() {
   return (
     <AppShell>
       <div className="mx-auto max-w-4xl space-y-4 p-4 sm:p-6">
+        <PageBreadcrumb
+          ariaLabel="Order path"
+          items={[{ label: 'Orders', href: '/trader/orders' }, { label: orderId }]}
+        />
         <div className="flex items-center gap-3">
           <BackToDashboardButton />
         </div>

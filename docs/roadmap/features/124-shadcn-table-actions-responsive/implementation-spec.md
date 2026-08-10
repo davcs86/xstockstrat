@@ -962,7 +962,7 @@ pnpm run lint
 
 ### Step 20 — service: Migrate 2 existing + add 6 new `PageBreadcrumb` sites (FR-10b)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/[namespace]/NamespaceEditor.tsx` — modify (migrate lines 131-149 onto `PageBreadcrumb`)
@@ -1046,7 +1046,7 @@ NEXT_DISABLE_STANDALONE=1 pnpm build
 
 ### Step 21 — test: `breadcrumb.spec.ts` collision coverage for all 8 sites + full-suite gate (FR-10 / AC-9)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/breadcrumb.spec.ts` — create
@@ -1291,3 +1291,26 @@ sizing while keeping `SidebarProvider`'s actual job (mounting `SidebarContext`) 
 running Step 18's e2e against the real implementation (not just `build`/`lint`, which are blind to
 runtime layout) — reinforces why the TDD gate requires an actual browser run, not just a type-check,
 for layout-sensitive vendored-primitive wiring.
+
+### Step 21 — mobile `Sidebar`'s desktop DOM footprint collided with Row 2's real nav (found via Step 21's own new e2e, not anticipated by design.md)
+**Disposition**: resolved with a CSS `display:none` wrapper; a genuine accessibility-tree defect
+introduced by Step 17 (FR-11b), discovered only once Step 21's collision coverage (FR-10, written
+against `design.md`'s pre-FR-11 analysis) exercised a page whose active nav group happened to be
+expanded by default in the mobile sidebar.
+`Sidebar`'s desktop/non-mobile branch (`sidebar.tsx:207-249`, `isMobile===false`) is `fixed`-positioned
+and pushed off-screen via a negative `left` offset when collapsed (`data-collapsible="offcanvas"`) —
+**not** `display:none`. Combined with Radix `Collapsible.Content` keeping closed-group content mounted
+in the DOM, and `expanded` defaulting to the current route's active group (`PlatformHeader.tsx`'s
+existing `React.useState<string>(activeGroup.key)`), landing directly on `/config-ui/audit` left the
+mobile sidebar's Settings group content — including its own "Audit log" `SidebarMenuButton` link —
+fully mounted and role/label-queryable at the **default desktop viewport**, even though visually
+off-screen. Step 21's own `breadcrumb.spec.ts` collision test caught this directly: `getByRole('link',
+{name: 'Audit log', exact: true})` resolved to **2** elements (Row 2's real `Section` nav link + the
+off-screen mobile sidebar's own copy) instead of the expected 1 — a genuine duplicate-interactive-
+content a11y defect (off-screen but focusable/queryable), not a false positive in the test.
+**Fix**: wrapped the entire `SidebarProvider`/`MobileNavTrigger`/`Sidebar` subtree in a
+`<div className="sm:hidden">` (`PlatformHeader.tsx`) — `display:none` removes the whole subtree from
+both the visual and accessibility trees at `sm:`+ widths, not just repositioning it. The individual
+`sm:hidden` previously only on `MobileNavTrigger` was removed as redundant. Re-verified: the full
+`breadcrumb.spec.ts` (10/10) and the mandated full-suite gate (Step 21's own instruction) both green
+after the fix.

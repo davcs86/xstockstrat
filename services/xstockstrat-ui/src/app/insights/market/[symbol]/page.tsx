@@ -17,6 +17,7 @@ import { SignalOrderTicket } from '@/components/insights/SignalOrderTicket';
 import { OPPORTUNITY_ACTION, EnumBadge } from '@/lib/opportunityShared';
 import { useOpportunities, useStrategyAnalytics } from '@/hooks/useOpportunities';
 import { Eyebrow } from '@/components/shared/Eyebrow';
+import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
 
 /** `HH:MM` local time from a protobuf-es Timestamp ({ seconds: bigint }); null when unset. */
 function validUntilLabel(validUntil: { seconds: bigint } | undefined): string | null {
@@ -113,6 +114,13 @@ export default function MarketSymbolPage() {
   return (
     <AppShell>
       <div className="p-4 sm:p-6 space-y-4">
+        {/* FR-10b: kept alongside the existing "← Queue" back-link below rather than replacing it
+            — their labels ("Opportunities" vs "Queue") don't collide, and signal-detail.spec.ts
+            already asserts a `Queue`-named link that a replacement would break. */}
+        <PageBreadcrumb
+          ariaLabel="Signal path"
+          items={[{ label: 'Opportunities', href: '/insights/opportunities' }, { label: symbol }]}
+        />
         {/* Signal-detail header (handoff: ← Queue · symbol + action + price · CONVICTION / EDGE). */}
         <Card>
           <CardHeader>

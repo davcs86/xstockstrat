@@ -587,6 +587,58 @@
 - Deviations: none (the `BreadcrumbSeparator` nesting fix was caught and corrected while writing
   the new component, before any commit — not a residual gap)
 
+### Step 20 + 21 — Migrate/add 8 `PageBreadcrumb` sites, collision coverage + full-suite gate (FR-10b / AC-9) [done]
+- Migrated `NamespaceEditor.tsx` and `config-ui/audit/page.tsx` onto `PageBreadcrumb`, preserving
+  exact link targets/terminal text. **Cosmetic simplification, noted not fixed**: `NamespaceEditor`'s
+  original terminal crumb carried a one-off `className="font-mono text-primary"` (emphasis on the
+  namespace name); `PageBreadcrumb`'s generic `{label, href?}` shape has no per-item className
+  escape hatch, so this one flourish did not survive generalization. No test depends on it; accepted
+  as the right DRY tradeoff for a component meant to serve 8 sites uniformly.
+- Added `PageBreadcrumb` to the 6 new sites (`strategies/[id]`, `strategies/[id]/edit`,
+  `formulas/[id]`, `positions/[symbol]`, `market/[symbol]`, `orders/[id]`). Per-site keep-or-replace
+  decision for the pre-existing ad hoc back-link (Step 20's own explicit judgment call):
+  - `positions/[symbol]/page.tsx`: **replaced** the "← Exposure" `Button asChild` back-link — its
+    label ("Exposure") is identical to the new breadcrumb's first-item label, so keeping both would
+    duplicate an accessible-name link; no e2e test targets that specific button (grepped first).
+  - `market/[symbol]/page.tsx`: **kept both** — the existing "← Queue" back-link's label doesn't
+    collide with the breadcrumb's "Opportunities" first-item label, and `signal-detail.spec.ts:17`
+    already asserts `getByRole('link', {name: /Queue/})`, which a replacement would have broken.
+  - `orders/[id]/page.tsx`: **kept both** — confirmed by reading `BackToDashboardButton.tsx` that it
+    navigates to `/trader` (dashboard), not `/trader/orders`; no label or destination overlap with the
+    new breadcrumb's "Orders" first-item link.
+  - `formulas/[id]/page.tsx`: `PageBreadcrumb` added only on the loaded branch (uses `formula.name`,
+    which doesn't exist on the loading/not-found branches) — matches the spec's own "omit rather than
+    show a raw id" preference.
+  - `orders/[id]/page.tsx`'s terminal crumb uses the route `orderId` param (always available), not
+    `order.orderId` (undefined during loading) — same visible value, avoids a loading-state crash.
+- **Deviation (recorded in `implementation-spec.md`'s Deviation Log): the mobile `Sidebar`'s desktop
+  DOM footprint collided with Row 2's real nav.** `Sidebar`'s non-mobile branch is off-screen via a
+  negative `left` offset, not `display:none`, and Radix `Collapsible.Content` keeps closed-group
+  content mounted — so landing on `/config-ui/audit` (whose Settings group is the default-expanded
+  one) left the mobile sidebar's own "Audit log" link fully queryable at the desktop viewport,
+  colliding with Row 2's real "Audit log" `Section` nav link. Caught by `breadcrumb.spec.ts`'s own
+  explicit "Audit Log vs Audit log" collision test (`getByRole('link', {name:'Audit log', exact:
+  true})` resolved to 2, not 1) — a genuine a11y defect from Step 17, not anticipated by `design.md`
+  (which predates FR-11). **Fix**: wrapped the whole mobile-sidebar subtree in
+  `<div className="sm:hidden">` in `PlatformHeader.tsx` (`display:none` removes it from the
+  accessibility tree too, not just visually) instead of gating only the trigger button.
+- **TDD**: wrote `e2e/breadcrumb.spec.ts` (8 per-site collision tests + 1 named "Audit Log" vs "Audit
+  log" case) against Step 20's uncommitted changes, then confirmed RED properly via `git stash` —
+  stashed all 8 Step 20 file changes (kept the test), rebuilt, ran: the 6 new sites failed as expected
+  (no `PageBreadcrumb` yet), 2 migrated-site tests + the explicit Audit collision test initially also
+  surfaced the `Sidebar` DOM-footprint defect above (an unanticipated finding, fixed on the clean
+  pre-Step-20 tree first, reconfirmed RED for exactly the 6 missing sites, GREEN for the rest), then
+  restored Step 20's stash and reran: **GREEN, 10/10**. Ran the Step-21-mandated full suite once more
+  as the closing gate for this FR: **all e2e green**, `pnpm lint` clean.
+- Files modified: `src/app/config-ui/[namespace]/NamespaceEditor.tsx`,
+  `src/app/config-ui/audit/page.tsx`, `src/app/insights/strategies/[id]/page.tsx`,
+  `src/app/insights/strategies/[id]/edit/page.tsx`, `src/app/insights/formulas/[id]/page.tsx`,
+  `src/app/trader/positions/[symbol]/page.tsx`, `src/app/insights/market/[symbol]/page.tsx`,
+  `src/app/trader/orders/[id]/page.tsx`, `src/components/shared/PlatformHeader.tsx` (Sidebar
+  `sm:hidden` fix); created `e2e/breadcrumb.spec.ts`
+- Deviations: the `Sidebar` DOM-footprint fix, recorded above and in `implementation-spec.md`'s
+  Deviation Log.
+
 ## Session 2026-08-09T23:27:35Z — sdd-spec
 
 - Generated `implementation-spec.md` with 24 steps (12 service/test pairs + a closing docs gate).

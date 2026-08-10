@@ -255,55 +255,65 @@ function PlatformHeaderInner({ actions }: PlatformHeaderProps) {
               sizing meant to wrap the whole app) — overridden here since it's scoped narrowly
               around just the Row 1 trigger+panel pair, not the page (design.md's named
               constraint: must not disturb Row 1's own flex layout). */}
-          <SidebarProvider defaultOpen={false} className="w-auto min-h-0">
-            <MobileNavTrigger className="sm:hidden" />
-            <Sidebar side="left" collapsible="offcanvas">
-              <SidebarHeader className="flex-row items-center gap-2 px-3 py-3 text-primary">
-                <Lightning className="h-5 w-5" weight="fill" />
-                xstockstrat
-              </SidebarHeader>
-              <nav aria-label="Mobile">
-                <SidebarContent>
-                  {NAV_GROUPS.map((group) => (
-                    <SidebarGroup key={group.key}>
-                      <Collapsible
-                        open={expanded === group.key}
-                        onOpenChange={(open) => setExpanded(open ? group.key : '')}
-                      >
-                        <CollapsibleTrigger asChild>
-                          <SidebarMenuButton
-                            className={cn(
-                              group.key === activeGroup.key
-                                ? 'bg-accent text-foreground font-medium'
-                                : 'text-muted-foreground',
-                            )}
-                          >
-                            {group.icon}
-                            <span className="flex-1">{group.label}</span>
-                          </SidebarMenuButton>
-                        </CollapsibleTrigger>
-                        <CollapsibleContent>
-                          <SidebarGroupContent>
-                            <SidebarMenu>
-                              {visibleItems(group.items).map((sub) => (
-                                <SidebarMenuItem key={sub.href}>
-                                  <MobileNavLink
-                                    href={sub.href}
-                                    label={sub.label}
-                                    isActive={isItemActive(pathname, sub)}
-                                  />
-                                </SidebarMenuItem>
-                              ))}
-                            </SidebarMenu>
-                          </SidebarGroupContent>
-                        </CollapsibleContent>
-                      </Collapsible>
-                    </SidebarGroup>
-                  ))}
-                </SidebarContent>
-              </nav>
-            </Sidebar>
-          </SidebarProvider>
+          {/* `sm:hidden` on the whole subtree (not just the trigger): `Sidebar`'s desktop/
+              non-mobile branch renders off-screen via a negative `left` offset, not
+              `display:none` — without this wrapper its full nav content (every group, not just
+              the expanded one — Radix Collapsible keeps closed content mounted) stays in the DOM
+              and the accessibility tree at `sm:`+ widths, duplicating every link Row 2's real
+              `Section` nav already exposes (found via breadcrumb.spec.ts's collision coverage,
+              FR-10/AC-9 Step 21 — not anticipated by design.md, which predates this FR-11
+              addition). `display:none` removes the whole subtree from both. */}
+          <div className="sm:hidden">
+            <SidebarProvider defaultOpen={false} className="w-auto min-h-0">
+              <MobileNavTrigger />
+              <Sidebar side="left" collapsible="offcanvas">
+                <SidebarHeader className="flex-row items-center gap-2 px-3 py-3 text-primary">
+                  <Lightning className="h-5 w-5" weight="fill" />
+                  xstockstrat
+                </SidebarHeader>
+                <nav aria-label="Mobile">
+                  <SidebarContent>
+                    {NAV_GROUPS.map((group) => (
+                      <SidebarGroup key={group.key}>
+                        <Collapsible
+                          open={expanded === group.key}
+                          onOpenChange={(open) => setExpanded(open ? group.key : '')}
+                        >
+                          <CollapsibleTrigger asChild>
+                            <SidebarMenuButton
+                              className={cn(
+                                group.key === activeGroup.key
+                                  ? 'bg-accent text-foreground font-medium'
+                                  : 'text-muted-foreground',
+                              )}
+                            >
+                              {group.icon}
+                              <span className="flex-1">{group.label}</span>
+                            </SidebarMenuButton>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <SidebarGroupContent>
+                              <SidebarMenu>
+                                {visibleItems(group.items).map((sub) => (
+                                  <SidebarMenuItem key={sub.href}>
+                                    <MobileNavLink
+                                      href={sub.href}
+                                      label={sub.label}
+                                      isActive={isItemActive(pathname, sub)}
+                                    />
+                                  </SidebarMenuItem>
+                                ))}
+                              </SidebarMenu>
+                            </SidebarGroupContent>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      </SidebarGroup>
+                    ))}
+                  </SidebarContent>
+                </nav>
+              </Sidebar>
+            </SidebarProvider>
+          </div>
         </div>
       </div>
 

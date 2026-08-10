@@ -13,14 +13,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
-import {
-  Breadcrumb,
-  BreadcrumbList,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbSeparator,
-  BreadcrumbPage,
-} from '@/components/ui/breadcrumb';
+import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
 import {
   Table,
   TableHeader,
@@ -137,23 +130,13 @@ export function NamespaceEditor({ namespace, env, mode, nativeEnv }: Props) {
     <div className="space-y-4">
       {/* Breadcrumb */}
       <div className="flex flex-wrap items-center gap-2">
-        {/* aria-label deliberately distinct from PlatformHeader's own "Breadcrumb" landmark —
-            Playwright's getByLabel substring-matches case-insensitively, and a duplicate
-            "breadcrumb" label here would make nav-reachability.spec.ts's header lookup
-            ambiguous on this route. */}
-        <Breadcrumb aria-label="Namespace path">
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              <BreadcrumbLink href={`/config-ui?env=${env}&mode=${mode}`}>
-                ← namespaces
-              </BreadcrumbLink>
-            </BreadcrumbItem>
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              <BreadcrumbPage className="font-mono text-primary">{namespace}</BreadcrumbPage>
-            </BreadcrumbItem>
-          </BreadcrumbList>
-        </Breadcrumb>
+        <PageBreadcrumb
+          ariaLabel="Namespace path"
+          items={[
+            { label: '← namespaces', href: `/config-ui?env=${env}&mode=${mode}` },
+            { label: namespace },
+          ]}
+        />
         <div className="flex gap-1.5 ml-1">
           <Badge variant="secondary" className="text-xs">
             {env}

@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
 import { AppShell } from '@/components/trader/AppShell';
 import { useAccountContext } from '@/context/AccountContext';
 import { usePosition, usePortfolio } from '@/hooks/usePortfolio';
@@ -30,6 +29,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
 import { StatTile } from '@/components/shared/StatTile';
 import { Eyebrow } from '@/components/shared/Eyebrow';
+import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
 import {
   Table,
   TableHeader,
@@ -133,14 +133,12 @@ export default function PositionDetailPage() {
   return (
     <AppShell>
       <div className="p-4 sm:p-6 space-y-4">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/trader/positions" className="flex items-center gap-1.5">
-              <ArrowLeft className="h-4 w-4" />
-              Exposure
-            </Link>
-          </Button>
-        </div>
+        {/* FR-10b: replaces the prior ad hoc "← Exposure" Button asChild back-link — keeping
+            both would duplicate an identically-labeled "Exposure" link on the page. */}
+        <PageBreadcrumb
+          ariaLabel="Position path"
+          items={[{ label: 'Exposure', href: '/trader/positions' }, { label: symbol }]}
+        />
 
         {isLoading && (
           <div className="space-y-3" data-testid="position-loading">
