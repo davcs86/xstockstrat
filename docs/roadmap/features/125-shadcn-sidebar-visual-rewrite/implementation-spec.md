@@ -481,40 +481,48 @@ visual result is recorded.
 
 ## Deviation Log
 
-### Step 3 — Playwright e2e run substituted with CI-equivalent fallback
+### Step 3 — Playwright e2e: first attempt fell back, then a scoped retry got a genuine red/green cycle
 
-**Disposition**: CI-equivalent fallback (sequential-mode verification fallback, pre-authorized
-without asking per `reference/sequential-mode.md` § Sequential-mode verification fallbacks).
+**Disposition**: resolved — genuine red-before-green captured. (First attempt fell back to a
+CI-equivalent substitute; a second, more targeted attempt superseded it with a real result. Both
+are recorded here since the corrected approach is itself the reusable lesson.)
 
-**What happened**: attempted a genuine red-before-green Playwright run per the step's own
-Verification section — snapshotted the pre-Step-1/2 versions of `PlatformHeader.tsx`/
-`navGroups.tsx` via `git show 9ddee29:...` (Step 2's parent commit), swapped them in with the new
-test file in place, and ran `pnpm exec playwright test mobile-sidebar.spec.ts`. The Next.js dev
-server (`pnpm dev`, `reuseExistingServer`) came up, but individual route compiles are extremely
-slow in this sandbox — `/config-ui/sources` alone took **88.6s to compile 13,610 modules** on
-first hit — and `warmup.setup.ts` fetches 21 routes, compiled serially by the dev server despite
-`Promise.allSettled`'s parallel fetch. The warmup test itself timed out (10s default, then 60s
-with `--timeout=60000 --workers=1`, still exceeded) before a single real assertion in
-`mobile-sidebar.spec.ts` ran. Confirmed via `ps`/log inspection this is a genuine compile-speed
-limitation (4 CPU / 15GB available, `next-server` process pegged near 100% CPU while compiling —
-not a hang, just slow), not a defect introduced by this feature's code.
+**Attempt 1 — full-suite run, fell back**: snapshotted the pre-Step-1/2 versions of
+`PlatformHeader.tsx`/`navGroups.tsx` via `git show 9ddee29:...` (Step 2's parent commit), swapped
+them in with the new test file in place, and ran `pnpm exec playwright test mobile-sidebar.spec.ts`
+(default, depends on the `setup` project). The Next.js dev server (`pnpm dev`,
+`reuseExistingServer`) came up, but individual route compiles are slow in this sandbox —
+`/config-ui/sources` alone took 88.6s to compile 13,610 modules on first hit — and
+`warmup.setup.ts` fetches **21** routes, compiled serially by the dev server despite
+`Promise.allSettled`'s parallel fetch; the warmup test itself timed out (10s default, then 60s with
+`--timeout=60000 --workers=1`) before a single real assertion in `mobile-sidebar.spec.ts` ran.
+Fell back to `pnpm exec tsc --noEmit` (clean) + `pnpm run lint` (clean) +
+`playwright test --list` (confirmed all 9 tests register/parse correctly) — the sequential-mode
+pre-authorized substitute.
 
-**Fallback applied**: `pnpm exec tsc --noEmit` (clean) + `pnpm run lint` (clean, one pre-existing
-unrelated warning) + `pnpm exec playwright test mobile-sidebar.spec.ts --list` (confirms all 9
-tests — 6 existing + 3 new — register and parse correctly as valid Playwright syntax, addressing
-the `fails.md` 2026-07-29/074 "a green suite that executes zero assertions proves nothing" trap by
-at minimum confirming the cases are real and would run, not silently skipped).
+**Attempt 2 — scoped run, succeeded**: this feature's tests only ever visit **two** routes
+(`/insights/opportunities`, `/trader/positions`), not all 21 `warmup.setup.ts` covers. Re-ran with
+`--project=chromium --no-deps` (skips the `setup` project's dependency entirely) after manually
+pre-warming just those two routes via `curl` with a hand-signed test JWT (same secret/shape as
+`e2e/helpers/auth.ts`'s `signTestJwt`) — `/insights/opportunities` compiled in 29s, `/trader/
+positions` in 11.4s, both one-time costs. The subsequent `playwright test mobile-sidebar.spec.ts
+--project=chromium --no-deps` run completed in under a minute and produced a **genuine RED**: the
+3 new tests failed for the right reasons (no `rotate-90`-driven rotation, no `SidebarMenuSub`, no
+section labels), all 6 existing tests still passed (no regression from the temporary revert).
 
-**What this does NOT prove**: none of chevron rotation (`rotate-90` class + `data-state`
-transition), `SidebarMenuSub` DOM presence, or the two section labels' actual rendering was
-verified against a live browser. This is a genuine confidence gap versus a true red-before-green
-cycle — flagged prominently at the next checkpoint, not just logged here. CI (which builds a
-production bundle via `pnpm build && pnpm start`, not the slow dev-mode on-demand compiler) is
-expected to run this suite successfully; the integration PR's CI run is where this gets its first
-real, complete verification, and any failure there must be treated as seriously as a local RED
-result would have been.
+**Bug found and fixed during the cycle**: restoring Steps 1-3 and re-running initially still showed
+1 failure — the chevron test's `data-state` assertions passed but
+`expect(chevron).not.toHaveCSS('transform', 'none')` stayed `"none"` even after the click. Dumped
+the actual generated stylesheet rule via `document.styleSheets` and found Tailwind v4 sets the
+standalone CSS `rotate` property for a bare `rotate-90` utility (not `transform`, which is only
+composed in when a separate `.transform` class is also present):
+`.group-data-[state=open]/menu-button:rotate-90:is(:where(.group/menu-button)[data-state="open"] *)
+{ rotate: 90deg; }`. The chevron mechanism (Step 2's actual implementation) was correct all along —
+only the test's chosen CSS property was wrong. Fixed the test to assert `toHaveCSS('rotate', ...)`
+instead of `'transform'`, re-verified RED (fails for the right reason: no rotation exists pre-
+Step-2) then GREEN. Final result: **9/9 passed** in 18.2s.
 
-**Ledger relevance**: this is the same "frontend-reverse-proxy" sandbox-capability class flagged in
-`fails.md` (2026-08-05) and independently anticipated by `implementation-spec.md` Step 4's own
-Instruction 4 for the manual visual check — worth a fresh ledger entry scoped to Playwright dev-mode
-compile time specifically (see context.md for the proposed entry).
+**Ledger relevance**: two `fails.md` entries added (2026-08-10) — one correcting Attempt 1's overly
+pessimistic "sandbox can't do live e2e" conclusion with the scoped-run technique that actually
+worked, and one recording the Tailwind v4 `rotate`-vs-`transform` CSS-property gotcha for any future
+rotate/scale/translate assertion in this codebase.

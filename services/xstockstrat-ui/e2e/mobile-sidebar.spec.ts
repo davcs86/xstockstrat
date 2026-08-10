@@ -121,11 +121,18 @@ test.describe('Mobile offcanvas sidebar (FR-11b)', () => {
     const trigger = panel.getByRole('button', { name: 'Discover' });
     const chevron = trigger.locator('svg').last();
     await expect(trigger).toHaveAttribute('data-state', 'closed');
-    await expect(chevron).not.toHaveClass(/rotate-90/);
+    // The `group-data-[state=open]/menu-button:rotate-90` Tailwind variant class is always
+    // present in the rendered class list (it's a static selector, not a toggled one) — the
+    // rotation is applied conditionally via CSS based on the trigger's own data-state, not by
+    // adding/removing the class string. Assert the actual computed style instead. Tailwind v4
+    // sets the standalone CSS `rotate` property (not `transform`) when no `.transform` utility
+    // class composes it in — confirmed via the generated stylesheet rule
+    // `.group-data-[state=open]/menu-button:rotate-90:is(:where(.group/menu-button)[data-state="open"] *) { rotate: 90deg; }`.
+    await expect(chevron).toHaveCSS('rotate', 'none');
 
     await trigger.click();
     await expect(trigger).toHaveAttribute('data-state', 'open');
-    await expect(chevron).toHaveClass(/rotate-90/);
+    await expect(chevron).not.toHaveCSS('rotate', 'none');
   });
 
   test('sub-items render via SidebarMenuSub once a group is expanded', async ({ page }) => {

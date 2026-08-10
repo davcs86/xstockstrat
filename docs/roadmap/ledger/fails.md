@@ -931,3 +931,46 @@ ambiguity is logged here).
   `pnpm run lint` + `--list` fallback as the *expected* sandbox outcome for now, and treat the
   integration PR's CI run (production bundle, not dev-mode) as the actual first red/green signal —
   not something to silently skip mentioning when the sandbox happens to cooperate on a smaller spec.
+
+### 2026-08-10 — shadcn-sidebar-visual-rewrite — assumption (corrects the entry immediately above, same session)
+- **Mistake**: the entry directly above concluded a live-browser red-before-green run was
+  impractical in this sandbox and fell back to `tsc`/`lint`/`--list` only. That conclusion was
+  **too pessimistic** — it generalized from the *full* `warmup.setup.ts` (21 routes, serially
+  compiled, ~90s each in the worst case) to "any live e2e run is impractical here," when the real
+  constraint is narrower: **only the untargeted, full-suite warmup is impractical**. A *scoped* run
+  — `playwright test <file> --project=chromium --no-deps` (skips the `setup` project's 21-route
+  dependency entirely) plus manually pre-warming just the 1-2 routes the target spec actually
+  visits (a plain `curl` with a hand-signed test JWT cookie, ~10-30s per route on first hit) — is
+  fully practical and completed a genuine RED (3 real failures, right reasons) then GREEN (9/9
+  pass) cycle in well under a minute once warm. The step was re-verified this way and marked `done`
+  on the real result, not the fallback.
+- **Evidence**: same feature's `implementation-spec.md` § Deviation Log, Step 3 (updated with the
+  corrected narrative); `context.md` Step 3 entry.
+- **Rule it implies**: before concluding "this sandbox can't run Playwright e2e for this
+  `xstockstrat-ui` feature," try the narrow path first: `--project=chromium --no-deps` to skip
+  `warmup.setup.ts`'s full route sweep, plus a manual `curl`-with-signed-JWT pre-warm of only the
+  specific route(s) the target spec visits. Reserve the `tsc`+`lint`+`--list` fallback for when
+  even that scoped, pre-warmed run still times out — not as the first resort the moment the full
+  suite is slow.
+
+### 2026-08-10 — shadcn-sidebar-visual-rewrite — assumption
+- **Mistake**: a Playwright assertion checking a Tailwind `rotate-90` utility's effect via
+  `expect(locator).toHaveCSS('transform', ...)` silently and consistently read `"none"` in both the
+  pre- and post-toggle state — not because the CSS rule wasn't applied, but because **Tailwind v4's
+  bare `rotate-*`/`scale-*`/`translate-*` utilities set the standalone CSS `rotate`/`scale`/
+  `translate` property directly**, not the composed `transform` property, unless the separate
+  `.transform` utility class is also present to fold them in (confirmed by reading the generated
+  stylesheet rule directly: `.group-data-[state=open]/menu-button:rotate-90:is(:where(.group/
+  menu-button)[data-state="open"] *) { rotate: 90deg; }` — no `transform` property anywhere in that
+  rule). The class list and `data-state` attribute were both correct at every step; only the test's
+  chosen CSS property to inspect was wrong, which read as a false implementation bug until the
+  actual generated CSS was inspected directly (`document.styleSheets` + `getComputedStyle().rotate`).
+- **Evidence**: `docs/roadmap/features/125-shadcn-sidebar-visual-rewrite/implementation-spec.md` §
+  Deviation Log, Step 3; `services/xstockstrat-ui/e2e/mobile-sidebar.spec.ts`'s chevron test
+  (`toHaveCSS('rotate', ...)`, not `'transform'`).
+- **Rule it implies**: in this codebase (Tailwind v4), a Playwright/e2e assertion verifying a bare
+  rotate/scale/translate utility's effect must check `getComputedStyle`'s own `rotate`/`scale`/
+  `translate` property, not `transform` — `transform` only reflects these utilities when the
+  element *also* carries the `.transform` class. When a rotation/scale assertion mysteriously stays
+  "none"/unset on both sides of a toggle, inspect the actual generated stylesheet rule
+  (`document.styleSheets`) before assuming the underlying app code is broken.
