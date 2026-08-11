@@ -1,0 +1,144 @@
+# Product Spec: ui-middleware-nodejs-runtime
+
+**Created**: 2026-08-11
+
+---
+
+## Problem Statement
+
+`xstockstrat-ui`'s `src/middleware.ts` runs in the Next.js Edge runtime, which cannot import
+Node-only modules — including `src/lib/identity.ts`'s `@connectrpc/connect-node` gRPC client. So
+the middleware's near-expiry access-token refresh cannot call `xstockstrat-identity` directly; it
+instead makes a self-referential HTTP call to its own `/api/auth/refresh` Node.js route handler,
+which then calls `identity.ts`. That extra network hop was the root cause of a production defect
+(`docs/reports/2026-08-11-ui-middleware-self-refresh-tls-defect.md`, fixed in PR #925 by looping
+back over plain HTTP to `127.0.0.1:$PORT` instead of the request's public origin). The loopback fix
+is safe, but it's a workaround for an avoidable network hop: Next.js 15.5 (this repo's pinned
+version) stabilized a Node.js runtime option for middleware, which would let the refresh call reach
+`identity.ts` in-process, eliminating the hop and the class of self-fetch bugs entirely.
+
+## User Story
+
+As a platform engineer, I want `xstockstrat-ui`'s `middleware.ts` to run in the Node.js runtime and
+call `xstockstrat-identity`'s `refreshSession()` directly, so the near-expiry token refresh no
+longer needs a self-referential HTTP call to `/api/auth/refresh`.
+
+## Functional Requirements
+
+FR-1. `src/middleware.ts` opts into the Node.js runtime (`export const config = { runtime: 'nodejs', matcher: [...] }`).
+
+FR-2. The near-expiry refresh branch calls `refreshSession(refreshToken)` (from `src/lib/identity.ts`)
+directly instead of `fetch()`-ing `/api/auth/refresh`. `middleware.ts` reads the `refresh_token`
+cookie directly (mirroring what `app/api/auth/refresh/route.ts` does today) since there's no
+longer an inner HTTP request to carry it.
+
+FR-3. On successful refresh, the middleware sets the new session cookies itself (reusing
+`setSessionCookies` from `auth.ts`) on the outgoing `NextResponse`, matching today's behavior where
+the browser receives updated `Set-Cookie` headers from the refresh call.
+
+FR-4. On failed refresh (invalid/expired refresh token), the middleware clears session cookies
+(`clearSessionCookies`) and redirects to `/auth/login`, matching current behavior.
+
+FR-5. `PR #925`'s loopback workaround (`buildInternalRefreshUrl()` in `auth.ts`, the `fetch()` call
+and the `api/auth/refresh` matcher exclusion in `middleware.ts`) is removed — the `/api/auth/refresh`
+Node route itself may stay (browsers never call it directly today, but removing it is out of scope
+here; see Out of Scope) or be deleted if this feature's design finds it now fully redundant.
+
+FR-6. `services/xstockstrat-ui/docs/patterns/frontend-auth.md` and
+`services/xstockstrat-ui/CLAUDE.md` are updated in the same feature: the documented hard rule "Only
+`lib/auth.ts` may be imported from `middleware.ts`" (and the associated Edge-bundling-trap
+explanation) no longer applies once `middleware.ts` runs in the Node.js runtime, and must be
+corrected — not left contradicting the shipped code.
+
+FR-7. `docs/roadmap/ledger/insights.md`'s 2026-08-05 `wire-fe-auth` entry ("`middleware.ts` and
+other Edge-runtime code must never import modules that pull in `@connectrpc/connect-node`") predates
+this change and describes a now-superseded constraint; the Ledger is append-only, so this feature
+does not edit it, but its design phase must explicitly account for why the old constraint no longer
+applies (see Open Questions).
+
+## Out of Scope
+
+- Migrating any other Edge-runtime code path in this repo (there is currently only one
+  `middleware.ts`).
+- Deleting `app/api/auth/{login,logout}/route.ts` or restructuring the unified-login flow —
+  those routes are Node-runtime already and unaffected.
+- Any change to `ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS`, the redirect-to-login fallback behavior,
+  or cookie attributes (`httpOnly`/`secure`/`sameSite`) — behavior must be observably identical to
+  today, only the transport changes.
+- Renaming `middleware.ts` to `proxy.ts` (Next.js's newer file-convention rename, deprecating
+  "Middleware" terminology as of v16) — out of scope; this repo is on Next 15.5.21, and that rename
+  is a separate, unrelated migration.
+
+## Affected Services
+
+- `xstockstrat-ui` — `src/middleware.ts`, `src/lib/auth.ts`, `src/lib/identity.ts`,
+  `docs/patterns/frontend-auth.md`, `CLAUDE.md`
+
+## Consumer Surface(s)
+
+- [ ] **UI** — no visible change; the trader/insights/config-ui/accounts segments behave identically.
+- [ ] **Agent** — not applicable.
+- [x] **None** — internal platform/transport refactor of the existing auth middleware. No new
+  capability, page, control, or MCP tool; the observable behavior (session refresh, redirect-to-login
+  on failure) is unchanged — only how the middleware reaches `xstockstrat-identity` changes.
+
+## Proto Contract Changes
+
+- [x] No proto changes required
+
+## Config Key Changes
+
+- [x] No new config keys
+
+## Database Changes
+
+- [x] No schema changes
+
+## Feature Workflow Notes
+
+Branch to create: `feature/ui-middleware-nodejs-runtime` (branch from `main-dev`)
+Approval gates required (per docs/runbooks/feature-workflow.md):
+- [x] 1 service owner approval (non-breaking, single-service change)
+
+## Acceptance Criteria
+
+1. `middleware.ts` runs in the Node.js runtime (`config.runtime === 'nodejs'`) and no longer imports
+   or calls `fetch()` against `/api/auth/refresh`.
+2. Near-expiry access tokens are refreshed via a direct in-process call to `identity.ts`'s
+   `refreshSession()` — verified by a unit/integration test that stubs `refreshSession` and asserts
+   `middleware()` calls it with the request's `refresh_token` cookie, with no outbound `fetch`.
+3. On refresh failure, the user is redirected to `/auth/login` with cookies cleared, identical to
+   pre-change behavior (regression-tested).
+4. `buildInternalRefreshUrl()` and its test (`auth.test.ts`) are removed along with the `api/auth/refresh`
+   matcher exclusion (`middleware.test.ts` updated to match the new matcher, or removed if the
+   matcher concern no longer exists).
+5. `pnpm exec vitest run`, `pnpm exec tsc --noEmit`, `pnpm run lint`, and the Playwright e2e auth
+   suite (`e2e/auth.spec.ts`) all pass.
+6. `frontend-auth.md` and this service's `CLAUDE.md` no longer state the Edge-only constraint as
+   current; they describe the Node.js-runtime middleware and why the constraint was removed.
+7. Verified (not just asserted) that the app still builds and runs correctly under
+   `output: 'standalone'` in a Docker build — Node.js-runtime middleware is confirmed by Next.js
+   docs to be supported for both Node.js server and Docker container deploys, but this repo's own
+   standalone-output build must be exercised, not assumed.
+
+## Open Questions
+
+- [ ] **Known trap** (`docs/roadmap/ledger/insights.md`, 2026-08-05, `wire-fe-auth`): "`middleware.ts`
+  and other Edge-runtime code must never import modules that pull in `@connectrpc/connect-node`."
+  This feature's entire premise is that Next.js 15.5's stable Node.js middleware runtime removes the
+  reason that rule existed. The design phase must confirm this directly (re-derive why the rule was
+  written, confirm Node.js-runtime middleware genuinely lifts the Edge-bundling constraint for this
+  repo's build/deploy setup) rather than assume the ledger entry is simply obsolete.
+- [ ] Does `identity.ts`'s `refreshSession()` (and the `@connectrpc/connect-node` gRPC client it
+  builds) behave correctly when constructed/invoked once per middleware invocation (as opposed to
+  once per Node.js route handler invocation, its current call pattern)? Middleware runs far more
+  frequently (every non-excluded request) than the refresh route did — check for any per-call
+  client-construction cost or connection-pooling assumption in `connectClients.ts`.
+- [ ] Should `app/api/auth/refresh/route.ts` be deleted once middleware no longer calls it, or kept
+  as a still-reachable (if currently uncalled) API surface? Confirm no other caller exists before
+  deciding (FR-5 leaves this to the design phase).
+- [ ] Is there a Docker/standalone-specific gotcha with Node.js-runtime middleware bundling (e.g.
+  `serverExternalPackages` in `next.config.js` already lists `@connectrpc/connect-node` for route
+  handlers — does middleware need the same treatment, and does the standalone output's `server.js`
+  still discover it correctly)? Must be verified with a real `docker build`/`next build` under
+  `output: 'standalone'`, not assumed from Vercel-oriented documentation.
