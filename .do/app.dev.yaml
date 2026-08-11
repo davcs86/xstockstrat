@@ -257,6 +257,10 @@ services:
       # DB_POOL_MAX intentionally unset — pooled service, see trading above. Code default is 2.
       - key: SERVICE_NAME
         value: analysis
+      - key: FMP_API_KEY
+        scope: RUN_TIME
+        value: YOUR_DEV_FMP_API_KEY
+        type: SECRET
 
   - name: xstockstrat-agent
     image:
