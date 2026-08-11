@@ -32,6 +32,22 @@ export async function getSessionFromRequest(req: NextRequest): Promise<JwtClaims
 // Node-only Connect client and must not be reachable from middleware,
 // which Next.js bundles for the Edge runtime.
 
+/**
+ * Loopback URL for middleware's self-referential call to `/api/auth/refresh`.
+ *
+ * Must NOT be built from the inbound request's own origin (`new URL(path, req.url)`):
+ * on DigitalOcean App Platform that origin is the app's public `https://` domain, and a
+ * container calling back out to its own public domain is intermittently routed over the
+ * platform's internal (plain-HTTP) network instead of back out through TLS termination —
+ * the https:// ClientHello then hits a non-TLS responder and fails with
+ * ERR_SSL_WRONG_VERSION_NUMBER. The Next.js server always listens on plain HTTP on PORT
+ * (default 3000 — see Dockerfile `EXPOSE 3000`), so loop back there directly instead.
+ */
+export function buildInternalRefreshUrl(): URL {
+  const port = process.env.PORT ?? '3000';
+  return new URL(`http://127.0.0.1:${port}/api/auth/refresh`);
+}
+
 export function setSessionCookies(
   res: NextResponse,
   accessToken: string,
