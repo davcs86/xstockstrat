@@ -94,6 +94,17 @@ func main() {
 			"api_secret_placeholder", looksLikePlaceholderCred(cfg.AlpacaAPISecret))
 	}
 
+	// Fail loud if the FMP API key is missing or still set to a DO app-spec placeholder.
+	// An empty key makes every FMP fundamentals call fail silently (feature 076: FMP_API_KEY
+	// comes from a secret env var, not config). The service still starts — cached reads
+	// and non-FMP RPCs keep working — but the operator gets an unambiguous startup signal
+	// if the credential is missing.
+	if looksLikePlaceholderCred(cfg.FMPAPIKey) {
+		slog.Warn("FMP_API_KEY looks empty or is still set to a placeholder — "+
+			"every FMP fundamentals fetch will fail; set the real FMP_API_KEY secret",
+			"fmp_api_key_placeholder", looksLikePlaceholderCred(cfg.FMPAPIKey))
+	}
+
 	// TimescaleDB repository
 	repo, err := repository.NewMarketDataRepo(cfg.DBConnStr)
 	if err != nil {

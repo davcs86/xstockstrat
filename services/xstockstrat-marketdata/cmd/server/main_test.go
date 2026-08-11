@@ -44,3 +44,26 @@ func TestNewFundamentalsSource_AlwaysNonNil(t *testing.T) {
 		}
 	}
 }
+
+// TestLooksLikePlaceholderCred_FMPCases verifies FMP credentials are handled by the same
+// placeholder detector as Alpaca credentials.
+func TestLooksLikePlaceholderCred_FMPCases(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want bool
+	}{
+		{"empty", "", true},
+		{"FMP placeholder prefix", "YOUR_DEV_FMP_API_KEY", true},
+		{"FMP prod placeholder", "YOUR_PROD_FMP_API_KEY", true},
+		{"FMP placeholder word", "fmp-PLACEHOLDER-key", true},
+		{"real FMP key", "RealFMPKey123456789", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := looksLikePlaceholderCred(tc.in); got != tc.want {
+				t.Errorf("looksLikePlaceholderCred(%q) = %v, want %v", tc.in, got, tc.want)
+			}
+		})
+	}
+}
