@@ -1,6 +1,8 @@
 # Feature: shadcn-migration-low-confidence
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: be21f3389151ccac1bfd68e7aa96d73d3d4efd78
+**Launched date**: 2026-08-10
 **Development Branch**: `feature/shadcn-migration-low-confidence`
 **Created**: 2026-08-08
 **Last Updated**: 2026-08-09
@@ -20,6 +22,7 @@
 | 2026-08-09 | `implementation-ready` → `in-progress` | /sdd-execute sequential | User directed re-specing and executing FR-1 in this same pass (mirroring sibling `121`'s Tranche 2 pattern) — this feature's branch is stacked on `121`'s (itself stacked on `120`'s), and `ui/alert.tsx` is confirmed present. Added `implementation-spec.md` Steps 9-12 (FR-1 migration + e2e regression + build-only note + whole-feature gate), step count 8 → 12; `product-spec.md`'s FR-1/Affected Services/Open Questions updated to record "unblocked." `design.md` unchanged (§ Round 4 already recorded the migrate decision). Execution begins against all 12 steps. |
 | 2026-08-09 | `in-progress` → `code-completed` | /sdd-execute sequential | All 12 steps done: FR-2/FR-3/FR-4 (Steps 1-8 — `CredentialsForm`/`AddAccountForm`/`EditCredentialsForm` migrated to react-hook-form + zod + `ui/field.tsx`, sharing one `credentialSchema(brokerType)` factory) and FR-1 (Steps 9-12 — `OrderForm.tsx`/`EditOrderDialog.tsx` migrated to `Alert`/`AlertDescription`). Whole-feature gate green: `pnpm lint` clean, `pnpm build` succeeds, full `pnpm test:e2e` — **257 passed**, no skips/failures. Draft PR [#913](https://github.com/davcs86/xstockstrat/pull/913) flipped to ready-for-review. |
 
+| 2026-08-10 | `code-completed` → `launched` | CI workflow | Promoted via PR #923; committed be21f3389151ccac1bfd68e7aa96d73d3d4efd78 |
 ---
 
 ## Artifacts

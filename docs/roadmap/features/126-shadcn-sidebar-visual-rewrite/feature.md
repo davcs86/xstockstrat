@@ -1,6 +1,8 @@
 # Feature: shadcn-sidebar-visual-rewrite
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: be21f3389151ccac1bfd68e7aa96d73d3d4efd78
+**Launched date**: 2026-08-10
 **Development Branch**: `claude/implement-124-e48xkn` (harness-assigned; see note below)
 **Created**: 2026-08-10
 **Last Updated**: 2026-08-10
@@ -20,6 +22,7 @@
 | 2026-08-10 | `in-progress` → `code-completed` | /sdd-execute (sequential) | All 4 steps landed. Steps 1-2 straightforward. Step 3 (e2e coverage): first Playwright attempt fell back to `tsc`+`lint`+`--list` after `warmup.setup.ts`'s 21-route pre-warm timed out; a scoped retry (`--project=chromium --no-deps` + manually pre-warming just the 2 routes this spec visits) got a genuine RED→GREEN cycle, catching and fixing a real test bug along the way (Tailwind v4 sets the standalone `rotate` CSS property for a bare `rotate-90` utility, not `transform`) — final result 9/9 passed. Step 4 (manual visual check): PASS against all three criteria, screenshot sent to user. Closed the impl-spec review's one unaddressed warning (`pnpm build` now run, succeeds). Two `fails.md` entries added (scoped-e2e-run technique, Tailwind v4 rotate/transform gotcha). No out-of-scope changes; no Floor breach. Ready for the integration PR. |
 | 2026-08-10 | `code-completed` (unchanged) | /sdd-execute (sequential) | **Post-checkpoint correction**, triggered by the user's own visual review of the Step 4 screenshot against the real shadcn reference page. Found and fixed: (1) the design/implementation omitted shadcn's `SidebarMenu`/`SidebarMenuItem` wrapper around each collapsible group — corrected to match the reference's actual DOM composition (user supplied the exact structure); (2) a real bug in the *vendored* `ui/sidebar.tsx` primitive — `data-active={isActive}` always renders the attribute, and Tailwind's bare `data-active:bg-sidebar-accent` variant matches on presence not value, so every row was permanently painted with the accent background regardless of state — this, not any styling choice, was the actual cause of the "chunky pill button" look; fixed to `isActive \|\| undefined`, documented in `xstockstrat-ui/CLAUDE.md`'s customization list. One pre-existing test assertion updated to match the resulting flatter active-state styling; full suite re-verified 9/9 green. A third visual concern (panel not reaching full height) was investigated and found to be a `fullPage: true` screenshot-capture artifact plus Next.js's dev-only toolbar indicator, not a real bug — confirmed via direct `boundingBox()` measurement. `design.md` ADDENDUM records the full design-level narrative; a third `fails.md` entry (2026-08-10) records the process lesson: no design round fetched the live external reference to check DOM composition, only its visual styling. User signed off on the corrected result. |
 
+| 2026-08-10 | `code-completed` → `launched` | CI workflow | Promoted via PR #923; committed be21f3389151ccac1bfd68e7aa96d73d3d4efd78 |
 ---
 
 **Note on Development Branch**: this session runs on the harness-assigned branch

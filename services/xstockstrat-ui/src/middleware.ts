@@ -4,13 +4,18 @@ import {
   getSessionFromRequest,
   ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS,
   generateTraceId,
+  buildInternalRefreshUrl,
 } from '@/lib/auth';
 import { HEADER_TRACE_ID } from '@/lib/headers';
 
 export const config = {
   matcher: [
     '/',
-    '/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|api/auth/login|api/health|health|auth/login|auth/oauth-login|\\.well-known|api/oauth).+)',
+    // api/auth/refresh is excluded alongside login/health: it is called only by this
+    // middleware's own near-expiry refresh below, never by the browser. Without the
+    // exclusion, that self-call re-enters the auth gate on the still-not-yet-refreshed
+    // cookie, which is still within the refresh threshold, triggering another self-call.
+    '/((?!_next/static|_next/image|favicon.ico|icon.svg|apple-icon.png|api/auth/login|api/auth/refresh|api/health|health|auth/login|auth/oauth-login|\\.well-known|api/oauth).+)',
   ],
 };
 
@@ -30,8 +35,7 @@ export async function middleware(req: NextRequest) {
   }
 
   if (claims.expires_at - Math.floor(Date.now() / 1000) < ACCESS_TOKEN_REFRESH_THRESHOLD_SECONDS) {
-    const refreshUrl = new URL('/api/auth/refresh', req.url);
-    const refreshRes = await fetch(refreshUrl, {
+    const refreshRes = await fetch(buildInternalRefreshUrl(), {
       method: 'POST',
       headers: { cookie: req.headers.get('cookie') ?? '' },
     });

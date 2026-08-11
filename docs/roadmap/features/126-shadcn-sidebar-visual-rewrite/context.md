@@ -465,3 +465,10 @@ that check to a post-implementation human screenshot comparison.
 mobile-sidebar.spec.ts`, `services/xstockstrat-ui/CLAUDE.md`,
 `docs/roadmap/features/126-shadcn-sidebar-visual-rewrite/{design.md,implementation-spec.md,
 context.md}`, `docs/roadmap/ledger/fails.md`.
+
+## Session 2026-08-10 (CI: feature status automation)
+
+- Promotion PR #923 merged to main
+- Feature promoted and committed: be21f3389151ccac1bfd68e7aa96d73d3d4efd78
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-10
