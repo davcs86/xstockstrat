@@ -1,6 +1,6 @@
 # Feature: fundamentals-provider-alternative
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `claude/fmp-free-layer-ratios-dr0c4j`
 **Created**: 2026-08-12
 **Last Updated**: 2026-08-12
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-12 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-12 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS: 3 open questions deferred to /sdd-design per feature-059 precedent; consumer-surface "None" flagged as re-check-if-scope-widens). Overlap scan: clean. |
 
 ---
 
@@ -46,4 +47,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review fundamentals-provider-alternative product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design fundamentals-provider-alternative quick` — recon + adversarial design debate
