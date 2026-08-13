@@ -131,9 +131,10 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Acceptance Criteria
 
-1. A signal ingested 48 hours ago with a 24-hour half-life contributes half the `signal_axis`
-   weight of an otherwise-identical signal ingested now (all else — including any 130
-   `reliability_weight`, if already landed — held equal).
+1. A signal ingested 48 hours ago with a 24-hour half-life (two half-lives elapsed:
+   `0.5^(48/24) = 0.25`) contributes a **quarter** of the `signal_axis` weight of an
+   otherwise-identical signal ingested now (all else — including any 130 `reliability_weight`, if
+   already landed — held equal).
 2. Setting `signal_decay_half_life_hours` to 0 via the config service (no restart) immediately
    disables decay — `signal_axis` matches pre-feature behavior.
 3. Within a single `_compute_opportunities` compute pass, every candidate's decay is computed

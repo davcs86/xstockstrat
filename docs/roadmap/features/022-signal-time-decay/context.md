@@ -113,3 +113,16 @@
   Reviewers table updated to match the retargeted spec (was still describing the pre-097 premise,
   flagged as stale/informational by the reviewer).
 - Re-running `/sdd-review signal-time-decay product-spec` (round 4) next.
+
+## Session 2026-08-13T00:50:00Z — sdd-review product-spec (round 4, FAIL — arithmetic error)
+
+- Round 4 confirmed the FR-1/FR-5 contradiction is genuinely fixed (verified against
+  `servicer.py:2083-2242`'s real control flow: `now_utc` read at the top of the function is in
+  scope at the `:2163` write-site; `session_end_seconds` correctly identified as a distinct,
+  later-declared variable). Overlap re-scan also clean — both merge-order rows still accurate.
+- One new, previously-uncaught defect: AC-1's worked example was arithmetically wrong. "48 hours
+  ago, 24-hour half-life → half the weight" is incorrect — two half-lives elapsed means
+  `0.5^(48/24) = 0.25`, a quarter, not a half (contradicted AC-5's own correct `t=half_life ⇒ ≈0.5`
+  statement in the same spec).
+- Fixed: AC-1 now states the correct `0.25`/quarter result explicitly, with the exponent shown.
+- Re-running `/sdd-review signal-time-decay product-spec` (round 5) next.
