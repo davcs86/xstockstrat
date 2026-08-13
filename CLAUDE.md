@@ -172,7 +172,7 @@ See `docs/runbooks/approval-flow.md`. Breaking proto: 2 owners + platform lead. 
 
 ## Config Governance Rules
 
-Config served by `xstockstrat-config` via `WatchConfig` RPC (gRPC 50060). Key rules: no hardcoded values in source; naming is `<service>.<category>.<key>`; all services subscribe at startup; sensitive keys use `secret.*` prefix; defaults declared in each service's `CLAUDE.md`.
+Config served by `xstockstrat-config` via `WatchConfig` RPC (gRPC 50060). Key rules: no hardcoded values in source; naming is `<service>.<category>.<key>`; all services subscribe at startup; defaults declared in each service's `CLAUDE.md`. **A vendor API credential is never a config key** (the `secret.*`/`is_secret` mechanism was tried once and reversed — feature 076) — it's a `type: SECRET` env var wired through the deploy pipeline instead; see `docs/runbooks/add-data-source.md` § "Wiring a New Vendor Credential Through Deploy".
 
 **Full rules, global key table, and the per-feature registered-keys log** → `docs/patterns/config-governance.md`.
 

@@ -9,7 +9,16 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 3. **All services subscribe to xstockstrat-config at startup** before accepting traffic, passing `environment` and `trading_mode` in the WatchConfig request.
 4. **Config values are scoped** by `environment` (`dev`/`production`) and `trading_mode` (`paper`/`live`/`all`). Rows with `trading_mode='all'` apply to all modes.
 5. **Config changes flow**: agent or webhook caller → config webhook handler → config service → WatchConfig stream → all subscribers.
-6. **Sensitive keys** use the `secret.*` prefix and are resolved from the secret store at runtime — never stored in config service state.
+6. **A vendor API credential is never a config key — not even under `secret.*`.** The `secret.*`
+   prefix + `is_secret=TRUE` mechanism exists in the schema but has exactly one historical use
+   (`secret.marketdata.fmp.api_key`), and it was **removed** by feature 076 (migration
+   `009_drop_fmp_api_key_config.up.sql`): config values are plaintext, streamed to every
+   `WatchConfig` subscriber, and no `secret://` resolver was ever built, so a config-stored
+   "secret" was never actually secret. Every vendor credential on the platform (Alpaca, JWT,
+   broker-accounts encryption, MCP agent, FMP, Finnhub) is instead a DO App Platform `type: SECRET`
+   env var, delivered through the GitHub Actions deploy pipeline — see § "Registering a new vendor
+   credential" below, not this section. Only the non-secret *knobs* around a credential
+   (`<source>.enabled`, `.base_url`, cache/quota settings) are config keys.
 7. **Default values** must be declared in each service's `CLAUDE.md` under "Config Keys".
 8. **Config UI** at `http://localhost:3002` — manage config values by environment and trading mode.
 
@@ -39,6 +48,18 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 2. Declare it in the consuming service's `CLAUDE.md` under "Config Keys Consumed".
 3. Approval: service owner + config team (see `docs/runbooks/approval-flow.md`).
 4. Add a row to the "Per-Feature Registered Keys" log below.
+
+## Registering a new vendor credential (not a config key)
+
+A vendor API key/secret is governed by a **separate, parallel** process — it never touches this
+service (Rule 6 above). Follow `docs/runbooks/add-data-source.md` § "Wiring a New Vendor
+Credential Through Deploy" — a 10-file checklist (`Config`/`LoadFromEnv`, `docker-compose.yml`,
+both `.do/*.yaml` files, all 4 GitHub Actions deploy workflows, `do-inject-prod-secrets.py`, and
+2 docs files). Approval: service owner + Security (per `docs/runbooks/reviewer-registry.md`'s
+Security role — API key scoping, secret-env-var convention followed). This checklist exists
+because feature 129 shipped `FINNHUB_API_KEY` wired into only 3 of the 8 required files — see
+`docs/roadmap/ledger/fails.md` 2026-08-13 for the full root-cause writeup. Skipping any wiring
+file doesn't fail loudly: the credential just deploys silently empty.
 
 ## Author-sentinel conventions
 
