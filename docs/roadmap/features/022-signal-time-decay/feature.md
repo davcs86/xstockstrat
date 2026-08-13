@@ -1,6 +1,6 @@
 # Feature: signal-time-decay
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/signal-time-decay`
 **Created**: 2026-05-26
 **Last Updated**: 2026-08-13
@@ -12,7 +12,8 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-26 | `idea` → `draft` | /sdd-story | Product spec generated |
-| 2026-08-13 | `draft` (unchanged) | /sdd-review | Round 1 FAIL (missing Consumer Surface, unresolved Open Questions); fixed. Round 2 FAIL (stale premise — feature 097 retired the backtest/live signal blend this spec originally targeted); retargeted to `Opportunity.signal_axis` per user direction. Round 3 FAIL (FR-1/FR-5 internal contradiction); fixed. Re-review pending. |
+| 2026-08-13 | `draft` (unchanged) | /sdd-review | Round 1 FAIL (missing Consumer Surface, unresolved Open Questions); fixed. Round 2 FAIL (stale premise — feature 097 retired the backtest/live signal blend this spec originally targeted); retargeted to `Opportunity.signal_axis` per user direction. Round 3 FAIL (FR-1/FR-5 internal contradiction); fixed. Round 4 FAIL (AC-1 arithmetic error); fixed. |
+| 2026-08-13 | `draft` → `spec-ready` | /sdd-review | Round 5: PASS, 0 warnings |
 
 ---
 
@@ -46,4 +47,7 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review signal-time-decay product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec signal-time-decay` — generate implementation spec. **Must land after
+`130-signal-source-reliability-weight` and `131-live-strategy-opportunity-attribution`**
+(same-expression/same-function overlap in `_compute_opportunities`, `servicer.py:2144-2168` —
+see `docs/roadmap/features/merge-order.md`, landing order 130 → 131 → 022).

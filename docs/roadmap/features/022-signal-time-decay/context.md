@@ -126,3 +126,20 @@
   statement in the same spec).
 - Fixed: AC-1 now states the correct `0.25`/quarter result explicitly, with the exponent shown.
 - Re-running `/sdd-review signal-time-decay product-spec` (round 5) next.
+
+## Session 2026-08-13T00:55:00Z — sdd-review product-spec (round 5, PASS)
+
+- Product spec approved. Status: draft → spec-ready.
+- Criteria verdict: PASS, zero blockers, zero warnings. Reviewer independently re-derived every
+  Acceptance Criterion's arithmetic from FR-1's formula and re-traced `_compute_opportunities`'s
+  real control flow line-by-line to re-confirm FR-1/FR-5 compatibility — both hold.
+- Overlap verdict: CLEAN. Both `merge-order.md` coordination rows (022 waits for 130; 022 waits
+  for 131) re-confirmed accurate against current trunk and current sibling-feature state.
+- Five review rounds total this session, each catching a distinct real defect: (1) missing
+  Consumer Surface + unresolved Open Questions, (2) a stale premise targeting code feature 097 had
+  already retired, (3) an FR-1/FR-5 internal contradiction (a cited variable that didn't exist yet
+  at the write-site), (4) an AC-1 arithmetic error. This is the pipeline working as designed — a
+  dormant, unreviewed 2026-05-26 draft had accumulated all four defects silently; nothing caught
+  them until this review pass actually ran.
+- Next: `/sdd-spec signal-time-decay`, but only after `130-signal-source-reliability-weight` and
+  `131-live-strategy-opportunity-attribution` land (merge-order.md dependency).
