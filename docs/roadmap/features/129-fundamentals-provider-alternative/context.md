@@ -600,3 +600,25 @@
   `git merge-base --is-ancestor origin/main-dev HEAD`), force-pushed (`--force-with-lease`), and
   opened a **new** PR — **#931** — since #930 cannot be reused. Same branch name
   (`claude/fmp-free-layer-ratios-dr0c4j`) throughout, per the harness's branch-reuse convention.
+
+## Session 2026-08-13T05:30:00Z — user-directed: "update governance files"
+
+- Found the root cause of the FINNHUB_API_KEY wiring gap had a governance-doc dimension: root
+  `CLAUDE.md` § Config Governance Rules, `docs/patterns/config-governance.md` Rule 6, and
+  `docs/runbooks/reviewer-registry.md`'s Security row all claimed "sensitive keys use the
+  `secret.*` prefix" — verified dead in practice (`grep` across every `xstockstrat-config`
+  migration: exactly one historical use, `secret.marketdata.fmp.api_key`, reversed by feature 076
+  migration `009`). A reader following only the stated rule would repeat the exact
+  config-key-for-a-credential mistake migration 009 already reversed once.
+- Fixed all three docs to state the actual rule (vendor credential = `type: SECRET` deploy-pipeline
+  env var, never a config key) and added a parallel "Registering a new vendor credential" section
+  to `config-governance.md` (alongside the existing "Registering a new config key" section) that
+  cross-references the `add-data-source.md` checklist — closing the governance-doc gap that let
+  the original wiring miss happen without any doc pointing to the right process.
+- **Teardown check**: per root CLAUDE.md's own Teardown rule, changing a context file (`CLAUDE.md`,
+  `config-governance.md`) requires `/context-scrubber scan` before pushing. Checked: the
+  context-forge plugin/skill is not available in this session (no matching skill, no
+  `.claude/skills/context-scrubber` on disk). Noted explicitly in PR #931's body per the rule's own
+  instruction ("say so in the PR body rather than skipping silently") rather than skipped quietly.
+- Files modified: `CLAUDE.md`, `docs/patterns/config-governance.md`,
+  `docs/runbooks/reviewer-registry.md`.
