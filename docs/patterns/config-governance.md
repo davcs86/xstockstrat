@@ -20,11 +20,18 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 | `platform.maintenance_mode` | bool | false | Halts all trading operations |
 | `platform.trading_state` | string | ACTIVE | Richer halt state (`ACTIVE`/`REDUCE_ONLY`/`HALTED`), independent of `platform.maintenance_mode`; seeded per `trading_mode` |
 | `platform.log_level` | string | info | Global log level override |
-| `platform.ledger_endpoint` | string | — | xstockstrat-ledger gRPC address |
-| `platform.config_endpoint` | string | — | xstockstrat-config gRPC address |
-| `platform.otel.enabled` | bool | false | Master OTel export switch |
-| `platform.otel.endpoint` | string | — | OTLP endpoint (set via secret) |
-| `platform.otel.sample_rate` | float | 1.0 | Trace sample rate (0.0–1.0) |
+
+> **Not real config keys (2026-08-07 audit):** this table previously also listed
+> `platform.ledger_endpoint`, `platform.config_endpoint`, `platform.otel.enabled`,
+> `platform.otel.endpoint`, and `platform.otel.sample_rate`. None of the five is seeded in any
+> `xstockstrat-config` DB migration, and no service reads any of them via `WatchConfig` — a repo-wide
+> grep found zero call sites. Inter-service gRPC addresses use the `<SERVICE>_ENDPOINT` env var
+> convention instead (`LEDGER_ENDPOINT`, `CONFIG_ENDPOINT` — see root CLAUDE.md § Environment
+> Variable Naming Convention); a service also cannot fetch its own `config_endpoint` from the config
+> service before it has connected to the config service, so that key was never buildable as
+> described. OTel toggling is env-var-driven (`OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`) per
+> `docs/patterns/observability.md`. Rows removed rather than left aspirational; reintroduce only
+> alongside the DB seed migration and the code that actually reads them.
 
 ## Registering a new config key
 
