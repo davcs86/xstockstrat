@@ -92,7 +92,14 @@ is required — the existing queue ordering already reflects `signal_axis`.
 
 ## Database Changes
 
-- [x] New migration: `ingest.signal_sources` gains a `reliability_weight` column (default `1.0`).
+- [x] New migration in `services/xstockstrat-ingest/migrations/`, following the established
+  `NNN_description.up.sql`/`.down.sql` pair convention (`docs/runbooks/feature-workflow.md` §
+  Database Schema Changes). The directory's current highest is `009_signal_dedup_keys`, so this
+  migration is `010_add_signal_source_reliability_weight` — adds a `reliability_weight DOUBLE
+  PRECISION NOT NULL DEFAULT 1.0` column to `ingest.signal_sources`, with the `.down.sql` dropping
+  it. Confirm the number is still free (no sibling in-flight feature has claimed `010`) immediately
+  before `/sdd-execute` runs it, per the numbering-collision guidance in
+  `docs/runbooks/feature-workflow.md` § Feature Numbering.
 
 ## Feature Workflow Notes
 

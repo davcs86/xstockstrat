@@ -44,3 +44,18 @@
 - Overlap findings: none. Confirmed CLEAN against all 9 other active-status features scanned;
   `125-unified-symbol-page` shares `xstockstrat-analysis` and even reads `ListOpportunities`, but
   only as a read-only consumer — it never touches `_compute_opportunities` or `StrategiesRepository`.
+
+## Session 2026-08-13T00:30:00Z — fix review warnings
+
+- Fixed all three advisory warnings from the sdd-review pass:
+  - FR-2's citation split into the correct two ranges: `servicer.py:2144-2168` now labeled
+    specifically as the attribution/provenance-building step, with the actual
+    `evaluator.evaluate_conditions_traced` call site cited separately at `servicer.py:2205-2209`.
+  - AC-2 and AC-6 rewritten to be quantitative: AC-2 now states `passing_conditions`/
+    `total_conditions` must reflect real evaluated leaves (not `0/0`) and `total_conditions` must
+    equal the strategy's entry-rule leaf count exactly; AC-6 now states byte-identical
+    `strategy_id`/`passing_conditions`/`total_conditions`/`provenance` before/after a live-loop
+    restart, given unchanged market data.
+  - OQ1 (the `023-position-sizing-engine` guardrail) reworded to explicitly say it's a guardrail
+    check to carry into `/sdd-design` and re-confirm, not a decision to resolve now — mirrors OQ2's
+    already-explicit "decide at `/sdd-design`" phrasing per the reviewer's suggestion.

@@ -32,11 +32,13 @@ parallel in shape to the existing `watchlist_by_symbol` index (`servicer.py:2103
 rather than filtering client-side) and, per row, call the already-exported `strategy_symbols(definition)`
 helper (`live_loop.py:37`, public, no leading underscore — import it, do not duplicate its logic
 per the DRY guard rail).
-FR-2. Fold `live_by_symbol` into the existing attribution/trace step (`servicer.py:2144-2168`) as an
-additional origin alongside watchlist bindings: a held or signaled symbol covered by a live
-strategy gets that strategy attributed (`_add_provenance(c, "live_strategy")`) and traced via the
-existing `evaluator.evaluate_conditions_traced` — the same entry-rule-for-candidates /
-exit-rule-for-held distinction the watchlist path already applies (FR-8 of feature 097).
+FR-2. Fold `live_by_symbol` into the existing attribution step (`servicer.py:2144-2168` —
+candidate-building and `provenance` assembly) as an additional origin alongside watchlist bindings:
+a held or signaled symbol covered by a live strategy gets that strategy attributed
+(`_add_provenance(c, "live_strategy")`), then traced via the existing
+`evaluator.evaluate_conditions_traced` call site (`servicer.py:2205-2209`) — the same
+entry-rule-for-candidates / exit-rule-for-held distinction the watchlist path already applies (FR-8
+of feature 097).
 FR-3. When a symbol is covered by **both** a watchlist binding and a live strategy for the same
 `(symbol, strategy_id)` pair, collapse into the existing single candidate (per feature 097's
 dedup-by-`(symbol, strategy)` key) with both origins in `provenance` — never a duplicate row.
@@ -114,8 +116,10 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
    strategy with a real exit-rule trace (`passing/total` reflects actual evaluated conditions, not
    `0/0`).
 2. An active signal (no watchlist binding, no held position) on a symbol covered by a live strategy
-   is attributed to that strategy with a real entry-rule trace, same as a watchlist-bound candidate
-   is today.
+   is attributed to that strategy with a real entry-rule trace: `passing_conditions`/
+   `total_conditions` reflect actually-evaluated leaf conditions (not `0/0`), and `total_conditions`
+   equals the strategy's entry-rule leaf count exactly — the same shape a watchlist-bound
+   candidate's trace produces today.
 3. A symbol covered by both a watchlist binding and a live strategy for the same `(symbol,
    strategy_id)` produces exactly one candidate row, with `provenance` containing both origins.
 4. A live-strategy-only-attributed candidate is classified `curated` (ranked above the
@@ -123,17 +127,21 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 5. Strategies that are `active=TRUE` but `live_enabled=FALSE` never attribute a candidate under this
    feature (the predicate matches `live_loop.py`'s own `live_enabled=TRUE AND active=TRUE` exactly —
    no drift between what the live loop evaluates and what the queue attributes).
-6. A live-loop restart (which resets `live_loop`'s own in-memory `_last_state`) does not change
-   `_compute_opportunities`' attribution or trace output — confirms FR-5's independence from the live
-   loop's private state.
+6. A live-loop restart (which resets `live_loop`'s own in-memory `_last_state`) produces
+   byte-identical `strategy_id`/`passing_conditions`/`total_conditions`/`provenance` values from
+   `_compute_opportunities` for the same `(user, symbol)` opportunity, before and after the
+   restart, given unchanged market data — confirms FR-5's independence from the live loop's
+   private state.
 
 ## Open Questions
 
-- [ ] **Known trap** (`fails.md` 2026-08-05, `023-position-sizing-engine`): do not conflate
+- [ ] **Known trap** (`fails.md` 2026-08-05, `023-position-sizing-engine`) — carry into
+  `/sdd-design` as a guardrail check, not a decision to resolve: do not conflate
   `Opportunity.conviction` (a deterministic *ordinal* — "passing/total leaves... NOT a probability",
   per its own proto comment) with any cardinal quantity when extending its computation here; this
-  feature only changes *which* candidates get traced, not the conviction formula itself, so this is
-  a guardrail for the design pass, not an expected conflict.
+  feature only changes *which* candidates get traced, not the conviction formula itself, so no
+  conflict is expected — the design pass must state that it re-confirmed this rather than skip the
+  check.
 - [ ] Whether a `live_enabled=TRUE AND active=TRUE` strategies query belongs as a new
   `StrategiesRepository` method (mirroring `list()`'s shape) or a raw query duplicating
   `live_loop.py:188-190`'s SQL — decide at `/sdd-design`; the DRY guard rail favors a single shared

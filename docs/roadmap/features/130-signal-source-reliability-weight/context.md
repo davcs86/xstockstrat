@@ -42,3 +42,12 @@
   disjoint files/messages/config keys. `007-signal-source-weighting` (launched) is the historical
   origin of `analysis.signals.source_weights`, not a live collision. `022-signal-time-decay` (draft)
   is self-flagged in this spec's own FR-6, not a scanner finding.
+
+## Session 2026-08-13T00:30:00Z — fix review warning
+
+- Fixed the one advisory warning from the sdd-review pass: `## Database Changes` now states the
+  migration naming convention explicitly — next free number in
+  `services/xstockstrat-ingest/migrations/` is `010_*` (current highest is `009_signal_dedup_keys`),
+  named as `010_add_signal_source_reliability_weight`, with a note to re-verify the number is still
+  free immediately before `/sdd-execute` runs it (numbering-collision risk per
+  `docs/runbooks/feature-workflow.md` § Feature Numbering).
