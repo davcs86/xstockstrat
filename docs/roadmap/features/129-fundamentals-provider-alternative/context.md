@@ -590,3 +590,13 @@
     `os.Getenv`/`process.env`/`os.environ.get` vendor-credential read across every service's
     config/main entrypoint.
 - Files modified: `docker-compose.yml` only (this session's fix).
+- **User reported PR #930 was already merged** (squash-merged into `main-dev` as `bb37d657`,
+  base sha `71cd1cbf`) before this session's two follow-up commits
+  (`309e439b`/`4ed1f162` — the FINNHUB deploy-pipeline fix and the BROKER_ACCOUNTS_ENCRYPTION_KEY
+  fix) were pushed, so they landed stranded on a branch whose PR was already closed. Per the
+  branch-reuse rule (merged PR can't track new work): rebased those 2 commits onto the current
+  `origin/main-dev` tip (`git rebase --onto origin/main-dev b9399bdc
+  claude/fmp-free-layer-ratios-dr0c4j` — clean, no conflicts, verified via
+  `git merge-base --is-ancestor origin/main-dev HEAD`), force-pushed (`--force-with-lease`), and
+  opened a **new** PR — **#931** — since #930 cannot be reused. Same branch name
+  (`claude/fmp-free-layer-ratios-dr0c4j`) throughout, per the harness's branch-reuse convention.
