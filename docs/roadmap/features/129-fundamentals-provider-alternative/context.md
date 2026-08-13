@@ -316,3 +316,14 @@
 - Files modified: `services/xstockstrat-marketdata/internal/finnhub/finnhub_client_test.go`,
   `services/xstockstrat-marketdata/internal/finnhub/finnhub_client.go` (gofmt only)
 - Deviations: none beyond the Step 2 note above (shared root cause).
+
+### Step 4 — service: `CountFundamentalsFetchedSince` repo method [done]
+- Added `CountFundamentalsFetchedSince(ctx, since time.Time)` immediately after
+  `CountFundamentalsFetchedToday`, same query shape (`SELECT count(*) FROM
+  marketdata.fundamentals WHERE fetched_at >= $1`), reusing `idx_fundamentals_fetched_at`.
+  `time` was already imported in this file — no import change needed.
+- `go build ./internal/repository/...` and `golangci-lint run ./internal/repository/...` both
+  pass. `TDD: N/A` per the step's own spec (repository/ is CI-coverage-excluded and has no direct
+  test for the sibling method either — exercised via `fakeFundRepo` in Step 6).
+- Files modified: `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go`
+- Deviations: none.

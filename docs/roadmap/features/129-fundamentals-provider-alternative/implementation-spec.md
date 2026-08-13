@@ -279,7 +279,7 @@ coverage confirmed together with Step 6's verification.
 
 ### Step 4 — service: `CountFundamentalsFetchedSince` repo method
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go` — modify
