@@ -26,12 +26,30 @@ FR-6. The effective (post-decay) confidence must be logged at DEBUG level per si
 - Per-source-type decay rates (one global half-life in V1; per-source rates are a V2 extension)
 - Decay applied in the indicators formula engine (only in the analysis scoring loop)
 - UI visualization of decayed vs. raw confidence
+- A maximum age floor that drops ancient signals entirely (resolved — see Open Questions: not
+  needed in V1, since FR-1's exponential decay already asymptotically approaches zero without a
+  special-cased cutoff)
 
 ## Affected Services
 
 Exact service names from CLAUDE.md Service Registry:
 - `xstockstrat-analysis` — scoring loop modification
 - `xstockstrat-config` — new config key registration
+
+## Consumer Surface(s)
+
+- [x] **UI** — `xstockstrat-ui` `/insights`: the decayed `effective_confidence` feeds
+  `combine_score()`'s `signal_score` input, which is one of the two terms `conviction`
+  (`BarDiagnostic.conviction`, `packages/proto/analysis/v1/analysis.proto:147`) is computed from —
+  the Backtest Diagnostics table on `/insights/strategies/[id]` renders `bar.conviction` per row
+  (`services/xstockstrat-ui/src/components/insights/BacktestDiagnostics.tsx:153`), so a decayed
+  signal changes a value already displayed there. Second-order: `conviction` drives `BarAction`
+  entry/exit decisions, which roll into the headline `StrategyScore.overall_score`/`rating`
+  (`analysis.proto:170,172`) shown on the same strategy detail page via feature 065's per-symbol
+  evidence aggregation — no new UI element is required, an existing display simply reflects
+  different (fresher-weighted) values once this ships.
+- [ ] **Agent** — no MCP tool surfaces per-bar diagnostics or signal decay directly; none added.
+- [ ] **None**
 
 ## Proto Contract Changes
 
@@ -63,5 +81,15 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Open Questions
 
-- [ ] Should the decay reference time be `ingested_at` or the source newsletter's publication timestamp? `ingested_at` is preferred — it's platform-controlled and immune to newsletter timestamp manipulation. Confirm at impl-spec time.
-- [ ] Should a maximum age floor (e.g. signals older than 7 days get multiplier=0 and are dropped entirely) be added in V1? Would simplify DB queries. Decision deferred to impl-spec.
+- [x] Should the decay reference time be `ingested_at` or the source newsletter's publication
+  timestamp? **Resolved**: `ingested_at`, per FR-4 — it's platform-controlled and immune to
+  newsletter timestamp manipulation. This was already the spec's own committed requirement (FR-4);
+  the question is closed, not deferred.
+- [x] Should a maximum age floor (e.g. signals older than 7 days get multiplier=0 and are dropped
+  entirely) be added in V1? **Resolved: no.** FR-1's exponential decay is already
+  self-limiting — at 3×half-life the multiplier is ≈0.125, at 7×half-life ≈0.008 — so a signal's
+  practical influence vanishes on its own without a special-cased hard cutoff, consistent with this
+  spec's existing V1-minimalism (single global half-life, no per-source rates). A DB-query-pruning
+  floor is a distinct performance optimization, not a correctness requirement; if signal-table
+  volume later makes an unbounded age range a real query cost, that is a named follow-up to raise
+  against the ingest signal-retention story, not blocking scope here.
