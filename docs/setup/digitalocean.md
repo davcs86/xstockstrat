@@ -311,17 +311,27 @@ Add four GitHub Actions secrets (see Step 9):
 
 The deploy workflows substitute them into the app spec at deploy time via the `YOUR_DEV_ALPACA_API_KEY` / `YOUR_DEV_ALPACA_API_SECRET` (dev) and `YOUR_PROD_ALPACA_API_KEY` / `YOUR_PROD_ALPACA_API_SECRET` (prod) placeholders.
 
-### FMP fundamentals credential
+### Fundamentals credentials (FMP, Finnhub)
 Set on: `xstockstrat-marketdata`
 
-Optional — the FMP fundamentals pipeline is off by default (`marketdata.fmp.enabled=false`), so
-this can be left unset until you're ready to enable it. Sign up for FMP's free "Personal Use"
-Basic plan at financialmodelingprep.com.
+`xstockstrat-marketdata` supports two switchable fundamentals providers
+(`marketdata.fundamentals.provider`, feature 129) — FMP and Finnhub — each with its own optional
+credential. Both pipelines are off by default (`marketdata.fmp.enabled` / `marketdata.finnhub.enabled`
+default to `false`), so either key can be left unset until you're ready to enable that provider.
+Unlike Alpaca, there's no required-guard on either: an empty key deploys fine as long as the
+corresponding `.enabled` key stays `false`.
 
-Add `DEV_FMP_API_KEY` and `PROD_FMP_API_KEY` as GitHub Actions secrets (see Step 9) — they
-substitute into the `YOUR_DEV_FMP_API_KEY` / `YOUR_PROD_FMP_API_KEY` placeholders. Unlike Alpaca,
-there's no required-guard: an empty key deploys fine as long as `marketdata.fmp.enabled` stays
-`false`.
+- **FMP** — sign up for FMP's free "Personal Use" Basic plan at financialmodelingprep.com. Add
+  `DEV_FMP_API_KEY` and `PROD_FMP_API_KEY` as GitHub Actions secrets (see Step 9) — they
+  substitute into the `YOUR_DEV_FMP_API_KEY` / `YOUR_PROD_FMP_API_KEY` placeholders.
+- **Finnhub** — sign up for Finnhub's free tier at finnhub.io (no credit card required). Add
+  `DEV_FINNHUB_API_KEY` and `PROD_FINNHUB_API_KEY` as GitHub Actions secrets (see Step 9) — they
+  substitute into the `YOUR_DEV_FINNHUB_API_KEY` / `YOUR_PROD_FINNHUB_API_KEY` placeholders.
+
+> **Adding a third fundamentals provider (or any new vendor credential) later?** See
+> `docs/runbooks/add-data-source.md` § Wiring a New Vendor Credential Through Deploy — the FMP/
+> Finnhub pair above is the reference instance of that checklist, and it's easy to wire the `.do/*.yaml`
+> placeholder but miss the GitHub Actions layer (the mistake that prompted writing the checklist).
 
 ### JWT secret
 Set on: `xstockstrat-identity`
@@ -444,6 +454,8 @@ The CI/CD workflows need the following repository secrets. Go to:
 | `PROD_ALPACA_API_SECRET` | Alpaca **live** API secret (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
 | `DEV_FMP_API_KEY` | FMP API key for staging, optional (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
 | `PROD_FMP_API_KEY` | FMP API key for production, optional (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
+| `DEV_FINNHUB_API_KEY` | Finnhub API key for staging, optional (see Step 7) | deploy-dev — substituted into `.do/app.dev.yaml` at deploy time |
+| `PROD_FINNHUB_API_KEY` | Finnhub API key for production, optional (see Step 7) | deploy-prod — substituted into `.do/app.yaml` at deploy time |
 
 `GITHUB_TOKEN` is automatically provided by GitHub Actions for GHCR pushes — no setup needed.
 

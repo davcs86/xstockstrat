@@ -33,7 +33,7 @@ list — this drives AI review focus, not notifications.
 | Platform Lead | Cross-service architecture, new service additions, port assignments | Port uniqueness, service registry consistency, inter-service dependency graph correctness |
 | DBA | All database schema changes | Migration NNN numbering (no gaps, no conflicts), up+down pair present, hypertable partitioning strategy, index correctness, run-order compliance with `scripts/db-migrate.sh` |
 | Proto Reviewer | All `.proto` file changes | Field number uniqueness per message, no breaking changes without deprecation comment, `buf lint` passes, `buf breaking` passes against dev trunk, BSR publication readiness |
-| Security | Identity, API keys, secrets, auth scope | No secrets in config service state, secret keys use `secret.*` prefix, JWT claims minimal, API key scoping correct |
+| Security | Identity, API keys, secrets, auth scope | No secrets in config service state (a vendor credential is a `type: SECRET` deploy-pipeline env var, never a `secret.*` config key — see `docs/patterns/config-governance.md` Rule 6), JWT claims minimal, API key scoping correct, new credential wiring follows the full checklist in `docs/runbooks/add-data-source.md` § "Wiring a New Vendor Credential Through Deploy" |
 
 ---
 

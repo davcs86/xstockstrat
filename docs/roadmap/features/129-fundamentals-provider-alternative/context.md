@@ -522,3 +522,103 @@
   rollout process — `marketdata.finnhub.enabled` starts `false` (Step 1's seed default) and is
   flipped deliberately later, by an operator with real Docker/DB access, not by this sandboxed
   session. Step 12 marked `done` on this basis.
+
+## Session 2026-08-13T04:00:00Z — post-completion fix: GitHub Actions secret wiring gap
+
+- **User-reported gap** (after the integration PR #930 was already open): Step 7's `**Files**`
+  scoped `FINNHUB_API_KEY`'s deployment wiring to only the 3 files FMP's precedent visibly
+  touched (`docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`). Missed the 5 files that
+  actually carry a GitHub Secret into those `.do/*.yaml` placeholders:
+  `.github/workflows/deploy.yml` (the reusable workflow's `secrets:` input, its substitution
+  `env:` block, and its `python3 -c` heredoc's `content.replace(...)` calls),
+  `.github/workflows/deploy-dev.yml` / `deploy-prod.yml` (per-environment secret passthrough),
+  `.github/workflows/prod-up.yml` + `scripts/do-inject-prod-secrets.py` (the prod-recreate
+  injection path). Without this fix, `marketdata.finnhub.enabled=true` in production would have
+  deployed with `FINNHUB_API_KEY` silently empty — no error, just every Finnhub call 401ing.
+- **Fix applied** (this branch, before PR #930 merges — F-09 doesn't apply here since all 12
+  spec steps are already `done`; this is new work, not an edit to an immutable step body):
+  added `FINNHUB_API_KEY` wiring to all 5 missed workflow/script files, mirroring `FMP_API_KEY`
+  exactly (optional, `OPTIONAL_PLACEHOLDER_KEYS`, no `required: true` guard). Validated: `python3
+  -c "import yaml; yaml.safe_load(...)"` on all 4 workflow YAML files, `ast.parse` on the Python
+  script — all parse clean.
+- **Docs updated** (the "document the pattern" half of the request):
+  `docs/setup/digitalocean.md` (FMP/Finnhub credential subsection generalized, 2 new GitHub
+  Actions secrets table rows), `docs/runbooks/infra-cost-reduction.md` (prod bring-up secret list
+  mentions `PROD_FINNHUB_API_KEY`), and a **new** `docs/runbooks/add-data-source.md` §
+  "Wiring a New Vendor Credential Through Deploy" — a 10-file checklist (8 wiring + 2 docs) so a
+  future vendor-credential addition doesn't rediscover this gap the same way.
+- **Ledger write**: `docs/roadmap/ledger/fails.md` 2026-08-13 `fundamentals-provider-alternative —
+  scope-creep` — records the root cause (recon/spec only grepped the files the FMP precedent's
+  Instructions already named, not every file referencing `FMP_API_KEY` repo-wide) and the durable
+  fix (the new checklist).
+
+## Session 2026-08-13T05:00:00Z — user-directed audit: "the secrets pattern applies to all"
+
+- **Scope note**: this session's work is explicitly outside feature 129's own scope (not
+  Finnhub/fundamentals-related) — the user directed a repo-wide audit of the credential-wiring
+  pattern the previous session's fix surfaced, applied to every existing vendor credential, not
+  just Finnhub. Per root CLAUDE.md's ledger precedent on scope-expansion (2026-08-05
+  `phase-2-data-layer` entry: "a small opportunistic in-session fix must get its own /sdd-story
+  pass or be explicitly logged as a sanctioned deviation"), this is logged here as the sanction —
+  an explicit user direction in this conversation, not a silent scope creep.
+- **CI check**: PR #930 green on the prior commit (`b9399bdc`, all jobs `success`/`skipped`);
+  latest push had not yet produced a CI run at check time.
+- **Audit method**: built a presence matrix (`grep`) for every known vendor credential
+  (`ALPACA_API_KEY`, `ALPACA_API_SECRET`, `BROKER_ACCOUNTS_ENCRYPTION_KEY`, `JWT_SECRET`,
+  `MCP_AGENT_SECRET`, `FMP_API_KEY`, `FINNHUB_API_KEY`) across all 9 files the new
+  add-data-source.md checklist names (`docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`,
+  the 4 GitHub Actions workflow files, `do-inject-prod-secrets.py`, `digitalocean.md`).
+- **Findings**:
+  - `BROKER_ACCOUNTS_ENCRYPTION_KEY` missing from `docker-compose.yml`'s `xstockstrat-trading`
+    `environment:` block — **a real, pre-existing local-dev-breaking bug**, unrelated to this
+    feature. Confirmed: not covered by the `*common-env` YAML anchor (only
+    `APPLICATION_ENV`/`TRADING_MODE`/`OTEL_ENABLED`), and `.env.local` (the file trading's
+    `env_file:` directive loads) explicitly documents itself as "committed local dev structural
+    overrides. No secrets here." So the container's `os.Getenv("BROKER_ACCOUNTS_ENCRYPTION_KEY")`
+    (`internal/config/config.go:47`) always returned empty locally, and `main.go:49-52`'s
+    `os.Exit(1)` guard means `xstockstrat-trading` could never boot via `docker compose up`
+    — this predates feature 129 (confirmed via `git log -S`, present since at least feature 023).
+    Fixed by adding the same `${VAR:?message}` fail-fast pattern `JWT_SECRET`/`ALPACA_API_KEY`
+    already use in their service blocks. `python3 -c "import yaml; yaml.safe_load(...)"`: valid.
+  - `MCP_AGENT_SECRET` absent from `deploy.yml`/`deploy-dev.yml`/`deploy-prod.yml` — **not a
+    gap**: confirmed no `value:` line in its `.do/*.yaml` block (dashboard-set-once by design,
+    per `do-inject-prod-secrets.py`'s own docstring: `doctl apps update` preserves dashboard-set
+    SECRET values across ordinary deploys; only `prod-up.yml`'s fresh `doctl apps create` needs
+    re-injection, which it already does via `INJECT_KEYS`). Left untouched.
+  - `ALPACA_API_KEY`/`ALPACA_API_SECRET`/`JWT_SECRET`/`FMP_API_KEY`/`FINNHUB_API_KEY`: all fully
+    wired across all 9 files. No further gaps found in a second grep pass for any other
+    `os.Getenv`/`process.env`/`os.environ.get` vendor-credential read across every service's
+    config/main entrypoint.
+- Files modified: `docker-compose.yml` only (this session's fix).
+- **User reported PR #930 was already merged** (squash-merged into `main-dev` as `bb37d657`,
+  base sha `71cd1cbf`) before this session's two follow-up commits
+  (`309e439b`/`4ed1f162` — the FINNHUB deploy-pipeline fix and the BROKER_ACCOUNTS_ENCRYPTION_KEY
+  fix) were pushed, so they landed stranded on a branch whose PR was already closed. Per the
+  branch-reuse rule (merged PR can't track new work): rebased those 2 commits onto the current
+  `origin/main-dev` tip (`git rebase --onto origin/main-dev b9399bdc
+  claude/fmp-free-layer-ratios-dr0c4j` — clean, no conflicts, verified via
+  `git merge-base --is-ancestor origin/main-dev HEAD`), force-pushed (`--force-with-lease`), and
+  opened a **new** PR — **#931** — since #930 cannot be reused. Same branch name
+  (`claude/fmp-free-layer-ratios-dr0c4j`) throughout, per the harness's branch-reuse convention.
+
+## Session 2026-08-13T05:30:00Z — user-directed: "update governance files"
+
+- Found the root cause of the FINNHUB_API_KEY wiring gap had a governance-doc dimension: root
+  `CLAUDE.md` § Config Governance Rules, `docs/patterns/config-governance.md` Rule 6, and
+  `docs/runbooks/reviewer-registry.md`'s Security row all claimed "sensitive keys use the
+  `secret.*` prefix" — verified dead in practice (`grep` across every `xstockstrat-config`
+  migration: exactly one historical use, `secret.marketdata.fmp.api_key`, reversed by feature 076
+  migration `009`). A reader following only the stated rule would repeat the exact
+  config-key-for-a-credential mistake migration 009 already reversed once.
+- Fixed all three docs to state the actual rule (vendor credential = `type: SECRET` deploy-pipeline
+  env var, never a config key) and added a parallel "Registering a new vendor credential" section
+  to `config-governance.md` (alongside the existing "Registering a new config key" section) that
+  cross-references the `add-data-source.md` checklist — closing the governance-doc gap that let
+  the original wiring miss happen without any doc pointing to the right process.
+- **Teardown check**: per root CLAUDE.md's own Teardown rule, changing a context file (`CLAUDE.md`,
+  `config-governance.md`) requires `/context-scrubber scan` before pushing. Checked: the
+  context-forge plugin/skill is not available in this session (no matching skill, no
+  `.claude/skills/context-scrubber` on disk). Noted explicitly in PR #931's body per the rule's own
+  instruction ("say so in the PR body rather than skipping silently") rather than skipped quietly.
+- Files modified: `CLAUDE.md`, `docs/patterns/config-governance.md`,
+  `docs/runbooks/reviewer-registry.md`.

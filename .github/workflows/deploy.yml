@@ -38,6 +38,11 @@ on:
         # Callers pass DEV_FMP_API_KEY or PROD_FMP_API_KEY from GitHub Secrets. Optional — the FMP
         # fundamentals pipeline is off by default (marketdata.fmp.enabled=false), so an unset key is
         # a valid state, unlike the Alpaca credentials above.
+      FINNHUB_API_KEY:
+        required: false
+        # Callers pass DEV_FINNHUB_API_KEY or PROD_FINNHUB_API_KEY from GitHub Secrets. Optional —
+        # same reasoning as FMP_API_KEY above: the Finnhub fundamentals pipeline is off by default
+        # (marketdata.finnhub.enabled=false), so an unset key is a valid state (feature 129).
 
 jobs:
   deploy:
@@ -56,6 +61,7 @@ jobs:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
           FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+          FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
         run: |
           sed \
             -e "s|YOUR_GITHUB_ORG|${{ github.repository_owner }}|g" \
@@ -66,6 +72,7 @@ jobs:
             ALPACA_API_KEY="$ALPACA_API_KEY" \
             ALPACA_API_SECRET="$ALPACA_API_SECRET" \
             FMP_API_KEY="$FMP_API_KEY" \
+            FINNHUB_API_KEY="$FINNHUB_API_KEY" \
             python3 -c "
           import os, sys
           content = sys.stdin.read()
@@ -84,6 +91,9 @@ jobs:
           fmp_key = os.environ.get('FMP_API_KEY', '')
           content = content.replace('YOUR_DEV_FMP_API_KEY', fmp_key)
           content = content.replace('YOUR_PROD_FMP_API_KEY', fmp_key)
+          finnhub_key = os.environ.get('FINNHUB_API_KEY', '')
+          content = content.replace('YOUR_DEV_FINNHUB_API_KEY', finnhub_key)
+          content = content.replace('YOUR_PROD_FINNHUB_API_KEY', finnhub_key)
           sys.stdout.write(content)
           " > /tmp/app_spec_substituted.yaml
 

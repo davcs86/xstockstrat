@@ -428,6 +428,7 @@ services:
       INDICATORS_ENDPOINT: xstockstrat-indicators:50054
       MARKETDATA_ENDPOINT: xstockstrat-marketdata:50053
       NOTIFY_ENDPOINT: xstockstrat-notify:50059
+      BROKER_ACCOUNTS_ENCRYPTION_KEY: "${BROKER_ACCOUNTS_ENCRYPTION_KEY:?BROKER_ACCOUNTS_ENCRYPTION_KEY is required - copy .env.example to .env (run: openssl rand -hex 32)}"
       SERVICE_NAME: trading
       DB_POOL_MAX: "2"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317

@@ -19,9 +19,10 @@ Two injection styles:
 
 Any required secret whose env var is empty/unset is left untouched, so the
 workflow degrades gracefully (DO treats it as an unset SECRET) and logs a
-warning. FMP_API_KEY is optional — the FMP fundamentals pipeline is off by
-default (marketdata.fmp.enabled=false) — so its warning is suppressed when
-unset, matching deploy.yml.
+warning. FMP_API_KEY and FINNHUB_API_KEY are optional — their fundamentals
+pipelines are off by default (marketdata.fmp.enabled=false,
+marketdata.finnhub.enabled=false, feature 129) — so their warnings are
+suppressed when unset, matching deploy.yml.
 
 Reads the spec on stdin, writes the rendered spec to stdout.
 """
@@ -43,9 +44,12 @@ PLACEHOLDER_KEYS = (
     ("YOUR_PROD_ALPACA_API_SECRET", "ALPACA_API_SECRET"),
 )
 
-# Optional placeholder token -> env var name. The FMP fundamentals pipeline is
+# Optional placeholder token -> env var name. These fundamentals pipelines are
 # off by default, so an unset key is a valid state — no warning if empty.
-OPTIONAL_PLACEHOLDER_KEYS = (("YOUR_PROD_FMP_API_KEY", "FMP_API_KEY"),)
+OPTIONAL_PLACEHOLDER_KEYS = (
+    ("YOUR_PROD_FMP_API_KEY", "FMP_API_KEY"),
+    ("YOUR_PROD_FINNHUB_API_KEY", "FINNHUB_API_KEY"),
+)
 
 
 def inject_block(content, key, value):
