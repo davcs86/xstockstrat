@@ -1,9 +1,9 @@
 # Feature: fundamentals-provider-alternative
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `design-approved`
 **Development Branch**: `claude/fmp-free-layer-ratios-dr0c4j`
 **Created**: 2026-08-12
-**Last Updated**: 2026-08-12
+**Last Updated**: 2026-08-13
 
 ---
 
@@ -13,12 +13,15 @@
 |---|---|---|---|
 | 2026-08-12 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-12 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS: 3 open questions deferred to /sdd-design per feature-059 precedent; consumer-surface "None" flagged as re-check-if-scope-widens). Overlap scan: clean. |
+| 2026-08-13 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; provider = Finnhub (Twelve Data disqualified — free tier excludes fundamentals). Kept switchable-not-replaced pending live smoke test on 2 open risks (dividend yield, call shape). recon.md + design.md written. |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon](recon.md) — grounded codebase dossier
+- [Design](design.md) — debated, approved architecture
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fundamentals-provider-alternative`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -47,4 +50,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design fundamentals-provider-alternative quick` — recon + adversarial design debate
+`/sdd-spec fundamentals-provider-alternative` — generate implementation spec from the approved design

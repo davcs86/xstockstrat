@@ -44,3 +44,48 @@
   established the `<PROVIDER>_API_KEY` secret-env precedent this feature's FR-5 follows (distinct
   key name, no clash) — worth checking its migration-NNN tip again at `/sdd-spec` time if a
   migration ends up needed. No `finnhub`/`twelvedata` name collisions anywhere in the repo.
+
+## Session 2026-08-13T00:00:00Z — sdd-design (quick)
+
+- **Phase 0 Recon**: wrote `recon.md` (services: `xstockstrat-marketdata`, `xstockstrat-config`).
+  Key reuse patterns found: `internal/fmp/fmp_client.go` client shape and
+  `marketdata_service.go:846-1002` cache/quota-guard logic are fully provider-agnostic and
+  directly reusable; `marketdata.fundamentals` DB schema has zero column gap vs.
+  `source.Fundamentals`. Real gap found: 3 proto doc-comments (`marketdata.proto:160,174,178`)
+  name FMP specifically and need a text-only edit regardless of shape changes.
+- **Live-docs research** (orchestrator, via WebFetch/WebSearch — the design-proposer/-adversary
+  subagents have no web tools, so this ran in the main session before Phase 1 per product-spec
+  FR-1/AC-1's "must be citable, not assumed" requirement):
+  - **Finnhub free tier**: ~60 calls/min, no daily cap, no credit card. `/stock/metric`
+    (Basic Financials) confirmed free-accessible with PE, PB, 52w-high/low, EPS, ROE,
+    debt-to-equity, beta, market cap. Sources: https://finnhub.io/pricing,
+    https://robotwealth.com/finnhub-api/,
+    https://www.interactivebrokers.com/campus/ibkr-quant-news/exploring-the-finnhub-io-api/,
+    https://apicostcalc.com/finnhub.html, https://github.com/finnhubio/Finnhub-API/issues/122.
+    **Not confirmed**: dividend-yield field presence (Finnhub's own docs.finnhub.io SPA did not
+    render for the fetch tool) and whether fundamentals endpoints batch across symbols — both
+    carried into design.md as Open Risks, to close via `/sdd-spec`'s live re-verification +
+    product-spec AC-3's live smoke test.
+  - **Twelve Data free/Basic tier**: 800 req/day, but **excludes all fundamentals data
+    categorically** — `/statistics` (P/E, P/B, ROE, D/E, dividend yield, beta) requires
+    Pro/Venture plan (https://twelvedata.com/docs#statistics); free `/quote` has no P/E or market
+    cap (https://twelvedata.com/docs#quote); pricing page confirms the exclusion directly
+    (https://twelvedata.com/pricing). **Disqualified outright** — fails FR-2's required-field
+    coverage bar regardless of its generous rate limit.
+- **Phase 1 Grilling**: 1 round (quick). Design-proposer chose Finnhub, full replacement of FMP.
+  Design-adversary verdict: NEEDS WORK (no Floor breach) — found a real correctness gap (proposal's
+  "full replacement" didn't account for 7+7 literal `marketdata.fmp.*` string reads across
+  `marketdata_service.go`/`main.go`/tests, which would leave fundamentals silently disabled after
+  an FMP-removal migration), flagged C-01 concerns about committing to full replacement plus a
+  derived numeric quota default on top of 2 unverified facts (dividend yield, call shape), and
+  cited the 2026-08-06 migration-collision ledger trap. Orchestrator synthesized a revision (no
+  second proposer/adversary round needed — direct incorporation of the adversary's own suggested
+  fixes): keep FMP switchable via a `marketdata.fundamentals.provider` selector instead of full
+  replacement; defer the exact `symbols_per_minute` quota default to `/sdd-spec`; made the
+  FMP-string rename (config-key reads, alert text, error text, comments — not just the 3 proto
+  comments) an explicit mandatory scope item; single migration (`015_marketdata_finnhub`, no drop
+  migration in this feature).
+- **Gate**: user approved the synthesized design directly (no further rounds requested).
+- Constitution rules touched: C-01, C-05, C-10(b), C-14, F-01, F-04, F-11 — all "honored" per
+  design.md § Constitution Rules Touched. No Floor breach.
+- Status: spec-ready → design-approved.

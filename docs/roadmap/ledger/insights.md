@@ -1405,3 +1405,26 @@ reusing.
   default. When adopted, document the exception in the service's own `CLAUDE.md` (the "one client
   per segment" convention) in the same PR, so a future reader has the verified justification instead
   of an unexplained deviation.
+
+### 2026-08-13 — fundamentals-provider-alternative — design
+- **Pattern**: When a feature's design-phase acceptance criterion requires citing a **live external
+  API/docs source** (not just the codebase), the orchestrator — not `design-proposer`/
+  `design-adversary`, which are read-only `Glob`/`Grep`/`Read` subagents with no web tools — must do
+  the `WebFetch`/`WebSearch` verification itself, in the main session, before Phase 1, and hand the
+  proposer/adversary a written research brief with citations to treat as grounded evidence. This is
+  the direct successor to the 2026-08-10 `shadcn-sidebar-visual-rewrite` fails.md entry (external
+  reference never fetched, only discovered post-implementation) — applying its rule prevented the
+  same gap here. Concretely: researched Finnhub's and Twelve Data's actual free-tier docs
+  (rate limits, per-endpoint field/plan gating) via `WebFetch`/`WebSearch` before spawning the
+  proposer, which let the proposer immediately disqualify Twelve Data (its free tier categorically
+  excludes fundamentals data) with a citable source instead of guessing from training-data
+  recollection or carrying forward an un-reverified assumption from an earlier chat turn.
+- **Evidence**: `docs/roadmap/features/127-fundamentals-provider-alternative/context.md` § Session
+  2026-08-13 — sdd-design (quick), "Live-docs research" bullet (full citation list);
+  `docs/roadmap/ledger/fails.md` 2026-08-10 `shadcn-sidebar-visual-rewrite` entry (the rule this
+  applies).
+- **Rule it implies**: extends the shadcn entry's rule beyond "match a visual reference" to any
+  product-spec requirement of the form "verify against live/current external docs, not assumption."
+  The orchestrating skill (not a subagent) owns the web-fetch step, synthesizes it into a citable
+  brief, and passes that brief — never a bare URL a tool-less subagent can't follow — into the
+  proposer/adversary prompts.

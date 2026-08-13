@@ -1045,3 +1045,27 @@ ambiguity is logged here).
   prove what the *reference* does. A future `/sdd-design` round debating an external-reference-match
   feature should include a `WebFetch`/reference-inspection step in Phase 0 Recon, not defer that
   check to a human eyeballing a screenshot after the code already shipped.
+
+### 2026-08-13 — fundamentals-provider-alternative — assumption
+- **Mistake**: The design-proposer's first-round approach for swapping a provider behind an
+  existing interface (`source.FundamentalsSource`, feature 059's FMP integration) framed the change
+  as "add a new client + point construction at it," and its own "PROTO" section correctly caught 3
+  provider-named doc-comments needing a text edit — but the proposal never extended that same
+  literal-string audit to the *service code itself*: 7 live config-key reads
+  (`"marketdata.fmp.enabled"` etc.) plus provider-named error text, alert title/body, and comments
+  scattered across `marketdata_service.go`/`main.go` and their tests all reference the old provider
+  by name. Left unaddressed, a subsequent "remove the old provider" migration would delete the old
+  provider's config rows while the code kept reading the old literal key name — silently disabling
+  the feature (config falls through to its Go-coded `false` default) rather than erroring loudly.
+  Caught only by the design-adversary explicitly re-reading the cited service-code line ranges
+  recon.md had already surfaced, not by the proposer that first drafted the change.
+- **Evidence**: `docs/roadmap/features/127-fundamentals-provider-alternative/design.md` § Chosen
+  Approach ("Mandatory scope correction" — full list of literal-string sites);
+  `context.md` § Session 2026-08-13 — sdd-design (quick), Phase 1 Grilling bullet.
+- **Rule it implies**: extends the 2026-07-30 "reinforces C-10(b) — every read path" family — when
+  a design swaps *which* provider/backend/implementation serves an existing interface, grep for
+  every literal reference to the *old* provider's name across the touched service (config-key
+  strings, error/alert text, log messages, comments), not just its primary construction/registration
+  site — a provider swap is not done until every string that names the old provider is either
+  removed or made provider-agnostic. `recon.md`'s per-line config-read citations are exactly the
+  evidence to re-check for this before approving a "replace provider X" design.
