@@ -77,3 +77,17 @@
   `signal-source-reliability-weight` (130) — same-expression overlap on `servicer.py:2163`, 130
   lands first (already `spec-ready`), 022 rebases the combined formula onto it.
 - Re-running `/sdd-review signal-time-decay product-spec` next.
+
+## Session 2026-08-13T00:40:00Z — sdd-review product-spec (round 3, overlap findings)
+
+- Overlap re-scan (round 3): the 022↔130 `merge-order.md` row is present and correctly shaped. New
+  finding: `131-live-strategy-opportunity-attribution` (also `spec-ready`) restructures the same
+  `_compute_opportunities` candidate-creation/signals-merge block (`servicer.py:2144-2168`) that
+  contains the `signal_axis` line (`:2163`) 022/130 already coordinate on — a three-way
+  same-function overlap, not previously recorded.
+- Added a second `merge-order.md` row: 022 must also wait for 131, with a recommended landing
+  order **130 → 131 → 022** (130's factor addition first since simplest/earliest spec-ready; 131's
+  structural candidate-loop change next; 022's decay factor composes last on the combined
+  expression). This row governs 022's ordering relative to 131 — 131 itself has no dependency here
+  (confirmed clean in its own overlap scan).
+- Criteria re-review (round 3) in progress; awaiting result.
