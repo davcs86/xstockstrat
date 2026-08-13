@@ -193,3 +193,40 @@
   the same class already covered by the 2026-08-06 `fundamentals-signal-producer — migration`
   ledger entry (concurrent migration-NNN collisions) but at the feature-directory level instead.
 - Status: `implementation-ready` unchanged — this was a pre-step-loop correction, not a step.
+
+## Session 2026-08-13T02:15:00Z — sdd-execute (sequential) — tooling setup
+
+- Re-spec gate validation (§5.3.2): re-checked cited evidence against the post-merge tree.
+  `docs/patterns/config-governance.md`'s "Per-Feature Registered Keys" header/feature-102-entry
+  shifted +7 lines (unrelated PR #897, config-governance audit) — symbol/content unchanged, only
+  line numbers drift; Phase 1 discovery re-greps live at Step 11 execution, so no re-spec needed.
+  `.do/app.dev.yaml`/`.do/app.yaml` gained an unrelated `FMP_API_KEY` block under
+  `xstockstrat-analysis` (also PR #897) — `xstockstrat-marketdata`'s own `FMP_API_KEY` block
+  (Step 7's mirror target) is untouched at its cited location. `xstockstrat-marketdata` service
+  code and `packages/proto/marketdata/v1/marketdata.proto` were not touched by the merge — all
+  other steps' evidence stands as specced.
+- Tooling setup (steps 1-12): go1.25.0 ✓ · golangci-lint v2.5.0 ✓ · buf ⬇ 1.72.0 (Docker daemon
+  unavailable in this sandbox — `docker build -f Dockerfile.codegen` failed with "no such file or
+  directory" on the docker socket; fell back to
+  `docs/runbooks/codegen-toolchain-host-setup.md`'s host-toolchain path) · protoc-gen-go ⬇ v1.36.11
+  · protoc-gen-go-grpc ⬇ v1.6.2 · protoc-gen-connect-go ⬇ v1.19.2 · ts-proto ⬇ 2.11.8 ·
+  @bufbuild/protoc-gen-es ⬇ 2.12.0 · @connectrpc/protoc-gen-connect-es ⬇ 1.7.0 · grpcio-tools ⬇
+  1.80.0 · `packages/proto/gen/ts` pnpm deps ⬇. All pins verified against `Dockerfile.codegen`
+  (authoritative source) before install — matched the runbook's snapshot exactly, no drift.
+  **Validated per the runbook's Step 5 acceptance gate**: `git branch -f main-dev origin/main-dev`
+  (local ref, so `buf breaking` actually runs instead of silently no-op'ing) →
+  `./scripts/buf-gen.sh` → `git diff --stat packages/proto/gen/` → **empty**, proving the host
+  toolchain reproduces the committed stubs byte-for-byte before Step 9 touches any `.proto` line.
+- Deviation: proto-codegen tool source is the host-toolchain runbook fallback, not the Docker
+  container — logged per the sequential-mode "CI-equivalent fallback" carve-out (matches CI's
+  `proto-freshness` job pins exactly, confirmed by the empty-diff gate, so no actual divergence
+  from CI's toolchain — this is a sandbox-environment substitution, not a corner cut).
+
+### Step 1 — config: seed `marketdata.finnhub.*` + `marketdata.fundamentals.provider` config keys [done]
+- Created `015_marketdata_finnhub.up.sql`/`.down.sql` mirroring `007_marketdata_fmp.up.sql`'s exact
+  shape: 6 keys × 2 rows (dev/production), `is_secret=FALSE` throughout (no credential row, per the
+  feature-076 precedent). Offline verification passed: all 6 `.up.sql` keys present in `.down.sql`'s
+  `DELETE ... WHERE key IN (...)`, zero `is_secret=TRUE` rows.
+- Files modified: `services/xstockstrat-config/migrations/015_marketdata_finnhub.up.sql`,
+  `services/xstockstrat-config/migrations/015_marketdata_finnhub.down.sql`
+- Deviations: none.

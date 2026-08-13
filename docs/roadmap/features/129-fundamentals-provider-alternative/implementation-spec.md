@@ -70,7 +70,7 @@ is the mandated AC-3 live smoke test that gives it a final, authoritative answer
 
 ### Step 1 — config: seed `marketdata.finnhub.*` + `marketdata.fundamentals.provider` config keys
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/015_marketdata_finnhub.up.sql` — create
