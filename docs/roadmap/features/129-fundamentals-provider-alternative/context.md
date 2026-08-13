@@ -551,3 +551,42 @@
   scope-creep` — records the root cause (recon/spec only grepped the files the FMP precedent's
   Instructions already named, not every file referencing `FMP_API_KEY` repo-wide) and the durable
   fix (the new checklist).
+
+## Session 2026-08-13T05:00:00Z — user-directed audit: "the secrets pattern applies to all"
+
+- **Scope note**: this session's work is explicitly outside feature 129's own scope (not
+  Finnhub/fundamentals-related) — the user directed a repo-wide audit of the credential-wiring
+  pattern the previous session's fix surfaced, applied to every existing vendor credential, not
+  just Finnhub. Per root CLAUDE.md's ledger precedent on scope-expansion (2026-08-05
+  `phase-2-data-layer` entry: "a small opportunistic in-session fix must get its own /sdd-story
+  pass or be explicitly logged as a sanctioned deviation"), this is logged here as the sanction —
+  an explicit user direction in this conversation, not a silent scope creep.
+- **CI check**: PR #930 green on the prior commit (`b9399bdc`, all jobs `success`/`skipped`);
+  latest push had not yet produced a CI run at check time.
+- **Audit method**: built a presence matrix (`grep`) for every known vendor credential
+  (`ALPACA_API_KEY`, `ALPACA_API_SECRET`, `BROKER_ACCOUNTS_ENCRYPTION_KEY`, `JWT_SECRET`,
+  `MCP_AGENT_SECRET`, `FMP_API_KEY`, `FINNHUB_API_KEY`) across all 9 files the new
+  add-data-source.md checklist names (`docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`,
+  the 4 GitHub Actions workflow files, `do-inject-prod-secrets.py`, `digitalocean.md`).
+- **Findings**:
+  - `BROKER_ACCOUNTS_ENCRYPTION_KEY` missing from `docker-compose.yml`'s `xstockstrat-trading`
+    `environment:` block — **a real, pre-existing local-dev-breaking bug**, unrelated to this
+    feature. Confirmed: not covered by the `*common-env` YAML anchor (only
+    `APPLICATION_ENV`/`TRADING_MODE`/`OTEL_ENABLED`), and `.env.local` (the file trading's
+    `env_file:` directive loads) explicitly documents itself as "committed local dev structural
+    overrides. No secrets here." So the container's `os.Getenv("BROKER_ACCOUNTS_ENCRYPTION_KEY")`
+    (`internal/config/config.go:47`) always returned empty locally, and `main.go:49-52`'s
+    `os.Exit(1)` guard means `xstockstrat-trading` could never boot via `docker compose up`
+    — this predates feature 129 (confirmed via `git log -S`, present since at least feature 023).
+    Fixed by adding the same `${VAR:?message}` fail-fast pattern `JWT_SECRET`/`ALPACA_API_KEY`
+    already use in their service blocks. `python3 -c "import yaml; yaml.safe_load(...)"`: valid.
+  - `MCP_AGENT_SECRET` absent from `deploy.yml`/`deploy-dev.yml`/`deploy-prod.yml` — **not a
+    gap**: confirmed no `value:` line in its `.do/*.yaml` block (dashboard-set-once by design,
+    per `do-inject-prod-secrets.py`'s own docstring: `doctl apps update` preserves dashboard-set
+    SECRET values across ordinary deploys; only `prod-up.yml`'s fresh `doctl apps create` needs
+    re-injection, which it already does via `INJECT_KEYS`). Left untouched.
+  - `ALPACA_API_KEY`/`ALPACA_API_SECRET`/`JWT_SECRET`/`FMP_API_KEY`/`FINNHUB_API_KEY`: all fully
+    wired across all 9 files. No further gaps found in a second grep pass for any other
+    `os.Getenv`/`process.env`/`os.environ.get` vendor-credential read across every service's
+    config/main entrypoint.
+- Files modified: `docker-compose.yml` only (this session's fix).
