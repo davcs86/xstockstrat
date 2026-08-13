@@ -3,7 +3,7 @@
 **Lifecycle Status**: `draft`
 **Development Branch**: `feature/signal-time-decay`
 **Created**: 2026-05-26
-**Last Updated**: 2026-05-26
+**Last Updated**: 2026-08-13
 
 ---
 
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-05-26 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-13 | `draft` (unchanged) | /sdd-review | Round 1 FAIL (missing Consumer Surface, unresolved Open Questions); fixed. Round 2 FAIL (stale premise — feature 097 retired the backtest/live signal blend this spec originally targeted); retargeted to `Opportunity.signal_axis` per user direction. Round 3 FAIL (FR-1/FR-5 internal contradiction); fixed. Re-review pending. |
 
 ---
 
@@ -25,7 +26,10 @@
 
 ## Summary
 
-Adds exponential confidence decay to the analysis service scoring loop so that signals lose weight as they age, preventing stale market intelligence from influencing trade decisions after the market has already priced in the information.
+Adds exponential confidence decay to the Opportunities queue's `signal_axis` ranking
+(`_compute_opportunities`) so a signal loses ranking weight as it ages, instead of ranking equally
+with a fresh signal until it expires. (Retargeted 2026-08-13 from the original premise — decaying
+the backtest/live scoring loop's signal blend — which feature 097 had already retired.)
 
 ## Reviewers
 
@@ -35,7 +39,9 @@ re-run /sdd-spec if the registry changes.)_
 
 | Role | Review Focus |
 |---|---|
+| Proto Reviewer | Field number uniqueness, no breaking changes without deprecation, `buf lint`/`buf breaking` |
 | `xstockstrat-analysis` owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias |
+| `xstockstrat-ingest` owner | Signal normalization correctness, idempotent ingestion, newsletter source schema stability |
 | `xstockstrat-config` owner | Config key naming (`<service>.<category>.<key>`), environment/trading_mode scoping, WatchConfig stream stability |
 
 ## Next Action

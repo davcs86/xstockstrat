@@ -58,14 +58,18 @@ select or set it. This feature adds `google.protobuf.Timestamp ingested_at = 10;
 `ExternalSignal` (next free field number after `tags = 9`), selects the existing column in
 `QuerySignals`'s SQL, and populates it on the constructed message — no new migration needed, only
 exposure of an already-stored value.
-FR-5. Determinism: `_compute_opportunities` already tracks a single session-reference timestamp per
-compute pass (the newest bar seen across the whole run — see `servicer.py:2179-2185`,
-`session_end_seconds`). The decay multiplier must use that same reference timestamp for every
-candidate within one compute pass, not a fresh wall-clock read per signal, so results within one
-materialized queue are internally consistent. (The original 2026-05-26 draft's *backtest-window*
-determinism requirement no longer applies — this feature does not touch the backtest engine at all
-under the retargeting above; the Opportunities queue has no backtest-replay concept to be
-deterministic against.)
+FR-5. Consistency within one compute pass: read `now_utc` **once**, at the start of
+`_compute_opportunities`, into a local variable, and use that same instant for every signal's
+`age_hours` in that pass — never a fresh `datetime.now(UTC)` call per signal. **This is a new local
+variable, not `session_end_seconds`**: `session_end_seconds` (`servicer.py:2179-2185`, only
+populated starting the later per-candidate bar-fetch loop, `servicer.py:2184` initializes it to `0`)
+is a *bars-derived* running max used solely to compute `valid_until` (`servicer.py:2235-2241`) — it
+does not exist yet at FR-1's write-site (`:2163`, inside the earlier signals-merge loop,
+`servicer.py:2152-2166`, which runs before any bars are fetched) and is conceptually the wrong clock
+regardless (market-bar time, not wall-clock signal-ingestion time). A prior draft of this FR
+incorrectly conflated the two — caught by `/sdd-review` round 3 (see `context.md`). (The original
+2026-05-26 draft's *backtest-window* determinism requirement doesn't apply here either — this
+feature never touches the backtest engine; the Opportunities queue has no backtest-replay concept.)
 FR-6. The effective (post-decay) contribution must be logged at DEBUG level per signal, inside
 `_compute_opportunities`, to aid tuning.
 
@@ -133,8 +137,9 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 2. Setting `signal_decay_half_life_hours` to 0 via the config service (no restart) immediately
    disables decay — `signal_axis` matches pre-feature behavior.
 3. Within a single `_compute_opportunities` compute pass, every candidate's decay is computed
-   against the same session-reference timestamp (FR-5) — not independent per-candidate wall-clock
-   reads.
+   against the same once-read `now_utc` local variable (FR-5) — not independent per-candidate
+   `datetime.now(UTC)` calls, and not `session_end_seconds` (a distinct, bars-derived variable used
+   only for `valid_until`).
 4. DEBUG logs show `raw_conviction`, `age_hours`, `decay_multiplier`, and `effective_conviction`
    per signal (plus `source_weight` once 130 lands and the expression carries it).
 5. Analysis service unit tests cover: decay at t=0 (multiplier=1.0), at t=half_life
@@ -156,9 +161,9 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
   floor is a distinct performance optimization, not a correctness requirement; if signal-table
   volume later makes an unbounded age range a real query cost, that is a named follow-up to raise
   against the ingest signal-retention story, not blocking scope here.
-- [ ] **Known trap** (`fails.md` 2026-08-05, `023-position-sizing-engine`) — carry into
-  `/sdd-design` as a guardrail check, not a decision to resolve: `signal_axis` and `Opportunity`'s
-  own `conviction` field are different things (`signal_axis` is a cardinal 0–1 confidence derived
-  from `ExternalSignal.conviction`; `Opportunity.conviction` is a deterministic readiness *ordinal*,
+- **Known trap, carried forward as a guardrail** (not an open checklist item — `fails.md`
+  2026-08-05, `023-position-sizing-engine`): `signal_axis` and `Opportunity`'s own `conviction`
+  field are different things (`signal_axis` is a cardinal 0–1 confidence derived from
+  `ExternalSignal.conviction`; `Opportunity.conviction` is a deterministic readiness *ordinal*,
   never a probability, per its own proto comment) — this feature only touches `signal_axis`, never
-  `conviction`. The design pass must state it re-confirmed this distinction, not skip the check.
+  `conviction`. `/sdd-design` must state it re-confirmed this distinction, not skip the check.

@@ -91,3 +91,25 @@
   expression). This row governs 022's ordering relative to 131 — 131 itself has no dependency here
   (confirmed clean in its own overlap scan).
 - Criteria re-review (round 3) in progress; awaiting result.
+
+## Session 2026-08-13T00:45:00Z — sdd-review product-spec (round 3, criteria FAIL — self-introduced bug)
+
+- Criteria re-review (round 3) FAIL: my own round-2 fix introduced a genuine internal
+  contradiction. FR-5 required the decay multiplier (written at FR-1's site, `servicer.py:2163`,
+  inside the signals-merge loop `servicer.py:2152-2166`) to use `session_end_seconds` as its
+  reference clock — but `session_end_seconds` is declared `= 0` at `servicer.py:2184`, inside a
+  **later** per-candidate bar-fetch loop that runs after the signals-merge loop, and is a
+  bars-derived running max (used only for `valid_until`), not a wall-clock timestamp at all. FR-1's
+  write-site literally cannot read a variable that doesn't exist yet at that point in the function.
+- Root cause: I pattern-matched the original 2026-05-26 spec's "determinism" concern (backtest
+  window's `now` vs. wall clock) onto the wrong variable in the new target function, without
+  tracing the actual order of operations in `_compute_opportunities` before citing it.
+- Fixed: FR-5 rewritten to require a single `now_utc` read at the **start** of
+  `_compute_opportunities` (a new local variable, not yet present in the function) reused for every
+  signal's `age_hours` in that pass — explicitly distinguished from `session_end_seconds`. AC-3
+  updated to match. Also fixed two advisory items from the same round: the "Known trap" Open
+  Question item moved out of checklist (`- [ ]`) format since it's a guardrail note, not an
+  unresolved decision (was tripping Criterion 9's literal checkbox rule); `feature.md`'s Summary and
+  Reviewers table updated to match the retargeted spec (was still describing the pre-097 premise,
+  flagged as stale/informational by the reviewer).
+- Re-running `/sdd-review signal-time-decay product-spec` (round 4) next.
