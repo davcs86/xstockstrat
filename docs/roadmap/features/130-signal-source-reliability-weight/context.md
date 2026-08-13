@@ -29,3 +29,16 @@
   explicitly, not assume it from this note. (2) 2026-08-05 `signal-source-weighting` (feature 007) —
   a `grpcio` version mismatch between regenerated proto stubs and `uv.lock` across three Python
   services, caught only at test-import time; re-check `uv.lock` after regenerating stubs here.
+
+## Session 2026-08-13T00:10:00Z — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Criteria verdict: PASS WITH WARNINGS. Warnings: `## Database Changes` should state the
+  migration follows `NNN_description.up.sql`/`.down.sql` naming and that the next number in
+  `services/xstockstrat-ingest/migrations/` is `010_*` (current highest is `009_signal_dedup_keys`)
+  — maps to C-07. Advisory, to be filled in at `/sdd-spec` time, not a blocker.
+- Overlap findings: none. Confirmed CLEAN against all other active features — `125-unified-symbol-page`
+  and `084-droplet-compose-deploy` share `xstockstrat-analysis`/deploy topology respectively but touch
+  disjoint files/messages/config keys. `007-signal-source-weighting` (launched) is the historical
+  origin of `analysis.signals.source_weights`, not a live collision. `022-signal-time-decay` (draft)
+  is self-flagged in this spec's own FR-6, not a scanner finding.

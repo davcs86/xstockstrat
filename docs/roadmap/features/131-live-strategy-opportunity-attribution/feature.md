@@ -1,6 +1,6 @@
 # Feature: live-strategy-opportunity-attribution
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/live-strategy-opportunity-attribution`
 **Created**: 2026-08-13
 **Last Updated**: 2026-08-13
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-13 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-13 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
 
 ---
 
@@ -41,4 +42,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review live-strategy-opportunity-attribution product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec live-strategy-opportunity-attribution` — generate implementation spec

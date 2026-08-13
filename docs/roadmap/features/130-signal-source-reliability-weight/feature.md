@@ -1,6 +1,6 @@
 # Feature: signal-source-reliability-weight
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/signal-source-reliability-weight`
 **Created**: 2026-08-13
 **Last Updated**: 2026-08-13
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-13 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-13 | `draft` → `spec-ready` | /sdd-review | Product spec approved (1 warning) |
 
 ---
 
@@ -44,4 +45,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review signal-source-reliability-weight product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec signal-source-reliability-weight` — generate implementation spec
