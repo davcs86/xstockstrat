@@ -1460,3 +1460,33 @@ reusing.
   (millions-vs-dollars, percentage-vs-fraction) that no amount of docs-reading finds — real API
   responses are the only reliable source for these, and they are exactly the class of bug a
   same-shape client swap is most likely to introduce silently.
+
+### 2026-08-13 — 130-signal-source-reliability-weight — design
+- **Pattern**: A 4-round design debate on a single, apparently-small proto+DB+3-service change
+  surfaced three distinct, internally-consistent-but-wrong proposals in a row, each caught only
+  because the adversary **re-traced the actual code/DB semantics** instead of accepting the
+  proposer's own description of what it did: (1) a plain `double reliability_weight` field —
+  proto3's zero-value default is indistinguishable from "explicitly set to 0," so a create form that
+  doesn't set the field would silently ship every new row at weight `0.0` instead of the intended
+  `1.0`; (2) the round-2 fix ("pass `None` so the DB `DEFAULT` applies") — verified against the real
+  repository SQL and found wrong: Postgres does **not** fall through to a column's `DEFAULT` when a
+  bound `NULL` parameter is supplied and the column is named in the statement, only when the column
+  is omitted entirely — this crashes with `NotNullViolationError` on the common path, not an edge
+  case; (3) "config key deprecated" — verified by grepping every consumer, not trusting the label:
+  the config blob's only real reader (`ScreenSymbols`) was left untouched, so the fix was a
+  description-text relabel while a second, silently-independent number stayed live — exactly the
+  anti-pattern the requirement existed to prevent. All three read as complete, reasonable fixes in
+  prose; none were, and each needed one more adversarial round specifically aimed at re-deriving the
+  claim from the actual system rather than the proposal's self-report.
+- **Evidence**: `docs/roadmap/features/130-signal-source-reliability-weight/design.md` § Rejected
+  Alternatives (all three); `context.md` § sdd-design session — round-by-round defect log;
+  `services/xstockstrat-ingest/app/repositories/signal_sources.py:94-154` (the explicit-column-list
+  SQL that makes the `None`/`DEFAULT` bug real, not hypothetical).
+- **Rule it implies**: extends **P-03**/**C-01** with a design-debate-specific corollary — when an
+  adversary round's remit includes "verify this fix," the verification must trace the *actual*
+  runtime/DB semantics the fix depends on (does `None` really fall through to `DEFAULT`? does the
+  repointed consumer really stop being called anywhere?), not just check that the proposal's prose
+  addresses the previous round's named objection. A proposal that reads as internally consistent and
+  directly responsive to the last objection is exactly the shape a plausible-but-wrong fix takes —
+  the same family as the 2026-07-27/2026-08-05 "demonstration is not a producer contract" entries,
+  now specifically instantiated inside the design-debate loop itself, not just at spec/execute time.
