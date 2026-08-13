@@ -52,9 +52,10 @@ Postgres cluster `xstockstrat` is a separate resource and is never touched.
 
 `PROD_JWT_SECRET`, `PROD_BROKER_ACCOUNTS_ENCRYPTION_KEY`, `PROD_ALPACA_API_KEY`,
 `PROD_ALPACA_API_SECRET`, `MCP_AGENT_SECRET`, plus `DIGITALOCEAN_ACCESS_TOKEN` and
-(optional) `DO_PROD_PROJECT_ID`. `PROD_FMP_API_KEY` is also optional — the FMP
-fundamentals pipeline is off by default (`marketdata.fmp.enabled=false`), so an
-unset key is a valid state. Injection is handled by
+(optional) `DO_PROD_PROJECT_ID`. `PROD_FMP_API_KEY` and `PROD_FINNHUB_API_KEY` are
+also optional — their fundamentals pipelines are off by default
+(`marketdata.fmp.enabled=false`, `marketdata.finnhub.enabled=false`, feature 129),
+so an unset key is a valid state. Injection is handled by
 `scripts/do-inject-prod-secrets.py`; a missing required secret logs a warning
 and the component comes up with an unset value.
 

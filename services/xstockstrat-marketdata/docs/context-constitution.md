@@ -1,7 +1,7 @@
 # xstockstrat-marketdata — Constitution
 
 Derived by `/context-constitution` (context-forge) on 2026-07-24. Captures the **non-obvious** local
-invariants of the marketdata service (Alpaca feed + FMP fundamentals, OHLCV storage, gRPC 50053).
+invariants of the marketdata service (Alpaca feed + switchable fundamentals providers (FMP/Finnhub), OHLCV storage, gRPC 50053).
 Does not restate documented/CI-enforced rules (see `## Pointers`).
 
 > Inherits all rules of the root constitution (`../../../docs/context-constitution.md`). This file lists only
@@ -46,7 +46,7 @@ Does not restate documented/CI-enforced rules (see `## Pointers`).
 | pgxpool cap=2 / `DB_POOL_MAX`; PgBouncer exec-mode (root PLAT-7) | `internal/repository/pool.go:16,24` (`QueryExecModeExec:37`); root pool budget |
 | Header propagation interceptor | `internal/middleware/propagation.go` (root PLAT-4) |
 | Config Watcher 90s snapshot gate + reconnect | `internal/config/config.go:112-121` (`WaitForSnapshot`), `:179-215` (`stream`/reconnect loop) |
-| FMP gated live per-RPC by `marketdata.fmp.enabled` (re-read on every call, no restart needed since feature 082), held off the OHLCV `Registry` (FR-2) | `internal/service/marketdata_service.go:966`, `internal/source/source.go:57` |
+| Active fundamentals provider (`s.fundProvider`, FMP or Finnhub — feature 129) gated live per-RPC by `marketdata.<fundProvider>.enabled` (re-read on every call, no restart needed since feature 082), held off the OHLCV `Registry` (FR-2). Provider *selection* itself (`marketdata.fundamentals.provider`) is the one boot-only exception — read once, not live. | `internal/service/marketdata_service.go:966`, `internal/source/source.go:57`, `cmd/server/main.go` (`newFundamentalsSource`) |
 
 ---
 _Forged by [context-forge](https://github.com/davcs86/agent-plugins). It captures the

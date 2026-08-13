@@ -9,7 +9,16 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 3. **All services subscribe to xstockstrat-config at startup** before accepting traffic, passing `environment` and `trading_mode` in the WatchConfig request.
 4. **Config values are scoped** by `environment` (`dev`/`production`) and `trading_mode` (`paper`/`live`/`all`). Rows with `trading_mode='all'` apply to all modes.
 5. **Config changes flow**: agent or webhook caller → config webhook handler → config service → WatchConfig stream → all subscribers.
-6. **Sensitive keys** use the `secret.*` prefix and are resolved from the secret store at runtime — never stored in config service state.
+6. **A vendor API credential is never a config key — not even under `secret.*`.** The `secret.*`
+   prefix + `is_secret=TRUE` mechanism exists in the schema but has exactly one historical use
+   (`secret.marketdata.fmp.api_key`), and it was **removed** by feature 076 (migration
+   `009_drop_fmp_api_key_config.up.sql`): config values are plaintext, streamed to every
+   `WatchConfig` subscriber, and no `secret://` resolver was ever built, so a config-stored
+   "secret" was never actually secret. Every vendor credential on the platform (Alpaca, JWT,
+   broker-accounts encryption, MCP agent, FMP, Finnhub) is instead a DO App Platform `type: SECRET`
+   env var, delivered through the GitHub Actions deploy pipeline — see § "Registering a new vendor
+   credential" below, not this section. Only the non-secret *knobs* around a credential
+   (`<source>.enabled`, `.base_url`, cache/quota settings) are config keys.
 7. **Default values** must be declared in each service's `CLAUDE.md` under "Config Keys".
 8. **Config UI** at `http://localhost:3002` — manage config values by environment and trading mode.
 
@@ -20,11 +29,18 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 | `platform.maintenance_mode` | bool | false | Halts all trading operations |
 | `platform.trading_state` | string | ACTIVE | Richer halt state (`ACTIVE`/`REDUCE_ONLY`/`HALTED`), independent of `platform.maintenance_mode`; seeded per `trading_mode` |
 | `platform.log_level` | string | info | Global log level override |
-| `platform.ledger_endpoint` | string | — | xstockstrat-ledger gRPC address |
-| `platform.config_endpoint` | string | — | xstockstrat-config gRPC address |
-| `platform.otel.enabled` | bool | false | Master OTel export switch |
-| `platform.otel.endpoint` | string | — | OTLP endpoint (set via secret) |
-| `platform.otel.sample_rate` | float | 1.0 | Trace sample rate (0.0–1.0) |
+
+> **Not real config keys (2026-08-07 audit):** this table previously also listed
+> `platform.ledger_endpoint`, `platform.config_endpoint`, `platform.otel.enabled`,
+> `platform.otel.endpoint`, and `platform.otel.sample_rate`. None of the five is seeded in any
+> `xstockstrat-config` DB migration, and no service reads any of them via `WatchConfig` — a repo-wide
+> grep found zero call sites. Inter-service gRPC addresses use the `<SERVICE>_ENDPOINT` env var
+> convention instead (`LEDGER_ENDPOINT`, `CONFIG_ENDPOINT` — see root CLAUDE.md § Environment
+> Variable Naming Convention); a service also cannot fetch its own `config_endpoint` from the config
+> service before it has connected to the config service, so that key was never buildable as
+> described. OTel toggling is env-var-driven (`OTEL_ENABLED`, `OTEL_EXPORTER_OTLP_ENDPOINT`) per
+> `docs/patterns/observability.md`. Rows removed rather than left aspirational; reintroduce only
+> alongside the DB seed migration and the code that actually reads them.
 
 ## Registering a new config key
 
@@ -32,6 +48,18 @@ All runtime configuration is served by **xstockstrat-config** via `WatchConfig` 
 2. Declare it in the consuming service's `CLAUDE.md` under "Config Keys Consumed".
 3. Approval: service owner + config team (see `docs/runbooks/approval-flow.md`).
 4. Add a row to the "Per-Feature Registered Keys" log below.
+
+## Registering a new vendor credential (not a config key)
+
+A vendor API key/secret is governed by a **separate, parallel** process — it never touches this
+service (Rule 6 above). Follow `docs/runbooks/add-data-source.md` § "Wiring a New Vendor
+Credential Through Deploy" — a 10-file checklist (`Config`/`LoadFromEnv`, `docker-compose.yml`,
+both `.do/*.yaml` files, all 4 GitHub Actions deploy workflows, `do-inject-prod-secrets.py`, and
+2 docs files). Approval: service owner + Security (per `docs/runbooks/reviewer-registry.md`'s
+Security role — API key scoping, secret-env-var convention followed). This checklist exists
+because feature 129 shipped `FINNHUB_API_KEY` wired into only 3 of the 8 required files — see
+`docs/roadmap/ledger/fails.md` 2026-08-13 for the full root-cause writeup. Skipping any wiring
+file doesn't fail loudly: the credential just deploys silently empty.
 
 ## Author-sentinel conventions
 
@@ -48,6 +76,23 @@ without this convention, both look identical (fails.md 2026-07-01).
 ## Per-Feature Registered Keys
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
+
+### feature 129 — fundamentals-provider-alternative (`xstockstrat-marketdata`)
+
+Adds Finnhub as a second `source.FundamentalsSource`, switchable-not-replacing FMP via
+`marketdata.fundamentals.provider` (read once at boot). FMP's `marketdata.fmp.*` keys (feature
+059, below) are unchanged and still fully functional; Finnhub's quota shape is a rolling
+window (`symbols_per_minute` / `rate_window_seconds`) rather than FMP's fixed UTC-day cap,
+since Finnhub's real limit is per-minute, not per-day.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `marketdata.finnhub.enabled` | bool | `false` | Master gate for the Finnhub fundamentals source; off by default |
+| `marketdata.finnhub.base_url` | string | `https://api.finnhub.io/api/v1` | Finnhub API base URL |
+| `marketdata.finnhub.cache_ttl_hours` | int | `24` | Hours a cached fundamentals row stays fresh before a re-fetch is attempted |
+| `marketdata.finnhub.symbols_per_minute` | int | `20` | Max distinct symbols fetched per rolling `rate_window_seconds` window (derived from Finnhub's ~60 calls/min free tier ÷ 3 calls/symbol) |
+| `marketdata.finnhub.rate_window_seconds` | int | `60` | Rolling window (seconds) `symbols_per_minute` applies over |
+| `marketdata.fundamentals.provider` | string | `finnhub` | Selects the active fundamentals source (`finnhub` \| `fmp`); read once at boot, not live |
 
 ### feature 102 — broker-state-reconciliation (`xstockstrat-trading`)
 

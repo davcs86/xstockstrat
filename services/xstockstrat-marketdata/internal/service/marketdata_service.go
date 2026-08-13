@@ -45,17 +45,23 @@ type MarketDataService struct {
 	warmMu      sync.Mutex
 	warmSymbols map[string]struct{}
 
-	// fundamentals is the FMP source (feature 059), held separately from the OHLCV
-	// registry (FR-2). Always non-nil since feature 082 — marketdata.fmp.enabled gates
-	// use (fundamentalsEnabled()), not construction.
+	// fundamentals is the active fundamentals source (feature 059; provider made
+	// switchable by feature 129), held separately from the OHLCV registry (FR-2).
+	// Always non-nil since feature 082 — marketdata.<fundProvider>.enabled gates use
+	// (fundamentalsEnabled()), not construction.
 	fundamentals source.FundamentalsSource
+	// fundProvider names the active fundamentals provider ("fmp" or "finnhub"),
+	// frozen once at construction (never re-read live) — see NewMarketDataService.
+	fundProvider string
 	// fundCfg / fundRepo are the config + repo surfaces the fundamentals RPCs use,
 	// behind interfaces so the cache/quota/gate logic is unit-testable with stubs.
 	fundCfg  fundamentalsConfig
 	fundRepo fundamentalsRepo
-	// quotaAlert dedupes the FR-7 80%-quota WARNING to one emit per UTC day.
-	quotaAlertMu  sync.Mutex
-	quotaAlertDay string
+	// quotaAlert dedupes the FR-7 80%-quota WARNING to one emit per active window
+	// (a UTC day for FMP, a rolling rate_window_seconds for Finnhub — see
+	// maybeAlertQuota/fundamentalsQuota).
+	quotaAlertMu     sync.Mutex
+	quotaAlertBucket string
 }
 
 // fundamentalsConfig is the slice of *config.Watcher the fundamentals RPCs read.
@@ -70,11 +76,14 @@ type fundamentalsRepo interface {
 	GetFundamentals(ctx context.Context, symbol string) (*source.Fundamentals, time.Time, bool, error)
 	UpsertFundamentals(ctx context.Context, f *source.Fundamentals) error
 	CountFundamentalsFetchedToday(ctx context.Context) (int, error)
+	CountFundamentalsFetchedSince(ctx context.Context, since time.Time) (int, error)
 }
 
 // NewMarketDataService creates the service and dials ledger + notify. fundamentals is
-// the FMP source (feature 059), always non-nil via the sole boot-time construction
-// path since feature 082 (cmd/server/main.go's newFundamentalsSource).
+// the active fundamentals source, always non-nil via the sole boot-time construction
+// path since feature 082 (cmd/server/main.go's newFundamentalsSource). provider names
+// which source it is ("fmp" or "finnhub", feature 129) — frozen here, never re-read
+// live, so the client object and the config-key dispatch it drives can never diverge.
 func NewMarketDataService(
 	registry *source.Registry,
 	repo *repository.MarketDataRepo,
@@ -82,6 +91,7 @@ func NewMarketDataService(
 	ledgerEndpoint string,
 	notifyEndpoint string,
 	fundamentals source.FundamentalsSource,
+	provider string,
 ) (*MarketDataService, error) {
 	ledgerConn, err := grpc.NewClient(ledgerEndpoint, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithChainUnaryInterceptor(middleware.UnaryClientInterceptor))
 	if err != nil {
@@ -101,6 +111,7 @@ func NewMarketDataService(
 		quoteSubs:    make(map[string]chan *marketdatav1.Quote),
 		warmSymbols:  make(map[string]struct{}),
 		fundamentals: fundamentals,
+		fundProvider: provider,
 		fundCfg:      cfgWatcher,
 		fundRepo:     repo,
 	}, nil
@@ -837,10 +848,11 @@ func (s *MarketDataService) emitAlert(ctx context.Context, msg string) {
 	}
 }
 
-// ── Fundamentals (feature 059) ───────────────────────────────────────────────
-// Read-through cache → quota guard → FMP fetch → 80%-quota WARNING, mirroring the
-// GetBars/fetchAndCacheBars idiom. FMP is gated behind marketdata.fmp.enabled and
-// reached only via this service (the single FMP chokepoint).
+// ── Fundamentals (feature 059; provider made switchable by feature 129) ─────
+// Read-through cache → quota guard → provider fetch → 80%-quota WARNING, mirroring
+// the GetBars/fetchAndCacheBars idiom. The active provider (s.fundProvider, "fmp" or
+// "finnhub") is gated behind marketdata.<fundProvider>.enabled and reached only via
+// this service (the single fundamentals chokepoint).
 
 // GetFundamentals returns cached-or-fetched fundamentals for one symbol.
 func (s *MarketDataService) GetFundamentals(ctx context.Context, symbol string) (*marketdatav1.Fundamentals, error) {
@@ -858,12 +870,12 @@ func (s *MarketDataService) GetFundamentals(ctx context.Context, symbol string) 
 }
 
 // GetFundamentalsMulti returns fundamentals for several symbols, batching the
-// needs-fetch set through one FMP quote call (FR-5).
+// needs-fetch set through one provider quote call where the provider supports it (FR-5).
 func (s *MarketDataService) GetFundamentalsMulti(ctx context.Context, symbols []string) ([]*marketdatav1.Fundamentals, error) {
 	if err := s.fundamentalsEnabled(); err != nil {
 		return nil, err
 	}
-	ttl := time.Duration(s.fundCfg.GetInt("marketdata.fmp.cache_ttl_hours", 24)) * time.Hour
+	ttl := time.Duration(s.fundCfg.GetInt("marketdata."+s.fundProvider+".cache_ttl_hours", 24)) * time.Hour
 
 	out := make([]*marketdatav1.Fundamentals, 0, len(symbols))
 	var needFetch []string
@@ -878,37 +890,36 @@ func (s *MarketDataService) GetFundamentalsMulti(ctx context.Context, symbols []
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 		if found && time.Since(fetchedAt) <= ttl {
-			cached[strings.ToUpper(sym)] = toProtoFundamentals(f, false)
+			cached[strings.ToUpper(sym)] = s.toProtoFundamentals(f, false)
 			continue
 		}
 		needFetch = append(needFetch, sym)
 	}
 
 	if len(needFetch) > 0 {
-		dailyCap := int(s.fundCfg.GetInt("marketdata.fmp.daily_request_cap", 250))
-		count, err := s.fundRepo.CountFundamentalsFetchedToday(ctx)
+		count, cap, windowSeconds, err := s.fundamentalsQuota(ctx)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
-		if count >= dailyCap {
+		if count >= cap {
 			// Quota exhausted: serve stale rows where we have them, skip the rest.
 			for _, sym := range needFetch {
 				if f, _, found, _ := s.fundRepo.GetFundamentals(ctx, sym); found {
-					cached[strings.ToUpper(sym)] = toProtoFundamentals(f, true)
+					cached[strings.ToUpper(sym)] = s.toProtoFundamentals(f, true)
 				}
 			}
 		} else {
 			fetched, err := s.fundamentals.GetFundamentalsMulti(ctx, needFetch)
 			if err != nil {
-				return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("fmp fetch: %w", err))
+				return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("%s fetch: %w", s.fundProvider, err))
 			}
 			for _, f := range fetched {
 				if upErr := s.fundRepo.UpsertFundamentals(ctx, f); upErr != nil {
 					slog.Warn("GetFundamentalsMulti: cache upsert failed", "symbol", f.Symbol, "error", upErr)
 				}
-				cached[strings.ToUpper(f.Symbol)] = toProtoFundamentals(f, false)
+				cached[strings.ToUpper(f.Symbol)] = s.toProtoFundamentals(f, false)
 			}
-			s.maybeAlertQuota(ctx, count+len(fetched), dailyCap)
+			s.maybeAlertQuota(ctx, count+len(fetched), cap, windowSeconds)
 		}
 	}
 
@@ -922,68 +933,92 @@ func (s *MarketDataService) GetFundamentalsMulti(ctx context.Context, symbols []
 }
 
 // resolveFundamentals implements the single-symbol read-through: cache hit within TTL,
-// else quota-guarded FMP fetch, else stale/ResourceExhausted.
+// else quota-guarded provider fetch, else stale/ResourceExhausted.
 func (s *MarketDataService) resolveFundamentals(ctx context.Context, symbol string) (*marketdatav1.Fundamentals, error) {
-	ttl := time.Duration(s.fundCfg.GetInt("marketdata.fmp.cache_ttl_hours", 24)) * time.Hour
+	ttl := time.Duration(s.fundCfg.GetInt("marketdata."+s.fundProvider+".cache_ttl_hours", 24)) * time.Hour
 	cached, fetchedAt, found, err := s.fundRepo.GetFundamentals(ctx, symbol)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	if found && time.Since(fetchedAt) <= ttl {
-		return toProtoFundamentals(cached, false), nil
+		return s.toProtoFundamentals(cached, false), nil
 	}
 
-	dailyCap := int(s.fundCfg.GetInt("marketdata.fmp.daily_request_cap", 250))
-	count, err := s.fundRepo.CountFundamentalsFetchedToday(ctx)
+	count, cap, windowSeconds, err := s.fundamentalsQuota(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	if count >= dailyCap {
+	if count >= cap {
 		if found {
-			return toProtoFundamentals(cached, true), nil // stale under quota exhaustion (FR-4)
+			return s.toProtoFundamentals(cached, true), nil // stale under quota exhaustion (FR-4)
 		}
-		return nil, connect.NewError(connect.CodeResourceExhausted, fmt.Errorf("fmp daily request cap %d reached", dailyCap))
+		return nil, connect.NewError(connect.CodeResourceExhausted, fmt.Errorf("%s request cap %d reached", s.fundProvider, cap))
 	}
 
 	fresh, err := s.fundamentals.GetFundamentals(ctx, symbol)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("fmp fetch: %w", err))
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("%s fetch: %w", s.fundProvider, err))
 	}
 	if upErr := s.fundRepo.UpsertFundamentals(ctx, fresh); upErr != nil {
 		slog.Warn("GetFundamentals: cache upsert failed", "symbol", symbol, "error", upErr)
 	}
-	s.maybeAlertQuota(ctx, count+1, dailyCap)
-	return toProtoFundamentals(fresh, false), nil
+	s.maybeAlertQuota(ctx, count+1, cap, windowSeconds)
+	return s.toProtoFundamentals(fresh, false), nil
 }
 
-// fundamentalsEnabled returns FailedPrecondition when FMP is disabled (or unbuilt),
-// making NO external call (FR-6). Since feature 082, s.fundamentals is always non-nil
-// via the sole construction path (cmd/server/main.go's newFundamentalsSource) — the
-// "|| s.fundamentals == nil" half of this guard is defensive-only and not reachable
-// through that path today; kept in case a future caller constructs the service directly
-// with a nil source.
+// fundamentalsEnabled returns FailedPrecondition when the active fundamentals provider
+// is disabled (or unbuilt), making NO external call (FR-6). Since feature 082,
+// s.fundamentals is always non-nil via the sole construction path (cmd/server/main.go's
+// newFundamentalsSource) — the "|| s.fundamentals == nil" half of this guard is
+// defensive-only and not reachable through that path today; kept in case a future
+// caller constructs the service directly with a nil source.
 func (s *MarketDataService) fundamentalsEnabled() error {
-	if !s.fundCfg.GetBool("marketdata.fmp.enabled", false) || s.fundamentals == nil {
-		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("fmp fundamentals source disabled"))
+	if !s.fundCfg.GetBool("marketdata."+s.fundProvider+".enabled", false) || s.fundamentals == nil {
+		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("%s fundamentals source disabled", s.fundProvider))
 	}
 	return nil
 }
 
-// maybeAlertQuota emits one WARNING per UTC day once the daily fetch count crosses 80%
-// of the cap (FR-7). Uses the request ctx so the propagation interceptor carries headers.
-func (s *MarketDataService) maybeAlertQuota(ctx context.Context, count, dailyCap int) {
-	if dailyCap <= 0 || count < (dailyCap*8)/10 {
+// fundamentalsQuota returns the active provider's current fetch count, cap, and window
+// (seconds) for the 80%-WARNING/at-cap logic. FMP keeps its exact pre-existing daily-cap
+// shape (unchanged config key, unchanged repo method); Finnhub uses the new rolling
+// window (feature 129).
+func (s *MarketDataService) fundamentalsQuota(ctx context.Context) (count, cap int, windowSeconds int64, err error) {
+	switch s.fundProvider {
+	case "finnhub":
+		windowSeconds = s.fundCfg.GetInt("marketdata.finnhub.rate_window_seconds", 60)
+		cap = int(s.fundCfg.GetInt("marketdata.finnhub.symbols_per_minute", 20))
+		since := time.Now().Add(-time.Duration(windowSeconds) * time.Second)
+		count, err = s.fundRepo.CountFundamentalsFetchedSince(ctx, since)
+	default: // "fmp" and any unrecognized value fall back to the existing, well-tested daily-cap shape
+		windowSeconds = 86400
+		cap = int(s.fundCfg.GetInt("marketdata.fmp.daily_request_cap", 250))
+		count, err = s.fundRepo.CountFundamentalsFetchedToday(ctx)
+	}
+	return count, cap, windowSeconds, err
+}
+
+// maybeAlertQuota emits one WARNING per active window (see fundamentalsQuota) once the
+// fetch count crosses 80% of the cap (FR-7). Uses the request ctx so the propagation
+// interceptor carries headers. The dedup bucket is a window-floor, not a UTC-date
+// string — for FMP's 86400s window this is UTC-midnight-aligned (Unix epoch starts at
+// UTC midnight), identical behavior to the pre-feature-129 UTC-day dedup; for a shorter
+// window (e.g. Finnhub's 60s) it correctly re-fires once per new window instead of
+// firing once and going silent until the next UTC day.
+func (s *MarketDataService) maybeAlertQuota(ctx context.Context, count, cap int, windowSeconds int64) {
+	if cap <= 0 || count < (cap*8)/10 {
 		return
 	}
-	day := time.Now().UTC().Format("2006-01-02")
+	bucket := fmt.Sprintf("%d", time.Now().Unix()/windowSeconds)
 	s.quotaAlertMu.Lock()
-	if s.quotaAlertDay == day {
+	if s.quotaAlertBucket == bucket {
 		s.quotaAlertMu.Unlock()
 		return
 	}
-	s.quotaAlertDay = day
+	s.quotaAlertBucket = bucket
 	s.quotaAlertMu.Unlock()
-	s.emitWarning(ctx, fmt.Sprintf("FMP daily request usage at %d/%d (>=80%% of cap)", count, dailyCap))
+	s.emitWarning(ctx, fmt.Sprintf("%s request usage at %d/%d (>=80%% of cap) in the last %ds",
+		strings.ToUpper(s.fundProvider), count, cap, windowSeconds))
 }
 
 // emitWarning emits an ALERT_SEVERITY_WARNING notify alert. Distinct from emitAlert,
@@ -992,7 +1027,7 @@ func (s *MarketDataService) emitWarning(ctx context.Context, msg string) {
 	_, err := s.notify.EmitAlert(ctx, &notifyv1.EmitAlertRequest{
 		Severity:      notifyv1.AlertSeverity_ALERT_SEVERITY_WARNING,
 		Category:      "system",
-		Title:         "marketdata FMP quota warning",
+		Title:         fmt.Sprintf("marketdata %s quota warning", strings.ToUpper(s.fundProvider)),
 		Body:          msg,
 		SourceService: "marketdata",
 	})
@@ -1001,14 +1036,16 @@ func (s *MarketDataService) emitWarning(ctx context.Context, msg string) {
 	}
 }
 
-// toProtoFundamentals maps the internal source.Fundamentals to the wire message.
-func toProtoFundamentals(f *source.Fundamentals, stale bool) *marketdatav1.Fundamentals {
+// toProtoFundamentals maps the internal source.Fundamentals to the wire message. It is
+// a method (not a free function) so its empty-Source fallback can name the actually
+// active provider (feature 129) instead of hardcoding "fmp".
+func (s *MarketDataService) toProtoFundamentals(f *source.Fundamentals, stale bool) *marketdatav1.Fundamentals {
 	if f == nil {
 		return nil
 	}
 	src := f.Source
 	if src == "" {
-		src = "fmp"
+		src = s.fundProvider
 	}
 	pb := &marketdatav1.Fundamentals{
 		Symbol:        f.Symbol,
