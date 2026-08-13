@@ -1,6 +1,6 @@
 # Implementation Spec: fundamentals-provider-alternative
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-08-13
 **Feature**: `docs/roadmap/features/129-fundamentals-provider-alternative/feature.md`
 **Total Steps**: 12
@@ -827,7 +827,7 @@ newest-first ordering) and the `feature 059` entry below it is untouched byte-fo
 
 ### Step 12 — test: AC-3 live smoke test (manual, not CI-automated)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `docs/roadmap/features/129-fundamentals-provider-alternative/context.md` — modify (record the

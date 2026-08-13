@@ -461,3 +461,64 @@
   content was not edited (no diff to it beyond the new entry's insertion point above 102).
 - Files modified: `docs/patterns/config-governance.md`
 - Deviations: none.
+
+## Session 2026-08-13T03:00:00Z — sdd-execute (sequential) — Step 12 AC-3 smoke test
+
+- **Scope constraint found before executing**: Step 12's Instructions call for exercising a fully
+  deployed `xstockstrat-marketdata` instance via `grpcurl` (TimescaleDB + xstockstrat-config +
+  ledger + notify all running, `SetConfig` applied, `GetFundamentalsMulti` called against the real
+  service). This sandbox has no Docker daemon (`docker build` failed earlier this session with
+  "no such file or directory" on the socket — same constraint noted in the tooling-setup session).
+  Spinning up that stack here would also violate this skill's own HARD CONSTRAINT ("never start a
+  database or other long-running service container to verify a step") — so the literal
+  full-stack instruction is **not executable in this environment**, independent of the Docker gap.
+  This is a genuine scope limitation, not a corner cut — recorded per P-03 rather than silently
+  worked around or silently marked done.
+- **What was verified instead, live, against the real Finnhub API** (extending Steps 2-3's AAPL
+  check to 2 more symbols, using the same session's Finnhub key — never stored/logged):
+  - **PLTR** (`/stock/metric`, `/quote`, `/stock/profile2`, all HTTP 200): price=171.04,
+    currency=USD, 52WeekHigh=207.52, 52WeekLow=106.37, beta=1.617006, peTTM=139.588, pb=43.0822,
+    epsTTM=1.1735, roeTTM=37.47, marketCapitalization=421094 (millions). **Two fields read as
+    zero/null**: `totalDebt/totalEquityQuarterly=0` and `currentDividendYieldTTM=null` (key
+    present, JSON value `null` — confirmed via direct key-presence check, not just a falsy read).
+  - **SOFI** (all HTTP 200): price=17.94, currency=USD, 52WeekHigh=32.73, 52WeekLow=14.88,
+    beta=2.3501444, peTTM=36.7823, pb=2.1129, epsTTM=0.4736, roeTTM=6.18,
+    totalDebt/totalEquityQuarterly=0.298, marketCapitalization=23403.256 (millions).
+    `currentDividendYieldTTM=0` (key present, value `0`, not null this time).
+  - **Assessment of the zero/null fields**: both PLTR and Sofi Technologies pay no common-stock
+    dividend — `currentDividendYieldTTM` reading `0`/`null` for both is the economically **correct**
+    answer, not a mapping bug or a missing-data gap. PLTR's near-zero debt-to-equity is also
+    consistent with its real balance sheet. Neither is evidence against Open Risk #1's closure —
+    if anything it's positive evidence: the field genuinely represents dividend yield and responds
+    correctly (0) for genuine non-payers, exactly as AAPL's real 0.3494 (a genuine payer) confirmed
+    the field's existence and shape in Steps 2-3.
+  - **Verified the `null` case doesn't break the client**: `encoding/json` unmarshaling a JSON
+    `null` into `finnhubMetric.DividendYieldTTM` (a plain `float64`, not `*float64`) leaves the
+    field at its zero value with **no error** (confirmed with a standalone Go snippet run this
+    session) — PLTR's live `null` response would map to `DividendYield: 0` cleanly through the
+    real `internal/finnhub/finnhub_client.go` code path, not crash or silently corrupt other
+    fields.
+  - Combined with Steps 2-3's AAPL data (a genuine dividend payer, confirming
+    `currentDividendYieldTTM` populates a real non-zero value when one exists), all 12 required
+    fields (price, market cap, P/E, EPS, 52w high/low, P/B, dividend yield, ROE, D/E, beta,
+    currency) have now been observed **non-null/non-error at the field level** across 3 diverse
+    real symbols, with the two "zero" readings independently explained as correct-not-missing.
+- **What remains unverified in this session** (the honest gap): the full RPC path —
+  `GetFundamentalsMulti`'s cache write/read against a real `marketdata.fundamentals` table, the
+  `fundamentalsQuota`/`CountFundamentalsFetchedSince` rolling-window guard against real DB rows,
+  and a `SetConfig`-driven live-config-rollout of `marketdata.finnhub.enabled` — was not exercised
+  end-to-end against a deployed instance. This logic is covered by Step 5-6's 15 fundamentals unit
+  tests (with fakes, not a live DB), which is strong but not equivalent to a live-deployed
+  integration run.
+- **Design.md's Open Risk #1 (dividend yield) is CLOSED** — the field exists, is correctly named
+  (`currentDividendYieldTTM`), and behaves correctly (real value for payers, 0/null for
+  non-payers, no crash) across 3 real symbols. **Open Risk #2 (call shape/batching) was already
+  closed at Step 2/spec time.**
+- Files modified: this `context.md` entry only (per the step's own `**Files**` scope).
+- **User decision**: accepted the client-level live verification as sufficient closure for Step
+  12/AC-3. Rationale recorded: the full RPC/DB/cache path is covered by 15 passing unit tests
+  (Steps 5-6, against fakes); true end-to-end verification against a real deployed instance
+  happens naturally at actual deployment time via `docs/runbooks/config-rollout.md`'s gradual
+  rollout process — `marketdata.finnhub.enabled` starts `false` (Step 1's seed default) and is
+  flipped deliberately later, by an operator with real Docker/DB access, not by this sandboxed
+  session. Step 12 marked `done` on this basis.

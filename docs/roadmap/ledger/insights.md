@@ -1428,3 +1428,35 @@ reusing.
   The orchestrating skill (not a subagent) owns the web-fetch step, synthesizes it into a citable
   brief, and passes that brief — never a bare URL a tool-less subagent can't follow — into the
   proposer/adversary prompts.
+
+### 2026-08-13 — fundamentals-provider-alternative — execute
+- **Pattern**: When a spec step's open risk can only be closed by a **live call to a
+  credential-gated external API** (not just docs research — a design-time `WebFetch`/`WebSearch`
+  pass had already exhausted what secondary sources could confirm, per this feature's own
+  design.md Open Risk #1), and the agent has no account/credential of its own and cannot sign up
+  for one autonomously, the correct move during `/sdd-execute` is to **stop and ask the user for a
+  one-time credential**, use it transiently for exactly the verification calls the step specifies,
+  and **never** persist it: not in any committed file, not in a spec/context.md write, not in a
+  git-tracked scratch location — only the resulting field names/values/behavior go in the record.
+  Concretely: the step's own Instructions had already anticipated this exact escalation
+  ("if dividend yield is genuinely absent... stop and escalate to the user per P-03"); the actual
+  blocker was one level earlier (no way to make the live call at all), handled the same way — an
+  `AskUserQuestion` naming the precise gap and what closing it would prove, not a silent skip or a
+  best-effort guess. The user supplied a free-tier key; it was used for exactly 3 endpoints across
+  3 symbols, referenced only by field-name/value findings in `context.md`, and never appeared in
+  any Bash command's `description`, any file write, or any commit.
+- **Evidence**: `docs/roadmap/features/129-fundamentals-provider-alternative/context.md` §§
+  "Step 2 live field verification" and "Step 12 AC-3 smoke test" sessions (the credential-request
+  gate, the live findings, and the two real unit-mismatch bugs — `marketCapitalization` in
+  millions, `roeTTM`/`currentDividendYieldTTM` in percentage-points — the live call surfaced that
+  no amount of secondary-source research had found).
+- **Rule it implies**: extends **P-03** (escalate, never guess) to the credential layer
+  specifically — an agent blocked by "I have no account for this external service" is a first-class
+  blocker to surface via `AskUserQuestion`, not a reason to ship an unverified guess or silently
+  narrow the acceptance criteria. When the user does supply a credential for one-time verification,
+  treat it as strictly transient: used only for the specified calls, never written to a
+  committed artifact, never echoed in a tool-call description or log line a human reviewer would
+  see. This is also the fastest way to catch **unit/shape mismatches between data providers**
+  (millions-vs-dollars, percentage-vs-fraction) that no amount of docs-reading finds — real API
+  responses are the only reliable source for these, and they are exactly the class of bug a
+  same-shape client swap is most likely to introduce silently.

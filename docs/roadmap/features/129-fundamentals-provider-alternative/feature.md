@@ -1,6 +1,6 @@
 # Feature: fundamentals-provider-alternative
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `claude/fmp-free-layer-ratios-dr0c4j`
 **Created**: 2026-08-12
 **Last Updated**: 2026-08-13
@@ -17,6 +17,7 @@
 | 2026-08-13 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps. Live-docs research (finnhub-python client.py, static GitHub source) confirmed base URL, `token` auth param, and no-batching/one-symbol-per-call shape for all 3 Finnhub endpoints — closing design.md's Open Risk #2 and deriving `symbols_per_minute=20`. Dividend-yield field name (Open Risk #1) remains unconfirmed; deferred to Step 2's live field-name check and Step 12's AC-3 smoke test. |
 | 2026-08-13 | `implementation-ready` (unchanged) | /sdd-execute | **Renumbered 127 → 129.** `/sdd-execute`'s re-spec-gate `main-dev` merge surfaced that `docs/roadmap/features/127-consolidate-watchlist-signal/` (PR #926) had landed on `main-dev` claiming `127` first — a genuine cross-session numbering race (this feature's `127` was only ever pushed to this feature branch, never merged). Per the numbering rule (root CLAUDE.md § Feature Roadmap / feature-workflow.md), the later-to-merge feature renumbers: `129` is the next free `NNN` (127, 128 both taken on `main-dev`). Directory renamed, every internal `127-fundamentals-provider-alternative` path reference and bare "feature 127" mention updated across this feature's own artifacts + the 2 ledger entries this feature wrote (`insights.md`, `fails.md`). No content/decision changed — pure renumbering. |
 | 2026-08-13 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential-mode execution started. Step 1 (config migration `015_marketdata_finnhub`) done. |
+| 2026-08-13 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps done. Finnhub client + provider-dispatch quota guard implemented, tested (15 fundamentals unit tests, 63.3% coverage), and wired at boot; proto comments + service docs + config-governance log updated; both design.md Open Risks closed via live Finnhub API verification (AAPL, PLTR, SOFI). Ready for the integration PR to `main-dev`. |
 
 ---
 
