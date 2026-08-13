@@ -1106,7 +1106,8 @@ func (x *DeleteBackfilledDataResponse) GetRowsDeleted() int64 {
 	return 0
 }
 
-// Fundamentals (feature 059) — cached fundamental metrics for a symbol, FMP-backed.
+// Fundamentals (feature 059; provider made switchable by feature 129) — cached fundamental
+// metrics for a symbol, sourced from the active marketdata.fundamentals.provider.
 type Fundamentals struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
@@ -1121,11 +1122,11 @@ type Fundamentals struct {
 	Price         float64                `protobuf:"fixed64,10,opt,name=price,proto3" json:"price,omitempty"`
 	YearHigh      float64                `protobuf:"fixed64,11,opt,name=year_high,json=yearHigh,proto3" json:"year_high,omitempty"`
 	YearLow       float64                `protobuf:"fixed64,12,opt,name=year_low,json=yearLow,proto3" json:"year_low,omitempty"`
-	// FMP's open-ended metric set (keys are FMP field names)
+	// The active provider's open-ended metric set (keys are provider-specific field names)
 	ExtraMetrics  map[string]float64     `protobuf:"bytes,13,rep,name=extra_metrics,json=extraMetrics,proto3" json:"extra_metrics,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"fixed64,2,opt,name=value"`
 	AsOf          *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=as_of,json=asOf,proto3" json:"as_of,omitempty"`
 	Currency      string                 `protobuf:"bytes,15,opt,name=currency,proto3" json:"currency,omitempty"`
-	Source        string                 `protobuf:"bytes,16,opt,name=source,proto3" json:"source,omitempty"` // "fmp"
+	Source        string                 `protobuf:"bytes,16,opt,name=source,proto3" json:"source,omitempty"` // e.g. "fmp" or "finnhub" — the provider that produced this row
 	Stale         bool                   `protobuf:"varint,17,opt,name=stale,proto3" json:"stale,omitempty"`  // true when served past TTL under quota exhaustion (FR-4)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

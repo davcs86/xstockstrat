@@ -547,7 +547,8 @@ export const DeleteBackfilledDataResponseSchema: GenMessage<DeleteBackfilledData
   messageDesc(file_marketdata_v1_marketdata, 15);
 
 /**
- * Fundamentals (feature 059) — cached fundamental metrics for a symbol, FMP-backed.
+ * Fundamentals (feature 059; provider made switchable by feature 129) — cached fundamental
+ * metrics for a symbol, sourced from the active marketdata.fundamentals.provider.
  *
  * @generated from message xstockstrat.marketdata.v1.Fundamentals
  */
@@ -613,7 +614,7 @@ export type Fundamentals = Message<"xstockstrat.marketdata.v1.Fundamentals"> & {
   yearLow: number;
 
   /**
-   * FMP's open-ended metric set (keys are FMP field names)
+   * The active provider's open-ended metric set (keys are provider-specific field names)
    *
    * @generated from field: map<string, double> extra_metrics = 13;
    */
@@ -630,7 +631,7 @@ export type Fundamentals = Message<"xstockstrat.marketdata.v1.Fundamentals"> & {
   currency: string;
 
   /**
-   * "fmp"
+   * e.g. "fmp" or "finnhub" — the provider that produced this row
    *
    * @generated from field: string source = 16;
    */

@@ -415,3 +415,26 @@
   staged/committed).
 - Files modified: `services/xstockstrat-marketdata/cmd/server/main_test.go`
 - Deviations: none.
+
+### Step 9 — proto: text-only doc-comment edits (no wire shape change) [done]
+- Edited the 3 FMP-specific comments in `marketdata.proto` (message doc, `extra_metrics` field
+  comment, `source` field inline comment) to describe the active provider generically.
+- `buf lint`: 0 findings. **Deviation from the step's literal Verification command**: `buf breaking
+  --against ".git#branch=claude/fmp-free-layer-ratios-dr0c4j"` fails when run from
+  `packages/proto/` (no `.git` in that subdir — buf resolves the git ref relative to the current
+  directory, not the repo root). Used the correct, actually-working invocation
+  `buf-gen.sh` itself uses: `buf breaking --against
+  "<repo-root>/.git#branch=claude/fmp-free-layer-ratios-dr0c4j,subdir=packages/proto"` — 0
+  findings. Then ran the full `./scripts/buf-gen.sh` (which internally runs `buf breaking` against
+  `main-dev`, a stricter check than the feature-branch one) — also 0 findings.
+- `git diff --stat packages/proto/gen/`: non-empty, limited to `gen/go/marketdata/v1/marketdata.pb.go`
+  + the 4 TS generated files (message/field doc-comment propagation only — verified by reading the
+  diff, no field number/type/tag changes). No Python file changed (Python protobuf codegen doesn't
+  propagate `.proto` comments into `_pb2.py`/`_pb2_grpc.py` — expected, not a gap).
+  `go build ./...` against the regenerated stubs: passes.
+- Files modified: `packages/proto/marketdata/v1/marketdata.proto`,
+  `packages/proto/gen/go/marketdata/v1/marketdata.pb.go`,
+  `packages/proto/gen/ts/marketdata/v1/marketdata.ts`,
+  `packages/proto/gen/ts/marketdata/v1/marketdata_pb.ts`,
+  `packages/proto/gen/ts/dist/marketdata/v1/marketdata.d.ts`,
+  `packages/proto/gen/ts/dist/marketdata/v1/marketdata_pb.d.ts`

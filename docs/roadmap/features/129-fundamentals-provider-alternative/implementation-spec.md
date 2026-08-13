@@ -681,7 +681,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 
 ### Step 9 — proto: text-only doc-comment edits (no wire shape change)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/marketdata/v1/marketdata.proto` — modify
