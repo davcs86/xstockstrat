@@ -1419,7 +1419,7 @@ reusing.
   proposer, which let the proposer immediately disqualify Twelve Data (its free tier categorically
   excludes fundamentals data) with a citable source instead of guessing from training-data
   recollection or carrying forward an un-reverified assumption from an earlier chat turn.
-- **Evidence**: `docs/roadmap/features/127-fundamentals-provider-alternative/context.md` § Session
+- **Evidence**: `docs/roadmap/features/129-fundamentals-provider-alternative/context.md` § Session
   2026-08-13 — sdd-design (quick), "Live-docs research" bullet (full citation list);
   `docs/roadmap/ledger/fails.md` 2026-08-10 `shadcn-sidebar-visual-rewrite` entry (the rule this
   applies).

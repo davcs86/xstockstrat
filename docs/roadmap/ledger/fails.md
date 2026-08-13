@@ -1059,7 +1059,7 @@ ambiguity is logged here).
   the feature (config falls through to its Go-coded `false` default) rather than erroring loudly.
   Caught only by the design-adversary explicitly re-reading the cited service-code line ranges
   recon.md had already surfaced, not by the proposer that first drafted the change.
-- **Evidence**: `docs/roadmap/features/127-fundamentals-provider-alternative/design.md` § Chosen
+- **Evidence**: `docs/roadmap/features/129-fundamentals-provider-alternative/design.md` § Chosen
   Approach ("Mandatory scope correction" — full list of literal-string sites);
   `context.md` § Session 2026-08-13 — sdd-design (quick), Phase 1 Grilling bullet.
 - **Rule it implies**: extends the 2026-07-30 "reinforces C-10(b) — every read path" family — when

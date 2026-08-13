@@ -2,7 +2,7 @@
 
 **Status**: `pending`
 **Created**: 2026-08-13
-**Feature**: `docs/roadmap/features/127-fundamentals-provider-alternative/feature.md`
+**Feature**: `docs/roadmap/features/129-fundamentals-provider-alternative/feature.md`
 **Total Steps**: 12
 **Feature Branch**: `claude/fmp-free-layer-ratios-dr0c4j` (this feature's **Development Branch** deviation — see `product-spec.md` § Feature Workflow Notes; all step PRs target this branch, never `main-dev`)
 
@@ -304,7 +304,7 @@ for its Fundamentals sibling, CountFundamentalsFetchedToday, either — see Step
    ```go
    // CountFundamentalsFetchedSince counts rows fetched since the given time — the rolling-window
    // quota shape a per-minute-limited provider (e.g. Finnhub) needs, as opposed to
-   // CountFundamentalsFetchedToday's fixed UTC-day window (feature 127).
+   // CountFundamentalsFetchedToday's fixed UTC-day window (feature 129).
    func (r *MarketDataRepo) CountFundamentalsFetchedSince(ctx context.Context, since time.Time) (int, error) {
        var n int
        err := r.pool.QueryRow(ctx,
@@ -581,7 +581,7 @@ scoping correct, secret-env-var convention followed (no `secret.*` config-servic
    as a DO App Platform `type: SECRET` env var, never through the config service.
 2. Rewrite `newFundamentalsSource` (`main.go:175-189`) to read the provider selector and dispatch:
    ```go
-   // newFundamentalsSource constructs the active fundamentals client (feature 127), selected by
+   // newFundamentalsSource constructs the active fundamentals client (feature 129), selected by
    // marketdata.fundamentals.provider (read once at boot — see marketdata_service.go's
    // fundProvider doc comment for why this is startup-only, not a live per-call read). Always
    // constructed regardless of the provider's own .enabled flag — that flag is a live per-RPC
@@ -609,7 +609,7 @@ scoping correct, secret-env-var convention followed (no `secret.*` config-servic
    cfg.NotifyEndpoint, fundamentalsSrc, fundProvider)` call (`:112`, new trailing arg per Step 5.3).
 4. Add to `docker-compose.yml`, immediately after the `FMP_API_KEY` line (`:252`):
    ```yaml
-      # Optional: only needed when marketdata.finnhub.enabled is true (feature 127).
+      # Optional: only needed when marketdata.finnhub.enabled is true (feature 129).
       # Same secret mechanism as the Alpaca/FMP keys above — never stored in config.
       FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
    ```
@@ -706,7 +706,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 
 **Instructions**:
 1. Line 160: `// Fundamentals (feature 059) — cached fundamental metrics for a symbol, FMP-backed.`
-   → `// Fundamentals (feature 059; provider made switchable by feature 127) — cached fundamental
+   → `// Fundamentals (feature 059; provider made switchable by feature 129) — cached fundamental
    metrics for a symbol, sourced from the active marketdata.fundamentals.provider.`
 2. Line 174: `// FMP's open-ended metric set (keys are FMP field names)` →
    `// The active provider's open-ended metric set (keys are provider-specific field names)`
@@ -753,7 +753,7 @@ field numbers/types/RPC signatures.
    migration (same Key/Type/Default/Description columns), immediately after the existing
    `marketdata.fmp.*` rows.
 2. Rename `## FMP Fundamentals Integration (feature 059)` (`:88`) to `## Fundamentals Integration
-   (feature 059; provider made switchable by feature 127)` and rewrite its body to describe: two
+   (feature 059; provider made switchable by feature 129)` and rewrite its body to describe: two
    `source.FundamentalsSource` implementations (`internal/fmp/`, `internal/finnhub/`), selected at
    boot by `marketdata.fundamentals.provider` (default `finnhub`), sharing the identical
    read-through-cache/quota-guard RPC layer — with the quota-guard's shape (daily cap vs. rolling
@@ -797,11 +797,11 @@ provider.
 **Instructions**:
 1. Insert a new entry **above** the existing `### feature 102 — broker-state-reconciliation`
    entry (i.e. at the very top of the log, since it's "newest first" and this feature's number
-   (127) is higher than every existing entry), following the exact table shape of the `feature
+   (129) is higher than every existing entry), following the exact table shape of the `feature
    059` entry (`:205-216`):
 
    ```markdown
-   ### feature 127 — fundamentals-provider-alternative (`xstockstrat-marketdata`)
+   ### feature 129 — fundamentals-provider-alternative (`xstockstrat-marketdata`)
 
    Adds Finnhub as a second `source.FundamentalsSource`, switchable-not-replacing FMP via
    `marketdata.fundamentals.provider` (read once at boot). FMP's `marketdata.fmp.*` keys (feature
@@ -830,7 +830,7 @@ newest-first ordering) and the `feature 059` entry below it is untouched byte-fo
 **Status**: `pending`
 **Service**: `xstockstrat-marketdata`
 **Files**:
-- `docs/roadmap/features/127-fundamentals-provider-alternative/context.md` — modify (record the
+- `docs/roadmap/features/129-fundamentals-provider-alternative/context.md` — modify (record the
   smoke-test transcript/result — the durable, load-bearing record per Constitution P-05)
 
 **Reviewers**: `xstockstrat-marketdata` (service owner) — same focus as Step 2

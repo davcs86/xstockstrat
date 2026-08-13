@@ -1,8 +1,8 @@
 # Context: fundamentals-provider-alternative
 
-**Feature**: `docs/roadmap/features/127-fundamentals-provider-alternative/feature.md`
-**Product Spec**: `docs/roadmap/features/127-fundamentals-provider-alternative/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/127-fundamentals-provider-alternative/implementation-spec.md`
+**Feature**: `docs/roadmap/features/129-fundamentals-provider-alternative/feature.md`
+**Product Spec**: `docs/roadmap/features/129-fundamentals-provider-alternative/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/129-fundamentals-provider-alternative/implementation-spec.md`
 
 ---
 
@@ -168,5 +168,28 @@
 - Overlap findings: none. Verified `xstockstrat-config/migrations/` still tops out at `014` (015
   genuinely free); no other feature references `marketdata.finnhub.*` /
   `marketdata.fundamentals.provider`; `125-unified-symbol-page`'s only touchpoint is a read-only
-  citation of the same proto message (disjoint files, no line-count shift from 127's comment-only
+  citation of the same proto message (disjoint files, no line-count shift from 129's comment-only
   edits) — no merge-order entry needed.
+
+## Session 2026-08-13T02:00:00Z — sdd-execute (sequential) — renumbering blocker
+
+- **Blocker encountered during the re-spec gate's `main-dev` merge** (BRANCH SYNC step 5 /
+  sequential-mode §5.3.1): `git merge -X ours origin/main-dev` pulled in
+  `docs/roadmap/features/127-consolidate-watchlist-signal/` (merged via PR #926, story-only,
+  `draft` status) and `docs/roadmap/features/128-ui-middleware-nodejs-runtime/` (also story-only)
+  — both landed on `main-dev` after this feature was created but before this feature merged.
+  `127` collided directly with this feature's own number.
+- User resolved via Option A (fix now): **renumber this feature 127 → 129** (128 was also already
+  taken). `git mv docs/roadmap/features/127-fundamentals-provider-alternative
+  docs/roadmap/features/129-fundamentals-provider-alternative`; every internal path reference and
+  bare "feature 127" mention updated across `context.md`, `implementation-spec.md`, and the two
+  ledger entries this feature's `/sdd-design` session wrote (`docs/roadmap/ledger/insights.md`,
+  `docs/roadmap/ledger/fails.md`). `feature.md`/`design.md`/`product-spec.md`/`recon.md` titles use
+  the bare slug (no embedded number) so needed no edit. `merge-order.md` has no entry for either
+  slug — nothing to fix there. No spec content or decision changed.
+- This is **not** a fails.md-worthy new lesson — it's the numbering rule (root CLAUDE.md § Feature
+  Roadmap: "the next number is `max(existing NNN) + 1` … If two `/sdd-story` runs race and collide
+  on a number, renumber the later one") working exactly as designed for a real cross-session race,
+  the same class already covered by the 2026-08-06 `fundamentals-signal-producer — migration`
+  ledger entry (concurrent migration-NNN collisions) but at the feature-directory level instead.
+- Status: `implementation-ready` unchanged — this was a pre-step-loop correction, not a step.
