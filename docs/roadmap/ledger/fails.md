@@ -1104,3 +1104,38 @@ ambiguity is logged here).
   belongs to deployment/rollout verification (`docs/runbooks/config-rollout.md`'s gradual
   enablement), not to the implementation spec's own step list, unless the executing environment is
   *known* to have Docker/DB access — which cannot be assumed for every `/sdd-execute` session.
+
+### 2026-08-13 — fundamentals-provider-alternative — scope-creep
+- **Mistake**: Step 7's Codebase Evidence and Instructions scoped `FINNHUB_API_KEY`'s deployment
+  wiring to exactly the 3 files FMP's own precedent visibly touches —
+  `docker-compose.yml`/`.do/app.dev.yaml`/`.do/app.yaml` — because those were the files recon/spec
+  actually grepped and cited. That's an incomplete picture of how a vendor credential reaches a
+  running service: five more files carry the same key from GitHub Secrets through the deploy
+  pipeline (`.github/workflows/deploy.yml`'s reusable `secrets:` input + substitution logic,
+  `deploy-dev.yml`/`deploy-prod.yml`'s per-environment secret passthrough,
+  `scripts/do-inject-prod-secrets.py`'s prod-recreate injection list used by `prod-up.yml`) plus
+  two docs files (`docs/setup/digitalocean.md`'s GitHub Actions secrets table,
+  `docs/runbooks/infra-cost-reduction.md`'s prod bring-up secret list) — none of which were in
+  Step 7's `**Files**` or cited as Codebase Evidence, so none were touched. The feature merged
+  code-completed with a real gap: pushing to `main-dev`/`main` would deploy with
+  `FINNHUB_API_KEY` silently empty on every environment, because nothing in CI ever reads a
+  `DEV_FINNHUB_API_KEY`/`PROD_FINNHUB_API_KEY` GitHub Secret into it. Caught only by the user
+  after the integration PR was already open, not by any review gate — `/sdd-review impl-spec`'s
+  overlap/criteria passes don't check "does every file that touched the *previous* instance of
+  this pattern get touched again," and recon's own citation search stopped at the files the spec's
+  own Instructions happened to name.
+- **Evidence**: `docs/roadmap/features/129-fundamentals-provider-alternative/implementation-spec.md`
+  Step 7 (`**Files**` list — only 5 entries, 3 of them deployment files, missing all deploy-workflow
+  and injection-script files); the fix commit adding `FINNHUB_API_KEY` to
+  `.github/workflows/{deploy,deploy-dev,deploy-prod,prod-up}.yml` and
+  `scripts/do-inject-prod-secrets.py`; the new `docs/runbooks/add-data-source.md` § "Wiring a New
+  Vendor Credential Through Deploy" checklist this mistake prompted.
+- **Rule it implies**: when a design/spec step introduces a new vendor credential env var by
+  mirroring an existing one's `.do/*.yaml`/`docker-compose.yml` wiring, recon must also grep for
+  every other file that references the *existing* credential's name across the whole repo
+  (`grep -rn FMP_API_KEY .` would have surfaced all 8 sites immediately, not just the 3 the spec's
+  Instructions happened to already know about) — a credential is not "wired" until every file that
+  carries its sibling credential from GitHub Secrets to the running container is updated in
+  parallel. `docs/runbooks/add-data-source.md`'s new checklist section is the durable fix: future
+  features get all 10 files (8 wiring + 2 docs) named up front instead of rediscovering them one
+  broken deploy at a time.

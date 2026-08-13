@@ -522,3 +522,32 @@
   rollout process — `marketdata.finnhub.enabled` starts `false` (Step 1's seed default) and is
   flipped deliberately later, by an operator with real Docker/DB access, not by this sandboxed
   session. Step 12 marked `done` on this basis.
+
+## Session 2026-08-13T04:00:00Z — post-completion fix: GitHub Actions secret wiring gap
+
+- **User-reported gap** (after the integration PR #930 was already open): Step 7's `**Files**`
+  scoped `FINNHUB_API_KEY`'s deployment wiring to only the 3 files FMP's precedent visibly
+  touched (`docker-compose.yml`, `.do/app.dev.yaml`, `.do/app.yaml`). Missed the 5 files that
+  actually carry a GitHub Secret into those `.do/*.yaml` placeholders:
+  `.github/workflows/deploy.yml` (the reusable workflow's `secrets:` input, its substitution
+  `env:` block, and its `python3 -c` heredoc's `content.replace(...)` calls),
+  `.github/workflows/deploy-dev.yml` / `deploy-prod.yml` (per-environment secret passthrough),
+  `.github/workflows/prod-up.yml` + `scripts/do-inject-prod-secrets.py` (the prod-recreate
+  injection path). Without this fix, `marketdata.finnhub.enabled=true` in production would have
+  deployed with `FINNHUB_API_KEY` silently empty — no error, just every Finnhub call 401ing.
+- **Fix applied** (this branch, before PR #930 merges — F-09 doesn't apply here since all 12
+  spec steps are already `done`; this is new work, not an edit to an immutable step body):
+  added `FINNHUB_API_KEY` wiring to all 5 missed workflow/script files, mirroring `FMP_API_KEY`
+  exactly (optional, `OPTIONAL_PLACEHOLDER_KEYS`, no `required: true` guard). Validated: `python3
+  -c "import yaml; yaml.safe_load(...)"` on all 4 workflow YAML files, `ast.parse` on the Python
+  script — all parse clean.
+- **Docs updated** (the "document the pattern" half of the request):
+  `docs/setup/digitalocean.md` (FMP/Finnhub credential subsection generalized, 2 new GitHub
+  Actions secrets table rows), `docs/runbooks/infra-cost-reduction.md` (prod bring-up secret list
+  mentions `PROD_FINNHUB_API_KEY`), and a **new** `docs/runbooks/add-data-source.md` §
+  "Wiring a New Vendor Credential Through Deploy" — a 10-file checklist (8 wiring + 2 docs) so a
+  future vendor-credential addition doesn't rediscover this gap the same way.
+- **Ledger write**: `docs/roadmap/ledger/fails.md` 2026-08-13 `fundamentals-provider-alternative —
+  scope-creep` — records the root cause (recon/spec only grepped the files the FMP precedent's
+  Instructions already named, not every file referencing `FMP_API_KEY` repo-wide) and the durable
+  fix (the new checklist).

@@ -44,6 +44,46 @@ Newsletter / Signal feeds                 Market data feeds (REST/stream)
 
 ---
 
+# Wiring a New Vendor Credential Through Deploy
+
+Applies to **any** new external-vendor API key (OHLCV source, fundamentals source, or otherwise)
+regardless of which Part below you're following — a credential lives at the deployment layer, not
+the config layer (`secret.*` config keys are for admin-editable operational secrets; a vendor API
+key is delivered as a platform secret env var instead — see `docs/patterns/config-governance.md`
+and the `FMP_API_KEY`/`FINNHUB_API_KEY` precedent, feature 076 / feature 129).
+
+A vendor credential touches **eight** files, not just the three most visible ones. Missing the
+last five is easy — feature 129 (adding Finnhub) initially wired only the first three and had to
+follow up in a separate PR once the gap was noticed. Use this checklist for every new credential:
+
+| # | File | What to add |
+|---|---|---|
+| 1 | `services/<service>/internal/config/config.go` | A `<Vendor>APIKey string` field on `Config` + `getEnv("<VENDOR>_API_KEY", "")` in `LoadFromEnv` (mirror the existing vendor key's comment: never a config key, config values are plaintext and stream to every `WatchConfig` subscriber) |
+| 2 | `docker-compose.yml` | `<VENDOR>_API_KEY: ${<VENDOR>_API_KEY:-}` in the service's `environment:` block, immediately after the existing vendor key |
+| 3 | `.do/app.dev.yaml` | `- key: <VENDOR>_API_KEY` / `scope: RUN_TIME` / `value: YOUR_DEV_<VENDOR>_API_KEY` / `type: SECRET`, immediately after the existing vendor key's block |
+| 4 | `.do/app.yaml` | Same block, `value: YOUR_PROD_<VENDOR>_API_KEY` |
+| 5 | `.github/workflows/deploy.yml` | A `<VENDOR>_API_KEY:` entry under `on.workflow_call.secrets` (`required: false` for an optional vendor key); the `env:` block of the "Substitute app spec placeholders" step; the `python3 -c` heredoc's `content.replace('YOUR_DEV_<VENDOR>_API_KEY', ...)` / `YOUR_PROD_...` pair |
+| 6 | `.github/workflows/deploy-dev.yml` | `<VENDOR>_API_KEY: ${{ secrets.DEV_<VENDOR>_API_KEY }}` under the `deploy` job's `secrets:` |
+| 7 | `.github/workflows/deploy-prod.yml` | `<VENDOR>_API_KEY: ${{ secrets.PROD_<VENDOR>_API_KEY }}` under the `deploy` job's `secrets:` |
+| 8 | `.github/workflows/prod-up.yml` + `scripts/do-inject-prod-secrets.py` | `<VENDOR>_API_KEY: ${{ secrets.PROD_<VENDOR>_API_KEY }}` in prod-up's "Render app spec with secrets" `env:` block, **and** a `("YOUR_PROD_<VENDOR>_API_KEY", "<VENDOR>_API_KEY")` tuple in the script's `PLACEHOLDER_KEYS` (required vendor) or `OPTIONAL_PLACEHOLDER_KEYS` (optional vendor, off-by-default pipeline) |
+
+Then document it — two more files, both non-optional:
+
+| # | File | What to add |
+|---|---|---|
+| 9 | `docs/setup/digitalocean.md` | A prose subsection under "Secrets to set on both dev and prod apps" (mirror the FMP/Finnhub subsection) **and** two rows in the GitHub Actions secrets table (`DEV_<VENDOR>_API_KEY` / `PROD_<VENDOR>_API_KEY`) |
+| 10 | `services/<service>/CLAUDE.md` | The new source's config keys + a short integration-narrative paragraph, per that service's existing pattern (see the "Fundamentals Integration" section in `services/xstockstrat-marketdata/CLAUDE.md` for the two-provider version) |
+
+If the vendor's pipeline is **optional** (off by default behind an `<source>.enabled` config key,
+like FMP/Finnhub fundamentals), files 5, 8, and the config/deployment files should all treat an
+empty key as a valid, non-fatal state — no `required: true` guard, no warning-suppression gap. If
+it's **required** (like Alpaca), mirror `ALPACA_API_KEY`'s stricter wiring instead (`required: true`
+in `deploy.yml`, `PLACEHOLDER_KEYS` not `OPTIONAL_PLACEHOLDER_KEYS` in the injection script).
+
+---
+
+---
+
 # Part 1 — Adding a Market Data Source (OHLCV)
 
 Use this path for providers that deliver OHLCV bars and/or quotes via REST API or WebSocket stream (e.g. Polygon.io, Tiingo, Yahoo Finance, Interactive Brokers, Quandl).
