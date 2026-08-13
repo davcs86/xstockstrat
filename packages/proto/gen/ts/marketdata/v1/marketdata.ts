@@ -176,7 +176,10 @@ export interface DeleteBackfilledDataResponse {
   rowsDeleted: number;
 }
 
-/** Fundamentals (feature 059) — cached fundamental metrics for a symbol, FMP-backed. */
+/**
+ * Fundamentals (feature 059; provider made switchable by feature 129) — cached fundamental
+ * metrics for a symbol, sourced from the active marketdata.fundamentals.provider.
+ */
 export interface Fundamentals {
   symbol: string;
   marketCap: number;
@@ -190,11 +193,11 @@ export interface Fundamentals {
   price: number;
   yearHigh: number;
   yearLow: number;
-  /** FMP's open-ended metric set (keys are FMP field names) */
+  /** The active provider's open-ended metric set (keys are provider-specific field names) */
   extraMetrics: { [key: string]: number };
   asOf?: Date | undefined;
   currency: string;
-  /** "fmp" */
+  /** e.g. "fmp" or "finnhub" — the provider that produced this row */
   source: string;
   /** true when served past TTL under quota exhaustion (FR-4) */
   stale: boolean;

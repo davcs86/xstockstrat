@@ -145,6 +145,10 @@ services:
         scope: RUN_TIME
         value: YOUR_PROD_FMP_API_KEY
         type: SECRET
+      - key: FINNHUB_API_KEY
+        scope: RUN_TIME
+        value: YOUR_PROD_FINNHUB_API_KEY
+        type: SECRET
       # DB_POOL_MAX intentionally unset — pooled service, see trading above. Code default is 2.
       - key: SERVICE_NAME
         value: marketdata

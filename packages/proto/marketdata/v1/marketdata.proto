@@ -157,7 +157,8 @@ message DeleteBackfilledDataResponse {
   int64 rows_deleted = 1;
 }
 
-// Fundamentals (feature 059) — cached fundamental metrics for a symbol, FMP-backed.
+// Fundamentals (feature 059; provider made switchable by feature 129) — cached fundamental
+// metrics for a symbol, sourced from the active marketdata.fundamentals.provider.
 message Fundamentals {
   string symbol = 1;
   double market_cap = 2;
@@ -171,11 +172,11 @@ message Fundamentals {
   double price = 10;
   double year_high = 11;
   double year_low = 12;
-  // FMP's open-ended metric set (keys are FMP field names)
+  // The active provider's open-ended metric set (keys are provider-specific field names)
   map<string, double> extra_metrics = 13;
   google.protobuf.Timestamp as_of = 14;
   string currency = 15;
-  string source = 16;   // "fmp"
+  string source = 16;   // e.g. "fmp" or "finnhub" — the provider that produced this row
   bool stale = 17;      // true when served past TTL under quota exhaustion (FR-4)
 }
 

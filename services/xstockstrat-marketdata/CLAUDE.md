@@ -68,6 +68,12 @@ Namespace: `marketdata`
 | `marketdata.fmp.daily_request_cap` | int | `250` | Max FMP requests per UTC day (free Basic plan budget). At cap, stale rows are served (`stale=true`) or `ResourceExhausted` is returned; an 80%-of-cap crossing emits one WARNING alert/day. |
 | `marketdata.fmp.base_url` | string | `https://financialmodelingprep.com` | FMP API base URL; endpoint paths (`/stable/quote`, `/stable/ratios-ttm`, `/stable/profile`) are built under it. |
 | `marketdata.fmp.metrics` | string | `core,extended` | Metric tiers to fetch. `core` (batchable quote, 1 call/scan chunk); `extended` adds per-symbol ratios-ttm + profile. |
+| `marketdata.finnhub.enabled` | bool | `false` | Master gate for the Finnhub fundamentals source (feature 129). Off by default; same live-per-call-read/no-restart-needed convention as `marketdata.fmp.enabled`. |
+| `marketdata.finnhub.base_url` | string | `https://api.finnhub.io/api/v1` | Finnhub API base URL; endpoint paths (`/stock/metric`, `/quote`, `/stock/profile2`) are built under it. |
+| `marketdata.finnhub.cache_ttl_hours` | int | `24` | Hours a cached fundamentals row stays fresh before a re-fetch is attempted. |
+| `marketdata.finnhub.symbols_per_minute` | int | `20` | Max distinct symbols fetched per rolling `rate_window_seconds` window — Finnhub's real limit is per-minute (~60 calls/min ÷ 3 calls/symbol), not per-day like FMP's cap. At cap, stale rows are served (`stale=true`) or `ResourceExhausted` is returned; an 80%-of-cap crossing emits one WARNING alert per window. |
+| `marketdata.finnhub.rate_window_seconds` | int | `60` | Rolling window (seconds) `symbols_per_minute` applies over. |
+| `marketdata.fundamentals.provider` | string | `finnhub` | Selects the active `source.FundamentalsSource` (`finnhub` \| `fmp`). Read **once at boot** (`cmd/server/main.go`) — unlike every other fundamentals key above, changing it requires a restart; the active client object and the config-key dispatch it drives must never diverge mid-process. |
 | `marketdata.retention.quotes_days` | int | `90` | **Documented, not yet implemented** — intended quote retention; no retention job reads this key yet |
 | `marketdata.retention.ohlcv_years` | int | `5` | **Documented, not yet implemented** — intended OHLCV retention; no retention job reads this key yet |
 
@@ -85,22 +91,35 @@ Namespace: `marketdata`
 - **Planned, not yet implemented:** continuous aggregate `marketdata.ohlcv_1h` (no migration creates it today)
 - Migration tool: `golang-migrate`
 
-## FMP Fundamentals Integration (feature 059)
+## Fundamentals Integration (feature 059; provider made switchable by feature 129)
 
 `xstockstrat-marketdata` is also the **single chokepoint** for fundamental metrics (the screener
 060 and the fundamentals-signal producer 062 read fundamentals **only** via the cached
-`GetFundamentals`/`GetFundamentalsMulti` RPCs, never FMP directly — so the 250/day free-Basic budget
-is enforced in one place). FMP is a **separate `source.FundamentalsSource`** (`internal/fmp/`),
+`GetFundamentals`/`GetFundamentalsMulti` RPCs, never a provider directly — so each provider's rate
+budget is enforced in one place). There are **two** `source.FundamentalsSource` implementations —
+`internal/fmp/` and `internal/finnhub/` — selected at boot by `marketdata.fundamentals.provider`
+(default `finnhub`; frozen in a `fundProvider` field, never re-read live — see
+`internal/service/marketdata_service.go`'s `fundProvider` doc comment for why). Both are
 deliberately **NOT** registered in the OHLCV `source.Registry` — the Alpaca/OHLCV path is untouched
-(FR-2). The RPCs are a read-through DB cache (`marketdata.fundamentals` table): cache hit within
-`cache_ttl_hours` → no FMP call; miss/stale → quota-guarded fetch; at cap → serve stale (`stale=true`)
-or `ResourceExhausted`; `enabled=false` → `FailedPrecondition` with no external call. Core metrics
-come from one batchable `quote` call per scan chunk; extended ratios add per-symbol `ratios-ttm` +
-`profile`. The API key comes from the **`FMP_API_KEY` env var** (`type: SECRET` in both DO app
-specs, `${FMP_API_KEY:-}` in docker-compose) and is never logged. It is deliberately **not** a config
-key: config values are stored in plaintext and streamed to every `WatchConfig` subscriber, so
-credentials use the same secret-env-var mechanism as the Alpaca keys (feature 076). The non-secret
-FMP knobs (`enabled`, `base_url`, `metrics`, caps) remain config keys.
+(FR-2).
+
+Both providers share the **identical** read-through DB cache (`marketdata.fundamentals` table) and
+RPC layer: cache hit within `cache_ttl_hours` → no provider call; miss/stale → quota-guarded fetch;
+at cap → serve stale (`stale=true`) or `ResourceExhausted`; `enabled=false` → `FailedPrecondition`
+with no external call. What differs per provider is the **quota-guard shape**
+(`fundamentalsQuota()`, `marketdata_service.go`): FMP keeps its original fixed UTC-day cap
+(`marketdata.fmp.daily_request_cap`, one batchable `quote` call per scan chunk + per-symbol
+`ratios-ttm`/`profile`); Finnhub uses a rolling window (`marketdata.finnhub.symbols_per_minute` /
+`.rate_window_seconds`) since its real limit is per-minute, not per-day, and none of its 3
+fundamentals endpoints (`/stock/metric`, `/quote`, `/stock/profile2`) batch across symbols — every
+`GetFundamentalsMulti` call costs exactly 3 HTTP requests per symbol against Finnhub.
+
+Each provider's API key comes from its own env var — **`FMP_API_KEY`** / **`FINNHUB_API_KEY`**
+(`type: SECRET` in both DO app specs, `${FMP_API_KEY:-}` / `${FINNHUB_API_KEY:-}` in
+docker-compose) — and is never logged. Neither is a config key: config values are stored in
+plaintext and streamed to every `WatchConfig` subscriber, so credentials use the same
+secret-env-var mechanism as the Alpaca keys (feature 076). Every other knob (`enabled`, `base_url`,
+cache/quota settings) remains a config key.
 
 ## Alpaca Integration
 

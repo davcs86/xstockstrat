@@ -1045,3 +1045,62 @@ ambiguity is logged here).
   prove what the *reference* does. A future `/sdd-design` round debating an external-reference-match
   feature should include a `WebFetch`/reference-inspection step in Phase 0 Recon, not defer that
   check to a human eyeballing a screenshot after the code already shipped.
+
+### 2026-08-13 — fundamentals-provider-alternative — assumption
+- **Mistake**: The design-proposer's first-round approach for swapping a provider behind an
+  existing interface (`source.FundamentalsSource`, feature 059's FMP integration) framed the change
+  as "add a new client + point construction at it," and its own "PROTO" section correctly caught 3
+  provider-named doc-comments needing a text edit — but the proposal never extended that same
+  literal-string audit to the *service code itself*: 7 live config-key reads
+  (`"marketdata.fmp.enabled"` etc.) plus provider-named error text, alert title/body, and comments
+  scattered across `marketdata_service.go`/`main.go` and their tests all reference the old provider
+  by name. Left unaddressed, a subsequent "remove the old provider" migration would delete the old
+  provider's config rows while the code kept reading the old literal key name — silently disabling
+  the feature (config falls through to its Go-coded `false` default) rather than erroring loudly.
+  Caught only by the design-adversary explicitly re-reading the cited service-code line ranges
+  recon.md had already surfaced, not by the proposer that first drafted the change.
+- **Evidence**: `docs/roadmap/features/129-fundamentals-provider-alternative/design.md` § Chosen
+  Approach ("Mandatory scope correction" — full list of literal-string sites);
+  `context.md` § Session 2026-08-13 — sdd-design (quick), Phase 1 Grilling bullet.
+- **Rule it implies**: extends the 2026-07-30 "reinforces C-10(b) — every read path" family — when
+  a design swaps *which* provider/backend/implementation serves an existing interface, grep for
+  every literal reference to the *old* provider's name across the touched service (config-key
+  strings, error/alert text, log messages, comments), not just its primary construction/registration
+  site — a provider swap is not done until every string that names the old provider is either
+  removed or made provider-agnostic. `recon.md`'s per-line config-read citations are exactly the
+  evidence to re-check for this before approving a "replace provider X" design.
+
+### 2026-08-13 — fundamentals-provider-alternative — assumption
+- **Mistake**: `/sdd-spec` wrote Step 12's Instructions to require exercising a **fully deployed**
+  `xstockstrat-marketdata` instance via `grpcurl` (TimescaleDB + xstockstrat-config + ledger +
+  notify all running, `SetConfig` applied, `GetFundamentalsMulti` called against the real
+  service) to close product-spec's AC-3. This is an anti-pattern for a spec'd verification step,
+  independent of any one environment's limits: it directly contradicts the very insight the step's
+  own Codebase Evidence cited as its justification for staying manual
+  (`docs/roadmap/ledger/insights.md` 2026-07-30 `082-fix-fmp-config-boot-only` — "compose the proof
+  from narrower unit facts plus one written, inspectable argument" instead of a fragile/
+  disproportionate live-network end-to-end test). A full-stack deployed-instance smoke test is
+  exactly that kind of fragile dependency, just moved from CI to a "manual" step instead of being
+  designed away — it requires Docker/DB access most execution environments (including this
+  session's sandbox) don't have, and it duplicates what two much narrower checks already prove:
+  (a) a direct live call to the *external* API confirms the real data shape/units (what actually
+  closed both of design.md's Open Risks here), and (b) the existing fake-backed unit tests
+  (Steps 3, 6 — 15 passing tests) already prove the RPC/cache/quota-guard wiring is correct. The
+  full-stack layer in between is thin, mechanical wiring the other two checks already cover
+  end-to-end in substance, not just in form. The step was still marked `done` here, but only after
+  an explicit escalation and a user sign-off accepting the narrower evidence — the spec itself
+  should not have required the fragile path as its primary instruction in the first place.
+- **Evidence**: `docs/roadmap/features/129-fundamentals-provider-alternative/implementation-spec.md`
+  Step 12 Instructions (the `grpcurl`-against-deployed-instance requirement, citing the 082 insight
+  in its own Codebase Evidence without fully applying its rule); `context.md` § Session
+  2026-08-13 — sdd-execute (sequential), "Step 12 AC-3 smoke test" (the scope-constraint finding,
+  the substituted live-API verification, and the `AskUserQuestion` closure).
+- **Rule it implies**: extends the 082 insight from "keep a fragile live-network test out of CI"
+  to "don't spec a fragile live-network test at all, even as a manual step" — when `/sdd-spec`
+  writes an acceptance-criterion-closing verification step for "does this correctly integrate with
+  a live external API," default to the **narrowest** live check that actually closes the risk (a
+  direct call to the external API/service itself, e.g. via `curl`/the client library in isolation)
+  rather than routing it through a fully deployed internal instance. A full-stack smoke test
+  belongs to deployment/rollout verification (`docs/runbooks/config-rollout.md`'s gradual
+  enablement), not to the implementation spec's own step list, unless the executing environment is
+  *known* to have Docker/DB access — which cannot be assumed for every `/sdd-execute` session.

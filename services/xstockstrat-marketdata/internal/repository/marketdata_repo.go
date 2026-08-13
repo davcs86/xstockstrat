@@ -346,3 +346,16 @@ func (r *MarketDataRepo) CountFundamentalsFetchedToday(ctx context.Context) (int
 	}
 	return n, nil
 }
+
+// CountFundamentalsFetchedSince counts rows fetched since the given time — the rolling-window
+// quota shape a per-minute-limited provider (e.g. Finnhub) needs, as opposed to
+// CountFundamentalsFetchedToday's fixed UTC-day window (feature 129).
+func (r *MarketDataRepo) CountFundamentalsFetchedSince(ctx context.Context, since time.Time) (int, error) {
+	var n int
+	err := r.pool.QueryRow(ctx,
+		`SELECT count(*) FROM marketdata.fundamentals WHERE fetched_at >= $1`, since).Scan(&n)
+	if err != nil {
+		return 0, fmt.Errorf("count fundamentals fetched since %s: %w", since, err)
+	}
+	return n, nil
+}

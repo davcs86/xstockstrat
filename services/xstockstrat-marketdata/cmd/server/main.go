@@ -19,6 +19,7 @@ import (
 	marketdatav1 "github.com/xstockstrat/contracts/gen/go/marketdata/v1"
 	"github.com/xstockstrat/marketdata/internal/alpaca"
 	"github.com/xstockstrat/marketdata/internal/config"
+	"github.com/xstockstrat/marketdata/internal/finnhub"
 	"github.com/xstockstrat/marketdata/internal/fmp"
 	"github.com/xstockstrat/marketdata/internal/handler"
 	"github.com/xstockstrat/marketdata/internal/middleware"
@@ -104,12 +105,16 @@ func main() {
 	reg := source.NewRegistry()
 	reg.Register("alpaca", alpacaClient)
 
-	// FMP fundamentals source (feature 059) — always constructed; per-RPC enablement is
-	// enforced live by fundamentalsEnabled() (marketdata_service.go:960), not at boot
-	// (feature 082 fix — see CLAUDE.md marketdata.fmp.enabled).
-	fundamentalsSrc := newFundamentalsSource(cfgWatcher, cfg.FMPAPIKey)
+	// Fundamentals source (feature 059; provider made switchable by feature 129) —
+	// always constructed; per-RPC enablement is enforced live by fundamentalsEnabled()
+	// (marketdata_service.go:960), not at boot (feature 082 fix — see CLAUDE.md
+	// marketdata.<fundProvider>.enabled). fundProvider is read once here, at boot, and
+	// passed to both the client constructor and the service — see marketdata_service.go's
+	// fundProvider doc comment for why the two must stay coupled.
+	fundProvider := cfgWatcher.GetString("marketdata.fundamentals.provider", "finnhub")
+	fundamentalsSrc := newFundamentalsSource(cfgWatcher, fundProvider, cfg.FMPAPIKey, cfg.FinnhubAPIKey)
 
-	svc, err := service.NewMarketDataService(reg, repo, cfgWatcher, cfg.LedgerEndpoint, cfg.NotifyEndpoint, fundamentalsSrc)
+	svc, err := service.NewMarketDataService(reg, repo, cfgWatcher, cfg.LedgerEndpoint, cfg.NotifyEndpoint, fundamentalsSrc, fundProvider)
 	if err != nil {
 		slog.Error("service init failed", "error", err)
 		os.Exit(1)
@@ -172,18 +177,23 @@ func looksLikePlaceholderCred(v string) bool {
 	return strings.HasPrefix(upper, "YOUR_") || strings.Contains(upper, "PLACEHOLDER")
 }
 
-// newFundamentalsSource constructs the FMP fundamentals client (feature 059). It is
-// always built, unconditionally — marketdata.fmp.enabled is a live per-RPC gate read
-// fresh on every call by fundamentalsEnabled() (internal/service/marketdata_service.go:960),
-// not a boot-time construction gate (feature 082 fix). apiKey is the FMP_API_KEY secret
-// env var, never a config value (see internal/config/config.go).
-func newFundamentalsSource(cfgWatcher *config.Watcher, apiKey string) source.FundamentalsSource {
-	baseURL := cfgWatcher.GetString("marketdata.fmp.base_url", "https://financialmodelingprep.com")
-	metrics := strings.Split(cfgWatcher.GetString("marketdata.fmp.metrics", "core,extended"), ",")
-	slog.Info("FMP fundamentals client constructed", "base_url", baseURL, "metrics", metrics)
-	return fmp.NewClient(fmp.ClientConfig{
-		BaseURL: baseURL,
-		APIKey:  apiKey,
-		Metrics: metrics,
-	})
+// newFundamentalsSource constructs the active fundamentals client (feature 129), selected by
+// marketdata.fundamentals.provider (read once at boot — see marketdata_service.go's
+// fundProvider doc comment for why this is startup-only, not a live per-call read). Always
+// constructed regardless of the provider's own .enabled flag — that flag is a live per-RPC
+// gate (fundamentalsEnabled(), internal/service/marketdata_service.go), not a boot-time gate
+// (feature 082 fix). fmpAPIKey/finnhubAPIKey are the FMP_API_KEY/FINNHUB_API_KEY secret env
+// vars, never config values (see internal/config/config.go).
+func newFundamentalsSource(cfgWatcher *config.Watcher, provider, fmpAPIKey, finnhubAPIKey string) source.FundamentalsSource {
+	switch provider {
+	case "finnhub":
+		baseURL := cfgWatcher.GetString("marketdata.finnhub.base_url", "https://api.finnhub.io/api/v1")
+		slog.Info("Finnhub fundamentals client constructed", "base_url", baseURL)
+		return finnhub.NewClient(finnhub.ClientConfig{BaseURL: baseURL, APIKey: finnhubAPIKey})
+	default: // "fmp" and any unrecognized value fall back to the pre-existing FMP client
+		baseURL := cfgWatcher.GetString("marketdata.fmp.base_url", "https://financialmodelingprep.com")
+		metrics := strings.Split(cfgWatcher.GetString("marketdata.fmp.metrics", "core,extended"), ",")
+		slog.Info("FMP fundamentals client constructed", "base_url", baseURL, "metrics", metrics)
+		return fmp.NewClient(fmp.ClientConfig{BaseURL: baseURL, APIKey: fmpAPIKey, Metrics: metrics})
+	}
 }
