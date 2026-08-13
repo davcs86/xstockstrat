@@ -144,3 +144,29 @@
 - Reviewers snapshot finalized in `feature.md` from `docs/runbooks/reviewer-registry.md`: adds DBA
   and Proto Reviewer (both step categories now present — migration step 1, proto step 9) to the
   product-spec's original 3-role table.
+
+## Session 2026-08-13T01:00:00Z — sdd-review impl-spec (advisory)
+
+- Result: 0 blockers, 5 warnings (advisory — did not block). No Floor (`F-*`) risk. B3 step
+  ordering and C-08 test-pairing fully satisfied.
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 3: C-08 coverage threshold not restated numerically in this step's own Verification
+    (deferred to Step 6's full-suite ≥40% check — reasonable given Go's suite-level coverage
+    model) — [ ] unaddressed (advisory only, no action expected)
+  - Step 5: Codebase Evidence cites `cmd/server/main.go:103-105,175-178` for FMP-naming doc
+    comments; actual lines are `107-109` (comment) / `110` (call site) and `175-179` (5-line
+    comment span) — symbols are real, only line numbers off by a few — [ ] unaddressed (fix
+    during Step 5 execution by re-reading the live file, not by editing the immutable spec body
+    per F-09)
+  - Step 7: same `main.go:103-105` citation imprecision repeated — [ ] unaddressed (same fix)
+  - Step 9: `Files` lists `packages/proto/gen/{go,python,ts}/marketdata/v1/` as directories, not
+    exact file paths — standard codegen-output convention (root CLAUDE.md forbids hand-editing
+    `gen/`), low-severity NOTE — [ ] unaddressed (no action expected)
+  - Step 10: `context-constitution.md:49` described as a "MARKETDATA-* invariant row" but is
+    actually a row in the "## Pointers" table — line number correct, category mischaracterized —
+    [ ] unaddressed (no action expected)
+- Overlap findings: none. Verified `xstockstrat-config/migrations/` still tops out at `014` (015
+  genuinely free); no other feature references `marketdata.finnhub.*` /
+  `marketdata.fundamentals.provider`; `125-unified-symbol-page`'s only touchpoint is a read-only
+  citation of the same proto message (disjoint files, no line-count shift from 127's comment-only
+  edits) — no merge-order entry needed.
