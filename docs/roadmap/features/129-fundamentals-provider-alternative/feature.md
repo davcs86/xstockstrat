@@ -1,6 +1,8 @@
 # Feature: fundamentals-provider-alternative
 
-**Lifecycle Status**: `code-completed`
+**Lifecycle Status**: `launched`
+**Committed to main**: 947c3cb0a7af9243532c08b9ab6507c83a685fac
+**Launched date**: 2026-08-13
 **Development Branch**: `claude/fmp-free-layer-ratios-dr0c4j`
 **Created**: 2026-08-12
 **Last Updated**: 2026-08-13
@@ -19,6 +21,7 @@
 | 2026-08-13 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential-mode execution started. Step 1 (config migration `015_marketdata_finnhub`) done. |
 | 2026-08-13 | `in-progress` → `code-completed` | /sdd-execute | All 12 steps done. Finnhub client + provider-dispatch quota guard implemented, tested (15 fundamentals unit tests, 63.3% coverage), and wired at boot; proto comments + service docs + config-governance log updated; both design.md Open Risks closed via live Finnhub API verification (AAPL, PLTR, SOFI). Ready for the integration PR to `main-dev`. |
 
+| 2026-08-13 | `code-completed` → `launched` | CI workflow | Promoted via PR #932; committed 947c3cb0a7af9243532c08b9ab6507c83a685fac |
 ---
 
 ## Artifacts

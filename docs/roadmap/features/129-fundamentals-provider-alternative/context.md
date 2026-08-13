@@ -622,3 +622,10 @@
   instruction ("say so in the PR body rather than skipping silently") rather than skipped quietly.
 - Files modified: `CLAUDE.md`, `docs/patterns/config-governance.md`,
   `docs/runbooks/reviewer-registry.md`.
+
+## Session 2026-08-13 (CI: feature status automation)
+
+- Promotion PR #932 merged to main
+- Feature promoted and committed: 947c3cb0a7af9243532c08b9ab6507c83a685fac
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-13
