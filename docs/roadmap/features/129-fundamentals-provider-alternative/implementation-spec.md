@@ -144,7 +144,7 @@ no-database check per the migration-step verification rule — no `psql`/`migrat
 
 ### Step 2 — service: new Finnhub fundamentals client (`internal/finnhub/`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/finnhub/finnhub_client.go` — create
@@ -230,7 +230,7 @@ source.FundamentalsSource = (*Client)(nil)` compile-time assertion fails the bui
 
 ### Step 3 — test: `internal/finnhub/finnhub_client_test.go`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/finnhub/finnhub_client_test.go` — create

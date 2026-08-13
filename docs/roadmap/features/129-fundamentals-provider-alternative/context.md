@@ -230,3 +230,89 @@
 - Files modified: `services/xstockstrat-config/migrations/015_marketdata_finnhub.up.sql`,
   `services/xstockstrat-config/migrations/015_marketdata_finnhub.down.sql`
 - Deviations: none.
+
+## Session 2026-08-13T02:30:00Z — sdd-execute (sequential) — Step 2 live field verification (closes design.md Open Risk #1)
+
+- **Blocker**: Step 2 Instruction 1 requires a live Finnhub call to confirm field names, but this
+  session has no Finnhub API key and cannot sign up for one autonomously. Raised via
+  `AskUserQuestion` (§5.7). User supplied a free-tier Finnhub API key for this one-time
+  verification. **The key is not stored, logged, or committed anywhere** — used transiently via
+  `curl` to 3 live endpoints, response bodies saved only to the session scratchpad (never staged),
+  then discarded from this record.
+- **Live GET `https://api.finnhub.io/api/v1/stock/metric?symbol=AAPL&metric=all`** (HTTP 200,
+  ~150 fields returned). Confirmed exact field names for every required metric:
+  `52WeekHigh`, `52WeekLow`, `beta`, `peTTM` (34.7202), `pb` (41.6339), `epsTTM` (8.7233),
+  `roeTTM` (137.18), `totalDebt/totalEquityQuarterly` (0.7844 — literal `/` in the JSON key),
+  `marketCapitalization` (4,476,472.5). **Dividend yield: CONFIRMED PRESENT** — two candidate
+  fields, `currentDividendYieldTTM` (0.3494) and `dividendYieldIndicatedAnnual` (0.3542028795...).
+  Chose `currentDividendYieldTTM` as the mapping target — its "TTM" naming most directly parallels
+  FMP's own `dividendYieldTTM` (from `ratios-ttm`), which is exactly the semantic this feature is
+  replacing/matching.
+- **Live GET `.../quote?symbol=AAPL`** (HTTP 200): `c` = current price (302.25), `d`/`dp` =
+  change/percent-change, `h`/`l`/`o`/`pc` = day high/low/open/prev-close, `t` = unix timestamp. No
+  symbol echo, no valuation fields — confirms design.md's expectation that price comes from here.
+- **Live GET `.../stock/profile2?symbol=AAPL`** (HTTP 200): `currency` = `"USD"`, plus a second,
+  slightly different `marketCapitalization` (4,411,090.86) — **not used**; `/stock/metric`'s value
+  is the single source of truth for market cap to avoid a two-sources-for-one-field ambiguity.
+- **Two NEW unit-mismatch findings beyond what Step 2's Instructions anticipated** (the Instructions
+  only asked to confirm field *names*, not units — this is additional evidence the live check
+  surfaced, recorded here per Constitution C-01/P-03 rather than silently absorbed into the code
+  with no trace):
+  1. **`marketCapitalization` is denominated in millions of USD**, not raw dollars — AAPL's
+     4,476,472.5 is $4.4761 **trillion**. FMP's `fmpQuote.MarketCap` (from `/stable/quote`) is raw
+     dollars (an ordinary large float, no millions scaling — confirmed by its direct pass-through
+     in `fmp_client.go:213`, no division anywhere in that mapper). **The Finnhub mapper must
+     multiply `marketCapitalization` by 1,000,000** before assigning `source.Fundamentals.MarketCap`,
+     or every Finnhub-sourced market cap would be ~1,000,000× too small — a silent, severe
+     data-correctness bug that would have shipped invisibly (both values are "plausible-looking"
+     floats; nothing would error).
+  2. **`roeTTM` and `currentDividendYieldTTM` are percentage-**point** numbers** (137.18 meaning
+     "137.18%", 0.3494 meaning "0.3494%"), while FMP's `ROE`/`DividendYield` are **fractions**
+     (confirmed via `fmp_client_test.go:60,75`'s own fixture: `"dividendYieldTTM":0.005` mapped
+     directly to `f.DividendYield != 0.005`, i.e. FMP's raw value IS the fraction, no scaling in
+     FMP's mapper either — `fmp_client.go:232-237`). **The Finnhub mapper must divide `roeTTM` and
+     `currentDividendYieldTTM` by 100** before assigning `source.Fundamentals.ROE`/`.DividendYield`,
+     or a screener criterion like `min_dividend_yield: 0.02` (a 2% threshold in FMP's fraction
+     convention) would silently misbehave against Finnhub-sourced rows (0.3494 unscaled would read
+     as "34.94%", not the intended "0.3494%" — every Finnhub symbol would spuriously pass or fail a
+     dividend/ROE screen depending on the threshold's sign). `peTTM`/`pb`/
+     `totalDebt/totalEquityQuarterly`/`beta` are true dimensionless ratios in both providers — no
+     scaling needed for those.
+- **This is a deviation from implementation-spec.md's Step 2 Instructions** (F-09: step bodies are
+  immutable during execution) — the Instructions text is left as originally written; this note plus
+  the actual code (which will include explicit `/ 100` and `* 1_000_000` conversions with comments
+  citing this session's verification) is the record of what was actually found and done.
+- **Open Risk #1 (design.md) is now CLOSED**: dividend yield exists on the free tier, field name
+  confirmed, unit conversion identified. Product-spec Acceptance Criteria 1 (citable live-docs
+  evidence) satisfied by this direct API response, not a secondary source.
+
+### Step 2 — service: new Finnhub fundamentals client (`internal/finnhub/`) [done]
+- Implemented `finnhub_client.go` mirroring `fmp_client.go`'s shape: `ClientConfig`/`Client`,
+  `NewClient`, `GetFundamentals`/`GetFundamentalsMulti` (per-symbol loop, 3 calls each — no
+  batching, per the confirmed no-batch finding), `getJSON` HTTP plumbing (`token` param, never
+  logged), response structs (`finnhubMetricResponse`/`finnhubMetric`, `finnhubQuote`,
+  `finnhubProfile2`) with `apply()` mappers implementing the confirmed field names + the two unit
+  conversions (ROE and DividendYield ÷100, MarketCap ×1,000,000).
+- `go build ./internal/finnhub/...` passes; the `var _ source.FundamentalsSource = (*Client)(nil)`
+  compile-time assertion confirms interface satisfaction.
+- Files modified: `services/xstockstrat-marketdata/internal/finnhub/finnhub_client.go`
+- Deviations: Step 2's Instructions only anticipated confirming field *names* live; the session
+  additionally discovered and had to resolve two unit-mismatch bugs (see the session note above)
+  that the Instructions text did not anticipate — recorded here per F-09 rather than editing the
+  immutable Instructions.
+
+### Step 3 — test: `internal/finnhub/finnhub_client_test.go` [done]
+- Wrote `finnhub_client_test.go` mirroring `fmp_client_test.go`'s shape (`recordingRT` fake,
+  `newTestClient` helper, field-mapping test, call-count test, key-leak test), using the
+  live-confirmed field names/shapes from Step 2's session note.
+- **TDD red→green** (Constitution P-06): captured genuine RED by temporarily stubbing
+  `finnhubMetric.apply()` to a no-op (`internal/finnhub/finnhub_client.go`, saved/restored via a
+  scratchpad copy, never committed in its stubbed state) — `TestGetFundamentals_MapsField` FAILED
+  as expected ("metric mapping wrong: ...ROE:0 DebtToEquity:0..."), the other two tests still
+  passed (they don't depend on the metric mapper). Restored the real implementation — all 3 tests
+  PASS. `go test ./internal/finnhub/... -race -count=1 -v`: 3/3 pass.
+  `golangci-lint run ./internal/finnhub/...`: 1 gofmt issue (comment alignment in the apply
+  method) found and fixed in-scope (HARD CONSTRAINTS' own-changed-lines exception) → 0 issues.
+- Files modified: `services/xstockstrat-marketdata/internal/finnhub/finnhub_client_test.go`,
+  `services/xstockstrat-marketdata/internal/finnhub/finnhub_client.go` (gofmt only)
+- Deviations: none beyond the Step 2 note above (shared root cause).
