@@ -1,30 +1,84 @@
 # Product Spec: signal-time-decay
 
 **Created**: 2026-05-26
+**Retargeted**: 2026-08-13 (see `context.md` — original premise invalidated by feature 097)
 
 ---
 
 ## Problem Statement
 
-The analysis service applies source weights to signals (feature 007) but treats all signals as equally fresh regardless of age. A buy signal extracted from a newsletter 72 hours ago carries identical conviction weight to one extracted 30 minutes before market open. Markets reprice information quickly; stale signals actively mislead the scoring engine and can produce erroneous high-confidence scores on information the market has already acted on.
+The Opportunities queue (`ListOpportunities`, feature 097) ranks candidates partly by `signal_axis`
+(`_compute_opportunities`, `services/xstockstrat-analysis/app/handlers/servicer.py:2163`, currently
+`c["signal_axis"] = max(c["signal_axis"], sig.conviction)`) — and, per feature
+`130-signal-source-reliability-weight`, is gaining a per-source `reliability_weight` multiplier on
+that same expression. Neither weights nor the underlying `sig.conviction` account for signal age: a
+buy signal extracted from a newsletter 72 hours ago carries identical ranking weight to one
+extracted 30 minutes ago. Markets reprice information quickly; a stale signal ranking equally with a
+fresh one actively misleads the queue's ordering.
+
+**Retargeting note**: this spec was originally written 2026-05-26 against "the analysis service
+scoring loop" — the backtest/live signal-confidence blend (`combine_score`/`compute_signal_score`
+as invoked from `RunBacktest`). That blend was **retired** by feature 097
+(`services/xstockstrat-analysis/app/handlers/servicer.py:326-331`: "a signal is no longer an input
+to a strategy's internal score; it is a universe + independent queue ranking axis") before this
+spec was ever implemented. A 2026-08-13 `/sdd-review` pass caught the stale premise (FR-1 targeted
+dead code, FR-4 assumed a data field that was never wired, and the Consumer Surface citation chain
+was code-false) and this spec was rewritten in place to target the surface that actually still
+exists: `Opportunity.signal_axis`. `compute_signal_score`/`combine_score` do still exist and are
+still live — but only inside `ScreenSymbols` (`services/xstockstrat-analysis/app/services/screener.py:235,456`)
+— which this feature deliberately does not touch (see Out of Scope).
 
 ## User Story
 
-As a platform operator, I want signal confidence to decay exponentially with age so that the analysis engine naturally deprioritizes stale signals and reacts more strongly to recent intelligence.
+As a platform operator, I want a signal's contribution to the Opportunities queue's `signal_axis`
+ranking to decay exponentially with age, so the queue naturally deprioritizes stale signals and
+reacts more strongly to recent intelligence.
 
 ## Functional Requirements
 
-FR-1. The analysis service scoring loop must apply an exponential decay multiplier to each signal's effective confidence before aggregating: `effective_confidence = raw_confidence × source_weight × exp(-λ × age_hours)` where `λ = ln(2) / half_life_hours`.
-FR-2. The decay half-life must be configurable via a config key (`analysis.scoring.signal_decay_half_life_hours`, float, default: 24.0) with no restart required.
-FR-3. A half-life of 0 or negative must disable decay (multiplier = 1.0) to allow rollback without config key removal.
-FR-4. Signal age is computed as `now_utc - signal.ingested_at` (the timestamp recorded by the ingest service at extraction time, not the source publication time).
-FR-5. The decay calculation must be deterministic: backtests use the signal's `ingested_at` timestamp relative to the backtest window's `now`, not the real wall clock.
-FR-6. The effective (post-decay) confidence must be logged at DEBUG level per signal to aid tuning.
+FR-1. `_compute_opportunities` must apply an exponential decay multiplier to each signal's
+contribution to `signal_axis` (`servicer.py:2163`): `effective_conviction = sig.conviction ×
+exp(-λ × age_hours)` where `λ = ln(2) / half_life_hours`, folded into the existing `max(...)`
+expression. **Coordination with `130-signal-source-reliability-weight`**: both features multiply
+into this exact expression — 130 adds a `× source_weight` term. Whichever feature lands second
+rebases the expression to include both terms (`sig.conviction × source_weight × exp(-λ ×
+age_hours)`); this is recorded as a same-expression coordination row in
+`docs/roadmap/features/merge-order.md`, not re-litigated here.
+FR-2. The decay half-life must be configurable via a config key
+(`analysis.scoring.signal_decay_half_life_hours`, float, default: 24.0) with no restart required.
+FR-3. A half-life of 0 or negative must disable decay (multiplier = 1.0) to allow rollback without
+config key removal.
+FR-4. Signal age is computed as `now_utc - signal.ingested_at`. **This requires a proto + ingest
+change that did not exist when this spec was first drafted**: `ExternalSignal`
+(`packages/proto/ingest/v1/ingest.proto:106-116`) has no `ingested_at` field today, even though the
+underlying `ingest.newsletter_signals` table already has an `ingested_at` column
+(`services/xstockstrat-ingest/migrations/001_newsletter_signals.up.sql:10`) — `QuerySignals`'s SQL
+and response construction (`services/xstockstrat-ingest/app/handlers/servicer.py:956-989`) never
+select or set it. This feature adds `google.protobuf.Timestamp ingested_at = 10;` to
+`ExternalSignal` (next free field number after `tags = 9`), selects the existing column in
+`QuerySignals`'s SQL, and populates it on the constructed message — no new migration needed, only
+exposure of an already-stored value.
+FR-5. Determinism: `_compute_opportunities` already tracks a single session-reference timestamp per
+compute pass (the newest bar seen across the whole run — see `servicer.py:2179-2185`,
+`session_end_seconds`). The decay multiplier must use that same reference timestamp for every
+candidate within one compute pass, not a fresh wall-clock read per signal, so results within one
+materialized queue are internally consistent. (The original 2026-05-26 draft's *backtest-window*
+determinism requirement no longer applies — this feature does not touch the backtest engine at all
+under the retargeting above; the Opportunities queue has no backtest-replay concept to be
+deterministic against.)
+FR-6. The effective (post-decay) contribution must be logged at DEBUG level per signal, inside
+`_compute_opportunities`, to aid tuning.
 
 ## Out of Scope
 
 - Per-source-type decay rates (one global half-life in V1; per-source rates are a V2 extension)
-- Decay applied in the indicators formula engine (only in the analysis scoring loop)
+- Decay applied in the indicators formula engine (only in `_compute_opportunities`)
+- Decay applied inside the Screener's `compute_signal_score`/`combine_score` path
+  (`ScreenSymbols`/`screener.py`) — that surface still blends signals today, but this feature scopes
+  to the Opportunities queue only; a future feature can extend decay there if wanted
+- Reintroducing any signal-confidence blend into the backtest/live scoring loop — feature 097
+  deliberately retired that blend (Option 2: a signal is a ranking axis, never a score input); this
+  feature does not reverse that decision
 - UI visualization of decayed vs. raw confidence
 - A maximum age floor that drops ancient signals entirely (resolved — see Open Questions: not
   needed in V1, since FR-1's exponential decay already asymptotically approaches zero without a
@@ -33,27 +87,26 @@ FR-6. The effective (post-decay) confidence must be logged at DEBUG level per si
 ## Affected Services
 
 Exact service names from CLAUDE.md Service Registry:
-- `xstockstrat-analysis` — scoring loop modification
+- `xstockstrat-analysis` — `_compute_opportunities` `signal_axis` decay (`servicer.py:2163`)
+- `xstockstrat-ingest` — expose `ingested_at` on `ExternalSignal`/`QuerySignals` (FR-4)
 - `xstockstrat-config` — new config key registration
+- `packages/proto` — new `ExternalSignal.ingested_at` field
 
 ## Consumer Surface(s)
 
-- [x] **UI** — `xstockstrat-ui` `/insights`: the decayed `effective_confidence` feeds
-  `combine_score()`'s `signal_score` input, which is one of the two terms `conviction`
-  (`BarDiagnostic.conviction`, `packages/proto/analysis/v1/analysis.proto:147`) is computed from —
-  the Backtest Diagnostics table on `/insights/strategies/[id]` renders `bar.conviction` per row
-  (`services/xstockstrat-ui/src/components/insights/BacktestDiagnostics.tsx:153`), so a decayed
-  signal changes a value already displayed there. Second-order: `conviction` drives `BarAction`
-  entry/exit decisions, which roll into the headline `StrategyScore.overall_score`/`rating`
-  (`analysis.proto:170,172`) shown on the same strategy detail page via feature 065's per-symbol
-  evidence aggregation — no new UI element is required, an existing display simply reflects
-  different (fresher-weighted) values once this ships.
-- [ ] **Agent** — no MCP tool surfaces per-bar diagnostics or signal decay directly; none added.
+- [x] **UI** — `xstockstrat-ui` `/insights` Opportunities page: no new page or control — the
+  existing queue ordering (`signal_axis`-driven ranking, already rendered via `ListOpportunities`)
+  reflects decayed contributions once this ships: a signal loses ranking weight as it ages instead
+  of staying flat until its `valid_until` cutoff.
+- [ ] **Agent** — no MCP tool surfaces `signal_axis` computation or signal decay directly; none
+  added.
 - [ ] **None**
 
 ## Proto Contract Changes
 
-- [ ] No proto changes required
+- [x] New field: `google.protobuf.Timestamp ingested_at = 10;` on `ingest.ExternalSignal`
+  (additive, non-breaking — 1 service owner + Proto Reviewer per the non-breaking-proto approval
+  gate).
 
 ## Config Key Changes
 
@@ -61,23 +114,33 @@ Exact service names from CLAUDE.md Service Registry:
 
 ## Database Changes
 
-- [ ] No schema changes
+- [ ] No schema changes — `ingest.newsletter_signals.ingested_at` already exists (migration `001`);
+  FR-4 only exposes it through `QuerySignals`, no new column or migration.
 
 ## Feature Workflow Notes
 
 Branch to create: `feature/signal-time-decay` (branch from `main-dev`)
 Approval gates required (per docs/runbooks/feature-workflow.md):
-- [x] 1 service owner approval (non-breaking config + analysis logic change)
-- [ ] 2 service owners + platform lead (breaking proto change) — not applicable
+- [x] 1 service owner approval (non-breaking proto + config + analysis/ingest logic change)
+- [ ] 2 service owners + platform lead (breaking proto change) — not applicable (additive field)
 - [ ] DBA review + service owner (schema migration) — not applicable
 
 ## Acceptance Criteria
 
-1. A signal ingested 48 hours ago with a 24-hour half-life has its confidence halved relative to a signal ingested now with identical raw values.
-2. Setting `signal_decay_half_life_hours` to 0 via the config service (no restart) immediately disables decay — scores match pre-feature behavior.
-3. Backtests using a fixed historical window produce the same score on repeated runs (determinism invariant).
-4. DEBUG logs show `raw_confidence`, `source_weight`, `age_hours`, `decay_multiplier`, and `effective_confidence` per signal.
-5. Analysis service unit tests cover: decay at t=0 (multiplier=1.0), at t=half_life (multiplier≈0.5), at t=3×half_life (multiplier≈0.125), and disabled decay.
+1. A signal ingested 48 hours ago with a 24-hour half-life contributes half the `signal_axis`
+   weight of an otherwise-identical signal ingested now (all else — including any 130
+   `reliability_weight`, if already landed — held equal).
+2. Setting `signal_decay_half_life_hours` to 0 via the config service (no restart) immediately
+   disables decay — `signal_axis` matches pre-feature behavior.
+3. Within a single `_compute_opportunities` compute pass, every candidate's decay is computed
+   against the same session-reference timestamp (FR-5) — not independent per-candidate wall-clock
+   reads.
+4. DEBUG logs show `raw_conviction`, `age_hours`, `decay_multiplier`, and `effective_conviction`
+   per signal (plus `source_weight` once 130 lands and the expression carries it).
+5. Analysis service unit tests cover: decay at t=0 (multiplier=1.0), at t=half_life
+   (multiplier≈0.5), at t=3×half_life (multiplier≈0.125), and disabled decay (half_life ≤ 0).
+6. `QuerySignals` responses include a populated `ingested_at` for every signal, confirming FR-4's
+   proto/ingest-servicer change is wired end-to-end (not just declared on the message).
 
 ## Open Questions
 
@@ -93,3 +156,9 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
   floor is a distinct performance optimization, not a correctness requirement; if signal-table
   volume later makes an unbounded age range a real query cost, that is a named follow-up to raise
   against the ingest signal-retention story, not blocking scope here.
+- [ ] **Known trap** (`fails.md` 2026-08-05, `023-position-sizing-engine`) — carry into
+  `/sdd-design` as a guardrail check, not a decision to resolve: `signal_axis` and `Opportunity`'s
+  own `conviction` field are different things (`signal_axis` is a cardinal 0–1 confidence derived
+  from `ExternalSignal.conviction`; `Opportunity.conviction` is a deterministic readiness *ordinal*,
+  never a probability, per its own proto comment) — this feature only touches `signal_axis`, never
+  `conviction`. The design pass must state it re-confirmed this distinction, not skip the check.
