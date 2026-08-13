@@ -730,7 +730,7 @@ field numbers/types/RPC signatures.
 
 ### Step 10 — docs: `xstockstrat-marketdata` service docs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `services/xstockstrat-marketdata/CLAUDE.md` — modify
@@ -778,7 +778,7 @@ provider.
 
 ### Step 11 — docs: `config-governance.md` Per-Feature Registered Keys log
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/`
 **Files**:
 - `docs/patterns/config-governance.md` — modify

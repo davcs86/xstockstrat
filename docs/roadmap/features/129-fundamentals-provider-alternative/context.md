@@ -438,3 +438,26 @@
   `packages/proto/gen/ts/marketdata/v1/marketdata_pb.ts`,
   `packages/proto/gen/ts/dist/marketdata/v1/marketdata.d.ts`,
   `packages/proto/gen/ts/dist/marketdata/v1/marketdata_pb.d.ts`
+
+### Step 10 — docs: `xstockstrat-marketdata` service docs [done]
+- Appended the 6 new config-key rows to `CLAUDE.md`'s Config Keys Consumed table. Renamed
+  "## FMP Fundamentals Integration (feature 059)" to "## Fundamentals Integration (feature 059;
+  provider made switchable by feature 129)" and rewrote the body to describe both providers, the
+  shared cache/RPC layer, and the provider-dependent quota-guard shape. Updated
+  `context-constitution.md`'s top-of-file summary and the `MARKETDATA-*` Pointers row for the
+  provider-dispatched gate.
+- Verification: `grep -n "FMP"` both files, manually reviewed every hit — all describe FMP as *a*
+  provider option (an FMP-specific config-key row, or an explicit FMP-vs-Finnhub contrast), none
+  imply FMP is the only source.
+- Files modified: `services/xstockstrat-marketdata/CLAUDE.md`,
+  `services/xstockstrat-marketdata/docs/context-constitution.md`
+- Deviations: none.
+
+### Step 11 — docs: `config-governance.md` Per-Feature Registered Keys log [done]
+- Inserted the `### feature 129 — fundamentals-provider-alternative` entry above the existing
+  `### feature 102` entry (newest-first ordering), listing all 6 new keys in the same table shape
+  as the `feature 059` entry below it (left untouched, per the append-only rule).
+- Verification: `grep -n "^### feature"` confirms 129 sits directly above 102; the 059 entry's
+  content was not edited (no diff to it beyond the new entry's insertion point above 102).
+- Files modified: `docs/patterns/config-governance.md`
+- Deviations: none.

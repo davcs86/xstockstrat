@@ -56,6 +56,23 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 129 — fundamentals-provider-alternative (`xstockstrat-marketdata`)
+
+Adds Finnhub as a second `source.FundamentalsSource`, switchable-not-replacing FMP via
+`marketdata.fundamentals.provider` (read once at boot). FMP's `marketdata.fmp.*` keys (feature
+059, below) are unchanged and still fully functional; Finnhub's quota shape is a rolling
+window (`symbols_per_minute` / `rate_window_seconds`) rather than FMP's fixed UTC-day cap,
+since Finnhub's real limit is per-minute, not per-day.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `marketdata.finnhub.enabled` | bool | `false` | Master gate for the Finnhub fundamentals source; off by default |
+| `marketdata.finnhub.base_url` | string | `https://api.finnhub.io/api/v1` | Finnhub API base URL |
+| `marketdata.finnhub.cache_ttl_hours` | int | `24` | Hours a cached fundamentals row stays fresh before a re-fetch is attempted |
+| `marketdata.finnhub.symbols_per_minute` | int | `20` | Max distinct symbols fetched per rolling `rate_window_seconds` window (derived from Finnhub's ~60 calls/min free tier ÷ 3 calls/symbol) |
+| `marketdata.finnhub.rate_window_seconds` | int | `60` | Rolling window (seconds) `symbols_per_minute` applies over |
+| `marketdata.fundamentals.provider` | string | `finnhub` | Selects the active fundamentals source (`finnhub` \| `fmp`); read once at boot, not live |
+
 ### feature 102 — broker-state-reconciliation (`xstockstrat-trading`)
 
 A lightweight periodic ticker (`StartReconciliationPoller`/`reconcileTick`) compares open orders/
