@@ -1,6 +1,6 @@
 # Feature: fundamentals-provider-alternative
 
-**Lifecycle Status**: `design-approved`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `claude/fmp-free-layer-ratios-dr0c4j`
 **Created**: 2026-08-12
 **Last Updated**: 2026-08-13
@@ -14,6 +14,7 @@
 | 2026-08-12 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-12 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS: 3 open questions deferred to /sdd-design per feature-059 precedent; consumer-surface "None" flagged as re-check-if-scope-widens). Overlap scan: clean. |
 | 2026-08-13 | `spec-ready` → `design-approved` | /sdd-design | Design debated (1 round, quick) and approved; provider = Finnhub (Twelve Data disqualified — free tier excludes fundamentals). Kept switchable-not-replaced pending live smoke test on 2 open risks (dividend yield, call shape). recon.md + design.md written. |
+| 2026-08-13 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 12 steps. Live-docs research (finnhub-python client.py, static GitHub source) confirmed base URL, `token` auth param, and no-batching/one-symbol-per-call shape for all 3 Finnhub endpoints — closing design.md's Open Risk #2 and deriving `symbols_per_minute=20`. Dividend-yield field name (Open Risk #1) remains unconfirmed; deferred to Step 2's live field-name check and Step 12's AC-3 smoke test. |
 
 ---
 
@@ -22,7 +23,7 @@
 - [Product Spec](product-spec.md) — requirements and governance
 - [Recon](recon.md) — grounded codebase dossier
 - [Design](design.md) — debated, approved architecture
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec fundamentals-provider-alternative`_
+- [Implementation Spec](implementation-spec.md) — 12 steps, ready for /sdd-review impl-spec then /sdd-execute
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -46,8 +47,10 @@ re-run /sdd-spec if the registry changes.)_
 |---|---|
 | `xstockstrat-marketdata` (service owner) | OHLCV ingestion integrity (Alpaca path must stay untouched), Alpaca feed idempotency; here: new fundamentals-source client correctness, quota-guard behavior, cache correctness |
 | `xstockstrat-config` (service owner) | Config key naming (`<service>.<category>.<key>`), environment/trading_mode scoping, WatchConfig stream stability |
+| DBA | Migration NNN numbering (no gaps, no conflicts), up+down pair present |
+| Proto Reviewer | Field number uniqueness (unaffected), `buf lint`/`buf breaking` pass on the comment-only edit |
 | Security | No secrets in config service state, secret keys use `secret.*` prefix / secret-env-var convention, API key scoping correct |
 
 ## Next Action
 
-`/sdd-spec fundamentals-provider-alternative` — generate implementation spec from the approved design
+`/sdd-review fundamentals-provider-alternative impl-spec` — validate implementation spec, then `/sdd-execute fundamentals-provider-alternative`
