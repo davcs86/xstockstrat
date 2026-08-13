@@ -327,3 +327,91 @@
   test for the sibling method either — exercised via `fakeFundRepo` in Step 6).
 - Files modified: `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go`
 - Deviations: none.
+
+### Step 5 — service: provider-dispatch the fundamentals cache/quota guard [done]
+- Added `fundProvider string` (frozen at construction, never re-read live) to
+  `MarketDataService`; extended `fundamentalsRepo` with `CountFundamentalsFetchedSince`;
+  extended `NewMarketDataService`'s signature with a trailing `provider string` param.
+  Generalized both `cache_ttl_hours` reads to `"marketdata."+s.fundProvider+".cache_ttl_hours"`.
+  Replaced the two duplicated daily-cap blocks with a new `fundamentalsQuota(ctx)` helper
+  dispatching FMP's unchanged daily-cap shape vs. Finnhub's new rolling-window shape (reusing a
+  single quota read per call site — fixed a redundant-double-query mistake caught while
+  implementing, before it ever hit a test). Generalized `fundamentalsEnabled`'s config key +
+  error text, `maybeAlertQuota`'s dedup key (UTC-date string → window-floor bucket, algebraically
+  identical to the old dedup for FMP's 86400s window since Unix epoch starts at UTC midnight),
+  `emitWarning`'s alert title. Converted `toProtoFundamentals` from a free function to a method
+  (`s.toProtoFundamentals`) so its empty-`Source` fallback names `s.fundProvider`, not a hardcoded
+  `"fmp"` — this closes the design-adversary's original correctness finding from the design phase.
+  Generalized the section banner + 3 doc comments naming FMP specifically.
+- `go build ./internal/service/...` passes (build exit 0). `golangci-lint run` on the same package
+  initially failed with 1 typecheck error — but it was `marketdata_service_test.go`'s stale fakes
+  (missing `CountFundamentalsFetchedSince`, old `newFundSvc`/`NewMarketDataService` call shapes),
+  exactly the compile-coupling with Step 6 the spec's own Verification section anticipated. Left
+  unresolved at this point in the session and closed by Step 6 (see below) — both steps'
+  Verification commands only pass together, so both are recorded as `done` in the same pass.
+- Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service.go`
+- Deviations: implemented `fundamentalsQuota`, `maybeAlertQuota`'s new signature, and the
+  `toProtoFundamentals` method conversion exactly per design.md/the step's own Instructions — no
+  scope deviation. One in-session self-correction (the double-query mistake above), fixed before
+  it ever produced a wrong test result — not a deviation from the spec, a normal edit-time fix.
+
+### Step 6 — test: update + extend `marketdata_service_test.go` fundamentals suite [done]
+- Updated `fakeFundRepo` (added `sinceCount` + `CountFundamentalsFetchedSince`), `fakeCfg` (added
+  a real `strings` map + `GetString` lookup), `enabledCfg` (now takes a `provider` arg, seeds the
+  correct per-provider key set/quota shape), `newFundSvc` (now takes a `provider` arg, sets
+  `fundProvider`). Updated all 8 existing FMP-path tests' call sites to pass `"fmp"` explicitly —
+  every one keeps its original, unmodified assertions and **all 8 still pass byte-for-byte**,
+  proving Step 5's generalization is behavior-preserving for the FMP path.
+- Added 7 parallel Finnhub-path tests mirroring the 8 FMP tests (folding
+  cache-hit/at-cap-stale/at-cap-exhausted/disabled/miss-fetch into 5, since Finnhub has no
+  separate "live toggle" acceptance criterion beyond what's already covered): `CacheHitNoFetch`,
+  `AtCapStale`, `AtCapNoCacheResourceExhausted`, `DisabledFailedPrecondition` (asserts the exact
+  provider-specific error text), `MissFetchesAndUpserts` (asserts the `Source` fallback is
+  `"finnhub"`, proving Step 5.9), `QuotaWarningRefiresPerWindow` (the genuinely new behavior —
+  same-window dedup holds, then re-fires once the window bucket changes; since `maybeAlertQuota`
+  has no injectable clock, the "window changed" precondition is forced directly by overwriting
+  `quotaAlertBucket` between calls, the same technique `repo.todayCount`/`sinceCount` already use
+  elsewhere in this suite to force a quota precondition without issuing real requests — recorded
+  as the deliberate testing technique it is, not silently), and
+  `ThreeCallsPerSymbolCostsQuota` (service-level: N-symbol fetch advances the quota count by
+  `len(fetched)`, distinct from Step 3's client-level 3-calls-per-symbol HTTP test).
+- `go test ./internal/service/...`: all tests pass (15 fundamentals tests: 8 FMP + 7 Finnhub, plus
+  every pre-existing non-fundamentals test unaffected). `golangci-lint run` on the package: 0
+  issues — this closes Step 5's deferred lint failure.
+- Files modified: `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go`
+- Deviations: none beyond the fold-5-into-1 test-count note above (documented, not silent).
+
+### Step 7 — service: wire the provider selector into `main.go` + `FINNHUB_API_KEY` [done]
+- Added `FinnhubAPIKey` to `Config`/`LoadFromEnv` (`config.go`), mirroring `FMPAPIKey` exactly.
+  Rewrote `newFundamentalsSource` to dispatch on a new `provider` param (finnhub/fmp branches);
+  read `marketdata.fundamentals.provider` once in `main()` before constructing the client, passed
+  into both the client constructor and `NewMarketDataService`'s new trailing `provider` arg. Added
+  `FINNHUB_API_KEY` to `docker-compose.yml` and both `.do/app*.yaml` files, immediately after each
+  file's existing `FMP_API_KEY` block — verified via `grep` that the edit hit only
+  `xstockstrat-marketdata`'s own block, not the unrelated `xstockstrat-analysis` `FMP_API_KEY`
+  block the concurrent PR #897 merge had added to `.do/app.dev.yaml` (same key/scope/value
+  literal text, different service — disambiguated by including the block's trailing
+  `SERVICE_NAME: marketdata` context in the edit's match).
+- `go build ./...` (the **full** module, not scoped) passes cleanly — this is the point at which
+  the whole service compiles end-to-end for the first time in this feature.
+  `golangci-lint run ./cmd/... ./internal/config/...`: 0 issues.
+- Files modified: `services/xstockstrat-marketdata/cmd/server/main.go`,
+  `services/xstockstrat-marketdata/internal/config/config.go`, `docker-compose.yml`,
+  `.do/app.dev.yaml`, `.do/app.yaml`
+- Deviations: none.
+
+### Step 8 — test: update `main_test.go`'s boot-canary for the new signature [done]
+- Updated `TestNewFundamentalsSource_AlwaysNonNil` to cross 3 provider values (`"fmp"`,
+  `"finnhub"`, and an unrecognized value proving the fallback branch) × 2 API-key states,
+  asserting non-nil in all 6 combinations — the feature-082 regression this canary guards against
+  is exactly as reachable for the new `"finnhub"` branch as it was for the sole FMP branch before.
+- `go test ./cmd/server/...`: passes (canary + the pre-existing placeholder-cred test, unaffected).
+  `golangci-lint run ./cmd/... ./internal/config/...`: 0 issues (re-run, still clean).
+- **Closing full-suite verification for the Steps 5-8 chain** (Step 6's own Verification section,
+  now unblocked since Step 7 makes `cmd/server` compile): `go test ./... -race -count=1
+  -coverprofile=coverage.out -covermode=atomic -coverpkg=<non-excluded packages>` — every package
+  passes; `go tool cover -func=coverage.out | grep "^total:"` → **63.3%**, well above the ≥40%
+  threshold. `coverage.out` deleted after the check (not a step `**Files**` artifact, never
+  staged/committed).
+- Files modified: `services/xstockstrat-marketdata/cmd/server/main_test.go`
+- Deviations: none.

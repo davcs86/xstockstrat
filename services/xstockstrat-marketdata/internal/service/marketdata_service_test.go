@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -169,6 +170,7 @@ type fakeFundRepo struct {
 	rows       map[string]*source.Fundamentals
 	fetchedAt  map[string]time.Time
 	todayCount int
+	sinceCount int
 	upserts    int
 }
 
@@ -194,6 +196,14 @@ func (r *fakeFundRepo) UpsertFundamentals(_ context.Context, f *source.Fundament
 
 func (r *fakeFundRepo) CountFundamentalsFetchedToday(_ context.Context) (int, error) {
 	return r.todayCount, nil
+}
+
+// CountFundamentalsFetchedSince is the rolling-window sibling (feature 129, Step 4).
+// Tests set sinceCount directly, mirroring how todayCount is set directly today rather
+// than derived from real timestamps — the dispatch logic under test (fundamentalsQuota)
+// only cares which repo method gets called for which provider, not real time math.
+func (r *fakeFundRepo) CountFundamentalsFetchedSince(_ context.Context, _ time.Time) (int, error) {
+	return r.sinceCount, nil
 }
 
 type fakeFundSource struct {
@@ -227,8 +237,9 @@ func (s *fakeFundSource) GetFundamentalsMulti(_ context.Context, symbols []strin
 }
 
 type fakeCfg struct {
-	bools map[string]bool
-	ints  map[string]int64
+	bools   map[string]bool
+	ints    map[string]int64
+	strings map[string]string
 }
 
 func (c *fakeCfg) GetBool(k string, d bool) bool {
@@ -243,7 +254,12 @@ func (c *fakeCfg) GetInt(k string, d int64) int64 {
 	}
 	return d
 }
-func (c *fakeCfg) GetString(_, d string) string { return d }
+func (c *fakeCfg) GetString(k, d string) string {
+	if v, ok := c.strings[k]; ok {
+		return v
+	}
+	return d
+}
 
 type fakeNotify struct {
 	notifyv1.NotifyServiceClient
@@ -257,15 +273,30 @@ func (n *fakeNotify) EmitAlert(_ context.Context, in *notifyv1.EmitAlertRequest,
 	return &notifyv1.EmitAlertResponse{}, nil
 }
 
-func enabledCfg() *fakeCfg {
-	return &fakeCfg{
-		bools: map[string]bool{"marketdata.fmp.enabled": true},
-		ints:  map[string]int64{"marketdata.fmp.cache_ttl_hours": 24, "marketdata.fmp.daily_request_cap": 250},
+// enabledCfg seeds the enabled/cache/quota keys for the given provider ("fmp" or
+// "finnhub", feature 129) — each provider's key set and quota shape differ (FMP:
+// daily_request_cap; Finnhub: symbols_per_minute + rate_window_seconds).
+func enabledCfg(provider string) *fakeCfg {
+	switch provider {
+	case "finnhub":
+		return &fakeCfg{
+			bools: map[string]bool{"marketdata.finnhub.enabled": true},
+			ints: map[string]int64{
+				"marketdata.finnhub.cache_ttl_hours":     24,
+				"marketdata.finnhub.symbols_per_minute":  20,
+				"marketdata.finnhub.rate_window_seconds": 60,
+			},
+		}
+	default:
+		return &fakeCfg{
+			bools: map[string]bool{"marketdata.fmp.enabled": true},
+			ints:  map[string]int64{"marketdata.fmp.cache_ttl_hours": 24, "marketdata.fmp.daily_request_cap": 250},
+		}
 	}
 }
 
-func newFundSvc(cfg *fakeCfg, repo *fakeFundRepo, src source.FundamentalsSource, notify notifyv1.NotifyServiceClient) *MarketDataService {
-	return &MarketDataService{fundamentals: src, fundCfg: cfg, fundRepo: repo, notify: notify}
+func newFundSvc(cfg *fakeCfg, repo *fakeFundRepo, src source.FundamentalsSource, notify notifyv1.NotifyServiceClient, provider string) *MarketDataService {
+	return &MarketDataService{fundamentals: src, fundProvider: provider, fundCfg: cfg, fundRepo: repo, notify: notify}
 }
 
 // Acceptance #2: a within-TTL second call issues zero FMP calls.
@@ -274,7 +305,7 @@ func TestGetFundamentals_CacheHitNoFMP(t *testing.T) {
 	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: 100}
 	repo.fetchedAt["AAPL"] = time.Now()
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
-	svc := newFundSvc(enabledCfg(), repo, src, &fakeNotify{})
+	svc := newFundSvc(enabledCfg("fmp"), repo, src, &fakeNotify{}, "fmp")
 
 	f, err := svc.GetFundamentals(context.Background(), "AAPL")
 	if err != nil {
@@ -295,7 +326,7 @@ func TestGetFundamentals_AtCapStale(t *testing.T) {
 	repo.fetchedAt["AAPL"] = time.Now().Add(-48 * time.Hour)
 	repo.todayCount = 250
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
-	svc := newFundSvc(enabledCfg(), repo, src, &fakeNotify{})
+	svc := newFundSvc(enabledCfg("fmp"), repo, src, &fakeNotify{}, "fmp")
 
 	f, err := svc.GetFundamentals(context.Background(), "AAPL")
 	if err != nil {
@@ -314,7 +345,7 @@ func TestGetFundamentals_AtCapNoCacheResourceExhausted(t *testing.T) {
 	repo := newFakeFundRepo()
 	repo.todayCount = 250
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
-	svc := newFundSvc(enabledCfg(), repo, src, &fakeNotify{})
+	svc := newFundSvc(enabledCfg("fmp"), repo, src, &fakeNotify{}, "fmp")
 
 	_, err := svc.GetFundamentals(context.Background(), "AAPL")
 	if connect.CodeOf(err) != connect.CodeResourceExhausted {
@@ -327,7 +358,7 @@ func TestGetFundamentals_DisabledFailedPrecondition(t *testing.T) {
 	repo := newFakeFundRepo()
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
 	cfg := &fakeCfg{bools: map[string]bool{"marketdata.fmp.enabled": false}}
-	svc := newFundSvc(cfg, repo, src, &fakeNotify{})
+	svc := newFundSvc(cfg, repo, src, &fakeNotify{}, "fmp")
 
 	_, err := svc.GetFundamentals(context.Background(), "AAPL")
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
@@ -345,7 +376,7 @@ func TestGetFundamentals_LiveToggle_NoRestart(t *testing.T) {
 	repo := newFakeFundRepo()
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
 	cfg := &fakeCfg{bools: map[string]bool{"marketdata.fmp.enabled": false}}
-	svc := newFundSvc(cfg, repo, src, &fakeNotify{})
+	svc := newFundSvc(cfg, repo, src, &fakeNotify{}, "fmp")
 
 	// starts disabled: FailedPrecondition, zero FMP calls
 	if _, err := svc.GetFundamentals(context.Background(), "AAPL"); connect.CodeOf(err) != connect.CodeFailedPrecondition {
@@ -378,7 +409,7 @@ func TestGetFundamentals_LiveToggle_NoRestart(t *testing.T) {
 func TestGetFundamentals_MissFetchesAndUpserts(t *testing.T) {
 	repo := newFakeFundRepo()
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
-	svc := newFundSvc(enabledCfg(), repo, src, &fakeNotify{})
+	svc := newFundSvc(enabledCfg("fmp"), repo, src, &fakeNotify{}, "fmp")
 
 	f, err := svc.GetFundamentals(context.Background(), "AAPL")
 	if err != nil {
@@ -398,7 +429,7 @@ func TestGetFundamentals_QuotaWarningEmittedOnce(t *testing.T) {
 	repo.todayCount = 199 // post-fetch 200 == 80% of 250
 	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
 	notify := &fakeNotify{}
-	svc := newFundSvc(enabledCfg(), repo, src, notify)
+	svc := newFundSvc(enabledCfg("fmp"), repo, src, notify, "fmp")
 
 	if _, err := svc.GetFundamentals(context.Background(), "AAPL"); err != nil {
 		t.Fatalf("first fetch: %v", err)
@@ -416,10 +447,184 @@ func TestGetFundamentals_QuotaWarningEmittedOnce(t *testing.T) {
 // this path is unreachable through the current sole construction call site; kept as a
 // guard against a future direct NewMarketDataService caller passing a nil source.
 func TestGetFundamentals_NilSourceFailedPrecondition(t *testing.T) {
-	svc := newFundSvc(enabledCfg(), newFakeFundRepo(), nil, &fakeNotify{})
+	svc := newFundSvc(enabledCfg("fmp"), newFakeFundRepo(), nil, &fakeNotify{}, "fmp")
 	_, err := svc.GetFundamentals(context.Background(), "AAPL")
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("expected FailedPrecondition for nil source, got %v", err)
+	}
+}
+
+// ── Fundamentals, Finnhub path (feature 129) ─────────────────────────────────
+// Mirrors the 8 FMP-path tests above 1:1, proving Step 5's provider-dispatch
+// generalization behaves identically in shape for a second provider while exercising
+// the genuinely NEW behavior: the rolling-window quota shape (vs. FMP's fixed UTC day).
+
+// Mirrors TestGetFundamentals_CacheHitNoFMP.
+func TestGetFundamentals_Finnhub_CacheHitNoFetch(t *testing.T) {
+	repo := newFakeFundRepo()
+	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: 100}
+	repo.fetchedAt["AAPL"] = time.Now()
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	svc := newFundSvc(enabledCfg("finnhub"), repo, src, &fakeNotify{}, "finnhub")
+
+	f, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if f.Price != 100 || f.Stale {
+		t.Fatalf("expected fresh cache hit, got %+v", f)
+	}
+	if src.calls != 0 {
+		t.Fatalf("cache hit should issue zero Finnhub calls, got %d", src.calls)
+	}
+}
+
+// Mirrors TestGetFundamentals_AtCapStale, using the rolling-window counter
+// (sinceCount) against marketdata.finnhub.symbols_per_minute (20) instead of FMP's
+// todayCount against daily_request_cap.
+func TestGetFundamentals_Finnhub_AtCapStale(t *testing.T) {
+	repo := newFakeFundRepo()
+	repo.rows["AAPL"] = &source.Fundamentals{Symbol: "AAPL", Price: 100}
+	repo.fetchedAt["AAPL"] = time.Now().Add(-48 * time.Hour)
+	repo.sinceCount = 20
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	svc := newFundSvc(enabledCfg("finnhub"), repo, src, &fakeNotify{}, "finnhub")
+
+	f, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if !f.Stale {
+		t.Fatalf("expected stale=true under quota exhaustion, got %+v", f)
+	}
+	if src.calls != 0 {
+		t.Fatalf("at-cap must not call Finnhub, got %d", src.calls)
+	}
+}
+
+// Mirrors TestGetFundamentals_AtCapNoCacheResourceExhausted.
+func TestGetFundamentals_Finnhub_AtCapNoCacheResourceExhausted(t *testing.T) {
+	repo := newFakeFundRepo()
+	repo.sinceCount = 20
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	svc := newFundSvc(enabledCfg("finnhub"), repo, src, &fakeNotify{}, "finnhub")
+
+	_, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if connect.CodeOf(err) != connect.CodeResourceExhausted {
+		t.Fatalf("expected ResourceExhausted, got %v", err)
+	}
+}
+
+// Mirrors TestGetFundamentals_DisabledFailedPrecondition, and additionally asserts the
+// error text names "finnhub" — proving Step 5.6's fundamentalsEnabled() generalization
+// actually dispatches on the active provider rather than hardcoding "fmp".
+func TestGetFundamentals_Finnhub_DisabledFailedPrecondition(t *testing.T) {
+	repo := newFakeFundRepo()
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	cfg := &fakeCfg{bools: map[string]bool{"marketdata.finnhub.enabled": false}}
+	svc := newFundSvc(cfg, repo, src, &fakeNotify{}, "finnhub")
+
+	_, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("expected FailedPrecondition, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "finnhub fundamentals source disabled") {
+		t.Fatalf("expected provider-specific error text, got %v", err)
+	}
+	if src.calls != 0 {
+		t.Fatalf("disabled must not call Finnhub, got %d", src.calls)
+	}
+}
+
+// Mirrors TestGetFundamentals_MissFetchesAndUpserts, and additionally asserts
+// toProtoFundamentals' empty-Source fallback is "finnhub" not "fmp" (Step 5.9) when the
+// fake source returns an empty Source, exactly as the existing FMP test's fake does.
+func TestGetFundamentals_Finnhub_MissFetchesAndUpserts(t *testing.T) {
+	repo := newFakeFundRepo()
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}} // Source left empty
+	svc := newFundSvc(enabledCfg("finnhub"), repo, src, &fakeNotify{}, "finnhub")
+
+	f, err := svc.GetFundamentals(context.Background(), "AAPL")
+	if err != nil {
+		t.Fatalf("GetFundamentals: %v", err)
+	}
+	if f.Price != 200 || f.Stale {
+		t.Fatalf("expected fresh fetch, got %+v", f)
+	}
+	if src.calls != 1 || repo.upserts != 1 {
+		t.Fatalf("expected 1 fetch + 1 upsert, got calls=%d upserts=%d", src.calls, repo.upserts)
+	}
+	if f.Source != "finnhub" {
+		t.Fatalf("expected empty-Source fallback to be the active provider %q, got %q", "finnhub", f.Source)
+	}
+}
+
+// TestGetFundamentals_Finnhub_QuotaWarningRefiresPerWindow proves the NEW behavior
+// design.md called for: unlike FMP's UTC-day dedup (which fires once and stays silent
+// for the rest of the day), Finnhub's rolling-window dedup must re-fire once the window
+// bucket changes. There is no injectable clock on maybeAlertQuota, so — exactly like
+// repo.sinceCount/todayCount are set directly elsewhere in this suite to force a quota
+// precondition without issuing real requests — this test forces the bucket-changed
+// precondition directly by overwriting quotaAlertBucket between calls, isolating the
+// exact comparison branch under test (see the 2026-07-30 082-fix-fmp-config-boot-only
+// insight on composing a proof from narrower unit facts instead of a fragile/disproportionate
+// end-to-end test — here, a real 60s sleep to observe a genuine new window).
+func TestGetFundamentals_Finnhub_QuotaWarningRefiresPerWindow(t *testing.T) {
+	repo := newFakeFundRepo()
+	repo.sinceCount = 15 // post-fetch 16 == 80% of 20
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	notify := &fakeNotify{}
+	svc := newFundSvc(enabledCfg("finnhub"), repo, src, notify, "finnhub")
+
+	if _, err := svc.GetFundamentals(context.Background(), "AAPL"); err != nil {
+		t.Fatalf("first fetch: %v", err)
+	}
+	if notify.warnings != 1 {
+		t.Fatalf("expected exactly 1 WARNING after crossing 80%%, got %d", notify.warnings)
+	}
+	// Same window: a second crossing must NOT re-fire (dedup still holds).
+	if _, err := svc.GetFundamentals(context.Background(), "MSFT"); err != nil {
+		t.Fatalf("second fetch (same window): %v", err)
+	}
+	if notify.warnings != 1 {
+		t.Fatalf("expected dedup to hold within the same window, got %d warnings", notify.warnings)
+	}
+
+	// Simulate the rolling window having moved on to a new bucket.
+	svc.quotaAlertBucket = "stale-bucket-forces-refire"
+	if _, err := svc.GetFundamentals(context.Background(), "GOOG"); err != nil {
+		t.Fatalf("third fetch (new window): %v", err)
+	}
+	if notify.warnings != 2 {
+		t.Fatalf("expected a second WARNING once the window bucket changed, got %d", notify.warnings)
+	}
+}
+
+// TestGetFundamentals_Finnhub_ThreeCallsPerSymbolCostsQuota is a service-level sanity
+// check (not a duplicate of Step 3's client-level HTTP-call-count test): fetching N
+// symbols via GetFundamentalsMulti against a Finnhub-backed service correctly advances
+// the quota-crossing math by len(fetched) — the service layer only ever sees "N symbols
+// fetched", never the raw per-symbol HTTP call count, which finnhub_client_test.go's
+// TestGetFundamentalsMulti_ThreeCallsPerSymbol proves separately at the client level.
+func TestGetFundamentals_Finnhub_ThreeCallsPerSymbolCostsQuota(t *testing.T) {
+	repo := newFakeFundRepo()
+	repo.sinceCount = 17 // 17 + 3 fetched == 20 == 100% of cap, crosses the 80% (16) threshold
+	src := &fakeFundSource{resp: &source.Fundamentals{Price: 200}}
+	notify := &fakeNotify{}
+	svc := newFundSvc(enabledCfg("finnhub"), repo, src, notify, "finnhub")
+
+	out, err := svc.GetFundamentalsMulti(context.Background(), []string{"AAPL", "MSFT", "GOOG"})
+	if err != nil {
+		t.Fatalf("GetFundamentalsMulti: %v", err)
+	}
+	if len(out) != 3 {
+		t.Fatalf("expected 3 results, got %d", len(out))
+	}
+	if src.calls != 1 {
+		t.Fatalf("expected exactly 1 GetFundamentalsMulti call to the source, got %d", src.calls)
+	}
+	if notify.warnings != 1 {
+		t.Fatalf("expected quota WARNING once count+len(fetched) crosses 80%% of cap, got %d", notify.warnings)
 	}
 }
 

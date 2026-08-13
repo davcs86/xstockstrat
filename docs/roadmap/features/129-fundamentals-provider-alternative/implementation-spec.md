@@ -331,7 +331,7 @@ status) — Step 6 exercises this method through `fakeFundRepo` (mirroring how
 
 ### Step 5 — service: provider-dispatch the fundamentals cache/quota guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -460,7 +460,7 @@ the *old* test file's `newFundSvc`/`NewMarketDataService` call sites — see Ste
 
 ### Step 6 — test: update + extend `marketdata_service_test.go` fundamentals suite
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify
@@ -542,7 +542,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 
 ### Step 7 — service: wire the provider selector into `main.go` + `FINNHUB_API_KEY`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/cmd/server/main.go` — modify
@@ -641,7 +641,7 @@ cd services/xstockstrat-marketdata && GOWORK=off golangci-lint run --modules-dow
 
 ### Step 8 — test: update `main_test.go`'s boot-canary for the new signature
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/cmd/server/main_test.go` — modify

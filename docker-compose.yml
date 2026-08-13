@@ -250,6 +250,9 @@ services:
       # Optional: only needed when marketdata.fmp.enabled is true (feature 059).
       # Same secret mechanism as the Alpaca keys above — never stored in config.
       FMP_API_KEY: ${FMP_API_KEY:-}
+      # Optional: only needed when marketdata.finnhub.enabled is true (feature 129).
+      # Same secret mechanism as the Alpaca/FMP keys above — never stored in config.
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY:-}
       SERVICE_NAME: marketdata
       DB_POOL_MAX: "2"
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
