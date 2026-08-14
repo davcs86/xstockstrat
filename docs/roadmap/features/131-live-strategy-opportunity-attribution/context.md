@@ -261,3 +261,35 @@
   defect, a scope waiver).
 - Status: design-approved (unchanged) — both rounds this session were post-approval amendments with
   explicit user direction, not lifecycle transitions.
+
+## Session 2026-08-14 — sdd-spec
+
+- Generated implementation-spec.md with 5 steps. Status design-approved → implementation-ready.
+- Steps: (1) service repo `list_live_enabled()` + `LIVE_ENABLED_PREDICATE_SQL` constant + one-line
+  `live_loop.py:188-190` re-point; (2) test repo/parity; (3) service `_compute_opportunities` live
+  attribution (design steps 1-7) + `_drain_held_symbols` widening; (4) test servicer + mandatory
+  harness extensions; (5) config register 3 keys + attribution prose.
+- Key codebase findings (grounded, verified this session):
+  - `list_live_enabled`/`LIVE_ENABLED_PREDICATE_SQL` confirmed ABSENT (`grep` no hits) — created in
+    Step 1. `list()` sibling at `strategies.py:147-161`; `_to_dict` returns `dict(row)` incl.
+    `created_at`/`active`/`live_enabled` (so the `_capped_live` created_at tiebreak has its source).
+  - `_row_to_strategy_definition` is module-level in `servicer.py:2990` (call directly, same module);
+    `strategy_symbols` deferred-imported from `live_loop.py:37-47` mirroring the existing precedent at
+    `servicer.py:1824`. `live_loop.py:29` already module-imports from servicer → the reverse constant
+    import (live_loop ← strategies) adds no new cycle.
+  - **Harness break (mandatory Step 4 fix):** `_materialized_svc` (`tests:3637-3673`) stubs
+    `_strategies_repo` as a bare `AsyncMock` with only `get_by_id`; once Step 3 calls
+    `list_live_enabled()` a bare AsyncMock returns a non-iterable MagicMock → `TypeError` breaks ALL 12
+    existing `TestListOpportunitiesMaterialized` tests. Harness must default `list_live_enabled → []`.
+    `_strat_row` (`:3608-3630`) also lacks `signal_params.symbols` and `created_at` — both needed for a
+    live-covered row; extend it (or a sibling) for the new tests. `make_servicer`'s `get_int` returns
+    the passed default, so the three new caps read 5/20/20 with no extra wiring.
+  - **Design-prose deviation surfaced (P-03):** design.md says widening `_drain_held_symbols` to a
+    normalized-keyed `dict[str,float]` leaves "both call sites dict-compatible with zero other changes."
+    Discovery shows the screener call site's membership test (`servicer.py:1926` `if r.symbol in held:`)
+    must become `if _normalize_symbol(r.symbol) in held:` to stay correct against the now-normalized keys.
+    Spec'd as a required 1-line adjustment in Step 3, flagged for the reviewer. `Position.market_value`
+    = double field 5 (confirmed) → summed `abs()` is the held-value rank source.
+  - No proto/migration/DB-schema changes. Consumer surface `/insights` needs no UI code change (existing
+    display path + provenance-blind e2e mock — C-12 obligation already resolved in design).
+- Merge order recorded in spec (`133 → 134 → 131 → 132`; 131 after 134, before 132).
