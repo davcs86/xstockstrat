@@ -1,6 +1,6 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the twenty-two tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the twenty-four tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 ---
@@ -34,7 +34,7 @@ directly on port 9000.
 
 **Direct (local):** `http://localhost:9000`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same twenty-two tools' `name`,
+**Tool catalog (UI display).** `GET /api/tools` returns the same twenty-four tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
 capabilities (the same data documented below), never user data or credentials. It powers the
 `xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
@@ -887,6 +887,50 @@ require a PR" is enforced, not merely conventional.)
 
 **Errors:** `PERMISSION_DENIED` → "admin scope required"; `INVALID_ARGUMENT` → missing author;
 `NOT_FOUND` → "config key not registered" (pass `create_key=true` to create it).
+
+---
+
+### `get_user_metadata`
+
+Fetch the calling user's own profile metadata from `xstockstrat-identity`. **Read-only.**
+
+No parameters — the caller identity comes from the `x-user-id` gRPC metadata header (propagated
+from the verified MCP session), not from the request body.
+
+Returns `{userId, email, phone, displayName, metadata, metadataUpdatedAt}`.
+
+- `userId` (string): the user's ID (read-only).
+- `email` (string): the user's email (read-only — cannot be changed via `set_user_metadata`).
+- `phone` (string | null): phone number, or null if not set.
+- `displayName` (string | null): display name, or null if not set.
+- `metadata` (object): arbitrary JSON metadata (max 8KB), defaults to `{}`.
+- `metadataUpdatedAt` (string | null): ISO 8601 timestamp of the last metadata update, or null if never updated.
+
+**Errors:** `user not found` → identity returned `NOT_FOUND` for the calling user; `RuntimeError` →
+no verified caller claims on the request (defence in depth — the tool refuses when `x-user-id`
+cannot be resolved).
+
+---
+
+### `set_user_metadata`
+
+Partial-update the calling user's own profile metadata. **Email is read-only and cannot be set.**
+Only provided fields are changed; omitted fields retain their current values.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `phone` | string | no | Phone number |
+| `display_name` | string | no | Display name |
+| `metadata` | dict | no | Arbitrary JSON object (max 8KB) — replaces the entire `metadata` field |
+
+At least one parameter must be provided.
+
+Returns `{userId, email, phone, displayName, metadata, metadataUpdatedAt}` — the full updated
+profile (same shape as `get_user_metadata`).
+
+**Errors:** `at least one field (phone, display_name, metadata) must be provided` → no fields given;
+`user not found` → identity returned `NOT_FOUND` for the calling user; `RuntimeError` → no verified
+caller claims on the request.
 
 ---
 

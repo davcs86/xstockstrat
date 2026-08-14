@@ -1056,7 +1056,7 @@ Coverage threshold: 40%. All commands exit 0.
 
 ### Step 13 — docs: Add tool sections to mcp-tools.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify
