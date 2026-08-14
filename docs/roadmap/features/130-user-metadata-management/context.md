@@ -96,3 +96,19 @@
 - Files modified: `services/xstockstrat-identity/src/grpc/authz.ts`
 - Deviations: none
 - TDD: red (`Cannot find module './src/grpc/authz'`) → green (lint passed, 0 errors). Dedicated unit tests land in Step 6.
+
+### Step 5 — service: Identity getUserMetadata and updateUserMetadata handlers [done]
+- Added `getUserMetadata` and `updateUserMetadata` methods to `IdentityServiceImpl`, importing `userIdFrom` from `./authz`.
+- `getUserMetadata`: extracts userId from `call.metadata` via `userIdFrom`, queries `SELECT user_id, email, phone, display_name, metadata, metadata_updated_at FROM identity.users WHERE user_id = $1`, returns `NOT_FOUND` (code 5) if absent, includes runtime guard on `call.metadata?.get`.
+- `updateUserMetadata`: same metadata extraction, builds dynamic SET clause from non-undefined optional fields (phone, displayName, metadata), always sets `metadata_updated_at = NOW()`, uses RETURNING clause, validates at-least-one-field (code 3).
+- Files modified: `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts`
+- Deviations: none
+- TDD: red (`getUserMetadata: undefined` on prototype) → green (`getUserMetadata: function`, `updateUserMetadata: function`; lint 0 errors, 103 pre-existing warnings).
+
+### Step 6 — test: Identity handler unit tests [done]
+- Added 11 new tests: getUserMetadata (3: NOT_FOUND, happy path, missing metadata), updateUserMetadata (2: no-fields rejection, partial update), handler registration smoke (2), authz unit tests (4: userIdFrom extract, absent header, first extract, missing key).
+- Imported `userIdFrom` and `first` via lazy dynamic import alongside `IdentityServiceImpl`.
+- Added `makeCallWithMetadata` helper for tests that need x-user-id propagation.
+- Files modified: `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts`
+- Deviations: authz test assertions adjusted — spec expected `userIdFrom` to throw on absent header and `first` to return `undefined` on missing key, but the actual `authz.ts` implementation returns `''` (empty string) in both cases (the handlers do the UNAUTHENTICATED throw, not the helper). Assertions corrected to match real behavior.
+- TDD: red (0 getUserMetadata/updateUserMetadata/authz tests) → green (33/33 tests pass, 0 errors, 106 warnings).
