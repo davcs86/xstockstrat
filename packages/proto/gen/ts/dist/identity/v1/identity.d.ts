@@ -98,6 +98,32 @@ export interface RevokeAuthorizedAppRequest {
 export interface RevokeAuthorizedAppResponse {
     success: boolean;
 }
+/** ── User profile metadata (feature 130) ────────────────────────────────── */
+export interface UserMetadata {
+    userId: string;
+    email: string;
+    phone?: string | undefined;
+    displayName?: string | undefined;
+    metadata?: {
+        [key: string]: any;
+    } | undefined;
+    metadataUpdatedAt?: Date | undefined;
+}
+export interface GetUserMetadataRequest {
+}
+export interface GetUserMetadataResponse {
+    userMetadata?: UserMetadata | undefined;
+}
+export interface UpdateUserMetadataRequest {
+    phone?: string | undefined;
+    displayName?: string | undefined;
+    metadata?: {
+        [key: string]: any;
+    } | undefined;
+}
+export interface UpdateUserMetadataResponse {
+    userMetadata?: UserMetadata | undefined;
+}
 export declare const AuthenticateUserRequest: MessageFns<AuthenticateUserRequest>;
 export declare const AuthTokenResponse: MessageFns<AuthTokenResponse>;
 export declare const TokenClaims: MessageFns<TokenClaims>;
@@ -118,6 +144,11 @@ export declare const ListAuthorizedAppsRequest: MessageFns<ListAuthorizedAppsReq
 export declare const ListAuthorizedAppsResponse: MessageFns<ListAuthorizedAppsResponse>;
 export declare const RevokeAuthorizedAppRequest: MessageFns<RevokeAuthorizedAppRequest>;
 export declare const RevokeAuthorizedAppResponse: MessageFns<RevokeAuthorizedAppResponse>;
+export declare const UserMetadata: MessageFns<UserMetadata>;
+export declare const GetUserMetadataRequest: MessageFns<GetUserMetadataRequest>;
+export declare const GetUserMetadataResponse: MessageFns<GetUserMetadataResponse>;
+export declare const UpdateUserMetadataRequest: MessageFns<UpdateUserMetadataRequest>;
+export declare const UpdateUserMetadataResponse: MessageFns<UpdateUserMetadataResponse>;
 export type IdentityServiceService = typeof IdentityServiceService;
 export declare const IdentityServiceService: {
     readonly authenticateUser: {
@@ -227,6 +258,25 @@ export declare const IdentityServiceService: {
         readonly responseSerialize: (value: RevokeAuthorizedAppResponse) => Buffer;
         readonly responseDeserialize: (value: Buffer) => RevokeAuthorizedAppResponse;
     };
+    /** User profile metadata self-management (feature 130) */
+    readonly getUserMetadata: {
+        readonly path: "/xstockstrat.identity.v1.IdentityService/GetUserMetadata";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetUserMetadataRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetUserMetadataRequest;
+        readonly responseSerialize: (value: GetUserMetadataResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => GetUserMetadataResponse;
+    };
+    readonly updateUserMetadata: {
+        readonly path: "/xstockstrat.identity.v1.IdentityService/UpdateUserMetadata";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: UpdateUserMetadataRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => UpdateUserMetadataRequest;
+        readonly responseSerialize: (value: UpdateUserMetadataResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => UpdateUserMetadataResponse;
+    };
 };
 export interface IdentityServiceServer extends UntypedServiceImplementation {
     authenticateUser: handleUnaryCall<AuthenticateUserRequest, AuthTokenResponse>;
@@ -248,6 +298,9 @@ export interface IdentityServiceServer extends UntypedServiceImplementation {
      */
     listAuthorizedApps: handleUnaryCall<ListAuthorizedAppsRequest, ListAuthorizedAppsResponse>;
     revokeAuthorizedApp: handleUnaryCall<RevokeAuthorizedAppRequest, RevokeAuthorizedAppResponse>;
+    /** User profile metadata self-management (feature 130) */
+    getUserMetadata: handleUnaryCall<GetUserMetadataRequest, GetUserMetadataResponse>;
+    updateUserMetadata: handleUnaryCall<UpdateUserMetadataRequest, UpdateUserMetadataResponse>;
 }
 export interface IdentityServiceClient extends Client {
     authenticateUser(request: AuthenticateUserRequest, callback: (error: ServiceError | null, response: AuthTokenResponse) => void): ClientUnaryCall;
@@ -291,6 +344,13 @@ export interface IdentityServiceClient extends Client {
     revokeAuthorizedApp(request: RevokeAuthorizedAppRequest, callback: (error: ServiceError | null, response: RevokeAuthorizedAppResponse) => void): ClientUnaryCall;
     revokeAuthorizedApp(request: RevokeAuthorizedAppRequest, metadata: Metadata, callback: (error: ServiceError | null, response: RevokeAuthorizedAppResponse) => void): ClientUnaryCall;
     revokeAuthorizedApp(request: RevokeAuthorizedAppRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: RevokeAuthorizedAppResponse) => void): ClientUnaryCall;
+    /** User profile metadata self-management (feature 130) */
+    getUserMetadata(request: GetUserMetadataRequest, callback: (error: ServiceError | null, response: GetUserMetadataResponse) => void): ClientUnaryCall;
+    getUserMetadata(request: GetUserMetadataRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetUserMetadataResponse) => void): ClientUnaryCall;
+    getUserMetadata(request: GetUserMetadataRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetUserMetadataResponse) => void): ClientUnaryCall;
+    updateUserMetadata(request: UpdateUserMetadataRequest, callback: (error: ServiceError | null, response: UpdateUserMetadataResponse) => void): ClientUnaryCall;
+    updateUserMetadata(request: UpdateUserMetadataRequest, metadata: Metadata, callback: (error: ServiceError | null, response: UpdateUserMetadataResponse) => void): ClientUnaryCall;
+    updateUserMetadata(request: UpdateUserMetadataRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: UpdateUserMetadataResponse) => void): ClientUnaryCall;
 }
 export declare const IdentityServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): IdentityServiceClient;

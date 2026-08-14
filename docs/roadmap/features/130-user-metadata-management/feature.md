@@ -1,6 +1,6 @@
 # Feature: user-metadata-management
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/user-metadata-management`
 **Created**: 2026-08-14
 **Last Updated**: 2026-08-14
@@ -14,7 +14,7 @@
 | 2026-08-14 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-14 | `draft` → `design-approved` | /sdd-design | 3-round quick grilling; user-approved design |
 | 2026-08-14 | `design-approved` → `implementation-ready` | /sdd-spec | 13-step implementation spec generated |
-| 2026-08-14 | `implementation-ready` → `in-progress` | /sdd-execute | Step 1 (proto) completed |
+| 2026-08-14 | `implementation-ready` → `code-completed` | /sdd-execute | All 13 steps done |
 
 ---
 
@@ -48,4 +48,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review user-metadata-management impl-spec` — advisory review, then `/sdd-execute user-metadata-management`
+All steps complete. Merge step PRs into `claude/user-metadata-management-x7r9aw`, then create integration PR to `main-dev`.

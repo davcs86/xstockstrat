@@ -66,6 +66,12 @@ const (
 	// IdentityServiceRevokeAuthorizedAppProcedure is the fully-qualified name of the IdentityService's
 	// RevokeAuthorizedApp RPC.
 	IdentityServiceRevokeAuthorizedAppProcedure = "/xstockstrat.identity.v1.IdentityService/RevokeAuthorizedApp"
+	// IdentityServiceGetUserMetadataProcedure is the fully-qualified name of the IdentityService's
+	// GetUserMetadata RPC.
+	IdentityServiceGetUserMetadataProcedure = "/xstockstrat.identity.v1.IdentityService/GetUserMetadata"
+	// IdentityServiceUpdateUserMetadataProcedure is the fully-qualified name of the IdentityService's
+	// UpdateUserMetadata RPC.
+	IdentityServiceUpdateUserMetadataProcedure = "/xstockstrat.identity.v1.IdentityService/UpdateUserMetadata"
 )
 
 // IdentityServiceClient is a client for the xstockstrat.identity.v1.IdentityService service.
@@ -85,6 +91,9 @@ type IdentityServiceClient interface {
 	// calling user has granted access to the MCP agent. Additive over 049's OAuth backend.
 	ListAuthorizedApps(context.Context, *connect.Request[v1.ListAuthorizedAppsRequest]) (*connect.Response[v1.ListAuthorizedAppsResponse], error)
 	RevokeAuthorizedApp(context.Context, *connect.Request[v1.RevokeAuthorizedAppRequest]) (*connect.Response[v1.RevokeAuthorizedAppResponse], error)
+	// User profile metadata self-management (feature 130)
+	GetUserMetadata(context.Context, *connect.Request[v1.GetUserMetadataRequest]) (*connect.Response[v1.GetUserMetadataResponse], error)
+	UpdateUserMetadata(context.Context, *connect.Request[v1.UpdateUserMetadataRequest]) (*connect.Response[v1.UpdateUserMetadataResponse], error)
 }
 
 // NewIdentityServiceClient constructs a client for the xstockstrat.identity.v1.IdentityService
@@ -164,6 +173,18 @@ func NewIdentityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(identityServiceMethods.ByName("RevokeAuthorizedApp")),
 			connect.WithClientOptions(opts...),
 		),
+		getUserMetadata: connect.NewClient[v1.GetUserMetadataRequest, v1.GetUserMetadataResponse](
+			httpClient,
+			baseURL+IdentityServiceGetUserMetadataProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("GetUserMetadata")),
+			connect.WithClientOptions(opts...),
+		),
+		updateUserMetadata: connect.NewClient[v1.UpdateUserMetadataRequest, v1.UpdateUserMetadataResponse](
+			httpClient,
+			baseURL+IdentityServiceUpdateUserMetadataProcedure,
+			connect.WithSchema(identityServiceMethods.ByName("UpdateUserMetadata")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -180,6 +201,8 @@ type identityServiceClient struct {
 	refreshOAuthToken   *connect.Client[v1.RefreshOAuthTokenRequest, v1.OAuthTokenResponse]
 	listAuthorizedApps  *connect.Client[v1.ListAuthorizedAppsRequest, v1.ListAuthorizedAppsResponse]
 	revokeAuthorizedApp *connect.Client[v1.RevokeAuthorizedAppRequest, v1.RevokeAuthorizedAppResponse]
+	getUserMetadata     *connect.Client[v1.GetUserMetadataRequest, v1.GetUserMetadataResponse]
+	updateUserMetadata  *connect.Client[v1.UpdateUserMetadataRequest, v1.UpdateUserMetadataResponse]
 }
 
 // AuthenticateUser calls xstockstrat.identity.v1.IdentityService.AuthenticateUser.
@@ -237,6 +260,16 @@ func (c *identityServiceClient) RevokeAuthorizedApp(ctx context.Context, req *co
 	return c.revokeAuthorizedApp.CallUnary(ctx, req)
 }
 
+// GetUserMetadata calls xstockstrat.identity.v1.IdentityService.GetUserMetadata.
+func (c *identityServiceClient) GetUserMetadata(ctx context.Context, req *connect.Request[v1.GetUserMetadataRequest]) (*connect.Response[v1.GetUserMetadataResponse], error) {
+	return c.getUserMetadata.CallUnary(ctx, req)
+}
+
+// UpdateUserMetadata calls xstockstrat.identity.v1.IdentityService.UpdateUserMetadata.
+func (c *identityServiceClient) UpdateUserMetadata(ctx context.Context, req *connect.Request[v1.UpdateUserMetadataRequest]) (*connect.Response[v1.UpdateUserMetadataResponse], error) {
+	return c.updateUserMetadata.CallUnary(ctx, req)
+}
+
 // IdentityServiceHandler is an implementation of the xstockstrat.identity.v1.IdentityService
 // service.
 type IdentityServiceHandler interface {
@@ -255,6 +288,9 @@ type IdentityServiceHandler interface {
 	// calling user has granted access to the MCP agent. Additive over 049's OAuth backend.
 	ListAuthorizedApps(context.Context, *connect.Request[v1.ListAuthorizedAppsRequest]) (*connect.Response[v1.ListAuthorizedAppsResponse], error)
 	RevokeAuthorizedApp(context.Context, *connect.Request[v1.RevokeAuthorizedAppRequest]) (*connect.Response[v1.RevokeAuthorizedAppResponse], error)
+	// User profile metadata self-management (feature 130)
+	GetUserMetadata(context.Context, *connect.Request[v1.GetUserMetadataRequest]) (*connect.Response[v1.GetUserMetadataResponse], error)
+	UpdateUserMetadata(context.Context, *connect.Request[v1.UpdateUserMetadataRequest]) (*connect.Response[v1.UpdateUserMetadataResponse], error)
 }
 
 // NewIdentityServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -330,6 +366,18 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 		connect.WithSchema(identityServiceMethods.ByName("RevokeAuthorizedApp")),
 		connect.WithHandlerOptions(opts...),
 	)
+	identityServiceGetUserMetadataHandler := connect.NewUnaryHandler(
+		IdentityServiceGetUserMetadataProcedure,
+		svc.GetUserMetadata,
+		connect.WithSchema(identityServiceMethods.ByName("GetUserMetadata")),
+		connect.WithHandlerOptions(opts...),
+	)
+	identityServiceUpdateUserMetadataHandler := connect.NewUnaryHandler(
+		IdentityServiceUpdateUserMetadataProcedure,
+		svc.UpdateUserMetadata,
+		connect.WithSchema(identityServiceMethods.ByName("UpdateUserMetadata")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.identity.v1.IdentityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case IdentityServiceAuthenticateUserProcedure:
@@ -354,6 +402,10 @@ func NewIdentityServiceHandler(svc IdentityServiceHandler, opts ...connect.Handl
 			identityServiceListAuthorizedAppsHandler.ServeHTTP(w, r)
 		case IdentityServiceRevokeAuthorizedAppProcedure:
 			identityServiceRevokeAuthorizedAppHandler.ServeHTTP(w, r)
+		case IdentityServiceGetUserMetadataProcedure:
+			identityServiceGetUserMetadataHandler.ServeHTTP(w, r)
+		case IdentityServiceUpdateUserMetadataProcedure:
+			identityServiceUpdateUserMetadataHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -405,4 +457,12 @@ func (UnimplementedIdentityServiceHandler) ListAuthorizedApps(context.Context, *
 
 func (UnimplementedIdentityServiceHandler) RevokeAuthorizedApp(context.Context, *connect.Request[v1.RevokeAuthorizedAppRequest]) (*connect.Response[v1.RevokeAuthorizedAppResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.RevokeAuthorizedApp is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) GetUserMetadata(context.Context, *connect.Request[v1.GetUserMetadataRequest]) (*connect.Response[v1.GetUserMetadataResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.GetUserMetadata is not implemented"))
+}
+
+func (UnimplementedIdentityServiceHandler) UpdateUserMetadata(context.Context, *connect.Request[v1.UpdateUserMetadataRequest]) (*connect.Response[v1.UpdateUserMetadataResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.identity.v1.IdentityService.UpdateUserMetadata is not implemented"))
 }

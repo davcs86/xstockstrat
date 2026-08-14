@@ -43,6 +43,8 @@ def test_list_tools_returns_all_registered_tools():
         "get_config",
         "list_config_keys",
         "set_config",
+        "get_user_metadata",
+        "set_user_metadata",
     }
 
 
@@ -65,3 +67,17 @@ def test_list_tools_does_not_require_auth():
     with TestClient(_app()) as tc:
         r = tc.get("/api/tools")
     assert r.status_code == 200
+
+
+def test_client_has_get_user_metadata_method():
+    """Smoke: client.get_user_metadata is importable and callable (feature 130)."""
+    from app.client import get_user_metadata  # noqa: PLC0415
+
+    assert callable(get_user_metadata)
+
+
+def test_client_has_update_user_metadata_method():
+    """Smoke: client.update_user_metadata is importable and callable (feature 130)."""
+    from app.client import update_user_metadata  # noqa: PLC0415
+
+    assert callable(update_user_metadata)

@@ -82,6 +82,7 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: <GearSix className="h-4 w-4" weight="bold" />,
     sectionStart: 'Settings',
     items: [
+      { label: 'Profile', href: '/accounts/profile' },
       { label: 'Trader home', href: '/trader', match: 'exact' },
       { label: 'Insights home', href: '/insights', match: 'exact' },
       { label: 'Accounts', href: '/trader/accounts' },

@@ -36,7 +36,7 @@ in the design phase; this spec updates the product spec accordingly.
 
 ### Step 1 — proto: Add UserMetadata messages and RPCs to identity.proto
 
-**Status**: `done`
+**Status**: `pending`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/identity/v1/identity.proto` — modify
@@ -1056,7 +1056,7 @@ Coverage threshold: 40%. All commands exit 0.
 
 ### Step 13 — docs: Add tool sections to mcp-tools.md
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs/runbooks/`
 **Files**:
 - `docs/runbooks/mcp-tools.md` — modify
