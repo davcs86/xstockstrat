@@ -1,9 +1,9 @@
 # Feature: live-strategy-opportunity-attribution
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `design-approved`
 **Development Branch**: `feature/live-strategy-opportunity-attribution`
 **Created**: 2026-08-13
-**Last Updated**: 2026-08-13
+**Last Updated**: 2026-08-14
 
 ---
 
@@ -13,12 +13,15 @@
 |---|---|---|---|
 | 2026-08-13 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-13 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
+| 2026-08-14 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds — started quick, upgraded to full mid-debate) and approved; recon.md + design.md written |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon](recon.md) — grounded codebase dossier
+- [Design](design.md) — debated, approved architecture
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec live-strategy-opportunity-attribution`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -42,4 +45,6 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec live-strategy-opportunity-attribution` — generate implementation spec
+`/sdd-spec live-strategy-opportunity-attribution` — generate implementation spec from the approved
+design. **Must land after `130-signal-source-reliability-weight`** (same-function overlap in
+`_compute_opportunities`, `servicer.py:2144-2168` — see `docs/roadmap/features/merge-order.md`).
