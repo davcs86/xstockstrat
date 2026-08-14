@@ -142,7 +142,7 @@ non-breaking at the wire level — the behavioral break is documented in feature
 
 ### Step 3 — migration: `013` add `user_id` to `analysis.strategies`, composite PK
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/013_strategies_user_id.up.sql` — create

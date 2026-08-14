@@ -244,3 +244,8 @@
 ### Step 2 — proto-gen: regenerate stubs [done]
 - Ran `./scripts/buf-gen.sh` (buf 1.69.0 + pinned Go plugins + grpcio-tools 1.80.0 + TS plugins). Diff scoped to `packages/proto/gen/{go,python,ts}/analysis/v1/**` only (8 files); `UserId`/`user_id` field 13 present in Go/TS/Python stubs. No drift to other services' stubs.
 - Files modified: `packages/proto/gen/**`. TDD: N/A (proto-gen). Deviations: none.
+
+### Step 3 — migration 013: strategies user_id + composite PK [done]
+- Created 013 up/down. up: ADD COLUMN user_id → guarded seed backfill (RAISE on unset/unrendered, no silent default) → SET NOT NULL → drop strategies_pkey → ADD PRIMARY KEY (user_id, strategy_id). down reverses (restore single-col PK, drop column).
+- Offline verify: up/down parity confirmed; `envsubst '$SEED_USER_ID'` render tested — seed substitutes, `DO $$…$$` block preserved, empty seed trips RAISE. Installed `gettext-base` on host for the render check.
+- Files: `migrations/013_strategies_user_id.{up,down}.sql`. TDD: N/A (migration). Deviations: none.
