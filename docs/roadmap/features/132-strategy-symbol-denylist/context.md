@@ -210,3 +210,22 @@
   cycle-skip (`live_loop.py:176-178`).
 - User chose **"Run round 4"** to pressure-test the three folded fixes before approval. Round 4 in
   progress (cap is 5).
+
+### Phase 1 round 4 (proposer + adversary) — three fixes nailed
+
+- Round-4 proposer specified the three round-3 fixes concretely; round-4 adversary confirmed FIX 3
+  (clamped identity-keyed scheduler) correct and found 4 remaining defects, all with clear remedies
+  (now folded, verified in round 5):
+  1. **muted persistence** — `analysis.opportunities` has no `muted` column + fixed INSERT/SELECT, so
+     a top-level `row["muted"]` is dropped at persist. Fix: `"denied"` provenance marker is the
+     persisted carrier; derive `opp.muted = ("denied" in provenance)` in `_row_to_opportunity`.
+  2. **bucket-predicate double-row** — a watchlist-denied `(X,A)` is is_watchlist AND muted, landing
+     in both `curated` and `muted_only` → duplicate opportunity_key → PK collision. Fix: buckets
+     disjoint — `muted_only = muted and not (is_watchlist or is_held or is_live)`; the trace-skip
+     predicate `muted and not is_held` is a different test, not the bucket predicate.
+  3. **entry_backfill boot-race** — `run_once` fires at t=0 concurrent; routing its pair-set through
+     resolve_universe adds a portfolio dependency whose cold-boot empty-held result makes the one-shot
+     pass miss the >365d held positions 116 anchors → permanent exit suppression. Fix: gate run_once on
+     portfolio readiness (wait_for_ready/retry).
+  4. **scheduler zero-guard** — only advance cursor when n>0 (avoid ZeroDivision on empty pairs).
+- User chose **"Run round 5 (final, cap)"** to verify the four remedies. Round 5 in progress.
