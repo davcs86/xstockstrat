@@ -127,3 +127,35 @@
   collision, and are out of scope for this fix.
 - Status unchanged (`design-approved`) — this was a pure renumbering, no content/design change.
 - Next: unchanged — `/sdd-spec signal-source-reliability-weight` (slug unchanged, only `NNN` moved).
+
+## Session 2026-08-14T20:30:00Z — sdd-spec
+
+- Generated implementation-spec.md with 11 steps. Status → implementation-ready. Consumed recon.md +
+  design.md as authoritative; re-verified every load-bearing `path:line` by grep before citing it.
+- Step list: 1 proto (`optional double reliability_weight = 12` on `SignalSource`) → 2 proto-gen
+  (buf-gen + `uv lock --check` in ingest/analysis/indicators for the feature-007 grpcio trap) →
+  3 ingest migration `010` (ADD COLUMN + CHECK) → 4 ingest service (register/update HasField+reject
+  merge, `_SS_MASKABLE_PATHS`, repo kwargs, both row-builds, `list_all_sources` cols) → 5 ingest tests
+  → 6 analysis service (new `_drain_source_weights` helper + `signal_axis` weighting at `:2163` +
+  genuine FR-4 replace of the `ScreenSymbols` config-blob read at `:1890-1901`) → 7 analysis tests →
+  8 UI (`useSignalSources` drops the config-blob combine, inline-edit weight cell) → 9 UI e2e +
+  C-12 fixture centralization → 10 config migration `016` (description-only UPDATE, F-01-safe) →
+  11 docs drift fixes.
+- Key codebase findings (grep-verified this session):
+  - `SignalSource` fields 1–11 in use; **field 12 free, no `reserved` block** (`ingest.proto`).
+  - Ingest last migration is `009_signal_dedup_keys` → `010` free; config last is `015_marketdata_finnhub`
+    → `016` free. Both to be re-verified immediately before `/sdd-execute` (numbering-collision guard).
+  - `insert_source` positional args: `config_param` is index 6, `active` is 7 — `reliability_weight`
+    must be appended **after `active`** (index 8) to keep `test_signal_sources.py:277`'s
+    `call_args[0][6]` assertion valid (design.md Open Risk confirmed against the real test).
+  - Analysis `_drain_active_signals` (`servicer.py:2358`) calls `self._ingest.QuerySignals(…,
+    metadata=propagation_meta)` — the header-propagation (C-03) pattern the new `ListSignalSources`
+    call reuses; `propagation_meta` is already in scope at both `:1885` (ScreenSymbols) and
+    `:2098-2100` (`_compute_opportunities`).
+  - `analysis.signals.source_weights` is seeded by config migration `003` (dev+prod rows) and its
+    only remaining truthful-description edit is a **new** UPDATE migration (F-01: never edit `003`).
+  - Doc-drift sites confirmed: `docs/patterns/config-governance.md` (feature-097 "unchanged — stays
+    the screener's") and `services/xstockstrat-analysis/CLAUDE.md:169,192` — both falsified by the
+    FR-4 replace, fixed in Step 11 (same-PR teardown rule).
+  - C-12: signal-source mock is inline at `e2e/mock-backend.ts:882-923`, `INVENTORY.md:60` "not yet
+    centralized" — this is the second consumer, so Step 9 creates `e2e/fixtures/signalSources.ts`.

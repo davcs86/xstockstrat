@@ -26,11 +26,18 @@ hold, or have active signals on, and only need to explicitly list the symbols I 
 
 FR-1. Add `repeated string denied_symbols = 12;` to `StrategyDefinition`
 (`packages/proto/analysis/v1/analysis.proto:249-274`, next free field number after
-`exit_cooldown_days = 11`) — normalized-uppercase symbols this strategy must never evaluate or
-attribute, regardless of any other coverage source (watchlist, held position, or active signal). No
+`exit_cooldown_days = 11`) — normalized-uppercase symbols this strategy must never evaluate **for
+entry**, regardless of any other entry-coverage source (watchlist, active signal). No
 migration required: `StrategyDefinition` persists as `definition_json JSONB`
 (`services/xstockstrat-analysis/migrations/001_strategies.up.sql:4`), so a new field is captured
 automatically, same as `signal_params`/`cooldown_days`.
+
+> **AMENDED by `/sdd-design` (2026-08-14, entry-only deny — Fork A, user-locked).** Deny is
+> **entry-scoped**, not "regardless of held position." A held position under the strategy keeps its
+> exit-rule (REDUCE) evaluation, exit tracing, and exit alerts even when its symbol is denied — a
+> denied symbol must never blind a user to an exit on capital they already hold. The deny list
+> subtracts from the *entry* universe and the live loop's *entry* evaluation only; the muted flag is
+> set on the existing held/exit row (one row, not a second). See design.md decision 3.
 
 FR-2. `ManageStrategy`'s AIP-161 partial-update path (`update_mask`, `analysis.proto:284-302`) must
 accept `denied_symbols` as an allowed masked path, so the deny list can be edited independently of
@@ -58,6 +65,28 @@ FR-4. UI: the deny list must be editable from **both**:
 
 Both surfaces write through the same `ManageStrategy` masked-update path (FR-2) — no second write
 mechanism.
+
+FR-8. **(Added by `/sdd-design` 2026-08-14 — Fork B, user-directed.)** Add `bool signal_eligible = 14;`
+to `StrategyDefinition` (default false) — a per-strategy flag gating whether the **platform-wide
+active-signal** term joins the strategy's evaluation universe. Default false bounds the universe to
+`watchlist ∪ held ∪ allowlist − denied` (owner-scoped, bounded by one owner's real coverage); only
+explicitly-flagged strategies (intended: 1–2 "screening" strategies) pull the unbounded `QuerySignals`
+set. This exists to bound the live-loop fan-out/starvation introduced by FR-3's universe expansion. It
+is maskable (FR-2 mechanism), gets a wizard toggle (FR-4 surface) and an agent `manage_strategy` param
+(FR-7). A strategy that sets **both** a non-empty `signal_params.symbols` allowlist and
+`signal_eligible=true` is rejected at write time with `INVALID_ARGUMENT` (allowlist-as-universe-override
+would otherwise silently swallow the flag). Field-number coordination: `denied_symbols=12` (FR-1),
+133's `user_id=13`, so `signal_eligible=14` — re-verify free at `/sdd-spec`.
+
+FR-9. **(Added by `/sdd-design` 2026-08-14.)** Bound the live loop's per-cycle evaluation with a
+**fair-share scheduler** so FR-3's expanded universe cannot permanently starve arbitrary strategies.
+`live_loop._run_cycle`'s truncate-at-`max_strategies_per_cycle`-over-an-unordered-`SELECT` is replaced
+by a deterministic total order (`ORDER BY created_at, strategy_id`, then per-strategy `sorted(symbols)`)
+plus an identity-keyed rotating cursor (`bisect_right` resume on the last-processed
+`(created_at, strategy_id, symbol)`), so every pair is reached within `⌈N/max_pairs⌉` cycles across
+universe churn and restart. Budget stays `analysis.engine.max_strategies_per_cycle` (no new config key);
+a bounded truncation `log.warning` + OTel counter make any residual cap-hit observable. See design.md
+decision 5.
 
 FR-5. Opportunities page (`services/xstockstrat-ui/src/app/insights/opportunities/`): when a
 `(symbol, strategy_id)` pair is on that strategy's deny list, it must not silently disappear from
@@ -124,6 +153,13 @@ Exact service names from CLAUDE.md Service Registry:
   non-breaking). `ManageStrategyRequest.update_mask`'s allowed-paths comment
   (`analysis.proto:298-299`) must list `denied_symbols` as a maskable path (FR-2) — 1 service owner
   + Proto Reviewer per the non-breaking-proto approval gate.
+- [x] **(Added by `/sdd-design`)** New field: `bool signal_eligible = 14;` on
+  `analysis.StrategyDefinition` (additive, non-breaking; FR-8) — also listed in the `update_mask`
+  allowed-paths comment. Field 13 is reserved for feature 133's `user_id`.
+- [x] **(Added by `/sdd-design`)** New field: `bool muted = 12;` on `analysis.Opportunity` (additive,
+  non-breaking; FR-5). Field 12 is free — 131 adds no `Opportunity` proto field (its `is_live` is an
+  internal `_candidate` key). Persisted via the existing `provenance` JSONB (a `"denied"` marker),
+  read-side-derived in `_row_to_opportunity` — no `analysis.opportunities` schema/column change.
 
 ## Config Key Changes
 
@@ -155,18 +191,24 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
    "no symbols configured → strategy never fires" (`strategy_symbols()`'s current empty-list
    short-circuit).
 2. Adding a symbol to `denied_symbols` (via either UI surface, FR-4) removes that
-   `(symbol, strategy)` pair from live-loop evaluation on the next cycle, and from Opportunities
-   attribution on the next compute pass — replaced by a skipped/muted row (FR-5), not a silent
-   absence.
+   `(symbol, strategy)` pair from live-loop **entry** evaluation on the next cycle, and from
+   Opportunities **entry** attribution on the next compute pass — replaced by a skipped/muted row
+   (FR-5), not a silent absence. **AMENDED (entry-only deny, 2026-08-14):** if the owner **holds** that
+   symbol under the strategy, its held/exit (REDUCE) row and exit alerts are **preserved** — the row is
+   flagged `muted=True` in place (one row), not deleted; a standalone muted row replaces the entry
+   candidate only for a denied symbol the owner does **not** hold.
 3. A denied symbol that is *also* covered by a different, non-denying live strategy is unaffected
    for that other strategy — the deny list is strictly per-`(strategy_id, symbol)`.
 4. `manage_strategy` (agent tool) round-trips `denied_symbols` correctly: setting it via the tool is
    reflected in a subsequent `GetStrategy`/`ListStrategies` read, and the `strat-lab` skill's
    documented tool contract reflects the new field.
 5. Existing strategies with a populated `signal_params.symbols` and no `denied_symbols` do not lose
-   coverage of those symbols on migration to this feature (exact backward-compatibility mechanism —
-   e.g. a one-time best-effort translation, or accepting that the allowlist becomes informationally
-   inert once the union-based universe supersedes it — is a `/sdd-design` decision, not fixed here).
+   coverage of those symbols on migration to this feature. **RESOLVED by `/sdd-design` (2026-08-14 —
+   allowlist-as-explicit-universe-override):** a non-empty `signal_params.symbols` is treated *as* the
+   universe (`union = allowlist`, still minus `denied`, with held-exit preserved), applied verbatim —
+   the allowlist is **not** inert and is **not** translated/migrated; the `watchlist ∪ held ∪ signals`
+   union applies only to allowlist-free strategies. So existing allowlist strategies keep exactly their
+   configured symbols (minus any denied) and stay portfolio-independent. See design.md decision 2 / AC-5.
 
 ## Open Questions
 
