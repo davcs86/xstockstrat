@@ -115,15 +115,17 @@ populates more often.
 
 ## Open Risks
 
-- [ ] **Test-helper incompatibility, now precisely scoped**: the test suite's `_list_opps` helper
-  (`test_analysis_servicer.py:3676-3680`) groups `resp.opportunities` by `symbol` alone
-  (`{o.symbol: o for o in resp.opportunities}`) — incompatible with FR-4's requirement that distinct
-  `(symbol, strategy_id)` pairs each produce their own row (e.g. a watchlist-bound strategy A and a
-  live-only strategy B both covering the same symbol). New tests exercising this scenario must group
-  by `(o.symbol, o.strategy_id)` or use a new sibling helper — to be resolved at `/sdd-spec` in the
-  same step that adds the multi-strategy-per-symbol test. Co-locate this with the `_strat_row`
-  `signal_params` extension noted above (round 4) — both are test-harness prerequisites for the same
-  new test class of scenarios, not independent fixes.
+- [x] **Test-helper incompatibility — CLOSED, not required (explicit user decision, 2026-08-14).**
+  The `_list_opps` helper's by-`symbol` grouping (`test_analysis_servicer.py:3676-3680`) is still
+  factually incompatible with asserting FR-4's multi-strategy-per-symbol case in a new test — that
+  finding stands, unchanged. What's closed is the *coverage decision*: the user explicitly chose not
+  to require a dedicated multi-strategy-per-symbol test (or the `_list_opps`/`_strat_row` harness
+  extensions that would enable one) as part of this feature. This is a scope waiver, not a technical
+  resolution — FR-4's underlying *behavior* (distinct `(symbol, strategy_id)` pairs still produce
+  distinct rows, via the existing `_candidate()` dict-key mechanism) is unaffected and still holds;
+  only the dedicated *test* for that specific multi-strategy-same-symbol scenario is waived. If a
+  regression in that exact behavior ever occurs, this suite gap is why it wouldn't be caught —
+  recorded here so that's a known, chosen trade-off, not a silent gap discovered later.
 - [ ] **Compute fan-out, not just membership growth**: `curated`'s bypass of `max_universe_size`
   previously bounded fan-out by a user's own watchlist size (small, user-controlled). Step 5 can now
   curate one row per live strategy covering a signaled symbol — platform-operator-controlled, not
