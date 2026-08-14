@@ -749,7 +749,7 @@ grep -n "Profile" src/components/shared/navGroups.tsx src/components/shared/Plat
 
 ### Step 9 — test: UI E2E test for profile page
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/accounts/profile.spec.ts` — create
