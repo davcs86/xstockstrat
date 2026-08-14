@@ -820,7 +820,7 @@ cd /home/user/xstockstrat/services/xstockstrat-ui && pnpm test:e2e -- --grep "Pr
 
 ### Step 10 — service: Agent client.py get_user_metadata and update_user_metadata
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
