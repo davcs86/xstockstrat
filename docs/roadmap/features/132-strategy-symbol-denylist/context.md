@@ -131,3 +131,30 @@
   remaining decisions (AC-5 backward-compat, `strategy_symbols()` redefinition + owner-scoping,
   mask-vs-full-replace UI write, symbol-page plumbing, compute-cost/truncation fairness, FR-6
   amendment shape).
+
+### Phase 1 round 1 (proposer + adversary) + user steers
+
+- Round-1 adversary verdict NEEDS WORK (no Floor breach). Accepted fixes folded into round 2:
+  C-14 muted-row UI surface (Opportunities card + mobile renderer; branch on `o.muted`; suppress
+  action buttons; **exclude muted rows from the conviction filter/sort** so the min-conviction slider
+  can't silently delete them); ONE shared owner-scoped union builder + parity guard (C-10b, not two
+  divergent unions); AC-5 back-compat = **allowlist-as-universe-when-present** (a non-empty
+  `signal_params.symbols` is treated AS the universe, deny still subtracts — union applies only to
+  allowlist-free strategies, so a strategy scoped to `[AAPL]` doesn't suddenly fire platform-wide);
+  add a real StrategyDefinition round-trip test for `denied_symbols` (plain+masked+masked-clear —
+  the proposer's OR-F citation was a miscite, that test pins the Opportunity mapper); SetStrategyLive
+  precondition edits must target 133's rewritten block and remove only the empty-symbol branch, with
+  the feature-089 "stored-flag-never-fires" rationale recorded (P-03); symbol-page write should prefer
+  server-side denied-set add/remove (or a version guard) over a client RMW of the whole array
+  (lost-update hazard) — round 2 to nail the concrete mechanism.
+- **USER-LOCKED FORK A (deny vs held):** **Entry-only deny (preserve exits).** Deny subtracts from
+  the ENTRY universe + live-loop entry evaluation only; a held position keeps its exit-rule (REDUCE)
+  tracing and exit alerts, annotated as muted rather than deleted. Deviates from FR-1's literal
+  "regardless of held position" — amend product-spec FR-1 + AC-2 accordingly.
+- **USER-LOCKED FORK B (live-loop universe scope):** **Keep active-signals in the firing universe,
+  gated by a NEW per-strategy `signal_eligible` bool flag on `StrategyDefinition`.** Only flagged
+  ("one or two screening") strategies pull the unbounded platform-wide active-signal term; default off
+  → universe = `watchlist ∪ held ∪ allowlist − denied` (owner-scoped, bounded). New proto field
+  (coordinate number: 12=denied_symbols, 13=user_id/133 → 14, verify vs 134), maskable path, wizard
+  toggle, agent param. Folded in as a new FR (FR-8). Round 2 to also decide whether a secondary
+  per-strategy cap / fair-schedule is still warranted on the live loop for the flagged set.
