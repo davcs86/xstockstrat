@@ -22,10 +22,11 @@ _runtime_version.ValidateProtobufRuntimeVersion(
 _sym_db = _symbol_database.Default()
 
 
+from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
 from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1aidentity/v1/identity.proto\x12\x17xstockstrat.identity.v1\x1a\x1fgoogle/protobuf/timestamp.proto\":\n\x17\x41uthenticateUserRequest\x12\r\n\x05\x65mail\x18\x01 \x01(\t\x12\x10\n\x08password\x18\x02 \x01(\t\"\xa6\x01\n\x11\x41uthTokenResponse\x12\x14\n\x0c\x61\x63\x63\x65ss_token\x18\x01 \x01(\t\x12\x15\n\rrefresh_token\x18\x02 \x01(\t\x12.\n\nexpires_at\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x34\n\x06\x63laims\x18\x04 \x01(\x0b\x32$.xstockstrat.identity.v1.TokenClaims\"\xa8\x01\n\x0bTokenClaims\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\r\n\x05\x65mail\x18\x02 \x01(\t\x12\r\n\x05roles\x18\x03 \x03(\t\x12-\n\tissued_at\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\nexpires_at\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x0b\n\x03\x61ud\x18\x06 \x01(\t\"%\n\x14ValidateTokenRequest\x12\r\n\x05token\x18\x01 \x01(\t\",\n\x13RefreshTokenRequest\x12\x15\n\rrefresh_token\x18\x01 \x01(\t\"#\n\x12RevokeTokenRequest\x12\r\n\x05token\x18\x01 \x01(\t\"&\n\x13RevokeTokenResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\"|\n\x0bOAuthClient\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\x15\n\rredirect_uris\x18\x02 \x03(\t\x12\x13\n\x0b\x63lient_name\x18\x03 \x01(\t\x12.\n\ncreated_at\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"H\n\x1aRegisterOAuthClientRequest\x12\x15\n\rredirect_uris\x18\x01 \x03(\t\x12\x13\n\x0b\x63lient_name\x18\x02 \x01(\t\"*\n\x15GetOAuthClientRequest\x12\x11\n\tclient_id\x18\x01 \x01(\t\"z\n\x14IssueAuthCodeRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\x11\n\tclient_id\x18\x02 \x01(\t\x12\x14\n\x0credirect_uri\x18\x03 \x01(\t\x12\x16\n\x0e\x63ode_challenge\x18\x04 \x01(\t\x12\x10\n\x08resource\x18\x05 \x01(\t\"%\n\x15IssueAuthCodeResponse\x12\x0c\n\x04\x63ode\x18\x01 \x01(\t\"y\n\x17\x45xchangeAuthCodeRequest\x12\x0c\n\x04\x63ode\x18\x01 \x01(\t\x12\x15\n\rcode_verifier\x18\x02 \x01(\t\x12\x14\n\x0credirect_uri\x18\x03 \x01(\t\x12\x11\n\tclient_id\x18\x04 \x01(\t\x12\x10\n\x08resource\x18\x05 \x01(\t\"i\n\x12OAuthTokenResponse\x12\x14\n\x0c\x61\x63\x63\x65ss_token\x18\x01 \x01(\t\x12\x12\n\ntoken_type\x18\x02 \x01(\t\x12\x12\n\nexpires_in\x18\x03 \x01(\x03\x12\x15\n\rrefresh_token\x18\x04 \x01(\t\"C\n\x18RefreshOAuthTokenRequest\x12\x15\n\rrefresh_token\x18\x01 \x01(\t\x12\x10\n\x08resource\x18\x02 \x01(\t\"\xb3\x01\n\rAuthorizedApp\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\x13\n\x0b\x63lient_name\x18\x02 \x01(\t\x12\x31\n\rauthorized_at\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x30\n\x0clast_used_at\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x15\n\rredirect_uris\x18\x05 \x03(\t\",\n\x19ListAuthorizedAppsRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\"R\n\x1aListAuthorizedAppsResponse\x12\x34\n\x04\x61pps\x18\x01 \x03(\x0b\x32&.xstockstrat.identity.v1.AuthorizedApp\"@\n\x1aRevokeAuthorizedAppRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\x11\n\tclient_id\x18\x02 \x01(\t\".\n\x1bRevokeAuthorizedAppResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\x32\xf1\t\n\x0fIdentityService\x12p\n\x10\x41uthenticateUser\x12\x30.xstockstrat.identity.v1.AuthenticateUserRequest\x1a*.xstockstrat.identity.v1.AuthTokenResponse\x12\x64\n\rValidateToken\x12-.xstockstrat.identity.v1.ValidateTokenRequest\x1a$.xstockstrat.identity.v1.TokenClaims\x12h\n\x0cRefreshToken\x12,.xstockstrat.identity.v1.RefreshTokenRequest\x1a*.xstockstrat.identity.v1.AuthTokenResponse\x12h\n\x0bRevokeToken\x12+.xstockstrat.identity.v1.RevokeTokenRequest\x1a,.xstockstrat.identity.v1.RevokeTokenResponse\x12p\n\x13RegisterOAuthClient\x12\x33.xstockstrat.identity.v1.RegisterOAuthClientRequest\x1a$.xstockstrat.identity.v1.OAuthClient\x12\x66\n\x0eGetOAuthClient\x12..xstockstrat.identity.v1.GetOAuthClientRequest\x1a$.xstockstrat.identity.v1.OAuthClient\x12n\n\rIssueAuthCode\x12-.xstockstrat.identity.v1.IssueAuthCodeRequest\x1a..xstockstrat.identity.v1.IssueAuthCodeResponse\x12q\n\x10\x45xchangeAuthCode\x12\x30.xstockstrat.identity.v1.ExchangeAuthCodeRequest\x1a+.xstockstrat.identity.v1.OAuthTokenResponse\x12s\n\x11RefreshOAuthToken\x12\x31.xstockstrat.identity.v1.RefreshOAuthTokenRequest\x1a+.xstockstrat.identity.v1.OAuthTokenResponse\x12}\n\x12ListAuthorizedApps\x12\x32.xstockstrat.identity.v1.ListAuthorizedAppsRequest\x1a\x33.xstockstrat.identity.v1.ListAuthorizedAppsResponse\x12\x80\x01\n\x13RevokeAuthorizedApp\x12\x33.xstockstrat.identity.v1.RevokeAuthorizedAppRequest\x1a\x34.xstockstrat.identity.v1.RevokeAuthorizedAppResponseB@Z>github.com/xstockstrat/contracts/gen/go/identity/v1;identityv1b\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x1aidentity/v1/identity.proto\x12\x17xstockstrat.identity.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\":\n\x17\x41uthenticateUserRequest\x12\r\n\x05\x65mail\x18\x01 \x01(\t\x12\x10\n\x08password\x18\x02 \x01(\t\"\xa6\x01\n\x11\x41uthTokenResponse\x12\x14\n\x0c\x61\x63\x63\x65ss_token\x18\x01 \x01(\t\x12\x15\n\rrefresh_token\x18\x02 \x01(\t\x12.\n\nexpires_at\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x34\n\x06\x63laims\x18\x04 \x01(\x0b\x32$.xstockstrat.identity.v1.TokenClaims\"\xa8\x01\n\x0bTokenClaims\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\r\n\x05\x65mail\x18\x02 \x01(\t\x12\r\n\x05roles\x18\x03 \x03(\t\x12-\n\tissued_at\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12.\n\nexpires_at\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x0b\n\x03\x61ud\x18\x06 \x01(\t\"%\n\x14ValidateTokenRequest\x12\r\n\x05token\x18\x01 \x01(\t\",\n\x13RefreshTokenRequest\x12\x15\n\rrefresh_token\x18\x01 \x01(\t\"#\n\x12RevokeTokenRequest\x12\r\n\x05token\x18\x01 \x01(\t\"&\n\x13RevokeTokenResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\"|\n\x0bOAuthClient\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\x15\n\rredirect_uris\x18\x02 \x03(\t\x12\x13\n\x0b\x63lient_name\x18\x03 \x01(\t\x12.\n\ncreated_at\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\"H\n\x1aRegisterOAuthClientRequest\x12\x15\n\rredirect_uris\x18\x01 \x03(\t\x12\x13\n\x0b\x63lient_name\x18\x02 \x01(\t\"*\n\x15GetOAuthClientRequest\x12\x11\n\tclient_id\x18\x01 \x01(\t\"z\n\x14IssueAuthCodeRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\x11\n\tclient_id\x18\x02 \x01(\t\x12\x14\n\x0credirect_uri\x18\x03 \x01(\t\x12\x16\n\x0e\x63ode_challenge\x18\x04 \x01(\t\x12\x10\n\x08resource\x18\x05 \x01(\t\"%\n\x15IssueAuthCodeResponse\x12\x0c\n\x04\x63ode\x18\x01 \x01(\t\"y\n\x17\x45xchangeAuthCodeRequest\x12\x0c\n\x04\x63ode\x18\x01 \x01(\t\x12\x15\n\rcode_verifier\x18\x02 \x01(\t\x12\x14\n\x0credirect_uri\x18\x03 \x01(\t\x12\x11\n\tclient_id\x18\x04 \x01(\t\x12\x10\n\x08resource\x18\x05 \x01(\t\"i\n\x12OAuthTokenResponse\x12\x14\n\x0c\x61\x63\x63\x65ss_token\x18\x01 \x01(\t\x12\x12\n\ntoken_type\x18\x02 \x01(\t\x12\x12\n\nexpires_in\x18\x03 \x01(\x03\x12\x15\n\rrefresh_token\x18\x04 \x01(\t\"C\n\x18RefreshOAuthTokenRequest\x12\x15\n\rrefresh_token\x18\x01 \x01(\t\x12\x10\n\x08resource\x18\x02 \x01(\t\"\xb3\x01\n\rAuthorizedApp\x12\x11\n\tclient_id\x18\x01 \x01(\t\x12\x13\n\x0b\x63lient_name\x18\x02 \x01(\t\x12\x31\n\rauthorized_at\x18\x03 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x30\n\x0clast_used_at\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.Timestamp\x12\x15\n\rredirect_uris\x18\x05 \x03(\t\",\n\x19ListAuthorizedAppsRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\"R\n\x1aListAuthorizedAppsResponse\x12\x34\n\x04\x61pps\x18\x01 \x03(\x0b\x32&.xstockstrat.identity.v1.AuthorizedApp\"@\n\x1aRevokeAuthorizedAppRequest\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\x11\n\tclient_id\x18\x02 \x01(\t\".\n\x1bRevokeAuthorizedAppResponse\x12\x0f\n\x07success\x18\x01 \x01(\x08\"\xdc\x01\n\x0cUserMetadata\x12\x0f\n\x07user_id\x18\x01 \x01(\t\x12\r\n\x05\x65mail\x18\x02 \x01(\t\x12\x12\n\x05phone\x18\x03 \x01(\tH\x00\x88\x01\x01\x12\x19\n\x0c\x64isplay_name\x18\x04 \x01(\tH\x01\x88\x01\x01\x12)\n\x08metadata\x18\x05 \x01(\x0b\x32\x17.google.protobuf.Struct\x12\x37\n\x13metadata_updated_at\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.TimestampB\x08\n\x06_phoneB\x0f\n\r_display_name\"\x18\n\x16GetUserMetadataRequest\"W\n\x17GetUserMetadataResponse\x12<\n\ruser_metadata\x18\x01 \x01(\x0b\x32%.xstockstrat.identity.v1.UserMetadata\"\xa2\x01\n\x19UpdateUserMetadataRequest\x12\x12\n\x05phone\x18\x01 \x01(\tH\x00\x88\x01\x01\x12\x19\n\x0c\x64isplay_name\x18\x02 \x01(\tH\x01\x88\x01\x01\x12.\n\x08metadata\x18\x03 \x01(\x0b\x32\x17.google.protobuf.StructH\x02\x88\x01\x01\x42\x08\n\x06_phoneB\x0f\n\r_display_nameB\x0b\n\t_metadata\"Z\n\x1aUpdateUserMetadataResponse\x12<\n\ruser_metadata\x18\x01 \x01(\x0b\x32%.xstockstrat.identity.v1.UserMetadata2\xe6\x0b\n\x0fIdentityService\x12p\n\x10\x41uthenticateUser\x12\x30.xstockstrat.identity.v1.AuthenticateUserRequest\x1a*.xstockstrat.identity.v1.AuthTokenResponse\x12\x64\n\rValidateToken\x12-.xstockstrat.identity.v1.ValidateTokenRequest\x1a$.xstockstrat.identity.v1.TokenClaims\x12h\n\x0cRefreshToken\x12,.xstockstrat.identity.v1.RefreshTokenRequest\x1a*.xstockstrat.identity.v1.AuthTokenResponse\x12h\n\x0bRevokeToken\x12+.xstockstrat.identity.v1.RevokeTokenRequest\x1a,.xstockstrat.identity.v1.RevokeTokenResponse\x12p\n\x13RegisterOAuthClient\x12\x33.xstockstrat.identity.v1.RegisterOAuthClientRequest\x1a$.xstockstrat.identity.v1.OAuthClient\x12\x66\n\x0eGetOAuthClient\x12..xstockstrat.identity.v1.GetOAuthClientRequest\x1a$.xstockstrat.identity.v1.OAuthClient\x12n\n\rIssueAuthCode\x12-.xstockstrat.identity.v1.IssueAuthCodeRequest\x1a..xstockstrat.identity.v1.IssueAuthCodeResponse\x12q\n\x10\x45xchangeAuthCode\x12\x30.xstockstrat.identity.v1.ExchangeAuthCodeRequest\x1a+.xstockstrat.identity.v1.OAuthTokenResponse\x12s\n\x11RefreshOAuthToken\x12\x31.xstockstrat.identity.v1.RefreshOAuthTokenRequest\x1a+.xstockstrat.identity.v1.OAuthTokenResponse\x12}\n\x12ListAuthorizedApps\x12\x32.xstockstrat.identity.v1.ListAuthorizedAppsRequest\x1a\x33.xstockstrat.identity.v1.ListAuthorizedAppsResponse\x12\x80\x01\n\x13RevokeAuthorizedApp\x12\x33.xstockstrat.identity.v1.RevokeAuthorizedAppRequest\x1a\x34.xstockstrat.identity.v1.RevokeAuthorizedAppResponse\x12t\n\x0fGetUserMetadata\x12/.xstockstrat.identity.v1.GetUserMetadataRequest\x1a\x30.xstockstrat.identity.v1.GetUserMetadataResponse\x12}\n\x12UpdateUserMetadata\x12\x32.xstockstrat.identity.v1.UpdateUserMetadataRequest\x1a\x33.xstockstrat.identity.v1.UpdateUserMetadataResponseB@Z>github.com/xstockstrat/contracts/gen/go/identity/v1;identityv1b\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -33,46 +34,56 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'identity.v1.identity_pb2', 
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'Z>github.com/xstockstrat/contracts/gen/go/identity/v1;identityv1'
-  _globals['_AUTHENTICATEUSERREQUEST']._serialized_start=88
-  _globals['_AUTHENTICATEUSERREQUEST']._serialized_end=146
-  _globals['_AUTHTOKENRESPONSE']._serialized_start=149
-  _globals['_AUTHTOKENRESPONSE']._serialized_end=315
-  _globals['_TOKENCLAIMS']._serialized_start=318
-  _globals['_TOKENCLAIMS']._serialized_end=486
-  _globals['_VALIDATETOKENREQUEST']._serialized_start=488
-  _globals['_VALIDATETOKENREQUEST']._serialized_end=525
-  _globals['_REFRESHTOKENREQUEST']._serialized_start=527
-  _globals['_REFRESHTOKENREQUEST']._serialized_end=571
-  _globals['_REVOKETOKENREQUEST']._serialized_start=573
-  _globals['_REVOKETOKENREQUEST']._serialized_end=608
-  _globals['_REVOKETOKENRESPONSE']._serialized_start=610
-  _globals['_REVOKETOKENRESPONSE']._serialized_end=648
-  _globals['_OAUTHCLIENT']._serialized_start=650
-  _globals['_OAUTHCLIENT']._serialized_end=774
-  _globals['_REGISTEROAUTHCLIENTREQUEST']._serialized_start=776
-  _globals['_REGISTEROAUTHCLIENTREQUEST']._serialized_end=848
-  _globals['_GETOAUTHCLIENTREQUEST']._serialized_start=850
-  _globals['_GETOAUTHCLIENTREQUEST']._serialized_end=892
-  _globals['_ISSUEAUTHCODEREQUEST']._serialized_start=894
-  _globals['_ISSUEAUTHCODEREQUEST']._serialized_end=1016
-  _globals['_ISSUEAUTHCODERESPONSE']._serialized_start=1018
-  _globals['_ISSUEAUTHCODERESPONSE']._serialized_end=1055
-  _globals['_EXCHANGEAUTHCODEREQUEST']._serialized_start=1057
-  _globals['_EXCHANGEAUTHCODEREQUEST']._serialized_end=1178
-  _globals['_OAUTHTOKENRESPONSE']._serialized_start=1180
-  _globals['_OAUTHTOKENRESPONSE']._serialized_end=1285
-  _globals['_REFRESHOAUTHTOKENREQUEST']._serialized_start=1287
-  _globals['_REFRESHOAUTHTOKENREQUEST']._serialized_end=1354
-  _globals['_AUTHORIZEDAPP']._serialized_start=1357
-  _globals['_AUTHORIZEDAPP']._serialized_end=1536
-  _globals['_LISTAUTHORIZEDAPPSREQUEST']._serialized_start=1538
-  _globals['_LISTAUTHORIZEDAPPSREQUEST']._serialized_end=1582
-  _globals['_LISTAUTHORIZEDAPPSRESPONSE']._serialized_start=1584
-  _globals['_LISTAUTHORIZEDAPPSRESPONSE']._serialized_end=1666
-  _globals['_REVOKEAUTHORIZEDAPPREQUEST']._serialized_start=1668
-  _globals['_REVOKEAUTHORIZEDAPPREQUEST']._serialized_end=1732
-  _globals['_REVOKEAUTHORIZEDAPPRESPONSE']._serialized_start=1734
-  _globals['_REVOKEAUTHORIZEDAPPRESPONSE']._serialized_end=1780
-  _globals['_IDENTITYSERVICE']._serialized_start=1783
-  _globals['_IDENTITYSERVICE']._serialized_end=3048
+  _globals['_AUTHENTICATEUSERREQUEST']._serialized_start=118
+  _globals['_AUTHENTICATEUSERREQUEST']._serialized_end=176
+  _globals['_AUTHTOKENRESPONSE']._serialized_start=179
+  _globals['_AUTHTOKENRESPONSE']._serialized_end=345
+  _globals['_TOKENCLAIMS']._serialized_start=348
+  _globals['_TOKENCLAIMS']._serialized_end=516
+  _globals['_VALIDATETOKENREQUEST']._serialized_start=518
+  _globals['_VALIDATETOKENREQUEST']._serialized_end=555
+  _globals['_REFRESHTOKENREQUEST']._serialized_start=557
+  _globals['_REFRESHTOKENREQUEST']._serialized_end=601
+  _globals['_REVOKETOKENREQUEST']._serialized_start=603
+  _globals['_REVOKETOKENREQUEST']._serialized_end=638
+  _globals['_REVOKETOKENRESPONSE']._serialized_start=640
+  _globals['_REVOKETOKENRESPONSE']._serialized_end=678
+  _globals['_OAUTHCLIENT']._serialized_start=680
+  _globals['_OAUTHCLIENT']._serialized_end=804
+  _globals['_REGISTEROAUTHCLIENTREQUEST']._serialized_start=806
+  _globals['_REGISTEROAUTHCLIENTREQUEST']._serialized_end=878
+  _globals['_GETOAUTHCLIENTREQUEST']._serialized_start=880
+  _globals['_GETOAUTHCLIENTREQUEST']._serialized_end=922
+  _globals['_ISSUEAUTHCODEREQUEST']._serialized_start=924
+  _globals['_ISSUEAUTHCODEREQUEST']._serialized_end=1046
+  _globals['_ISSUEAUTHCODERESPONSE']._serialized_start=1048
+  _globals['_ISSUEAUTHCODERESPONSE']._serialized_end=1085
+  _globals['_EXCHANGEAUTHCODEREQUEST']._serialized_start=1087
+  _globals['_EXCHANGEAUTHCODEREQUEST']._serialized_end=1208
+  _globals['_OAUTHTOKENRESPONSE']._serialized_start=1210
+  _globals['_OAUTHTOKENRESPONSE']._serialized_end=1315
+  _globals['_REFRESHOAUTHTOKENREQUEST']._serialized_start=1317
+  _globals['_REFRESHOAUTHTOKENREQUEST']._serialized_end=1384
+  _globals['_AUTHORIZEDAPP']._serialized_start=1387
+  _globals['_AUTHORIZEDAPP']._serialized_end=1566
+  _globals['_LISTAUTHORIZEDAPPSREQUEST']._serialized_start=1568
+  _globals['_LISTAUTHORIZEDAPPSREQUEST']._serialized_end=1612
+  _globals['_LISTAUTHORIZEDAPPSRESPONSE']._serialized_start=1614
+  _globals['_LISTAUTHORIZEDAPPSRESPONSE']._serialized_end=1696
+  _globals['_REVOKEAUTHORIZEDAPPREQUEST']._serialized_start=1698
+  _globals['_REVOKEAUTHORIZEDAPPREQUEST']._serialized_end=1762
+  _globals['_REVOKEAUTHORIZEDAPPRESPONSE']._serialized_start=1764
+  _globals['_REVOKEAUTHORIZEDAPPRESPONSE']._serialized_end=1810
+  _globals['_USERMETADATA']._serialized_start=1813
+  _globals['_USERMETADATA']._serialized_end=2033
+  _globals['_GETUSERMETADATAREQUEST']._serialized_start=2035
+  _globals['_GETUSERMETADATAREQUEST']._serialized_end=2059
+  _globals['_GETUSERMETADATARESPONSE']._serialized_start=2061
+  _globals['_GETUSERMETADATARESPONSE']._serialized_end=2148
+  _globals['_UPDATEUSERMETADATAREQUEST']._serialized_start=2151
+  _globals['_UPDATEUSERMETADATAREQUEST']._serialized_end=2313
+  _globals['_UPDATEUSERMETADATARESPONSE']._serialized_start=2315
+  _globals['_UPDATEUSERMETADATARESPONSE']._serialized_end=2405
+  _globals['_IDENTITYSERVICE']._serialized_start=2408
+  _globals['_IDENTITYSERVICE']._serialized_end=3918
 # @@protoc_insertion_point(module_scope)

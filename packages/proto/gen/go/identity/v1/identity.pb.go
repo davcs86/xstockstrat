@@ -9,6 +9,7 @@ package identityv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	structpb "google.golang.org/protobuf/types/known/structpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
@@ -1146,11 +1147,280 @@ func (x *RevokeAuthorizedAppResponse) GetSuccess() bool {
 	return false
 }
 
+// ── User profile metadata (feature 130) ──────────────────────────────────
+type UserMetadata struct {
+	state             protoimpl.MessageState `protogen:"open.v1"`
+	UserId            string                 `protobuf:"bytes,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	Email             string                 `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
+	Phone             *string                `protobuf:"bytes,3,opt,name=phone,proto3,oneof" json:"phone,omitempty"`
+	DisplayName       *string                `protobuf:"bytes,4,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
+	Metadata          *structpb.Struct       `protobuf:"bytes,5,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	MetadataUpdatedAt *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=metadata_updated_at,json=metadataUpdatedAt,proto3" json:"metadata_updated_at,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
+}
+
+func (x *UserMetadata) Reset() {
+	*x = UserMetadata{}
+	mi := &file_identity_v1_identity_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UserMetadata) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UserMetadata) ProtoMessage() {}
+
+func (x *UserMetadata) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UserMetadata.ProtoReflect.Descriptor instead.
+func (*UserMetadata) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *UserMetadata) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
+}
+
+func (x *UserMetadata) GetEmail() string {
+	if x != nil {
+		return x.Email
+	}
+	return ""
+}
+
+func (x *UserMetadata) GetPhone() string {
+	if x != nil && x.Phone != nil {
+		return *x.Phone
+	}
+	return ""
+}
+
+func (x *UserMetadata) GetDisplayName() string {
+	if x != nil && x.DisplayName != nil {
+		return *x.DisplayName
+	}
+	return ""
+}
+
+func (x *UserMetadata) GetMetadata() *structpb.Struct {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
+func (x *UserMetadata) GetMetadataUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.MetadataUpdatedAt
+	}
+	return nil
+}
+
+type GetUserMetadataRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetUserMetadataRequest) Reset() {
+	*x = GetUserMetadataRequest{}
+	mi := &file_identity_v1_identity_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetUserMetadataRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetUserMetadataRequest) ProtoMessage() {}
+
+func (x *GetUserMetadataRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetUserMetadataRequest.ProtoReflect.Descriptor instead.
+func (*GetUserMetadataRequest) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{21}
+}
+
+type GetUserMetadataResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserMetadata  *UserMetadata          `protobuf:"bytes,1,opt,name=user_metadata,json=userMetadata,proto3" json:"user_metadata,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetUserMetadataResponse) Reset() {
+	*x = GetUserMetadataResponse{}
+	mi := &file_identity_v1_identity_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetUserMetadataResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetUserMetadataResponse) ProtoMessage() {}
+
+func (x *GetUserMetadataResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetUserMetadataResponse.ProtoReflect.Descriptor instead.
+func (*GetUserMetadataResponse) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *GetUserMetadataResponse) GetUserMetadata() *UserMetadata {
+	if x != nil {
+		return x.UserMetadata
+	}
+	return nil
+}
+
+type UpdateUserMetadataRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Phone         *string                `protobuf:"bytes,1,opt,name=phone,proto3,oneof" json:"phone,omitempty"`
+	DisplayName   *string                `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
+	Metadata      *structpb.Struct       `protobuf:"bytes,3,opt,name=metadata,proto3,oneof" json:"metadata,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateUserMetadataRequest) Reset() {
+	*x = UpdateUserMetadataRequest{}
+	mi := &file_identity_v1_identity_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateUserMetadataRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateUserMetadataRequest) ProtoMessage() {}
+
+func (x *UpdateUserMetadataRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateUserMetadataRequest.ProtoReflect.Descriptor instead.
+func (*UpdateUserMetadataRequest) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *UpdateUserMetadataRequest) GetPhone() string {
+	if x != nil && x.Phone != nil {
+		return *x.Phone
+	}
+	return ""
+}
+
+func (x *UpdateUserMetadataRequest) GetDisplayName() string {
+	if x != nil && x.DisplayName != nil {
+		return *x.DisplayName
+	}
+	return ""
+}
+
+func (x *UpdateUserMetadataRequest) GetMetadata() *structpb.Struct {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
+type UpdateUserMetadataResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserMetadata  *UserMetadata          `protobuf:"bytes,1,opt,name=user_metadata,json=userMetadata,proto3" json:"user_metadata,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateUserMetadataResponse) Reset() {
+	*x = UpdateUserMetadataResponse{}
+	mi := &file_identity_v1_identity_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateUserMetadataResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateUserMetadataResponse) ProtoMessage() {}
+
+func (x *UpdateUserMetadataResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_identity_v1_identity_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateUserMetadataResponse.ProtoReflect.Descriptor instead.
+func (*UpdateUserMetadataResponse) Descriptor() ([]byte, []int) {
+	return file_identity_v1_identity_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *UpdateUserMetadataResponse) GetUserMetadata() *UserMetadata {
+	if x != nil {
+		return x.UserMetadata
+	}
+	return nil
+}
+
 var File_identity_v1_identity_proto protoreflect.FileDescriptor
 
 const file_identity_v1_identity_proto_rawDesc = "" +
 	"\n" +
-	"\x1aidentity/v1/identity.proto\x12\x17xstockstrat.identity.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"K\n" +
+	"\x1aidentity/v1/identity.proto\x12\x17xstockstrat.identity.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"K\n" +
 	"\x17AuthenticateUserRequest\x12\x14\n" +
 	"\x05email\x18\x01 \x01(\tR\x05email\x12\x1a\n" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\"\xd4\x01\n" +
@@ -1229,7 +1499,28 @@ const file_identity_v1_identity_proto_rawDesc = "" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1b\n" +
 	"\tclient_id\x18\x02 \x01(\tR\bclientId\"7\n" +
 	"\x1bRevokeAuthorizedAppResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess2\xf1\t\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"\x9c\x02\n" +
+	"\fUserMetadata\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x14\n" +
+	"\x05email\x18\x02 \x01(\tR\x05email\x12\x19\n" +
+	"\x05phone\x18\x03 \x01(\tH\x00R\x05phone\x88\x01\x01\x12&\n" +
+	"\fdisplay_name\x18\x04 \x01(\tH\x01R\vdisplayName\x88\x01\x01\x123\n" +
+	"\bmetadata\x18\x05 \x01(\v2\x17.google.protobuf.StructR\bmetadata\x12J\n" +
+	"\x13metadata_updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x11metadataUpdatedAtB\b\n" +
+	"\x06_phoneB\x0f\n" +
+	"\r_display_name\"\x18\n" +
+	"\x16GetUserMetadataRequest\"e\n" +
+	"\x17GetUserMetadataResponse\x12J\n" +
+	"\ruser_metadata\x18\x01 \x01(\v2%.xstockstrat.identity.v1.UserMetadataR\fuserMetadata\"\xc0\x01\n" +
+	"\x19UpdateUserMetadataRequest\x12\x19\n" +
+	"\x05phone\x18\x01 \x01(\tH\x00R\x05phone\x88\x01\x01\x12&\n" +
+	"\fdisplay_name\x18\x02 \x01(\tH\x01R\vdisplayName\x88\x01\x01\x128\n" +
+	"\bmetadata\x18\x03 \x01(\v2\x17.google.protobuf.StructH\x02R\bmetadata\x88\x01\x01B\b\n" +
+	"\x06_phoneB\x0f\n" +
+	"\r_display_nameB\v\n" +
+	"\t_metadata\"h\n" +
+	"\x1aUpdateUserMetadataResponse\x12J\n" +
+	"\ruser_metadata\x18\x01 \x01(\v2%.xstockstrat.identity.v1.UserMetadataR\fuserMetadata2\xe6\v\n" +
 	"\x0fIdentityService\x12p\n" +
 	"\x10AuthenticateUser\x120.xstockstrat.identity.v1.AuthenticateUserRequest\x1a*.xstockstrat.identity.v1.AuthTokenResponse\x12d\n" +
 	"\rValidateToken\x12-.xstockstrat.identity.v1.ValidateTokenRequest\x1a$.xstockstrat.identity.v1.TokenClaims\x12h\n" +
@@ -1241,7 +1532,9 @@ const file_identity_v1_identity_proto_rawDesc = "" +
 	"\x10ExchangeAuthCode\x120.xstockstrat.identity.v1.ExchangeAuthCodeRequest\x1a+.xstockstrat.identity.v1.OAuthTokenResponse\x12s\n" +
 	"\x11RefreshOAuthToken\x121.xstockstrat.identity.v1.RefreshOAuthTokenRequest\x1a+.xstockstrat.identity.v1.OAuthTokenResponse\x12}\n" +
 	"\x12ListAuthorizedApps\x122.xstockstrat.identity.v1.ListAuthorizedAppsRequest\x1a3.xstockstrat.identity.v1.ListAuthorizedAppsResponse\x12\x80\x01\n" +
-	"\x13RevokeAuthorizedApp\x123.xstockstrat.identity.v1.RevokeAuthorizedAppRequest\x1a4.xstockstrat.identity.v1.RevokeAuthorizedAppResponseB@Z>github.com/xstockstrat/contracts/gen/go/identity/v1;identityv1b\x06proto3"
+	"\x13RevokeAuthorizedApp\x123.xstockstrat.identity.v1.RevokeAuthorizedAppRequest\x1a4.xstockstrat.identity.v1.RevokeAuthorizedAppResponse\x12t\n" +
+	"\x0fGetUserMetadata\x12/.xstockstrat.identity.v1.GetUserMetadataRequest\x1a0.xstockstrat.identity.v1.GetUserMetadataResponse\x12}\n" +
+	"\x12UpdateUserMetadata\x122.xstockstrat.identity.v1.UpdateUserMetadataRequest\x1a3.xstockstrat.identity.v1.UpdateUserMetadataResponseB@Z>github.com/xstockstrat/contracts/gen/go/identity/v1;identityv1b\x06proto3"
 
 var (
 	file_identity_v1_identity_proto_rawDescOnce sync.Once
@@ -1255,7 +1548,7 @@ func file_identity_v1_identity_proto_rawDescGZIP() []byte {
 	return file_identity_v1_identity_proto_rawDescData
 }
 
-var file_identity_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_identity_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_identity_v1_identity_proto_goTypes = []any{
 	(*AuthenticateUserRequest)(nil),     // 0: xstockstrat.identity.v1.AuthenticateUserRequest
 	(*AuthTokenResponse)(nil),           // 1: xstockstrat.identity.v1.AuthTokenResponse
@@ -1277,44 +1570,59 @@ var file_identity_v1_identity_proto_goTypes = []any{
 	(*ListAuthorizedAppsResponse)(nil),  // 17: xstockstrat.identity.v1.ListAuthorizedAppsResponse
 	(*RevokeAuthorizedAppRequest)(nil),  // 18: xstockstrat.identity.v1.RevokeAuthorizedAppRequest
 	(*RevokeAuthorizedAppResponse)(nil), // 19: xstockstrat.identity.v1.RevokeAuthorizedAppResponse
-	(*timestamppb.Timestamp)(nil),       // 20: google.protobuf.Timestamp
+	(*UserMetadata)(nil),                // 20: xstockstrat.identity.v1.UserMetadata
+	(*GetUserMetadataRequest)(nil),      // 21: xstockstrat.identity.v1.GetUserMetadataRequest
+	(*GetUserMetadataResponse)(nil),     // 22: xstockstrat.identity.v1.GetUserMetadataResponse
+	(*UpdateUserMetadataRequest)(nil),   // 23: xstockstrat.identity.v1.UpdateUserMetadataRequest
+	(*UpdateUserMetadataResponse)(nil),  // 24: xstockstrat.identity.v1.UpdateUserMetadataResponse
+	(*timestamppb.Timestamp)(nil),       // 25: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),             // 26: google.protobuf.Struct
 }
 var file_identity_v1_identity_proto_depIdxs = []int32{
-	20, // 0: xstockstrat.identity.v1.AuthTokenResponse.expires_at:type_name -> google.protobuf.Timestamp
+	25, // 0: xstockstrat.identity.v1.AuthTokenResponse.expires_at:type_name -> google.protobuf.Timestamp
 	2,  // 1: xstockstrat.identity.v1.AuthTokenResponse.claims:type_name -> xstockstrat.identity.v1.TokenClaims
-	20, // 2: xstockstrat.identity.v1.TokenClaims.issued_at:type_name -> google.protobuf.Timestamp
-	20, // 3: xstockstrat.identity.v1.TokenClaims.expires_at:type_name -> google.protobuf.Timestamp
-	20, // 4: xstockstrat.identity.v1.OAuthClient.created_at:type_name -> google.protobuf.Timestamp
-	20, // 5: xstockstrat.identity.v1.AuthorizedApp.authorized_at:type_name -> google.protobuf.Timestamp
-	20, // 6: xstockstrat.identity.v1.AuthorizedApp.last_used_at:type_name -> google.protobuf.Timestamp
+	25, // 2: xstockstrat.identity.v1.TokenClaims.issued_at:type_name -> google.protobuf.Timestamp
+	25, // 3: xstockstrat.identity.v1.TokenClaims.expires_at:type_name -> google.protobuf.Timestamp
+	25, // 4: xstockstrat.identity.v1.OAuthClient.created_at:type_name -> google.protobuf.Timestamp
+	25, // 5: xstockstrat.identity.v1.AuthorizedApp.authorized_at:type_name -> google.protobuf.Timestamp
+	25, // 6: xstockstrat.identity.v1.AuthorizedApp.last_used_at:type_name -> google.protobuf.Timestamp
 	15, // 7: xstockstrat.identity.v1.ListAuthorizedAppsResponse.apps:type_name -> xstockstrat.identity.v1.AuthorizedApp
-	0,  // 8: xstockstrat.identity.v1.IdentityService.AuthenticateUser:input_type -> xstockstrat.identity.v1.AuthenticateUserRequest
-	3,  // 9: xstockstrat.identity.v1.IdentityService.ValidateToken:input_type -> xstockstrat.identity.v1.ValidateTokenRequest
-	4,  // 10: xstockstrat.identity.v1.IdentityService.RefreshToken:input_type -> xstockstrat.identity.v1.RefreshTokenRequest
-	5,  // 11: xstockstrat.identity.v1.IdentityService.RevokeToken:input_type -> xstockstrat.identity.v1.RevokeTokenRequest
-	8,  // 12: xstockstrat.identity.v1.IdentityService.RegisterOAuthClient:input_type -> xstockstrat.identity.v1.RegisterOAuthClientRequest
-	9,  // 13: xstockstrat.identity.v1.IdentityService.GetOAuthClient:input_type -> xstockstrat.identity.v1.GetOAuthClientRequest
-	10, // 14: xstockstrat.identity.v1.IdentityService.IssueAuthCode:input_type -> xstockstrat.identity.v1.IssueAuthCodeRequest
-	12, // 15: xstockstrat.identity.v1.IdentityService.ExchangeAuthCode:input_type -> xstockstrat.identity.v1.ExchangeAuthCodeRequest
-	14, // 16: xstockstrat.identity.v1.IdentityService.RefreshOAuthToken:input_type -> xstockstrat.identity.v1.RefreshOAuthTokenRequest
-	16, // 17: xstockstrat.identity.v1.IdentityService.ListAuthorizedApps:input_type -> xstockstrat.identity.v1.ListAuthorizedAppsRequest
-	18, // 18: xstockstrat.identity.v1.IdentityService.RevokeAuthorizedApp:input_type -> xstockstrat.identity.v1.RevokeAuthorizedAppRequest
-	1,  // 19: xstockstrat.identity.v1.IdentityService.AuthenticateUser:output_type -> xstockstrat.identity.v1.AuthTokenResponse
-	2,  // 20: xstockstrat.identity.v1.IdentityService.ValidateToken:output_type -> xstockstrat.identity.v1.TokenClaims
-	1,  // 21: xstockstrat.identity.v1.IdentityService.RefreshToken:output_type -> xstockstrat.identity.v1.AuthTokenResponse
-	6,  // 22: xstockstrat.identity.v1.IdentityService.RevokeToken:output_type -> xstockstrat.identity.v1.RevokeTokenResponse
-	7,  // 23: xstockstrat.identity.v1.IdentityService.RegisterOAuthClient:output_type -> xstockstrat.identity.v1.OAuthClient
-	7,  // 24: xstockstrat.identity.v1.IdentityService.GetOAuthClient:output_type -> xstockstrat.identity.v1.OAuthClient
-	11, // 25: xstockstrat.identity.v1.IdentityService.IssueAuthCode:output_type -> xstockstrat.identity.v1.IssueAuthCodeResponse
-	13, // 26: xstockstrat.identity.v1.IdentityService.ExchangeAuthCode:output_type -> xstockstrat.identity.v1.OAuthTokenResponse
-	13, // 27: xstockstrat.identity.v1.IdentityService.RefreshOAuthToken:output_type -> xstockstrat.identity.v1.OAuthTokenResponse
-	17, // 28: xstockstrat.identity.v1.IdentityService.ListAuthorizedApps:output_type -> xstockstrat.identity.v1.ListAuthorizedAppsResponse
-	19, // 29: xstockstrat.identity.v1.IdentityService.RevokeAuthorizedApp:output_type -> xstockstrat.identity.v1.RevokeAuthorizedAppResponse
-	19, // [19:30] is the sub-list for method output_type
-	8,  // [8:19] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	26, // 8: xstockstrat.identity.v1.UserMetadata.metadata:type_name -> google.protobuf.Struct
+	25, // 9: xstockstrat.identity.v1.UserMetadata.metadata_updated_at:type_name -> google.protobuf.Timestamp
+	20, // 10: xstockstrat.identity.v1.GetUserMetadataResponse.user_metadata:type_name -> xstockstrat.identity.v1.UserMetadata
+	26, // 11: xstockstrat.identity.v1.UpdateUserMetadataRequest.metadata:type_name -> google.protobuf.Struct
+	20, // 12: xstockstrat.identity.v1.UpdateUserMetadataResponse.user_metadata:type_name -> xstockstrat.identity.v1.UserMetadata
+	0,  // 13: xstockstrat.identity.v1.IdentityService.AuthenticateUser:input_type -> xstockstrat.identity.v1.AuthenticateUserRequest
+	3,  // 14: xstockstrat.identity.v1.IdentityService.ValidateToken:input_type -> xstockstrat.identity.v1.ValidateTokenRequest
+	4,  // 15: xstockstrat.identity.v1.IdentityService.RefreshToken:input_type -> xstockstrat.identity.v1.RefreshTokenRequest
+	5,  // 16: xstockstrat.identity.v1.IdentityService.RevokeToken:input_type -> xstockstrat.identity.v1.RevokeTokenRequest
+	8,  // 17: xstockstrat.identity.v1.IdentityService.RegisterOAuthClient:input_type -> xstockstrat.identity.v1.RegisterOAuthClientRequest
+	9,  // 18: xstockstrat.identity.v1.IdentityService.GetOAuthClient:input_type -> xstockstrat.identity.v1.GetOAuthClientRequest
+	10, // 19: xstockstrat.identity.v1.IdentityService.IssueAuthCode:input_type -> xstockstrat.identity.v1.IssueAuthCodeRequest
+	12, // 20: xstockstrat.identity.v1.IdentityService.ExchangeAuthCode:input_type -> xstockstrat.identity.v1.ExchangeAuthCodeRequest
+	14, // 21: xstockstrat.identity.v1.IdentityService.RefreshOAuthToken:input_type -> xstockstrat.identity.v1.RefreshOAuthTokenRequest
+	16, // 22: xstockstrat.identity.v1.IdentityService.ListAuthorizedApps:input_type -> xstockstrat.identity.v1.ListAuthorizedAppsRequest
+	18, // 23: xstockstrat.identity.v1.IdentityService.RevokeAuthorizedApp:input_type -> xstockstrat.identity.v1.RevokeAuthorizedAppRequest
+	21, // 24: xstockstrat.identity.v1.IdentityService.GetUserMetadata:input_type -> xstockstrat.identity.v1.GetUserMetadataRequest
+	23, // 25: xstockstrat.identity.v1.IdentityService.UpdateUserMetadata:input_type -> xstockstrat.identity.v1.UpdateUserMetadataRequest
+	1,  // 26: xstockstrat.identity.v1.IdentityService.AuthenticateUser:output_type -> xstockstrat.identity.v1.AuthTokenResponse
+	2,  // 27: xstockstrat.identity.v1.IdentityService.ValidateToken:output_type -> xstockstrat.identity.v1.TokenClaims
+	1,  // 28: xstockstrat.identity.v1.IdentityService.RefreshToken:output_type -> xstockstrat.identity.v1.AuthTokenResponse
+	6,  // 29: xstockstrat.identity.v1.IdentityService.RevokeToken:output_type -> xstockstrat.identity.v1.RevokeTokenResponse
+	7,  // 30: xstockstrat.identity.v1.IdentityService.RegisterOAuthClient:output_type -> xstockstrat.identity.v1.OAuthClient
+	7,  // 31: xstockstrat.identity.v1.IdentityService.GetOAuthClient:output_type -> xstockstrat.identity.v1.OAuthClient
+	11, // 32: xstockstrat.identity.v1.IdentityService.IssueAuthCode:output_type -> xstockstrat.identity.v1.IssueAuthCodeResponse
+	13, // 33: xstockstrat.identity.v1.IdentityService.ExchangeAuthCode:output_type -> xstockstrat.identity.v1.OAuthTokenResponse
+	13, // 34: xstockstrat.identity.v1.IdentityService.RefreshOAuthToken:output_type -> xstockstrat.identity.v1.OAuthTokenResponse
+	17, // 35: xstockstrat.identity.v1.IdentityService.ListAuthorizedApps:output_type -> xstockstrat.identity.v1.ListAuthorizedAppsResponse
+	19, // 36: xstockstrat.identity.v1.IdentityService.RevokeAuthorizedApp:output_type -> xstockstrat.identity.v1.RevokeAuthorizedAppResponse
+	22, // 37: xstockstrat.identity.v1.IdentityService.GetUserMetadata:output_type -> xstockstrat.identity.v1.GetUserMetadataResponse
+	24, // 38: xstockstrat.identity.v1.IdentityService.UpdateUserMetadata:output_type -> xstockstrat.identity.v1.UpdateUserMetadataResponse
+	26, // [26:39] is the sub-list for method output_type
+	13, // [13:26] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_identity_v1_identity_proto_init() }
@@ -1322,13 +1630,15 @@ func file_identity_v1_identity_proto_init() {
 	if File_identity_v1_identity_proto != nil {
 		return
 	}
+	file_identity_v1_identity_proto_msgTypes[20].OneofWrappers = []any{}
+	file_identity_v1_identity_proto_msgTypes[23].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_identity_v1_identity_proto_rawDesc), len(file_identity_v1_identity_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   20,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

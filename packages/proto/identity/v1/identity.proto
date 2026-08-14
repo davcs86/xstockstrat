@@ -4,6 +4,7 @@ package xstockstrat.identity.v1;
 
 option go_package = "github.com/xstockstrat/contracts/gen/go/identity/v1;identityv1";
 
+import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
 service IdentityService {
@@ -24,6 +25,10 @@ service IdentityService {
   // calling user has granted access to the MCP agent. Additive over 049's OAuth backend.
   rpc ListAuthorizedApps(ListAuthorizedAppsRequest) returns (ListAuthorizedAppsResponse);
   rpc RevokeAuthorizedApp(RevokeAuthorizedAppRequest) returns (RevokeAuthorizedAppResponse);
+
+  // User profile metadata self-management (feature 130)
+  rpc GetUserMetadata(GetUserMetadataRequest) returns (GetUserMetadataResponse);
+  rpc UpdateUserMetadata(UpdateUserMetadataRequest) returns (UpdateUserMetadataResponse);
 }
 
 message AuthenticateUserRequest {
@@ -111,3 +116,21 @@ message ListAuthorizedAppsRequest { string user_id = 1; }
 message ListAuthorizedAppsResponse { repeated AuthorizedApp apps = 1; }
 message RevokeAuthorizedAppRequest { string user_id = 1; string client_id = 2; }
 message RevokeAuthorizedAppResponse { bool success = 1; }
+
+// ── User profile metadata (feature 130) ──────────────────────────────────
+message UserMetadata {
+  string user_id = 1;
+  string email = 2;
+  optional string phone = 3;
+  optional string display_name = 4;
+  google.protobuf.Struct metadata = 5;
+  google.protobuf.Timestamp metadata_updated_at = 6;
+}
+message GetUserMetadataRequest {}
+message GetUserMetadataResponse { UserMetadata user_metadata = 1; }
+message UpdateUserMetadataRequest {
+  optional string phone = 1;
+  optional string display_name = 2;
+  optional google.protobuf.Struct metadata = 3;
+}
+message UpdateUserMetadataResponse { UserMetadata user_metadata = 1; }
