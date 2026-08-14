@@ -233,3 +233,30 @@
   130 → 131 → 022). `/sdd-spec` must re-verify the actual landed `_compute_opportunities` shape at
   that time per this design's explicit instruction — do not copy this design's pseudocode verbatim
   without re-grounding it.
+
+## Session 2026-08-14T02:00:00Z — /sdd-design signal-time-decay (follow-up round, Open Risks review)
+
+- User asked to run a round targeting 022's 2 remaining `design.md` Open Risks, to see if either
+  could be resolved further rather than left as documented-and-deferred.
+- Proposer evaluated both honestly rather than manufacturing a fix:
+  - **Composition-unverified risk**: confirmed no defensive code (e.g. `getattr`/duck-typing around
+    `weight_for`) is warranted — `merge-order.md`'s hard `130 → 131 → 022` sequencing plus
+    Constitution **F-04** ("Never invent a file path or symbol... block the step",
+    `docs/sdd/constitution.md:76`) already guarantee/enforce the symbol exists before `/sdd-spec`
+    could ever cite it; a runtime guard would be speculative scaffolding for a codepath that cannot
+    exist in the delivered artifact, violating root `CLAUDE.md`'s "write the minimum" principle.
+    Added one clarifying paragraph to `design.md` citing F-04 as the actual backstop mechanism —
+    strengthens the existing procedural mitigation's justification, no code change.
+  - **Thesis-decay-blind risk**: confirmed this isn't actually an open risk — `product-spec.md`
+    FR-1 (`:39`) is the sole FR defining decay's scope and names only `signal_axis`; no FR/AC covers
+    `thesis`/`best_direction`/`_best_sig_conv`. Extending decay there would be user-visible scope
+    expansion requiring a product-spec amendment via `/sdd-story`, not something a design round can
+    fold in unilaterally. Reclassified out of "Open Risks" into a new "Scope Decisions (not risks)"
+    section in `design.md` — kept visible (not deleted) so a future reader finds the reasoning
+    already done rather than re-opening it as undecided.
+- Verified the F-04 citation directly (`grep -n "F-04" docs/sdd/constitution.md` → line 76, exact
+  wording matches) before accepting the round's claim, consistent with this session's own
+  `insights.md` 2026-08-13/14 lesson (verify every claim against the real source, not prose
+  responsiveness).
+- Result: documentation-only `design.md` amendment, no code/config/proto change, no re-approval gate
+  needed (no architecture change — status stays `design-approved`).

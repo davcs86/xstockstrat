@@ -179,7 +179,16 @@ fact.** This is the same claim-vs-producer-contract failure family already named
 hoisting depends on) may also shift once 130's and 131's changes land — the *behavioral* contract
 (decay computed once per signal, aggregated warning, NaN guard, raw-conviction-keyed thesis
 selection) is durable; the literal code shape is not guaranteed stable across two un-landed upstream
-features, and `/sdd-spec` must re-derive it rather than copy this pseudocode verbatim.
+features, and `/sdd-spec` must re-derive it rather than copy this pseudocode verbatim. **No
+defensive coding pattern (e.g. `getattr`/duck-typing around `weight_for`) is added at design time**:
+`merge-order.md`'s hard `130 → 131 → 022` sequencing means `weight_for` is guaranteed to exist by
+the time `/sdd-spec` runs against real code; if that ordering were ever violated, **F-04**
+(`docs/sdd/constitution.md:76`, "Never invent a file path or symbol. If discovery does not find it,
+block the step.") already blocks `/sdd-spec` from citing/inventing an absent symbol, rather than
+requiring this design to guess at 130's not-yet-decided failure semantics (raise? return `None`?
+— per the `.get(key, 1.0)` neutral-default idiom `scoring.py:23` already establishes for 130 itself).
+A runtime guard here would be speculative scaffolding for a codepath that cannot exist in the
+delivered artifact, per root `CLAUDE.md`'s "write the minimum" principle.
 
 **Accepted V1 scope limit — thesis/direction selection stays decay-blind.** `_best_sig_conv`/
 `best_direction`/`thesis` selection (`servicer.py:2164-2168`) stays keyed on **raw** `sig.conviction`,
@@ -229,12 +238,26 @@ practice.
 
 - **Composition with 130/131's landed shape is unverified until `/sdd-spec` time** (see Chosen
   Approach's composition note). Not a blocker — `merge-order.md` already sequences 130 → 131 → 022,
-  and the fix is procedural (re-grep at spec time), not architectural. Carried forward as an explicit
-  `/sdd-spec` instruction, not left implicit.
-- **Thesis/direction staying decay-blind** is an accepted, documented V1 scope limit (see Chosen
-  Approach), not a defect — flagged here so a future reader doesn't mistake it for an oversight if
-  operators find a stale signal's headline persisting past its ranking relevance confusing in
-  practice.
+  the fix is procedural (re-grep at spec time), and **F-04** structurally prevents `/sdd-spec` from
+  inventing `weight_for` if that ordering were ever violated. Carried forward as an explicit
+  `/sdd-spec` instruction, not left implicit. (Re-evaluated in a follow-up round, 2026-08-14: no
+  defensive code was added — see the "No defensive coding pattern" note in Chosen Approach — since
+  F-04 already backstops the only failure mode a runtime guard would protect against, and adding one
+  would be speculative scaffolding for a codepath guaranteed to exist by spec time.)
+
+## Scope Decisions (not risks)
+
+- **Thesis/direction selection stays decay-blind.** Reclassified out of Open Risks in a follow-up
+  round (2026-08-14) — this is not open technical uncertainty, it is a fully resolved product-spec
+  scope boundary. FR-1 (`product-spec.md:39`) is the sole functional requirement defining where decay
+  applies, and it names only `signal_axis`; no FR or AC covers `thesis`/`best_direction`/
+  `_best_sig_conv` (confirmed by re-reading `servicer.py:2164-2168`'s actual write site — unaffected
+  by this feature). Extending decay there would be user-visible scope expansion (which signal
+  supplies the displayed headline/direction) beyond what the approved product-spec specified or
+  wrote acceptance criteria for — that requires a product-spec amendment and re-approval via
+  `/sdd-story`, not a design-time judgment call. Flagged here, not silently dropped, so a future
+  reader asking "should thesis decay too?" finds the answer already reasoned through rather than
+  re-opening it as if undecided.
 
 ---
 
