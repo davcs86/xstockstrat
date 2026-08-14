@@ -177,3 +177,49 @@
   the design's own prior-round claims — recorded as a candidate `insights.md` entry (see below).
 - Status: spec-ready → design-approved.
 - Next: `/sdd-spec strategy-user-ownership`.
+
+## Session 2026-08-14 — sdd-spec
+
+- Generated implementation-spec.md with **17 steps**. Status → implementation-ready. Followed
+  design.md's 12 decisions faithfully; every step cites verified `path:line` evidence.
+- **No trading/portfolio code steps** — verified: `trading.proto`'s Order/PlaceOrderRequest/
+  ListOrdersRequest already carry `user_id` (design decision 8, attribution-only; TRADING-N1 stays
+  open), and the live-loop uses a synthetic outbound `x-user-id` header rather than a new portfolio
+  RPC variant (design decision 6). Reviewers table re-finalized to the step-derived set (dropped
+  trading/portfolio owners, added the `xstockstrat-ui` owner).
+- **Key codebase findings (grep/Read-verified this session):**
+  - Migrations: last is `012_strategy_cooldowns_last_entry_at` → next **013**. `analysis.strategies`
+    is `strategy_id TEXT PRIMARY KEY`, no `user_id` (`001:1-8`); `strategy_cooldowns` PK
+    `(strategy_id, symbol)` (`009:6-11`); `backtest_runs` PK is `backtest_id`, `strategy_id` a plain
+    column (`006:6-7`) — plain column add, no PK change (matches design).
+  - `StrategyDefinition` max field today is `exit_cooldown_days = 11` (`analysis.proto:273`); field
+    12 unused but reserved for 132's `denied_symbols` → this feature takes **13**.
+  - Server-side gate to delete: `_has_admin_scope` (`servicer.py:188-202`), called by ManageStrategy
+    (`:1597`), SetStrategyLive (`:1805`), and RunFundamentalsScan (`:1936` — out of scope, keep).
+  - `set_live_enabled` (`strategies.py:109-120`) has a bare `WHERE strategy_id = $1` — the
+    cross-tenant write bug design decision 4 names; the repo step adds `user_id` to it + the other
+    write methods' WHERE clauses (not just the RPC pre-check).
+  - **Strong in-service reuse precedent for the live-loop synthetic header**: the opportunity daily
+    refresh already does `meta = [("x-user-id", uid)]` from a stored user id →
+    `_compute_opportunities` → `_drain_watchlist_bindings`'s `ListWatchlists(metadata=…)`
+    (`servicer.py:2312-2318`). Cited in Step 9.
+  - Agent gap confirmed: `client.py:29-30` `_metadata()` = `[]`; `get_user_metadata` already appends
+    `("x-user-id", user_id)` (`:857`) — the exact reuse shape for the 5 strategy client fns.
+    `run_backtest`/`get_strategy`/`list_strategies` tools lack `ctx: Context`; `run_backtest` has no
+    `except grpc.aio.AioRpcError`.
+  - Migration tooling gaps confirmed: `Dockerfile.migrate` has no `gettext`/`envsubst` (`:3`);
+    `db-migrate.sh` has no `envsubst` invocation; `docker-compose.yml` db-migrator block has no
+    `SEED_USER_ID` (`:89-102`); `.do/app*.yaml` db-migrator `envs:` blocks exist (`:479-495` /
+    `:483-495`). All wired in Step 6 using the scoped `envsubst '$SEED_USER_ID'` form.
+- **Open Risks placed on steps:** OR-1 (live-loop impersonation findings entry) = Step 17; OR-2
+  (envsubst vs `DO $$`) = Step 6 render check; OR-3 (WatchlistBinding regression AC) = Step 10.6;
+  OR-4 (concrete seed `user_id`) = operator-supplied before Step 3/6 execute, recorded here — **NOT
+  invented** (F-04).
+- **One execute-time confirmation deliberately left open (behavior #1 / P-03):** design.md decision 6
+  commits live_loop to owner-scoped `ListPositions`/`ListWatchlists` calls, and AC-4 requires
+  evaluating against the owner's `union(watchlist, held, active-signal)` — but the composition of that
+  union with the current `signal_params.symbols`-only firing contract (`live_loop.py:37-47,208-210`)
+  and feature-089's no-symbols `SetStrategyLive` precondition (`servicer.py:1838-1843`) is
+  under-specified in the design. Step 9 sub-step 3 flags this to surface to the user at execute time
+  rather than silently guess; the dict-owner-keying half of Step 9 is unambiguous and proceeds.
+- Next: `/sdd-review strategy-user-ownership impl-spec`.
