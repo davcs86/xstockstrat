@@ -523,7 +523,7 @@ ownership scoping at the SQL layer
 
 ### Step 9 — service: live-loop + entry-backfill owner-keying and identity mechanism
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/live_loop.py` — modify
@@ -914,4 +914,33 @@ grep -n "x-user-id\|live_loop\|feature 133" services/xstockstrat-analysis/docs/c
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### D-1 — Step 9 sub-step 3 (owner-scoped symbol universe) DEFERRED to feature 132
+**Disposition**: user-approved scope change (execute-time confirmation, design Open Risk 1 / P-03).
+The live-loop owner-union symbol-universe composition (`ListPositions(user_id=owner)` +
+synthetic-header `ListWatchlists` + union) is **not** built in 133. User decision (recorded in
+context.md): 133 threads **identity only** — the six live-loop state dicts + entry_backfill are
+owner-keyed to `(user_id, strategy_id, symbol)` (sub-steps 1-2, done), but the firing universe stays
+`signal_params.symbols` (feature 089's `SetStrategyLive` no-symbols precondition stays). The
+owner-scoped union is feature 132's `resolve_universe` (the single shared builder). Consequently the
+synthetic outbound `x-user-id` call is **not** introduced by 133, so **Step 17's impersonation
+finding also moves to 132** (recorded on Step 17). AC-4's owner-union firing is satisfied by 132, not
+133.
+
+### D-2 — Step 8 score-cache multi-tenancy closed at the RPC layer (no strategy_scores migration)
+**Disposition**: user-approved (blocker, Option A). The in-memory `_strategies` cache +
+`analysis.strategy_scores` table remain keyed by bare `strategy_id`; ListStrategies/GetStrategyReport/
+ListBacktests/`_recompute_headline` cross-check ownership against the repo instead of re-keying the
+scoring subsystem. Accepted limitation: two users sharing a `strategy_id` share one cached grade value
+(a derived cache) — candidate follow-up. IDOR (cross-user enumeration/read) fully closed.
+
+### D-3 — GetStrategyAnalytics + ListBacktests owner pre-checks added
+**Disposition**: in-intent (both are in the spec's stated "gated RPC set", Step 8 Codebase Evidence);
+Step 8 instructions under-specified them (only named the ListOrders internal leak). Added the
+`get_by_owner_and_id` pre-check for IDOR completeness — not scope creep.
+
+### D-4 — backtest_runs.user_id left NULL for new runs
+**Disposition**: spec-aligned. Migration 015 backfills historical `user_id` via the strategies join;
+`insert` accepts a nullable `user_id` (Step 7). New RunBacktest inserts do not thread it — the table
+is explicitly "attribution-only, not an ownership boundary" (Step 5 / design decision), and the
+ownership gate is RunBacktest's owner-scoped strategy resolution + ListBacktests' owner pre-check, not
+this column. `insert(user_id=...)` stays available for a future attribution pass.

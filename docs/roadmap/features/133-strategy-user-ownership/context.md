@@ -306,3 +306,13 @@ TS plugins (pnpm) + `uv sync --extra dev` (analysis) all done. gettext-base inst
 - **BLOCKER RESOLVED (user, Option A): score-cache multi-tenancy.** The in-memory `_strategies` cache + `analysis.strategy_scores` table are keyed by bare `strategy_id`. Chose **RPC-level owner cross-check, no migration**: ListStrategies filters to owned ids (`repo.list(caller_user_id)`); GetStrategyReport + ListBacktests owner-check via `get_by_owner_and_id` before returning cached score/history. **Accepted limitation (recorded, candidate follow-up):** two users sharing a `strategy_id` share one cached grade value (scores are a derived cache; strategy_scores not re-keyed). IDOR fully closed (no cross-user enumeration/read of another user's strategy_ids).
 - ListStrategiesRequest.user_id NOT read from the wire (header-only filtering, design decision 3).
 - Verify: ruff check + format clean. Full coverage deferred to Step 10 (paired tests). TDD: red-green at Step 10. Deviations: GetStrategyAnalytics + ListBacktests owner pre-checks — both are in the spec's stated "gated RPC set" (Evidence), instruction under-specified them; added for IDOR completeness (in-intent, not scope creep).
+
+### Step 9 — live-loop + entry-backfill owner-keying [done]
+- live_loop.py: all 6 state dicts + `_replayed`/`_logged_unresolved` sets re-typed to
+  `(user_id, strategy_id, symbol)`; key built from `definition.user_id` at `_run_cycle`;
+  hydrate_cooldowns keys from `r["user_id"]`; `_write_cooldown`/`_write_entry_cooldown` pass `key[2]`.
+- entry_backfill.py: `_backfill_pair(user_id, strategy_id, symbol)` 3-tuple key parity; call site passes
+  `definition.user_id`. Firing universe UNCHANGED (still `strategy_symbols`) per the identity-only
+  decision — sub-step 3 (owner-scoped union) deferred to 132 (Deviation D-1). No synthetic-header call
+  added, so Step 17's finding moves to 132 too.
+- Verify: ruff check + format clean on both. Full coverage at Step 10. Deviations: D-1 (sub-step 3 → 132).
