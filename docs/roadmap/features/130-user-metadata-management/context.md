@@ -84,3 +84,9 @@
 - Files modified: `packages/proto/gen/go/`, `packages/proto/gen/python/`, `packages/proto/gen/ts/`
 - Deviations: none
 - TDD: N/A (proto-gen — non-code-bearing)
+
+### Step 3 — migration: Add metadata columns to identity.users [done]
+- Created `006_user_metadata.up.sql` (ADD phone, display_name, metadata JSONB, metadata_updated_at + 8KB CHECK) and `.down.sql` (reverse drops).
+- Files modified: `services/xstockstrat-identity/migrations/006_user_metadata.{up,down}.sql`
+- Deviations: none (offline verification — live apply deferred to CI)
+- TDD: N/A (migration — non-code-bearing)

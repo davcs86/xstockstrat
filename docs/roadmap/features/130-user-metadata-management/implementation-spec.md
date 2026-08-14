@@ -134,7 +134,7 @@ grep -l 'UserMetadata' packages/proto/gen/python/identity/v1/identity_pb2.py
 
 ### Step 3 — migration: Add metadata columns to identity.users
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/migrations/006_user_metadata.up.sql` — create
