@@ -96,3 +96,11 @@
 - Files modified: `services/xstockstrat-identity/src/grpc/authz.ts`
 - Deviations: none
 - TDD: red (`Cannot find module './src/grpc/authz'`) → green (lint passed, 0 errors). Dedicated unit tests land in Step 6.
+
+### Step 5 — service: Identity getUserMetadata and updateUserMetadata handlers [done]
+- Added `getUserMetadata` and `updateUserMetadata` methods to `IdentityServiceImpl`, importing `userIdFrom` from `./authz`.
+- `getUserMetadata`: extracts userId from `call.metadata` via `userIdFrom`, queries `SELECT user_id, email, phone, display_name, metadata, metadata_updated_at FROM identity.users WHERE user_id = $1`, returns `NOT_FOUND` (code 5) if absent, includes runtime guard on `call.metadata?.get`.
+- `updateUserMetadata`: same metadata extraction, builds dynamic SET clause from non-undefined optional fields (phone, displayName, metadata), always sets `metadata_updated_at = NOW()`, uses RETURNING clause, validates at-least-one-field (code 3).
+- Files modified: `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts`
+- Deviations: none
+- TDD: red (`getUserMetadata: undefined` on prototype) → green (`getUserMetadata: function`, `updateUserMetadata: function`; lint 0 errors, 103 pre-existing warnings).

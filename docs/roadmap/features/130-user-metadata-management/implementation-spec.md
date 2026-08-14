@@ -248,7 +248,7 @@ cd /home/user/xstockstrat/services/xstockstrat-identity && pnpm run lint
 
 ### Step 5 — service: Identity getUserMetadata and updateUserMetadata handlers
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts` — modify
