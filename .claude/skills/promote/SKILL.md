@@ -193,7 +193,7 @@ grep "^## $(date +%Y-%m-%d)$" CHANGELOG.md
 
 **If the entry exists**: Replace the entire entry (from `## YYYY-MM-DD` to the next `---` separator or EOF) with the new changelog entry (from P4).
 
-**If the entry does not exist**: Prepend the new changelog entry (from P4) immediately after the `---` separator line.
+**If the entry does not exist**: Prepend the new changelog entry (from P4) immediately before the first `## YYYY-MM-DD` entry heading in the file (i.e. right after the header/intro text) — followed by a blank line, a `---` separator, and another blank line before the existing content resumes. Do **not** anchor on "the first `---` line in the file": the header itself has no leading `---`, so that line is actually the closing separator of whatever entry currently happens to be first, and inserting after it drops the new entry into the wrong position instead of at the top. If the file has no `## ` entries yet (freshly created), append the new entry at the end instead.
 
 Write the file back.
 
