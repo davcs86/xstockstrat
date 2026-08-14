@@ -69,3 +69,12 @@
   - Step 10: agent client.py wrapper methods have no directly paired test step (C-08) — [x] addressed: added client method smoke tests to Step 12 instructions
 - Step Dependencies annotations updated: Step 6 now documents coverage of Steps 4+5; Step 12 covers Steps 10+11.
 - Overlap findings: CLEAN — no blocking collisions. File-level overlaps with features 085, 094, 125 in disjoint line regions (rebase risk only).
+
+## Session 2026-08-14T20:00:00Z — sdd-execute
+
+### Step 1 — proto: Add UserMetadata messages and RPCs to identity.proto [done]
+- Added `import "google/protobuf/struct.proto"`, two RPCs (`GetUserMetadata`, `UpdateUserMetadata`), and 5 messages (`UserMetadata`, `Get*Request/Response`, `Update*Request/Response`) to `identity.proto`.
+- Files modified: `packages/proto/identity/v1/identity.proto`
+- Deviations: none
+- TDD: N/A (proto — non-code-bearing)
+- Tooling: buf 1.72.0, protoc-gen-go v1.36.11, protoc-gen-go-grpc v1.6.2, protoc-gen-connect-go v1.19.2, ts-proto 2.11.8, protoc-gen-es 2.12.0, protoc-gen-connect-es 1.7.0, grpcio-tools 1.80.0 — all installed from host codegen toolchain; stub-diff validated empty before proto edit.
