@@ -10,7 +10,7 @@
 The Opportunities queue (`ListOpportunities`, feature 097) ranks candidates partly by `signal_axis`
 (`_compute_opportunities`, `services/xstockstrat-analysis/app/handlers/servicer.py:2163`, currently
 `c["signal_axis"] = max(c["signal_axis"], sig.conviction)`) — and, per feature
-`130-signal-source-reliability-weight`, is gaining a per-source `reliability_weight` multiplier on
+`134-signal-source-reliability-weight`, is gaining a per-source `reliability_weight` multiplier on
 that same expression. Neither weights nor the underlying `sig.conviction` account for signal age: a
 buy signal extracted from a newsletter 72 hours ago carries identical ranking weight to one
 extracted 30 minutes ago. Markets reprice information quickly; a stale signal ranking equally with a
@@ -39,8 +39,8 @@ reacts more strongly to recent intelligence.
 FR-1. `_compute_opportunities` must apply an exponential decay multiplier to each signal's
 contribution to `signal_axis` (`servicer.py:2163`): `effective_conviction = sig.conviction ×
 exp(-λ × age_hours)` where `λ = ln(2) / half_life_hours`, folded into the existing `max(...)`
-expression. **Coordination with `130-signal-source-reliability-weight`**: both features multiply
-into this exact expression — 130 adds a `× source_weight` term. Whichever feature lands second
+expression. **Coordination with `134-signal-source-reliability-weight`**: both features multiply
+into this exact expression — 134 adds a `× source_weight` term. Whichever feature lands second
 rebases the expression to include both terms (`sig.conviction × source_weight × exp(-λ ×
 age_hours)`); this is recorded as a same-expression coordination row in
 `docs/roadmap/features/merge-order.md`, not re-litigated here.
@@ -141,7 +141,7 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 1. A signal ingested 48 hours ago with a 24-hour half-life (two half-lives elapsed:
    `0.5^(48/24) = 0.25`) contributes a **quarter** of the `signal_axis` weight of an
-   otherwise-identical signal ingested now (all else — including any 130 `reliability_weight`, if
+   otherwise-identical signal ingested now (all else — including any 134 `reliability_weight`, if
    already landed — held equal).
 2. Setting `signal_decay_half_life_hours` to 0 via the config service (no restart) immediately
    disables decay — `signal_axis` matches pre-feature behavior.
@@ -150,7 +150,7 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
    `datetime.now(UTC)` calls, and not `session_end_seconds` (a distinct, bars-derived variable used
    only for `valid_until`).
 4. DEBUG logs show `raw_conviction`, `age_hours`, `decay_multiplier`, and `effective_conviction`
-   per signal (plus `source_weight` once 130 lands and the expression carries it).
+   per signal (plus `source_weight` once 134 lands and the expression carries it).
 5. Analysis service unit tests cover: decay at t=0 (multiplier=1.0), at t=half_life
    (multiplier≈0.5), at t=3×half_life (multiplier≈0.125), disabled decay (half_life ≤ 0), and a
    signal missing `ingested_at` (`age_known=False`, `decay_multiplier=1.0` regardless of the

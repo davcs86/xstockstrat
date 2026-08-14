@@ -70,7 +70,7 @@ for sym, sigs in signals_by_symbol.items():
     sig_contribs = []
     for sig in sigs:
         raw_conviction = sig.conviction
-        source_weight = weight_for(sig.source)  # 130's landed term — see composition note below
+        source_weight = weight_for(sig.source)  # 134's landed term — see composition note below
 
         if sig.HasField("ingested_at"):
             ingested_dt = sig.ingested_at.ToDatetime(tzinfo=UTC)
@@ -155,7 +155,7 @@ if missing_ingested_at_count > 0:
    log-volume risk.
 4. **Explicit `isfinite()` guard, not a doc-only tripwire.** `if not math.isfinite(effective_conviction):
    effective_conviction = 0.0`, placed immediately after computing `effective_conviction` and before
-   the `max()` call. Under today's guarded inputs (`source_weight` clamped `[0, 1]` per 130's design,
+   the `max()` call. Under today's guarded inputs (`source_weight` clamped `[0, 1]` per 134's design,
    `age_hours` clamped `≥0`, `half_life > 0` on the decay-active branch) `NaN` cannot actually occur —
    this guard is pure future-refactor insurance, adopted because `max(c["signal_axis"],
    effective_conviction)`'s existing NaN fail-safety is an emergent property of argument order
@@ -165,28 +165,28 @@ if missing_ingested_at_count > 0:
    converts an implicit invariant into an explicit, test-verifiable one — consistent with "write the
    minimum" because the insurance itself is minimal, not because the guard is currently load-bearing.
 
-**Composition with 130 (`weight_for(sig.source)`) — verify at spec time, not design time.** As of
-this design round (2026-08-14), `130-signal-source-reliability-weight` is **not** landed on
+**Composition with 134 (`weight_for(sig.source)`) — verify at spec time, not design time.** As of
+this design round (2026-08-14), `134-signal-source-reliability-weight` is **not** landed on
 `main-dev`: `grep -rn "def weight_for" services/xstockstrat-analysis/` returns zero hits, and the
 current-trunk write site (`servicer.py:2161-2168`) is still `c["signal_axis"] = max(c["signal_axis"],
-sig.conviction)` — no `source_weight` term. This design assumes the landing order `130 → 131 → 022`
+sig.conviction)` — no `source_weight` term. This design assumes the landing order `134 → 131 → 022`
 per `docs/roadmap/features/merge-order.md:59-60`. **`/sdd-spec` for this feature must re-grep and
 re-read the actual landed `_compute_opportunities` body at spec time and cite what it actually finds
 there — it must not treat this design.md's (or recon.md's) citation of `weight_for` as current
 fact.** This is the same claim-vs-producer-contract failure family already named in `fails.md`
 2026-08-05 (`023-position-sizing-engine`) and 2026-07-30 (`080-fix-backfill-timeframe-enum`), and the
 `_compute_opportunities` loop shape itself (the two-level nested structure this design's own
-hoisting depends on) may also shift once 130's and 131's changes land — the *behavioral* contract
+hoisting depends on) may also shift once 134's and 131's changes land — the *behavioral* contract
 (decay computed once per signal, aggregated warning, NaN guard, raw-conviction-keyed thesis
 selection) is durable; the literal code shape is not guaranteed stable across two un-landed upstream
 features, and `/sdd-spec` must re-derive it rather than copy this pseudocode verbatim. **No
 defensive coding pattern (e.g. `getattr`/duck-typing around `weight_for`) is added at design time**:
-`merge-order.md`'s hard `130 → 131 → 022` sequencing means `weight_for` is guaranteed to exist by
+`merge-order.md`'s hard `134 → 131 → 022` sequencing means `weight_for` is guaranteed to exist by
 the time `/sdd-spec` runs against real code; if that ordering were ever violated, **F-04**
 (`docs/sdd/constitution.md:76`, "Never invent a file path or symbol. If discovery does not find it,
 block the step.") already blocks `/sdd-spec` from citing/inventing an absent symbol, rather than
-requiring this design to guess at 130's not-yet-decided failure semantics (raise? return `None`?
-— per the `.get(key, 1.0)` neutral-default idiom `scoring.py:23` already establishes for 130 itself).
+requiring this design to guess at 134's not-yet-decided failure semantics (raise? return `None`?
+— per the `.get(key, 1.0)` neutral-default idiom `scoring.py:23` already establishes for 134 itself).
 A runtime guard here would be speculative scaffolding for a codepath that cannot exist in the
 delivered artifact, per root `CLAUDE.md`'s "write the minimum" principle.
 
@@ -236,8 +236,8 @@ practice.
 
 ## Open Risks
 
-- **Composition with 130/131's landed shape is unverified until `/sdd-spec` time** (see Chosen
-  Approach's composition note). Not a blocker — `merge-order.md` already sequences 130 → 131 → 022,
+- **Composition with 134/131's landed shape is unverified until `/sdd-spec` time** (see Chosen
+  Approach's composition note). Not a blocker — `merge-order.md` already sequences 134 → 131 → 022,
   the fix is procedural (re-grep at spec time), and **F-04** structurally prevents `/sdd-spec` from
   inventing `weight_for` if that ordering were ever violated. Carried forward as an explicit
   `/sdd-spec` instruction, not left implicit. (Re-evaluated in a follow-up round, 2026-08-14: no
@@ -278,7 +278,7 @@ practice.
   only ever touches `signal_axis`/`sig.conviction` (`ExternalSignal`'s cardinal field), never
   `Opportunity.conviction` (the ordinal readiness field). Re-confirmed clean at every round,
   including round 4's direct re-read of the thesis/direction selection block.
-- **Ledger pattern re-applied** (`insights.md` 2026-08-13/14, this session's own 130/131 lesson —
+- **Ledger pattern re-applied** (`insights.md` 2026-08-13/14, this session's own 134/131 lesson —
   "verify every claim against real code/DB/timing semantics, not prose responsiveness") — this
-  exact lesson recurred one layer deeper inside 022's own round 3 (the "130 already landed" claim
+  exact lesson recurred one layer deeper inside 022's own round 3 (the "134 already landed" claim
   was prose-plausible but code-false) and was caught and corrected before reaching `design-approved`.

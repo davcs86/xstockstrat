@@ -50,5 +50,5 @@ re-run /sdd-spec if the registry changes.)_
 ## Next Action
 
 `/sdd-spec live-strategy-opportunity-attribution` — generate implementation spec from the approved
-design. **Must land after `130-signal-source-reliability-weight`** (same-function overlap in
+design. **Must land after `134-signal-source-reliability-weight`** (same-function overlap in
 `_compute_opportunities`, `servicer.py:2144-2168` — see `docs/roadmap/features/merge-order.md`).

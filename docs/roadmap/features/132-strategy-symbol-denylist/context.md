@@ -9,7 +9,7 @@
 ## Session 2026-08-14T04:00:00Z — sdd-story
 
 - Created feature.md (status: draft), product-spec.md, context.md from user story.
-- **Origin**: raised mid-session while discussing 130/131/022 (signal source weights,
+- **Origin**: raised mid-session while discussing 134/131/022 (signal source weights,
   live-strategy-opportunity-attribution, signal decay). User asked two things: (1) a conceptual
   question about how signal-conviction vs. readiness-conviction contradictions rank in the
   Opportunities queue (answered directly, no code change needed — the two axes are deliberately
@@ -27,7 +27,7 @@
      existing shape rather than inventing a second one.
   2. **131 interaction** — user chose "Amend 131's design before /sdd-spec" (not a competing
      feature that blocks/supersedes 131 as a separate artifact). 131 is `design-approved` but not
-     yet implemented (still spec-ready in `merge-order.md`'s sequence, waiting on 130), so amending
+     yet implemented (still spec-ready in `merge-order.md`'s sequence, waiting on 134), so amending
      its design.md directly (rather than leaving it as dead weight) is the correct move — this will
      happen during `/sdd-design` for 132, not during this story pass.
 - **Grounded FR-1's proto field** directly: `StrategyDefinition` (`analysis.proto:249-274`) next

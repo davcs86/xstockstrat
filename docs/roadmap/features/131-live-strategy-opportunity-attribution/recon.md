@@ -93,7 +93,7 @@ strategy.
 - **fails.md 2026-08-05 (`023-position-sizing-engine`)**: `Opportunity.conviction` (ordinal) vs.
   `ExternalSignal.conviction` (cardinal) conflation trap — this feature touches neither value's
   formula, only *which* candidates get traced; re-confirm explicitly per the ledger's own rule.
-- **insights.md 2026-08-13 (`130-signal-source-reliability-weight`)**: this session's own fresh
+- **insights.md 2026-08-13 (`134-signal-source-reliability-weight`)**: this session's own fresh
   lesson — verify any proposed fix against real code/DB semantics, not just that it reads as
   responsive to a named objection. Directly applicable here given the `live_enabled` query
   placement decision (new repo method vs. raw SQL) touches the same `analysis.strategies` table

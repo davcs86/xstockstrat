@@ -1461,7 +1461,7 @@ reusing.
   responses are the only reliable source for these, and they are exactly the class of bug a
   same-shape client swap is most likely to introduce silently.
 
-### 2026-08-13 — 130-signal-source-reliability-weight — design
+### 2026-08-13 — 134-signal-source-reliability-weight — design
 - **Pattern**: A 4-round design debate on a single, apparently-small proto+DB+3-service change
   surfaced three distinct, internally-consistent-but-wrong proposals in a row, each caught only
   because the adversary **re-traced the actual code/DB semantics** instead of accepting the
@@ -1478,7 +1478,7 @@ reusing.
   anti-pattern the requirement existed to prevent. All three read as complete, reasonable fixes in
   prose; none were, and each needed one more adversarial round specifically aimed at re-deriving the
   claim from the actual system rather than the proposal's self-report.
-- **Evidence**: `docs/roadmap/features/130-signal-source-reliability-weight/design.md` § Rejected
+- **Evidence**: `docs/roadmap/features/134-signal-source-reliability-weight/design.md` § Rejected
   Alternatives (all three); `context.md` § sdd-design session — round-by-round defect log;
   `services/xstockstrat-ingest/app/repositories/signal_sources.py:94-154` (the explicit-column-list
   SQL that makes the `None`/`DEFAULT` bug real, not hypothetical).

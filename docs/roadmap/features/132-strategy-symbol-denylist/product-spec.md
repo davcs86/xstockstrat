@@ -71,7 +71,7 @@ decision, not fixed here.
 FR-6. This feature directly supersedes `131-live-strategy-opportunity-attribution`'s design-time
 assumption that `strategy_symbols()`/`live_by_symbol` is built from an explicit opt-in
 `signal_params.symbols` set. **131 is `design-approved` but not yet implemented** (still spec-ready
-in the merge-order sequence, waiting on `130-signal-source-reliability-weight`). `/sdd-design` for
+in the merge-order sequence, waiting on `134-signal-source-reliability-weight`). `/sdd-design` for
 this feature must amend `131`'s `design.md` directly to consume the new deny-list-derived universe
 — not leave 131's existing mechanism as dead weight, and not duplicate the live-strategy-attribution
 logic in a second place. Update `docs/roadmap/features/merge-order.md` accordingly.

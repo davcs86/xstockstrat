@@ -1,15 +1,16 @@
 # Context: signal-source-reliability-weight
 
-**Feature**: `docs/roadmap/features/130-signal-source-reliability-weight/feature.md`
-**Product Spec**: `docs/roadmap/features/130-signal-source-reliability-weight/product-spec.md`
-**Implementation Spec**: `docs/roadmap/features/130-signal-source-reliability-weight/implementation-spec.md`
+**Feature**: `docs/roadmap/features/134-signal-source-reliability-weight/feature.md`
+**Product Spec**: `docs/roadmap/features/134-signal-source-reliability-weight/product-spec.md`
+**Implementation Spec**: `docs/roadmap/features/134-signal-source-reliability-weight/implementation-spec.md`
 
 ---
 
 ## Session 2026-08-13T00:00:00Z — sdd-story
 
 - Created feature.md (status: draft), product-spec.md, context.md from user story.
-- Feature number assigned: 130.
+- Feature number assigned: 130 (renumbered to 134 on 2026-08-14 — see the renumbering session entry
+  below).
 - Story originated from a conversational design-scouting pass (not `/sdd-story` invoked cold): the
   user asked whether signal source weights could live on `ingest.SignalSource` instead of only the
   `analysis.signals.source_weights` config blob, and whether the Opportunities queue could apply
@@ -88,3 +89,41 @@
   *plausible-sounding and internally consistent* in the proposer's own text, and were only caught
   because the adversary re-traced the actual code/DB semantics instead of accepting the proposal's
   self-description. Logged to `docs/roadmap/ledger/insights.md`.
+
+## Session 2026-08-14T07:00:00Z — feature-number collision resolved (130 → 134)
+
+- **Trigger**: merging `origin/main-dev` into `claude/opportunity-scoring-signals-ex8u1w` (this
+  session's working branch) brought in `130-user-metadata-management` (PR #934, `/sdd-story` ran
+  2026-08-14T00:00:00Z, already `code-completed` and merged to `main-dev`) — colliding with this
+  feature's own `130` (`/sdd-story` ran 2026-08-13T00:00:00Z, still `design-approved`, never merged
+  upstream).
+- **Verified before acting**: a fresh checkout of `origin/main-dev` alone has only ONE `130`
+  (`130-user-metadata-management`) — no collision exists on the trunk. The collision was confined
+  entirely to this session's working branch, since this feature's work predates `main-dev`'s current
+  state and was never merged there. Renumbering `130-user-metadata-management` would have been wrong
+  (it's already correctly numbered on the trunk, the actual source of truth); this feature — the one
+  still in-flight — is the one that needed to move.
+- **Resolution per `docs/runbooks/feature-workflow.md` § Feature Numbering's collision-resolution
+  rule** ("renumber the later one"): this feature's `/sdd-story` ran first (2026-08-13), so by the
+  rule's own "later one" test it might seem like `130-user-metadata-management` should move — but
+  that feature is already merged/code-completed on `main-dev`, where it holds `130` uncontested. The
+  practical resolution (consistent with the rule's actual purpose — resolve the collision with the
+  least disruption to already-landed work) was to renumber THIS feature to the next free number,
+  `134` (the highest existing at the time, `133-strategy-user-ownership`, plus one).
+- `git mv docs/roadmap/features/130-signal-source-reliability-weight
+  docs/roadmap/features/134-signal-source-reliability-weight`, then updated every cross-reference:
+  this feature's own self-referential `**Feature**`/`**Product Spec**`/`**Implementation Spec**` path
+  lines and two bare-number self-mentions in `recon.md`; `docs/roadmap/features/merge-order.md`'s two
+  `(130)` table-cell citations; `022-signal-time-decay`'s `context.md`/`design.md`/`feature.md`/
+  `product-spec.md`/`recon.md` (extensive — 022's own design explicitly composes with this feature's
+  landed change throughout multiple documents, per the `merge-order.md` `130 → 131 → 022` sequencing,
+  now `134 → 131 → 022`); `131-live-strategy-opportunity-attribution`'s `context.md`; `132-strategy-
+  symbol-denylist`'s `context.md`; `docs/roadmap/ledger/insights.md`'s 2026-08-13 entry title/citation.
+  One false positive avoided: `022-signal-time-decay/recon.md`'s `watcher.py:124-130` line-range
+  citation was protected (not a feature reference) before the bulk `\b130\b` → `134` sweep, then
+  restored unchanged.
+- **Not touched**: the other 5 pre-existing duplicate `NNN` prefixes already in the repo (`058`,
+  `064`, `065`, `097`, `111`) — these predate this session and this merge, are unrelated to this
+  collision, and are out of scope for this fix.
+- Status unchanged (`design-approved`) — this was a pure renumbering, no content/design change.
+- Next: unchanged — `/sdd-spec signal-source-reliability-weight` (slug unchanged, only `NNN` moved).

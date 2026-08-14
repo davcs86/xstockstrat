@@ -117,9 +117,9 @@ builds each candidate's `signal_axis` ranking input — today built from raw, un
   `ExternalSignal.conviction`, the correct cardinal field; re-confirm explicitly in this design, per
   the ledger's own rule.
 - **FR-6 is effectively pre-resolved this session**: `022-signal-time-decay`'s product-spec was
-  retargeted (this same session) to explicitly depend on 130 landing first
+  retargeted (this same session) to explicitly depend on 134 landing first
   (`docs/roadmap/features/merge-order.md`) and multiply its own decay factor into the same
-  `signal_axis` expression 130 introduces. This already satisfies FR-6's "defer with a named
+  `signal_axis` expression 134 introduces. This already satisfies FR-6's "defer with a named
   follow-up" branch — the debate should confirm this rather than re-litigate fold-in.
 
 ## Recommended Scope

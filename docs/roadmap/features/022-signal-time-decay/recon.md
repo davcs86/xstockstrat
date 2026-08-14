@@ -10,8 +10,8 @@
 
 Apply exponential age-based decay to a signal's contribution to `_compute_opportunities`'s
 `signal_axis` ranking value, so a stale signal loses ranking weight instead of counting equally with
-a fresh one until its hard `valid_until` cutoff. Must compose correctly with `130-signal-source-
-reliability-weight`'s `weight_for(sig.source)` multiplier and land after both 130 and 131 per the
+a fresh one until its hard `valid_until` cutoff. Must compose correctly with `134-signal-source-
+reliability-weight`'s `weight_for(sig.source)` multiplier and land after both 134 and 131 per the
 existing `merge-order.md` same-expression/same-function coordination.
 
 ## Codebase Map
@@ -34,7 +34,7 @@ existing `merge-order.md` same-expression/same-function coordination.
 - **`xstockstrat-analysis`** (Python)
   - `_compute_opportunities`: `servicer.py:2083-2242`
   - `signal_axis` init: `servicer.py:2121` (`"signal_axis": 0.0`)
-  - Signals-merge loop (**current trunk shape** — 130/131 haven't landed yet):
+  - Signals-merge loop (**current trunk shape** — 134/131 haven't landed yet):
     `servicer.py:2154-2168`, write site at `:2163`
     (`c["signal_axis"] = max(c["signal_axis"], sig.conviction)`)
   - Speculative-tail sort keyed on `signal_axis`: `servicer.py:2175`
@@ -59,7 +59,7 @@ existing `merge-order.md` same-expression/same-function coordination.
 - **Config-read shape** → `self._cfg.get_float("analysis.opportunity.signal_rank_weight", 0.3)`
   (`servicer.py:2014`) — same sibling config namespace, same feature area.
 - **`.get(key, 1.0)` neutral-default idiom** → already established at `scoring.py:23` for source
-  weights; 130's design also adopts this shape for `weight_for(sig.source)` — decay's multiplier
+  weights; 134's design also adopts this shape for `weight_for(sig.source)` — decay's multiplier
   should compose into the same expression using the same idiom, not a parallel mechanism.
 
 ## Dependencies
@@ -95,18 +95,18 @@ existing `merge-order.md` same-expression/same-function coordination.
   bars-derived and populated much later in the function, in a different loop).
 - **Not found**: any age/emitted-at field on `ExternalSignal` beyond the unused `valid_from` — confirms
   FR-4's proto-change premise exactly (no existing field to repurpose).
-- **Composition risk with 130 and 131 (not yet landed, but designed)**: 130's design adds a
+- **Composition risk with 134 and 131 (not yet landed, but designed)**: 134's design adds a
   `weight_for(sig.source)` term to the same `servicer.py:2163` expression; 131's design restructures
   the surrounding loop (pre-seeding step for signal-only live-attributed candidates) and touches the
   same `servicer.py:2144-2168` block. This feature's own decay term must compose as a third
   multiplicative factor into the same final expression (`conviction × weight_for(source) ×
-  decay_multiplier(age)`), landing last per `merge-order.md`'s 130 → 131 → 022 order — the design
+  decay_multiplier(age)`), landing last per `merge-order.md`'s 134 → 131 → 022 order — the design
   must state precisely how the three land in sequence without each rebase silently dropping a term.
 - **fails.md 2026-08-05 (`023-position-sizing-engine`)**: `Opportunity.conviction` (ordinal) vs.
   `ExternalSignal.conviction` (cardinal) trap — this feature only touches `signal_axis`, built from
   `ExternalSignal.conviction`, never `Opportunity.conviction`; re-confirm explicitly per the ledger's
   own rule (already carried in product-spec.md's Open Questions).
-- **insights.md 2026-08-13/14 (this session, 130 and 131)**: verify every claim against real
+- **insights.md 2026-08-13/14 (this session, 134 and 131)**: verify every claim against real
   code/DB/timing semantics, not prose responsiveness — directly the lesson that surfaced 022's own
   round-3 FR-1/FR-5 contradiction (a variable read before it was computed) and is exactly the shape
   of risk the config zero-trap finding above represents.
@@ -122,7 +122,7 @@ existing `merge-order.md` same-expression/same-function coordination.
    signals-merge loop; compose into `signal_axis`'s existing expression as a third factor.
 4. **Config**: register `analysis.scoring.signal_decay_half_life_hours` (float, default 24.0) —
    standard config-registration pattern, no new mechanism.
-5. **Sequencing**: this feature's implementation must be spec'd/executed only after 130 and 131 land
+5. **Sequencing**: this feature's implementation must be spec'd/executed only after 134 and 131 land
    (merge-order.md), and its own `/sdd-spec` step must cite the *actual landed* `signal_axis`
    expression at that time, not this recon's current-trunk citation — flag this explicitly so
    `/sdd-spec` doesn't cite stale line numbers.

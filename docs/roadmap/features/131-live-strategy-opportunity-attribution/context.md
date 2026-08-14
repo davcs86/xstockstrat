@@ -9,7 +9,7 @@
 ## Session 2026-08-13T00:00:00Z — sdd-story
 
 - Created feature.md (status: draft), product-spec.md, context.md from user story.
-- Feature number assigned: 131 (created immediately after 130-signal-source-reliability-weight in
+- Feature number assigned: 131 (created immediately after 134-signal-source-reliability-weight in
   the same session — recomputed `max(NNN)+1` fresh before this directory, not reused from a stale
   count).
 - Story originated from conversational design-scouting. The user's initial framing — "all symbols
@@ -94,7 +94,7 @@
 - Constitution rules touched: C-01, C-08, C-10(b), C-14, P-01, P-02, P-03 — all honored, no Floor
   breach at any round.
 - Status: spec-ready → design-approved.
-- **Process note**: this debate is a second consecutive case (after 130, same session) where a
+- **Process note**: this debate is a second consecutive case (after 134, same session) where a
   design that read as complete and responsive to the prior round's objection had a real, code-
   verifiable gap only a fresh re-trace against actual source caught — reinforces the
   `insights.md` 2026-08-13 entry rather than needing a new one.

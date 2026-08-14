@@ -18,7 +18,7 @@
 
 - `/sdd-review signal-time-decay product-spec` returned FAIL:
   - C-14 blocker: no `## Consumer Surface(s)` section at all — this dormant spec predates that
-    template requirement (it was written 2026-05-26, before `130-signal-source-reliability-weight`
+    template requirement (it was written 2026-05-26, before `134-signal-source-reliability-weight`
     established the current pattern for this scoring pipeline).
   - P-03 blocker: both Open Questions were unresolved `- [ ]` items ("confirm at impl-spec time" /
     "decision deferred to impl-spec") rather than settled or explicitly routed to a design-phase
@@ -56,11 +56,11 @@
   `ingest.proto:106-116`), even though the underlying DB column exists.
 - User asked, via `AskUserQuestion`: where should decay now apply, given the original target is
   gone? Options presented: Screener only / `Opportunity.signal_axis` / both / defer entirely into
-  130's design phase. **User chose `Opportunity.signal_axis`** — the same expression
-  `130-signal-source-reliability-weight` already targets (`servicer.py:2163`).
+  134's design phase. **User chose `Opportunity.signal_axis`** — the same expression
+  `134-signal-source-reliability-weight` already targets (`servicer.py:2163`).
 - Retargeted the spec accordingly:
   - FR-1 now decays `signal_axis`'s `sig.conviction` term directly, with an explicit coordination
-    note that 130 and 022 both multiply into the same expression — whichever lands second rebases
+    note that 134 and 022 both multiply into the same expression — whichever lands second rebases
     to include both terms.
   - FR-4 now specs the real gap: add `ExternalSignal.ingested_at` (proto field 10, next free after
     `tags=9`), select/populate it in `QuerySignals` — `xstockstrat-ingest` added to Affected
@@ -74,19 +74,19 @@
   - Added a "Known trap" Open Question item (023-position-sizing-engine ordinal/cardinal
     conflation) since this feature now touches the same `signal_axis` neighborhood as that trap.
 - Added a `docs/roadmap/features/merge-order.md` row: `signal-time-decay` (022) must wait for
-  `signal-source-reliability-weight` (130) — same-expression overlap on `servicer.py:2163`, 130
+  `signal-source-reliability-weight` (134) — same-expression overlap on `servicer.py:2163`, 134
   lands first (already `spec-ready`), 022 rebases the combined formula onto it.
 - Re-running `/sdd-review signal-time-decay product-spec` next.
 
 ## Session 2026-08-13T00:40:00Z — sdd-review product-spec (round 3, overlap findings)
 
-- Overlap re-scan (round 3): the 022↔130 `merge-order.md` row is present and correctly shaped. New
+- Overlap re-scan (round 3): the 022↔134 `merge-order.md` row is present and correctly shaped. New
   finding: `131-live-strategy-opportunity-attribution` (also `spec-ready`) restructures the same
   `_compute_opportunities` candidate-creation/signals-merge block (`servicer.py:2144-2168`) that
-  contains the `signal_axis` line (`:2163`) 022/130 already coordinate on — a three-way
+  contains the `signal_axis` line (`:2163`) 022/134 already coordinate on — a three-way
   same-function overlap, not previously recorded.
 - Added a second `merge-order.md` row: 022 must also wait for 131, with a recommended landing
-  order **130 → 131 → 022** (130's factor addition first since simplest/earliest spec-ready; 131's
+  order **134 → 131 → 022** (134's factor addition first since simplest/earliest spec-ready; 131's
   structural candidate-loop change next; 022's decay factor composes last on the combined
   expression). This row governs 022's ordering relative to 131 — 131 itself has no dependency here
   (confirmed clean in its own overlap scan).
@@ -133,7 +133,7 @@
 - Criteria verdict: PASS, zero blockers, zero warnings. Reviewer independently re-derived every
   Acceptance Criterion's arithmetic from FR-1's formula and re-traced `_compute_opportunities`'s
   real control flow line-by-line to re-confirm FR-1/FR-5 compatibility — both hold.
-- Overlap verdict: CLEAN. Both `merge-order.md` coordination rows (022 waits for 130; 022 waits
+- Overlap verdict: CLEAN. Both `merge-order.md` coordination rows (022 waits for 134; 022 waits
   for 131) re-confirmed accurate against current trunk and current sibling-feature state.
 - Five review rounds total this session, each catching a distinct real defect: (1) missing
   Consumer Surface + unresolved Open Questions, (2) a stale premise targeting code feature 097 had
@@ -141,7 +141,7 @@
   at the write-site), (4) an AC-1 arithmetic error. This is the pipeline working as designed — a
   dormant, unreviewed 2026-05-26 draft had accumulated all four defects silently; nothing caught
   them until this review pass actually ran.
-- Next: `/sdd-spec signal-time-decay`, but only after `130-signal-source-reliability-weight` and
+- Next: `/sdd-spec signal-time-decay`, but only after `134-signal-source-reliability-weight` and
   `131-live-strategy-opportunity-attribution` land (merge-order.md dependency).
 
 ## Session 2026-08-14T00:00:00Z — /sdd-design signal-time-decay (Phase 0 Recon)
@@ -152,8 +152,8 @@
 - Flagged as **Critical**: `ConfigWatcher.get_float`'s `v.float_val or default` zero-trap would
   silently defeat FR-3's "0 disables decay" rollback contract — no `get_float_present` equivalent
   exists yet (only `get_int_present`). Design must resolve this explicitly.
-- Flagged the 130/131 same-expression/same-function composition risk (already recorded in
-  `merge-order.md`, landing order 130 → 131 → 022) as something design must state precisely, not
+- Flagged the 134/131 same-expression/same-function composition risk (already recorded in
+  `merge-order.md`, landing order 134 → 131 → 022) as something design must state precisely, not
   just note.
 
 ## Session 2026-08-14T00:30:00Z — /sdd-design signal-time-decay (Phase 1, full mode, 4 rounds)
@@ -182,7 +182,7 @@
   remains), confirmed `HasField` is valid protobuf API for this plain submessage field (not a
   oneof), confirmed the deploy-race degrades to a neutral per-signal `decay_multiplier=1.0` + one
   WARNING instead of a blackout. Zero Floor breaches. Adversary recommended folding 4 remaining
-  mechanical objections into `design.md` without a full round 4: an unverified "130's term, already
+  mechanical objections into `design.md` without a full round 4: an unverified "134's term, already
   landed" claim (false against `main-dev` — a `fails.md` 2026-08-05/023, 2026-07-30/080
   claim-vs-producer-contract repeat); a C-08 test-pairing gap (AC-5 didn't cover the
   `age_known=False` branch — exactly round 2's blackout regression surface); a self-flagged
@@ -192,7 +192,7 @@
 - **User explicitly chose to run round 4 anyway** (via `AskUserQuestion`, selecting "Run another
   round" over "Approve design" and "Approve but skip the isfinite() code guard") rather than accept
   round 3's fixups as final.
-- **Round 4**: proposer resolved all four objections concretely — (1) design.md states 130 is not
+- **Round 4**: proposer resolved all four objections concretely — (1) design.md states 134 is not
   landed and `/sdd-spec` must re-verify the actual landed expression, not trust any design-time
   citation; (2) exact AC-5 amendment text + new AC-7 (aggregated-WARNING call-count assertion)
   drafted; (3) `missing_ingested_at_count`/`total_signal_count` aggregation, incremented once per
@@ -220,7 +220,7 @@
 - **Closed all four round-4 adversary gaps in the same pass**: `product-spec.md` FR-5 reworded to
   state the exact placement and why (race avoidance, not incidental); AC-5 amended in place to add
   the `age_known=False` test case; new AC-7 added for the aggregated-WARNING call-count assertion;
-  `design.md` written with the explicit `get_float_present` commitment, the 130-composition
+  `design.md` written with the explicit `get_float_present` commitment, the 134-composition
   spec-time-reverify instruction, and the accepted decay-blind-thesis-selection scope note.
 - **Result**: `design.md` written (Chosen Approach / Rejected Alternatives / Open Risks /
   Constitution Rules Touched). `feature.md` updated: `spec-ready` → `design-approved`, full 4-round
@@ -228,9 +228,9 @@
   concrete, code-grounded defects (not architecture forks), consistent with this session's own
   `insights.md` 2026-08-13/14 lesson recurring one layer deeper inside round 3 itself (the
   "already landed" claim was prose-plausible but code-false).
-- Next: `/sdd-spec signal-time-decay` — but only after `130-signal-source-reliability-weight` and
+- Next: `/sdd-spec signal-time-decay` — but only after `134-signal-source-reliability-weight` and
   `131-live-strategy-opportunity-attribution` land (`merge-order.md` dependency, landing order
-  130 → 131 → 022). `/sdd-spec` must re-verify the actual landed `_compute_opportunities` shape at
+  134 → 131 → 022). `/sdd-spec` must re-verify the actual landed `_compute_opportunities` shape at
   that time per this design's explicit instruction — do not copy this design's pseudocode verbatim
   without re-grounding it.
 
@@ -240,7 +240,7 @@
   could be resolved further rather than left as documented-and-deferred.
 - Proposer evaluated both honestly rather than manufacturing a fix:
   - **Composition-unverified risk**: confirmed no defensive code (e.g. `getattr`/duck-typing around
-    `weight_for`) is warranted — `merge-order.md`'s hard `130 → 131 → 022` sequencing plus
+    `weight_for`) is warranted — `merge-order.md`'s hard `134 → 131 → 022` sequencing plus
     Constitution **F-04** ("Never invent a file path or symbol... block the step",
     `docs/sdd/constitution.md:76`) already guarantee/enforce the symbol exists before `/sdd-spec`
     could ever cite it; a runtime guard would be speculative scaffolding for a codepath that cannot
