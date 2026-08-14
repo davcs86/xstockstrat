@@ -152,3 +152,10 @@
 - Files modified: `docs/runbooks/mcp-tools.md`
 - Deviations: none
 - TDD: N/A (docs — non-code-bearing).
+
+## Session 2026-08-14 (CI: feature status automation)
+
+- Promotion PR #950 merged to main
+- Feature promoted and committed: edb7c4172bb973b2111eb833253e1b454301bbde
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-14
