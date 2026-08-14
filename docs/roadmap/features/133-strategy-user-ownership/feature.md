@@ -1,6 +1,6 @@
 # Feature: strategy-user-ownership
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/strategy-user-ownership`
 **Created**: 2026-08-14
 **Last Updated**: 2026-08-14
@@ -16,6 +16,7 @@
 | 2026-08-14 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full, plus 1 extra final-verification adversary pass) and approved; recon.md + design.md written. No Floor breach at any round; several severity-equivalent gaps found and fixed each round (a cross-tenant write-scoping bug, a migration mechanism that didn't satisfy its own dev/prod requirement, a missed second BFF gate, a false "already secure" trading rationale, a missed second unscoped list RPC, a missed `ctx` parameter). |
 | 2026-08-14 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 17 steps. No trading/portfolio code steps (existing `user_id` fields + synthetic-header mechanism, per design decisions 6/8). One execute-time confirmation flagged: the live-loop owner-union symbol-universe composition (Step 9 sub-step 3, design Open Risk 1). |
 | 2026-08-14 | `implementation-ready` (unchanged) | /sdd-execute respec | Sequential-mode §5.3 re-spec gate: 16/17 steps' anchors confirmed against trunk. One corrected — Step 7's `BacktestRunsRepository.create` → `insert` (the real method name, `backtest_runs.py:25`); same intent (thread `user_id` into the backtest-run write). Anchor-only edit, no scope change. |
+| 2026-08-14 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started. Step 1 (proto: `StrategyDefinition.user_id = 13`) done — buf lint + buf breaking (vs main-dev, non-breaking) pass. |
 
 ---
 

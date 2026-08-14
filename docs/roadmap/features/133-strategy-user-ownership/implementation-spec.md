@@ -69,7 +69,7 @@ strategies) is proven by the Step 16 cross-user e2e.
 
 ### Step 1 — proto: add `user_id` to `StrategyDefinition`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify

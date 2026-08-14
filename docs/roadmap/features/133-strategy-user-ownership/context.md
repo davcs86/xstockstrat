@@ -233,3 +233,10 @@
   backtest-run write). Committed as `respec(133)`.
 - Proto state confirmed clean pre-feature: `StrategyDefinition` highest field = `exit_cooldown_days=11`,
   no `user_id`, field 13 free.
+
+- Tooling setup (steps 1-17): buf ⬇ 1.69.0 (host binary) · protoc-gen-go ⬇ v1.36.11 · protoc-gen-go-grpc ⬇ v1.6.2 · protoc-gen-connect-go ⬇ v1.19.2 · grpcio-tools ⬇ 1.80.0 (host py3.11; CI uses py3.12 — watch for stub drift at Step 2) · TS plugins ⬇ (pnpm install, frozen) · uv ✓ (per-service sync deferred to steps 7/11) · pnpm ✓ 9.15.0 · Chromium ✓ pre-installed · Docker ✓ (unused). buf lint passes on trunk proto.
+
+### Step 1 — proto: add user_id to StrategyDefinition [done]
+- Added `string user_id = 13;` to `StrategyDefinition` (after `exit_cooldown_days = 11`; field 12 reserved for feature 132). Server-authoritative comment per the ownership convention.
+- Verification: `buf lint` OK; `buf breaking --against main-dev` clean (additive string field, non-breaking); grep confirms field present.
+- Files modified: `packages/proto/analysis/v1/analysis.proto`. TDD: N/A (proto). Deviations: none.
