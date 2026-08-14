@@ -283,3 +283,18 @@
 - strategy_cooldowns.py: `user_id` on upsert_exit/upsert_entry + `ON CONFLICT (user_id, strategy_id, symbol)`; list_all selects user_id.
 - backtest_runs.py: `insert` gains keyword `user_id` (nullable) + column ($16).
 - Verify: ruff check + format clean on all 3 (full coverage deferred to Step 10). Servicer callers updated in Step 8. TDD: red-green covered by Step 10. Deviations: none.
+
+## Session 2026-08-14 — sdd-execute (sequential) PAUSE @ step 7/17
+**Steps this session**: respec(Step7 anchor), 1, 2, 3, 4, 5, 6, 7
+**Progress**: 7 done / 17 total (feature lifecycle: in-progress)
+**Stopped at**: clean boundary after Step 7 (repos). Next = Step 8 (servicer ownership gating,
+~13 security-critical edit sites) — deliberately deferred to a fresh /sdd-execute session so the
+IDOR/PERMISSION_DENIED logic gets clean-context attention rather than being rushed.
+**Decisions locked (do not re-ask on resume)**: SEED_USER_ID=`80880990-2b79-4d85-8761-d8d9102c2efb`
+(applied to .do/app{,.dev}.yaml + compose default + setup-env + .env.example); owner-union =
+**identity-only 133, firing universe deferred to feature 132's resolve_universe** — so Step 9 executes
+sub-steps 1-2 (owner-key the 6 state dicts + entry_backfill 3-tuple) ONLY, sub-step 3 is a Deviation
+Log entry (target: feature 132), and Step 17's synthetic-x-user-id finding also moves to 132.
+**Tooling (resumes without re-provisioning)**: buf 1.69.0 + pinned Go plugins + grpcio-tools 1.80.0 +
+TS plugins (pnpm) + `uv sync --extra dev` (analysis) all done. gettext-base installed for envsubst checks.
+**Next**: /sdd-execute strategy-user-ownership sequential (resumes at Step 8)
