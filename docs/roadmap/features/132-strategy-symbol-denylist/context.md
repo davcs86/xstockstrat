@@ -183,3 +183,30 @@
   `max_strategies_per_cycle=50` truncates silently over an unordered SELECT. User chose **"Build
   fair-share now (round 3)"**: design per-strategy round-robin / fair scheduling into `_run_cycle`
   this feature (not just deterministic ORDER BY + a metric). Round 3 designs it.
+
+### Phase 1 round 3 (proposer + adversary) — fair scheduler + fixes
+
+- Round-3 proposer designed the fair scheduler (deterministic ORDER BY created_at,strategy_id +
+  rotating cursor over a flattened pairs list, budget stays max_strategies_per_cycle, + truncation
+  log/OTel counter) plus all folded round-2 fixes.
+- Round-3 adversary verdict NEEDS WORK (no Floor breach). VERIFIED SOUND: allowlist×signal_eligible
+  write-reject is NOT bypassable by a two-step masked update (`_validate_definition` runs on the
+  MERGED def, `servicer.py:1705`/`:1682`); `deny_entry` threading correct (entry-only short-circuit
+  `:67-70`, exit branch `:71-74` untouched, replay default False `:103`). Three defects to fix:
+  1. **Held+denied double-row** — resolver keeps held-denied in `universe` AND it's in `.denied`, so
+     without a `− held_norm` guard the muted emission creates a SECOND row (the exact bug 131 killed
+     via its held_norm exclusion, 131 design.md:125,305-317). Fix: set `muted=True` on the EXISTING
+     held row; standalone muted emission covers only `denied ∩ union − held_norm`.
+  2. **entry_backfill → strategy_cooldowns narrows the pair-set** — `strategy_cooldowns` keys exclude
+     exactly the never-persisted >365d-old open positions feature 116 targets (fails.md narrowed-subset
+     trap). Fix: source the backfill pair-set from the resolved live universe (held ⊆ union via
+     ListPositions), not strategy_cooldowns.
+  3. **Scheduler window unclamped + integer cursor unstable under churn** — common case is
+     len(pairs)<50 so unclamped wrap double-evaluates; and an integer cursor % a list rebuilt every
+     cycle has no stable index→pair identity. Fix: clamp to min(max_pairs,len(pairs)) + dedupe on wrap;
+     identity-keyed resume cursor (resume after last-processed (created_at,strategy_id,symbol)) which
+     also survives restart.
+  Minor: record the full-universe-resolution cost-shift (2×owners+1 RPCs/cycle) bounded by the `_lock`
+  cycle-skip (`live_loop.py:176-178`).
+- User chose **"Run round 4"** to pressure-test the three folded fixes before approval. Round 4 in
+  progress (cap is 5).
