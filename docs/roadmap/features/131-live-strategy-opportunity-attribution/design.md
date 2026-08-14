@@ -78,19 +78,86 @@ re-declared-string parity test was considered and rejected: it would prove nothi
    `is_live=True`/`_add_provenance(c, "live_strategy")` **if** `strat in live_all` (the full,
    uncapped set — so a `strat ∈ watch` that's also genuinely live is always tagged correctly,
    regardless of the cap; only `live_new`, the capped live-only delta, is bounded).
-6. **New bounded step**, inserted between the held loop and the signals-merge loop: iterate **only**
-   `signals_by_symbol.keys() & live_by_symbol.keys()` (the intersection — never the full
-   `live_by_symbol` key set). For each such `sym`, for each `strat in _capped_live(sym)`
-   (capped — this is pure candidate creation, no pre-existing row to preserve): call
-   `_candidate(sym, strat)`, set `is_live=True`, add `"live_strategy"` provenance. This pre-seeds the
-   row **before** the signals-merge loop (`servicer.py:2152-2168`) runs, so its existing
-   `targets = [k for k in candidates if k[0] == sym]` lookup (`servicer.py:2155`) finds it instead of
-   falling through to an unattributed `_candidate(sym, "")` row. **Both the per-symbol cap (this step)
-   and the intersection bound are load-bearing, not incidental**: `curated` candidates (below) are
-   never subject to `max_universe_size` truncation — an uncapped iteration over a popular symbol's
-   full live-strategy set would inject one fully-traced row (bars fetch + `evaluate_conditions_traced`)
-   per strategy, for every user who happens to hold/signal/watchlist that symbol, regardless of the
-   platform-wide count of strategies configured against it.
+6. **New bounded step**, inserted between the held loop and the signals-merge loop, bounded by TWO
+   independent caps composed together (added across a 3-round follow-up debate, 2026-08-14 — see
+   Open Risks and `context.md` for the full history; the mechanism below is the final, adversary-
+   verified form, not the original single-cap version):
+
+   ```python
+   def _new_live_strats(sym):
+       # per-(symbol, strategy) newness check — NOT a symbol-level "already curated" check.
+       # A symbol that already has *some* candidate (e.g. watchlist-bound to strategy A) can
+       # still have additional, distinct (symbol, strategy) pairs left to create (e.g. live
+       # strategy B, not watchlist-bound) — FR-4 requires each such pair to become its own row.
+       return [s for s in _capped_live(sym) if (sym, s) not in candidates]
+
+   def _max_signal_conviction(sym):
+       return max(sig.conviction for sig in signals_by_symbol[sym])
+
+   live_signal_symbols = signals_by_symbol.keys() & live_by_symbol.keys()
+   competitive_pool = [sym for sym in live_signal_symbols if _new_live_strats(sym)]
+
+   max_live_only_symbols = self._cfg.get_int(
+       "analysis.opportunity.max_live_only_symbols_per_compute", 20
+   )
+   ranked_symbols = sorted(
+       competitive_pool,
+       key=lambda sym: (-_max_signal_conviction(sym), sym),  # conviction desc, sym asc tiebreak
+   )[:max_live_only_symbols]
+
+   for sym in ranked_symbols:
+       for strat in _new_live_strats(sym):
+           c = _candidate(sym, strat)
+           c["is_live"] = True
+           _add_provenance(c, "live_strategy")
+   ```
+
+   **Cap 1 (pre-existing): `_capped_live(sym)`'s own `max_live_strategies_per_symbol` bound**
+   (step 3) — how many strategies-per-symbol. **Cap 2 (this round): `max_live_only_symbols_per_compute`**
+   (int, default `20`) — how many *distinct symbols* this step is allowed to process in one compute
+   pass, applied to `signals_by_symbol.keys() & live_by_symbol.keys()` (the intersection — never the
+   full `live_by_symbol` key set) **before** any candidate is created. The two caps compose
+   multiplicatively, not additively: worst case is `20 × 5 = 100` new rows from this step alone
+   (both defaults) — a future reader must not read "20" as a row-count ceiling.
+
+   **Why per-`(symbol, strategy)` newness, not per-symbol "already curated"** (this is the load-
+   bearing correctness property of the whole step, found via 3 rounds of adversarial iteration —
+   see Rejected Alternatives): a symbol-level "has this symbol already got *a* candidate" check
+   would silently exclude a symbol from the competitive pool even when it still has a genuinely new
+   `(symbol, strategy)` pair to create — e.g. symbol X watchlisted to strategy A (candidate `(X,A)`
+   already exists) but also covered by live strategy B, not watchlist-bound to X: a symbol-level
+   check would drop X from the pool entirely, silently violating FR-4 (which requires `(X,B)` to
+   become its own row). `_new_live_strats` correctly returns `[B]` for X (non-empty, since
+   `(X,B) ∉ candidates`), so X still competes for a slot and, if selected, `(X,B)` gets created —
+   `(X,A)` is untouched, already correct from the watchlist loop.
+
+   **Why `_capped_live(sym)` with no `exclude` here (not `_capped_live(sym, exclude=already_here)`)
+   — provable, not incidental**: let `T = _capped_live(sym)` (the fixed cap-sized window, oldest-
+   `created_at`-first) and `W` = whatever the held loop already created for `sym` (its own
+   `watch ∪ live_new` union, step 5). For any `W ⊆ S` (the full live set), `T \ W ⊆
+   _capped_live(sym, exclude=W)` always holds — removing elements from the ranking pool before a
+   top-`cap` slice can only keep or promote an element's rank, never demote it. So **every element
+   of `T` already exists as a candidate by the time step 6 runs, whenever the held loop already
+   processed that symbol** — `_new_live_strats(sym)` naturally returns `[]` for a fully-held symbol
+   with no extra work needed, with no separate exclusion logic required. The tempting-looking
+   alternative — `_capped_live(sym, exclude=existing_strats_for_sym)` computed *before* capping —
+   is actually **wrong**: excluding first and capping second re-opens the ranking window into
+   strategies beyond the original `cap`, and can push a symbol's total attributed-strategy count
+   past `max_live_strategies_per_symbol` (e.g. 5 from the held loop + 3 more from this step = 8,
+   violating AC-7's own per-symbol bound). **This ordering dependency is real but non-obvious and
+   untested — `/sdd-spec` should add either a code comment on `_capped_live` stating the
+   exclude-before-slice order is load-bearing for this cross-site composition, or a unit test with a
+   symbol that is both held and signal-covered, with `watch` strategies scattered inside/outside the
+   cap window, asserting the per-symbol total never exceeds the cap.**
+
+   This pre-seeds the row **before** the signals-merge loop (`servicer.py:2152-2168`) runs, so its
+   existing `targets = [k for k in candidates if k[0] == sym]` lookup (`servicer.py:2155`) finds it
+   instead of falling through to an unattributed `_candidate(sym, "")` row. **All three bounds — the
+   per-strategy cap, the per-compute-pass distinct-symbol cap, and the intersection restriction —
+   are load-bearing, not incidental**: `curated` candidates (below) are never subject to
+   `max_universe_size` truncation — an unbounded iteration over either dimension (strategies sharing
+   a popular symbol, or distinct signal-covered symbols in one pass) would inject fully-traced rows
+   (bars fetch + `evaluate_conditions_traced`) with no ceiling tied to `max_universe_size`.
 7. **Curated predicate** (`servicer.py:2172-2177`):
    `curated = [c for c in candidates.values() if c["is_watchlist"] or c["is_held"] or c["is_live"]]`.
    For already-watchlist/held candidates this is a no-op (already `True`); it only changes outcomes
@@ -168,6 +235,31 @@ populates more often.
   alternative of reusing `max_universe_size` as a shared budget was rejected because it bounds a
   different dimension (total curated *rows*, an existing consumer) than this cap needs (live
   strategies *per symbol*, a new dimension) — conflating them caused the overshoot bug above.
+- **Symbol-level "already curated" exclusion for the distinct-symbol cap** (round 2 of the follow-up
+  debate closing the distinct-symbol-count Open Risk) — computing `already_curated_symbols = {k[0]
+  for k in candidates}` and filtering the step-6 competitive pool against it looked correct (avoids
+  wasting cap slots on symbols needing no protection) but operates at the wrong granularity: `FR-4`
+  requires per-`(symbol, strategy)` distinctness, and a symbol can have *some* candidate (e.g.
+  watchlist-bound to strategy A) while still having a genuinely new pair to create (live strategy B,
+  not watchlist-bound) — the symbol-level check would silently drop that pair, a real regression
+  against an already-approved FR. Rejected in favor of the per-`(symbol, strategy)` newness check
+  (`_new_live_strats`, round 3, adopted) that only excludes a symbol once it has zero remaining new
+  pairs, not merely because it already has one candidate.
+- **`_capped_live(sym, exclude=already_here)` — excluding existing pairs before capping, instead of
+  capping first then filtering for newness** (considered and rejected during round 3's verification,
+  not a prior round's actual proposal) — proven wrong, not just less clean: excluding first re-opens
+  the ranking window into strategies beyond the original `cap`, and can push a symbol's total
+  attributed-strategy count past `max_live_strategies_per_symbol` (e.g. 5 from the held loop + 3 more
+  from step 6 = 8) — a direct AC-7 violation. `_capped_live(sym)` with no `exclude`, then filtering
+  the fixed-size result for newness, is the only order that provably composes correctly (see Chosen
+  Approach step 6's proof).
+- **Cross-pass hysteresis for the distinct-symbol cap** (to prevent a symbol's curated row from
+  appearing/disappearing between consecutive daily refreshes as signal conviction shifts near the cap
+  boundary) — rejected: `OpportunitiesRepository.replace_for_user` is a stateless DELETE+INSERT per
+  user with no carried state across passes; persisting cap-decision state would be real new state
+  grafted onto a stateless write model for a ~daily-cadence cosmetic risk, against this codebase's
+  "write minimum" bias already applied to reject more-elaborate fixes above. Documented instead as
+  AC-8's explicit trade-off (no cross-pass hysteresis, a previously-curated row can vanish silently).
 
 ## Open Risks
 
@@ -182,23 +274,45 @@ populates more often.
   only the dedicated *test* for that specific multi-strategy-same-symbol scenario is waived. If a
   regression in that exact behavior ever occurs, this suite gap is why it wouldn't be caught —
   recorded here so that's a known, chosen trade-off, not a silent gap discovered later.
-- [x] **Compute fan-out — PARTIALLY RESOLVED (post-approval amendment, 2026-08-14).** The
-  **strategies-per-symbol** dimension (many live strategies sharing one popular symbol) is now bounded
-  by `analysis.opportunity.max_live_strategies_per_symbol` (default `5`), enforced at both
-  candidate-creation sites (held loop's live-only delta, step 6) via `_capped_live()` — see Chosen
-  Approach step 3. This closes the held-loop fan-out vector too, not just step 5/6's (a gap found
-  during the fix's own adversarial verification — the original Open Risk here only named step 5,
-  which was itself an unverified absence claim about the held loop). Required product-spec.md changes,
-  recorded and made with the user's explicit sign-off: a new config key (Config Key Changes section)
-  and a new AC-7 documenting that excess strategies beyond the cap get no row/no provenance for that
-  symbol (a deliberate trade-off, not a demotion of an existing row — AC-4 is unconditional for every
-  candidate that *is* created, unchanged). **Still open, deliberately not addressed by this cap**: the
-  **distinct-symbol-count** dimension — `signals_by_symbol.keys() & live_by_symbol.keys()`'s size
-  (step 6's iteration domain) remains unbounded and still bypasses `max_universe_size` via `curated`.
-  A user with an unusually large number of active signals, each matched by at least one live strategy,
-  can still curate an unbounded number of rows. This is a distinct risk from the one just closed
-  (bounded by user-scoped signal count in practice, not platform-wide strategy count, but still
-  theoretically unbounded) — left open for `/sdd-spec` to weigh, not silently folded into "resolved."
+- [x] **Compute fan-out — FULLY RESOLVED (post-approval amendment 2026-08-14, plus a 3-round
+  follow-up debate the same day).** The **strategies-per-symbol** dimension (many live strategies
+  sharing one popular symbol) is bounded by `analysis.opportunity.max_live_strategies_per_symbol`
+  (default `5`), enforced at both candidate-creation sites via `_capped_live()` — see Chosen Approach
+  step 3; AC-7. The **distinct-symbol-count** dimension (`signals_by_symbol.keys() &
+  live_by_symbol.keys()`'s size, step 6's iteration domain) — previously left open — is now bounded
+  by a second, orthogonal config key `analysis.opportunity.max_live_only_symbols_per_compute`
+  (default `20`), ranking eligible symbols by max active-signal conviction descending; see Chosen
+  Approach step 6; AC-8. **This second fix took 3 follow-up rounds to get right**: round 1's cap
+  correctly avoided the two previously-rejected bugs (sorting on a not-yet-computed field, non-
+  deterministic tiebreak) but round 2's naive fix for a newly-found starvation bug (a symbol-level
+  "already curated" exclusion wasting cap slots on symbols needing no protection) introduced a
+  *regression* against FR-4 — silently dropping legitimate `(symbol, strategy)` pairs for
+  watchlist-bound symbols with cross-strategy live coverage. Round 3 corrected this to a
+  per-`(symbol, strategy)` newness check (`_new_live_strats`), verified via a direct proof that it
+  composes correctly with the pre-existing per-strategy cap with no double- or under-counting — see
+  Chosen Approach step 6 for the full mechanism and proof, and `context.md` for the round-by-round
+  history. Required product-spec.md changes, made with the user's explicit sign-off: the new config
+  key (Config Key Changes section) and new **AC-8** documenting the per-pair eligibility rule, the
+  ranking/tiebreak, and the compound (multiplicative, not additive) worst-case row count. **New,
+  deliberately deferred residual gap, recorded rather than silently dropped**: the held-symbol-count
+  dimension — see the new Open Risk line immediately below.
+- [ ] **Held-symbol-count fan-out — OPEN, deliberately deferred (follow-up round, 2026-08-14).** A
+  user holding an unusually large number of *distinct* symbols, each covered by at least one live
+  strategy, still produces one curated row per `(symbol, strategy)` pair via the held loop with no
+  cap on the number of *distinct held symbols* itself — only the per-symbol strategy count (AC-7) and
+  the step-6 signal-only distinct-symbol count (AC-8) are now bounded; `held_norm`'s own size is not.
+  Verified directly, not assumed: no service enforces a ceiling on distinct held-symbol count —
+  `trading.risk.max_position_pct`/`max_concentration_pct` (`services/xstockstrat-trading/
+  CLAUDE.md:66,70`) bound single-position *size* relative to equity, not symbol *count*, and
+  `portfolio.risk.max_drawdown_pct` is explicitly unenforced (`services/xstockstrat-portfolio/
+  CLAUDE.md:47`) — an earlier draft of this reasoning incorrectly assumed a risk cap covered this;
+  corrected here. **Deferred, not fixed**, because growing this dimension requires N real
+  `order.filled` events per symbol (`servicer.py:2384-2409`, `portfolio/CLAUDE.md:62`) — actual
+  capital, an actual broker fill — a materially higher-friction, slower-growing vector than the two
+  now-capped zero-marginal-cost vectors (strategies-per-symbol, distinct signal-only symbols), plus a
+  loose structural ceiling already exists from `_MAX_DRAIN_PAGES=50 × _BAR_PAGE_SIZE=1000`
+  (`servicer.py:94,107`, ~50,000 positions). Revisit if real-world held-symbol counts are ever
+  observed approaching that ceiling.
 - [x] **Insertion-order test fragility — RESOLVED (round 4), safe.** Read every assertion in
   `TestListOpportunitiesMaterialized` (`test_analysis_servicer.py:3683-3877`): all assert
   set/membership (`set(by_symbol) == {...}`), dict-key lookup (`by_symbol["SYM"]`), or `len(opps)` —

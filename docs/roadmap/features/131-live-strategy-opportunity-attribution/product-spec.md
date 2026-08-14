@@ -101,6 +101,14 @@ Exact service names from CLAUDE.md Service Registry:
   expected far below this default. Does **not** replace or reuse `analysis.opportunity.max_universe_size`
   — that key still governs the unrelated curated/speculative split (FR-6 extends its OR-chain, doesn't
   touch its budget math).
+- `analysis.opportunity.max_live_only_symbols_per_compute` — int, default `20`. Added at `/sdd-design`
+  time (3-round follow-up debate, 2026-08-14 — see design.md's Chosen Approach step 6 and Open Risks).
+  Bounds how many *distinct symbols*, covered only by an active-signal + live-strategy intersection
+  (no watchlist binding, no held position), can get a new candidate row created per
+  `_compute_opportunities` compute pass — a separate, orthogonal dimension from
+  `max_live_strategies_per_symbol`'s per-symbol strategy count; the two compose multiplicatively
+  (worst case `20 × 5 = 100` new rows from this step alone, both defaults). Does **not** replace or
+  reuse `max_universe_size` or `max_live_strategies_per_symbol` — see AC-8.
 
 ## Database Changes
 
@@ -151,6 +159,28 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
    `is_live` classification are always correct regardless of how many other strategies cover the same
    symbol, since tagging an already-existing row costs no additional compute (see design.md's
    distinction between *tagging* reads, uncapped, and *candidate-creation* reads, capped).
+8. **Distinct-symbol-count cap (added at `/sdd-design` time — 3-round follow-up debate,
+   2026-08-14, closing the compute fan-out Open Risk's deferred dimension).** Step 6's iteration is
+   additionally bounded by `analysis.opportunity.max_live_only_symbols_per_compute`. Eligibility is
+   checked **per `(symbol, strategy)` pair, not per symbol**: a symbol only consumes a
+   competitive-pool slot if it has at least one live-covered `strategy_id` (within AC-7's per-symbol
+   cap) that is **not already** a candidate — i.e. a symbol with **no remaining new `(symbol,
+   strategy)` pair to create never consumes a slot**, while a symbol that **already has some curated
+   candidate** (e.g. watchlist-bound to a different `strategy_id`, or already processed by the held
+   loop) but still has additional uncreated live-strategy pairs **remains eligible for exactly those
+   remaining pairs**. Eligible symbols are ranked by descending max active-signal conviction (`sym`
+   ascending as a deterministic tiebreak); only the top `max_live_only_symbols_per_compute` proceed
+   to pair creation — symbols beyond the cut get no new row from this step (a candidate already
+   created by another origin is unaffected — this cap governs only step 6's own creation, mirroring
+   AC-7's origin-scoped bound). **No cross-pass hysteresis**: which symbols make the cut can change
+   between consecutive daily refreshes (`analysis.opportunity.refresh_hour_utc`) or on-read
+   staleness recomputes as signal conviction shifts — a previously-curated live-only row can vanish
+   entirely from one compute to the next with no user-facing signal beyond its absence, a deliberate,
+   documented trade-off (mirrors AC-7's precedent), not a silent gap. **Compound worst case**: this
+   cap composes multiplicatively with AC-7's per-symbol cap, not additively — up to
+   `max_live_only_symbols_per_compute` symbols × up to `max_live_strategies_per_symbol` strategies
+   each = **up to 100 new candidate rows** (20 × 5, both defaults) from step 6 alone in a single
+   compute; readers must not read "20" as a row-count ceiling.
 
 ## Open Questions
 
