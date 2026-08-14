@@ -14,6 +14,7 @@
 | 2026-08-13 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-13 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
 | 2026-08-14 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds — started quick, upgraded to full mid-debate) and approved; recon.md + design.md written |
+| 2026-08-14 | `design-approved` (unchanged) | /sdd-design | Round 4 reopened at user request; resolved 2 of 4 remaining Open Risks with citation-backed evidence (insertion-order safety, C-12 fixture obligation); 2 still open, tracked in design.md for `/sdd-spec` |
 
 ---
 

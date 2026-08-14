@@ -1,7 +1,8 @@
 # Design: live-strategy-opportunity-attribution
 
 **Created**: 2026-08-13
-**Rounds**: 3 (started `quick`, upgraded to full mid-debate at user direction; termination: approved)
+**Rounds**: 4 (started `quick`, upgraded to full mid-debate at user direction; round 4 reopened at
+user request after prior approval to force-resolve two deferred Open Risks; termination: approved)
 **Approved by**: user @ 2026-08-14
 **Grounded in**: recon.md
 
@@ -120,7 +121,9 @@ populates more often.
   `(symbol, strategy_id)` pairs each produce their own row (e.g. a watchlist-bound strategy A and a
   live-only strategy B both covering the same symbol). New tests exercising this scenario must group
   by `(o.symbol, o.strategy_id)` or use a new sibling helper — to be resolved at `/sdd-spec` in the
-  same step that adds the multi-strategy-per-symbol test.
+  same step that adds the multi-strategy-per-symbol test. Co-locate this with the `_strat_row`
+  `signal_params` extension noted above (round 4) — both are test-harness prerequisites for the same
+  new test class of scenarios, not independent fixes.
 - [ ] **Compute fan-out, not just membership growth**: `curated`'s bypass of `max_universe_size`
   previously bounded fan-out by a user's own watchlist size (small, user-controlled). Step 5 can now
   curate one row per live strategy covering a signaled symbol — platform-operator-controlled, not
@@ -128,15 +131,37 @@ populates more often.
   (`servicer.py:2188-2213`, per-row not per-symbol) in a single synchronous, compute-on-read RPC. This
   is an intended consequence of AC-4/FR-6 (not a regression), but is named here as a residual latency
   risk for `/sdd-spec` to weigh, not silently accepted.
-- [ ] **Insertion-order test fragility**: the loop reordering (watchlist → held → new step 5 →
-  signals-merge, vs. today's watchlist → held → signals) changes when `_candidate()` first creates a
-  row for a given key. `_candidate()` is idempotent on lookup so row *content* is unaffected, but if
-  any existing test asserts on `candidates` dict/list *iteration order* rather than set/membership,
-  the reorder could produce a spurious diff — check the existing `TestListOpportunitiesMaterialized`
-  suite's assertion style during `/sdd-spec` discovery, not assumed safe.
-- [ ] **C-12 fixture obligation**: no e2e-fixture change identified as required (this is a pure
-  backend attribution change, no new UI element) — confirm at `/sdd-spec` that no new frontend mock
-  data is needed for the Opportunities page tests that already exercise attributed rows.
+- [x] **Insertion-order test fragility — RESOLVED (round 4), safe.** Read every assertion in
+  `TestListOpportunitiesMaterialized` (`test_analysis_servicer.py:3683-3877`): all assert
+  set/membership (`set(by_symbol) == {...}`), dict-key lookup (`by_symbol["SYM"]`), or `len(opps)` —
+  none iterate `candidates`/`resp.opportunities` positionally except
+  `test_ranked_by_conviction_and_signal_axis` (`:3790-3800`), whose order comes from an explicit
+  downstream rank-sort in `_FakeOppRepo.read()` (`:3552`), mirroring the real `ORDER BY` in
+  `app/repositories/opportunities.py:112` — fully decoupled from `_compute_opportunities`'s internal
+  `candidates` dict build order (`servicer.py:2111-2177`). The watchlist → held → new step-5 →
+  signals-merge reorder cannot regress this suite. **Caveat carried forward, not blocking**: none of
+  the existing suite's `_strat_row` fixtures configure `signal_params.symbols`
+  (`test_analysis_servicer.py:3608-3630` has no such field), so this reorder-safety finding is
+  necessarily a no-op check against the *current* suite — the step-5 code path is genuinely exercised
+  for the first time by the *new* tests this feature adds, which haven't been written yet. Also
+  surfaced: `_strat_row` needs extending with a `signal_params` option (or a sibling helper) to write
+  those new tests at all — a `/sdd-spec` step, tracked alongside the `_list_opps` item below (C-13:
+  second consumer forces centralization, not ad hoc inline `StrategyDefinition(signal_params=...)`
+  per test).
+- [x] **C-12 fixture obligation — RESOLVED (round 4), no fixture change needed.** The real closing
+  argument (corrected from round 4's first pass, which over-relied on a `provenance`-only grep): the
+  UI *does* render the other three fields this feature newly populates —
+  `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx:333-341` renders
+  `{passingConditions}/{totalConditions}`, `:354-356` renders `strategyId` — but an **existing** e2e
+  assertion already exercises exactly this rendering path:
+  `services/xstockstrat-ui/e2e/insights/opportunities.spec.ts:70-72` asserts `getByText('4/5')` and
+  `getByText('strat-001')` against a fixture row with real (non-`0/0`) values
+  (`e2e/fixtures/opportunities.ts:12-24`), explicitly commented "an attributed row carries REAL
+  passing/total... not 0/0." Since the e2e mock is static and provenance-blind
+  (`e2e/mock-backend.ts:547-550` serves `OPPORTUNITIES` filtered only by `min_conviction`, never
+  routing through `_compute_opportunities`), a row's *origin* (watchlist vs. live-strategy) is
+  invisible to the UI/test either way — the backend attribution change doesn't alter what the UI
+  renders or how it's tested. No new fixture, no `INVENTORY.md` row.
 
 ## Constitution Rules Touched
 

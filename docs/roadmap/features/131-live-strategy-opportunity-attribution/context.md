@@ -98,3 +98,30 @@
   design that read as complete and responsive to the prior round's objection had a real, code-
   verifiable gap only a fresh re-trace against actual source caught — reinforces the
   `insights.md` 2026-08-13 entry rather than needing a new one.
+
+## Session 2026-08-14T00:10:00Z — sdd-design round 4 (reopened by user)
+
+- User asked to "run round 4" ambiguously right after 131's approval; clarified via
+  `AskUserQuestion` — user meant reopening 131's already-approved debate for another round, not
+  starting 022's design phase.
+- Round 4 targeted the two Open Risks design.md had explicitly deferred to `/sdd-spec` rather than
+  resolving ("check... not assumed safe" / "confirm at `/sdd-spec`"): insertion-order test fragility
+  and the C-12 fixture obligation.
+- Proposer resolved both by reading the actual test/UI code rather than reasoning abstractly: (1)
+  every existing `TestListOpportunitiesMaterialized` assertion is set/membership/dict-key-based
+  except one, whose order comes from an explicit downstream rank-sort decoupled from `candidates`
+  dict build order — reorder is safe against the current suite. (2) initially closed C-12 via a
+  `provenance`-grep (zero UI consumers) — adversary correctly pushed back that this didn't answer
+  whether the UI reads the *other* three newly-populated fields (`strategy_id`/`passing_conditions`/
+  `total_conditions`); re-verified and found the real answer: it does render them, but an *existing*
+  e2e test (`opportunities.spec.ts:70-72`) already exercises that exact path with non-`0/0` fixture
+  values, and the mock is provenance-blind either way — no new fixture needed.
+- Adversary verdict: SOUND, with one correction (cite the existing e2e test, not just the grep) and
+  one new spec-time note (the `_strat_row` test helper has no `signal_params` support — needed to
+  write the new tests this feature requires at all; co-located with the existing `_list_opps`
+  test-helper Open Risk as a shared prerequisite, not two independent fixes).
+- `design.md` updated in place: two Open Risks marked resolved with full citation trails, `Rounds`
+  updated to 4, the two genuinely-still-open risks (test-helper incompatibility, compute fan-out)
+  left as-is — confirmed untouched by this round, not implicitly closed by proximity.
+- Status: design-approved (unchanged) — round 4 didn't flip lifecycle, it strengthened the existing
+  approval's evidence trail.
