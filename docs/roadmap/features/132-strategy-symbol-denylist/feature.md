@@ -1,6 +1,6 @@
 # Feature: strategy-symbol-denylist
 
-**Lifecycle Status**: `spec-ready`
+**Lifecycle Status**: `design-approved`
 **Development Branch**: `feature/strategy-symbol-denylist`
 **Created**: 2026-08-14
 **Last Updated**: 2026-08-14
@@ -13,12 +13,15 @@
 |---|---|---|---|
 | 2026-08-14 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-14 | `draft` → `spec-ready` | /sdd-review | Criteria: PASS WITH WARNINGS (1 warning fixed — a wrong `live_loop.py` line citation, corrected to `:188-196`; FR-3/FR-5/AC-5's deferred-mechanism warnings accepted as legitimate, matching 131's own precedent). Overlap: file-level overlap with 131 (`_compute_opportunities`, `strategy_symbols()`) confirmed expected/already-committed-to (FR-6); no resource-number collisions (proto field 12 vs 133's field 13 confirmed disjoint against trunk). |
+| 2026-08-14 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved APPROVE-READY; recon.md + design.md written. Two user-locked forks: **layer 132 on 131** (merge order 133→134→131→132) and a **dedicated `Opportunity.muted` flag** for FR-5. User steers: **entry-only deny** (held positions keep exit tracing) amending FR-1/AC-2; a **new `signal_eligible` flag** (FR-8) gating the platform-wide active-signal term; and **fair-share live-loop scheduling** (FR-9) built now. Shared `resolve_universe` helper (C-10b parity), muted-via-provenance persistence (no migration), portfolio-readiness-gated entry_backfill. One accepted residual (cold-boot backfill no-retry, no worse than shipped 116). Amended 131's design.md (FR-6) + merge-order.md. |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon](recon.md) — grounded codebase dossier (Phase 0)
+- [Design](design.md) — debated, user-approved architecture (Phase 1, 5 rounds)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec strategy-symbol-denylist`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -51,9 +54,9 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design strategy-symbol-denylist` — recon + design debate. **Phase 0 Recon must resolve this
-story's central open question (cross-user aggregation for the live loop's evaluation universe)
-before Phase 1 debate can proceed** — see product-spec.md § Open Questions. This is expected to
-depend on `133-strategy-user-ownership` reaching at least `design-approved` first (its own identity
-contract determines how 132's FR-3 gets built) — confirm exact sequencing at `/sdd-design` time and
-update `docs/roadmap/features/merge-order.md` accordingly.
+`/sdd-spec strategy-symbol-denylist` — generate the implementation spec from the approved design.
+The central open question (cross-user aggregation) is resolved: strategies are owner-scoped via
+`133-strategy-user-ownership` and the live loop uses 133's `ListPositions(user_id=owner)` +
+synthetic-header `ListWatchlists` mechanism. Merge/build order is `133 → 134 → 131 → 132`
+(`merge-order.md`); 132 layers on 131 and its spec should cite 131's landed
+`_compute_opportunities`/`live_by_symbol`/`resolve_universe` shape.

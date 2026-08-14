@@ -11,6 +11,33 @@ changes); termination: approved
 
 ---
 
+## Amendment — feature 132-strategy-symbol-denylist (2026-08-14)
+
+> Added by 132's `/sdd-design` per 132 FR-6. Execute/merge order is `133 → 134 → 131 → 132` (131
+> merges first, 132 layers on top); this amendment records how 132 changes 131's mechanism so 131's
+> `/sdd-spec` and later re-spec reflect the deny-list universe rather than the opt-in allowlist.
+> 131's caps, curated predicate, `_capped_live`, and `LIVE_ENABLED_PREDICATE_SQL` are **unchanged**.
+
+- **`live_by_symbol` source (Chosen Approach step 1).** Under 132, `live_by_symbol` is built from
+  `resolve_universe(definition, watchlist, held, signals).union` — the pre-deny owner-coverage set
+  (`watchlist ∪ held ∪ (signals iff definition.signal_eligible)`, or the allowlist when
+  `signal_params.symbols` is set) — **not** from `strategy_symbols(definition)` reading
+  `signal_params.symbols` as an allowlist. `strategy_symbols` is replaced by the shared
+  `resolve_universe` helper (132 design.md decision 2). The normalization requirement in step 1 is
+  unchanged (`resolve_universe` normalizes internally).
+- **Denied pairs → muted rows (new).** 132 adds `Opportunity.muted` (bool, proto field 12, carried via
+  the `"denied"` provenance marker) and a muted-row emission step: a held-denied symbol is flagged
+  `muted=True` on its **existing** `is_held` exit row (no second row); a non-held denied symbol in the
+  union but `∉ held_norm` gets a zero-compute standalone muted row. The `− held_norm` guard reuses 131's
+  own domain restriction (this design's step 6 / `:125,305-317`). The cut becomes three disjoint buckets
+  (`curated`/`muted_only`/`speculative`) so muted rows are never truncated and never sorted/filtered by
+  conviction.
+- **`is_live` unaffected.** 131's internal `is_live` `_candidate` flag, `_capped_live`, and the two
+  fan-out caps are unchanged — 132 only changes the symbol *set* each live row expands to (via
+  `resolve_universe`) and adds the orthogonal `muted` flag.
+
+---
+
 ## Chosen Approach
 
 **Repository/predicate.** New `StrategiesRepository.list_live_enabled()` (sibling of `list()`,

@@ -229,3 +229,22 @@
      portfolio readiness (wait_for_ready/retry).
   4. **scheduler zero-guard** — only advance cursor when n>0 (avoid ZeroDivision on empty pairs).
 - User chose **"Run round 5 (final, cap)"** to verify the four remedies. Round 5 in progress.
+
+### Phase 1 round 5 (cap) — APPROVE-READY → design-approved
+
+- Round-5 proposer locked the four round-4 remedies with cited code (+ caught `_primary_source` must
+  skip `"denied"`, and budget must subtract `len(muted_only)`). Round-5 adversary verdict
+  **APPROVE-READY**: all four remedies correct against real code; `TestOpportunityRowParity`
+  (`test_analysis_servicer.py:4016-4019`) actively enforces the muted mapper; three buckets provably
+  disjoint; R4 zero-guard sound; R3 residual bounded/logged/no-worse-than-116. No Floor breach across
+  all 5 rounds. Two non-blocking impl notes carried to /sdd-spec: (a) capture the portfolio *channel*
+  object (not the stub) for `channel_ready()`, apply the gate per allowlist-free pair with TimeoutError
+  caught; (b) the backend `ListOpportunities` read query's conviction floor (`opportunities.py:105`)
+  must also exempt muted rows (`OR provenance ? 'denied'`), not just the UI filter, or FR-5's "never
+  vanish" fails at the DB layer.
+- **User APPROVED the design.** Written: design.md (full approach + all round 1-5 fixes + Open Risks).
+  Amended 131's design.md (FR-6 amendment block). Updated merge-order.md (132→133, 132→131 rows;
+  cohort order 133→134→131→132). Amended product-spec.md: FR-1/AC-2 (entry-only deny), AC-5
+  (allowlist-as-override), new FR-8 (signal_eligible), new FR-9 (fair-share scheduler), Proto Contract
+  Changes (signal_eligible=14, Opportunity.muted=12).
+- Status: spec-ready → **design-approved**. Next: `/sdd-spec strategy-symbol-denylist`.
