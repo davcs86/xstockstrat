@@ -90,3 +90,9 @@
 - Files modified: `services/xstockstrat-identity/migrations/006_user_metadata.{up,down}.sql`
 - Deviations: none (offline verification — live apply deferred to CI)
 - TDD: N/A (migration — non-code-bearing)
+
+### Step 4 — service: Identity authz.ts module [done]
+- Created `src/grpc/authz.ts` with `first(md, key)`, `userIdFrom(md)`, and `HEADER_USER_ID` — minimal subset of config's authz pattern for self-management RPCs.
+- Files modified: `services/xstockstrat-identity/src/grpc/authz.ts`
+- Deviations: none
+- TDD: red (`Cannot find module './src/grpc/authz'`) → green (lint passed, 0 errors). Dedicated unit tests land in Step 6.

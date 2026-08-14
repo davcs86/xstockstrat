@@ -190,7 +190,7 @@ ls services/xstockstrat-identity/migrations/006_user_metadata.up.sql \
 
 ### Step 4 — service: Identity authz.ts module
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-identity`
 **Files**:
 - `services/xstockstrat-identity/src/grpc/authz.ts` — create
