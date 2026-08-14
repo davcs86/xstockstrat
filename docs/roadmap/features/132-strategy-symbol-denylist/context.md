@@ -248,3 +248,45 @@
   (allowlist-as-override), new FR-8 (signal_eligible), new FR-9 (fair-share scheduler), Proto Contract
   Changes (signal_eligible=14, Opportunity.muted=12).
 - Status: spec-ready → **design-approved**. Next: `/sdd-spec strategy-symbol-denylist`.
+
+## Session 2026-08-14 — sdd-spec
+
+- Generated implementation-spec.md with 17 steps. Status `design-approved` → `implementation-ready`.
+- Structure: proto (Step 1, 3 additive fields) → proto-gen (2) → analysis service+test pairs (3/4
+  resolve_universe helper + maskability + allowlist×signal_eligible reject; 5/6 entry-only deny +
+  fair-share scheduler + owner-scoped universe; 7/8 muted rows + read-filter exemption; 9/10 precondition
+  removal + entry_backfill union sourcing + portfolio-readiness gate) → agent (11/12 manage_strategy
+  fields + strat-lab skill same-PR) → UI (13 wizard, 14 symbol-page masked mute, 15 opportunities
+  muted-row, 16 e2e) → docs (17). C-14 consumer surfaces both covered (UI /insights + agent
+  manage_strategy).
+- Key codebase findings (current trunk, features 131/133 NOT yet merged):
+  - `analysis.proto`: `StrategyDefinition` highest field = `exit_cooldown_days = 11` (`:273`) → field 12
+    free; `Opportunity` highest = `provenance = 11` (`:458`) → field 12 free. Confirms `denied_symbols=12`,
+    `signal_eligible=14` (13 reserved for 133's `user_id`), `Opportunity.muted=12` all free. No
+    `user_id`/`denied_symbols`/`signal_eligible`/`muted` on trunk today.
+  - `strategy_symbols(definition)` at `live_loop.py:37-47`; callers `live_loop.py:210`,
+    `entry_backfill.py:83` (import `:18`), `servicer.py:1838` (SetStrategyLive precondition, local import
+    `:1824`). `_apply_transition` `:50-75` (entry `:67-70`, exit `:71-74`); `_run_cycle` truncate-at-cap
+    `:185-206`; `_lock` cycle-skip `:176-178`.
+  - `_compute_opportunities` `servicer.py:2083`; `_candidate` template `:2113-2127`; held loop `:2144-2150`;
+    signals-merge `:2154-2168`; max_universe cut `:2170-2177`; `_row_to_opportunity` `:2590-2608`;
+    `_primary_source` `:2580-2587`; `_normalize_symbol` `:2542`; `_MASKABLE_PATHS` `:2873-2883`;
+    `_validate_definition` on merged def at `:1705`.
+  - Agent: `manage_strategy` tool `tools.py:488` (supplied dict `:572-583`, mask `:581`); client
+    `client.py:396` (`StrategyDefinition(...)` `:425-438`); strat-lab `SKILL.md:44-57`.
+  - UI: `StrategyWizard.tsx:108` (cooldown state `:121-126`, submit `:172-197`); `useManageStrategy`
+    `useStrategyDefinitions.ts:34-43` (no update_mask today — full-replace); `insightsBff.manageStrategy`
+    `:42-54`; `market/[symbol]/page.tsx` loads no strategy-write path today (`:44,:97-109`).
+
+## Decisions (durable)
+
+- 132 executes/merges LAST (`133 → 134 → 131 → 132`). The impl-spec grounds every step in current-trunk
+  `path:line` and flags each 131/133-dependent anchor; a conditional evidence-only re-spec pass runs
+  immediately before /sdd-execute once 131 and 133 land (mirrors fails.md 019/041). Reviewer snapshot is
+  the 4 step-reviewers (Proto, analysis, ui, agent); portfolio owner / Platform Lead own no step because
+  the design adds no new portfolio RPC (reuses 133's owner-scoping mechanism).
+
+## Open Threads
+
+- Re-run `/sdd-spec` (evidence-only) after 131 + 133 merge to refresh shifted line numbers before execute.
+- Accepted residual: entry_backfill cold-boot no-retry (Step 9/10, no worse than shipped 116).

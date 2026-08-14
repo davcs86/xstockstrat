@@ -1,6 +1,6 @@
 # Feature: strategy-symbol-denylist
 
-**Lifecycle Status**: `design-approved`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/strategy-symbol-denylist`
 **Created**: 2026-08-14
 **Last Updated**: 2026-08-14
@@ -14,6 +14,7 @@
 | 2026-08-14 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-14 | `draft` → `spec-ready` | /sdd-review | Criteria: PASS WITH WARNINGS (1 warning fixed — a wrong `live_loop.py` line citation, corrected to `:188-196`; FR-3/FR-5/AC-5's deferred-mechanism warnings accepted as legitimate, matching 131's own precedent). Overlap: file-level overlap with 131 (`_compute_opportunities`, `strategy_symbols()`) confirmed expected/already-committed-to (FR-6); no resource-number collisions (proto field 12 vs 133's field 13 confirmed disjoint against trunk). |
 | 2026-08-14 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved APPROVE-READY; recon.md + design.md written. Two user-locked forks: **layer 132 on 131** (merge order 133→134→131→132) and a **dedicated `Opportunity.muted` flag** for FR-5. User steers: **entry-only deny** (held positions keep exit tracing) amending FR-1/AC-2; a **new `signal_eligible` flag** (FR-8) gating the platform-wide active-signal term; and **fair-share live-loop scheduling** (FR-9) built now. Shared `resolve_universe` helper (C-10b parity), muted-via-provenance persistence (no migration), portfolio-readiness-gated entry_backfill. One accepted residual (cold-boot backfill no-retry, no worse than shipped 116). Amended 131's design.md (FR-6) + merge-order.md. |
+| 2026-08-14 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 17 steps. Proto (3 additive fields, re-verified free on trunk: StrategyDefinition highest=11, Opportunity highest=11) → analysis write-path/live-loop/opportunities/precondition-backfill (4 service+4 test steps) → agent (1+1) → UI (3 service + 1 e2e, C-14) → docs. Every step grounded in current-trunk `path:line`; 131/133-dependent anchors flagged for a conditional re-spec pass before /sdd-execute (132 executes last per merge order 133→134→131→132). |
 
 ---
 
@@ -22,7 +23,7 @@
 - [Product Spec](product-spec.md) — requirements and governance
 - [Recon](recon.md) — grounded codebase dossier (Phase 0)
 - [Design](design.md) — debated, user-approved architecture (Phase 1, 5 rounds)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec strategy-symbol-denylist`_
+- [Implementation Spec](implementation-spec.md) — 17 numbered steps with grounded codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -39,24 +40,27 @@ assumes the opt-in list.
 
 ## Reviewers
 
-_(Auto-populated from docs/runbooks/reviewer-registry.md based on affected services and
-change types. Override as needed for this feature. Snapshot finalized at /sdd-spec time —
-re-run /sdd-spec if the registry changes.)_
+_(Canonical snapshot finalized at /sdd-spec time — the deduplicated union of every step's
+`**Reviewers**` value in implementation-spec.md. Stable unless /sdd-spec re-runs.)_
 
-| Role | Review Focus |
-|---|---|
-| Proto Reviewer | Field number uniqueness, no breaking changes without deprecation, `buf lint`/`buf breaking` |
-| `xstockstrat-analysis` owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias — plus live-loop evaluation-universe correctness (this feature's core change) |
-| `xstockstrat-portfolio` owner | P&L calculation accuracy, position snapshot consistency, concurrent write safety — relevant if a cross-user positions/watchlist aggregation RPC is added (see Open Questions) |
-| `xstockstrat-ui` owner | Trading UI correctness, Connect-RPC call safety — Symbol page + Strategy edit page deny-list controls, Opportunities muted-row display |
-| `xstockstrat-agent` owner | MCP tool contract stability — `manage_strategy` tool surface, `strat-lab` plugin skill parity (root CLAUDE.md requires same-PR skill updates for `manage_strategy` changes) |
-| Platform Lead | Cross-service architecture — the live-loop's evaluation-universe scoping is a genuine platform-wide compute-cost and multi-tenancy question (see Open Questions) |
+| Role | Review Focus | Steps |
+|---|---|---|
+| Proto Reviewer | Field number uniqueness, no breaking changes without deprecation, `buf lint`/`buf breaking` | 1, 2 |
+| `xstockstrat-analysis` owner | Backtest reproducibility, strategy scoring determinism, no look-ahead bias — live-loop evaluation-universe correctness, fair-share fairness, ordinal/cardinal discipline (muted rows), live-toggle precondition, boot-time backfill robustness | 1, 2, 3–10, 17 |
+| `xstockstrat-ui` owner | Trading/analytics UI correctness, Connect-RPC call safety — StrategyWizard deny-list editor + `signal_eligible` toggle, Symbol-page masked mute control, Opportunities muted-row display, mock-backend fidelity | 1, 2, 13–16 |
+| `xstockstrat-agent` owner | MCP tool contract stability (name, params, return shape) — `manage_strategy` field surface + `strat-lab` plugin skill parity (root CLAUDE.md same-PR rule) | 1, 2, 11, 12 |
+
+_Note: `xstockstrat-portfolio` owner and Platform Lead were flagged advisory at story/design time; the
+approved design reuses feature 133's existing `ListPositions(user_id)` + synthetic-header `ListWatchlists`
+mechanism and adds **no** new portfolio RPC or cross-user aggregation surface, so neither owns a step here._
 
 ## Next Action
 
-`/sdd-spec strategy-symbol-denylist` — generate the implementation spec from the approved design.
-The central open question (cross-user aggregation) is resolved: strategies are owner-scoped via
-`133-strategy-user-ownership` and the live loop uses 133's `ListPositions(user_id=owner)` +
-synthetic-header `ListWatchlists` mechanism. Merge/build order is `133 → 134 → 131 → 132`
-(`merge-order.md`); 132 layers on 131 and its spec should cite 131's landed
-`_compute_opportunities`/`live_by_symbol`/`resolve_universe` shape.
+`/sdd-review strategy-symbol-denylist impl-spec` — validate the implementation spec (advisory quality
+check + overlap scan), then `/sdd-execute strategy-symbol-denylist`. **Before executing**, run a
+conditional re-spec pass (`/sdd-spec strategy-symbol-denylist`, evidence-only) once features **131** and
+**133** have merged to `main-dev` — 132 executes last (merge order `133 → 134 → 131 → 132`) and several
+step anchors (`resolve_universe`/`live_by_symbol` in `_compute_opportunities`, `StrategyDefinition.user_id`,
+the rewritten `get_by_owner_and_id`, `_MASKABLE_PATHS`) only take final line-shape after those land. The
+spec flags each such anchor. Field numbers (`denied_symbols=12`, `signal_eligible=14`, `Opportunity.muted=12`)
+re-verified free on trunk today.
