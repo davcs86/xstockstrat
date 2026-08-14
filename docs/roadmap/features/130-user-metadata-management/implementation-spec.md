@@ -36,7 +36,7 @@ in the design phase; this spec updates the product spec accordingly.
 
 ### Step 1 — proto: Add UserMetadata messages and RPCs to identity.proto
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/identity/v1/identity.proto` — modify
