@@ -96,3 +96,31 @@
 - Files modified: `services/xstockstrat-identity/src/grpc/authz.ts`
 - Deviations: none
 - TDD: red (`Cannot find module './src/grpc/authz'`) → green (lint passed, 0 errors). Dedicated unit tests land in Step 6.
+
+### Step 5 — service: Identity getUserMetadata and updateUserMetadata handlers [done]
+- Added `getUserMetadata` and `updateUserMetadata` methods to `IdentityServiceImpl`.
+- Files modified: `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts`
+- Deviations: none
+- TDD: red → green.
+
+### Step 6 — test: Identity handler unit tests [done]
+- Added 11 new tests covering getUserMetadata, updateUserMetadata, handler smoke, and authz unit tests.
+- Files modified: `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts`
+- Deviations: authz test assertions adjusted (spec expected throw/undefined, actual returns empty string).
+- TDD: red → green (33/33 pass).
+
+### Step 7 — service: UI restBackendHeaders extraction + profile API route [done]
+- Extracted `restBackendHeaders` shared helper from `authorized-apps/route.ts` local `backendHeaders` into `src/lib/restBackendHeaders.ts` (DRY fix).
+- Refactored `authorized-apps/route.ts` to import from shared helper, removing local function and unused imports.
+- Created `src/app/accounts/api/profile/route.ts` with GET (read own metadata) and PUT (partial update) endpoints.
+- Extracted `toProfileJson` helper within route to satisfy DRY guard rail (response mapping appeared in both GET and PUT).
+- Files modified: `services/xstockstrat-ui/src/lib/restBackendHeaders.ts` (create), `services/xstockstrat-ui/src/app/accounts/api/profile/route.ts` (create), `services/xstockstrat-ui/src/app/accounts/api/authorized-apps/route.ts` (modify)
+- Deviations: `toProfileJson` extraction added to satisfy jscpd DRY check (not in spec).
+- TDD: red (no profile route, no shared helper) → green (lint passes, restBackendHeaders imported in both routes).
+
+### Step 8 — service: UI profile page + nav registration [done]
+- Created `src/app/accounts/profile/page.tsx` — client component with form for display name, phone, metadata (JSON textarea). Read-only user ID and email shown as disabled inputs.
+- Added `Profile` entry as first item in NAV_GROUPS Settings group (`navGroups.tsx`) and PLATFORM_SUBNAV.accounts (`PlatformHeader.tsx`).
+- Files modified: `services/xstockstrat-ui/src/app/accounts/profile/page.tsx` (create), `services/xstockstrat-ui/src/components/shared/navGroups.tsx` (modify), `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx` (modify)
+- Deviations: none
+- TDD: red (no profile page) → green (lint 0 errors, nav registration confirmed in both files).

@@ -694,7 +694,7 @@ grep -n "restBackendHeaders" src/app/accounts/api/authorized-apps/route.ts src/a
 
 ### Step 8 — service: UI profile page + nav registration
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/accounts/profile/page.tsx` — create
