@@ -1,6 +1,6 @@
 # Feature: user-metadata-management
 
-**Lifecycle Status**: `design-approved`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/user-metadata-management`
 **Created**: 2026-08-14
 **Last Updated**: 2026-08-14
@@ -13,6 +13,7 @@
 |---|---|---|---|
 | 2026-08-14 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-14 | `draft` → `design-approved` | /sdd-design | 3-round quick grilling; user-approved design |
+| 2026-08-14 | `design-approved` → `implementation-ready` | /sdd-spec | 13-step implementation spec generated |
 
 ---
 
@@ -21,7 +22,7 @@
 - [Product Spec](product-spec.md) — requirements and governance
 - [Recon](recon.md) — codebase dossier (Phase 0)
 - [Design](design.md) — debated architecture (Phase 1, 3 rounds quick)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec user-metadata-management`_
+- [Implementation Spec](implementation-spec.md) — 13 numbered steps with codebase evidence
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -46,4 +47,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-spec user-metadata-management` — generate implementation spec from approved design
+`/sdd-review user-metadata-management impl-spec` — advisory review, then `/sdd-execute user-metadata-management`

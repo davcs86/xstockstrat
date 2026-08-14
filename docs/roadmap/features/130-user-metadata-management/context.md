@@ -43,5 +43,20 @@
 ### Open Threads
 - [ ] Dual user_id sourcing in identity (old=request body, new=metadata) — documented via JSDoc; consider follow-up migration.
 - [ ] `call: any` typing in identity — runtime guard added; future improvement could narrow to `ServerUnaryCall`.
-- [ ] Product spec FR-6 deviation (`/config-ui/profile` → `/accounts/profile`) — update product spec at impl-spec time.
+- [x] Product spec FR-6 deviation (`/config-ui/profile` → `/accounts/profile`) — **resolved**: product spec updated at impl-spec time (FR-6, acceptance criterion 4-5, affected services, consumer surfaces).
 - [ ] Recon BFF guidance at `recon.md:63` superseded by `/accounts` REST route pattern.
+
+## Session 2026-08-14T10:00:00Z — sdd-spec
+
+- Generated `implementation-spec.md` with 13 steps across 4 services + proto + docs.
+- Updated `feature.md` status: `design-approved` → `implementation-ready`.
+- Updated `product-spec.md`: applied design deviations (FR-6: `/config-ui/profile` → `/accounts/profile`, FR-9: email excluded from `set_user_metadata`, consumer surfaces, affected services, acceptance criteria).
+- Step order: proto → proto-gen → migration → identity authz → identity handlers → identity tests → UI route + DRY extraction → UI page + nav → UI E2E → agent client → agent tools + tool count → agent tests → docs.
+- Key spec decisions:
+  - Identity `authz.ts` is Step 4 (before handlers in Step 5) — handlers import from it.
+  - `restBackendHeaders` extraction (DRY fix) is bundled in Step 7 with the profile API route — same commit touches `authorized-apps/route.ts` refactor.
+  - Tool count bump (5 prose + 1 numeric) consolidated into Step 11 with tool registration.
+  - Product spec FR-6 deviation from design (open thread) resolved — product spec updated in this session.
+  - Migration verification is offline (no DB spinup) per spec template constraint.
+  - All `service` steps carry TDD red-green required; non-code steps (proto, proto-gen, migration, docs) are N/A.
+  - C-12/C-13 test data compliance documented per step (reuses `TEST_USER_ID`/`TEST_USER_EMAIL`, inline fixtures are single-consumer).
