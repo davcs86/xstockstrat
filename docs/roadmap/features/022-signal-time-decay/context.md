@@ -260,3 +260,64 @@
   responsiveness).
 - Result: documentation-only `design.md` amendment, no code/config/proto change, no re-approval gate
   needed (no architecture change — status stays `design-approved`).
+
+## Session 2026-08-14T04:00:00Z — /sdd-spec signal-time-decay
+
+- Generated `implementation-spec.md` with **7 steps**. Status → `implementation-ready`.
+- **Executed the design's mandatory spec-time re-verification** (design.md § Chosen Approach —
+  "134 composition — verify at spec time, not design time"): **134 and 131 have NOT landed** — both
+  are `implementation-ready`, not `launched`. Grep-confirmed against current trunk:
+  - Write site is still `c["signal_axis"] = max(c["signal_axis"], sig.conviction)`
+    (`services/xstockstrat-analysis/app/handlers/servicer.py:2163`), **no `source_weight` term**.
+  - `grep -rn "weight_for" services/xstockstrat-analysis/` → zero hits (134's symbol absent);
+    `live_by_symbol` → zero hits (131 absent). `source_weights` exists only in the screener path
+    (`scoring.py:23`, `screener.py`), never in `_compute_opportunities`.
+  - The current-trunk signals-merge section (`:2154-2168`) is exactly the two-level nested loop the
+    design wrote against (`for key in targets: for sig in sigs:`), so the design's `sig_contribs`
+    hoist maps 1:1.
+  - **Per Constitution F-04**, Step 5 cites only the real current expression
+    (`effective_conviction = sig.conviction * decay_multiplier`, no invented `source_weight`) and
+    carries an explicit **MERGE-ORDER / REBASE CONSTRAINT** in `## Step Dependencies`: `/sdd-execute`
+    must re-grep the landed `_compute_opportunities` and add `× source_weight` / adjust the loop shape
+    only against real landed symbols if 134/131 have landed by then. Landing order 134 → 131 → 022
+    (`merge-order.md:59-60`) is enforced at the integration-PR gate.
+- Key codebase findings (all `path:line`-grounded):
+  - Proto: `ExternalSignal` `packages/proto/ingest/v1/ingest.proto:106-116`; highest field `tags = 9`
+    (`:115`), **field 10 free**; `google.protobuf.Timestamp` already imported/used (`:111-112`).
+  - Ingest `QuerySignals` `servicer.py:898-994`: SELECT (`:958-960`) and `ExternalSignal(...)`
+    construction (`:976-983`) both omit `ingested_at`; query already `ORDER BY ingested_at DESC`
+    (`:962`). Column `NOT NULL DEFAULT NOW()` (`migrations/001_newsletter_signals.up.sql:10`) — no
+    migration, no `IngestSignal` change. Reuse `SignalSource.last_seen_at.FromDatetime(...)`
+    (`servicer.py:1039-1040`), no null guard (NOT NULL). `Timestamp` imported (`:20`).
+  - Config zero-trap (recon Critical): analysis `watcher.py` `get_float` (`:124-130`) is
+    `v.float_val or default`; `get_int_present` (`:103-114`) is the presence-aware template; **no
+    `get_float_present` exists** — Step 5 adds it (design-mandated explicit change). `float_val` is
+    oneof member #3 (`packages/proto/config/v1/config.proto:48-52`), so `HasField("float_val")` valid.
+  - Analysis servicer already imports `math` (`:17`), `datetime/UTC/timedelta` (`:19`), `log` (`:61`) —
+    no new imports for the decay logic.
+  - Config key is **runtime-registered, no config-service seed migration** — the sibling
+    `analysis.scoring.*` keys (065) are not seeded either
+    (`services/xstockstrat-config/docs/context-constitution-findings.md:13`); declared in analysis
+    `CLAUDE.md` only (Step 7). Tradeoff surfaced in the spec (a seed migration is optional, not
+    required for correctness).
+  - **C-14**: no UI/Agent step — product spec's Consumer Surface is the existing `ListOpportunities`
+    ranking, which reflects the decayed `signal_axis` with no frontend change. Restated as a decision
+    in `## Execution Summary`.
+  - Test homes confirmed: ingest `tests/test_ingest_servicer.py` (QuerySignals); analysis
+    `tests/test_analysis_servicer.py` (`_FakeOppRepo` harness `:3517`, `_sig` fixture builder `:3504`,
+    existing `signal_axis` assertions `:3769-3792`) + `tests/test_config_watcher.py`.
+
+### Decisions
+
+- Spec cites current-trunk code (no `source_weight`, current 2-level loop); rebase deferred to
+  `/sdd-execute` per F-04 and the design's explicit spec-time-reverify instruction.
+- Config key runtime-registered (no seed migration) — sibling-precedent-backed; a seed migration is a
+  named, optional follow-up, not required.
+- No config-service reviewer on the snapshot — the `config`-category step (analysis `CLAUDE.md`
+  declaration) is analysis-owned per the reviewer matrix; config service is untouched.
+
+### Open Threads
+
+- Hard: 022's integration PR must land after 134 and 131 (landing order 134 → 131 → 022). At execute
+  time, re-grep `_compute_opportunities` and rebase Step 5's expression/loop shape onto whatever
+  134/131 actually left — adding `× source_weight` only against a real landed symbol (F-04).
