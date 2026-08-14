@@ -445,7 +445,7 @@ ownership scoping at the SQL layer
 
 ### Step 8 — service: analysis servicer ownership gating
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
