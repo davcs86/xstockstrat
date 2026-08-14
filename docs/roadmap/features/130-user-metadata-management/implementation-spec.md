@@ -559,7 +559,7 @@ Coverage threshold: 40% (lines). Both commands exit 0.
 
 ### Step 7 — service: UI restBackendHeaders extraction + profile API route
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/restBackendHeaders.ts` — create
