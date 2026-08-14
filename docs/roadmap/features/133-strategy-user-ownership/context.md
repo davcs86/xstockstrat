@@ -263,3 +263,23 @@
 - Edits: Dockerfile.migrate `+gettext`; db-migrate.sh `up)` case renders `envsubst '$SEED_USER_ID'` into a scratch dir for analysis only (with `:?` hard-fail guard); docker-compose.yml db-migrator env `SEED_USER_ID: "${SEED_USER_ID:-<seed>}"`; setup-env.sh prompt (default=seed) + `.env` write; `.env.example` line.
 - **Design-justified choice (Step 6.3 "or a required form" latitude, honoring design decision 2 "local docker compose up must not break"):** compose uses a CONCRETE default (`:-<seed>`) rather than empty, because db-migrate.sh's `:?` guard fails unconditionally for analysis-up when SEED_USER_ID is empty — an empty compose default would break `docker compose up` on any fresh local DB. Overridable via `.env`. Not a deviation (spec allowed the variant); recorded for auditability.
 - Verify: gettext ✓, `envsubst '$SEED_USER_ID'` ✓, SEED_USER_ID in all 6 files ✓, `bash -n` clean for both scripts ✓. TDD: N/A (bash/YAML, grep/parse gate). Deviations: none.
+
+### Step 9 owner-union blocker — RESOLVED (user decision)
+- **USER DECISION: identity-only 133; defer the firing universe to 132.** 133 owner-keys the 6 live-loop
+  state dicts + entry_backfill to `(user_id, strategy_id, symbol)` and resolves ownership at the RPC/SQL
+  layers, but does NOT change the firing universe — `signal_params.symbols` stays and feature 089's
+  no-symbols `SetStrategyLive` precondition stays. The owner-scoped `ListPositions(user_id=owner)` +
+  synthetic-header `ListWatchlists` + union composition (design decision 6 / AC-4) is DEFERRED to
+  feature 132's `resolve_universe` (the single shared owner-scoped universe builder), avoiding a
+  duplicate union.
+- **Ripple:** Step 9 sub-step 3 (owner-scoped symbol universe) is deferred to 132 — recorded as a
+  Deviation Log entry, target = feature 132. Step 17 (live-loop synthetic `x-user-id` impersonation
+  finding) also moves to 132, since 133 no longer introduces the synthetic-header call — Step 17 will
+  record that the finding is deferred to where the call is actually added (132).
+- uv sync (analysis, --extra dev) completed — pytest/ruff ready for steps 7-10.
+
+### Step 7 — analysis repositories gain user_id scoping [done]
+- strategies.py: added `get_by_owner_and_id(user_id, strategy_id)`; `user_id` param + owner-scoped WHERE on create/update_locked (both SELECT FOR UPDATE + UPDATE)/set_live_enabled/deactivate/reactivate/list. `get_by_id` kept (owner-carrying callers, e.g. live loop). Non-locked `update` left untouched — dead (no app/ callers).
+- strategy_cooldowns.py: `user_id` on upsert_exit/upsert_entry + `ON CONFLICT (user_id, strategy_id, symbol)`; list_all selects user_id.
+- backtest_runs.py: `insert` gains keyword `user_id` (nullable) + column ($16).
+- Verify: ruff check + format clean on all 3 (full coverage deferred to Step 10). Servicer callers updated in Step 8. TDD: red-green covered by Step 10. Deviations: none.

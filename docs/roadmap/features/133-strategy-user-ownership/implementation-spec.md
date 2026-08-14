@@ -392,7 +392,7 @@ bash -n scripts/db-migrate.sh   # syntax-check the script
 
 ### Step 7 — service: analysis repositories gain `user_id` scoping
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/strategies.py` — modify
