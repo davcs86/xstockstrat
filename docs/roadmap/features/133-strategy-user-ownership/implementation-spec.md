@@ -218,7 +218,7 @@ ls services/xstockstrat-analysis/migrations/013_strategies_user_id.up.sql \
 
 ### Step 4 — migration: `014` add `user_id` to `analysis.strategy_cooldowns`, composite PK
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/014_strategy_cooldowns_user_id.up.sql` — create

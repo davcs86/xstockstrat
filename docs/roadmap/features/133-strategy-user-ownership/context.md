@@ -249,3 +249,7 @@
 - Created 013 up/down. up: ADD COLUMN user_id → guarded seed backfill (RAISE on unset/unrendered, no silent default) → SET NOT NULL → drop strategies_pkey → ADD PRIMARY KEY (user_id, strategy_id). down reverses (restore single-col PK, drop column).
 - Offline verify: up/down parity confirmed; `envsubst '$SEED_USER_ID'` render tested — seed substitutes, `DO $$…$$` block preserved, empty seed trips RAISE. Installed `gettext-base` on host for the render check.
 - Files: `migrations/013_strategies_user_id.{up,down}.sql`. TDD: N/A (migration). Deviations: none.
+
+### Step 4 — migration 014: strategy_cooldowns user_id + composite PK [done]
+- 014 up: ADD COLUMN → mechanical backfill (JOIN on strategies.user_id) → DELETE orphaned rows → SET NOT NULL → drop pkey → ADD PRIMARY KEY (user_id, strategy_id, symbol). down reverses.
+- Offline verify: up/down parity confirmed. Files: `migrations/014_*.{up,down}.sql`. TDD: N/A. Deviations: none.
