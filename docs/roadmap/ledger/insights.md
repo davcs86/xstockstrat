@@ -1516,3 +1516,8 @@ reusing.
   a closed question. Separately: a rollout plan that depends on inter-deploy timing must be checked
   against the actual deploy tooling before it's designed, not assumed compatible with "how migrations
   usually work."
+
+### 2026-08-14 — user-metadata-management — reuse
+- **Pattern**: When a Node.js backend service needs to read `x-user-id` from gRPC metadata for caller-scoped RPCs, replicate `xstockstrat-config`'s `authz.ts` pattern: a small module exporting `first(md, key)` + `userIdFrom(md)` with a runtime guard on `call.metadata?.get` (the first use of gRPC metadata in identity). Similarly, when a Next.js `/accounts` REST route needs to forward auth headers to a backend, extract a `restBackendHeaders(req)` shared helper rather than inlining the cookie→header plumbing per route — this also DRY-fixes existing routes (authorized-apps) in the same commit.
+- **Evidence**: `services/xstockstrat-identity/src/grpc/authz.ts` (Step 4), `services/xstockstrat-ui/src/lib/restBackendHeaders.ts` (Step 7), design.md §R3 decisions.
+- **Rule it implies**: when adding self-management RPCs to a backend service, prefer replicating an existing service's `authz.ts` module over inventing a new pattern; for REST routes, extract shared header helpers on first use rather than waiting for the third copy.

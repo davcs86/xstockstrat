@@ -18,6 +18,7 @@ import {
   type ServiceError,
   type UntypedServiceImplementation,
 } from "@grpc/grpc-js";
+import { Struct } from "../../google/protobuf/struct";
 import { Timestamp } from "../../google/protobuf/timestamp";
 
 export const protobufPackage = "xstockstrat.identity.v1";
@@ -141,6 +142,33 @@ export interface RevokeAuthorizedAppRequest {
 
 export interface RevokeAuthorizedAppResponse {
   success: boolean;
+}
+
+/** ── User profile metadata (feature 130) ────────────────────────────────── */
+export interface UserMetadata {
+  userId: string;
+  email: string;
+  phone?: string | undefined;
+  displayName?: string | undefined;
+  metadata?: { [key: string]: any } | undefined;
+  metadataUpdatedAt?: Date | undefined;
+}
+
+export interface GetUserMetadataRequest {
+}
+
+export interface GetUserMetadataResponse {
+  userMetadata?: UserMetadata | undefined;
+}
+
+export interface UpdateUserMetadataRequest {
+  phone?: string | undefined;
+  displayName?: string | undefined;
+  metadata?: { [key: string]: any } | undefined;
+}
+
+export interface UpdateUserMetadataResponse {
+  userMetadata?: UserMetadata | undefined;
 }
 
 function createBaseAuthenticateUserRequest(): AuthenticateUserRequest {
@@ -1951,6 +1979,436 @@ export const RevokeAuthorizedAppResponse: MessageFns<RevokeAuthorizedAppResponse
   },
 };
 
+function createBaseUserMetadata(): UserMetadata {
+  return {
+    userId: "",
+    email: "",
+    phone: undefined,
+    displayName: undefined,
+    metadata: undefined,
+    metadataUpdatedAt: undefined,
+  };
+}
+
+export const UserMetadata: MessageFns<UserMetadata> = {
+  encode(message: UserMetadata, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.userId !== "") {
+      writer.uint32(10).string(message.userId);
+    }
+    if (message.email !== "") {
+      writer.uint32(18).string(message.email);
+    }
+    if (message.phone !== undefined) {
+      writer.uint32(26).string(message.phone);
+    }
+    if (message.displayName !== undefined) {
+      writer.uint32(34).string(message.displayName);
+    }
+    if (message.metadata !== undefined) {
+      Struct.encode(Struct.wrap(message.metadata), writer.uint32(42).fork()).join();
+    }
+    if (message.metadataUpdatedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.metadataUpdatedAt), writer.uint32(50).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UserMetadata {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseUserMetadata();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.email = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.phone = reader.string();
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.displayName = reader.string();
+          continue;
+        }
+        case 5: {
+          if (tag !== 42) {
+            break;
+          }
+
+          message.metadata = Struct.unwrap(Struct.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 6: {
+          if (tag !== 50) {
+            break;
+          }
+
+          message.metadataUpdatedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): UserMetadata {
+    return {
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
+      email: isSet(object.email) ? globalThis.String(object.email) : "",
+      phone: isSet(object.phone) ? globalThis.String(object.phone) : undefined,
+      displayName: isSet(object.displayName)
+        ? globalThis.String(object.displayName)
+        : isSet(object.display_name)
+        ? globalThis.String(object.display_name)
+        : undefined,
+      metadata: isObject(object.metadata) ? object.metadata : undefined,
+      metadataUpdatedAt: isSet(object.metadataUpdatedAt)
+        ? fromJsonTimestamp(object.metadataUpdatedAt)
+        : isSet(object.metadata_updated_at)
+        ? fromJsonTimestamp(object.metadata_updated_at)
+        : undefined,
+    };
+  },
+
+  toJSON(message: UserMetadata): unknown {
+    const obj: any = {};
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
+    if (message.email !== "") {
+      obj.email = message.email;
+    }
+    if (message.phone !== undefined) {
+      obj.phone = message.phone;
+    }
+    if (message.displayName !== undefined) {
+      obj.displayName = message.displayName;
+    }
+    if (message.metadata !== undefined) {
+      obj.metadata = message.metadata;
+    }
+    if (message.metadataUpdatedAt !== undefined) {
+      obj.metadataUpdatedAt = message.metadataUpdatedAt.toISOString();
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<UserMetadata>, I>>(base?: I): UserMetadata {
+    return UserMetadata.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UserMetadata>, I>>(object: I): UserMetadata {
+    const message = createBaseUserMetadata();
+    message.userId = object.userId ?? "";
+    message.email = object.email ?? "";
+    message.phone = object.phone ?? undefined;
+    message.displayName = object.displayName ?? undefined;
+    message.metadata = object.metadata ?? undefined;
+    message.metadataUpdatedAt = object.metadataUpdatedAt ?? undefined;
+    return message;
+  },
+};
+
+function createBaseGetUserMetadataRequest(): GetUserMetadataRequest {
+  return {};
+}
+
+export const GetUserMetadataRequest: MessageFns<GetUserMetadataRequest> = {
+  encode(_: GetUserMetadataRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetUserMetadataRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetUserMetadataRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(_: any): GetUserMetadataRequest {
+    return {};
+  },
+
+  toJSON(_: GetUserMetadataRequest): unknown {
+    const obj: any = {};
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetUserMetadataRequest>, I>>(base?: I): GetUserMetadataRequest {
+    return GetUserMetadataRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetUserMetadataRequest>, I>>(_: I): GetUserMetadataRequest {
+    const message = createBaseGetUserMetadataRequest();
+    return message;
+  },
+};
+
+function createBaseGetUserMetadataResponse(): GetUserMetadataResponse {
+  return { userMetadata: undefined };
+}
+
+export const GetUserMetadataResponse: MessageFns<GetUserMetadataResponse> = {
+  encode(message: GetUserMetadataResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.userMetadata !== undefined) {
+      UserMetadata.encode(message.userMetadata, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetUserMetadataResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetUserMetadataResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.userMetadata = UserMetadata.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetUserMetadataResponse {
+    return {
+      userMetadata: isSet(object.userMetadata)
+        ? UserMetadata.fromJSON(object.userMetadata)
+        : isSet(object.user_metadata)
+        ? UserMetadata.fromJSON(object.user_metadata)
+        : undefined,
+    };
+  },
+
+  toJSON(message: GetUserMetadataResponse): unknown {
+    const obj: any = {};
+    if (message.userMetadata !== undefined) {
+      obj.userMetadata = UserMetadata.toJSON(message.userMetadata);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetUserMetadataResponse>, I>>(base?: I): GetUserMetadataResponse {
+    return GetUserMetadataResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetUserMetadataResponse>, I>>(object: I): GetUserMetadataResponse {
+    const message = createBaseGetUserMetadataResponse();
+    message.userMetadata = (object.userMetadata !== undefined && object.userMetadata !== null)
+      ? UserMetadata.fromPartial(object.userMetadata)
+      : undefined;
+    return message;
+  },
+};
+
+function createBaseUpdateUserMetadataRequest(): UpdateUserMetadataRequest {
+  return { phone: undefined, displayName: undefined, metadata: undefined };
+}
+
+export const UpdateUserMetadataRequest: MessageFns<UpdateUserMetadataRequest> = {
+  encode(message: UpdateUserMetadataRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.phone !== undefined) {
+      writer.uint32(10).string(message.phone);
+    }
+    if (message.displayName !== undefined) {
+      writer.uint32(18).string(message.displayName);
+    }
+    if (message.metadata !== undefined) {
+      Struct.encode(Struct.wrap(message.metadata), writer.uint32(26).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateUserMetadataRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseUpdateUserMetadataRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.phone = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.displayName = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.metadata = Struct.unwrap(Struct.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): UpdateUserMetadataRequest {
+    return {
+      phone: isSet(object.phone) ? globalThis.String(object.phone) : undefined,
+      displayName: isSet(object.displayName)
+        ? globalThis.String(object.displayName)
+        : isSet(object.display_name)
+        ? globalThis.String(object.display_name)
+        : undefined,
+      metadata: isObject(object.metadata) ? object.metadata : undefined,
+    };
+  },
+
+  toJSON(message: UpdateUserMetadataRequest): unknown {
+    const obj: any = {};
+    if (message.phone !== undefined) {
+      obj.phone = message.phone;
+    }
+    if (message.displayName !== undefined) {
+      obj.displayName = message.displayName;
+    }
+    if (message.metadata !== undefined) {
+      obj.metadata = message.metadata;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<UpdateUserMetadataRequest>, I>>(base?: I): UpdateUserMetadataRequest {
+    return UpdateUserMetadataRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UpdateUserMetadataRequest>, I>>(object: I): UpdateUserMetadataRequest {
+    const message = createBaseUpdateUserMetadataRequest();
+    message.phone = object.phone ?? undefined;
+    message.displayName = object.displayName ?? undefined;
+    message.metadata = object.metadata ?? undefined;
+    return message;
+  },
+};
+
+function createBaseUpdateUserMetadataResponse(): UpdateUserMetadataResponse {
+  return { userMetadata: undefined };
+}
+
+export const UpdateUserMetadataResponse: MessageFns<UpdateUserMetadataResponse> = {
+  encode(message: UpdateUserMetadataResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.userMetadata !== undefined) {
+      UserMetadata.encode(message.userMetadata, writer.uint32(10).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): UpdateUserMetadataResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseUpdateUserMetadataResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.userMetadata = UserMetadata.decode(reader, reader.uint32());
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): UpdateUserMetadataResponse {
+    return {
+      userMetadata: isSet(object.userMetadata)
+        ? UserMetadata.fromJSON(object.userMetadata)
+        : isSet(object.user_metadata)
+        ? UserMetadata.fromJSON(object.user_metadata)
+        : undefined,
+    };
+  },
+
+  toJSON(message: UpdateUserMetadataResponse): unknown {
+    const obj: any = {};
+    if (message.userMetadata !== undefined) {
+      obj.userMetadata = UserMetadata.toJSON(message.userMetadata);
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<UpdateUserMetadataResponse>, I>>(base?: I): UpdateUserMetadataResponse {
+    return UpdateUserMetadataResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<UpdateUserMetadataResponse>, I>>(object: I): UpdateUserMetadataResponse {
+    const message = createBaseUpdateUserMetadataResponse();
+    message.userMetadata = (object.userMetadata !== undefined && object.userMetadata !== null)
+      ? UserMetadata.fromPartial(object.userMetadata)
+      : undefined;
+    return message;
+  },
+};
+
 export type IdentityServiceService = typeof IdentityServiceService;
 export const IdentityServiceService = {
   authenticateUser: {
@@ -2070,6 +2528,29 @@ export const IdentityServiceService = {
       Buffer.from(RevokeAuthorizedAppResponse.encode(value).finish()),
     responseDeserialize: (value: Buffer): RevokeAuthorizedAppResponse => RevokeAuthorizedAppResponse.decode(value),
   },
+  /** User profile metadata self-management (feature 130) */
+  getUserMetadata: {
+    path: "/xstockstrat.identity.v1.IdentityService/GetUserMetadata" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetUserMetadataRequest): Buffer =>
+      Buffer.from(GetUserMetadataRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetUserMetadataRequest => GetUserMetadataRequest.decode(value),
+    responseSerialize: (value: GetUserMetadataResponse): Buffer =>
+      Buffer.from(GetUserMetadataResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetUserMetadataResponse => GetUserMetadataResponse.decode(value),
+  },
+  updateUserMetadata: {
+    path: "/xstockstrat.identity.v1.IdentityService/UpdateUserMetadata" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: UpdateUserMetadataRequest): Buffer =>
+      Buffer.from(UpdateUserMetadataRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): UpdateUserMetadataRequest => UpdateUserMetadataRequest.decode(value),
+    responseSerialize: (value: UpdateUserMetadataResponse): Buffer =>
+      Buffer.from(UpdateUserMetadataResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): UpdateUserMetadataResponse => UpdateUserMetadataResponse.decode(value),
+  },
 } as const;
 
 export interface IdentityServiceServer extends UntypedServiceImplementation {
@@ -2092,6 +2573,9 @@ export interface IdentityServiceServer extends UntypedServiceImplementation {
    */
   listAuthorizedApps: handleUnaryCall<ListAuthorizedAppsRequest, ListAuthorizedAppsResponse>;
   revokeAuthorizedApp: handleUnaryCall<RevokeAuthorizedAppRequest, RevokeAuthorizedAppResponse>;
+  /** User profile metadata self-management (feature 130) */
+  getUserMetadata: handleUnaryCall<GetUserMetadataRequest, GetUserMetadataResponse>;
+  updateUserMetadata: handleUnaryCall<UpdateUserMetadataRequest, UpdateUserMetadataResponse>;
 }
 
 export interface IdentityServiceClient extends Client {
@@ -2268,6 +2752,37 @@ export interface IdentityServiceClient extends Client {
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: RevokeAuthorizedAppResponse) => void,
   ): ClientUnaryCall;
+  /** User profile metadata self-management (feature 130) */
+  getUserMetadata(
+    request: GetUserMetadataRequest,
+    callback: (error: ServiceError | null, response: GetUserMetadataResponse) => void,
+  ): ClientUnaryCall;
+  getUserMetadata(
+    request: GetUserMetadataRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetUserMetadataResponse) => void,
+  ): ClientUnaryCall;
+  getUserMetadata(
+    request: GetUserMetadataRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetUserMetadataResponse) => void,
+  ): ClientUnaryCall;
+  updateUserMetadata(
+    request: UpdateUserMetadataRequest,
+    callback: (error: ServiceError | null, response: UpdateUserMetadataResponse) => void,
+  ): ClientUnaryCall;
+  updateUserMetadata(
+    request: UpdateUserMetadataRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: UpdateUserMetadataResponse) => void,
+  ): ClientUnaryCall;
+  updateUserMetadata(
+    request: UpdateUserMetadataRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: UpdateUserMetadataResponse) => void,
+  ): ClientUnaryCall;
 }
 
 export const IdentityServiceClient = makeGenericClientConstructor(
@@ -2322,6 +2837,10 @@ function longToNumber(int64: { toString(): string }): number {
     throw new globalThis.Error("Value is smaller than Number.MIN_SAFE_INTEGER");
   }
   return num;
+}
+
+function isObject(value: any): boolean {
+  return typeof value === "object" && value !== null;
 }
 
 function isSet(value: any): boolean {

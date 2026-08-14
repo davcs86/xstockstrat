@@ -5,6 +5,7 @@ import * as jwt from 'jsonwebtoken';
 import * as bcrypt from 'bcrypt';
 import { ConfigWatcher } from '../services/configWatcher';
 import { getLogger } from '../services/logger';
+import { userIdFrom } from './authz';
 
 const log = getLogger('identity:impl');
 
@@ -512,6 +513,97 @@ export class IdentityServiceImpl {
       callback(null, { success: true });
     } catch (err: any) {
       log.error('revokeAuthorizedApp failed', { error: err.message });
+      callback({ code: 13, message: err.message });
+    }
+  }
+
+  /**
+   * GetUserMetadata — return the calling user's own profile metadata.
+   *
+   * Unlike listAuthorizedApps/revokeAuthorizedApp (which accept userId in the request body),
+   * this RPC derives the caller from the propagated x-user-id metadata header (C-03). New
+   * identity RPCs should follow this pattern.
+   */
+  async getUserMetadata(call: any, callback: any) {
+    if (!call.metadata?.get) {
+      return callback({ code: 13, message: 'missing metadata' });
+    }
+    const userId = userIdFrom(call.metadata);
+    if (!userId) return callback({ code: 3, message: 'x-user-id header required' });
+    try {
+      const result = await this.pool.query(
+        `SELECT user_id, email, phone, display_name, metadata, metadata_updated_at
+         FROM identity.users WHERE user_id = $1`,
+        [userId]
+      );
+      if (result.rows.length === 0) {
+        return callback({ code: 5, message: 'user not found' });
+      }
+      const r = result.rows[0];
+      callback(null, {
+        userMetadata: {
+          userId: r.user_id,
+          email: r.email,
+          phone: r.phone ?? undefined,
+          displayName: r.display_name ?? undefined,
+          metadata: r.metadata ? JSON.parse(JSON.stringify(r.metadata)) : {},
+          metadataUpdatedAt: r.metadata_updated_at ? new Date(r.metadata_updated_at) : undefined,
+        },
+      });
+    } catch (err: any) {
+      log.error('getUserMetadata failed', { error: err.message });
+      callback({ code: 13, message: err.message });
+    }
+  }
+
+  /**
+   * UpdateUserMetadata — partial-update the calling user's own profile metadata.
+   *
+   * Unlike listAuthorizedApps/revokeAuthorizedApp (which accept userId in the request body),
+   * this RPC derives the caller from the propagated x-user-id metadata header (C-03). New
+   * identity RPCs should follow this pattern.
+   */
+  async updateUserMetadata(call: any, callback: any) {
+    if (!call.metadata?.get) {
+      return callback({ code: 13, message: 'missing metadata' });
+    }
+    const userId = userIdFrom(call.metadata);
+    if (!userId) return callback({ code: 3, message: 'x-user-id header required' });
+    const { phone, displayName, metadata } = call.request;
+    // Build dynamic SET clause from non-undefined optional fields (ts-proto optional presence)
+    const sets: string[] = [];
+    const params: any[] = [];
+    let idx = 1;
+    if (phone !== undefined) { sets.push(`phone = $${idx++}`); params.push(phone); }
+    if (displayName !== undefined) { sets.push(`display_name = $${idx++}`); params.push(displayName); }
+    if (metadata !== undefined) { sets.push(`metadata = $${idx++}`); params.push(JSON.stringify(metadata)); }
+    if (sets.length === 0) {
+      return callback({ code: 3, message: 'at least one field required' });
+    }
+    sets.push(`metadata_updated_at = NOW()`);
+    params.push(userId);
+    try {
+      const result = await this.pool.query(
+        `UPDATE identity.users SET ${sets.join(', ')} WHERE user_id = $${idx}
+         RETURNING user_id, email, phone, display_name, metadata, metadata_updated_at`,
+        params
+      );
+      if (result.rows.length === 0) {
+        return callback({ code: 5, message: 'user not found' });
+      }
+      const r = result.rows[0];
+      callback(null, {
+        userMetadata: {
+          userId: r.user_id,
+          email: r.email,
+          phone: r.phone ?? undefined,
+          displayName: r.display_name ?? undefined,
+          metadata: r.metadata ? JSON.parse(JSON.stringify(r.metadata)) : {},
+          metadataUpdatedAt: r.metadata_updated_at ? new Date(r.metadata_updated_at) : undefined,
+        },
+      });
+    } catch (err: any) {
+      log.error('updateUserMetadata failed', { error: err.message });
       callback({ code: 13, message: err.message });
     }
   }

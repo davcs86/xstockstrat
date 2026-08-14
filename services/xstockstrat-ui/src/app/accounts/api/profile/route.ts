@@ -9,50 +9,62 @@ function tsToISO(ts?: { seconds: bigint; nanos: number }): string | null {
   return new Date(Number(ts.seconds) * 1000 + Math.floor(ts.nanos / 1e6)).toISOString();
 }
 
-// GET /accounts/api/authorized-apps — the calling user's OAuth-authorized apps.
+/** Map the gRPC UserMetadata message to the REST JSON shape. */
+function toProfileJson(m?: {
+  userId?: string;
+  email?: string;
+  phone?: string;
+  displayName?: string;
+  metadata?: Record<string, unknown>;
+  metadataUpdatedAt?: { seconds: bigint; nanos: number };
+}) {
+  return {
+    userId: m?.userId ?? '',
+    email: m?.email ?? '',
+    phone: m?.phone ?? null,
+    displayName: m?.displayName ?? null,
+    metadata: m?.metadata ?? {},
+    metadataUpdatedAt: tsToISO(m?.metadataUpdatedAt),
+  };
+}
+
+// GET /accounts/api/profile — the calling user's own metadata.
 export async function GET(req: NextRequest) {
   const claims = await getSessionFromRequest(req);
   if (!claims) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
     const headers = restBackendHeaders(req, claims.user_id, claims.roles);
-    const data = await identityClient.listAuthorizedApps({ userId: claims.user_id }, { headers });
-    // Return only the non-sensitive AuthorizedApp metadata — never tokens/secrets (FR-7).
-    return NextResponse.json({
-      apps: data.apps.map((a) => ({
-        clientId: a.clientId,
-        clientName: a.clientName,
-        authorizedAt: tsToISO(a.authorizedAt),
-        lastUsedAt: tsToISO(a.lastUsedAt),
-        redirectUris: a.redirectUris,
-      })),
-    });
+    const data = await identityClient.getUserMetadata({}, { headers });
+    return NextResponse.json(toProfileJson(data.userMetadata));
   } catch (err) {
     const ce = ConnectError.from(err);
     return NextResponse.json(
-      { error: ce.rawMessage || 'Failed to list authorized apps' },
+      { error: ce.rawMessage || 'Failed to fetch profile' },
       { status: connectCodeToHttp(ce.code) },
     );
   }
 }
 
-// POST /accounts/api/authorized-apps — revoke one app: body { action: 'revoke', clientId }.
-export async function POST(req: NextRequest) {
+// PUT /accounts/api/profile — partial-update the calling user's own metadata.
+export async function PUT(req: NextRequest) {
   const claims = await getSessionFromRequest(req);
   if (!claims) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   const body = await req.json().catch(() => ({}));
-  const clientId: string = body.clientId ?? '';
-  if (!clientId) return NextResponse.json({ error: 'clientId required' }, { status: 400 });
   try {
     const headers = restBackendHeaders(req, claims.user_id, claims.roles);
-    const data = await identityClient.revokeAuthorizedApp(
-      { userId: claims.user_id, clientId },
+    const data = await identityClient.updateUserMetadata(
+      {
+        phone: body.phone,
+        displayName: body.displayName,
+        metadata: body.metadata,
+      },
       { headers },
     );
-    return NextResponse.json({ success: data.success });
+    return NextResponse.json(toProfileJson(data.userMetadata));
   } catch (err) {
     const ce = ConnectError.from(err);
     return NextResponse.json(
-      { error: ce.rawMessage || 'Failed to revoke authorized app' },
+      { error: ce.rawMessage || 'Failed to update profile' },
       { status: connectCodeToHttp(ce.code) },
     );
   }

@@ -846,6 +846,68 @@ async def refresh_oauth_token(refresh_token: str, resource: str) -> dict[str, An
     }
 
 
+async def get_user_metadata(user_id: str) -> dict:
+    """Fetch the calling user's own profile metadata from identity."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.GetUserMetadata(
+            identity_pb2.GetUserMetadataRequest(),
+            metadata=[*_metadata(), ("x-user-id", user_id)],
+        )
+    m = resp.user_metadata
+    return {
+        "userId": m.user_id,
+        "email": m.email,
+        "phone": m.phone if m.HasField("phone") else None,
+        "displayName": m.display_name if m.HasField("display_name") else None,
+        "metadata": dict(m.metadata) if m.metadata else {},
+        "metadataUpdatedAt": (
+            m.metadata_updated_at.ToJsonString() if m.HasField("metadata_updated_at") else None
+        ),
+    }
+
+
+async def update_user_metadata(
+    user_id: str,
+    phone: str | None = None,
+    display_name: str | None = None,
+    metadata: dict | None = None,
+) -> dict:
+    """Partial-update the calling user's own profile metadata."""
+    from gen.identity.v1 import identity_pb2, identity_pb2_grpc  # noqa: PLC0415
+    from google.protobuf.struct_pb2 import Struct  # noqa: PLC0415
+
+    req = identity_pb2.UpdateUserMetadataRequest()
+    if phone is not None:
+        req.phone = phone
+    if display_name is not None:
+        req.display_name = display_name
+    if metadata is not None:
+        s = Struct()
+        s.update(metadata)
+        req.metadata.CopyFrom(s)
+
+    async with grpc.aio.insecure_channel(IDENTITY_ENDPOINT) as channel:
+        stub = identity_pb2_grpc.IdentityServiceStub(channel)
+        resp = await stub.UpdateUserMetadata(
+            req,
+            metadata=[*_metadata(), ("x-user-id", user_id)],
+        )
+    m = resp.user_metadata
+    return {
+        "userId": m.user_id,
+        "email": m.email,
+        "phone": m.phone if m.HasField("phone") else None,
+        "displayName": m.display_name if m.HasField("display_name") else None,
+        "metadata": dict(m.metadata) if m.metadata else {},
+        "metadataUpdatedAt": (
+            m.metadata_updated_at.ToJsonString() if m.HasField("metadata_updated_at") else None
+        ),
+    }
+
+
 async def set_strategy_live(
     strategy_id: str, live_enabled: bool, access_scope: int = 0
 ) -> dict[str, Any]:

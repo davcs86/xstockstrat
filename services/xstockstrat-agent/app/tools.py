@@ -1,7 +1,7 @@
 """
 MCP tool definitions for xstockstrat-agent.
 
-Twenty-two tools:
+Twenty-four tools:
   list_signal_sources  — lists active sources from ingest, enriched with extractor_tool
   extract_email_content — extracts raw text from email attachments or gated URLs
   extract_website_content — fetches and returns raw text from a registered website source
@@ -24,6 +24,8 @@ Twenty-two tools:
   get_config          — reads a namespace's current config values, secrets redacted (read-only)
   list_config_keys    — lists a namespace's registered config keys, metadata only (read-only)
   set_config          — writes one non-secret config value (admin-scoped write)
+  get_user_metadata   — fetches the calling user's own profile metadata (read-only)
+  set_user_metadata   — partial-updates the calling user's own profile metadata
 """
 
 import base64
@@ -1100,6 +1102,43 @@ def register_tools(server: MCPServer) -> None:
             )
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="config key not found")) from e
+
+    @server.tool()
+    async def get_user_metadata(ctx: Context) -> dict:
+        """Fetch the calling user's own profile metadata from xstockstrat-identity.
+        Returns userId, email (read-only), phone, displayName, metadata, metadataUpdatedAt."""
+        user_id = _caller_user_id(ctx, "get_user_metadata")
+        try:
+            return await client.get_user_metadata(user_id)
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="user not found")) from e
+
+    @server.tool()
+    async def set_user_metadata(
+        ctx: Context,
+        phone: str | None = None,
+        display_name: str | None = None,
+        metadata: dict | None = None,
+    ) -> dict:
+        """Update the calling user's own profile metadata. Partial update — only provided
+        fields are changed. Email is read-only and cannot be set.
+        phone: optional phone number.
+        display_name: optional display name.
+        metadata: optional JSON object (max 8KB)."""
+        user_id = _caller_user_id(ctx, "set_user_metadata")
+        if phone is None and display_name is None and metadata is None:
+            raise RuntimeError(
+                "at least one field (phone, display_name, metadata) must be provided"
+            )
+        try:
+            return await client.update_user_metadata(
+                user_id,
+                phone=phone,
+                display_name=display_name,
+                metadata=metadata,
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="user not found")) from e
 
 
 async def _get_source(source_slug: str) -> dict:

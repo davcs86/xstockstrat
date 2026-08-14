@@ -1,6 +1,6 @@
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import type { Message } from "@bufbuild/protobuf";
+import type { JsonObject, Message } from "@bufbuild/protobuf";
 /**
  * Describes the file identity/v1/identity.proto.
  */
@@ -415,6 +415,101 @@ export type RevokeAuthorizedAppResponse = Message<"xstockstrat.identity.v1.Revok
  */
 export declare const RevokeAuthorizedAppResponseSchema: GenMessage<RevokeAuthorizedAppResponse>;
 /**
+ * ── User profile metadata (feature 130) ──────────────────────────────────
+ *
+ * @generated from message xstockstrat.identity.v1.UserMetadata
+ */
+export type UserMetadata = Message<"xstockstrat.identity.v1.UserMetadata"> & {
+    /**
+     * @generated from field: string user_id = 1;
+     */
+    userId: string;
+    /**
+     * @generated from field: string email = 2;
+     */
+    email: string;
+    /**
+     * @generated from field: optional string phone = 3;
+     */
+    phone?: string | undefined;
+    /**
+     * @generated from field: optional string display_name = 4;
+     */
+    displayName?: string | undefined;
+    /**
+     * @generated from field: google.protobuf.Struct metadata = 5;
+     */
+    metadata?: JsonObject | undefined;
+    /**
+     * @generated from field: google.protobuf.Timestamp metadata_updated_at = 6;
+     */
+    metadataUpdatedAt?: Timestamp | undefined;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.UserMetadata.
+ * Use `create(UserMetadataSchema)` to create a new message.
+ */
+export declare const UserMetadataSchema: GenMessage<UserMetadata>;
+/**
+ * @generated from message xstockstrat.identity.v1.GetUserMetadataRequest
+ */
+export type GetUserMetadataRequest = Message<"xstockstrat.identity.v1.GetUserMetadataRequest"> & {};
+/**
+ * Describes the message xstockstrat.identity.v1.GetUserMetadataRequest.
+ * Use `create(GetUserMetadataRequestSchema)` to create a new message.
+ */
+export declare const GetUserMetadataRequestSchema: GenMessage<GetUserMetadataRequest>;
+/**
+ * @generated from message xstockstrat.identity.v1.GetUserMetadataResponse
+ */
+export type GetUserMetadataResponse = Message<"xstockstrat.identity.v1.GetUserMetadataResponse"> & {
+    /**
+     * @generated from field: xstockstrat.identity.v1.UserMetadata user_metadata = 1;
+     */
+    userMetadata?: UserMetadata | undefined;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.GetUserMetadataResponse.
+ * Use `create(GetUserMetadataResponseSchema)` to create a new message.
+ */
+export declare const GetUserMetadataResponseSchema: GenMessage<GetUserMetadataResponse>;
+/**
+ * @generated from message xstockstrat.identity.v1.UpdateUserMetadataRequest
+ */
+export type UpdateUserMetadataRequest = Message<"xstockstrat.identity.v1.UpdateUserMetadataRequest"> & {
+    /**
+     * @generated from field: optional string phone = 1;
+     */
+    phone?: string | undefined;
+    /**
+     * @generated from field: optional string display_name = 2;
+     */
+    displayName?: string | undefined;
+    /**
+     * @generated from field: optional google.protobuf.Struct metadata = 3;
+     */
+    metadata?: JsonObject | undefined;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.UpdateUserMetadataRequest.
+ * Use `create(UpdateUserMetadataRequestSchema)` to create a new message.
+ */
+export declare const UpdateUserMetadataRequestSchema: GenMessage<UpdateUserMetadataRequest>;
+/**
+ * @generated from message xstockstrat.identity.v1.UpdateUserMetadataResponse
+ */
+export type UpdateUserMetadataResponse = Message<"xstockstrat.identity.v1.UpdateUserMetadataResponse"> & {
+    /**
+     * @generated from field: xstockstrat.identity.v1.UserMetadata user_metadata = 1;
+     */
+    userMetadata?: UserMetadata | undefined;
+};
+/**
+ * Describes the message xstockstrat.identity.v1.UpdateUserMetadataResponse.
+ * Use `create(UpdateUserMetadataResponseSchema)` to create a new message.
+ */
+export declare const UpdateUserMetadataResponseSchema: GenMessage<UpdateUserMetadataResponse>;
+/**
  * @generated from service xstockstrat.identity.v1.IdentityService
  */
 export declare const IdentityService: GenService<{
@@ -511,5 +606,23 @@ export declare const IdentityService: GenService<{
         methodKind: "unary";
         input: typeof RevokeAuthorizedAppRequestSchema;
         output: typeof RevokeAuthorizedAppResponseSchema;
+    };
+    /**
+     * User profile metadata self-management (feature 130)
+     *
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.GetUserMetadata
+     */
+    getUserMetadata: {
+        methodKind: "unary";
+        input: typeof GetUserMetadataRequestSchema;
+        output: typeof GetUserMetadataResponseSchema;
+    };
+    /**
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.UpdateUserMetadata
+     */
+    updateUserMetadata: {
+        methodKind: "unary";
+        input: typeof UpdateUserMetadataRequestSchema;
+        output: typeof UpdateUserMetadataResponseSchema;
     };
 }>;
