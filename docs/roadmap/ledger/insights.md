@@ -1490,3 +1490,29 @@ reusing.
   directly responsive to the last objection is exactly the shape a plausible-but-wrong fix takes —
   the same family as the 2026-07-27/2026-08-05 "demonstration is not a producer contract" entries,
   now specifically instantiated inside the design-debate loop itself, not just at spec/execute time.
+
+### 2026-08-14 — strategy-user-ownership — design
+- **Pattern**: derive a "which RPCs need X" set **mechanically** (grep every request message for the
+  relevant field, cross-checked against the service's RPC list) instead of hand-curating it from
+  memory/spec text. A hand-curated "8 RPCs" list in round 1 missed `EvaluateReadiness` (a real,
+  reachable ownership leak); the mechanical re-derivation in round 2 caught it. The same principle
+  caught a second gap the mechanical method itself couldn't reach (`ListStrategyDefinitions`, a list
+  RPC with no per-strategy field to grep for) — the fix there was recognizing the method's own blind
+  spot (list RPCs need a separate audit pass, not just a request-field grep) rather than trusting a
+  clean grep result as proof of completeness.
+- **Pattern**: before designing a multi-step rollout that depends on a "pause between step N and
+  step N+1" (e.g. a two-migration split bracketing a manual operator action), verify the actual
+  deploy/execute tooling has a primitive for that pause. This repo's `/sdd-execute` produces one
+  integration PR per feature and `db-migrator` applies every pending migration in one deploy run —
+  a design that assumed a pause point existed (round 2/3) was structurally infeasible and had to
+  collapse to a single guarded migration (round 4) once verified against `scripts/db-migrate.sh`
+  directly.
+- **Evidence**: `docs/roadmap/features/133-strategy-user-ownership/design.md` § Chosen Approach
+  (points 2-3) and § Rejected Alternatives; `docs/roadmap/features/133-strategy-user-ownership/
+  context.md` Session 2026-08-14T06:00:00Z.
+- **Rule it implies**: prefer a mechanically-reproducible audit over a hand-curated list wherever the
+  codebase makes one possible, but treat the mechanical method's own structural blind spots (e.g. it
+  only finds RPCs with a matching request field, not list/browse RPCs) as a named residual risk, not
+  a closed question. Separately: a rollout plan that depends on inter-deploy timing must be checked
+  against the actual deploy tooling before it's designed, not assumed compatible with "how migrations
+  usually work."
