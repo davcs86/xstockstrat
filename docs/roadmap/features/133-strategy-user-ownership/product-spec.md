@@ -48,10 +48,10 @@ unambiguous:
   per-user `Watchlist` message already, so the owning user is contextually implied; `/sdd-design`
   must confirm binding resolution always validates `(watchlist.user_id, strategy_id)` against the
   strategy table's new composite key, not a bare `strategy_id` lookup.
-- `trading.Order.strategy_id` (`trading.proto`, 3 message occurrences — `CreateOrderRequest`/`Order`/
-  a filter field, grep-confirm exact messages at `/sdd-design` time) — orders are already
-  user-scoped; `/sdd-design` must confirm order-to-strategy resolution validates ownership
-  (`order.user_id == strategy.user_id`), not just a bare string match.
+- `trading.Order.strategy_id` (`trading.proto` — confirmed exactly 3 occurrences: `Order.strategy_id`
+  line 47, `PlaceOrderRequest.strategy_id` line 91, `ListOrdersRequest.strategy_id` line 129 as a
+  filter field) — orders are already user-scoped; `/sdd-design` must confirm order-to-strategy
+  resolution validates ownership (`order.user_id == strategy.user_id`), not just a bare string match.
 - Live-loop's in-memory `_last_state`/`_last_exit_at` dict keys (`live_loop.py:134`, currently
   `tuple[str, str]` = `(strategy_id, symbol)`) → `(user_id, strategy_id, symbol)`.
 
@@ -83,7 +83,13 @@ pre-existing strategies are assigned to **one specific seed/admin user** at migr
 concrete `user_id` value must be supplied by the operator before `/sdd-spec`/`/sdd-execute`** — this
 spec does not invent one (Constitution F-04). Record the actual value in `context.md` once provided,
 not in this file (avoids the value going stale if it's environment-specific — dev vs. prod may need
-different seed users).
+different seed users). **Governance for this ownership sentinel (C-10(c))**: the seed user is a real,
+existing account (not a reserved/synthetic id like `author="system"`) — `/sdd-design` must confirm
+whether it needs any special protection once assigned (e.g. can that account's own
+`SetStrategyLive`/`DEACTIVATE` calls on a migrated strategy still fire alerts/backtests normally, or
+does bulk pre-existing ownership warrant a distinct code path — for instance to avoid one account's
+credential rotation or deactivation silently orphaning every legacy strategy). Not resolved here;
+flagged so it isn't silently assumed to need no special handling.
 
 FR-6. `132-strategy-symbol-denylist`'s `denied_symbols` field composes with this feature's ownership
 model without conflict — a denied symbol is still evaluated relative to *the owning user's* universe,
@@ -143,10 +149,14 @@ Exact service names from CLAUDE.md Service Registry:
 
 - [x] Migration `013` (analysis): add `user_id` to `analysis.strategies`, change PK from
   `(strategy_id)` to `(user_id, strategy_id)`, backfill existing rows per FR-5's seed user.
-- [x] Migration (analysis): add `user_id` to `analysis.strategy_cooldowns`, change PK from
-  `(strategy_id, symbol)` to `(user_id, strategy_id, symbol)`.
-- [ ] Audit `backtest_runs`/`opportunities`/`opportunity_actions`/`fundsignal_emitted` for bare
-  `strategy_id` columns needing a `user_id` companion — exact migration count TBD at `/sdd-design`.
+- [x] Migration `014` (analysis): add `user_id` to `analysis.strategy_cooldowns`, change PK from
+  `(strategy_id, symbol)` to `(user_id, strategy_id, symbol)`. Sequenced directly after `013` since
+  both are this feature's own migrations and must apply together (the cooldown table's rows are only
+  meaningful once `013`'s ownership backfill has run) — exact SQL is `/sdd-spec` work, not this spec's.
+- [ ] Migration `015`+ (analysis, count TBD at `/sdd-design`): audit `backtest_runs`/`opportunities`/
+  `opportunity_actions`/`fundsignal_emitted` for bare `strategy_id` columns needing a `user_id`
+  companion — each such column gets its own migration starting at `015`, sequenced after `014`;
+  `/sdd-design` determines the exact count once the audit is complete.
 
 ## Feature Workflow Notes
 

@@ -54,3 +54,34 @@
   page) + Agent (5 MCP tools: `manage_strategy`, `run_backtest`, `set_strategy_live`, `get_strategy`,
   `list_strategies`, per root CLAUDE.md's same-PR `strat-lab` skill rule).
 - Status: draft. Next: `/sdd-review strategy-user-ownership product-spec`.
+
+## Session 2026-08-14T05:00:00Z — sdd-review product-spec (PASS WITH WARNINGS)
+
+- Criteria verdict: PASS WITH WARNINGS. No Floor breach. Nearly every code citation verified
+  accurate against the real repo. Four warnings, all fixed in this pass:
+  1. `## Database Changes` migration numbering tightened: `013` (strategies PK/ownership) →
+     explicit `014` (strategy_cooldowns PK, sequenced directly after since its rows depend on 013's
+     backfill) → `015`+ (the backtest_runs/opportunities/opportunity_actions/fundsignal_emitted
+     audit, exact count still TBD at `/sdd-design` but now explicitly sequenced, not left dangling).
+  2. FR-5 (seed-user ownership) gained a C-10(c) governance note: the seed user is a real account,
+     not a reserved sentinel like `author="system"` — `/sdd-design` must confirm whether that
+     account needs special protection (e.g. does its own deactivation/credential rotation risk
+     orphaning every legacy strategy).
+  3. FR-2's wrong proto message name fixed: `CreateOrderRequest` (doesn't exist in
+     `trading.proto`) → `PlaceOrderRequest` (the real message, line 91) — the reviewer confirmed the
+     "3 occurrences" count was correct, only the message name was wrong. All three call sites now
+     named precisely: `Order.strategy_id` (:47), `PlaceOrderRequest.strategy_id` (:91),
+     `ListOrdersRequest.strategy_id` (:129, filter field).
+  4. `feature.md`'s Reviewers table reconciled with `## Affected Services` — removed the
+     `xstockstrat-identity` reviewer row since no identity-service code change is actually proposed
+     (this feature reuses existing JWT/`x-user-id` header-propagation infrastructure, per FR-1's own
+     citation of `docs/patterns/header-propagation.md`).
+- Overlap verdict: CLEAN. No proto field, migration NNN, or config-key collisions against 132 (or
+  any other active feature) — 132's field `12` and this feature's field `13` both independently
+  verified free against real trunk. The one shared surface (`ManageStrategy`'s `update_mask`
+  allowed-paths comment) is textually adjacent, ordinary rebase risk only, not a real conflict.
+- Status: draft → spec-ready.
+- Next: `/sdd-design strategy-user-ownership` — Phase 0 Recon's central task is resolving the
+  background-loop identity mechanism (live_loop.py has no inbound request to propagate x-user-id
+  from), grounded in the existing `analysis.fundsignal.universe_source` precedent already cited in
+  the product spec.

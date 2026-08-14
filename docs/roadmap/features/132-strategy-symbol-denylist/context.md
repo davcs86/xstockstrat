@@ -83,3 +83,23 @@
   session's snapshot.
 - `merge-order.md` not yet updated — deferred until `/sdd-design` confirms the exact dependency
   shape between 132 and 133 (full block vs. partial-landing split).
+
+## Session 2026-08-14T05:00:00Z — sdd-review product-spec (PASS WITH WARNINGS)
+
+- Criteria verdict: PASS WITH WARNINGS. No Floor breach. One real defect found and fixed: the
+  compute-cost Open Question cited `live_loop.py:102-110` for the truncate-vs-round-robin
+  `max_strategies_per_cycle` claim — actually `_replay_state`, unrelated code. Corrected to the real
+  location, `live_loop.py:188-196` (the `SELECT ... WHERE live_enabled = TRUE AND active = TRUE` +
+  `if processed >= max_pairs: return` logic). Other warnings (FR-3/FR-5/AC-5 deferring exact
+  mechanism to `/sdd-design`) accepted as legitimate per this pipeline's own established precedent
+  (131's product-spec review treated the identical pattern as WARN, not FAIL — cited directly by the
+  reviewer).
+- Overlap verdict: file-level overlap found with `131-live-strategy-opportunity-attribution` on the
+  exact code region this feature's FR-3 must rewrite (`_compute_opportunities`,
+  `strategy_symbols()`) — but this is the *expected* overlap FR-6 already commits to resolving (amend
+  131's design.md directly, not land as a competing change), not an accidental collision. No resource-
+  number collisions: proto field `12` (`denied_symbols`) confirmed disjoint from 133's field `13`
+  against real trunk (`analysis.proto:273` — last used field is `exit_cooldown_days=11`).
+- Status: draft → spec-ready.
+- Next: `/sdd-design strategy-symbol-denylist` — expected to depend on 133 reaching at least
+  `design-approved` first (its identity contract determines how FR-3 gets built).

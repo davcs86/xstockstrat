@@ -1,6 +1,6 @@
 # Feature: strategy-symbol-denylist
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/strategy-symbol-denylist`
 **Created**: 2026-08-14
 **Last Updated**: 2026-08-14
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-14 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-14 | `draft` → `spec-ready` | /sdd-review | Criteria: PASS WITH WARNINGS (1 warning fixed — a wrong `live_loop.py` line citation, corrected to `:188-196`; FR-3/FR-5/AC-5's deferred-mechanism warnings accepted as legitimate, matching 131's own precedent). Overlap: file-level overlap with 131 (`_compute_opportunities`, `strategy_symbols()`) confirmed expected/already-committed-to (FR-6); no resource-number collisions (proto field 12 vs 133's field 13 confirmed disjoint against trunk). |
 
 ---
 
@@ -50,7 +51,9 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review strategy-symbol-denylist product-spec` — AI review of product spec before running
-`/sdd-design strategy-symbol-denylist`. **The design phase's Phase 0 Recon must resolve this
+`/sdd-design strategy-symbol-denylist` — recon + design debate. **Phase 0 Recon must resolve this
 story's central open question (cross-user aggregation for the live loop's evaluation universe)
-before Phase 1 debate can proceed** — see product-spec.md § Open Questions.
+before Phase 1 debate can proceed** — see product-spec.md § Open Questions. This is expected to
+depend on `133-strategy-user-ownership` reaching at least `design-approved` first (its own identity
+contract determines how 132's FR-3 gets built) — confirm exact sequencing at `/sdd-design` time and
+update `docs/roadmap/features/merge-order.md` accordingly.

@@ -191,7 +191,7 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 - [ ] **Live-loop compute-cost impact.** `analysis.engine.max_strategies_per_cycle` (default 50) caps
   total `(strategy × symbol)` pairs evaluated per cycle, and **truncates rather than round-robins**
   (`insights.md` 2026-08-13: "a standing loop... cap truncates rather than round-robins" —
-  `live_loop.py:102-110`'s `SELECT` with no `ORDER BY` + early-return-at-cap). If FR-3's union
+  `live_loop.py:188-196`'s `SELECT` with no `ORDER BY` + early-return-at-cap). If FR-3's union
   meaningfully grows the average strategy's symbol count (opt-in lists today are presumably small;
   a platform-wide watchlist/held/signal union could be much larger), this existing truncation
   behavior becomes a much bigger fairness problem — some (strategy, symbol) pairs could
