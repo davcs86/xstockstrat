@@ -70,6 +70,18 @@ migrate_service() {
       echo "  [dirty] force-resetting $svc to version 0"
       migrate -path "$dir" -database "$url" force 0
     fi
+    # Seed-user templating for feature 133's migration 013 (analysis only). Render
+    # ${SEED_USER_ID} into a scratch copy with the single-variable allowlist form of
+    # envsubst — NEVER bare envsubst, which would corrupt 013's own DO $$ ... $$
+    # dollar-quoted block (fails.md 2026-08-05 do-nginx-integration). Copy the whole
+    # migrations dir first so golang-migrate still sees .down.sql and the other NNN files.
+    if [ "$svc" = "xstockstrat-analysis" ] && [ "$COMMAND" = "up" ]; then
+      : "${SEED_USER_ID:?SEED_USER_ID is required to apply analysis migration 013 (strategy ownership backfill)}"
+      scratch="$(mktemp -d)"
+      cp "$dir"/*.sql "$scratch"/
+      envsubst '$SEED_USER_ID' < "$dir/013_strategies_user_id.up.sql" > "$scratch/013_strategies_user_id.up.sql"
+      dir="$scratch"
+    fi
     migrate -path "$dir" -database "$url" up
     ;;
   version)

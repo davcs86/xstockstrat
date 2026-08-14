@@ -489,6 +489,11 @@ jobs:
       - key: DATABASE_URL
         scope: RUN_TIME
         value: ${xstockstrat.DATABASE_URL}
+      # Feature 133: seed owner assigned to pre-existing strategies by migration 013.
+      # Operator-supplied (not invented); may differ per environment.
+      - key: SEED_USER_ID
+        scope: RUN_TIME
+        value: 80880990-2b79-4d85-8761-d8d9102c2efb
 
 databases:
   - name: xstockstrat

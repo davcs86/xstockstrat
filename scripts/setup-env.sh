@@ -142,6 +142,11 @@ prompt_value POSTGRES_PASSWORD "devpassword" \
   Use 'devpassword' for local dev; ignore for production (managed DB)." \
   true
 
+prompt_value SEED_USER_ID "80880990-2b79-4d85-8761-d8d9102c2efb" \
+  "Existing user id that pre-existing strategies are assigned to at migration time
+  (feature 133, migration 013's ownership backfill). Only matters when the local DB
+  already has strategies; the shown default is safe for a fresh local DB."
+
 # ── Alpaca Credentials ─────────────────────────────────────────────────────────
 section "Alpaca Markets (Paper Trading)"
 
@@ -267,6 +272,7 @@ EOF
 
 # shellcheck disable=SC2129
 echo "POSTGRES_PASSWORD='$POSTGRES_PASSWORD'" >>"$ENV_FILE"
+echo "SEED_USER_ID='$SEED_USER_ID'" >>"$ENV_FILE"
 
 cat >>"$ENV_FILE" <<'EOF'
 

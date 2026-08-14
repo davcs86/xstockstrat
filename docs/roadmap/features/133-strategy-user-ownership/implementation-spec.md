@@ -310,7 +310,7 @@ ls services/xstockstrat-analysis/migrations/015_backtest_runs_user_id.up.sql \
 
 ### Step 6 — service: migration-tooling — seed-user templating + `SEED_USER_ID` wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis` (migration tooling — repo-level scripts + deploy specs)
 **Files**:
 - `scripts/db-migrate.sh` — modify

@@ -257,3 +257,9 @@
 ### Step 5 — migration 015: backtest_runs user_id column [done]
 - 015 up: plain ADD COLUMN user_id (NULLABLE — append-only history, not an ownership boundary) + backfill UPDATE; no NOT NULL, no PK change (PK is backtest_id). down: DROP COLUMN.
 - Offline verify: up/down parity confirmed. Files: `migrations/015_*.{up,down}.sql`. TDD: N/A. Deviations: none.
+
+### Step 6 — migration tooling: SEED_USER_ID wiring [done]
+- **Operator-supplied seed user_id (resolves design Open Risk 4 / F-04): `80880990-2b79-4d85-8761-d8d9102c2efb`** — user-provided this session; applied to BOTH `.do/app.yaml` (prod) and `.do/app.dev.yaml` (dev) db-migrator envs (single value for both; can be differentiated later).
+- Edits: Dockerfile.migrate `+gettext`; db-migrate.sh `up)` case renders `envsubst '$SEED_USER_ID'` into a scratch dir for analysis only (with `:?` hard-fail guard); docker-compose.yml db-migrator env `SEED_USER_ID: "${SEED_USER_ID:-<seed>}"`; setup-env.sh prompt (default=seed) + `.env` write; `.env.example` line.
+- **Design-justified choice (Step 6.3 "or a required form" latitude, honoring design decision 2 "local docker compose up must not break"):** compose uses a CONCRETE default (`:-<seed>`) rather than empty, because db-migrate.sh's `:?` guard fails unconditionally for analysis-up when SEED_USER_ID is empty — an empty compose default would break `docker compose up` on any fresh local DB. Overridable via `.env`. Not a deviation (spec allowed the variant); recorded for auditability.
+- Verify: gettext ✓, `envsubst '$SEED_USER_ID'` ✓, SEED_USER_ID in all 6 files ✓, `bash -n` clean for both scripts ✓. TDD: N/A (bash/YAML, grep/parse gate). Deviations: none.
