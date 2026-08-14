@@ -2,7 +2,10 @@
 
 **Created**: 2026-08-13
 **Rounds**: 4 (started `quick`, upgraded to full mid-debate at user direction; round 4 reopened at
-user request after prior approval to force-resolve two deferred Open Risks; termination: approved)
+user request after prior approval to force-resolve two deferred Open Risks) + a post-approval
+amendment (compute-fan-out fix, 2 verification passes — 2 rejected attempts before the adopted
+mechanism, per Rejected Alternatives; user explicit sign-off on the resulting product-spec.md
+changes); termination: approved
 **Approved by**: user @ 2026-08-14
 **Grounded in**: recon.md
 
@@ -43,31 +46,58 @@ re-declared-string parity test was considered and rejected: it would prove nothi
    exactly those rows, invisible to the predicate-parity fix (which only guards the SQL predicate,
    not the key-space match).
 2. Extend the `_candidate()` dict template (`servicer.py:2117-2127`) with a new field `"is_live": False`.
-3. **Watchlist loop** (`servicer.py:2136-2140`): after tagging `"watchlist"`, additionally set
+3. **Per-symbol fan-out cap — read `analysis.opportunity.max_live_strategies_per_symbol`
+   (int, default `5`) once, alongside `max_universe_size` (`servicer.py:2172`). Define
+   `_capped_live(sym, exclude=frozenset())` returning
+   `sorted(live_by_symbol.get(sym, set()) - exclude, key=lambda strat: created_at_by_strategy[strat])[:cap]`
+   — a helper local to `_compute_opportunities`, backed by a `strategy_id → created_at` map built
+   alongside `live_by_symbol` in step 1 (from the same `list_live_enabled()` rows). **Tiebreak is
+   `created_at` ascending (oldest-registered-first), not lexicographic `strategy_id`** — an
+   alphabetically-sorted slug rewards whoever named a strategy earliest in the alphabet, with no
+   relation to relevance or quality; `created_at` at least reflects an established track record, and
+   mirrors `StrategiesRepository.list()`'s own `ORDER BY created_at` precedent (`strategies.py:155`,
+   descending there; ascending here is a deliberate choice — the cap favors the strategies a user
+   has lived with longest, not the newest). **This cap applies only at the two candidate-*creation*
+   sites (steps 4's live-only delta and step 5) — never at a tagging-only read (step 3's watchlist
+   loop, or step 4's `watch`-intersection branch).** Capping a tagging-only read would silently strip
+   the `"live_strategy"` tag from an already-existing, already-curated candidate (a watchlist-bound
+   or held strategy that also happens to be live) purely because other strategies "won" the cap slots
+   for that symbol — a real AC-3 violation caught during design (see Rejected Alternatives): tagging
+   an existing row costs no additional compute, so it must never be capped, only *creating* a new row
+   costs compute and needs the bound.
+4. **Watchlist loop** (`servicer.py:2136-2140`): after tagging `"watchlist"`, additionally set
    `c["is_live"]=True` and call `_add_provenance(c, "live_strategy")` **if**
-   `strat in live_by_symbol.get(sym, set())` — a per-strategy check, not a blanket per-symbol union
-   (a blanket union would mis-tag a watchlist-bound strategy as "live" just because a *different*
-   strategy on the same symbol happens to be live-enabled).
-4. **Held loop** (`servicer.py:2144-2150`): `watch = watchlist_by_symbol.get(sym, set()); live =
-   live_by_symbol.get(sym, set()); targets = list(watch | live) if (watch or live) else [""]`. For
-   each `strat` in `targets`: unconditional `is_held=True`/`_add_provenance(c, "position")` (as
-   today), **plus** `is_live=True`/`_add_provenance(c, "live_strategy")` **if** `strat in live`
-   (per-strategy check).
-5. **New bounded step**, inserted between the held loop and the signals-merge loop: iterate **only**
+   `strat in live_by_symbol.get(sym, set())` (the **full, uncapped** index — tagging-only, zero
+   marginal cost) — a per-strategy check, not a blanket per-symbol union (a blanket union would
+   mis-tag a watchlist-bound strategy as "live" just because a *different* strategy on the same
+   symbol happens to be live-enabled).
+5. **Held loop** (`servicer.py:2144-2150`): `watch = watchlist_by_symbol.get(sym, set()); live_all =
+   live_by_symbol.get(sym, set()); live_new = _capped_live(sym, exclude=watch); targets =
+   list(watch | set(live_new)) if (watch or live_new) else [""]`. For each `strat` in `targets`:
+   unconditional `is_held=True`/`_add_provenance(c, "position")` (as today), **plus**
+   `is_live=True`/`_add_provenance(c, "live_strategy")` **if** `strat in live_all` (the full,
+   uncapped set — so a `strat ∈ watch` that's also genuinely live is always tagged correctly,
+   regardless of the cap; only `live_new`, the capped live-only delta, is bounded).
+6. **New bounded step**, inserted between the held loop and the signals-merge loop: iterate **only**
    `signals_by_symbol.keys() & live_by_symbol.keys()` (the intersection — never the full
-   `live_by_symbol` key set). For each such `sym`, for each `strat in live_by_symbol[sym]`: call
+   `live_by_symbol` key set). For each such `sym`, for each `strat in _capped_live(sym)`
+   (capped — this is pure candidate creation, no pre-existing row to preserve): call
    `_candidate(sym, strat)`, set `is_live=True`, add `"live_strategy"` provenance. This pre-seeds the
    row **before** the signals-merge loop (`servicer.py:2152-2168`) runs, so its existing
    `targets = [k for k in candidates if k[0] == sym]` lookup (`servicer.py:2155`) finds it instead of
-   falling through to an unattributed `_candidate(sym, "")` row. **The intersection bound is load-
-   bearing, not incidental**: `curated` candidates (below) are never subject to `max_universe_size`
-   truncation — an unbounded iteration over the full `live_by_symbol` set would inject a fully-traced
-   row (bars fetch + `evaluate_conditions_traced`) for every symbol any live strategy happens to
-   cover, for every user, regardless of whether that user ever held, signaled, or watchlisted it.
-6. **Curated predicate** (`servicer.py:2172-2177`):
+   falling through to an unattributed `_candidate(sym, "")` row. **Both the per-symbol cap (this step)
+   and the intersection bound are load-bearing, not incidental**: `curated` candidates (below) are
+   never subject to `max_universe_size` truncation — an uncapped iteration over a popular symbol's
+   full live-strategy set would inject one fully-traced row (bars fetch + `evaluate_conditions_traced`)
+   per strategy, for every user who happens to hold/signal/watchlist that symbol, regardless of the
+   platform-wide count of strategies configured against it.
+7. **Curated predicate** (`servicer.py:2172-2177`):
    `curated = [c for c in candidates.values() if c["is_watchlist"] or c["is_held"] or c["is_live"]]`.
    For already-watchlist/held candidates this is a no-op (already `True`); it only changes outcomes
-   for the signal-only case from step 5.
+   for the signal-only case from step 6. **This predicate is unconditional for every candidate that
+   exists** — the per-symbol cap (step 3) operates strictly upstream, at candidate-*creation* time;
+   it never demotes an existing curated candidate to speculative (which would have re-created the
+   AC-4 conflict found and rejected during design — see Rejected Alternatives).
 
 No other lines in `_compute_opportunities` change. Tracing (`servicer.py:2194-2212`) is unaffected —
 it already keys off `c["strategy_id"]`/`c["is_held"]`, both correctly populated by the above; no new
@@ -112,6 +142,32 @@ populates more often.
   underspecified text) — rejected: bypasses `max_universe_size` truncation via the `curated` bucket,
   creating unbounded per-request compute cost (bars fetch + trace per symbol) for symbols the user
   never held, signaled, or watchlisted.
+- **Capping step 5's own promotion count against `max_universe_size`, sorted by `signal_axis`
+  descending** (first fan-out-fix attempt) — rejected on adversarial re-verification: `signal_axis`
+  is `0.0` for every step-5 candidate at the point step 5 runs (it's populated by the signals-merge
+  loop, which runs *after* step 5 by design); the cap's own count didn't bound *total* curated size
+  (could overshoot `max_universe_size` and zero out the unrelated speculative bucket); sorting over
+  Python `set`s with tied `signal_axis` values is non-deterministic; and it left the held loop's
+  identical fan-out vector completely unaddressed (an unverified "steps 3/4 are already bounded"
+  absence claim — the exact `fails.md` 2026-07-30 trap).
+- **Truncating the shared `live_by_symbol` index itself, uniformly, before any consumer reads it**
+  (second fan-out-fix attempt) — rejected on adversarial re-verification: `live_by_symbol` has three
+  consumers, only two of which cost compute (candidate *creation* — the held loop's live-only delta
+  and step 6). The watchlist loop's read and the held loop's `watch`-intersection read are
+  *tagging-only* — the candidate already exists unconditionally, so truncating the shared index there
+  silently strips the `"live_strategy"` tag from an already-existing, already-curated candidate purely
+  because other strategies "won" the cap slots for that symbol, at zero compute savings — a literal
+  AC-3 violation. Fixed by capping only at the two creation sites (`_capped_live`), never the shared
+  index used for tagging.
+- **Lexicographic `strategy_id` as the per-symbol cap's tiebreak** — rejected in favor of `created_at`
+  ascending: a user-supplied slug sorted alphabetically rewards whoever named a strategy earliest in
+  the alphabet, with no relation to relevance, recency, or quality, and a newly-added better strategy
+  targeting a popular symbol could never surface once that symbol is at cap.
+- **A new, independently-tuned config key instead of deriving the cap from `max_universe_size`** —
+  actually the chosen approach (`analysis.opportunity.max_live_strategies_per_symbol`, a new key): the
+  alternative of reusing `max_universe_size` as a shared budget was rejected because it bounds a
+  different dimension (total curated *rows*, an existing consumer) than this cap needs (live
+  strategies *per symbol*, a new dimension) — conflating them caused the overshoot bug above.
 
 ## Open Risks
 
@@ -126,13 +182,23 @@ populates more often.
   only the dedicated *test* for that specific multi-strategy-same-symbol scenario is waived. If a
   regression in that exact behavior ever occurs, this suite gap is why it wouldn't be caught —
   recorded here so that's a known, chosen trade-off, not a silent gap discovered later.
-- [ ] **Compute fan-out, not just membership growth**: `curated`'s bypass of `max_universe_size`
-  previously bounded fan-out by a user's own watchlist size (small, user-controlled). Step 5 can now
-  curate one row per live strategy covering a signaled symbol — platform-operator-controlled, not
-  user-controlled or capped anywhere. Each curated row costs an independent `_fetch_bars_paged` call
-  (`servicer.py:2188-2213`, per-row not per-symbol) in a single synchronous, compute-on-read RPC. This
-  is an intended consequence of AC-4/FR-6 (not a regression), but is named here as a residual latency
-  risk for `/sdd-spec` to weigh, not silently accepted.
+- [x] **Compute fan-out — PARTIALLY RESOLVED (post-approval amendment, 2026-08-14).** The
+  **strategies-per-symbol** dimension (many live strategies sharing one popular symbol) is now bounded
+  by `analysis.opportunity.max_live_strategies_per_symbol` (default `5`), enforced at both
+  candidate-creation sites (held loop's live-only delta, step 6) via `_capped_live()` — see Chosen
+  Approach step 3. This closes the held-loop fan-out vector too, not just step 5/6's (a gap found
+  during the fix's own adversarial verification — the original Open Risk here only named step 5,
+  which was itself an unverified absence claim about the held loop). Required product-spec.md changes,
+  recorded and made with the user's explicit sign-off: a new config key (Config Key Changes section)
+  and a new AC-7 documenting that excess strategies beyond the cap get no row/no provenance for that
+  symbol (a deliberate trade-off, not a demotion of an existing row — AC-4 is unconditional for every
+  candidate that *is* created, unchanged). **Still open, deliberately not addressed by this cap**: the
+  **distinct-symbol-count** dimension — `signals_by_symbol.keys() & live_by_symbol.keys()`'s size
+  (step 6's iteration domain) remains unbounded and still bypasses `max_universe_size` via `curated`.
+  A user with an unusually large number of active signals, each matched by at least one live strategy,
+  can still curate an unbounded number of rows. This is a distinct risk from the one just closed
+  (bounded by user-scoped signal count in practice, not platform-wide strategy count, but still
+  theoretically unbounded) — left open for `/sdd-spec` to weigh, not silently folded into "resolved."
 - [x] **Insertion-order test fragility — RESOLVED (round 4), safe.** Read every assertion in
   `TestListOpportunitiesMaterialized` (`test_analysis_servicer.py:3683-3877`): all assert
   set/membership (`set(by_symbol) == {...}`), dict-key lookup (`by_symbol["SYM"]`), or `len(opps)` —
@@ -177,6 +243,19 @@ populates more often.
   `list_live_enabled()` and `live_loop.py` — structural parity, not a maintained-by-convention pair.
 - `C-14` (name the consumer surface) — honored: `/insights` named explicitly; no new UI element
   required, an existing display path populates more often.
+- `C-05` (config key naming) — honored: `analysis.opportunity.max_live_strategies_per_symbol`
+  follows `<service>.<category>.<key>`, sibling to the existing `analysis.opportunity.*` keys; must be
+  added to `services/xstockstrat-analysis/CLAUDE.md`'s Config Keys Consumed table and
+  `docs/patterns/config-governance.md`'s Per-Feature Registered Keys log at `/sdd-spec`/execute time
+  (not now — the key doesn't exist in running code yet).
+- `F-07` (never hardcode config values) — to be honored at implementation: the cap must be read via
+  the existing `self._cfg.get_int(...)`/`ConfigWatcher` pattern this function already uses for
+  `max_universe_size`, not hardcoded — flagged explicitly so `/sdd-spec` doesn't hardcode the default
+  as a Python literal.
+- `C-11`/`P-04` (Commandment override requires explicit user sign-off, recorded) — honored: AC-4's
+  amendment (adding AC-7's cap) and the new config key both required and received explicit user
+  sign-off (`AskUserQuestion`, "Full fix: cap both step 4 + 5, amend AC-4", 2026-08-14) before being
+  written into product-spec.md — not silently narrowed.
 - `P-01`/`P-02` — honored: all rounds' proposer/adversary pairs mediated exclusively through
   synthesized state passed by this orchestrator.
 - `P-03` (no silent deviation) — honored: every fork (repo-method-vs-raw-SQL, shared-method-vs-

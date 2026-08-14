@@ -93,8 +93,14 @@ Exact service names from CLAUDE.md Service Registry:
 
 ## Config Key Changes
 
-- [ ] No new config keys — reuses `analysis.opportunity.max_universe_size` (FR-6 extends its
-  existing curated/speculative split, doesn't add a new knob).
+- `analysis.opportunity.max_live_strategies_per_symbol` — int, default `5`. Bounds how many
+  live-enabled strategies can newly attribute to a single symbol via live-coverage (per-symbol fan-out
+  cap, added at `/sdd-design` time — see design.md's compute-fan-out mitigation). Conservatively
+  bounds worst-case added latency per symbol to `default` extra bar-fetch+trace calls in a single
+  synchronous, compute-on-read RPC; realistic live-strategy-per-symbol overlap on this platform is
+  expected far below this default. Does **not** replace or reuse `analysis.opportunity.max_universe_size`
+  — that key still governs the unrelated curated/speculative split (FR-6 extends its OR-chain, doesn't
+  touch its budget math).
 
 ## Database Changes
 
@@ -123,7 +129,9 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 3. A symbol covered by both a watchlist binding and a live strategy for the same `(symbol,
    strategy_id)` produces exactly one candidate row, with `provenance` containing both origins.
 4. A live-strategy-only-attributed candidate is classified `curated` (ranked above the
-   `max_universe_size` truncation cut), not `speculative`.
+   `max_universe_size` truncation cut), not `speculative` — **for every candidate that is created**.
+   This does not conflict with AC-7 below: AC-7 bounds *how many* candidates get created per symbol
+   via live-only coverage, not how a created candidate is classified.
 5. Strategies that are `active=TRUE` but `live_enabled=FALSE` never attribute a candidate under this
    feature (the predicate matches `live_loop.py`'s own `live_enabled=TRUE AND active=TRUE` exactly —
    no drift between what the live loop evaluates and what the queue attributes).
@@ -132,6 +140,17 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
    `_compute_opportunities` for the same `(user, symbol)` opportunity, before and after the
    restart, given unchanged market data — confirms FR-5's independence from the live loop's
    private state.
+7. **Per-symbol fan-out cap (added at `/sdd-design` time — compute-cost mitigation, not part of the
+   original story).** When more than `analysis.opportunity.max_live_strategies_per_symbol`
+   live-enabled strategies cover the same symbol, only the top-K (by a deterministic tiebreak — see
+   design.md) get a **new** candidate row created for that symbol via live-only coverage (i.e., a
+   symbol with no watchlist binding and no held position for the excess strategies); strategies
+   beyond the cap get no row and no provenance for that symbol — a deliberate, documented trade-off,
+   not a silent gap. This cap **never** affects an already-existing candidate (one created via a
+   watchlist binding or a held position): such a candidate's `"live_strategy"` provenance tag and
+   `is_live` classification are always correct regardless of how many other strategies cover the same
+   symbol, since tagging an already-existing row costs no additional compute (see design.md's
+   distinction between *tagging* reads, uncapped, and *candidate-creation* reads, capped).
 
 ## Open Questions
 

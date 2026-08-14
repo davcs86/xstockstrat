@@ -125,3 +125,49 @@
   left as-is — confirmed untouched by this round, not implicitly closed by proximity.
 - Status: design-approved (unchanged) — round 4 didn't flip lifecycle, it strengthened the existing
   approval's evidence trail.
+
+## Session 2026-08-14T00:20:00Z — post-approval amendment: compute fan-out fix + test-helper closure
+
+- User: "close the e2e test as not required. Required compute fan-out, try to fix it" — mapped
+  (correctly, per the parallel structure of my own prior status summary listing exactly these two
+  remaining Open Risks) to: close "test-helper incompatibility" as an explicit scope waiver, and
+  actually design/verify a fix for "compute fan-out" rather than leave it as a documented trade-off.
+- **Test-helper incompatibility**: closed as an explicit user-directed scope waiver, not a technical
+  resolution — recorded precisely as such (the `_list_opps` incompatibility finding still stands;
+  what's waived is requiring a dedicated test for the multi-strategy-per-symbol scenario).
+- **Compute fan-out**: two proposed fixes were adversarially verified and both had real bugs, caught
+  before either was written into design.md:
+  1. First attempt (cap step 5's own count against `max_universe_size`, sorted by `signal_axis`) —
+     4 bugs: `signal_axis` read before it's computed (step 5 runs before the loop that sets it),
+     budget-overshoot into the unrelated speculative bucket, non-deterministic set-order sorting, and
+     — the load-bearing one — left the held loop's *identical* fan-out vector completely unaddressed,
+     an unverified "steps 3/4 are already bounded" absence claim (the exact `fails.md` 2026-07-30
+     trap this repo's own ledger tracks).
+  2. Asked the user to choose scope given the held-loop gap: full fix (cap both, amend AC-4) / step-5
+     only / revert to documented trade-off. **User chose the full fix.**
+  3. Second attempt (truncate the shared `live_by_symbol` index itself, uniformly) — 1 more real bug:
+     the index has three consumers, only two of which cost compute (candidate creation); truncating it
+     for the *tagging-only* reads (watchlist loop, held loop's watchlist-intersection branch) would
+     silently strip the `"live_strategy"` tag from an already-existing, zero-marginal-cost candidate —
+     a literal AC-3 violation.
+  4. Adopted mechanism (verified sound): a new config key
+     `analysis.opportunity.max_live_strategies_per_symbol` (default 5), a `_capped_live()` helper
+     applied **only** at the two candidate-creation sites (held loop's live-only delta, the new
+     signal-only step), tiebroken by `created_at` ascending (not lexicographic `strategy_id`, which
+     would reward alphabetically-early user-chosen slugs with no relation to relevance). The shared
+     `live_by_symbol` index stays uncapped for tagging-only reads.
+- Required product-spec.md changes, made with the user's explicit sign-off already given via the
+  scope-choice question above: Config Key Changes section now lists the new key; AC-4 clarified
+  ("for every candidate that is created") to no longer read as unconditional; new AC-7 documents the
+  cap's behavior (excess strategies get no row at all for the signal-only case — never a demotion of
+  an already-existing row).
+- design.md updated: Chosen Approach steps renumbered/rewritten (new step 3 = the cap helper, steps
+  4-7 = watchlist/held/signal-only/curated, each now precise about capped-vs-uncapped reads);
+  Rejected Alternatives gained 4 new entries (both failed fix attempts, the tiebreak choice, and the
+  config-key-vs-reusing-max_universe_size choice); Constitution Rules Touched gained C-05/F-07 (new
+  config key obligations, deferred to `/sdd-spec` since the key doesn't exist in code yet) and
+  C-11/P-04 (the Commandment-override sign-off itself). The Open Risk item is marked resolved for the
+  strategies-per-symbol dimension, explicitly still open for the separate distinct-symbol-count
+  dimension (not silently folded into "resolved").
+- Status: design-approved (unchanged) — this was a post-approval amendment with explicit user
+  sign-off (C-11/P-04), not a lifecycle transition.

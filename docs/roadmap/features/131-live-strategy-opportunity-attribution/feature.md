@@ -15,6 +15,7 @@
 | 2026-08-13 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings) |
 | 2026-08-14 | `spec-ready` → `design-approved` | /sdd-design | Design debated (3 rounds — started quick, upgraded to full mid-debate) and approved; recon.md + design.md written |
 | 2026-08-14 | `design-approved` (unchanged) | /sdd-design | Round 4 reopened at user request; resolved 2 of 4 remaining Open Risks with citation-backed evidence (insertion-order safety, C-12 fixture obligation); 2 still open, tracked in design.md for `/sdd-spec` |
+| 2026-08-14 | `design-approved` (unchanged) | /sdd-design | Post-approval amendment: fixed the compute-fan-out Open Risk for real (2 rejected fix attempts, adversarially caught real bugs in each) — added a new config key (`analysis.opportunity.max_live_strategies_per_symbol`) and amended product-spec.md (AC-4 clarified, new AC-7) with explicit user sign-off. Test-helper incompatibility Open Risk explicitly waived (not required) per user decision. |
 
 ---
 
