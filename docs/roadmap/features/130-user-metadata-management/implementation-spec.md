@@ -820,7 +820,7 @@ cd /home/user/xstockstrat/services/xstockstrat-ui && pnpm test:e2e -- --grep "Pr
 
 ### Step 10 — service: Agent client.py get_user_metadata and update_user_metadata
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -915,7 +915,7 @@ cd /home/user/xstockstrat/services/xstockstrat-agent && ruff check . && ruff for
 
 ### Step 11 — service: Agent tools.py get_user_metadata and set_user_metadata + tool count bump
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify

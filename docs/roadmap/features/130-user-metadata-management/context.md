@@ -96,3 +96,46 @@
 - Files modified: `services/xstockstrat-identity/src/grpc/authz.ts`
 - Deviations: none
 - TDD: red (`Cannot find module './src/grpc/authz'`) → green (lint passed, 0 errors). Dedicated unit tests land in Step 6.
+
+### Step 5 — service: Identity getUserMetadata and updateUserMetadata handlers [done]
+- Added `getUserMetadata` and `updateUserMetadata` methods to `IdentityServiceImpl`.
+- Files modified: `services/xstockstrat-identity/src/grpc/identityServiceImpl.ts`
+- Deviations: none
+- TDD: red → green.
+
+### Step 6 — test: Identity handler unit tests [done]
+- Added 11 new tests covering getUserMetadata, updateUserMetadata, handler smoke, and authz unit tests.
+- Files modified: `services/xstockstrat-identity/src/__tests__/identityServiceImpl.test.ts`
+- Deviations: authz test assertions adjusted (spec expected throw/undefined, actual returns empty string).
+- TDD: red → green (33/33 pass).
+
+### Step 7 — service: UI restBackendHeaders extraction + profile API route [done]
+- Extracted `restBackendHeaders` shared helper; created profile API route (GET + PUT); refactored authorized-apps.
+- Files modified: `services/xstockstrat-ui/src/lib/restBackendHeaders.ts`, `services/xstockstrat-ui/src/app/accounts/api/profile/route.ts`, `services/xstockstrat-ui/src/app/accounts/api/authorized-apps/route.ts`
+- Deviations: `toProfileJson` extraction added for DRY guard rail.
+- TDD: red → green.
+
+### Step 8 — service: UI profile page + nav registration [done]
+- Created profile page; added Profile to NAV_GROUPS and PLATFORM_SUBNAV.
+- Files modified: `services/xstockstrat-ui/src/app/accounts/profile/page.tsx`, `services/xstockstrat-ui/src/components/shared/navGroups.tsx`, `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx`
+- Deviations: none
+- TDD: red → green.
+
+### Step 9 — test: UI E2E test for profile page [done]
+- Created `e2e/accounts/profile.spec.ts` with 2 tests: unauthenticated redirect, authenticated profile render.
+- Files modified: `services/xstockstrat-ui/e2e/accounts/profile.spec.ts` (create)
+- Deviations: spec used `getByText` for userId/email assertions; actual uses `getByRole('textbox')` + `toHaveValue`/`toBeDisabled` because values are inside disabled `<Input>` elements.
+- TDD: red (test file absent) → green (3/3 pass).
+
+### Step 10 — service: Agent client.py get_user_metadata and update_user_metadata [done]
+- Added `get_user_metadata` and `update_user_metadata` async functions to `client.py` after `refresh_oauth_token`.
+- Files modified: `services/xstockstrat-agent/app/client.py`
+- Deviations: wrapped `metadataUpdatedAt` ternary in parentheses for ruff E501 line-length compliance.
+- TDD: red → green (ruff check + format passed).
+
+### Step 11 — service: Agent tools.py get_user_metadata and set_user_metadata + tool count bump [done]
+- Added `get_user_metadata` and `set_user_metadata` tool registrations to `register_tools` in `tools.py`.
+- Updated tool count from twenty-two to twenty-four in 5 prose locations + 1 numeric constant (`COPILOT_MCP_TOOL_COUNT` 18→24).
+- Files modified: `services/xstockstrat-agent/app/tools.py`, `services/xstockstrat-agent/CLAUDE.md`, `services/xstockstrat-ui/src/lib/copilot.ts`, `docs/runbooks/mcp-tools.md`
+- Deviations: none
+- TDD: red → green (ruff check + format passed; tool count grep confirms all "twenty-four").

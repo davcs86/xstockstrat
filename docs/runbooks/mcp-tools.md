@@ -1,6 +1,6 @@
 # MCP Tools Reference — xstockstrat-agent
 
-Complete reference for the twenty-two tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
+Complete reference for the twenty-four tools exposed by `xstockstrat-agent` via the Model Context Protocol (MCP).
 Connection setup → `services/xstockstrat-agent/claude_mcp_config.json`.
 
 ---
@@ -34,7 +34,7 @@ directly on port 9000.
 
 **Direct (local):** `http://localhost:9000`
 
-**Tool catalog (UI display).** `GET /api/tools` returns the same twenty-two tools' `name`,
+**Tool catalog (UI display).** `GET /api/tools` returns the same twenty-four tools' `name`,
 `description`, and `inputSchema` as JSON — **unauthenticated**, since it only describes
 capabilities (the same data documented below), never user data or credentials. It powers the
 `xstockstrat-ui` `/accounts/mcp-tools` page (via the `/accounts/api/mcp-tools` BFF route) so users
