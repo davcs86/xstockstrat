@@ -1,6 +1,6 @@
 # Feature: user-metadata-management
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `design-approved`
 **Development Branch**: `feature/user-metadata-management`
 **Created**: 2026-08-14
 **Last Updated**: 2026-08-14
@@ -12,12 +12,15 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-14 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-14 | `draft` → `design-approved` | /sdd-design | 3-round quick grilling; user-approved design |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon](recon.md) — codebase dossier (Phase 0)
+- [Design](design.md) — debated architecture (Phase 1, 3 rounds quick)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec user-metadata-management`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -43,4 +46,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review user-metadata-management product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-spec user-metadata-management` — generate implementation spec from approved design
