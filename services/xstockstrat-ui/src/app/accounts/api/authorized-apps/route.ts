@@ -1,20 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ConnectError } from '@connectrpc/connect';
 import { identityClient, connectCodeToHttp } from '@/lib/connectClients';
-import { getSessionFromRequest, rolesToAccessScope, generateTraceId } from '@/lib/auth';
-import { HEADER_USER_ID, HEADER_ACCESS_SCOPE, HEADER_TRACE_ID } from '@/lib/headers';
-
-// Platform-internal propagation headers, built like bffShared.ts:backendHeaders but for a
-// plain Next.js route (NextRequest, not a Connect HandlerContext). The userId is always
-// derived from the verified session — never from the request body — so a caller can only
-// ever list/revoke their own authorized apps (FR-3 IDOR).
-function backendHeaders(req: NextRequest, userId: string, roles: string[]): Headers {
-  return new Headers({
-    [HEADER_USER_ID]: userId,
-    [HEADER_ACCESS_SCOPE]: String(rolesToAccessScope(roles)),
-    [HEADER_TRACE_ID]: req.headers.get(HEADER_TRACE_ID) ?? generateTraceId(),
-  });
-}
+import { getSessionFromRequest } from '@/lib/auth';
+import { restBackendHeaders } from '@/lib/restBackendHeaders';
 
 function tsToISO(ts?: { seconds: bigint; nanos: number }): string | null {
   if (!ts) return null;
@@ -26,7 +14,7 @@ export async function GET(req: NextRequest) {
   const claims = await getSessionFromRequest(req);
   if (!claims) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   try {
-    const headers = backendHeaders(req, claims.user_id, claims.roles);
+    const headers = restBackendHeaders(req, claims.user_id, claims.roles);
     const data = await identityClient.listAuthorizedApps({ userId: claims.user_id }, { headers });
     // Return only the non-sensitive AuthorizedApp metadata — never tokens/secrets (FR-7).
     return NextResponse.json({
@@ -55,7 +43,7 @@ export async function POST(req: NextRequest) {
   const clientId: string = body.clientId ?? '';
   if (!clientId) return NextResponse.json({ error: 'clientId required' }, { status: 400 });
   try {
-    const headers = backendHeaders(req, claims.user_id, claims.roles);
+    const headers = restBackendHeaders(req, claims.user_id, claims.roles);
     const data = await identityClient.revokeAuthorizedApp(
       { userId: claims.user_id, clientId },
       { headers },

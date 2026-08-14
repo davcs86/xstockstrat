@@ -5,14 +5,14 @@
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import { file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
-import type { Message } from "@bufbuild/protobuf";
+import { file_google_protobuf_struct, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
+import type { JsonObject, Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file identity/v1/identity.proto.
  */
 export const file_identity_v1_identity: GenFile = /*@__PURE__*/
-  fileDesc("ChppZGVudGl0eS92MS9pZGVudGl0eS5wcm90bxIXeHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEiOgoXQXV0aGVudGljYXRlVXNlclJlcXVlc3QSDQoFZW1haWwYASABKAkSEAoIcGFzc3dvcmQYAiABKAkipgEKEUF1dGhUb2tlblJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRIVCg1yZWZyZXNoX3Rva2VuGAIgASgJEi4KCmV4cGlyZXNfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjQKBmNsYWltcxgEIAEoCzIkLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlRva2VuQ2xhaW1zIqgBCgtUb2tlbkNsYWltcxIPCgd1c2VyX2lkGAEgASgJEg0KBWVtYWlsGAIgASgJEg0KBXJvbGVzGAMgAygJEi0KCWlzc3VlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZXhwaXJlc19hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASCwoDYXVkGAYgASgJIiUKFFZhbGlkYXRlVG9rZW5SZXF1ZXN0Eg0KBXRva2VuGAEgASgJIiwKE1JlZnJlc2hUb2tlblJlcXVlc3QSFQoNcmVmcmVzaF90b2tlbhgBIAEoCSIjChJSZXZva2VUb2tlblJlcXVlc3QSDQoFdG9rZW4YASABKAkiJgoTUmV2b2tlVG9rZW5SZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIInwKC09BdXRoQ2xpZW50EhEKCWNsaWVudF9pZBgBIAEoCRIVCg1yZWRpcmVjdF91cmlzGAIgAygJEhMKC2NsaWVudF9uYW1lGAMgASgJEi4KCmNyZWF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIkgKGlJlZ2lzdGVyT0F1dGhDbGllbnRSZXF1ZXN0EhUKDXJlZGlyZWN0X3VyaXMYASADKAkSEwoLY2xpZW50X25hbWUYAiABKAkiKgoVR2V0T0F1dGhDbGllbnRSZXF1ZXN0EhEKCWNsaWVudF9pZBgBIAEoCSJ6ChRJc3N1ZUF1dGhDb2RlUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEhEKCWNsaWVudF9pZBgCIAEoCRIUCgxyZWRpcmVjdF91cmkYAyABKAkSFgoOY29kZV9jaGFsbGVuZ2UYBCABKAkSEAoIcmVzb3VyY2UYBSABKAkiJQoVSXNzdWVBdXRoQ29kZVJlc3BvbnNlEgwKBGNvZGUYASABKAkieQoXRXhjaGFuZ2VBdXRoQ29kZVJlcXVlc3QSDAoEY29kZRgBIAEoCRIVCg1jb2RlX3ZlcmlmaWVyGAIgASgJEhQKDHJlZGlyZWN0X3VyaRgDIAEoCRIRCgljbGllbnRfaWQYBCABKAkSEAoIcmVzb3VyY2UYBSABKAkiaQoST0F1dGhUb2tlblJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRISCgp0b2tlbl90eXBlGAIgASgJEhIKCmV4cGlyZXNfaW4YAyABKAMSFQoNcmVmcmVzaF90b2tlbhgEIAEoCSJDChhSZWZyZXNoT0F1dGhUb2tlblJlcXVlc3QSFQoNcmVmcmVzaF90b2tlbhgBIAEoCRIQCghyZXNvdXJjZRgCIAEoCSKzAQoNQXV0aG9yaXplZEFwcBIRCgljbGllbnRfaWQYASABKAkSEwoLY2xpZW50X25hbWUYAiABKAkSMQoNYXV0aG9yaXplZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMbGFzdF91c2VkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIVCg1yZWRpcmVjdF91cmlzGAUgAygJIiwKGUxpc3RBdXRob3JpemVkQXBwc1JlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCSJSChpMaXN0QXV0aG9yaXplZEFwcHNSZXNwb25zZRI0CgRhcHBzGAEgAygLMiYueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuQXV0aG9yaXplZEFwcCJAChpSZXZva2VBdXRob3JpemVkQXBwUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEhEKCWNsaWVudF9pZBgCIAEoCSIuChtSZXZva2VBdXRob3JpemVkQXBwUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCDLxCQoPSWRlbnRpdHlTZXJ2aWNlEnAKEEF1dGhlbnRpY2F0ZVVzZXISMC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5BdXRoZW50aWNhdGVVc2VyUmVxdWVzdBoqLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLkF1dGhUb2tlblJlc3BvbnNlEmQKDVZhbGlkYXRlVG9rZW4SLS54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5WYWxpZGF0ZVRva2VuUmVxdWVzdBokLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlRva2VuQ2xhaW1zEmgKDFJlZnJlc2hUb2tlbhIsLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJlZnJlc2hUb2tlblJlcXVlc3QaKi54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5BdXRoVG9rZW5SZXNwb25zZRJoCgtSZXZva2VUb2tlbhIrLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJldm9rZVRva2VuUmVxdWVzdBosLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJldm9rZVRva2VuUmVzcG9uc2UScAoTUmVnaXN0ZXJPQXV0aENsaWVudBIzLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJlZ2lzdGVyT0F1dGhDbGllbnRSZXF1ZXN0GiQueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuT0F1dGhDbGllbnQSZgoOR2V0T0F1dGhDbGllbnQSLi54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5HZXRPQXV0aENsaWVudFJlcXVlc3QaJC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5PQXV0aENsaWVudBJuCg1Jc3N1ZUF1dGhDb2RlEi0ueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuSXNzdWVBdXRoQ29kZVJlcXVlc3QaLi54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5Jc3N1ZUF1dGhDb2RlUmVzcG9uc2UScQoQRXhjaGFuZ2VBdXRoQ29kZRIwLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLkV4Y2hhbmdlQXV0aENvZGVSZXF1ZXN0GisueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuT0F1dGhUb2tlblJlc3BvbnNlEnMKEVJlZnJlc2hPQXV0aFRva2VuEjEueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuUmVmcmVzaE9BdXRoVG9rZW5SZXF1ZXN0GisueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuT0F1dGhUb2tlblJlc3BvbnNlEn0KEkxpc3RBdXRob3JpemVkQXBwcxIyLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLkxpc3RBdXRob3JpemVkQXBwc1JlcXVlc3QaMy54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5MaXN0QXV0aG9yaXplZEFwcHNSZXNwb25zZRKAAQoTUmV2b2tlQXV0aG9yaXplZEFwcBIzLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJldm9rZUF1dGhvcml6ZWRBcHBSZXF1ZXN0GjQueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuUmV2b2tlQXV0aG9yaXplZEFwcFJlc3BvbnNlQkBaPmdpdGh1Yi5jb20veHN0b2Nrc3RyYXQvY29udHJhY3RzL2dlbi9nby9pZGVudGl0eS92MTtpZGVudGl0eXYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
+  fileDesc("ChppZGVudGl0eS92MS9pZGVudGl0eS5wcm90bxIXeHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEiOgoXQXV0aGVudGljYXRlVXNlclJlcXVlc3QSDQoFZW1haWwYASABKAkSEAoIcGFzc3dvcmQYAiABKAkipgEKEUF1dGhUb2tlblJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRIVCg1yZWZyZXNoX3Rva2VuGAIgASgJEi4KCmV4cGlyZXNfYXQYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjQKBmNsYWltcxgEIAEoCzIkLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlRva2VuQ2xhaW1zIqgBCgtUb2tlbkNsYWltcxIPCgd1c2VyX2lkGAEgASgJEg0KBWVtYWlsGAIgASgJEg0KBXJvbGVzGAMgAygJEi0KCWlzc3VlZF9hdBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKZXhwaXJlc19hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASCwoDYXVkGAYgASgJIiUKFFZhbGlkYXRlVG9rZW5SZXF1ZXN0Eg0KBXRva2VuGAEgASgJIiwKE1JlZnJlc2hUb2tlblJlcXVlc3QSFQoNcmVmcmVzaF90b2tlbhgBIAEoCSIjChJSZXZva2VUb2tlblJlcXVlc3QSDQoFdG9rZW4YASABKAkiJgoTUmV2b2tlVG9rZW5SZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIInwKC09BdXRoQ2xpZW50EhEKCWNsaWVudF9pZBgBIAEoCRIVCg1yZWRpcmVjdF91cmlzGAIgAygJEhMKC2NsaWVudF9uYW1lGAMgASgJEi4KCmNyZWF0ZWRfYXQYBCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIkgKGlJlZ2lzdGVyT0F1dGhDbGllbnRSZXF1ZXN0EhUKDXJlZGlyZWN0X3VyaXMYASADKAkSEwoLY2xpZW50X25hbWUYAiABKAkiKgoVR2V0T0F1dGhDbGllbnRSZXF1ZXN0EhEKCWNsaWVudF9pZBgBIAEoCSJ6ChRJc3N1ZUF1dGhDb2RlUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEhEKCWNsaWVudF9pZBgCIAEoCRIUCgxyZWRpcmVjdF91cmkYAyABKAkSFgoOY29kZV9jaGFsbGVuZ2UYBCABKAkSEAoIcmVzb3VyY2UYBSABKAkiJQoVSXNzdWVBdXRoQ29kZVJlc3BvbnNlEgwKBGNvZGUYASABKAkieQoXRXhjaGFuZ2VBdXRoQ29kZVJlcXVlc3QSDAoEY29kZRgBIAEoCRIVCg1jb2RlX3ZlcmlmaWVyGAIgASgJEhQKDHJlZGlyZWN0X3VyaRgDIAEoCRIRCgljbGllbnRfaWQYBCABKAkSEAoIcmVzb3VyY2UYBSABKAkiaQoST0F1dGhUb2tlblJlc3BvbnNlEhQKDGFjY2Vzc190b2tlbhgBIAEoCRISCgp0b2tlbl90eXBlGAIgASgJEhIKCmV4cGlyZXNfaW4YAyABKAMSFQoNcmVmcmVzaF90b2tlbhgEIAEoCSJDChhSZWZyZXNoT0F1dGhUb2tlblJlcXVlc3QSFQoNcmVmcmVzaF90b2tlbhgBIAEoCRIQCghyZXNvdXJjZRgCIAEoCSKzAQoNQXV0aG9yaXplZEFwcBIRCgljbGllbnRfaWQYASABKAkSEwoLY2xpZW50X25hbWUYAiABKAkSMQoNYXV0aG9yaXplZF9hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMbGFzdF91c2VkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIVCg1yZWRpcmVjdF91cmlzGAUgAygJIiwKGUxpc3RBdXRob3JpemVkQXBwc1JlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCSJSChpMaXN0QXV0aG9yaXplZEFwcHNSZXNwb25zZRI0CgRhcHBzGAEgAygLMiYueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuQXV0aG9yaXplZEFwcCJAChpSZXZva2VBdXRob3JpemVkQXBwUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEhEKCWNsaWVudF9pZBgCIAEoCSIuChtSZXZva2VBdXRob3JpemVkQXBwUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCCLcAQoMVXNlck1ldGFkYXRhEg8KB3VzZXJfaWQYASABKAkSDQoFZW1haWwYAiABKAkSEgoFcGhvbmUYAyABKAlIAIgBARIZCgxkaXNwbGF5X25hbWUYBCABKAlIAYgBARIpCghtZXRhZGF0YRgFIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSNwoTbWV0YWRhdGFfdXBkYXRlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCCAoGX3Bob25lQg8KDV9kaXNwbGF5X25hbWUiGAoWR2V0VXNlck1ldGFkYXRhUmVxdWVzdCJXChdHZXRVc2VyTWV0YWRhdGFSZXNwb25zZRI8Cg11c2VyX21ldGFkYXRhGAEgASgLMiUueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuVXNlck1ldGFkYXRhIqIBChlVcGRhdGVVc2VyTWV0YWRhdGFSZXF1ZXN0EhIKBXBob25lGAEgASgJSACIAQESGQoMZGlzcGxheV9uYW1lGAIgASgJSAGIAQESLgoIbWV0YWRhdGEYAyABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0SAKIAQFCCAoGX3Bob25lQg8KDV9kaXNwbGF5X25hbWVCCwoJX21ldGFkYXRhIloKGlVwZGF0ZVVzZXJNZXRhZGF0YVJlc3BvbnNlEjwKDXVzZXJfbWV0YWRhdGEYASABKAsyJS54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5Vc2VyTWV0YWRhdGEy5gsKD0lkZW50aXR5U2VydmljZRJwChBBdXRoZW50aWNhdGVVc2VyEjAueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuQXV0aGVudGljYXRlVXNlclJlcXVlc3QaKi54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5BdXRoVG9rZW5SZXNwb25zZRJkCg1WYWxpZGF0ZVRva2VuEi0ueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuVmFsaWRhdGVUb2tlblJlcXVlc3QaJC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5Ub2tlbkNsYWltcxJoCgxSZWZyZXNoVG9rZW4SLC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5SZWZyZXNoVG9rZW5SZXF1ZXN0GioueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuQXV0aFRva2VuUmVzcG9uc2USaAoLUmV2b2tlVG9rZW4SKy54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5SZXZva2VUb2tlblJlcXVlc3QaLC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5SZXZva2VUb2tlblJlc3BvbnNlEnAKE1JlZ2lzdGVyT0F1dGhDbGllbnQSMy54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5SZWdpc3Rlck9BdXRoQ2xpZW50UmVxdWVzdBokLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLk9BdXRoQ2xpZW50EmYKDkdldE9BdXRoQ2xpZW50Ei4ueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuR2V0T0F1dGhDbGllbnRSZXF1ZXN0GiQueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuT0F1dGhDbGllbnQSbgoNSXNzdWVBdXRoQ29kZRItLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLklzc3VlQXV0aENvZGVSZXF1ZXN0Gi4ueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuSXNzdWVBdXRoQ29kZVJlc3BvbnNlEnEKEEV4Y2hhbmdlQXV0aENvZGUSMC54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5FeGNoYW5nZUF1dGhDb2RlUmVxdWVzdBorLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLk9BdXRoVG9rZW5SZXNwb25zZRJzChFSZWZyZXNoT0F1dGhUb2tlbhIxLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJlZnJlc2hPQXV0aFRva2VuUmVxdWVzdBorLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLk9BdXRoVG9rZW5SZXNwb25zZRJ9ChJMaXN0QXV0aG9yaXplZEFwcHMSMi54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5MaXN0QXV0aG9yaXplZEFwcHNSZXF1ZXN0GjMueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuTGlzdEF1dGhvcml6ZWRBcHBzUmVzcG9uc2USgAEKE1Jldm9rZUF1dGhvcml6ZWRBcHASMy54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5SZXZva2VBdXRob3JpemVkQXBwUmVxdWVzdBo0LnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlJldm9rZUF1dGhvcml6ZWRBcHBSZXNwb25zZRJ0Cg9HZXRVc2VyTWV0YWRhdGESLy54c3RvY2tzdHJhdC5pZGVudGl0eS52MS5HZXRVc2VyTWV0YWRhdGFSZXF1ZXN0GjAueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuR2V0VXNlck1ldGFkYXRhUmVzcG9uc2USfQoSVXBkYXRlVXNlck1ldGFkYXRhEjIueHN0b2Nrc3RyYXQuaWRlbnRpdHkudjEuVXBkYXRlVXNlck1ldGFkYXRhUmVxdWVzdBozLnhzdG9ja3N0cmF0LmlkZW50aXR5LnYxLlVwZGF0ZVVzZXJNZXRhZGF0YVJlc3BvbnNlQkBaPmdpdGh1Yi5jb20veHN0b2Nrc3RyYXQvY29udHJhY3RzL2dlbi9nby9pZGVudGl0eS92MTtpZGVudGl0eXYxYgZwcm90bzM", [file_google_protobuf_struct, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message xstockstrat.identity.v1.AuthenticateUserRequest
@@ -514,6 +514,124 @@ export const RevokeAuthorizedAppResponseSchema: GenMessage<RevokeAuthorizedAppRe
   messageDesc(file_identity_v1_identity, 19);
 
 /**
+ * ── User profile metadata (feature 130) ──────────────────────────────────
+ *
+ * @generated from message xstockstrat.identity.v1.UserMetadata
+ */
+export type UserMetadata = Message<"xstockstrat.identity.v1.UserMetadata"> & {
+  /**
+   * @generated from field: string user_id = 1;
+   */
+  userId: string;
+
+  /**
+   * @generated from field: string email = 2;
+   */
+  email: string;
+
+  /**
+   * @generated from field: optional string phone = 3;
+   */
+  phone?: string | undefined;
+
+  /**
+   * @generated from field: optional string display_name = 4;
+   */
+  displayName?: string | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Struct metadata = 5;
+   */
+  metadata?: JsonObject | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp metadata_updated_at = 6;
+   */
+  metadataUpdatedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.UserMetadata.
+ * Use `create(UserMetadataSchema)` to create a new message.
+ */
+export const UserMetadataSchema: GenMessage<UserMetadata> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 20);
+
+/**
+ * @generated from message xstockstrat.identity.v1.GetUserMetadataRequest
+ */
+export type GetUserMetadataRequest = Message<"xstockstrat.identity.v1.GetUserMetadataRequest"> & {
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.GetUserMetadataRequest.
+ * Use `create(GetUserMetadataRequestSchema)` to create a new message.
+ */
+export const GetUserMetadataRequestSchema: GenMessage<GetUserMetadataRequest> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 21);
+
+/**
+ * @generated from message xstockstrat.identity.v1.GetUserMetadataResponse
+ */
+export type GetUserMetadataResponse = Message<"xstockstrat.identity.v1.GetUserMetadataResponse"> & {
+  /**
+   * @generated from field: xstockstrat.identity.v1.UserMetadata user_metadata = 1;
+   */
+  userMetadata?: UserMetadata | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.GetUserMetadataResponse.
+ * Use `create(GetUserMetadataResponseSchema)` to create a new message.
+ */
+export const GetUserMetadataResponseSchema: GenMessage<GetUserMetadataResponse> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 22);
+
+/**
+ * @generated from message xstockstrat.identity.v1.UpdateUserMetadataRequest
+ */
+export type UpdateUserMetadataRequest = Message<"xstockstrat.identity.v1.UpdateUserMetadataRequest"> & {
+  /**
+   * @generated from field: optional string phone = 1;
+   */
+  phone?: string | undefined;
+
+  /**
+   * @generated from field: optional string display_name = 2;
+   */
+  displayName?: string | undefined;
+
+  /**
+   * @generated from field: optional google.protobuf.Struct metadata = 3;
+   */
+  metadata?: JsonObject | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.UpdateUserMetadataRequest.
+ * Use `create(UpdateUserMetadataRequestSchema)` to create a new message.
+ */
+export const UpdateUserMetadataRequestSchema: GenMessage<UpdateUserMetadataRequest> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 23);
+
+/**
+ * @generated from message xstockstrat.identity.v1.UpdateUserMetadataResponse
+ */
+export type UpdateUserMetadataResponse = Message<"xstockstrat.identity.v1.UpdateUserMetadataResponse"> & {
+  /**
+   * @generated from field: xstockstrat.identity.v1.UserMetadata user_metadata = 1;
+   */
+  userMetadata?: UserMetadata | undefined;
+};
+
+/**
+ * Describes the message xstockstrat.identity.v1.UpdateUserMetadataResponse.
+ * Use `create(UpdateUserMetadataResponseSchema)` to create a new message.
+ */
+export const UpdateUserMetadataResponseSchema: GenMessage<UpdateUserMetadataResponse> = /*@__PURE__*/
+  messageDesc(file_identity_v1_identity, 24);
+
+/**
  * @generated from service xstockstrat.identity.v1.IdentityService
  */
 export const IdentityService: GenService<{
@@ -610,6 +728,24 @@ export const IdentityService: GenService<{
     methodKind: "unary";
     input: typeof RevokeAuthorizedAppRequestSchema;
     output: typeof RevokeAuthorizedAppResponseSchema;
+  },
+  /**
+   * User profile metadata self-management (feature 130)
+   *
+   * @generated from rpc xstockstrat.identity.v1.IdentityService.GetUserMetadata
+   */
+  getUserMetadata: {
+    methodKind: "unary";
+    input: typeof GetUserMetadataRequestSchema;
+    output: typeof GetUserMetadataResponseSchema;
+  },
+  /**
+   * @generated from rpc xstockstrat.identity.v1.IdentityService.UpdateUserMetadata
+   */
+  updateUserMetadata: {
+    methodKind: "unary";
+    input: typeof UpdateUserMetadataRequestSchema;
+    output: typeof UpdateUserMetadataResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_identity_v1_identity, 0);

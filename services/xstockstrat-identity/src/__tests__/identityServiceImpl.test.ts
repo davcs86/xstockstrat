@@ -20,11 +20,16 @@ import * as crypto from 'crypto';
 // ---------------------------------------------------------------------------
 
 let IdentityServiceImpl: any;
+let userIdFrom: any;
+let first: any;
 
 before(async () => {
   try {
     const mod = await import('../grpc/identityServiceImpl.js');
     IdentityServiceImpl = mod.IdentityServiceImpl;
+    const authz = await import('../grpc/authz.js');
+    userIdFrom = authz.userIdFrom;
+    first = authz.first;
   } catch {
     // Unsupported TypeScript syntax in strip-only mode — tests will be skipped.
   }
@@ -52,6 +57,15 @@ function makeImpl(rows: any[] = [], throws?: Error) {
 
 function makeCall(req: any) {
   return { request: req };
+}
+
+function makeCallWithMetadata(req: any, userId: string) {
+  return {
+    request: req,
+    metadata: {
+      get: (key: string) => key === 'x-user-id' ? [userId] : [],
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -469,5 +483,146 @@ describe('revokeAuthorizedApp', () => {
     });
     assert.strictEqual(res.success, true);
     assert.ok(pool.queries.some((q) => /WHERE user_id = \$1 AND client_id = \$2/.test(q)));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getUserMetadata (feature 130)
+// ---------------------------------------------------------------------------
+
+describe('getUserMetadata', () => {
+  it('returns NOT_FOUND (code 5) when user does not exist', async () => {
+    const impl = makeImpl([]);
+    if (!impl) return;
+    await new Promise<void>((resolve) => {
+      impl.getUserMetadata(
+        makeCallWithMetadata({}, 'nonexistent-user'),
+        (err: any) => {
+          assert.equal(err.code, 5);
+          resolve();
+        }
+      );
+    });
+  });
+
+  it('returns user metadata for an existing user', async () => {
+    const row = {
+      user_id: 'u1', email: 'a@b.com', phone: '+1234',
+      display_name: 'Alice', metadata: {}, metadata_updated_at: new Date(),
+    };
+    const impl = makeImpl([row]);
+    if (!impl) return;
+    await new Promise<void>((resolve) => {
+      impl.getUserMetadata(
+        makeCallWithMetadata({}, 'u1'),
+        (err: any, res: any) => {
+          assert.equal(err, null);
+          assert.equal(res.userMetadata.userId, 'u1');
+          assert.equal(res.userMetadata.email, 'a@b.com');
+          assert.equal(res.userMetadata.phone, '+1234');
+          resolve();
+        }
+      );
+    });
+  });
+
+  it('rejects when call.metadata is missing', async () => {
+    const impl = makeImpl([]);
+    if (!impl) return;
+    await new Promise<void>((resolve) => {
+      impl.getUserMetadata(
+        makeCall({}),
+        (err: any) => {
+          assert.equal(err.code, 13);
+          resolve();
+        }
+      );
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// updateUserMetadata (feature 130)
+// ---------------------------------------------------------------------------
+
+describe('updateUserMetadata', () => {
+  it('rejects when no fields are provided', async () => {
+    const impl = makeImpl([]);
+    if (!impl) return;
+    await new Promise<void>((resolve) => {
+      impl.updateUserMetadata(
+        makeCallWithMetadata({}, 'u1'),
+        (err: any) => {
+          assert.equal(err.code, 3);
+          resolve();
+        }
+      );
+    });
+  });
+
+  it('partial update: sets phone only, preserves display_name', async () => {
+    const row = {
+      user_id: 'u1', email: 'a@b.com', phone: '+9999',
+      display_name: 'Alice', metadata: {}, metadata_updated_at: new Date(),
+    };
+    const impl = makeImpl([row]);
+    if (!impl) return;
+    await new Promise<void>((resolve) => {
+      impl.updateUserMetadata(
+        makeCallWithMetadata({ phone: '+9999' }, 'u1'),
+        (err: any, res: any) => {
+          assert.equal(err, null);
+          assert.equal(res.userMetadata.phone, '+9999');
+          assert.equal(res.userMetadata.displayName, 'Alice');
+          resolve();
+        }
+      );
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Handler registration smoke (feature 130)
+// ---------------------------------------------------------------------------
+
+describe('handler registration (smoke)', () => {
+  it('getUserMetadata is a callable method on the prototype', () => {
+    if (!IdentityServiceImpl) return;
+    assert.equal(typeof IdentityServiceImpl.prototype.getUserMetadata, 'function');
+  });
+
+  it('updateUserMetadata is a callable method on the prototype', () => {
+    if (!IdentityServiceImpl) return;
+    assert.equal(typeof IdentityServiceImpl.prototype.updateUserMetadata, 'function');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// authz: userIdFrom / first (feature 130 — Step 4 coverage)
+// ---------------------------------------------------------------------------
+
+describe('authz: userIdFrom / first', () => {
+  it('userIdFrom extracts x-user-id from metadata', () => {
+    if (!userIdFrom) return;
+    const md = { get: (key: string) => key === 'x-user-id' ? ['uid-123'] : [] };
+    assert.equal(userIdFrom(md), 'uid-123');
+  });
+
+  it('userIdFrom returns empty string when x-user-id is absent', () => {
+    if (!userIdFrom) return;
+    const md = { get: () => [] };
+    assert.equal(userIdFrom(md), '');
+  });
+
+  it('first returns the first element of a metadata array', () => {
+    if (!first) return;
+    const md = { get: (key: string) => key === 'x-trace-id' ? ['t1', 't2'] : [] };
+    assert.equal(first(md, 'x-trace-id'), 't1');
+  });
+
+  it('first returns empty string for a missing key', () => {
+    if (!first) return;
+    const md = { get: () => [] };
+    assert.equal(first(md, 'x-missing'), '');
   });
 });

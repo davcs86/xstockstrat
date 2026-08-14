@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { AuthenticateUserRequest, AuthTokenResponse, ExchangeAuthCodeRequest, GetOAuthClientRequest, IssueAuthCodeRequest, IssueAuthCodeResponse, ListAuthorizedAppsRequest, ListAuthorizedAppsResponse, OAuthClient, OAuthTokenResponse, RefreshOAuthTokenRequest, RefreshTokenRequest, RegisterOAuthClientRequest, RevokeAuthorizedAppRequest, RevokeAuthorizedAppResponse, RevokeTokenRequest, RevokeTokenResponse, TokenClaims, ValidateTokenRequest } from "./identity_pb.js";
+import { AuthenticateUserRequest, AuthTokenResponse, ExchangeAuthCodeRequest, GetOAuthClientRequest, GetUserMetadataRequest, GetUserMetadataResponse, IssueAuthCodeRequest, IssueAuthCodeResponse, ListAuthorizedAppsRequest, ListAuthorizedAppsResponse, OAuthClient, OAuthTokenResponse, RefreshOAuthTokenRequest, RefreshTokenRequest, RegisterOAuthClientRequest, RevokeAuthorizedAppRequest, RevokeAuthorizedAppResponse, RevokeTokenRequest, RevokeTokenResponse, TokenClaims, UpdateUserMetadataRequest, UpdateUserMetadataResponse, ValidateTokenRequest } from "./identity_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -115,6 +115,26 @@ export const IdentityService = {
       name: "RevokeAuthorizedApp",
       I: RevokeAuthorizedAppRequest,
       O: RevokeAuthorizedAppResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * User profile metadata self-management (feature 130)
+     *
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.GetUserMetadata
+     */
+    getUserMetadata: {
+      name: "GetUserMetadata",
+      I: GetUserMetadataRequest,
+      O: GetUserMetadataResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * @generated from rpc xstockstrat.identity.v1.IdentityService.UpdateUserMetadata
+     */
+    updateUserMetadata: {
+      name: "UpdateUserMetadata",
+      I: UpdateUserMetadataRequest,
+      O: UpdateUserMetadataResponse,
       kind: MethodKind.Unary,
     },
   }

@@ -27,7 +27,7 @@ Python 3.12 (asyncio, grpc.aio, mcp SDK v2 MCPServer)
 
 ## MCP Tools
 
-The agent registers twenty-two tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
+The agent registers twenty-four tools (see `docs/runbooks/mcp-tools.md` for full parameter/return/error
 reference):
 
 | Tool | Purpose |
@@ -54,6 +54,8 @@ reference):
 | `get_config` | Read a namespace's current config values, secret values redacted (read-only, feature 073) |
 | `list_config_keys` | List a namespace's registered config keys, metadata only (read-only, feature 073) |
 | `set_config` | Write one non-secret config value (admin-scoped write, feature 073); a write to an unregistered key scope is refused `NOT_FOUND` unless `create_key=true` (feature 091) |
+| `get_user_metadata` | Fetch the calling user's own profile metadata (read-only, feature 130) |
+| `set_user_metadata` | Partial-update the calling user's own profile metadata (feature 130) |
 
 ### Management-tool authorization
 
