@@ -30,6 +30,8 @@ const (
 	IdentityService_RefreshOAuthToken_FullMethodName   = "/xstockstrat.identity.v1.IdentityService/RefreshOAuthToken"
 	IdentityService_ListAuthorizedApps_FullMethodName  = "/xstockstrat.identity.v1.IdentityService/ListAuthorizedApps"
 	IdentityService_RevokeAuthorizedApp_FullMethodName = "/xstockstrat.identity.v1.IdentityService/RevokeAuthorizedApp"
+	IdentityService_GetUserMetadata_FullMethodName     = "/xstockstrat.identity.v1.IdentityService/GetUserMetadata"
+	IdentityService_UpdateUserMetadata_FullMethodName  = "/xstockstrat.identity.v1.IdentityService/UpdateUserMetadata"
 )
 
 // IdentityServiceClient is the client API for IdentityService service.
@@ -51,6 +53,9 @@ type IdentityServiceClient interface {
 	// calling user has granted access to the MCP agent. Additive over 049's OAuth backend.
 	ListAuthorizedApps(ctx context.Context, in *ListAuthorizedAppsRequest, opts ...grpc.CallOption) (*ListAuthorizedAppsResponse, error)
 	RevokeAuthorizedApp(ctx context.Context, in *RevokeAuthorizedAppRequest, opts ...grpc.CallOption) (*RevokeAuthorizedAppResponse, error)
+	// User profile metadata self-management (feature 130)
+	GetUserMetadata(ctx context.Context, in *GetUserMetadataRequest, opts ...grpc.CallOption) (*GetUserMetadataResponse, error)
+	UpdateUserMetadata(ctx context.Context, in *UpdateUserMetadataRequest, opts ...grpc.CallOption) (*UpdateUserMetadataResponse, error)
 }
 
 type identityServiceClient struct {
@@ -171,6 +176,26 @@ func (c *identityServiceClient) RevokeAuthorizedApp(ctx context.Context, in *Rev
 	return out, nil
 }
 
+func (c *identityServiceClient) GetUserMetadata(ctx context.Context, in *GetUserMetadataRequest, opts ...grpc.CallOption) (*GetUserMetadataResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetUserMetadataResponse)
+	err := c.cc.Invoke(ctx, IdentityService_GetUserMetadata_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *identityServiceClient) UpdateUserMetadata(ctx context.Context, in *UpdateUserMetadataRequest, opts ...grpc.CallOption) (*UpdateUserMetadataResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpdateUserMetadataResponse)
+	err := c.cc.Invoke(ctx, IdentityService_UpdateUserMetadata_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // IdentityServiceServer is the server API for IdentityService service.
 // All implementations should embed UnimplementedIdentityServiceServer
 // for forward compatibility.
@@ -190,6 +215,9 @@ type IdentityServiceServer interface {
 	// calling user has granted access to the MCP agent. Additive over 049's OAuth backend.
 	ListAuthorizedApps(context.Context, *ListAuthorizedAppsRequest) (*ListAuthorizedAppsResponse, error)
 	RevokeAuthorizedApp(context.Context, *RevokeAuthorizedAppRequest) (*RevokeAuthorizedAppResponse, error)
+	// User profile metadata self-management (feature 130)
+	GetUserMetadata(context.Context, *GetUserMetadataRequest) (*GetUserMetadataResponse, error)
+	UpdateUserMetadata(context.Context, *UpdateUserMetadataRequest) (*UpdateUserMetadataResponse, error)
 }
 
 // UnimplementedIdentityServiceServer should be embedded to have
@@ -231,6 +259,12 @@ func (UnimplementedIdentityServiceServer) ListAuthorizedApps(context.Context, *L
 }
 func (UnimplementedIdentityServiceServer) RevokeAuthorizedApp(context.Context, *RevokeAuthorizedAppRequest) (*RevokeAuthorizedAppResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RevokeAuthorizedApp not implemented")
+}
+func (UnimplementedIdentityServiceServer) GetUserMetadata(context.Context, *GetUserMetadataRequest) (*GetUserMetadataResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetUserMetadata not implemented")
+}
+func (UnimplementedIdentityServiceServer) UpdateUserMetadata(context.Context, *UpdateUserMetadataRequest) (*UpdateUserMetadataResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpdateUserMetadata not implemented")
 }
 func (UnimplementedIdentityServiceServer) testEmbeddedByValue() {}
 
@@ -450,6 +484,42 @@ func _IdentityService_RevokeAuthorizedApp_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _IdentityService_GetUserMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetUserMetadataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).GetUserMetadata(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_GetUserMetadata_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).GetUserMetadata(ctx, req.(*GetUserMetadataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _IdentityService_UpdateUserMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateUserMetadataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IdentityServiceServer).UpdateUserMetadata(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IdentityService_UpdateUserMetadata_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IdentityServiceServer).UpdateUserMetadata(ctx, req.(*UpdateUserMetadataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // IdentityService_ServiceDesc is the grpc.ServiceDesc for IdentityService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -500,6 +570,14 @@ var IdentityService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RevokeAuthorizedApp",
 			Handler:    _IdentityService_RevokeAuthorizedApp_Handler,
+		},
+		{
+			MethodName: "GetUserMetadata",
+			Handler:    _IdentityService_GetUserMetadata_Handler,
+		},
+		{
+			MethodName: "UpdateUserMetadata",
+			Handler:    _IdentityService_UpdateUserMetadata_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -78,3 +78,9 @@
 - Deviations: none
 - TDD: N/A (proto — non-code-bearing)
 - Tooling: buf 1.72.0, protoc-gen-go v1.36.11, protoc-gen-go-grpc v1.6.2, protoc-gen-connect-go v1.19.2, ts-proto 2.11.8, protoc-gen-es 2.12.0, protoc-gen-connect-es 1.7.0, grpcio-tools 1.80.0 — all installed from host codegen toolchain; stub-diff validated empty before proto edit.
+
+### Step 2 — proto-gen: Regenerate stubs [done]
+- Ran `./scripts/buf-gen.sh`; all 12 generated files updated (Go, Python, TS, TS compiled JS).
+- Files modified: `packages/proto/gen/go/`, `packages/proto/gen/python/`, `packages/proto/gen/ts/`
+- Deviations: none
+- TDD: N/A (proto-gen — non-code-bearing)
