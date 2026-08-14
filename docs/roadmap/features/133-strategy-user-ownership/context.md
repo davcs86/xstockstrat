@@ -253,3 +253,7 @@
 ### Step 4 — migration 014: strategy_cooldowns user_id + composite PK [done]
 - 014 up: ADD COLUMN → mechanical backfill (JOIN on strategies.user_id) → DELETE orphaned rows → SET NOT NULL → drop pkey → ADD PRIMARY KEY (user_id, strategy_id, symbol). down reverses.
 - Offline verify: up/down parity confirmed. Files: `migrations/014_*.{up,down}.sql`. TDD: N/A. Deviations: none.
+
+### Step 5 — migration 015: backtest_runs user_id column [done]
+- 015 up: plain ADD COLUMN user_id (NULLABLE — append-only history, not an ownership boundary) + backfill UPDATE; no NOT NULL, no PK change (PK is backtest_id). down: DROP COLUMN.
+- Offline verify: up/down parity confirmed. Files: `migrations/015_*.{up,down}.sql`. TDD: N/A. Deviations: none.

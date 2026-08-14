@@ -265,7 +265,7 @@ ls services/xstockstrat-analysis/migrations/014_strategy_cooldowns_user_id.up.sq
 
 ### Step 5 — migration: `015` add `user_id` column to `analysis.backtest_runs`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/015_backtest_runs_user_id.up.sql` — create
