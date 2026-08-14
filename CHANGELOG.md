@@ -17,6 +17,26 @@ Each entry corresponds to one `main-dev → main` PR merge.
 
 ---
 
+## 2026-08-14
+
+### Features
+- phase7-observability: Completes the pending Phase 7 implementation roadmap item: activates the OTel SDK already stubbed in every service, routes telemetry to Grafana Cloud via the OTLP collector, and delivers service health, latency, and signal pipeline throughput dashboards — providing operational visibility before live capital is at risk.
+- fmp-key-to-secret-env: Feature 059 routed the FMP API key through `xstockstrat-config` as
+- fix-listkeys-wire-encoding: `ConfigService.ListKeys` built its response with **snake_case** field names and **numeric** enums,
+- fix-config-scope-resolution: `ConfigService` resolved **every** request to the `('dev', 'all')` scope, whatever the caller asked
+- mcp-python-sdk-v2-upgrade: Upgrade `xstockstrat-agent` from the Python `mcp` SDK v1.27.1 to v2.0.0 (released 2026-07-28),
+- fix-mcp-server-input-validation: Two small independent server guards: ingest range-validates conviction to INVALID_ARGUMENT (not INTERNAL/silent NULL), and notify rejects empty title/body (INVALID_ARGUMENT).
+- shadcn-migration-custom-composites: Fourth and final backlog feature from "The Component Ledger" shadcn/ui gap audit: close out the
+- user-metadata-management: Add user profile metadata (email, phone, display name) to the identity service, with a self-management UI page under /config-ui and MCP agent tools for reading and setting metadata. Admins can manage their own profile only in this phase.
+
+### Proto Changes
+- identity/v1/identity.proto
+
+### Summary
+3 commits, 0 feature merges since last promotion.
+
+---
+
 ## 2026-08-13
 
 ### Features

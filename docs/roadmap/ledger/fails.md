@@ -1139,3 +1139,24 @@ ambiguity is logged here).
   parallel. `docs/runbooks/add-data-source.md`'s new checklist section is the durable fix: future
   features get all 10 files (8 wiring + 2 docs) named up front instead of rediscovering them one
   broken deploy at a time.
+
+### 2026-08-14 — strategy-user-ownership — assumption
+- **Mistake**: across a 5-round design debate, every round's proposal contained at least one
+  "already handles this"/"fully closed"/"the other three already accept X" claim that the very next
+  adversary pass (or an extra verification pass) disproved by direct code read — `set_live_enabled`
+  was claimed fixed but its SQL write kept a bare `WHERE strategy_id = $1` (no `user_id`); trading
+  was claimed to "already enforce its own user_id-based authorization" when an already-recorded,
+  open finding (TRADING-N1) says the opposite; `run_backtest` was claimed to already have a
+  `ctx: Context` param (recon's own claim) when it didn't; a "no other consumer besides X" claim
+  missed a second BFF call site (`traderBff.ts`) twice, for two different RPCs, in two different
+  rounds.
+- **Evidence**: `docs/roadmap/features/133-strategy-user-ownership/context.md` Session
+  2026-08-14T06:00:00Z (full round-by-round breakdown); `services/xstockstrat-analysis/app/
+  repositories/strategies.py:109-120`; `services/xstockstrat-trading/docs/
+  context-constitution-findings.md:36`; `services/xstockstrat-agent/app/tools.py:378-384`.
+- **Rule it implies**: a closure claim inside a design debate ("this fixes it," "already handles
+  it," "no other consumer") is exactly as unverified as a closure claim in an implementation step —
+  the adversary must re-grep every such claim in the SAME round it's made, not accept a proposer's
+  self-report as evidence. This recurred 4+ times in one debate despite each prior instance being
+  caught; treat "the proposer says X is closed" as a hypothesis to disprove, every round, not a fact
+  once established in an earlier round.

@@ -5,10 +5,11 @@
 //   protoc               unknown
 // source: identity/v1/identity.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.IdentityServiceClient = exports.IdentityServiceService = exports.RevokeAuthorizedAppResponse = exports.RevokeAuthorizedAppRequest = exports.ListAuthorizedAppsResponse = exports.ListAuthorizedAppsRequest = exports.AuthorizedApp = exports.RefreshOAuthTokenRequest = exports.OAuthTokenResponse = exports.ExchangeAuthCodeRequest = exports.IssueAuthCodeResponse = exports.IssueAuthCodeRequest = exports.GetOAuthClientRequest = exports.RegisterOAuthClientRequest = exports.OAuthClient = exports.RevokeTokenResponse = exports.RevokeTokenRequest = exports.RefreshTokenRequest = exports.ValidateTokenRequest = exports.TokenClaims = exports.AuthTokenResponse = exports.AuthenticateUserRequest = exports.protobufPackage = void 0;
+exports.IdentityServiceClient = exports.IdentityServiceService = exports.UpdateUserMetadataResponse = exports.UpdateUserMetadataRequest = exports.GetUserMetadataResponse = exports.GetUserMetadataRequest = exports.UserMetadata = exports.RevokeAuthorizedAppResponse = exports.RevokeAuthorizedAppRequest = exports.ListAuthorizedAppsResponse = exports.ListAuthorizedAppsRequest = exports.AuthorizedApp = exports.RefreshOAuthTokenRequest = exports.OAuthTokenResponse = exports.ExchangeAuthCodeRequest = exports.IssueAuthCodeResponse = exports.IssueAuthCodeRequest = exports.GetOAuthClientRequest = exports.RegisterOAuthClientRequest = exports.OAuthClient = exports.RevokeTokenResponse = exports.RevokeTokenRequest = exports.RefreshTokenRequest = exports.ValidateTokenRequest = exports.TokenClaims = exports.AuthTokenResponse = exports.AuthenticateUserRequest = exports.protobufPackage = void 0;
 /* eslint-disable */
 const wire_1 = require("@bufbuild/protobuf/wire");
 const grpc_js_1 = require("@grpc/grpc-js");
+const struct_1 = require("../../google/protobuf/struct");
 const timestamp_1 = require("../../google/protobuf/timestamp");
 exports.protobufPackage = "xstockstrat.identity.v1";
 function createBaseAuthenticateUserRequest() {
@@ -1649,6 +1650,395 @@ exports.RevokeAuthorizedAppResponse = {
         return message;
     },
 };
+function createBaseUserMetadata() {
+    return {
+        userId: "",
+        email: "",
+        phone: undefined,
+        displayName: undefined,
+        metadata: undefined,
+        metadataUpdatedAt: undefined,
+    };
+}
+exports.UserMetadata = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.userId !== "") {
+            writer.uint32(10).string(message.userId);
+        }
+        if (message.email !== "") {
+            writer.uint32(18).string(message.email);
+        }
+        if (message.phone !== undefined) {
+            writer.uint32(26).string(message.phone);
+        }
+        if (message.displayName !== undefined) {
+            writer.uint32(34).string(message.displayName);
+        }
+        if (message.metadata !== undefined) {
+            struct_1.Struct.encode(struct_1.Struct.wrap(message.metadata), writer.uint32(42).fork()).join();
+        }
+        if (message.metadataUpdatedAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.metadataUpdatedAt), writer.uint32(50).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseUserMetadata();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.email = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.phone = reader.string();
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.displayName = reader.string();
+                    continue;
+                }
+                case 5: {
+                    if (tag !== 42) {
+                        break;
+                    }
+                    message.metadata = struct_1.Struct.unwrap(struct_1.Struct.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 6: {
+                    if (tag !== 50) {
+                        break;
+                    }
+                    message.metadataUpdatedAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
+            email: isSet(object.email) ? globalThis.String(object.email) : "",
+            phone: isSet(object.phone) ? globalThis.String(object.phone) : undefined,
+            displayName: isSet(object.displayName)
+                ? globalThis.String(object.displayName)
+                : isSet(object.display_name)
+                    ? globalThis.String(object.display_name)
+                    : undefined,
+            metadata: isObject(object.metadata) ? object.metadata : undefined,
+            metadataUpdatedAt: isSet(object.metadataUpdatedAt)
+                ? fromJsonTimestamp(object.metadataUpdatedAt)
+                : isSet(object.metadata_updated_at)
+                    ? fromJsonTimestamp(object.metadata_updated_at)
+                    : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
+        if (message.email !== "") {
+            obj.email = message.email;
+        }
+        if (message.phone !== undefined) {
+            obj.phone = message.phone;
+        }
+        if (message.displayName !== undefined) {
+            obj.displayName = message.displayName;
+        }
+        if (message.metadata !== undefined) {
+            obj.metadata = message.metadata;
+        }
+        if (message.metadataUpdatedAt !== undefined) {
+            obj.metadataUpdatedAt = message.metadataUpdatedAt.toISOString();
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.UserMetadata.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseUserMetadata();
+        message.userId = object.userId ?? "";
+        message.email = object.email ?? "";
+        message.phone = object.phone ?? undefined;
+        message.displayName = object.displayName ?? undefined;
+        message.metadata = object.metadata ?? undefined;
+        message.metadataUpdatedAt = object.metadataUpdatedAt ?? undefined;
+        return message;
+    },
+};
+function createBaseGetUserMetadataRequest() {
+    return {};
+}
+exports.GetUserMetadataRequest = {
+    encode(_, writer = new wire_1.BinaryWriter()) {
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetUserMetadataRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(_) {
+        return {};
+    },
+    toJSON(_) {
+        const obj = {};
+        return obj;
+    },
+    create(base) {
+        return exports.GetUserMetadataRequest.fromPartial(base ?? {});
+    },
+    fromPartial(_) {
+        const message = createBaseGetUserMetadataRequest();
+        return message;
+    },
+};
+function createBaseGetUserMetadataResponse() {
+    return { userMetadata: undefined };
+}
+exports.GetUserMetadataResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.userMetadata !== undefined) {
+            exports.UserMetadata.encode(message.userMetadata, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetUserMetadataResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.userMetadata = exports.UserMetadata.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            userMetadata: isSet(object.userMetadata)
+                ? exports.UserMetadata.fromJSON(object.userMetadata)
+                : isSet(object.user_metadata)
+                    ? exports.UserMetadata.fromJSON(object.user_metadata)
+                    : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.userMetadata !== undefined) {
+            obj.userMetadata = exports.UserMetadata.toJSON(message.userMetadata);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetUserMetadataResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetUserMetadataResponse();
+        message.userMetadata = (object.userMetadata !== undefined && object.userMetadata !== null)
+            ? exports.UserMetadata.fromPartial(object.userMetadata)
+            : undefined;
+        return message;
+    },
+};
+function createBaseUpdateUserMetadataRequest() {
+    return { phone: undefined, displayName: undefined, metadata: undefined };
+}
+exports.UpdateUserMetadataRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.phone !== undefined) {
+            writer.uint32(10).string(message.phone);
+        }
+        if (message.displayName !== undefined) {
+            writer.uint32(18).string(message.displayName);
+        }
+        if (message.metadata !== undefined) {
+            struct_1.Struct.encode(struct_1.Struct.wrap(message.metadata), writer.uint32(26).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseUpdateUserMetadataRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.phone = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.displayName = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.metadata = struct_1.Struct.unwrap(struct_1.Struct.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            phone: isSet(object.phone) ? globalThis.String(object.phone) : undefined,
+            displayName: isSet(object.displayName)
+                ? globalThis.String(object.displayName)
+                : isSet(object.display_name)
+                    ? globalThis.String(object.display_name)
+                    : undefined,
+            metadata: isObject(object.metadata) ? object.metadata : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.phone !== undefined) {
+            obj.phone = message.phone;
+        }
+        if (message.displayName !== undefined) {
+            obj.displayName = message.displayName;
+        }
+        if (message.metadata !== undefined) {
+            obj.metadata = message.metadata;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.UpdateUserMetadataRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseUpdateUserMetadataRequest();
+        message.phone = object.phone ?? undefined;
+        message.displayName = object.displayName ?? undefined;
+        message.metadata = object.metadata ?? undefined;
+        return message;
+    },
+};
+function createBaseUpdateUserMetadataResponse() {
+    return { userMetadata: undefined };
+}
+exports.UpdateUserMetadataResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.userMetadata !== undefined) {
+            exports.UserMetadata.encode(message.userMetadata, writer.uint32(10).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseUpdateUserMetadataResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.userMetadata = exports.UserMetadata.decode(reader, reader.uint32());
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            userMetadata: isSet(object.userMetadata)
+                ? exports.UserMetadata.fromJSON(object.userMetadata)
+                : isSet(object.user_metadata)
+                    ? exports.UserMetadata.fromJSON(object.user_metadata)
+                    : undefined,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.userMetadata !== undefined) {
+            obj.userMetadata = exports.UserMetadata.toJSON(message.userMetadata);
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.UpdateUserMetadataResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseUpdateUserMetadataResponse();
+        message.userMetadata = (object.userMetadata !== undefined && object.userMetadata !== null)
+            ? exports.UserMetadata.fromPartial(object.userMetadata)
+            : undefined;
+        return message;
+    },
+};
 exports.IdentityServiceService = {
     authenticateUser: {
         path: "/xstockstrat.identity.v1.IdentityService/AuthenticateUser",
@@ -1757,6 +2147,25 @@ exports.IdentityServiceService = {
         responseSerialize: (value) => Buffer.from(exports.RevokeAuthorizedAppResponse.encode(value).finish()),
         responseDeserialize: (value) => exports.RevokeAuthorizedAppResponse.decode(value),
     },
+    /** User profile metadata self-management (feature 130) */
+    getUserMetadata: {
+        path: "/xstockstrat.identity.v1.IdentityService/GetUserMetadata",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.GetUserMetadataRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.GetUserMetadataRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.GetUserMetadataResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.GetUserMetadataResponse.decode(value),
+    },
+    updateUserMetadata: {
+        path: "/xstockstrat.identity.v1.IdentityService/UpdateUserMetadata",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.UpdateUserMetadataRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.UpdateUserMetadataRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.UpdateUserMetadataResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.UpdateUserMetadataResponse.decode(value),
+    },
 };
 exports.IdentityServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.IdentityServiceService, "xstockstrat.identity.v1.IdentityService");
 function toTimestamp(date) {
@@ -1789,6 +2198,9 @@ function longToNumber(int64) {
         throw new globalThis.Error("Value is smaller than Number.MIN_SAFE_INTEGER");
     }
     return num;
+}
+function isObject(value) {
+    return typeof value === "object" && value !== null;
 }
 function isSet(value) {
     return value !== null && value !== undefined;

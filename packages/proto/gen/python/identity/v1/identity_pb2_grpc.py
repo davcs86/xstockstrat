@@ -89,6 +89,16 @@ class IdentityServiceStub(object):
                 request_serializer=identity_dot_v1_dot_identity__pb2.RevokeAuthorizedAppRequest.SerializeToString,
                 response_deserializer=identity_dot_v1_dot_identity__pb2.RevokeAuthorizedAppResponse.FromString,
                 _registered_method=True)
+        self.GetUserMetadata = channel.unary_unary(
+                '/xstockstrat.identity.v1.IdentityService/GetUserMetadata',
+                request_serializer=identity_dot_v1_dot_identity__pb2.GetUserMetadataRequest.SerializeToString,
+                response_deserializer=identity_dot_v1_dot_identity__pb2.GetUserMetadataResponse.FromString,
+                _registered_method=True)
+        self.UpdateUserMetadata = channel.unary_unary(
+                '/xstockstrat.identity.v1.IdentityService/UpdateUserMetadata',
+                request_serializer=identity_dot_v1_dot_identity__pb2.UpdateUserMetadataRequest.SerializeToString,
+                response_deserializer=identity_dot_v1_dot_identity__pb2.UpdateUserMetadataResponse.FromString,
+                _registered_method=True)
 
 
 class IdentityServiceServicer(object):
@@ -164,6 +174,19 @@ class IdentityServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetUserMetadata(self, request, context):
+        """User profile metadata self-management (feature 130)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def UpdateUserMetadata(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_IdentityServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -221,6 +244,16 @@ def add_IdentityServiceServicer_to_server(servicer, server):
                     servicer.RevokeAuthorizedApp,
                     request_deserializer=identity_dot_v1_dot_identity__pb2.RevokeAuthorizedAppRequest.FromString,
                     response_serializer=identity_dot_v1_dot_identity__pb2.RevokeAuthorizedAppResponse.SerializeToString,
+            ),
+            'GetUserMetadata': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetUserMetadata,
+                    request_deserializer=identity_dot_v1_dot_identity__pb2.GetUserMetadataRequest.FromString,
+                    response_serializer=identity_dot_v1_dot_identity__pb2.GetUserMetadataResponse.SerializeToString,
+            ),
+            'UpdateUserMetadata': grpc.unary_unary_rpc_method_handler(
+                    servicer.UpdateUserMetadata,
+                    request_deserializer=identity_dot_v1_dot_identity__pb2.UpdateUserMetadataRequest.FromString,
+                    response_serializer=identity_dot_v1_dot_identity__pb2.UpdateUserMetadataResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -520,6 +553,60 @@ class IdentityService(object):
             '/xstockstrat.identity.v1.IdentityService/RevokeAuthorizedApp',
             identity_dot_v1_dot_identity__pb2.RevokeAuthorizedAppRequest.SerializeToString,
             identity_dot_v1_dot_identity__pb2.RevokeAuthorizedAppResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetUserMetadata(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.identity.v1.IdentityService/GetUserMetadata',
+            identity_dot_v1_dot_identity__pb2.GetUserMetadataRequest.SerializeToString,
+            identity_dot_v1_dot_identity__pb2.GetUserMetadataResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def UpdateUserMetadata(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.identity.v1.IdentityService/UpdateUserMetadata',
+            identity_dot_v1_dot_identity__pb2.UpdateUserMetadataRequest.SerializeToString,
+            identity_dot_v1_dot_identity__pb2.UpdateUserMetadataResponse.FromString,
             options,
             channel_credentials,
             insecure,
