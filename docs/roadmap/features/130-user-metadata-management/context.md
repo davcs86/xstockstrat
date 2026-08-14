@@ -60,3 +60,12 @@
   - Migration verification is offline (no DB spinup) per spec template constraint.
   - All `service` steps carry TDD red-green required; non-code steps (proto, proto-gen, migration, docs) are N/A.
   - C-12/C-13 test data compliance documented per step (reuses `TEST_USER_ID`/`TEST_USER_EMAIL`, inline fixtures are single-consumer).
+
+## Session 2026-08-14T15:00:00Z — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 2 warnings (advisory — did not block).
+- Unresolved ✗ / ⚠ carried into execution:
+  - Step 4: authz.ts module has no directly paired test step (C-08) — [x] addressed: added dedicated `userIdFrom`/`first` unit tests to Step 6 instructions
+  - Step 10: agent client.py wrapper methods have no directly paired test step (C-08) — [x] addressed: added client method smoke tests to Step 12 instructions
+- Step Dependencies annotations updated: Step 6 now documents coverage of Steps 4+5; Step 12 covers Steps 10+11.
+- Overlap findings: CLEAN — no blocking collisions. File-level overlaps with features 085, 094, 125 in disjoint line regions (rebase risk only).

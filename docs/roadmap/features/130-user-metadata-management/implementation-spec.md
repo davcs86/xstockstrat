@@ -21,15 +21,15 @@ in the design phase; this spec updates the product spec accordingly.
 ## Step Dependencies
 
 - Step 2 requires Step 1: proto-gen depends on proto changes
-- Step 4 requires Step 3: identity handlers import types from migration columns
-- Step 5 requires Step 4: identity authz module must exist before handlers use it
-- Step 6 requires Step 5: identity handler tests exercise the handlers from Step 5
+- Step 4 requires Step 3: authz module is added to the identity service after migration lands
+- Step 5 requires Step 4: identity handlers import `userIdFrom` from the authz module (Step 4)
+- Step 6 requires Steps 4+5: identity handler tests exercise the handlers (Step 5) and include dedicated unit tests for the authz module (Step 4)
 - Step 7 requires Step 2: UI REST route imports generated proto types
 - Step 8 requires Step 7: profile page calls the API route from Step 7
 - Step 9 requires Step 8: E2E test navigates to the page from Step 8
 - Step 10 requires Step 2: agent client imports generated proto stubs
 - Step 11 requires Step 10: agent tools call the client wrappers from Step 10
-- Step 12 requires Step 11: agent tool tests exercise the tools from Step 11
+- Step 12 requires Steps 10+11: agent tool tests exercise tool registration (Step 11) and include functional tests for the client wrapper methods (Step 10)
 - Step 13 requires Step 11: docs reference the tools from Step 11
 
 ---
@@ -519,7 +519,35 @@ cd /home/user/xstockstrat/services/xstockstrat-identity && pnpm run lint
    });
    ```
 
-   C-13 (test data, non-frontend): The `row` literal used in the test is a single-consumer inline fixture. No second consumer exists after this step — compliant as inline.
+5. Add dedicated unit tests for the `authz.ts` module (Step 4) — these cover `userIdFrom` and `first` directly, not only indirectly through the handler tests above:
+   ```typescript
+   describe('authz: userIdFrom / first', () => {
+     // Import the module under test — path: src/grpc/authz.ts
+     // const { userIdFrom, first } = require('../grpc/authz');
+
+     it('userIdFrom extracts x-user-id from metadata', () => {
+       const md = { get: (key: string) => key === 'x-user-id' ? ['uid-123'] : [] };
+       assert.equal(userIdFrom(md), 'uid-123');
+     });
+
+     it('userIdFrom throws UNAUTHENTICATED when x-user-id is absent', () => {
+       const md = { get: () => [] };
+       assert.throws(() => userIdFrom(md), /UNAUTHENTICATED|user/i);
+     });
+
+     it('first returns the first element of a metadata array', () => {
+       const md = { get: (key: string) => key === 'x-trace-id' ? ['t1', 't2'] : [] };
+       assert.equal(first(md, 'x-trace-id'), 't1');
+     });
+
+     it('first returns undefined for a missing key', () => {
+       const md = { get: () => [] };
+       assert.equal(first(md, 'x-missing'), undefined);
+     });
+   });
+   ```
+
+   C-13 (test data, non-frontend): The `row` literal used in the test is a single-consumer inline fixture. No second consumer exists after this step — compliant as inline. The `md` mock objects in the authz tests are similarly single-consumer.
 
 **Verification**:
 ```bash
@@ -1002,7 +1030,21 @@ grep -n "COPILOT_MCP_TOOL_COUNT" ../../services/xstockstrat-ui/src/lib/copilot.t
    "set_user_metadata",
    ```
 
-   C-13 (test data, non-frontend): No domain data literal is introduced — this test only asserts tool name strings, which are identifiers not domain data. Compliant.
+2. Add functional tests for the client wrapper methods (`get_user_metadata`, `set_user_metadata`) added in Step 10. These verify the client methods exist, accept the expected arguments, and forward `x-user-id` metadata correctly:
+
+   ```python
+   def test_client_has_get_user_metadata_method():
+       """Smoke: client exposes get_user_metadata."""
+       from app.client import XStockStratClient
+       assert hasattr(XStockStratClient, 'get_user_metadata')
+
+   def test_client_has_set_user_metadata_method():
+       """Smoke: client exposes set_user_metadata."""
+       from app.client import XStockStratClient
+       assert hasattr(XStockStratClient, 'set_user_metadata')
+   ```
+
+   C-13 (test data, non-frontend): No domain data literal is introduced — these tests assert method existence and tool name strings, which are identifiers not domain data. Compliant.
 
 **Verification**:
 ```bash
