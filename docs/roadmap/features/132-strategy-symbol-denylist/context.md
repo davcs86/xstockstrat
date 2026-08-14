@@ -63,3 +63,23 @@
   Agent (`manage_strategy` MCP tool + `strat-lab` plugin skill, per root CLAUDE.md's same-PR rule
   for changes to that tool).
 - Status: draft. Next: `/sdd-review strategy-symbol-denylist product-spec`.
+
+## Session 2026-08-14T04:30:00Z — dependency created: 133-strategy-user-ownership
+
+- User's resolution to this story's critical Open Question (cross-user aggregation for FR-3's
+  universe): make strategies user-bound, closing the gap by construction. Storied as a new,
+  separate feature — `133-strategy-user-ownership` — since it's a foundational, wide-blast-radius
+  change (composite `(user_id, strategy_id)` uniqueness, full ownership gating including
+  `RunBacktest`, touches every table/proto referencing a bare `strategy_id`) well beyond this
+  feature's own scope.
+- **133 is now a hard prerequisite for this feature's FR-3** (the union-universe mechanism needs a
+  resolved owner to scope `ListPositions`/`ListWatchlists` against). FR-1/FR-2 (the
+  `denied_symbols` proto field + `ManageStrategy` masking), FR-4 (UI edit surfaces), and FR-7 (agent
+  tool) may not need to wait — `/sdd-design` for this feature should confirm exact sequencing once
+  133 has its own design.
+- **Field-number coordination**: this feature claims `StrategyDefinition` field `12`
+  (`denied_symbols`); 133 claims field `13` (`user_id`). Whichever feature's `/sdd-spec` runs second
+  must re-verify the number is still free against the other's actual landed state, not this
+  session's snapshot.
+- `merge-order.md` not yet updated — deferred until `/sdd-design` confirms the exact dependency
+  shape between 132 and 133 (full block vs. partial-landing split).
