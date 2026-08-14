@@ -103,3 +103,31 @@
 - Status: draft → spec-ready.
 - Next: `/sdd-design strategy-symbol-denylist` — expected to depend on 133 reaching at least
   `design-approved` first (its identity contract determines how FR-3 gets built).
+
+## Session 2026-08-14 — sdd-design (in progress)
+
+- Phase 0 Recon: wrote recon.md via 3 parallel codebase-discovery agents (analysis, ui, agent).
+  Key facts: `StrategyDefinition` field 12 free (`denied_symbols`), 133 claims 13 (`user_id`);
+  `Opportunity` field 12 free (`provenance=11` is highest); no migration (JSONB). **Nothing is on
+  trunk yet** — 131's `live_by_symbol`/`is_live`/caps, 133's ownership, and `denied_symbols` are all
+  design-approved but unimplemented.
+- **USER-LOCKED FORK 1 (decomposition/merge-order)** via AskUserQuestion: **Layer 132 on 131** →
+  build/merge order `133 → 134 → 131 → 132`. 131 ships the live-attribution machinery first
+  (`live_by_symbol` built by calling `strategy_symbols()`); 132 layers the deny-list on top by
+  redefining `strategy_symbols()` from an allowlist to `union(watchlist, held, active-signal) −
+  denied_symbols` (owner-scoped via 133), which 131's `live_by_symbol` picks up automatically. 132's
+  spec is written *before* 131's (2nd in the spec order) so 132's design can amend 131's design.md
+  first; execute order stays 133→134→131→132.
+- **USER-LOCKED FORK 2 (FR-5 muted-row representation)** via AskUserQuestion, after user asked me to
+  first research `Opportunity.provenance`'s existing uses: provenance = ordered de-duped **positive**
+  contributing origins (`"watchlist"`/`"position"` structural markers + signal `sig.source`; 131 adds
+  `"live_strategy"`), consumed by `_primary_source()` → `Opportunity.source` (field 8). A muted pair is
+  the opposite (an exclusion, zero-compute, not even a materialized candidate today), so reusing
+  provenance would repeat the fails.md-023 ordinal/cardinal conflation trap. **Decision: a DEDICATED
+  backend flag** (e.g. `bool muted = 12` on `Opportunity`), a zero-compute row with empty readiness
+  (NEVER `conviction=0`), parallel to 131's `is_live`, with a UI link back to the deny-list editor.
+  Bool avoids the enum→TS-exhaustive-Record trap (fails.md 067).
+- Phase 1 Grilling: in progress (full mode, ≥2 rounds) with both forks locked — debating the
+  remaining decisions (AC-5 backward-compat, `strategy_symbols()` redefinition + owner-scoping,
+  mask-vs-full-replace UI write, symbol-page plumbing, compute-cost/truncation fairness, FR-6
+  amendment shape).
