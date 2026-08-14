@@ -58,18 +58,26 @@ select or set it. This feature adds `google.protobuf.Timestamp ingested_at = 10;
 `ExternalSignal` (next free field number after `tags = 9`), selects the existing column in
 `QuerySignals`'s SQL, and populates it on the constructed message — no new migration needed, only
 exposure of an already-stored value.
-FR-5. Consistency within one compute pass: read `now_utc` **once**, at the start of
-`_compute_opportunities`, into a local variable, and use that same instant for every signal's
-`age_hours` in that pass — never a fresh `datetime.now(UTC)` call per signal. **This is a new local
-variable, not `session_end_seconds`**: `session_end_seconds` (`servicer.py:2179-2185`, only
-populated starting the later per-candidate bar-fetch loop, `servicer.py:2184` initializes it to `0`)
-is a *bars-derived* running max used solely to compute `valid_until` (`servicer.py:2235-2241`) — it
-does not exist yet at FR-1's write-site (`:2163`, inside the earlier signals-merge loop,
-`servicer.py:2152-2166`, which runs before any bars are fetched) and is conceptually the wrong clock
-regardless (market-bar time, not wall-clock signal-ingestion time). A prior draft of this FR
-incorrectly conflated the two — caught by `/sdd-review` round 3 (see `context.md`). (The original
-2026-05-26 draft's *backtest-window* determinism requirement doesn't apply here either — this
-feature never touches the backtest engine; the Opportunities queue has no backtest-replay concept.)
+FR-5. Consistency within one compute pass: read `now_utc` **once**, into a local variable, and use
+that same instant for every signal's `age_hours` in that pass — never a fresh `datetime.now(UTC)`
+call per signal. **Exact placement (amended at `/sdd-design` round 2 — see design.md and
+`context.md`)**: not literally the first line of `_compute_opportunities`, but immediately after
+`signals = await self._drain_active_signals(propagation_meta)` (`servicer.py:2098`) resolves —
+*before* any per-signal age computation and before the two subsequent drain awaits
+(`_drain_held_symbols`/`_drain_watchlist_bindings`, `servicer.py:2099-2100`) start. This ordering is
+deliberate, not incidental: capturing `now_utc` any earlier (e.g. a true first-line read, before the
+`:2098` await) would reopen a race where a signal ingested concurrently with that await could carry
+an `ingested_at` *later* than the captured `now_utc`, producing a structurally negative raw age
+(`/sdd-design` round 1 finding). **This is a new local variable, not `session_end_seconds`**:
+`session_end_seconds` (`servicer.py:2179-2185`, only populated starting the later per-candidate
+bar-fetch loop, `servicer.py:2184` initializes it to `0`) is a *bars-derived* running max used solely
+to compute `valid_until` (`servicer.py:2235-2241`) — it does not exist yet at FR-1's write-site
+(`:2163`, inside the earlier signals-merge loop, `servicer.py:2152-2166`, which runs before any bars
+are fetched) and is conceptually the wrong clock regardless (market-bar time, not wall-clock
+signal-ingestion time). A prior draft of this FR incorrectly conflated the two — caught by
+`/sdd-review` round 3 (see `context.md`). (The original 2026-05-26 draft's *backtest-window*
+determinism requirement doesn't apply here either — this feature never touches the backtest engine;
+the Opportunities queue has no backtest-replay concept.)
 FR-6. The effective (post-decay) contribution must be logged at DEBUG level per signal, inside
 `_compute_opportunities`, to aid tuning.
 
@@ -144,9 +152,21 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 4. DEBUG logs show `raw_conviction`, `age_hours`, `decay_multiplier`, and `effective_conviction`
    per signal (plus `source_weight` once 130 lands and the expression carries it).
 5. Analysis service unit tests cover: decay at t=0 (multiplier=1.0), at t=half_life
-   (multiplier≈0.5), at t=3×half_life (multiplier≈0.125), and disabled decay (half_life ≤ 0).
+   (multiplier≈0.5), at t=3×half_life (multiplier≈0.125), disabled decay (half_life ≤ 0), and a
+   signal missing `ingested_at` (`age_known=False`, `decay_multiplier=1.0` regardless of the
+   configured half-life — the deploy-ordering-race regression surface found at `/sdd-design` round
+   2; added at round 4, see design.md).
 6. `QuerySignals` responses include a populated `ingested_at` for every signal, confirming FR-4's
    proto/ingest-servicer change is wired end-to-end (not just declared on the message).
+7. **(Added at `/sdd-design` round 4 — compute-fan-out/log-volume mitigation, not part of the
+   original story.)** A compute pass containing N signals missing `ingested_at` emits **exactly
+   one** aggregated WARNING log line reporting the count (e.g. "N of M signals missing
+   ingested_at; treated as fresh"), never one WARNING per missing signal — verified by a unit test
+   asserting the log call **count**, not just its presence. This exists because `_compute_opportunities`
+   runs per-user (lazy compute-on-read plus a configured daily refresh across the known-user set)
+   and `xstockstrat-ingest`/`xstockstrat-analysis` deploy independently (root `CLAUDE.md` § CI/CD) —
+   without aggregation, a routine, self-resolving ingest/analysis deploy-ordering race would emit
+   WARNING-level noise proportional to (active signals × active users) for its duration.
 
 ## Open Questions
 

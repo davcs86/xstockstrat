@@ -143,3 +143,93 @@
   them until this review pass actually ran.
 - Next: `/sdd-spec signal-time-decay`, but only after `130-signal-source-reliability-weight` and
   `131-live-strategy-opportunity-attribution` land (merge-order.md dependency).
+
+## Session 2026-08-14T00:00:00Z — /sdd-design signal-time-decay (Phase 0 Recon)
+
+- Recon written (`recon.md`): confirmed `_compute_opportunities` has no existing `now_utc`/decay
+  code (grep-clean); `ingested_at` is stored (migration `001`) but never exposed by `QuerySignals`;
+  the `SignalSource.last_seen_at.FromDatetime(...)` pattern is the direct reuse for exposing it.
+- Flagged as **Critical**: `ConfigWatcher.get_float`'s `v.float_val or default` zero-trap would
+  silently defeat FR-3's "0 disables decay" rollback contract — no `get_float_present` equivalent
+  exists yet (only `get_int_present`). Design must resolve this explicitly.
+- Flagged the 130/131 same-expression/same-function composition risk (already recorded in
+  `merge-order.md`, landing order 130 → 131 → 022) as something design must state precisely, not
+  just note.
+
+## Session 2026-08-14T00:30:00Z — /sdd-design signal-time-decay (Phase 1, full mode, 4 rounds)
+
+- **Round 1**: adversary found a structurally-reachable negative-`age_hours` bug — ambiguity in
+  exactly when `now_utc` is captured relative to `await self._drain_active_signals(...)`
+  (`servicer.py:2098`, a real network round-trip) meant a signal ingested concurrently with that
+  await could carry `ingested_at > now_utc`. `math.exp` on a negative age produces
+  `decay_multiplier > 1.0` with no downstream clamp, risking `signal_axis` silently exceeding the
+  `[0,1]` range every consumer assumes.
+- **Round 2**: proposer fixed it (capture `now_utc` immediately after `:2098`'s await resolves,
+  plus a defensive `age_hours = max(0.0, age_hours)` clamp regardless of ordering). Adversary
+  verified the fix but found **two new, real must-fix defects**: (1) the FR-6/AC-4 mandated
+  per-signal DEBUG log referenced `age_hours`, which was only assigned in the `half_life > 0`
+  branch — FR-3's disable path (`half_life <= 0`, an intentional operator rollback, not a rare
+  edge case) would raise `UnboundLocalError` on every signal; (2) `ExternalSignal.ingested_at`
+  reaching analysis unset (proto zero-value = epoch 1970) during a routine ingest/analysis
+  independent-deploy-ordering race (the two services redeploy on separate merges) would make every
+  signal's age ~55 years, underflowing `decay_multiplier` to a literal `0.0` for **every** signal
+  platform-wide — a silent full signal blackout, not the self-limiting per-signal decay the spec's
+  Open Questions explicitly signed off on.
+- **Round 3**: proposer fixed both by splitting age-derivation (branches only on
+  `sig.HasField("ingested_at")`) from decay-application (branches only on `half_life`) — neither
+  branch depends on the other's outcome, so all four log-referenced names are always bound.
+  Adversary verified: traced all 4 branch combinations (confirmed no `UnboundLocalError` path
+  remains), confirmed `HasField` is valid protobuf API for this plain submessage field (not a
+  oneof), confirmed the deploy-race degrades to a neutral per-signal `decay_multiplier=1.0` + one
+  WARNING instead of a blackout. Zero Floor breaches. Adversary recommended folding 4 remaining
+  mechanical objections into `design.md` without a full round 4: an unverified "130's term, already
+  landed" claim (false against `main-dev` — a `fails.md` 2026-08-05/023, 2026-07-30/080
+  claim-vs-producer-contract repeat); a C-08 test-pairing gap (AC-5 didn't cover the
+  `age_known=False` branch — exactly round 2's blackout regression surface); a self-flagged
+  per-signal WARNING log-volume risk (proportional to active-signals × active-users during a
+  routine deploy race); and a NaN fail-safety concern (the existing `max()`'s NaN-discarding
+  behavior is a real but fragile argument-order-dependent emergent property, not a designed guard).
+- **User explicitly chose to run round 4 anyway** (via `AskUserQuestion`, selecting "Run another
+  round" over "Approve design" and "Approve but skip the isfinite() code guard") rather than accept
+  round 3's fixups as final.
+- **Round 4**: proposer resolved all four objections concretely — (1) design.md states 130 is not
+  landed and `/sdd-spec` must re-verify the actual landed expression, not trust any design-time
+  citation; (2) exact AC-5 amendment text + new AC-7 (aggregated-WARNING call-count assertion)
+  drafted; (3) `missing_ingested_at_count`/`total_signal_count` aggregation, incremented once per
+  signal, one `log.warning` after the full section fires; (4) adopted an explicit
+  `if not math.isfinite(effective_conviction): effective_conviction = 0.0` guard rather than a
+  doc-only tripwire. While grounding decision (3) against the real code, the proposer **found its
+  own new structural bug**: the signals-merge section is actually a two-level nested loop
+  (`signals_by_symbol` → `targets` → `sigs`, `targets` can have >1 entry when a symbol is bound to
+  multiple watchlist strategies) — computing/logging/counting inside the `targets` loop as a flat
+  loop would have implied would multiply DEBUG log volume and the missing-count by `len(targets)`,
+  reintroducing the exact amplification objection 3 was meant to fix. Fixed by hoisting decay
+  computation into a `sig_contribs` list above the `targets` loop, computed once per signal.
+- **Round 4 adversary**: verified the nested-loop claim directly against `servicer.py:2083-2242`
+  (confirmed correct, zero regression vs. current trunk) and the hoisted-computation fix (confirmed
+  it correctly avoids per-target duplication). Zero Floor breaches. Found 4 more finalization gaps,
+  all closable without a round 5: `get_float_present` was being *used* in pseudocode without being
+  explicitly committed as a required `/sdd-spec` code change to `watcher.py`; the claimed AC-5/AC-7
+  amendments existed only in debate text, not yet written into `product-spec.md` itself (a P-04
+  process gap — `/sdd-spec` reads `product-spec.md`, not this session's debate transcript); the
+  thesis/`best_direction` staying keyed on raw (not decayed) conviction was a real, accepted scope
+  asymmetry that needed to be stated explicitly rather than left implicit; and FR-5's literal
+  wording ("at the start of `_compute_opportunities`") mismatched the actual placement (after the
+  `:2098` await, not the true first line) — recommended softening the wording rather than moving
+  the read (moving it would reopen round 1's race).
+- **Closed all four round-4 adversary gaps in the same pass**: `product-spec.md` FR-5 reworded to
+  state the exact placement and why (race avoidance, not incidental); AC-5 amended in place to add
+  the `age_known=False` test case; new AC-7 added for the aggregated-WARNING call-count assertion;
+  `design.md` written with the explicit `get_float_present` commitment, the 130-composition
+  spec-time-reverify instruction, and the accepted decay-blind-thesis-selection scope note.
+- **Result**: `design.md` written (Chosen Approach / Rejected Alternatives / Open Risks /
+  Constitution Rules Touched). `feature.md` updated: `spec-ready` → `design-approved`, full 4-round
+  history recorded. Zero Floor breaches at any of the 4 rounds — every round's findings were real,
+  concrete, code-grounded defects (not architecture forks), consistent with this session's own
+  `insights.md` 2026-08-13/14 lesson recurring one layer deeper inside round 3 itself (the
+  "already landed" claim was prose-plausible but code-false).
+- Next: `/sdd-spec signal-time-decay` — but only after `130-signal-source-reliability-weight` and
+  `131-live-strategy-opportunity-attribution` land (`merge-order.md` dependency, landing order
+  130 → 131 → 022). `/sdd-spec` must re-verify the actual landed `_compute_opportunities` shape at
+  that time per this design's explicit instruction — do not copy this design's pseudocode verbatim
+  without re-grounding it.
