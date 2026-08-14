@@ -171,3 +171,93 @@
   dimension (not silently folded into "resolved").
 - Status: design-approved (unchanged) — this was a post-approval amendment with explicit user
   sign-off (C-11/P-04), not a lifecycle transition.
+
+## Session 2026-08-14T02:30:00Z — /sdd-design follow-up: close distinct-symbol-count Open Risk
+
+- User asked to "run a round to clear warnings" across 131 and 022; for 131 this targeted the last
+  unclosed Open Risk from the prior post-approval amendment: step 6's
+  `signals_by_symbol.keys() & live_by_symbol.keys()` intersection was unbounded, bypassing
+  `max_universe_size` via `curated`.
+- **Round 1**: new config key `analysis.opportunity.max_live_only_symbols_per_compute` (default
+  20), ranking eligible symbols by max active-signal conviction descending (`sym` ascending
+  tiebreak), grounded correctly (sort key available before step 6 runs, unlike the earlier
+  `signal_axis`-forward-reference bug). Adversary found a starvation bug: the competitive pool
+  included symbols already curated for free via watchlist/held, wasting scarce slots that
+  genuinely-uncovered signal-only symbols needed.
+- **Round 2**: fixed via a symbol-level `already_curated_symbols` exclusion — but this introduced a
+  real regression against the already-approved FR-4: a symbol with SOME existing candidate (e.g.
+  watchlist-bound to strategy A) but a genuinely new `(symbol, strategy B)` pair to create would be
+  silently dropped from the pool entirely, violating FR-4's "each distinct pair becomes its own
+  row." Adversary caught this and proposed the fix adopted in round 3.
+- **Round 3**: corrected to a per-`(symbol, strategy)` newness check (`_new_live_strats`), with a
+  formal proof that `_capped_live(sym)` called with no `exclude` (not `exclude=existing`) is the
+  only order that composes correctly with the held loop's own capping — excluding first and capping
+  second would silently blow a symbol's total attributed-strategy count past
+  `max_live_strategies_per_symbol`. Verified directly against the real code
+  (`services/xstockstrat-analysis/app/handlers/servicer.py`) before accepting.
+- New **AC-8** in product-spec.md documents the per-pair eligibility rule, the ranking/tiebreak, the
+  no-cross-pass-hysteresis trade-off (mirrors AC-7's precedent — `OpportunitiesRepository`'s
+  delete+reinsert write model has no carried state), and the compound (multiplicative) worst-case
+  row count.
+- Gated via `AskUserQuestion` before finalizing (per C-11/P-04, mirroring the first fan-out fix's
+  process) — user selected "Also fix held-symbol-count now" instead of approving as-is, reopening
+  the deliberately-deferred held-symbol-count dimension too (see next entry).
+
+## Session 2026-08-14T03:00:00Z — /sdd-design follow-up: close held-symbol-count Open Risk
+
+- User explicitly chose to also close the held-symbol-count dimension (previously recorded as a
+  deliberately deferred, not-fixed Open Risk) rather than accept it deferred.
+- Clarified scope during round 1: held-symbol tracing itself (every held position gets ≥1 row) is
+  baseline feature-097 behavior, unchanged and out of scope. What 131 actually adds per held symbol
+  is a live-attribution multiplier (`live_new`, up to `max_live_strategies_per_symbol` extra rows) —
+  the real unbounded dimension is how many DISTINCT held symbols get this multiplier applied per
+  compute pass, not whether a symbol gets traced at all.
+- **Round 1**: new config key `analysis.opportunity.max_live_held_symbols_per_compute` (default
+  20), ranking eligible held symbols by summed `abs(Position.market_value)` descending (position
+  size is the only cleanly-aggregable, economically-meaningful field on the object `ListPositions`
+  actually returns — `opened_at` doesn't aggregate cleanly across multi-account holdings of the same
+  symbol). Required widening `_drain_held_symbols`'s return type from `set[str]` to `dict[str,
+  float]`. Correctly chose a separate config key rather than sharing AC-8's budget — held-symbol
+  growth is capital/fill-gated while AC-8's dimension is zero-marginal-cost; sharing would let a
+  large real portfolio silently starve the zero-cost dimension AC-8 protects (the same
+  cross-dimension-conflation trap this feature's design already rejected once for
+  `max_universe_size`). Also corrected a false assumption from my own round-1 prompt: "held
+  positions are capital/risk-bounded elsewhere" does NOT hold — verified directly, no service
+  enforces a distinct-symbol-count ceiling (`trading.risk.max_position_pct`/`max_concentration_pct`
+  bound position *size*, not symbol *count*; `portfolio.risk.max_drawdown_pct` is unenforced). The
+  real, sound reasoning is execution-friction (real `order.filled` events, not a config-side cap).
+- Adversary found TWO real bugs in round 1: (a) a held symbol denied a budget slot could still be
+  independently re-discovered by step 6 (AC-8's mechanism, which has no concept of held status) if
+  it also had an active signal — producing a wrongly entry-traced duplicate row for an
+  already-held position (step 6 never sets `is_held=True`, so `rule = "exit" if c["is_held"] else
+  "entry"` picks the wrong rule, and `_resolve_action_tag` could emit a misleading ENTER tag); (b)
+  the same raw-vs-normalized symbol-key mismatch bug this feature already found and fixed once for
+  `live_by_symbol` at step 1 recurred a second time for the new `held_value_by_symbol` index.
+- **Round 2**: fixed both. (a) `held_norm` is now excluded from step 6's domain entirely
+  (`live_signal_symbols = (signals_by_symbol.keys() & live_by_symbol.keys()) - held_norm`) — the
+  adversary's own recommended, lower-surface-area fix (vs. threading `is_held` correctly through a
+  row created outside the held loop). (b) `_drain_held_symbols` now normalizes at construction
+  (`_normalize_symbol(p.symbol)` as the dict key), matching how `held_norm`/`watchlist_by_symbol`/
+  `live_by_symbol` are all normalized.
+- New **AC-9** documents the eligibility rule, ranking, the accepted long+short hedge-pair
+  measurement caveat, explicit disjointness from AC-8's pool (a symbol is never in both — proven by
+  construction), no-cross-pass-hysteresis (mirrors AC-8), and a shared "Compound worst case across
+  all three caps" note (replacing AC-8's now-incomplete standalone note) — combined ceiling of up to
+  200 newly-attributed rows across the two disjoint capped pools, plus uncapped baseline rows from
+  watchlist bindings (tagging-only, zero marginal cost) and held positions (row count itself
+  uncapped, only the live-attribution fan-out is capped).
+- Verified several of round 2's grounding claims directly (not just trusted the subagent's prose):
+  `_drain_held_symbols`'s current shape (`servicer.py:2384-2410`, returns bare `set`, two call sites
+  at `:1924,2099`, un-normalized `p.symbol` accumulation) and `Position.market_value`'s existence
+  (`packages/proto/portfolio/v1/portfolio.proto:48`) — both confirmed exactly as claimed.
+- Result: `design.md` Open Risks section now shows the "Held-symbol live-attribution fan-out" item
+  RESOLVED (was the last remaining `[ ]` open item); Chosen Approach steps 5/6 updated with the
+  final mechanism; two new Rejected Alternatives entries recorded (the `is_held`-blind step-6
+  mistake, the raw-key `held_value_by_symbol` mistake). `product-spec.md` gets AC-9 and an amended
+  AC-8 (compound-worst-case sentence now points to the shared note; explicit `held_norm` exclusion
+  noted). All Open Risks for this feature are now either resolved or explicitly, deliberately
+  out-of-scope (raw held-position-row count — correctly never capped, that's feature 097's domain).
+  Test-helper incompatibility remains the one item explicitly waived by prior user decision (not a
+  defect, a scope waiver).
+- Status: design-approved (unchanged) — both rounds this session were post-approval amendments with
+  explicit user direction, not lifecycle transitions.

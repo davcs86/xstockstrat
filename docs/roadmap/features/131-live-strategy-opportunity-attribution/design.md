@@ -71,13 +71,34 @@ re-declared-string parity test was considered and rejected: it would prove nothi
    marginal cost) — a per-strategy check, not a blanket per-symbol union (a blanket union would
    mis-tag a watchlist-bound strategy as "live" just because a *different* strategy on the same
    symbol happens to be live-enabled).
-5. **Held loop** (`servicer.py:2144-2150`): `watch = watchlist_by_symbol.get(sym, set()); live_all =
-   live_by_symbol.get(sym, set()); live_new = _capped_live(sym, exclude=watch); targets =
-   list(watch | set(live_new)) if (watch or live_new) else [""]`. For each `strat` in `targets`:
-   unconditional `is_held=True`/`_add_provenance(c, "position")` (as today), **plus**
+5. **Held loop** (`servicer.py:2144-2150`), bounded by a THIRD cap added in a follow-up round
+   (2026-08-14 — see Open Risks/AC-9): `_drain_held_symbols` (`servicer.py:2384-2410`) is widened
+   from returning `set[str]` to `dict[str, float]` — keyed by **normalized** symbol
+   (`_normalize_symbol(p.symbol)`, mirroring `watchlist_by_symbol`/`live_by_symbol`'s own
+   normalization — the exact bug class this feature already fixed once for `live_by_symbol` at step
+   1 recurred here in an earlier round and was caught), valued by summed `abs(Position.market_value)`
+   across that symbol's positions (accepted trade-off: inflates apparent size for a long+short hedge
+   pair on the same symbol, rare given this platform's single-trading-mode-per-deployment account
+   model, `services/xstockstrat-trading/CLAUDE.md:21`). Both call sites (`servicer.py:1924,2099`)
+   are dict-compatible with zero other changes — `held_norm = set(held_value_by_symbol)`.
+
+   Before the held loop runs: `max_live_held_symbols = self._cfg.get_int(
+   "analysis.opportunity.max_live_held_symbols_per_compute", 20)`; `live_eligible_held = [sym for
+   sym in held_norm if _capped_live(sym, exclude=watchlist_by_symbol.get(sym, set()))]` (a symbol
+   only competes if it has ≥1 live-covered strategy not already watchlist-attributed);
+   `ranked_held = sorted(live_eligible_held, key=lambda sym: (-held_value_by_symbol.get(sym, 0.0),
+   sym))` (summed position value descending, `sym` ascending tiebreak); `held_live_budget =
+   set(ranked_held[:max_live_held_symbols])`.
+
+   Then, for each `sym in held_norm`: `watch = watchlist_by_symbol.get(sym, set()); live_all =
+   live_by_symbol.get(sym, set()); live_new = _capped_live(sym, exclude=watch) if sym in
+   held_live_budget else []; targets = list(watch | set(live_new)) if (watch or live_new) else
+   [""]`. For each `strat` in `targets`: unconditional `is_held=True`/`_add_provenance(c,
+   "position")` (as today — **every held symbol still gets at least one row this pass, uncapped**;
+   this cap governs only the *live-attribution fan-out*, never row existence), **plus**
    `is_live=True`/`_add_provenance(c, "live_strategy")` **if** `strat in live_all` (the full,
    uncapped set — so a `strat ∈ watch` that's also genuinely live is always tagged correctly,
-   regardless of the cap; only `live_new`, the capped live-only delta, is bounded).
+   regardless of either cap; only `live_new`, the capped live-only delta, is bounded).
 6. **New bounded step**, inserted between the held loop and the signals-merge loop, bounded by TWO
    independent caps composed together (added across a 3-round follow-up debate, 2026-08-14 — see
    Open Risks and `context.md` for the full history; the mechanism below is the final, adversary-
@@ -94,7 +115,14 @@ re-declared-string parity test was considered and rejected: it would prove nothi
    def _max_signal_conviction(sym):
        return max(sig.conviction for sig in signals_by_symbol[sym])
 
-   live_signal_symbols = signals_by_symbol.keys() & live_by_symbol.keys()
+   # Held symbols are attributed exclusively by the held loop (its own held_live_budget cap,
+   # step 5) — excluding held_norm here prevents a denied-and-signal-covered held symbol from
+   # being independently re-discovered by this step, which would create a second, wrongly
+   # is_held=False row (entry-traced instead of exit-traced) for a symbol the held loop already
+   # correctly gave a single row this pass. Provably a no-op for every non-held symbol (set
+   # difference only removes elements present in held_norm). Added in a follow-up round
+   # (2026-08-14) after the adversary found the un-excluded version produced exactly this bug.
+   live_signal_symbols = (signals_by_symbol.keys() & live_by_symbol.keys()) - held_norm
    competitive_pool = [sym for sym in live_signal_symbols if _new_live_strats(sym)]
 
    max_live_only_symbols = self._cfg.get_int(
@@ -113,12 +141,15 @@ re-declared-string parity test was considered and rejected: it would prove nothi
    ```
 
    **Cap 1 (pre-existing): `_capped_live(sym)`'s own `max_live_strategies_per_symbol` bound**
-   (step 3) — how many strategies-per-symbol. **Cap 2 (this round): `max_live_only_symbols_per_compute`**
-   (int, default `20`) — how many *distinct symbols* this step is allowed to process in one compute
-   pass, applied to `signals_by_symbol.keys() & live_by_symbol.keys()` (the intersection — never the
-   full `live_by_symbol` key set) **before** any candidate is created. The two caps compose
-   multiplicatively, not additively: worst case is `20 × 5 = 100` new rows from this step alone
-   (both defaults) — a future reader must not read "20" as a row-count ceiling.
+   (step 3) — how many strategies-per-symbol. **Cap 2: `max_live_only_symbols_per_compute`**
+   (int, default `20`) — how many *distinct, non-held symbols* this step is allowed to process in
+   one compute pass, applied to `(signals_by_symbol.keys() & live_by_symbol.keys()) - held_norm`
+   **before** any candidate is created. The two caps compose multiplicatively, not additively:
+   worst case is `20 × 5 = 100` new rows from this step alone (both defaults). **This is one of two
+   disjoint pools** (the held loop, step 5, has its own analogous cap for held symbols,
+   `max_live_held_symbols_per_compute`) — see the shared "Compound worst case across all caps" note
+   after AC-9 in `product-spec.md` for the combined ceiling; a future reader must not read "20" in
+   isolation as *the* row-count ceiling.
 
    **Why per-`(symbol, strategy)` newness, not per-symbol "already curated"** (this is the load-
    bearing correctness property of the whole step, found via 3 rounds of adversarial iteration —
@@ -149,6 +180,17 @@ re-declared-string parity test was considered and rejected: it would prove nothi
    exclude-before-slice order is load-bearing for this cross-site composition, or a unit test with a
    symbol that is both held and signal-covered, with `watch` strategies scattered inside/outside the
    cap window, asserting the per-symbol total never exceeds the cap.**
+
+   **Superseded note (follow-up round, 2026-08-14)**: the held-symbol composition scenario this
+   proof was originally written for (a symbol both held and signal-covered, reaching step 6 after
+   the held loop already created rows for it) can no longer occur — `held_norm` is now excluded from
+   step 6's domain entirely (see the domain line above), so a held symbol never reaches this step at
+   all. The proof is retained because its underlying principle (exclude-before-slice ordering is
+   load-bearing for `_capped_live`) still applies wherever `_capped_live` is called with a
+   pre-existing `exclude` set — the held loop's own `_capped_live(sym, exclude=watch)` call (step 5)
+   is the one remaining site where this matters, now additionally gated by `held_live_budget`; the
+   `/sdd-spec` recommendation above (code comment or unit test) should target that call site rather
+   than this one.
 
    This pre-seeds the row **before** the signals-merge loop (`servicer.py:2152-2168`) runs, so its
    existing `targets = [k for k in candidates if k[0] == sym]` lookup (`servicer.py:2155`) finds it
@@ -260,6 +302,27 @@ populates more often.
   grafted onto a stateless write model for a ~daily-cadence cosmetic risk, against this codebase's
   "write minimum" bias already applied to reject more-elaborate fixes above. Documented instead as
   AC-8's explicit trade-off (no cross-pass hysteresis, a previously-curated row can vanish silently).
+- **Making step 6 `is_held`-aware, instead of excluding `held_norm` from its domain** (the
+  held-symbol-count fix's first attempt) — a budget-denied held symbol that was also signal-covered
+  would be independently re-discovered by step 6 (which has no concept of held status), creating a
+  new `(sym, strat)` row with `is_held=False` by default — silently traced with the entry rule
+  instead of the exit rule (`rule = "exit" if c["is_held"] else "entry"`), and capable of emitting a
+  misleading `ENTER` action tag for a symbol the user already owns. The held loop would *also*
+  separately still create a correct, unattributed `(sym, "")` row for the same symbol in the same
+  pass — producing two contradictory rows for one held position. Threading `is_held` correctly
+  through a row created outside the held loop was assessed as strictly more surface area (more
+  downstream assumptions to re-verify: `_resolve_action_tag`, the trace-rule branch, anything else
+  that assumes `is_held` is only ever set inside the held loop) than the adopted fix — excluding
+  `held_norm` from step 6's domain entirely, which is a one-line, provably-safe-for-non-held-symbols
+  set difference (see Chosen Approach step 6).
+- **Keeping `held_value_by_symbol` keyed by raw (unnormalized) symbol** — the tempting-looking
+  minimal diff (just widen the return type, don't touch the existing `p.symbol` accumulation) —
+  rejected: the held loop's ranking reads `held_value_by_symbol.get(sym, 0.0)` where `sym` iterates
+  the already-*normalized* `held_norm`, so any raw/normalized casing mismatch would silently rank a
+  real held symbol as value `0.0`, unfairly losing a budget slot — the identical bug class this
+  feature's design already found and fixed once for `live_by_symbol` at step 1, now fixed a second
+  time at its actual source (`_drain_held_symbols` itself normalizes at construction, rather than
+  patching the read site).
 
 ## Open Risks
 
@@ -296,21 +359,32 @@ populates more often.
   ranking/tiebreak, and the compound (multiplicative, not additive) worst-case row count. **New,
   deliberately deferred residual gap, recorded rather than silently dropped**: the held-symbol-count
   dimension — see the new Open Risk line immediately below.
-- [ ] **Held-symbol-count fan-out — OPEN, deliberately deferred (follow-up round, 2026-08-14).** A
-  user holding an unusually large number of *distinct* symbols, each covered by at least one live
-  strategy, still produces one curated row per `(symbol, strategy)` pair via the held loop with no
-  cap on the number of *distinct held symbols* itself — only the per-symbol strategy count (AC-7) and
-  the step-6 signal-only distinct-symbol count (AC-8) are now bounded; `held_norm`'s own size is not.
-  Verified directly, not assumed: no service enforces a ceiling on distinct held-symbol count —
-  `trading.risk.max_position_pct`/`max_concentration_pct` (`services/xstockstrat-trading/
-  CLAUDE.md:66,70`) bound single-position *size* relative to equity, not symbol *count*, and
-  `portfolio.risk.max_drawdown_pct` is explicitly unenforced (`services/xstockstrat-portfolio/
-  CLAUDE.md:47`) — an earlier draft of this reasoning incorrectly assumed a risk cap covered this;
-  corrected here. **Deferred, not fixed**, because growing this dimension requires N real
-  `order.filled` events per symbol (`servicer.py:2384-2409`, `portfolio/CLAUDE.md:62`) — actual
-  capital, an actual broker fill — a materially higher-friction, slower-growing vector than the two
-  now-capped zero-marginal-cost vectors (strategies-per-symbol, distinct signal-only symbols), plus a
-  loose structural ceiling already exists from `_MAX_DRAIN_PAGES=50 × _BAR_PAGE_SIZE=1000`
+- [x] **Held-symbol live-attribution fan-out — RESOLVED (follow-up round, 2026-08-14, AC-9).**
+  Originally two conflated concerns: (a) the *live-attribution fan-out* for held symbols (how many
+  distinct held symbols get the extra up-to-5x `live_new` multiplier applied per compute pass), and
+  (b) the *raw held-position-row count* itself (does every held symbol get traced at all,
+  independent of live coverage). (a) is now bounded by `analysis.opportunity.max_live_held_symbols_per_compute`
+  (default `20`), ranked by summed `abs(Position.market_value)` descending — see Chosen Approach
+  step 5, AC-9. This took one extra fix-round: the first version had a real regression (a
+  budget-denied held symbol that was also signal-covered could be independently re-discovered by
+  step 6, which is `is_held`-blind — producing a wrongly entry-traced duplicate row for an
+  already-held position) and a raw-vs-normalized key mismatch bug in the new `held_value_by_symbol`
+  index (the same class already fixed once for `live_by_symbol` at step 1, recurring here). Both
+  fixed: `held_norm` is now excluded from step 6's domain entirely, and `held_value_by_symbol` is
+  keyed by `_normalize_symbol(...)` at construction. **(b), the raw held-position-row count, remains
+  deliberately UNCAPPED — this is correct, not deferred**: every held symbol still gets at least one
+  row this pass regardless of the new cap (baseline tracing is feature-097 territory, unchanged by
+  this feature; AC-9 governs only the live-attribution *multiplier* on top of that baseline, never
+  row existence). Verified directly, not assumed, that no service enforces a ceiling on distinct
+  held-symbol count either way — `trading.risk.max_position_pct`/`max_concentration_pct`
+  (`services/xstockstrat-trading/CLAUDE.md:66,70`) bound single-position *size* relative to equity,
+  not symbol *count*, and `portfolio.risk.max_drawdown_pct` is explicitly unenforced
+  (`services/xstockstrat-portfolio/CLAUDE.md:47`) — an earlier draft of this reasoning incorrectly
+  assumed a risk cap covered this; corrected here. Growing the raw held-symbol-count dimension
+  requires N real `order.filled` events per symbol (`servicer.py:2384-2409`, `portfolio/
+  CLAUDE.md:62`) — actual capital, an actual broker fill — a materially higher-friction,
+  slower-growing baseline cost than the now-capped zero-marginal-cost live-attribution vectors, plus
+  a loose structural ceiling already exists from `_MAX_DRAIN_PAGES=50 × _BAR_PAGE_SIZE=1000`
   (`servicer.py:94,107`, ~50,000 positions). Revisit if real-world held-symbol counts are ever
   observed approaching that ceiling.
 - [x] **Insertion-order test fragility — RESOLVED (round 4), safe.** Read every assertion in

@@ -109,6 +109,15 @@ Exact service names from CLAUDE.md Service Registry:
   `max_live_strategies_per_symbol`'s per-symbol strategy count; the two compose multiplicatively
   (worst case `20 × 5 = 100` new rows from this step alone, both defaults). Does **not** replace or
   reuse `max_universe_size` or `max_live_strategies_per_symbol` — see AC-8.
+- `analysis.opportunity.max_live_held_symbols_per_compute` — int, default `20`. Added at
+  `/sdd-design` time (follow-up debate, 2026-08-14 — see design.md's Chosen Approach step 5 and
+  Open Risks). Bounds how many *distinct held symbols* may receive a new live-only strategy
+  attribution (beyond any watchlist binding) per compute pass — orthogonal to
+  `max_live_strategies_per_symbol` (per-symbol strategy count) and
+  `max_live_only_symbols_per_compute` (step 6's non-held distinct-symbol count); the three compose
+  per AC-9's compound-worst-case note. Does **not** bound the number of held-position rows
+  themselves (every held symbol still gets at least one row this pass, unconditionally) — only the
+  live-strategy-attribution fan-out on top of that baseline — see AC-9.
 
 ## Database Changes
 
@@ -160,27 +169,87 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
    symbol, since tagging an already-existing row costs no additional compute (see design.md's
    distinction between *tagging* reads, uncapped, and *candidate-creation* reads, capped).
 8. **Distinct-symbol-count cap (added at `/sdd-design` time — 3-round follow-up debate,
-   2026-08-14, closing the compute fan-out Open Risk's deferred dimension).** Step 6's iteration is
-   additionally bounded by `analysis.opportunity.max_live_only_symbols_per_compute`. Eligibility is
-   checked **per `(symbol, strategy)` pair, not per symbol**: a symbol only consumes a
+   2026-08-14, closing the compute fan-out Open Risk's deferred dimension).** Step 6's iteration
+   domain **excludes every held symbol** (`(signals_by_symbol.keys() & live_by_symbol.keys()) -
+   held_norm` — a held symbol's live attribution is governed exclusively by AC-9, never this AC; see
+   the "Held-symbol live-attribution fan-out" note in design.md's Open Risks for why a held symbol
+   reaching step 6 would produce a wrongly entry-traced duplicate row). Among the remaining, non-held
+   symbols, step 6 is additionally bounded by `analysis.opportunity.max_live_only_symbols_per_compute`.
+   Eligibility is checked **per `(symbol, strategy)` pair, not per symbol**: a symbol only consumes a
    competitive-pool slot if it has at least one live-covered `strategy_id` (within AC-7's per-symbol
    cap) that is **not already** a candidate — i.e. a symbol with **no remaining new `(symbol,
    strategy)` pair to create never consumes a slot**, while a symbol that **already has some curated
-   candidate** (e.g. watchlist-bound to a different `strategy_id`, or already processed by the held
-   loop) but still has additional uncreated live-strategy pairs **remains eligible for exactly those
-   remaining pairs**. Eligible symbols are ranked by descending max active-signal conviction (`sym`
-   ascending as a deterministic tiebreak); only the top `max_live_only_symbols_per_compute` proceed
-   to pair creation — symbols beyond the cut get no new row from this step (a candidate already
-   created by another origin is unaffected — this cap governs only step 6's own creation, mirroring
-   AC-7's origin-scoped bound). **No cross-pass hysteresis**: which symbols make the cut can change
-   between consecutive daily refreshes (`analysis.opportunity.refresh_hour_utc`) or on-read
-   staleness recomputes as signal conviction shifts — a previously-curated live-only row can vanish
-   entirely from one compute to the next with no user-facing signal beyond its absence, a deliberate,
-   documented trade-off (mirrors AC-7's precedent), not a silent gap. **Compound worst case**: this
-   cap composes multiplicatively with AC-7's per-symbol cap, not additively — up to
+   candidate** (e.g. watchlist-bound to a different `strategy_id`) but still has additional
+   uncreated live-strategy pairs **remains eligible for exactly those remaining pairs**. Eligible
+   symbols are ranked by descending max active-signal conviction (`sym` ascending as a deterministic
+   tiebreak); only the top `max_live_only_symbols_per_compute` proceed to pair creation — symbols
+   beyond the cut get no new row from this step (a candidate already created by another origin is
+   unaffected — this cap governs only step 6's own creation, mirroring AC-7's origin-scoped bound).
+   **No cross-pass hysteresis**: which symbols make the cut can change between consecutive daily
+   refreshes (`analysis.opportunity.refresh_hour_utc`) or on-read staleness recomputes as signal
+   conviction shifts — a previously-curated live-only row can vanish entirely from one compute to
+   the next with no user-facing signal beyond its absence, a deliberate, documented trade-off
+   (mirrors AC-7's precedent), not a silent gap. **This AC's own worst case**: up to
    `max_live_only_symbols_per_compute` symbols × up to `max_live_strategies_per_symbol` strategies
-   each = **up to 100 new candidate rows** (20 × 5, both defaults) from step 6 alone in a single
-   compute; readers must not read "20" as a row-count ceiling.
+   each = up to **100** new candidate rows from step 6 alone (20 × 5, both defaults) — see the
+   combined ceiling across all caps in AC-9's "Compound worst case" note; readers must not read "20"
+   in isolation as *the* row-count ceiling.
+9. **Held-symbol-count fan-out cap (added at `/sdd-design` time — follow-up debate, 2026-08-14,
+   closing the compute fan-out Open Risk's remaining deferred dimension for held positions).** The
+   held loop's per-symbol live-strategy attribution (the `live_new` delta beyond any watchlist
+   binding) is additionally bounded by `analysis.opportunity.max_live_held_symbols_per_compute` —
+   how many *distinct held symbols*, per compute pass, may receive a **new** live-only strategy
+   attribution beyond their watchlist-bound strategies (if any). This does **not** bound the number
+   of held-position rows themselves: **every** held symbol still gets at least one row this pass
+   (via its watchlist binding, or an unattributed `(symbol, "")` row if none) — the raw
+   distinct-held-symbol count (requiring a real broker fill to grow) remains deliberately
+   unbounded, since it is baseline feature-097 behavior this feature does not change; this AC
+   governs only the zero-marginal-cost live-strategy-attribution dimension on top of that baseline,
+   mirroring AC-8's precedent for the signal-only case.
+
+   **Eligibility**: a held symbol only consumes a budget slot if it has at least one live-covered
+   strategy not already attributed via its watchlist binding — i.e.
+   `_capped_live(sym, exclude=watchlist_by_symbol.get(sym, set()))` is non-empty (the same
+   per-symbol cap-then-filter mechanism AC-7 already defines, evaluated against the candidates that
+   exist when the held loop runs — the watchlist loop's rows only). A held symbol whose live
+   coverage is entirely already watchlist-attributed consumes no slot.
+
+   **Ranking (deterministic)**: eligible held symbols are ranked by descending summed
+   `abs(Position.market_value)` across the symbol's positions (keyed by *normalized* symbol),
+   symbol ascending as the tiebreak; only the top `max_live_held_symbols_per_compute` proceed to
+   receive their `live_new` delta. Summing `abs(market_value)` across a symbol's positions can
+   inflate apparent size for a long+short hedge pair on the same symbol — accepted as a documented
+   trade-off, rare given this platform's single-trading-mode-per-deployment account model. A denied
+   symbol still gets exactly its existing correct row(s): its watchlist-bound candidates (if any)
+   remain correctly tagged `is_live` wherever `strat` is independently in the symbol's full,
+   uncapped live set, and if it has no watchlist binding it gets a single unattributed
+   `(symbol, "")` held row — never a duplicate or a mis-traced row.
+
+   **Disjoint from AC-8's pool**: a held symbol is never a member of step 6's competitive pool (AC-8
+   explicitly excludes `held_norm` from its domain), so AC-8's and this AC's row pools draw from
+   disjoint symbol sets and can never double-count, double-budget, or produce two competing rows for
+   the same symbol in the same pass.
+
+   **No cross-pass hysteresis**: mirrors AC-8's precedent — which held symbols make the cut can
+   change between consecutive computes as position market values move, with no carried state (same
+   stateless DELETE+INSERT write model, same rationale as AC-8).
+
+   **Compound worst case across all three caps** (the single shared source for both AC-8's and this
+   AC's row-count math — do not restate elsewhere): the per-symbol strategy cap (AC-7,
+   `max_live_strategies_per_symbol`, default 5) composes multiplicatively, not additively, with EACH
+   of the two independent distinct-symbol caps — step 6 (AC-8, non-held symbols): up to
+   `max_live_only_symbols_per_compute × max_live_strategies_per_symbol` = **up to 100** new rows (20
+   × 5, both defaults); held loop (this AC, held symbols' live-only delta): up to
+   `max_live_held_symbols_per_compute × max_live_strategies_per_symbol` = **up to 100** additional
+   new rows (20 × 5, both defaults), on top of the always-present, uncapped baseline of one row per
+   held symbol. These two pools are **disjoint** (a symbol is either in `held_norm` or eligible for
+   AC-8, never both), so their worst cases **sum**: up to **200** newly-attributed rows across both
+   capped dimensions in a single compute pass, plus the always-present baseline rows from watchlist
+   bindings (uncapped, tagging-only — zero marginal compute) and held positions (row count uncapped,
+   only live-attribution fan-out capped). None of `max_live_strategies_per_symbol`,
+   `max_live_only_symbols_per_compute`, or `max_live_held_symbols_per_compute` should be read in
+   isolation as a row-count ceiling — only their pairwise products, summed across the two disjoint
+   pools, bound the compute cost this feature can add per pass.
 
 ## Open Questions
 
