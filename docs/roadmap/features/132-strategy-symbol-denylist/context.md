@@ -158,3 +158,28 @@
   (coordinate number: 12=denied_symbols, 13=user_id/133 → 14, verify vs 134), maskable path, wizard
   toggle, agent param. Folded in as a new FR (FR-8). Round 2 to also decide whether a secondary
   per-strategy cap / fair-schedule is still warranted on the live loop for the flagged set.
+
+### Phase 1 round 2 (proposer + adversary) + user steer → round 3
+
+- Round-2 adversary verdict NEEDS WORK (no Floor breach). Verified SOUND: all field numbers
+  (denied_symbols=12, signal_eligible=14, Opportunity.muted=12; 133 owns user_id=13; 134's
+  reliability_weight=12 is on ingest.SignalSource, a different message); the `_row_to_strategy_definition`
+  "no explicit line needed" claim (JSONB fields flow via ParseDict; 048 lockstep only applies to
+  column-backed fields like 133's live_enabled/user_id); plain-bool `signal_eligible` has no
+  false-vs-absent defect. Folded correctness fixes:
+  - **Resolver returns structured `(surviving_universe, deny_entry_set)`** — a single `union − denied`
+    return cannot express "keep held-denied for EXIT but block ENTRY"; the live-loop universe must be
+    `(union − denied) ∪ (held ∩ denied)` with `deny_entry = denied ∩ universe`.
+  - **`deny_entry` must NOT reach `_replay_state`** (shared `_apply_transition` core also drives restart
+    replay) — default false, passed only to the live `latest` path; else a held-denied symbol
+    reconstructs flat-on-restart and its exit never fires.
+  - **C-03 live-loop owner-fetch wiring** must be spec'd: `_run_cycle` fetches owner-scoped
+    watchlist/held (+signals iff signal_eligible) and synthesizes `x-user-id` per strategy owner
+    (reuse 133's synthetic-header mechanism).
+  - **C-11 allowlist × signal_eligible**: an allowlist strategy that's also flagged silently gets no
+    signals (allowlist-as-override wins) — document + wizard note (or reject the combo at write time).
+- **USER STEER (Fork B refinement):** the `signal_eligible` flag does NOT fully bound starvation —
+  even with zero flagged strategies, watchlist∪held balloons every strategy's universe and
+  `max_strategies_per_cycle=50` truncates silently over an unordered SELECT. User chose **"Build
+  fair-share now (round 3)"**: design per-strategy round-robin / fair scheduling into `_run_cycle`
+  this feature (not just deterministic ORDER BY + a metric). Round 3 designs it.
