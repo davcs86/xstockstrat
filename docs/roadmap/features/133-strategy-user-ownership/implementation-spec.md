@@ -114,7 +114,7 @@ non-breaking at the wire level — the behavioral break is documented in feature
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/**` — modify (generated; never hand-edit)

@@ -240,3 +240,7 @@
 - Added `string user_id = 13;` to `StrategyDefinition` (after `exit_cooldown_days = 11`; field 12 reserved for feature 132). Server-authoritative comment per the ownership convention.
 - Verification: `buf lint` OK; `buf breaking --against main-dev` clean (additive string field, non-breaking); grep confirms field present.
 - Files modified: `packages/proto/analysis/v1/analysis.proto`. TDD: N/A (proto). Deviations: none.
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Ran `./scripts/buf-gen.sh` (buf 1.69.0 + pinned Go plugins + grpcio-tools 1.80.0 + TS plugins). Diff scoped to `packages/proto/gen/{go,python,ts}/analysis/v1/**` only (8 files); `UserId`/`user_id` field 13 present in Go/TS/Python stubs. No drift to other services' stubs.
+- Files modified: `packages/proto/gen/**`. TDD: N/A (proto-gen). Deviations: none.

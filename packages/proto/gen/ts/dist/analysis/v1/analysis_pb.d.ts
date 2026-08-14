@@ -706,6 +706,15 @@ export type StrategyDefinition = Message<"xstockstrat.analysis.v1.StrategyDefini
      * @generated from field: optional int32 exit_cooldown_days = 11;
      */
     exitCooldownDays?: number | undefined;
+    /**
+     * Owning user (feature 133). Server-authoritative: populated from the propagated
+     * x-user-id header on ManageStrategy REGISTER, never accepted from the request body
+     * (mirrors ListOpportunitiesRequest / portfolio ownership convention). Field 12 is
+     * reserved for feature 132's denied_symbols — do not reuse.
+     *
+     * @generated from field: string user_id = 13;
+     */
+    userId: string;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.StrategyDefinition.

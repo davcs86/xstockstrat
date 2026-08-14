@@ -383,6 +383,13 @@ export interface StrategyDefinition {
      * (INVALID_ARGUMENT).
      */
     exitCooldownDays?: number | undefined;
+    /**
+     * Owning user (feature 133). Server-authoritative: populated from the propagated
+     * x-user-id header on ManageStrategy REGISTER, never accepted from the request body
+     * (mirrors ListOpportunitiesRequest / portfolio ownership convention). Field 12 is
+     * reserved for feature 132's denied_symbols — do not reuse.
+     */
+    userId: string;
 }
 export interface ManageStrategyRequest {
     operation: StrategyOperation;
