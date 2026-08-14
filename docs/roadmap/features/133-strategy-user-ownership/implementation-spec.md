@@ -411,8 +411,8 @@ ownership scoping at the SQL layer
 - `StrategyCooldownsRepository` (`strategy_cooldowns.py`): `upsert_exit` (`:27-38`), `upsert_entry`
   (`:40-51`), `list_all` (`:53-58`) — all keyed on `(strategy_id, symbol)`, `ON CONFLICT (strategy_id,
   symbol)`.
-- `BacktestRunsRepository` (`backtest_runs.py`): `create` INSERTs `(backtest_id, strategy_id, …)`
-  (`:29,40-49`); `list_by_strategy` `WHERE strategy_id = $1` (`:66-74`).
+- `BacktestRunsRepository` (`backtest_runs.py`): `insert` INSERTs `(backtest_id, strategy_id, …)`
+  (`:25`; there is **no** `create` method — re-spec 2026-08-14); `list_by_strategy` `WHERE strategy_id = $1` (`:66-74`).
 
 **TDD**: `red-green required` (covered by Step 10)
 
@@ -435,7 +435,7 @@ ownership scoping at the SQL layer
 2. `strategy_cooldowns.py`: add a `user_id` param to `upsert_exit`, `upsert_entry`; INSERT it and
    change `ON CONFLICT (strategy_id, symbol)` → `ON CONFLICT (user_id, strategy_id, symbol)`. Change
    `list_all` to also SELECT `user_id`.
-3. `backtest_runs.py`: add a `user_id` param to `create` (INSERT the column, nullable OK per Step 5);
+3. `backtest_runs.py`: add a `user_id` param to `insert` (the real method name; INSERT the column, nullable OK per Step 5);
    leave `list_by_strategy`'s `strategy_id` filter but confirm its callers pass an owner-scoped id
    (the `ListBacktests` gate in Step 8 already rejects non-owners before this read).
 

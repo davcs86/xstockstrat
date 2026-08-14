@@ -223,3 +223,13 @@
   under-specified in the design. Step 9 sub-step 3 flags this to surface to the user at execute time
   rather than silently guess; the dict-owner-keying half of Step 9 is unambiguous and proceeds.
 - Next: `/sdd-review strategy-user-ownership impl-spec`.
+
+## Session 2026-08-14 — sdd-execute (sequential) START
+
+- Executing on `feature/strategy-user-ownership` (branched off main-dev @ #949 merged).
+- §5.3 re-spec gate: codebase-discovery validated all 17 steps' anchors against trunk — 16/17 clean.
+  **One correction (user-approved):** Step 7 cited `BacktestRunsRepository.create`; the real method is
+  `insert` (`backtest_runs.py:25`) — anchor-only re-spec, same intent (thread `user_id` into the
+  backtest-run write). Committed as `respec(133)`.
+- Proto state confirmed clean pre-feature: `StrategyDefinition` highest field = `exit_cooldown_days=11`,
+  no `user_id`, field 13 free.
