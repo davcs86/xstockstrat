@@ -3141,6 +3141,10 @@ def _row_to_strategy_definition(row: dict) -> "analysis_pb2.StrategyDefinition":
     definition.active = row["active"]
     # live_enabled column added by feature 048 (absent on rows predating that migration).
     definition.live_enabled = bool(row.get("live_enabled", False))
+    # feature 133: the user_id column is authoritative — a migrated row carries its owner only on
+    # the column, not in the embedded definition_json, and the live loop keys its state by this
+    # value (so it must match the cooldown rows hydrated by the same column).
+    definition.user_id = row.get("user_id", "") or ""
     return definition
 
 

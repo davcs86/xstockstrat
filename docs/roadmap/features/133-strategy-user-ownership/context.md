@@ -316,3 +316,35 @@ TS plugins (pnpm) + `uv sync --extra dev` (analysis) all done. gettext-base inst
   decision — sub-step 3 (owner-scoped union) deferred to 132 (Deviation D-1). No synthetic-header call
   added, so Step 17's finding moves to 132 too.
 - Verify: ruff check + format clean on both. Full coverage at Step 10. Deviations: D-1 (sub-step 3 → 132).
+
+### Step 10 — tests [IN PROGRESS — do not mark done until full suite green]
+- **RED baseline captured**: 77 failures across the suite after steps 7-9 (the red-before-green
+  evidence for the 7/8/9 cluster).
+- **Implementation correction found via tests (fails.md-048 mapper lockstep):** `_row_to_strategy_definition`
+  (`servicer.py`) did NOT surface the `user_id` column — migrated rows would key the live loop by ""
+  while hydrate_cooldowns keys by the seed id (mismatch → broken cooldown gate on restart). FIXED:
+  added `definition.user_id = row.get("user_id","") or ""` column overlay.
+- **GREEN so far (34 tests):** test_live_loop.py, test_entry_backfill.py, test_strategy_cooldowns_repo.py
+  all pass. Alignment pattern applied: definitions get `user_id="u1"`; state-dict keys are 3-tuples
+  `("u1","s1","SYM")`; strategy/cooldown row dicts include `"user_id":"u1"`; upsert_exit/entry assertions
+  are 4-arg `("u1","s1","AAPL",ts)`; ON CONFLICT `(user_id, strategy_id, symbol)`.
+- **REMAINING — tests/test_analysis_servicer.py (~61 failures), the mechanical pattern:**
+  1. **Contexts need `x-user-id`**: many tests build `ctx.invocation_metadata=[("x-access-scope","7")]`
+     with NO x-user-id → servicer's `_caller_user_id` returns "" → PERMISSION_DENIED. Add
+     `("x-user-id","u1")` to those metadata lists (the `_ctx()` helper ~:872 already includes it — use
+     that shape everywhere).
+  2. **Fake repos need `get_by_owner_and_id`**: tests do `svc._strategies_repo=AsyncMock()` +
+     stub `get_by_id`. The servicer now calls `get_by_owner_and_id` → returns an un-stubbed truthy
+     MagicMock (not the row / not None). After each `get_by_id` stub add
+     `svc._strategies_repo.get_by_owner_and_id = svc._strategies_repo.get_by_id` (single-user tests), or
+     stub it to return the row for the matching (user_id,strategy_id) and None otherwise.
+  3. **ManageStrategy REGISTER** now sets `definition.user_id` + owner-scoped dup check; `create` is
+     called `create(caller_user_id, strategy_id, display_name, json)` — update any `create.assert_awaited_with(...)`.
+  4. **repo write signatures** gained a leading `user_id` (update_locked/set_live_enabled/deactivate/
+     reactivate/create) — update positional assertions.
+- **STILL TO ADD (new coverage per Step 10 instructions):** AC-1 (two users same strategy_id, no
+  collision), AC-2 (owner-mismatch → PERMISSION_DENIED for Get/RunBacktest/SetLive/Manage UPDATE/DEACTIVATE),
+  AC-3 (ListStrategies/ListStrategyDefinitions cross-user isolation), AC-4 (3-tuple owner-keying isolates
+  two users sharing a strategy_id), Open-Risk-3 (legacy binding now owned by another user → unattributed).
+  Fixtures per C-13 live in tests/conftest.py.
+- **Verification target**: `ruff check . && ruff format --check . && pytest --cov=app --cov-fail-under=40`.
