@@ -5,8 +5,8 @@
 //   protoc               unknown
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SymbolReadiness = exports.ConditionEval = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.OpportunityAction = exports.ReadinessRule = exports.ConditionState = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.BacktestStatus = exports.protobufPackage = void 0;
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = void 0;
+exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionPassedEntry = exports.ScreenResult_CriterionRawValuesEntry = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.OpportunityAction = exports.ReadinessRule = exports.ConditionState = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.BacktestStatus = exports.protobufPackage = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = void 0;
 exports.backtestStatusFromJSON = backtestStatusFromJSON;
 exports.backtestStatusToJSON = backtestStatusToJSON;
 exports.backtestStatusToNumber = backtestStatusToNumber;
@@ -4529,6 +4529,8 @@ function createBaseScreenResult() {
         atr: 0,
         revGrowth: 0,
         held: false,
+        criterionRawValues: {},
+        criterionPassed: {},
     };
 }
 exports.ScreenResult = {
@@ -4566,6 +4568,12 @@ exports.ScreenResult = {
         if (message.held !== false) {
             writer.uint32(88).bool(message.held);
         }
+        globalThis.Object.entries(message.criterionRawValues).forEach(([key, value]) => {
+            exports.ScreenResult_CriterionRawValuesEntry.encode({ key: key, value }, writer.uint32(98).fork()).join();
+        });
+        globalThis.Object.entries(message.criterionPassed).forEach(([key, value]) => {
+            exports.ScreenResult_CriterionPassedEntry.encode({ key: key, value }, writer.uint32(106).fork()).join();
+        });
         return writer;
     },
     decode(input, length) {
@@ -4655,6 +4663,26 @@ exports.ScreenResult = {
                     message.held = reader.bool();
                     continue;
                 }
+                case 12: {
+                    if (tag !== 98) {
+                        break;
+                    }
+                    const entry12 = exports.ScreenResult_CriterionRawValuesEntry.decode(reader, reader.uint32());
+                    if (entry12.value !== undefined) {
+                        message.criterionRawValues[entry12.key] = entry12.value;
+                    }
+                    continue;
+                }
+                case 13: {
+                    if (tag !== 106) {
+                        break;
+                    }
+                    const entry13 = exports.ScreenResult_CriterionPassedEntry.decode(reader, reader.uint32());
+                    if (entry13.value !== undefined) {
+                        message.criterionPassed[entry13.key] = entry13.value;
+                    }
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -4692,6 +4720,28 @@ exports.ScreenResult = {
                     ? globalThis.Number(object.rev_growth)
                     : 0,
             held: isSet(object.held) ? globalThis.Boolean(object.held) : false,
+            criterionRawValues: isObject(object.criterionRawValues)
+                ? globalThis.Object.entries(object.criterionRawValues).reduce((acc, [key, value]) => {
+                    acc[key] = globalThis.Number(value);
+                    return acc;
+                }, {})
+                : isObject(object.criterion_raw_values)
+                    ? globalThis.Object.entries(object.criterion_raw_values).reduce((acc, [key, value]) => {
+                        acc[key] = globalThis.Number(value);
+                        return acc;
+                    }, {})
+                    : {},
+            criterionPassed: isObject(object.criterionPassed)
+                ? globalThis.Object.entries(object.criterionPassed).reduce((acc, [key, value]) => {
+                    acc[key] = globalThis.Boolean(value);
+                    return acc;
+                }, {})
+                : isObject(object.criterion_passed)
+                    ? globalThis.Object.entries(object.criterion_passed).reduce((acc, [key, value]) => {
+                        acc[key] = globalThis.Boolean(value);
+                        return acc;
+                    }, {})
+                    : {},
         };
     },
     toJSON(message) {
@@ -4735,6 +4785,24 @@ exports.ScreenResult = {
         if (message.held !== false) {
             obj.held = message.held;
         }
+        if (message.criterionRawValues) {
+            const entries = globalThis.Object.entries(message.criterionRawValues);
+            if (entries.length > 0) {
+                obj.criterionRawValues = {};
+                entries.forEach(([k, v]) => {
+                    obj.criterionRawValues[k] = v;
+                });
+            }
+        }
+        if (message.criterionPassed) {
+            const entries = globalThis.Object.entries(message.criterionPassed);
+            if (entries.length > 0) {
+                obj.criterionPassed = {};
+                entries.forEach(([k, v]) => {
+                    obj.criterionPassed[k] = v;
+                });
+            }
+        }
         return obj;
     },
     create(base) {
@@ -4758,6 +4826,19 @@ exports.ScreenResult = {
         message.atr = object.atr ?? 0;
         message.revGrowth = object.revGrowth ?? 0;
         message.held = object.held ?? false;
+        message.criterionRawValues = globalThis.Object.entries(object.criterionRawValues ?? {})
+            .reduce((acc, [key, value]) => {
+            if (value !== undefined) {
+                acc[key] = globalThis.Number(value);
+            }
+            return acc;
+        }, {});
+        message.criterionPassed = globalThis.Object.entries(object.criterionPassed ?? {}).reduce((acc, [key, value]) => {
+            if (value !== undefined) {
+                acc[key] = globalThis.Boolean(value);
+            }
+            return acc;
+        }, {});
         return message;
     },
 };
@@ -4826,6 +4907,142 @@ exports.ScreenResult_CriterionScoresEntry = {
         const message = createBaseScreenResult_CriterionScoresEntry();
         message.key = object.key ?? "";
         message.value = object.value ?? 0;
+        return message;
+    },
+};
+function createBaseScreenResult_CriterionRawValuesEntry() {
+    return { key: "", value: 0 };
+}
+exports.ScreenResult_CriterionRawValuesEntry = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.key !== "") {
+            writer.uint32(10).string(message.key);
+        }
+        if (message.value !== 0) {
+            writer.uint32(17).double(message.value);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseScreenResult_CriterionRawValuesEntry();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.key = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 17) {
+                        break;
+                    }
+                    message.value = reader.double();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            key: isSet(object.key) ? globalThis.String(object.key) : "",
+            value: isSet(object.value) ? globalThis.Number(object.value) : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.key !== "") {
+            obj.key = message.key;
+        }
+        if (message.value !== 0) {
+            obj.value = message.value;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ScreenResult_CriterionRawValuesEntry.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseScreenResult_CriterionRawValuesEntry();
+        message.key = object.key ?? "";
+        message.value = object.value ?? 0;
+        return message;
+    },
+};
+function createBaseScreenResult_CriterionPassedEntry() {
+    return { key: "", value: false };
+}
+exports.ScreenResult_CriterionPassedEntry = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.key !== "") {
+            writer.uint32(10).string(message.key);
+        }
+        if (message.value !== false) {
+            writer.uint32(16).bool(message.value);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseScreenResult_CriterionPassedEntry();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.key = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.value = reader.bool();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            key: isSet(object.key) ? globalThis.String(object.key) : "",
+            value: isSet(object.value) ? globalThis.Boolean(object.value) : false,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.key !== "") {
+            obj.key = message.key;
+        }
+        if (message.value !== false) {
+            obj.value = message.value;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ScreenResult_CriterionPassedEntry.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseScreenResult_CriterionPassedEntry();
+        message.key = object.key ?? "";
+        message.value = object.value ?? false;
         return message;
     },
 };

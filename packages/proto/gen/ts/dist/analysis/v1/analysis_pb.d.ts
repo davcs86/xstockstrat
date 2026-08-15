@@ -978,6 +978,23 @@ export type ScreenResult = Message<"xstockstrat.analysis.v1.ScreenResult"> & {
      * @generated from field: bool held = 11;
      */
     held: boolean;
+    /**
+     * Per-criterion raw readings + pass/fail, for single-symbol screening where the universe-relative
+     * `score`/`criterion_scores` collapse to a content-free 0.5 (feature 125, FR-8). Populated from the
+     * same engine-internal values `criterion_scores` already draws from, exposed directly instead of
+     * normalized.
+     *
+     * @generated from field: map<string, double> criterion_raw_values = 12;
+     */
+    criterionRawValues: {
+        [key: string]: number;
+    };
+    /**
+     * @generated from field: map<string, bool> criterion_passed = 13;
+     */
+    criterionPassed: {
+        [key: string]: boolean;
+    };
 };
 /**
  * Describes the message xstockstrat.analysis.v1.ScreenResult.

@@ -1187,11 +1187,29 @@ export interface ScreenResult {
   atr: number;
   revGrowth: number;
   held: boolean;
+  /**
+   * Per-criterion raw readings + pass/fail, for single-symbol screening where the universe-relative
+   * `score`/`criterion_scores` collapse to a content-free 0.5 (feature 125, FR-8). Populated from the
+   * same engine-internal values `criterion_scores` already draws from, exposed directly instead of
+   * normalized.
+   */
+  criterionRawValues: { [key: string]: number };
+  criterionPassed: { [key: string]: boolean };
 }
 
 export interface ScreenResult_CriterionScoresEntry {
   key: string;
   value: number;
+}
+
+export interface ScreenResult_CriterionRawValuesEntry {
+  key: string;
+  value: number;
+}
+
+export interface ScreenResult_CriterionPassedEntry {
+  key: string;
+  value: boolean;
 }
 
 export interface ScreenSymbolsRequest {
@@ -5402,6 +5420,8 @@ function createBaseScreenResult(): ScreenResult {
     atr: 0,
     revGrowth: 0,
     held: false,
+    criterionRawValues: {},
+    criterionPassed: {},
   };
 }
 
@@ -5440,6 +5460,12 @@ export const ScreenResult: MessageFns<ScreenResult> = {
     if (message.held !== false) {
       writer.uint32(88).bool(message.held);
     }
+    globalThis.Object.entries(message.criterionRawValues).forEach(([key, value]: [string, number]) => {
+      ScreenResult_CriterionRawValuesEntry.encode({ key: key as any, value }, writer.uint32(98).fork()).join();
+    });
+    globalThis.Object.entries(message.criterionPassed).forEach(([key, value]: [string, boolean]) => {
+      ScreenResult_CriterionPassedEntry.encode({ key: key as any, value }, writer.uint32(106).fork()).join();
+    });
     return writer;
   },
 
@@ -5541,6 +5567,28 @@ export const ScreenResult: MessageFns<ScreenResult> = {
           message.held = reader.bool();
           continue;
         }
+        case 12: {
+          if (tag !== 98) {
+            break;
+          }
+
+          const entry12 = ScreenResult_CriterionRawValuesEntry.decode(reader, reader.uint32());
+          if (entry12.value !== undefined) {
+            message.criterionRawValues[entry12.key] = entry12.value;
+          }
+          continue;
+        }
+        case 13: {
+          if (tag !== 106) {
+            break;
+          }
+
+          const entry13 = ScreenResult_CriterionPassedEntry.decode(reader, reader.uint32());
+          if (entry13.value !== undefined) {
+            message.criterionPassed[entry13.key] = entry13.value;
+          }
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -5585,6 +5633,40 @@ export const ScreenResult: MessageFns<ScreenResult> = {
         ? globalThis.Number(object.rev_growth)
         : 0,
       held: isSet(object.held) ? globalThis.Boolean(object.held) : false,
+      criterionRawValues: isObject(object.criterionRawValues)
+        ? (globalThis.Object.entries(object.criterionRawValues) as [string, any][]).reduce(
+          (acc: { [key: string]: number }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.Number(value);
+            return acc;
+          },
+          {},
+        )
+        : isObject(object.criterion_raw_values)
+        ? (globalThis.Object.entries(object.criterion_raw_values) as [string, any][]).reduce(
+          (acc: { [key: string]: number }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.Number(value);
+            return acc;
+          },
+          {},
+        )
+        : {},
+      criterionPassed: isObject(object.criterionPassed)
+        ? (globalThis.Object.entries(object.criterionPassed) as [string, any][]).reduce(
+          (acc: { [key: string]: boolean }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.Boolean(value);
+            return acc;
+          },
+          {},
+        )
+        : isObject(object.criterion_passed)
+        ? (globalThis.Object.entries(object.criterion_passed) as [string, any][]).reduce(
+          (acc: { [key: string]: boolean }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.Boolean(value);
+            return acc;
+          },
+          {},
+        )
+        : {},
     };
   },
 
@@ -5629,6 +5711,24 @@ export const ScreenResult: MessageFns<ScreenResult> = {
     if (message.held !== false) {
       obj.held = message.held;
     }
+    if (message.criterionRawValues) {
+      const entries = globalThis.Object.entries(message.criterionRawValues) as [string, number][];
+      if (entries.length > 0) {
+        obj.criterionRawValues = {};
+        entries.forEach(([k, v]) => {
+          obj.criterionRawValues[k] = v;
+        });
+      }
+    }
+    if (message.criterionPassed) {
+      const entries = globalThis.Object.entries(message.criterionPassed) as [string, boolean][];
+      if (entries.length > 0) {
+        obj.criterionPassed = {};
+        entries.forEach(([k, v]) => {
+          obj.criterionPassed[k] = v;
+        });
+      }
+    }
     return obj;
   },
 
@@ -5656,6 +5756,22 @@ export const ScreenResult: MessageFns<ScreenResult> = {
     message.atr = object.atr ?? 0;
     message.revGrowth = object.revGrowth ?? 0;
     message.held = object.held ?? false;
+    message.criterionRawValues = (globalThis.Object.entries(object.criterionRawValues ?? {}) as [string, number][])
+      .reduce((acc: { [key: string]: number }, [key, value]: [string, number]) => {
+        if (value !== undefined) {
+          acc[key] = globalThis.Number(value);
+        }
+        return acc;
+      }, {});
+    message.criterionPassed = (globalThis.Object.entries(object.criterionPassed ?? {}) as [string, boolean][]).reduce(
+      (acc: { [key: string]: boolean }, [key, value]: [string, boolean]) => {
+        if (value !== undefined) {
+          acc[key] = globalThis.Boolean(value);
+        }
+        return acc;
+      },
+      {},
+    );
     return message;
   },
 };
@@ -5736,6 +5852,166 @@ export const ScreenResult_CriterionScoresEntry: MessageFns<ScreenResult_Criterio
     const message = createBaseScreenResult_CriterionScoresEntry();
     message.key = object.key ?? "";
     message.value = object.value ?? 0;
+    return message;
+  },
+};
+
+function createBaseScreenResult_CriterionRawValuesEntry(): ScreenResult_CriterionRawValuesEntry {
+  return { key: "", value: 0 };
+}
+
+export const ScreenResult_CriterionRawValuesEntry: MessageFns<ScreenResult_CriterionRawValuesEntry> = {
+  encode(message: ScreenResult_CriterionRawValuesEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== 0) {
+      writer.uint32(17).double(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ScreenResult_CriterionRawValuesEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseScreenResult_CriterionRawValuesEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.value = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ScreenResult_CriterionRawValuesEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.Number(object.value) : 0,
+    };
+  },
+
+  toJSON(message: ScreenResult_CriterionRawValuesEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== 0) {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ScreenResult_CriterionRawValuesEntry>, I>>(
+    base?: I,
+  ): ScreenResult_CriterionRawValuesEntry {
+    return ScreenResult_CriterionRawValuesEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ScreenResult_CriterionRawValuesEntry>, I>>(
+    object: I,
+  ): ScreenResult_CriterionRawValuesEntry {
+    const message = createBaseScreenResult_CriterionRawValuesEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? 0;
+    return message;
+  },
+};
+
+function createBaseScreenResult_CriterionPassedEntry(): ScreenResult_CriterionPassedEntry {
+  return { key: "", value: false };
+}
+
+export const ScreenResult_CriterionPassedEntry: MessageFns<ScreenResult_CriterionPassedEntry> = {
+  encode(message: ScreenResult_CriterionPassedEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== false) {
+      writer.uint32(16).bool(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ScreenResult_CriterionPassedEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseScreenResult_CriterionPassedEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.value = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ScreenResult_CriterionPassedEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.Boolean(object.value) : false,
+    };
+  },
+
+  toJSON(message: ScreenResult_CriterionPassedEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== false) {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ScreenResult_CriterionPassedEntry>, I>>(
+    base?: I,
+  ): ScreenResult_CriterionPassedEntry {
+    return ScreenResult_CriterionPassedEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ScreenResult_CriterionPassedEntry>, I>>(
+    object: I,
+  ): ScreenResult_CriterionPassedEntry {
+    const message = createBaseScreenResult_CriterionPassedEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? false;
     return message;
   },
 };

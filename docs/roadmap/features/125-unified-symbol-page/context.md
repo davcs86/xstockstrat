@@ -576,3 +576,25 @@ each checkpoint (C-02/P-03).
   relative to cwd (`packages/proto/.git`, which doesn't exist) and needs a local `main-dev` ref; ran
   the CI-equivalent `buf breaking --against "<repo-root>/.git#branch=main-dev,subdir=packages/proto"`
   after `git branch -f main-dev origin/main-dev`. Same check, correct path — CI-equivalent fallback.
+
+### ⚠ Binding execution constraint (user, 2026-08-15) — shadcn-first UI
+- **Hard requirement**: avoid custom components; use primitive or composite **shadcn** components as
+  much as possible. Applies to every UI step (8-26, 32-33).
+- **Already consistent with the design**: Step 32's indicator panels use the shadcn chart composite
+  (`ChartContainer`/`ChartTooltipContent` from `@/components/ui/chart`, the same `FormulaRunResult.tsx`
+  uses) + shadcn `Card`; the design already *rejected* hand-rolled lightweight-charts panes. This
+  constraint reinforces that choice.
+- **Execution rule for UI steps**: compose feature UI from shadcn primitives/composites (`Card`,
+  `ChartContainer`, `ChartTooltip*`, `ChartLegend*`, `Badge`, `Table`, `Skeleton`, `Tabs`, etc.);
+  if a needed primitive is absent from `src/components/ui/`, add it via `npx shadcn@latest add <name>`
+  (per service CLAUDE.md § Styling) rather than hand-rolling. Feature components (e.g. `IndicatorPanels`)
+  stay thin compositions of those. Sole allowed non-shadcn UI: the pre-existing candlestick chart
+  (`useCandlestickChart`/`lightweight-charts`) — a documented sanctioned exception (no shadcn/recharts
+  candlestick geometry), not introduced by this feature.
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Ran `./scripts/buf-gen.sh`; diff confined to `packages/proto/gen/{go,python,ts}/analysis/v1/` —
+  new `criterionRawValues`/`criterionPassed` (map) fields on `ScreenResult` across all three
+  languages. Second run produced no further change (idempotent). No other message touched.
+- Files modified: `packages/proto/gen/{go,python,ts}/analysis/v1/` (generated)
+- Deviations: none.

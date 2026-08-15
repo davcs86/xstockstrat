@@ -139,7 +139,7 @@ Both must pass (additive-only change — no breaking diff expected).
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/analysis/v1/` — modify (generated)

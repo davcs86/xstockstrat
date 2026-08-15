@@ -497,10 +497,30 @@ export interface ScreenResult {
     atr: number;
     revGrowth: number;
     held: boolean;
+    /**
+     * Per-criterion raw readings + pass/fail, for single-symbol screening where the universe-relative
+     * `score`/`criterion_scores` collapse to a content-free 0.5 (feature 125, FR-8). Populated from the
+     * same engine-internal values `criterion_scores` already draws from, exposed directly instead of
+     * normalized.
+     */
+    criterionRawValues: {
+        [key: string]: number;
+    };
+    criterionPassed: {
+        [key: string]: boolean;
+    };
 }
 export interface ScreenResult_CriterionScoresEntry {
     key: string;
     value: number;
+}
+export interface ScreenResult_CriterionRawValuesEntry {
+    key: string;
+    value: number;
+}
+export interface ScreenResult_CriterionPassedEntry {
+    key: string;
+    value: boolean;
 }
 export interface ScreenSymbolsRequest {
     symbols: string[];
@@ -664,6 +684,8 @@ export declare const SetStrategyLiveResponse: MessageFns<SetStrategyLiveResponse
 export declare const ScreenCriterion: MessageFns<ScreenCriterion>;
 export declare const ScreenResult: MessageFns<ScreenResult>;
 export declare const ScreenResult_CriterionScoresEntry: MessageFns<ScreenResult_CriterionScoresEntry>;
+export declare const ScreenResult_CriterionRawValuesEntry: MessageFns<ScreenResult_CriterionRawValuesEntry>;
+export declare const ScreenResult_CriterionPassedEntry: MessageFns<ScreenResult_CriterionPassedEntry>;
 export declare const ScreenSymbolsRequest: MessageFns<ScreenSymbolsRequest>;
 export declare const ScreenSymbolsResponse: MessageFns<ScreenSymbolsResponse>;
 export declare const RunFundamentalsScanRequest: MessageFns<RunFundamentalsScanRequest>;
