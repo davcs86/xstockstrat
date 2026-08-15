@@ -849,3 +849,14 @@ each checkpoint (C-02/P-03).
   (no run button). shadcn Card/Button/Table.
 - Verify: tsc clean, lint clean.
 - Files: `src/app/trader/positions/[symbol]/page.tsx`
+
+### Step 19 — test (xstockstrat-ui): Backtests section e2e [done]
+- **No mock change needed** — the existing `listBacktests` already returns an AAPL run (bt-hist-2)
+  + an MSFT run (bt-hist-1) for `strat-history-001`, and `runBacktest` returns a valid (non-thrown)
+  result for it. Generalized the `watchlist(page, symbol, strategyId='strat-live-001')` helper to
+  bind an explicit strategy (backward-compatible default).
+- E2E: (1) AAPL bound to strat-history-001 → Backtests table shows exactly 1 row (the AAPL run at
+  15.00%), the MSFT-only run (-3.00%) excluded — proves the client-side symbols filter; Run backtest
+  completes without error. (2) ZZZZ (no binding, no orders) → "No strategy resolves for ZZZZ" state.
+- E2E: **built + ran — position-detail 13/13 pass (13.6s).**
+- Files: `e2e/trader/position-detail.spec.ts`

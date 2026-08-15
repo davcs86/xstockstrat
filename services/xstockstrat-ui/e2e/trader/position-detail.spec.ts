@@ -181,11 +181,47 @@ test.describe('Single Position page', () => {
     // column, no score readout anywhere in the section's DOM subtree.
     await expect(screening.getByText('Score', { exact: false })).toHaveCount(0);
   });
+
+  test('the Backtests section lists the resolved strategy runs for this symbol, excluding others (FR-9)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // Bind AAPL to strat-history-001 (the mock's only strategy with backtest history). Its history
+    // has one AAPL run (bt-hist-2) and one MSFT run (bt-hist-1) — only the AAPL row must survive the
+    // client-side symbols filter.
+    await watchlist(page, 'AAPL', 'strat-history-001');
+    await page.goto('/trader/positions/AAPL');
+
+    const table = page.getByTestId('backtests-table');
+    await expect(table).toBeVisible({ timeout: 30000 });
+    await expect(page.getByTestId('backtest-row')).toHaveCount(1);
+    await expect(table.getByText('15.00%')).toBeVisible(); // bt-hist-2 totalReturn 0.15
+    // The MSFT-only run is filtered out (it never included this symbol).
+    await expect(table.getByText('-3.00%')).toHaveCount(0);
+
+    // Running a new backtest completes (mock) and refreshes the history without error.
+    await page.getByTestId('run-backtest').click();
+    await expect(page.getByTestId('backtests-table')).toBeVisible();
+    await expect(page.getByText(/Running…/)).toHaveCount(0, { timeout: 10000 });
+  });
+
+  test('the Backtests section shows a no-strategy state for a symbol with no binding and no orders (FR-9)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // ZZZZ is unheld (no orders → no owning strategy) and non-watchlisted → no strategy resolves.
+    await page.goto('/trader/positions/ZZZZ');
+    await expect(page.getByText(/No strategy resolves for ZZZZ/)).toBeVisible({ timeout: 30000 });
+  });
 });
 
-/** Route the browser's ListWatchlists to a single watchlist containing `symbol` (bound to a live
- *  strategy), so the FR-11 gate takes the watchlisted branch. */
-async function watchlist(page: import('@playwright/test').Page, symbol: string): Promise<void> {
+/** Route the browser's ListWatchlists to a single watchlist containing `symbol` (bound to
+ *  `strategyId`), so the FR-11 gate takes the watchlisted branch and the resolved strategy is known. */
+async function watchlist(
+  page: import('@playwright/test').Page,
+  symbol: string,
+  strategyId = 'strat-live-001',
+): Promise<void> {
   await page.route('**/xstockstrat.portfolio.v1.PortfolioService/ListWatchlists', async (route) => {
     await route.fulfill({
       status: 200,
@@ -196,7 +232,7 @@ async function watchlist(page: import('@playwright/test').Page, symbol: string):
             watchlistId: 'wl-1',
             name: 'My list',
             symbols: [symbol],
-            bindings: [{ symbol, strategyId: 'strat-live-001' }],
+            bindings: [{ symbol, strategyId }],
           },
         ],
       }),

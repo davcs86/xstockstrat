@@ -1194,7 +1194,7 @@ Plus the e2e proof in Step 19.
 
 ### Step 19 — test (xstockstrat-ui): Backtests section e2e
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify
