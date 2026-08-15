@@ -3684,9 +3684,23 @@ def _wl(bindings=None, symbols=None):
     )
 
 
-def _strat_row(strategy_id, entry=None, exit_=None, active=True, live_enabled=True):
-    """A strategy row (SMA≈close via the ComputeIndicator stub) with optional entry/exit rules."""
-    definition = analysis_pb2.StrategyDefinition(
+def _strat_row(
+    strategy_id,
+    entry=None,
+    exit_=None,
+    active=True,
+    live_enabled=True,
+    symbols=None,
+    created_at=None,
+):
+    """A strategy row (SMA≈close via the ComputeIndicator stub) with optional entry/exit rules.
+
+    feature 131: pass ``symbols`` to give the row a live-firing universe
+    (``signal_params.symbols``, read by ``strategy_symbols`` to build ``live_by_symbol``), and
+    ``created_at`` (the ``_capped_live`` tiebreak key). Both default off so existing callers are
+    unchanged (C-13: no speculative centralization); a row destined for ``list_live_enabled`` needs
+    them, so passing ``symbols`` defaults ``created_at`` to a deterministic 2024-01-01."""
+    kwargs = dict(
         strategy_id=strategy_id,
         display_name=strategy_id.upper(),
         components=[
@@ -3700,13 +3714,25 @@ def _strat_row(strategy_id, entry=None, exit_=None, active=True, live_enabled=Tr
         entry_rule=json.dumps(entry) if entry else "",
         exit_rule=json.dumps(exit_) if exit_ else "",
     )
-    return {
+    if symbols is not None:
+        from google.protobuf.struct_pb2 import Struct
+
+        sp = Struct()
+        sp.update({"symbols": list(symbols)})
+        kwargs["signal_params"] = sp
+    definition = analysis_pb2.StrategyDefinition(**kwargs)
+    row = {
         "strategy_id": strategy_id,
         "display_name": strategy_id.upper(),
         "active": active,
         "live_enabled": live_enabled,
         "definition_json": json_format.MessageToDict(definition),
     }
+    if created_at is None and symbols is not None:
+        created_at = datetime(2024, 1, 1, tzinfo=UTC)
+    if created_at is not None:
+        row["created_at"] = created_at
+    return row
 
 
 _GT_100 = {"fn": ">", "lhs": "sma", "rhs": 100.0}  # fires when last close > 100
@@ -3714,9 +3740,18 @@ _FIRING_BARS = [120.0, 130.0, 150.0]  # SMA≈close, last 150 > 100 → PASS
 
 
 def _materialized_svc(
-    signals=(), held=(), watchlists=(), strategies=None, bars=None, source_weights=None
+    signals=(),
+    held=(),
+    watchlists=(),
+    strategies=None,
+    bars=None,
+    source_weights=None,
+    live_strategies=None,
 ):
-    """A no-DB servicer wired with a _FakeOppRepo + all Universe-compute edges mocked."""
+    """A no-DB servicer wired with a _FakeOppRepo + all Universe-compute edges mocked.
+
+    feature 131: ``held`` accepts a plain symbol (default market value) or a ``(symbol, value)``
+    tuple; ``live_strategies`` seeds ``list_live_enabled`` (default ``[]``)."""
     strategies = strategies or {}
     bars = bars or {}
     svc = make_servicer()
@@ -3736,9 +3771,16 @@ def _materialized_svc(
         )
     )
     svc._portfolio = MagicMock()
+
+    def _held_pos(h):
+        # feature 131: _drain_held_symbols reads abs(market_value); accept a plain symbol
+        # (default value) or a (symbol, market_value) tuple for value-ranked live-budget tests.
+        sym, mv = h if isinstance(h, tuple) else (h, 1000.0)
+        return SimpleNamespace(symbol=sym, market_value=mv)
+
     svc._portfolio.ListPositions = AsyncMock(
         return_value=SimpleNamespace(
-            positions=[SimpleNamespace(symbol=s) for s in held],
+            positions=[_held_pos(h) for h in held],
             page=SimpleNamespace(next_page_token=""),
         )
     )
@@ -3754,6 +3796,10 @@ def _materialized_svc(
     svc._strategies_repo.get_by_owner_and_id = AsyncMock(
         side_effect=lambda uid, sid: strategies.get(sid)
     )
+    # feature 131: _compute_opportunities builds live_by_symbol from list_live_enabled(user_id).
+    # Default [] keeps every non-live test green — a bare AsyncMock would return a MagicMock and
+    # the "for row in ..." build would raise TypeError.
+    svc._strategies_repo.list_live_enabled = AsyncMock(return_value=list(live_strategies or []))
     svc._marketdata = MagicMock()
     svc._marketdata.GetBars = AsyncMock(
         side_effect=lambda req, metadata=None: _recent_bars_resp(bars.get(req.symbol, []))
@@ -4007,6 +4053,111 @@ class TestListOpportunitiesMaterialized:
             await asyncio.sleep(0)
         assert svc._ingest.QuerySignals.await_count >= 1
         assert "u1" not in svc._opportunity_recomputing  # guard cleared after it ran
+
+    # ── feature 131 — live-strategy symbol-coverage attribution ──────────────────
+    # Scope waiver (design.md Open Risk "Test-helper incompatibility — CLOSED, explicit user
+    # decision 2026-08-14): no dedicated multi-strategy-per-same-symbol test is added — _list_opps'
+    # by-symbol grouping can't express it and the user chose not to require the harness extension.
+    # FR-4's distinct-(symbol, strategy) rows still hold via _candidate's dict-key mechanism.
+
+    @pytest.mark.asyncio
+    async def test_held_symbol_in_live_universe_gets_real_exit_trace(self):
+        """AC-1: a held symbol covered by a live strategy's signal_params.symbols (no watchlist
+        binding) is attributed to that strategy with a REAL exit-rule trace + live_strategy
+        provenance, instead of falling through to unattributed (0/0)."""
+        row = _strat_row("sx", entry=_GT_100, exit_=_GT_100, symbols=["AAPL"])
+        svc = _materialized_svc(
+            held=["AAPL"],
+            strategies={"sx": row},
+            live_strategies=[row],
+            bars={"AAPL": _FIRING_BARS},
+        )
+        by_symbol, _ = await _list_opps(svc)
+        r = by_symbol["AAPL"]
+        assert r.strategy_id == "sx"
+        assert r.total_conditions == 1 and r.passing_conditions == 1  # real exit trace, not 0/0
+        assert set(r.provenance) >= {"position", "live_strategy"}
+        assert r.action == analysis_pb2.OPPORTUNITY_ACTION_TAG_REDUCE  # exit fired
+
+    @pytest.mark.asyncio
+    async def test_live_only_signal_symbol_gets_real_entry_trace_and_is_curated(self):
+        """AC-2/FR-6: an active signal on a symbol with no watchlist/held but covered by a live
+        strategy is attributed with a REAL entry-rule trace + live_strategy provenance, and is
+        curated — this is the case the feature actually changes (held was already curated)."""
+        row = _strat_row("sx", entry=_GT_100, symbols=["AAPL"])
+        svc = _materialized_svc(
+            signals=[_sig("AAPL", "buy", 0.9, source="uw")],
+            strategies={"sx": row},
+            live_strategies=[row],
+            bars={"AAPL": _FIRING_BARS},
+        )
+        by_symbol, _ = await _list_opps(svc)
+        r = by_symbol["AAPL"]
+        assert r.strategy_id == "sx"
+        assert r.total_conditions == 1 and r.passing_conditions == 1  # real entry trace
+        assert set(r.provenance) >= {"uw", "live_strategy"}
+        stored = svc._opportunities_repo.rows["u1"]
+        assert any(x["symbol"] == "AAPL" and x["strategy_id"] == "sx" for x in stored)
+
+    @pytest.mark.asyncio
+    async def test_watchlist_and_live_same_strategy_collapse_to_one_row(self):
+        """AC-3: a symbol bound in the watchlist to strategy sx that is ALSO live-covered by sx
+        yields exactly one (symbol, sx) row whose provenance carries both origins."""
+        row = _strat_row("sx", entry=_GT_100, symbols=["AAPL"])
+        svc = _materialized_svc(
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": row},
+            live_strategies=[row],
+            bars={"AAPL": _FIRING_BARS},
+        )
+        by_symbol, opps = await _list_opps(svc)
+        assert len(opps) == 1
+        r = by_symbol["AAPL"]
+        assert r.strategy_id == "sx"
+        assert set(r.provenance) >= {"watchlist", "live_strategy"}
+
+    @pytest.mark.asyncio
+    async def test_non_live_strategy_never_attributes_live_candidate(self):
+        """AC-5: an active but live_enabled=False strategy is absent from list_live_enabled (the
+        repo predicate excludes it), so a signal on its symbol stays unattributed — no
+        live_strategy provenance and no fabricated attribution."""
+        off = _strat_row("sx", entry=_GT_100, symbols=["AAPL"], live_enabled=False)
+        svc = _materialized_svc(
+            signals=[_sig("AAPL", "buy", 0.9, source="uw")],
+            strategies={"sx": off},
+            live_strategies=[],  # predicate (live_enabled=TRUE AND active=TRUE) excludes it
+            bars={"AAPL": _FIRING_BARS},
+        )
+        by_symbol, _ = await _list_opps(svc)
+        r = by_symbol["AAPL"]
+        assert "live_strategy" not in r.provenance
+        assert r.strategy_id == ""  # unattributed signal-only row
+
+    @pytest.mark.asyncio
+    async def test_live_only_candidate_survives_tiny_universe_cap(self):
+        """AC-4: a live-only (signal-covered, no watchlist/held) attributed candidate is curated —
+        not dropped even when max_universe_size is smaller than the higher-axis speculative tail."""
+        live = _strat_row("sx", entry=_GT_100, symbols=["AAPL"])
+        svc = _materialized_svc(
+            signals=[
+                _sig("AAPL", "buy", 0.5, source="uw"),  # live-covered → curated
+                _sig("ZZZ", "buy", 0.99, source="uw"),  # speculative, higher axis
+                _sig("YYY", "buy", 0.98, source="uw"),  # speculative, higher axis
+            ],
+            strategies={"sx": live},
+            live_strategies=[live],
+            bars={"AAPL": _FIRING_BARS},
+        )
+        # Cap the universe at 1 (all other get_int keys keep their defaults, incl. the 3 caps).
+        svc._cfg.get_int = MagicMock(
+            side_effect=lambda key, default=0: (
+                1 if key == "analysis.opportunity.max_universe_size" else default
+            )
+        )
+        by_symbol, _ = await _list_opps(svc)
+        assert "AAPL" in by_symbol  # curated live row survives the cut
+        assert by_symbol["AAPL"].strategy_id == "sx"
+        assert "live_strategy" in by_symbol["AAPL"].provenance
 
 
 class TestGetStrategyAnalytics:
@@ -4676,3 +4827,61 @@ class TestFeature133Ownership:
             resp = await svc.ManageStrategy(req, ctx)
             assert resp.user_id == user  # owner is server-set from the header
         assert set(created) == {("ua", "s1"), ("ub", "s1")}  # composite PK, no collision
+
+
+class TestListLiveEnabled:
+    """feature 131 — StrategiesRepository.list_live_enabled() + the shared predicate constant.
+
+    C-13 verdict: the strategy-row literals here are single-consumer (this class) → inline
+    compliant.
+    """
+
+    @pytest.mark.asyncio
+    async def test_list_live_enabled_uses_shared_predicate_and_decodes(self):
+        from app.repositories.strategies import LIVE_ENABLED_PREDICATE_SQL, StrategiesRepository
+
+        db = MagicMock()
+        db.fetch = AsyncMock(
+            return_value=[
+                {
+                    "strategy_id": "s1",
+                    "user_id": "u1",
+                    "active": True,
+                    "live_enabled": True,
+                    "created_at": None,
+                    "definition_json": '{"display_name": "S1"}',
+                },
+                {
+                    "strategy_id": "s2",
+                    "user_id": "u2",
+                    "active": True,
+                    "live_enabled": True,
+                    "created_at": None,
+                    "definition_json": {"display_name": "S2"},
+                },
+            ]
+        )
+        repo = StrategiesRepository(db)
+        rows = await repo.list_live_enabled()
+        sql = db.fetch.call_args[0][0]
+        assert LIVE_ENABLED_PREDICATE_SQL in sql
+        assert "live_enabled = TRUE AND active = TRUE" in sql
+        # _to_dict decodes the JSONB definition_json (string → dict) on every row.
+        assert rows[0]["definition_json"] == {"display_name": "S1"}
+        assert isinstance(rows[1]["definition_json"], dict)
+        # Global (no owner filter) when called with no user_id — the live loop needs every owner.
+        assert "user_id" not in sql
+
+    @pytest.mark.asyncio
+    async def test_list_live_enabled_owner_scoped_when_user_id_given(self):
+        # feature 131 deviation (post-133 ownership): the per-user opportunity compute must not
+        # attribute another user's live strategy, so passing user_id owner-scopes the query.
+        from app.repositories.strategies import StrategiesRepository
+
+        db = MagicMock()
+        db.fetch = AsyncMock(return_value=[])
+        repo = StrategiesRepository(db)
+        await repo.list_live_enabled("u1")
+        sql = db.fetch.call_args[0][0]
+        assert "user_id = $1" in sql
+        assert db.fetch.call_args[0][1] == "u1"

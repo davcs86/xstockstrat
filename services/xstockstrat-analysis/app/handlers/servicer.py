@@ -2034,7 +2034,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         user_id = dict(context.invocation_metadata()).get("x-user-id", "")
         held = await self._drain_held_symbols(user_id, propagation_meta)
         for r in resp.results:
-            if r.symbol in held:
+            # feature 131: _drain_held_symbols now keys by normalized symbol, so normalize the
+            # membership test (no-op for already-uppercase broker tickers; correct for mixed case).
+            if _normalize_symbol(r.symbol) in held:
                 r.held = True
         return resp
 
@@ -2214,7 +2216,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         a single row whose ``provenance`` lists them all (FR-4/AC-2).
         """
         signals = await self._drain_active_signals(propagation_meta)
-        held = await self._drain_held_symbols(user_id, propagation_meta)
+        held_value_by_symbol = await self._drain_held_symbols(user_id, propagation_meta)
         bindings = await self._drain_watchlist_bindings(propagation_meta)
         # feature 134 — per-source reliability weight scales the signal ranking axis below.
         source_weights = await self._drain_source_weights(propagation_meta)
@@ -2226,7 +2228,44 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         signals_by_symbol: dict[str, list] = {}
         for sig in signals:
             signals_by_symbol.setdefault(_normalize_symbol(sig.symbol), []).append(sig)
-        held_norm = {_normalize_symbol(s) for s in held}
+        held_norm = set(held_value_by_symbol)  # keys already normalized (feature 131)
+
+        # feature 131 — live-strategy symbol coverage: a held/signal symbol covered by a
+        # live-enabled strategy's universe surfaces that strategy's readiness trace instead of
+        # falling through to unattributed. list_live_enabled is owner-scoped (feature-131 D-1) so
+        # this per-user compute never attributes another user's live strategy to this user's
+        # symbols (the other origins — watchlist/held/signals — are already owner-scoped).
+        live_by_symbol: dict[str, set[str]] = {}
+        created_at_by_strategy: dict[str, object] = {}
+        if self._strategies_repo is not None:
+            from app.engine.live_loop import (  # noqa: PLC0415 (avoids import cycle)
+                strategy_symbols,
+            )
+
+            for row in await self._strategies_repo.list_live_enabled(user_id):
+                definition = _row_to_strategy_definition(row)
+                for sym in strategy_symbols(definition):
+                    # Normalize the key (design step 1): signal_params.symbols has no write-time
+                    # case validation, so an un-normalized key would silently never match
+                    # held_norm/signals_by_symbol's already-normalized keys.
+                    live_by_symbol.setdefault(_normalize_symbol(sym), set()).add(row["strategy_id"])
+                created_at_by_strategy[row["strategy_id"]] = row["created_at"]
+
+        # feature 131 — per-symbol live-attribution fan-out cap (read once, F-07). Applies ONLY at
+        # candidate-CREATION sites (the held loop's live_new delta and the live-only step below);
+        # tagging an already-existing curated row is uncapped. The exclude-before-slice order is
+        # LOAD-BEARING for the held loop's _capped_live(sym, exclude=watch) composition: excluding
+        # already-tagged watchlist strategies before the [:cap] slice lets the budget go to
+        # genuinely-new live strategies rather than being consumed by ones already attributed.
+        max_live_strats = self._cfg.get_int(
+            "analysis.opportunity.max_live_strategies_per_symbol", 5
+        )
+
+        def _capped_live(sym: str, exclude=frozenset()) -> list[str]:
+            return sorted(
+                live_by_symbol.get(sym, set()) - exclude,
+                key=lambda s: created_at_by_strategy[s],
+            )[:max_live_strats]
 
         candidates: dict[tuple[str, str], dict] = {}
 
@@ -2242,6 +2281,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     "thesis": "",
                     "is_watchlist": False,
                     "is_held": False,
+                    "is_live": False,
                     "best_direction": "",
                     "_best_sig_conv": -1.0,
                 }
@@ -2258,16 +2298,65 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 c = _candidate(sym, strat)
                 c["is_watchlist"] = True
                 _add_provenance(c, "watchlist")
+                # feature 131 — tag (never cap) a watchlist strategy that is also live-covered.
+                if strat in live_by_symbol.get(sym, set()):
+                    c["is_live"] = True
+                    _add_provenance(c, "live_strategy")
 
-        # 2. Held positions — attribute to each watchlist strategy for the symbol if any,
-        #    else an unattributed (symbol, "") candidate (no fabricated strategy).
+        # 2. Held positions — attribute to each watchlist strategy for the symbol if any, plus
+        #    live-covered strategies (bounded, feature 131); else an unattributed (symbol, "")
+        #    candidate (no fabricated strategy). Every held symbol still yields ≥1 row — the cap
+        #    governs only the extra live-attribution fan-out, never the base held row.
+        max_live_held = self._cfg.get_int(
+            "analysis.opportunity.max_live_held_symbols_per_compute", 20
+        )
+        live_eligible_held = [
+            sym
+            for sym in held_norm
+            if _capped_live(sym, exclude=watchlist_by_symbol.get(sym, set()))
+        ]
+        ranked_held = sorted(
+            live_eligible_held,
+            key=lambda sym: (-held_value_by_symbol.get(sym, 0.0), sym),
+        )
+        held_live_budget = set(ranked_held[:max_live_held])
         for sym in held_norm:
-            strats = watchlist_by_symbol.get(sym)
-            targets = list(strats) if strats else [""]
+            watch = watchlist_by_symbol.get(sym, set())
+            live_all = live_by_symbol.get(sym, set())
+            live_new = _capped_live(sym, exclude=watch) if sym in held_live_budget else []
+            targets = list(watch | set(live_new)) if (watch or live_new) else [""]
             for strat in targets:
                 c = _candidate(sym, strat)
                 c["is_held"] = True
                 _add_provenance(c, "position")
+                if strat in live_all:
+                    c["is_live"] = True
+                    _add_provenance(c, "live_strategy")
+
+        # 2b. Live-only symbols (feature 131, design step 6) — distinct NON-held symbols carrying
+        #     both an active signal and live coverage get a new live-attributed row, bounded per
+        #     compute. Pre-seeds the (symbol, strategy) row so the signals-merge loop below finds
+        #     it and folds in signal provenance + signal_axis.
+        def _new_live_strats(sym: str) -> list[str]:
+            # _capped_live with no exclude — exclude-before-slice would breach the per-symbol cap.
+            return [s for s in _capped_live(sym) if (sym, s) not in candidates]
+
+        # The − held_norm exclusion is load-bearing: a held symbol here would produce a wrongly
+        # entry-traced duplicate (held symbols already got their exit-traced rows above).
+        live_signal_symbols = (signals_by_symbol.keys() & live_by_symbol.keys()) - held_norm
+        competitive_pool = [sym for sym in live_signal_symbols if _new_live_strats(sym)]
+        max_live_only = self._cfg.get_int(
+            "analysis.opportunity.max_live_only_symbols_per_compute", 20
+        )
+        ranked_live_only = sorted(
+            competitive_pool,
+            key=lambda sym: (-max(sig.conviction for sig in signals_by_symbol[sym]), sym),
+        )[:max_live_only]
+        for sym in ranked_live_only:
+            for strat in _new_live_strats(sym):
+                c = _candidate(sym, strat)
+                c["is_live"] = True
+                _add_provenance(c, "live_strategy")
 
         # 3. Signals — merge into every existing candidate for the symbol (collapse); if none
         #    exists, stand alone as an unattributed (symbol, "") candidate.
@@ -2293,8 +2382,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # FR-1: rank watchlist/held (curated) ABOVE the max_universe_size cut so a curated
         # candidate is never truncated; drop only the speculative signal-only tail.
         max_universe = self._cfg.get_int("analysis.opportunity.max_universe_size", 100)
-        curated = [c for c in candidates.values() if c["is_watchlist"] or c["is_held"]]
-        speculative = [c for c in candidates.values() if not (c["is_watchlist"] or c["is_held"])]
+        curated = [
+            c for c in candidates.values() if c["is_watchlist"] or c["is_held"] or c["is_live"]
+        ]
+        speculative = [
+            c
+            for c in candidates.values()
+            if not (c["is_watchlist"] or c["is_held"] or c["is_live"])
+        ]
         speculative.sort(key=lambda c: c["signal_axis"], reverse=True)
         budget = max(0, max_universe - len(curated))
         selected = curated + speculative[:budget]
@@ -2523,13 +2618,18 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             return {}
         return {src.slug: src.reliability_weight for src in resp.sources}
 
-    async def _drain_held_symbols(self, user_id, propagation_meta) -> set:
-        """Drain the set of symbols the user holds across all accounts/modes (paginated).
+    async def _drain_held_symbols(self, user_id, propagation_meta) -> "dict[str, float]":
+        """Drain the user's held symbols across all accounts/modes (paginated), keyed by
+        **normalized** symbol and valued by summed ``abs(Position.market_value)``.
         ``ListPositions(user_id)`` with ``account_id`` unset + ``TradingMode UNSPECIFIED``
-        already returns every held position — no new global-positions RPC needed."""
+        already returns every held position — no new global-positions RPC needed.
+
+        Feature 131: normalized at construction (not the read site) — the opportunity ranking reads
+        ``held_value_by_symbol.get(sym, 0.0)`` where ``sym`` iterates the already-normalized
+        ``held_norm``, so a raw key would silently rank a real held symbol at 0.0."""
         if self._portfolio is None:
-            return set()
-        held: set = set()
+            return {}
+        held: dict[str, float] = {}
         page_token = ""
         for _ in range(_MAX_DRAIN_PAGES):
             try:
@@ -2545,7 +2645,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             except grpc.RpcError as e:
                 log.warning("ListOpportunities: ListPositions failed: %s", e)
                 return held
-            held.update(p.symbol for p in resp.positions)
+            for p in resp.positions:
+                norm = _normalize_symbol(p.symbol)
+                held[norm] = held.get(norm, 0.0) + abs(p.market_value)
             page_token = resp.page.next_page_token
             if not page_token:
                 break
