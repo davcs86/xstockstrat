@@ -30,7 +30,6 @@ import {
 import { FieldMask } from "../../google/protobuf/field_mask";
 import { Struct } from "../../google/protobuf/struct";
 import { Timestamp } from "../../google/protobuf/timestamp";
-import { DoubleValue } from "../../google/protobuf/wrappers";
 
 export const protobufPackage = "xstockstrat.analysis.v1";
 
@@ -1399,10 +1398,19 @@ export interface NamedSeries {
    */
   name: string;
   /**
-   * DoubleValue (not repeated double) so a warm-up-head or mid-series None round-trips as an unset
-   * value, never a fabricated 0.0 (feature 125, AC-4a/P-03). Index-aligned with the response times.
+   * Index-aligned with the response times. Each point is an IndicatorValue whose `value` is UNSET
+   * for a warm-up-head or mid-series None, so a gap never round-trips as a fabricated 0.0 (feature
+   * 125, AC-4a/P-03). A bare `google.protobuf.DoubleValue` element cannot do this — in a repeated
+   * field an empty DoubleValue is byte-identical to DoubleValue(0.0) and serializes to JSON `0`, so
+   * the wrapper is a message with a proto3 `optional double` (explicit presence: HasField works and
+   * JSON omits an unset value) instead.
    */
-  values: number[];
+  values: IndicatorValue[];
+}
+
+/** One point of an indicator series. `value` unset == a gap (warm-up head / NaN / None), never 0.0. */
+export interface IndicatorValue {
+  value?: number | undefined;
 }
 
 function createBaseRunBacktestRequest(): RunBacktestRequest {
@@ -8230,7 +8238,7 @@ export const NamedSeries: MessageFns<NamedSeries> = {
       writer.uint32(10).string(message.name);
     }
     for (const v of message.values) {
-      DoubleValue.encode({ value: v!! }, writer.uint32(18).fork()).join();
+      IndicatorValue.encode(v!, writer.uint32(18).fork()).join();
     }
     return writer;
   },
@@ -8255,7 +8263,7 @@ export const NamedSeries: MessageFns<NamedSeries> = {
             break;
           }
 
-          message.values.push(DoubleValue.decode(reader, reader.uint32()).value);
+          message.values.push(IndicatorValue.decode(reader, reader.uint32()));
           continue;
         }
       }
@@ -8270,7 +8278,7 @@ export const NamedSeries: MessageFns<NamedSeries> = {
   fromJSON(object: any): NamedSeries {
     return {
       name: isSet(object.name) ? globalThis.String(object.name) : "",
-      values: globalThis.Array.isArray(object?.values) ? object.values.map((e: any) => Number(e)) : [],
+      values: globalThis.Array.isArray(object?.values) ? object.values.map((e: any) => IndicatorValue.fromJSON(e)) : [],
     };
   },
 
@@ -8280,7 +8288,7 @@ export const NamedSeries: MessageFns<NamedSeries> = {
       obj.name = message.name;
     }
     if (message.values?.length) {
-      obj.values = message.values;
+      obj.values = message.values.map((e) => IndicatorValue.toJSON(e));
     }
     return obj;
   },
@@ -8291,7 +8299,65 @@ export const NamedSeries: MessageFns<NamedSeries> = {
   fromPartial<I extends Exact<DeepPartial<NamedSeries>, I>>(object: I): NamedSeries {
     const message = createBaseNamedSeries();
     message.name = object.name ?? "";
-    message.values = object.values?.map((e) => e) || [];
+    message.values = object.values?.map((e) => IndicatorValue.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseIndicatorValue(): IndicatorValue {
+  return { value: undefined };
+}
+
+export const IndicatorValue: MessageFns<IndicatorValue> = {
+  encode(message: IndicatorValue, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.value !== undefined) {
+      writer.uint32(9).double(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): IndicatorValue {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseIndicatorValue();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 9) {
+            break;
+          }
+
+          message.value = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): IndicatorValue {
+    return { value: isSet(object.value) ? globalThis.Number(object.value) : undefined };
+  },
+
+  toJSON(message: IndicatorValue): unknown {
+    const obj: any = {};
+    if (message.value !== undefined) {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<IndicatorValue>, I>>(base?: I): IndicatorValue {
+    return IndicatorValue.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<IndicatorValue>, I>>(object: I): IndicatorValue {
+    const message = createBaseIndicatorValue();
+    message.value = object.value ?? undefined;
     return message;
   },
 };

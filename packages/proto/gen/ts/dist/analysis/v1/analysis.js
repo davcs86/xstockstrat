@@ -6,7 +6,7 @@
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionPassedEntry = exports.ScreenResult_CriterionRawValuesEntry = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.OpportunityAction = exports.ReadinessRule = exports.ConditionState = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.BacktestStatus = exports.protobufPackage = void 0;
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.NamedSeries = exports.ComponentSeries = exports.GetIndicatorSeriesResponse = exports.GetIndicatorSeriesRequest = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.IndicatorValue = exports.NamedSeries = exports.ComponentSeries = exports.GetIndicatorSeriesResponse = exports.GetIndicatorSeriesRequest = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = void 0;
 exports.backtestStatusFromJSON = backtestStatusFromJSON;
 exports.backtestStatusToJSON = backtestStatusToJSON;
 exports.backtestStatusToNumber = backtestStatusToNumber;
@@ -50,7 +50,6 @@ const common_1 = require("../../common/v1/common");
 const field_mask_1 = require("../../google/protobuf/field_mask");
 const struct_1 = require("../../google/protobuf/struct");
 const timestamp_1 = require("../../google/protobuf/timestamp");
-const wrappers_1 = require("../../google/protobuf/wrappers");
 exports.protobufPackage = "xstockstrat.analysis.v1";
 var BacktestStatus;
 (function (BacktestStatus) {
@@ -7033,7 +7032,7 @@ exports.NamedSeries = {
             writer.uint32(10).string(message.name);
         }
         for (const v of message.values) {
-            wrappers_1.DoubleValue.encode({ value: v }, writer.uint32(18).fork()).join();
+            exports.IndicatorValue.encode(v, writer.uint32(18).fork()).join();
         }
         return writer;
     },
@@ -7055,7 +7054,7 @@ exports.NamedSeries = {
                     if (tag !== 18) {
                         break;
                     }
-                    message.values.push(wrappers_1.DoubleValue.decode(reader, reader.uint32()).value);
+                    message.values.push(exports.IndicatorValue.decode(reader, reader.uint32()));
                     continue;
                 }
             }
@@ -7069,7 +7068,7 @@ exports.NamedSeries = {
     fromJSON(object) {
         return {
             name: isSet(object.name) ? globalThis.String(object.name) : "",
-            values: globalThis.Array.isArray(object?.values) ? object.values.map((e) => Number(e)) : [],
+            values: globalThis.Array.isArray(object?.values) ? object.values.map((e) => exports.IndicatorValue.fromJSON(e)) : [],
         };
     },
     toJSON(message) {
@@ -7078,7 +7077,7 @@ exports.NamedSeries = {
             obj.name = message.name;
         }
         if (message.values?.length) {
-            obj.values = message.values;
+            obj.values = message.values.map((e) => exports.IndicatorValue.toJSON(e));
         }
         return obj;
     },
@@ -7088,7 +7087,58 @@ exports.NamedSeries = {
     fromPartial(object) {
         const message = createBaseNamedSeries();
         message.name = object.name ?? "";
-        message.values = object.values?.map((e) => e) || [];
+        message.values = object.values?.map((e) => exports.IndicatorValue.fromPartial(e)) || [];
+        return message;
+    },
+};
+function createBaseIndicatorValue() {
+    return { value: undefined };
+}
+exports.IndicatorValue = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.value !== undefined) {
+            writer.uint32(9).double(message.value);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseIndicatorValue();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 9) {
+                        break;
+                    }
+                    message.value = reader.double();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { value: isSet(object.value) ? globalThis.Number(object.value) : undefined };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.value !== undefined) {
+            obj.value = message.value;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.IndicatorValue.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseIndicatorValue();
+        message.value = object.value ?? undefined;
         return message;
     },
 };

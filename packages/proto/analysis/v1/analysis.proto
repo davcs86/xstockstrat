@@ -7,7 +7,6 @@ option go_package = "github.com/xstockstrat/contracts/gen/go/analysis/v1;analysi
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/field_mask.proto";
-import "google/protobuf/wrappers.proto";
 import "common/v1/common.proto";
 
 service AnalysisService {
@@ -605,7 +604,16 @@ message NamedSeries {
   // "value" (primary) plus each secondary the component emits (bb.upper/bb.lower,
   // macd.signal/macd.histogram, stoch.d, or custom-formula output keys).
   string name = 1;
-  // DoubleValue (not repeated double) so a warm-up-head or mid-series None round-trips as an unset
-  // value, never a fabricated 0.0 (feature 125, AC-4a/P-03). Index-aligned with the response times.
-  repeated google.protobuf.DoubleValue values = 2;
+  // Index-aligned with the response times. Each point is an IndicatorValue whose `value` is UNSET
+  // for a warm-up-head or mid-series None, so a gap never round-trips as a fabricated 0.0 (feature
+  // 125, AC-4a/P-03). A bare `google.protobuf.DoubleValue` element cannot do this — in a repeated
+  // field an empty DoubleValue is byte-identical to DoubleValue(0.0) and serializes to JSON `0`, so
+  // the wrapper is a message with a proto3 `optional double` (explicit presence: HasField works and
+  // JSON omits an unset value) instead.
+  repeated IndicatorValue values = 2;
+}
+
+// One point of an indicator series. `value` unset == a gap (warm-up head / NaN / None), never 0.0.
+message IndicatorValue {
+  optional double value = 1;
 }

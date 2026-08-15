@@ -688,10 +688,18 @@ export interface NamedSeries {
      */
     name: string;
     /**
-     * DoubleValue (not repeated double) so a warm-up-head or mid-series None round-trips as an unset
-     * value, never a fabricated 0.0 (feature 125, AC-4a/P-03). Index-aligned with the response times.
+     * Index-aligned with the response times. Each point is an IndicatorValue whose `value` is UNSET
+     * for a warm-up-head or mid-series None, so a gap never round-trips as a fabricated 0.0 (feature
+     * 125, AC-4a/P-03). A bare `google.protobuf.DoubleValue` element cannot do this — in a repeated
+     * field an empty DoubleValue is byte-identical to DoubleValue(0.0) and serializes to JSON `0`, so
+     * the wrapper is a message with a proto3 `optional double` (explicit presence: HasField works and
+     * JSON omits an unset value) instead.
      */
-    values: number[];
+    values: IndicatorValue[];
+}
+/** One point of an indicator series. `value` unset == a gap (warm-up head / NaN / None), never 0.0. */
+export interface IndicatorValue {
+    value?: number | undefined;
 }
 export declare const RunBacktestRequest: MessageFns<RunBacktestRequest>;
 export declare const CoverageGap: MessageFns<CoverageGap>;
@@ -744,6 +752,7 @@ export declare const GetIndicatorSeriesRequest: MessageFns<GetIndicatorSeriesReq
 export declare const GetIndicatorSeriesResponse: MessageFns<GetIndicatorSeriesResponse>;
 export declare const ComponentSeries: MessageFns<ComponentSeries>;
 export declare const NamedSeries: MessageFns<NamedSeries>;
+export declare const IndicatorValue: MessageFns<IndicatorValue>;
 export type AnalysisServiceService = typeof AnalysisServiceService;
 export declare const AnalysisServiceService: {
     readonly runBacktest: {

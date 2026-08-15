@@ -1,5 +1,5 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import type { DoubleValue, FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
+import type { FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
 import type { PageRequest, PageResponse, Timeframe, TimeRange } from "../../common/v1/common_pb";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 /**
@@ -1540,18 +1540,38 @@ export type NamedSeries = Message<"xstockstrat.analysis.v1.NamedSeries"> & {
      */
     name: string;
     /**
-     * DoubleValue (not repeated double) so a warm-up-head or mid-series None round-trips as an unset
-     * value, never a fabricated 0.0 (feature 125, AC-4a/P-03). Index-aligned with the response times.
+     * Index-aligned with the response times. Each point is an IndicatorValue whose `value` is UNSET
+     * for a warm-up-head or mid-series None, so a gap never round-trips as a fabricated 0.0 (feature
+     * 125, AC-4a/P-03). A bare `google.protobuf.DoubleValue` element cannot do this — in a repeated
+     * field an empty DoubleValue is byte-identical to DoubleValue(0.0) and serializes to JSON `0`, so
+     * the wrapper is a message with a proto3 `optional double` (explicit presence: HasField works and
+     * JSON omits an unset value) instead.
      *
-     * @generated from field: repeated google.protobuf.DoubleValue values = 2;
+     * @generated from field: repeated xstockstrat.analysis.v1.IndicatorValue values = 2;
      */
-    values: DoubleValue[];
+    values: IndicatorValue[];
 };
 /**
  * Describes the message xstockstrat.analysis.v1.NamedSeries.
  * Use `create(NamedSeriesSchema)` to create a new message.
  */
 export declare const NamedSeriesSchema: GenMessage<NamedSeries>;
+/**
+ * One point of an indicator series. `value` unset == a gap (warm-up head / NaN / None), never 0.0.
+ *
+ * @generated from message xstockstrat.analysis.v1.IndicatorValue
+ */
+export type IndicatorValue = Message<"xstockstrat.analysis.v1.IndicatorValue"> & {
+    /**
+     * @generated from field: optional double value = 1;
+     */
+    value?: number | undefined;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.IndicatorValue.
+ * Use `create(IndicatorValueSchema)` to create a new message.
+ */
+export declare const IndicatorValueSchema: GenMessage<IndicatorValue>;
 /**
  * @generated from enum xstockstrat.analysis.v1.BacktestStatus
  */
