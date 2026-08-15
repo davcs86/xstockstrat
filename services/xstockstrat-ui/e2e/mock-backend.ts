@@ -14,7 +14,7 @@
 import * as http2 from 'node:http2';
 import { ConnectError, Code } from '@connectrpc/connect';
 import { connectNodeAdapter } from '@connectrpc/connect-node';
-import { AnalysisService } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import { AnalysisService, ReadinessRule } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { ConfigService } from '@xstockstrat/proto/config/v1/config_pb';
 import { IdentityService } from '@xstockstrat/proto/identity/v1/identity_pb';
 import { IngestService } from '@xstockstrat/proto/ingest/v1/ingest_pb';
@@ -40,6 +40,7 @@ import {
   insufficientDataResult,
   OPPORTUNITIES,
   symbolReadiness,
+  exitReadiness,
   POSITIONS,
   positionForSymbol,
   ORDERS,
@@ -599,6 +600,11 @@ export async function startMockBackend(): Promise<void> {
         // overrides are spread at this call site so the shared AAPL default is unchanged.
         async evaluateReadiness(req) {
           const syms = req.symbols.length ? req.symbols : ['AAPL'];
+          // feature 138 — a held (REDUCE/ADD) opportunity's panel requests the EXIT rule; return
+          // the distinct exit trace so the e2e can prove the exit rule was traced (not entry).
+          if (req.rule === ReadinessRule.EXIT) {
+            return { readiness: syms.map((s) => exitReadiness(s)) };
+          }
           return {
             readiness: syms.map((s) => ({
               ...symbolReadiness(s),

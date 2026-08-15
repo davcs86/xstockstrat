@@ -708,6 +708,63 @@ export function conditionStateToNumber(object: ConditionState): number {
   }
 }
 
+/** Which rule tree EvaluateReadiness traces (feature 138). Closed set → enum (C-04). */
+export enum ReadinessRule {
+  /** READINESS_RULE_UNSPECIFIED - server treats as ENTRY (back-compat default) */
+  READINESS_RULE_UNSPECIFIED = "READINESS_RULE_UNSPECIFIED",
+  /** READINESS_RULE_ENTRY - trace the entry_rule (ENTER candidates, watchlist readiness) */
+  READINESS_RULE_ENTRY = "READINESS_RULE_ENTRY",
+  /** READINESS_RULE_EXIT - trace the exit_rule (held REDUCE/ADD opportunities) */
+  READINESS_RULE_EXIT = "READINESS_RULE_EXIT",
+  UNRECOGNIZED = "UNRECOGNIZED",
+}
+
+export function readinessRuleFromJSON(object: any): ReadinessRule {
+  switch (object) {
+    case 0:
+    case "READINESS_RULE_UNSPECIFIED":
+      return ReadinessRule.READINESS_RULE_UNSPECIFIED;
+    case 1:
+    case "READINESS_RULE_ENTRY":
+      return ReadinessRule.READINESS_RULE_ENTRY;
+    case 2:
+    case "READINESS_RULE_EXIT":
+      return ReadinessRule.READINESS_RULE_EXIT;
+    case -1:
+    case "UNRECOGNIZED":
+    default:
+      return ReadinessRule.UNRECOGNIZED;
+  }
+}
+
+export function readinessRuleToJSON(object: ReadinessRule): string {
+  switch (object) {
+    case ReadinessRule.READINESS_RULE_UNSPECIFIED:
+      return "READINESS_RULE_UNSPECIFIED";
+    case ReadinessRule.READINESS_RULE_ENTRY:
+      return "READINESS_RULE_ENTRY";
+    case ReadinessRule.READINESS_RULE_EXIT:
+      return "READINESS_RULE_EXIT";
+    case ReadinessRule.UNRECOGNIZED:
+    default:
+      return "UNRECOGNIZED";
+  }
+}
+
+export function readinessRuleToNumber(object: ReadinessRule): number {
+  switch (object) {
+    case ReadinessRule.READINESS_RULE_UNSPECIFIED:
+      return 0;
+    case ReadinessRule.READINESS_RULE_ENTRY:
+      return 1;
+    case ReadinessRule.READINESS_RULE_EXIT:
+      return 2;
+    case ReadinessRule.UNRECOGNIZED:
+    default:
+      return -1;
+  }
+}
+
 /** The persisted per-user disposition of a queued opportunity (feature 097). Closed set → enum (C-04). */
 export enum OpportunityAction {
   OPPORTUNITY_ACTION_UNSPECIFIED = "OPPORTUNITY_ACTION_UNSPECIFIED",
@@ -1254,6 +1311,13 @@ export interface ListOpportunitiesResponse {
 export interface EvaluateReadinessRequest {
   strategyId: string;
   symbols: string[];
+  /**
+   * feature 138 — which rule tree to trace. UNSPECIFIED == ENTRY (back-compat). The Signal-detail
+   * "Why this fired" panel requests EXIT for a held (REDUCE/ADD) opportunity so it explains the
+   * exit rule that actually fired, reconciling with the queue's exit-derived conviction; every
+   * other caller (watchlist readiness) leaves it unset and keeps entry-rule tracing.
+   */
+  rule: ReadinessRule;
 }
 
 export interface EvaluateReadinessResponse {
@@ -7156,7 +7220,7 @@ export const ListOpportunitiesResponse: MessageFns<ListOpportunitiesResponse> = 
 };
 
 function createBaseEvaluateReadinessRequest(): EvaluateReadinessRequest {
-  return { strategyId: "", symbols: [] };
+  return { strategyId: "", symbols: [], rule: ReadinessRule.READINESS_RULE_UNSPECIFIED };
 }
 
 export const EvaluateReadinessRequest: MessageFns<EvaluateReadinessRequest> = {
@@ -7166,6 +7230,9 @@ export const EvaluateReadinessRequest: MessageFns<EvaluateReadinessRequest> = {
     }
     for (const v of message.symbols) {
       writer.uint32(18).string(v!);
+    }
+    if (message.rule !== ReadinessRule.READINESS_RULE_UNSPECIFIED) {
+      writer.uint32(24).int32(readinessRuleToNumber(message.rule));
     }
     return writer;
   },
@@ -7193,6 +7260,14 @@ export const EvaluateReadinessRequest: MessageFns<EvaluateReadinessRequest> = {
           message.symbols.push(reader.string());
           continue;
         }
+        case 3: {
+          if (tag !== 24) {
+            break;
+          }
+
+          message.rule = readinessRuleFromJSON(reader.int32());
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -7210,6 +7285,7 @@ export const EvaluateReadinessRequest: MessageFns<EvaluateReadinessRequest> = {
         ? globalThis.String(object.strategy_id)
         : "",
       symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e: any) => globalThis.String(e)) : [],
+      rule: isSet(object.rule) ? readinessRuleFromJSON(object.rule) : ReadinessRule.READINESS_RULE_UNSPECIFIED,
     };
   },
 
@@ -7221,6 +7297,9 @@ export const EvaluateReadinessRequest: MessageFns<EvaluateReadinessRequest> = {
     if (message.symbols?.length) {
       obj.symbols = message.symbols;
     }
+    if (message.rule !== ReadinessRule.READINESS_RULE_UNSPECIFIED) {
+      obj.rule = readinessRuleToJSON(message.rule);
+    }
     return obj;
   },
 
@@ -7231,6 +7310,7 @@ export const EvaluateReadinessRequest: MessageFns<EvaluateReadinessRequest> = {
     const message = createBaseEvaluateReadinessRequest();
     message.strategyId = object.strategyId ?? "";
     message.symbols = object.symbols?.map((e) => e) || [];
+    message.rule = object.rule ?? ReadinessRule.READINESS_RULE_UNSPECIFIED;
     return message;
   },
 };

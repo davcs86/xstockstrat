@@ -139,6 +139,19 @@ export declare enum ConditionState {
 export declare function conditionStateFromJSON(object: any): ConditionState;
 export declare function conditionStateToJSON(object: ConditionState): string;
 export declare function conditionStateToNumber(object: ConditionState): number;
+/** Which rule tree EvaluateReadiness traces (feature 138). Closed set → enum (C-04). */
+export declare enum ReadinessRule {
+    /** READINESS_RULE_UNSPECIFIED - server treats as ENTRY (back-compat default) */
+    READINESS_RULE_UNSPECIFIED = "READINESS_RULE_UNSPECIFIED",
+    /** READINESS_RULE_ENTRY - trace the entry_rule (ENTER candidates, watchlist readiness) */
+    READINESS_RULE_ENTRY = "READINESS_RULE_ENTRY",
+    /** READINESS_RULE_EXIT - trace the exit_rule (held REDUCE/ADD opportunities) */
+    READINESS_RULE_EXIT = "READINESS_RULE_EXIT",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function readinessRuleFromJSON(object: any): ReadinessRule;
+export declare function readinessRuleToJSON(object: ReadinessRule): string;
+export declare function readinessRuleToNumber(object: ReadinessRule): number;
 /** The persisted per-user disposition of a queued opportunity (feature 097). Closed set → enum (C-04). */
 export declare enum OpportunityAction {
     OPPORTUNITY_ACTION_UNSPECIFIED = "OPPORTUNITY_ACTION_UNSPECIFIED",
@@ -594,6 +607,13 @@ export interface ListOpportunitiesResponse {
 export interface EvaluateReadinessRequest {
     strategyId: string;
     symbols: string[];
+    /**
+     * feature 138 — which rule tree to trace. UNSPECIFIED == ENTRY (back-compat). The Signal-detail
+     * "Why this fired" panel requests EXIT for a held (REDUCE/ADD) opportunity so it explains the
+     * exit rule that actually fired, reconciling with the queue's exit-derived conviction; every
+     * other caller (watchlist readiness) leaves it unset and keeps entry-rule tracing.
+     */
+    rule: ReadinessRule;
 }
 export interface EvaluateReadinessResponse {
     readiness: SymbolReadiness[];

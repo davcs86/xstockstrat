@@ -1350,6 +1350,15 @@ export type EvaluateReadinessRequest = Message<"xstockstrat.analysis.v1.Evaluate
      * @generated from field: repeated string symbols = 2;
      */
     symbols: string[];
+    /**
+     * feature 138 — which rule tree to trace. UNSPECIFIED == ENTRY (back-compat). The Signal-detail
+     * "Why this fired" panel requests EXIT for a held (REDUCE/ADD) opportunity so it explains the
+     * exit rule that actually fired, reconciling with the queue's exit-derived conviction; every
+     * other caller (watchlist readiness) leaves it unset and keeps entry-rule tracing.
+     *
+     * @generated from field: xstockstrat.analysis.v1.ReadinessRule rule = 3;
+     */
+    rule: ReadinessRule;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.EvaluateReadinessRequest.
@@ -1747,6 +1756,35 @@ export declare enum ConditionState {
  * Describes the enum xstockstrat.analysis.v1.ConditionState.
  */
 export declare const ConditionStateSchema: GenEnum<ConditionState>;
+/**
+ * Which rule tree EvaluateReadiness traces (feature 138). Closed set → enum (C-04).
+ *
+ * @generated from enum xstockstrat.analysis.v1.ReadinessRule
+ */
+export declare enum ReadinessRule {
+    /**
+     * server treats as ENTRY (back-compat default)
+     *
+     * @generated from enum value: READINESS_RULE_UNSPECIFIED = 0;
+     */
+    UNSPECIFIED = 0,
+    /**
+     * trace the entry_rule (ENTER candidates, watchlist readiness)
+     *
+     * @generated from enum value: READINESS_RULE_ENTRY = 1;
+     */
+    ENTRY = 1,
+    /**
+     * trace the exit_rule (held REDUCE/ADD opportunities)
+     *
+     * @generated from enum value: READINESS_RULE_EXIT = 2;
+     */
+    EXIT = 2
+}
+/**
+ * Describes the enum xstockstrat.analysis.v1.ReadinessRule.
+ */
+export declare const ReadinessRuleSchema: GenEnum<ReadinessRule>;
 /**
  * The persisted per-user disposition of a queued opportunity (feature 097). Closed set → enum (C-04).
  *
