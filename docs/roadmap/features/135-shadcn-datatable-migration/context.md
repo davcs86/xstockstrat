@@ -75,3 +75,29 @@ Addressed both `/sdd-review product-spec` warnings directly in `product-spec.md`
 - No re-run of `/sdd-review product-spec` performed yet — these are refinements of an
   already-PASSED review (no new criterion introduced, no scope change), not a reversal of the
   approval. `feature.md` stays at `spec-ready`; proceeding to `/sdd-design` next.
+
+## Session 2026-08-15 — sdd-design Phase 0 (recon)
+
+- Spawned 3 parallel `codebase-discovery` subagents (trader, insights, config-ui+shared-infra),
+  plus a direct check of one flagged gap (`accounts/authorized-apps/page.tsx`). Wrote `recon.md`.
+- **C-14 correction found during recon**: the product spec's `## Consumer Surface(s)` and FR-1 said
+  "all three UI segments" (`/trader`, `/insights`, `/config-ui`) but `xstockstrat-ui` has a 4th
+  segment, `/accounts` (OAuth authorized-apps UI, per `services/xstockstrat-ui/CLAUDE.md` §
+  Segments), which also renders a table (`authorized-apps/page.tsx`, 5 cols, Revoke action).
+  Corrected `product-spec.md`'s FR-1, Consumer Surface(s), and User Story to name all four segments
+  before writing recon.md — a strengthening correction (adds scope recon already needed to cover
+  per FR-1's own "audit every page/component" instruction), not a scope change requiring
+  re-approval.
+- **Full inventory: 15 table sites across all 4 segments** (7 trader, 4 insights, 3 config-ui, 1
+  accounts). Every one fails FR-3's fixed exemption threshold — flagged as a risk for the grilling
+  round (is a literally-zero-exemption outcome intended, or should the 3-column nested Sheet
+  fill-lineage table get a design-level exception?).
+- Confirmed via all three digests: **zero raw `<table>` elements** and **zero existing table/grid
+  library** (`@tanstack/react-table` not installed) anywhere in `services/xstockstrat-ui` — 100% of
+  existing tables already go through the shadcn `Table` styling primitive.
+  `mobile-overflow.spec.ts` needs no code change for FR-5, only `ROUTES` data additions (confirmed
+  it doesn't yet cover the bare `/trader` dashboard route, where `OrderBook`/`LiveStrategiesPanel`
+  render).
+- Flagged `BacktestDiagnostics.tsx` (a `@tanstack/react-virtual` div-grid, not a `<table>`/`Table`
+  primitive) as explicitly out of FR-1's literal scope — for the grilling round to confirm.
+- Proceeding to Phase 1 — Grilling (quick mode, 1 mandated round).

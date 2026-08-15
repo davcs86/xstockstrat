@@ -17,7 +17,8 @@ viewports (see Known Trap below). This feature brings every table onto a single,
 
 ## User Story
 
-As a trader/analyst using any `xstockstrat-ui` segment (`/trader`, `/insights`, `/config-ui`), I
+As a trader/analyst using any `xstockstrat-ui` segment (`/trader`, `/insights`, `/config-ui`,
+`/accounts`), I
 want every table to support consistent sorting/filtering/pagination where the data volume warrants
 it, and to remain usable (no clipped columns, no broken layout) on narrow/mobile viewports, so that
 I can work with tabular data without horizontal scrolling surprises or console-only workarounds.
@@ -26,7 +27,8 @@ I can work with tabular data without horizontal scrolling surprises or console-o
 
 FR-1. Recon must enumerate **every** table-rendering call site in `services/xstockstrat-ui/src` —
   raw `<table>` elements, the shadcn `Table` primitive (`ui/table.tsx` consumers), and any other
-  table library in use — producing an exhaustive migration inventory (file, route/segment, current
+  table library in use, across **all four** UI segments (`/trader`, `/insights`, `/config-ui`, and
+  `/accounts`) — producing an exhaustive migration inventory (file, route/segment, current
   implementation, approximate row/column count). Do not scope to a preset list; the actual list is
   a Phase-0 recon deliverable.
 
@@ -80,9 +82,9 @@ FR-5. Every table covered by this feature is asserted overflow-free on a narrow/
 - [x] **UI** — `xstockstrat-ui` segments: `/trader` (Orders, Positions, Order Book, and any other
   table found in recon), `/insights` (Screener results, Strategies list, Formulas list, and any
   other table found in recon), `/config-ui` (Sources, Audit log, Namespace editor, and any other
-  table found in recon) — every migrated table is an in-place visual/interaction upgrade on an
-  existing, already-reachable route; no new routes are added, so C-10 nav-reachability is
-  unaffected.
+  table found in recon), `/accounts` (Authorized Apps, and any other table found in recon) — every
+  migrated table is an in-place visual/interaction upgrade on an existing, already-reachable route;
+  no new routes are added, so C-10 nav-reachability is unaffected.
 - [ ] **Agent** — not applicable.
 - [ ] **None** — not applicable.
 
