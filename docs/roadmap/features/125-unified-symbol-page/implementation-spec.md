@@ -499,7 +499,7 @@ findings it reports against these two files are fixed before this step is marked
 
 ### Step 8 — service (xstockstrat-ui): page-structure refactor — sections gate independently of position
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify

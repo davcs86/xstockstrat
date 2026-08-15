@@ -683,3 +683,23 @@ each checkpoint (C-02/P-03).
   — the context-forge/context-scrubber plugin is **not available in this session** (only `strat-lab`
   is installed). Per root CLAUDE.md § Teardown, recording it here and in the PR body rather than
   skipping silently. The two edited files were self-reviewed against the spec's exact required text.
+
+### Step 8 — service (xstockstrat-ui): page-structure refactor [done]
+- `trader/positions/[symbol]/page.tsx` restructured so the price chart, Orders & fills, and a new
+  Trade widget (`OrderForm`) render **independent of position** (top-level, for any symbol);
+  extracted `SymbolPriceChart` + `SymbolOrdersCard` thin components reading page-level
+  `avg/stop/last/hasStop`/`orders`/`working` locals (no `position.` reads). Added an always-on
+  `<h1>{symbol}</h1>` heading below the breadcrumb; position-not-found now shows a compact inline
+  `CardNotice` (not a page takeover). Render-order fix: a NotFound error routes to the notice, only
+  a genuine error shows the error paragraph (`genuineError = error && !isNotFoundError`). `PositionBody`
+  trimmed to header + stat tiles + sidebar (chart/orders removed; unused props dropped).
+  `usePosition` (usePortfolio.ts) gained the NotFound-aware `retry` + `refetchInterval` guards
+  (mirrors useStrategies.ts). All UI composed from shadcn primitives (Card/Badge/Skeleton/Table/
+  Tabs/CardNotice) per the shadcn-first constraint — no new custom components beyond thin page-local
+  compositions.
+- Verify: `pnpm exec tsc --noEmit` clean; `pnpm lint` clean (only a pre-existing unrelated warning).
+- TDD: paired e2e is Step 9. **Behavioral red-green deferred to CI** — the Playwright suite needs a
+  240s Next.js build the sandbox can't reliably run (ledger: sandbox dev compiler too slow);
+  verified structurally via tsc + lint (CI-equivalent). **Disposition**: CI-equivalent fallback.
+- Files modified: `src/app/trader/positions/[symbol]/page.tsx`, `src/hooks/usePortfolio.ts`
+- Deviations: e2e→CI fallback (above), applies to all UI `test` steps this session.

@@ -27,9 +27,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/shared/EmptyState';
+import { CardNotice } from '@/components/shared/CardNotice';
 import { StatTile } from '@/components/shared/StatTile';
 import { Eyebrow } from '@/components/shared/Eyebrow';
 import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
+import { OrderForm } from '@/components/trader/OrderForm';
+import { isNotFoundError } from '@/lib/scoreDisplay';
 import {
   Table,
   TableHeader,
@@ -75,8 +78,20 @@ export default function PositionDetailPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const priceLinesRef = useRef<any[]>([]);
 
+  // Top-level price/stop locals — computed once, safely, regardless of whether a position exists
+  // (feature 125: the chart section renders for every symbol, held or not, so these must never
+  // reach into an undefined `position`).
   const avg = Number(position?.avgEntryPrice ?? 0);
   const stop = Number(position?.stopPrice ?? 0);
+  const last = Number(position?.currentPrice ?? 0);
+  const hasStop = Number(position?.stopPrice ?? 0) > 0;
+  const working = useMemo(
+    () =>
+      orders.filter(
+        (o) => o.status === OrderStatus.NEW || o.status === OrderStatus.PARTIALLY_FILLED,
+      ).length,
+    [orders],
+  );
 
   useEffect(() => {
     if (!symbol) return;
@@ -130,6 +145,11 @@ export default function PositionDetailPage() {
     };
   }, [symbol, timeframe, avg, stop, seriesRef]);
 
+  // A NotFound position is the common case for a non-held / watchlist-research symbol — it is not an
+  // error, so route it to the inline notice below rather than the scary error paragraph.
+  const positionNotFound = !isLoading && !error && (!position || !position.symbol);
+  const genuineError = error && !isNotFoundError(error);
+
   return (
     <AppShell>
       <div className="p-4 sm:p-6 space-y-4">
@@ -140,68 +160,227 @@ export default function PositionDetailPage() {
           items={[{ label: 'Exposure', href: '/trader/positions' }, { label: symbol }]}
         />
 
+        {/* Minimal always-on page title (feature 125): an unheld symbol has no position header, so
+            this is the page's only title in that case; when held, the richer PositionBody header
+            renders below it too. */}
+        <h1 className="font-mono text-2xl font-semibold tracking-tight">{symbol}</h1>
+
         {isLoading && (
           <div className="space-y-3" data-testid="position-loading">
             <Skeleton className="h-16 w-full" />
             <Skeleton className="h-64 w-full" />
           </div>
         )}
-        {error && (
+        {genuineError && (
           <p className="text-sm text-destructive">Failed to load position: {error.message}</p>
         )}
-        {!isLoading && !error && (!position || !position.symbol) && (
-          <EmptyState
-            title={`No ${mode} position in ${symbol || 'this symbol'}`}
-            description={
-              selectedAccountId
-                ? 'You do not hold this symbol in the selected account.'
-                : 'Select an account in the header to load the position.'
-            }
-            action={
-              <Button asChild variant="outline" size="sm">
-                <Link href="/trader/positions">Back to Exposure</Link>
-              </Button>
-            }
-          />
-        )}
 
-        {position && position.symbol && (
+        {/* Sections below render independent of whether a position is held (feature 125): the price
+            chart, orders & fills, and the trade widget serve research and entry for any symbol. */}
+        <SymbolPriceChart
+          symbol={symbol}
+          chartRef={containerRef}
+          timeframe={timeframe}
+          onTimeframe={setTimeframe}
+          barsError={barsError}
+          avg={avg}
+          stop={stop}
+          last={last}
+          hasStop={hasStop}
+        />
+
+        <SymbolOrdersCard symbol={symbol} orders={orders} working={working} />
+
+        <Card>
+          <CardHeader>
+            <CardTitle>
+              <Eyebrow as="span">Trade {symbol}</Eyebrow>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <OrderForm mode={mode} initialSymbol={symbol} />
+          </CardContent>
+        </Card>
+
+        {position && position.symbol ? (
           <PositionBody
             position={position}
             equity={Number(portfolio?.equity ?? 0)}
-            orders={orders}
             owningStrategy={owningStrategy}
-            timeframe={timeframe}
-            onTimeframe={setTimeframe}
-            barsError={barsError}
-            chartRef={containerRef}
           />
+        ) : (
+          positionNotFound && (
+            <CardNotice>
+              No {mode} position in {symbol || 'this symbol'}.{' '}
+              {selectedAccountId
+                ? 'You do not hold this symbol in the selected account.'
+                : 'Select an account in the header to load the position.'}
+            </CardNotice>
+          )
         )}
       </div>
     </AppShell>
   );
 }
 
-// PositionBody renders the risk-framed detail once a Position is loaded. Split out so the loading /
-// empty / error branches above stay flat and every field below can assume a present Position.
-function PositionBody({
-  position,
-  equity,
-  orders,
-  owningStrategy,
+// The price chart section — rendered for every symbol (feature 125), so its captions read the
+// page-level avg/stop/last/hasStop locals (which no-op safely with no position) rather than a
+// Position object.
+function SymbolPriceChart({
+  symbol,
+  chartRef,
   timeframe,
   onTimeframe,
   barsError,
-  chartRef,
+  avg,
+  stop,
+  last,
+  hasStop,
 }: {
-  position: Position;
-  equity: number;
-  orders: Order[];
-  owningStrategy: string;
+  symbol: string;
+  chartRef: React.RefObject<HTMLDivElement>;
   timeframe: Timeframe;
   onTimeframe: (t: Timeframe) => void;
   barsError: string | null;
-  chartRef: React.RefObject<HTMLDivElement>;
+  avg: number;
+  stop: number;
+  last: number;
+  hasStop: boolean;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle>Price · {symbol}</CardTitle>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-muted-foreground">
+              {avg > 0 ? `avg ${fmtUsd(avg)}` : ''}
+              {hasStop ? ` · stop ${fmtUsd(stop)}` : ''}
+              {last > 0 ? ` · last ${fmtUsd(last)}` : ''}
+            </span>
+            <Tabs value={timeframe} onValueChange={(v) => onTimeframe(v as Timeframe)}>
+              <TabsList>
+                {TIMEFRAMES.map(({ value, label }) => (
+                  <TabsTrigger key={value} value={value}>
+                    {label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {barsError && <p className="mb-2 text-xs text-destructive">{barsError}</p>}
+        <div ref={chartRef} className="w-full" style={{ height: 260 }} />
+        {(avg > 0 || hasStop) && (
+          <div className="flex flex-wrap gap-4 pt-2 font-mono text-[11px] text-muted-foreground">
+            {avg > 0 && (
+              <span>
+                <span className="text-muted-foreground">— —</span> avg cost {fmtUsd(avg)}
+              </span>
+            )}
+            {hasStop && (
+              <span>
+                <span className="text-destructive">— —</span> stop {fmtUsd(stop)}
+              </span>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Orders & fills — rendered for every symbol (feature 125), reading only the top-level orders list
+// and the page-level symbol (never a Position field).
+function SymbolOrdersCard({
+  symbol,
+  orders,
+  working,
+}: {
+  symbol: string;
+  orders: Order[];
+  working: number;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle>Orders &amp; fills · {symbol}</CardTitle>
+          <span className="text-xs text-muted-foreground">
+            {orders.length} total · {working} working
+          </span>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {orders.length === 0 ? (
+          <EmptyState
+            title="No orders for this symbol"
+            description="Orders you place for this position will appear here, traced to their origin signal."
+          />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Side</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead className="text-right">Qty</TableHead>
+                <TableHead className="text-right hidden sm:table-cell">Filled</TableHead>
+                <TableHead className="text-right">Avg fill</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="hidden md:table-cell">Origin</TableHead>
+                <TableHead className="sr-only">Open</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {orders.map((o) => (
+                <TableRow key={o.orderId} className="cursor-pointer">
+                  <TableCell>
+                    <OrderSideBadge side={o.side} />
+                  </TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    {TYPE_LABEL[OrderType[o.orderType]] ?? '—'}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{o.qty}</TableCell>
+                  <TableCell className="text-right tabular-nums hidden sm:table-cell text-muted-foreground">
+                    {o.filledQty}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {formatOrderPrice(o.filledAvgPrice)}
+                  </TableCell>
+                  <TableCell>
+                    <OrderStatusBadge status={o.status} intentState={o.intentState} />
+                  </TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground hidden md:table-cell">
+                    {o.strategyId || 'Manual'}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button asChild size="sm" variant="ghost" className="h-8">
+                      <Link href={`/trader/orders/${o.orderId}`}>View →</Link>
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// PositionBody renders the risk-framed detail once a Position is loaded — the stat-tile header and
+// the risk/manage/why/broker sidebar. The price chart, orders, and trade widget are hoisted to the
+// page level (feature 125) so they render for unheld symbols too, so they are no longer here.
+function PositionBody({
+  position,
+  equity,
+  owningStrategy,
+}: {
+  position: Position;
+  equity: number;
+  owningStrategy: string;
 }) {
   const r = openR(position);
   const marketValue = Number(position.marketValue ?? 0);
@@ -210,9 +389,6 @@ function PositionBody({
   // The stop-distance meter fills toward the stop: 0% distance = full (at the stop), further = less.
   const stopDist = Number(position.stopDistancePct ?? 0);
   const stopMeterPct = hasStop ? Math.max(4, Math.min(100, 100 - stopDist * 100 * 10)) : 0;
-  const working = orders.filter(
-    (o) => o.status === OrderStatus.NEW || o.status === OrderStatus.PARTIALLY_FILLED,
-  ).length;
 
   return (
     <>
@@ -264,7 +440,7 @@ function PositionBody({
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
-        {/* Left column: stat grid + price chart + orders & fills. */}
+        {/* Left column: stat grid (position-specific figures). */}
         <div className="min-w-0 space-y-4">
           <div className="grid grid-cols-2 overflow-hidden rounded-md border border-border sm:grid-cols-3">
             <StatTile size="md" label="Avg cost" value={fmtUsd(position.avgEntryPrice)} />
@@ -284,114 +460,6 @@ function PositionBody({
               tone={Number(position.dayPnl ?? 0) >= 0 ? 'gain' : 'loss'}
             />
           </div>
-
-          <Card>
-            <CardHeader>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <CardTitle>Price · entry to stop</CardTitle>
-                <div className="flex items-center gap-3">
-                  <span className="text-xs text-muted-foreground">
-                    avg {fmtUsd(position.avgEntryPrice)}
-                    {hasStop ? ` · stop ${fmtUsd(position.stopPrice)}` : ''} · last{' '}
-                    {fmtUsd(position.currentPrice)}
-                  </span>
-                  <Tabs value={timeframe} onValueChange={(v) => onTimeframe(v as Timeframe)}>
-                    <TabsList>
-                      {TIMEFRAMES.map(({ value, label }) => (
-                        <TabsTrigger key={value} value={value}>
-                          {label}
-                        </TabsTrigger>
-                      ))}
-                    </TabsList>
-                  </Tabs>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {barsError && <p className="mb-2 text-xs text-destructive">{barsError}</p>}
-              <div ref={chartRef} className="w-full" style={{ height: 260 }} />
-              <div className="flex flex-wrap gap-4 pt-2 font-mono text-[11px] text-muted-foreground">
-                <span>
-                  <span className="text-muted-foreground">— —</span> avg cost{' '}
-                  {fmtUsd(position.avgEntryPrice)}
-                </span>
-                {hasStop && (
-                  <span>
-                    <span className="text-destructive">— —</span> stop {fmtUsd(position.stopPrice)}
-                  </span>
-                )}
-                {hasStop && (
-                  <span className="ml-auto">
-                    distance to stop {fmtPct(position.stopDistancePct)}
-                  </span>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <CardTitle>Orders &amp; fills · {position.symbol}</CardTitle>
-                <span className="text-xs text-muted-foreground">
-                  {orders.length} total · {working} working
-                </span>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {orders.length === 0 ? (
-                <EmptyState
-                  title="No orders for this symbol"
-                  description="Orders you place for this position will appear here, traced to their origin signal."
-                />
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Side</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead className="text-right">Qty</TableHead>
-                      <TableHead className="text-right hidden sm:table-cell">Filled</TableHead>
-                      <TableHead className="text-right">Avg fill</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="hidden md:table-cell">Origin</TableHead>
-                      <TableHead className="sr-only">Open</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {orders.map((o) => (
-                      <TableRow key={o.orderId} className="cursor-pointer">
-                        <TableCell>
-                          <OrderSideBadge side={o.side} />
-                        </TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">
-                          {TYPE_LABEL[OrderType[o.orderType]] ?? '—'}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">{o.qty}</TableCell>
-                        <TableCell className="text-right tabular-nums hidden sm:table-cell text-muted-foreground">
-                          {o.filledQty}
-                        </TableCell>
-                        <TableCell className="text-right tabular-nums">
-                          {formatOrderPrice(o.filledAvgPrice)}
-                        </TableCell>
-                        <TableCell>
-                          <OrderStatusBadge status={o.status} intentState={o.intentState} />
-                        </TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground hidden md:table-cell">
-                          {o.strategyId || 'Manual'}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Button asChild size="sm" variant="ghost" className="h-8">
-                            <Link href={`/trader/orders/${o.orderId}`}>View →</Link>
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
         </div>
 
         {/* Right sidebar: risk & exit / manage / why-it's-held / broker. */}
