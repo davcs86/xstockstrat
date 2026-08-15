@@ -398,7 +398,7 @@ Coverage ≥ 40%; AC-2 half-weight test and the repoint test are green (and were
 
 ### Step 8 — service: `/config-ui` Sources page weight column becomes read/write against `reliability_weight`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/hooks/useSignalSources.ts` — modify
@@ -454,7 +454,7 @@ Behavioral proof runs in Step 9 (Playwright).
 
 ### Step 9 — test: `/config-ui` Sources weight inline-edit e2e + fixture centralization (C-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/config-ui/sources.spec.ts` — modify (add inline-edit-weight test)

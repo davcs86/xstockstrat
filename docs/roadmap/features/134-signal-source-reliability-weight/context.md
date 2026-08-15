@@ -239,3 +239,32 @@
 - C-13 verdict: signal-source literals single-consumer (this module) → inline compliant.
 - Files modified: `tests/test_analysis_servicer.py`
 - TDD: red (3 failing) → green (467 passed, 82.04%). Deviations: none.
+
+### Step 8 — service: /config-ui Sources weight cell read/write [done]
+- `useSignalSources.ts`: dropped the `configClient.listKeys(...)` combine + `weights` map/parse; returns
+  just `sources` from `ingestClient.listSignalSources({includeInactive:true})` — the weight now lives on
+  each `SignalSource` as `reliabilityWeight`.
+- `sources/page.tsx`: replaced the read-only weight cell (`{weights[src.slug] ?? 1.0}`) with a
+  click-to-edit inline control (local `editingWeightSlug`/`weightValue`/`weightError` state, `<Input>`,
+  Save/Cancel). Display `src.reliabilityWeight ?? 1.0`. Bespoke `[0,1]` scalar validator (~2 lines, not
+  `validateFloatMap`). On Save → `useManageSignalSource().mutate` with `operation:'update'`,
+  `source:{slug, reliabilityWeight}`, `updateMask:{paths:['reliability_weight']}`. Full edit modal untouched.
+- Files modified: `src/app/config-ui/hooks/useSignalSources.ts`, `src/app/config-ui/sources/page.tsx`
+- TDD: red is structural — the Step 9 e2e drives DOM (`weight-<slug>` testid, the inline editor, the
+  `[0,1]` error) that only exists after Step 8; against the pre-Step-8 read-only cell it fails to find
+  them. green: 16/16 sources.spec.ts pass. Verify: `pnpm run lint` + `tsc --noEmit` clean.
+
+### Step 9 — test: /config-ui weight e2e + fixture centralization (C-12) [done]
+- Created `e2e/fixtures/signalSources.ts` (`SIGNAL_SOURCE_WEIGHTED` @0.5, `SIGNAL_SOURCE_NEUTRAL` @1.0,
+  `SIGNAL_SOURCES`) — distinct weights so the assertion is meaningful. `mock-backend.ts`
+  `listSignalSources`/`manageSignalSource` now import the fixtures; manage echoes the saved
+  `reliabilityWeight`. `INVENTORY.md` points Signal sources at the new module. Barrel re-exports it.
+- New `sources.spec.ts` tests: inline edit → Save sends `update` + `updateMask` + `reliabilityWeight` (the
+  FieldMask serializes camelCase on the wire — the Python server converts to snake_case; asserted the
+  wire form); an out-of-range value is rejected client-side with no ManageSignalSource call.
+- In-scope test churn from the 2nd fixture source: scoped the pre-existing "Live badge" assertion to
+  `.first()` (two LIVE sources now); made the 2nd source `hasCredentials:true`
+  (`authenticated_website`) so proto3 serializes the bool for the ListSignalSources contract test.
+- Files modified: `e2e/config-ui/sources.spec.ts`, `e2e/fixtures/signalSources.ts`,
+  `e2e/fixtures/index.ts`, `e2e/fixtures/INVENTORY.md`, `e2e/mock-backend.ts`
+- TDD: red (weight cell/editor absent pre-Step-8) → green (16/16 sources.spec.ts pass). Deviations: none.
