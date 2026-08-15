@@ -939,3 +939,15 @@ each checkpoint (C-02/P-03).
 - Old symbol page retired; unified page is the sole live symbol route with every section + the ported
   132/138 controls. Remaining: the FR-6 indicator-overlay-panel block (Steps 27–33): proto RPC +
   regen (27–28), config key (29), analysis handler + tests (30–31), UI panels + e2e (32–33).
+
+### Steps 27–28 — proto GetIndicatorSeries RPC + regen [done]
+- Added `import "google/protobuf/wrappers.proto"`, the `GetIndicatorSeries` RPC, and four additive
+  messages (`GetIndicatorSeriesRequest`/`Response`, `ComponentSeries`, `NamedSeries`) to analysis.proto.
+  `NamedSeries.values` is `repeated google.protobuf.DoubleValue` (null-safe warm-up/gap points, not 0.0).
+- `buf lint` clean; `buf breaking` clean — **note**: the breaking check needs the input qualifier
+  `--against ".git#branch=main-dev,subdir=packages/proto"` (without `subdir=` buf can't resolve the
+  other protos' common/v1 imports in the snapshot and reports false compile errors). `buf-gen.sh`
+  itself already passes the right against.
+- `./scripts/buf-gen.sh` regenerated Go/Python/TS stubs; diff scoped to `analysis/v1/` only, idempotent
+  on re-run.
+- Files: `packages/proto/analysis/v1/analysis.proto`, `packages/proto/gen/**` (generated)

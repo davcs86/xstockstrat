@@ -7,6 +7,7 @@ option go_package = "github.com/xstockstrat/contracts/gen/go/analysis/v1;analysi
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/field_mask.proto";
+import "google/protobuf/wrappers.proto";
 import "common/v1/common.proto";
 
 service AnalysisService {
@@ -39,6 +40,11 @@ service AnalysisService {
   rpc SetOpportunityAction(SetOpportunityActionRequest) returns (SetOpportunityActionResponse);
   // Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share).
   rpc GetStrategyAnalytics(GetStrategyAnalyticsRequest) returns (StrategyAnalytics);
+  // Per-component historical indicator series for a strategy over a caller-supplied bar window,
+  // for the unified Symbol page's overlay panels (feature 125, FR-6). Reuses the analysis
+  // evaluator's own _compute_component per declared component in a dedicated handler loop — never
+  // the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
+  rpc GetIndicatorSeries(GetIndicatorSeriesRequest) returns (GetIndicatorSeriesResponse);
 }
 
 message RunBacktestRequest {
@@ -567,4 +573,39 @@ message SetOpportunityActionResponse {}
 
 message GetStrategyAnalyticsRequest {
   string strategy_id = 1;
+}
+
+message GetIndicatorSeriesRequest {
+  string strategy_id = 1;
+  string symbol = 2;
+  // The caller's own already-fetched candlestick closes + their timestamps (the page passes the
+  // exact bars it drew, so the x-axis is parity-aligned and no server re-fetch happens). closes
+  // and times are index-aligned and equal length.
+  repeated double closes = 3;
+  repeated google.protobuf.Timestamp times = 4;
+}
+
+message GetIndicatorSeriesResponse {
+  // Echoes the request times, index-aligned across every series in every component.
+  repeated google.protobuf.Timestamp times = 1;
+  repeated ComponentSeries components = 2;
+}
+
+message ComponentSeries {
+  string ref_name = 1;
+  ComponentKind kind = 2;
+  repeated NamedSeries series = 3;
+  // Non-empty when this component failed to compute (soft-deleted formula, sandbox timeout, NaN
+  // output); series is then empty and the UI renders a per-panel error state. Per-component fault
+  // isolation — one bad component never fails the whole RPC.
+  string error = 4;
+}
+
+message NamedSeries {
+  // "value" (primary) plus each secondary the component emits (bb.upper/bb.lower,
+  // macd.signal/macd.histogram, stoch.d, or custom-formula output keys).
+  string name = 1;
+  // DoubleValue (not repeated double) so a warm-up-head or mid-series None round-trips as an unset
+  // value, never a fabricated 0.0 (feature 125, AC-4a/P-03). Index-aligned with the response times.
+  repeated google.protobuf.DoubleValue values = 2;
 }

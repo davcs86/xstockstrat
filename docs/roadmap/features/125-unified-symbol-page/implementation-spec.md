@@ -1590,7 +1590,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "AC-8 valuation parity"
 
 ### Step 27 — proto: additive `GetIndicatorSeries` RPC + messages for FR-6 overlay panels
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -1693,7 +1693,7 @@ breaking diff expected).
 
 ### Step 28 — proto-gen: regenerate stubs for `GetIndicatorSeries`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/analysis/v1/` — modify (generated)

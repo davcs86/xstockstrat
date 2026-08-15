@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { BacktestResult, EvaluateReadinessRequest, EvaluateReadinessResponse, FundamentalsScanSummary, GetBacktestRequest, GetStrategyAnalyticsRequest, GetStrategyReportRequest, GetStrategyRequest, ListBacktestsRequest, ListBacktestsResponse, ListOpportunitiesRequest, ListOpportunitiesResponse, ListStrategiesRequest, ListStrategiesResponse, ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse, ManageStrategyRequest, RunBacktestRequest, RunFundamentalsScanRequest, ScoreStrategyRequest, ScreenSymbolsRequest, ScreenSymbolsResponse, SetOpportunityActionRequest, SetOpportunityActionResponse, SetStrategyLiveRequest, SetStrategyLiveResponse, StrategyAnalytics, StrategyDefinition, StrategyReport, StrategyScore } from "./analysis_pb.js";
+import { BacktestResult, EvaluateReadinessRequest, EvaluateReadinessResponse, FundamentalsScanSummary, GetBacktestRequest, GetIndicatorSeriesRequest, GetIndicatorSeriesResponse, GetStrategyAnalyticsRequest, GetStrategyReportRequest, GetStrategyRequest, ListBacktestsRequest, ListBacktestsResponse, ListOpportunitiesRequest, ListOpportunitiesResponse, ListStrategiesRequest, ListStrategiesResponse, ListStrategyDefinitionsRequest, ListStrategyDefinitionsResponse, ManageStrategyRequest, RunBacktestRequest, RunFundamentalsScanRequest, ScoreStrategyRequest, ScreenSymbolsRequest, ScreenSymbolsResponse, SetOpportunityActionRequest, SetOpportunityActionResponse, SetStrategyLiveRequest, SetStrategyLiveResponse, StrategyAnalytics, StrategyDefinition, StrategyReport, StrategyScore } from "./analysis_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -175,6 +175,20 @@ export const AnalysisService = {
       name: "GetStrategyAnalytics",
       I: GetStrategyAnalyticsRequest,
       O: StrategyAnalytics,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * Per-component historical indicator series for a strategy over a caller-supplied bar window,
+     * for the unified Symbol page's overlay panels (feature 125, FR-6). Reuses the analysis
+     * evaluator's own _compute_component per declared component in a dedicated handler loop — never
+     * the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.GetIndicatorSeries
+     */
+    getIndicatorSeries: {
+      name: "GetIndicatorSeries",
+      I: GetIndicatorSeriesRequest,
+      O: GetIndicatorSeriesResponse,
       kind: MethodKind.Unary,
     },
   }

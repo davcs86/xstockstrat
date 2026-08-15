@@ -1,5 +1,5 @@
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import type { FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
+import type { DoubleValue, FieldMask, Timestamp } from "@bufbuild/protobuf/wkt";
 import type { PageRequest, PageResponse, Timeframe, TimeRange } from "../../common/v1/common_pb";
 import type { JsonObject, Message } from "@bufbuild/protobuf";
 /**
@@ -1449,6 +1449,110 @@ export type GetStrategyAnalyticsRequest = Message<"xstockstrat.analysis.v1.GetSt
  */
 export declare const GetStrategyAnalyticsRequestSchema: GenMessage<GetStrategyAnalyticsRequest>;
 /**
+ * @generated from message xstockstrat.analysis.v1.GetIndicatorSeriesRequest
+ */
+export type GetIndicatorSeriesRequest = Message<"xstockstrat.analysis.v1.GetIndicatorSeriesRequest"> & {
+    /**
+     * @generated from field: string strategy_id = 1;
+     */
+    strategyId: string;
+    /**
+     * @generated from field: string symbol = 2;
+     */
+    symbol: string;
+    /**
+     * The caller's own already-fetched candlestick closes + their timestamps (the page passes the
+     * exact bars it drew, so the x-axis is parity-aligned and no server re-fetch happens). closes
+     * and times are index-aligned and equal length.
+     *
+     * @generated from field: repeated double closes = 3;
+     */
+    closes: number[];
+    /**
+     * @generated from field: repeated google.protobuf.Timestamp times = 4;
+     */
+    times: Timestamp[];
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.GetIndicatorSeriesRequest.
+ * Use `create(GetIndicatorSeriesRequestSchema)` to create a new message.
+ */
+export declare const GetIndicatorSeriesRequestSchema: GenMessage<GetIndicatorSeriesRequest>;
+/**
+ * @generated from message xstockstrat.analysis.v1.GetIndicatorSeriesResponse
+ */
+export type GetIndicatorSeriesResponse = Message<"xstockstrat.analysis.v1.GetIndicatorSeriesResponse"> & {
+    /**
+     * Echoes the request times, index-aligned across every series in every component.
+     *
+     * @generated from field: repeated google.protobuf.Timestamp times = 1;
+     */
+    times: Timestamp[];
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.ComponentSeries components = 2;
+     */
+    components: ComponentSeries[];
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.GetIndicatorSeriesResponse.
+ * Use `create(GetIndicatorSeriesResponseSchema)` to create a new message.
+ */
+export declare const GetIndicatorSeriesResponseSchema: GenMessage<GetIndicatorSeriesResponse>;
+/**
+ * @generated from message xstockstrat.analysis.v1.ComponentSeries
+ */
+export type ComponentSeries = Message<"xstockstrat.analysis.v1.ComponentSeries"> & {
+    /**
+     * @generated from field: string ref_name = 1;
+     */
+    refName: string;
+    /**
+     * @generated from field: xstockstrat.analysis.v1.ComponentKind kind = 2;
+     */
+    kind: ComponentKind;
+    /**
+     * @generated from field: repeated xstockstrat.analysis.v1.NamedSeries series = 3;
+     */
+    series: NamedSeries[];
+    /**
+     * Non-empty when this component failed to compute (soft-deleted formula, sandbox timeout, NaN
+     * output); series is then empty and the UI renders a per-panel error state. Per-component fault
+     * isolation — one bad component never fails the whole RPC.
+     *
+     * @generated from field: string error = 4;
+     */
+    error: string;
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.ComponentSeries.
+ * Use `create(ComponentSeriesSchema)` to create a new message.
+ */
+export declare const ComponentSeriesSchema: GenMessage<ComponentSeries>;
+/**
+ * @generated from message xstockstrat.analysis.v1.NamedSeries
+ */
+export type NamedSeries = Message<"xstockstrat.analysis.v1.NamedSeries"> & {
+    /**
+     * "value" (primary) plus each secondary the component emits (bb.upper/bb.lower,
+     * macd.signal/macd.histogram, stoch.d, or custom-formula output keys).
+     *
+     * @generated from field: string name = 1;
+     */
+    name: string;
+    /**
+     * DoubleValue (not repeated double) so a warm-up-head or mid-series None round-trips as an unset
+     * value, never a fabricated 0.0 (feature 125, AC-4a/P-03). Index-aligned with the response times.
+     *
+     * @generated from field: repeated google.protobuf.DoubleValue values = 2;
+     */
+    values: DoubleValue[];
+};
+/**
+ * Describes the message xstockstrat.analysis.v1.NamedSeries.
+ * Use `create(NamedSeriesSchema)` to create a new message.
+ */
+export declare const NamedSeriesSchema: GenMessage<NamedSeries>;
+/**
  * @generated from enum xstockstrat.analysis.v1.BacktestStatus
  */
 export declare enum BacktestStatus {
@@ -1987,5 +2091,18 @@ export declare const AnalysisService: GenService<{
         methodKind: "unary";
         input: typeof GetStrategyAnalyticsRequestSchema;
         output: typeof StrategyAnalyticsSchema;
+    };
+    /**
+     * Per-component historical indicator series for a strategy over a caller-supplied bar window,
+     * for the unified Symbol page's overlay panels (feature 125, FR-6). Reuses the analysis
+     * evaluator's own _compute_component per declared component in a dedicated handler loop — never
+     * the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
+     *
+     * @generated from rpc xstockstrat.analysis.v1.AnalysisService.GetIndicatorSeries
+     */
+    getIndicatorSeries: {
+        methodKind: "unary";
+        input: typeof GetIndicatorSeriesRequestSchema;
+        output: typeof GetIndicatorSeriesResponseSchema;
     };
 }>;

@@ -654,6 +654,45 @@ export interface SetOpportunityActionResponse {
 export interface GetStrategyAnalyticsRequest {
     strategyId: string;
 }
+export interface GetIndicatorSeriesRequest {
+    strategyId: string;
+    symbol: string;
+    /**
+     * The caller's own already-fetched candlestick closes + their timestamps (the page passes the
+     * exact bars it drew, so the x-axis is parity-aligned and no server re-fetch happens). closes
+     * and times are index-aligned and equal length.
+     */
+    closes: number[];
+    times: Date[];
+}
+export interface GetIndicatorSeriesResponse {
+    /** Echoes the request times, index-aligned across every series in every component. */
+    times: Date[];
+    components: ComponentSeries[];
+}
+export interface ComponentSeries {
+    refName: string;
+    kind: ComponentKind;
+    series: NamedSeries[];
+    /**
+     * Non-empty when this component failed to compute (soft-deleted formula, sandbox timeout, NaN
+     * output); series is then empty and the UI renders a per-panel error state. Per-component fault
+     * isolation — one bad component never fails the whole RPC.
+     */
+    error: string;
+}
+export interface NamedSeries {
+    /**
+     * "value" (primary) plus each secondary the component emits (bb.upper/bb.lower,
+     * macd.signal/macd.histogram, stoch.d, or custom-formula output keys).
+     */
+    name: string;
+    /**
+     * DoubleValue (not repeated double) so a warm-up-head or mid-series None round-trips as an unset
+     * value, never a fabricated 0.0 (feature 125, AC-4a/P-03). Index-aligned with the response times.
+     */
+    values: number[];
+}
 export declare const RunBacktestRequest: MessageFns<RunBacktestRequest>;
 export declare const CoverageGap: MessageFns<CoverageGap>;
 export declare const BacktestResult: MessageFns<BacktestResult>;
@@ -701,6 +740,10 @@ export declare const EvaluateReadinessResponse: MessageFns<EvaluateReadinessResp
 export declare const SetOpportunityActionRequest: MessageFns<SetOpportunityActionRequest>;
 export declare const SetOpportunityActionResponse: MessageFns<SetOpportunityActionResponse>;
 export declare const GetStrategyAnalyticsRequest: MessageFns<GetStrategyAnalyticsRequest>;
+export declare const GetIndicatorSeriesRequest: MessageFns<GetIndicatorSeriesRequest>;
+export declare const GetIndicatorSeriesResponse: MessageFns<GetIndicatorSeriesResponse>;
+export declare const ComponentSeries: MessageFns<ComponentSeries>;
+export declare const NamedSeries: MessageFns<NamedSeries>;
 export type AnalysisServiceService = typeof AnalysisServiceService;
 export declare const AnalysisServiceService: {
     readonly runBacktest: {
@@ -866,6 +909,21 @@ export declare const AnalysisServiceService: {
         readonly responseSerialize: (value: StrategyAnalytics) => Buffer;
         readonly responseDeserialize: (value: Buffer) => StrategyAnalytics;
     };
+    /**
+     * Per-component historical indicator series for a strategy over a caller-supplied bar window,
+     * for the unified Symbol page's overlay panels (feature 125, FR-6). Reuses the analysis
+     * evaluator's own _compute_component per declared component in a dedicated handler loop — never
+     * the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
+     */
+    readonly getIndicatorSeries: {
+        readonly path: "/xstockstrat.analysis.v1.AnalysisService/GetIndicatorSeries";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetIndicatorSeriesRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetIndicatorSeriesRequest;
+        readonly responseSerialize: (value: GetIndicatorSeriesResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => GetIndicatorSeriesResponse;
+    };
 };
 export interface AnalysisServiceServer extends UntypedServiceImplementation {
     runBacktest: handleUnaryCall<RunBacktestRequest, BacktestResult>;
@@ -903,6 +961,13 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
     setOpportunityAction: handleUnaryCall<SetOpportunityActionRequest, SetOpportunityActionResponse>;
     /** Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share). */
     getStrategyAnalytics: handleUnaryCall<GetStrategyAnalyticsRequest, StrategyAnalytics>;
+    /**
+     * Per-component historical indicator series for a strategy over a caller-supplied bar window,
+     * for the unified Symbol page's overlay panels (feature 125, FR-6). Reuses the analysis
+     * evaluator's own _compute_component per declared component in a dedicated handler loop — never
+     * the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
+     */
+    getIndicatorSeries: handleUnaryCall<GetIndicatorSeriesRequest, GetIndicatorSeriesResponse>;
 }
 export interface AnalysisServiceClient extends Client {
     runBacktest(request: RunBacktestRequest, callback: (error: ServiceError | null, response: BacktestResult) => void): ClientUnaryCall;
@@ -972,6 +1037,15 @@ export interface AnalysisServiceClient extends Client {
     getStrategyAnalytics(request: GetStrategyAnalyticsRequest, callback: (error: ServiceError | null, response: StrategyAnalytics) => void): ClientUnaryCall;
     getStrategyAnalytics(request: GetStrategyAnalyticsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: StrategyAnalytics) => void): ClientUnaryCall;
     getStrategyAnalytics(request: GetStrategyAnalyticsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: StrategyAnalytics) => void): ClientUnaryCall;
+    /**
+     * Per-component historical indicator series for a strategy over a caller-supplied bar window,
+     * for the unified Symbol page's overlay panels (feature 125, FR-6). Reuses the analysis
+     * evaluator's own _compute_component per declared component in a dedicated handler loop — never
+     * the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
+     */
+    getIndicatorSeries(request: GetIndicatorSeriesRequest, callback: (error: ServiceError | null, response: GetIndicatorSeriesResponse) => void): ClientUnaryCall;
+    getIndicatorSeries(request: GetIndicatorSeriesRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetIndicatorSeriesResponse) => void): ClientUnaryCall;
+    getIndicatorSeries(request: GetIndicatorSeriesRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetIndicatorSeriesResponse) => void): ClientUnaryCall;
 }
 export declare const AnalysisServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): AnalysisServiceClient;
