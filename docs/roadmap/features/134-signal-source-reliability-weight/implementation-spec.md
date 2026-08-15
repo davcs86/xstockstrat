@@ -1,6 +1,6 @@
 # Implementation Spec: signal-source-reliability-weight
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-08-14
 **Feature**: `docs/roadmap/features/134-signal-source-reliability-weight/feature.md`
 **Total Steps**: 11
@@ -549,7 +549,7 @@ Read both: the `.up` UPDATE is reversed by the `.down` UPDATE (original descript
 
 ### Step 11 — docs: Fix the two doc-drift sites the FR-4 replace falsifies
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` / `xstockstrat-analysis`
 **Files**:
 - `docs/patterns/config-governance.md` — modify

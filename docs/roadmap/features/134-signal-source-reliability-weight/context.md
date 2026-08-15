@@ -277,3 +277,19 @@
 - Files modified: `services/xstockstrat-config/migrations/016_*.{up,down}.sql`
 - Verify (offline, no DB): both exist; `.up` UPDATE reversed by `.down`. Live apply runs in CI.
 - Deviations: none.
+
+### Step 11 — docs: fix FR-4 doc-drift [done]
+- `docs/patterns/config-governance.md` (feature-097 line): dropped "source_weights is unchanged (stays
+  the screener's)"; states it is superseded by `ingest.SignalSource.reliability_weight`, read via
+  `ListSignalSources` by both the queue and the screener.
+- `services/xstockstrat-analysis/CLAUDE.md`: the config-key row now says "Superseded (feature 134) —
+  retained but no longer read" (fixed the "clamped at read time" claim); the signal_rank_weight row's
+  "stays the screener's" mention corrected to "(feature-134-superseded)".
+- context-scrubber: context-forge plugin not installed this session (noted in the PR body per the
+  teardown rule); touched docs reviewed by hand against the code.
+- Files modified: `docs/patterns/config-governance.md`, `services/xstockstrat-analysis/CLAUDE.md`
+- Deviations: none.
+
+### Feature 134 — code-completed
+All 11 steps done. proto+codegen (1-2), ingest migration+service+tests (3-5, 190 green), analysis
+service+tests (6-7, 467 green), config-ui service+e2e (8-9, 16/16 green), config migration (10), docs (11).

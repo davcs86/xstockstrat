@@ -1,6 +1,6 @@
 # Feature: signal-source-reliability-weight
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/signal-source-reliability-weight`
 **Created**: 2026-08-13
 **Last Updated**: 2026-08-14
@@ -16,6 +16,7 @@
 | 2026-08-13 | `spec-ready` → `design-approved` | /sdd-design | Design debated (4 rounds, full) and approved; recon.md + design.md written |
 | 2026-08-14 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 11 steps |
 | 2026-08-15 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started (Step 1) |
+| 2026-08-15 | `in-progress` → `code-completed` | /sdd-execute | All 11 steps done; integration PR next |
 
 ---
 

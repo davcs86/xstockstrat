@@ -165,7 +165,7 @@ an operator can halt live trading during an incident while paper testing continu
 
 ### feature 097 — opportunity-universe-unification (`xstockstrat-analysis`)
 
-Config surface for the materialized opportunity queue (lazy compute-on-read + stale-while-revalidate + a daily refresh). `analysis.signals.source_weights` is **unchanged** (stays the screener's); the queue's independent signal ranking axis is the new scalar `analysis.opportunity.signal_rank_weight`.
+Config surface for the materialized opportunity queue (lazy compute-on-read + stale-while-revalidate + a daily refresh). The queue's independent signal ranking axis is the new scalar `analysis.opportunity.signal_rank_weight`. (Feature 134 note: `analysis.signals.source_weights` is now **superseded** — per-source reliability weight lives on `ingest.SignalSource.reliability_weight` and both analysis read paths, the queue and the screener, read it via `ListSignalSources`; the config key is retained but no longer read.)
 
 | Key | Type | Default | Description |
 |---|---|---|---|
