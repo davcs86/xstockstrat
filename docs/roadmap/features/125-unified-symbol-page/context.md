@@ -416,3 +416,57 @@ execution).
 **Next**: `/sdd-design unified-symbol-page quick` — debate FR-6's indicator-overlay-panel
 architecture, then `/sdd-spec unified-symbol-page` to add implementation steps, then resume
 `/sdd-execute unified-symbol-page` (all 27 steps, starting from Step 1 — none executed yet).
+
+---
+
+## Session 2026-08-15 — sdd-design (FR-6 addendum)
+
+- **Phase 0 Recon**: appended an FR-6 addendum to recon.md (services: `xstockstrat-indicators`,
+  `xstockstrat-analysis`, `xstockstrat-ui`). Key reuse patterns found: `StrategyEvaluator._compute_component`/
+  `align_indicator_points` (`evaluator.py:215-317`) is the ONLY proven `StrategyComponent → aligned
+  per-bar series` path, but it's reachable today only via `RunBacktest`'s heavyweight diagnostics or
+  the last-bar-only `EvaluateReadiness` trace — no lightweight standalone read exists. `ComputeIndicator`/
+  `ExecuteFormula` are stateless whole-series compute (caller supplies closes). `useCandlestickChart.ts`
+  has no multi-pane infra; `FormulaRunResult.tsx` is the in-repo stacked-`recharts` precedent.
+- **Phase 1 Grilling**: 3 rounds, full mode (user escalated from `quick` to full after round 1).
+  - Round 1: new `GetIndicatorSeries` RPC (dedicated). Adversary: no Floor breach, but flagged a
+    C-10(b) overlay-vs-readiness parity gap, missing per-component fault isolation, a semaphore-reuse
+    overclaim (screener's is per-request), and an inert Suspense mitigation.
+  - Round 2: proposer REVERSED to "widen `EvaluateReadiness`" (the series dict is already computed
+    there; parity by construction). Adversary VERIFIED that claim true — but found the disqualifier:
+    `evaluate_conditions_traced` is shared with launched feature 097's `ListOpportunities` exit trace
+    (`servicer.py:2207`), so adding fault-isolation there silently changes held-position exit-signal
+    semantics.
+  - Round 3 (user chose "converge on dedicated RPC"): back to a dedicated `GetIndicatorSeries`, now
+    with all fixes. Final adversary VERIFIED `_compute_component` needs only closes (so client-supplied
+    closes is faithful, not a regression — high/low/volume are already unavailable in every existing
+    path), and that the `None` warm-up/gap representation is real (→ `DoubleValue` unset, no `0.0`).
+    Two must-fix items folded in: the parity test must be evaluator-level (not cross-RPC — the two
+    RPCs fetch different bar windows, making a cross-RPC assertion flaky for path-dependent
+    indicators), and the semaphore needs the `max(1, …)` clamp both siblings use. Orchestrator
+    grounded and corrected the bar-source decision mid-round: the candlestick fetches by `pageSize`
+    count, not a `TimeRange` (`positions/[symbol]/page.tsx:84-91`), so option (b) "reuse the
+    TimeRange" was impossible — corrected to client-supplied closes+times (option a).
+- **Chosen approach**: new additive `AnalysisService.GetIndicatorSeries(strategy_id, symbol, closes[],
+  times[])` reusing `_compute_component` in its own isolated handler loop; `DoubleValue` null-safe
+  series; per-component fault isolation; process-lifetime singleton semaphore
+  `analysis.series.max_concurrent_components` (default 4); stacked `recharts` panels via the
+  already-sanctioned cross-segment `analysisClient`; evaluator-level parity test.
+- **Rejected**: widen `EvaluateReadiness` (shared-method blast radius onto launched 097); UI-direct
+  indicator orchestration (TS logic duplication + unthrottled sandbox); server re-fetch from a
+  `TimeRange` (false premise — candlestick uses `pageSize`); `RunBacktest` diagnostics reuse
+  (side-effecting full simulation per page view); `repeated double` with NaN/0.0 sentinel (fabricates
+  data, AC-4a violation).
+- **Constitution rules touched**: C-01, C-05, C-08/P-06, C-09, C-10(b), C-14. Floor breaches: none in
+  any of the 3 rounds.
+- **New Open Risks** (carried to design.md): uncapped `StrategyDefinition.components` fan-out (panel
+  count uncapped though concurrency is semaphore-bounded); `/sdd-spec` must confirm the `Bar`
+  timestamp attribute name (`marketdata.proto:46` says `time`; `evaluator.py:105` docstring says
+  `timestamp`); paired tests for fault isolation + `None→unset DoubleValue` mapping beyond parity.
+- **Status**: unchanged at `implementation-ready` (feature was already past `design-approved`; design.md
+  amended with an addendum, not re-gated). product-spec.md FR-6/Affected Services/Proto/Config/AC-4a
+  corrected in lockstep. `/sdd-spec` must be re-run to add the FR-6 implementation steps.
+
+**Next**: `/sdd-spec unified-symbol-page` (add FR-6 steps: proto + buf-gen predecessor, analysis
+service + paired tests, UI overlay-panel component + wiring), then `/sdd-review impl-spec`, then
+`/sdd-execute`.

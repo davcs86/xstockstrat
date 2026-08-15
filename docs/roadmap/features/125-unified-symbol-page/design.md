@@ -404,3 +404,225 @@ old bookmarks/external links), not a distinct surface.
 - **F-11** (Floor rejection halts) — honored trivially: no Floor breach was flagged by any adversary
   in any of the 7 rounds (5 to the design skill's normal cap, 2 more under the user's explicit
   override).
+
+---
+
+# Design Addendum — FR-6 Indicator Overlay Panels (2026-08-15)
+
+**Created**: 2026-08-15
+**Rounds**: 3 (full mode — user escalated from `quick` to full after round 1; min 2, cap 5; termination:
+approved by user @ 2026-08-15). **Grounded in**: recon.md § "Recon Addendum — FR-6 Indicator Overlay
+Panels (2026-08-15)".
+**Scope**: this addendum covers ONLY the FR-6 amendment (indicator overlay chart panels). The original
+7-round design above is unchanged.
+
+## Chosen Approach (FR-6)
+
+### New dedicated RPC `AnalysisService.GetIndicatorSeries` — not widening `EvaluateReadiness`
+
+A new **additive** RPC on `AnalysisService`, with a NEW handler method peer to `EvaluateReadiness`
+(`services/xstockstrat-analysis/app/handlers/servicer.py:1959`). It reuses that handler's proven
+skeleton — build `propagation_meta` (`servicer.py:1963-1967`), guard `self._strategies_repo is None`
+→ `UNAVAILABLE`, resolve the strategy via `self._strategies_repo.get_by_id` +
+`_row_to_strategy_definition` (`servicer.py:1971-1977`), instantiate its own
+`StrategyEvaluator(self._indicators, propagation_meta)` (`servicer.py:1978`) — but **diverges on one
+decisive point**: instead of calling `evaluate_conditions_traced`, the handler runs its OWN loop over
+`definition.components`, calling `evaluator._compute_component(comp, closes)` directly
+(`evaluator.py:215-292`).
+
+**Why a dedicated RPC and not widening `EvaluateReadiness` (round 2 → round 3 reversal).** Round 2
+proposed adding `include_component_series` to `EvaluateReadiness` for "parity by construction." Round
+2's adversary verified the load-bearing facts were true (the full `component_series` dict is already
+built unconditionally at `evaluator.py:201-207`; the handler's missing try/except is a real
+pre-existing crash bug) — but found a disqualifying flaw: `evaluate_conditions_traced` is **shared
+with `ListOpportunities`** (launched feature 097's exit-rule trace on held positions, call site
+`servicer.py:2207`). Any per-component fault-isolation added inside that shared method silently
+changes live exit-signal semantics — a failed/omitted component resolves via `_resolve_term`→`None`→
+`CONDITION_STATE_UNSPECIFIED` (`evaluator.py:512-517,554-555`), which can suppress `exit_fires` for a
+held position with no visible error to the trader. A dedicated handler's try/except + semaphore live
+in **its own** method and are structurally incapable of reaching the `ListOpportunities` path — that
+isolation is the entire reason for the choice (user decision at the round-2 gate).
+
+### Bar source — client supplies the candlestick's own closes+times (no server-side re-fetch)
+
+`GetIndicatorSeriesRequest{ strategy_id, symbol, repeated double closes, repeated google.protobuf.Timestamp times }`
+— **no `TimeRange`**. The page captures the exact bars it already fetched for the candlestick chart
+and passes their `closes` and `times` to the RPC; the server runs `_compute_component` on those
+supplied closes and zips aligned outputs against the supplied `times`. It does **not** fetch bars.
+
+- **Round 3's option (b) ("client passes the same `TimeRange`, server re-fetches") was rejected on a
+  verified false premise**: `/trader/positions/[symbol]/page.tsx:84-91` fetches bars via
+  `page: { pageSize: 200 }` (a **count**), not a `TimeRange`, and discards the bars after
+  `series.setData` (only `barsError` survives in state). There is no `TimeRange` to reuse.
+- **Verified safe (round-3 adversary)**: `_compute_component` consumes **only** `closes` — the
+  builtin path passes `values=closes` and nothing else (`evaluator.py:227-234`); the custom-formula
+  path builds `input_data` from `{"close": closes}` only (`evaluator.py:237-238`), never high/low/
+  volume. This is identical to what `evaluate_with_series` (`evaluator.py:142`) and
+  `evaluate_conditions_traced` (`evaluator.py:200`) already feed it — so a formula that reads
+  `data["high"]`/`data["volume"]` is *already* under-served in backtest/live today (a pre-existing
+  platform property, out of 125's scope), and option (a) preserves exact parity with what backtest
+  computes.
+- **Benefit**: structural x-axis parity by construction (identical bars feed both the candlestick
+  chart and the panels), zero second bars fetch, and it matches the platform's existing
+  caller-supplies-`values` model (`ComputeIndicatorRequest.values` is caller-supplied,
+  `indicators.proto:45`). The positions page must add small new state to retain the fetched bars
+  (today it discards them, `page.tsx:96`).
+
+### Response shape — null-safe, all-series-per-component, server-owned timestamps
+
+`GetIndicatorSeriesResponse{ repeated google.protobuf.Timestamp times, repeated ComponentSeries components }`;
+`ComponentSeries{ string ref_name, ComponentKind kind, repeated NamedSeries series, string error }`;
+`NamedSeries{ string name, repeated google.protobuf.DoubleValue values }`. Requires
+`import "google/protobuf/wrappers.proto"` in `analysis.proto`.
+
+- **Null-safe encoding (`google.protobuf.DoubleValue`, not `repeated double`).** proto3 `repeated
+  double` cannot represent null — a warm-up-head `None` or a custom-formula mid-series `None` would
+  round-trip to a fabricated `0.0`, violating AC-4a ("no fabricated/placeholder series"). `DoubleValue`
+  gives native presence; `None → unset DoubleValue`, a finite float → `DoubleValue(value=x)`. Chosen
+  over a parallel bool present-mask (two arrays that can desync) and a per-point `{time,value,has_value}`
+  triple (repeats timestamps N×). **Verified (round-3 adversary)** the `None` representation is real,
+  not `NaN`/`0.0`: builtin warm-up head is `[None]*n` filled only at the tail (`align_indicator_points`,
+  `evaluator.py:308-316`); custom-formula gaps pass through `_finite_or_none` which maps
+  `None`/`NaN`/`Inf`/non-numeric → `None` (`evaluator.py:39-45`, applied at `:283`).
+- **Every emitted series per component is carried** — `ComponentSeries.series` = one `NamedSeries` for
+  the primary `"value"` plus each secondary the component emits (`bb.upper`/`bb.lower`,
+  `macd.signal`/`macd.histogram`, `stoch.d`, or custom-formula output keys) — exactly the `series_map`
+  keys `_compute_component` returns (`evaluator.py:58-67,268-291`; `IndicatorPoint.extra` per
+  `indicators_engine.py:75-133`). A panel renders all of a component's lines; no sub-series is dropped
+  (FR-12/P-03).
+- **Server owns per-point timestamps** — `IndicatorPoint.time` is never set by the indicators service
+  (`indicators.proto:59` populated nowhere; `servicer.py:66-71`), so the response's shared `times`
+  array is the client-supplied bar timestamps, index-aligned across every series.
+
+### Per-component fault isolation
+
+Each `_compute_component` await is wrapped in `try/except (FormulaExecutionError, Exception)` **inside
+the new handler's own loop**. On failure that component's `ComponentSeries` is returned with a
+populated `error` string and empty `series` → the UI renders a per-panel error/no-data state; the RPC
+still succeeds and every other component's panel renders. One bad custom-formula component
+(soft-deleted formula, sandbox timeout, NaN output — `evaluator.py:252-291` raises
+`FormulaExecutionError`) never takes down the whole section. This changes **only** the new handler,
+never the shared `evaluate_conditions_traced` (so `ListOpportunities` is untouched).
+
+### Concurrency — process-lifetime singleton semaphore
+
+`self._component_series_sem = asyncio.Semaphore(max(1, self._cfg.get_int("analysis.series.max_concurrent_components", 4)))`
+constructed once in `AnalysisServicer.__init__` (`servicer.py:117`, confirmed boot-once via
+`main.py:59-69`), acquired via `async with` in the handler loop around each `_compute_component`
+await (release-safe on exception). Because the handler loop is sequential (no `asyncio.gather`), the
+singleton bounds **cross-request** concurrency — total in-flight `ComputeIndicator`/`ExecuteFormula`
+across simultaneous page loads — the live-loop-starvation guard recon flagged, mirroring
+`ScreenerEngine`'s intent (`screener.py:84-86`) but as a genuine process-lifetime singleton rather
+than a per-request instance. It threads through **no** `StrategyEvaluator` call site (all 5 untouched).
+
+- **`max(1, …)` clamp is mandatory (round-3 adversary)** — both sibling semaphores use it
+  (`screener.py:84-85`, `entry_backfill.py:54-55`); dropping it means a negative config value reaches
+  `asyncio.Semaphore(-n)` → `ValueError` and a `0` would deadlock the handler. `get_int`'s zero-trap
+  covers config `0`→default, but the clamp covers negatives.
+- **Config key `analysis.series.max_concurrent_components`** (int, default 4) — new `analysis.series.*`
+  category (not `analysis.readiness.*`: this is not readiness; not `analysis.indicators.*`: collides
+  in spirit with the `xstockstrat-indicators` service's own `indicators.sandbox.*` namespace). Needs a
+  `services/xstockstrat-analysis/CLAUDE.md` § Config Keys row + a per-feature registered-keys entry in
+  `docs/patterns/config-governance.md` (C-05).
+
+### Parity test — evaluator-level, not cross-RPC (round-3 adversary correction)
+
+**C-10(b) parity is proven at the evaluator/unit layer, NOT by a cross-RPC assertion.** The naive
+"assert `GetIndicatorSeries`'s last-bar primary value == `EvaluateReadiness`'s `ConditionEval.lhsValue`
+for the same ref" is **flaky by construction** under the chosen bar-source: `GetIndicatorSeries`
+receives the client's candlestick closes (a `pageSize:200` count) while `EvaluateReadiness` fetches
+its **own** bars internally via `_recent_range(_READINESS_LOOKBACK_DAYS)` → `_fetch_bars_paged`
+(`servicer.py:1979,1983`) — a different-length set. For a path-dependent indicator (EMA/RSI/MACD/ATR —
+recursive/Wilder seeding) the last-bar value over a different-length `closes` **legitimately differs**,
+so the assertion tests bar-fetch equivalence, not computation parity. **The real invariant** ("same
+`closes` → same series") is proven by a Python unit test feeding one fixed `closes` fixture through
+both code paths (or feeding both RPCs an identical controlled bar set), discharging the C-10(b)
+obligation deterministically. This is the ledger-056 "two paths drift apart" lesson applied correctly
+rather than nominally cited.
+
+### Rendering
+
+Stacked `recharts` `ChartContainer`+`LineChart` panels (`FormulaRunResult.tsx:43-88` — the proven
+in-repo stacked-independent-chart pattern), one panel per `ComponentSeries`, drawing every
+`NamedSeries` in that component's panel as its own `<Line>`. `isLoading` skeleton gating
+(`SignalReadiness.tsx:64-71`'s existing per-section pattern; **no** Suspense — `useSuspenseQuery` has
+zero usages anywhere in the codebase). Explicit no-data state for zero declared components, an
+unresolvable strategy, or a per-component `error`. The UI calls the new RPC through the already-bound
+`analysisClient` (`baseUrl: '/insights/api'`) under **this feature's already-approved cross-segment
+sanctioned exception** — no new `traderBff.ts` registration, and `xstockstrat-indicators` is not
+called by the UI at all (reached only transitively, server-side, through the new analysis RPC).
+
+- **Not a `lightweight-charts` second pane** — the sanctioned `useCandlestickChart` hook has no
+  sub-pane/second-series infrastructure (recon: zero `addLineSeries`/`priceScaleId` usage anywhere),
+  and `FormulaRunResult.tsx` is a proven working stacking analog. Kept the candlestick on
+  `lightweight-charts` (its own sanctioned exception) and stacked recharts panels beneath it.
+
+### Strategy resolution & no-data (inherited, not re-argued)
+
+The strategy whose components are charted follows FR-6's existing precedence (watchlist binding, else
+the strategy picker's current selection) — unchanged from the already-approved design; this addendum
+only decides how a series is computed once a `strategy_id` is in hand. No resolvable strategy → skip
+the RPC, show the no-data state (mirrors FR-9/AC-6's existing pattern, no new rule).
+
+## Rejected Alternatives (FR-6)
+
+- **Widen `EvaluateReadiness` with `include_component_series`** (round 2's recommendation) — rejected
+  round 3: `evaluate_conditions_traced` is shared with launched `ListOpportunities` (`servicer.py:2207`),
+  so its fault-isolation change would silently alter held-position exit-signal semantics. A dedicated
+  handler is structurally isolated. (The round-2 finding that the series dict is *already computed*
+  there remains true and is why the dedicated handler can reuse `_compute_component` cheaply — it just
+  does so in its own loop.)
+- **UI directly orchestrates `ComputeIndicator`/`ExecuteFormula` per component** (round-1 Option A,
+  the recon "obvious" path) — rejected: duplicates `_compute_component`/`align_indicator_points`
+  alignment logic in TypeScript (the ledger-056 "two paths drift apart" trap, for computation logic)
+  and inherits the unenforced `indicators.sandbox.max_concurrent` gap into a browser-triggered
+  page-load path with zero server-side throttle.
+- **Server re-fetches bars from a client `TimeRange`** (round-3 option (b)) — rejected on a verified
+  false premise (the candlestick fetches by `pageSize` count, not a `TimeRange`) and because
+  `_compute_component` needs only closes, so a re-fetch buys nothing and introduces a differently
+  windowed bar set (the source of the parity-test flake).
+- **Reuse `RunBacktest`'s `BarDiagnostic.indicators` per-bar map** via a dry-run trigger — rejected:
+  re-runs a full trade simulation (P&L, `backtest_runs` history writes, ledger events) merely to render
+  a chart on every page view — far more expensive and side-effecting than a read.
+- **`repeated double` with a NaN/sentinel for gaps** — rejected: proto3 `repeated double` cannot carry
+  null, and `MessageToDict`/JSON round-trips reject `NaN`; a `0.0` sentinel fabricates a data point
+  (AC-4a violation). `DoubleValue` is the null-safe choice.
+
+## Open Risks (FR-6)
+
+- [ ] **Uncapped component fan-out (NEW — supersedes the original design's "each section reuses a cheap
+  existing RPC" risk call for FR-6).** `StrategyDefinition.components` has no server-enforced count cap
+  (`analysis.proto:252`). `GetIndicatorSeries` is an N-fan-out, sandbox-subprocess-backed compute, not
+  the cheap existing-RPC the original 7-round design's Open Risks assumed (`design.md` above,
+  Performance/UX risk). Mitigations: single-strategy scope (only the resolved strategy's own declared
+  components — no general indicator browser, per Out of Scope) and the
+  `analysis.series.max_concurrent_components` semaphore bounds concurrent formula execution. But **panel
+  count itself is uncapped** — a pathological strategy yields many semaphore-serialized computes and
+  many stacked panels. Named QA check before launch (matches the original design's own
+  performance-Open-Risk posture); a hard component cap is a candidate follow-up, not built here.
+- [ ] **`/sdd-spec` must confirm the `Bar` timestamp attribute name.** `marketdata.proto:46` names it
+  `time`; `evaluator.py:105`'s docstring says `.timestamp`. The client reads bar timestamps to populate
+  the request `times`; `/sdd-spec` verifies the actual generated field before citing it. (Not
+  design-blocking — a naming confirmation.)
+- [ ] **Paired tests beyond parity (C-08).** The new `service` step must pair Python tests for: the
+  evaluator-level parity invariant (above), per-component fault isolation (one component raises →
+  populated `error` + empty series, RPC still OK), and the `None → unset DoubleValue` mapping. Flagged
+  for `/sdd-spec`'s test-step pairing.
+
+## Constitution Rules Touched (FR-6)
+
+- **C-01** (evidence-cited) — honored: every claim cites recon/`path:line`; the round-3 bar-source
+  correction (candlestick uses `pageSize`, not `TimeRange`) was grep-verified before adoption, and the
+  false round-2 "parity by construction" premise was caught and corrected mid-debate.
+- **C-05** (config naming) — honored: `analysis.series.max_concurrent_components` follows
+  `<service>.<category>.<key>`; default declared in `xstockstrat-analysis/CLAUDE.md` + registered-keys log.
+- **C-08 / P-06** (test-step pairing / red-before-green) — honored: the new RPC's `service` step pairs
+  parity + fault-isolation + null-mapping Python tests (named as an Open Risk for `/sdd-spec`).
+- **C-09** (proto verification) — honored: the additive `GetIndicatorSeries` RPC + 4 messages +
+  `wrappers.proto` import require `buf lint`/`buf breaking`/`./scripts/buf-gen.sh` as a hard predecessor
+  to the UI step (same governance shape as FR-8's `ScreenResult` additive fields already in this design).
+- **C-10(b)** (parity across read paths) — honored: the overlay series and Readiness's `lhsValue` both
+  derive from `_compute_component`; proven at the evaluator/unit layer with a fixed-closes fixture
+  (cross-RPC assertion rejected as flaky under different bar windows).
+- **C-14** (consumer surface) — honored: `/trader` remains the sole surface; no Agent tool.
+- **F-11** (Floor halts) — honored: no Floor breach flagged in any of the 3 FR-6 rounds.
