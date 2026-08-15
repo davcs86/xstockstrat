@@ -154,6 +154,33 @@ test.describe('Single Position page', () => {
     });
     await expect(page.getByText(/No fundamentals data for MSFT/)).toBeVisible({ timeout: 10000 });
   });
+
+  test('a non-watchlisted symbol runs the single-symbol Screening section (FR-8)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // Default mock returns no watchlists → AAPL is non-watchlisted → the Screening branch (not the
+    // watchlisted Opportunity/Readiness/Fundamentals branch) renders.
+    await page.goto('/trader/positions/AAPL');
+
+    const screening = page.getByTestId('symbol-screening');
+    await expect(screening).toBeVisible({ timeout: 30000 });
+
+    // Run the default criterion against just this symbol.
+    await screening.getByTestId('run-symbol-screen').click();
+
+    // The result echoes the per-criterion raw reading + pass/fail from the mocked single-symbol
+    // response (criterionRawValues/criterionPassed) — 42.50 raw, Pass.
+    const results = screening.getByTestId('symbol-screen-results');
+    await expect(results).toBeVisible({ timeout: 10000 });
+    await expect(results.getByText('42.50')).toBeVisible();
+    // Scope to the result row's Pass badge — "Pass" also appears as the column header.
+    await expect(results.getByTestId('symbol-screen-row').getByText('Pass')).toBeVisible();
+
+    // The universe-collapsed composite score must NEVER surface in this section (FR-8): no Score
+    // column, no score readout anywhere in the section's DOM subtree.
+    await expect(screening.getByText('Score', { exact: false })).toHaveCount(0);
+  });
 });
 
 /** Route the browser's ListWatchlists to a single watchlist containing `symbol` (bound to a live

@@ -50,6 +50,7 @@ import {
   SIGNAL_SOURCE_WEIGHTED,
   FUNDAMENTALS_AAPL,
 } from './fixtures';
+import { criterionDetailRow } from './fixtures/screenResults';
 
 export const TRADER_MOCK_PORT = 9091;
 export const INSIGHTS_MOCK_PORT = 9092;
@@ -780,6 +781,15 @@ export async function startMockBackend(): Promise<void> {
         // Feature 060: deterministic ranked screen result — 3 results, score-ordered,
         // one with INSUFFICIENT_DATA + a coverage gap.
         async screenSymbols(req) {
+          // feature 125: a single-symbol scan (the Symbol page's Screening section) returns the
+          // per-criterion criterionRawValues/criterionPassed maps, never the universe-collapsed
+          // composite score. ref_name 'c1' matches SymbolScreening's default first criterion.
+          if (req.symbols.length === 1) {
+            return {
+              results: [criterionDetailRow(req.symbols[0], 42.5, true)],
+              coverageGaps: [],
+            };
+          }
           const symbols = req.symbols.length ? req.symbols : ['AAA', 'BBB', 'CCC'];
           return {
             results: [

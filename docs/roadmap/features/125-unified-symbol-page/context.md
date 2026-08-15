@@ -819,3 +819,20 @@ each checkpoint (C-02/P-03).
   `src/app/insights/screener/page.tsx` (refactored onto the shared module),
   `src/app/trader/positions/[symbol]/page.tsx`, `e2e/fixtures/screenResults.ts`,
   `e2e/fixtures/INVENTORY.md`
+
+### Step 17 — test (xstockstrat-ui): Screening section e2e [done]
+- Mock `screenSymbols`: added a `req.symbols.length === 1` branch returning `criterionDetailRow(sym,
+  42.5, true)` (ref_name `c1` = SymbolScreening's default first criterion); the multi-symbol ranked
+  path is untouched. Imported `criterionDetailRow` directly from `./fixtures/screenResults` (that
+  module is not in the `./fixtures` barrel — the build caught the missing barrel export).
+- E2E: non-watchlisted AAPL → Screening section renders, default criterion runs, row shows raw `42.50`
+  + a `Pass` badge; asserts no "Score" text anywhere in the section (composite score never surfaced).
+  Scoped the Pass badge locator to `symbol-screen-row` (strict-mode: "Pass" also the column header).
+- E2E: **built + ran — position-detail 11/11 + screener 21/21 = 30/30 pass (27.8s).**
+- Files: `e2e/mock-backend.ts`, `e2e/trader/position-detail.spec.ts`
+
+### Checkpoint (after Step 16/17) — 17/33 steps done
+- Steps 12–17 (Opportunity/Readiness gating, Fundamentals, single-symbol Screening) + their e2e all
+  green. Backend prereqs (1–6), shared-component fixes (8–11), and docs (7) done earlier. Next:
+  Steps 18–21 (Backtests + Backfill sections), then 22–26 (page retirement/nav/cross-cutting proofs),
+  then the FR-6 indicator-overlay-panel block (27–33).

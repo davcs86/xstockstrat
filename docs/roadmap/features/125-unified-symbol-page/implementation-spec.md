@@ -1095,7 +1095,7 @@ Plus the e2e proof in Step 17.
 
 ### Step 17 — test (xstockstrat-ui): Screening section e2e
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify (`screenSymbols` handler — add a
