@@ -235,6 +235,122 @@ test.describe('Single Position page', () => {
     await expect(page.getByTestId('no-backfill')).toBeVisible({ timeout: 30000 });
     await expect(page.getByTestId('no-backfill')).toContainText(/No ingested coverage for ZZZZ/);
   });
+
+  // ── Signal-detail readiness, relocated from the retired insights/market/[symbol] page (Step 25).
+  // The SignalReadiness component (+ the ported MuteForStrategy control and the Opportunity
+  // Conviction/Edge grammar) live in the watchlisted branch, so each test seeds a watchlist first.
+
+  test('renders traced readiness conditions + Conviction/Edge for the threaded strategy (feature 083/125)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await watchlist(page, 'AAPL', 'strat-live-001');
+    await page.goto('/trader/positions/AAPL?strategy=strat-live-001');
+
+    await expect(page.getByText('Why this fired')).toBeVisible({ timeout: 30000 });
+    // Opportunity header grammar (relocated from the Signal-detail header): Conviction + Edge (BT).
+    await expect(page.getByText('Conviction')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('Edge (BT)')).toBeVisible();
+    // Deterministic conviction as N/M conditions (never a fabricated %), from EvaluateReadiness.
+    await expect(page.getByText('2/3 conditions')).toBeVisible();
+    // Traced leaves from EvaluateReadiness.
+    await expect(page.getByText('sma_fast', { exact: false })).toBeVisible();
+    await expect(page.getByText('rsi', { exact: false })).toBeVisible();
+    // The readiness picker reflects the threaded strategy (`.first()` scopes to it, above the Mute card).
+    await expect(page.getByText('Live Test Strategy').first()).toBeVisible();
+    // The opportunity's source survives in the meta line (non-exact — it's joined, not a Badge here).
+    await expect(page.getByText(/unusual_whales/)).toBeVisible();
+
+    // Strategy track-record block (GetStrategyAnalytics): signals 30d 42, hit rate 62%, expectancy 0.35.
+    const record = page.getByTestId('strategy-track-record');
+    await expect(record).toBeVisible();
+    await expect(record).toContainText('42');
+    await expect(record).toContainText('62%');
+    await expect(record).toContainText('0.35');
+  });
+
+  test('prompts to pick a strategy when none is threaded (no fabricated binding, feature 083/125)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await watchlist(page, 'AAPL', 'strat-live-001');
+    await page.goto('/trader/positions/AAPL');
+    await expect(page.getByText(/Select a strategy to evaluate/)).toBeVisible({ timeout: 30000 });
+  });
+
+  test('the readiness strategy picker excludes non-live strategies (feature 083/125)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await watchlist(page, 'AAPL', 'strat-live-001');
+    await page.goto('/trader/positions/AAPL');
+    await expect(page.getByText(/Select a strategy to evaluate/)).toBeVisible({ timeout: 30000 });
+    // Exact label — the readiness picker is "Strategy"; the Mute card's trigger is "Mute strategy".
+    await page.getByLabel('Strategy', { exact: true }).click();
+    await expect(page.getByRole('option', { name: 'Live Test Strategy' })).toBeVisible();
+    // "Inactive Strategy" (liveEnabled: false) must not be a selectable readiness option.
+    await expect(page.getByRole('option', { name: 'Inactive Strategy' })).toHaveCount(0);
+  });
+
+  test('feature 132: the mute control sends a masked denied_symbols update appending this symbol', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await watchlist(page, 'AMD', 'strat-live-001'); // watchlisted → the Mute card renders
+    let captured: Record<string, unknown> | null = null;
+    await page.route('**/xstockstrat.analysis.v1.AnalysisService/ManageStrategy', async (route) => {
+      captured = JSON.parse(route.request().postData() ?? '{}');
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+    await page.goto('/trader/positions/AMD');
+    const card = page.getByTestId('mute-for-strategy');
+    await expect(card).toBeVisible({ timeout: 30000 });
+    // strat-001 (Deny List Strategy) already denies TSLA — muting AMD appends to that list. The
+    // control is now a shadcn Select: open the trigger, then pick the option.
+    await card.getByTestId('mute-strategy-select').click();
+    await page.getByRole('option', { name: /Deny List Strategy/ }).click();
+    await card.getByTestId('mute-submit').click();
+
+    await expect.poll(() => captured).not.toBeNull();
+    const body = captured as unknown as {
+      definition?: { strategyId?: string; deniedSymbols?: string[] };
+      updateMask?: unknown;
+    };
+    expect(body.definition?.strategyId).toBe('strat-001');
+    expect(body.definition?.deniedSymbols).toEqual(expect.arrayContaining(['TSLA', 'AMD']));
+    // Connect-JSON serializes a FieldMask as a camelCase, comma-joined string (protobuf-es).
+    expect(body.updateMask).toBe('deniedSymbols');
+  });
+
+  test('feature 138: a held (REDUCE/ADD) opportunity traces the EXIT rule, not entry', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await watchlist(page, 'MSFT', 'strat-001'); // watchlisted → SignalReadiness renders
+    // MSFT is a held opportunity (ADD, provenance includes "position") under strat-001.
+    await page.goto('/trader/positions/MSFT?strategy=strat-001');
+    await expect(page.getByText('Why this fired')).toBeVisible({ timeout: 30000 });
+    await expect(page.getByTestId('readiness-exit-rule')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('exit_z', { exact: false })).toBeVisible();
+    await expect(page.getByText('1/1 conditions')).toBeVisible();
+    // The entry-rule leaves (symbolReadiness) must NOT appear — that was the mislabeled trace.
+    await expect(page.getByText('sma_fast', { exact: false })).toHaveCount(0);
+  });
+
+  test('a stale ?strategy= (deleted strategy) shows a distinct message, not a generic error (feature 125)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await watchlist(page, 'AAPL', 'strat-live-001');
+    // strat-notfound-readiness-01 is a reserved sentinel the mock's evaluateReadiness aborts NOT_FOUND
+    // for — a stale/bookmarkable ?strategy= threading a strategy the service no longer has.
+    await page.goto('/trader/positions/AAPL?strategy=strat-notfound-readiness-01');
+    await expect(page.getByText('Why this fired')).toBeVisible({ timeout: 30000 });
+    await expect(page.getByText('This strategy no longer exists — pick another.')).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(page.getByText('Failed to evaluate readiness.')).toHaveCount(0);
+  });
 });
 
 /** Route the browser's ListWatchlists to a single watchlist containing `symbol` (bound to

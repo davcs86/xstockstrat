@@ -1314,7 +1314,7 @@ change to that spec, per the DRY guard rail's "touch only what the task requires
 
 ### Step 22 — service (xstockstrat-ui): retire `insights/market/[symbol]` → redirect; repoint caller
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/market/[symbol]/page.tsx` — modify (replace with a
@@ -1375,7 +1375,7 @@ old path as a destination.
 
 ### Step 23 — service (xstockstrat-ui): nav cleanup — delete `/insights/market` special-cases
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx` — modify
@@ -1428,7 +1428,7 @@ Confirm both grep calls return no hits (the special-cases and their comments are
 
 ### Step 24 — test (xstockstrat-ui): two-surface nav-reachability proof
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/nav-reachability.spec.ts` — modify
@@ -1495,7 +1495,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "nav reachability"
 
 ### Step 25 — test (xstockstrat-ui): relocate/rewrite `signal-detail.spec.ts`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/signal-detail.spec.ts` — delete
@@ -1548,7 +1548,7 @@ ls e2e/insights/signal-detail.spec.ts 2>&1  # expect "No such file or directory"
 
 ### Step 26 — test (xstockstrat-ui): three-way valuation parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/valuation-parity.spec.ts` — modify

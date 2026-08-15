@@ -146,14 +146,15 @@ test.describe('FR-20 order parity', () => {
     await expect(partialRow).toContainText('20');
   });
 
-  test('Signal-detail order ticket offers all 5 order types (re-presentation)', async ({
-    page,
-  }) => {
-    await page.goto('/insights/market/AAPL');
+  test('symbol-page order ticket offers all 5 order types (re-presentation)', async ({ page }) => {
+    // feature 125: the symbol-page order ticket now lives on the unified /trader/positions/[symbol]
+    // page's always-on Trade widget (the former Signal-detail page redirects here). Auth is set by
+    // the describe's beforeEach.
+    await page.goto('/trader/positions/AAPL');
 
-    await expect(page.getByText('Place Order').first()).toBeVisible({ timeout: 10000 });
-    // Scope to the OrderForm <form> so the type Select isn't confused with the
-    // SignalReadiness strategy picker (also a combobox) on the same page.
+    await expect(page.getByText('Place Order').first()).toBeVisible({ timeout: 30000 });
+    // Scope to the OrderForm <form> so the type Select isn't confused with any other combobox
+    // (e.g. the Screening criteria selects) on the same page.
     const form = page.locator('form').filter({ has: page.getByPlaceholder('Symbol (e.g. AAPL)') });
     // The symbol field is pre-filled from the route param (FR-6) and locked: the chart,
     // conviction, and edge stats above the ticket are all keyed to this symbol, so the field

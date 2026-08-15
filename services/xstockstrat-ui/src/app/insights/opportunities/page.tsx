@@ -140,8 +140,8 @@ export default function OpportunitiesPage() {
 
   const reviewHref = (o: Opportunity) =>
     o.strategyId
-      ? `/insights/market/${o.symbol}?strategy=${o.strategyId}`
-      : `/insights/market/${o.symbol}`;
+      ? `/trader/positions/${o.symbol}?strategy=${o.strategyId}`
+      : `/trader/positions/${o.symbol}`;
 
   // Mobile 1:1 of the queue (FR-16) — the same rows as one `signal` section each.
   const mobileSections: Section[] = rows.map((o) => ({

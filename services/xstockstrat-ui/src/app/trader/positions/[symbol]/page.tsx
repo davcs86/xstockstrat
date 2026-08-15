@@ -15,8 +15,9 @@ import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
 import { openR, fmtR, sideLabel } from '@/lib/positionRisk';
 import { POSITION_RISK_FLAG, OPPORTUNITY_ACTION, EnumBadge } from '@/lib/opportunityShared';
 import { useWatchlists } from '@/hooks/useWatchlists';
-import { useOpportunities } from '@/hooks/useOpportunities';
+import { useOpportunities, useStrategyAnalytics } from '@/hooks/useOpportunities';
 import { useFundamentals } from '@/hooks/useFundamentals';
+import { MuteForStrategy } from '@/components/insights/MuteForStrategy';
 import { useBacktestHistory } from '@/hooks/useStrategies';
 import { useRunBacktest } from '@/hooks/useBacktest';
 import { useBackfillJobs } from '@/hooks/useBackfills';
@@ -126,7 +127,7 @@ export default function PositionDetailPage() {
     return { isSymbolWatchlisted: found, boundStrategyId: bound };
   }, [watchlistsData, symbol]);
 
-  // Opportunity for this symbol (watchlisted branch) — replicate insights/market's tie-break:
+  // Opportunity for this symbol (watchlisted branch) — replicate the former Signal-detail tie-break:
   // prefer the watchlist-bound strategy's opportunity, else the highest-conviction match.
   const { data: oppData } = useOpportunities(0);
   const opportunity = useMemo(() => {
@@ -256,6 +257,8 @@ export default function PositionDetailPage() {
               <SignalReadiness symbol={symbol} />
             </Suspense>
             <FundamentalsSection symbol={symbol} />
+            {/* feature 132 mute control, relocated here from the retired Signal-detail page. */}
+            <MuteForStrategy symbol={symbol} />
           </>
         ) : (
           <SymbolScreening symbol={symbol} />
@@ -647,8 +650,8 @@ function PositionBody({
 }
 
 // Opportunity/conviction section (FR-5) for a watchlisted symbol — reuses the same Opportunity
-// fields and deterministic-ordinal conviction display insights/market/[symbol] shows today. When no
-// opportunity matches the symbol, an explicit no-data notice (never a fabricated row — P-03).
+// fields and deterministic-ordinal conviction display the former Signal-detail page used (now
+// redirected here). When no opportunity matches the symbol, an explicit no-data notice (P-03).
 function OpportunitySection({
   opportunity,
   symbol,
@@ -656,6 +659,10 @@ function OpportunitySection({
   opportunity: Opportunity | undefined;
   symbol: string;
 }) {
+  // Edge (BT) — the strategy's backtested expectancy (feature 083 header grammar, relocated from the
+  // retired Signal-detail page). Hook is called unconditionally (before the early return) to satisfy
+  // the rules of hooks; it no-ops when there's no strategy.
+  const { data: analytics } = useStrategyAnalytics(opportunity?.strategyId || undefined);
   if (!opportunity) {
     return <CardNotice>No current opportunity for {symbol}.</CardNotice>;
   }
@@ -679,11 +686,27 @@ function OpportunitySection({
         </div>
       </CardHeader>
       <CardContent className="space-y-2">
-        <div className="flex items-center gap-3">
-          <span className="font-mono text-2xl tabular-nums text-buy">{conviction}</span>
+        <div className="flex flex-wrap items-center gap-3">
+          <div>
+            <Eyebrow>Conviction</Eyebrow>
+            <span className="font-mono text-2xl tabular-nums text-buy">{conviction}</span>
+          </div>
           <span className="text-sm text-muted-foreground">
             {opportunity.passingConditions}/{opportunity.totalConditions} conditions
           </span>
+          {analytics && (
+            <div className="ml-auto text-right">
+              <Eyebrow>Edge (BT)</Eyebrow>
+              <span
+                className={`font-mono text-xl tabular-nums ${
+                  analytics.expectancy >= 0 ? 'text-buy' : 'text-destructive'
+                }`}
+              >
+                {analytics.expectancy >= 0 ? '+' : ''}
+                {analytics.expectancy.toFixed(2)}
+              </span>
+            </div>
+          )}
         </div>
         {opportunity.thesis && (
           <p className="text-sm text-muted-foreground">{opportunity.thesis}</p>

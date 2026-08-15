@@ -894,3 +894,48 @@ each checkpoint (C-02/P-03).
   Screening (16), Backtests (18), Backfill (20) — each with e2e. Next: Steps 22–26 (retire
   `insights/market/[symbol]` → redirect, nav cleanup, cross-cutting proofs), then FR-6 indicator
   overlay panels (27–33).
+
+### Steps 22–26 — retire insights/market, nav cleanup, cross-cutting proofs [done]
+- **Step 22**: replaced `insights/market/[symbol]/page.tsx` with a Server Component `redirect()` stub
+  that forwards symbol + full query string (notably `?strategy=`) to `/trader/positions/[symbol]`.
+  Repointed `opportunities/page.tsx`'s `reviewHref` to `/trader/positions/...`.
+- **Step 23**: deleted the `/insights/market` nav special-cases in `PlatformHeader.tsx` (resolveActive)
+  and `BottomTabBar.tsx` (isGroupActive) — the plain NAV_GROUPS walk now classifies
+  `/trader/positions/[symbol]` into Book.
+- **Step 24**: nav-reachability e2e — asserts the unified page resolves to Book on desktop (Primary)
+  AND mobile (BottomTabBar) via `aria-current`, and that `/insights/market/AAPL` redirects to
+  `/trader/positions/AAPL` with the query string preserved.
+- **Step 25**: deleted `e2e/insights/signal-detail.spec.ts`; ported its 6 tests into
+  `position-detail.spec.ts` (watchlisted gate + new route). Dropped only the Queue back-link (the
+  unified page uses a PageBreadcrumb "Exposure") and the exact-Badge source assertion (source is now a
+  joined meta line).
+- **Step 26**: added the third valuation-parity leg (`/trader/positions/AAPL` shows the same
+  +$100.00).
+
+- **DESIGN DECISION (user sign-off, C-11) — absorb features 132/138 controls.** The spec predates
+  features 132 (MuteForStrategy) and the 083 "Edge (BT)" header stat, both added to the market page
+  *after* recon. Retiring that page would have silently dropped the shipped feature-132 mute control
+  (defined only there) and the Edge (BT) headline. **User chose "port them onto the unified page"**
+  (AskUserQuestion). So: extracted `MuteForStrategy` into a shared `components/insights/MuteForStrategy.tsx`
+  (rebuilt with a shadcn `Select` per the shadcn-first hard requirement — the original used a raw
+  `<select>`), mounted in the watchlisted branch; added an "Edge (BT)" expectancy stat to
+  `OpportunitySection` (via `useStrategyAnalytics`). Feature 138's exit-rule + the track-record block
+  already ride along via the reused `SignalReadiness` component (no extra work).
+- **Spec drift handled (inbound-reference sweep, Step 22 reviewer intent).** The spec's grep only found
+  the `opportunities` caller, but four later-added specs also navigated to `/insights/market/AAPL`:
+  `breadcrumb.spec.ts` (removed the now-redundant "Signal detail" site — Position detail already
+  covers the destination), `order-parity.spec.ts` (repointed to `/trader/positions/AAPL`, renamed),
+  `mobile-overflow.spec.ts` (dropped the market entry — `/trader/positions/AAPL` already in the list),
+  and `nav-reachability.spec.ts` (the intentional redirect assertion). All re-run green.
+- Verify: tsc clean, lint clean; e2e — position-detail 20/20, order-parity, nav-reachability,
+  valuation-parity, breadcrumb, mobile-overflow, opportunities all green (64 across the batch).
+- Files: `src/app/insights/market/[symbol]/page.tsx` (redirect), `src/app/insights/opportunities/page.tsx`,
+  `src/components/shared/PlatformHeader.tsx`, `src/components/mobile/BottomTabBar.tsx`,
+  `src/components/insights/MuteForStrategy.tsx` (new), `src/app/trader/positions/[symbol]/page.tsx`,
+  `e2e/nav-reachability.spec.ts`, `e2e/trader/{position-detail,valuation-parity,order-parity}.spec.ts`,
+  `e2e/breadcrumb.spec.ts`, `e2e/mobile-overflow.spec.ts`, deleted `e2e/insights/signal-detail.spec.ts`
+
+### Checkpoint (after Steps 22–26) — 26/33 steps done
+- Old symbol page retired; unified page is the sole live symbol route with every section + the ported
+  132/138 controls. Remaining: the FR-6 indicator-overlay-panel block (Steps 27–33): proto RPC +
+  regen (27–28), config key (29), analysis handler + tests (30–31), UI panels + e2e (32–33).

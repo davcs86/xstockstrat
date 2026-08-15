@@ -15,9 +15,6 @@ const TABS = NAV_GROUPS.slice(0, 4);
 
 function isGroupActive(pathname: string | null, hrefs: string[]): boolean {
   if (!pathname) return false;
-  // Signal detail lives under /insights/market — it belongs to Decide (mirrors the desktop shell).
-  if (pathname.startsWith('/insights/market'))
-    return hrefs.some((h) => h.includes('/opportunities'));
   return hrefs.some(
     (h) => pathname === h || pathname.startsWith(h + '/') || pathname.startsWith(h),
   );
