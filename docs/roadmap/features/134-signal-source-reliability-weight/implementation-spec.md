@@ -294,7 +294,7 @@ Coverage ≥ 40%; the two zero-weight tests and the out-of-range test are green 
 
 ### Step 6 — service: Apply `reliability_weight` in the analysis read paths (genuine FR-4 replace)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -357,7 +357,7 @@ The new `ListSignalSources` call carries `metadata=propagation_meta` (header pro
 
 ### Step 7 — test: analysis weighting + repoint coverage
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/` — modify/add servicer tests

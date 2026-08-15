@@ -214,3 +214,28 @@
 - C-13 verdict: the slug/source_type literals are single-consumer (this module) → inline compliant.
 - Files modified: `tests/test_signal_sources.py`, `tests/test_ingest_servicer.py`
 - TDD: red (7 failing) → green (190 passed, 76.39%). Deviations: none.
+
+### Step 6 — service: analysis apply weight + FR-4 replace [done]
+- Added `_drain_source_weights(propagation_meta) -> dict[str,float]` (mirrors `_drain_active_signals`:
+  one unpaginated `ListSignalSources(include_inactive=True)`, best-effort `except grpc.RpcError → {}`,
+  returns `{slug: reliability_weight}`). Header propagation via `metadata=propagation_meta`.
+- `_compute_opportunities`: drains weights once alongside the other drains; the `signal_axis` write is
+  `max(signal_axis, sig.conviction * source_weights.get(sig.source, 1.0))` (neutral 1.0 default).
+- ScreenSymbols FR-4 genuine replace: removed the `self._cfg.get_str("analysis.signals.source_weights")`
+  read + JSON parse; `source_weights = await self._drain_source_weights(propagation_meta)`. Both read
+  paths now share the helper; `scoring.py`/`screener.py` untouched (dict shape unchanged).
+- NOTE (133 line-shift): the spec's line refs (:2163/:2358/:1890) were stale after 133 merged;
+  Phase-1 discovery relocated the symbols by name (:2285/:2484/:2005) — no guessing.
+- Files modified: `app/handlers/servicer.py`
+- TDD: red (3 new tests fail — no method / raw axis 0.9≠0.45 / config still read) → green (467 passed,
+  82.04%). Deviations: none (verification-form line-refs relocated by name, not a spec deviation).
+
+### Step 7 — test: analysis weighting + repoint coverage [done]
+- Updated `_materialized_svc` (+`source_weights` param, mocks `ListSignalSources`), `TestScreenSymbols._svc()`,
+  and `TestScreenSymbolsHeld` to mock `ListSignalSources` (empty→1.0, no behavior change for existing tests).
+- New: AC-2 half-weight (`signal_axis` = conviction*0.5 = half of the 1.0 case); `_drain_source_weights`
+  maps + best-effort {} on RpcError; ScreenSymbols repoint (ScreenerEngine receives the ingest-derived
+  map; the `analysis.signals.source_weights` config key is never consulted).
+- C-13 verdict: signal-source literals single-consumer (this module) → inline compliant.
+- Files modified: `tests/test_analysis_servicer.py`
+- TDD: red (3 failing) → green (467 passed, 82.04%). Deviations: none.

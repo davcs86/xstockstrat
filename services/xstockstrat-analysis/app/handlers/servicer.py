@@ -2002,15 +2002,11 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if k in ("x-user-id", "x-access-scope", "x-trace-id")
         ]
 
-        _weights_raw = self._cfg.get_str("analysis.signals.source_weights", default="{}")
-        try:
-            source_weights = (
-                {k: max(0.0, min(1.0, float(v))) for k, v in json.loads(_weights_raw).items()}
-                if _weights_raw
-                else {}
-            )
-        except (ValueError, TypeError):
-            source_weights = {}
+        # feature 134 (FR-4 genuine replace): source weights now come from
+        # ingest.SignalSource.reliability_weight (reject-at-write in [0,1]), not the
+        # retained-but-inert analysis.signals.source_weights config key. Both analysis read paths
+        # (this + the Opportunities queue) share the one _drain_source_weights helper.
+        source_weights = await self._drain_source_weights(propagation_meta)
 
         engine = ScreenerEngine(
             self._marketdata, self._indicators, self._ingest, self._cfg, source_weights
@@ -2220,6 +2216,8 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         signals = await self._drain_active_signals(propagation_meta)
         held = await self._drain_held_symbols(user_id, propagation_meta)
         bindings = await self._drain_watchlist_bindings(propagation_meta)
+        # feature 134 — per-source reliability weight scales the signal ranking axis below.
+        source_weights = await self._drain_source_weights(propagation_meta)
 
         # Index the origins by normalized symbol.
         watchlist_by_symbol: dict[str, set[str]] = {}
@@ -2282,7 +2280,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 c = candidates[key]
                 for sig in sigs:
                     _add_provenance(c, sig.source)
-                    c["signal_axis"] = max(c["signal_axis"], sig.conviction)
+                    # feature 134 — weight conviction by the source's reliability (neutral 1.0 for
+                    # an unknown/unweighted source, mirroring scoring.compute_signal_score).
+                    weighted = sig.conviction * source_weights.get(sig.source, 1.0)
+                    c["signal_axis"] = max(c["signal_axis"], weighted)
                     if sig.conviction > c["_best_sig_conv"]:
                         c["_best_sig_conv"] = sig.conviction
                         c["best_direction"] = sig.direction
@@ -2506,6 +2507,21 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if not page_token:
                 break
         return out
+
+    async def _drain_source_weights(self, propagation_meta) -> dict[str, float]:
+        """Drain per-source reliability weights from ingest (feature 134). Single unpaginated
+        ListSignalSources call, best-effort (an ingest failure yields an empty map so the caller
+        falls back to the neutral 1.0 multiplier), mirroring ``_drain_active_signals``. Returns
+        ``{slug: reliability_weight}`` — the shape ``scoring.compute_signal_score`` consumes."""
+        try:
+            resp = await self._ingest.ListSignalSources(
+                ingest_pb2.ListSignalSourcesRequest(include_inactive=True),
+                metadata=propagation_meta,
+            )
+        except grpc.RpcError as e:
+            log.warning("_drain_source_weights: ListSignalSources failed: %s", e)
+            return {}
+        return {src.slug: src.reliability_weight for src in resp.sources}
 
     async def _drain_held_symbols(self, user_id, propagation_meta) -> set:
         """Drain the set of symbols the user holds across all accounts/modes (paginated).
