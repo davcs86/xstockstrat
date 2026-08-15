@@ -19,6 +19,8 @@ import { useOpportunities } from '@/hooks/useOpportunities';
 import { useFundamentals } from '@/hooks/useFundamentals';
 import { useBacktestHistory } from '@/hooks/useStrategies';
 import { useRunBacktest } from '@/hooks/useBacktest';
+import { useBackfillJobs } from '@/hooks/useBackfills';
+import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { timestampToDate } from '@/lib/protoTime';
 import { SignalReadiness } from '@/components/insights/SignalReadiness';
 import { SymbolScreening } from '@/components/trader/SymbolScreening';
@@ -262,6 +264,9 @@ export default function PositionDetailPage() {
         {/* Backtests (FR-9) — always-on, keyed on the resolved strategy: the watchlist-binding's
             strategyId (Step 12), else the orders-derived owning strategy (Step 8). */}
         <BacktestsSection symbol={symbol} strategyId={boundStrategyId || owningStrategy} />
+
+        {/* Backfill coverage (FR-10) — always-on (any symbol): the ingested date span, dates only. */}
+        <BackfillSection symbol={symbol} />
 
         {position && position.symbol ? (
           <PositionBody
@@ -851,6 +856,55 @@ function BacktestsSection({ symbol, strategyId }: { symbol: string; strategyId: 
               ))}
             </TableBody>
           </Table>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Backfill coverage section (FR-10) — the symbol's ingested OHLCV date span, dates only (no chart).
+// Always-on for any symbol. Reduces the completed backfill jobs carrying a range into one covered
+// window (earliest start … latest end); an empty job list is an explicit no-coverage state.
+function BackfillSection({ symbol }: { symbol: string }) {
+  const { data, isLoading } = useBackfillJobs({ symbol });
+  const jobs = data?.jobs ?? [];
+  const completed = jobs.filter(
+    (j) => j.status === BackfillStatus.COMPLETED && j.range?.start && j.range?.end,
+  );
+  let coverStart = Infinity;
+  let coverEnd = -Infinity;
+  for (const j of completed) {
+    coverStart = Math.min(coverStart, Number(j.range!.start!.seconds));
+    coverEnd = Math.max(coverEnd, Number(j.range!.end!.seconds));
+  }
+  const hasCoverage = completed.length > 0;
+  const fmtDay = (secs: number) => new Date(secs * 1000).toISOString().slice(0, 10);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">Backfill coverage</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading ingested coverage…</p>
+        ) : jobs.length === 0 ? (
+          <p className="text-sm text-muted-foreground" data-testid="no-backfill">
+            No ingested coverage for {symbol} yet.
+          </p>
+        ) : hasCoverage ? (
+          <p className="text-sm" data-testid="backfill-coverage">
+            Ingested{' '}
+            <span className="font-mono tabular-nums">
+              {fmtDay(coverStart)} → {fmtDay(coverEnd)}
+            </span>{' '}
+            across {completed.length} completed job{completed.length > 1 ? 's' : ''}.
+          </p>
+        ) : (
+          <p className="text-sm text-muted-foreground" data-testid="backfill-pending">
+            {jobs.length} backfill job{jobs.length > 1 ? 's' : ''} for {symbol} — none completed
+            with a recorded range yet.
+          </p>
         )}
       </CardContent>
     </Card>

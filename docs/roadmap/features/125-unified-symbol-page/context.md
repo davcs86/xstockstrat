@@ -860,3 +860,14 @@ each checkpoint (C-02/P-03).
   completes without error. (2) ZZZZ (no binding, no orders) → "No strategy resolves for ZZZZ" state.
 - E2E: **built + ran — position-detail 13/13 pass (13.6s).**
 - Files: `e2e/trader/position-detail.spec.ts`
+
+### Step 20 — service (xstockstrat-ui): Backfill section [done]
+- New local `BackfillSection` in `page.tsx`, always-on (FR-10, any symbol). Calls
+  `useBackfillJobs({ symbol })` (cross-segment `insightsIngestClient`, Step 7 exception — the hook is
+  reused verbatim, no new BFF registration). Reduces COMPLETED jobs carrying a `range` into one
+  covered window (min start … max end) rendered dates-only ("Ingested YYYY-MM-DD → YYYY-MM-DD across N
+  completed jobs"); empty job list → explicit "No ingested coverage" state; jobs-but-none-completed →
+  a pending note. Deliberately avoided replicating the backfills page's `statusBadge` switch (DRY) —
+  the section is dates-focused per FR-10, not a job-status board. shadcn Card.
+- Verify: tsc clean, lint clean.
+- Files: `src/app/trader/positions/[symbol]/page.tsx`
