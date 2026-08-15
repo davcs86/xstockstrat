@@ -65,6 +65,18 @@ parameter sweep and re-enable it at the end so it never evaluates at a config yo
 under this partial-merge contract — send only it to change it, and use `clear_fields` to revert it
 to the platform default.
 
+**`denied_symbols` and `signal_eligible` (feature 132)** are two more partial-merge fields on
+`manage_strategy`. `denied_symbols` is an **entry-only deny list** — a normalized-uppercase symbol
+list the strategy must never evaluate *for entry*; a held position on a denied symbol still keeps
+its **exit** tracing, so an operator can always exit what they already hold. Send only
+`denied_symbols=[...]` to change it, or name it in `clear_fields` to clear. `signal_eligible` (a
+bool, default false) gates whether the platform-wide active-signal term joins the strategy's live
+evaluation universe; setting it `true` while `signal_params.symbols` already holds a non-empty
+allowlist is rejected `INVALID_ARGUMENT` (the allowlist is already an explicit universe override, so
+the two together are contradictory). Under the deny model an **empty** `signal_params.symbols` no
+longer blocks enabling live — the strategy fires its whole owner universe (watchlist ∪ held ∪
+signals-iff-eligible) minus the deny list.
+
 ## Phase 1 — Ensure data coverage (backfill)
 
 A backtest silently reports fewer/short bars if the symbol's history is not backfilled. Before the

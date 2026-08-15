@@ -273,6 +273,54 @@ test.describe('Strategy authoring — UI', () => {
     await expect(page.getByRole('button', { name: 'Create Strategy' })).toBeVisible();
   });
 
+  test('feature 132: wizard deny-list chips + signal_eligible toggle add/remove and submit', async ({
+    page,
+  }) => {
+    await addAdminCookie(page);
+    await stubListFormulas(page);
+    const getCaptured = await captureManageStrategy(page);
+    await page.goto('/insights/strategies/new');
+
+    await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
+    const next = page.getByRole('button', { name: 'Next', exact: true });
+    await page.getByPlaceholder('e.g. sma_crossover').fill('deny_test');
+    await next.click(); // → display name
+    await page.getByPlaceholder('SMA Crossover').fill('Deny Test');
+    await next.click(); // → cooldown
+    await next.click(); // → exit cooldown (sub-screen 4 — deny-list editor lives here)
+
+    // Add two chips (normalized uppercase), remove one, toggle signal-eligible on.
+    await page.getByTestId('denied-input').fill('tsla');
+    await page.getByTestId('denied-add').click();
+    await page.getByTestId('denied-input').fill('nvda');
+    await page.getByTestId('denied-add').click();
+    await expect(page.getByTestId('denied-chip-TSLA')).toBeVisible();
+    await expect(page.getByTestId('denied-chip-NVDA')).toBeVisible();
+    await page.getByTestId('denied-chip-NVDA').getByRole('button', { name: 'Remove NVDA' }).click();
+    await expect(page.getByTestId('denied-chip-NVDA')).toHaveCount(0);
+    await page.getByTestId('signal-eligible-toggle').check();
+
+    await next.click(); // → Step 2 Components
+    await page.getByRole('button', { name: 'Add component' }).click();
+    await next.click(); // → Step 3 Rules
+    const jsonButtons = page.getByRole('tab', { name: 'JSON' });
+    await jsonButtons.nth(0).click();
+    await page.getByLabel('Entry rule JSON').fill('{"op":"and","conditions":[]}');
+    await jsonButtons.nth(1).click();
+    await page.getByLabel('Exit rule JSON').fill('{"op":"or","conditions":[]}');
+    await next.click(); // → Step 4 Review
+    await page.getByRole('button', { name: 'Create Strategy' }).click();
+
+    await expect.poll(() => getCaptured()).not.toBeNull();
+    const body = getCaptured() as {
+      definition?: { deniedSymbols?: string[]; signalEligible?: boolean };
+      updateMask?: unknown;
+    };
+    expect(body.definition?.deniedSymbols).toEqual(['TSLA']); // NVDA removed
+    expect(body.definition?.signalEligible).toBe(true);
+    expect(body.updateMask).toBeUndefined(); // wizard is a full replace, not a masked update
+  });
+
   test('server validation error shows inline with a Go to Step link (AC-13)', async ({ page }) => {
     await addAdminCookie(page);
     await stubListFormulas(page);

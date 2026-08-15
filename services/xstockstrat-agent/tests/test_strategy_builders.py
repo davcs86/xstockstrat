@@ -70,6 +70,11 @@ async def _capture_manage_strategy_request():
                     "cooldown_days": 5,
                     "exit_cooldown_days": 3,
                     "signal_params": {"symbols": ["AAPL"]},
+                    # feature 132 — set both so they appear in ListFields for the parity check (the
+                    # allowlist×signal_eligible conflict is a backend concern; this mock only
+                    # captures the built request, it does not validate).
+                    "denied_symbols": ["TSLA"],
+                    "signal_eligible": True,
                 },
             )
     return mock_stub.ManageStrategy.call_args[0][0]

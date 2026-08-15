@@ -2729,6 +2729,160 @@ def _masked_req(strategy_id="s1", paths=(), **fields):
     return req
 
 
+def _deny_def(symbols=None, denied=None, signal_eligible=False):
+    """A StrategyDefinition carrying feature-132 fields (for resolve_universe/reject tests)."""
+    from google.protobuf.struct_pb2 import Struct
+
+    kwargs = {}
+    if symbols is not None:
+        sp = Struct()
+        sp.update({"symbols": list(symbols)})
+        kwargs["signal_params"] = sp
+    return analysis_pb2.StrategyDefinition(
+        denied_symbols=list(denied or []), signal_eligible=signal_eligible, **kwargs
+    )
+
+
+class TestResolveUniverse:
+    """feature 132 — resolve_universe() 4-branch coverage (design decision 2). Pure function."""
+
+    def test_allowlist_present_is_universe_minus_denied(self):
+        from app.engine.live_loop import resolve_universe
+
+        # (a) allowlist override applied verbatim (normalized), minus denied.
+        d = _deny_def(symbols=["AAPL", "tsla"], denied=["TSLA"])
+        r = resolve_universe(d, watchlist={"MSFT"}, held={"NVDA"}, signals={"GOOG"})
+        assert r.union == {"AAPL", "TSLA"}  # allowlist wins, watchlist/held/signals ignored
+        assert r.universe == {"AAPL"}  # TSLA denied and not held
+        assert r.deny_entry == set()
+
+    def test_no_allowlist_signal_ineligible_excludes_signals(self):
+        from app.engine.live_loop import resolve_universe
+
+        # (b) no allowlist, signal_eligible=false → watchlist ∪ held − denied (signals excluded).
+        d = _deny_def(denied=["ZZZ"], signal_eligible=False)
+        r = resolve_universe(d, watchlist={"MSFT"}, held={"NVDA"}, signals={"GOOG"})
+        assert r.union == {"MSFT", "NVDA"}
+        assert r.universe == {"MSFT", "NVDA"}
+        assert "GOOG" not in r.universe
+
+    def test_no_allowlist_signal_eligible_includes_signals(self):
+        from app.engine.live_loop import resolve_universe
+
+        # (c) no allowlist, signal_eligible=true → watchlist ∪ held ∪ signals − denied.
+        d = _deny_def(signal_eligible=True)
+        r = resolve_universe(d, watchlist={"MSFT"}, held={"NVDA"}, signals={"GOOG"})
+        assert r.union == {"MSFT", "NVDA", "GOOG"}
+        assert r.universe == {"MSFT", "NVDA", "GOOG"}
+
+    def test_held_denied_retained_for_exit(self):
+        from app.engine.live_loop import resolve_universe
+
+        # (d) held ∩ denied → deny_entry non-empty; the held-denied symbol stays in universe (exit).
+        d = _deny_def(denied=["NVDA"], signal_eligible=True)
+        r = resolve_universe(d, watchlist=set(), held={"NVDA"}, signals={"NVDA"})
+        assert r.deny_entry == {"NVDA"}
+        assert "NVDA" in r.universe  # retained so exit still traces (entry-only deny)
+        assert r.denied == {"NVDA"}
+
+
+class TestDenyListMaskingAndValidation:
+    """feature 132 — denied_symbols/signal_eligible masking + allowlist×eligible reject."""
+
+    @pytest.mark.asyncio
+    async def test_denied_symbols_masked_set_and_clear(self):
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row())
+        # set
+        result = await svc.ManageStrategy(
+            _masked_req(paths=["denied_symbols"], denied_symbols=["TSLA", "NVDA"]),
+            context=_admin_ctx(),
+        )
+        assert list(result.denied_symbols) == ["TSLA", "NVDA"]
+        assert [c.ref_name for c in result.components] == ["z"]  # definition preserved
+        # masked-clear (no value supplied → AIP-161 erase)
+        _stub_update_repo(svc, _stored_row())
+        cleared = await svc.ManageStrategy(
+            _masked_req(paths=["denied_symbols"]), context=_admin_ctx()
+        )
+        assert list(cleared.denied_symbols) == []
+
+    @pytest.mark.asyncio
+    async def test_signal_eligible_masked_set_and_clear(self):
+        svc = make_servicer()
+        _stub_update_repo(svc, _stored_row())
+        result = await svc.ManageStrategy(
+            _masked_req(paths=["signal_eligible"], signal_eligible=True), context=_admin_ctx()
+        )
+        assert result.signal_eligible is True
+        assert json.loads(result.entry_rule)["lhs"] == "z"  # untouched
+        _stub_update_repo(svc, _stored_row())
+        cleared = await svc.ManageStrategy(
+            _masked_req(paths=["signal_eligible"]), context=_admin_ctx()
+        )
+        assert cleared.signal_eligible is False
+
+    @pytest.mark.asyncio
+    async def test_register_rejects_allowlist_plus_signal_eligible(self):
+        """A REGISTER with both a non-empty signal_params.symbols allowlist and signal_eligible=true
+        is rejected INVALID_ARGUMENT (design decision 4)."""
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=None)
+        definition = _valid_definition()
+        from google.protobuf.struct_pb2 import Struct
+
+        sp = Struct()
+        sp.update({"symbols": ["AAPL"]})
+        definition.signal_params.CopyFrom(sp)
+        definition.signal_eligible = True
+        req = analysis_pb2.ManageStrategyRequest(
+            operation=analysis_pb2.STRATEGY_OPERATION_REGISTER, definition=definition
+        )
+        ctx = _admin_ctx()
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(req, ctx)
+        code, _ = ctx.abort.await_args.args
+        assert code == grpc.StatusCode.INVALID_ARGUMENT
+
+    @pytest.mark.asyncio
+    async def test_two_step_masked_flip_onto_stored_allowlist_is_rejected(self):
+        """The merged-definition validator catches the two-step evasion: a stored strategy that
+        already carries an allowlist, then a masked update flipping signal_eligible=true → the
+        MERGED definition has both → INVALID_ARGUMENT (proves validation runs on to_write)."""
+        svc = make_servicer()
+        stored = _stored_row()
+        # stored row already carries an allowlist
+        stored["definition_json"]["signal_params"] = {"symbols": ["AAPL"]}
+        _stub_update_repo(svc, stored)
+        ctx = _admin_ctx()
+        with pytest.raises(Exception, match="aborted"):
+            await svc.ManageStrategy(
+                _masked_req(paths=["signal_eligible"], signal_eligible=True), ctx
+            )
+        code, _ = ctx.abort.await_args.args
+        assert code == grpc.StatusCode.INVALID_ARGUMENT
+
+    def test_definition_json_round_trip_needs_no_mapper_change(self):
+        """decision 13: denied_symbols/signal_eligible ride definition_json — a MessageToDict →
+        _row_to_strategy_definition round-trip preserves them with no column mapper line."""
+        from app.handlers.servicer import _row_to_strategy_definition
+
+        d = _deny_def(denied=["TSLA"], signal_eligible=True)
+        d.strategy_id = "s1"
+        row = {
+            "strategy_id": "s1",
+            "display_name": "s1",
+            "active": True,
+            "live_enabled": False,
+            "definition_json": json_format.MessageToDict(d, preserving_proto_field_name=True),
+        }
+        back = _row_to_strategy_definition(row)
+        assert list(back.denied_symbols) == ["TSLA"]
+        assert back.signal_eligible is True
+
+
 class TestPartialStrategyUpdate:
     """The reported incident: `manage_strategy update` with only cooldown_days wiped the
     strategy's components and rules. These pin the server half of the fix."""
@@ -3619,7 +3773,9 @@ class _FakeOppRepo:
         for r in self.rows.get(user_id, []):
             if not include_expired and r["valid_until"] <= now:
                 continue
-            if r["conviction"] < min_conviction:
+            # feature 132: muted (deny-listed) rows are exempt from the conviction floor — they
+            # carry conviction 0 by design (mirrors the SQL `OR provenance ? 'denied'`).
+            if r["conviction"] < min_conviction and "denied" not in (r.get("provenance") or []):
                 continue
             act = self.actions.get((user_id, r["opportunity_key"]))
             if act:
@@ -3692,6 +3848,8 @@ def _strat_row(
     live_enabled=True,
     symbols=None,
     created_at=None,
+    denied=None,
+    signal_eligible=False,
 ):
     """A strategy row (SMA≈close via the ComputeIndicator stub) with optional entry/exit rules.
 
@@ -3720,6 +3878,10 @@ def _strat_row(
         sp = Struct()
         sp.update({"symbols": list(symbols)})
         kwargs["signal_params"] = sp
+    if denied is not None:  # feature 132 — entry-only deny list
+        kwargs["denied_symbols"] = list(denied)
+    if signal_eligible:  # feature 132 — join platform-wide signals
+        kwargs["signal_eligible"] = True
     definition = analysis_pb2.StrategyDefinition(**kwargs)
     row = {
         "strategy_id": strategy_id,
@@ -4159,6 +4321,75 @@ class TestListOpportunitiesMaterialized:
         assert by_symbol["AAPL"].strategy_id == "sx"
         assert "live_strategy" in by_symbol["AAPL"].provenance
 
+    # ── feature 132 — muted (deny-listed) rows ───────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_held_denied_is_one_muted_row_with_exit_trace(self):
+        """AC (132): a held+denied (sym, strat) is exactly ONE row, muted=True, with its exit trace
+        preserved (deny is entry-only) — not a second standalone row, never conviction=0."""
+        row = _strat_row("sx", entry=_GT_100, exit_=_GT_100, symbols=["AAPL"], denied=["AAPL"])
+        svc = _materialized_svc(
+            held=["AAPL"],
+            strategies={"sx": row},
+            live_strategies=[row],
+            bars={"AAPL": _FIRING_BARS},
+        )
+        by_symbol, opps = await _list_opps(svc)
+        assert sum(1 for o in opps if o.symbol == "AAPL") == 1  # one row, not two
+        r = by_symbol["AAPL"]
+        assert r.muted is True
+        assert "denied" in r.provenance
+        assert r.total_conditions == 1  # exit rule still traced (entry-only deny)
+        assert r.action == analysis_pb2.OPPORTUNITY_ACTION_TAG_REDUCE
+
+    @pytest.mark.asyncio
+    async def test_pure_denied_symbol_is_muted_unspecified_placeholder(self):
+        """AC (132): a denied symbol in the strategy's coverage but not held/watchlisted/signalled
+        is a 0/0 muted placeholder — kept (UNSPECIFIED action), never dropped by the action guard,
+        never conviction=0-as-classifier."""
+        row = _strat_row("sx", entry=_GT_100, symbols=["XYZ"], denied=["XYZ"])
+        svc = _materialized_svc(strategies={"sx": row}, live_strategies=[row], bars={})
+        by_symbol, _ = await _list_opps(svc)
+        assert "XYZ" in by_symbol  # not dropped by the action-is-None guard
+        r = by_symbol["XYZ"]
+        assert r.muted is True
+        assert "denied" in r.provenance
+        assert r.total_conditions == 0  # trace skipped for a non-held muted row
+        assert r.action == analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED
+
+    @pytest.mark.asyncio
+    async def test_muted_row_survives_tiny_universe_cut(self):
+        """AC (132): the muted_only bucket ranks above the speculative tail — a muted row is not
+        dropped for a higher-conviction speculative signal when max_universe is tiny."""
+        row = _strat_row("sx", entry=_GT_100, symbols=["XYZ"], denied=["XYZ"])
+        svc = _materialized_svc(
+            signals=[
+                _sig("ZZZ", "buy", 0.99, source="uw"),
+                _sig("YYY", "buy", 0.98, source="uw"),
+            ],
+            strategies={"sx": row},
+            live_strategies=[row],
+            bars={},
+        )
+        svc._cfg.get_int = MagicMock(
+            side_effect=lambda key, default=0: (
+                1 if key == "analysis.opportunity.max_universe_size" else default
+            )
+        )
+        by_symbol, _ = await _list_opps(svc)
+        assert "XYZ" in by_symbol  # muted row survives despite the higher-axis speculative pair
+        assert by_symbol["XYZ"].muted is True
+
+    @pytest.mark.asyncio
+    async def test_muted_row_returned_despite_min_conviction_floor(self):
+        """AC (132): a min_conviction>0 read still returns a muted (conviction-0) row (the
+        `provenance ? 'denied'` OR-branch of the read query)."""
+        row = _strat_row("sx", entry=_GT_100, symbols=["XYZ"], denied=["XYZ"])
+        svc = _materialized_svc(strategies={"sx": row}, live_strategies=[row], bars={})
+        by_symbol, _ = await _list_opps(svc, min_conviction=0.5)
+        assert "XYZ" in by_symbol  # exempt from the floor
+        assert by_symbol["XYZ"].muted is True
+
 
 class TestGetStrategyAnalytics:
     def _svc(self, runs, orders, signals_count):
@@ -4293,6 +4524,7 @@ class TestOpportunityRowParity:
         "valid_until",
         "opportunity_key",
         "provenance",
+        "muted",  # feature 132
     }
     _INTENTIONALLY_UNSET: set[str] = set()  # the mapper populates every field
 
@@ -4334,6 +4566,29 @@ class TestOpportunityRowParity:
         assert opp.opportunity_key == "u1|AAPL|sx"
         assert list(opp.provenance) == ["watchlist", "position", "uw"]
         assert opp.valid_until.ToDatetime(tzinfo=UTC) == valid
+        assert opp.muted is False  # feature 132 — no "denied" marker → not muted
+
+    def test_muted_derived_from_denied_provenance(self):
+        """feature 132: the mapper sets Opportunity.muted from the "denied" provenance marker (the
+        persistence carrier), and _primary_source never leaks "denied" into Opportunity.source."""
+        from app.handlers.servicer import _primary_source, _row_to_opportunity
+
+        row = {
+            "opportunity_key": "u1|XYZ|sx",
+            "symbol": "XYZ",
+            "strategy_id": "sx",
+            "action": int(analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED),
+            "conviction": 0.0,
+            "readiness_json": {"passing_conditions": 0, "total_conditions": 0},
+            "signal_axis": 0.0,
+            "provenance": ["position", "denied"],
+            "thesis": "",
+            "valid_until": datetime(2999, 1, 1, tzinfo=UTC),
+        }
+        opp = _row_to_opportunity(row)
+        assert opp.muted is True
+        assert opp.source == ""  # "denied" (like "watchlist"/"position") is a structural marker
+        assert _primary_source(["denied"]) == ""
 
 
 class TestScreenSymbolsHeld:
@@ -4470,17 +4725,29 @@ class TestStrategyLifecycle089:
         assert ctx.abort.await_args.args[0] == grpc.StatusCode.FAILED_PRECONDITION
 
     @pytest.mark.asyncio
-    async def test_enable_live_without_symbols_rejected(self):
+    async def test_enable_live_without_symbols_now_succeeds(self):
+        """feature 132 (AC-1): the feature-089 empty-symbol precondition was REMOVED. An empty
+        signal_params.symbols allowlist no longer blocks enabling live — the strategy fires its
+        whole owner union (watchlist ∪ held ∪ signals-iff-eligible) minus the deny list."""
         svc = make_servicer()
         svc._strategies_repo = AsyncMock()
-        svc._strategies_repo.get_by_id = AsyncMock(return_value=_live_row(symbols=()))
         svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_live_row(symbols=()))
+        enabled = {
+            "strategy_id": "s1",
+            "display_name": "S1",
+            "active": True,
+            "live_enabled": True,
+            "definition_json": {"strategy_id": "s1"},  # no signal_params.symbols
+        }
+        svc._strategies_repo.set_live_enabled = AsyncMock(return_value=enabled)
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         req = MagicMock(strategy_id="s1", live_enabled=True)
         ctx = _admin_ctx()
         ctx.invocation_metadata.return_value = [("x-user-id", "u1"), ("x-access-scope", "7")]
-        with pytest.raises(Exception, match="aborted"):
-            await svc.SetStrategyLive(req, ctx)
-        assert ctx.abort.await_args.args[0] == grpc.StatusCode.FAILED_PRECONDITION
+        resp = await svc.SetStrategyLive(req, ctx)
+        ctx.abort.assert_not_called()
+        assert resp.definition.live_enabled is True
 
     @pytest.mark.asyncio
     async def test_disable_live_always_allowed_even_when_inert(self):

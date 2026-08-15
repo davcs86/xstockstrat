@@ -862,6 +862,47 @@ class TestManageStrategyTool:
             assert "exit_cooldown_days" not in m.call_args.kwargs["definition"]
 
     @pytest.mark.asyncio
+    async def test_forwards_denied_symbols_and_signal_eligible(self):
+        """feature 132: denied_symbols / signal_eligible join the supplied field-map, the derived
+        update_mask, and the outbound definition; omitting them omits the keys (partial merge)."""
+        server = _make_server()
+        with patch.object(
+            client, "manage_strategy", AsyncMock(return_value={"strategy_id": "s"})
+        ) as m:
+            # Both forwarded, and present in the derived update_mask.
+            await _tool_fn(server, "manage_strategy")(
+                ctx=_ctx(ADMIN),
+                operation="update",
+                strategy_id="s",
+                denied_symbols=["TSLA", "NVDA"],
+                signal_eligible=True,
+            )
+            defn = m.call_args.kwargs["definition"]
+            assert defn["denied_symbols"] == ["TSLA", "NVDA"]
+            assert defn["signal_eligible"] is True
+            mask = m.call_args.kwargs["update_mask"]
+            assert "denied_symbols" in mask and "signal_eligible" in mask
+
+            # Explicit empty/false are forwarded (mask includes them → clears server-side).
+            await _tool_fn(server, "manage_strategy")(
+                ctx=_ctx(ADMIN),
+                operation="update",
+                strategy_id="s",
+                denied_symbols=[],
+                signal_eligible=False,
+            )
+            defn = m.call_args.kwargs["definition"]
+            assert defn["denied_symbols"] == [] and defn["signal_eligible"] is False
+
+            # Omitted → keys absent, and NOT in the mask (partial-merge preserves them).
+            await _tool_fn(server, "manage_strategy")(
+                ctx=_ctx(ADMIN), operation="update", strategy_id="s", cooldown_days=9
+            )
+            defn = m.call_args.kwargs["definition"]
+            assert "denied_symbols" not in defn and "signal_eligible" not in defn
+            assert "denied_symbols" not in (m.call_args.kwargs["update_mask"] or [])
+
+    @pytest.mark.asyncio
     async def test_grpc_error_reraised_as_clear_message(self):
         import grpc  # noqa: PLC0415
 

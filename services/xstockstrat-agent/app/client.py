@@ -439,6 +439,11 @@ async def manage_strategy(
         # and an explicit 0 sets presence (feature 069 — no post-construction assignment needed).
         cooldown_days=definition.get("cooldown_days"),
         exit_cooldown_days=definition.get("exit_cooldown_days"),
+        # feature 132 — entry-only deny list + platform-signal eligibility. denied_symbols is a
+        # repeated field (empty list when absent → sent empty, applied only if in the update_mask);
+        # signal_eligible is a plain bool (None → protobuf leaves it default false).
+        denied_symbols=definition.get("denied_symbols", []),
+        signal_eligible=definition.get("signal_eligible"),
     )
     signal_params = definition.get("signal_params")
     if signal_params:

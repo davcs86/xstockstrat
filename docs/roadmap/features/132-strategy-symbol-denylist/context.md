@@ -290,3 +290,74 @@
 
 - Re-run `/sdd-spec` (evidence-only) after 131 + 133 merge to refresh shifted line numbers before execute.
 - Accepted residual: entry_backfill cold-boot no-retry (Step 9/10, no worse than shipped 116).
+
+## Session 2026-08-15 — sdd-execute (sequential, stacked on 131)
+
+Stacked on `feature/live-strategy-opportunity-attribution` (131, PR #954 open). 131 + 133 have
+landed (133 merged; 131 in this stack), so the spec's re-spec gate was satisfied inline: each
+analysis anchor is re-grounded by name against the landed tree during execution (the pre-131 spec's
+line numbers are stale, and it did not know 131 added a 5th `strategy_symbols` caller in
+`_compute_opportunities` — the design anticipated this; Step 7 migrates it to `resolve_universe().union`).
+
+### Step 1 — proto: denied_symbols/signal_eligible/muted [done]
+- `analysis.proto`: `StrategyDefinition.denied_symbols=12` (entry-only deny), `signal_eligible=14`
+  (13 taken by 133's user_id); `Opportunity.muted=12`; maskable-paths comment extended. buf lint +
+  breaking clean (additive).
+### Step 2 — proto-gen [done]
+- `./scripts/buf-gen.sh`; only `analysis.v1` stubs changed; idempotent.
+### Step 3 — service: resolve_universe + maskable paths + reject [done]
+- `live_loop.py`: `resolve_universe(definition, watchlist, held, signals) -> ResolvedUniverse`
+  (universe/deny_entry/union/denied). `strategy_symbols` retained as the allowlist extractor
+  resolve_universe reuses — its 5 callers migrate in Steps 5/7/9, then it can be removed
+  (**deviation**: spec said "replace" in Step 3; kept to keep intermediate commits importable).
+- `servicer.py`: `_MASKABLE_PATHS += denied_symbols, signal_eligible`; **pulled forward** the
+  one-line `Opportunity.muted` mapper in `_row_to_opportunity` (inert until Step 7) so the OR-F
+  parity test stays green now the proto field exists (**deviation** — mapper line is Step 7's, but
+  the parity test breaks at Step 2).
+- `evaluator.py::_validate_definition`: reject merged allowlist × signal_eligible (INVALID_ARGUMENT).
+### Step 4 — test: resolve_universe/masking/reject [done]
+- `TestResolveUniverse` (4 branches), `TestDenyListMaskingAndValidation` (masked set+clear,
+  register-reject, two-step-masked-flip reject, definition_json round-trip), parity `_MAPPED += muted`.
+- TDD: reject/masking assertions target Step-3 behavior. Full suite 483 passed, 82.8%.
+
+### REMAINING (Steps 5–17) — not yet executed
+- **5-6** live loop: entry-only deny + fair-share scheduler + **owner-scoped universe** (the loop must
+  fetch per-owner watchlist/held/signals to call resolve_universe) + tests. **Largest step.**
+- **7-8** `_compute_opportunities`: migrate `live_by_symbol` to `resolve_universe(...).union`, emit
+  muted rows, read-query conviction-floor exemption + tests.
+- **9-10** remove SetStrategyLive empty-symbol precondition; migrate `entry_backfill` to the resolved
+  union; then `strategy_symbols` has no external callers — remove or keep private + tests.
+- **11-12** agent `manage_strategy` exposes denied_symbols/signal_eligible + `strat-lab` skill + tests.
+- **13-16** UI: StrategyWizard deny-list chips + signal_eligible toggle; Symbol-page mute control;
+  Opportunities muted-row treatment; e2e + fixtures (C-12).
+- **17** docs: analysis CLAUDE.md + mcp-tools reference.
+
+## Session 2026-08-15 (cont.) — Steps 3–17 executed (stacked on 131, then rebased onto main-dev)
+
+131 merged mid-session (PR #954); rebased this branch onto the updated main-dev (drops 131's commits).
+Each 131/133-dependent anchor was re-grounded inline against the landed tree (the pre-131 spec's line
+numbers were stale, and it did not know 131 added a 5th `strategy_symbols` caller in
+`_compute_opportunities` — the design anticipated it; Step 7 migrated `live_by_symbol` to
+`resolve_universe(...).union`).
+
+- **Steps 3–4** [done]: `resolve_universe` helper + `ResolvedUniverse`; `_MASKABLE_PATHS` += the two
+  fields; `_validate_definition` allowlist×signal_eligible reject; unit tests. **D-1, D-2.**
+- **Steps 5–6** [done]: live-loop rewrite — entry-only deny in `_apply_transition`; owner-scoped
+  per-cycle universe (portfolio_stub added, wired in main.py); fair-share rotating scheduler
+  (`_cursor_key`, OTel truncation counter); comprehensive tests. **D-4** (FR-6 guard narrowed).
+- **Steps 7–8** [done]: muted rows in `_compute_opportunities` (held-denied flags exit row, non-held
+  0/0 placeholder), three-bucket cut, read-query `OR provenance ? 'denied'` exemption, mapper +
+  parity + tests.
+- **Steps 9–10** [done]: SetStrategyLive empty-symbol precondition removed; `entry_backfill` sources
+  `resolve_universe(...).union` via the loop's drains. **D-3** (readiness via best-effort drains, no
+  channel_ready gate).
+- **Steps 11–12** [done]: agent `manage_strategy` exposes `denied_symbols`/`signal_eligible`;
+  strat-lab skill updated same-PR; tool/client/builder-parity tests.
+- **Steps 13–16** [done]: StrategyWizard deny chips + toggle; `useManageStrategy` optional
+  `updateMask`; Symbol-page masked mute control; Opportunities muted-row treatment (desktop + mobile);
+  e2e fixtures + specs. tsc+lint clean; e2e is the CI gate (cold warmup times out locally).
+- **Step 17** [done]: analysis `CLAUDE.md` § Decide-surface RPCs + `mcp-tools.md` `manage_strategy`
+  params/errors updated.
+
+Teardown: `/context-scrubber` plugin not installed this session — touched context docs
+(`analysis/CLAUDE.md`, `mcp-tools.md`, strat-lab `SKILL.md`) reviewed by hand against the code.

@@ -103,7 +103,10 @@ export default function OpportunitiesPage() {
   const rows = useMemo(() => {
     const filtered = opportunities.filter(
       (o) =>
-        o.conviction >= minConviction &&
+        // feature 132: a muted (deny-listed) row carries conviction 0 by design and must never be
+        // filtered out by the min-conviction slider — the mute is the signal, not a low score
+        // (mirrors the backend read-filter exemption; FR-5 "must not silently disappear").
+        (o.muted || o.conviction >= minConviction) &&
         (activeSources.length === 0 || activeSources.includes(o.source)) &&
         (actionFilter === 'any' || String(o.action) === actionFilter),
     );
@@ -148,6 +151,7 @@ export default function OpportunitiesPage() {
     conviction: o.conviction,
     caption: o.thesis || o.source || undefined,
     href: reviewHref(o),
+    muted: o.muted, // feature 132 — deny-listed row renders a "Muted" marker on mobile too
   }));
 
   return (
@@ -322,10 +326,18 @@ function OpportunityCard({
   onTake: () => void;
 }) {
   const conv = Math.round(o.conviction * 100);
+  // feature 132: a muted (deny-listed) row is informational — distinct styling, no action buttons,
+  // and a link back to the deny-list editor (the symbol's market page carries the mute control).
+  const muted = o.muted;
   return (
     <div
       data-testid="opportunity-card"
-      className="flex gap-4 rounded-lg border border-border bg-card p-4"
+      data-muted={muted || undefined}
+      className={
+        muted
+          ? 'flex gap-4 rounded-lg border border-dashed border-border bg-muted/30 p-4 opacity-75'
+          : 'flex gap-4 rounded-lg border border-border bg-card p-4'
+      }
     >
       {/* Left: conviction / conditions */}
       <div className="flex w-16 shrink-0 flex-col items-center justify-center border-r border-border pr-4">
@@ -345,7 +357,17 @@ function OpportunityCard({
       <div className="min-w-0 flex-1 space-y-1.5">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono font-semibold">{o.symbol}</span>
-          <EnumBadge render={OPPORTUNITY_ACTION[o.action]} />
+          {muted ? (
+            <Badge
+              variant="outline"
+              className="text-[11px]"
+              data-testid={`muted-badge-${o.symbol}`}
+            >
+              Muted
+            </Badge>
+          ) : (
+            <EnumBadge render={OPPORTUNITY_ACTION[o.action]} />
+          )}
           {o.source && (
             <Badge variant="outline" className="text-[11px] text-muted-foreground">
               {o.source}
@@ -363,22 +385,34 @@ function OpportunityCard({
         <span className="font-mono text-xs text-muted-foreground">
           expires {expiresLabel(o.validUntil)}
         </span>
-        <div className="flex gap-2">
-          <Button asChild size="sm" onClick={onTake}>
-            <Link href={href}>Review &amp; add</Link>
+        {muted ? (
+          // No Snooze/Dismiss/Review on a muted row — only a link back to the deny-list editor.
+          <Button asChild size="sm" variant="outline" data-testid={`manage-deny-${o.symbol}`}>
+            <Link href={href}>Manage deny list</Link>
           </Button>
-          <Button size="sm" variant="outline" onClick={onSnooze} data-testid={`snooze-${o.symbol}`}>
-            Snooze
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onDismiss}
-            data-testid={`dismiss-${o.symbol}`}
-          >
-            Dismiss
-          </Button>
-        </div>
+        ) : (
+          <div className="flex gap-2">
+            <Button asChild size="sm" onClick={onTake}>
+              <Link href={href}>Review &amp; add</Link>
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onSnooze}
+              data-testid={`snooze-${o.symbol}`}
+            >
+              Snooze
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onDismiss}
+              data-testid={`dismiss-${o.symbol}`}
+            >
+              Dismiss
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

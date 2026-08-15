@@ -505,6 +505,8 @@ def register_tools(server: MCPServer) -> None:
         signal_params: dict | None = None,
         cooldown_days: int | None = None,
         exit_cooldown_days: int | None = None,
+        denied_symbols: list[str] | None = None,
+        signal_eligible: bool | None = None,
         clear_fields: list[str] | None = None,
     ) -> dict:
         """Register/update/deactivate/reactivate a stored strategy in xstockstrat-analysis.
@@ -548,6 +550,14 @@ def register_tools(server: MCPServer) -> None:
         exit_cooldown_days: optional per-symbol minimum holding period in calendar days before
             exit_rule may fire a sell — omit → platform default (0, no minimum hold); 0 → no
             minimum hold (immediate exit permitted); negative → rejected (INVALID_ARGUMENT).
+        denied_symbols: optional list of normalized-uppercase symbols this strategy must never
+            evaluate FOR ENTRY (feature 132 — entry-only deny). A held position on a denied symbol
+            keeps exit tracing, so an operator can always exit what they already hold; deny only
+            suppresses new entries. Omit to leave unchanged; pass [] (or clear_fields) to clear.
+        signal_eligible: optional bool gating whether the platform-wide active-signal term joins
+            this strategy's evaluation universe (feature 132; default false). Setting it true while
+            signal_params.symbols is a non-empty allowlist is rejected INVALID_ARGUMENT (the
+            allowlist is already an explicit universe override).
         clear_fields: optional list of field names to ERASE, e.g. ['exit_rule']. Use this to
             blank a rule or to revert cooldown_days to the platform default — passing a field
             with no value cannot express "erase" on its own.
@@ -586,6 +596,8 @@ def register_tools(server: MCPServer) -> None:
             "signal_params": signal_params,
             "cooldown_days": cooldown_days,
             "exit_cooldown_days": exit_cooldown_days,
+            "denied_symbols": denied_symbols,
+            "signal_eligible": signal_eligible,
         }
         mask = [name for name, value in supplied.items() if value is not None]
         for name in mask:

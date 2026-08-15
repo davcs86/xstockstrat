@@ -102,7 +102,9 @@ class OpportunitiesRepository:
               ON a.user_id = o.user_id AND a.opportunity_key = o.opportunity_key
             WHERE o.user_id = $1
               {valid_clause}
-              AND o.conviction >= $2
+              -- feature 132: a min_conviction floor must still return muted (deny-listed) rows,
+              -- which carry conviction 0 by design (the mute is the signal, not a low score).
+              AND (o.conviction >= $2 OR o.provenance ? 'denied')
               AND COALESCE(a.action, 0) <> $4
               AND NOT (
                     COALESCE(a.action, 0) = $5

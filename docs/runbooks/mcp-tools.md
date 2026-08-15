@@ -474,6 +474,8 @@ gate.
 | `signal_params` | `object` | No | Optional signal-weighting params |
 | `cooldown_days` | `int` | No | Per-symbol re-entry cooldown in calendar days. Omit → platform default (31); `0` → no cooldown; negative rejected |
 | `exit_cooldown_days` | `int` | No | Per-symbol minimum holding period in calendar days before `exit_rule` may fire a sell. Omit → platform default (0, no minimum hold); `0` → no minimum hold (current behavior); negative rejected |
+| `denied_symbols` | `string[]` | No | **Entry-only** deny list (feature 132) — normalized-uppercase symbols the strategy never evaluates for entry; a held position on a denied symbol still exits. Omit to leave unchanged; pass `[]` (or `clear_fields`) to clear |
+| `signal_eligible` | `bool` | No | Whether the platform-wide active-signal term joins the strategy's live universe (feature 132; default `false`). `true` alongside a non-empty `signal_params.symbols` allowlist is rejected `INVALID_ARGUMENT` (the allowlist is already an explicit override) |
 | `clear_fields` | `string[]` | No | Field names to **erase** on `update`, e.g. `["exit_rule"]`. The only way to blank a rule or revert `cooldown_days` to the platform default |
 
 **Return**
@@ -489,6 +491,7 @@ gate.
 | Invalid definition (unknown indicator, bad rule JSON, undefined ref_name) | `invalid argument` (INVALID_ARGUMENT) |
 | Negative `cooldown_days` | `invalid argument` (INVALID_ARGUMENT) |
 | Negative `exit_cooldown_days` | `invalid argument` (INVALID_ARGUMENT) |
+| `signal_eligible=true` with a non-empty `signal_params.symbols` allowlist (feature 132) | `invalid argument` (INVALID_ARGUMENT) |
 | `update` with no fields and no `clear_fields` | `ValueError` raised client-side, before any RPC |
 | An `update` that would empty `components` or blank a rule without naming it for erasure | `invalid argument` (INVALID_ARGUMENT) — the server refuses; the message names `update_mask` as the escape hatch |
 | `update`/`deactivate`/`reactivate` on unknown strategy | `strategy not found` (NOT_FOUND) |

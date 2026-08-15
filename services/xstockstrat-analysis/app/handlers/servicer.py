@@ -1927,13 +1927,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if k in ("x-user-id", "x-access-scope", "x-trace-id")
         ]
 
-        # Feature 089 (F-7): enabling live on an inert config stores a flag that never fires. The
-        # live loop selects `live_enabled AND active` and skips a strategy with no
-        # signal_params.symbols, so reject both at enable time (FAILED_PRECONDITION). Disabling is
-        # ALWAYS allowed — even on an inert config — so an operator can always turn live off.
+        # Feature 089 (F-7): enabling live on an inactive strategy stores a flag that never fires,
+        # so reject that at enable time (FAILED_PRECONDITION). Disabling is ALWAYS allowed — even on
+        # an inert config — so an operator can always turn live off.
+        # Feature 132: the empty-signal_params.symbols reject was REMOVED. Under the deny model, an
+        # empty allowlist no longer means "never fires" — the strategy fires its whole owner union
+        # (watchlist ∪ held ∪ signals-iff-eligible, minus the deny list), so the feature-089
+        # precondition would now wrongly block a valid allowlist-free config (AC-1).
         if request.live_enabled:
-            from app.engine.live_loop import strategy_symbols  # noqa: PLC0415 (avoids import cycle)
-
             existing = await self._strategies_repo.get_by_owner_and_id(
                 caller_user_id, request.strategy_id
             )
@@ -1947,12 +1948,6 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 await context.abort(
                     grpc.StatusCode.FAILED_PRECONDITION,
                     "cannot enable live evaluation on an inactive strategy; reactivate it first",
-                )
-                return
-            if not strategy_symbols(_row_to_strategy_definition(existing)):
-                await context.abort(
-                    grpc.StatusCode.FAILED_PRECONDITION,
-                    "strategy has no signal_params.symbols; live evaluation would never fire",
                 )
                 return
 
@@ -2237,19 +2232,29 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         # symbols (the other origins — watchlist/held/signals — are already owner-scoped).
         live_by_symbol: dict[str, set[str]] = {}
         created_at_by_strategy: dict[str, object] = {}
+        # feature 132: (sym, strat) pairs where sym is on strat's deny list AND within its pre-deny
+        # coverage — these become muted rows below (held+denied keeps its exit; non-held gets a 0/0
+        # placeholder), never conviction=0.
+        denied_covered: list[tuple[str, str]] = []
         if self._strategies_repo is not None:
             from app.engine.live_loop import (  # noqa: PLC0415 (avoids import cycle)
-                strategy_symbols,
+                resolve_universe,
             )
 
+            # feature 132: resolve_universe.union is the strategy's pre-deny coverage (a non-empty
+            # signal_params.symbols allowlist is an explicit override, else watchlist ∪ held ∪
+            # signals-iff-eligible) — the source of "which symbols this live strategy covers", and
+            # already normalized. Supersedes 131's allowlist-only strategy_symbols source.
+            wl_set = set(watchlist_by_symbol)
+            sig_set = set(signals_by_symbol)
             for row in await self._strategies_repo.list_live_enabled(user_id):
                 definition = _row_to_strategy_definition(row)
-                for sym in strategy_symbols(definition):
-                    # Normalize the key (design step 1): signal_params.symbols has no write-time
-                    # case validation, so an un-normalized key would silently never match
-                    # held_norm/signals_by_symbol's already-normalized keys.
-                    live_by_symbol.setdefault(_normalize_symbol(sym), set()).add(row["strategy_id"])
+                resolved = resolve_universe(definition, wl_set, held_norm, sig_set)
+                for sym in resolved.union:
+                    live_by_symbol.setdefault(sym, set()).add(row["strategy_id"])
                 created_at_by_strategy[row["strategy_id"]] = row["created_at"]
+                for sym in resolved.denied & resolved.union:
+                    denied_covered.append((sym, row["strategy_id"]))
 
         # feature 131 — per-symbol live-attribution fan-out cap (read once, F-07). Applies ONLY at
         # candidate-CREATION sites (the held loop's live_new delta and the live-only step below);
@@ -2282,6 +2287,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                     "is_watchlist": False,
                     "is_held": False,
                     "is_live": False,
+                    "muted": False,  # feature 132 — on the strategy's deny list
                     "best_direction": "",
                     "_best_sig_conv": -1.0,
                 }
@@ -2379,20 +2385,32 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         if not c["thesis"]:
                             c["thesis"] = sig.headline
 
-        # FR-1: rank watchlist/held (curated) ABOVE the max_universe_size cut so a curated
-        # candidate is never truncated; drop only the speculative signal-only tail.
+        # feature 132 — muted (deny-listed) rows: exactly one row per denied (sym, strat) covered by
+        # the strategy. Held+denied flags the existing exit-traced row (deny is entry-only, exit
+        # still shows); non-held denied gets a 0/0 placeholder. muted is a bool carried by the
+        # "denied" provenance marker (the persistence carrier) — never conviction=0 (fails.md 023).
+        for sym, strat in denied_covered:
+            c = _candidate(sym, strat)
+            if sym in held_norm:
+                c["is_held"] = True  # keep the exit trace on the held+denied row
+                _add_provenance(c, "position")
+            _add_provenance(c, "denied")
+            c["muted"] = "denied" in c["provenance"]
+
+        # FR-1: rank watchlist/held/live (curated) ABOVE the max_universe_size cut so a curated
+        # candidate is never truncated; feature 132 adds a muted_only bucket ranked above the
+        # speculative tail too, so a deny-listed row is never dropped for a higher signal.
         max_universe = self._cfg.get_int("analysis.opportunity.max_universe_size", 100)
-        curated = [
-            c for c in candidates.values() if c["is_watchlist"] or c["is_held"] or c["is_live"]
-        ]
-        speculative = [
-            c
-            for c in candidates.values()
-            if not (c["is_watchlist"] or c["is_held"] or c["is_live"])
-        ]
+
+        def _sel(c: dict) -> bool:
+            return c["is_watchlist"] or c["is_held"] or c["is_live"]
+
+        curated = [c for c in candidates.values() if _sel(c)]
+        muted_only = [c for c in candidates.values() if c["muted"] and not _sel(c)]
+        speculative = [c for c in candidates.values() if not (_sel(c) or c["muted"])]
         speculative.sort(key=lambda c: c["signal_axis"], reverse=True)
-        budget = max(0, max_universe - len(curated))
-        selected = curated + speculative[:budget]
+        budget = max(0, max_universe - len(curated) - len(muted_only))
+        selected = curated + muted_only + speculative[:budget]
 
         # Readiness + row assembly. Attributed candidates fetch bars once each and trace; the
         # session date (for valid_until) is the newest bar seen across the whole compute.
@@ -2409,7 +2427,10 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             readiness = _empty_readiness(sym)
             exit_fires = False
 
-            if strat:
+            # feature 132: a muted NON-held row is a deny-listed placeholder — skip the bars-fetch/
+            # trace and emit a 0/0 (a held+denied row still traces its exit, since deny is
+            # entry-only).
+            if strat and not (c["muted"] and not c["is_held"]):
                 definition = await self._load_strategy_definition(user_id, strat, strategy_defs)
                 if definition is not None:
                     try:
@@ -2430,8 +2451,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                         exit_fires = total > 0 and readiness["passing_conditions"] == total
 
             action = _resolve_action_tag(c, exit_fires)
-            if action is None:  # speculative sell-with-no-position → not actionable, drop
-                continue
+            if action is None:
+                if c["muted"]:
+                    # feature 132: a muted, otherwise-non-actionable row is informational — keep it
+                    # (UNSPECIFIED tag), never drop it. The mute is the signal (fails.md 023).
+                    action = analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED
+                else:
+                    continue  # speculative sell-with-no-position → not actionable, drop
 
             rows.append(
                 {
@@ -2842,7 +2868,7 @@ def _primary_source(provenance: list[str]) -> str:
     origin in ``provenance``, skipping the ``"watchlist"``/``"position"`` structural markers.
     ``provenance`` carries the full origin list."""
     for origin in provenance:
-        if origin not in ("watchlist", "position"):
+        if origin not in ("watchlist", "position", "denied"):
             return origin
     return ""
 
@@ -2865,6 +2891,9 @@ def _row_to_opportunity(row: dict) -> "analysis_pb2.Opportunity":
         source=_primary_source(provenance),
         opportunity_key=row["opportunity_key"],
         provenance=provenance,
+        # feature 132 — muted is derived from the "denied" provenance marker (the persistence
+        # carrier; analysis.opportunities has no muted column), so it survives the DB round-trip.
+        muted=("denied" in provenance),
     )
     valid_until = row.get("valid_until")
     if valid_until is not None:
@@ -3139,6 +3168,8 @@ _MASKABLE_PATHS = frozenset(
         "signal_params",
         "cooldown_days",
         "exit_cooldown_days",
+        "denied_symbols",  # feature 132 — entry-only deny list (rides definition_json)
+        "signal_eligible",  # feature 132 — gates the platform-wide active-signal universe term
     }
 )
 

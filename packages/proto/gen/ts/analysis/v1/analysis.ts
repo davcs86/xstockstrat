@@ -1020,12 +1020,27 @@ export interface StrategyDefinition {
     | number
     | undefined;
   /**
+   * Normalized-uppercase symbols this strategy must never evaluate FOR ENTRY (feature 132 —
+   * entry-only deny). A held position on a denied symbol keeps exit tracing (the deny suppresses
+   * only the entry edge, so an operator can always exit a position they already hold). Rides
+   * definition_json (no column); maskable via ManageStrategyRequest.update_mask.
+   */
+  deniedSymbols: string[];
+  /**
    * Owning user (feature 133). Server-authoritative: populated from the propagated
    * x-user-id header on ManageStrategy REGISTER, never accepted from the request body
-   * (mirrors ListOpportunitiesRequest / portfolio ownership convention). Field 12 is
-   * reserved for feature 132's denied_symbols — do not reuse.
+   * (mirrors ListOpportunitiesRequest / portfolio ownership convention).
    */
   userId: string;
+  /**
+   * Gates whether the platform-wide active-signal term joins this strategy's evaluation universe
+   * (feature 132). Plain bool (no optional) is intentional: absent ≡ false ≡ explicit-false resolve
+   * identically. A strategy that sets BOTH a non-empty signal_params.symbols allowlist AND
+   * signal_eligible=true is rejected INVALID_ARGUMENT at write time (the allowlist is already an
+   * explicit universe override; signals would be redundant/contradictory). Rides definition_json;
+   * maskable.
+   */
+  signalEligible: boolean;
 }
 
 export interface ManageStrategyRequest {
@@ -1046,7 +1061,7 @@ export interface ManageStrategyRequest {
    *              StrategyWizard, which always sends a complete definition) are unaffected.
    *
    * Allowed paths: display_name, components, entry_rule, exit_rule, signal_params, cooldown_days,
-   * exit_cooldown_days.
+   * exit_cooldown_days, denied_symbols, signal_eligible.
    * strategy_id/active/live_enabled are column-authoritative and rejected with INVALID_ARGUMENT.
    */
   updateMask?: string[] | undefined;
@@ -1181,6 +1196,8 @@ export interface Opportunity {
   opportunityKey: string;
   /** contributing origins for a de-duplicated row (signal source(s) / "position" / "watchlist") */
   provenance: string[];
+  /** feature 132 — the (symbol, strategy) pair is on the strategy's deny list; surfaced as an explicit muted row (never conviction=0) */
+  muted: boolean;
 }
 
 /** One evaluated condition leaf from the traced evaluator (feature 083). */
@@ -4276,7 +4293,9 @@ function createBaseStrategyDefinition(): StrategyDefinition {
     cooldownDays: undefined,
     warnings: [],
     exitCooldownDays: undefined,
+    deniedSymbols: [],
     userId: "",
+    signalEligible: false,
   };
 }
 
@@ -4315,8 +4334,14 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
     if (message.exitCooldownDays !== undefined) {
       writer.uint32(88).int32(message.exitCooldownDays);
     }
+    for (const v of message.deniedSymbols) {
+      writer.uint32(98).string(v!);
+    }
     if (message.userId !== "") {
       writer.uint32(106).string(message.userId);
+    }
+    if (message.signalEligible !== false) {
+      writer.uint32(112).bool(message.signalEligible);
     }
     return writer;
   },
@@ -4416,12 +4441,28 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
           message.exitCooldownDays = reader.int32();
           continue;
         }
+        case 12: {
+          if (tag !== 98) {
+            break;
+          }
+
+          message.deniedSymbols.push(reader.string());
+          continue;
+        }
         case 13: {
           if (tag !== 106) {
             break;
           }
 
           message.userId = reader.string();
+          continue;
+        }
+        case 14: {
+          if (tag !== 112) {
+            break;
+          }
+
+          message.signalEligible = reader.bool();
           continue;
         }
       }
@@ -4482,11 +4523,21 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
         : isSet(object.exit_cooldown_days)
         ? globalThis.Number(object.exit_cooldown_days)
         : undefined,
+      deniedSymbols: globalThis.Array.isArray(object?.deniedSymbols)
+        ? object.deniedSymbols.map((e: any) => globalThis.String(e))
+        : globalThis.Array.isArray(object?.denied_symbols)
+        ? object.denied_symbols.map((e: any) => globalThis.String(e))
+        : [],
       userId: isSet(object.userId)
         ? globalThis.String(object.userId)
         : isSet(object.user_id)
         ? globalThis.String(object.user_id)
         : "",
+      signalEligible: isSet(object.signalEligible)
+        ? globalThis.Boolean(object.signalEligible)
+        : isSet(object.signal_eligible)
+        ? globalThis.Boolean(object.signal_eligible)
+        : false,
     };
   },
 
@@ -4525,8 +4576,14 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
     if (message.exitCooldownDays !== undefined) {
       obj.exitCooldownDays = Math.round(message.exitCooldownDays);
     }
+    if (message.deniedSymbols?.length) {
+      obj.deniedSymbols = message.deniedSymbols;
+    }
     if (message.userId !== "") {
       obj.userId = message.userId;
+    }
+    if (message.signalEligible !== false) {
+      obj.signalEligible = message.signalEligible;
     }
     return obj;
   },
@@ -4547,7 +4604,9 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
     message.cooldownDays = object.cooldownDays ?? undefined;
     message.warnings = object.warnings?.map((e) => e) || [];
     message.exitCooldownDays = object.exitCooldownDays ?? undefined;
+    message.deniedSymbols = object.deniedSymbols?.map((e) => e) || [];
     message.userId = object.userId ?? "";
+    message.signalEligible = object.signalEligible ?? false;
     return message;
   },
 };
@@ -6205,6 +6264,7 @@ function createBaseOpportunity(): Opportunity {
     validUntil: undefined,
     opportunityKey: "",
     provenance: [],
+    muted: false,
   };
 }
 
@@ -6242,6 +6302,9 @@ export const Opportunity: MessageFns<Opportunity> = {
     }
     for (const v of message.provenance) {
       writer.uint32(90).string(v!);
+    }
+    if (message.muted !== false) {
+      writer.uint32(96).bool(message.muted);
     }
     return writer;
   },
@@ -6341,6 +6404,14 @@ export const Opportunity: MessageFns<Opportunity> = {
           message.provenance.push(reader.string());
           continue;
         }
+        case 12: {
+          if (tag !== 96) {
+            break;
+          }
+
+          message.muted = reader.bool();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -6387,6 +6458,7 @@ export const Opportunity: MessageFns<Opportunity> = {
       provenance: globalThis.Array.isArray(object?.provenance)
         ? object.provenance.map((e: any) => globalThis.String(e))
         : [],
+      muted: isSet(object.muted) ? globalThis.Boolean(object.muted) : false,
     };
   },
 
@@ -6425,6 +6497,9 @@ export const Opportunity: MessageFns<Opportunity> = {
     if (message.provenance?.length) {
       obj.provenance = message.provenance;
     }
+    if (message.muted !== false) {
+      obj.muted = message.muted;
+    }
     return obj;
   },
 
@@ -6444,6 +6519,7 @@ export const Opportunity: MessageFns<Opportunity> = {
     message.validUntil = object.validUntil ?? undefined;
     message.opportunityKey = object.opportunityKey ?? "";
     message.provenance = object.provenance?.map((e) => e) || [];
+    message.muted = object.muted ?? false;
     return message;
   },
 };

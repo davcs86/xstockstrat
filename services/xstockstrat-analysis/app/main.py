@@ -113,6 +113,9 @@ async def serve():
             evaluator=StrategyEvaluator(servicer._indicators, ()),
             # feature 069 — reuses db_pool (F-06)
             cooldowns_repo=StrategyCooldownsRepository(db_pool),
+            # feature 132 — owner-scoped universe resolution reads watchlist/held from portfolio
+            # (reuses the existing PORTFOLIO_ENDPOINT stub; no new channel — F-06).
+            portfolio_stub=servicer._portfolio,
         )
         # ── Hydrate persisted re-entry cooldowns (feature 069) ───────────
         # Best-effort, alongside hydrate_scores — a failure never blocks startup.
