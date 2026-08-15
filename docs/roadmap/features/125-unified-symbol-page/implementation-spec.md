@@ -397,7 +397,7 @@ go test ./internal/repository/... -race -run TestGetPosition -v
 
 ### Step 7 — docs: cross-segment client-reuse sanctioned exception + `nextjs-frontends.md` correction
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui` / `docs/patterns`
 **Files**:
 - `services/xstockstrat-ui/CLAUDE.md` — modify

@@ -661,3 +661,25 @@ each checkpoint (C-02/P-03).
   (user-approved) to exercise the query offline. A benign `covdata` sandbox-toolchain warning
   appears on the no-test middleware pkg under `-race -coverpkg` but all packages pass and coverage
   computes.
+
+### UI-block prep (2026-08-15) — rebase + shadcn skill (per user)
+- Synced latest `origin/main-dev` (was 1 commit ahead) into the branch — clean merge; pushed. That
+  commit **added the new shadcn skill** to the repo (`.claude/skills/shadcn` → `.agents/skills/shadcn/`).
+- shadcn skill located and available; will invoke it for the UI component steps (8-26, 32-33) to
+  drive `npx shadcn@latest` (project context, docs, add) and honor its critical rules (semantic
+  colors, `gap`/`size-*`, full Card composition, `Chart` composite for recharts, `Skeleton`/`Badge`/
+  `Alert`/`Empty` over custom markup). Step 7 is docs-only — no shadcn.
+
+### Step 7 — docs: cross-segment client-reuse exception + nextjs-frontends.md correction [done]
+- Added the feature-125 cross-segment-client sanctioned-exception bullet to
+  `services/xstockstrat-ui/CLAUDE.md` (after the ChartPanel bullet). Rewrote `nextjs-frontends.md`
+  §10: "two BFF files" → "one BFF file per segment" (`{trader,insights,configUi}Bff.ts` +
+  `bffShared.ts`), corrected the "#1 BFF footgun" block (no basePath in the consolidated app → key
+  the handler map on the FULL segment prefix `prefix + h.requestPath`, cite `bffShared.ts:105-119`),
+  dropped the stale nginx claim, and added the cross-reference footnote to the exception.
+- Verify: exception present (1), "one BFF file per segment" (1), "two BFF files" (0). ✓
+- Files modified: `services/xstockstrat-ui/CLAUDE.md`, `docs/patterns/nextjs-frontends.md`
+- **Deviation (recorded, not skipped)**: the mandated Teardown `/context-scrubber scan` could not run
+  — the context-forge/context-scrubber plugin is **not available in this session** (only `strat-lab`
+  is installed). Per root CLAUDE.md § Teardown, recording it here and in the PR body rather than
+  skipping silently. The two edited files were self-reviewed against the spec's exact required text.

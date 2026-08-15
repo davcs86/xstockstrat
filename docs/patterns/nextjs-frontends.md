@@ -279,23 +279,20 @@ Browser (React Client Components)
 
 ### BFF catch-all: one file per frontend
 
-Each frontend has two BFF files:
+Since feature 045 (`ui-consolidation-nextjs`) there is **one consolidated `xstockstrat-ui` app with one BFF file per segment**, not one Next.js app per frontend:
 
 ```
-lib/connectBff.ts           ← router setup, auth helpers, dispatchConnect()
-app/api/[...connect]/route.ts  ← two lines: export GET/POST = dispatchConnect
+src/lib/{traderBff,insightsBff,configUiBff}.ts   ← per-segment router + dispatchConnect()
+src/lib/bffShared.ts                             ← shared plumbing (createBffRouter, createDispatch, requireSession, backendHeaders)
+src/app/<segment>/api/[...connect]/route.ts      ← re-exports its segment's dispatchConnect
 ```
 
-`connectBff.ts` registers services via `createConnectRouter` (from `@connectrpc/connect`) and builds a handler map keyed by **`'/api' + handler.requestPath`** — i.e. the **basePath-relative** path, NOT `basePath + '/api' + ...`. The `dispatchConnect` function adapts Web API `Request`/`Response` to `UniversalServerRequest`/`UniversalServerResponse`.
+Each segment router registers services and then `export const dispatchConnect = createDispatch(router, '<prefix>')`; all session/header/dispatch logic is shared via `bffShared.ts` (do not re-implement per segment — DRY guard rail).
 
-> ⚠️ **The #1 BFF footgun — do not prefix the basePath onto the handler-map keys.**
-> Next.js **strips the configured `basePath` from `req.url` before the route handler runs.** Inside `dispatchConnect`, `new URL(req.url).pathname` is therefore basePath-relative — e.g. `/api/xstockstrat.portfolio.v1.PortfolioService/ListPortfolios`, **not** `/trader/api/...`. If you build the map with `const PREFIX = '/trader/api'` (the public URL the browser sees), **every lookup misses and every RPC returns 404.** The browser hits `/trader/api/...` (correct — `browserTransport.baseUrl` includes the basePath, and nginx forwards it intact), but by the time it reaches `dispatchConnect` the `/trader` prefix is gone. Key the map on `'/api'` only:
-> ```ts
-> // ✓ Correct — matches the basePath-relative pathname dispatchConnect actually receives
-> const PREFIX = '/api';
-> const handlerMap = new Map(router.handlers.map((h) => [PREFIX + h.requestPath, h]));
-> ```
-> **Bug fixed** ([PR #453](https://github.com/davcs86/xstockstrat/pull/453)): all three BFFs keyed on `'/<basePath>/api'`. Latent until the trader frontend actually started calling its BFF (connect-web migration, [PR #451](https://github.com/davcs86/xstockstrat/pull/451)) — then **every** method (`ListOrders`, `ListPortfolios`, `RegisterBrokerAccount`, `ListBrokerAccounts`, `StreamAlerts`, `ListAssets`) 404'd in production. See "Verifying a BFF route actually resolves" below — a `next build` pass does **not** catch this.
+> ⚠️ **The #1 BFF footgun — the handler-map key must include the full segment prefix.**
+> The consolidated app has **no** Next.js `basePath` config, so nothing strips the segment prefix from `req.url` — `new URL(req.url).pathname` inside dispatch is the **full** public path (e.g. `/trader/api/xstockstrat.portfolio.v1.PortfolioService/ListPortfolios`). `bffShared.ts`'s `createDispatch(router, prefix)` (`src/lib/bffShared.ts:105-119`) therefore builds its handler map as **`prefix + h.requestPath`** where `prefix` is the full segment path (e.g. `createDispatch(router, '/trader/api')` at `traderBff.ts`), and its own inline comment states why: "in the consolidated app Next.js does NOT strip a basePath, so the handler-map key must include it." Keying the map on `'/api'` only (the pre-045 multi-app guidance) makes **every lookup miss and every RPC 404** in this architecture — the opposite of the old rule.
+>
+> **Exception**: `/trader/positions/[symbol]` calls `/insights`-segment browser clients directly rather than adding a `traderBff.ts` registration for every RPC it needs — see `services/xstockstrat-ui/CLAUDE.md` § Styling for the verified conditions and rationale (feature 125).
 
 All existing specific App Router routes (`auth/*`, `health`, `alerts/stream`, `audit`, etc.) take precedence over the `[...connect]` catch-all due to Next.js route ordering (static > required catch-all).
 

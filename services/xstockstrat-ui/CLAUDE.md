@@ -74,6 +74,18 @@ theme values come entirely from the preset).
   `/insights`, and `e2e/trader/chart-panel.spec.ts` depends on `lightweight-charts`'s own injected
   `.tv-lightweight-charts` DOM class as an async-readiness signal. Do not re-flag this as an
   unconsolidated charting approach in a future audit.
+- **Sanctioned exception — the unified `/trader/positions/[symbol]` page reuses `/insights`-segment
+  browser clients.** `analysisClient`, `insightsIngestClient`, and `insightsPortfolioClient` (all
+  `baseUrl: '/insights/api'`) are called directly from this `/trader`-segment page rather than
+  re-registered in `traderBff.ts` (feature 125 design decision, 2026-08-10): the base URLs are
+  root-relative so the browser `fetch()` stays same-origin regardless of which segment rendered the
+  page; no segment-specific ingress routing exists — `.do/app.yaml`'s single `/` catch-all routes
+  both `/trader/api` and `/insights/api` to the same DO component; the session cookie is
+  `path: '/'`, not segment-scoped; and `bffShared.ts`'s `requireSession` re-checks the session on
+  every dispatch independent of which BFF router handled it. This trades `/trader`'s BFF
+  self-containment for avoiding duplicate one-line `forward()` registrations — do not re-flag this
+  as an architecture violation in a future audit; do not treat it as precedent for arbitrary
+  cross-segment reuse without re-verifying these four facts still hold.
 
 ## Docker Build Pattern
 
