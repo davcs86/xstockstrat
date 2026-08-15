@@ -35,12 +35,16 @@ FR-2. Build one shared `DataTable` composite (`@tanstack/react-table` + the exis
   shape. It must support sorting and pagination as baseline capabilities; column filtering and
   column-visibility toggles are added per-table only where the data justifies it (see FR-3).
 
-FR-3. For each table in the FR-1 inventory, migrate it to the shared `DataTable` UNLESS it is a
-  small, static, read-only lookup table (e.g. a namespace's key/value editor row list) where a full
-  `DataTable` would be pure overhead — in which case it stays on the plain `Table` primitive and the
-  decision + rationale is recorded in `context.md`. Every migrated table gets sort support at
-  minimum; add filter/pagination/column-visibility per-table based on realistic row/column counts
-  found in recon (a 5-row static table does not need pagination controls).
+FR-3. For each table in the FR-1 inventory, migrate it to the shared `DataTable` UNLESS it meets
+  **all three** of the following exemption thresholds, in which case it stays on the plain `Table`
+  primitive and the decision is recorded in `implementation-spec.md` with its measured row/column
+  counts: (a) **static or bounded row count ≤ 10** — not paginated/API-driven data that can grow
+  unbounded; (b) **column count ≤ 4**; (c) **read-only** — no sortable/filterable value a user would
+  plausibly want to reorder (e.g. a namespace's key/value editor row list). Recon enumerates which
+  FR-1 inventory entries meet all three thresholds; this is a measurement against a fixed rule, not
+  an open design choice. Every migrated table gets sort support at minimum; add
+  filter/pagination/column-visibility per-table based on realistic row/column counts found in recon
+  (a 5-row static table does not need pagination controls).
 
 FR-4. Every table this feature touches (both migrated-to-`DataTable` and explicitly-left-on-`Table`
   per FR-3) must be horizontally responsive on narrow viewports. For each, recon/design must
@@ -102,24 +106,33 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 
 ## Acceptance Criteria
 
-1. Recon's table inventory (FR-1) is exhaustive and cited with `path:line` evidence for every hit —
-   no table implementation left undiscovered.
+1. Recon's table inventory (FR-1) lists every match of a full-repo grep for `<table`, `from
+   "@/components/ui/table"` / `from '@/components/ui/table'`, and any other table-library import
+   across `services/xstockstrat-ui/src`, each with `path:line` evidence — zero table call sites are
+   found post-hoc during `/sdd-spec` or `/sdd-execute` that recon's inventory does not already list.
 2. A shared `DataTable` composite exists and is the single implementation every migrated table
-   consumes (no per-page duplicate TanStack wiring).
-3. Every table in the inventory is either migrated to `DataTable` or explicitly, individually
-   justified as staying on the plain `Table` primitive per FR-3.
+   consumes (no per-page duplicate TanStack wiring) — zero files under
+   `services/xstockstrat-ui/src` import `@tanstack/react-table` directly outside that one composite
+   and its own test file.
+3. Every entry in the FR-1 inventory has an explicit, recorded disposition in
+   `implementation-spec.md` — either "migrated to `DataTable`" or "kept on `Table` primitive,
+   qualifies for all three FR-3 exemption thresholds (measured row/column counts cited)" — zero
+   entries left without a recorded disposition.
 4. Every table in the inventory has a recorded, applied responsive strategy (FR-4) and passes an
-   automated no-horizontal-overflow assertion (FR-5) on a narrow/mobile viewport.
-5. Existing table functionality (row actions, links, existing data display) is preserved —
-   no regression in what data a table shows or what a row's action buttons do.
-6. Full `xstockstrat-ui` Playwright + Vitest suites pass after migration.
+   automated no-horizontal-overflow assertion (FR-5) on a narrow/mobile viewport — zero migrated
+   routes are absent from the `mobile-overflow.spec.ts` (or equivalent) route list without a
+   documented reason recon found it structurally uncoverable.
+5. For each migrated table, the pre-migration set of user-visible data fields and row action
+   buttons (identified in recon) is unchanged post-migration, verified by existing or updated
+   Playwright/Vitest assertions covering that table — any assertion whose expected value changes is
+   recorded in the Deviation Log with why.
+6. Full `xstockstrat-ui` Playwright + Vitest suites pass (exit code 0) after migration.
 
 ## Open Questions
 
-- [ ] Recon should confirm the exact set of "small static lookup" tables that qualify for the FR-3
-  exemption before implementation-spec is written — the product spec above names one example
-  (`NamespaceEditor`-style key/value rows) but the full list is a recon deliverable, not assumed
-  here.
+None outstanding. (Resolved 2026-08-15: the FR-3 exemption criteria are now a fixed, three-part
+measurable threshold — see FR-3 — rather than an open design choice; recon's job is to measure each
+inventory entry against it, not decide the rule.)
 
 **Known trap** (ledger `fails.md`, 2026-08-06, `083-ui-revamp-opportunities-first`): a prior
 feature shipped a "fidelity matches handoff" sign-off via content-only review that missed the

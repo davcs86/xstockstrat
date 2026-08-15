@@ -57,3 +57,21 @@
     between 096/124) — recommend adding a `135` row to `merge-order.md` once 135 reaches
     `implementation-ready`, sequencing it after 124 (closest to merge) and re-checked against 125 if
     that merges first. Not a blocking gate today (no config/proto/migration collision exists).
+
+## Session 2026-08-15 — warnings addressed (pre-design)
+
+Addressed both `/sdd-review product-spec` warnings directly in `product-spec.md` before starting
+`/sdd-design`:
+
+- **AC1/AC3/AC5 qualitative → quantitative.** Rewrote all six ACs to name a concrete, checkable
+  condition (grep-derived inventory completeness, zero direct `@tanstack/react-table` imports
+  outside the shared composite, an explicit per-table disposition record, zero undocumented missing
+  routes in the overflow sweep, assertion-parity pre/post migration, suite exit code 0).
+- **Open Question resolved.** FR-3's exemption for staying on the plain `Table` primitive was an
+  open design choice ("recon should confirm the exact set..."); replaced with a fixed, measurable
+  three-part threshold (row count ≤ 10 and static/bounded, column count ≤ 4, read-only) directly in
+  FR-3. Recon's job is now to *measure* inventory entries against this rule, not decide the rule
+  itself. `## Open Questions` is now empty.
+- No re-run of `/sdd-review product-spec` performed yet — these are refinements of an
+  already-PASSED review (no new criterion introduced, no scope change), not a reversal of the
+  approval. `feature.md` stays at `spec-ready`; proceeding to `/sdd-design` next.
