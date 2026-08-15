@@ -79,6 +79,11 @@ migrate_service() {
       : "${SEED_USER_ID:?SEED_USER_ID is required to apply analysis migration 013 (strategy ownership backfill)}"
       scratch="$(mktemp -d)"
       cp "$dir"/*.sql "$scratch"/
+      # SC2016: the single quotes are intentional and required — the literal '$SEED_USER_ID' is
+      # envsubst's variable *allowlist* argument, not a value to expand in the shell. Expanding it
+      # here (double quotes) would pass envsubst the resolved UUID as its allowlist, which matches
+      # nothing, and would drop the single-variable safety that protects 013's DO $$ … $$ block.
+      # shellcheck disable=SC2016
       envsubst '$SEED_USER_ID' < "$dir/013_strategies_user_id.up.sql" > "$scratch/013_strategies_user_id.up.sql"
       dir="$scratch"
     fi
