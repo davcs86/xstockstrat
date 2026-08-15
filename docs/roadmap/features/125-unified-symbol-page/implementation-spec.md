@@ -246,7 +246,7 @@ Write the test first (Step 4) so it fails against the pre-Step-3 tree (`criterio
 
 ### Step 4 — test (xstockstrat-analysis): single-symbol raw/passed fields
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_screener.py` — modify

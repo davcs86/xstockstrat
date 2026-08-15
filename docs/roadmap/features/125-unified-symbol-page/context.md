@@ -607,3 +607,16 @@ each checkpoint (C-02/P-03).
   FAILED; green: `test_single_symbol_criterion_raw_values_and_passed` PASSED, ruff clean.
 - Files modified: `services/xstockstrat-analysis/app/services/screener.py`
 - Deviations: none.
+
+### Step 4 — test (xstockstrat-analysis): single-symbol raw/passed fields [done]
+- Added `test_single_symbol_criterion_raw_values_and_passed` to `tests/test_screener.py`: a
+  single-symbol scan with pass/fail/skip criteria asserting `criterion_raw_values` = real reading,
+  `criterion_scores` = collapsed 0.5 (the motivating contrast), `criterion_passed` = comparator
+  result, and a skipped criterion absent from both maps.
+- TDD: red (pre-Step-3: raw==0.0 vs 0.8) → green (post-Step-3: PASSED). Full suite: 515 passed,
+  83.32% coverage.
+- Files modified: `services/xstockstrat-analysis/tests/test_screener.py`
+- Deviations: Step 4's Verification `pytest tests/test_screener.py --cov=app --cov-fail-under=40`
+  measures app-wide coverage over a single test file (6.86% — unreachable by design). Ran the
+  CI-equivalent full suite `uv run pytest --cov=app --cov-fail-under=40` (83.32%, matches CI's
+  full-suite gate). **Disposition**: CI-equivalent fallback.
