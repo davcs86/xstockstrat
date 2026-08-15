@@ -579,7 +579,11 @@ export async function startMockBackend(): Promise<void> {
         // feature 083 — ranked opportunity queue; honors the min_conviction filter.
         async listOpportunities(req) {
           const min = req.minConviction ?? 0;
-          return { opportunities: OPPORTUNITIES.filter((o) => o.conviction >= min) };
+          // feature 132: muted (deny-listed) rows are exempt from the conviction floor (they carry
+          // conviction 0 by design) — mirrors the backend `OR provenance ? 'denied'` read exemption.
+          return {
+            opportunities: OPPORTUNITIES.filter((o) => o.muted || o.conviction >= min),
+          };
         },
         // feature 097 — the persisted-disposition RPC exists on the server so a call resolves.
         // Stateful snooze/dismiss *persistence* is proven per-test via page.route isolation
@@ -842,6 +846,10 @@ export async function startMockBackend(): Promise<void> {
             // Feature 069: only this id carries a non-default cooldown (edit-prepopulation e2e);
             // every other id leaves cooldownDays unset so the "edit unset strategy" case stays honest.
             ...(req.strategyId === 'strat-cooldown-14' ? { cooldownDays: 14 } : {}),
+            // feature 132: this id carries a deny list + signal_eligible (deny-list edit round-trip).
+            ...(req.strategyId === 'strat-001'
+              ? { deniedSymbols: ['TSLA'], signalEligible: true }
+              : {}),
             // Feature 116: only this id carries a non-default exit cooldown (edit-prepopulation e2e);
             // every other id leaves exitCooldownDays unset so the "edit unset strategy" case stays honest.
             ...(req.strategyId === 'strat-exit-cooldown-7' ? { exitCooldownDays: 7 } : {}),

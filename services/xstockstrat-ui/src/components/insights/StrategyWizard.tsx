@@ -135,6 +135,18 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
   );
   const [entryRule, setEntryRule] = useState(initial?.entryRule ?? '');
   const [exitRule, setExitRule] = useState(initial?.exitRule ?? '');
+  // feature 132 — entry-only deny list (normalized uppercase) + platform-signal eligibility toggle.
+  const [deniedSymbols, setDeniedSymbols] = useState<string[]>(() =>
+    (initial?.deniedSymbols ?? []).map((s) => s.toUpperCase()),
+  );
+  const [deniedInput, setDeniedInput] = useState('');
+  const [signalEligible, setSignalEligible] = useState<boolean>(initial?.signalEligible ?? false);
+
+  function addDenied() {
+    const v = deniedInput.trim().toUpperCase();
+    if (v && !deniedSymbols.includes(v)) setDeniedSymbols((xs) => [...xs, v]);
+    setDeniedInput('');
+  }
 
   const serverError =
     errorObj instanceof ConnectError ? errorObj.rawMessage : (errorObj?.message ?? null);
@@ -186,6 +198,10 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
       // Presence-honest: blank omits the key (server default drives the gate); "0" sends cooldownDays: 0.
       ...(cd.valid && cd.value !== undefined ? { cooldownDays: cd.value } : {}),
       ...(cd2.valid && cd2.value !== undefined ? { exitCooldownDays: cd2.value } : {}),
+      // feature 132 — the wizard is a full replace, so it always sends both (empty deny list clears
+      // any prior; signalEligible defaults false). The masked Symbol-page control is the partial path.
+      deniedSymbols,
+      signalEligible,
     };
     mutate(
       {
@@ -339,6 +355,62 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
                   {!exitCooldownParsed.valid && (
                     <p className="mt-1 text-xs text-destructive">{exitCooldownParsed.error}</p>
                   )}
+                </div>
+              </QuestionnaireItem>
+              <QuestionnaireItem name="deniedSymbols">
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">
+                    Denied symbols (entry-only — held positions still exit)
+                  </label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={deniedInput}
+                      placeholder="e.g. TSLA"
+                      data-testid="denied-input"
+                      onChange={(e) => setDeniedInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          addDenied();
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      data-testid="denied-add"
+                      onClick={addDenied}
+                    >
+                      Add
+                    </Button>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1" data-testid="denied-chips">
+                    {deniedSymbols.map((s) => (
+                      <span
+                        key={s}
+                        data-testid={`denied-chip-${s}`}
+                        className="inline-flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-xs"
+                      >
+                        {s}
+                        <button
+                          type="button"
+                          aria-label={`Remove ${s}`}
+                          onClick={() => setDeniedSymbols((xs) => xs.filter((x) => x !== s))}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <label className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      data-testid="signal-eligible-toggle"
+                      checked={signalEligible}
+                      onChange={(e) => setSignalEligible(e.target.checked)}
+                    />
+                    Signal-eligible (join platform-wide signals in the live universe)
+                  </label>
                 </div>
               </QuestionnaireItem>
               <IdentityNav

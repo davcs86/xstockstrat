@@ -609,7 +609,7 @@ ruff are the gate.)
 
 ### Step 13 — service: StrategyWizard deny-list chips editor + `signal_eligible` toggle + masked write plumbing
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/StrategyWizard.tsx` — modify
@@ -652,7 +652,7 @@ Lint clean; the deny-list chips + toggle render and submit (behavioral proof in 
 
 ### Step 14 — service: Symbol detail page "mute this symbol for a strategy" control (masked write)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/market/[symbol]/page.tsx` — modify
@@ -687,7 +687,7 @@ Lint clean; behavioral proof in Step 16.
 
 ### Step 15 — service: Opportunities page muted-row treatment
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx` — modify
@@ -722,7 +722,7 @@ Lint clean; behavioral proof in Step 16.
 
 ### Step 16 — test: e2e specs + fixtures for the three UI surfaces (C-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify

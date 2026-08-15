@@ -16,6 +16,8 @@ import { SignalReadiness } from '@/components/insights/SignalReadiness';
 import { SignalOrderTicket } from '@/components/insights/SignalOrderTicket';
 import { OPPORTUNITY_ACTION, EnumBadge } from '@/lib/opportunityShared';
 import { useOpportunities, useStrategyAnalytics } from '@/hooks/useOpportunities';
+import { useStrategyDefinitions, useManageStrategy } from '@/hooks/useStrategyDefinitions';
+import { StrategyOperation } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { Eyebrow } from '@/components/shared/Eyebrow';
 import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
 
@@ -217,6 +219,8 @@ export default function MarketSymbolPage() {
             <Suspense fallback={<div className="h-24" />}>
               <SignalReadiness symbol={symbol} />
             </Suspense>
+
+            <MuteForStrategy symbol={symbol} />
           </div>
           <div className="lg:col-span-1">
             <Suspense fallback={<div className="h-24" />}>
@@ -226,5 +230,70 @@ export default function MarketSymbolPage() {
         </div>
       </div>
     </AppShell>
+  );
+}
+
+/**
+ * feature 132 — "mute this symbol for a strategy": pick one of the caller's own strategies and
+ * append this symbol (uppercase) to its deny list via a MASKED manageStrategy update
+ * (updateMask=['denied_symbols']) — the first UI exercise of the mask path, so it touches only the
+ * deny list and never clobbers the rest of the definition. The strategy-definitions query is
+ * invalidated on success (wired in useManageStrategy), so the "already muted" state reflects after
+ * the write.
+ */
+function MuteForStrategy({ symbol }: { symbol: string }) {
+  const { data } = useStrategyDefinitions(true);
+  const { mutate, isPending } = useManageStrategy();
+  const [picked, setPicked] = useState('');
+  const definitions = data?.definitions ?? [];
+  const chosen = definitions.find((s) => s.strategyId === picked);
+  const alreadyDenied = chosen?.deniedSymbols?.includes(symbol) ?? false;
+
+  function mute() {
+    if (!chosen) return;
+    const next = Array.from(new Set([...(chosen.deniedSymbols ?? []), symbol]));
+    mutate({
+      operation: StrategyOperation.UPDATE,
+      definition: { strategyId: chosen.strategyId, deniedSymbols: next },
+      updateMask: ['denied_symbols'],
+    });
+  }
+
+  return (
+    <Card data-testid="mute-for-strategy">
+      <CardHeader>
+        <CardTitle className="text-base">Mute {symbol} for a strategy</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <p className="text-xs text-muted-foreground">
+          Adds {symbol} to the strategy&apos;s entry-only deny list — a held position still exits.
+        </p>
+        <div className="flex items-center gap-2">
+          <select
+            data-testid="mute-strategy-select"
+            className="rounded border bg-background px-2 py-1 text-sm"
+            value={picked}
+            onChange={(e) => setPicked(e.target.value)}
+          >
+            <option value="">Select a strategy…</option>
+            {definitions.map((s) => (
+              <option key={s.strategyId} value={s.strategyId}>
+                {s.displayName || s.strategyId}
+                {s.deniedSymbols?.length ? ` (denies ${s.deniedSymbols.length})` : ''}
+              </option>
+            ))}
+          </select>
+          <Button
+            type="button"
+            variant="secondary"
+            data-testid="mute-submit"
+            disabled={!chosen || alreadyDenied || isPending}
+            onClick={mute}
+          >
+            {alreadyDenied ? 'Muted' : 'Mute'}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
