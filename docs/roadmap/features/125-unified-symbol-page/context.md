@@ -836,3 +836,16 @@ each checkpoint (C-02/P-03).
   green. Backend prereqs (1–6), shared-component fixes (8–11), and docs (7) done earlier. Next:
   Steps 18–21 (Backtests + Backfill sections), then 22–26 (page retirement/nav/cross-cutting proofs),
   then the FR-6 indicator-overlay-panel block (27–33).
+
+### Step 18 — service (xstockstrat-ui): Backtests section [done]
+- New local `BacktestsSection` in `page.tsx`, mounted unconditionally (always-on, FR-9) after the
+  watchlist split. Resolves `strategyId = boundStrategyId || owningStrategy` (Step 12's binding, else
+  Step 8's orders-derived owner). Calls `useBacktestHistory(strategyId || undefined)` and
+  **client-side filters** `runs` to `r.symbols.includes(symbol)` (the accepted narrower coverage).
+  History-list only (When/Return/Sharpe/Trades) — no embedded per-run detail, no `GetBacktest` call.
+  "Run backtest" → `useRunBacktest().mutate({ strategyIdRef, symbols:[symbol], initialCapital:100000,
+  range: 2024 })` (fixed default window/capital matching the reference runner), invalidates
+  `['analysis-backtests', strategyId]` on success. No-resolvable-strategy → explicit no-data card
+  (no run button). shadcn Card/Button/Table.
+- Verify: tsc clean, lint clean.
+- Files: `src/app/trader/positions/[symbol]/page.tsx`

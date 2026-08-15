@@ -1128,7 +1128,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "Single Position page"
 
 ### Step 18 — service (xstockstrat-ui): Backtests section
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify

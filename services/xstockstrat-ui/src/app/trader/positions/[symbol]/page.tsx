@@ -1,5 +1,6 @@
 'use client';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { AppShell } from '@/components/trader/AppShell';
@@ -16,6 +17,9 @@ import { POSITION_RISK_FLAG, OPPORTUNITY_ACTION, EnumBadge } from '@/lib/opportu
 import { useWatchlists } from '@/hooks/useWatchlists';
 import { useOpportunities } from '@/hooks/useOpportunities';
 import { useFundamentals } from '@/hooks/useFundamentals';
+import { useBacktestHistory } from '@/hooks/useStrategies';
+import { useRunBacktest } from '@/hooks/useBacktest';
+import { timestampToDate } from '@/lib/protoTime';
 import { SignalReadiness } from '@/components/insights/SignalReadiness';
 import { SymbolScreening } from '@/components/trader/SymbolScreening';
 import { ConnectError } from '@connectrpc/connect';
@@ -254,6 +258,10 @@ export default function PositionDetailPage() {
         ) : (
           <SymbolScreening symbol={symbol} />
         )}
+
+        {/* Backtests (FR-9) — always-on, keyed on the resolved strategy: the watchlist-binding's
+            strategyId (Step 12), else the orders-derived owning strategy (Step 8). */}
+        <BacktestsSection symbol={symbol} strategyId={boundStrategyId || owningStrategy} />
 
         {position && position.symbol ? (
           <PositionBody
@@ -730,6 +738,119 @@ function FundamentalsSection({ symbol }: { symbol: string }) {
               </div>
             ))}
           </dl>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Backtests section (FR-9) — the run history for the resolved strategy, client-side filtered to the
+// runs that included this symbol (the accepted narrower coverage), plus a "Run backtest" action.
+// History-list only: no embedded per-run detail (that stays on /insights/strategies/[id]).
+function BacktestsSection({ symbol, strategyId }: { symbol: string; strategyId: string }) {
+  const queryClient = useQueryClient();
+  const { data: history, isLoading } = useBacktestHistory(strategyId || undefined);
+  const { mutate: runBacktest, isPending, error } = useRunBacktest();
+
+  const runs = useMemo(
+    () => (history?.runs ?? []).filter((r) => r.symbols.includes(symbol)),
+    [history, symbol],
+  );
+
+  // No watchlist binding and no orders-derived owning strategy → nothing to back-test against.
+  if (!strategyId) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Backtests</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            No strategy resolves for {symbol} — add it to a watchlist bound to a strategy, or place
+            an order under one, to back-test it here.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const errorMessage = error instanceof ConnectError ? error.rawMessage : (error?.message ?? null);
+
+  function handleRun() {
+    // Fixed default window/capital, matching the reference runner on /insights/strategies/[id].
+    const isoToTimestamp = (iso: string) => {
+      const ms = new Date(iso).getTime();
+      return { seconds: BigInt(Math.floor(ms / 1000)), nanos: (ms % 1000) * 1_000_000 };
+    };
+    runBacktest(
+      {
+        strategyIdRef: strategyId,
+        symbols: [symbol],
+        initialCapital: 100000,
+        range: { start: isoToTimestamp('2024-01-01'), end: isoToTimestamp('2024-12-31') },
+      },
+      {
+        onSuccess: () =>
+          queryClient.invalidateQueries({ queryKey: ['analysis-backtests', strategyId] }),
+      },
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle className="text-base">Backtests</CardTitle>
+          <span className="font-mono text-xs text-muted-foreground">{strategyId}</span>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex items-center gap-3">
+          <Button size="sm" onClick={handleRun} disabled={isPending} data-testid="run-backtest">
+            {isPending ? 'Running…' : 'Run backtest'}
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            {symbol} · 2024 · $100k — history covers this strategy&apos;s runs only.
+          </span>
+        </div>
+        {errorMessage && <p className="text-sm text-destructive">{errorMessage}</p>}
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading backtest history…</p>
+        ) : runs.length === 0 ? (
+          <p className="text-sm text-muted-foreground" data-testid="no-backtests">
+            No backtests including {symbol} under {strategyId} yet.
+          </p>
+        ) : (
+          <Table data-testid="backtests-table">
+            <TableHeader>
+              <TableRow>
+                <TableHead>When</TableHead>
+                <TableHead className="text-right">Return</TableHead>
+                <TableHead className="text-right">Sharpe</TableHead>
+                <TableHead className="text-right">Trades</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {runs.map((run) => (
+                <TableRow key={run.backtestId} data-testid="backtest-row">
+                  <TableCell className="whitespace-nowrap text-muted-foreground">
+                    {timestampToDate(run.completedAt)?.toLocaleDateString() ?? '—'}
+                  </TableCell>
+                  <TableCell
+                    className={`text-right font-mono tabular-nums ${pnlClass(run.totalReturn ?? 0)}`}
+                  >
+                    {((run.totalReturn ?? 0) * 100).toFixed(2)}%
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular-nums">
+                    {(run.sharpeRatio ?? 0).toFixed(2)}
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular-nums">
+                    {String(run.totalTrades ?? 0)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
         )}
       </CardContent>
     </Card>
