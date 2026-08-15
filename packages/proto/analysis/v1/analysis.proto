@@ -401,6 +401,12 @@ message ScreenResult {
   double atr = 9;
   double rev_growth = 10;
   bool held = 11;
+  // Per-criterion raw readings + pass/fail, for single-symbol screening where the universe-relative
+  // `score`/`criterion_scores` collapse to a content-free 0.5 (feature 125, FR-8). Populated from the
+  // same engine-internal values `criterion_scores` already draws from, exposed directly instead of
+  // normalized.
+  map<string, double> criterion_raw_values = 12;
+  map<string, bool> criterion_passed = 13;
 }
 
 message ScreenSymbolsRequest {

@@ -547,3 +547,32 @@ unified-symbol-page`.
 **Next**: `/sdd-execute unified-symbol-page` — FR-6 begins at Step 27 (all 33 steps still `pending`;
 none executed). `/sdd-execute` must announce the three `[ ] unaddressed` advisory notes above at
 each checkpoint (C-02/P-03).
+
+---
+
+## Session 2026-08-15 — sdd-execute (sequential, full feature)
+
+- Mode: SEQUENTIAL, full feature (user: "full feature, sequential, one commit per step, one final
+  integration PR"). Executing on `claude/strategy-charts-symbol-page-itodkw` (harness-pinned; the SDD
+  `feature/unified-symbol-page` branch does not exist on origin). Integration PR = the existing #958
+  (→ main-dev), which accumulates the step commits.
+- Re-spec gate (§5.3): merged `origin/main-dev` clean (brought in the 131-134 cohort's migrations/
+  fixtures); pushed. Per-step Phase-1 discovery validates each step's evidence against the updated
+  tree (directive = none → any mismatch is a §5.7 blocker).
+- Tooling setup (all steps): go1.25 ✓ · golangci-lint 2.5.0 ✓ · python3.11+uv0.8.17 ✓ · ruff0.15.8 ✓
+  · node22+pnpm9.15.0 ✓ (workspace installed) · buf1.72.0 ⬇ · protoc-gen-go@1.36.11 /
+  protoc-gen-go-grpc@1.6.2 / protoc-gen-connect-go@1.19.2 ⬇ · grpcio-tools==1.80.0 ⬇ · TS plugins ✓
+  (pnpm). **Codegen validated: `./scripts/buf-gen.sh` reproduces committed stubs byte-for-byte
+  (empty `git diff packages/proto/gen/`)** before any proto edit — per the ledger toolchain-validation
+  lesson. Docker present but unused (host codegen works).
+
+### Step 1 — proto: additive `ScreenResult` fields [done]
+- Added `map<string, double> criterion_raw_values = 12` and `map<string, bool> criterion_passed = 13`
+  after `bool held = 11;` in `ScreenResult`. `buf lint` ✓; `buf breaking` against main-dev ✓
+  (additive-only, no breaking diff). Anchors shifted (ScreenResult 369-385 → 388-404 from the main-dev
+  merge) but field content/numbers unchanged — benign line-shift, no re-spec needed.
+- Files modified: `packages/proto/analysis/v1/analysis.proto`
+- Deviations: the step's Verification `buf breaking --against ".git#branch=main-dev"` resolves `.git`
+  relative to cwd (`packages/proto/.git`, which doesn't exist) and needs a local `main-dev` ref; ran
+  the CI-equivalent `buf breaking --against "<repo-root>/.git#branch=main-dev,subdir=packages/proto"`
+  after `git branch -f main-dev origin/main-dev`. Same check, correct path — CI-equivalent fallback.

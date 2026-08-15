@@ -93,7 +93,7 @@ does not wait on FR-6.
 
 ### Step 1 — proto: additive `ScreenResult` fields for single-symbol screening
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
