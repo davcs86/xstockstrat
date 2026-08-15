@@ -28,6 +28,7 @@ skill).
 | Config key SetConfig payload | `setConfigPayload` | `e2e/fixtures/configKeys.ts` | `xstockstrat.config.v1.SetConfigRequest` | `e2e/config-ui/api-smoke.spec.ts` |
 | Config key ListKeys metadata rows | `CONFIG_KEY_FIXTURES` | `e2e/fixtures/configKeys.ts` | `xstockstrat.config.v1.ConfigKeyMeta` | `e2e/mock-backend.ts` (`ConfigService.listKeys` — spreads each row + computes `currentValue` from a `configValueOverrides` map that `setConfig` writes into, so a save is visible to the next `listKeys` the same way `value_data` vs. `default_value` works on the real service), `e2e/config-ui/{api-smoke,value-persists-after-save,reason-capture,env-gate}.spec.ts` |
 | Screener results (scenario rows) | `fundamentalsPendingRow`, `barsInsufficientRow`, `resolvedRow`, `criterionDetailRow` (single-symbol `criterionRawValues`/`criterionPassed` row, feature 125) | `e2e/fixtures/screenResults.ts` | `xstockstrat.analysis.v1.ScreenResult` | `e2e/insights/screener.spec.ts` (feature 118 polling suite); `e2e/trader/position-detail.spec.ts` (feature 125 single-symbol Screening) |
+| Backfill jobs | `backfillJob(over)` (numeric `BackfillStatus`/`Timeframe` enums — valid for both a Connect-server response and a page.route Connect-JSON body; `range` passed via `over` when a test needs the covered span, feature 125) | `e2e/fixtures/backfillJobs.ts` | `xstockstrat.ingest.v1.BackfillJob` | `e2e/insights/backfills.spec.ts` (imported as `runningJob`); `e2e/mock-backend.ts` (`listBackfillJobs`) + `e2e/trader/position-detail.spec.ts` (feature 125 Backfill coverage) |
 
 ## Recurring sentinel ids (stay inline, but are reserved)
 
@@ -62,6 +63,5 @@ a fixture module and register it above (never copy-paste it into a second site).
 | Editable strategy components (`getStrategy`) | `e2e/mock-backend.ts` |
 | Signal sources | `e2e/fixtures/signalSources.ts` (`SIGNAL_SOURCE_WEIGHTED`/`SIGNAL_SOURCE_NEUTRAL`/`SIGNAL_SOURCES`) — feature 134 centralized these from `mock-backend.ts`; each carries `reliabilityWeight` (0.5 / 1.0) |
 | OAuth authorized apps | `e2e/mock-backend.ts` (`listAuthorizedApps`) |
-| Backfill jobs | `e2e/insights/backfills.spec.ts` (`runningJob()` factory) — carries **both** `timeframe: '1d'` and `timeframeEnum: 'TIMEFRAME_1DAY'` (feature 080) |
 | MCP tool list | `e2e/accounts/mcp-tools.spec.ts` (`SAMPLE_TOOLS`) |
 | Copilot rail thread notes | `e2e/fixtures/copilotThread.ts` (`COPILOT_NOTE`/`COPILOT_NOTE_TEXT`) + `e2e/mock-backend.ts` (in-memory `copilotThreads` store via `appendEvent`/`queryEvents`) |

@@ -213,6 +213,28 @@ test.describe('Single Position page', () => {
     await page.goto('/trader/positions/ZZZZ');
     await expect(page.getByText(/No strategy resolves for ZZZZ/)).toBeVisible({ timeout: 30000 });
   });
+
+  test('the Backfill section shows the ingested date span for a symbol with coverage (FR-10)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // AAPL has one COMPLETED backfill job spanning 2024-01-01 → 2024-06-01 in the mock.
+    await page.goto('/trader/positions/AAPL');
+
+    const coverage = page.getByTestId('backfill-coverage');
+    await expect(coverage).toBeVisible({ timeout: 30000 });
+    await expect(coverage).toContainText('2024-01-01 → 2024-06-01');
+  });
+
+  test('the Backfill section shows a no-coverage state for a symbol with no ingested data (FR-10)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // ZZZZ has no backfill jobs in the mock → explicit no-coverage state, never a blank gap.
+    await page.goto('/trader/positions/ZZZZ');
+    await expect(page.getByTestId('no-backfill')).toBeVisible({ timeout: 30000 });
+    await expect(page.getByTestId('no-backfill')).toContainText(/No ingested coverage for ZZZZ/);
+  });
 });
 
 /** Route the browser's ListWatchlists to a single watchlist containing `symbol` (bound to

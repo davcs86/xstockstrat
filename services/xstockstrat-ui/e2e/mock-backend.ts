@@ -51,6 +51,8 @@ import {
   FUNDAMENTALS_AAPL,
 } from './fixtures';
 import { criterionDetailRow } from './fixtures/screenResults';
+import { backfillJob } from './fixtures/backfillJobs';
+import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 
 export const TRADER_MOCK_PORT = 9091;
 export const INSIGHTS_MOCK_PORT = 9092;
@@ -983,6 +985,35 @@ export async function startMockBackend(): Promise<void> {
         // job id so the confirmation can be asserted (AC-4).
         async triggerBackfill() {
           return { jobId: 'job-e2e-1', status: 1 /* BACKFILL_STATUS_QUEUED */ };
+        },
+        // feature 125: the Symbol-page Backfill coverage section lists jobs for one symbol. AAPL has
+        // one COMPLETED job carrying a covered range (2024-01-01 → 2024-06-01); any other symbol has
+        // no ingested coverage.
+        async listBackfillJobs(req) {
+          if (req.symbol === 'AAPL') {
+            return {
+              jobs: [
+                {
+                  // Spread the shared fixture, then override the two int64 fields to bigint (the
+                  // Connect-server message-init shape) and add the covered range — the fixture's
+                  // string int64s are the page.route/Connect-JSON shape backfills.spec.ts needs.
+                  ...backfillJob({
+                    jobId: 'job-aapl-1',
+                    symbols: ['AAPL'],
+                    status: BackfillStatus.COMPLETED,
+                  }),
+                  barsProcessed: BigInt(500),
+                  barsTotal: BigInt(500),
+                  range: {
+                    start: { seconds: BigInt(1704067200), nanos: 0 }, // 2024-01-01
+                    end: { seconds: BigInt(1717200000), nanos: 0 }, // 2024-06-01
+                  },
+                },
+              ],
+              page: { nextPageToken: '', totalCount: 1 },
+            };
+          }
+          return { jobs: [], page: { nextPageToken: '', totalCount: 0 } };
         },
         async manageSignalSource(req) {
           // feature 134: echo the saved reliabilityWeight back so the inline-edit round-trip is

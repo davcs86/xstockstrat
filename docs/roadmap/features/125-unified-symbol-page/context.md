@@ -871,3 +871,26 @@ each checkpoint (C-02/P-03).
   the section is dates-focused per FR-10, not a job-status board. shadcn Card.
 - Verify: tsc clean, lint clean.
 - Files: `src/app/trader/positions/[symbol]/page.tsx`
+
+### Step 21 — test (xstockstrat-ui): Backfill section e2e [done]
+- **Fixture centralized (C-12)**: generalized `backfills.spec.ts`'s inline `runningJob()` into
+  `e2e/fixtures/backfillJobs.ts` (`backfillJob(over)`), imported back into `backfills.spec.ts` as
+  `runningJob` (behavior unchanged — 6/6 still green). Switched its enum fields to the **numeric**
+  proto values so the same fixture is valid both as a page.route Connect-JSON body and (spread) as a
+  Connect-server response. Moved the INVENTORY row from "Not yet centralized" to Canonical fixtures.
+- **Dual-serialization note**: int64 fields stay strings in the fixture (JSON-serializable for
+  page.route; a `bigint` would throw in `JSON.stringify`). The mock-backend `listBackfillJobs` handler
+  spreads the fixture and overrides `barsProcessed`/`barsTotal` to `bigint` + adds a `{seconds,nanos}`
+  `range` — the Connect-server message-init shape. AAPL → one COMPLETED job (2024-01-01 → 2024-06-01);
+  any other symbol → empty jobs. `INGEST_ENDPOINT=9093` for all segments, so the handler was added to
+  the port-9093 IngestService (the one `insightsIngestClient` reaches).
+- E2E: AAPL → "2024-01-01 → 2024-06-01" coverage; ZZZZ → "No ingested coverage for ZZZZ".
+- E2E: **built + ran — position-detail 14/14 + backfills 6/6 = 21/21 (18.9s).**
+- Files: `e2e/fixtures/backfillJobs.ts` (new), `e2e/fixtures/INVENTORY.md`, `e2e/mock-backend.ts`,
+  `e2e/insights/backfills.spec.ts`, `e2e/trader/position-detail.spec.ts`
+
+### Checkpoint (after Step 20/21) — 21/33 steps done
+- All page sections now built: chart/orders/trade (8), Opportunity/Readiness (12), Fundamentals (14),
+  Screening (16), Backtests (18), Backfill (20) — each with e2e. Next: Steps 22–26 (retire
+  `insights/market/[symbol]` → redirect, nav cleanup, cross-cutting proofs), then FR-6 indicator
+  overlay panels (27–33).

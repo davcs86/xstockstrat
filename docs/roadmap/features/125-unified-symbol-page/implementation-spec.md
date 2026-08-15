@@ -1272,7 +1272,7 @@ Plus the e2e proof in Step 21.
 
 ### Step 21 — test (xstockstrat-ui): Backfill section e2e
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify (add a `listBackfillJobs` handler — confirmed
