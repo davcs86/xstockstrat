@@ -609,8 +609,11 @@ def register_tools(server: MCPServer) -> None:
                 )
             update_mask = mask
 
-        # feature 092: forward the caller's REAL derived scope (was a hardcoded admin 7); the
-        # analysis ManageStrategy backend enforces the ADMIN bit, so a non-admin is rejected there.
+        # feature 092: forward the caller's REAL derived scope (was a hardcoded admin 7). NOTE
+        # (feature 133): ManageStrategy is no longer admin-gated — it is ownership-gated. Analysis
+        # resolves the owner from the propagated x-user-id header and returns PERMISSION_DENIED for
+        # a non-owner; any authenticated caller acts on their OWN strategies regardless of admin.
+        # The scope is still forwarded (harmless defence-in-depth), but it is no longer the gate.
         access_scope = _caller_access_scope(ctx, "manage_strategy")
         # feature 133: forward the caller's own user id so analysis resolves ownership from the
         # header (never the request body) — a non-owner is rejected PERMISSION_DENIED there.

@@ -838,7 +838,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -- strategy-ownership
 
 ### Step 16 — docs: strat-lab skill + agent/analysis doc corrections (same-PR)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` / plugins
 **Files**:
 - `plugins/strat-lab/skills/backtest/SKILL.md` — modify
@@ -881,7 +881,8 @@ grep -n "admin gate\|ADMIN bit" services/xstockstrat-agent/CLAUDE.md services/xs
 
 ### Step 17 — docs: record the live-loop `x-user-id` impersonation finding (design.md Open Risk 1)
 
-**Status**: `pending`
+**Status**: `done` (recorded as **deferred to feature 132** per D-1 — 133 is identity-only and
+introduces no synthetic-header call site; the analysis findings doc carries the forward-pointer)
 **Service**: `docs`
 **Files**:
 - `services/xstockstrat-analysis/docs/context-constitution-findings.md` — modify

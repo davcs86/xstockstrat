@@ -431,3 +431,36 @@ TS plugins (pnpm) + `uv sync --extra dev` (analysis) all done. gettext-base inst
   regression). Env note: e2e run locally needs `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/
   chromium-1194/chrome-linux/chrome` and a longer `--timeout` for the cold-dev warmup; CI's prebuilt
   bundle is unaffected.
+
+### Step 16 — docs corrections (same-PR) [done]
+- `plugins/strat-lab/skills/backtest/SKILL.md`: added an **Ownership (feature 133)** note —
+  manage_strategy/set_strategy_live/run_backtest/get_strategy/list_strategies operate only on the
+  caller's own strategies; ownership-gated (no admin required); a non-owned id → uniform
+  PERMISSION_DENIED (never NOT_FOUND).
+- `services/xstockstrat-agent/CLAUDE.md` § Management-tool authorization: moved manage_strategy/
+  set_strategy_live OFF the "backend admin gate" list (now only manage_signal_source/trigger_backfill
+  hit ingest's admin gate); added a paragraph stating the strategy tools are ownership-gated on the
+  forwarded x-user-id. Softened the Role-section summary line accordingly.
+- `services/xstockstrat-agent/app/tools.py`: corrected the stale "backend enforces the ADMIN bit"
+  comment on manage_strategy → ownership-gated note.
+- `services/xstockstrat-analysis/CLAUDE.md`: added a **Strategy Ownership (feature 133)** subsection
+  (composite `(user_id, strategy_id)` PK, header-resolved ownership, uniform PERMISSION_DENIED,
+  ManageStrategy/SetStrategyLive ownership-gated not admin-gated, D-2 score-cache note, D-1 universe
+  deferral).
+- **context-scrubber**: the context-forge plugin is NOT installed in this session (only
+  `.agents/context-forge.json` + `context-scrubber-findings.md` exist; no skill/command). Per the root
+  CLAUDE.md Teardown rule this is noted in the PR body rather than skipped silently; the touched
+  context files were manually reviewed for drift against the code.
+
+### Step 17 — impersonation finding [done — deferred to feature 132 per D-1]
+- 133 is identity-only and introduces NO synthetic outbound `x-user-id` call site (the owner-scoped
+  firing-universe union that needs it is deferred to 132's `resolve_universe`), so there is no new
+  impersonation vector to record as a 133 defect.
+- Recorded a **forward-pointer** in `services/xstockstrat-analysis/docs/context-constitution-findings.md`
+  extending the existing admin-bit self-injection open question to the identity-impersonation case and
+  marking it **deferred to feature 132** — so a future reader understands why 133's x-user-id
+  propagation did not add a synthetic-header vector.
+
+### Feature 133 — code-completed
+All 17 steps done. Analysis backend (auth core, 464 tests green), agent surface (219 tests green),
+UI BFF de-gating + cross-user isolation e2e (green), and same-PR docs. Ready for the integration PR.
