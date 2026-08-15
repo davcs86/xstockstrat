@@ -67,9 +67,29 @@ FR-6. **Indicators + per-strategy conviction** (watchlist symbols only): show pe
 condition readiness for the symbol exactly as the existing `SignalReadiness` component (backed by
 `EvaluateReadiness`) does on `/insights/market/[symbol]` today — strategy-scoped, using whatever
 strategy the watchlist binding names (`WatchlistBinding.strategyId`) or a strategy picker if
-unbound. Raw indicator values beyond per-strategy readiness (`ComputeIndicator`) are **out of
-scope** — no UI surface exposes those generically today and this feature does not add one (flag
-any real need for that as a named follow-up, don't build it here).
+unbound.
+
+**Amended 2026-08-15 (user decision — see context.md § Session 2026-08-15).** The prior scope note
+here ("raw indicator values beyond per-strategy readiness are out of scope") is **superseded**:
+this feature now also renders **indicator overlay chart panels** for the resolved strategy's
+declared components. For the strategy resolved by this FR's own precedence (watchlist binding, or
+the picker's current selection), read `StrategyDefinition.components`
+(`packages/proto/analysis/v1/analysis.proto:241-246` — each a `StrategyComponent{ref_name, kind,
+indicator, formula_id, params}`, `kind` is `COMPONENT_KIND_BUILTIN_INDICATOR` or
+`COMPONENT_KIND_CUSTOM_FORMULA`) and plot one sub-panel per component beneath the existing
+candlestick price chart, computed via `ComputeIndicator`/`ExecuteFormula` on
+`xstockstrat-indicators` — RPCs that already exist but that **no UI surface calls today**
+(confirmed by recon at the time of the original design; this is new UI/BFF wiring, not reuse, same
+as FR-7/FR-8 already were). Scope stays bounded to *this resolved strategy's own declared
+components* — a general-purpose, strategy-agnostic indicator browser remains out of scope (see Out
+of Scope, updated below). Design-phase (re-opened for this FR only) determines: the exact
+input-series sourcing for `ComputeIndicator` (the page's already-fetched bar closes) vs.
+`ExecuteFormula` (custom-formula components, whose `input_data` contract needs verifying against
+`xstockstrat-indicators`'s actual sandbox contract — see `docs/runbooks/indicator-builder.md`), how
+multiple sub-panels render given `ChartPanel.tsx`/`useCandlestickChart.ts`'s sanctioned
+`lightweight-charts@^4.2.0` exception (`services/xstockstrat-ui/CLAUDE.md`) has no existing
+multi-pane precedent on this page, and how a strategy with zero components or an
+unresolvable-strategy symbol degrades (no fabricated panels — P-03).
 
 FR-7. **Fundamentals** (watchlist symbols only): show the symbol's fundamentals ratios/metrics via
 `GetFundamentals` on `MarketDataService` (`xstockstrat-marketdata`) — **corrected by `/sdd-design`
@@ -137,7 +157,10 @@ Exposure and Portfolio exactly, same as 096 already guarantees for its own page 
 - Any new backend computation: live streaming quotes (LAST/CHG — feature 099, parked, no data
   source yet), richer conviction/target/R:R/sizing fields (feature 095, still `draft`), and any new
   indicator formula or scoring model.
-- Building a general-purpose "indicator values" viewer beyond existing per-strategy readiness.
+- **Amended 2026-08-15**: a **general-purpose**, strategy-agnostic "indicator values" viewer is
+  still out of scope. FR-6's indicator overlay panels are scoped strictly to the *resolved
+  strategy's own declared `components`* — not an arbitrary indicator picker, not indicators outside
+  what the strategy itself references.
 - Rebuilding the full multi-symbol Screener UI — only a single-symbol evaluation surface for this
   page.
 - New proto RPCs, unless design-phase recon proves none of the existing RPCs above can serve a
@@ -166,8 +189,10 @@ Exposure and Portfolio exactly, same as 096 already guarantees for its own page 
   which is a single-job lookup with no symbol param; see recon.md).
 - `xstockstrat-trading` — read-only consumer via existing `ListOrders`; write path via the existing
   order-placement flow the reused `OrderForm` already calls.
-- `xstockstrat-indicators` — not directly called by this feature (readiness goes through
-  `xstockstrat-analysis`'s `EvaluateReadiness`); listed for completeness only.
+- `xstockstrat-indicators` — **amended 2026-08-15**: readiness itself still goes through
+  `xstockstrat-analysis`'s `EvaluateReadiness`, but FR-6's new indicator overlay panels call
+  `ComputeIndicator`/`ExecuteFormula` on `xstockstrat-indicators` directly (read-only, no new RPC
+  anticipated — both already exist). No longer "not directly called."
 
 ## Consumer Surface(s)
 
@@ -237,6 +262,11 @@ Approval gates required (per docs/runbooks/feature-workflow.md):
 4. For a symbol on a watchlist: Opportunity/conviction, per-strategy readiness, and Fundamentals
    sections render (each with an explicit no-data state where the platform has none) — the
    Screening-tools section is absent.
+4a. **(Amended 2026-08-15)** For a symbol whose resolved strategy has one or more declared
+   `components`, an indicator overlay panel renders per component beneath the price chart, each
+   showing the real series returned by `ComputeIndicator`/`ExecuteFormula` for that component — no
+   fabricated/placeholder series. A strategy with zero declared components, or a symbol with no
+   resolvable strategy, shows an explicit no-data state instead of an empty gap.
 5. For a symbol not on any watchlist: the Screening-tools section renders — Opportunity/conviction,
    readiness, and Fundamentals sections are absent.
 6. The Backtesting section lists past runs for the strategy resolved by FR-9's watchlist-binding-
@@ -299,6 +329,17 @@ proposer-vs-adversary debate (Phase 1) makes the final call on anything still un
   itself the mechanism that caught the one thing that would otherwise have gone silently missing —
   the new sections being unreachable for unheld symbols due to the inherited all-or-nothing position
   gate.
+- [ ] **(New, 2026-08-15) FR-6 indicator overlay panels — architecture re-opened.** The prior design
+  (7 rounds, approved 2026-08-10) never debated this: how `ComputeIndicator`'s required input
+  `values` series is sourced per component (the page's already-fetched bar closes, presumably), how
+  `ExecuteFormula`'s `input_data`/`input_params` contract maps from a `StrategyComponent` for
+  `COMPONENT_KIND_CUSTOM_FORMULA`, whether `ExecuteFormula` even returns a per-bar series suitable
+  for charting (its response shape — `output: Struct`, `stdout`/`stderr`/timing — was designed for
+  one-shot sandboxed execution, not obviously a time series) or whether custom-formula components
+  need a different treatment than builtin ones, and how multiple sub-panels lay out given
+  `lightweight-charts@^4.2.0`'s sanctioned-exception single-pane precedent on this page
+  (`useCandlestickChart.ts`). Route this through `/sdd-design unified-symbol-page quick` before
+  `/sdd-spec` writes steps for it.
 
 ### Known traps (from the Ledger — read before designing)
 

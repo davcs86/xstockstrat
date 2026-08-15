@@ -376,3 +376,43 @@
 **Next**: `/sdd-execute unified-symbol-page` — pending explicit user confirmation to proceed (the
 "2" instruction that triggered this session was scoped to the citation refresh, not to launching
 execution).
+
+---
+
+## Session 2026-08-15T00:00:00Z — scope amendment (new request absorbed)
+
+- **Trigger**: a fresh task arrived ("UI change. Add charts for the selected strategy in the Symbol
+  page.") — root `CLAUDE.md`'s Mandatory Entry Point rule requires `/sdd-story` for any new
+  capability. Ran `/sdd-story`'s discovery steps (NNN allocation, governance/ledger reads) and found
+  this feature (125) already owns "the Symbol page" (design-approved, implementation-ready, 26
+  steps, none executed yet — `in-progress` never started).
+- **Genuine fork surfaced to the user** (not guessed): (1) which page counts as "the Symbol page"
+  given 125's unified page hasn't shipped — today's codebase still has two separate pages
+  (`/trader/positions/[symbol]`, `/insights/market/[symbol]`); (2) what "chart for the selected
+  strategy" should actually show (backtest equity curve / price chart with signal markers /
+  indicator overlay panels — the last being flagged up front as needing a new-to-the-UI RPC surface,
+  `ComputeIndicator`/`ExecuteFormula`, and therefore the largest of the three options).
+- **User's answers**: (1) *"absorb this request into the 125 feature, start the process to
+  implement it"* — do not create a new sibling feature (135 was the next-available NNN, computed but
+  never written to disk — no directory was created, no number consumed). (2) **Indicator overlay
+  panels** — the largest, most architecturally novel of the three options.
+- **Action taken this session**: amended `product-spec.md` FR-6 (added the indicator-overlay-panel
+  requirement, evidenced against `StrategyComponent`/`StrategyDefinition.components`
+  (`analysis.proto:241-246`) and the existing-but-never-UI-called `ComputeIndicator`/`ExecuteFormula`
+  RPCs on `xstockstrat-indicators`), Out of Scope (a *general-purpose* indicator viewer stays out;
+  strategy-scoped overlay panels are now in), Affected Services (`xstockstrat-indicators` is no
+  longer "not directly called"), Acceptance Criteria (new AC-4a), and Open Questions (new item
+  naming the real unresolved architecture questions: `ComputeIndicator`'s input-series sourcing,
+  whether `ExecuteFormula`'s response shape — designed for one-shot sandboxed execution — even
+  returns a chartable per-bar series for custom-formula components, and multi-panel layout against
+  `lightweight-charts@^4.2.0`'s single-pane sanctioned-exception precedent
+  (`useCandlestickChart.ts`)). Logged the amendment in `feature.md` Status History without
+  re-gating lifecycle status (still `implementation-ready` — the other 25 approved steps and their
+  design rationale are untouched; only FR-6's design is re-opened).
+- **Not yet done, by design**: no design debate has run on the new FR-6 scope yet — deliberately
+  left to `/sdd-design unified-symbol-page quick`, scoped to just the new Open Questions item, as
+  the very next action, before `/sdd-spec` writes any implementation steps for it.
+
+**Next**: `/sdd-design unified-symbol-page quick` — debate FR-6's indicator-overlay-panel
+architecture, then `/sdd-spec unified-symbol-page` to add implementation steps, then resume
+`/sdd-execute unified-symbol-page` (all 27 steps, starting from Step 1 — none executed yet).
