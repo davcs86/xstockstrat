@@ -209,3 +209,47 @@ session exists. Resolved as a stale/cached mobile-client render, not a collision
     live-docs version check performed (not a functional-behavior claim requiring the 2026-08-10/
     2026-08-13 ledger "verify against live docs" pattern — a caret range resolves at install time
     either way).
+
+## Session 2026-08-15 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 3 warnings (advisory — did not block). No Floor (`F-*`) violations. The
+  reviewer independently re-verified ~20+ path:line citations across all 33 steps (every
+  `mobile-overflow.spec.ts` `ROUTES` line, every table's column count including the 18→19 correction,
+  the `LiveStrategiesPanel` keyboard double-fire bug) and found them all accurate.
+- Unresolved ⚠ carried into execution:
+  - Step 20: Codebase Evidence claims `e2e/trader/portfolio.spec.ts` directly imports
+    `POSITION_AAPL`/`POSITION_MSFT`/`POSITIONS` from `e2e/fixtures/positions.ts` — grepped, zero
+    matches; the spec never imports these symbols directly. The underlying data IS still centralized
+    (sourced indirectly via `e2e/mock-backend.ts`'s `listPositions()` handler), so C-12 compliance
+    itself isn't broken, but the citation as written is factually wrong (C-01). — [ ] unaddressed
+  - Steps 9, 13, 23: each anticipates the possibility of extending the `DataTable` composite
+    (`tableClassName` prop, per-row `data-testid`/`getRowProps` passthrough) beyond Step 1's shipped
+    prop list (`columns, data, onRowClick, enablePagination, pageSize, emptyMessage, getRowId,
+    rowClassName`), but none of the three list `data-table.tsx` in their `**Files**` section — if the
+    extension proves necessary at execute time, staging that file would risk an **F-08** violation
+    (never stage files outside the step's Files section). Each step already routes the contingency
+    through the Deviation Log if needed (P-03-compliant), but the Files-list gap itself is unresolved.
+    — [ ] unaddressed
+  - Step 1/2: no explicit sentence stating that the composite's own Playwright/E2E coverage is
+    intentionally deferred to the 15 downstream consumer-migration steps (a reasonable design, but
+    stated only implicitly via `## Step Dependencies`, not as an explicit coverage-deferral note per
+    B3). — [ ] unaddressed
+- Overlap findings (soft/rebase-level file collisions only — no proto/config/migration FAIL; 135
+  declares zero of those resource types):
+  - `trader/positions/[symbol]/page.tsx` + `e2e/trader/position-detail.spec.ts` — this feature's
+    Steps 21–22 vs. **125-unified-symbol-page** (`implementation-ready`) Steps 8–21/25, which
+    page-structure-refactors most of the same file/spec. Real edit-surface overlap, not disjoint.
+  - `e2e/trader/valuation-parity.spec.ts` — Step 30 vs. **125** Step 26.
+  - `config-ui/sources/page.tsx` + `e2e/config-ui/sources.spec.ts` — Steps 3–4 vs.
+    **134-signal-source-reliability-weight** (`implementation-ready`) Steps 8–9, which adds a
+    `reliabilityWeight` column to the same 8-column table this feature migrates to `DataTable`.
+    Whichever lands second must rebase its column-def onto the other's landed markup.
+  - `e2e/insights/strategy-authoring.spec.ts` — Step 12 vs. **132-strategy-symbol-denylist**
+    (`implementation-ready`) Step 16.
+  - No `merge-order.md` entry exists for any of these pairs; the overlap agent recommends an
+    advisory soft-overlap note (not a blocking row) once 135 starts executing, since none share a
+    proto field/config key/migration NNN.
+
+Per this skill's own protocol, `/sdd-execute` must announce every `[ ] unaddressed` item above at
+each checkpoint and at session end (P-03) — mark `[x]` here in the same block when the step that
+clears it lands, rather than letting the warning go stale.
