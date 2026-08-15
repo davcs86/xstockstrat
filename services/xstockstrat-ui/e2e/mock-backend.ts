@@ -25,6 +25,7 @@ import { NotifyService, type Alert } from '@xstockstrat/proto/notify/v1/notify_p
 import { PortfolioService } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
 import { TradingService } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { signTestJwt } from './helpers/auth';
+import { HEADER_USER_ID } from '../src/lib/headers';
 import {
   TEST_USER_ID,
   TEST_USER_EMAIL,
@@ -63,6 +64,33 @@ const READINESS_BUCKET_OVERRIDE: Record<
   QUIET1: { passingConditions: 0, totalConditions: 3 }, // quiet
   NODATA1: { passingConditions: 0, totalConditions: 0 }, // no-data (un-evaluable)
 };
+
+// feature 133 — strategy ownership. Every pre-seeded fixture strategy is owned by user A
+// (`TEST_USER_ID`); the composite `(user_id, strategy_id)` PK means a second user (`TEST_USER_B_ID`)
+// may hold the same id without collision. The handlers below resolve the caller from the propagated
+// `x-user-id` header (never the request body) and mirror the analysis backend's uniform
+// PERMISSION_DENIED for a non-owner, so the cross-user isolation e2e proves the BFF forwards
+// identity and the backend gates on it.
+const A_OWNED_STRATEGY_IDS = new Set<string>([
+  ...STRATEGY_DEFINITIONS.map((d) => d.strategyId),
+  'strat-owned-by-a', // dedicated ownership-spec fixture
+]);
+
+function callerUserId(ctx: { requestHeader: Headers }): string {
+  return ctx.requestHeader.get(HEADER_USER_ID) ?? '';
+}
+
+function assertStrategyOwner(
+  ctx: { requestHeader: Headers },
+  strategyId: string | undefined,
+): void {
+  // A caller who is not the owner of a pre-seeded (user-A) strategy is denied uniformly — no
+  // NOT_FOUND vs PERMISSION_DENIED distinction (anti-IDOR, design decision 3). A brand-new id the
+  // caller is registering is not in the owned set, so it passes (the caller owns what they create).
+  if (strategyId && A_OWNED_STRATEGY_IDS.has(strategyId) && callerUserId(ctx) !== TEST_USER_ID) {
+    throw new ConnectError('strategy not found or not owned by caller', Code.PermissionDenied);
+  }
+}
 
 let traderServer: http2.Http2Server | null = null;
 let insightsServer: http2.Http2Server | null = null;
@@ -540,7 +568,10 @@ export async function startMockBackend(): Promise<void> {
   const insightsHandler = connectNodeAdapter({
     routes(router) {
       router.service(AnalysisService, {
-        async listStrategies() {
+        async listStrategies(_req, ctx) {
+          // feature 133: only the owner (user A) sees the seeded strategies; a different caller
+          // gets an empty list (cross-user isolation, AC-3).
+          if (callerUserId(ctx) !== TEST_USER_ID) return { strategies: [] };
           return { strategies: STRATEGY_SCORES };
         },
         // feature 083 — ranked opportunity queue; honors the min_conviction filter.
@@ -754,13 +785,18 @@ export async function startMockBackend(): Promise<void> {
         },
         // Feature 048: trader BFF analysisClient dials ANALYSIS_ENDPOINT (9092 in e2e),
         // so the live-strategy methods are mocked here.
-        async listStrategyDefinitions() {
+        async listStrategyDefinitions(_req, ctx) {
+          // feature 133: definitions are owner-scoped — a non-owner sees none (AC-3).
+          if (callerUserId(ctx) !== TEST_USER_ID) {
+            return { definitions: [], totalCount: 0 };
+          }
           return {
             definitions: STRATEGY_DEFINITIONS,
             totalCount: STRATEGY_DEFINITIONS.length,
           };
         },
-        async setStrategyLive(req) {
+        async setStrategyLive(req, ctx) {
+          assertStrategyOwner(ctx, req.strategyId); // feature 133 — owner-gated (AC-2)
           return {
             definition: {
               ...STRATEGY_DEF_LIVE,
@@ -770,7 +806,10 @@ export async function startMockBackend(): Promise<void> {
           };
         },
         // Feature 050: strategy-authoring RPCs proxied by the insights BFF.
-        async manageStrategy(req) {
+        async manageStrategy(req, ctx) {
+          // feature 133 — a mutation on another user's strategy is denied (AC-2); a brand-new id is
+          // owned by the caller and passes.
+          assertStrategyOwner(ctx, req.definition?.strategyId);
           // Sentinel id used by the wizard server-error test (AC-13).
           if (req.definition?.strategyId === 'invalid_ref') {
             throw new ConnectError(
@@ -780,7 +819,8 @@ export async function startMockBackend(): Promise<void> {
           }
           return req.definition ?? {};
         },
-        async getStrategy(req) {
+        async getStrategy(req, ctx) {
+          assertStrategyOwner(ctx, req.strategyId); // feature 133 — owner-gated read (AC-2)
           return {
             strategyId: req.strategyId,
             displayName: 'Editable Strategy',

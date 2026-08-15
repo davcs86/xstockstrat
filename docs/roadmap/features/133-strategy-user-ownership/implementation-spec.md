@@ -724,7 +724,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . \
 
 ### Step 13 — service: UI BFF — remove admin gates from strategy mutations (`/insights` + `/trader`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/insightsBff.ts` — modify
@@ -770,7 +770,7 @@ grep -n "forwardAdmin" src/lib/traderBff.ts
 
 ### Step 14 — test: UI second test-user fixture (infrastructure for Step 16)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/users.ts` — modify
@@ -804,7 +804,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 15 — test: UI cross-user strategy isolation e2e (covers Step 13, C-14 `/insights`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/strategy-ownership.spec.ts` — create

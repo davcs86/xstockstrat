@@ -394,3 +394,40 @@ TS plugins (pnpm) + `uv sync --extra dev` (analysis) all done. gettext-base inst
   server-side, never the request body).
 - **Verify**: `ruff check . && ruff format --check .` clean; `pytest --cov=app --cov-fail-under=40` →
   **219 passed**, coverage **75.32%** (≥40%). Deviations: none.
+
+### Step 13 — UI BFF de-gating [done]
+- `insightsBff.ts`: `manageStrategy` → plain `forward(...)` (dropped the `requireAdminScope`/`mutating`
+  block); `setStrategyLive` `forwardAdmin` → `forward`; `listStrategies` stops injecting
+  `{ userId: claims.user_id }` (sends `req` as-is, keeps `backendHeaders`). Removed the now-unused
+  `requireAdminScope` + `StrategyOperation` imports (`forwardAdmin` stays — still used by
+  cancelBackfill/deleteBackfilledData; the two `userId: claims.user_id` injections that remain are
+  IndicatorsService formula-ownership, untouched by decision 3).
+- `traderBff.ts`: `setStrategyLive` `forwardAdmin` → `forward`; dropped the now-unused `forwardAdmin`
+  import.
+- Verify: `pnpm run lint` clean (only the pre-existing aria-selected warning), `tsc --noEmit` clean.
+
+### Step 14 — second test-user fixture [done]
+- `e2e/fixtures/users.ts`: added `TEST_USER_B_ID`/`TEST_USER_B_EMAIL`. `INVENTORY.md`: catalog row.
+- `e2e/helpers/auth.ts`: generalized `signTestJwt(roles, user?)` and `addCookieWithRoles(page, roles,
+  user?)` with the canonical user as default (back-compat for ~all existing single-arg callers).
+
+### Step 15 — cross-user isolation e2e [done] — GREEN
+- New `e2e/insights/strategy-ownership.spec.ts` (6 tests): AC-3 (A sees seeded strategies on the
+  `/insights` list, B sees the empty state; ListStrategyDefinitions owner-scoped at the BFF), AC-2/AC-6
+  (owner reads their strategy 200; a non-owner GetStrategy/SetStrategyLive/ManageStrategy → HTTP 403
+  `permission_denied`). BFF calls use the `page.evaluate(fetch)` pattern (api-smoke precedent) to prove
+  the real BFF forwards `x-user-id` and the backend gates on it.
+- `e2e/mock-backend.ts`: owner-aware AnalysisService — reads the propagated `x-user-id`
+  (`callerUserId` via `HEADER_USER_ID`), owns every seeded strategy + `strat-owned-by-a` as user A,
+  and mirrors the backend's uniform PERMISSION_DENIED for a non-owner
+  (`assertStrategyOwner` on getStrategy/setStrategyLive/manageStrategy; empty list for a non-owner on
+  listStrategies/listStrategyDefinitions).
+- **Regression fix (part of Step 13/15):** three pre-existing specs asserted the *removed* admin gate —
+  `strategy-authoring.spec.ts` "manageStrategy register/deactivate is denied for non-admin" and
+  `live-strategies.spec.ts` "setStrategyLive is denied for non-admin". Flipped all three to assert a
+  non-admin **owner** now SUCCEEDS (the gate is gone); cross-user denial is proven by the new spec.
+- **Verify**: `strategy-ownership` 6/6 pass; `strategy-authoring` + `live-strategies` green (the AC-13
+  wizard test flaked once under parallel dev-server load, passes in isolation — not a logic
+  regression). Env note: e2e run locally needs `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/
+  chromium-1194/chrome-linux/chrome` and a longer `--timeout` for the cold-dev warmup; CI's prebuilt
+  bundle is unaffected.
