@@ -570,7 +570,7 @@ Coverage ≥ 40%; assertions red before Step 9, green after.
 
 ### Step 12 — test: agent field-map forwarding + read-back round-trip
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify

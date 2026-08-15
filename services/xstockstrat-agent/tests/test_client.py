@@ -674,6 +674,62 @@ class TestManageStrategyUpdateMask:
         assert masked.definition.exit_cooldown_days == 7
 
     @pytest.mark.asyncio
+    async def test_denied_symbols_and_signal_eligible_reach_the_wire(self):
+        """feature 132 — denied_symbols/signal_eligible are constructed onto the outbound
+        StrategyDefinition and reach the wire under their own mask (round-trip is automatic via
+        MessageToDict(preserving_proto_field_name=True))."""
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+
+        mock_stub = MagicMock()
+        mock_stub.ManageStrategy = AsyncMock(
+            return_value=analysis_pb2.StrategyDefinition(
+                strategy_id="x", denied_symbols=["TSLA"], signal_eligible=True
+            )
+        )
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
+                result = await client.manage_strategy(
+                    user_id="u-1",
+                    operation="update",
+                    definition={
+                        "strategy_id": "x",
+                        "denied_symbols": ["TSLA"],
+                        "signal_eligible": True,
+                    },
+                    update_mask=["denied_symbols", "signal_eligible"],
+                )
+                masked = mock_stub.ManageStrategy.call_args[0][0]
+
+        assert list(masked.update_mask.paths) == ["denied_symbols", "signal_eligible"]
+        assert list(masked.definition.denied_symbols) == ["TSLA"]
+        assert masked.definition.signal_eligible is True
+        # manage_strategy echoes the response in camelCase (its documented casing); the snake_case
+        # AC-4 round-trip lives on get_strategy (preserving_proto_field_name=True), below.
+        assert result["deniedSymbols"] == ["TSLA"]
+        assert result["signalEligible"] is True
+
+    @pytest.mark.asyncio
+    async def test_get_strategy_round_trips_denied_symbols_snake_case(self):
+        """feature 132 AC-4: a get_strategy read reflects a set denied_symbols/signal_eligible in
+        snake_case (automatic via MessageToDict(preserving_proto_field_name=True))."""
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+
+        mock_stub = MagicMock()
+        mock_stub.GetStrategy = AsyncMock(
+            return_value=analysis_pb2.StrategyDefinition(
+                strategy_id="x", denied_symbols=["TSLA", "NVDA"], signal_eligible=True
+            )
+        )
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
+                result = await client.get_strategy(user_id="u-1", strategy_id="x")
+
+        assert result["denied_symbols"] == ["TSLA", "NVDA"]
+        assert result["signal_eligible"] is True
+
+    @pytest.mark.asyncio
     async def test_active_is_no_longer_injected(self):
         """`active` is column-authoritative — the server overlays it and never writes it from
         the definition, so sending it only polluted the stored definition_json."""
