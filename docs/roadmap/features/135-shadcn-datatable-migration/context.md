@@ -30,3 +30,30 @@
   primitive collided with Playwright `getByRole`/`getByLabel` locators on unrelated specs, only
   caught by a broader `-g` run — worth keeping in mind if this feature's design touches any nav/
   breadcrumb-adjacent markup incidentally.
+
+## Session 2026-08-15 — sdd-review product-spec
+
+- Product spec approved. Status: draft → spec-ready.
+- Warnings (advisory, non-blocking):
+  - AC1/AC3/AC5 are qualitative rather than quantitative ("no table implementation left
+    undiscovered", "no regression in what data a table shows") — acceptable per the criteria's own
+    WARN condition, not a FAIL.
+  - One Open Question remains unresolved, explicitly deferred to `/sdd-design` recon (the exact set
+    of "small static lookup" tables exempt from FR-3). Matches accepted repo precedent (sibling
+    feature 124 passed review with the same deferral pattern) but flagged for visibility.
+- Overlap findings (soft/rebase-level file collisions only — no config/proto/migration FAIL):
+  - **124-shadcn-table-actions-responsive** (`code-completed`): already converted Orders/Strategies/
+    Config-Sources/Namespace-editor Actions columns to `DropdownMenu` and two raw-`<table>` sites to
+    the `Table` primitive. **135's recon must treat 124's landed markup as the migration baseline**,
+    not re-derive from a pre-124 mental model.
+  - **124** also extends `services/xstockstrat-ui/e2e/mobile-overflow.spec.ts`'s `ROUTES` list with
+    the same gap set 135's FR-5 targets — both features edit the same array; expect a rebase, not a
+    silent conflict.
+  - **125-unified-symbol-page** (`implementation-ready`): may relocate/redirect
+    `trader/positions/[symbol]/page.tsx` and `trader/orders/[id]/page.tsx`'s tables before 135
+    executes. If 125 merges first, 135's recon/design must re-verify those two routes' table
+    structure against 125's landed shape rather than the pre-125 one.
+  - Recorded per `docs/roadmap/features/merge-order.md:58` precedent (same file pair already flagged
+    between 096/124) — recommend adding a `135` row to `merge-order.md` once 135 reaches
+    `implementation-ready`, sequencing it after 124 (closest to merge) and re-checked against 125 if
+    that merges first. Not a blocking gate today (no config/proto/migration collision exists).

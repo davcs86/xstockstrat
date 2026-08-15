@@ -1,6 +1,6 @@
 # Feature: shadcn-datatable-migration
 
-**Lifecycle Status**: `draft`
+**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/shadcn-datatable-migration`
 **Created**: 2026-08-15
 **Last Updated**: 2026-08-15
@@ -12,6 +12,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-15 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-15 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings; soft file-overlap with 124/125 noted, no blocking collision) |
 
 ---
 
@@ -38,4 +39,4 @@ narrow viewports (scrollable container, column priority, or stacked layout, as f
 
 ## Next Action
 
-`/sdd-review shadcn-datatable-migration product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design shadcn-datatable-migration quick` — recon + design debate before running /sdd-spec
