@@ -594,7 +594,7 @@ grep-confirmed there.
 
 ### Step 10 — test: analysis service (Steps 7/8/9)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify

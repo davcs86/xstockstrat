@@ -48,6 +48,16 @@ def make_servicer() -> AnalysisServicer:
     )
 
 
+def _owned_ctx():
+    """A gRPC context carrying x-user-id (feature 133) so ownership-gated RPCs resolve a caller."""
+    ctx = MagicMock()
+    ctx.invocation_metadata = MagicMock(
+        return_value=[("x-user-id", "u1"), ("x-access-scope", "7"), ("x-trace-id", "t1")]
+    )
+    ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+    return ctx
+
+
 def _make_backtest(
     strategy_id: str = "strat-1",
     sharpe: float = 1.5,
@@ -86,15 +96,18 @@ def _derivation_svc(cells, definition_json=None, strategy_id="s1"):
     svc._ledger = MagicMock()
     svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
     svc._strategies_repo = AsyncMock()
-    svc._strategies_repo.get_by_id = AsyncMock(
-        return_value={
-            "strategy_id": strategy_id,
-            "display_name": "S1",
-            "active": True,
-            "live_enabled": False,
-            "definition_json": definition_json or {"entry_rule": "x"},
-        }
-    )
+    _drow = {
+        "strategy_id": strategy_id,
+        "user_id": "u1",
+        "display_name": "S1",
+        "active": True,
+        "live_enabled": False,
+        "definition_json": definition_json or {"entry_rule": "x"},
+    }
+    svc._strategies_repo.get_by_id = AsyncMock(return_value=_drow)
+    svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_drow)
+    # feature 133: ListStrategies owner-filters against repo.list(user_id); return this strategy.
+    svc._strategies_repo.list = AsyncMock(return_value=([{"strategy_id": strategy_id}], 1))
     svc._backtest_run_symbols_repo = AsyncMock()
     svc._backtest_run_symbols_repo.fetch_eligible = AsyncMock(return_value=cells)
     svc._scores_repo = AsyncMock()
@@ -170,7 +183,7 @@ class TestRunBacktest:
         req.HasField = MagicMock(return_value=False)
         req.range = common_pb2.TimeRange()
 
-        result = await svc.RunBacktest(req, context=MagicMock())
+        result = await svc.RunBacktest(req, context=_owned_ctx())
         assert result.strategy_id == "s1"
         assert "s1" in svc._backtests
 
@@ -197,7 +210,7 @@ class TestRunBacktest:
         svc._marketdata = MagicMock()
         svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
 
-        result = await svc.RunBacktest(self._legacy_req(["AAPL"]), context=MagicMock())
+        result = await svc.RunBacktest(self._legacy_req(["AAPL"]), context=_owned_ctx())
 
         assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
         assert result.total_trades == 0
@@ -219,7 +232,7 @@ class TestRunBacktest:
         svc._marketdata = MagicMock()
         svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
 
-        await svc.RunBacktest(self._legacy_req(["AAPL"]), context=MagicMock())
+        await svc.RunBacktest(self._legacy_req(["AAPL"]), context=_owned_ctx())
 
         called_req = svc._marketdata.GetBars.await_args.args[0]
         assert called_req.timeframe == "1d"
@@ -236,7 +249,7 @@ class TestListStrategies:
     async def test_returns_empty_when_no_strategies(self):
         svc = make_servicer()
         req = MagicMock()
-        resp = await svc.ListStrategies(req, context=MagicMock())
+        resp = await svc.ListStrategies(req, context=_owned_ctx())
         assert len(resp.strategies) == 0
 
     @pytest.mark.asyncio
@@ -246,7 +259,7 @@ class TestListStrategies:
         svc._strategies["s2"] = analysis_pb2.StrategyScore(strategy_id="s2", overall_score=0.5)
 
         req = MagicMock()
-        resp = await svc.ListStrategies(req, context=MagicMock())
+        resp = await svc.ListStrategies(req, context=_owned_ctx())
         assert len(resp.strategies) == 2
 
 
@@ -277,7 +290,7 @@ class TestGetStrategyReport:
 
         req = MagicMock()
         req.strategy_id = "s1"
-        report = await svc.GetStrategyReport(req, context=MagicMock())
+        report = await svc.GetStrategyReport(req, context=_owned_ctx())
         assert report.strategy_id == "s1"
 
 
@@ -307,7 +320,7 @@ class TestRunBacktestPersistence:
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         svc._scores_repo = AsyncMock()
 
-        result = await svc.RunBacktest(self._empty_req("s1"), context=MagicMock())
+        result = await svc.RunBacktest(self._empty_req("s1"), context=_owned_ctx())
 
         assert result.status == analysis_pb2.BACKTEST_STATUS_OK
         # No per-run headline upsert — the run's own aggregate never becomes the grade.
@@ -321,7 +334,7 @@ class TestRunBacktestPersistence:
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         svc._backtest_runs_repo = AsyncMock()
 
-        result = await svc.RunBacktest(self._empty_req("s1", ["AAPL"]), context=MagicMock())
+        result = await svc.RunBacktest(self._empty_req("s1", ["AAPL"]), context=_owned_ctx())
 
         svc._backtest_runs_repo.insert.assert_awaited_once()
         kwargs = svc._backtest_runs_repo.insert.await_args.kwargs
@@ -347,7 +360,7 @@ class TestRunBacktestPersistence:
         svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
 
         req = self._empty_req("s1", ["AAPL"])
-        result = await svc.RunBacktest(req, context=MagicMock())
+        result = await svc.RunBacktest(req, context=_owned_ctx())
 
         assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
         svc._scores_repo.upsert.assert_not_awaited()  # no score for an unusable run
@@ -368,7 +381,7 @@ class TestRunBacktestPersistence:
         svc._backtest_runs_repo = AsyncMock()
         svc._backtest_runs_repo.insert = AsyncMock(side_effect=Exception("db down"))
 
-        result = await svc.RunBacktest(self._empty_req("s1"), context=MagicMock())
+        result = await svc.RunBacktest(self._empty_req("s1"), context=_owned_ctx())
         assert result.strategy_id == "s1"
 
 
@@ -401,7 +414,7 @@ class TestListBacktests:
         req = MagicMock()
         req.strategy_id = "s1"
         req.limit = 0  # → server default
-        resp = await svc.ListBacktests(req, context=MagicMock())
+        resp = await svc.ListBacktests(req, context=_owned_ctx())
 
         assert [r.backtest_id for r in resp.runs] == ["bt-2", "bt-1"]
         assert resp.runs[0].status == analysis_pb2.BACKTEST_STATUS_OK
@@ -418,7 +431,7 @@ class TestListBacktests:
         req = MagicMock()
         req.strategy_id = "s1"
         req.limit = 5
-        await svc.ListBacktests(req, context=MagicMock())
+        await svc.ListBacktests(req, context=_owned_ctx())
         assert svc._backtest_runs_repo.list_by_strategy.await_args.kwargs["limit"] == 5
 
     @pytest.mark.asyncio
@@ -433,7 +446,7 @@ class TestListBacktests:
         req = MagicMock()
         req.strategy_id = "s1"
         req.limit = 0
-        resp = await svc.ListBacktests(req, context=MagicMock())
+        resp = await svc.ListBacktests(req, context=_owned_ctx())
         assert resp.runs[0].status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
         assert resp.runs[0].overall_score == 0.0
         assert resp.runs[0].rating == ""
@@ -444,7 +457,7 @@ class TestListBacktests:
         req = MagicMock()
         req.strategy_id = "s1"
         req.limit = 0
-        resp = await svc.ListBacktests(req, context=MagicMock())
+        resp = await svc.ListBacktests(req, context=_owned_ctx())
         assert list(resp.runs) == []
 
 
@@ -587,7 +600,7 @@ def _row_for(definition):
 def _admin_ctx():
     """A gRPC context carrying the admin x-access-scope bit (7 = READ|WRITE|ADMIN)."""
     ctx = MagicMock()
-    ctx.invocation_metadata = MagicMock(return_value=[("x-access-scope", "7")])
+    ctx.invocation_metadata = MagicMock(return_value=[("x-user-id", "u1"), ("x-access-scope", "7")])
     ctx.abort = AsyncMock(side_effect=Exception("aborted"))
     return ctx
 
@@ -601,7 +614,9 @@ class TestManageStrategy:
             definition=_valid_definition(),
         )
         context = MagicMock()
-        context.invocation_metadata = MagicMock(return_value=[("x-access-scope", "1")])  # READ only
+        context.invocation_metadata = MagicMock(
+            return_value=[("x-user-id", "u1"), ("x-access-scope", "1")]
+        )  # READ only
         context.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception, match="aborted"):
             await svc.ManageStrategy(req, context)
@@ -613,6 +628,7 @@ class TestManageStrategy:
         definition = _valid_definition()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=None)  # feature 089: not existing
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=None)
         svc._strategies_repo.create = AsyncMock(return_value=_row_for(definition))
         req = analysis_pb2.ManageStrategyRequest(
             operation=analysis_pb2.STRATEGY_OPERATION_REGISTER, definition=definition
@@ -654,6 +670,7 @@ class TestGetStrategy:
         svc = make_servicer()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=None)
         req = analysis_pb2.GetStrategyRequest(strategy_id="missing")
         context = MagicMock()
         context.abort = AsyncMock(side_effect=Exception("not found"))
@@ -666,8 +683,9 @@ class TestGetStrategy:
         definition = _valid_definition()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=_row_for(definition))
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_row_for(definition))
         req = analysis_pb2.GetStrategyRequest(strategy_id="sma_x")
-        result = await svc.GetStrategy(req, context=MagicMock())
+        result = await svc.GetStrategy(req, context=_owned_ctx())
         assert result.strategy_id == "sma_x"
 
 
@@ -677,7 +695,7 @@ class TestListStrategyDefinitions:
         svc = make_servicer()
         svc._strategies_repo = None
         req = analysis_pb2.ListStrategyDefinitionsRequest()
-        resp = await svc.ListStrategyDefinitions(req, context=MagicMock())
+        resp = await svc.ListStrategyDefinitions(req, context=_owned_ctx())
         assert list(resp.definitions) == []
         assert resp.total_count == 0
 
@@ -688,7 +706,7 @@ class TestListStrategyDefinitions:
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.list = AsyncMock(return_value=([_row_for(definition)], 1))
         req = analysis_pb2.ListStrategyDefinitionsRequest(include_inactive=False)
-        resp = await svc.ListStrategyDefinitions(req, context=MagicMock())
+        resp = await svc.ListStrategyDefinitions(req, context=_owned_ctx())
         assert resp.total_count == 1
         assert resp.definitions[0].strategy_id == "sma_x"
 
@@ -710,7 +728,7 @@ class TestRunBacktestBackwardCompat:
         req.HasField = MagicMock(return_value=False)  # no inline_definition, no strategy_params
         req.range = common_pb2.TimeRange()
 
-        result = await svc.RunBacktest(req, context=MagicMock())
+        result = await svc.RunBacktest(req, context=_owned_ctx())
         assert result.strategy_id == "legacy"
         assert result.backtest_id
         assert "legacy" in svc._backtests
@@ -807,18 +825,20 @@ class TestBacktestTechnicalOnly:
 
 class TestSetStrategyLive:
     @pytest.mark.asyncio
-    async def test_requires_admin_scope(self):
+    async def test_unauthenticated_caller_denied(self):
+        # feature 133: admin scope no longer gates SetStrategyLive — but an unauthenticated caller
+        # (no x-user-id) can never own a strategy, so the live toggle is PERMISSION_DENIED.
         svc = make_servicer()
         svc._strategies_repo = AsyncMock()
         req = MagicMock()
         req.strategy_id = "s1"
         req.live_enabled = True
         ctx = MagicMock()
-        ctx.invocation_metadata.return_value = [("x-access-scope", "1")]  # READ only
+        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]  # no x-user-id
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception, match="aborted"):
             await svc.SetStrategyLive(req, ctx)
-        ctx.abort.assert_called_once()
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
 
     @pytest.mark.asyncio
     async def test_permits_admin_scope(self):
@@ -833,6 +853,7 @@ class TestSetStrategyLive:
             "definition_json": {"strategy_id": "s1", "signal_params": {"symbols": ["AAPL"]}},
         }
         svc._strategies_repo.get_by_id = AsyncMock(return_value=live_row)
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=live_row)
         svc._strategies_repo.set_live_enabled = AsyncMock(return_value=live_row)
         svc._ledger = MagicMock()
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
@@ -840,7 +861,10 @@ class TestSetStrategyLive:
         req.strategy_id = "s1"
         req.live_enabled = True
         ctx = MagicMock()
-        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]  # ADMIN|WRITE|READ
+        ctx.invocation_metadata.return_value = [
+            ("x-user-id", "u1"),
+            ("x-access-scope", "7"),
+        ]  # ADMIN|WRITE|READ
         resp = await svc.SetStrategyLive(req, ctx)
         assert resp.definition.strategy_id == "s1"
         assert resp.definition.live_enabled is True
@@ -851,12 +875,13 @@ class TestSetStrategyLive:
         svc._strategies_repo = AsyncMock()
         # Feature 089: on enable the NOT_FOUND now comes from the get_by_id precondition fetch.
         svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=None)
         svc._strategies_repo.set_live_enabled = AsyncMock(return_value=None)
         req = MagicMock()
         req.strategy_id = "missing"
         req.live_enabled = True
         ctx = MagicMock()
-        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]
+        ctx.invocation_metadata.return_value = [("x-user-id", "u1"), ("x-access-scope", "7")]
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception, match="aborted"):
             await svc.SetStrategyLive(req, ctx)
@@ -1052,7 +1077,10 @@ class TestRunFundamentalsScan:
         svc = make_servicer()
         svc._fundsignal_loop = AsyncMock()
         ctx = MagicMock()
-        ctx.invocation_metadata.return_value = [("x-access-scope", "1")]  # READ only
+        ctx.invocation_metadata.return_value = [
+            ("x-user-id", "u1"),
+            ("x-access-scope", "1"),
+        ]  # READ only
         ctx.abort = AsyncMock(side_effect=Exception("aborted"))
         with pytest.raises(Exception, match="aborted"):
             await svc.RunFundamentalsScan(_scan_req(), ctx)
@@ -1064,7 +1092,10 @@ class TestRunFundamentalsScan:
         svc = make_servicer()
         svc._fundsignal_loop = None
         ctx = MagicMock()
-        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]  # admin
+        ctx.invocation_metadata.return_value = [
+            ("x-user-id", "u1"),
+            ("x-access-scope", "7"),
+        ]  # admin
         ctx.abort = AsyncMock(side_effect=Exception("unavailable"))
         with pytest.raises(Exception, match="unavailable"):
             await svc.RunFundamentalsScan(_scan_req(), ctx)
@@ -1109,7 +1140,7 @@ class TestRunFundamentalsScan:
             return_value=analysis_pb2.FundamentalsScanSummary(status="completed")
         )
         ctx = MagicMock()
-        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]
+        ctx.invocation_metadata.return_value = [("x-user-id", "u1"), ("x-access-scope", "7")]
         await svc.RunFundamentalsScan(_scan_req(dry_run=True), ctx)
         assert svc._fundsignal_loop.run_once.call_args.kwargs["dry_run"] is True
         # No explicit symbols → override_symbols is None (use computed universe).
@@ -1174,7 +1205,7 @@ class TestBacktestDiagnostics:
         slow = [11, 11, 11, 11]  # 4 points → bars 2..5
         svc = self._svc_with(bars, fast, slow)
 
-        result = await svc.RunBacktest(self._legacy_req(), context=MagicMock())
+        result = await svc.RunBacktest(self._legacy_req(), context=_owned_ctx())
 
         assert result.status == analysis_pb2.BACKTEST_STATUS_OK
         assert len(result.diagnostics) == 1
@@ -1211,7 +1242,7 @@ class TestBacktestDiagnostics:
         fast = [8, 8, 8, 8]
         slow = [11, 11, 11]
         svc = self._svc_with(bars, fast, slow)
-        result = await svc.RunBacktest(self._legacy_req(), context=MagicMock())
+        result = await svc.RunBacktest(self._legacy_req(), context=_owned_ctx())
         assert result.total_trades == 0
         sd = result.diagnostics[0]
         assert sd.warmup_bars < sd.bars_total
@@ -1222,7 +1253,7 @@ class TestBacktestDiagnostics:
         # AC-5: the completion ledger payload carries only summary metrics, never diagnostics.
         bars = [_bar(3000 + i, c) for i, c in enumerate([10, 11, 12, 13, 14, 9])]
         svc = self._svc_with(bars, [9, 10, 12, 13, 9], [11, 11, 11, 11])
-        await svc.RunBacktest(self._legacy_req(), context=MagicMock())
+        await svc.RunBacktest(self._legacy_req(), context=_owned_ctx())
         completed = svc._ledger.AppendEvent.await_args_list[-1].args[0]
         assert completed.event_type == "analysis.backtest.completed"
         assert "diagnostics" not in dict(completed.payload.fields)
@@ -1233,10 +1264,10 @@ class TestBacktestDiagnostics:
         # or extends beyond it.
         full = [_bar(4000 + i, c) for i, c in enumerate([10, 11, 12, 13, 14, 9])]
         svc_full = self._svc_with(full, [9, 10, 12, 13, 9], [11, 11, 11, 11])
-        r_full = await svc_full.RunBacktest(self._legacy_req(), context=MagicMock())
+        r_full = await svc_full.RunBacktest(self._legacy_req(), context=_owned_ctx())
         trunc = full[:5]
         svc_tr = self._svc_with(trunc, [9, 10, 12, 13], [11, 11, 11])
-        r_tr = await svc_tr.RunBacktest(self._legacy_req(), context=MagicMock())
+        r_tr = await svc_tr.RunBacktest(self._legacy_req(), context=_owned_ctx())
         for i in range(5):
             a, b = r_full.diagnostics[0].bars[i], r_tr.diagnostics[0].bars[i]
             assert a.warmup == b.warmup
@@ -1254,7 +1285,7 @@ class TestBacktestDiagnostics:
                 page=_EOF_PAGE, bars=[_bar(1, 10), _bar(2, 11), _bar(3, 12)]
             )
         )
-        result = await svc.RunBacktest(self._legacy_req(), context=MagicMock())
+        result = await svc.RunBacktest(self._legacy_req(), context=_owned_ctx())
         assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
         assert len(result.coverage_gaps) == 1
         assert len(result.diagnostics) == 0  # never entered the bar loop
@@ -1296,7 +1327,7 @@ class TestBacktestDiagnostics:
                 ]
             )
         )
-        result = await svc.RunBacktest(self._def_req(definition), context=MagicMock())
+        result = await svc.RunBacktest(self._def_req(definition), context=_owned_ctx())
         keys = set(dict(result.diagnostics[0].bars[2].indicators))
         assert "bb" in keys and "bb.upper" in keys and "bb.lower" in keys
         assert "bb.value" not in keys  # redundant alias dropped
@@ -1336,7 +1367,7 @@ class TestBacktestDiagnostics:
         svc._indicators.GetFormula = AsyncMock(
             return_value=indicators_pb2.FormulaDefinition(formula_id="f-1", warmup_period=3)
         )
-        result = await svc.RunBacktest(self._def_req(definition), context=MagicMock())
+        result = await svc.RunBacktest(self._def_req(definition), context=_owned_ctx())
         sd = result.diagnostics[0]
         assert sd.warmup_bars == 3  # declared, not len(bars)=6
         assert result.total_trades == 0
@@ -1528,7 +1559,7 @@ class TestScorePersistence:
 
         req = MagicMock()
         req.strategy_id = "s1"
-        score = await svc.ScoreStrategy(req, context=MagicMock())
+        score = await svc.ScoreStrategy(req, context=_owned_ctx())
 
         svc._scores_repo.upsert.assert_awaited_once()
         args = svc._scores_repo.upsert.await_args.args
@@ -1545,12 +1576,12 @@ class TestScorePersistence:
 
         req = MagicMock()
         req.strategy_id = "s1"
-        score = await svc.ScoreStrategy(req, context=MagicMock())
+        score = await svc.ScoreStrategy(req, context=_owned_ctx())
 
         # No abort/raise — the score is returned despite the write failure.
         assert score.strategy_id == "s1"
         # Reads serve from memory, so the caller reads its own write back.
-        resp = await svc.ListStrategies(MagicMock(), context=MagicMock())
+        resp = await svc.ListStrategies(MagicMock(), context=_owned_ctx())
         assert any(s.strategy_id == "s1" for s in resp.strategies)
 
     @pytest.mark.asyncio
@@ -1678,7 +1709,7 @@ class TestRunBacktestCells:
         self._wire(svc)
         svc._backtest_symbol = AsyncMock(side_effect=self._fake_sma())
 
-        result = await svc.RunBacktest(self._req(), context=MagicMock())
+        result = await svc.RunBacktest(self._req(), context=_owned_ctx())
 
         assert result.status == analysis_pb2.BACKTEST_STATUS_OK
         svc._backtest_run_symbols_repo.insert_many.assert_awaited_once()
@@ -1710,6 +1741,7 @@ class TestRunBacktestCells:
                 "definition_json": definition_json,
             }
         )
+        svc._strategies_repo.get_by_owner_and_id = svc._strategies_repo.get_by_id
         diag = analysis_pb2.SymbolDiagnostics()
         curve = [100_000.0, 100_100.0, 100_200.0]
         svc._backtest_symbol_evaluated = AsyncMock(
@@ -1717,7 +1749,7 @@ class TestRunBacktestCells:
         )
 
         req = self._req(strategy_id="s1", strategy_id_ref="s1", symbols=("AAPL",))
-        await svc.RunBacktest(req, context=MagicMock())
+        await svc.RunBacktest(req, context=_owned_ctx())
 
         cells = svc._backtest_run_symbols_repo.insert_many.await_args.args[0]
         expected = _definition_fingerprint(definition_json)
@@ -1737,13 +1769,14 @@ class TestRunBacktestCells:
                 "definition_json": {"entry_rule": "x"},
             }
         )
+        svc._strategies_repo.get_by_owner_and_id = svc._strategies_repo.get_by_id
         diag = analysis_pb2.SymbolDiagnostics()
         svc._backtest_symbol_evaluated = AsyncMock(
             side_effect=lambda symbol=None, **kw: ([], 100_000.0, [100_000.0, 100_100.0], diag)
         )
         # strategy_id "s1" differs from strategy_id_ref "other" → cells carry no fingerprint.
         req = self._req(strategy_id="s1", strategy_id_ref="other", symbols=("AAPL",))
-        await svc.RunBacktest(req, context=MagicMock())
+        await svc.RunBacktest(req, context=_owned_ctx())
 
         cells = svc._backtest_run_symbols_repo.insert_many.await_args.args[0]
         assert cells and all(c["definition_fingerprint"] is None for c in cells)
@@ -1758,7 +1791,7 @@ class TestRunBacktestCells:
         svc._marketdata = MagicMock()
         svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
 
-        result = await svc.RunBacktest(self._req(symbols=("AAPL",)), context=MagicMock())
+        result = await svc.RunBacktest(self._req(symbols=("AAPL",)), context=_owned_ctx())
 
         assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
         svc._backtest_run_symbols_repo.insert_many.assert_not_awaited()
@@ -1770,7 +1803,7 @@ class TestRunBacktestCells:
         svc._backtest_run_symbols_repo.insert_many = AsyncMock(side_effect=Exception("db down"))
         svc._backtest_symbol = AsyncMock(side_effect=self._fake_sma())
 
-        result = await svc.RunBacktest(self._req(), context=MagicMock())
+        result = await svc.RunBacktest(self._req(), context=_owned_ctx())
         assert result.status == analysis_pb2.BACKTEST_STATUS_OK  # swallowed
 
     @pytest.mark.asyncio
@@ -1783,7 +1816,7 @@ class TestRunBacktestCells:
         req.range.start.seconds = 1_600_000_000
         req.range.end.seconds = 1_600_864_000  # 10 days, within cap
 
-        await svc.RunBacktest(req, context=MagicMock())
+        await svc.RunBacktest(req, context=_owned_ctx())
 
         kwargs = svc._backtest_runs_repo.insert.await_args.kwargs
         assert kwargs["range_start"] is not None
@@ -1900,8 +1933,9 @@ def _stub_update_repo(svc, current_row):
     """
     repo = AsyncMock()
     repo.get_by_id = AsyncMock(return_value=current_row)
+    repo.get_by_owner_and_id = AsyncMock(return_value=current_row)
 
-    async def _locked(strategy_id, apply_fn):
+    async def _locked(user_id, strategy_id, apply_fn):
         name, new_json = await apply_fn(current_row)
         return {**current_row, "display_name": name, "definition_json": new_json}
 
@@ -1949,7 +1983,7 @@ class TestHeadlineTriggers:
         req.HasField = MagicMock(return_value=False)
         req.range = common_pb2.TimeRange()
 
-        await svc.RunBacktest(req, context=MagicMock())
+        await svc.RunBacktest(req, context=_owned_ctx())
 
         svc._scores_repo.upsert.assert_awaited()
         kwargs = svc._scores_repo.upsert.await_args.kwargs
@@ -1968,7 +2002,7 @@ class TestHeadlineTriggers:
         svc._scores_repo.delete = AsyncMock(side_effect=Exception("db down"))
         svc._has_admin_scope = lambda ctx: True
 
-        await svc.ManageStrategy(_update_req(), context=MagicMock())
+        await svc.ManageStrategy(_update_req(), context=_owned_ctx())
 
         # Unconditional pop FIRST — the stale grade is gone even though recompute/delete failed.
         assert "s1" not in svc._strategies
@@ -1980,13 +2014,16 @@ class TestHeadlineTriggers:
         _stub_update_repo(svc, _updated_row())
         svc._has_admin_scope = lambda ctx: True
 
-        await asyncio.wait_for(svc.ManageStrategy(_update_req(), context=MagicMock()), timeout=2.0)
+        await asyncio.wait_for(svc.ManageStrategy(_update_req(), context=_owned_ctx()), timeout=2.0)
 
         svc._scores_repo.upsert.assert_awaited_once()  # recompute ran under the same lock
 
 
 def _abort_ctx():
     context = MagicMock()
+    context.invocation_metadata = MagicMock(
+        return_value=[("x-user-id", "u1"), ("x-access-scope", "7"), ("x-trace-id", "t1")]
+    )
     context.abort = AsyncMock(side_effect=Exception("aborted"))
     return context
 
@@ -2006,12 +2043,13 @@ class TestScoreStrategyRecompute:
     async def test_unregistered_not_found(self):
         svc = _derivation_svc([])
         svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=None)
         req = MagicMock()
         req.strategy_id = "nope"
         ctx = _abort_ctx()
         with pytest.raises(Exception, match="aborted"):
             await svc.ScoreStrategy(req, ctx)
-        assert ctx.abort.await_args.args[0] == grpc.StatusCode.NOT_FOUND
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
 
     @pytest.mark.asyncio
     async def test_zero_eligible_clears_and_not_found(self):
@@ -2054,7 +2092,7 @@ class TestScoreStrategyRecompute:
         req = MagicMock()
         req.strategy_id = "s1"
 
-        score = await svc.ScoreStrategy(req, context=MagicMock())
+        score = await svc.ScoreStrategy(req, context=_owned_ctx())
 
         assert score.strategy_id == "s1"
         assert score.evidence_symbols == 3
@@ -2073,7 +2111,7 @@ class TestScoreStrategyRecompute:
         req.range = common_pb2.TimeRange(
             start=Timestamp(seconds=1_600_000_000), end=Timestamp(seconds=1_600_864_000)
         )
-        score = await svc.ScoreStrategy(req, context=MagicMock())
+        score = await svc.ScoreStrategy(req, context=_owned_ctx())
         assert score.evidence_days == 1800  # whole eligible base, not a windowed subset
 
 
@@ -2128,7 +2166,7 @@ class TestTradedFirstDedupContract:
         svc = _derivation_svc([traded])
         req = MagicMock()
         req.strategy_id = "s1"
-        score = await svc.ScoreStrategy(req, context=MagicMock())
+        score = await svc.ScoreStrategy(req, context=_owned_ctx())
         assert score.evidence_days == 100  # the traded cell's window, per fetch_eligible
 
 
@@ -2163,7 +2201,7 @@ class TestEquityCapture:
         svc = TestBacktestDiagnostics()._svc_with(bars, fast, slow)
         req = TestBacktestDiagnostics()._legacy_req()
 
-        result = await svc.RunBacktest(req, context=MagicMock())
+        result = await svc.RunBacktest(req, context=_owned_ctx())
 
         assert result.status == analysis_pb2.BACKTEST_STATUS_OK
         assert result.initial_capital == 100_000.0
@@ -2188,7 +2226,7 @@ class TestEquityCapture:
         req.HasField = MagicMock(return_value=False)
         req.range = common_pb2.TimeRange()
 
-        result = await svc.RunBacktest(req, context=MagicMock())
+        result = await svc.RunBacktest(req, context=_owned_ctx())
         assert result.initial_capital == 100_000.0
 
     @pytest.mark.asyncio
@@ -2205,7 +2243,7 @@ class TestEquityCapture:
         req.HasField = MagicMock(return_value=False)
         req.range = common_pb2.TimeRange()
 
-        result = await svc.RunBacktest(req, context=MagicMock())
+        result = await svc.RunBacktest(req, context=_owned_ctx())
         assert result.initial_capital == 25_000.0
 
 
@@ -2233,7 +2271,7 @@ class TestBacktestDetailPersistence:
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         svc._backtest_details_repo = AsyncMock()
 
-        result = await svc.RunBacktest(self._empty_req("s1"), context=MagicMock())
+        result = await svc.RunBacktest(self._empty_req("s1"), context=_owned_ctx())
 
         assert result.status == analysis_pb2.BACKTEST_STATUS_OK
         svc._backtest_details_repo.insert.assert_awaited_once()
@@ -2257,7 +2295,7 @@ class TestBacktestDetailPersistence:
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         svc._backtest_details_repo = AsyncMock()
 
-        await svc.RunBacktest(self._empty_req("s1"), context=MagicMock())
+        await svc.RunBacktest(self._empty_req("s1"), context=_owned_ctx())
 
         assert svc._backtest_details_repo.insert.await_args.kwargs["retention"] == 1
 
@@ -2274,7 +2312,7 @@ class TestBacktestDetailPersistence:
         svc._marketdata = MagicMock()
         svc._marketdata.GetBars = AsyncMock(return_value=bars_resp)
 
-        result = await svc.RunBacktest(self._empty_req("s1", ["AAPL"]), context=MagicMock())
+        result = await svc.RunBacktest(self._empty_req("s1", ["AAPL"]), context=_owned_ctx())
 
         assert result.status == analysis_pb2.BACKTEST_STATUS_INSUFFICIENT_DATA
         svc._backtest_details_repo.insert.assert_not_awaited()
@@ -2288,7 +2326,7 @@ class TestBacktestDetailPersistence:
         svc._backtest_details_repo = AsyncMock()
         svc._backtest_details_repo.insert = AsyncMock(side_effect=RuntimeError("db down"))
 
-        result = await svc.RunBacktest(self._empty_req("s1"), context=MagicMock())
+        result = await svc.RunBacktest(self._empty_req("s1"), context=_owned_ctx())
         assert result.status == analysis_pb2.BACKTEST_STATUS_OK  # run still returned
 
     @pytest.mark.asyncio
@@ -2300,7 +2338,7 @@ class TestBacktestDetailPersistence:
         svc._backtest_runs_repo = AsyncMock()
         svc._backtest_details_repo = AsyncMock()
 
-        await svc.RunBacktest(self._empty_req("s1"), context=MagicMock())
+        await svc.RunBacktest(self._empty_req("s1"), context=_owned_ctx())
 
         history = svc._backtest_runs_repo.insert.await_args.kwargs
         detail = analysis_pb2.BacktestResult()
@@ -2332,7 +2370,7 @@ class TestGetBacktest:
 
         req = MagicMock()
         req.backtest_id = "bt-1"
-        result = await svc.GetBacktest(req, context=MagicMock())
+        result = await svc.GetBacktest(req, context=_owned_ctx())
 
         assert result == stored  # byte-exact round trip
         svc._backtest_details_repo.get.assert_awaited_once_with("bt-1")
@@ -2528,6 +2566,7 @@ class TestBacktestCooldown:
         definition.cooldown_days = 0
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=None)  # feature 089: not existing
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=None)
         svc._strategies_repo.create = AsyncMock(return_value=_row_for(definition))
         req = analysis_pb2.ManageStrategyRequest(
             operation=analysis_pb2.STRATEGY_OPERATION_REGISTER, definition=definition
@@ -2604,6 +2643,7 @@ class TestBacktestCooldown:
         definition.exit_cooldown_days = 0
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=None)
         svc._strategies_repo.create = AsyncMock(return_value=_row_for(definition))
         req = analysis_pb2.ManageStrategyRequest(
             operation=analysis_pb2.STRATEGY_OPERATION_REGISTER, definition=definition
@@ -2880,6 +2920,7 @@ class TestPartialStrategyUpdate:
         svc = make_servicer()
         repo = AsyncMock()
         repo.get_by_id = AsyncMock(return_value=None)
+        repo.get_by_owner_and_id = AsyncMock(return_value=None)
         svc._strategies_repo = repo
         ctx = _abort_ctx()
         svc._has_admin_scope = lambda c: True
@@ -2887,7 +2928,7 @@ class TestPartialStrategyUpdate:
         with pytest.raises(Exception, match="aborted"):
             await svc.ManageStrategy(_masked_req(paths=["display_name"]), context=ctx)
 
-        assert ctx.abort.await_args.args[0] == grpc.StatusCode.NOT_FOUND
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
         repo.update_locked.assert_not_awaited()  # no write attempted
 
 
@@ -3109,7 +3150,7 @@ class TestWindowDeterminism:
         async def _run(now_seconds):
             svc = _wire_evaluated(make_servicer(), bars)
             with self._freeze(now_seconds):
-                return await svc.RunBacktest(_windowed_req(_sma_def()), context=MagicMock())
+                return await svc.RunBacktest(_windowed_req(_sma_def()), context=_owned_ctx())
 
         # "today" a full year apart
         day_one = await _run(_W_END + _DAY)
@@ -3130,7 +3171,7 @@ class TestWindowDeterminism:
             req.inline_definition.CopyFrom(_sma_def())
             req.range.CopyFrom(common_pb2.TimeRange())  # no bounds → rolling default
             with self._freeze(now_seconds):
-                await svc.RunBacktest(req, context=MagicMock())
+                await svc.RunBacktest(req, context=_owned_ctx())
             captured.append((req.range.start.seconds, req.range.end.seconds))
 
         await _effective_window(_W_END + _DAY)
@@ -3141,7 +3182,7 @@ class TestWindowDeterminism:
     async def test_no_trade_opens_before_the_requested_start(self):
         """FR-3 at the RPC level: the prefix seeds indicators only."""
         svc = _wire_evaluated(make_servicer(), _series_bars(6, 12))
-        result = await svc.RunBacktest(_windowed_req(_sma_def()), context=MagicMock())
+        result = await svc.RunBacktest(_windowed_req(_sma_def()), context=_owned_ctx())
         assert result.trades  # the assertion below is vacuous on an empty list
         assert all(t.entry_time.seconds >= _W_START for t in result.trades)
         assert all(b.timestamp.seconds >= _W_START for b in result.diagnostics[0].bars)
@@ -3159,7 +3200,7 @@ class TestPrefixSizingIsNotSemantic:
 
         async def _run():
             svc = _wire_evaluated(make_servicer(), bars)
-            return await svc.RunBacktest(_windowed_req(_sma_def()), context=MagicMock())
+            return await svc.RunBacktest(_windowed_req(_sma_def()), context=_owned_ctx())
 
         baseline = await _run()
         with patch.object(
@@ -3176,7 +3217,7 @@ class TestPrefixSizingIsNotSemantic:
 
         async def _run(n_prefix):
             svc = _wire_evaluated(make_servicer(), _series_bars(n_prefix, 12))
-            return await svc.RunBacktest(_windowed_req(_sma_def()), context=MagicMock())
+            return await svc.RunBacktest(_windowed_req(_sma_def()), context=_owned_ctx())
 
         assert _canonical(await _run(6)) == _canonical(await _run(40))
 
@@ -3233,7 +3274,7 @@ class TestVwapAnchorMovesWithPrefix:
         cumulative mean starts 50 bars earlier than the caller's window."""
         capture = []
         svc = _wire_evaluated(make_servicer(), _series_bars(50, 12), capture=capture)
-        await svc.RunBacktest(_windowed_req(self._def()), context=MagicMock())
+        await svc.RunBacktest(_windowed_req(self._def()), context=_owned_ctx())
         by_indicator = dict(capture)
         assert by_indicator["VWAP"] == 62  # 50 prefix + 12 window, not 12
         assert by_indicator["SMA"] == 62
@@ -3313,7 +3354,7 @@ class TestPrefixFormulaCost:
                 formula_id="f-1", warmup_period=declared_warmup
             )
         )
-        await svc.RunBacktest(_windowed_req(self._def()), context=MagicMock())
+        await svc.RunBacktest(_windowed_req(self._def()), context=_owned_ctx())
         return sizes
 
     @pytest.mark.asyncio
@@ -3367,7 +3408,7 @@ class TestPrefixFormulaCost:
             return_value=indicators_pb2.FormulaDefinition(formula_id="f-1", warmup_period=10)
         )
         await svc.RunBacktest(
-            _windowed_req(self._def(), symbols=("AAPL", "MSFT")), context=MagicMock()
+            _windowed_req(self._def(), symbols=("AAPL", "MSFT")), context=_owned_ctx()
         )
         assert sizes == [23, 23]
         # ...and the declaration is fetched once for the whole run, not once per symbol.
@@ -3434,6 +3475,7 @@ class TestEvaluateReadiness:
         svc = make_servicer()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=_strategy_row_single_gt())
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_strategy_row_single_gt())
         svc._marketdata = MagicMock()
         svc._marketdata.GetBars = AsyncMock(
             side_effect=lambda req, metadata=None: _bars_resp(bars_by_symbol[req.symbol])
@@ -3493,11 +3535,12 @@ class TestEvaluateReadiness:
         svc = make_servicer()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=None)
         ctx = _ctx(_HEADERS)
         await svc.EvaluateReadiness(
             analysis_pb2.EvaluateReadinessRequest(strategy_id="nope", symbols=["AAPL"]), ctx
         )
-        assert ctx.abort.await_args.args[0] == grpc.StatusCode.NOT_FOUND
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
 
 
 def _sig(symbol, direction, conviction, source="src"):
@@ -3660,6 +3703,11 @@ def _materialized_svc(signals=(), held=(), watchlists=(), strategies=None, bars=
     )
     svc._strategies_repo = AsyncMock()
     svc._strategies_repo.get_by_id = AsyncMock(side_effect=lambda sid: strategies.get(sid))
+    # feature 133: _load_strategy_definition resolves owner-scoped now; the test fixtures are all
+    # under a single owner (_HEADERS x-user-id="u1"), so mirror get_by_id (owner-agnostic here).
+    svc._strategies_repo.get_by_owner_and_id = AsyncMock(
+        side_effect=lambda uid, sid: strategies.get(sid)
+    )
     svc._marketdata = MagicMock()
     svc._marketdata.GetBars = AsyncMock(
         side_effect=lambda req, metadata=None: _recent_bars_resp(bars.get(req.symbol, []))
@@ -4106,6 +4154,7 @@ class TestStrategyLifecycle089:
         definition = _valid_definition()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=_row_for(definition))
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_row_for(definition))
         ctx = _admin_ctx()
         with pytest.raises(Exception, match="aborted"):
             await svc.ManageStrategy(
@@ -4123,6 +4172,7 @@ class TestStrategyLifecycle089:
         definition = _valid_definition()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=None)
         svc._strategies_repo.create = AsyncMock(side_effect=asyncpg.UniqueViolationError("dup"))
         ctx = _admin_ctx()
         with pytest.raises(Exception, match="aborted"):
@@ -4140,6 +4190,7 @@ class TestStrategyLifecycle089:
         definition = _valid_definition()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=_row_for(definition))
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_row_for(definition))
         reactivated = {**_row_for(definition), "active": True}
         svc._strategies_repo.reactivate = AsyncMock(return_value=reactivated)
         resp = await svc.ManageStrategy(
@@ -4156,6 +4207,7 @@ class TestStrategyLifecycle089:
         svc = make_servicer()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=None)
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=None)
         ctx = _admin_ctx()
         with pytest.raises(Exception, match="aborted"):
             await svc.ManageStrategy(
@@ -4165,16 +4217,17 @@ class TestStrategyLifecycle089:
                 ),
                 ctx,
             )
-        assert ctx.abort.await_args.args[0] == grpc.StatusCode.NOT_FOUND
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
 
     @pytest.mark.asyncio
     async def test_enable_live_on_inactive_rejected(self):
         svc = make_servicer()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=_live_row(active=False))
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_live_row(active=False))
         req = MagicMock(strategy_id="s1", live_enabled=True)
         ctx = _admin_ctx()
-        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]
+        ctx.invocation_metadata.return_value = [("x-user-id", "u1"), ("x-access-scope", "7")]
         with pytest.raises(Exception, match="aborted"):
             await svc.SetStrategyLive(req, ctx)
         assert ctx.abort.await_args.args[0] == grpc.StatusCode.FAILED_PRECONDITION
@@ -4184,9 +4237,10 @@ class TestStrategyLifecycle089:
         svc = make_servicer()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=_live_row(symbols=()))
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_live_row(symbols=()))
         req = MagicMock(strategy_id="s1", live_enabled=True)
         ctx = _admin_ctx()
-        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]
+        ctx.invocation_metadata.return_value = [("x-user-id", "u1"), ("x-access-scope", "7")]
         with pytest.raises(Exception, match="aborted"):
             await svc.SetStrategyLive(req, ctx)
         assert ctx.abort.await_args.args[0] == grpc.StatusCode.FAILED_PRECONDITION
@@ -4203,7 +4257,7 @@ class TestStrategyLifecycle089:
         svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         req = MagicMock(strategy_id="s1", live_enabled=False)
         ctx = MagicMock()
-        ctx.invocation_metadata.return_value = [("x-access-scope", "7")]
+        ctx.invocation_metadata.return_value = [("x-user-id", "u1"), ("x-access-scope", "7")]
         resp = await svc.SetStrategyLive(req, ctx)
         assert resp.definition.strategy_id == "s1"
         svc._strategies_repo.get_by_id.assert_not_awaited()  # no precondition fetch on disable
@@ -4279,6 +4333,7 @@ class TestDeletedFormulaFlag:
         definition = _custom_formula_definition()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=_row_for(definition))
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_row_for(definition))
         svc._indicators = MagicMock()
         svc._indicators.GetFormula = AsyncMock(
             return_value=indicators_pb2.FormulaDefinition(
@@ -4286,7 +4341,7 @@ class TestDeletedFormulaFlag:
             )
         )
         ctx = MagicMock()
-        ctx.invocation_metadata = MagicMock(return_value=[])
+        ctx.invocation_metadata = MagicMock(return_value=[("x-user-id", "u1")])
         req = analysis_pb2.GetStrategyRequest(strategy_id="s-cf")
         result = await svc.GetStrategy(req, ctx)
         assert len(result.warnings) == 1
@@ -4298,12 +4353,13 @@ class TestDeletedFormulaFlag:
         definition = _custom_formula_definition()
         svc._strategies_repo = AsyncMock()
         svc._strategies_repo.get_by_id = AsyncMock(return_value=_row_for(definition))
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_row_for(definition))
         svc._indicators = MagicMock()
         svc._indicators.GetFormula = AsyncMock(
             return_value=indicators_pb2.FormulaDefinition(formula_id="fid", deleted=False)
         )
         ctx = MagicMock()
-        ctx.invocation_metadata = MagicMock(return_value=[])
+        ctx.invocation_metadata = MagicMock(return_value=[("x-user-id", "u1")])
         req = analysis_pb2.GetStrategyRequest(strategy_id="s-cf")
         result = await svc.GetStrategy(req, ctx)
         assert list(result.warnings) == []
@@ -4345,7 +4401,7 @@ class TestBacktestDeletedFormulaWarning:
             ],
             entry_rule=json.dumps({"fn": ">", "lhs": "ff", "rhs": 0}),
         )
-        result = await svc.RunBacktest(_windowed_req(definition), context=MagicMock())
+        result = await svc.RunBacktest(_windowed_req(definition), context=_owned_ctx())
         assert any("f-1" in w for w in result.warnings)
         # The deletion was captured on the warm-up prefetch's single fetch — no extra GetFormula.
         assert svc._indicators.GetFormula.await_count == 1
@@ -4446,3 +4502,91 @@ async def test_set_opportunity_action_dismiss_take_persist_enum():
         kw = svc._opportunity_actions_repo.upsert.await_args.kwargs
         assert kw["action"] == action
         assert kw["snooze_until"] is None  # only SNOOZE sets a timestamp
+
+
+class TestFeature133Ownership:
+    """Cross-user ownership isolation (feature 133) — AC-1/AC-2/AC-3 with an owner-aware repo."""
+
+    @staticmethod
+    def _owner_repo(rows):
+        """rows: dict[(user_id, strategy_id)] -> row dict. Owner-aware fake strategies repo."""
+        repo = AsyncMock()
+
+        async def _goai(user_id, strategy_id):
+            return rows.get((user_id, strategy_id))
+
+        async def _list(user_id, include_inactive=False, page_size=0, page_offset=0):
+            owned = [r for (u, _s), r in rows.items() if u == user_id]
+            return owned, len(owned)
+
+        repo.get_by_owner_and_id = AsyncMock(side_effect=_goai)
+        repo.list = AsyncMock(side_effect=_list)
+        return repo
+
+    @staticmethod
+    def _row(user_id, strategy_id):
+        return {
+            "strategy_id": strategy_id,
+            "user_id": user_id,
+            "display_name": strategy_id.upper(),
+            "active": True,
+            "live_enabled": False,
+            "definition_json": {},
+        }
+
+    @pytest.mark.asyncio
+    async def test_ac2_get_strategy_owner_mismatch_is_permission_denied(self):
+        svc = make_servicer()
+        svc._strategies_repo = self._owner_repo({("ua", "s1"): self._row("ua", "s1")})
+        ctx = _ctx({"x-user-id": "ub", "x-access-scope": "7", "x-trace-id": "t"})
+        ctx.abort = AsyncMock(side_effect=Exception("aborted"))
+        with pytest.raises(Exception, match="aborted"):
+            await svc.GetStrategy(analysis_pb2.GetStrategyRequest(strategy_id="s1"), ctx)
+        # uniform PERMISSION_DENIED — user B can't tell whether s1 exists under user A
+        assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
+
+    @pytest.mark.asyncio
+    async def test_ac3_list_definitions_excludes_other_users(self):
+        svc = make_servicer()
+        svc._strategies_repo = self._owner_repo(
+            {("ua", "s1"): self._row("ua", "s1"), ("ub", "s2"): self._row("ub", "s2")}
+        )
+        ctx = _ctx({"x-user-id": "ub", "x-access-scope": "7", "x-trace-id": "t"})
+        resp = await svc.ListStrategyDefinitions(analysis_pb2.ListStrategyDefinitionsRequest(), ctx)
+        assert {d.strategy_id for d in resp.definitions} == {"s2"}  # never user A's s1
+
+    @pytest.mark.asyncio
+    async def test_ac1_two_users_register_same_strategy_id_without_collision(self):
+        svc = make_servicer()
+        created = {}
+
+        async def _goai(user_id, strategy_id):
+            return created.get((user_id, strategy_id))
+
+        async def _create(user_id, strategy_id, display_name, definition_json):
+            row = {
+                "strategy_id": strategy_id,
+                "user_id": user_id,
+                "display_name": display_name,
+                "active": True,
+                "live_enabled": False,
+                "definition_json": definition_json,
+            }
+            created[(user_id, strategy_id)] = row
+            return row
+
+        repo = AsyncMock()
+        repo.get_by_owner_and_id = AsyncMock(side_effect=_goai)
+        repo.create = AsyncMock(side_effect=_create)
+        svc._strategies_repo = repo
+        svc._validate_definition_proto = AsyncMock()  # bypass formula validation
+
+        for user in ("ua", "ub"):
+            ctx = _ctx({"x-user-id": user, "x-access-scope": "7", "x-trace-id": "t"})
+            req = analysis_pb2.ManageStrategyRequest(
+                operation=analysis_pb2.STRATEGY_OPERATION_REGISTER,
+                definition=analysis_pb2.StrategyDefinition(strategy_id="s1", display_name="X"),
+            )
+            resp = await svc.ManageStrategy(req, ctx)
+            assert resp.user_id == user  # owner is server-set from the header
+        assert set(created) == {("ua", "s1"), ("ub", "s1")}  # composite PK, no collision

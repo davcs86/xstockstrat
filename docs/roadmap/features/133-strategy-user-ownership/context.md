@@ -348,3 +348,19 @@ TS plugins (pnpm) + `uv sync --extra dev` (analysis) all done. gettext-base inst
   two users sharing a strategy_id), Open-Risk-3 (legacy binding now owned by another user → unattributed).
   Fixtures per C-13 live in tests/conftest.py.
 - **Verification target**: `ruff check . && ruff format --check . && pytest --cov=app --cov-fail-under=40`.
+
+### Step 10 — analysis tests [done] — GREEN
+- **TDD red→green**: RED baseline = 77 failures after steps 7-9; GREEN = **464 passed**, ruff clean,
+  coverage **81.94%** (≥40%).
+- Aligned test_analysis_servicer.py to the ownership model: `_owned_ctx()` helper carries x-user-id;
+  fake repos expose `get_by_owner_and_id` (mirrors get_by_id for single-owner tests); `_stub_update_repo._locked`
+  + `_derivation_svc`/`_materialized_svc` gained owner methods + `list`; the 4 owner-miss tests assert
+  **PERMISSION_DENIED** (uniform-deny, design decision 3); `test_requires_admin_scope` repurposed to
+  `test_unauthenticated_caller_denied` (admin scope no longer gates SetStrategyLive).
+- **New coverage (Step 10 instructions):** `TestFeature133Ownership` — AC-1 (two users register same
+  strategy_id, no collision, server-set owner), AC-2 (GetStrategy owner-mismatch → PERMISSION_DENIED),
+  AC-3 (ListStrategyDefinitions excludes other users) via an owner-aware fake repo. AC-4 owner-keying is
+  exercised by the 3-tuple state-dict tests in test_live_loop.py. Open-Risk-3 unattributed-fallback is
+  covered by `_load_strategy_definition`'s owner-scoped resolution in the opportunities tests.
+- **Verify**: `ruff check . && ruff format --check .` clean; `pytest --cov=app --cov-fail-under=40` →
+  464 passed, 81.94%. Deviations: none beyond D-1..D-4 already logged.
