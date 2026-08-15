@@ -861,6 +861,7 @@ type ExternalSignal struct {
 	Headline      string                 `protobuf:"bytes,7,opt,name=headline,proto3" json:"headline,omitempty"`
 	RawUrl        string                 `protobuf:"bytes,8,opt,name=raw_url,json=rawUrl,proto3" json:"raw_url,omitempty"`
 	Tags          []string               `protobuf:"bytes,9,rep,name=tags,proto3" json:"tags,omitempty"`
+	IngestedAt    *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=ingested_at,json=ingestedAt,proto3" json:"ingested_at,omitempty"` // platform ingestion time (server-set, immune to source timestamp manipulation) — feature 022
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -954,6 +955,13 @@ func (x *ExternalSignal) GetRawUrl() string {
 func (x *ExternalSignal) GetTags() []string {
 	if x != nil {
 		return x.Tags
+	}
+	return nil
+}
+
+func (x *ExternalSignal) GetIngestedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.IngestedAt
 	}
 	return nil
 }
@@ -1590,7 +1598,7 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\x06format\x18\x03 \x01(\tR\x06format\"[\n" +
 	"\x18NormalizeRawDataResponse\x12'\n" +
 	"\x0frows_normalized\x18\x01 \x01(\x03R\x0erowsNormalized\x12\x16\n" +
-	"\x06errors\x18\x02 \x03(\tR\x06errors\"\xbf\x02\n" +
+	"\x06errors\x18\x02 \x03(\tR\x06errors\"\xfc\x02\n" +
 	"\x0eExternalSignal\x12\x16\n" +
 	"\x06source\x18\x01 \x01(\tR\x06source\x12\x16\n" +
 	"\x06symbol\x18\x02 \x01(\tR\x06symbol\x12\x1c\n" +
@@ -1604,7 +1612,10 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"validUntil\x12\x1a\n" +
 	"\bheadline\x18\a \x01(\tR\bheadline\x12\x17\n" +
 	"\araw_url\x18\b \x01(\tR\x06rawUrl\x12\x12\n" +
-	"\x04tags\x18\t \x03(\tR\x04tags\"T\n" +
+	"\x04tags\x18\t \x03(\tR\x04tags\x12;\n" +
+	"\vingested_at\x18\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"ingestedAt\"T\n" +
 	"\x13IngestSignalRequest\x12=\n" +
 	"\x06signal\x18\x01 \x01(\v2%.xstockstrat.ingest.v1.ExternalSignalR\x06signal\"W\n" +
 	"\x14IngestSignalResponse\x12\x1b\n" +
@@ -1748,42 +1759,43 @@ var file_ingest_v1_ingest_proto_depIdxs = []int32{
 	27, // 12: xstockstrat.ingest.v1.ListBackfillJobsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
 	24, // 13: xstockstrat.ingest.v1.ExternalSignal.valid_from:type_name -> google.protobuf.Timestamp
 	24, // 14: xstockstrat.ingest.v1.ExternalSignal.valid_until:type_name -> google.protobuf.Timestamp
-	13, // 15: xstockstrat.ingest.v1.IngestSignalRequest.signal:type_name -> xstockstrat.ingest.v1.ExternalSignal
-	23, // 16: xstockstrat.ingest.v1.QuerySignalsRequest.active_window:type_name -> xstockstrat.common.v1.TimeRange
-	26, // 17: xstockstrat.ingest.v1.QuerySignalsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
-	13, // 18: xstockstrat.ingest.v1.QuerySignalsResponse.signals:type_name -> xstockstrat.ingest.v1.ExternalSignal
-	27, // 19: xstockstrat.ingest.v1.QuerySignalsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
-	28, // 20: xstockstrat.ingest.v1.SignalSource.config_json:type_name -> google.protobuf.Struct
-	2,  // 21: xstockstrat.ingest.v1.SignalSource.health:type_name -> xstockstrat.ingest.v1.SourceHealthStatus
-	24, // 22: xstockstrat.ingest.v1.SignalSource.last_seen_at:type_name -> google.protobuf.Timestamp
-	18, // 23: xstockstrat.ingest.v1.ListSignalSourcesResponse.sources:type_name -> xstockstrat.ingest.v1.SignalSource
-	18, // 24: xstockstrat.ingest.v1.ManageSignalSourceRequest.source:type_name -> xstockstrat.ingest.v1.SignalSource
-	29, // 25: xstockstrat.ingest.v1.ManageSignalSourceRequest.update_mask:type_name -> google.protobuf.FieldMask
-	3,  // 26: xstockstrat.ingest.v1.ManageSignalSourceRequest.operation_enum:type_name -> xstockstrat.ingest.v1.SignalSourceOperation
-	18, // 27: xstockstrat.ingest.v1.ManageSignalSourceResponse.source:type_name -> xstockstrat.ingest.v1.SignalSource
-	5,  // 28: xstockstrat.ingest.v1.IngestService.TriggerBackfill:input_type -> xstockstrat.ingest.v1.TriggerBackfillRequest
-	7,  // 29: xstockstrat.ingest.v1.IngestService.GetBackfillStatus:input_type -> xstockstrat.ingest.v1.GetBackfillStatusRequest
-	8,  // 30: xstockstrat.ingest.v1.IngestService.ListBackfillJobs:input_type -> xstockstrat.ingest.v1.ListBackfillJobsRequest
-	9,  // 31: xstockstrat.ingest.v1.IngestService.CancelBackfill:input_type -> xstockstrat.ingest.v1.CancelBackfillRequest
-	11, // 32: xstockstrat.ingest.v1.IngestService.NormalizeRawData:input_type -> xstockstrat.ingest.v1.NormalizeRawDataRequest
-	14, // 33: xstockstrat.ingest.v1.IngestService.IngestSignal:input_type -> xstockstrat.ingest.v1.IngestSignalRequest
-	16, // 34: xstockstrat.ingest.v1.IngestService.QuerySignals:input_type -> xstockstrat.ingest.v1.QuerySignalsRequest
-	19, // 35: xstockstrat.ingest.v1.IngestService.ListSignalSources:input_type -> xstockstrat.ingest.v1.ListSignalSourcesRequest
-	21, // 36: xstockstrat.ingest.v1.IngestService.ManageSignalSource:input_type -> xstockstrat.ingest.v1.ManageSignalSourceRequest
-	6,  // 37: xstockstrat.ingest.v1.IngestService.TriggerBackfill:output_type -> xstockstrat.ingest.v1.TriggerBackfillResponse
-	4,  // 38: xstockstrat.ingest.v1.IngestService.GetBackfillStatus:output_type -> xstockstrat.ingest.v1.BackfillJob
-	10, // 39: xstockstrat.ingest.v1.IngestService.ListBackfillJobs:output_type -> xstockstrat.ingest.v1.ListBackfillJobsResponse
-	4,  // 40: xstockstrat.ingest.v1.IngestService.CancelBackfill:output_type -> xstockstrat.ingest.v1.BackfillJob
-	12, // 41: xstockstrat.ingest.v1.IngestService.NormalizeRawData:output_type -> xstockstrat.ingest.v1.NormalizeRawDataResponse
-	15, // 42: xstockstrat.ingest.v1.IngestService.IngestSignal:output_type -> xstockstrat.ingest.v1.IngestSignalResponse
-	17, // 43: xstockstrat.ingest.v1.IngestService.QuerySignals:output_type -> xstockstrat.ingest.v1.QuerySignalsResponse
-	20, // 44: xstockstrat.ingest.v1.IngestService.ListSignalSources:output_type -> xstockstrat.ingest.v1.ListSignalSourcesResponse
-	22, // 45: xstockstrat.ingest.v1.IngestService.ManageSignalSource:output_type -> xstockstrat.ingest.v1.ManageSignalSourceResponse
-	37, // [37:46] is the sub-list for method output_type
-	28, // [28:37] is the sub-list for method input_type
-	28, // [28:28] is the sub-list for extension type_name
-	28, // [28:28] is the sub-list for extension extendee
-	0,  // [0:28] is the sub-list for field type_name
+	24, // 15: xstockstrat.ingest.v1.ExternalSignal.ingested_at:type_name -> google.protobuf.Timestamp
+	13, // 16: xstockstrat.ingest.v1.IngestSignalRequest.signal:type_name -> xstockstrat.ingest.v1.ExternalSignal
+	23, // 17: xstockstrat.ingest.v1.QuerySignalsRequest.active_window:type_name -> xstockstrat.common.v1.TimeRange
+	26, // 18: xstockstrat.ingest.v1.QuerySignalsRequest.page:type_name -> xstockstrat.common.v1.PageRequest
+	13, // 19: xstockstrat.ingest.v1.QuerySignalsResponse.signals:type_name -> xstockstrat.ingest.v1.ExternalSignal
+	27, // 20: xstockstrat.ingest.v1.QuerySignalsResponse.page:type_name -> xstockstrat.common.v1.PageResponse
+	28, // 21: xstockstrat.ingest.v1.SignalSource.config_json:type_name -> google.protobuf.Struct
+	2,  // 22: xstockstrat.ingest.v1.SignalSource.health:type_name -> xstockstrat.ingest.v1.SourceHealthStatus
+	24, // 23: xstockstrat.ingest.v1.SignalSource.last_seen_at:type_name -> google.protobuf.Timestamp
+	18, // 24: xstockstrat.ingest.v1.ListSignalSourcesResponse.sources:type_name -> xstockstrat.ingest.v1.SignalSource
+	18, // 25: xstockstrat.ingest.v1.ManageSignalSourceRequest.source:type_name -> xstockstrat.ingest.v1.SignalSource
+	29, // 26: xstockstrat.ingest.v1.ManageSignalSourceRequest.update_mask:type_name -> google.protobuf.FieldMask
+	3,  // 27: xstockstrat.ingest.v1.ManageSignalSourceRequest.operation_enum:type_name -> xstockstrat.ingest.v1.SignalSourceOperation
+	18, // 28: xstockstrat.ingest.v1.ManageSignalSourceResponse.source:type_name -> xstockstrat.ingest.v1.SignalSource
+	5,  // 29: xstockstrat.ingest.v1.IngestService.TriggerBackfill:input_type -> xstockstrat.ingest.v1.TriggerBackfillRequest
+	7,  // 30: xstockstrat.ingest.v1.IngestService.GetBackfillStatus:input_type -> xstockstrat.ingest.v1.GetBackfillStatusRequest
+	8,  // 31: xstockstrat.ingest.v1.IngestService.ListBackfillJobs:input_type -> xstockstrat.ingest.v1.ListBackfillJobsRequest
+	9,  // 32: xstockstrat.ingest.v1.IngestService.CancelBackfill:input_type -> xstockstrat.ingest.v1.CancelBackfillRequest
+	11, // 33: xstockstrat.ingest.v1.IngestService.NormalizeRawData:input_type -> xstockstrat.ingest.v1.NormalizeRawDataRequest
+	14, // 34: xstockstrat.ingest.v1.IngestService.IngestSignal:input_type -> xstockstrat.ingest.v1.IngestSignalRequest
+	16, // 35: xstockstrat.ingest.v1.IngestService.QuerySignals:input_type -> xstockstrat.ingest.v1.QuerySignalsRequest
+	19, // 36: xstockstrat.ingest.v1.IngestService.ListSignalSources:input_type -> xstockstrat.ingest.v1.ListSignalSourcesRequest
+	21, // 37: xstockstrat.ingest.v1.IngestService.ManageSignalSource:input_type -> xstockstrat.ingest.v1.ManageSignalSourceRequest
+	6,  // 38: xstockstrat.ingest.v1.IngestService.TriggerBackfill:output_type -> xstockstrat.ingest.v1.TriggerBackfillResponse
+	4,  // 39: xstockstrat.ingest.v1.IngestService.GetBackfillStatus:output_type -> xstockstrat.ingest.v1.BackfillJob
+	10, // 40: xstockstrat.ingest.v1.IngestService.ListBackfillJobs:output_type -> xstockstrat.ingest.v1.ListBackfillJobsResponse
+	4,  // 41: xstockstrat.ingest.v1.IngestService.CancelBackfill:output_type -> xstockstrat.ingest.v1.BackfillJob
+	12, // 42: xstockstrat.ingest.v1.IngestService.NormalizeRawData:output_type -> xstockstrat.ingest.v1.NormalizeRawDataResponse
+	15, // 43: xstockstrat.ingest.v1.IngestService.IngestSignal:output_type -> xstockstrat.ingest.v1.IngestSignalResponse
+	17, // 44: xstockstrat.ingest.v1.IngestService.QuerySignals:output_type -> xstockstrat.ingest.v1.QuerySignalsResponse
+	20, // 45: xstockstrat.ingest.v1.IngestService.ListSignalSources:output_type -> xstockstrat.ingest.v1.ListSignalSourcesResponse
+	22, // 46: xstockstrat.ingest.v1.IngestService.ManageSignalSource:output_type -> xstockstrat.ingest.v1.ManageSignalSourceResponse
+	38, // [38:47] is the sub-list for method output_type
+	29, // [29:38] is the sub-list for method input_type
+	29, // [29:29] is the sub-list for extension type_name
+	29, // [29:29] is the sub-list for extension extendee
+	0,  // [0:29] is the sub-list for field type_name
 }
 
 func init() { file_ingest_v1_ingest_proto_init() }

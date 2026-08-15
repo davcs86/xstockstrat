@@ -964,7 +964,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             rows = await self._db.fetch(
                 f"""
                 SELECT source, symbol, direction, conviction, valid_from, valid_until,
-                       headline, raw_url, tags
+                       headline, raw_url, tags, ingested_at
                 FROM ingest.newsletter_signals
                 {where_clause}
                 ORDER BY ingested_at DESC
@@ -999,6 +999,9 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 vu = Timestamp()
                 vu.FromDatetime(row["valid_until"])
                 sig.valid_until.CopyFrom(vu)
+            # feature 022: platform ingestion time (NOT NULL column, DB default NOW()) — the age
+            # input for analysis's signal_axis decay. No null guard needed (column is NOT NULL).
+            sig.ingested_at.FromDatetime(row["ingested_at"])
             signals.append(sig)
 
         next_token = str(offset_int + len(rows)) if len(rows) == limit else ""

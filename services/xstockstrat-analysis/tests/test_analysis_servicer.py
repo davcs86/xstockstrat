@@ -9,7 +9,7 @@ import asyncio
 import inspect
 import json
 import math
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -39,6 +39,10 @@ def make_servicer() -> AnalysisServicer:
     # feature 116: get_int_present (not get_int) is used for exit_cooldown_days' platform
     # default, since a configured 0 is meaningful and must not be zero-trapped.
     cfg.get_int_present = MagicMock(side_effect=lambda key, default: default)
+    # feature 022: get_float_present backs the signal-decay half-life (a configured 0 disables
+    # decay and must not be zero-trapped). Default → no override, so existing signal fixtures
+    # (no ingested_at → age unknown → decay_multiplier 1.0) are unaffected.
+    cfg.get_float_present = MagicMock(side_effect=lambda key, default: default)
     return AnalysisServicer(
         cfg,
         marketdata_channel=MagicMock(),
@@ -538,6 +542,33 @@ class TestConfigWatcherGetters:
         snap.values["k"].CopyFrom(config_pb2.ConfigValue(float_val=0.75))
         w._snapshot = snap
         assert w.get_float("k") == 0.75
+
+    # feature 022 — get_float_present: presence-aware read that does NOT collapse a stored 0.0.
+    def test_get_float_present_no_snapshot(self):
+        w = _StubWatcher()
+        assert w.get_float_present("k", 24.0) == 24.0
+
+    def test_get_float_present_missing_key_returns_default(self):
+        w = _StubWatcher()
+        w._snapshot = config_pb2.ConfigSnapshot()
+        assert w.get_float_present("k", 24.0) == 24.0
+
+    def test_get_float_present_positive_value(self):
+        w = _StubWatcher()
+        snap = config_pb2.ConfigSnapshot()
+        snap.values["k"].CopyFrom(config_pb2.ConfigValue(float_val=12.5))
+        w._snapshot = snap
+        assert w.get_float_present("k", 24.0) == 12.5
+
+    def test_get_float_present_explicit_zero_is_not_trapped(self):
+        # FR-3 rollback contract: a configured 0.0 disables decay and must survive the read;
+        # get_float would collapse it to the default 24.0 (the zero-trap this method fixes).
+        w = _StubWatcher()
+        snap = config_pb2.ConfigSnapshot()
+        snap.values["k"].CopyFrom(config_pb2.ConfigValue(float_val=0.0))
+        w._snapshot = snap
+        assert w.get_float_present("k", 24.0) == 0.0
+        assert w.get_float("k", 24.0) == 24.0  # contrast: the old zero-trap
 
     def test_sandbox_timeout_default(self):
         w = _StubWatcher()
@@ -3733,14 +3764,18 @@ class TestEvaluateReadiness:
         assert ctx.abort.await_args.args[0] == grpc.StatusCode.PERMISSION_DENIED
 
 
-def _sig(symbol, direction, conviction, source="src"):
-    return ingest_pb2.ExternalSignal(
+def _sig(symbol, direction, conviction, source="src", ingested_at=None):
+    sig = ingest_pb2.ExternalSignal(
         symbol=symbol,
         direction=direction,
         conviction=conviction,
         source=source,
         headline=f"{direction} {symbol}",
     )
+    # feature 022 — optional platform ingestion time; when set, drives signal_axis age decay.
+    if ingested_at is not None:
+        sig.ingested_at.FromDatetime(ingested_at)
+    return sig
 
 
 # ── Materialized opportunity Universe (feature 097) ─────────────────────────────
@@ -4107,6 +4142,90 @@ class TestListOpportunitiesMaterialized:
         assert full_axis == pytest.approx(0.9)
         assert half_axis == pytest.approx(0.45)  # 0.9 * 0.5
         assert half_axis == pytest.approx(full_axis * 0.5)
+
+    # ── feature 022 — signal_axis age decay ──────────────────────────────────
+    async def _axis_for_age(self, age_hours, half_life=24.0, conviction=0.8, *, set_ingested=True):
+        """Compute a single AAPL signal's stored signal_axis under `half_life`, where the signal
+        was ingested `age_hours` ago (or with ingested_at unset when set_ingested=False). Uses a
+        curated watchlist+firing row so the candidate survives; reads the raw stored axis."""
+        ingested_at = datetime.now(UTC) - timedelta(hours=age_hours) if set_ingested else None
+        svc = _materialized_svc(
+            signals=[_sig("AAPL", "buy", conviction, source="uw", ingested_at=ingested_at)],
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS},
+        )
+        svc._cfg.get_float_present = MagicMock(
+            side_effect=lambda key, default: (
+                half_life if key == "analysis.scoring.signal_decay_half_life_hours" else default
+            )
+        )
+        await _list_opps(svc)
+        return svc._opportunities_repo.rows["u1"][0]["signal_axis"]
+
+    @pytest.mark.asyncio
+    async def test_decay_fresh_signal_undamped(self):
+        """AC (t=0): a signal ingested ~now with half-life 24 → multiplier ≈ 1.0."""
+        assert await self._axis_for_age(0.0) == pytest.approx(0.8, rel=1e-3)
+
+    @pytest.mark.asyncio
+    async def test_decay_one_half_life_halves(self):
+        """AC-5 (t=half_life): ingested 24h ago, half-life 24 → half the raw conviction."""
+        assert await self._axis_for_age(24.0) == pytest.approx(0.4, rel=1e-2)
+
+    @pytest.mark.asyncio
+    async def test_decay_two_half_lives_quarters(self):
+        """AC-1 (t=2×half_life): ingested 48h ago, half-life 24 → a quarter of raw."""
+        assert await self._axis_for_age(48.0) == pytest.approx(0.2, rel=1e-2)
+
+    @pytest.mark.asyncio
+    async def test_decay_three_half_lives_eighths(self):
+        """AC-5 (t=3×half_life): ingested 72h ago, half-life 24 → an eighth of raw."""
+        assert await self._axis_for_age(72.0) == pytest.approx(0.1, rel=1e-2)
+
+    @pytest.mark.asyncio
+    async def test_decay_disabled_by_zero_half_life(self):
+        """AC-2/FR-3: half-life 0 disables decay → undamped regardless of age (rollback path)."""
+        assert await self._axis_for_age(72.0, half_life=0.0) == pytest.approx(0.8, rel=1e-6)
+
+    @pytest.mark.asyncio
+    async def test_decay_disabled_by_negative_half_life(self):
+        """AC-2/FR-3: a negative half-life is also treated as disabled (undamped)."""
+        assert await self._axis_for_age(72.0, half_life=-5.0) == pytest.approx(0.8, rel=1e-6)
+
+    @pytest.mark.asyncio
+    async def test_missing_ingested_at_treated_as_fresh(self):
+        """AC-5 (deploy-ordering race): a signal with ingested_at unset → age unknown →
+        multiplier 1.0 regardless of half-life; must NOT underflow to 0.0."""
+        assert await self._axis_for_age(0.0, set_ingested=False) == pytest.approx(0.8, rel=1e-6)
+
+    @pytest.mark.asyncio
+    async def test_missing_ingested_at_emits_exactly_one_aggregated_warning(self):
+        """AC-7: N signals missing ingested_at → EXACTLY ONE aggregated log.warning per compute
+        pass (never one-per-signal), reporting the count."""
+        svc = _materialized_svc(
+            signals=[
+                _sig("GOOG", "buy", 0.9, source="uw"),  # both ingested_at unset
+                _sig("NFLX", "buy", 0.8, source="uw"),
+            ],
+        )
+        with patch("app.handlers.servicer.log.warning") as warn:
+            await _list_opps(svc)
+        assert warn.call_count == 1
+        # The single call reports the missing count (2) and the total (2).
+        args = warn.call_args.args
+        assert args[1] == 2 and args[2] == 2
+
+    @pytest.mark.asyncio
+    async def test_no_warning_when_all_signals_carry_ingested_at(self):
+        """The aggregated warning fires only when something is missing — a fully-stamped pass is
+        silent."""
+        svc = _materialized_svc(
+            signals=[_sig("GOOG", "buy", 0.9, source="uw", ingested_at=datetime.now(UTC))],
+        )
+        with patch("app.handlers.servicer.log.warning") as warn:
+            await _list_opps(svc)
+        assert warn.call_count == 0
 
     @pytest.mark.asyncio
     async def test_drain_source_weights_maps_and_is_best_effort(self):

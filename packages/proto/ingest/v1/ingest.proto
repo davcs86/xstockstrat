@@ -113,6 +113,7 @@ message ExternalSignal {
   string headline   = 7;
   string raw_url    = 8;
   repeated string tags = 9;
+  google.protobuf.Timestamp ingested_at = 10;  // platform ingestion time (server-set, immune to source timestamp manipulation) — feature 022
 }
 
 message IngestSignalRequest  { ExternalSignal signal = 1; }
