@@ -101,4 +101,19 @@ test.describe('Signal detail readiness', () => {
     // The entry-rule leaves (symbolReadiness) must NOT appear — that was the mislabeled trace.
     await expect(page.getByText('sma_fast', { exact: false })).toHaveCount(0);
   });
+
+  test('a stale ?strategy= (deleted strategy) shows a distinct message, not a generic error (feature 125)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // strat-notfound-readiness-01 is a reserved sentinel the mock's evaluateReadiness aborts
+    // NOT_FOUND for — a stale/bookmarkable ?strategy= threading a strategy the service no longer has.
+    await page.goto('/insights/market/AAPL?strategy=strat-notfound-readiness-01');
+    await expect(page.getByText('Why this fired')).toBeVisible({ timeout: 8000 });
+    // The NotFound-specific message renders; the generic "Failed to evaluate readiness." does not.
+    await expect(page.getByText('This strategy no longer exists — pick another.')).toBeVisible({
+      timeout: 10000,
+    });
+    await expect(page.getByText('Failed to evaluate readiness.')).toHaveCount(0);
+  });
 });

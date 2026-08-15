@@ -38,6 +38,7 @@ other meanings; don't rename without updating every listed site.
 | `strat-diag-001` | `RunBacktest` returns OK + per-bar diagnostics (feature 064) | `e2e/mock-backend.ts` |
 | `strat-formula-error-001` | `RunBacktest` returns `NO_TRADE_REASON_FORMULA_ERROR` (feature 067) | `e2e/mock-backend.ts` |
 | `strat-notfound-001` | `GetStrategyReport` throws NOT_FOUND (cleared grade, feature 065) | `e2e/mock-backend.ts` |
+| `strat-notfound-readiness-01` | `EvaluateReadiness` throws NOT_FOUND (stale `?strategy=`, feature 125) | `e2e/mock-backend.ts`, `e2e/insights/signal-detail.spec.ts` |
 | `strat-history-001` | Strategy with persisted score + backtest run history | `e2e/mock-backend.ts` |
 | `invalid_ref` | `ManageStrategy` throws INVALID_ARGUMENT (wizard error path) | `e2e/mock-backend.ts`, `e2e/insights/strategy-authoring.spec.ts` |
 | `READY1` / `WATCH1` / `QUIET1` / `NODATA1` | `evaluateReadiness` forces the ready / watching / quiet / no-data bucket for that symbol (feature 098 rollup e2e) — never AAPL/MSFT so other specs' default 2/3 shape is untouched | `e2e/mock-backend.ts` (`READINESS_BUCKET_OVERRIDE`), `e2e/insights/watchlists.spec.ts` |

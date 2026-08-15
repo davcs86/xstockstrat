@@ -606,6 +606,12 @@ export async function startMockBackend(): Promise<void> {
         // is an arrow, not point-free, so the array index is never passed as a second argument);
         // overrides are spread at this call site so the shared AAPL default is unchanged.
         async evaluateReadiness(req) {
+          // feature 125 — a stale/deleted `?strategy=` param threads a strategyId the analysis
+          // service no longer knows; the real EvaluateReadiness aborts NOT_FOUND, and
+          // SignalReadiness renders a distinct "no longer exists" message (not the generic error).
+          if (req.strategyId === 'strat-notfound-readiness-01') {
+            throw new ConnectError(`strategy '${req.strategyId}' not found`, Code.NotFound);
+          }
           const syms = req.symbols.length ? req.symbols : ['AAPL'];
           // feature 138 — a held (REDUCE/ADD) opportunity's panel requests the EXIT rule; return
           // the distinct exit trace so the e2e can prove the exit rule was traced (not entry).
