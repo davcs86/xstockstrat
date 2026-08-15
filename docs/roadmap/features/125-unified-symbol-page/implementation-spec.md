@@ -350,7 +350,7 @@ test).
 
 ### Step 6 — test (xstockstrat-portfolio): multi-account `GetPosition` regression
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo_test.go` — modify (or create if

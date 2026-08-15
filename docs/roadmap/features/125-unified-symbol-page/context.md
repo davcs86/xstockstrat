@@ -646,3 +646,18 @@ each checkpoint (C-02/P-03).
   predicate is skipped (identical to prior behavior); existing service/fill tests still pass
   (repository + service suites green, no regression). No longer a deferred latent defect — fixed
   in-scope under user sign-off.
+
+### Step 6 — test (xstockstrat-portfolio): multi-account `GetPosition` regression [done]
+- `TestGetPosition_ScopesToRequestedAccount` (pgxmock): requests the non-most-recent account,
+  asserts the emitted SQL carries `account_id=$4` + the bound account arg, and that the requested
+  account's row (qty/account_id) is returned. Added `github.com/pashagolub/pgxmock/v4` as the test
+  dependency (user-chosen approach — no DB-integration harness exists and CI has no postgres).
+- TDD: red (predicate neutralized → SQL lacks `account_id=$4` → pgxmock "could not match actual sql"
+  → FAILED) → green (fix in place → PASS). Full suite: all packages `ok`, 55.9% coverage (≥40%).
+- Files modified: `internal/repository/portfolio_repo_test.go`; `go.mod`/`go.sum` (pgxmock dep —
+  F-08 lockfile exception, staged with the test that uses it).
+- Deviations: **Disposition CI-equivalent fallback** — Step 6's `go test ./internal/repository/...`
+  would need a live DB for the specced "seed two rows" approach, which CI lacks; used pgxmock
+  (user-approved) to exercise the query offline. A benign `covdata` sandbox-toolchain warning
+  appears on the no-test middleware pkg under `-race -coverpkg` but all packages pass and coverage
+  computes.
