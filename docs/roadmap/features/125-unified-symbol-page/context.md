@@ -724,3 +724,25 @@ each checkpoint (C-02/P-03).
   `src/app/trader/positions/[symbol]/page.tsx` (the Step-8 fix the paired e2e caught — folded here
   rather than force-pushing an amend to the already-pushed Step 8 commit; the green-making change
   travels with the test that caught it, per the insights-ledger 072 pairing pattern).
+
+### Step 10 — service (xstockstrat-ui): useReadiness/SignalReadiness NotFound handling [done]
+- `useReadiness` (useOpportunities.ts) now mirrors `useBacktestDetail`: NotFound-aware `retry` guard +
+  returns `isNotFound`. `SignalReadiness.tsx` branches on `isNotFound` before the generic error,
+  rendering "This strategy no longer exists — pick another." (kept a `<p>` to match the sibling
+  error/empty branches' idiom — consistent with the existing ternary chain).
+- Verify: tsc clean, lint clean. TDD: paired e2e is Step 11.
+- Files modified: `src/hooks/useOpportunities.ts`, `src/components/insights/SignalReadiness.tsx`
+
+### Step 11 — test (xstockstrat-ui): SignalReadiness NotFound paired test [done]
+- Mock `evaluateReadiness` throws `Code.NotFound` for sentinel `strat-notfound-readiness-01`
+  (registered in `INVENTORY.md` Recurring-sentinel table, C-12). Added the NotFound test.
+- **Deviation (ordering)**: the spec placed this test in `position-detail.spec.ts`, but
+  `SignalReadiness` is not mounted on the positions page until Step 12 — so the red-green there is
+  unreachable now. Put it in `e2e/insights/signal-detail.spec.ts` instead, the component's **current
+  live mount** (`/insights/market/AAPL?strategy=strat-notfound-readiness-01`), giving a real
+  runnable red-green for Step 10's shared-component fix. The positions-page assertion for this
+  message lands when Step 25 relocates signal-detail coverage onto the unified page.
+- E2E: **built + ran** — 5 passed (my new test green; it + the pre-existing @41 flaked once on
+  cold-start then passed on retry — a run-level timing artifact, CI tolerates via retries, not a
+  logic issue). Message renders on NotFound; generic error absent.
+- Files modified: `e2e/mock-backend.ts`, `e2e/insights/signal-detail.spec.ts`, `e2e/fixtures/INVENTORY.md`

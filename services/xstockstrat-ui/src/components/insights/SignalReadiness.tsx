@@ -50,7 +50,11 @@ export function SignalReadiness({ symbol }: { symbol: string }) {
   const rule = isHeld ? ReadinessRule.EXIT : ReadinessRule.ENTRY;
   const ruleWord = isHeld ? 'exit' : 'entry';
 
-  const { data, isLoading, error } = useReadiness(strategyId, symbol ? [symbol] : [], rule);
+  const { data, isLoading, error, isNotFound } = useReadiness(
+    strategyId,
+    symbol ? [symbol] : [],
+    rule,
+  );
   const readiness = data?.readiness?.[0];
   // Strategy track record (feature 083 — the handoff's Signal-detail track-record block).
   const { data: analytics } = useStrategyAnalytics(strategyId || undefined);
@@ -81,6 +85,10 @@ export function SignalReadiness({ symbol }: { symbol: string }) {
           </p>
         ) : isLoading ? (
           <p className="text-sm text-muted-foreground">Evaluating conditions…</p>
+        ) : isNotFound ? (
+          <p className="text-sm text-muted-foreground">
+            This strategy no longer exists — pick another.
+          </p>
         ) : error ? (
           <p className="text-sm text-sell">Failed to evaluate readiness.</p>
         ) : !readiness || readiness.conditions.length === 0 ? (

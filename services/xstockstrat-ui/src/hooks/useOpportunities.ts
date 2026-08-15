@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { analysisClient } from '@/lib/browserClients/analysisClient';
 import { useInvalidatingMutation } from '@/hooks/useInvalidatingMutation';
+import { isNotFoundError } from '@/lib/scoreDisplay';
 import type { OpportunityAction, ReadinessRule } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
 /**
@@ -48,11 +49,15 @@ export function useSetOpportunityAction() {
  * conviction. The rule is part of the query key so entry/exit results cache separately.
  */
 export function useReadiness(strategyId: string, symbols: string[], rule?: ReadinessRule) {
-  return useQuery<EvaluateReadinessResult, Error>({
+  // A stale/deleted `?strategy=` param makes EvaluateReadiness abort NOT_FOUND — an expected,
+  // externally-controllable case, not a retriable failure. Mirrors useBacktestDetail (useStrategies.ts).
+  const query = useQuery<EvaluateReadinessResult, Error>({
     queryKey: ['readiness', strategyId, [...symbols].sort(), rule ?? 0],
     queryFn: () => analysisClient.evaluateReadiness({ strategyId, symbols, rule }),
     enabled: Boolean(strategyId) && symbols.length > 0,
+    retry: (failureCount, err) => !isNotFoundError(err) && failureCount < 1,
   });
+  return { ...query, isNotFound: isNotFoundError(query.error) };
 }
 
 type StrategyAnalyticsResult = Awaited<ReturnType<typeof analysisClient.getStrategyAnalytics>>;
