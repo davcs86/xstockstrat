@@ -598,3 +598,12 @@ each checkpoint (C-02/P-03).
   languages. Second run produced no further change (idempotent). No other message touched.
 - Files modified: `packages/proto/gen/{go,python,ts}/analysis/v1/` (generated)
 - Deviations: none.
+
+### Step 3 — service (xstockstrat-analysis): wire `criterion_raw_values`/`criterion_passed` [done]
+- `_build_result` now populates `criterion_raw_values`/`criterion_passed` from the same
+  `row["raws"]`/`row["passes"]` dicts, only for evaluated criteria (mirrors `criterion_scores`'
+  skip contract); both passed into the `ScreenResult(...)` constructor. No new computation.
+- TDD: red → green. red: `criterion_raw_values["f_pass"] == 0.0` (empty map) vs expected 0.8 →
+  FAILED; green: `test_single_symbol_criterion_raw_values_and_passed` PASSED, ruff clean.
+- Files modified: `services/xstockstrat-analysis/app/services/screener.py`
+- Deviations: none.

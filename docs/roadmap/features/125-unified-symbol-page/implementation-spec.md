@@ -173,7 +173,7 @@ regeneration, per the proto-versioning runbook's "Verifying the generated stubs 
 
 ### Step 3 — service (xstockstrat-analysis): wire `criterion_raw_values`/`criterion_passed`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/screener.py` — modify
