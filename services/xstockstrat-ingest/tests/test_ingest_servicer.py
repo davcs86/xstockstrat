@@ -942,6 +942,33 @@ class TestQuerySignals:
 
         context.abort.assert_called_once()
 
+    @pytest.mark.asyncio
+    async def test_populates_ingested_at(self):
+        """feature 022 (AC-6): every returned ExternalSignal carries the row's ingested_at (the
+        NOT NULL platform ingestion time — the age input for analysis's signal_axis decay)."""
+        ingested = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
+        db = MagicMock()
+        db.fetch = AsyncMock(
+            return_value=[
+                {
+                    "source": "unusual_whales",
+                    "symbol": "AAPL",
+                    "direction": "buy",
+                    "conviction": 0.9,
+                    "valid_from": datetime(2026, 8, 1, tzinfo=UTC),
+                    "valid_until": None,
+                    "headline": "h",
+                    "raw_url": "",
+                    "tags": [],
+                    "ingested_at": ingested,
+                }
+            ]
+        )
+        svc = make_servicer(db=db)
+        resp = await svc.QuerySignals(ingest_pb2.QuerySignalsRequest(), MagicMock())
+        assert resp.signals[0].HasField("ingested_at")
+        assert resp.signals[0].ingested_at.ToDatetime(tzinfo=UTC) == ingested
+
 
 # ---------------------------------------------------------------------------
 # ConfigWatcher getters
