@@ -38,8 +38,16 @@ from app.repositories.signal_sources import (
 log = logging.getLogger(__name__)
 
 # Feature 088 — honest ManageSignalSource verbs (AIP-161 partial update).
+# Feature 134 — reliability_weight is a maskable field (per-source ranking multiplier).
 _SS_MASKABLE_PATHS = frozenset(
-    {"display_name", "source_type", "extractor_module", "config_json", "credentials_ref"}
+    {
+        "display_name",
+        "source_type",
+        "extractor_module",
+        "config_json",
+        "credentials_ref",
+        "reliability_weight",
+    }
 )
 # slug is the PK; active is column-authoritative (lifecycle via reactivate/deactivate only, RC-6).
 _SS_COLUMN_AUTH_PATHS = frozenset({"slug", "active"})
@@ -1035,6 +1043,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 health=health,
                 last_error=last_error or "",
                 signals_fed=row.get("signals_fed") or 0,
+                reliability_weight=row.get("reliability_weight", 1.0),  # feature 134
             )
             if last_seen is not None:
                 source.last_seen_at.FromDatetime(last_seen)
@@ -1095,6 +1104,16 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             if err:
                 await context.abort(grpc.StatusCode.INVALID_ARGUMENT, err)
                 return
+            # feature 134 — reject an out-of-range explicit weight (mirrors conviction at ~719); an
+            # omitted field resolves to the neutral 1.0 default. Never pass None — the NOT NULL
+            # column is named in the INSERT, so a bound NULL would raise NotNullViolationError.
+            if src.HasField("reliability_weight") and not (0.0 <= src.reliability_weight <= 1.0):
+                await context.abort(
+                    grpc.StatusCode.INVALID_ARGUMENT,
+                    "reliability_weight must be between 0.0 and 1.0",
+                )
+                return
+            weight = src.reliability_weight if src.HasField("reliability_weight") else 1.0
             row = await insert_source(
                 self._db,
                 slug=src.slug,
@@ -1104,6 +1123,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 credentials_ref=merged_cred,
                 config_json=cfg_dict,
                 active=True,
+                reliability_weight=weight,
             )
         else:  # update — AIP-161 partial merge onto the stored row (feature 088)
             stored = await get_source(self._db, src.slug)
@@ -1155,6 +1175,19 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             if err:
                 await context.abort(grpc.StatusCode.INVALID_ARGUMENT, err)
                 return
+            # feature 134 — reject an out-of-range explicit weight, then merge: masked + present →
+            # request value; else preserve the stored weight (never None on the NOT NULL column).
+            if src.HasField("reliability_weight") and not (0.0 <= src.reliability_weight <= 1.0):
+                await context.abort(
+                    grpc.StatusCode.INVALID_ARGUMENT,
+                    "reliability_weight must be between 0.0 and 1.0",
+                )
+                return
+            merged_weight = (
+                src.reliability_weight
+                if (_use_req("reliability_weight") and src.HasField("reliability_weight"))
+                else stored["reliability_weight"]
+            )
             row = await update_source(
                 self._db,
                 slug=src.slug,
@@ -1163,6 +1196,7 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                 extractor_module=merged_extractor,
                 credentials_ref=merged_cred,
                 config_json=merged_cfg,
+                reliability_weight=merged_weight,
             )
             if row is None:
                 await context.abort(grpc.StatusCode.NOT_FOUND, f"source '{src.slug}' not found")
@@ -1183,5 +1217,6 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
             active=row["active"],
             has_credentials=(row["credentials_ref"] is not None),
             config_json=cfg_out,
+            reliability_weight=row["reliability_weight"],  # feature 134
         )
         return ingest_pb2.ManageSignalSourceResponse(source=result)

@@ -173,7 +173,7 @@ Read both: the `.up` `ADD COLUMN` is reversed by the `.down` `DROP COLUMN`. The 
 
 ### Step 4 — service: Persist and return `reliability_weight` in the ingest write/read paths
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify

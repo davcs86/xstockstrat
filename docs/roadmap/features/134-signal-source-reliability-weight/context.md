@@ -191,3 +191,15 @@
 - Files modified: `services/xstockstrat-ingest/migrations/010_*.{up,down}.sql`
 - Verify (offline, no DB): both files exist; `.up` ADD reversed by `.down` DROP. Live apply runs in CI.
 - Deviations: none.
+
+### Step 4 — service: ingest persist/return reliability_weight [done]
+- `signal_sources.py`: `insert_source` gains required kwarg `reliability_weight` (trailing INSERT
+  column/param $8, after `active` — preserves the config_json positional index 6); `update_source`
+  gains it (SET `reliability_weight = $7`); `list_all_sources` cols string appends `reliability_weight`.
+- `servicer.py`: added `reliability_weight` to `_SS_MASKABLE_PATHS`; register branch validates
+  `HasField && [0,1]` (reject INVALID_ARGUMENT, mirrors conviction) then passes `weight` (1.0 default,
+  never None on the NOT NULL column); update branch rejects out-of-range and computes `merged_weight`
+  (masked+present → request value, else stored); both row builds (ManageSignalSource + ListSignalSources)
+  carry `reliability_weight`. Validation kept inline (no shared module — scope guard, mirrors conviction).
+- Files modified: `app/handlers/servicer.py`, `app/repositories/signal_sources.py`
+- TDD: red (7 failing — unknown kwarg + missing validation) → green (190 passed, 76.39%). Deviations: none.
