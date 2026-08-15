@@ -174,3 +174,12 @@
   brand-new local branch; the HEAD-ref form is the CI-equivalent baseline. Recorded as a benign
   verification-form substitution (not a deviation — same non-breaking result).
 - Deviations: none.
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Ran `./scripts/buf-gen.sh` (Docker codegen available). Diff limited to 8 files under
+  `packages/proto/gen/{go,python,ts,ts/dist}/ingest/v1/` — the additive `reliability_weight`
+  accessor only, no unrelated churn. Present in Go/Python/TS stubs.
+- `uv lock --check` in ingest/analysis/indicators all pass (no grpcio floor bump this time — the
+  feature-007 trap did not recur; no uv.lock changes to commit).
+- Files modified: `packages/proto/gen/**` (generated)
+- Deviations: none.

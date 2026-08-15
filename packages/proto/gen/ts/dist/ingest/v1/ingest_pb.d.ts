@@ -454,6 +454,14 @@ export type SignalSource = Message<"xstockstrat.ingest.v1.SignalSource"> & {
      * @generated from field: int64 signals_fed = 11;
      */
     signalsFed: bigint;
+    /**
+     * reliability_weight ∈ [0.0, 1.0] — per-source ranking multiplier applied to signal
+     * conviction (feature 134). optional (explicit presence) so an omitted create-form field is
+     * distinguishable from an explicit 0.0. DB default 1.0 (neutral).
+     *
+     * @generated from field: optional double reliability_weight = 12;
+     */
+    reliabilityWeight?: number | undefined;
 };
 /**
  * Describes the message xstockstrat.ingest.v1.SignalSource.

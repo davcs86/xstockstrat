@@ -90,7 +90,7 @@ Both pass (additive field is non-breaking). `grep -n "reliability_weight" packag
 
 ### Step 2 — proto-gen: Regenerate stubs and re-verify Python lockfiles
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/**` — modify (generated; do not hand-edit)
