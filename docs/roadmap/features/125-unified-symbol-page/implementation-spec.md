@@ -288,7 +288,7 @@ empty), then again after Step 3 (confirm it passes) — captured in the TDD gate
 
 ### Step 5 — service (xstockstrat-portfolio): fix `GetPosition` `account_id` passthrough
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go` — modify

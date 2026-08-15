@@ -620,3 +620,29 @@ each checkpoint (C-02/P-03).
   measures app-wide coverage over a single test file (6.86% — unreachable by design). Ran the
   CI-equivalent full suite `uv run pytest --cov=app --cov-fail-under=40` (83.32%, matches CI's
   full-suite gate). **Disposition**: CI-equivalent fallback.
+
+### ⚠ Binding execution instructions for the UI block (user, 2026-08-15)
+- **Before starting the UI steps (7/8 onward): rebase onto `main-dev`** (pull latest, rebase/merge)
+  so the UI work builds on current trunk.
+- **Use the repo's new shadcn skill** when doing the UI steps (in addition to the shadcn-first
+  constraint already recorded above). Locate the skill (plugin/skill in the repo) at that point and
+  drive the shadcn component work through it.
+- Both apply from Step 7/8 (first UI/docs steps) through Steps 32-33.
+
+### Step 5 — service (xstockstrat-portfolio): fix `GetPosition` `account_id` passthrough [done]
+- `PortfolioRepo.GetPosition` gained an `accountID` param + a conditional `AND account_id=$4`
+  predicate (mirrors `ListPositions`); `portfolio_service.go:463` now passes `req.GetAccountId()`.
+  Added a minimal `queryRower` interface + `db` field so the query is testable via pgxmock (Pool()
+  still returns the concrete `*pgxpool.Pool` for sibling-repo reuse). golangci-lint: 0 issues.
+- TDD: covered by Step 6's paired pgxmock test (red→green).
+- Files modified: `internal/repository/portfolio_repo.go`, `internal/service/portfolio_service.go`
+- **Deviation D-1 (in-scope, spec missed a caller — resolved by explicit user decision)**: the
+  signature change surfaced a SECOND caller the spec didn't cite — `portfolio_service.go:257`, the
+  order-fill avg-entry lookup, which upserts under `fill.AccountId` at :278. I first surfaced this
+  as a fork (pass `""` to preserve behavior vs. scope to `fill.AccountId`). **User decided
+  (2026-08-15): scope it to the account** — line 257 now passes `fill.AccountId`, fixing the
+  write-path twin of the FR-14 read-path bug (a multi-account user's fill would otherwise compute
+  avg-entry from the wrong account's position). Behavior-safe: when `fill.AccountId` is empty the
+  predicate is skipped (identical to prior behavior); existing service/fill tests still pass
+  (repository + service suites green, no regression). No longer a deferred latent defect — fixed
+  in-scope under user sign-off.
