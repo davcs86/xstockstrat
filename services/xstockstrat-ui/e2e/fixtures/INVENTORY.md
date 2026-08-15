@@ -58,7 +58,7 @@ a fixture module and register it above (never copy-paste it into a second site).
 | OHLCV bars / assets | `e2e/mock-backend.ts` (`getBars`, `listAssets`) — bars carry the canonical `timeframe: '1d'` **plus** `timeframeEnum` (feature 080) |
 | Backtest diagnostics + run history | `e2e/mock-backend.ts` (`runBacktest` sentinel branches, `listBacktests`) — the coverage-gap half was centralized by feature 071; the `strat-diag-001` / `strat-formula-error-001` diagnostics and the run-history rows are still inline |
 | Editable strategy components (`getStrategy`) | `e2e/mock-backend.ts` |
-| Signal sources | `e2e/mock-backend.ts` (`listSignalSources`, `manageSignalSource`) |
+| Signal sources | `e2e/fixtures/signalSources.ts` (`SIGNAL_SOURCE_WEIGHTED`/`SIGNAL_SOURCE_NEUTRAL`/`SIGNAL_SOURCES`) — feature 134 centralized these from `mock-backend.ts`; each carries `reliabilityWeight` (0.5 / 1.0) |
 | OAuth authorized apps | `e2e/mock-backend.ts` (`listAuthorizedApps`) |
 | Backfill jobs | `e2e/insights/backfills.spec.ts` (`runningJob()` factory) — carries **both** `timeframe: '1d'` and `timeframeEnum: 'TIMEFRAME_1DAY'` (feature 080) |
 | MCP tool list | `e2e/accounts/mcp-tools.spec.ts` (`SAMPLE_TOOLS`) |

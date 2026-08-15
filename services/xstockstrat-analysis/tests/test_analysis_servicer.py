@@ -916,6 +916,10 @@ class TestScreenSymbols:
         svc._indicators.ComputeIndicator = AsyncMock(
             return_value=SimpleNamespace(result=[SimpleNamespace(value=1.0)])
         )
+        # feature 134 — ScreenSymbols now sources weights from ingest ListSignalSources (FR-4
+        # repoint off the analysis.signals.source_weights config key). Empty → neutral 1.0.
+        svc._ingest = MagicMock()
+        svc._ingest.ListSignalSources = AsyncMock(return_value=SimpleNamespace(sources=[]))
         return svc
 
     @staticmethod
@@ -935,6 +939,38 @@ class TestScreenSymbols:
         out = Struct()
         out.update({"value": value})
         return SimpleNamespace(success=True, output=out, error="")
+
+    @pytest.mark.asyncio
+    async def test_repoints_off_config_to_ingest_reliability_weights(self):
+        """feature 134 FR-4 (genuine replace): ScreenSymbols no longer reads
+        analysis.signals.source_weights from config — it sources the weight map from ingest
+        ListSignalSources and passes it into ScreenerEngine unchanged."""
+        from unittest.mock import patch
+
+        svc = self._svc()
+        svc._portfolio = None  # skip the held cross-ref
+        svc._ingest.ListSignalSources = AsyncMock(
+            return_value=SimpleNamespace(
+                sources=[SimpleNamespace(slug="uw", reliability_weight=0.5)]
+            )
+        )
+        captured = {}
+
+        class _FakeEngine:
+            def __init__(self, _md, _ind, _ing, _cfg, source_weights):
+                captured["weights"] = source_weights
+
+            async def screen(self, _request, _meta):
+                return SimpleNamespace(results=[])
+
+        req = analysis_pb2.ScreenSymbolsRequest(symbols=["AAA"])
+        with patch("app.handlers.servicer.ScreenerEngine", _FakeEngine):
+            await svc.ScreenSymbols(req, self._ctx())
+        # The ingest-derived weight map reached the engine.
+        assert captured["weights"] == {"uw": 0.5}
+        # The now-inert config key is never consulted (the repoint, not a fallback).
+        called_keys = [c.args[0] for c in svc._cfg.get_str.call_args_list if c.args]
+        assert "analysis.signals.source_weights" not in called_keys
 
     @pytest.mark.asyncio
     async def test_ranks_universe_and_forwards_headers(self):
@@ -3677,7 +3713,9 @@ _GT_100 = {"fn": ">", "lhs": "sma", "rhs": 100.0}  # fires when last close > 100
 _FIRING_BARS = [120.0, 130.0, 150.0]  # SMA≈close, last 150 > 100 → PASS
 
 
-def _materialized_svc(signals=(), held=(), watchlists=(), strategies=None, bars=None):
+def _materialized_svc(
+    signals=(), held=(), watchlists=(), strategies=None, bars=None, source_weights=None
+):
     """A no-DB servicer wired with a _FakeOppRepo + all Universe-compute edges mocked."""
     strategies = strategies or {}
     bars = bars or {}
@@ -3687,6 +3725,14 @@ def _materialized_svc(signals=(), held=(), watchlists=(), strategies=None, bars=
     svc._ingest.QuerySignals = AsyncMock(
         return_value=SimpleNamespace(
             signals=list(signals), page=SimpleNamespace(next_page_token="")
+        )
+    )
+    # feature 134: _compute_opportunities drains per-source reliability weights via
+    # ListSignalSources. Empty → every source resolves to the neutral 1.0 multiplier (no change).
+    _sw = source_weights or {}
+    svc._ingest.ListSignalSources = AsyncMock(
+        return_value=SimpleNamespace(
+            sources=[SimpleNamespace(slug=slug, reliability_weight=w) for slug, w in _sw.items()]
         )
     )
     svc._portfolio = MagicMock()
@@ -3833,6 +3879,44 @@ class TestListOpportunitiesMaterialized:
         # The only thing the signal moved is the independent axis (stored, not in readiness).
         assert svc_no_sig._opportunities_repo.rows["u1"][0]["signal_axis"] == 0.0
         assert svc_sig._opportunities_repo.rows["u1"][0]["signal_axis"] == 0.9
+
+    @pytest.mark.asyncio
+    async def test_signal_axis_weighted_by_source_reliability(self):
+        """feature 134 AC-2: a source weighted 0.5 contributes half the signal_axis of an
+        otherwise-identical 1.0-weighted source. signal_axis = conviction * reliability_weight."""
+        common = dict(
+            signals=[_sig("AAPL", "buy", 0.9, source="uw")],
+            watchlists=[_wl(bindings=[("AAPL", "sx")])],
+            strategies={"sx": _strat_row("sx", entry=_GT_100)},
+            bars={"AAPL": _FIRING_BARS},
+        )
+        svc_full = _materialized_svc(source_weights={"uw": 1.0}, **common)
+        svc_half = _materialized_svc(source_weights={"uw": 0.5}, **common)
+        await _list_opps(svc_full)
+        await _list_opps(svc_half)
+        full_axis = svc_full._opportunities_repo.rows["u1"][0]["signal_axis"]
+        half_axis = svc_half._opportunities_repo.rows["u1"][0]["signal_axis"]
+        assert full_axis == pytest.approx(0.9)
+        assert half_axis == pytest.approx(0.45)  # 0.9 * 0.5
+        assert half_axis == pytest.approx(full_axis * 0.5)
+
+    @pytest.mark.asyncio
+    async def test_drain_source_weights_maps_and_is_best_effort(self):
+        """feature 134: _drain_source_weights returns {slug: reliability_weight} from one
+        ListSignalSources call, and {} on grpc.RpcError (best-effort)."""
+        svc = make_servicer()
+        svc._ingest = MagicMock()
+        svc._ingest.ListSignalSources = AsyncMock(
+            return_value=SimpleNamespace(
+                sources=[
+                    SimpleNamespace(slug="uw", reliability_weight=0.5),
+                    SimpleNamespace(slug="tw", reliability_weight=1.0),
+                ]
+            )
+        )
+        assert await svc._drain_source_weights([]) == {"uw": 0.5, "tw": 1.0}
+        svc._ingest.ListSignalSources = AsyncMock(side_effect=grpc.RpcError("boom"))
+        assert await svc._drain_source_weights([]) == {}
 
     @pytest.mark.asyncio
     async def test_ranked_by_conviction_and_signal_axis(self):
@@ -4117,6 +4201,8 @@ class TestScreenSymbolsHeld:
             return_value=SimpleNamespace(result=[SimpleNamespace(value=50.0)])
         )
         svc._ingest = MagicMock()
+        # feature 134 — ScreenSymbols drains reliability weights via ListSignalSources (empty→1.0).
+        svc._ingest.ListSignalSources = AsyncMock(return_value=SimpleNamespace(sources=[]))
         # portfolio holds AAPL (single page).
         pos_resp = MagicMock()
         pos_resp.positions = [MagicMock(symbol="AAPL")]

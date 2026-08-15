@@ -45,6 +45,8 @@ import {
   ORDERS,
   orderForId,
   CONFIG_KEY_FIXTURES,
+  SIGNAL_SOURCES,
+  SIGNAL_SOURCE_WEIGHTED,
 } from './fixtures';
 
 export const TRADER_MOCK_PORT = 9091;
@@ -920,26 +922,8 @@ export async function startMockBackend(): Promise<void> {
 
       router.service(IngestService, {
         async listSignalSources() {
-          return {
-            sources: [
-              {
-                slug: 'example_simple_email',
-                displayName: 'Example Simple Email',
-                sourceType: 'simple_email',
-                active: true,
-                hasCredentials: true,
-                configJson: {
-                  sender_patterns: ['noreply@example.com'],
-                  subject_patterns: ['Signal:'],
-                },
-                extractorModule: 'app.extractors.example_simple_email',
-                // feature 083 source-health fields.
-                health: 1, // SOURCE_HEALTH_STATUS_LIVE
-                signalsFed: BigInt(128),
-                lastError: '',
-              },
-            ],
-          };
+          // feature 134 (C-12): fixtures centralized in e2e/fixtures/signalSources.ts.
+          return { sources: SIGNAL_SOURCES };
         },
         // Feature 053: the insights backtest "backfill this range" action dials the insights
         // BFF ingestClient, which (in e2e) points at INGEST_ENDPOINT=9093. Return a deterministic
@@ -947,16 +931,14 @@ export async function startMockBackend(): Promise<void> {
         async triggerBackfill() {
           return { jobId: 'job-e2e-1', status: 1 /* BACKFILL_STATUS_QUEUED */ };
         },
-        async manageSignalSource() {
+        async manageSignalSource(req) {
+          // feature 134: echo the saved reliabilityWeight back so the inline-edit round-trip is
+          // observable (the cell re-reads the mutated value after invalidation).
           return {
             source: {
-              slug: 'example_simple_email',
-              displayName: 'Example Simple Email',
-              sourceType: 'simple_email',
-              extractorModule: 'app.extractors.example_simple_email',
-              active: true,
-              hasCredentials: true,
-              configJson: {},
+              ...SIGNAL_SOURCE_WEIGHTED,
+              reliabilityWeight:
+                req.source?.reliabilityWeight ?? SIGNAL_SOURCE_WEIGHTED.reliabilityWeight,
             },
           };
         },

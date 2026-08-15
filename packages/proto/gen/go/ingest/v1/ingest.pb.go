@@ -1198,12 +1198,16 @@ type SignalSource struct {
 	ConfigJson      *structpb.Struct       `protobuf:"bytes,7,opt,name=config_json,json=configJson,proto3" json:"config_json,omitempty"`
 	// ── Source-health fields (feature 083 — Engine → Signal sources) ─────────────
 	// health is derived from last_seen_at freshness vs a staleness threshold.
-	Health        SourceHealthStatus     `protobuf:"varint,8,opt,name=health,proto3,enum=xstockstrat.ingest.v1.SourceHealthStatus" json:"health,omitempty"`
-	LastSeenAt    *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=last_seen_at,json=lastSeenAt,proto3" json:"last_seen_at,omitempty"`
-	LastError     string                 `protobuf:"bytes,10,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
-	SignalsFed    int64                  `protobuf:"varint,11,opt,name=signals_fed,json=signalsFed,proto3" json:"signals_fed,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Health     SourceHealthStatus     `protobuf:"varint,8,opt,name=health,proto3,enum=xstockstrat.ingest.v1.SourceHealthStatus" json:"health,omitempty"`
+	LastSeenAt *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=last_seen_at,json=lastSeenAt,proto3" json:"last_seen_at,omitempty"`
+	LastError  string                 `protobuf:"bytes,10,opt,name=last_error,json=lastError,proto3" json:"last_error,omitempty"`
+	SignalsFed int64                  `protobuf:"varint,11,opt,name=signals_fed,json=signalsFed,proto3" json:"signals_fed,omitempty"`
+	// reliability_weight ∈ [0.0, 1.0] — per-source ranking multiplier applied to signal
+	// conviction (feature 134). optional (explicit presence) so an omitted create-form field is
+	// distinguishable from an explicit 0.0. DB default 1.0 (neutral).
+	ReliabilityWeight *float64 `protobuf:"fixed64,12,opt,name=reliability_weight,json=reliabilityWeight,proto3,oneof" json:"reliability_weight,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *SignalSource) Reset() {
@@ -1309,6 +1313,13 @@ func (x *SignalSource) GetLastError() string {
 func (x *SignalSource) GetSignalsFed() int64 {
 	if x != nil {
 		return x.SignalsFed
+	}
+	return 0
+}
+
+func (x *SignalSource) GetReliabilityWeight() float64 {
+	if x != nil && x.ReliabilityWeight != nil {
+		return *x.ReliabilityWeight
 	}
 	return 0
 }
@@ -1607,7 +1618,7 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"\x04page\x18\x05 \x01(\v2\".xstockstrat.common.v1.PageRequestR\x04page\"\x90\x01\n" +
 	"\x14QuerySignalsResponse\x12?\n" +
 	"\asignals\x18\x01 \x03(\v2%.xstockstrat.ingest.v1.ExternalSignalR\asignals\x127\n" +
-	"\x04page\x18\x02 \x01(\v2#.xstockstrat.common.v1.PageResponseR\x04page\"\xcd\x03\n" +
+	"\x04page\x18\x02 \x01(\v2#.xstockstrat.common.v1.PageResponseR\x04page\"\x98\x04\n" +
 	"\fSignalSource\x12\x12\n" +
 	"\x04slug\x18\x01 \x01(\tR\x04slug\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x1f\n" +
@@ -1625,7 +1636,9 @@ const file_ingest_v1_ingest_proto_rawDesc = "" +
 	"last_error\x18\n" +
 	" \x01(\tR\tlastError\x12\x1f\n" +
 	"\vsignals_fed\x18\v \x01(\x03R\n" +
-	"signalsFed\"E\n" +
+	"signalsFed\x122\n" +
+	"\x12reliability_weight\x18\f \x01(\x01H\x00R\x11reliabilityWeight\x88\x01\x01B\x15\n" +
+	"\x13_reliability_weight\"E\n" +
 	"\x18ListSignalSourcesRequest\x12)\n" +
 	"\x10include_inactive\x18\x01 \x01(\bR\x0fincludeInactive\"Z\n" +
 	"\x19ListSignalSourcesResponse\x12=\n" +
@@ -1778,6 +1791,7 @@ func file_ingest_v1_ingest_proto_init() {
 	if File_ingest_v1_ingest_proto != nil {
 		return
 	}
+	file_ingest_v1_ingest_proto_msgTypes[14].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

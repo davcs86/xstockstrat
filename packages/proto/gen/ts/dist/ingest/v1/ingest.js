@@ -1772,6 +1772,7 @@ function createBaseSignalSource() {
         lastSeenAt: undefined,
         lastError: "",
         signalsFed: 0,
+        reliabilityWeight: undefined,
     };
 }
 exports.SignalSource = {
@@ -1808,6 +1809,9 @@ exports.SignalSource = {
         }
         if (message.signalsFed !== 0) {
             writer.uint32(88).int64(message.signalsFed);
+        }
+        if (message.reliabilityWeight !== undefined) {
+            writer.uint32(97).double(message.reliabilityWeight);
         }
         return writer;
     },
@@ -1895,6 +1899,13 @@ exports.SignalSource = {
                     message.signalsFed = longToNumber(reader.int64());
                     continue;
                 }
+                case 12: {
+                    if (tag !== 97) {
+                        break;
+                    }
+                    message.reliabilityWeight = reader.double();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1950,6 +1961,11 @@ exports.SignalSource = {
                 : isSet(object.signals_fed)
                     ? globalThis.Number(object.signals_fed)
                     : 0,
+            reliabilityWeight: isSet(object.reliabilityWeight)
+                ? globalThis.Number(object.reliabilityWeight)
+                : isSet(object.reliability_weight)
+                    ? globalThis.Number(object.reliability_weight)
+                    : undefined,
         };
     },
     toJSON(message) {
@@ -1987,6 +2003,9 @@ exports.SignalSource = {
         if (message.signalsFed !== 0) {
             obj.signalsFed = Math.round(message.signalsFed);
         }
+        if (message.reliabilityWeight !== undefined) {
+            obj.reliabilityWeight = message.reliabilityWeight;
+        }
         return obj;
     },
     create(base) {
@@ -2005,6 +2024,7 @@ exports.SignalSource = {
         message.lastSeenAt = object.lastSeenAt ?? undefined;
         message.lastError = object.lastError ?? "";
         message.signalsFed = object.signalsFed ?? 0;
+        message.reliabilityWeight = object.reliabilityWeight ?? undefined;
         return message;
     },
 };
