@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { analysisClient } from '@/lib/browserClients/analysisClient';
 import { useInvalidatingMutation } from '@/hooks/useInvalidatingMutation';
-import type { OpportunityAction } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import type { OpportunityAction, ReadinessRule } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
 /**
  * feature 083 — Decide surface data hooks. All read-only queries against the insights BFF
@@ -41,11 +41,16 @@ export function useSetOpportunityAction() {
   );
 }
 
-/** Per-symbol readiness (traced condition leaves) for a strategy. Enabled only with a strategy. */
-export function useReadiness(strategyId: string, symbols: string[]) {
+/**
+ * Per-symbol readiness (traced condition leaves) for a strategy. Enabled only with a strategy.
+ * feature 138 — `rule` selects the entry (default) or exit rule tree; the Signal-detail panel
+ * passes EXIT for a held (REDUCE/ADD) opportunity so the trace matches the queue's exit-derived
+ * conviction. The rule is part of the query key so entry/exit results cache separately.
+ */
+export function useReadiness(strategyId: string, symbols: string[], rule?: ReadinessRule) {
   return useQuery<EvaluateReadinessResult, Error>({
-    queryKey: ['readiness', strategyId, [...symbols].sort()],
-    queryFn: () => analysisClient.evaluateReadiness({ strategyId, symbols }),
+    queryKey: ['readiness', strategyId, [...symbols].sort(), rule ?? 0],
+    queryFn: () => analysisClient.evaluateReadiness({ strategyId, symbols, rule }),
     enabled: Boolean(strategyId) && symbols.length > 0,
   });
 }

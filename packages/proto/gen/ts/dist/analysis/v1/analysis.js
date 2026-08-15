@@ -5,8 +5,8 @@
 //   protoc               unknown
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.OpportunityAction = exports.ConditionState = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.BacktestStatus = exports.protobufPackage = void 0;
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = void 0;
+exports.SymbolReadiness = exports.ConditionEval = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.OpportunityAction = exports.ReadinessRule = exports.ConditionState = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.BacktestStatus = exports.protobufPackage = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = void 0;
 exports.backtestStatusFromJSON = backtestStatusFromJSON;
 exports.backtestStatusToJSON = backtestStatusToJSON;
 exports.backtestStatusToNumber = backtestStatusToNumber;
@@ -37,6 +37,9 @@ exports.opportunityActionTagToNumber = opportunityActionTagToNumber;
 exports.conditionStateFromJSON = conditionStateFromJSON;
 exports.conditionStateToJSON = conditionStateToJSON;
 exports.conditionStateToNumber = conditionStateToNumber;
+exports.readinessRuleFromJSON = readinessRuleFromJSON;
+exports.readinessRuleToJSON = readinessRuleToJSON;
+exports.readinessRuleToNumber = readinessRuleToNumber;
 exports.opportunityActionFromJSON = opportunityActionFromJSON;
 exports.opportunityActionToJSON = opportunityActionToJSON;
 exports.opportunityActionToNumber = opportunityActionToNumber;
@@ -689,6 +692,60 @@ function conditionStateToNumber(object) {
         case ConditionState.CONDITION_STATE_FAIL:
             return 3;
         case ConditionState.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/** Which rule tree EvaluateReadiness traces (feature 138). Closed set → enum (C-04). */
+var ReadinessRule;
+(function (ReadinessRule) {
+    /** READINESS_RULE_UNSPECIFIED - server treats as ENTRY (back-compat default) */
+    ReadinessRule["READINESS_RULE_UNSPECIFIED"] = "READINESS_RULE_UNSPECIFIED";
+    /** READINESS_RULE_ENTRY - trace the entry_rule (ENTER candidates, watchlist readiness) */
+    ReadinessRule["READINESS_RULE_ENTRY"] = "READINESS_RULE_ENTRY";
+    /** READINESS_RULE_EXIT - trace the exit_rule (held REDUCE/ADD opportunities) */
+    ReadinessRule["READINESS_RULE_EXIT"] = "READINESS_RULE_EXIT";
+    ReadinessRule["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(ReadinessRule || (exports.ReadinessRule = ReadinessRule = {}));
+function readinessRuleFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "READINESS_RULE_UNSPECIFIED":
+            return ReadinessRule.READINESS_RULE_UNSPECIFIED;
+        case 1:
+        case "READINESS_RULE_ENTRY":
+            return ReadinessRule.READINESS_RULE_ENTRY;
+        case 2:
+        case "READINESS_RULE_EXIT":
+            return ReadinessRule.READINESS_RULE_EXIT;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return ReadinessRule.UNRECOGNIZED;
+    }
+}
+function readinessRuleToJSON(object) {
+    switch (object) {
+        case ReadinessRule.READINESS_RULE_UNSPECIFIED:
+            return "READINESS_RULE_UNSPECIFIED";
+        case ReadinessRule.READINESS_RULE_ENTRY:
+            return "READINESS_RULE_ENTRY";
+        case ReadinessRule.READINESS_RULE_EXIT:
+            return "READINESS_RULE_EXIT";
+        case ReadinessRule.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function readinessRuleToNumber(object) {
+    switch (object) {
+        case ReadinessRule.READINESS_RULE_UNSPECIFIED:
+            return 0;
+        case ReadinessRule.READINESS_RULE_ENTRY:
+            return 1;
+        case ReadinessRule.READINESS_RULE_EXIT:
+            return 2;
+        case ReadinessRule.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -6138,7 +6195,7 @@ exports.ListOpportunitiesResponse = {
     },
 };
 function createBaseEvaluateReadinessRequest() {
-    return { strategyId: "", symbols: [] };
+    return { strategyId: "", symbols: [], rule: ReadinessRule.READINESS_RULE_UNSPECIFIED };
 }
 exports.EvaluateReadinessRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -6147,6 +6204,9 @@ exports.EvaluateReadinessRequest = {
         }
         for (const v of message.symbols) {
             writer.uint32(18).string(v);
+        }
+        if (message.rule !== ReadinessRule.READINESS_RULE_UNSPECIFIED) {
+            writer.uint32(24).int32(readinessRuleToNumber(message.rule));
         }
         return writer;
     },
@@ -6171,6 +6231,13 @@ exports.EvaluateReadinessRequest = {
                     message.symbols.push(reader.string());
                     continue;
                 }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.rule = readinessRuleFromJSON(reader.int32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -6187,6 +6254,7 @@ exports.EvaluateReadinessRequest = {
                     ? globalThis.String(object.strategy_id)
                     : "",
             symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+            rule: isSet(object.rule) ? readinessRuleFromJSON(object.rule) : ReadinessRule.READINESS_RULE_UNSPECIFIED,
         };
     },
     toJSON(message) {
@@ -6197,6 +6265,9 @@ exports.EvaluateReadinessRequest = {
         if (message.symbols?.length) {
             obj.symbols = message.symbols;
         }
+        if (message.rule !== ReadinessRule.READINESS_RULE_UNSPECIFIED) {
+            obj.rule = readinessRuleToJSON(message.rule);
+        }
         return obj;
     },
     create(base) {
@@ -6206,6 +6277,7 @@ exports.EvaluateReadinessRequest = {
         const message = createBaseEvaluateReadinessRequest();
         message.strategyId = object.strategyId ?? "";
         message.symbols = object.symbols?.map((e) => e) || [];
+        message.rule = object.rule ?? ReadinessRule.READINESS_RULE_UNSPECIFIED;
         return message;
     },
 };

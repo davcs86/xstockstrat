@@ -3691,6 +3691,33 @@ def _strategy_row_single_gt(threshold=100.0):
     }
 
 
+def _strategy_row_entry_exit():
+    """A strategy row whose entry_rule (`sma > 100`) and exit_rule (`sma > 200`) differ, so a trace
+    of one is distinguishable from the other (feature 138). With SMA≈close bars ~150: entry → 1/1
+    PASS, exit → 0/1 FAIL."""
+    definition = analysis_pb2.StrategyDefinition(
+        strategy_id="s1",
+        display_name="S1",
+        components=[
+            analysis_pb2.StrategyComponent(
+                ref_name="sma",
+                kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                indicator="SMA",
+                params={"period": 3.0},
+            )
+        ],
+        entry_rule=json.dumps({"fn": ">", "lhs": "sma", "rhs": 100.0}),
+        exit_rule=json.dumps({"fn": ">", "lhs": "sma", "rhs": 200.0}),
+    )
+    return {
+        "strategy_id": "s1",
+        "display_name": "S1",
+        "active": True,
+        "live_enabled": True,
+        "definition_json": json_format.MessageToDict(definition),
+    }
+
+
 class TestEvaluateReadiness:
     def _svc(self, bars_by_symbol):
         svc = make_servicer()
@@ -3722,6 +3749,44 @@ class TestEvaluateReadiness:
         assert r.passing_conditions == 1 and r.total_conditions == 1
         assert r.conviction == 1.0
         assert r.conditions[0].state == analysis_pb2.CONDITION_STATE_PASS
+
+    @pytest.mark.asyncio
+    async def test_default_rule_traces_entry(self):
+        """feature 138: an unset `rule` (READINESS_RULE_UNSPECIFIED) traces the entry rule —
+        back-compat, so watchlist readiness is unchanged. Entry `sma > 100` fires at ~150 → 1/1."""
+        svc = self._svc({"AAPL": [120.0, 130.0, 150.0]})
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(
+            return_value=_strategy_row_entry_exit()
+        )
+        resp = await svc.EvaluateReadiness(
+            analysis_pb2.EvaluateReadinessRequest(strategy_id="s1", symbols=["AAPL"]),
+            _ctx(_HEADERS),
+        )
+        r = resp.readiness[0]
+        assert r.passing_conditions == 1 and r.total_conditions == 1
+        assert r.conditions[0].threshold == 100.0  # the ENTRY leaf
+        assert r.conditions[0].state == analysis_pb2.CONDITION_STATE_PASS
+
+    @pytest.mark.asyncio
+    async def test_exit_rule_traced_when_requested(self):
+        """feature 138: READINESS_RULE_EXIT traces the exit rule instead — so a held REDUCE
+        opportunity's panel explains the exit rule that fired. Exit `sma > 200` fails at ~150 →
+        0/1, tracing the EXIT leaf (threshold 200), not the entry leaf (100)."""
+        svc = self._svc({"AAPL": [120.0, 130.0, 150.0]})
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(
+            return_value=_strategy_row_entry_exit()
+        )
+        resp = await svc.EvaluateReadiness(
+            analysis_pb2.EvaluateReadinessRequest(
+                strategy_id="s1", symbols=["AAPL"], rule=analysis_pb2.READINESS_RULE_EXIT
+            ),
+            _ctx(_HEADERS),
+        )
+        r = resp.readiness[0]
+        assert r.total_conditions == 1
+        assert r.passing_conditions == 0
+        assert r.conditions[0].threshold == 200.0  # the EXIT leaf, not the entry leaf
+        assert r.conditions[0].state == analysis_pb2.CONDITION_STATE_FAIL
 
     @pytest.mark.asyncio
     async def test_near_symbol_soft_with_distance(self):

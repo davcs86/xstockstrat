@@ -93,6 +93,30 @@ export const OPPORTUNITIES = [
   },
 ];
 
+/**
+ * feature 138 — an EXIT-rule SymbolReadiness for the Signal-detail mock. Distinct from the entry
+ * trace below (different leaf `refName`/threshold and a passing count) so the e2e can prove the
+ * panel traced the exit rule (not the entry rule) for a held opportunity.
+ */
+export function exitReadiness(symbol: string) {
+  return {
+    symbol,
+    conviction: 1.0,
+    passingConditions: 1,
+    totalConditions: 1,
+    conditions: [
+      {
+        refName: 'exit_z',
+        lhsValue: -2.1,
+        threshold: -2,
+        fn: '<',
+        state: 1,
+        distanceToThreshold: 0.05,
+      },
+    ],
+  };
+}
+
 /** A SymbolReadiness (traced condition leaves) for the Signal-detail EvaluateReadiness mock. */
 export function symbolReadiness(symbol: string) {
   return {

@@ -522,9 +522,21 @@ message ListOpportunitiesResponse {
   xstockstrat.common.v1.PageResponse page = 2;
 }
 
+// Which rule tree EvaluateReadiness traces (feature 138). Closed set → enum (C-04).
+enum ReadinessRule {
+  READINESS_RULE_UNSPECIFIED = 0;  // server treats as ENTRY (back-compat default)
+  READINESS_RULE_ENTRY = 1;        // trace the entry_rule (ENTER candidates, watchlist readiness)
+  READINESS_RULE_EXIT = 2;         // trace the exit_rule (held REDUCE/ADD opportunities)
+}
+
 message EvaluateReadinessRequest {
   string strategy_id = 1;
   repeated string symbols = 2;
+  // feature 138 — which rule tree to trace. UNSPECIFIED == ENTRY (back-compat). The Signal-detail
+  // "Why this fired" panel requests EXIT for a held (REDUCE/ADD) opportunity so it explains the
+  // exit rule that actually fired, reconciling with the queue's exit-derived conviction; every
+  // other caller (watchlist readiness) leaves it unset and keeps entry-rule tracing.
+  ReadinessRule rule = 3;
 }
 message EvaluateReadinessResponse {
   repeated SymbolReadiness readiness = 1;

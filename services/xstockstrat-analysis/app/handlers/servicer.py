@@ -2065,9 +2065,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
     # ── Opportunity queue + readiness (feature 083) ─────────────────────────────
 
     async def EvaluateReadiness(self, request, context):
-        """Trace a strategy's entry-rule conditions against recent bars for each requested
+        """Trace a strategy's entry- or exit-rule conditions against recent bars for each requested
         symbol (feature 083). Returns per-symbol PASS/SOFT/FAIL leaves + a deterministic
-        conviction ordinal. Propagates the C-03 header tuple on every outbound call."""
+        conviction ordinal. Propagates the C-03 header tuple on every outbound call.
+
+        feature 138: ``request.rule`` selects which rule tree to trace — ``READINESS_RULE_EXIT``
+        traces the ``exit_rule`` (so a held REDUCE/ADD opportunity's readiness panel explains the
+        exit rule that actually fired, matching the queue's exit-derived conviction); UNSPECIFIED
+        and ENTRY trace the ``entry_rule`` (the back-compat default — watchlist readiness relies on
+        it)."""
         propagation_meta = [
             (k, v)
             for k, v in context.invocation_metadata()
@@ -2090,6 +2096,9 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             )
             return
         definition = _row_to_strategy_definition(row)
+        # feature 138 — trace the exit rule only when explicitly requested (held REDUCE/ADD panel);
+        # UNSPECIFIED/ENTRY keep the entry-rule default so watchlist readiness is unchanged.
+        rule = "exit" if request.rule == analysis_pb2.READINESS_RULE_EXIT else "entry"
         evaluator = StrategyEvaluator(self._indicators, propagation_meta)
         range_msg = _recent_range(_READINESS_LOOKBACK_DAYS)
         readiness = []
@@ -2099,7 +2108,7 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             except Exception as e:  # bar fetch is best-effort per symbol
                 log.warning("EvaluateReadiness: bars fetch failed for %s: %s", symbol, e)
                 bars = []
-            trace = await evaluator.evaluate_conditions_traced(definition, bars, symbol)
+            trace = await evaluator.evaluate_conditions_traced(definition, bars, symbol, rule=rule)
             readiness.append(_readiness_to_proto(trace))
         return analysis_pb2.EvaluateReadinessResponse(readiness=readiness)
 

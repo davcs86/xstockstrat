@@ -84,4 +84,21 @@ test.describe('Signal detail readiness', () => {
     // Connect-JSON serializes a FieldMask as a camelCase, comma-joined string (protobuf-es).
     expect(body.updateMask).toBe('deniedSymbols');
   });
+
+  test('feature 138: a held (REDUCE/ADD) opportunity traces the EXIT rule, not entry', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // MSFT is a held opportunity (ADD, provenance includes "position") under strat-001. The panel
+    // must request the exit rule so it explains the rule that actually fired — matching the header's
+    // exit-derived conviction — instead of the misleading entry-rule trace (the reported bug).
+    await page.goto('/insights/market/MSFT?strategy=strat-001');
+    await expect(page.getByText('Why this fired')).toBeVisible({ timeout: 8000 });
+    // Exit-rule cue + the distinct exit leaf (mock's exitReadiness) — proves exit, not entry.
+    await expect(page.getByTestId('readiness-exit-rule')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('exit_z', { exact: false })).toBeVisible();
+    await expect(page.getByText('1/1 conditions')).toBeVisible();
+    // The entry-rule leaves (symbolReadiness) must NOT appear — that was the mislabeled trace.
+    await expect(page.getByText('sma_fast', { exact: false })).toHaveCount(0);
+  });
 });
