@@ -2216,6 +2216,15 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         a single row whose ``provenance`` lists them all (FR-4/AC-2).
         """
         signals = await self._drain_active_signals(propagation_meta)
+        # feature 022 — one reference instant per compute pass, captured immediately after the
+        # signals await resolves (FR-5): a signal ingested concurrently with the drain could
+        # otherwise carry ingested_at > a now taken earlier, yielding a spurious negative age.
+        now_utc = datetime.now(UTC)
+        half_life = self._cfg.get_float_present(
+            "analysis.scoring.signal_decay_half_life_hours", 24.0
+        )
+        missing_ingested_at_count = 0
+        total_signal_count = len(signals)
         held_value_by_symbol = await self._drain_held_symbols(user_id, propagation_meta)
         bindings = await self._drain_watchlist_bindings(propagation_meta)
         # feature 134 — per-source reliability weight scales the signal ranking axis below.
@@ -2365,19 +2374,75 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if not targets:
                 _candidate(sym, "")
                 targets = [(sym, "")]
+
+            # feature 022 — decay + feature-134 source weighting computed ONCE per signal, hoisted
+            # above the targets loop into sig_contribs so a symbol bound to multiple watchlist
+            # strategies (len(targets) > 1) does not re-decay/re-log/re-count the same signal.
+            sig_contribs = []
+            for sig in sigs:
+                raw_conviction = sig.conviction
+                # feature 134 — per-source reliability weight (neutral 1.0 for an unknown/unweighted
+                # source, mirroring scoring.compute_signal_score).
+                source_weight = source_weights.get(sig.source, 1.0)
+                if sig.HasField("ingested_at"):
+                    ingested_dt = sig.ingested_at.ToDatetime(tzinfo=UTC)
+                    raw_age_hours = (now_utc - ingested_dt).total_seconds() / 3600
+                    age_hours = max(0.0, raw_age_hours)  # defensive clamp (race / clock skew)
+                    age_clamped = raw_age_hours < 0.0
+                    age_known = True
+                else:
+                    age_hours = None
+                    age_clamped = False
+                    age_known = False
+                    missing_ingested_at_count += 1
+                # Age-derivation branches ONLY on HasField(ingested_at); decay-application branches
+                # ONLY on half_life. Neither gates the other, so all log-referenced names are bound
+                # in every combination (closes the UnboundLocalError on FR-3's disable path).
+                decay_multiplier = (
+                    math.exp(-math.log(2) / half_life * age_hours)
+                    if (half_life > 0 and age_known)
+                    else 1.0
+                )
+                effective_conviction = raw_conviction * source_weight * decay_multiplier
+                if not math.isfinite(effective_conviction):
+                    effective_conviction = 0.0  # explicit guard (future-refactor insurance)
+                log.debug(
+                    "signal_axis decay: symbol=%s source=%s raw_conviction=%s source_weight=%s "
+                    "age_hours=%s age_known=%s age_clamped=%s decay_multiplier=%s "
+                    "effective_conviction=%s",
+                    sym,
+                    sig.source,
+                    raw_conviction,
+                    source_weight,
+                    age_hours,
+                    age_known,
+                    age_clamped,
+                    decay_multiplier,
+                    effective_conviction,
+                )
+                sig_contribs.append((sig, effective_conviction))
+
             for key in targets:
                 c = candidates[key]
-                for sig in sigs:
+                for sig, effective_conviction in sig_contribs:
                     _add_provenance(c, sig.source)
-                    # feature 134 — weight conviction by the source's reliability (neutral 1.0 for
-                    # an unknown/unweighted source, mirroring scoring.compute_signal_score).
-                    weighted = sig.conviction * source_weights.get(sig.source, 1.0)
-                    c["signal_axis"] = max(c["signal_axis"], weighted)
-                    if sig.conviction > c["_best_sig_conv"]:
+                    c["signal_axis"] = max(c["signal_axis"], effective_conviction)  # decayed
+                    if sig.conviction > c["_best_sig_conv"]:  # thesis/direction on RAW conviction
                         c["_best_sig_conv"] = sig.conviction
                         c["best_direction"] = sig.direction
                         if not c["thesis"]:
                             c["thesis"] = sig.headline
+
+        # feature 022 — one aggregated WARNING per compute pass (never one-per-signal: this runs
+        # per-user, so per-signal warnings would scale as active-signals × active-users during an
+        # ingest/analysis deploy-ordering race). Signals missing ingested_at are treated as fresh.
+        if missing_ingested_at_count > 0:
+            log.warning(
+                "%d of %d signals missing ingested_at this compute pass; treated as fresh "
+                "(decay_multiplier=1.0)",
+                missing_ingested_at_count,
+                total_signal_count,
+            )
 
         # FR-1: rank watchlist/held (curated) ABOVE the max_universe_size cut so a curated
         # candidate is never truncated; drop only the speculative signal-only tail.
