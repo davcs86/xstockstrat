@@ -1730,7 +1730,7 @@ server method on all three languages) and nothing else. Re-run `./scripts/buf-ge
 
 ### Step 29 — config: register `analysis.series.max_concurrent_components`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify (§ Config Keys Consumed)
@@ -1790,7 +1790,7 @@ plugin's unavailability explicitly, per Step 7's precedent).
 
 ### Step 30 — service (xstockstrat-analysis): `GetIndicatorSeries` handler
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -1914,7 +1914,7 @@ Write the paired tests first (Step 31) so they fail against the pre-Step-30 tree
 
 ### Step 31 — test (xstockstrat-analysis): parity, fault isolation, null-mapping
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_strategy_evaluator.py` — modify (evaluator-level parity

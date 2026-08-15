@@ -27,6 +27,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from app.config.watcher import ConfigWatcher
 from app.handlers.servicer import AnalysisServicer, _InsufficientData
 from app.services import warmup as warmup_sizing
+from app.services.evaluator import FormulaExecutionError, StrategyEvaluator
 
 
 def make_servicer() -> AnalysisServicer:
@@ -5336,3 +5337,118 @@ class TestListLiveEnabled:
         sql = db.fetch.call_args[0][0]
         assert "user_id = $1" in sql
         assert db.fetch.call_args[0][1] == "u1"
+
+
+class TestGetIndicatorSeries:
+    """feature 125 (FR-6) — the indicator-overlay-panel RPC. Per-component fault isolation and the
+    None→unset-IndicatorValue (no fabricated 0.0) guarantee; owner-scoped like EvaluateReadiness."""
+
+    def _definition(self, components):
+        return analysis_pb2.StrategyDefinition(
+            strategy_id="s1",
+            display_name="S",
+            components=components,
+            entry_rule=json.dumps({"fn": ">", "lhs": components[0].ref_name, "rhs": 1}),
+        )
+
+    @pytest.mark.asyncio
+    async def test_per_component_fault_isolation(self):
+        """One component raising FormulaExecutionError never fails the whole RPC — its
+        ComponentSeries carries the error and empty series; the healthy one is populated."""
+        svc = make_servicer()
+        definition = self._definition(
+            [
+                analysis_pb2.StrategyComponent(
+                    ref_name="good",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="SMA",
+                    params={"period": 3.0},
+                ),
+                analysis_pb2.StrategyComponent(
+                    ref_name="bad",
+                    kind=analysis_pb2.COMPONENT_KIND_CUSTOM_FORMULA,
+                    formula_id="f-bad",
+                ),
+            ]
+        )
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_row_for(definition))
+
+        def fake_compute(comp, closes):
+            if comp.ref_name == "bad":
+                raise FormulaExecutionError("f-bad", "boom")
+            return {"value": [None, 1.0, 2.0]}
+
+        with patch.object(
+            StrategyEvaluator, "_compute_component", new=AsyncMock(side_effect=fake_compute)
+        ):
+            req = analysis_pb2.GetIndicatorSeriesRequest(
+                strategy_id="s1", symbol="AAPL", closes=[1.0, 2.0, 3.0]
+            )
+            resp = await svc.GetIndicatorSeries(req, _owned_ctx())
+
+        by_ref = {c.ref_name: c for c in resp.components}
+        assert set(by_ref) == {"good", "bad"}
+        # Healthy component: no error, one "value" series with all points.
+        assert by_ref["good"].error == ""
+        assert len(by_ref["good"].series) == 1
+        assert by_ref["good"].series[0].name == "value"
+        assert len(by_ref["good"].series[0].values) == 3
+        # Failed component: error populated, series empty — the RPC still succeeded.
+        assert "boom" in by_ref["bad"].error
+        assert len(by_ref["bad"].series) == 0
+
+    @pytest.mark.asyncio
+    async def test_none_maps_to_unset_indicator_value_not_zero(self):
+        """A warm-up/gap None round-trips as an UNSET IndicatorValue (no presence), distinct from a
+        real 0.0 (present) — the AC-4a no-fabricated-0.0 guarantee. This is the test that could not
+        pass under the earlier `repeated DoubleValue` encoding (an empty DoubleValue is byte- and
+        JSON-identical to 0.0)."""
+        svc = make_servicer()
+        definition = self._definition(
+            [
+                analysis_pb2.StrategyComponent(
+                    ref_name="sma",
+                    kind=analysis_pb2.COMPONENT_KIND_BUILTIN_INDICATOR,
+                    indicator="SMA",
+                    params={"period": 2.0},
+                )
+            ]
+        )
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_row_for(definition))
+
+        def fake_compute(comp, closes):
+            # leading warm-up None · a genuine 0.0 reading · a finite value
+            return {"value": [None, 0.0, 5.0]}
+
+        with patch.object(
+            StrategyEvaluator, "_compute_component", new=AsyncMock(side_effect=fake_compute)
+        ):
+            req = analysis_pb2.GetIndicatorSeriesRequest(
+                strategy_id="s1", symbol="AAPL", closes=[1.0, 2.0, 3.0]
+            )
+            resp = await svc.GetIndicatorSeries(req, _owned_ctx())
+
+        vals = resp.components[0].series[0].values
+        assert len(vals) == 3
+        # warm-up None → UNSET, never a fabricated 0.0
+        assert vals[0].HasField("value") is False
+        # a genuine 0.0 → SET (present) with value 0.0 — distinct from the gap above
+        assert vals[1].HasField("value") is True
+        assert vals[1].value == 0.0
+        # a finite value → SET
+        assert vals[2].HasField("value") is True
+        assert vals[2].value == 5.0
+
+    @pytest.mark.asyncio
+    async def test_owner_scoped_permission_denied(self):
+        """A non-owned/missing strategy aborts PERMISSION_DENIED, like EvaluateReadiness (133)."""
+        svc = make_servicer()
+        svc._strategies_repo = AsyncMock()
+        svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=None)
+        req = analysis_pb2.GetIndicatorSeriesRequest(
+            strategy_id="nope", symbol="AAPL", closes=[1.0]
+        )
+        with pytest.raises(Exception, match="aborted"):
+            await svc.GetIndicatorSeries(req, _owned_ctx())

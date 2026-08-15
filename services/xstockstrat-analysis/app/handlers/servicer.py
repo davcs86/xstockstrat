@@ -148,6 +148,13 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
         self._backtests: dict[str, analysis_pb2.BacktestResult] = {}
         self._strategies: dict[str, analysis_pb2.StrategyScore] = {}
         self._strategies_repo = StrategiesRepository(db_pool) if db_pool else None
+        # feature 125 (FR-6): process-lifetime singleton semaphore bounding cross-request
+        # concurrency of per-component indicator/formula compute driven by GetIndicatorSeries, so a
+        # routinely-visited Symbol page can't starve the live loop. Mirrors ScreenerEngine's own
+        # semaphore. `max(1, …)` guards a negative config value from reaching asyncio.Semaphore.
+        self._component_series_sem = asyncio.Semaphore(
+            max(1, self._cfg.get_int("analysis.series.max_concurrent_components", 4))
+        )
         # Durable backup for the in-memory _strategies dict (feature 064). Reads stay
         # in-memory; this persists on score and hydrates it at boot. None in the no-DB
         # test path so make_servicer()-based tests are unaffected.
@@ -2111,6 +2118,76 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             trace = await evaluator.evaluate_conditions_traced(definition, bars, symbol, rule=rule)
             readiness.append(_readiness_to_proto(trace))
         return analysis_pb2.EvaluateReadinessResponse(readiness=readiness)
+
+    async def GetIndicatorSeries(self, request, context):
+        """Per-component historical indicator series for a strategy over the caller's own bar window
+        (feature 125, FR-6). Reuses ``StrategyEvaluator._compute_component`` per declared component
+        in this handler's OWN loop — never the shared ``evaluate_conditions_traced`` that
+        ``ListOpportunities`` depends on — under a process-lifetime semaphore, with per-component
+        fault isolation: a component that fails to compute populates ``ComponentSeries.error`` and
+        never fails the whole RPC. ``None`` points (warm-up head / NaN / gap) round-trip as an unset
+        ``DoubleValue``, never a fabricated ``0.0`` (AC-4a / P-03). Owner-scoped like
+        ``EvaluateReadiness`` (feature 133)."""
+        propagation_meta = [
+            (k, v)
+            for k, v in context.invocation_metadata()
+            if k in ("x-user-id", "x-access-scope", "x-trace-id")
+        ]
+        if self._strategies_repo is None:
+            await context.abort(grpc.StatusCode.UNAVAILABLE, "strategy store unavailable")
+            return
+        caller_user_id = self._caller_user_id(context)
+        row = (
+            await self._strategies_repo.get_by_owner_and_id(caller_user_id, request.strategy_id)
+            if caller_user_id
+            else None
+        )
+        if row is None:
+            await context.abort(
+                grpc.StatusCode.PERMISSION_DENIED,
+                f"strategy '{request.strategy_id}' not found or not owned",
+            )
+            return
+        definition = _row_to_strategy_definition(row)
+        evaluator = StrategyEvaluator(self._indicators, propagation_meta)
+        closes = list(request.closes)
+        component_series = []
+        # Sequential loop (no gather) so the singleton semaphore bounds cross-request total
+        # in-flight compute, not intra-request.
+        for comp in definition.components:
+            try:
+                async with self._component_series_sem:
+                    series_map = await evaluator._compute_component(comp, closes)
+                named = [
+                    analysis_pb2.NamedSeries(
+                        name=name,
+                        # A None point (warm-up head / NaN / gap) → an IndicatorValue with `value`
+                        # UNSET (proto3 explicit presence), never a fabricated 0.0 (AC-4a / P-03).
+                        values=[
+                            analysis_pb2.IndicatorValue(value=v)
+                            if v is not None
+                            else analysis_pb2.IndicatorValue()
+                            for v in series
+                        ],
+                    )
+                    for name, series in series_map.items()
+                ]
+                component_series.append(
+                    analysis_pb2.ComponentSeries(
+                        ref_name=comp.ref_name, kind=comp.kind, series=named
+                    )
+                )
+            # Per-component fault isolation: catches FormulaExecutionError + any sandbox/RPC error
+            # (broad by design — one bad component must not fail the whole RPC).
+            except Exception as e:  # noqa: BLE001
+                component_series.append(
+                    analysis_pb2.ComponentSeries(
+                        ref_name=comp.ref_name, kind=comp.kind, error=str(e)
+                    )
+                )
+        return analysis_pb2.GetIndicatorSeriesResponse(
+            times=request.times, components=component_series
+        )
 
     async def ListOpportunities(self, request, context):
         """Pure read of the materialized per-user opportunity queue (feature 097). The Universe

@@ -951,3 +951,33 @@ each checkpoint (C-02/P-03).
 - `./scripts/buf-gen.sh` regenerated Go/Python/TS stubs; diff scoped to `analysis/v1/` only, idempotent
   on re-run.
 - Files: `packages/proto/analysis/v1/analysis.proto`, `packages/proto/gen/**` (generated)
+
+### Steps 29–31 — config key, GetIndicatorSeries handler + tests [done]
+- **Step 29**: registered `analysis.series.max_concurrent_components` (int, default 4) in the analysis
+  CLAUDE.md Config Keys table + the config-governance Per-Feature log (new `analysis.series.*` category).
+- **Step 30**: added the `GetIndicatorSeries` handler + the process-lifetime `_component_series_sem`
+  semaphore in `__init__`. Loops `definition.components`, computing each via `evaluator._compute_component`
+  under the semaphore (sequential — bounds cross-request, not intra-request), with per-component fault
+  isolation (a failed component → `ComponentSeries.error`, empty series; the RPC still succeeds).
+  **Owner-scoped like the live EvaluateReadiness** (`get_by_owner_and_id` → PERMISSION_DENIED) — the
+  spec's cited skeleton predated feature 133's owner-scoping; mirrored the live code, not the stale prose.
+- **Step 31**: 3 tests (evaluator parity/warm-up-None, handler fault isolation, None→unset mapping) +
+  an owner-scope test. Full analysis suite 308 pass, coverage 64.6% (≥40%).
+
+- **PROTO CONTRACT CORRECTION (deviation from design.md / Step 27).** design.md and Step 27 specified
+  `NamedSeries.values` as `repeated google.protobuf.DoubleValue` to make a warm-up/gap point round-trip
+  as "unset, never 0.0" (AC-4a/P-03). **Proven wrong at implementation**: in a *repeated* field an empty
+  `DoubleValue()` is byte-identical to `DoubleValue(0.0)`, `HasField('value')` raises ("does not have
+  presence"), and Connect-JSON serializes both as `0` — so a gap and a real 0.0 are indistinguishable,
+  defeating the AC-4a guarantee (the wrapper only gives presence for a *singular* optional field, not
+  per repeated element). Fixed by replacing it with a per-point wrapper message
+  `IndicatorValue { optional double value = 1; }` — proto3 `optional` gives real field presence
+  (`HasField` works; JSON omits an unset value as `{}`), verified empirically: gap→`{}`/False,
+  real 0.0→`{"value":0}`/True, round-trip preserves presence; TS shape is `value?: number`. Removed the
+  now-unused `wrappers.proto` import. `buf lint`/`buf breaking` clean; stubs regenerated. Correctness fix
+  to an unimplementable contract, not a scope change — the design's goal (single field, no parallel
+  present-mask, no fabricated 0.0) is preserved, only the mechanism corrected.
+- Files: `services/xstockstrat-analysis/CLAUDE.md`, `docs/patterns/config-governance.md`,
+  `packages/proto/analysis/v1/analysis.proto`, `packages/proto/gen/**`,
+  `services/xstockstrat-analysis/app/handlers/servicer.py`,
+  `services/xstockstrat-analysis/tests/{test_strategy_evaluator,test_analysis_servicer}.py`
