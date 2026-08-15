@@ -707,14 +707,33 @@ export type StrategyDefinition = Message<"xstockstrat.analysis.v1.StrategyDefini
      */
     exitCooldownDays?: number | undefined;
     /**
+     * Normalized-uppercase symbols this strategy must never evaluate FOR ENTRY (feature 132 —
+     * entry-only deny). A held position on a denied symbol keeps exit tracing (the deny suppresses
+     * only the entry edge, so an operator can always exit a position they already hold). Rides
+     * definition_json (no column); maskable via ManageStrategyRequest.update_mask.
+     *
+     * @generated from field: repeated string denied_symbols = 12;
+     */
+    deniedSymbols: string[];
+    /**
      * Owning user (feature 133). Server-authoritative: populated from the propagated
      * x-user-id header on ManageStrategy REGISTER, never accepted from the request body
-     * (mirrors ListOpportunitiesRequest / portfolio ownership convention). Field 12 is
-     * reserved for feature 132's denied_symbols — do not reuse.
+     * (mirrors ListOpportunitiesRequest / portfolio ownership convention).
      *
      * @generated from field: string user_id = 13;
      */
     userId: string;
+    /**
+     * Gates whether the platform-wide active-signal term joins this strategy's evaluation universe
+     * (feature 132). Plain bool (no optional) is intentional: absent ≡ false ≡ explicit-false resolve
+     * identically. A strategy that sets BOTH a non-empty signal_params.symbols allowlist AND
+     * signal_eligible=true is rejected INVALID_ARGUMENT at write time (the allowlist is already an
+     * explicit universe override; signals would be redundant/contradictory). Rides definition_json;
+     * maskable.
+     *
+     * @generated from field: bool signal_eligible = 14;
+     */
+    signalEligible: boolean;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.StrategyDefinition.
@@ -746,7 +765,7 @@ export type ManageStrategyRequest = Message<"xstockstrat.analysis.v1.ManageStrat
      *              StrategyWizard, which always sends a complete definition) are unaffected.
      *
      * Allowed paths: display_name, components, entry_rule, exit_rule, signal_params, cooldown_days,
-     * exit_cooldown_days.
+     * exit_cooldown_days, denied_symbols, signal_eligible.
      * strategy_id/active/live_enabled are column-authoritative and rejected with INVALID_ARGUMENT.
      *
      * @generated from field: google.protobuf.FieldMask update_mask = 3;
@@ -1153,6 +1172,12 @@ export type Opportunity = Message<"xstockstrat.analysis.v1.Opportunity"> & {
      * @generated from field: repeated string provenance = 11;
      */
     provenance: string[];
+    /**
+     * feature 132 — the (symbol, strategy) pair is on the strategy's deny list; surfaced as an explicit muted row (never conviction=0)
+     *
+     * @generated from field: bool muted = 12;
+     */
+    muted: boolean;
 };
 /**
  * Describes the message xstockstrat.analysis.v1.Opportunity.
