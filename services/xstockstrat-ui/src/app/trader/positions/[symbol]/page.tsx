@@ -145,10 +145,11 @@ export default function PositionDetailPage() {
     };
   }, [symbol, timeframe, avg, stop, seriesRef]);
 
-  // A NotFound position is the common case for a non-held / watchlist-research symbol — it is not an
-  // error, so route it to the inline notice below rather than the scary error paragraph.
-  const positionNotFound = !isLoading && !error && (!position || !position.symbol);
-  const genuineError = error && !isNotFoundError(error);
+  // GetPosition returns a NotFound *error* for a non-held / watchlist-research symbol (the common
+  // case) — route that (and a plain empty result) to the inline notice below, and reserve the scary
+  // error paragraph for a genuinely different failure (timeout, 5xx).
+  const genuineError = Boolean(error) && !isNotFoundError(error);
+  const positionNotFound = !isLoading && !genuineError && !position?.symbol;
 
   return (
     <AppShell>
@@ -172,7 +173,7 @@ export default function PositionDetailPage() {
           </div>
         )}
         {genuineError && (
-          <p className="text-sm text-destructive">Failed to load position: {error.message}</p>
+          <p className="text-sm text-destructive">Failed to load position: {error?.message}</p>
         )}
 
         {/* Sections below render independent of whether a position is held (feature 125): the price

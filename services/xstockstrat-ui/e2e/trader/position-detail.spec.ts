@@ -65,4 +65,35 @@ test.describe('Single Position page', () => {
     await expect(page).toHaveURL(/\/trader\/positions\/AAPL/);
     await expect(page.getByText('Risk & exit')).toBeVisible({ timeout: 30000 });
   });
+
+  test('an unheld symbol still renders the chart, orders and trade sections (feature 125)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // ZZZZ is absent from the position fixtures → GetPosition returns NotFound.
+    await page.goto('/trader/positions/ZZZZ');
+
+    // The not-found state is a compact inline notice, NOT a page takeover.
+    await expect(page.getByText(/position in ZZZZ/).first()).toBeVisible({ timeout: 30000 });
+
+    // The research sections render for the unheld symbol (hoisted independent of position):
+    // price chart, per-symbol orders, and the inline trade widget.
+    await expect(page.getByText('Price · ZZZZ')).toBeVisible();
+    await expect(page.getByText('Orders & fills · ZZZZ')).toBeVisible();
+    await expect(page.getByText('Trade ZZZZ')).toBeVisible();
+
+    // The position-specific sidebar (Risk & exit) is absent for an unheld symbol.
+    await expect(page.getByText('Risk & exit')).toHaveCount(0);
+  });
+
+  test('a NotFound position shows the notice, not the generic error paragraph (render-order fix)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await page.goto('/trader/positions/ZZZZ');
+
+    await expect(page.getByText(/position in ZZZZ/).first()).toBeVisible({ timeout: 30000 });
+    // A NotFound is not an error — the "Failed to load position" paragraph must not appear.
+    await expect(page.getByText(/Failed to load position/)).toHaveCount(0);
+  });
 });

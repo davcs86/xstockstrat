@@ -652,7 +652,7 @@ Plus the e2e proof in Step 9 (this step's own paired test).
 
 ### Step 9 — test (xstockstrat-ui): unheld-symbol section rendering + render-order fix
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify

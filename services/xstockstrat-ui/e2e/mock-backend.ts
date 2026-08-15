@@ -262,7 +262,14 @@ export async function startMockBackend(): Promise<void> {
         async getPosition(req) {
           // Single-position read for the dedicated Position page (feature 096); same authoritative
           // fixture as listPositions so the page's unrealized P&L ties to the Exposure list.
-          return positionForSymbol(req.symbol);
+          // A symbol not in the fixture set is genuinely unheld → NotFound, mirroring the real
+          // PortfolioService.GetPosition (feature 125: the unified page renders its research
+          // sections for such symbols instead of a position).
+          const held = POSITIONS.find((p) => p.symbol === (req.symbol ?? '').toUpperCase());
+          if (!held) {
+            throw new ConnectError(`no position for ${req.symbol}`, Code.NotFound);
+          }
+          return held;
         },
       });
 

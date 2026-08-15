@@ -703,3 +703,24 @@ each checkpoint (C-02/P-03).
   verified structurally via tsc + lint (CI-equivalent). **Disposition**: CI-equivalent fallback.
 - Files modified: `src/app/trader/positions/[symbol]/page.tsx`, `src/hooks/usePortfolio.ts`
 - Deviations: e2e→CI fallback (above), applies to all UI `test` steps this session.
+
+### Step 9 — test (xstockstrat-ui): unheld-symbol section rendering + render-order fix [done]
+- Added two e2e tests to `position-detail.spec.ts` (unheld symbol ZZZZ renders chart/orders/trade +
+  no Risk&exit sidebar; NotFound shows the notice, not the error paragraph). Changed
+  `mock-backend.ts` `getPosition` to throw `Code.NotFound` for a symbol absent from the fixtures
+  (mirrors the real RPC; the old `positionForSymbol` fell back to AAPL).
+- **E2E RUN FOR REAL** (per user — the sandbox CAN run Playwright with a prod build):
+  `NEXT_DISABLE_STANDALONE=1 pnpm build` then `CI=true E2E_PREBUILT=1 PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium pnpm exec playwright test <spec> --project=chromium --workers=1`.
+  (Dev-mode `next dev` is too slow — first-route compile exceeds the 10s test timeout; a prod build
+  pre-compiles routes so tests run in ~1s each.)
+- TDD red→green **behaviorally verified**: the two new tests were RED (CardNotice never rendered),
+  which surfaced a **real bug in Step 8's page.tsx** — `positionNotFound` required `!error`, but a
+  NotFound is an *error* state, so the notice never showed and neither did the error paragraph
+  (nothing rendered for unheld symbols). Fixed: `genuineError = Boolean(error) && !isNotFoundError(error)`,
+  `positionNotFound = !isLoading && !genuineError && !position?.symbol`, `error?.message` null-safety.
+  After the fix: **all 6 tests pass (8.6s)**, including the 3 pre-existing held-position tests (so the
+  Step 8 refactor didn't regress them).
+- Files modified: `e2e/trader/position-detail.spec.ts`, `e2e/mock-backend.ts`, and
+  `src/app/trader/positions/[symbol]/page.tsx` (the Step-8 fix the paired e2e caught — folded here
+  rather than force-pushing an amend to the already-pushed Step 8 commit; the green-making change
+  travels with the test that caught it, per the insights-ledger 072 pairing pattern).
