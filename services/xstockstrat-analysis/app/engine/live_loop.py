@@ -18,6 +18,7 @@ import asyncio
 import logging
 import time
 from datetime import UTC, datetime, timedelta
+from typing import NamedTuple
 
 from gen.common.v1 import common_pb2
 from gen.marketdata.v1 import marketdata_pb2
@@ -26,7 +27,7 @@ from google.protobuf import json_format
 from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
 
-from app.handlers.servicer import _row_to_strategy_definition
+from app.handlers.servicer import _normalize_symbol, _row_to_strategy_definition
 from app.repositories.strategies import LIVE_ENABLED_PREDICATE_SQL
 from app.services.cooldown import effective_cooldown_days, is_cooldown_active
 
@@ -46,6 +47,40 @@ def strategy_symbols(definition) -> list[str]:
         return []
     params = json_format.MessageToDict(definition.signal_params)
     return [str(s) for s in (params.get("symbols") or [])]
+
+
+class ResolvedUniverse(NamedTuple):
+    """Owner-scoped evaluation universe for one strategy, deny list applied (feature 132)."""
+
+    universe: set  # entry-eligible: (union − denied) ∪ (held ∩ denied)
+    deny_entry: set  # held ∩ denied — entry edge suppressed, exit edge still traces
+    union: set  # pre-deny coverage (allowlist override, else watchlist∪held∪signals-if-eligible)
+    denied: set  # normalized denied_symbols
+
+
+def resolve_universe(definition, watchlist, held, signals) -> "ResolvedUniverse":
+    """Owner-scoped evaluation universe for a strategy, with the deny list applied (feature 132).
+
+    Supersedes the feature-089 ``strategy_symbols`` allowlist-only contract. ``watchlist`` /
+    ``held`` / ``signals`` are the caller's per-owner symbol sets (normalized here defensively).
+
+    - ``union`` (pre-deny coverage): a non-empty ``signal_params.symbols`` allowlist is an explicit
+      universe override (AC-5), used verbatim; otherwise
+      ``watchlist ∪ held ∪ (signals iff signal_eligible)``.
+    - ``denied``: normalized ``denied_symbols``.
+    - ``universe`` (entry-eligible): ``(union − denied) ∪ (held ∩ denied)`` — a held+denied symbol
+      is retained so its EXIT edge still traces (entry-only deny); caller suppresses only its entry.
+    - ``deny_entry``: ``held ∩ denied`` — held+denied members whose entry edge is muted.
+    """
+    denied = {_normalize_symbol(s) for s in definition.denied_symbols}
+    allowlist = {_normalize_symbol(s) for s in strategy_symbols(definition)}
+    watchlist = {_normalize_symbol(s) for s in watchlist}
+    held = {_normalize_symbol(s) for s in held}
+    signals = {_normalize_symbol(s) for s in signals}
+    union = allowlist or (watchlist | held | (signals if definition.signal_eligible else set()))
+    deny_entry = held & denied
+    universe = (union - denied) | deny_entry
+    return ResolvedUniverse(universe=universe, deny_entry=deny_entry, union=union, denied=denied)
 
 
 def _apply_transition(

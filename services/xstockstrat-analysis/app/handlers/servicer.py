@@ -2865,6 +2865,9 @@ def _row_to_opportunity(row: dict) -> "analysis_pb2.Opportunity":
         source=_primary_source(provenance),
         opportunity_key=row["opportunity_key"],
         provenance=provenance,
+        muted=bool(
+            row.get("muted", False)
+        ),  # feature 132 — populated by Step 7's muted-row emission
     )
     valid_until = row.get("valid_until")
     if valid_until is not None:
@@ -3139,6 +3142,8 @@ _MASKABLE_PATHS = frozenset(
         "signal_params",
         "cooldown_days",
         "exit_cooldown_days",
+        "denied_symbols",  # feature 132 — entry-only deny list (rides definition_json)
+        "signal_eligible",  # feature 132 — gates the platform-wide active-signal universe term
     }
 )
 
