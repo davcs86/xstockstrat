@@ -364,3 +364,33 @@ TS plugins (pnpm) + `uv sync --extra dev` (analysis) all done. gettext-base inst
   covered by `_load_strategy_definition`'s owner-scoped resolution in the opportunities tests.
 - **Verify**: `ruff check . && ruff format --check .` clean; `pytest --cov=app --cov-fail-under=40` →
   464 passed, 81.94%. Deviations: none beyond D-1..D-4 already logged.
+
+### Step 11 — agent client.py + tools.py [done]
+- **client.py**: added a `user_id: str` param to each of the 5 strategy client fns and appended
+  `("x-user-id", user_id)` to their outbound metadata (following the `get_user_metadata` precedent).
+  Read fns (`run_backtest`, `get_strategy`, `list_strategy_definitions`) → `metadata=[*_metadata(),
+  ("x-user-id", user_id)]`; the two admin-scoped writes (`manage_strategy`, `set_strategy_live`) →
+  `meta = [*_metadata(), ("x-user-id", user_id), ("x-access-scope", str(access_scope))]` (kept the
+  existing access-scope tuple). `_metadata()`'s global `[]` signature untouched (~25 other callers).
+- **tools.py**: added `ctx: Context` as the first param of `run_backtest`, `get_strategy`,
+  `list_strategies` (`manage_strategy`/`set_strategy_live` already had it). In all 5 tools resolved
+  `user_id = _caller_user_id(ctx, "<tool>")` and passed it into the client fn. Wrapped the
+  `run_backtest` client call in `try/except grpc.aio.AioRpcError` → `_grpc_error_message` so a
+  `PERMISSION_DENIED` surfaces as a tool-level error (AC-6), matching the other tools.
+
+### Step 12 — agent tests [done] — GREEN
+- **TDD red→green**: adding the required `ctx`/`user_id` first turned the pre-impl tool tests red
+  (TypeError: missing user_id), then green after the client/tool edits.
+- Updated existing tool tests to pass `ctx=_ctx(ADMIN)` and assert the forwarded `user_id="u-1"`
+  (run_backtest, manage_strategy, set_strategy_live, get_strategy, list_strategies). Updated the
+  client-wire tests (`test_client.py`, `TestRunBacktestRangeOnTheWire`) to pass `user_id` and assert
+  `("x-user-id", ...)` reaches the outbound metadata for run_backtest / manage_strategy /
+  set_strategy_live / list_strategy_definitions.
+- New: `test_run_backtest_maps_permission_denied_to_tool_error` (AC-6 — PERMISSION_DENIED → tool
+  error string, not a raw AioRpcError). The wire-level `call_tool` return-shape test patches
+  `_caller_user_id` (no verified claims are present on the framework-injected ctx).
+- **Parity guard**: added `user_id` to `_STRATEGY_INTENTIONALLY_UNSET` in test_strategy_builders.py —
+  the builder deliberately never authors `StrategyDefinition.user_id` (ownership is header-resolved
+  server-side, never the request body).
+- **Verify**: `ruff check . && ruff format --check .` clean; `pytest --cov=app --cov-fail-under=40` →
+  **219 passed**, coverage **75.32%** (≥40%). Deviations: none.

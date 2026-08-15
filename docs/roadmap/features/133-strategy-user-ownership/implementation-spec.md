@@ -642,7 +642,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check . \
 
 ### Step 11 — service: agent — forward real `x-user-id`, add missing `ctx`, wrap `run_backtest`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -692,7 +692,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check . \
 
 ### Step 12 — test: agent (Step 11)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/` — modify (the tool tests; e.g. `test_tools_endpoint.py` / the
