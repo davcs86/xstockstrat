@@ -27,6 +27,7 @@ from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
 
 from app.handlers.servicer import _row_to_strategy_definition
+from app.repositories.strategies import LIVE_ENABLED_PREDICATE_SQL
 from app.services.cooldown import effective_cooldown_days, is_cooldown_active
 
 log = logging.getLogger(__name__)
@@ -188,7 +189,7 @@ class LiveEvaluationLoop:
         max_pairs = self._cfg.get_int("analysis.engine.max_strategies_per_cycle", default=50)
         throttle = self._cfg.get_int("analysis.engine.alert_throttle_seconds", default=300)
         rows = await self._db.fetch(
-            "SELECT * FROM analysis.strategies WHERE live_enabled = TRUE AND active = TRUE"
+            f"SELECT * FROM analysis.strategies WHERE {LIVE_ENABLED_PREDICATE_SQL}"
         )
         processed = 0
         for row in rows:

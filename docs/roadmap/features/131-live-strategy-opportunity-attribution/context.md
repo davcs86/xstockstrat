@@ -293,3 +293,23 @@
   - No proto/migration/DB-schema changes. Consumer surface `/insights` needs no UI code change (existing
     display path + provenance-blind e2e mock — C-12 obligation already resolved in design).
 - Merge order recorded in spec (`133 → 134 → 131 → 132`; 131 after 134, before 132).
+
+## Session 2026-08-15 — sdd-execute (sequential, stacked on 134)
+
+### Step 1 — service: list_live_enabled + shared predicate [done]
+- `strategies.py`: added module-level `LIVE_ENABLED_PREDICATE_SQL = "live_enabled = TRUE AND active = TRUE"`
+  and `list_live_enabled(user_id=None)` (sibling of `list()`). **Deviation D-1**: added the optional
+  `user_id` owner-scope param (post-133 IDOR guard — see Deviation Log). Return annotation quoted
+  (`-> "list[dict]"`) because the class's own `list()` method shadows the builtin `list` in class
+  scope, so an unquoted `list[dict]` annotation evaluated `<method>[dict]` → TypeError.
+- `live_loop.py`: imported `LIVE_ENABLED_PREDICATE_SQL`; re-pointed the inline query at the f-string
+  constant (the literal now appears exactly once in `app/`). Loop constructor/control-flow untouched.
+- Files modified: `app/repositories/strategies.py`, `app/engine/live_loop.py`
+- Verify: ruff clean; predicate literal `app/` count = 1; full suite 469 passed, 82.36%.
+
+### Step 2 — test: list_live_enabled predicate + owner-scope [done]
+- `TestListLiveEnabled`: asserts the query contains the shared predicate + `_to_dict` decodes
+  definition_json (global, no user filter); plus a D-1 test that `list_live_enabled("u1")` adds
+  `user_id = $1` bound to `"u1"`. C-13: strategy-row literals single-consumer → inline compliant.
+- Files modified: `tests/test_analysis_servicer.py`
+- TDD: red (AttributeError — method/constant absent) → green (2 pass; full suite 469, 82.36%).

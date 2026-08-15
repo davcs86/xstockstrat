@@ -14,6 +14,11 @@ callers resolve rows via :meth:`get_by_owner_and_id` and pass ``user_id`` into e
 
 import json
 
+# feature 131 — the single source of truth for "a strategy the live loop evaluates". Shared
+# (no leading underscore, designed for cross-module import) so live_loop.py interpolates the exact
+# same predicate rather than re-declaring the literal (parity is structural, not test-enforced).
+LIVE_ENABLED_PREDICATE_SQL = "live_enabled = TRUE AND active = TRUE"
+
 
 def _to_dict(row) -> dict | None:
     """Convert an asyncpg Record to a plain dict, decoding the JSONB definition_json."""
@@ -197,3 +202,24 @@ class StrategiesRepository:
             params.extend([page_size, page_offset or 0])
         rows = await self._db.fetch(sql, *params)
         return [_to_dict(r) for r in rows], int(total or 0)
+
+    async def list_live_enabled(self, user_id: str | None = None) -> "list[dict]":
+        """Rows the live loop evaluates: ``live_enabled = TRUE AND active = TRUE`` (feature 131).
+        No pagination / ORDER BY — the caller ranks by ``created_at`` itself.
+
+        ``user_id`` (feature-131 deviation for the post-133 ownership model): when given, the query
+        is **owner-scoped** so the per-user opportunity compute never attributes another user's live
+        strategy to this user's symbols (an IDOR leak — the other origins are already owner-scoped).
+        Called with no arg by the live loop, which is deliberately global (it evaluates every
+        owner's live strategies, keyed by ``(user_id, strategy_id, symbol)``)."""
+        if user_id is not None:
+            rows = await self._db.fetch(
+                f"SELECT * FROM analysis.strategies WHERE {LIVE_ENABLED_PREDICATE_SQL} "
+                "AND user_id = $1",
+                user_id,
+            )
+        else:
+            rows = await self._db.fetch(
+                f"SELECT * FROM analysis.strategies WHERE {LIVE_ENABLED_PREDICATE_SQL}"
+            )
+        return [_to_dict(r) for r in rows]

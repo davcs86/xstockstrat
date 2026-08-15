@@ -1,6 +1,6 @@
 # Feature: live-strategy-opportunity-attribution
 
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `in-progress`
 **Development Branch**: `feature/live-strategy-opportunity-attribution`
 **Created**: 2026-08-13
 **Last Updated**: 2026-08-14

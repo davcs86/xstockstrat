@@ -51,7 +51,7 @@ RESOLVED"). No UI step is therefore required — this is a decision, not an omis
 
 ### Step 1 — service: `StrategiesRepository.list_live_enabled()` + shared predicate constant
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/strategies.py` — modify
@@ -104,7 +104,7 @@ Coverage + red-green enforced by the paired Step 2.
 
 ### Step 2 — test: `list_live_enabled()` predicate + single-source parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -398,4 +398,12 @@ context docs and fix any grounded findings (or note in the PR body if the plugin
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### D-1 — `list_live_enabled` owner-scoped for the per-user compute (post-133 ownership)
+**Disposition**: fix-now (§5.7 Option A), applied not blocked — a single correct behavior, not a fork.
+131's spec predates feature 133 (strategy ownership, merged before 131 executes). `_compute_opportunities`
+is now **per-user**; a global `list_live_enabled()` would attribute *another* user's live strategy to
+this user's held/signal symbols — an IDOR leak (the other origins, held/watchlist, are already
+owner-scoped). Added an optional `user_id` param to `list_live_enabled` (Step 1): **no arg → global**
+(the live loop, deliberately global, keeps calling it with no arg — AC-5 unchanged); **user_id given →
+`AND user_id = $1`** (Step 3's compute passes the compute's `user_id`). Step 2 tests both paths.
+Recorded in `fails.md` (a spec written before a security-model feature lands must be re-owner-scoped).

@@ -4676,3 +4676,60 @@ class TestFeature133Ownership:
             resp = await svc.ManageStrategy(req, ctx)
             assert resp.user_id == user  # owner is server-set from the header
         assert set(created) == {("ua", "s1"), ("ub", "s1")}  # composite PK, no collision
+
+
+class TestListLiveEnabled:
+    """feature 131 — StrategiesRepository.list_live_enabled() + the shared predicate constant.
+
+    C-13 verdict: the strategy-row literals here are single-consumer (this class) → inline compliant.
+    """
+
+    @pytest.mark.asyncio
+    async def test_list_live_enabled_uses_shared_predicate_and_decodes(self):
+        from app.repositories.strategies import LIVE_ENABLED_PREDICATE_SQL, StrategiesRepository
+
+        db = MagicMock()
+        db.fetch = AsyncMock(
+            return_value=[
+                {
+                    "strategy_id": "s1",
+                    "user_id": "u1",
+                    "active": True,
+                    "live_enabled": True,
+                    "created_at": None,
+                    "definition_json": '{"display_name": "S1"}',
+                },
+                {
+                    "strategy_id": "s2",
+                    "user_id": "u2",
+                    "active": True,
+                    "live_enabled": True,
+                    "created_at": None,
+                    "definition_json": {"display_name": "S2"},
+                },
+            ]
+        )
+        repo = StrategiesRepository(db)
+        rows = await repo.list_live_enabled()
+        sql = db.fetch.call_args[0][0]
+        assert LIVE_ENABLED_PREDICATE_SQL in sql
+        assert "live_enabled = TRUE AND active = TRUE" in sql
+        # _to_dict decodes the JSONB definition_json (string → dict) on every row.
+        assert rows[0]["definition_json"] == {"display_name": "S1"}
+        assert isinstance(rows[1]["definition_json"], dict)
+        # Global (no owner filter) when called with no user_id — the live loop needs every owner.
+        assert "user_id" not in sql
+
+    @pytest.mark.asyncio
+    async def test_list_live_enabled_owner_scoped_when_user_id_given(self):
+        # feature 131 deviation (post-133 ownership): the per-user opportunity compute must not
+        # attribute another user's live strategy, so passing user_id owner-scopes the query.
+        from app.repositories.strategies import StrategiesRepository
+
+        db = MagicMock()
+        db.fetch = AsyncMock(return_value=[])
+        repo = StrategiesRepository(db)
+        await repo.list_live_enabled("u1")
+        sql = db.fetch.call_args[0][0]
+        assert "user_id = $1" in sql
+        assert db.fetch.call_args[0][1] == "u1"
