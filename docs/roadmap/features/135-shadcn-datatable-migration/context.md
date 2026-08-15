@@ -101,3 +101,70 @@ Addressed both `/sdd-review product-spec` warnings directly in `product-spec.md`
 - Flagged `BacktestDiagnostics.tsx` (a `@tanstack/react-virtual` div-grid, not a `<table>`/`Table`
   primitive) as explicitly out of FR-1's literal scope — for the grilling round to confirm.
 - Proceeding to Phase 1 — Grilling (quick mode, 1 mandated round).
+
+## Session 2026-08-15 — sdd-design Phase 1 (grilling, 5 rounds)
+
+User opted to run rounds beyond quick mode's 1-round minimum each time a round surfaced fixable
+issues, ending at 5 (the hard cap). Zero Constitution Floor breaches were found or flagged at any
+round. Per-round summary:
+
+- **Round 1** (proposer + adversary): established the core shape — one `ui/data-table.tsx`
+  composite wrapping the existing `Table` primitive + `@tanstack/react-table`, reusing feature 124's
+  `DropdownMenu` Actions-cell pattern. Adversary found: (a) the proposed `useIsMobile()`-driven
+  column-visibility for row 2 (Exposure table) would have silently regressed an already-working CSS
+  3-tier breakpoint mechanism (`positions/page.tsx:311-327`) that neither recon nor round 1 had
+  checked for; (b) an internal contradiction — pagination "baked in as always-on" vs. row 3 needing
+  "no pagination UI"; (c) row 2's proposed client pagination would double up with its existing
+  server-side keyset Prev/Next controls; (d) an arithmetic/prose inconsistency in the responsive-
+  strategy tally; (e) row 3's Sheet-nested table can't be overflow-tested by a plain
+  `mobile-overflow.spec.ts` `ROUTES` addition since that sweep never clicks to open the Sheet; (f)
+  `OrdersTable.tsx`'s live-merged data array needs `useMemo` before becoming the composite's `data`
+  prop (TanStack Table requires stable data-reference identity), citing a near-identical bug already
+  on record in this codebase (`fails.md` 2026-08-08, `screener-data-readiness-polling`). All folded
+  into the synthesis as fixes.
+- **Round 2**: resolved rows 6–7's (`LiveStrategiesPanel.tsx`, `OrderBook.tsx`) sort-semantics
+  question — proposer verified against actual code (not the misleading "OrderBook" name) that row 7
+  renders the user's own order list via the same `useOrders` hook as row 5, not a price ladder, so
+  sort stays enabled on both. Proposer also found a genuine new composite requirement: `onRowClick`,
+  needed at rows 6 and 10 (both have existing `role="button"`/keyboard row-activation the round-1
+  composite design never accounted for). Adversary verified the DropdownMenu/`OrderBook` claims held
+  but found the `onRowClick` site count was incomplete — 2 more sites needed it (row 2's Sheet-opener,
+  row 11's Formulas row-navigation, the latter masked by recon's technically-true-but-incomplete
+  "existing mutation/actions: none" note) — plus an unstated keyboard-accessibility decision for row
+  2 (currently mouse-only) and an unstated `stopPropagation` ownership contract, and found row 13
+  (`NamespaceEditor.tsx`) needed recording as a distinct "stateful/conditional cell content" pattern,
+  not a plain DropdownMenu swap.
+- **Round 3**: proposer re-verified all of round 2's fixes against live source and self-caught a
+  real internal contradiction — the "stopPropagation lives in the Actions-cell wrapper" framing
+  didn't hold, since row 2 has no Actions/DropdownMenu column at all (`recon.md:49`); corrected to a
+  generic row-level `isInteractiveTarget` guard. Also found a genuinely new, non-blocking item: rows
+  4 and 7 both carry dead `cursor-pointer` CSS with zero click handler wired anywhere — needs an
+  explicit per-row disposition, not a 5th `onRowClick` site. Final adversary pass on this round found
+  the stopPropagation guard as re-worded only checked `click`, not `keydown` — a keyboard user
+  pressing Enter on a nested button (row 6's Enable/Disable) would double-fire both the button's
+  action and `onRowClick` simultaneously, reproducible today by design; also caught a column-count
+  miscount (row 2 is 19 columns, not 18 — the `sr-only`-labeled "Trade" header still renders a
+  visible cell/column).
+- **Round 4**: proposer verified the keydown-guard fix concretely at rows 2 and 6, confirmed the
+  19-column correction changes no other decided fact, and ran a full 15-row count sweep (no further
+  discrepancies found). Surfaced the `data-row-click-ignore` escape-hatch requirement for future
+  non-native-interactive cell content. Final narrow adversary check verified the fix specifically
+  against the DropdownMenu-trigger case (the dominant real pattern, 6 of 15 sites) — confirmed sound
+  (portal-wrapped menu content never bubbles to the row) — but flagged doc-only enforcement of
+  `data-row-click-ignore` as a foreseeable silent-regression gap, citing this codebase's own
+  `button.test.ts` precedent and a ledger lesson ("advice alone demonstrably did not hold," `fails.md`
+  2026-07-30). Recommended fix: type `isInteractiveTarget`'s parameter as a small duck-typed
+  interface so it's testable under the existing node-environment Vitest config with no new
+  dependency (no jsdom needed), plus one unit test.
+- **Round 5** (final, hard cap): consolidated all 4 prior rounds into the final `design.md` content,
+  folding the unit-test requirement into the composite's own build step (not a separate step).
+  Produced the final Rejected Alternatives and Open Risks lists.
+
+User approved after round 5. `design.md` written; `feature.md` advanced `spec-ready` →
+`design-approved`.
+
+**Aside during this session**: user flagged a mobile-app screenshot referencing PR #960 and an
+unrelated question, suspecting a parallel session. Investigated via `list_sessions` +
+`pull_request_read` — confirmed PR #960 is this session's own auto-created PR for
+`claude/migrate-tables-shadcn-datatable-jbccqa` (footer links to this session's own ID); no parallel
+session exists. Resolved as a stale/cached mobile-client render, not a collision. No action needed.
