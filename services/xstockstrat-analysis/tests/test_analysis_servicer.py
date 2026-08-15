@@ -3773,7 +3773,9 @@ class _FakeOppRepo:
         for r in self.rows.get(user_id, []):
             if not include_expired and r["valid_until"] <= now:
                 continue
-            if r["conviction"] < min_conviction:
+            # feature 132: muted (deny-listed) rows are exempt from the conviction floor — they
+            # carry conviction 0 by design (mirrors the SQL `OR provenance ? 'denied'`).
+            if r["conviction"] < min_conviction and "denied" not in (r.get("provenance") or []):
                 continue
             act = self.actions.get((user_id, r["opportunity_key"]))
             if act:
@@ -3846,6 +3848,8 @@ def _strat_row(
     live_enabled=True,
     symbols=None,
     created_at=None,
+    denied=None,
+    signal_eligible=False,
 ):
     """A strategy row (SMA≈close via the ComputeIndicator stub) with optional entry/exit rules.
 
@@ -3874,6 +3878,10 @@ def _strat_row(
         sp = Struct()
         sp.update({"symbols": list(symbols)})
         kwargs["signal_params"] = sp
+    if denied is not None:  # feature 132 — entry-only deny list
+        kwargs["denied_symbols"] = list(denied)
+    if signal_eligible:  # feature 132 — join platform-wide signals
+        kwargs["signal_eligible"] = True
     definition = analysis_pb2.StrategyDefinition(**kwargs)
     row = {
         "strategy_id": strategy_id,
@@ -4313,6 +4321,75 @@ class TestListOpportunitiesMaterialized:
         assert by_symbol["AAPL"].strategy_id == "sx"
         assert "live_strategy" in by_symbol["AAPL"].provenance
 
+    # ── feature 132 — muted (deny-listed) rows ───────────────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_held_denied_is_one_muted_row_with_exit_trace(self):
+        """AC (132): a held+denied (sym, strat) is exactly ONE row, muted=True, with its exit trace
+        preserved (deny is entry-only) — not a second standalone row, never conviction=0."""
+        row = _strat_row("sx", entry=_GT_100, exit_=_GT_100, symbols=["AAPL"], denied=["AAPL"])
+        svc = _materialized_svc(
+            held=["AAPL"],
+            strategies={"sx": row},
+            live_strategies=[row],
+            bars={"AAPL": _FIRING_BARS},
+        )
+        by_symbol, opps = await _list_opps(svc)
+        assert sum(1 for o in opps if o.symbol == "AAPL") == 1  # one row, not two
+        r = by_symbol["AAPL"]
+        assert r.muted is True
+        assert "denied" in r.provenance
+        assert r.total_conditions == 1  # exit rule still traced (entry-only deny)
+        assert r.action == analysis_pb2.OPPORTUNITY_ACTION_TAG_REDUCE
+
+    @pytest.mark.asyncio
+    async def test_pure_denied_symbol_is_muted_unspecified_placeholder(self):
+        """AC (132): a denied symbol in the strategy's coverage but not held/watchlisted/signalled
+        is a 0/0 muted placeholder — kept (UNSPECIFIED action), never dropped by the action guard,
+        never conviction=0-as-classifier."""
+        row = _strat_row("sx", entry=_GT_100, symbols=["XYZ"], denied=["XYZ"])
+        svc = _materialized_svc(strategies={"sx": row}, live_strategies=[row], bars={})
+        by_symbol, _ = await _list_opps(svc)
+        assert "XYZ" in by_symbol  # not dropped by the action-is-None guard
+        r = by_symbol["XYZ"]
+        assert r.muted is True
+        assert "denied" in r.provenance
+        assert r.total_conditions == 0  # trace skipped for a non-held muted row
+        assert r.action == analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED
+
+    @pytest.mark.asyncio
+    async def test_muted_row_survives_tiny_universe_cut(self):
+        """AC (132): the muted_only bucket ranks above the speculative tail — a muted row is not
+        dropped for a higher-conviction speculative signal when max_universe is tiny."""
+        row = _strat_row("sx", entry=_GT_100, symbols=["XYZ"], denied=["XYZ"])
+        svc = _materialized_svc(
+            signals=[
+                _sig("ZZZ", "buy", 0.99, source="uw"),
+                _sig("YYY", "buy", 0.98, source="uw"),
+            ],
+            strategies={"sx": row},
+            live_strategies=[row],
+            bars={},
+        )
+        svc._cfg.get_int = MagicMock(
+            side_effect=lambda key, default=0: (
+                1 if key == "analysis.opportunity.max_universe_size" else default
+            )
+        )
+        by_symbol, _ = await _list_opps(svc)
+        assert "XYZ" in by_symbol  # muted row survives despite the higher-axis speculative pair
+        assert by_symbol["XYZ"].muted is True
+
+    @pytest.mark.asyncio
+    async def test_muted_row_returned_despite_min_conviction_floor(self):
+        """AC (132): a min_conviction>0 read still returns a muted (conviction-0) row (the
+        `provenance ? 'denied'` OR-branch of the read query)."""
+        row = _strat_row("sx", entry=_GT_100, symbols=["XYZ"], denied=["XYZ"])
+        svc = _materialized_svc(strategies={"sx": row}, live_strategies=[row], bars={})
+        by_symbol, _ = await _list_opps(svc, min_conviction=0.5)
+        assert "XYZ" in by_symbol  # exempt from the floor
+        assert by_symbol["XYZ"].muted is True
+
 
 class TestGetStrategyAnalytics:
     def _svc(self, runs, orders, signals_count):
@@ -4489,7 +4566,29 @@ class TestOpportunityRowParity:
         assert opp.opportunity_key == "u1|AAPL|sx"
         assert list(opp.provenance) == ["watchlist", "position", "uw"]
         assert opp.valid_until.ToDatetime(tzinfo=UTC) == valid
-        assert opp.muted is False  # feature 132 — default; Step 7 sets it on deny-listed rows
+        assert opp.muted is False  # feature 132 — no "denied" marker → not muted
+
+    def test_muted_derived_from_denied_provenance(self):
+        """feature 132: the mapper sets Opportunity.muted from the "denied" provenance marker (the
+        persistence carrier), and _primary_source never leaks "denied" into Opportunity.source."""
+        from app.handlers.servicer import _primary_source, _row_to_opportunity
+
+        row = {
+            "opportunity_key": "u1|XYZ|sx",
+            "symbol": "XYZ",
+            "strategy_id": "sx",
+            "action": int(analysis_pb2.OPPORTUNITY_ACTION_TAG_UNSPECIFIED),
+            "conviction": 0.0,
+            "readiness_json": {"passing_conditions": 0, "total_conditions": 0},
+            "signal_axis": 0.0,
+            "provenance": ["position", "denied"],
+            "thesis": "",
+            "valid_until": datetime(2999, 1, 1, tzinfo=UTC),
+        }
+        opp = _row_to_opportunity(row)
+        assert opp.muted is True
+        assert opp.source == ""  # "denied" (like "watchlist"/"position") is a structural marker
+        assert _primary_source(["denied"]) == ""
 
 
 class TestScreenSymbolsHeld:

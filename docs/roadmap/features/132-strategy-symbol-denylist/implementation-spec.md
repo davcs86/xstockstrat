@@ -238,7 +238,7 @@ Coverage ≥ 40%; the four assertions above fail on the pre-Step-3 tree (red) an
 
 ### Step 5 — service: entry-only deny + fair-share scheduler + owner-scoped universe in the live loop
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/live_loop.py` — modify
@@ -294,7 +294,7 @@ synthesizes `x-user-id = owner` per strategy owner.
 
 ### Step 6 — test: entry-only deny, fair-share rotation, owner-scoped universe
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_live_loop.py` — modify
@@ -336,7 +336,7 @@ Coverage ≥ 40%; assertions fail on the pre-Step-5 tree, pass after.
 
 ### Step 7 — service: muted rows in `_compute_opportunities` + read-query conviction-floor exemption
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -396,7 +396,7 @@ Coverage ≥ 40%; assertions fail on the pre-Step-5 tree, pass after.
 
 ### Step 8 — test: muted-row emission, mapper parity, read-filter exemption
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
