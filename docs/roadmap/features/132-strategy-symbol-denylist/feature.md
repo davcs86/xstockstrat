@@ -1,6 +1,6 @@
 # Feature: strategy-symbol-denylist
 
-**Lifecycle Status**: `in-progress`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/strategy-symbol-denylist`
 **Created**: 2026-08-14
 **Last Updated**: 2026-08-15
@@ -15,6 +15,8 @@
 | 2026-08-14 | `draft` → `spec-ready` | /sdd-review | Criteria: PASS WITH WARNINGS (1 warning fixed — a wrong `live_loop.py` line citation, corrected to `:188-196`; FR-3/FR-5/AC-5's deferred-mechanism warnings accepted as legitimate, matching 131's own precedent). Overlap: file-level overlap with 131 (`_compute_opportunities`, `strategy_symbols()`) confirmed expected/already-committed-to (FR-6); no resource-number collisions (proto field 12 vs 133's field 13 confirmed disjoint against trunk). |
 | 2026-08-14 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved APPROVE-READY; recon.md + design.md written. Two user-locked forks: **layer 132 on 131** (merge order 133→134→131→132) and a **dedicated `Opportunity.muted` flag** for FR-5. User steers: **entry-only deny** (held positions keep exit tracing) amending FR-1/AC-2; a **new `signal_eligible` flag** (FR-8) gating the platform-wide active-signal term; and **fair-share live-loop scheduling** (FR-9) built now. Shared `resolve_universe` helper (C-10b parity), muted-via-provenance persistence (no migration), portfolio-readiness-gated entry_backfill. One accepted residual (cold-boot backfill no-retry, no worse than shipped 116). Amended 131's design.md (FR-6) + merge-order.md. |
 | 2026-08-14 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 17 steps. Proto (3 additive fields, re-verified free on trunk: StrategyDefinition highest=11, Opportunity highest=11) → analysis write-path/live-loop/opportunities/precondition-backfill (4 service+4 test steps) → agent (1+1) → UI (3 service + 1 e2e, C-14) → docs. Every step grounded in current-trunk `path:line`; 131/133-dependent anchors flagged for a conditional re-spec pass before /sdd-execute (132 executes last per merge order 133→134→131→132). |
+| 2026-08-15 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential (stacked on 131) execution started; re-grounded each 131/133-dependent anchor inline against the landed tree. |
+| 2026-08-15 | `in-progress` → `code-completed` | /sdd-execute | All 17 steps done. analysis 499 pass / 83.1%, agent 222 pass / 75.8%, UI tsc+lint clean (e2e is the CI gate). Integration PR next. |
 
 ---
 

@@ -1,6 +1,6 @@
 # Implementation Spec: strategy-symbol-denylist
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-08-14
 **Feature**: `docs/roadmap/features/132-strategy-symbol-denylist/feature.md`
 **Total Steps**: 17
@@ -525,7 +525,7 @@ Coverage ≥ 40%; assertions red before Step 9, green after.
 
 ### Step 11 — service: agent `manage_strategy` exposes `denied_symbols` + `signal_eligible`; update `strat-lab` skill
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -773,7 +773,7 @@ Fixture imports confirmed: `grep -n "from '../fixtures'\|from './fixtures'\|help
 
 ### Step 17 — docs: update analysis service CLAUDE.md + mcp-tools reference
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` / `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
@@ -818,4 +818,35 @@ remains as the sole universe description.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### D-1 — `strategy_symbols` kept as `resolve_universe`'s allowlist extractor (Step 3)
+**Disposition**: applied — faithful to intent, keeps intermediate commits importable. Step 3 said
+"replace `strategy_symbols` with `resolve_universe`", but `strategy_symbols`'s 5 callers migrate across
+Steps 5/7/9. Rather than break the tree mid-stack, `resolve_universe` **reuses** `strategy_symbols`
+internally as its allowlist extractor; once every external caller migrated it is an internal-only
+helper (no dead code, no DRY duplication). No behavior change.
+
+### D-2 — `Opportunity.muted` mapper line pulled forward into Step 3 (parity gate)
+**Disposition**: applied. Adding `Opportunity.muted` in Step 1 immediately breaks the OR-F
+descriptor-parity test (`test_mapper_covers_every_proto_field`) — the same class as feature 134's agent
+projection. Pulled the one-line `_row_to_opportunity` mapper (and the `_MAPPED` set) forward into Step
+3 (inert — derives from the `"denied"` provenance marker, which nothing sets until Step 7) so steps 3–6
+stay green. Logged in `fails.md` under the existing "new proto field breaks a descriptor-parity test".
+
+### D-3 — entry_backfill readiness via the live loop's best-effort drains, not a channel_ready gate (Step 9)
+**Disposition**: applied — same accepted-residual contract, less plumbing (minimal-change / DRY). Step
+9.3 specified passing the portfolio **channel** into `entry_backfill` for an explicit
+`channel_ready()`+`RpcError`-retry gate (new `main.py` wiring). Instead the backfill reuses the live
+loop's own owner-scoped, best-effort drains (`_drain_held`/`_drain_watchlist`/`_drain_signals`, which
+already catch failures and return empty), so an allowlist-bearing strategy is backfilled even during a
+cold-boot portfolio outage (its `resolve_universe.union` ignores the empty drains) while an
+allowlist-free one is missed this boot and self-heals next boot — the design's exact accepted residual,
+with **no** new constructor deps or channel capture. Recorded because it departs from the spec's literal
+mechanism while preserving its contract (P-03: surfaced, not silent).
+
+### D-4 — FR-6 live-loop safety guard narrowed from "no portfolio" to "no trading write" (Steps 5/6)
+**Disposition**: applied — a sanctioned design change (decisions 5/6), not a scope creep. The live loop
+now performs a **read-only** portfolio query (owner watchlist/held) for owner-scoped universe
+resolution, so `test_no_trading_imports`'s forbidden set dropped `portfolio_pb2` (keeping `trading_pb2`/
+`PlaceOrder`/`CreateOrder`) and the module docstring/FR-6 wording changed from "never imports/calls any
+trading/portfolio RPC" to "never places orders / touches the trading write surface". The loop still
+never writes trades.
