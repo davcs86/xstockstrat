@@ -183,3 +183,11 @@
   feature-007 trap did not recur; no uv.lock changes to commit).
 - Files modified: `packages/proto/gen/**` (generated)
 - Deviations: none.
+
+### Step 3 — migration: ingest signal_sources.reliability_weight column [done]
+- Created `010_add_signal_source_reliability_weight.{up,down}.sql`: up `ADD COLUMN reliability_weight
+  DOUBLE PRECISION NOT NULL DEFAULT 1.0 CHECK (reliability_weight BETWEEN 0 AND 1)`; down `DROP COLUMN`.
+  `010` confirmed free (highest was `009_signal_dedup_keys`). CHECK mirrors `conviction` in `001`.
+- Files modified: `services/xstockstrat-ingest/migrations/010_*.{up,down}.sql`
+- Verify (offline, no DB): both files exist; `.up` ADD reversed by `.down` DROP. Live apply runs in CI.
+- Deviations: none.

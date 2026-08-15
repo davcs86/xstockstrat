@@ -128,7 +128,7 @@ for s in ingest analysis indicators; do (cd services/xstockstrat-$s && uv lock -
 
 ### Step 3 — migration: Add `reliability_weight` column to `ingest.signal_sources`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/migrations/010_add_signal_source_reliability_weight.up.sql` — create
