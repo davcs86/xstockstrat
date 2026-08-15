@@ -907,7 +907,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "Single Position page"
 
 ### Step 14 — service (xstockstrat-ui): Fundamentals section
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/traderBff.ts` — modify
@@ -991,7 +991,7 @@ Plus the e2e proof in Step 15.
 
 ### Step 15 — test (xstockstrat-ui): Fundamentals section e2e
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify (add a `getFundamentals` handler to the

@@ -768,3 +768,24 @@ each checkpoint (C-02/P-03).
   (`xstockstrat.portfolio.v1.PortfolioService/ListWatchlists`).
 - E2E: **built + ran — all 8 pass (9.2s), no flakiness.**
 - Files modified: `e2e/mock-backend.ts`, `e2e/trader/position-detail.spec.ts`
+
+### Step 14 — service (xstockstrat-ui): Fundamentals section [done]
+- Added `getFundamentals` to `traderBff.ts`'s MarketDataService block (the one genuinely new BFF
+  registration — read-only, ungated). New `useFundamentals(symbol)` hook (`retry: false` — a no-data
+  symbol errors, never NotFound). New `FundamentalsSection` in the watchlisted branch: metric grid
+  (market cap/PE/PB/div yield/EPS/beta/ROE/D-E) via shadcn Card + `<dl>`, `stale` Badge, and an
+  explicit no-data state surfacing the provider error message (treats ANY error as no-data per the
+  step's corrected finding — Unavailable/FailedPrecondition/ResourceExhausted, not NotFound).
+  New `e2e/fixtures/fundamentals.ts` (`FUNDAMENTALS_AAPL`) + barrel + INVENTORY row (C-12).
+- Verify: tsc + lint clean; `getFundamentals` present in traderBff.
+- Files: `src/lib/traderBff.ts`, `src/app/trader/positions/[symbol]/page.tsx`,
+  `src/hooks/useFundamentals.ts` (new), `e2e/fixtures/{fundamentals.ts,index.ts}`, `INVENTORY.md`
+
+### Step 15 — test (xstockstrat-ui): Fundamentals section e2e [done]
+- Mock `getFundamentals`: `FUNDAMENTALS_AAPL` for AAPL, `Code.Unavailable` otherwise (matches the
+  real no-data contract). Two e2e (watchlisted AAPL → metrics incl. P/E 31.40; watchlisted MSFT →
+  explicit "No fundamentals data for MSFT"). Extracted a `watchlist(page, symbol)` helper (DRY — also
+  adopted by Step 13's test). Fixed a strict-mode locator (heading role, not `getByText('Fundamentals')`
+  which also matched "Loading fundamentals…").
+- E2E: **built + ran — all 10 pass (11.1s).**
+- Files: `e2e/mock-backend.ts`, `e2e/trader/position-detail.spec.ts`

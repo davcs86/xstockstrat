@@ -15,7 +15,9 @@ import { openR, fmtR, sideLabel } from '@/lib/positionRisk';
 import { POSITION_RISK_FLAG, OPPORTUNITY_ACTION, EnumBadge } from '@/lib/opportunityShared';
 import { useWatchlists } from '@/hooks/useWatchlists';
 import { useOpportunities } from '@/hooks/useOpportunities';
+import { useFundamentals } from '@/hooks/useFundamentals';
 import { SignalReadiness } from '@/components/insights/SignalReadiness';
+import { ConnectError } from '@connectrpc/connect';
 import type { Opportunity } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import {
   OrderSideBadge,
@@ -246,6 +248,7 @@ export default function PositionDetailPage() {
             <Suspense fallback={<div className="h-24" />}>
               <SignalReadiness symbol={symbol} />
             </Suspense>
+            <FundamentalsSection symbol={symbol} />
           </>
         ) : null}
 
@@ -671,6 +674,59 @@ function OpportunitySection({
         )}
         {metaBits.length > 0 && (
           <p className="font-mono text-xs text-muted-foreground">{metaBits.join(' · ')}</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+// Fundamentals section (FR-7) — GetFundamentals ratios/metrics for a watchlisted symbol. A no-data
+// symbol surfaces as an error (Unavailable/FailedPrecondition/ResourceExhausted, never NotFound), so
+// ANY error renders the explicit no-data state with the provider's message (P-03: no fabricated 0s).
+function FundamentalsSection({ symbol }: { symbol: string }) {
+  const { data, isLoading, error } = useFundamentals(symbol);
+  const f = data?.fundamentals;
+  const rows: { label: string; value: string }[] = f
+    ? [
+        { label: 'Market cap', value: fmtUsd(f.marketCap) },
+        { label: 'P/E', value: f.peRatio ? f.peRatio.toFixed(2) : '—' },
+        { label: 'P/B', value: f.pbRatio ? f.pbRatio.toFixed(2) : '—' },
+        { label: 'Div yield', value: f.dividendYield ? fmtPct(f.dividendYield) : '—' },
+        { label: 'EPS', value: f.eps ? f.eps.toFixed(2) : '—' },
+        { label: 'Beta', value: f.beta ? f.beta.toFixed(2) : '—' },
+        { label: 'ROE', value: f.roe ? fmtPct(f.roe) : '—' },
+        { label: 'Debt/Equity', value: f.debtToEquity ? f.debtToEquity.toFixed(2) : '—' },
+      ]
+    : [];
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <CardTitle className="text-base">Fundamentals</CardTitle>
+          {f?.stale && (
+            <Badge variant="secondary" className="text-[11px]">
+              stale
+            </Badge>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        {isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading fundamentals…</p>
+        ) : error ? (
+          <p className="text-sm text-muted-foreground">
+            No fundamentals data for {symbol}
+            {error instanceof ConnectError ? ` — ${error.rawMessage}` : ''}.
+          </p>
+        ) : (
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm sm:grid-cols-4">
+            {rows.map((r) => (
+              <div key={r.label} className="flex flex-col">
+                <dt className="text-xs text-muted-foreground">{r.label}</dt>
+                <dd className="font-mono tabular-nums">{r.value}</dd>
+              </div>
+            ))}
+          </dl>
         )}
       </CardContent>
     </Card>
