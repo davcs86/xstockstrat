@@ -225,6 +225,7 @@ async def emit_alert(
 
 
 async def run_backtest(
+    user_id: str,
     strategy_id: str,
     symbols: list[str],
     initial_capital: float = 100000.0,
@@ -275,7 +276,7 @@ async def run_backtest(
 
     async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
-        resp = await stub.RunBacktest(req, metadata=_metadata())
+        resp = await stub.RunBacktest(req, metadata=[*_metadata(), ("x-user-id", user_id)])
     # feature 064: return the full BacktestResult (including the per-bar `diagnostics`) so the
     # agent can reason over the day-by-day OHLCV/indicator/decision data and suggest strategy or
     # indicator changes. `preserving_proto_field_name` keeps the snake_case keys existing consumers
@@ -394,6 +395,7 @@ async def screen_symbols(
 
 
 async def manage_strategy(
+    user_id: str,
     operation: str,
     definition: dict[str, Any],
     update_mask: list[str] | None = None,
@@ -448,14 +450,14 @@ async def manage_strategy(
 
     # feature 092: forward the caller's REAL derived scope (was a hardcoded admin 7). Analysis
     # does the role check on the propagated x-access-scope (admin bit), so it rejects a non-admin.
-    meta = [*_metadata(), ("x-access-scope", str(access_scope))]
+    meta = [*_metadata(), ("x-user-id", user_id), ("x-access-scope", str(access_scope))]
     async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.ManageStrategy(req, metadata=meta)
     return MessageToDict(resp)
 
 
-async def get_strategy(strategy_id: str) -> dict[str, Any]:
+async def get_strategy(user_id: str, strategy_id: str) -> dict[str, Any]:
     """Fetch a stored strategy definition via gRPC GetStrategy.
 
     Returns **snake_case** keys (feature 070). The consumer is the `get_strategy` MCP tool, whose
@@ -473,14 +475,16 @@ async def get_strategy(strategy_id: str) -> dict[str, Any]:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.GetStrategy(
             analysis_pb2.GetStrategyRequest(strategy_id=strategy_id),
-            metadata=_metadata(),
+            metadata=[*_metadata(), ("x-user-id", user_id)],
         )
     return MessageToDict(
         resp, preserving_proto_field_name=True, always_print_fields_with_no_presence=True
     )
 
 
-async def list_strategy_definitions(include_inactive: bool = False) -> list[dict[str, Any]]:
+async def list_strategy_definitions(
+    user_id: str, include_inactive: bool = False
+) -> list[dict[str, Any]]:
     """List stored strategy definitions via gRPC ListStrategyDefinitions."""
     from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
 
@@ -488,7 +492,7 @@ async def list_strategy_definitions(include_inactive: bool = False) -> list[dict
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.ListStrategyDefinitions(
             analysis_pb2.ListStrategyDefinitionsRequest(include_inactive=include_inactive),
-            metadata=_metadata(),
+            metadata=[*_metadata(), ("x-user-id", user_id)],
         )
     # Feature 087: snake_case to match get_strategy (avoids a third casing across list→get→manage).
     return [MessageToDict(d, preserving_proto_field_name=True) for d in resp.definitions]
@@ -909,7 +913,7 @@ async def update_user_metadata(
 
 
 async def set_strategy_live(
-    strategy_id: str, live_enabled: bool, access_scope: int = 0
+    user_id: str, strategy_id: str, live_enabled: bool, access_scope: int = 0
 ) -> dict[str, Any]:
     """Enable/disable live evaluation via SetStrategyLive RPC (admin-scoped).
 
@@ -918,7 +922,7 @@ async def set_strategy_live(
     """
     from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # noqa: PLC0415
 
-    meta = [*_metadata(), ("x-access-scope", str(access_scope))]
+    meta = [*_metadata(), ("x-user-id", user_id), ("x-access-scope", str(access_scope))]
     async with grpc.aio.insecure_channel(ANALYSIS_ENDPOINT) as channel:
         stub = analysis_pb2_grpc.AnalysisServiceStub(channel)
         resp = await stub.SetStrategyLive(

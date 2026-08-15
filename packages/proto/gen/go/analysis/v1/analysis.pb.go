@@ -2076,8 +2076,13 @@ type StrategyDefinition struct {
 	// permitted immediately, current behavior); negative → rejected at write time
 	// (INVALID_ARGUMENT).
 	ExitCooldownDays *int32 `protobuf:"varint,11,opt,name=exit_cooldown_days,json=exitCooldownDays,proto3,oneof" json:"exit_cooldown_days,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Owning user (feature 133). Server-authoritative: populated from the propagated
+	// x-user-id header on ManageStrategy REGISTER, never accepted from the request body
+	// (mirrors ListOpportunitiesRequest / portfolio ownership convention). Field 12 is
+	// reserved for feature 132's denied_symbols — do not reuse.
+	UserId        string `protobuf:"bytes,13,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StrategyDefinition) Reset() {
@@ -2185,6 +2190,13 @@ func (x *StrategyDefinition) GetExitCooldownDays() int32 {
 		return *x.ExitCooldownDays
 	}
 	return 0
+}
+
+func (x *StrategyDefinition) GetUserId() string {
+	if x != nil {
+		return x.UserId
+	}
+	return ""
 }
 
 type ManageStrategyRequest struct {
@@ -3941,7 +3953,7 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x06params\x18\x05 \x03(\v26.xstockstrat.analysis.v1.StrategyComponent.ParamsEntryR\x06params\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\"\xfb\x03\n" +
+	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\"\x94\x04\n" +
 	"\x12StrategyDefinition\x12\x1f\n" +
 	"\vstrategy_id\x18\x01 \x01(\tR\n" +
 	"strategyId\x12!\n" +
@@ -3958,7 +3970,8 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\rcooldown_days\x18\t \x01(\x05H\x00R\fcooldownDays\x88\x01\x01\x12\x1a\n" +
 	"\bwarnings\x18\n" +
 	" \x03(\tR\bwarnings\x121\n" +
-	"\x12exit_cooldown_days\x18\v \x01(\x05H\x01R\x10exitCooldownDays\x88\x01\x01B\x10\n" +
+	"\x12exit_cooldown_days\x18\v \x01(\x05H\x01R\x10exitCooldownDays\x88\x01\x01\x12\x17\n" +
+	"\auser_id\x18\r \x01(\tR\x06userIdB\x10\n" +
 	"\x0e_cooldown_daysB\x15\n" +
 	"\x13_exit_cooldown_days\"\xeb\x01\n" +
 	"\x15ManageStrategyRequest\x12H\n" +

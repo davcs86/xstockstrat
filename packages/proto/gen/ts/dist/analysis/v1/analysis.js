@@ -3514,6 +3514,7 @@ function createBaseStrategyDefinition() {
         cooldownDays: undefined,
         warnings: [],
         exitCooldownDays: undefined,
+        userId: "",
     };
 }
 exports.StrategyDefinition = {
@@ -3550,6 +3551,9 @@ exports.StrategyDefinition = {
         }
         if (message.exitCooldownDays !== undefined) {
             writer.uint32(88).int32(message.exitCooldownDays);
+        }
+        if (message.userId !== "") {
+            writer.uint32(106).string(message.userId);
         }
         return writer;
     },
@@ -3637,6 +3641,13 @@ exports.StrategyDefinition = {
                     message.exitCooldownDays = reader.int32();
                     continue;
                 }
+                case 13: {
+                    if (tag !== 106) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -3694,6 +3705,11 @@ exports.StrategyDefinition = {
                 : isSet(object.exit_cooldown_days)
                     ? globalThis.Number(object.exit_cooldown_days)
                     : undefined,
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
         };
     },
     toJSON(message) {
@@ -3731,6 +3747,9 @@ exports.StrategyDefinition = {
         if (message.exitCooldownDays !== undefined) {
             obj.exitCooldownDays = Math.round(message.exitCooldownDays);
         }
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
         return obj;
     },
     create(base) {
@@ -3749,6 +3768,7 @@ exports.StrategyDefinition = {
         message.cooldownDays = object.cooldownDays ?? undefined;
         message.warnings = object.warnings?.map((e) => e) || [];
         message.exitCooldownDays = object.exitCooldownDays ?? undefined;
+        message.userId = object.userId ?? "";
         return message;
     },
 };

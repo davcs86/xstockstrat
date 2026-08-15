@@ -271,6 +271,12 @@ message StrategyDefinition {
   // permitted immediately, current behavior); negative → rejected at write time
   // (INVALID_ARGUMENT).
   optional int32 exit_cooldown_days = 11;
+
+  // Owning user (feature 133). Server-authoritative: populated from the propagated
+  // x-user-id header on ManageStrategy REGISTER, never accepted from the request body
+  // (mirrors ListOpportunitiesRequest / portfolio ownership convention). Field 12 is
+  // reserved for feature 132's denied_symbols — do not reuse.
+  string user_id = 13;
 }
 
 enum StrategyOperation {

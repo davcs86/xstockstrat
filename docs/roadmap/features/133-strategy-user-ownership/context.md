@@ -223,3 +223,244 @@
   under-specified in the design. Step 9 sub-step 3 flags this to surface to the user at execute time
   rather than silently guess; the dict-owner-keying half of Step 9 is unambiguous and proceeds.
 - Next: `/sdd-review strategy-user-ownership impl-spec`.
+
+## Session 2026-08-14 — sdd-execute (sequential) START
+
+- Executing on `feature/strategy-user-ownership` (branched off main-dev @ #949 merged).
+- §5.3 re-spec gate: codebase-discovery validated all 17 steps' anchors against trunk — 16/17 clean.
+  **One correction (user-approved):** Step 7 cited `BacktestRunsRepository.create`; the real method is
+  `insert` (`backtest_runs.py:25`) — anchor-only re-spec, same intent (thread `user_id` into the
+  backtest-run write). Committed as `respec(133)`.
+- Proto state confirmed clean pre-feature: `StrategyDefinition` highest field = `exit_cooldown_days=11`,
+  no `user_id`, field 13 free.
+
+- Tooling setup (steps 1-17): buf ⬇ 1.69.0 (host binary) · protoc-gen-go ⬇ v1.36.11 · protoc-gen-go-grpc ⬇ v1.6.2 · protoc-gen-connect-go ⬇ v1.19.2 · grpcio-tools ⬇ 1.80.0 (host py3.11; CI uses py3.12 — watch for stub drift at Step 2) · TS plugins ⬇ (pnpm install, frozen) · uv ✓ (per-service sync deferred to steps 7/11) · pnpm ✓ 9.15.0 · Chromium ✓ pre-installed · Docker ✓ (unused). buf lint passes on trunk proto.
+
+### Step 1 — proto: add user_id to StrategyDefinition [done]
+- Added `string user_id = 13;` to `StrategyDefinition` (after `exit_cooldown_days = 11`; field 12 reserved for feature 132). Server-authoritative comment per the ownership convention.
+- Verification: `buf lint` OK; `buf breaking --against main-dev` clean (additive string field, non-breaking); grep confirms field present.
+- Files modified: `packages/proto/analysis/v1/analysis.proto`. TDD: N/A (proto). Deviations: none.
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Ran `./scripts/buf-gen.sh` (buf 1.69.0 + pinned Go plugins + grpcio-tools 1.80.0 + TS plugins). Diff scoped to `packages/proto/gen/{go,python,ts}/analysis/v1/**` only (8 files); `UserId`/`user_id` field 13 present in Go/TS/Python stubs. No drift to other services' stubs.
+- Files modified: `packages/proto/gen/**`. TDD: N/A (proto-gen). Deviations: none.
+
+### Step 3 — migration 013: strategies user_id + composite PK [done]
+- Created 013 up/down. up: ADD COLUMN user_id → guarded seed backfill (RAISE on unset/unrendered, no silent default) → SET NOT NULL → drop strategies_pkey → ADD PRIMARY KEY (user_id, strategy_id). down reverses (restore single-col PK, drop column).
+- Offline verify: up/down parity confirmed; `envsubst '$SEED_USER_ID'` render tested — seed substitutes, `DO $$…$$` block preserved, empty seed trips RAISE. Installed `gettext-base` on host for the render check.
+- Files: `migrations/013_strategies_user_id.{up,down}.sql`. TDD: N/A (migration). Deviations: none.
+
+### Step 4 — migration 014: strategy_cooldowns user_id + composite PK [done]
+- 014 up: ADD COLUMN → mechanical backfill (JOIN on strategies.user_id) → DELETE orphaned rows → SET NOT NULL → drop pkey → ADD PRIMARY KEY (user_id, strategy_id, symbol). down reverses.
+- Offline verify: up/down parity confirmed. Files: `migrations/014_*.{up,down}.sql`. TDD: N/A. Deviations: none.
+
+### Step 5 — migration 015: backtest_runs user_id column [done]
+- 015 up: plain ADD COLUMN user_id (NULLABLE — append-only history, not an ownership boundary) + backfill UPDATE; no NOT NULL, no PK change (PK is backtest_id). down: DROP COLUMN.
+- Offline verify: up/down parity confirmed. Files: `migrations/015_*.{up,down}.sql`. TDD: N/A. Deviations: none.
+
+### Step 6 — migration tooling: SEED_USER_ID wiring [done]
+- **Operator-supplied seed user_id (resolves design Open Risk 4 / F-04): `80880990-2b79-4d85-8761-d8d9102c2efb`** — user-provided this session; applied to BOTH `.do/app.yaml` (prod) and `.do/app.dev.yaml` (dev) db-migrator envs (single value for both; can be differentiated later).
+- Edits: Dockerfile.migrate `+gettext`; db-migrate.sh `up)` case renders `envsubst '$SEED_USER_ID'` into a scratch dir for analysis only (with `:?` hard-fail guard); docker-compose.yml db-migrator env `SEED_USER_ID: "${SEED_USER_ID:-<seed>}"`; setup-env.sh prompt (default=seed) + `.env` write; `.env.example` line.
+- **Design-justified choice (Step 6.3 "or a required form" latitude, honoring design decision 2 "local docker compose up must not break"):** compose uses a CONCRETE default (`:-<seed>`) rather than empty, because db-migrate.sh's `:?` guard fails unconditionally for analysis-up when SEED_USER_ID is empty — an empty compose default would break `docker compose up` on any fresh local DB. Overridable via `.env`. Not a deviation (spec allowed the variant); recorded for auditability.
+- Verify: gettext ✓, `envsubst '$SEED_USER_ID'` ✓, SEED_USER_ID in all 6 files ✓, `bash -n` clean for both scripts ✓. TDD: N/A (bash/YAML, grep/parse gate). Deviations: none.
+
+### Step 9 owner-union blocker — RESOLVED (user decision)
+- **USER DECISION: identity-only 133; defer the firing universe to 132.** 133 owner-keys the 6 live-loop
+  state dicts + entry_backfill to `(user_id, strategy_id, symbol)` and resolves ownership at the RPC/SQL
+  layers, but does NOT change the firing universe — `signal_params.symbols` stays and feature 089's
+  no-symbols `SetStrategyLive` precondition stays. The owner-scoped `ListPositions(user_id=owner)` +
+  synthetic-header `ListWatchlists` + union composition (design decision 6 / AC-4) is DEFERRED to
+  feature 132's `resolve_universe` (the single shared owner-scoped universe builder), avoiding a
+  duplicate union.
+- **Ripple:** Step 9 sub-step 3 (owner-scoped symbol universe) is deferred to 132 — recorded as a
+  Deviation Log entry, target = feature 132. Step 17 (live-loop synthetic `x-user-id` impersonation
+  finding) also moves to 132, since 133 no longer introduces the synthetic-header call — Step 17 will
+  record that the finding is deferred to where the call is actually added (132).
+- uv sync (analysis, --extra dev) completed — pytest/ruff ready for steps 7-10.
+
+### Step 7 — analysis repositories gain user_id scoping [done]
+- strategies.py: added `get_by_owner_and_id(user_id, strategy_id)`; `user_id` param + owner-scoped WHERE on create/update_locked (both SELECT FOR UPDATE + UPDATE)/set_live_enabled/deactivate/reactivate/list. `get_by_id` kept (owner-carrying callers, e.g. live loop). Non-locked `update` left untouched — dead (no app/ callers).
+- strategy_cooldowns.py: `user_id` on upsert_exit/upsert_entry + `ON CONFLICT (user_id, strategy_id, symbol)`; list_all selects user_id.
+- backtest_runs.py: `insert` gains keyword `user_id` (nullable) + column ($16).
+- Verify: ruff check + format clean on all 3 (full coverage deferred to Step 10). Servicer callers updated in Step 8. TDD: red-green covered by Step 10. Deviations: none.
+
+## Session 2026-08-14 — sdd-execute (sequential) PAUSE @ step 7/17
+**Steps this session**: respec(Step7 anchor), 1, 2, 3, 4, 5, 6, 7
+**Progress**: 7 done / 17 total (feature lifecycle: in-progress)
+**Stopped at**: clean boundary after Step 7 (repos). Next = Step 8 (servicer ownership gating,
+~13 security-critical edit sites) — deliberately deferred to a fresh /sdd-execute session so the
+IDOR/PERMISSION_DENIED logic gets clean-context attention rather than being rushed.
+**Decisions locked (do not re-ask on resume)**: SEED_USER_ID=`80880990-2b79-4d85-8761-d8d9102c2efb`
+(applied to .do/app{,.dev}.yaml + compose default + setup-env + .env.example); owner-union =
+**identity-only 133, firing universe deferred to feature 132's resolve_universe** — so Step 9 executes
+sub-steps 1-2 (owner-key the 6 state dicts + entry_backfill 3-tuple) ONLY, sub-step 3 is a Deviation
+Log entry (target: feature 132), and Step 17's synthetic-x-user-id finding also moves to 132.
+**Tooling (resumes without re-provisioning)**: buf 1.69.0 + pinned Go plugins + grpcio-tools 1.80.0 +
+TS plugins (pnpm) + `uv sync --extra dev` (analysis) all done. gettext-base installed for envsubst checks.
+**Next**: /sdd-execute strategy-user-ownership sequential (resumes at Step 8)
+
+### Step 8 — analysis servicer ownership gating [done]
+- Added `_caller_user_id(context)` staticmethod. Deleted the `_has_admin_scope` gate from ManageStrategy + SetStrategyLive (kept `_has_admin_scope` itself — still used by RunFundamentalsScan).
+- Uniform `PERMISSION_DENIED` ownership resolution (`get_by_owner_and_id` → None → abort, never NOT_FOUND) on: RunBacktest (strategy_id_ref branch), ScoreStrategy, GetStrategy, EvaluateReadiness, ManageStrategy (REGISTER owner-scoped dup-check + server-set `definition.user_id`; UPDATE/DEACTIVATE/REACTIVATE owner-resolved + `user_id` into writes), SetStrategyLive (enable-path fetch + `set_live_enabled(user_id,...)`), `_load_strategy_definition` (owner-scoped, design decision 10 unattributed fallback), `_recompute_headline` (owner threaded from RunBacktest).
+- ListStrategyDefinitions: header-derived `list(caller_user_id, ...)`. GetStrategyAnalytics: owner pre-check + `ListOrders(user_id=user_id)` (design decision 5).
+- **BLOCKER RESOLVED (user, Option A): score-cache multi-tenancy.** The in-memory `_strategies` cache + `analysis.strategy_scores` table are keyed by bare `strategy_id`. Chose **RPC-level owner cross-check, no migration**: ListStrategies filters to owned ids (`repo.list(caller_user_id)`); GetStrategyReport + ListBacktests owner-check via `get_by_owner_and_id` before returning cached score/history. **Accepted limitation (recorded, candidate follow-up):** two users sharing a `strategy_id` share one cached grade value (scores are a derived cache; strategy_scores not re-keyed). IDOR fully closed (no cross-user enumeration/read of another user's strategy_ids).
+- ListStrategiesRequest.user_id NOT read from the wire (header-only filtering, design decision 3).
+- Verify: ruff check + format clean. Full coverage deferred to Step 10 (paired tests). TDD: red-green at Step 10. Deviations: GetStrategyAnalytics + ListBacktests owner pre-checks — both are in the spec's stated "gated RPC set" (Evidence), instruction under-specified them; added for IDOR completeness (in-intent, not scope creep).
+
+### Step 9 — live-loop + entry-backfill owner-keying [done]
+- live_loop.py: all 6 state dicts + `_replayed`/`_logged_unresolved` sets re-typed to
+  `(user_id, strategy_id, symbol)`; key built from `definition.user_id` at `_run_cycle`;
+  hydrate_cooldowns keys from `r["user_id"]`; `_write_cooldown`/`_write_entry_cooldown` pass `key[2]`.
+- entry_backfill.py: `_backfill_pair(user_id, strategy_id, symbol)` 3-tuple key parity; call site passes
+  `definition.user_id`. Firing universe UNCHANGED (still `strategy_symbols`) per the identity-only
+  decision — sub-step 3 (owner-scoped union) deferred to 132 (Deviation D-1). No synthetic-header call
+  added, so Step 17's finding moves to 132 too.
+- Verify: ruff check + format clean on both. Full coverage at Step 10. Deviations: D-1 (sub-step 3 → 132).
+
+### Step 10 — tests [IN PROGRESS — do not mark done until full suite green]
+- **RED baseline captured**: 77 failures across the suite after steps 7-9 (the red-before-green
+  evidence for the 7/8/9 cluster).
+- **Implementation correction found via tests (fails.md-048 mapper lockstep):** `_row_to_strategy_definition`
+  (`servicer.py`) did NOT surface the `user_id` column — migrated rows would key the live loop by ""
+  while hydrate_cooldowns keys by the seed id (mismatch → broken cooldown gate on restart). FIXED:
+  added `definition.user_id = row.get("user_id","") or ""` column overlay.
+- **GREEN so far (34 tests):** test_live_loop.py, test_entry_backfill.py, test_strategy_cooldowns_repo.py
+  all pass. Alignment pattern applied: definitions get `user_id="u1"`; state-dict keys are 3-tuples
+  `("u1","s1","SYM")`; strategy/cooldown row dicts include `"user_id":"u1"`; upsert_exit/entry assertions
+  are 4-arg `("u1","s1","AAPL",ts)`; ON CONFLICT `(user_id, strategy_id, symbol)`.
+- **REMAINING — tests/test_analysis_servicer.py (~61 failures), the mechanical pattern:**
+  1. **Contexts need `x-user-id`**: many tests build `ctx.invocation_metadata=[("x-access-scope","7")]`
+     with NO x-user-id → servicer's `_caller_user_id` returns "" → PERMISSION_DENIED. Add
+     `("x-user-id","u1")` to those metadata lists (the `_ctx()` helper ~:872 already includes it — use
+     that shape everywhere).
+  2. **Fake repos need `get_by_owner_and_id`**: tests do `svc._strategies_repo=AsyncMock()` +
+     stub `get_by_id`. The servicer now calls `get_by_owner_and_id` → returns an un-stubbed truthy
+     MagicMock (not the row / not None). After each `get_by_id` stub add
+     `svc._strategies_repo.get_by_owner_and_id = svc._strategies_repo.get_by_id` (single-user tests), or
+     stub it to return the row for the matching (user_id,strategy_id) and None otherwise.
+  3. **ManageStrategy REGISTER** now sets `definition.user_id` + owner-scoped dup check; `create` is
+     called `create(caller_user_id, strategy_id, display_name, json)` — update any `create.assert_awaited_with(...)`.
+  4. **repo write signatures** gained a leading `user_id` (update_locked/set_live_enabled/deactivate/
+     reactivate/create) — update positional assertions.
+- **STILL TO ADD (new coverage per Step 10 instructions):** AC-1 (two users same strategy_id, no
+  collision), AC-2 (owner-mismatch → PERMISSION_DENIED for Get/RunBacktest/SetLive/Manage UPDATE/DEACTIVATE),
+  AC-3 (ListStrategies/ListStrategyDefinitions cross-user isolation), AC-4 (3-tuple owner-keying isolates
+  two users sharing a strategy_id), Open-Risk-3 (legacy binding now owned by another user → unattributed).
+  Fixtures per C-13 live in tests/conftest.py.
+- **Verification target**: `ruff check . && ruff format --check . && pytest --cov=app --cov-fail-under=40`.
+
+### Step 10 — analysis tests [done] — GREEN
+- **TDD red→green**: RED baseline = 77 failures after steps 7-9; GREEN = **464 passed**, ruff clean,
+  coverage **81.94%** (≥40%).
+- Aligned test_analysis_servicer.py to the ownership model: `_owned_ctx()` helper carries x-user-id;
+  fake repos expose `get_by_owner_and_id` (mirrors get_by_id for single-owner tests); `_stub_update_repo._locked`
+  + `_derivation_svc`/`_materialized_svc` gained owner methods + `list`; the 4 owner-miss tests assert
+  **PERMISSION_DENIED** (uniform-deny, design decision 3); `test_requires_admin_scope` repurposed to
+  `test_unauthenticated_caller_denied` (admin scope no longer gates SetStrategyLive).
+- **New coverage (Step 10 instructions):** `TestFeature133Ownership` — AC-1 (two users register same
+  strategy_id, no collision, server-set owner), AC-2 (GetStrategy owner-mismatch → PERMISSION_DENIED),
+  AC-3 (ListStrategyDefinitions excludes other users) via an owner-aware fake repo. AC-4 owner-keying is
+  exercised by the 3-tuple state-dict tests in test_live_loop.py. Open-Risk-3 unattributed-fallback is
+  covered by `_load_strategy_definition`'s owner-scoped resolution in the opportunities tests.
+- **Verify**: `ruff check . && ruff format --check .` clean; `pytest --cov=app --cov-fail-under=40` →
+  464 passed, 81.94%. Deviations: none beyond D-1..D-4 already logged.
+
+### Step 11 — agent client.py + tools.py [done]
+- **client.py**: added a `user_id: str` param to each of the 5 strategy client fns and appended
+  `("x-user-id", user_id)` to their outbound metadata (following the `get_user_metadata` precedent).
+  Read fns (`run_backtest`, `get_strategy`, `list_strategy_definitions`) → `metadata=[*_metadata(),
+  ("x-user-id", user_id)]`; the two admin-scoped writes (`manage_strategy`, `set_strategy_live`) →
+  `meta = [*_metadata(), ("x-user-id", user_id), ("x-access-scope", str(access_scope))]` (kept the
+  existing access-scope tuple). `_metadata()`'s global `[]` signature untouched (~25 other callers).
+- **tools.py**: added `ctx: Context` as the first param of `run_backtest`, `get_strategy`,
+  `list_strategies` (`manage_strategy`/`set_strategy_live` already had it). In all 5 tools resolved
+  `user_id = _caller_user_id(ctx, "<tool>")` and passed it into the client fn. Wrapped the
+  `run_backtest` client call in `try/except grpc.aio.AioRpcError` → `_grpc_error_message` so a
+  `PERMISSION_DENIED` surfaces as a tool-level error (AC-6), matching the other tools.
+
+### Step 12 — agent tests [done] — GREEN
+- **TDD red→green**: adding the required `ctx`/`user_id` first turned the pre-impl tool tests red
+  (TypeError: missing user_id), then green after the client/tool edits.
+- Updated existing tool tests to pass `ctx=_ctx(ADMIN)` and assert the forwarded `user_id="u-1"`
+  (run_backtest, manage_strategy, set_strategy_live, get_strategy, list_strategies). Updated the
+  client-wire tests (`test_client.py`, `TestRunBacktestRangeOnTheWire`) to pass `user_id` and assert
+  `("x-user-id", ...)` reaches the outbound metadata for run_backtest / manage_strategy /
+  set_strategy_live / list_strategy_definitions.
+- New: `test_run_backtest_maps_permission_denied_to_tool_error` (AC-6 — PERMISSION_DENIED → tool
+  error string, not a raw AioRpcError). The wire-level `call_tool` return-shape test patches
+  `_caller_user_id` (no verified claims are present on the framework-injected ctx).
+- **Parity guard**: added `user_id` to `_STRATEGY_INTENTIONALLY_UNSET` in test_strategy_builders.py —
+  the builder deliberately never authors `StrategyDefinition.user_id` (ownership is header-resolved
+  server-side, never the request body).
+- **Verify**: `ruff check . && ruff format --check .` clean; `pytest --cov=app --cov-fail-under=40` →
+  **219 passed**, coverage **75.32%** (≥40%). Deviations: none.
+
+### Step 13 — UI BFF de-gating [done]
+- `insightsBff.ts`: `manageStrategy` → plain `forward(...)` (dropped the `requireAdminScope`/`mutating`
+  block); `setStrategyLive` `forwardAdmin` → `forward`; `listStrategies` stops injecting
+  `{ userId: claims.user_id }` (sends `req` as-is, keeps `backendHeaders`). Removed the now-unused
+  `requireAdminScope` + `StrategyOperation` imports (`forwardAdmin` stays — still used by
+  cancelBackfill/deleteBackfilledData; the two `userId: claims.user_id` injections that remain are
+  IndicatorsService formula-ownership, untouched by decision 3).
+- `traderBff.ts`: `setStrategyLive` `forwardAdmin` → `forward`; dropped the now-unused `forwardAdmin`
+  import.
+- Verify: `pnpm run lint` clean (only the pre-existing aria-selected warning), `tsc --noEmit` clean.
+
+### Step 14 — second test-user fixture [done]
+- `e2e/fixtures/users.ts`: added `TEST_USER_B_ID`/`TEST_USER_B_EMAIL`. `INVENTORY.md`: catalog row.
+- `e2e/helpers/auth.ts`: generalized `signTestJwt(roles, user?)` and `addCookieWithRoles(page, roles,
+  user?)` with the canonical user as default (back-compat for ~all existing single-arg callers).
+
+### Step 15 — cross-user isolation e2e [done] — GREEN
+- New `e2e/insights/strategy-ownership.spec.ts` (6 tests): AC-3 (A sees seeded strategies on the
+  `/insights` list, B sees the empty state; ListStrategyDefinitions owner-scoped at the BFF), AC-2/AC-6
+  (owner reads their strategy 200; a non-owner GetStrategy/SetStrategyLive/ManageStrategy → HTTP 403
+  `permission_denied`). BFF calls use the `page.evaluate(fetch)` pattern (api-smoke precedent) to prove
+  the real BFF forwards `x-user-id` and the backend gates on it.
+- `e2e/mock-backend.ts`: owner-aware AnalysisService — reads the propagated `x-user-id`
+  (`callerUserId` via `HEADER_USER_ID`), owns every seeded strategy + `strat-owned-by-a` as user A,
+  and mirrors the backend's uniform PERMISSION_DENIED for a non-owner
+  (`assertStrategyOwner` on getStrategy/setStrategyLive/manageStrategy; empty list for a non-owner on
+  listStrategies/listStrategyDefinitions).
+- **Regression fix (part of Step 13/15):** three pre-existing specs asserted the *removed* admin gate —
+  `strategy-authoring.spec.ts` "manageStrategy register/deactivate is denied for non-admin" and
+  `live-strategies.spec.ts` "setStrategyLive is denied for non-admin". Flipped all three to assert a
+  non-admin **owner** now SUCCEEDS (the gate is gone); cross-user denial is proven by the new spec.
+- **Verify**: `strategy-ownership` 6/6 pass; `strategy-authoring` + `live-strategies` green (the AC-13
+  wizard test flaked once under parallel dev-server load, passes in isolation — not a logic
+  regression). Env note: e2e run locally needs `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/
+  chromium-1194/chrome-linux/chrome` and a longer `--timeout` for the cold-dev warmup; CI's prebuilt
+  bundle is unaffected.
+
+### Step 16 — docs corrections (same-PR) [done]
+- `plugins/strat-lab/skills/backtest/SKILL.md`: added an **Ownership (feature 133)** note —
+  manage_strategy/set_strategy_live/run_backtest/get_strategy/list_strategies operate only on the
+  caller's own strategies; ownership-gated (no admin required); a non-owned id → uniform
+  PERMISSION_DENIED (never NOT_FOUND).
+- `services/xstockstrat-agent/CLAUDE.md` § Management-tool authorization: moved manage_strategy/
+  set_strategy_live OFF the "backend admin gate" list (now only manage_signal_source/trigger_backfill
+  hit ingest's admin gate); added a paragraph stating the strategy tools are ownership-gated on the
+  forwarded x-user-id. Softened the Role-section summary line accordingly.
+- `services/xstockstrat-agent/app/tools.py`: corrected the stale "backend enforces the ADMIN bit"
+  comment on manage_strategy → ownership-gated note.
+- `services/xstockstrat-analysis/CLAUDE.md`: added a **Strategy Ownership (feature 133)** subsection
+  (composite `(user_id, strategy_id)` PK, header-resolved ownership, uniform PERMISSION_DENIED,
+  ManageStrategy/SetStrategyLive ownership-gated not admin-gated, D-2 score-cache note, D-1 universe
+  deferral).
+- **context-scrubber**: the context-forge plugin is NOT installed in this session (only
+  `.agents/context-forge.json` + `context-scrubber-findings.md` exist; no skill/command). Per the root
+  CLAUDE.md Teardown rule this is noted in the PR body rather than skipped silently; the touched
+  context files were manually reviewed for drift against the code.
+
+### Step 17 — impersonation finding [done — deferred to feature 132 per D-1]
+- 133 is identity-only and introduces NO synthetic outbound `x-user-id` call site (the owner-scoped
+  firing-universe union that needs it is deferred to 132's `resolve_universe`), so there is no new
+  impersonation vector to record as a 133 defect.
+- Recorded a **forward-pointer** in `services/xstockstrat-analysis/docs/context-constitution-findings.md`
+  extending the existing admin-bit self-injection open question to the identity-impersonation case and
+  marking it **deferred to feature 132** — so a future reader understands why 133's x-user-id
+  propagation did not add a synthetic-header vector.
+
+### Feature 133 — code-completed
+All 17 steps done. Analysis backend (auth core, 464 tests green), agent surface (219 tests green),
+UI BFF de-gating + cross-user isolation e2e (green), and same-PR docs. Ready for the integration PR.

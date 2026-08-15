@@ -76,7 +76,12 @@ async function fillToReview(
 }
 
 test.describe('Strategy authoring — insights BFF', () => {
-  test('manageStrategy register is denied for non-admin', async ({ page }) => {
+  // feature 133: the insights BFF no longer admin-gates strategy mutations. A non-admin
+  // authenticated user registers their OWN new strategy successfully — ownership, not an admin
+  // role, is the boundary (cross-user denial is covered in strategy-ownership.spec.ts).
+  test('manageStrategy register succeeds for a non-admin owner (admin gate removed)', async ({
+    page,
+  }) => {
     await addAuthCookie(page);
     await page.goto('/insights/strategies');
     const result = await page.evaluate(async () => {
@@ -91,10 +96,10 @@ test.describe('Strategy authoring — insights BFF', () => {
           }),
         },
       );
-      return { status: res.status, body: await res.text() };
+      return { status: res.status, body: (await res.json()) as Record<string, unknown> };
     });
-    expect(result.status).not.toBe(200);
-    expect(result.body.toLowerCase()).toContain('permission');
+    expect(result.status).toBe(200);
+    expect(result.body.strategyId).toBe('demo');
   });
 
   test('strategies list Actions menu: Edit navigates to the edit page (FR-2)', async ({ page }) => {
@@ -142,7 +147,11 @@ test.describe('Strategy authoring — insights BFF', () => {
     expect(result.body.strategyId).toBe('demo');
   });
 
-  test('manageStrategy deactivate is denied for non-admin', async ({ page }) => {
+  // feature 133: deactivate is no longer admin-gated either — a non-admin owner may deactivate
+  // their own strategy. A non-owner is denied by the backend (strategy-ownership.spec.ts).
+  test('manageStrategy deactivate succeeds for a non-admin owner (admin gate removed)', async ({
+    page,
+  }) => {
     await addAuthCookie(page);
     await page.goto('/insights/strategies');
     const result = await page.evaluate(async () => {
@@ -157,10 +166,9 @@ test.describe('Strategy authoring — insights BFF', () => {
           }),
         },
       );
-      return { status: res.status, body: await res.text() };
+      return { status: res.status, body: (await res.json()) as Record<string, unknown> };
     });
-    expect(result.status).not.toBe(200);
-    expect(result.body.toLowerCase()).toContain('permission');
+    expect(result.status).toBe(200);
   });
 
   test('getStrategy is readable (no admin required)', async ({ page }) => {

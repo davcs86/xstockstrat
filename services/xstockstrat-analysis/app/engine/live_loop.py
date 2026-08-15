@@ -131,20 +131,22 @@ class LiveEvaluationLoop:
         self._notify = notify_stub
         self._ledger = ledger_stub
         self._evaluator = evaluator  # 047 shared StrategyEvaluator instance
-        self._last_state: dict[tuple[str, str], bool] = {}  # (strategy_id, symbol) → in_position
-        self._last_alert_ts: dict[tuple[str, str], float] = {}  # throttle tracking
+        # feature 133: all live-loop state is keyed by the 3-tuple (user_id, strategy_id, symbol)
+        # so two owners that register the same strategy_id never share transition/cooldown state.
+        self._last_state: dict[tuple[str, str, str], bool] = {}  # (user, strat, sym) → in_position
+        self._last_alert_ts: dict[tuple[str, str, str], float] = {}  # throttle tracking
         # feature 069: durable re-entry cooldown. _last_exit_at parallels _last_state; the repo
         # (None in tests / no-DB) persists it so the cooldown survives a restart (FR-8). Default
         # None keeps the existing 7-arg constructor callers working.
         self._cooldowns_repo = cooldowns_repo
-        self._last_exit_at: dict[tuple[str, str], datetime] = {}
+        self._last_exit_at: dict[tuple[str, str, str], datetime] = {}
         # feature 116: exit-cooldown state. _last_entry_at parallels _last_exit_at (durable,
         # hydrated at boot). _replayed tracks which keys have already run their one-time-since-
         # restart bar-replay (never re-run once resolved). _logged_unresolved is the required
         # throttled-diagnostic's log-once-per-key tracker (design.md § Required diagnostic).
-        self._last_entry_at: dict[tuple[str, str], datetime] = {}
-        self._replayed: set[tuple[str, str]] = set()
-        self._logged_unresolved: set[tuple[str, str]] = set()
+        self._last_entry_at: dict[tuple[str, str, str], datetime] = {}
+        self._replayed: set[tuple[str, str, str]] = set()
+        self._logged_unresolved: set[tuple[str, str, str]] = set()
         self._lock = asyncio.Lock()
 
     async def hydrate_cooldowns(self):
@@ -159,7 +161,7 @@ class LiveEvaluationLoop:
         if self._cooldowns_repo is None:
             return
         for r in await self._cooldowns_repo.list_all():
-            key = (r["strategy_id"], r["symbol"])
+            key = (r["user_id"], r["strategy_id"], r["symbol"])
             self._last_exit_at[key] = r["last_exit_at"]
             # .get (not r["last_entry_at"]) — tolerates a row shape that predates migration 012
             # (or a test double built against the pre-116 repo contract); NULL/absent alike mean
@@ -234,7 +236,7 @@ class LiveEvaluationLoop:
             return
 
         latest = decisions[-1]
-        key = (definition.strategy_id, symbol)
+        key = (definition.user_id, definition.strategy_id, symbol)
 
         # feature 069/116: cooldown inputs. Uses bar time (bars[-1]) — the SAME time-source the
         # backtest gate feeds the shared helper — both call sites stay in parity (FR-4/C-10(b)).
@@ -380,7 +382,7 @@ class LiveEvaluationLoop:
         if self._cooldowns_repo is None:
             return
         try:
-            await self._cooldowns_repo.upsert_exit(key[0], key[1], ts)
+            await self._cooldowns_repo.upsert_exit(key[0], key[1], key[2], ts)
         except Exception as e:
             log.warning("live_loop: cooldown write failed: %s", e)
 
@@ -392,6 +394,6 @@ class LiveEvaluationLoop:
         if self._cooldowns_repo is None:
             return
         try:
-            await self._cooldowns_repo.upsert_entry(key[0], key[1], ts)
+            await self._cooldowns_repo.upsert_entry(key[0], key[1], key[2], ts)
         except Exception as e:
             log.warning("live_loop: entry cooldown write failed: %s", e)

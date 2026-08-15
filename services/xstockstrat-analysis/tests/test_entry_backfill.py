@@ -26,8 +26,9 @@ def _order(side, filled_qty, updated_at, status=trading_pb2.ORDER_STATUS_FILLED)
     return o
 
 
-def _strategy_row(strategy_id="s1", symbols=("AAPL",)):
+def _strategy_row(strategy_id="s1", symbols=("AAPL",), user_id="u1"):
     return {
+        "user_id": user_id,
         "strategy_id": strategy_id,
         "display_name": strategy_id,
         "active": True,
@@ -109,14 +110,14 @@ class TestRunOnce:
 
         await run_once(live_loop, db_pool, trading_stub, _cfg())
 
-        key = ("s1", "AAPL")
+        key = ("u1", "s1", "AAPL")
         assert live_loop._last_state[key] is True
         assert live_loop._last_entry_at[key] == _T0
         live_loop._write_entry_cooldown.assert_awaited_once_with(key, _T0)
 
     async def test_run_once_skips_pairs_with_known_entry_time(self):
         live_loop = _fake_live_loop()
-        key = ("s1", "AAPL")
+        key = ("u1", "s1", "AAPL")
         live_loop._last_entry_at[key] = _T0  # already known — no RPC needed
         db_pool = AsyncMock()
         db_pool.fetch = AsyncMock(return_value=[_strategy_row()])
@@ -144,8 +145,8 @@ class TestRunOnce:
 
         await run_once(live_loop, db_pool, trading_stub, _cfg())  # must not raise
 
-        assert ("s1", "AAPL") not in live_loop._last_entry_at
-        assert live_loop._last_entry_at[("s2", "MSFT")] == _T0
+        assert ("u1", "s1", "AAPL") not in live_loop._last_entry_at
+        assert live_loop._last_entry_at[("u1", "s2", "MSFT")] == _T0
 
     async def test_run_once_noop_without_trading_stub(self):
         live_loop = _fake_live_loop()

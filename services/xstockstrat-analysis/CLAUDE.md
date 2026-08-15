@@ -10,6 +10,23 @@ Python gRPC service for strategy backtesting, scoring, and report generation. Re
 
 Beyond the gRPC server, the service runs an **asyncio live evaluation loop** (`app/engine/live_loop.py`, feature 048) that continuously evaluates `live_enabled` strategies via the shared evaluator (`app/services/evaluator.py`) and emits alerts to xstockstrat-notify on entry/exit transitions — guaranteeing backtest/live parity. The loop never places orders.
 
+### Strategy Ownership (feature 133)
+
+Strategies are **per-user**: `analysis.strategies` (and `analysis.strategy_cooldowns`) carry a
+`user_id` and a **composite `(user_id, strategy_id)` primary key**, so two users may register the same
+`strategy_id` without collision. Ownership is resolved from the inbound **`x-user-id` header, never
+the request body** (`servicer._caller_user_id`); every owner-scoped RPC — `GetStrategy`,
+`RunBacktest` (registered `strategy_id_ref`), `ScoreStrategy`, `EvaluateReadiness`, `ManageStrategy`,
+`SetStrategyLive`, `GetStrategyReport`/`ListBacktests`/`GetStrategyAnalytics` — resolves the row via
+`get_by_owner_and_id` and returns a **uniform `PERMISSION_DENIED`** for any ownership miss (no
+NOT_FOUND vs PERMISSION_DENIED distinction — anti-IDOR). `ManageStrategy`/`SetStrategyLive` are
+**ownership-gated, not admin-gated** — the former server-side admin gate was removed; any
+authenticated caller acts on their **own** strategies. `ListStrategies`/`ListStrategyDefinitions`
+filter to the caller's own rows. (The `strategy_scores` cache stays keyed by bare `strategy_id` — a
+derived cache cross-checked for ownership at the RPC layer, feature 133 D-2.) The live loop keys its
+per-`(user_id, strategy_id, symbol)` state on the owner; the owner-scoped firing **universe** union is
+deferred to feature 132's `resolve_universe` (this feature is identity-only).
+
 ### Strategy Score Persistence (feature 064)
 
 > **Feature 065 update**: the headline `StrategyScore` is now **derived** from per-symbol evidence

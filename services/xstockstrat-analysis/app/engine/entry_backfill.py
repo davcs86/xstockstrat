@@ -58,8 +58,11 @@ async def run_once(live_loop, db_pool, trading_stub, cfg_watcher):
         "SELECT * FROM analysis.strategies WHERE live_enabled = TRUE AND active = TRUE"
     )
 
-    async def _backfill_pair(strategy_id, symbol):
-        key = (strategy_id, symbol)
+    async def _backfill_pair(user_id, strategy_id, symbol):
+        # feature 133: key parity with live_loop's 3-tuple (user_id, strategy_id, symbol) state so
+        # the backfill seeds the SAME slot the live loop reads (a mismatched key would silently
+        # never be seen by the loop). ListOrders stays owner-implicit via the order's own user_id.
+        key = (user_id, strategy_id, symbol)
         if live_loop._last_entry_at.get(key) is not None:
             return
         async with sem:
@@ -68,7 +71,7 @@ async def run_once(live_loop, db_pool, trading_stub, cfg_watcher):
                     trading_pb2.ListOrdersRequest(strategy_id=strategy_id, symbol=symbol)
                 )
             except Exception as e:
-                log.warning("entry_backfill: (%s,%s) ListOrders failed: %s", *key, e)
+                log.warning("entry_backfill: (%s,%s) ListOrders failed: %s", strategy_id, symbol, e)
                 return
         entry_time = _infer_open_entry_time(list(resp.orders))
         if entry_time is None:
@@ -80,7 +83,10 @@ async def run_once(live_loop, db_pool, trading_stub, cfg_watcher):
     tasks = []
     for row in rows:
         definition = _row_to_strategy_definition(dict(row))
+        # feature 133: the firing universe is unchanged here (still signal_params.symbols via
+        # strategy_symbols) — the owner-scoped union is feature 132's resolve_universe. This step
+        # only threads the owner into the key.
         for symbol in strategy_symbols(definition):
-            tasks.append(_backfill_pair(definition.strategy_id, symbol))
+            tasks.append(_backfill_pair(definition.user_id, definition.strategy_id, symbol))
     await asyncio.gather(*tasks, return_exceptions=True)
     log.info("entry_backfill: boot pass complete (%d pairs considered)", len(tasks))

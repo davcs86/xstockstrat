@@ -17,6 +17,15 @@ freshly-edited strategy can silently produce garbage. Each has a fixed, learned 
 staging or prod name (e.g. `mcp__xstockstrat_staging__*`); if the tools are not loaded, find them
 with ToolSearch first. Never assume a tool is absent without searching.
 
+**Ownership (feature 133).** Strategies are **per-user**. `manage_strategy`, `set_strategy_live`,
+`run_backtest`, `get_strategy` and `list_strategies` operate **only on the calling user's own
+strategies** — they are **ownership-gated, not admin-gated** (any authenticated caller manages their
+own; no admin role is required). A `strategy_id` you do not own returns `PERMISSION_DENIED` (uniform —
+never NOT_FOUND, so it does not leak whether another user's id exists). `list_strategies` returns only
+your own definitions. If a call unexpectedly returns `PERMISSION_DENIED`, you are acting on someone
+else's `strategy_id`, not hitting a missing-admin-scope gate — pick an id you own or register a new
+one.
+
 **Progressive disclosure.** This file is the always-loaded router. Load each `reference/` file only
 when its phase activates — not up front:
 - `reference/backfill.md` — Phase 1, before any backtest.

@@ -1016,7 +1016,16 @@ export interface StrategyDefinition {
    * permitted immediately, current behavior); negative → rejected at write time
    * (INVALID_ARGUMENT).
    */
-  exitCooldownDays?: number | undefined;
+  exitCooldownDays?:
+    | number
+    | undefined;
+  /**
+   * Owning user (feature 133). Server-authoritative: populated from the propagated
+   * x-user-id header on ManageStrategy REGISTER, never accepted from the request body
+   * (mirrors ListOpportunitiesRequest / portfolio ownership convention). Field 12 is
+   * reserved for feature 132's denied_symbols — do not reuse.
+   */
+  userId: string;
 }
 
 export interface ManageStrategyRequest {
@@ -4267,6 +4276,7 @@ function createBaseStrategyDefinition(): StrategyDefinition {
     cooldownDays: undefined,
     warnings: [],
     exitCooldownDays: undefined,
+    userId: "",
   };
 }
 
@@ -4304,6 +4314,9 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
     }
     if (message.exitCooldownDays !== undefined) {
       writer.uint32(88).int32(message.exitCooldownDays);
+    }
+    if (message.userId !== "") {
+      writer.uint32(106).string(message.userId);
     }
     return writer;
   },
@@ -4403,6 +4416,14 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
           message.exitCooldownDays = reader.int32();
           continue;
         }
+        case 13: {
+          if (tag !== 106) {
+            break;
+          }
+
+          message.userId = reader.string();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -4461,6 +4482,11 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
         : isSet(object.exit_cooldown_days)
         ? globalThis.Number(object.exit_cooldown_days)
         : undefined,
+      userId: isSet(object.userId)
+        ? globalThis.String(object.userId)
+        : isSet(object.user_id)
+        ? globalThis.String(object.user_id)
+        : "",
     };
   },
 
@@ -4499,6 +4525,9 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
     if (message.exitCooldownDays !== undefined) {
       obj.exitCooldownDays = Math.round(message.exitCooldownDays);
     }
+    if (message.userId !== "") {
+      obj.userId = message.userId;
+    }
     return obj;
   },
 
@@ -4518,6 +4547,7 @@ export const StrategyDefinition: MessageFns<StrategyDefinition> = {
     message.cooldownDays = object.cooldownDays ?? undefined;
     message.warnings = object.warnings?.map((e) => e) || [];
     message.exitCooldownDays = object.exitCooldownDays ?? undefined;
+    message.userId = object.userId ?? "";
     return message;
   },
 };
