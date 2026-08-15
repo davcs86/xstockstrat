@@ -1187,11 +1187,29 @@ export interface ScreenResult {
   atr: number;
   revGrowth: number;
   held: boolean;
+  /**
+   * Per-criterion raw readings + pass/fail, for single-symbol screening where the universe-relative
+   * `score`/`criterion_scores` collapse to a content-free 0.5 (feature 125, FR-8). Populated from the
+   * same engine-internal values `criterion_scores` already draws from, exposed directly instead of
+   * normalized.
+   */
+  criterionRawValues: { [key: string]: number };
+  criterionPassed: { [key: string]: boolean };
 }
 
 export interface ScreenResult_CriterionScoresEntry {
   key: string;
   value: number;
+}
+
+export interface ScreenResult_CriterionRawValuesEntry {
+  key: string;
+  value: number;
+}
+
+export interface ScreenResult_CriterionPassedEntry {
+  key: string;
+  value: boolean;
 }
 
 export interface ScreenSymbolsRequest {
@@ -1341,6 +1359,58 @@ export interface SetOpportunityActionResponse {
 
 export interface GetStrategyAnalyticsRequest {
   strategyId: string;
+}
+
+export interface GetIndicatorSeriesRequest {
+  strategyId: string;
+  symbol: string;
+  /**
+   * The caller's own already-fetched candlestick closes + their timestamps (the page passes the
+   * exact bars it drew, so the x-axis is parity-aligned and no server re-fetch happens). closes
+   * and times are index-aligned and equal length.
+   */
+  closes: number[];
+  times: Date[];
+}
+
+export interface GetIndicatorSeriesResponse {
+  /** Echoes the request times, index-aligned across every series in every component. */
+  times: Date[];
+  components: ComponentSeries[];
+}
+
+export interface ComponentSeries {
+  refName: string;
+  kind: ComponentKind;
+  series: NamedSeries[];
+  /**
+   * Non-empty when this component failed to compute (soft-deleted formula, sandbox timeout, NaN
+   * output); series is then empty and the UI renders a per-panel error state. Per-component fault
+   * isolation — one bad component never fails the whole RPC.
+   */
+  error: string;
+}
+
+export interface NamedSeries {
+  /**
+   * "value" (primary) plus each secondary the component emits (bb.upper/bb.lower,
+   * macd.signal/macd.histogram, stoch.d, or custom-formula output keys).
+   */
+  name: string;
+  /**
+   * Index-aligned with the response times. Each point is an IndicatorValue whose `value` is UNSET
+   * for a warm-up-head or mid-series None, so a gap never round-trips as a fabricated 0.0 (feature
+   * 125, AC-4a/P-03). A bare `google.protobuf.DoubleValue` element cannot do this — in a repeated
+   * field an empty DoubleValue is byte-identical to DoubleValue(0.0) and serializes to JSON `0`, so
+   * the wrapper is a message with a proto3 `optional double` (explicit presence: HasField works and
+   * JSON omits an unset value) instead.
+   */
+  values: IndicatorValue[];
+}
+
+/** One point of an indicator series. `value` unset == a gap (warm-up head / NaN / None), never 0.0. */
+export interface IndicatorValue {
+  value?: number | undefined;
 }
 
 function createBaseRunBacktestRequest(): RunBacktestRequest {
@@ -5402,6 +5472,8 @@ function createBaseScreenResult(): ScreenResult {
     atr: 0,
     revGrowth: 0,
     held: false,
+    criterionRawValues: {},
+    criterionPassed: {},
   };
 }
 
@@ -5440,6 +5512,12 @@ export const ScreenResult: MessageFns<ScreenResult> = {
     if (message.held !== false) {
       writer.uint32(88).bool(message.held);
     }
+    globalThis.Object.entries(message.criterionRawValues).forEach(([key, value]: [string, number]) => {
+      ScreenResult_CriterionRawValuesEntry.encode({ key: key as any, value }, writer.uint32(98).fork()).join();
+    });
+    globalThis.Object.entries(message.criterionPassed).forEach(([key, value]: [string, boolean]) => {
+      ScreenResult_CriterionPassedEntry.encode({ key: key as any, value }, writer.uint32(106).fork()).join();
+    });
     return writer;
   },
 
@@ -5541,6 +5619,28 @@ export const ScreenResult: MessageFns<ScreenResult> = {
           message.held = reader.bool();
           continue;
         }
+        case 12: {
+          if (tag !== 98) {
+            break;
+          }
+
+          const entry12 = ScreenResult_CriterionRawValuesEntry.decode(reader, reader.uint32());
+          if (entry12.value !== undefined) {
+            message.criterionRawValues[entry12.key] = entry12.value;
+          }
+          continue;
+        }
+        case 13: {
+          if (tag !== 106) {
+            break;
+          }
+
+          const entry13 = ScreenResult_CriterionPassedEntry.decode(reader, reader.uint32());
+          if (entry13.value !== undefined) {
+            message.criterionPassed[entry13.key] = entry13.value;
+          }
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -5585,6 +5685,40 @@ export const ScreenResult: MessageFns<ScreenResult> = {
         ? globalThis.Number(object.rev_growth)
         : 0,
       held: isSet(object.held) ? globalThis.Boolean(object.held) : false,
+      criterionRawValues: isObject(object.criterionRawValues)
+        ? (globalThis.Object.entries(object.criterionRawValues) as [string, any][]).reduce(
+          (acc: { [key: string]: number }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.Number(value);
+            return acc;
+          },
+          {},
+        )
+        : isObject(object.criterion_raw_values)
+        ? (globalThis.Object.entries(object.criterion_raw_values) as [string, any][]).reduce(
+          (acc: { [key: string]: number }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.Number(value);
+            return acc;
+          },
+          {},
+        )
+        : {},
+      criterionPassed: isObject(object.criterionPassed)
+        ? (globalThis.Object.entries(object.criterionPassed) as [string, any][]).reduce(
+          (acc: { [key: string]: boolean }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.Boolean(value);
+            return acc;
+          },
+          {},
+        )
+        : isObject(object.criterion_passed)
+        ? (globalThis.Object.entries(object.criterion_passed) as [string, any][]).reduce(
+          (acc: { [key: string]: boolean }, [key, value]: [string, any]) => {
+            acc[key] = globalThis.Boolean(value);
+            return acc;
+          },
+          {},
+        )
+        : {},
     };
   },
 
@@ -5629,6 +5763,24 @@ export const ScreenResult: MessageFns<ScreenResult> = {
     if (message.held !== false) {
       obj.held = message.held;
     }
+    if (message.criterionRawValues) {
+      const entries = globalThis.Object.entries(message.criterionRawValues) as [string, number][];
+      if (entries.length > 0) {
+        obj.criterionRawValues = {};
+        entries.forEach(([k, v]) => {
+          obj.criterionRawValues[k] = v;
+        });
+      }
+    }
+    if (message.criterionPassed) {
+      const entries = globalThis.Object.entries(message.criterionPassed) as [string, boolean][];
+      if (entries.length > 0) {
+        obj.criterionPassed = {};
+        entries.forEach(([k, v]) => {
+          obj.criterionPassed[k] = v;
+        });
+      }
+    }
     return obj;
   },
 
@@ -5656,6 +5808,22 @@ export const ScreenResult: MessageFns<ScreenResult> = {
     message.atr = object.atr ?? 0;
     message.revGrowth = object.revGrowth ?? 0;
     message.held = object.held ?? false;
+    message.criterionRawValues = (globalThis.Object.entries(object.criterionRawValues ?? {}) as [string, number][])
+      .reduce((acc: { [key: string]: number }, [key, value]: [string, number]) => {
+        if (value !== undefined) {
+          acc[key] = globalThis.Number(value);
+        }
+        return acc;
+      }, {});
+    message.criterionPassed = (globalThis.Object.entries(object.criterionPassed ?? {}) as [string, boolean][]).reduce(
+      (acc: { [key: string]: boolean }, [key, value]: [string, boolean]) => {
+        if (value !== undefined) {
+          acc[key] = globalThis.Boolean(value);
+        }
+        return acc;
+      },
+      {},
+    );
     return message;
   },
 };
@@ -5736,6 +5904,166 @@ export const ScreenResult_CriterionScoresEntry: MessageFns<ScreenResult_Criterio
     const message = createBaseScreenResult_CriterionScoresEntry();
     message.key = object.key ?? "";
     message.value = object.value ?? 0;
+    return message;
+  },
+};
+
+function createBaseScreenResult_CriterionRawValuesEntry(): ScreenResult_CriterionRawValuesEntry {
+  return { key: "", value: 0 };
+}
+
+export const ScreenResult_CriterionRawValuesEntry: MessageFns<ScreenResult_CriterionRawValuesEntry> = {
+  encode(message: ScreenResult_CriterionRawValuesEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== 0) {
+      writer.uint32(17).double(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ScreenResult_CriterionRawValuesEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseScreenResult_CriterionRawValuesEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 17) {
+            break;
+          }
+
+          message.value = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ScreenResult_CriterionRawValuesEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.Number(object.value) : 0,
+    };
+  },
+
+  toJSON(message: ScreenResult_CriterionRawValuesEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== 0) {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ScreenResult_CriterionRawValuesEntry>, I>>(
+    base?: I,
+  ): ScreenResult_CriterionRawValuesEntry {
+    return ScreenResult_CriterionRawValuesEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ScreenResult_CriterionRawValuesEntry>, I>>(
+    object: I,
+  ): ScreenResult_CriterionRawValuesEntry {
+    const message = createBaseScreenResult_CriterionRawValuesEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? 0;
+    return message;
+  },
+};
+
+function createBaseScreenResult_CriterionPassedEntry(): ScreenResult_CriterionPassedEntry {
+  return { key: "", value: false };
+}
+
+export const ScreenResult_CriterionPassedEntry: MessageFns<ScreenResult_CriterionPassedEntry> = {
+  encode(message: ScreenResult_CriterionPassedEntry, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.key !== "") {
+      writer.uint32(10).string(message.key);
+    }
+    if (message.value !== false) {
+      writer.uint32(16).bool(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ScreenResult_CriterionPassedEntry {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseScreenResult_CriterionPassedEntry();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.key = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.value = reader.bool();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ScreenResult_CriterionPassedEntry {
+    return {
+      key: isSet(object.key) ? globalThis.String(object.key) : "",
+      value: isSet(object.value) ? globalThis.Boolean(object.value) : false,
+    };
+  },
+
+  toJSON(message: ScreenResult_CriterionPassedEntry): unknown {
+    const obj: any = {};
+    if (message.key !== "") {
+      obj.key = message.key;
+    }
+    if (message.value !== false) {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ScreenResult_CriterionPassedEntry>, I>>(
+    base?: I,
+  ): ScreenResult_CriterionPassedEntry {
+    return ScreenResult_CriterionPassedEntry.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ScreenResult_CriterionPassedEntry>, I>>(
+    object: I,
+  ): ScreenResult_CriterionPassedEntry {
+    const message = createBaseScreenResult_CriterionPassedEntry();
+    message.key = object.key ?? "";
+    message.value = object.value ?? false;
     return message;
   },
 };
@@ -7586,6 +7914,454 @@ export const GetStrategyAnalyticsRequest: MessageFns<GetStrategyAnalyticsRequest
   },
 };
 
+function createBaseGetIndicatorSeriesRequest(): GetIndicatorSeriesRequest {
+  return { strategyId: "", symbol: "", closes: [], times: [] };
+}
+
+export const GetIndicatorSeriesRequest: MessageFns<GetIndicatorSeriesRequest> = {
+  encode(message: GetIndicatorSeriesRequest, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.strategyId !== "") {
+      writer.uint32(10).string(message.strategyId);
+    }
+    if (message.symbol !== "") {
+      writer.uint32(18).string(message.symbol);
+    }
+    writer.uint32(26).fork();
+    for (const v of message.closes) {
+      writer.double(v);
+    }
+    writer.join();
+    for (const v of message.times) {
+      Timestamp.encode(toTimestamp(v!), writer.uint32(34).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetIndicatorSeriesRequest {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetIndicatorSeriesRequest();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.strategyId = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.symbol = reader.string();
+          continue;
+        }
+        case 3: {
+          if (tag === 25) {
+            message.closes.push(reader.double());
+
+            continue;
+          }
+
+          if (tag === 26) {
+            const end2 = reader.uint32() + reader.pos;
+            while (reader.pos < end2) {
+              message.closes.push(reader.double());
+            }
+
+            continue;
+          }
+
+          break;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.times.push(fromTimestamp(Timestamp.decode(reader, reader.uint32())));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetIndicatorSeriesRequest {
+    return {
+      strategyId: isSet(object.strategyId)
+        ? globalThis.String(object.strategyId)
+        : isSet(object.strategy_id)
+        ? globalThis.String(object.strategy_id)
+        : "",
+      symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+      closes: globalThis.Array.isArray(object?.closes) ? object.closes.map((e: any) => globalThis.Number(e)) : [],
+      times: globalThis.Array.isArray(object?.times) ? object.times.map((e: any) => fromJsonTimestamp(e)) : [],
+    };
+  },
+
+  toJSON(message: GetIndicatorSeriesRequest): unknown {
+    const obj: any = {};
+    if (message.strategyId !== "") {
+      obj.strategyId = message.strategyId;
+    }
+    if (message.symbol !== "") {
+      obj.symbol = message.symbol;
+    }
+    if (message.closes?.length) {
+      obj.closes = message.closes;
+    }
+    if (message.times?.length) {
+      obj.times = message.times.map((e) => e.toISOString());
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetIndicatorSeriesRequest>, I>>(base?: I): GetIndicatorSeriesRequest {
+    return GetIndicatorSeriesRequest.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetIndicatorSeriesRequest>, I>>(object: I): GetIndicatorSeriesRequest {
+    const message = createBaseGetIndicatorSeriesRequest();
+    message.strategyId = object.strategyId ?? "";
+    message.symbol = object.symbol ?? "";
+    message.closes = object.closes?.map((e) => e) || [];
+    message.times = object.times?.map((e) => e) || [];
+    return message;
+  },
+};
+
+function createBaseGetIndicatorSeriesResponse(): GetIndicatorSeriesResponse {
+  return { times: [], components: [] };
+}
+
+export const GetIndicatorSeriesResponse: MessageFns<GetIndicatorSeriesResponse> = {
+  encode(message: GetIndicatorSeriesResponse, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    for (const v of message.times) {
+      Timestamp.encode(toTimestamp(v!), writer.uint32(10).fork()).join();
+    }
+    for (const v of message.components) {
+      ComponentSeries.encode(v!, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): GetIndicatorSeriesResponse {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseGetIndicatorSeriesResponse();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.times.push(fromTimestamp(Timestamp.decode(reader, reader.uint32())));
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.components.push(ComponentSeries.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): GetIndicatorSeriesResponse {
+    return {
+      times: globalThis.Array.isArray(object?.times) ? object.times.map((e: any) => fromJsonTimestamp(e)) : [],
+      components: globalThis.Array.isArray(object?.components)
+        ? object.components.map((e: any) => ComponentSeries.fromJSON(e))
+        : [],
+    };
+  },
+
+  toJSON(message: GetIndicatorSeriesResponse): unknown {
+    const obj: any = {};
+    if (message.times?.length) {
+      obj.times = message.times.map((e) => e.toISOString());
+    }
+    if (message.components?.length) {
+      obj.components = message.components.map((e) => ComponentSeries.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<GetIndicatorSeriesResponse>, I>>(base?: I): GetIndicatorSeriesResponse {
+    return GetIndicatorSeriesResponse.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<GetIndicatorSeriesResponse>, I>>(object: I): GetIndicatorSeriesResponse {
+    const message = createBaseGetIndicatorSeriesResponse();
+    message.times = object.times?.map((e) => e) || [];
+    message.components = object.components?.map((e) => ComponentSeries.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseComponentSeries(): ComponentSeries {
+  return { refName: "", kind: ComponentKind.COMPONENT_KIND_UNSPECIFIED, series: [], error: "" };
+}
+
+export const ComponentSeries: MessageFns<ComponentSeries> = {
+  encode(message: ComponentSeries, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.refName !== "") {
+      writer.uint32(10).string(message.refName);
+    }
+    if (message.kind !== ComponentKind.COMPONENT_KIND_UNSPECIFIED) {
+      writer.uint32(16).int32(componentKindToNumber(message.kind));
+    }
+    for (const v of message.series) {
+      NamedSeries.encode(v!, writer.uint32(26).fork()).join();
+    }
+    if (message.error !== "") {
+      writer.uint32(34).string(message.error);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): ComponentSeries {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseComponentSeries();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.refName = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 16) {
+            break;
+          }
+
+          message.kind = componentKindFromJSON(reader.int32());
+          continue;
+        }
+        case 3: {
+          if (tag !== 26) {
+            break;
+          }
+
+          message.series.push(NamedSeries.decode(reader, reader.uint32()));
+          continue;
+        }
+        case 4: {
+          if (tag !== 34) {
+            break;
+          }
+
+          message.error = reader.string();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): ComponentSeries {
+    return {
+      refName: isSet(object.refName)
+        ? globalThis.String(object.refName)
+        : isSet(object.ref_name)
+        ? globalThis.String(object.ref_name)
+        : "",
+      kind: isSet(object.kind) ? componentKindFromJSON(object.kind) : ComponentKind.COMPONENT_KIND_UNSPECIFIED,
+      series: globalThis.Array.isArray(object?.series) ? object.series.map((e: any) => NamedSeries.fromJSON(e)) : [],
+      error: isSet(object.error) ? globalThis.String(object.error) : "",
+    };
+  },
+
+  toJSON(message: ComponentSeries): unknown {
+    const obj: any = {};
+    if (message.refName !== "") {
+      obj.refName = message.refName;
+    }
+    if (message.kind !== ComponentKind.COMPONENT_KIND_UNSPECIFIED) {
+      obj.kind = componentKindToJSON(message.kind);
+    }
+    if (message.series?.length) {
+      obj.series = message.series.map((e) => NamedSeries.toJSON(e));
+    }
+    if (message.error !== "") {
+      obj.error = message.error;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<ComponentSeries>, I>>(base?: I): ComponentSeries {
+    return ComponentSeries.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<ComponentSeries>, I>>(object: I): ComponentSeries {
+    const message = createBaseComponentSeries();
+    message.refName = object.refName ?? "";
+    message.kind = object.kind ?? ComponentKind.COMPONENT_KIND_UNSPECIFIED;
+    message.series = object.series?.map((e) => NamedSeries.fromPartial(e)) || [];
+    message.error = object.error ?? "";
+    return message;
+  },
+};
+
+function createBaseNamedSeries(): NamedSeries {
+  return { name: "", values: [] };
+}
+
+export const NamedSeries: MessageFns<NamedSeries> = {
+  encode(message: NamedSeries, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.name !== "") {
+      writer.uint32(10).string(message.name);
+    }
+    for (const v of message.values) {
+      IndicatorValue.encode(v!, writer.uint32(18).fork()).join();
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): NamedSeries {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseNamedSeries();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 10) {
+            break;
+          }
+
+          message.name = reader.string();
+          continue;
+        }
+        case 2: {
+          if (tag !== 18) {
+            break;
+          }
+
+          message.values.push(IndicatorValue.decode(reader, reader.uint32()));
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): NamedSeries {
+    return {
+      name: isSet(object.name) ? globalThis.String(object.name) : "",
+      values: globalThis.Array.isArray(object?.values) ? object.values.map((e: any) => IndicatorValue.fromJSON(e)) : [],
+    };
+  },
+
+  toJSON(message: NamedSeries): unknown {
+    const obj: any = {};
+    if (message.name !== "") {
+      obj.name = message.name;
+    }
+    if (message.values?.length) {
+      obj.values = message.values.map((e) => IndicatorValue.toJSON(e));
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<NamedSeries>, I>>(base?: I): NamedSeries {
+    return NamedSeries.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<NamedSeries>, I>>(object: I): NamedSeries {
+    const message = createBaseNamedSeries();
+    message.name = object.name ?? "";
+    message.values = object.values?.map((e) => IndicatorValue.fromPartial(e)) || [];
+    return message;
+  },
+};
+
+function createBaseIndicatorValue(): IndicatorValue {
+  return { value: undefined };
+}
+
+export const IndicatorValue: MessageFns<IndicatorValue> = {
+  encode(message: IndicatorValue, writer: BinaryWriter = new BinaryWriter()): BinaryWriter {
+    if (message.value !== undefined) {
+      writer.uint32(9).double(message.value);
+    }
+    return writer;
+  },
+
+  decode(input: BinaryReader | Uint8Array, length?: number): IndicatorValue {
+    const reader = input instanceof BinaryReader ? input : new BinaryReader(input);
+    const end = length === undefined ? reader.len : reader.pos + length;
+    const message = createBaseIndicatorValue();
+    while (reader.pos < end) {
+      const tag = reader.uint32();
+      switch (tag >>> 3) {
+        case 1: {
+          if (tag !== 9) {
+            break;
+          }
+
+          message.value = reader.double();
+          continue;
+        }
+      }
+      if ((tag & 7) === 4 || tag === 0) {
+        break;
+      }
+      reader.skip(tag & 7);
+    }
+    return message;
+  },
+
+  fromJSON(object: any): IndicatorValue {
+    return { value: isSet(object.value) ? globalThis.Number(object.value) : undefined };
+  },
+
+  toJSON(message: IndicatorValue): unknown {
+    const obj: any = {};
+    if (message.value !== undefined) {
+      obj.value = message.value;
+    }
+    return obj;
+  },
+
+  create<I extends Exact<DeepPartial<IndicatorValue>, I>>(base?: I): IndicatorValue {
+    return IndicatorValue.fromPartial(base ?? ({} as any));
+  },
+  fromPartial<I extends Exact<DeepPartial<IndicatorValue>, I>>(object: I): IndicatorValue {
+    const message = createBaseIndicatorValue();
+    message.value = object.value ?? undefined;
+    return message;
+  },
+};
+
 export type AnalysisServiceService = typeof AnalysisServiceService;
 export const AnalysisServiceService = {
   runBacktest: {
@@ -7771,6 +8547,23 @@ export const AnalysisServiceService = {
     responseSerialize: (value: StrategyAnalytics): Buffer => Buffer.from(StrategyAnalytics.encode(value).finish()),
     responseDeserialize: (value: Buffer): StrategyAnalytics => StrategyAnalytics.decode(value),
   },
+  /**
+   * Per-component historical indicator series for a strategy over a caller-supplied bar window,
+   * for the unified Symbol page's overlay panels (feature 125, FR-6). Reuses the analysis
+   * evaluator's own _compute_component per declared component in a dedicated handler loop — never
+   * the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
+   */
+  getIndicatorSeries: {
+    path: "/xstockstrat.analysis.v1.AnalysisService/GetIndicatorSeries" as const,
+    requestStream: false as const,
+    responseStream: false as const,
+    requestSerialize: (value: GetIndicatorSeriesRequest): Buffer =>
+      Buffer.from(GetIndicatorSeriesRequest.encode(value).finish()),
+    requestDeserialize: (value: Buffer): GetIndicatorSeriesRequest => GetIndicatorSeriesRequest.decode(value),
+    responseSerialize: (value: GetIndicatorSeriesResponse): Buffer =>
+      Buffer.from(GetIndicatorSeriesResponse.encode(value).finish()),
+    responseDeserialize: (value: Buffer): GetIndicatorSeriesResponse => GetIndicatorSeriesResponse.decode(value),
+  },
 } as const;
 
 export interface AnalysisServiceServer extends UntypedServiceImplementation {
@@ -7809,6 +8602,13 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
   setOpportunityAction: handleUnaryCall<SetOpportunityActionRequest, SetOpportunityActionResponse>;
   /** Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share). */
   getStrategyAnalytics: handleUnaryCall<GetStrategyAnalyticsRequest, StrategyAnalytics>;
+  /**
+   * Per-component historical indicator series for a strategy over a caller-supplied bar window,
+   * for the unified Symbol page's overlay panels (feature 125, FR-6). Reuses the analysis
+   * evaluator's own _compute_component per declared component in a dedicated handler loop — never
+   * the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
+   */
+  getIndicatorSeries: handleUnaryCall<GetIndicatorSeriesRequest, GetIndicatorSeriesResponse>;
 }
 
 export interface AnalysisServiceClient extends Client {
@@ -8070,6 +8870,27 @@ export interface AnalysisServiceClient extends Client {
     metadata: Metadata,
     options: Partial<CallOptions>,
     callback: (error: ServiceError | null, response: StrategyAnalytics) => void,
+  ): ClientUnaryCall;
+  /**
+   * Per-component historical indicator series for a strategy over a caller-supplied bar window,
+   * for the unified Symbol page's overlay panels (feature 125, FR-6). Reuses the analysis
+   * evaluator's own _compute_component per declared component in a dedicated handler loop — never
+   * the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
+   */
+  getIndicatorSeries(
+    request: GetIndicatorSeriesRequest,
+    callback: (error: ServiceError | null, response: GetIndicatorSeriesResponse) => void,
+  ): ClientUnaryCall;
+  getIndicatorSeries(
+    request: GetIndicatorSeriesRequest,
+    metadata: Metadata,
+    callback: (error: ServiceError | null, response: GetIndicatorSeriesResponse) => void,
+  ): ClientUnaryCall;
+  getIndicatorSeries(
+    request: GetIndicatorSeriesRequest,
+    metadata: Metadata,
+    options: Partial<CallOptions>,
+    callback: (error: ServiceError | null, response: GetIndicatorSeriesResponse) => void,
   ): ClientUnaryCall;
 }
 

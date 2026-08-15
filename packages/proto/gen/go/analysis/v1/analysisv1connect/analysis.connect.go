@@ -81,6 +81,9 @@ const (
 	// AnalysisServiceGetStrategyAnalyticsProcedure is the fully-qualified name of the AnalysisService's
 	// GetStrategyAnalytics RPC.
 	AnalysisServiceGetStrategyAnalyticsProcedure = "/xstockstrat.analysis.v1.AnalysisService/GetStrategyAnalytics"
+	// AnalysisServiceGetIndicatorSeriesProcedure is the fully-qualified name of the AnalysisService's
+	// GetIndicatorSeries RPC.
+	AnalysisServiceGetIndicatorSeriesProcedure = "/xstockstrat.analysis.v1.AnalysisService/GetIndicatorSeries"
 )
 
 // AnalysisServiceClient is a client for the xstockstrat.analysis.v1.AnalysisService service.
@@ -114,6 +117,11 @@ type AnalysisServiceClient interface {
 	SetOpportunityAction(context.Context, *connect.Request[v1.SetOpportunityActionRequest]) (*connect.Response[v1.SetOpportunityActionResponse], error)
 	// Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share).
 	GetStrategyAnalytics(context.Context, *connect.Request[v1.GetStrategyAnalyticsRequest]) (*connect.Response[v1.StrategyAnalytics], error)
+	// Per-component historical indicator series for a strategy over a caller-supplied bar window,
+	// for the unified Symbol page's overlay panels (feature 125, FR-6). Reuses the analysis
+	// evaluator's own _compute_component per declared component in a dedicated handler loop — never
+	// the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
+	GetIndicatorSeries(context.Context, *connect.Request[v1.GetIndicatorSeriesRequest]) (*connect.Response[v1.GetIndicatorSeriesResponse], error)
 }
 
 // NewAnalysisServiceClient constructs a client for the xstockstrat.analysis.v1.AnalysisService
@@ -223,6 +231,12 @@ func NewAnalysisServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(analysisServiceMethods.ByName("GetStrategyAnalytics")),
 			connect.WithClientOptions(opts...),
 		),
+		getIndicatorSeries: connect.NewClient[v1.GetIndicatorSeriesRequest, v1.GetIndicatorSeriesResponse](
+			httpClient,
+			baseURL+AnalysisServiceGetIndicatorSeriesProcedure,
+			connect.WithSchema(analysisServiceMethods.ByName("GetIndicatorSeries")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -244,6 +258,7 @@ type analysisServiceClient struct {
 	evaluateReadiness       *connect.Client[v1.EvaluateReadinessRequest, v1.EvaluateReadinessResponse]
 	setOpportunityAction    *connect.Client[v1.SetOpportunityActionRequest, v1.SetOpportunityActionResponse]
 	getStrategyAnalytics    *connect.Client[v1.GetStrategyAnalyticsRequest, v1.StrategyAnalytics]
+	getIndicatorSeries      *connect.Client[v1.GetIndicatorSeriesRequest, v1.GetIndicatorSeriesResponse]
 }
 
 // RunBacktest calls xstockstrat.analysis.v1.AnalysisService.RunBacktest.
@@ -326,6 +341,11 @@ func (c *analysisServiceClient) GetStrategyAnalytics(ctx context.Context, req *c
 	return c.getStrategyAnalytics.CallUnary(ctx, req)
 }
 
+// GetIndicatorSeries calls xstockstrat.analysis.v1.AnalysisService.GetIndicatorSeries.
+func (c *analysisServiceClient) GetIndicatorSeries(ctx context.Context, req *connect.Request[v1.GetIndicatorSeriesRequest]) (*connect.Response[v1.GetIndicatorSeriesResponse], error) {
+	return c.getIndicatorSeries.CallUnary(ctx, req)
+}
+
 // AnalysisServiceHandler is an implementation of the xstockstrat.analysis.v1.AnalysisService
 // service.
 type AnalysisServiceHandler interface {
@@ -358,6 +378,11 @@ type AnalysisServiceHandler interface {
 	SetOpportunityAction(context.Context, *connect.Request[v1.SetOpportunityActionRequest]) (*connect.Response[v1.SetOpportunityActionResponse], error)
 	// Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share).
 	GetStrategyAnalytics(context.Context, *connect.Request[v1.GetStrategyAnalyticsRequest]) (*connect.Response[v1.StrategyAnalytics], error)
+	// Per-component historical indicator series for a strategy over a caller-supplied bar window,
+	// for the unified Symbol page's overlay panels (feature 125, FR-6). Reuses the analysis
+	// evaluator's own _compute_component per declared component in a dedicated handler loop — never
+	// the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
+	GetIndicatorSeries(context.Context, *connect.Request[v1.GetIndicatorSeriesRequest]) (*connect.Response[v1.GetIndicatorSeriesResponse], error)
 }
 
 // NewAnalysisServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -463,6 +488,12 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 		connect.WithSchema(analysisServiceMethods.ByName("GetStrategyAnalytics")),
 		connect.WithHandlerOptions(opts...),
 	)
+	analysisServiceGetIndicatorSeriesHandler := connect.NewUnaryHandler(
+		AnalysisServiceGetIndicatorSeriesProcedure,
+		svc.GetIndicatorSeries,
+		connect.WithSchema(analysisServiceMethods.ByName("GetIndicatorSeries")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/xstockstrat.analysis.v1.AnalysisService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AnalysisServiceRunBacktestProcedure:
@@ -497,6 +528,8 @@ func NewAnalysisServiceHandler(svc AnalysisServiceHandler, opts ...connect.Handl
 			analysisServiceSetOpportunityActionHandler.ServeHTTP(w, r)
 		case AnalysisServiceGetStrategyAnalyticsProcedure:
 			analysisServiceGetStrategyAnalyticsHandler.ServeHTTP(w, r)
+		case AnalysisServiceGetIndicatorSeriesProcedure:
+			analysisServiceGetIndicatorSeriesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -568,4 +601,8 @@ func (UnimplementedAnalysisServiceHandler) SetOpportunityAction(context.Context,
 
 func (UnimplementedAnalysisServiceHandler) GetStrategyAnalytics(context.Context, *connect.Request[v1.GetStrategyAnalyticsRequest]) (*connect.Response[v1.StrategyAnalytics], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.GetStrategyAnalytics is not implemented"))
+}
+
+func (UnimplementedAnalysisServiceHandler) GetIndicatorSeries(context.Context, *connect.Request[v1.GetIndicatorSeriesRequest]) (*connect.Response[v1.GetIndicatorSeriesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("xstockstrat.analysis.v1.AnalysisService.GetIndicatorSeries is not implemented"))
 }

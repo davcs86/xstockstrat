@@ -192,6 +192,7 @@ Namespace: `analysis`
 | `analysis.screener.max_duration_seconds` | int | `120` | Overall deadline for one screener scan |
 | `analysis.screener.default_rank_limit` | int | `50` | Default number of ranked results returned when the request omits `rank_limit` |
 | `analysis.screener.max_concurrent_formula_evals` | int | `4` | Max concurrent `ExecuteFormula` evaluations during a scan (semaphore-bounded so a scan can't starve the live loop) |
+| `analysis.series.max_concurrent_components` | int | `4` | Process-lifetime singleton semaphore bounding cross-request concurrency of per-component `ComputeIndicator`/`ExecuteFormula` execution driven by `GetIndicatorSeries` (feature 125, FR-6), so a routinely-visited Symbol page can't starve the analysis live loop — mirrors `analysis.screener.max_concurrent_formula_evals`. Read once in `AnalysisServicer.__init__` via `get_int` with a `max(1, …)` clamp (a `0` reads as the default 4 via `get_int`'s zero-trap; the clamp guards a negative value from reaching `asyncio.Semaphore`). |
 | `analysis.fundsignal.enabled` | bool | `false` | Master gate for the fundamentals signal producer loop (feature 062) |
 | `analysis.fundsignal.run_interval_hours` | int | `24` | Hours between scheduled producer cycles |
 | `analysis.fundsignal.universe_source` | string | `watchlists` | Symbol universe source: `watchlists` \| `explicit` \| `both` (watchlists union pends a global portfolio RPC; falls back to `explicit`) |

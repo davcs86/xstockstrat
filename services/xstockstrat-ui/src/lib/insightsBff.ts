@@ -53,6 +53,8 @@ router.service(AnalysisService, {
   listOpportunities: forward((req, opts) => analysisClient.listOpportunities(req, opts)),
   evaluateReadiness: forward((req, opts) => analysisClient.evaluateReadiness(req, opts)),
   getStrategyAnalytics: forward((req, opts) => analysisClient.getStrategyAnalytics(req, opts)),
+  // feature 125 (FR-6): per-component indicator series for the Symbol page's overlay panels.
+  getIndicatorSeries: forward((req, opts) => analysisClient.getIndicatorSeries(req, opts)),
 });
 
 router.service(IngestService, {

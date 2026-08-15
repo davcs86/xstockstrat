@@ -5,8 +5,8 @@
 //   protoc               unknown
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.SymbolReadiness = exports.ConditionEval = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.OpportunityAction = exports.ReadinessRule = exports.ConditionState = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.BacktestStatus = exports.protobufPackage = void 0;
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = void 0;
+exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionPassedEntry = exports.ScreenResult_CriterionRawValuesEntry = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.OpportunityAction = exports.ReadinessRule = exports.ConditionState = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.BacktestStatus = exports.protobufPackage = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.IndicatorValue = exports.NamedSeries = exports.ComponentSeries = exports.GetIndicatorSeriesResponse = exports.GetIndicatorSeriesRequest = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = void 0;
 exports.backtestStatusFromJSON = backtestStatusFromJSON;
 exports.backtestStatusToJSON = backtestStatusToJSON;
 exports.backtestStatusToNumber = backtestStatusToNumber;
@@ -4529,6 +4529,8 @@ function createBaseScreenResult() {
         atr: 0,
         revGrowth: 0,
         held: false,
+        criterionRawValues: {},
+        criterionPassed: {},
     };
 }
 exports.ScreenResult = {
@@ -4566,6 +4568,12 @@ exports.ScreenResult = {
         if (message.held !== false) {
             writer.uint32(88).bool(message.held);
         }
+        globalThis.Object.entries(message.criterionRawValues).forEach(([key, value]) => {
+            exports.ScreenResult_CriterionRawValuesEntry.encode({ key: key, value }, writer.uint32(98).fork()).join();
+        });
+        globalThis.Object.entries(message.criterionPassed).forEach(([key, value]) => {
+            exports.ScreenResult_CriterionPassedEntry.encode({ key: key, value }, writer.uint32(106).fork()).join();
+        });
         return writer;
     },
     decode(input, length) {
@@ -4655,6 +4663,26 @@ exports.ScreenResult = {
                     message.held = reader.bool();
                     continue;
                 }
+                case 12: {
+                    if (tag !== 98) {
+                        break;
+                    }
+                    const entry12 = exports.ScreenResult_CriterionRawValuesEntry.decode(reader, reader.uint32());
+                    if (entry12.value !== undefined) {
+                        message.criterionRawValues[entry12.key] = entry12.value;
+                    }
+                    continue;
+                }
+                case 13: {
+                    if (tag !== 106) {
+                        break;
+                    }
+                    const entry13 = exports.ScreenResult_CriterionPassedEntry.decode(reader, reader.uint32());
+                    if (entry13.value !== undefined) {
+                        message.criterionPassed[entry13.key] = entry13.value;
+                    }
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -4692,6 +4720,28 @@ exports.ScreenResult = {
                     ? globalThis.Number(object.rev_growth)
                     : 0,
             held: isSet(object.held) ? globalThis.Boolean(object.held) : false,
+            criterionRawValues: isObject(object.criterionRawValues)
+                ? globalThis.Object.entries(object.criterionRawValues).reduce((acc, [key, value]) => {
+                    acc[key] = globalThis.Number(value);
+                    return acc;
+                }, {})
+                : isObject(object.criterion_raw_values)
+                    ? globalThis.Object.entries(object.criterion_raw_values).reduce((acc, [key, value]) => {
+                        acc[key] = globalThis.Number(value);
+                        return acc;
+                    }, {})
+                    : {},
+            criterionPassed: isObject(object.criterionPassed)
+                ? globalThis.Object.entries(object.criterionPassed).reduce((acc, [key, value]) => {
+                    acc[key] = globalThis.Boolean(value);
+                    return acc;
+                }, {})
+                : isObject(object.criterion_passed)
+                    ? globalThis.Object.entries(object.criterion_passed).reduce((acc, [key, value]) => {
+                        acc[key] = globalThis.Boolean(value);
+                        return acc;
+                    }, {})
+                    : {},
         };
     },
     toJSON(message) {
@@ -4735,6 +4785,24 @@ exports.ScreenResult = {
         if (message.held !== false) {
             obj.held = message.held;
         }
+        if (message.criterionRawValues) {
+            const entries = globalThis.Object.entries(message.criterionRawValues);
+            if (entries.length > 0) {
+                obj.criterionRawValues = {};
+                entries.forEach(([k, v]) => {
+                    obj.criterionRawValues[k] = v;
+                });
+            }
+        }
+        if (message.criterionPassed) {
+            const entries = globalThis.Object.entries(message.criterionPassed);
+            if (entries.length > 0) {
+                obj.criterionPassed = {};
+                entries.forEach(([k, v]) => {
+                    obj.criterionPassed[k] = v;
+                });
+            }
+        }
         return obj;
     },
     create(base) {
@@ -4758,6 +4826,19 @@ exports.ScreenResult = {
         message.atr = object.atr ?? 0;
         message.revGrowth = object.revGrowth ?? 0;
         message.held = object.held ?? false;
+        message.criterionRawValues = globalThis.Object.entries(object.criterionRawValues ?? {})
+            .reduce((acc, [key, value]) => {
+            if (value !== undefined) {
+                acc[key] = globalThis.Number(value);
+            }
+            return acc;
+        }, {});
+        message.criterionPassed = globalThis.Object.entries(object.criterionPassed ?? {}).reduce((acc, [key, value]) => {
+            if (value !== undefined) {
+                acc[key] = globalThis.Boolean(value);
+            }
+            return acc;
+        }, {});
         return message;
     },
 };
@@ -4826,6 +4907,142 @@ exports.ScreenResult_CriterionScoresEntry = {
         const message = createBaseScreenResult_CriterionScoresEntry();
         message.key = object.key ?? "";
         message.value = object.value ?? 0;
+        return message;
+    },
+};
+function createBaseScreenResult_CriterionRawValuesEntry() {
+    return { key: "", value: 0 };
+}
+exports.ScreenResult_CriterionRawValuesEntry = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.key !== "") {
+            writer.uint32(10).string(message.key);
+        }
+        if (message.value !== 0) {
+            writer.uint32(17).double(message.value);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseScreenResult_CriterionRawValuesEntry();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.key = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 17) {
+                        break;
+                    }
+                    message.value = reader.double();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            key: isSet(object.key) ? globalThis.String(object.key) : "",
+            value: isSet(object.value) ? globalThis.Number(object.value) : 0,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.key !== "") {
+            obj.key = message.key;
+        }
+        if (message.value !== 0) {
+            obj.value = message.value;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ScreenResult_CriterionRawValuesEntry.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseScreenResult_CriterionRawValuesEntry();
+        message.key = object.key ?? "";
+        message.value = object.value ?? 0;
+        return message;
+    },
+};
+function createBaseScreenResult_CriterionPassedEntry() {
+    return { key: "", value: false };
+}
+exports.ScreenResult_CriterionPassedEntry = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.key !== "") {
+            writer.uint32(10).string(message.key);
+        }
+        if (message.value !== false) {
+            writer.uint32(16).bool(message.value);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseScreenResult_CriterionPassedEntry();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.key = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.value = reader.bool();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            key: isSet(object.key) ? globalThis.String(object.key) : "",
+            value: isSet(object.value) ? globalThis.Boolean(object.value) : false,
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.key !== "") {
+            obj.key = message.key;
+        }
+        if (message.value !== false) {
+            obj.value = message.value;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ScreenResult_CriterionPassedEntry.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseScreenResult_CriterionPassedEntry();
+        message.key = object.key ?? "";
+        message.value = object.value ?? false;
         return message;
     },
 };
@@ -6523,6 +6740,408 @@ exports.GetStrategyAnalyticsRequest = {
         return message;
     },
 };
+function createBaseGetIndicatorSeriesRequest() {
+    return { strategyId: "", symbol: "", closes: [], times: [] };
+}
+exports.GetIndicatorSeriesRequest = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.strategyId !== "") {
+            writer.uint32(10).string(message.strategyId);
+        }
+        if (message.symbol !== "") {
+            writer.uint32(18).string(message.symbol);
+        }
+        writer.uint32(26).fork();
+        for (const v of message.closes) {
+            writer.double(v);
+        }
+        writer.join();
+        for (const v of message.times) {
+            timestamp_1.Timestamp.encode(toTimestamp(v), writer.uint32(34).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetIndicatorSeriesRequest();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.strategyId = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.symbol = reader.string();
+                    continue;
+                }
+                case 3: {
+                    if (tag === 25) {
+                        message.closes.push(reader.double());
+                        continue;
+                    }
+                    if (tag === 26) {
+                        const end2 = reader.uint32() + reader.pos;
+                        while (reader.pos < end2) {
+                            message.closes.push(reader.double());
+                        }
+                        continue;
+                    }
+                    break;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.times.push(fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32())));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            strategyId: isSet(object.strategyId)
+                ? globalThis.String(object.strategyId)
+                : isSet(object.strategy_id)
+                    ? globalThis.String(object.strategy_id)
+                    : "",
+            symbol: isSet(object.symbol) ? globalThis.String(object.symbol) : "",
+            closes: globalThis.Array.isArray(object?.closes) ? object.closes.map((e) => globalThis.Number(e)) : [],
+            times: globalThis.Array.isArray(object?.times) ? object.times.map((e) => fromJsonTimestamp(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.strategyId !== "") {
+            obj.strategyId = message.strategyId;
+        }
+        if (message.symbol !== "") {
+            obj.symbol = message.symbol;
+        }
+        if (message.closes?.length) {
+            obj.closes = message.closes;
+        }
+        if (message.times?.length) {
+            obj.times = message.times.map((e) => e.toISOString());
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetIndicatorSeriesRequest.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetIndicatorSeriesRequest();
+        message.strategyId = object.strategyId ?? "";
+        message.symbol = object.symbol ?? "";
+        message.closes = object.closes?.map((e) => e) || [];
+        message.times = object.times?.map((e) => e) || [];
+        return message;
+    },
+};
+function createBaseGetIndicatorSeriesResponse() {
+    return { times: [], components: [] };
+}
+exports.GetIndicatorSeriesResponse = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        for (const v of message.times) {
+            timestamp_1.Timestamp.encode(toTimestamp(v), writer.uint32(10).fork()).join();
+        }
+        for (const v of message.components) {
+            exports.ComponentSeries.encode(v, writer.uint32(18).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseGetIndicatorSeriesResponse();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.times.push(fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32())));
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.components.push(exports.ComponentSeries.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            times: globalThis.Array.isArray(object?.times) ? object.times.map((e) => fromJsonTimestamp(e)) : [],
+            components: globalThis.Array.isArray(object?.components)
+                ? object.components.map((e) => exports.ComponentSeries.fromJSON(e))
+                : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.times?.length) {
+            obj.times = message.times.map((e) => e.toISOString());
+        }
+        if (message.components?.length) {
+            obj.components = message.components.map((e) => exports.ComponentSeries.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.GetIndicatorSeriesResponse.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseGetIndicatorSeriesResponse();
+        message.times = object.times?.map((e) => e) || [];
+        message.components = object.components?.map((e) => exports.ComponentSeries.fromPartial(e)) || [];
+        return message;
+    },
+};
+function createBaseComponentSeries() {
+    return { refName: "", kind: ComponentKind.COMPONENT_KIND_UNSPECIFIED, series: [], error: "" };
+}
+exports.ComponentSeries = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.refName !== "") {
+            writer.uint32(10).string(message.refName);
+        }
+        if (message.kind !== ComponentKind.COMPONENT_KIND_UNSPECIFIED) {
+            writer.uint32(16).int32(componentKindToNumber(message.kind));
+        }
+        for (const v of message.series) {
+            exports.NamedSeries.encode(v, writer.uint32(26).fork()).join();
+        }
+        if (message.error !== "") {
+            writer.uint32(34).string(message.error);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseComponentSeries();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.refName = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 16) {
+                        break;
+                    }
+                    message.kind = componentKindFromJSON(reader.int32());
+                    continue;
+                }
+                case 3: {
+                    if (tag !== 26) {
+                        break;
+                    }
+                    message.series.push(exports.NamedSeries.decode(reader, reader.uint32()));
+                    continue;
+                }
+                case 4: {
+                    if (tag !== 34) {
+                        break;
+                    }
+                    message.error = reader.string();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            refName: isSet(object.refName)
+                ? globalThis.String(object.refName)
+                : isSet(object.ref_name)
+                    ? globalThis.String(object.ref_name)
+                    : "",
+            kind: isSet(object.kind) ? componentKindFromJSON(object.kind) : ComponentKind.COMPONENT_KIND_UNSPECIFIED,
+            series: globalThis.Array.isArray(object?.series) ? object.series.map((e) => exports.NamedSeries.fromJSON(e)) : [],
+            error: isSet(object.error) ? globalThis.String(object.error) : "",
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.refName !== "") {
+            obj.refName = message.refName;
+        }
+        if (message.kind !== ComponentKind.COMPONENT_KIND_UNSPECIFIED) {
+            obj.kind = componentKindToJSON(message.kind);
+        }
+        if (message.series?.length) {
+            obj.series = message.series.map((e) => exports.NamedSeries.toJSON(e));
+        }
+        if (message.error !== "") {
+            obj.error = message.error;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.ComponentSeries.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseComponentSeries();
+        message.refName = object.refName ?? "";
+        message.kind = object.kind ?? ComponentKind.COMPONENT_KIND_UNSPECIFIED;
+        message.series = object.series?.map((e) => exports.NamedSeries.fromPartial(e)) || [];
+        message.error = object.error ?? "";
+        return message;
+    },
+};
+function createBaseNamedSeries() {
+    return { name: "", values: [] };
+}
+exports.NamedSeries = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.name !== "") {
+            writer.uint32(10).string(message.name);
+        }
+        for (const v of message.values) {
+            exports.IndicatorValue.encode(v, writer.uint32(18).fork()).join();
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseNamedSeries();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 10) {
+                        break;
+                    }
+                    message.name = reader.string();
+                    continue;
+                }
+                case 2: {
+                    if (tag !== 18) {
+                        break;
+                    }
+                    message.values.push(exports.IndicatorValue.decode(reader, reader.uint32()));
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return {
+            name: isSet(object.name) ? globalThis.String(object.name) : "",
+            values: globalThis.Array.isArray(object?.values) ? object.values.map((e) => exports.IndicatorValue.fromJSON(e)) : [],
+        };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.name !== "") {
+            obj.name = message.name;
+        }
+        if (message.values?.length) {
+            obj.values = message.values.map((e) => exports.IndicatorValue.toJSON(e));
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.NamedSeries.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseNamedSeries();
+        message.name = object.name ?? "";
+        message.values = object.values?.map((e) => exports.IndicatorValue.fromPartial(e)) || [];
+        return message;
+    },
+};
+function createBaseIndicatorValue() {
+    return { value: undefined };
+}
+exports.IndicatorValue = {
+    encode(message, writer = new wire_1.BinaryWriter()) {
+        if (message.value !== undefined) {
+            writer.uint32(9).double(message.value);
+        }
+        return writer;
+    },
+    decode(input, length) {
+        const reader = input instanceof wire_1.BinaryReader ? input : new wire_1.BinaryReader(input);
+        const end = length === undefined ? reader.len : reader.pos + length;
+        const message = createBaseIndicatorValue();
+        while (reader.pos < end) {
+            const tag = reader.uint32();
+            switch (tag >>> 3) {
+                case 1: {
+                    if (tag !== 9) {
+                        break;
+                    }
+                    message.value = reader.double();
+                    continue;
+                }
+            }
+            if ((tag & 7) === 4 || tag === 0) {
+                break;
+            }
+            reader.skip(tag & 7);
+        }
+        return message;
+    },
+    fromJSON(object) {
+        return { value: isSet(object.value) ? globalThis.Number(object.value) : undefined };
+    },
+    toJSON(message) {
+        const obj = {};
+        if (message.value !== undefined) {
+            obj.value = message.value;
+        }
+        return obj;
+    },
+    create(base) {
+        return exports.IndicatorValue.fromPartial(base ?? {});
+    },
+    fromPartial(object) {
+        const message = createBaseIndicatorValue();
+        message.value = object.value ?? undefined;
+        return message;
+    },
+};
 exports.AnalysisServiceService = {
     runBacktest: {
         path: "/xstockstrat.analysis.v1.AnalysisService/RunBacktest",
@@ -6686,6 +7305,21 @@ exports.AnalysisServiceService = {
         requestDeserialize: (value) => exports.GetStrategyAnalyticsRequest.decode(value),
         responseSerialize: (value) => Buffer.from(exports.StrategyAnalytics.encode(value).finish()),
         responseDeserialize: (value) => exports.StrategyAnalytics.decode(value),
+    },
+    /**
+     * Per-component historical indicator series for a strategy over a caller-supplied bar window,
+     * for the unified Symbol page's overlay panels (feature 125, FR-6). Reuses the analysis
+     * evaluator's own _compute_component per declared component in a dedicated handler loop — never
+     * the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
+     */
+    getIndicatorSeries: {
+        path: "/xstockstrat.analysis.v1.AnalysisService/GetIndicatorSeries",
+        requestStream: false,
+        responseStream: false,
+        requestSerialize: (value) => Buffer.from(exports.GetIndicatorSeriesRequest.encode(value).finish()),
+        requestDeserialize: (value) => exports.GetIndicatorSeriesRequest.decode(value),
+        responseSerialize: (value) => Buffer.from(exports.GetIndicatorSeriesResponse.encode(value).finish()),
+        responseDeserialize: (value) => exports.GetIndicatorSeriesResponse.decode(value),
     },
 };
 exports.AnalysisServiceClient = (0, grpc_js_1.makeGenericClientConstructor)(exports.AnalysisServiceService, "xstockstrat.analysis.v1.AnalysisService");

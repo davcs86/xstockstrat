@@ -349,3 +349,49 @@ async def test_universe_truncated_to_cap():
     )
     resp = await engine.screen(req)
     assert len(resp.results) == 2  # capped to 2
+
+
+# ── feature 125 (FR-8): single-symbol raw per-criterion values + pass/fail ────
+
+
+async def test_single_symbol_criterion_raw_values_and_passed():
+    """FR-8: single-symbol screening exposes each criterion's real raw reading and pass/fail,
+    where the universe-relative `criterion_scores` collapse to a content-free 0.5 (min==max)."""
+    md = AsyncMock()
+    md.GetBars = AsyncMock(return_value=bars([1.0, 2.0, 3.0]))
+    ind = AsyncMock()
+    # One symbol, three formula criteria → three ExecuteFormula calls in criteria order:
+    #   f_pass raw 0.8 (GT 0.5 → pass), f_fail raw 0.8 (GT 0.9 → fail),
+    #   f_skip → formula error (skipped)
+    ind.ExecuteFormula = AsyncMock(
+        side_effect=[
+            formula_resp([0.8]),
+            formula_resp([0.8]),
+            SimpleNamespace(success=False, output=Struct(), error="boom"),
+        ]
+    )
+    engine = make_engine(md, ind)
+    req = analysis_pb2.ScreenSymbolsRequest(
+        symbols=["AAA"],
+        criteria=[
+            formula_criterion("f_pass", "fid_pass", analysis_pb2.COMPARATOR_GT, 0.5),
+            formula_criterion("f_fail", "fid_fail", analysis_pb2.COMPARATOR_GT, 0.9),
+            formula_criterion("f_skip", "fid_skip", analysis_pb2.COMPARATOR_GT, 0.0),
+        ],
+    )
+    resp = await engine.screen(req)
+    assert len(resp.results) == 1
+    r = resp.results[0]
+    # Raw values are the real formula readings — NOT the universe-collapsed 0.5.
+    assert r.criterion_raw_values["f_pass"] == pytest.approx(0.8)
+    assert r.criterion_raw_values["f_fail"] == pytest.approx(0.8)
+    # The contrast that motivates the new field: a single-symbol universe collapses scores to 0.5.
+    assert r.criterion_scores["f_pass"] == pytest.approx(0.5)
+    # Pass/fail reflects the comparator against the raw value, not the collapsed score.
+    assert r.criterion_passed["f_pass"] is True
+    assert r.criterion_passed["f_fail"] is False
+    # A skipped criterion (formula unavailable) is absent from BOTH new maps
+    # (mirrors criterion_scores).
+    assert "f_skip" not in r.criterion_raw_values
+    assert "f_skip" not in r.criterion_passed
+    assert "f_skip" not in r.criterion_scores

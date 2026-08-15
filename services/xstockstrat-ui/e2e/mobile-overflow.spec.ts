@@ -11,7 +11,8 @@ test.use({ viewport: { width: 390, height: 844 } });
 
 const ROUTES: { path: string; admin?: boolean }[] = [
   { path: '/insights/opportunities' },
-  { path: '/insights/market/AAPL' },
+  // feature 125: the former /insights/market/[symbol] entry was dropped — that page now redirects to
+  // the unified symbol page, already covered by the /trader/positions/AAPL entry below.
   { path: '/insights/watchlists' },
   { path: '/insights/screener' },
   { path: '/insights/strategies' },

@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { addAuthCookie, addAdminCookie } from '../helpers/auth';
+import { backfillJob as runningJob } from '../fixtures/backfillJobs';
 
 /**
  * E2E coverage for the Backfills management page (feature 057).
@@ -12,23 +13,6 @@ import { addAuthCookie, addAdminCookie } from '../helpers/auth';
 
 const IngestPath = (m: string) => `**/xstockstrat.ingest.v1.IngestService/${m}`;
 const MarketDataPath = (m: string) => `**/xstockstrat.marketdata.v1.MarketDataService/${m}`;
-
-function runningJob(over: Record<string, unknown> = {}) {
-  return {
-    jobId: 'job-1',
-    symbols: ['AAPL'],
-    status: 'BACKFILL_STATUS_RUNNING',
-    barsProcessed: '100',
-    barsTotal: '500',
-    chunksCompleted: 1,
-    chunksTotal: 5,
-    failedSymbols: [],
-    error: '',
-    timeframe: '1d',
-    timeframeEnum: 'TIMEFRAME_1DAY',
-    ...over,
-  };
-}
 
 async function fulfillJson(route: import('@playwright/test').Route, body: unknown) {
   await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) });

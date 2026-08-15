@@ -102,6 +102,9 @@ router.service(PortfolioService, {
 router.service(MarketDataService, {
   getBars: forward((req, opts) => marketDataClient.getBars(req, opts)),
   listAssets: forward((req, opts) => marketDataClient.listAssets(req, opts)),
+  // feature 125 (FR-7) — read-only, ungated (matches GetFundamentals' backend contract); the one
+  // genuinely new BFF registration this feature needs (absent from both trader and insights BFFs).
+  getFundamentals: forward((req, opts) => marketDataClient.getFundamentals(req, opts)),
 });
 
 router.service(NotifyService, {

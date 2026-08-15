@@ -48,7 +48,12 @@ import {
   CONFIG_KEY_FIXTURES,
   SIGNAL_SOURCES,
   SIGNAL_SOURCE_WEIGHTED,
+  FUNDAMENTALS_AAPL,
 } from './fixtures';
+import { criterionDetailRow } from './fixtures/screenResults';
+import { backfillJob } from './fixtures/backfillJobs';
+import { INDICATOR_SERIES_AAPL } from './fixtures/indicatorSeries';
+import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 
 export const TRADER_MOCK_PORT = 9091;
 export const INSIGHTS_MOCK_PORT = 9092;
@@ -262,7 +267,20 @@ export async function startMockBackend(): Promise<void> {
         async getPosition(req) {
           // Single-position read for the dedicated Position page (feature 096); same authoritative
           // fixture as listPositions so the page's unrealized P&L ties to the Exposure list.
-          return positionForSymbol(req.symbol);
+          // A symbol not in the fixture set is genuinely unheld → NotFound, mirroring the real
+          // PortfolioService.GetPosition (feature 125: the unified page renders its research
+          // sections for such symbols instead of a position).
+          const held = POSITIONS.find((p) => p.symbol === (req.symbol ?? '').toUpperCase());
+          if (!held) {
+            throw new ConnectError(`no position for ${req.symbol}`, Code.NotFound);
+          }
+          return held;
+        },
+        async listWatchlists() {
+          // Default: no watchlists (feature 125 — the unified page's FR-11 gate then renders the
+          // Screening branch). Specs needing a watchlisted symbol override this per-test via
+          // page.route (see position-detail.spec.ts).
+          return { watchlists: [] };
         },
       });
 
@@ -413,6 +431,9 @@ export async function startMockBackend(): Promise<void> {
             bars: [
               {
                 symbol: 'AAPL',
+                // Bar.time (feature 125 FR-6): the Symbol page reads these to build the
+                // GetIndicatorSeries request's parity-aligned x-axis.
+                time: { seconds: BigInt(1704067200), nanos: 0 }, // 2024-01-01
                 open: 188.0,
                 high: 190.5,
                 low: 187.2,
@@ -426,6 +447,7 @@ export async function startMockBackend(): Promise<void> {
               },
               {
                 symbol: 'AAPL',
+                time: { seconds: BigInt(1704153600), nanos: 0 }, // 2024-01-02
                 open: 189.8,
                 high: 192.0,
                 low: 188.5,
@@ -448,6 +470,15 @@ export async function startMockBackend(): Promise<void> {
               { symbol: 'TSLA', exchange: 'NASDAQ', assetClass: 'us_equity' },
             ],
           };
+        },
+        async getFundamentals(req) {
+          // feature 125 (FR-7): AAPL has data; any other symbol has none — the real backend
+          // surfaces a no-data miss as UNAVAILABLE (not NotFound), which the UI treats as the
+          // explicit no-data state.
+          if ((req.symbol ?? '').toUpperCase() === 'AAPL') {
+            return { fundamentals: FUNDAMENTALS_AAPL };
+          }
+          throw new ConnectError(`fmp: no fundamentals for ${req.symbol}`, Code.Unavailable);
         },
       });
 
@@ -599,6 +630,12 @@ export async function startMockBackend(): Promise<void> {
         // is an arrow, not point-free, so the array index is never passed as a second argument);
         // overrides are spread at this call site so the shared AAPL default is unchanged.
         async evaluateReadiness(req) {
+          // feature 125 — a stale/deleted `?strategy=` param threads a strategyId the analysis
+          // service no longer knows; the real EvaluateReadiness aborts NOT_FOUND, and
+          // SignalReadiness renders a distinct "no longer exists" message (not the generic error).
+          if (req.strategyId === 'strat-notfound-readiness-01') {
+            throw new ConnectError(`strategy '${req.strategyId}' not found`, Code.NotFound);
+          }
           const syms = req.symbols.length ? req.symbols : ['AAPL'];
           // feature 138 — a held (REDUCE/ADD) opportunity's panel requests the EXIT rule; return
           // the distinct exit trace so the e2e can prove the exit rule was traced (not entry).
@@ -751,6 +788,15 @@ export async function startMockBackend(): Promise<void> {
         // Feature 060: deterministic ranked screen result — 3 results, score-ordered,
         // one with INSUFFICIENT_DATA + a coverage gap.
         async screenSymbols(req) {
+          // feature 125: a single-symbol scan (the Symbol page's Screening section) returns the
+          // per-criterion criterionRawValues/criterionPassed maps, never the universe-collapsed
+          // composite score. ref_name 'c1' matches SymbolScreening's default first criterion.
+          if (req.symbols.length === 1) {
+            return {
+              results: [criterionDetailRow(req.symbols[0], 42.5, true)],
+              coverageGaps: [],
+            };
+          }
           const symbols = req.symbols.length ? req.symbols : ['AAA', 'BBB', 'CCC'];
           return {
             results: [
@@ -867,6 +913,15 @@ export async function startMockBackend(): Promise<void> {
               : {}),
           };
         },
+        // feature 125 (FR-6): per-component indicator series for the Symbol page's overlay panels.
+        // AAPL → the canonical fixture (a multi-series MACD component with a warm-up gap + a failed
+        // component); any other symbol → no components.
+        async getIndicatorSeries(req) {
+          if (req.symbol === 'AAPL') {
+            return INDICATOR_SERIES_AAPL;
+          }
+          return { times: req.times, components: [] };
+        },
       });
 
       router.service(IdentityService, identityHandlers);
@@ -944,6 +999,35 @@ export async function startMockBackend(): Promise<void> {
         // job id so the confirmation can be asserted (AC-4).
         async triggerBackfill() {
           return { jobId: 'job-e2e-1', status: 1 /* BACKFILL_STATUS_QUEUED */ };
+        },
+        // feature 125: the Symbol-page Backfill coverage section lists jobs for one symbol. AAPL has
+        // one COMPLETED job carrying a covered range (2024-01-01 → 2024-06-01); any other symbol has
+        // no ingested coverage.
+        async listBackfillJobs(req) {
+          if (req.symbol === 'AAPL') {
+            return {
+              jobs: [
+                {
+                  // Spread the shared fixture, then override the two int64 fields to bigint (the
+                  // Connect-server message-init shape) and add the covered range — the fixture's
+                  // string int64s are the page.route/Connect-JSON shape backfills.spec.ts needs.
+                  ...backfillJob({
+                    jobId: 'job-aapl-1',
+                    symbols: ['AAPL'],
+                    status: BackfillStatus.COMPLETED,
+                  }),
+                  barsProcessed: BigInt(500),
+                  barsTotal: BigInt(500),
+                  range: {
+                    start: { seconds: BigInt(1704067200), nanos: 0 }, // 2024-01-01
+                    end: { seconds: BigInt(1717200000), nanos: 0 }, // 2024-06-01
+                  },
+                },
+              ],
+              page: { nextPageToken: '', totalCount: 1 },
+            };
+          }
+          return { jobs: [], page: { nextPageToken: '', totalCount: 0 } };
         },
         async manageSignalSource(req) {
           // feature 134: echo the saved reliabilityWeight back so the inline-edit round-trip is

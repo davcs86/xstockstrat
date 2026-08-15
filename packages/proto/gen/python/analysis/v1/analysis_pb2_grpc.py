@@ -114,6 +114,11 @@ class AnalysisServiceStub(object):
                 request_serializer=analysis_dot_v1_dot_analysis__pb2.GetStrategyAnalyticsRequest.SerializeToString,
                 response_deserializer=analysis_dot_v1_dot_analysis__pb2.StrategyAnalytics.FromString,
                 _registered_method=True)
+        self.GetIndicatorSeries = channel.unary_unary(
+                '/xstockstrat.analysis.v1.AnalysisService/GetIndicatorSeries',
+                request_serializer=analysis_dot_v1_dot_analysis__pb2.GetIndicatorSeriesRequest.SerializeToString,
+                response_deserializer=analysis_dot_v1_dot_analysis__pb2.GetIndicatorSeriesResponse.FromString,
+                _registered_method=True)
 
 
 class AnalysisServiceServicer(object):
@@ -228,6 +233,16 @@ class AnalysisServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def GetIndicatorSeries(self, request, context):
+        """Per-component historical indicator series for a strategy over a caller-supplied bar window,
+        for the unified Symbol page's overlay panels (feature 125, FR-6). Reuses the analysis
+        evaluator's own _compute_component per declared component in a dedicated handler loop — never
+        the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_AnalysisServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -310,6 +325,11 @@ def add_AnalysisServiceServicer_to_server(servicer, server):
                     servicer.GetStrategyAnalytics,
                     request_deserializer=analysis_dot_v1_dot_analysis__pb2.GetStrategyAnalyticsRequest.FromString,
                     response_serializer=analysis_dot_v1_dot_analysis__pb2.StrategyAnalytics.SerializeToString,
+            ),
+            'GetIndicatorSeries': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetIndicatorSeries,
+                    request_deserializer=analysis_dot_v1_dot_analysis__pb2.GetIndicatorSeriesRequest.FromString,
+                    response_serializer=analysis_dot_v1_dot_analysis__pb2.GetIndicatorSeriesResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -744,6 +764,33 @@ class AnalysisService(object):
             '/xstockstrat.analysis.v1.AnalysisService/GetStrategyAnalytics',
             analysis_dot_v1_dot_analysis__pb2.GetStrategyAnalyticsRequest.SerializeToString,
             analysis_dot_v1_dot_analysis__pb2.StrategyAnalytics.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetIndicatorSeries(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/xstockstrat.analysis.v1.AnalysisService/GetIndicatorSeries',
+            analysis_dot_v1_dot_analysis__pb2.GetIndicatorSeriesRequest.SerializeToString,
+            analysis_dot_v1_dot_analysis__pb2.GetIndicatorSeriesResponse.FromString,
             options,
             channel_credentials,
             insecure,

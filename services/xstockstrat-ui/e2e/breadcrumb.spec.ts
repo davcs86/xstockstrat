@@ -98,15 +98,6 @@ test.describe('PageBreadcrumb collision coverage (FR-10 / AC-9)', () => {
       },
     },
     {
-      name: 'Signal detail (new)',
-      ariaLabel: 'Signal path',
-      terminalLabel: 'AAPL',
-      goto: async (page) => {
-        await addAuthCookie(page);
-        await page.goto('/insights/market/AAPL');
-      },
-    },
-    {
       name: 'Order detail (new)',
       ariaLabel: 'Order path',
       terminalLabel: 'mock-order-001',

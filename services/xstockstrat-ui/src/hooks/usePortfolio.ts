@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { portfolioClient } from '@/lib/browserClients/portfolioClient';
 import { TradingMode as PbTradingMode } from '@xstockstrat/proto/common/v1/common_pb';
 import { PositionSide } from '@xstockstrat/proto/portfolio/v1/portfolio_pb';
+import { isNotFoundError } from '@/lib/scoreDisplay';
 
 export function usePortfolio(mode: 'paper' | 'live', selectedAccountId: string | null) {
   const toPbMode = (m: 'paper' | 'live') =>
@@ -78,6 +79,10 @@ export function usePosition(
         symbol,
         ...(selectedAccountId ? { accountId: selectedAccountId } : {}),
       }),
-    refetchInterval: 10_000,
+    // A NotFound (unheld symbol) is a normal, expected state on the unified symbol page — don't
+    // burn a retry on it, and don't keep polling GetPosition forever against a symbol that will
+    // never resolve (feature 125). Mirrors useStrategies.ts's NotFound-aware retry/refetch guards.
+    retry: (failureCount, err) => !isNotFoundError(err) && failureCount < 1,
+    refetchInterval: (query) => (isNotFoundError(query.state.error) ? false : 10_000),
   });
 }

@@ -26,5 +26,10 @@ test.describe('AC-8 valuation parity', () => {
     const exposureRow = page.getByRole('row', { name: /AAPL/ });
     await expect(exposureRow).toBeVisible({ timeout: 10000 });
     await expect(exposureRow).toContainText('+$100.00');
+
+    // Third read path (feature 125, FR-14): the unified single-symbol page (GetPosition) reports the
+    // same broker-authoritative +$100.00 — no fourth re-derivation.
+    await page.goto('/trader/positions/AAPL');
+    await expect(page.getByText('+$100.00').first()).toBeVisible({ timeout: 30000 });
   });
 });

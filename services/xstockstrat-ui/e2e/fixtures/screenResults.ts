@@ -26,6 +26,24 @@ export function barsInsufficientRow(symbol: string) {
   };
 }
 
+/**
+ * A single-symbol (feature 125) resolved row carrying the per-criterion `criterionRawValues`/
+ * `criterionPassed` maps the Symbol-page Screening section reads — never `score`/`criterionScores`,
+ * which collapse to a content-free 0.5 on a one-symbol scan. Keyed by ref_name (`c1` by default).
+ */
+export function criterionDetailRow(symbol: string, raw: number, passed: boolean, refName = 'c1') {
+  return {
+    symbol,
+    // score/criterionScores are intentionally left at their proto defaults (0 / {}) — the
+    // single-symbol section must not read them.
+    score: 0,
+    passed,
+    status: 1,
+    criterionRawValues: { [refName]: raw },
+    criterionPassed: { [refName]: passed },
+  };
+}
+
 /** A resolved (OK) row with an explicit score/criterionScores. */
 export function resolvedRow(
   symbol: string,

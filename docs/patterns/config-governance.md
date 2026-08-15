@@ -77,6 +77,17 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 125 — unified-symbol-page (`xstockstrat-analysis`)
+
+Adds one process-lifetime singleton semaphore key for the FR-6 indicator-overlay-panel RPC
+`GetIndicatorSeries`. New `analysis.series.*` category (distinct from `analysis.readiness.*` — this
+is not readiness — and from the `xstockstrat-indicators` service's own `indicators.sandbox.*`
+namespace). Read once at servicer construction, not live.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.series.max_concurrent_components` | int | `4` | Bounds concurrent per-component `ComputeIndicator`/`ExecuteFormula` execution across simultaneous `GetIndicatorSeries` calls, so a routinely-visited Symbol page can't starve the analysis live loop. `max(1, get_int(...))` clamp. |
+
 ### feature 131 — live-strategy-opportunity-attribution (`xstockstrat-analysis`)
 
 Adds live-strategy symbol-coverage attribution to the Opportunities compute (`_compute_opportunities`):

@@ -2,8 +2,10 @@
 
 **Status**: `pending`
 **Created**: 2026-08-10
+**Last Updated**: 2026-08-15 (FR-6 indicator-overlay-panel steps 27-33 added — see design.md
+§ "Design Addendum — FR-6 Indicator Overlay Panels")
 **Feature**: `docs/roadmap/features/125-unified-symbol-page/feature.md`
-**Total Steps**: 26
+**Total Steps**: 33
 **Feature Branch**: `feature/unified-symbol-page`
 
 ---
@@ -21,6 +23,19 @@ own e2e coverage per the repo's established one-file-per-concern convention. Ste
 two superseded source pages and repoint the shared nav. Steps 24-26 close the cross-cutting proofs
 design.md's Open Risks named explicitly: two-surface nav reachability, the relocated/rewritten
 `signal-detail.spec.ts`, and three-way valuation parity.
+
+**FR-6 indicator overlay panels (Steps 27-33, added 2026-08-15 — design.md § "Design Addendum —
+FR-6").** An independent additive block layered on top of the core sections. Steps 27-28 add the new
+additive `AnalysisService.GetIndicatorSeries` RPC (+ 4 messages + `wrappers.proto` import) and
+regenerate stubs — a hard predecessor to both the analysis handler and the UI panels, same governance
+shape as the `ScreenResult` change in Steps 1-2. Step 29 registers the new
+`analysis.series.max_concurrent_components` config key (C-05). Steps 30-31 add the new handler (whose
+own loop reuses `StrategyEvaluator._compute_component`, structurally isolated from launched feature
+097's shared `evaluate_conditions_traced`) and its paired Python tests. Steps 32-33 add the stacked
+`recharts` overlay panels to the unified page and their e2e coverage. This block slots into the page
+structure Steps 8/12 create but is **not** a predecessor of the Step 22 redirect — the panels are a
+new section that never existed on the deleted `insights/market/[symbol]` page, so retiring that page
+does not wait on FR-6.
 
 ## Step Dependencies
 
@@ -51,12 +66,34 @@ design.md's Open Risks named explicitly: two-surface nav reachability, the reloc
 - Step 26 requires Step 8 (the three-way parity read path Step 8's structure exposes).
 - Step 7 (docs) has no code dependency but must land no later than Step 12, the first step whose
   code relies on the cross-segment-client-reuse exception it documents (Open Risk, design.md).
+- Step 28 requires Step 27: `buf-gen.sh` regenerates stubs from the new `GetIndicatorSeries` RPC +
+  messages. (Independent of the Steps 1-2 `ScreenResult` proto change — the two additive proto
+  changes touch different messages and may land in either order, but each `proto` step must be
+  followed by its own regeneration before any code cites its generated symbols, C-09/F-04.)
+- Step 30 requires Step 28: the analysis handler references `analysis_pb2.GetIndicatorSeriesResponse`/
+  `ComponentSeries`/`NamedSeries` and `google.protobuf.wrappers` — none exist on the Python stubs
+  until Step 28 regenerates them (C-09/F-04 — neither `/sdd-spec` nor Step 30's implementation may
+  cite the generated symbols before regeneration lands).
+- Step 29 (config docs) has no code dependency but must land no later than Step 30, whose handler
+  reads `analysis.series.max_concurrent_components` — the key's CLAUDE.md row + registered-keys entry
+  (C-05) must ship in the same PR as the code that reads it.
+- Step 31 requires Step 30 (test-pairing, C-08).
+- Step 32 requires Step 28 (generated **TS** stubs for `GetIndicatorSeries`), Step 30 (the RPC
+  handler must exist to serve the browser call), Step 8 (it reads the candlestick bars Step 8 hoists
+  to the page's top level and adds new state to retain their closes+times), and Step 12 (the strategy
+  whose components are charted is the FR-6-resolved strategy — the watchlist-binding `strategyId`
+  Step 12 derives, else the picker selection). Like Step 12, it relies on Step 7's cross-segment
+  `analysisClient` sanctioned exception, so Step 7 must also precede it.
+- Step 33 requires Step 32 (test-pairing, C-08).
+- Step 22 is **not** a dependent of Step 32: the indicator overlay panels are a new section absent
+  from the deleted `insights/market/[symbol]` page, so the redirect does not need them to render
+  first.
 
 ---
 
 ### Step 1 — proto: additive `ScreenResult` fields for single-symbol screening
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -102,7 +139,7 @@ Both must pass (additive-only change — no breaking diff expected).
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/analysis/v1/` — modify (generated)
@@ -136,7 +173,7 @@ regeneration, per the proto-versioning runbook's "Verifying the generated stubs 
 
 ### Step 3 — service (xstockstrat-analysis): wire `criterion_raw_values`/`criterion_passed`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/services/screener.py` — modify
@@ -209,7 +246,7 @@ Write the test first (Step 4) so it fails against the pre-Step-3 tree (`criterio
 
 ### Step 4 — test (xstockstrat-analysis): single-symbol raw/passed fields
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_screener.py` — modify
@@ -251,7 +288,7 @@ empty), then again after Step 3 (confirm it passes) — captured in the TDD gate
 
 ### Step 5 — service (xstockstrat-portfolio): fix `GetPosition` `account_id` passthrough
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo.go` — modify
@@ -313,7 +350,7 @@ test).
 
 ### Step 6 — test (xstockstrat-portfolio): multi-account `GetPosition` regression
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-portfolio`
 **Files**:
 - `services/xstockstrat-portfolio/internal/repository/portfolio_repo_test.go` — modify (or create if
@@ -360,7 +397,7 @@ go test ./internal/repository/... -race -run TestGetPosition -v
 
 ### Step 7 — docs: cross-segment client-reuse sanctioned exception + `nextjs-frontends.md` correction
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui` / `docs/patterns`
 **Files**:
 - `services/xstockstrat-ui/CLAUDE.md` — modify
@@ -462,7 +499,7 @@ findings it reports against these two files are fixed before this step is marked
 
 ### Step 8 — service (xstockstrat-ui): page-structure refactor — sections gate independently of position
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
@@ -615,7 +652,7 @@ Plus the e2e proof in Step 9 (this step's own paired test).
 
 ### Step 9 — test (xstockstrat-ui): unheld-symbol section rendering + render-order fix
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify
@@ -665,7 +702,7 @@ Run once against the pre-Step-8 tree (confirm red), once after (confirm green).
 
 ### Step 10 — service (xstockstrat-ui): `useReadiness`/`SignalReadiness` NotFound handling
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/hooks/useOpportunities.ts` — modify
@@ -718,7 +755,7 @@ Plus the e2e proof in Step 11.
 
 ### Step 11 — test (xstockstrat-ui): `SignalReadiness` NotFound paired test
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify
@@ -758,7 +795,7 @@ once after (confirm green).
 
 ### Step 12 — service (xstockstrat-ui): watchlist-membership gating + Opportunity/Readiness sections
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
@@ -834,7 +871,7 @@ Plus the e2e proof in Step 13.
 
 ### Step 13 — test (xstockstrat-ui): watchlist-conditional gating
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify
@@ -870,7 +907,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "Single Position page"
 
 ### Step 14 — service (xstockstrat-ui): Fundamentals section
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/traderBff.ts` — modify
@@ -954,7 +991,7 @@ Plus the e2e proof in Step 15.
 
 ### Step 15 — test (xstockstrat-ui): Fundamentals section e2e
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify (add a `getFundamentals` handler to the
@@ -987,7 +1024,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "Single Position page"
 
 ### Step 16 — service (xstockstrat-ui): single-symbol Screening section
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
@@ -1058,7 +1095,7 @@ Plus the e2e proof in Step 17.
 
 ### Step 17 — test (xstockstrat-ui): Screening section e2e
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify (`screenSymbols` handler — add a
@@ -1091,7 +1128,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "Single Position page"
 
 ### Step 18 — service (xstockstrat-ui): Backtests section
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
@@ -1157,7 +1194,7 @@ Plus the e2e proof in Step 19.
 
 ### Step 19 — test (xstockstrat-ui): Backtests section e2e
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify
@@ -1190,7 +1227,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "Single Position page"
 
 ### Step 20 — service (xstockstrat-ui): Backfill section
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
@@ -1235,7 +1272,7 @@ Plus the e2e proof in Step 21.
 
 ### Step 21 — test (xstockstrat-ui): Backfill section e2e
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify (add a `listBackfillJobs` handler — confirmed
@@ -1277,7 +1314,7 @@ change to that spec, per the DRY guard rail's "touch only what the task requires
 
 ### Step 22 — service (xstockstrat-ui): retire `insights/market/[symbol]` → redirect; repoint caller
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/market/[symbol]/page.tsx` — modify (replace with a
@@ -1338,7 +1375,7 @@ old path as a destination.
 
 ### Step 23 — service (xstockstrat-ui): nav cleanup — delete `/insights/market` special-cases
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/shared/PlatformHeader.tsx` — modify
@@ -1391,7 +1428,7 @@ Confirm both grep calls return no hits (the special-cases and their comments are
 
 ### Step 24 — test (xstockstrat-ui): two-surface nav-reachability proof
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/nav-reachability.spec.ts` — modify
@@ -1458,7 +1495,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "nav reachability"
 
 ### Step 25 — test (xstockstrat-ui): relocate/rewrite `signal-detail.spec.ts`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/signal-detail.spec.ts` — delete
@@ -1511,7 +1548,7 @@ ls e2e/insights/signal-detail.spec.ts 2>&1  # expect "No such file or directory"
 
 ### Step 26 — test (xstockstrat-ui): three-way valuation parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/valuation-parity.spec.ts` — modify
@@ -1548,6 +1585,547 @@ adds the third leg, never rewrites the existing two.
 ```bash
 cd services/xstockstrat-ui && pnpm test:e2e -g "AC-8 valuation parity"
 ```
+
+---
+
+### Step 27 — proto: additive `GetIndicatorSeries` RPC + messages for FR-6 overlay panels
+
+**Status**: `done`
+**Service**: `packages/proto`
+**Files**:
+- `packages/proto/analysis/v1/analysis.proto` — modify
+
+**Reviewers**: Proto Reviewer — field number uniqueness per message, `import` correctness, `buf lint`/
+`buf breaking` pass, additive/non-breaking; `xstockstrat-analysis` (service owner) — confirms the new
+messages match what the handler (Step 30) populates from `_compute_component`'s output;
+`xstockstrat-ui` (consumer) — confirms the request/response shapes serve the stacked overlay panels
+
+**Codebase Evidence**:
+- `service AnalysisService` spans lines 12-42; the last RPC is `GetStrategyAnalytics` at line 41 —
+  the new `rpc GetIndicatorSeries(...)` is appended after it, before the service's closing `}`
+  (confirmed via `grep -n "^service AnalysisService\|^}" packages/proto/analysis/v1/analysis.proto`
+  and the RPC listing above).
+- Existing imports are lines 7-10 (`google/protobuf/timestamp.proto`, `struct.proto`,
+  `field_mask.proto`, `common/v1/common.proto`) — `google/protobuf/wrappers.proto` is **not** among
+  them (confirmed via `grep -n "wrappers.proto" packages/proto/analysis/v1/analysis.proto` → no hit);
+  it must be added for `google.protobuf.DoubleValue`.
+- `StrategyComponent` (lines 241-247) carries `ref_name`/`kind`/`indicator`/`formula_id`/`params`;
+  `ComponentKind` is the existing enum used at `StrategyComponent.kind = 2` (line 243) — reused
+  directly for `ComponentSeries.kind`, not redefined.
+- `StrategyDefinition.components` (line 252, `repeated StrategyComponent components = 3`) is the list
+  the handler iterates — confirming the response's one-`ComponentSeries`-per-declared-component shape.
+- design.md § "Design Addendum — FR-6" § "Response shape" gives the exact message set and the reason
+  for `DoubleValue` over `repeated double` (null-safety for warm-up/gap points — AC-4a/P-03) and over
+  a parallel present-mask.
+- `Bar.time` confirmed as `google.protobuf.Timestamp time = 2`
+  (`packages/proto/marketdata/v1/marketdata.proto:46`) — **resolves design.md's FR-6 Open Risk**
+  ("confirm the `Bar` timestamp attribute name"): the generated TS/Python field is `time`, not
+  `timestamp`; the UI reads `bar.time` to populate the request `times`, and the request/response
+  `times` are `repeated google.protobuf.Timestamp`.
+
+**TDD**: `N/A (proto)` — no code executes; verified by `buf lint`/`buf breaking`.
+
+**Instructions**:
+1. Add the wrappers import alongside the existing imports (after line 9's `field_mask.proto`, keeping
+   import grouping):
+   ```protobuf
+   import "google/protobuf/wrappers.proto";
+   ```
+2. Add the RPC to `service AnalysisService`, after the `GetStrategyAnalytics` RPC (line 41), before
+   the service's closing `}`:
+   ```protobuf
+   // Per-component historical indicator series for a strategy over a caller-supplied bar window,
+   // for the unified Symbol page's overlay panels (feature 125, FR-6). Reuses the analysis
+   // evaluator's own _compute_component per declared component in a dedicated handler loop — never
+   // the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
+   rpc GetIndicatorSeries(GetIndicatorSeriesRequest) returns (GetIndicatorSeriesResponse);
+   ```
+3. Add the four new messages near the other `Analytics`/`Readiness` messages at the end of the file
+   (after `GetStrategyAnalyticsRequest`, line 530, is a natural home — keep them contiguous):
+   ```protobuf
+   message GetIndicatorSeriesRequest {
+     string strategy_id = 1;
+     string symbol = 2;
+     // The caller's own already-fetched candlestick closes + their timestamps (the page passes the
+     // exact bars it drew, so the x-axis is parity-aligned and no server re-fetch happens). closes
+     // and times are index-aligned and equal length.
+     repeated double closes = 3;
+     repeated google.protobuf.Timestamp times = 4;
+   }
+
+   message GetIndicatorSeriesResponse {
+     // Echoes the request times, index-aligned across every series in every component.
+     repeated google.protobuf.Timestamp times = 1;
+     repeated ComponentSeries components = 2;
+   }
+
+   message ComponentSeries {
+     string ref_name = 1;
+     ComponentKind kind = 2;
+     repeated NamedSeries series = 3;
+     // Non-empty when this component failed to compute (soft-deleted formula, sandbox timeout, NaN
+     // output); series is then empty and the UI renders a per-panel error state. Per-component fault
+     // isolation — one bad component never fails the whole RPC.
+     string error = 4;
+   }
+
+   message NamedSeries {
+     // "value" (primary) plus each secondary the component emits (bb.upper/bb.lower,
+     // macd.signal/macd.histogram, stoch.d, or custom-formula output keys).
+     string name = 1;
+     // DoubleValue (not repeated double) so a warm-up-head or mid-series None round-trips as an unset
+     // value, never a fabricated 0.0 (feature 125, AC-4a/P-03). Index-aligned with the response times.
+     repeated google.protobuf.DoubleValue values = 2;
+   }
+   ```
+   Field numbers restart per message (all new messages) — no collision with any existing message.
+   Do not touch `ScreenResult` (Step 1's change) or any other message.
+
+**Verification**:
+```bash
+cd packages/proto && buf lint
+buf breaking --against ".git#branch=main-dev"
+```
+Both must pass (additive-only — new RPC + new messages + new import, no field removed or retyped, no
+breaking diff expected).
+
+---
+
+### Step 28 — proto-gen: regenerate stubs for `GetIndicatorSeries`
+
+**Status**: `done`
+**Service**: `packages/proto`
+**Files**:
+- `packages/proto/gen/go/analysis/v1/` — modify (generated)
+- `packages/proto/gen/python/analysis/v1/` — modify (generated)
+- `packages/proto/gen/ts/analysis/v1/` — modify (generated)
+
+**Reviewers**: Proto Reviewer — inherited from Step 27
+
+**Codebase Evidence**:
+- root `CLAUDE.md` § Generating Proto Stubs: `./scripts/buf-gen.sh` regenerates all three languages.
+- The new messages use `google.protobuf.DoubleValue`/`Timestamp` — both are well-known types already
+  resolvable by the existing buf toolchain (Step 27 adds only the `wrappers.proto` import, a WKT that
+  needs no BSR/dependency change).
+
+**TDD**: `N/A (proto-gen)`
+
+**Instructions**:
+Run `./scripts/buf-gen.sh` from repo root. Commit the proto source change (Step 27) and the
+regenerated stub diff together in this step's commit, per
+`docs/runbooks/codegen-toolchain-host-setup.md` if Docker/GitHub-releases egress is unavailable in
+the execution environment.
+
+**Verification**:
+```bash
+./scripts/buf-gen.sh
+git diff --stat packages/proto/gen/
+```
+Confirm the diff touches only `analysis/v1/` generated files (new `GetIndicatorSeriesRequest`/
+`GetIndicatorSeriesResponse`/`ComponentSeries`/`NamedSeries` types + the `getIndicatorSeries` client/
+server method on all three languages) and nothing else. Re-run `./scripts/buf-gen.sh` and confirm
+`git diff packages/proto/gen/` is empty (idempotent regeneration).
+
+---
+
+### Step 29 — config: register `analysis.series.max_concurrent_components`
+
+**Status**: `done`
+**Service**: `xstockstrat-analysis`
+**Files**:
+- `services/xstockstrat-analysis/CLAUDE.md` — modify (§ Config Keys Consumed)
+- `docs/patterns/config-governance.md` — modify (Per-Feature Registered Keys log)
+
+**Reviewers**: `xstockstrat-analysis` (service owner) — per reviewer-registry §governance matrix,
+`config` steps are reviewed by "Service owner of the service adding/changing the config key"
+
+**Codebase Evidence**:
+- `services/xstockstrat-analysis/CLAUDE.md:150` (`## Config Keys Consumed`, `Namespace: analysis`) is
+  the § the new key row joins; the sibling semaphore key
+  `analysis.screener.max_concurrent_formula_evals` (int, default `4`) is already listed there
+  (line 176) — the new key mirrors its shape and description.
+- `docs/patterns/config-governance.md:76` (`## Per-Feature Registered Keys`, append-only, newest
+  first) — the feature-129 entry (lines 80-95) is the format template: a `### feature NNN — <slug>
+  (<service>)` heading, a short prose paragraph, then a `| Key | Type | Default | Description |`
+  table.
+- design.md § "Design Addendum — FR-6" § "Concurrency": the key bounds **cross-request** concurrency
+  of per-component `ComputeIndicator`/`ExecuteFormula` execution (a process-lifetime singleton
+  semaphore in `AnalysisServicer.__init__`), read via `cfg.get_int(...)` with a mandatory `max(1, …)`
+  clamp — chosen category `analysis.series.*` (not `analysis.readiness.*`, not `analysis.indicators.*`).
+
+**TDD**: `N/A (config docs)`
+
+**Instructions**:
+1. In `services/xstockstrat-analysis/CLAUDE.md`'s `## Config Keys Consumed` table, add a row (grouped
+   with the other semaphore/limit keys):
+   ```
+   | `analysis.series.max_concurrent_components` | int | `4` | Process-lifetime singleton semaphore bounding cross-request concurrency of per-component `ComputeIndicator`/`ExecuteFormula` execution driven by `GetIndicatorSeries` (feature 125, FR-6), so a routinely-visited Symbol page can't starve the analysis live loop — mirrors `analysis.screener.max_concurrent_formula_evals`. Read once in `AnalysisServicer.__init__` via `get_int` with a `max(1, …)` clamp (a `0` reads as the default 4 via `get_int`'s zero-trap; the clamp guards a negative value from reaching `asyncio.Semaphore`). |
+   ```
+2. In `docs/patterns/config-governance.md`'s `## Per-Feature Registered Keys` log, add a **new entry
+   at the top** (newest first — above the feature-129 entry), matching the feature-129 format:
+   ```markdown
+   ### feature 125 — unified-symbol-page (`xstockstrat-analysis`)
+
+   Adds one process-lifetime singleton semaphore key for the FR-6 indicator-overlay-panel RPC
+   `GetIndicatorSeries`. New `analysis.series.*` category (distinct from `analysis.readiness.*` — this
+   is not readiness — and from the `xstockstrat-indicators` service's own `indicators.sandbox.*`
+   namespace). Read once at servicer construction, not live.
+
+   | Key | Type | Default | Description |
+   |---|---|---|---|
+   | `analysis.series.max_concurrent_components` | int | `4` | Bounds concurrent per-component `ComputeIndicator`/`ExecuteFormula` execution across simultaneous `GetIndicatorSeries` calls, so a routinely-visited Symbol page can't starve the analysis live loop. `max(1, get_int(...))` clamp. |
+   ```
+
+**Verification**:
+```bash
+grep -n "analysis.series.max_concurrent_components" services/xstockstrat-analysis/CLAUDE.md docs/patterns/config-governance.md
+grep -n "feature 125 — unified-symbol-page" docs/patterns/config-governance.md
+```
+Confirm the key appears in both files. This step edits a service `CLAUDE.md` and a context doc listed
+in scrubber targets — run the mandated Teardown scan (root `CLAUDE.md` § Teardown): `/context-scrubber
+scan`, scoped to these two files, and fix any grounded findings before marking done (or record the
+plugin's unavailability explicitly, per Step 7's precedent).
+
+---
+
+### Step 30 — service (xstockstrat-analysis): `GetIndicatorSeries` handler
+
+**Status**: `done`
+**Service**: `xstockstrat-analysis`
+**Files**:
+- `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
+
+**Reviewers**: `xstockstrat-analysis` (service owner) — backtest reproducibility / strategy scoring
+determinism / no look-ahead bias; confirms the new handler's loop reuses `_compute_component` in its
+**own** method (never the shared `evaluate_conditions_traced`), so launched feature 097's
+`ListOpportunities` exit trace is structurally untouched
+
+**Codebase Evidence**:
+- `EvaluateReadiness` handler confirmed at `servicer.py:1959` — the proven skeleton this handler
+  reuses (re-read fresh): builds `propagation_meta` from `context.invocation_metadata()` filtered to
+  `("x-user-id", "x-access-scope", "x-trace-id")` (lines 1963-1967); guards
+  `if self._strategies_repo is None:` → `context.abort(grpc.StatusCode.UNAVAILABLE, ...)` (1968-1970);
+  `row = await self._strategies_repo.get_by_id(request.strategy_id)` then `if row is None:` →
+  `context.abort(grpc.StatusCode.NOT_FOUND, ...)` (1971-1976); `definition =
+  _row_to_strategy_definition(row)` (1977); `evaluator = StrategyEvaluator(self._indicators,
+  propagation_meta)` (1978). The new handler reuses all of this verbatim, then **diverges**: instead
+  of `evaluate_conditions_traced`, it loops over `definition.components` calling
+  `evaluator._compute_component(comp, closes)`.
+- `StrategyEvaluator._compute_component(comp, closes)` confirmed at `app/services/evaluator.py:215`
+  — returns `dict[str, list[float | None]]` (the `series_map`: `"value"` primary + secondaries like
+  `bb.upper`, `macd.signal`, `stoch.d`, or custom-formula output keys). Consumes **only** `closes`
+  (builtin path passes `values=closes`; custom-formula path builds `input_data` from `{"close":
+  closes}` only) — verified, so the client-supplied candlestick closes are sufficient input, no bar
+  re-fetch.
+- `FormulaExecutionError` confirmed at `evaluator.py:27` — raised by `_compute_component` (lines
+  254/267/279/288) on a failed/soft-deleted/NaN custom formula; the per-component `try/except` catches
+  this (and any `Exception`) to populate `ComponentSeries.error`.
+- `_finite_or_none` confirmed at `evaluator.py:39` (maps `None`/`NaN`/`Inf`/non-numeric → `None`) and
+  `align_indicator_points` at `evaluator.py:295` (builtin warm-up head is `[None]*n`, tail-filled) —
+  the two sources of the `None` values the handler must encode as **unset** `DoubleValue`, never
+  `0.0`.
+- Semaphore pattern to mirror confirmed at `screener.py:84-85`:
+  `self._sem = asyncio.Semaphore(max(1, cfg.get_int("analysis.screener.max_concurrent_formula_evals",
+  4)))`. `AnalysisServicer.__init__` at `servicer.py:117` (self._cfg at 129, self._indicators at 131,
+  self._strategies_repo at 150) is where the new `self._component_series_sem` is constructed once
+  (boot-once confirmed via the recon's `main.py:59-69` citation).
+- Header propagation (§B code-quality constraint): the handler makes new outbound
+  `ComputeIndicator`/`ExecuteFormula` calls **only transitively** via `StrategyEvaluator`, which is
+  constructed with `propagation_meta` and forwards it on every stub call (the same mechanism
+  `EvaluateReadiness` uses at `servicer.py:1978`; Python per-method `metadata=` propagation per
+  `docs/patterns/header-propagation.md`). No new direct stub call is added in this handler — it reuses
+  the propagating `StrategyEvaluator`, so the three headers are carried.
+
+**TDD**: `red-green required`
+
+**Instructions**:
+1. In `AnalysisServicer.__init__` (`servicer.py:117-`), after the existing `self._cfg`/
+   `self._indicators`/`self._strategies_repo` assignments, construct the singleton semaphore:
+   ```python
+   self._component_series_sem = asyncio.Semaphore(
+       max(1, self._cfg.get_int("analysis.series.max_concurrent_components", 4))
+   )
+   ```
+   (Confirm `asyncio` is already imported in this module — `screener.py` imports it for the same
+   pattern; add the import to `servicer.py` only if a grep shows it absent.)
+2. Add a new `async def GetIndicatorSeries(self, request, context):` handler method, peer to
+   `EvaluateReadiness`. Reuse `EvaluateReadiness`'s skeleton verbatim through the `evaluator =
+   StrategyEvaluator(self._indicators, propagation_meta)` line: build `propagation_meta`; guard
+   `self._strategies_repo is None` → `UNAVAILABLE`; `get_by_id(request.strategy_id)` → `None` →
+   `NOT_FOUND`; `definition = _row_to_strategy_definition(row)`; instantiate the evaluator.
+3. Then loop over `definition.components`, computing each component's series under the semaphore, with
+   per-component fault isolation:
+   ```python
+   closes = list(request.closes)
+   component_series = []
+   for comp in definition.components:
+       try:
+           async with self._component_series_sem:
+               series_map = await evaluator._compute_component(comp, closes)
+           named = [
+               analysis_pb2.NamedSeries(
+                   name=name,
+                   values=[
+                       google_dot_protobuf_dot_wrappers__pb2.DoubleValue(value=v)
+                       if v is not None else google_dot_protobuf_dot_wrappers__pb2.DoubleValue()
+                       for v in series
+                   ],
+               )
+               for name, series in series_map.items()
+           ]
+           component_series.append(
+               analysis_pb2.ComponentSeries(ref_name=comp.ref_name, kind=comp.kind, series=named)
+           )
+       except Exception as e:  # per-component fault isolation (catches FormulaExecutionError + any sandbox/RPC error; broad by design)
+           component_series.append(
+               analysis_pb2.ComponentSeries(ref_name=comp.ref_name, kind=comp.kind, error=str(e))
+           )
+   return analysis_pb2.GetIndicatorSeriesResponse(times=request.times, components=component_series)
+   ```
+   - **`None` → unset `DoubleValue`, finite float → `DoubleValue(value=x)`** — this is the AC-4a/P-03
+     no-fabricated-`0.0` guarantee. Use the module's actual generated `DoubleValue` symbol (confirm
+     the import alias `google_dot_protobuf_dot_wrappers__pb2` — or however the regenerated stub names
+     it — via a grep of the Step 28 output; do **not** guess the alias, cite the real one at execute
+     time, F-04).
+   - The `times` echoed back are `request.times` unchanged (server owns no per-point timestamps —
+     `IndicatorPoint.time` is never set by the indicators service; the client's bar timestamps are the
+     index-aligned x-axis).
+   - The loop is **sequential** (no `asyncio.gather`), so the singleton semaphore bounds cross-request
+     total in-flight compute, not intra-request.
+4. Register the new handler if the servicer requires explicit method registration (it is a
+   grpc.aio servicer method — confirm whether the generated `add_AnalysisServiceServicer_to_server`
+   picks it up by name automatically, which it does for a method whose name matches the proto RPC;
+   no manual registration line is typically needed — verify against how `EvaluateReadiness` is wired).
+
+Do **not** touch `evaluate_conditions_traced`, `evaluate_with_series`, or any `StrategyEvaluator` call
+site other than this new handler's own loop — the whole point of the dedicated handler (design.md's
+round-2→3 reversal) is that its fault-isolation/semaphore live in its own method and cannot reach
+`ListOpportunities`' shared trace path.
+
+**Verification**:
+```bash
+cd services/xstockstrat-analysis && ruff check . && ruff format --check .
+uv run pytest tests/test_analysis_servicer.py -k IndicatorSeries -v
+```
+Write the paired tests first (Step 31) so they fail against the pre-Step-30 tree
+(`GetIndicatorSeries` unimplemented / `AttributeError`), then pass after this step.
+
+---
+
+### Step 31 — test (xstockstrat-analysis): parity, fault isolation, null-mapping
+
+**Status**: `done`
+**Service**: `xstockstrat-analysis`
+**Files**:
+- `services/xstockstrat-analysis/tests/test_strategy_evaluator.py` — modify (evaluator-level parity
+  invariant)
+- `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify (handler fault-isolation +
+  null-mapping + response shape)
+
+**Reviewers**: `xstockstrat-analysis` (service owner)
+
+**Codebase Evidence**:
+- `tests/test_strategy_evaluator.py` confirmed present — the existing home for `_compute_component`/
+  alignment tests (it references `_compute_component`/`align_indicator_points` per
+  `grep -rln "_compute_component" tests/`). The evaluator-level parity invariant test joins it (C-13:
+  real engine logic, inline in the existing module — no new fixture home).
+- `tests/test_analysis_servicer.py` confirmed present — the existing handler-level test home;
+  fault-isolation + null-mapping + response-shape tests for `GetIndicatorSeries` join it.
+- design.md § "Parity test — evaluator-level, not cross-RPC": the C-10(b) invariant is **"same
+  `closes` → same series"**, proven deterministically at the evaluator/unit layer with a fixed
+  `closes` fixture — **not** a cross-RPC assertion against `EvaluateReadiness`'s `lhsValue`, which is
+  flaky by construction because `EvaluateReadiness` fetches its own differently-windowed bars
+  (`servicer.py:1979,1983` via `_recent_range`/`_fetch_bars_paged`) while `GetIndicatorSeries` receives
+  the client's `pageSize:200` closes — a path-dependent indicator (EMA/RSI/MACD/ATR) legitimately
+  differs over different-length inputs.
+- design.md § "Open Risks (FR-6)" names the three required paired tests explicitly (parity,
+  fault-isolation, null→unset-DoubleValue).
+
+**TDD**: `red-green required` (paired with Step 30; run against the pre-Step-30 tree first — the
+handler doesn't exist, so the servicer tests error/fail — before Step 30 lands, per P-06).
+**Which tests carry the RED gate**: the P-06 red-before-green proof rests on tests **2 and 3**
+(handler fault-isolation + null→unset-`DoubleValue`), which cannot pass until Step 30's
+`GetIndicatorSeries` handler exists — they must genuinely fail/error against the pre-Step-30 tree.
+Test **1** (evaluator-level parity) exercises the pre-existing `_compute_component` and is expected
+to pass pre-Step-30 — it is a regression/invariant guard, **not** the RED proof; do not treat its
+green as satisfying P-06 for this step.
+
+**Instructions**:
+Add three tests:
+1. **Evaluator-level parity invariant** (in `test_strategy_evaluator.py`): feed one fixed `closes`
+   fixture through `_compute_component` for a component, and assert the series the handler would emit
+   for that component equals what the same `_compute_component` call produces — i.e. that the
+   handler's encoding is a faithful pass-through of the evaluator's output, discharging C-10(b)'s
+   "same closes → same series" deterministically. (If the encoding helper is factored out of the
+   handler it can be unit-tested directly here; otherwise assert on `_compute_component`'s output
+   shape/values for the fixed input, matching how `evaluate_conditions_traced` is already tested in
+   `test_evaluator_traced.py`.)
+2. **Per-component fault isolation** (in `test_analysis_servicer.py`): a strategy whose components
+   include one that raises `FormulaExecutionError` (e.g. a component whose `_compute_component` is
+   stubbed/mocked to raise) alongside a healthy one — assert the response still succeeds, the failing
+   component's `ComponentSeries` has a non-empty `error` and empty `series`, and the healthy
+   component's `ComponentSeries` has its populated series. One bad component never fails the RPC.
+3. **`None` → unset `DoubleValue` mapping** (in `test_analysis_servicer.py`): a component whose
+   `_compute_component` output contains leading `None` warm-up values (and/or a mid-series `None`) —
+   assert those positions round-trip as **unset** `DoubleValue` (no `value` set / `HasField` false),
+   never `DoubleValue(value=0.0)`, proving the AC-4a no-fabricated-`0.0` guarantee. Assert a finite
+   value maps to `DoubleValue(value=x)` with presence.
+
+**Verification**:
+```bash
+cd services/xstockstrat-analysis && ruff check . && ruff format --check .
+uv run pytest tests/test_strategy_evaluator.py tests/test_analysis_servicer.py --cov=app --cov-fail-under=40
+```
+Run once against the pre-Step-30 tree (confirm the servicer tests fail — handler absent), once after
+(confirm green). Confirm overall coverage stays ≥40%.
+
+---
+
+### Step 32 — service (xstockstrat-ui): indicator overlay panels beneath the price chart
+
+**Status**: `done`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
+- `services/xstockstrat-ui/src/components/trader/IndicatorPanels.tsx` — create
+- `services/xstockstrat-ui/src/hooks/useIndicatorSeries.ts` — create (or co-locate; decide by
+  file-size precedent at execute time, matching the `useBackfills.ts`/`useOpportunities.ts`
+  per-domain-hook convention)
+
+**Reviewers**: `xstockstrat-ui` (service owner) — Trading UI correctness, analytics display accuracy,
+Connect-RPC call safety, no fabricated data (P-03); `xstockstrat-indicators` (FYI) — reached only
+transitively through the new analysis RPC, no service-side change
+
+**Codebase Evidence**:
+- `useGetStrategy(strategyId?)` confirmed at `hooks/useStrategyDefinitions.ts:25-28` — calls
+  `analysisClient.getStrategy({ strategyId })` (the cross-segment `/insights/api` browser client,
+  covered by Step 7's sanctioned exception), returning the full `StrategyDefinition` including
+  `components`. This is the source of the resolved strategy's declared components to chart. (Note: it
+  lives in `useStrategyDefinitions.ts`, **not** `useStrategies.ts`.)
+- `analysisClient` browser client bound to `/insights/api` confirmed at
+  `src/lib/browserClients/analysisClient.ts:5` — the same client `useGetStrategy` already uses; the
+  new `getIndicatorSeries` browser call reuses it directly (no new `traderBff.ts` registration —
+  Step 7's exception), matching how every other cross-segment section on this page calls analysis.
+- Bars are fetched but **discarded** today: `page.tsx:86-96` — `.getBars({ ... page: { pageSize: 200 }
+  })` then `series.setData(mapBars(res.bars))` at line 96, with only `barsError` retained in state
+  (line 73). This step adds new state to **retain** the fetched bars' `close` + `time` for the RPC
+  request (design.md § "Bar source" — the page must add small new state; the candlestick's own closes
+  +times feed the panels, structural x-axis parity, no second fetch). `Bar.time` is the timestamp
+  field (Step 27 evidence).
+- Stacked-panels rendering precedent confirmed: `components/insights/FormulaRunResult.tsx` uses
+  `import { Line, LineChart, XAxis, YAxis } from 'recharts'` + `ChartContainer` from
+  `@/components/ui/chart` (lines 2, 5) — one independent chart per output series, each its own axis
+  domain (design.md cites `:43-88`). The new `IndicatorPanels` follows this exact pattern: one
+  `ChartContainer`+`LineChart` panel per `ComponentSeries`, drawing every `NamedSeries` as its own
+  `<Line>`. **Not** a `lightweight-charts` second pane (the `useCandlestickChart` hook has no
+  sub-pane/second-series API — recon: zero `addLineSeries`/`priceScaleId` usage anywhere).
+- `isLoading` skeleton gating precedent: `SignalReadiness.tsx:64-71`'s per-section pattern (no
+  Suspense — `useSuspenseQuery` has zero usages in the codebase, recon).
+- Strategy resolution: the FR-6 strategy follows the same precedence as Readiness/Backtests — the
+  watchlist-binding `strategyId` (Step 12's derived `boundStrategyId`), else the picker's current
+  selection. Reuse Step 12's already-computed binding output; no new resolution logic.
+
+**TDD**: `red-green required`
+
+**Instructions**:
+1. **Retain the fetched bars.** In `page.tsx`'s bars-fetch effect (lines 86-96, at/after Step 8's
+   top-level hoist of this effect), capture the fetched bars into new state — e.g. `const [barSeries,
+   setBarSeries] = useState<{ closes: number[]; times: Timestamp[] }>(...)` — alongside the existing
+   `series.setData(...)` call, so the closes and their `time` timestamps survive for the RPC request.
+   Do not add a second `getBars` call — reuse the one already firing (design.md: no second bars fetch).
+2. Create `hooks/useIndicatorSeries.ts` — a query hook calling
+   `analysisClient.getIndicatorSeries({ strategyId, symbol, closes, times })` (cross-segment browser
+   client per Step 7's exception), `enabled` only when a resolved `strategyId`, a non-empty `closes`
+   array, and a non-empty `times` array are all present. Returns the `components` array + loading/error.
+3. Create `components/trader/IndicatorPanels.tsx` (`{ components: ComponentSeries[]; times: Timestamp[]
+   }` prop) rendering one stacked `ChartContainer`+`LineChart` panel per `ComponentSeries`, following
+   `FormulaRunResult.tsx`'s pattern:
+   - Each panel draws every `NamedSeries` in that component as its own `<Line>` (primary `value` +
+     secondaries like `bb.upper`/`macd.signal`/`stoch.d`) — no sub-series dropped (FR-12/P-03).
+   - **Warm-up/gap points**: a `NamedSeries.values[i]` that is an **unset** `DoubleValue` (no `value`
+     presence) is rendered as a gap (recharts `null`/`connectNulls={false}`), never plotted as `0`
+     (AC-4a — this is the whole reason the wire type is `DoubleValue`). Read presence via the
+     generated getter, not `?? 0`.
+   - A `ComponentSeries` with a non-empty `error` renders a per-panel error/no-data state instead of
+     a chart (per-component fault isolation surfaced to the UI).
+4. In `page.tsx`, mount `<IndicatorPanels ... />` **beneath the hoisted price chart** (Step 8's
+   top-level chart `Card`), gated: resolve the FR-6 strategy id (Step 12's `boundStrategyId`, else the
+   picker selection); if none resolves, or `useGetStrategy` returns a strategy with **zero**
+   `components`, render an explicit no-data state (no fabricated panels — P-03), never call the RPC
+   with an empty strategy. When resolved, call `useGetStrategy(strategyId)` for `components` presence
+   and `useIndicatorSeries({ strategyId, symbol, closes, times })` for the series; `isLoading` shows a
+   skeleton (SignalReadiness pattern, no Suspense).
+
+Cross-cutting code-quality (§B): this step adds new outbound gRPC calls (`getIndicatorSeries`,
+`getStrategy`) but only from the **browser** via `analysisClient` — header propagation is the
+BFF/edge's concern (the browser client hits `/insights/api`, and `bffShared.ts`'s dispatch +
+`backendHeaders` inject the C-03 tuple server-side, same as every other section's browser call on this
+page); no new server-side propagation code is added here. Test-data (C-12): the e2e fixture for the
+new RPC response is added in Step 33's paired test (a new `e2e/fixtures/indicatorSeries.ts` module +
+`INVENTORY.md` row — a second consumer, `mock-backend.ts` + the spec, exists on day one).
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && pnpm lint
+grep -n "getIndicatorSeries" src/hooks/useIndicatorSeries.ts
+grep -n "connectNulls\|hasValue\|\.value\b" src/components/trader/IndicatorPanels.tsx  # confirm no `?? 0` fabrication of gaps
+```
+Plus the e2e proof in Step 33.
+
+---
+
+### Step 33 — test (xstockstrat-ui): indicator overlay panels e2e
+
+**Status**: `done`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/e2e/mock-backend.ts` — modify (add a `getIndicatorSeries` handler to the
+  `AnalysisService` router registration — confirmed absent; grep `getIndicatorSeries` in
+  `mock-backend.ts` returns zero hits at execute time)
+- `services/xstockstrat-ui/e2e/fixtures/indicatorSeries.ts` — create
+- `services/xstockstrat-ui/e2e/fixtures/INVENTORY.md` — modify
+- `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify
+
+**Reviewers**: `xstockstrat-ui` (service owner)
+
+**Codebase Evidence**:
+- `mock-backend.ts` registers an `AnalysisService` router already (it mocks `evaluateReadiness`,
+  `screenSymbols`, `listBacktests`, etc. per earlier steps' evidence) — the new `getIndicatorSeries`
+  handler joins that same registration block; confirm it's absent first (grep).
+- `INVENTORY.md` has **no** indicator-series fixture (new domain object) — a canonical
+  `e2e/fixtures/indicatorSeries.ts` module + catalog row is required (C-12), not an inline literal;
+  the mock handler and this spec are its two consumers on day one.
+- `useGetStrategy`'s mock: `getStrategy` on the `AnalysisService` mock must return a strategy whose
+  `components` include at least one builtin and (optionally) one custom-formula component so the panel
+  count is assertable — confirm whether an existing strategy fixture already carries `components` or
+  whether this step extends one.
+
+**TDD**: `red-green required` (paired with Step 32; run against the pre-Step-32 tree first — the
+panels don't render — to confirm red).
+
+**Instructions**:
+1. Create `e2e/fixtures/indicatorSeries.ts` with a canonical `INDICATOR_SERIES_AAPL`
+   `GetIndicatorSeriesResponse`-shaped object: a `times` array and ≥2 `ComponentSeries` — one with a
+   multi-`NamedSeries` component (e.g. an `MACD` component emitting `value`/`macd.signal`/
+   `macd.histogram`) whose leading values are **unset** `DoubleValue`s (warm-up), and one with a
+   non-empty `error` (the fault-isolation case). Register it in `INVENTORY.md`'s Canonical fixtures
+   table in the same step (C-12).
+2. Add a `getIndicatorSeries` handler to `mock-backend.ts`'s `AnalysisService` registration returning
+   `INDICATOR_SERIES_AAPL` for a watchlisted `AAPL` visit (with a resolvable strategy), and ensure the
+   `getStrategy` mock returns a matching-`components` strategy for that symbol's resolved strategy id.
+3. Add tests to `position-detail.spec.ts` (the `Single Position page` describe block): on a
+   watchlisted `AAPL` with a resolved strategy, assert one panel renders per `ComponentSeries` beneath
+   the price chart, the multi-series component shows all its named lines, the errored component shows
+   its per-panel error state (not a chart), and the warm-up gap is not rendered as a `0`-valued point
+   (assert against the panel's rendered points / that no fabricated zero appears). Add a no-data test:
+   a resolved strategy with zero `components` (or an unresolvable strategy) shows the explicit no-data
+   state and the RPC is not called.
+
+**Verification**:
+```bash
+cd services/xstockstrat-ui && pnpm test:e2e -g "Single Position page"
+```
+Run once against the pre-Step-32 tree (confirm red), once after (confirm green).
 
 ---
 

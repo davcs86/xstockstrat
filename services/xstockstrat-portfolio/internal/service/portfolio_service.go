@@ -253,8 +253,12 @@ func (s *PortfolioService) processOrderFill(ctx context.Context, event *ledgerv1
 		s.stops.set(stopKey{user: fill.UserID, symbol: fill.Symbol, mode: mode}, fill.StopPrice)
 	}
 
-	// Get existing position to compute new avg entry
-	existing, _ := s.repo.GetPosition(ctx, fill.UserID, fill.Symbol, mode)
+	// Get existing position to compute new avg entry, scoped to the fill's account — the same
+	// fill.AccountId this path upserts under below. Without account scoping a multi-account user's
+	// fill would compute the new average entry from whichever account's position opened most
+	// recently, not the account the fill actually belongs to (the write-path twin of the read-path
+	// bug feature 125 FR-14 fixes; extended to this caller by explicit user decision, 2026-08-15).
+	existing, _ := s.repo.GetPosition(ctx, fill.UserID, fill.Symbol, mode, fill.AccountId)
 	var (
 		newQty      float64
 		newAvgEntry float64
@@ -460,7 +464,7 @@ func (s *PortfolioService) GetPortfolio(ctx context.Context, req *portfoliov1.Ge
 
 // GetPosition returns a single position with live price.
 func (s *PortfolioService) GetPosition(ctx context.Context, req *portfoliov1.GetPositionRequest) (*portfoliov1.Position, error) {
-	p, err := s.repo.GetPosition(ctx, req.UserId, req.Symbol, req.TradingMode)
+	p, err := s.repo.GetPosition(ctx, req.UserId, req.Symbol, req.TradingMode, req.GetAccountId())
 	if err != nil {
 		return nil, err
 	}

@@ -15,9 +15,21 @@ import (
 	portfoliov1 "github.com/xstockstrat/contracts/gen/go/portfolio/v1"
 )
 
+// queryRower is the subset of *pgxpool.Pool that GetPosition needs, extracted so the
+// account-scoped query can be exercised with pgxmock (this service has no live-DB test
+// harness and CI provisions no database). Both *pgxpool.Pool and pgxmock.PgxPoolIface
+// satisfy it; production wires it to the real pool.
+type queryRower interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+}
+
 // PortfolioRepo handles reads and writes for positions and snapshots.
 type PortfolioRepo struct {
 	pool *pgxpool.Pool
+	// db is the query surface GetPosition executes against — the same *pgxpool.Pool in
+	// production, a pgxmock in the repository test. Kept alongside pool (not replacing it)
+	// so Pool() still returns the concrete *pgxpool.Pool that sibling repos reuse.
+	db queryRower
 }
 
 // NewPortfolioRepo opens a pgx connection pool.
@@ -29,7 +41,7 @@ func NewPortfolioRepo(connStr string) (*PortfolioRepo, error) {
 	if err := pool.Ping(context.Background()); err != nil {
 		return nil, fmt.Errorf("db ping: %w", err)
 	}
-	return &PortfolioRepo{pool: pool}, nil
+	return &PortfolioRepo{pool: pool, db: pool}, nil
 }
 
 // Pool exposes the underlying connection pool so sibling repositories in this
@@ -58,13 +70,23 @@ func (r *PortfolioRepo) ClosePosition(ctx context.Context, userID, symbol string
 }
 
 // GetPosition returns a single position for a user/symbol/mode.
-func (r *PortfolioRepo) GetPosition(ctx context.Context, userID, symbol string, mode commonv1.TradingMode) (*portfoliov1.Position, error) {
+func (r *PortfolioRepo) GetPosition(ctx context.Context, userID, symbol string, mode commonv1.TradingMode, accountID string) (*portfoliov1.Position, error) {
+	// Scope to a specific account when one is requested, mirroring ListPositions' optional
+	// account_id predicate (portfolio_repo.go ListPositions). Without it, a multi-account user's
+	// GetPosition would fall through to ORDER BY opened_at DESC LIMIT 1 and silently return
+	// whichever account's position opened most recently — not the account actually asked for.
 	q := `
 		SELECT ` + positionColumns + `
 		FROM portfolio.positions
-		WHERE user_id=$1 AND symbol=$2 AND trading_mode=$3
-		ORDER BY opened_at DESC LIMIT 1`
-	row := r.pool.QueryRow(ctx, q, userID, symbol, mode.String())
+		WHERE user_id=$1 AND symbol=$2 AND trading_mode=$3`
+	args := []any{userID, symbol, mode.String()}
+	if accountID != "" {
+		q += ` AND account_id=$4`
+		args = append(args, accountID)
+	}
+	// LIMIT 1 tie-breaks a stale duplicate within the (now account-narrowed) candidate set.
+	q += ` ORDER BY opened_at DESC LIMIT 1`
+	row := r.db.QueryRow(ctx, q, args...)
 	return scanPositionRow(row)
 }
 
