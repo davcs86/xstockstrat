@@ -795,7 +795,7 @@ once after (confirm green).
 
 ### Step 12 — service (xstockstrat-ui): watchlist-membership gating + Opportunity/Readiness sections
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
@@ -871,7 +871,7 @@ Plus the e2e proof in Step 13.
 
 ### Step 13 — test (xstockstrat-ui): watchlist-conditional gating
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify

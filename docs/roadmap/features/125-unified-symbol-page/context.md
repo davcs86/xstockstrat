@@ -746,3 +746,25 @@ each checkpoint (C-02/P-03).
   cold-start then passed on retry — a run-level timing artifact, CI tolerates via retries, not a
   logic issue). Message renders on NotFound; generic error absent.
 - Files modified: `e2e/mock-backend.ts`, `e2e/insights/signal-detail.spec.ts`, `e2e/fixtures/INVENTORY.md`
+
+### Step 12 — service (xstockstrat-ui): watchlist gating + Opportunity/Readiness [done]
+- Positions page gained `isSymbolWatchlisted`/`boundStrategyId` (scan `useWatchlists()` bindings,
+  legacy `symbols[]` fallback) and the FR-11 gate: watchlisted → `OpportunitySection` (conviction as
+  a deterministic ordinal + N/M conditions, action `EnumBadge`, thesis/source/strategy/expiry; no-data
+  `CardNotice` when no matching Opportunity) + `<SignalReadiness>` in Suspense; non-watchlisted → null
+  for now (Screening arrives Step 16); loading → Skeleton (no wrong-side flash). Opportunity tie-break
+  replicates insights/market's `matches.find(o=>o.strategyId===boundStrategyId) ?? matches[0]`. All
+  shadcn primitives (Card/Badge/Skeleton).
+- Verify: tsc clean (fixed a `0n` bigint-literal → truthy check, matching the reference), lint clean.
+- Files modified: `src/app/trader/positions/[symbol]/page.tsx`
+
+### Step 13 — test (xstockstrat-ui): watchlist-conditional gating [done]
+- Added a default empty `listWatchlists` to the mock (the page now calls it; specs override per-test).
+  Two e2e: watchlisted AAPL (via `page.route` override on `ListWatchlists`) → Opportunity + "Why this
+  fired" render; non-watchlisted → both absent.
+- **Deviation (ordering)**: the spec's non-watchlisted assertion checks the Screening section, which
+  doesn't exist until Step 16 — so I assert the testable-now half (Opportunity/Readiness ABSENT); the
+  Screening-renders assertion lands in Step 17. Route pattern uses the full connect service name
+  (`xstockstrat.portfolio.v1.PortfolioService/ListWatchlists`).
+- E2E: **built + ran — all 8 pass (9.2s), no flakiness.**
+- Files modified: `e2e/mock-backend.ts`, `e2e/trader/position-detail.spec.ts`

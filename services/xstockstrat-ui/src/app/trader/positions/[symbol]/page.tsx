@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { AppShell } from '@/components/trader/AppShell';
@@ -12,7 +12,11 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { marketDataClient } from '@/lib/browserClients/marketDataClient';
 import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
 import { openR, fmtR, sideLabel } from '@/lib/positionRisk';
-import { POSITION_RISK_FLAG, EnumBadge } from '@/lib/opportunityShared';
+import { POSITION_RISK_FLAG, OPPORTUNITY_ACTION, EnumBadge } from '@/lib/opportunityShared';
+import { useWatchlists } from '@/hooks/useWatchlists';
+import { useOpportunities } from '@/hooks/useOpportunities';
+import { SignalReadiness } from '@/components/insights/SignalReadiness';
+import type { Opportunity } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import {
   OrderSideBadge,
   OrderStatusBadge,
@@ -92,6 +96,34 @@ export default function PositionDetailPage() {
       ).length,
     [orders],
   );
+
+  // FR-11 watchlist-conditional split: is this symbol on any of the user's watchlists, and (if so)
+  // which strategy is it bound to? No dedicated membership RPC exists — scan useWatchlists()'s
+  // bindings (authoritative) with the deprecated flat symbols[] as a legacy fallback.
+  const { data: watchlistsData, isLoading: watchlistsLoading } = useWatchlists();
+  const { isSymbolWatchlisted, boundStrategyId } = useMemo(() => {
+    let found = false;
+    let bound = '';
+    for (const wl of watchlistsData?.watchlists ?? []) {
+      for (const b of wl.bindings ?? []) {
+        if ((b.symbol ?? '').toUpperCase() === symbol) {
+          found = true;
+          if (b.strategyId) bound = b.strategyId;
+        }
+      }
+      // Legacy fallback: a pre-097 record with an empty bindings[] still lists symbols[].
+      if (!found && (wl.symbols ?? []).some((s) => s.toUpperCase() === symbol)) found = true;
+    }
+    return { isSymbolWatchlisted: found, boundStrategyId: bound };
+  }, [watchlistsData, symbol]);
+
+  // Opportunity for this symbol (watchlisted branch) — replicate insights/market's tie-break:
+  // prefer the watchlist-bound strategy's opportunity, else the highest-conviction match.
+  const { data: oppData } = useOpportunities(0);
+  const opportunity = useMemo(() => {
+    const matches = (oppData?.opportunities ?? []).filter((o) => o.symbol === symbol);
+    return matches.find((o) => o.strategyId === boundStrategyId) ?? matches[0];
+  }, [oppData, symbol, boundStrategyId]);
 
   useEffect(() => {
     if (!symbol) return;
@@ -202,6 +234,20 @@ export default function PositionDetailPage() {
             <OrderForm mode={mode} initialSymbol={symbol} />
           </CardContent>
         </Card>
+
+        {/* FR-11 watchlist-conditional split: exactly one side — Opportunity + Readiness (+ Fundamentals,
+            Step 14) for a watchlisted symbol, or Screening (Step 16) otherwise. Render neither while
+            watchlist membership is still loading (no flash of the wrong side). */}
+        {watchlistsLoading ? (
+          <Skeleton className="h-24 w-full" />
+        ) : isSymbolWatchlisted ? (
+          <>
+            <OpportunitySection opportunity={opportunity} symbol={symbol} />
+            <Suspense fallback={<div className="h-24" />}>
+              <SignalReadiness symbol={symbol} />
+            </Suspense>
+          </>
+        ) : null}
 
         {position && position.symbol ? (
           <PositionBody
@@ -578,6 +624,56 @@ function PositionBody({
         </div>
       </div>
     </>
+  );
+}
+
+// Opportunity/conviction section (FR-5) for a watchlisted symbol — reuses the same Opportunity
+// fields and deterministic-ordinal conviction display insights/market/[symbol] shows today. When no
+// opportunity matches the symbol, an explicit no-data notice (never a fabricated row — P-03).
+function OpportunitySection({
+  opportunity,
+  symbol,
+}: {
+  opportunity: Opportunity | undefined;
+  symbol: string;
+}) {
+  if (!opportunity) {
+    return <CardNotice>No current opportunity for {symbol}.</CardNotice>;
+  }
+  // conviction is a deterministic ordinal, NOT a probability — shown as a scaled number alongside
+  // the authoritative "N/M conditions", never re-labeled as a % confidence.
+  const conviction = Math.round(opportunity.conviction * 100);
+  const validUntil = opportunity.validUntil?.seconds
+    ? new Date(Number(opportunity.validUntil.seconds) * 1000).toTimeString().slice(0, 5)
+    : null;
+  const metaBits = [
+    opportunity.strategyId || undefined,
+    opportunity.source || undefined,
+    validUntil ? `valid until ${validUntil}` : undefined,
+  ].filter(Boolean);
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <CardTitle className="text-base">Opportunity</CardTitle>
+          <EnumBadge render={OPPORTUNITY_ACTION[opportunity.action]} />
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-2xl tabular-nums text-buy">{conviction}</span>
+          <span className="text-sm text-muted-foreground">
+            {opportunity.passingConditions}/{opportunity.totalConditions} conditions
+          </span>
+        </div>
+        {opportunity.thesis && (
+          <p className="text-sm text-muted-foreground">{opportunity.thesis}</p>
+        )}
+        {metaBits.length > 0 && (
+          <p className="font-mono text-xs text-muted-foreground">{metaBits.join(' · ')}</p>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
