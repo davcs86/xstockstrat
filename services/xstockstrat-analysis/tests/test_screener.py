@@ -361,7 +361,8 @@ async def test_single_symbol_criterion_raw_values_and_passed():
     md.GetBars = AsyncMock(return_value=bars([1.0, 2.0, 3.0]))
     ind = AsyncMock()
     # One symbol, three formula criteria → three ExecuteFormula calls in criteria order:
-    #   f_pass raw 0.8 (GT 0.5 → pass), f_fail raw 0.8 (GT 0.9 → fail), f_skip → formula error (skipped)
+    #   f_pass raw 0.8 (GT 0.5 → pass), f_fail raw 0.8 (GT 0.9 → fail),
+    #   f_skip → formula error (skipped)
     ind.ExecuteFormula = AsyncMock(
         side_effect=[
             formula_resp([0.8]),
@@ -389,7 +390,8 @@ async def test_single_symbol_criterion_raw_values_and_passed():
     # Pass/fail reflects the comparator against the raw value, not the collapsed score.
     assert r.criterion_passed["f_pass"] is True
     assert r.criterion_passed["f_fail"] is False
-    # A skipped criterion (formula unavailable) is absent from BOTH new maps (mirrors criterion_scores).
+    # A skipped criterion (formula unavailable) is absent from BOTH new maps
+    # (mirrors criterion_scores).
     assert "f_skip" not in r.criterion_raw_values
     assert "f_skip" not in r.criterion_passed
     assert "f_skip" not in r.criterion_scores
