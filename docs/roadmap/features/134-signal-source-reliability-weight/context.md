@@ -268,3 +268,12 @@
 - Files modified: `e2e/config-ui/sources.spec.ts`, `e2e/fixtures/signalSources.ts`,
   `e2e/fixtures/index.ts`, `e2e/fixtures/INVENTORY.md`, `e2e/mock-backend.ts`
 - TDD: red (weight cell/editor absent pre-Step-8) → green (16/16 sources.spec.ts pass). Deviations: none.
+
+### Step 10 — migration: config source_weights description superseded [done]
+- Created `016_deprecate_analysis_signal_source_weights_desc.{up,down}.sql`: up UPDATEs the
+  `analysis.signals.source_weights` description to "SUPERSEDED (feature 134) … retained but no longer
+  read"; down restores the exact original 003 text. Description-only (value_type/value_data untouched).
+  `016` confirmed free (highest was `015_marketdata_finnhub`). F-01 respected (003 unedited; new migration).
+- Files modified: `services/xstockstrat-config/migrations/016_*.{up,down}.sql`
+- Verify (offline, no DB): both exist; `.up` UPDATE reversed by `.down`. Live apply runs in CI.
+- Deviations: none.

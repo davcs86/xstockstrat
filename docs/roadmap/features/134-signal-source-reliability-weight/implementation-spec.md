@@ -506,7 +506,7 @@ The new test is green after Step 8 and red before it; `INVENTORY.md` points at t
 
 ### Step 10 — migration: Mark `analysis.signals.source_weights` description as superseded (config service)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-config`
 **Files**:
 - `services/xstockstrat-config/migrations/016_deprecate_analysis_signal_source_weights_desc.up.sql` — create
