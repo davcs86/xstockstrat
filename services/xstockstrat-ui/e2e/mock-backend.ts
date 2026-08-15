@@ -48,6 +48,7 @@ import {
   CONFIG_KEY_FIXTURES,
   SIGNAL_SOURCES,
   SIGNAL_SOURCE_WEIGHTED,
+  FUNDAMENTALS_AAPL,
 } from './fixtures';
 
 export const TRADER_MOCK_PORT = 9091;
@@ -461,6 +462,15 @@ export async function startMockBackend(): Promise<void> {
               { symbol: 'TSLA', exchange: 'NASDAQ', assetClass: 'us_equity' },
             ],
           };
+        },
+        async getFundamentals(req) {
+          // feature 125 (FR-7): AAPL has data; any other symbol has none — the real backend
+          // surfaces a no-data miss as UNAVAILABLE (not NotFound), which the UI treats as the
+          // explicit no-data state.
+          if ((req.symbol ?? '').toUpperCase() === 'AAPL') {
+            return { fundamentals: FUNDAMENTALS_AAPL };
+          }
+          throw new ConnectError(`fmp: no fundamentals for ${req.symbol}`, Code.Unavailable);
         },
       });
 

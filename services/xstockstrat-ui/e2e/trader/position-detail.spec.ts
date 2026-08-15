@@ -103,25 +103,7 @@ test.describe('Single Position page', () => {
     await addAuthCookie(page);
     // Seed AAPL into a watchlist (bound to a live strategy) so the FR-11 gate takes the
     // watchlisted branch (Opportunity + Readiness), not the Screening branch.
-    await page.route(
-      '**/xstockstrat.portfolio.v1.PortfolioService/ListWatchlists',
-      async (route) => {
-        await route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify({
-            watchlists: [
-              {
-                watchlistId: 'wl-1',
-                name: 'My list',
-                symbols: ['AAPL'],
-                bindings: [{ symbol: 'AAPL', strategyId: 'strat-live-001' }],
-              },
-            ],
-          }),
-        });
-      },
-    );
+    await watchlist(page, 'AAPL');
     await page.goto('/trader/positions/AAPL');
 
     await expect(page.getByText('Opportunity').first()).toBeVisible({ timeout: 30000 });
@@ -141,4 +123,56 @@ test.describe('Single Position page', () => {
     await expect(page.getByText('Why this fired')).toHaveCount(0);
     await expect(page.getByText('Opportunity', { exact: true })).toHaveCount(0);
   });
+
+  test('the Fundamentals section renders metrics for a watchlisted symbol with data (FR-7)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    await watchlist(page, 'AAPL'); // AAPL watchlisted → the fundamentals branch renders
+    await page.goto('/trader/positions/AAPL');
+
+    await expect(page.getByRole('heading', { name: 'Fundamentals' })).toBeVisible({
+      timeout: 30000,
+    });
+    // Metric labels + a value from FUNDAMENTALS_AAPL (P/E 31.40).
+    await expect(page.getByText('P/E')).toBeVisible();
+    await expect(page.getByText('31.40')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('ROE')).toBeVisible();
+  });
+
+  test('the Fundamentals section shows an explicit no-data state when the provider has none', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // MSFT is held (so the page loads) and watchlisted here, but the mock has no fundamentals for
+    // it → the section shows the explicit no-data message, never fabricated zeros.
+    await watchlist(page, 'MSFT');
+    await page.goto('/trader/positions/MSFT');
+
+    await expect(page.getByRole('heading', { name: 'Fundamentals' })).toBeVisible({
+      timeout: 30000,
+    });
+    await expect(page.getByText(/No fundamentals data for MSFT/)).toBeVisible({ timeout: 10000 });
+  });
 });
+
+/** Route the browser's ListWatchlists to a single watchlist containing `symbol` (bound to a live
+ *  strategy), so the FR-11 gate takes the watchlisted branch. */
+async function watchlist(page: import('@playwright/test').Page, symbol: string): Promise<void> {
+  await page.route('**/xstockstrat.portfolio.v1.PortfolioService/ListWatchlists', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        watchlists: [
+          {
+            watchlistId: 'wl-1',
+            name: 'My list',
+            symbols: [symbol],
+            bindings: [{ symbol, strategyId: 'strat-live-001' }],
+          },
+        ],
+      }),
+    });
+  });
+}
