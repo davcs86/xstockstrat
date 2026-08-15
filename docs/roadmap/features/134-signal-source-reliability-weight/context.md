@@ -293,3 +293,10 @@
 ### Feature 134 — code-completed
 All 11 steps done. proto+codegen (1-2), ingest migration+service+tests (3-5, 190 green), analysis
 service+tests (6-7, 467 green), config-ui service+e2e (8-9, 16/16 green), config migration (10), docs (11).
+
+### Post-PR CI fix — agent SignalSource projection parity
+- CI on #953 caught a real regression the spec's C-14 scan missed: `xstockstrat-agent`
+  `list_signal_sources` hand-projects every `SignalSource` field and a descriptor-parity test
+  (`test_signal_source_projection.py`) fails when a new field is unprojected. Added
+  `"reliability_weight": src.reliability_weight` to the projection (`app/client.py`). Agent suite green
+  (219 passed). Not a new capability — a projection-parity fix for the proto field added in Step 1.

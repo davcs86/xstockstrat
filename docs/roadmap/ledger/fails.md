@@ -1160,3 +1160,5 @@ ambiguity is logged here).
   self-report as evidence. This recurred 4+ times in one debate despite each prior instance being
   caught; treat "the proposer says X is closed" as a hypothesis to disprove, every round, not a fact
   once established in an earlier round.
+
+- **A new proto field on a shared message breaks the agent's descriptor-parity projection test** — `xstockstrat-agent` `list_signal_sources` (and the backtest view) hand-project every field of a proto message and guard it with a `set(DESCRIPTOR.fields_by_name)` parity test. Adding a field to `ingest.SignalSource` / any such message without updating the agent projection fails CI at `test_*_projection.py`. When a `/sdd-spec` C-14 consumer scan enumerates surfaces for a proto change, include the agent's parity-guarded projections, not just the UI/BFF. (feature 134 — `reliability_weight` added to `SignalSource`; caught by CI, not the spec.)

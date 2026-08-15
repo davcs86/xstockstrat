@@ -134,6 +134,8 @@ async def list_signal_sources(include_inactive: bool = False) -> list[dict[str, 
             "last_error": src.last_error,
             # int64 → a JSON number here (manual projection), not the int64-as-string contract.
             "signals_fed": src.signals_fed,
+            # feature 134 — per-source reliability weight (ranking multiplier in [0,1]).
+            "reliability_weight": src.reliability_weight,
         }
         for src in resp.sources
     ]
