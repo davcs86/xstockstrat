@@ -53,7 +53,7 @@ config key's registered description, and Step 11 fixes the two doc-drift sites t
 
 ### Step 1 — proto: Add `reliability_weight` field to `ingest.SignalSource`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/ingest/v1/ingest.proto` — modify

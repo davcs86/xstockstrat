@@ -153,6 +153,10 @@ message SignalSource {
   google.protobuf.Timestamp last_seen_at = 9;
   string last_error = 10;
   int64  signals_fed = 11;
+  // reliability_weight ∈ [0.0, 1.0] — per-source ranking multiplier applied to signal
+  // conviction (feature 134). optional (explicit presence) so an omitted create-form field is
+  // distinguishable from an explicit 0.0. DB default 1.0 (neutral).
+  optional double reliability_weight = 12;
 }
 
 // Health of a registered signal source (feature 083). Closed set → enum (C-04).

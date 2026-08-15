@@ -159,3 +159,18 @@
     FR-4 replace, fixed in Step 11 (same-PR teardown rule).
   - C-12: signal-source mock is inline at `e2e/mock-backend.ts:882-923`, `INVENTORY.md:60` "not yet
     centralized" — this is the second consumer, so Step 9 creates `e2e/fixtures/signalSources.ts`.
+
+## Session 2026-08-15 — sdd-execute (sequential)
+
+### Step 1 — proto: add reliability_weight field [done]
+- Added `optional double reliability_weight = 12;` to `message SignalSource` in
+  `packages/proto/ingest/v1/ingest.proto` (after `signals_fed = 11`, field 12 was free, no reserved
+  block). Explicit presence (`optional`) so an omitted create-form field is distinguishable from an
+  explicit 0.0.
+- Files modified: `packages/proto/ingest/v1/ingest.proto`
+- Verify: `buf lint` clean; `buf breaking` (run from repo root, `--against .git#ref=HEAD,subdir=packages/proto`
+  since the fresh branch has no commits and HEAD==main-dev) exits 0 — additive field is non-breaking.
+  Note: the spec's `--against .git#branch=<branch>` form failed with a git-remote read error on a
+  brand-new local branch; the HEAD-ref form is the CI-equivalent baseline. Recorded as a benign
+  verification-form substitution (not a deviation — same non-breaking result).
+- Deviations: none.
