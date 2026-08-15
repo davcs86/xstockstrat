@@ -253,3 +253,28 @@ session exists. Resolved as a stale/cached mobile-client render, not a collision
 Per this skill's own protocol, `/sdd-execute` must announce every `[ ] unaddressed` item above at
 each checkpoint and at session end (P-03) — mark `[x]` here in the same block when the step that
 clears it lands, rather than letting the warning go stale.
+
+## Session 2026-08-15 — sdd-execute boot (branch-topology correction)
+
+- Boot Step B3 (`git ls-remote --heads origin feature/shadcn-datatable-migration`) found the
+  spec's stated Development Branch does not exist on origin, and `origin/main-dev` doesn't have
+  the feature docs either (expected — this feature hasn't merged). Root cause: this session's
+  harness assignment ("Develop on branch `claude/migrate-tables-shadcn-datatable-jbccqa`",
+  "NEVER push to a different branch without explicit permission") overrides
+  `docs/runbooks/feature-workflow.md`'s default `feature/<slug>` branch model — every SDD artifact
+  for this feature (`feature.md`, `product-spec.md`, `recon.md`, `design.md`,
+  `implementation-spec.md`, this file) has, correctly, been authored and pushed to
+  `claude/migrate-tables-shadcn-datatable-jbccqa` throughout, not a `feature/*` branch.
+- Same branch-topology-mismatch shape as ledger `fails.md` 2026-07-30
+  (`082-fix-fmp-config-boot-only`: "a skill that writes to a feature directory should verify early
+  that the currently-checked-out branch and the feature's Development Branch are the same lineage").
+  Caught here at `/sdd-execute`'s own boot sequence (B3/B4), same as that entry recommends — not
+  mid-execution.
+- Corrected `feature.md`'s `**Development Branch**` field to
+  `claude/migrate-tables-shadcn-datatable-jbccqa` (matching reality) rather than creating a
+  redundant `feature/shadcn-datatable-migration` branch that would violate the harness's explicit
+  branch constraint. Recorded as its own Status History row (lifecycle unchanged).
+  `/sdd-execute` proceeds treating `claude/migrate-tables-shadcn-datatable-jbccqa` as `<dev-branch>`
+  for the remainder of this session — sequential mode commits steps directly to it, and the
+  integration PR (already open as #960) targets `main-dev` from it, same as every other artifact
+  PR this session has pushed.

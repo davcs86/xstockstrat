@@ -1,7 +1,7 @@
 # Feature: shadcn-datatable-migration
 
 **Lifecycle Status**: `implementation-ready`
-**Development Branch**: `feature/shadcn-datatable-migration`
+**Development Branch**: `claude/migrate-tables-shadcn-datatable-jbccqa`
 **Created**: 2026-08-15
 **Last Updated**: 2026-08-15
 
@@ -15,6 +15,7 @@
 | 2026-08-15 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings; soft file-overlap with 124/125 noted, no blocking collision) |
 | 2026-08-15 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + design.md written. Zero Floor breaches. |
 | 2026-08-15 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 33 steps |
+| 2026-08-15 | `implementation-ready` (unchanged) | /sdd-execute (boot) | Corrected **Development Branch** `feature/shadcn-datatable-migration` → `claude/migrate-tables-shadcn-datatable-jbccqa` — session's harness assignment requires all work stay on the `claude/*` branch; every SDD artifact for this feature already lives (and is pushed) there. Same branch-topology-mismatch shape as ledger `fails.md` 2026-07-30 `082-fix-fmp-config-boot-only`, caught at boot instead of mid-execution. |
 
 ---
 
