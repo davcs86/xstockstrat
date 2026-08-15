@@ -143,6 +143,8 @@ export interface ExternalSignal {
     headline: string;
     rawUrl: string;
     tags: string[];
+    /** platform ingestion time (server-set, immune to source timestamp manipulation) — feature 022 */
+    ingestedAt?: Date | undefined;
 }
 export interface IngestSignalRequest {
     signal?: ExternalSignal | undefined;

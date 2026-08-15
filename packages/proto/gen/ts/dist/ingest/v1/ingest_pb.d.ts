@@ -302,6 +302,12 @@ export type ExternalSignal = Message<"xstockstrat.ingest.v1.ExternalSignal"> & {
      * @generated from field: repeated string tags = 9;
      */
     tags: string[];
+    /**
+     * platform ingestion time (server-set, immune to source timestamp manipulation) — feature 022
+     *
+     * @generated from field: google.protobuf.Timestamp ingested_at = 10;
+     */
+    ingestedAt?: Timestamp | undefined;
 };
 /**
  * Describes the message xstockstrat.ingest.v1.ExternalSignal.

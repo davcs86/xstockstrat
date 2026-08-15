@@ -1257,6 +1257,7 @@ function createBaseExternalSignal() {
         headline: "",
         rawUrl: "",
         tags: [],
+        ingestedAt: undefined,
     };
 }
 exports.ExternalSignal = {
@@ -1287,6 +1288,9 @@ exports.ExternalSignal = {
         }
         for (const v of message.tags) {
             writer.uint32(74).string(v);
+        }
+        if (message.ingestedAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.ingestedAt), writer.uint32(82).fork()).join();
         }
         return writer;
     },
@@ -1360,6 +1364,13 @@ exports.ExternalSignal = {
                     message.tags.push(reader.string());
                     continue;
                 }
+                case 10: {
+                    if (tag !== 82) {
+                        break;
+                    }
+                    message.ingestedAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1391,6 +1402,11 @@ exports.ExternalSignal = {
                     ? globalThis.String(object.raw_url)
                     : "",
             tags: globalThis.Array.isArray(object?.tags) ? object.tags.map((e) => globalThis.String(e)) : [],
+            ingestedAt: isSet(object.ingestedAt)
+                ? fromJsonTimestamp(object.ingestedAt)
+                : isSet(object.ingested_at)
+                    ? fromJsonTimestamp(object.ingested_at)
+                    : undefined,
         };
     },
     toJSON(message) {
@@ -1422,6 +1438,9 @@ exports.ExternalSignal = {
         if (message.tags?.length) {
             obj.tags = message.tags;
         }
+        if (message.ingestedAt !== undefined) {
+            obj.ingestedAt = message.ingestedAt.toISOString();
+        }
         return obj;
     },
     create(base) {
@@ -1438,6 +1457,7 @@ exports.ExternalSignal = {
         message.headline = object.headline ?? "";
         message.rawUrl = object.rawUrl ?? "";
         message.tags = object.tags?.map((e) => e) || [];
+        message.ingestedAt = object.ingestedAt ?? undefined;
         return message;
     },
 };

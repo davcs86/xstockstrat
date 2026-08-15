@@ -412,6 +412,8 @@ export interface ExternalSignal {
   headline: string;
   rawUrl: string;
   tags: string[];
+  /** platform ingestion time (server-set, immune to source timestamp manipulation) — feature 022 */
+  ingestedAt?: Date | undefined;
 }
 
 export interface IngestSignalRequest {
@@ -1559,6 +1561,7 @@ function createBaseExternalSignal(): ExternalSignal {
     headline: "",
     rawUrl: "",
     tags: [],
+    ingestedAt: undefined,
   };
 }
 
@@ -1590,6 +1593,9 @@ export const ExternalSignal: MessageFns<ExternalSignal> = {
     }
     for (const v of message.tags) {
       writer.uint32(74).string(v!);
+    }
+    if (message.ingestedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.ingestedAt), writer.uint32(82).fork()).join();
     }
     return writer;
   },
@@ -1673,6 +1679,14 @@ export const ExternalSignal: MessageFns<ExternalSignal> = {
           message.tags.push(reader.string());
           continue;
         }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          message.ingestedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1705,6 +1719,11 @@ export const ExternalSignal: MessageFns<ExternalSignal> = {
         ? globalThis.String(object.raw_url)
         : "",
       tags: globalThis.Array.isArray(object?.tags) ? object.tags.map((e: any) => globalThis.String(e)) : [],
+      ingestedAt: isSet(object.ingestedAt)
+        ? fromJsonTimestamp(object.ingestedAt)
+        : isSet(object.ingested_at)
+        ? fromJsonTimestamp(object.ingested_at)
+        : undefined,
     };
   },
 
@@ -1737,6 +1756,9 @@ export const ExternalSignal: MessageFns<ExternalSignal> = {
     if (message.tags?.length) {
       obj.tags = message.tags;
     }
+    if (message.ingestedAt !== undefined) {
+      obj.ingestedAt = message.ingestedAt.toISOString();
+    }
     return obj;
   },
 
@@ -1754,6 +1776,7 @@ export const ExternalSignal: MessageFns<ExternalSignal> = {
     message.headline = object.headline ?? "";
     message.rawUrl = object.rawUrl ?? "";
     message.tags = object.tags?.map((e) => e) || [];
+    message.ingestedAt = object.ingestedAt ?? undefined;
     return message;
   },
 };
