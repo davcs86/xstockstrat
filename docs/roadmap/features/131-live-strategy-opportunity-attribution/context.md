@@ -313,3 +313,48 @@
   `user_id = $1` bound to `"u1"`. C-13: strategy-row literals single-consumer → inline compliant.
 - Files modified: `tests/test_analysis_servicer.py`
 - TDD: red (AttributeError — method/constant absent) → green (2 pass; full suite 469, 82.36%).
+
+### Interlude — 134 (PR #953) CI drive-to-green [done]
+- Mid-execute, PR #953 (feature 134, this stack's base) went red on Frontend E2E shard 1: a REAL 134
+  regression, not the known signal-detail flake. `e2e/config-ui/value-persists-after-save.spec.ts:83`
+  asserted the Sources weight column reflects a saved `analysis.signals.source_weights` **config-key**
+  edit — the exact `useSignalSources` config-blob parse 134's FR-4 removed. Deleted that obsolete case
+  (Sources weight column is covered by `sources.spec.ts`), pruned its unused page constants, fixed the
+  module docstring. Committed on the 134 branch (`fe33fd9`), merged into this stack. **PR #953 merged.**
+- Ledger: `fails.md` already carries the general "new proto field breaks agent parity test" line; this
+  one is a different class — a UI behavior removal (FR-4 genuine replace) leaving a stale e2e that
+  asserts the removed behavior. Recorded below.
+
+### Step 3 — service: fold live_by_symbol into _compute_opportunities; widen _drain_held_symbols [done]
+- `servicer.py`: widened `_drain_held_symbols` → `dict[str, float]` keyed by normalized symbol, summed
+  `abs(market_value)` (normalize at construction — design step 1). Screener call-site membership test
+  normalized (**D-3**). In `_compute_opportunities`: renamed local `held`→`held_value_by_symbol`;
+  built owner-scoped `live_by_symbol` + `created_at_by_strategy` from `list_live_enabled(user_id)`
+  (**D-1**); `_candidate` gains `is_live`; `_capped_live(sym, exclude)` (exclude-before-slice, cap read
+  once — **D-4** placement); watchlist loop tags live; held loop bounded by `max_live_held`; new
+  live-only step (design step 6) bounded by `max_live_only`, `− held_norm` domain guard; curated
+  predicate extended with `is_live`. Did **not** touch `_resolve_action_tag`/`signal_axis` (instr. 11).
+- Files modified: `app/handlers/servicer.py`
+- Verify: ruff clean; structural grep confirms all 3 caps read via `get_int` (F-07), drain returns dict.
+
+### Step 4 — test: live-strategy attribution + harness extensions [done]
+- `_materialized_svc`: added `live_strategies` param (→ `list_live_enabled` default `[]` — the
+  mandatory harness fix; a bare AsyncMock breaks all 12 existing tests), and `held` now accepts a
+  `(symbol, market_value)` tuple (**D-2**, held-mock `market_value`). `_strat_row` gained
+  `symbols`/`created_at` (a live-universe row via `signal_params.symbols` + the `_capped_live`
+  tiebreak), defaulted off so existing callers are unchanged.
+- 5 new AC tests (AC-1 held exit trace, AC-2 live-only entry trace + curated, AC-3 watchlist∩live
+  collapse, AC-5 non-live never attributes, AC-4 curated survives tiny universe). Multi-strategy-
+  per-symbol test **waived** (design Open Risk, explicit user decision) — recorded inline.
+- Files modified: `tests/test_analysis_servicer.py`
+- TDD: red (4/5 fail without Step 3; AC-5 is a negative-guard, green both trees) → green (474 pass,
+  82.59%; all 12 pre-existing Materialized tests still green — harness fix verified).
+
+### Step 5 — config: register 3 keys + attribution prose [done]
+- `analysis/CLAUDE.md` § Config Keys Consumed: 3 `analysis.opportunity.max_live_*` rows + compound
+  worst-case note (5 × (20+20) = 200, disjoint pools). `config-governance.md` Per-Feature Registered
+  Keys: prepended a newest-first feature-131 entry (no seed migration — live `get_int`, mirrors the
+  existing `analysis.opportunity.*` no-seed pattern).
+- Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `docs/patterns/config-governance.md`
+- Teardown: `/context-scrubber` plugin not installed in this session — touched context docs reviewed
+  by hand against the code (noted in the integration PR body).

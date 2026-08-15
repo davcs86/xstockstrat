@@ -208,6 +208,14 @@ Namespace: `analysis`
 | `analysis.opportunity.snooze_default_hours` | int | `24` | Default bounded "snooze until" when a SNOOZE carries no explicit timestamp (feature 097). |
 | `analysis.opportunity.signal_rank_weight` | float | `0.3` | Weight `w ∈ [0,1]` of the independent signal axis in the queue ORDER BY (feature 097, OR-G); `rank = (1−w)·conviction + w·signal_axis`. This is a distinct scalar from the (feature-134-superseded) `analysis.signals.source_weights` — not a re-purpose. |
 | `analysis.opportunity.refresh_hour_utc` | int | `0` | Hour (UTC) of the **configured daily refresh** pass (feature 097) — a wall-clock refresh, **not** market close (holiday/DST/early-close drift is expected; a calendar-aligned refresh is a future feature). Read **presence-aware** (mirror `get_bool`'s `HasField`), never `get_int` — `0` = midnight is legitimate and the `get_int` zero-trap would swallow it. |
+| `analysis.opportunity.max_live_strategies_per_symbol` | int | `5` | Per-symbol cap (feature 131): how many live-enabled strategies may **newly** attribute to one symbol via live-coverage. Enforced only at the two candidate-**creation** sites (`_capped_live`); tagging an already-existing curated row (a watchlist-bound or held strategy that is also live) is uncapped. Tiebreak is `created_at` ascending. AC-7. |
+| `analysis.opportunity.max_live_only_symbols_per_compute` | int | `20` | Cap (feature 131) on distinct **non-held** signal+live-covered symbols that get a new candidate row per compute pass (design step 6). Ranked by max active-signal conviction descending. Composes **multiplicatively** with the per-symbol cap. AC-8. |
+| `analysis.opportunity.max_live_held_symbols_per_compute` | int | `20` | Cap (feature 131) on distinct **held** symbols that may receive a new live-only strategy attribution per compute pass (ranked by held market value descending); does **not** bound the held-row count itself — every held symbol still yields ≥1 row. AC-9. |
+
+> **Feature-131 fan-out worst case:** the two caps govern disjoint pools (live-only non-held symbols
+> and live-attributed held symbols), so the compound ceiling on **newly-attributed** live rows is
+> `max_live_strategies_per_symbol × (max_live_only_symbols_per_compute + max_live_held_symbols_per_compute)`
+> = 200 at the defaults — no single key is *the* row ceiling.
 
 ## Ledger Events Emitted
 
