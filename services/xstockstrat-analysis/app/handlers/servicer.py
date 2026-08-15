@@ -1927,13 +1927,14 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
             if k in ("x-user-id", "x-access-scope", "x-trace-id")
         ]
 
-        # Feature 089 (F-7): enabling live on an inert config stores a flag that never fires. The
-        # live loop selects `live_enabled AND active` and skips a strategy with no
-        # signal_params.symbols, so reject both at enable time (FAILED_PRECONDITION). Disabling is
-        # ALWAYS allowed — even on an inert config — so an operator can always turn live off.
+        # Feature 089 (F-7): enabling live on an inactive strategy stores a flag that never fires,
+        # so reject that at enable time (FAILED_PRECONDITION). Disabling is ALWAYS allowed — even on
+        # an inert config — so an operator can always turn live off.
+        # Feature 132: the empty-signal_params.symbols reject was REMOVED. Under the deny model, an
+        # empty allowlist no longer means "never fires" — the strategy fires its whole owner union
+        # (watchlist ∪ held ∪ signals-iff-eligible, minus the deny list), so the feature-089
+        # precondition would now wrongly block a valid allowlist-free config (AC-1).
         if request.live_enabled:
-            from app.engine.live_loop import strategy_symbols  # noqa: PLC0415 (avoids import cycle)
-
             existing = await self._strategies_repo.get_by_owner_and_id(
                 caller_user_id, request.strategy_id
             )
@@ -1947,12 +1948,6 @@ class AnalysisServicer(analysis_pb2_grpc.AnalysisServiceServicer):
                 await context.abort(
                     grpc.StatusCode.FAILED_PRECONDITION,
                     "cannot enable live evaluation on an inactive strategy; reactivate it first",
-                )
-                return
-            if not strategy_symbols(_row_to_strategy_definition(existing)):
-                await context.abort(
-                    grpc.StatusCode.FAILED_PRECONDITION,
-                    "strategy has no signal_params.symbols; live evaluation would never fire",
                 )
                 return
 

@@ -434,7 +434,7 @@ Coverage ≥ 40%; assertions red before Step 7, green after.
 
 ### Step 9 — service: remove SetStrategyLive empty-symbol precondition + migrate `entry_backfill` to the resolved union
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -486,7 +486,7 @@ Coverage ≥ 40%; assertions red before Step 7, green after.
 
 ### Step 10 — test: precondition removal, union-sourced backfill, readiness gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify

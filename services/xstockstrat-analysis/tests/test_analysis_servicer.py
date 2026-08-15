@@ -4725,17 +4725,29 @@ class TestStrategyLifecycle089:
         assert ctx.abort.await_args.args[0] == grpc.StatusCode.FAILED_PRECONDITION
 
     @pytest.mark.asyncio
-    async def test_enable_live_without_symbols_rejected(self):
+    async def test_enable_live_without_symbols_now_succeeds(self):
+        """feature 132 (AC-1): the feature-089 empty-symbol precondition was REMOVED. An empty
+        signal_params.symbols allowlist no longer blocks enabling live — the strategy fires its
+        whole owner union (watchlist ∪ held ∪ signals-iff-eligible) minus the deny list."""
         svc = make_servicer()
         svc._strategies_repo = AsyncMock()
-        svc._strategies_repo.get_by_id = AsyncMock(return_value=_live_row(symbols=()))
         svc._strategies_repo.get_by_owner_and_id = AsyncMock(return_value=_live_row(symbols=()))
+        enabled = {
+            "strategy_id": "s1",
+            "display_name": "S1",
+            "active": True,
+            "live_enabled": True,
+            "definition_json": {"strategy_id": "s1"},  # no signal_params.symbols
+        }
+        svc._strategies_repo.set_live_enabled = AsyncMock(return_value=enabled)
+        svc._ledger = MagicMock()
+        svc._ledger.AppendEvent = AsyncMock(return_value=MagicMock())
         req = MagicMock(strategy_id="s1", live_enabled=True)
         ctx = _admin_ctx()
         ctx.invocation_metadata.return_value = [("x-user-id", "u1"), ("x-access-scope", "7")]
-        with pytest.raises(Exception, match="aborted"):
-            await svc.SetStrategyLive(req, ctx)
-        assert ctx.abort.await_args.args[0] == grpc.StatusCode.FAILED_PRECONDITION
+        resp = await svc.SetStrategyLive(req, ctx)
+        ctx.abort.assert_not_called()
+        assert resp.definition.live_enabled is True
 
     @pytest.mark.asyncio
     async def test_disable_live_always_allowed_even_when_inert(self):
