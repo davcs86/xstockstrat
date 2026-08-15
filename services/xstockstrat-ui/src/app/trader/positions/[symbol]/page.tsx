@@ -17,6 +17,7 @@ import { useWatchlists } from '@/hooks/useWatchlists';
 import { useOpportunities } from '@/hooks/useOpportunities';
 import { useFundamentals } from '@/hooks/useFundamentals';
 import { SignalReadiness } from '@/components/insights/SignalReadiness';
+import { SymbolScreening } from '@/components/trader/SymbolScreening';
 import { ConnectError } from '@connectrpc/connect';
 import type { Opportunity } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import {
@@ -250,7 +251,9 @@ export default function PositionDetailPage() {
             </Suspense>
             <FundamentalsSection symbol={symbol} />
           </>
-        ) : null}
+        ) : (
+          <SymbolScreening symbol={symbol} />
+        )}
 
         {position && position.symbol ? (
           <PositionBody

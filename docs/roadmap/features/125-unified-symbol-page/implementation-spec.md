@@ -1024,7 +1024,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -g "Single Position page"
 
 ### Step 16 — service (xstockstrat-ui): single-symbol Screening section
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify

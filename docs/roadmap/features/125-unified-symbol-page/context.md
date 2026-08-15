@@ -789,3 +789,33 @@ each checkpoint (C-02/P-03).
   which also matched "Loading fundamentals…").
 - E2E: **built + ran — all 10 pass (11.1s).**
 - Files: `e2e/mock-backend.ts`, `e2e/trader/position-detail.spec.ts`
+
+### Step 16 — service (xstockstrat-ui): single-symbol Screening section [done]
+- New `src/components/trader/SymbolScreening.tsx` (`{ symbol }`) — a minimal ad hoc criteria builder
+  reusing the full Screener's `newCriterion`/`buildCriterion` shape (kind/metric/comparator/threshold,
+  TECHNICAL_INDICATOR→`component` vs FUNDAMENTAL→`metricName` branch) but scoped to `[symbol]`. Runs
+  `useScreenSymbols().mutate(...)` (cross-segment `analysisClient`, Step 7 exception). Displays ONLY
+  the per-criterion `criterionRawValues`/`criterionPassed` maps (ref_name-keyed) + the client-echoed
+  threshold — **never** the universe-collapsed composite rank readings (grep guard clean). Skipped
+  criterion (absent from maps) → em-dash; INSUFFICIENT_DATA → explicit Badge+message with the gap.
+- **shadcn-first (hard req)**: composed entirely from Card/Badge/Button/Input/Select/Table + shared
+  Eyebrow — unlike the reference Screener page's raw `<select>`, all three pickers are shadcn `Select`.
+  Pass/Fail use the app-specific `buy`/`sell` Badge variants.
+- Mounted in `page.tsx`'s FR-11 non-watchlisted branch (Step 12's `isSymbolWatchlisted` gate,
+  inverted — previously `: null`).
+- Extended `e2e/fixtures/screenResults.ts` with `criterionDetailRow(symbol, raw, passed, refName='c1')`
+  (carries `criterionRawValues`/`criterionPassed`, leaves score/criterionScores at proto defaults);
+  updated the INVENTORY "Screener results" row description (same module, not a new file).
+- **DRY guard rail (pre-commit) caught two clones** between the new component and the launched
+  `insights/screener/page.tsx` (the comparator/kind option lists + the add/remove/update criteria
+  trio). Resolved the correct way — extracted a shared `src/lib/screenCriteria.ts` (`CriterionRow`,
+  `COMPARATOR_LABELS`, `KIND_OPTIONS`, `comparatorGlyph`, `newCriterion`, `useCriteriaList` hook,
+  `buildScreenCriterion`) and refactored **both** the screener page and `SymbolScreening` to consume
+  it. jscpd now reports 0 clones. Re-verified the launched Screener with its own e2e (21/21 green) so
+  the refactor of a shipped page is regression-free.
+- Verify: tsc clean (full project), lint clean, grep guard `criterion_scores|\.score\b` → no hits,
+  `check-duplication.sh` → 0 clones.
+- Files: `src/lib/screenCriteria.ts` (new), `src/components/trader/SymbolScreening.tsx` (new),
+  `src/app/insights/screener/page.tsx` (refactored onto the shared module),
+  `src/app/trader/positions/[symbol]/page.tsx`, `e2e/fixtures/screenResults.ts`,
+  `e2e/fixtures/INVENTORY.md`

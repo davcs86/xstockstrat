@@ -42,46 +42,22 @@ import {
   DEFAULT_FUNDAMENTAL_METRIC,
 } from '@/lib/strategyCatalog';
 import {
+  type CriterionRow,
+  COMPARATOR_LABELS,
+  KIND_OPTIONS,
+  comparatorGlyph,
+  useCriteriaList,
+  buildScreenCriterion,
+} from '@/lib/screenCriteria';
+import {
   Comparator,
-  ComponentKind,
   ScreenKind,
   ScreenResultStatus,
 } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 
-type CriterionRow = {
-  refName: string;
-  // FUNDAMENTAL (a marketdata fundamentals field/extra_metric, e.g. "pe_ratio") or
-  // TECHNICAL_INDICATOR (a built-in indicator computed from bars, e.g. "RSI"). Bug fix: previously
-  // every criterion was sent as FUNDAMENTAL regardless of what the user picked, so an indicator name
-  // like "rsi" never matched a fundamental field, was silently skipped server-side, and — because a
-  // skipped criterion never fails a hard filter — a comparison like "rsi < 30" always read as passed.
-  kind: ScreenKind.FUNDAMENTAL | ScreenKind.TECHNICAL_INDICATOR;
-  metricName: string;
-  op: Comparator;
-  threshold: number;
-  weight: number;
-  hardFilter: boolean;
-};
-
-const COMPARATOR_LABELS: Array<{ value: Comparator; label: string }> = [
-  { value: Comparator.LT, label: '<' },
-  { value: Comparator.LTE, label: '≤' },
-  { value: Comparator.GT, label: '>' },
-  { value: Comparator.GTE, label: '≥' },
-];
-
-const KIND_OPTIONS: Array<{ value: CriterionRow['kind']; label: string }> = [
-  { value: ScreenKind.FUNDAMENTAL, label: 'Fundamental' },
-  { value: ScreenKind.TECHNICAL_INDICATOR, label: 'Technical indicator' },
-];
-
 // Top-N default for the "Add top N to watchlist" action (feature 098, FR-6). A UI display constant,
 // not a WatchConfig key (Floor F-07 unaffected).
 const TOP_N = 5;
-
-function comparatorGlyph(op: Comparator): string {
-  return COMPARATOR_LABELS.find((c) => c.value === op)?.label ?? '?';
-}
 
 // Feature 118: merges a poll response into the displayed results by symbol, preserving row order
 // (avoids the table visibly reordering every 60s) — safe because every poll response is a full,
@@ -95,18 +71,6 @@ function mergeResultsBySymbol(
   return current.map((r) => bySymbol.get(r.symbol) ?? r);
 }
 
-function newCriterion(i: number): CriterionRow {
-  return {
-    refName: `c${i}`,
-    kind: ScreenKind.FUNDAMENTAL,
-    metricName: DEFAULT_FUNDAMENTAL_METRIC,
-    op: Comparator.LT,
-    threshold: 20,
-    weight: 1,
-    hardFilter: false,
-  };
-}
-
 export default function ScreenerPage() {
   const screen = useScreenSymbols();
   const watchlists = useWatchlists();
@@ -114,7 +78,12 @@ export default function ScreenerPage() {
   const addSymbols = useAddWatchlistSymbols();
 
   const [symbolsText, setSymbolsText] = useState('AAPL MSFT GOOG');
-  const [criteria, setCriteria] = useState<CriterionRow[]>([newCriterion(1)]);
+  const {
+    criteria,
+    add: addCriterion,
+    remove: removeCriterion,
+    update: updateCriterion,
+  } = useCriteriaList();
   // Last-run metadata (FR-4) — captured on scan success, rendered once from Date.now() at render
   // (no live tick; see src/lib/formatLastRun.ts).
   const [lastRun, setLastRun] = useState<{ at: Date; count: number } | null>(null);
@@ -135,44 +104,12 @@ export default function ScreenerPage() {
 
   const shares = normalizeWeights(criteria.map((c) => c.weight));
 
-  function addCriterion() {
-    setCriteria((c) => [...c, newCriterion(c.length + 1)]);
-  }
-  function removeCriterion(i: number) {
-    setCriteria((c) => c.filter((_, idx) => idx !== i));
-  }
-  function updateCriterion(i: number, patch: Partial<CriterionRow>) {
-    setCriteria((c) => c.map((row, idx) => (idx === i ? { ...row, ...patch } : row)));
-  }
-
   function runScan() {
     const symbols = symbolsText.split(/[\s,]+/).filter(Boolean);
     if (symbols.length === 0) return;
     const req: ScreenSymbolsInput = {
       symbols,
-      criteria: criteria.map((c) => {
-        const base = {
-          refName: c.refName,
-          kind: c.kind,
-          op: c.op,
-          threshold: c.threshold,
-          weight: c.weight,
-          hardFilter: c.hardFilter,
-        };
-        if (c.kind === ScreenKind.TECHNICAL_INDICATOR) {
-          // Route through `component` (not `metricName`) so the engine actually computes the
-          // indicator from bars — a bare metric_name only resolves fundamentals fields.
-          return {
-            ...base,
-            component: {
-              refName: c.refName,
-              kind: ComponentKind.BUILTIN_INDICATOR,
-              indicator: c.metricName.toUpperCase(),
-            },
-          };
-        }
-        return { ...base, metricName: c.metricName };
-      }),
+      criteria: criteria.map(buildScreenCriterion),
     };
     // Feature 118 — scan-generation guard: bump before mutate so a still-in-flight poll from a
     // superseded scan is orphaned; reset per-scan polling state so a stopped/exhausted previous
