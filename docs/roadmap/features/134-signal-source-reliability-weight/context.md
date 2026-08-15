@@ -203,3 +203,14 @@
   carry `reliability_weight`. Validation kept inline (no shared module — scope guard, mirrors conviction).
 - Files modified: `app/handlers/servicer.py`, `app/repositories/signal_sources.py`
 - TDD: red (7 failing — unknown kwarg + missing validation) → green (190 passed, 76.39%). Deviations: none.
+
+### Step 5 — test: ingest write-path coverage [done]
+- Updated the 3 existing repo tests to pass the now-required `reliability_weight=` kwarg; asserted the
+  trailing positional arg + `reliability_weight` in the SQL, and that config_json stays index 6.
+- Added `TestSignalSourceReliabilityWeight` (servicer): register explicit-0.0 persists as 0.0;
+  register without the field defaults to 1.0; register out-of-range (1.5) → INVALID_ARGUMENT; masked
+  update to 0.0 persists as 0.0. Added `reliability_weight` to the `_stored()` helper + fixed one
+  pre-existing register test's mocked INSERT-return row (row build now reads the column).
+- C-13 verdict: the slug/source_type literals are single-consumer (this module) → inline compliant.
+- Files modified: `tests/test_signal_sources.py`, `tests/test_ingest_servicer.py`
+- TDD: red (7 failing) → green (190 passed, 76.39%). Deviations: none.

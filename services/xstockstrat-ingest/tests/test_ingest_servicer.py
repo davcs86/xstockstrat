@@ -1236,6 +1236,7 @@ class TestManageSignalSource:
                     "credentials_ref": None,
                     "active": True,
                     "config_json": None,
+                    "reliability_weight": 1.0,  # feature 134 — column on every returned row
                 },
             ]
         )
@@ -1362,6 +1363,7 @@ def _stored(**over):
         "credentials_ref": "secret.ingest.uw",
         "active": True,
         "config_json": {"url": "https://x.com", "scrape_selector": ".a"},
+        "reliability_weight": 1.0,  # feature 134 — column present on every stored row
     }
     base.update(over)
     return base
@@ -1497,3 +1499,106 @@ class TestManageSignalSourceVerbs:
         ):
             await svc.ManageSignalSource(req, _admin_ctx())
         up.assert_awaited_once()
+
+
+# Feature 134 — reliability_weight register/update persistence + reject-at-write validation.
+# C-13 verdict: the `derived`/`uw` slug + source_type literals here are single-consumer (this test
+# module only), so inline is compliant — no conftest fixture required.
+class TestSignalSourceReliabilityWeight:
+    @pytest.mark.asyncio
+    async def test_manage_signal_source_register_explicit_zero_weight_persists_as_zero(self):
+        # The `optional` field exists precisely so an explicit 0.0 is not collapsed to the 1.0
+        # default. A register with reliability_weight=0.0 must persist 0.0.
+        svc = make_servicer()
+        svc._db = MagicMock()
+        req = ingest_pb2.ManageSignalSourceRequest(
+            source=ingest_pb2.SignalSource(
+                slug="zerosrc",
+                source_type="derived",
+                extractor_module="app.extractors.noop",
+                reliability_weight=0.0,
+            ),
+            operation="register",
+        )
+        captured = {}
+
+        async def _fake_insert(_db, **kw):
+            captured.update(kw)
+            return _stored(
+                slug="zerosrc", source_type="derived", reliability_weight=kw["reliability_weight"]
+            )
+
+        with (
+            patch(f"{_SS}.get_source", AsyncMock(return_value=None)),
+            patch(f"{_SS}.insert_source", _fake_insert),
+        ):
+            resp = await svc.ManageSignalSource(req, _admin_ctx())
+        assert captured["reliability_weight"] == 0.0
+        assert resp.source.reliability_weight == 0.0
+
+    @pytest.mark.asyncio
+    async def test_manage_signal_source_register_without_weight_defaults_to_one(self):
+        svc = make_servicer()
+        svc._db = MagicMock()
+        req = ingest_pb2.ManageSignalSourceRequest(
+            source=ingest_pb2.SignalSource(
+                slug="defsrc",
+                source_type="derived",
+                extractor_module="app.extractors.noop",
+            ),
+            operation="register",
+        )
+        captured = {}
+
+        async def _fake_insert(_db, **kw):
+            captured.update(kw)
+            return _stored(slug="defsrc", source_type="derived", reliability_weight=1.0)
+
+        with (
+            patch(f"{_SS}.get_source", AsyncMock(return_value=None)),
+            patch(f"{_SS}.insert_source", _fake_insert),
+        ):
+            await svc.ManageSignalSource(req, _admin_ctx())
+        assert captured["reliability_weight"] == 1.0
+
+    @pytest.mark.asyncio
+    async def test_manage_signal_source_register_out_of_range_weight_rejected(self):
+        svc = make_servicer()
+        svc._db = MagicMock()
+        req = ingest_pb2.ManageSignalSourceRequest(
+            source=ingest_pb2.SignalSource(
+                slug="badsrc",
+                source_type="derived",
+                extractor_module="app.extractors.noop",
+                reliability_weight=1.5,
+            ),
+            operation="register",
+        )
+        with patch(f"{_SS}.get_source", AsyncMock(return_value=None)):
+            ctx = _admin_ctx()
+            with pytest.raises(Exception, match="aborted"):
+                await svc.ManageSignalSource(req, ctx)
+        assert ctx.abort.call_args[0][0] == grpc.StatusCode.INVALID_ARGUMENT
+
+    @pytest.mark.asyncio
+    async def test_manage_signal_source_update_explicit_zero_weight_persists_as_zero(self):
+        svc = make_servicer()
+        svc._db = MagicMock()
+        req = ingest_pb2.ManageSignalSourceRequest(
+            source=ingest_pb2.SignalSource(slug="uw", reliability_weight=0.0),
+            operation="update",
+        )
+        req.update_mask.paths.append("reliability_weight")
+        captured = {}
+
+        async def _fake_update(_db, **kw):
+            captured.update(kw)
+            return _stored(reliability_weight=kw["reliability_weight"])
+
+        with (
+            patch(f"{_SS}.get_source", AsyncMock(return_value=_stored())),
+            patch(f"{_SS}.update_source", _fake_update),
+        ):
+            resp = await svc.ManageSignalSource(req, _admin_ctx())
+        assert captured["reliability_weight"] == 0.0
+        assert resp.source.reliability_weight == 0.0

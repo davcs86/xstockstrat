@@ -255,11 +255,16 @@ class TestInsertUpdateSource:
             extractor_module="app.extractors.noop",
             credentials_ref=None,
             config_json=None,
+            reliability_weight=1.0,  # feature 134 — kwarg now required
         )
         assert result["slug"] == "uw"
         sql = db.fetchrow.call_args[0][0]
         assert "INSERT INTO" in sql and "RETURNING" in sql
         assert "ON CONFLICT" not in sql
+        # feature 134: reliability_weight is the trailing positional arg (after active), so the
+        # config_json index (6) that the next test asserts stays valid.
+        assert db.fetchrow.call_args[0][-1] == 1.0
+        assert "reliability_weight" in sql
 
     @pytest.mark.asyncio
     async def test_insert_config_json_passed_as_json_text(self):
@@ -273,6 +278,7 @@ class TestInsertUpdateSource:
             extractor_module="",
             credentials_ref=None,
             config_json={"url": "https://example.com", "scrape_selector": "entry"},
+            reliability_weight=1.0,  # feature 134 — appended after active; index 6 stays config
         )
         config_arg = db.fetchrow.call_args[0][6]
         assert isinstance(config_arg, str)
@@ -290,10 +296,13 @@ class TestInsertUpdateSource:
             extractor_module="app.extractors.noop",
             credentials_ref="secret.x",
             config_json=None,
+            reliability_weight=0.5,  # feature 134 — kwarg now required
         )
         sql = db.fetchrow.call_args[0][0]
         assert sql.strip().startswith("UPDATE ingest.signal_sources")
         assert "active" not in sql  # lifecycle stays reactivate/deactivate only
+        assert "reliability_weight" in sql  # feature 134 — written in the SET clause
+        assert db.fetchrow.call_args[0][-1] == 0.5
 
     @pytest.mark.asyncio
     async def test_get_source_returns_none_when_missing(self):

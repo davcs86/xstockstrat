@@ -249,7 +249,7 @@ No new outbound gRPC call is added in this step (header propagation N/A). Behavi
 
 ### Step 5 — test: ingest write-path + zero-weight persistence coverage
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_signal_sources.py` — modify (repo-layer tests)
