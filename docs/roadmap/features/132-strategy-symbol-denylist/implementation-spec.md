@@ -66,7 +66,7 @@ deferred.
 
 ### Step 1 — proto: add `denied_symbols`, `signal_eligible`, and `Opportunity.muted`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -107,7 +107,7 @@ Both pass (additive fields → no breaking change). Confirm the three new field 
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/**` — modify (generated; do not hand-edit)
@@ -138,7 +138,7 @@ run leaves an empty `git diff packages/proto/gen/` (freshness — the CI `proto-
 
 ### Step 3 — service: shared `resolve_universe()` helper, maskable paths, allowlist×signal_eligible reject
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/live_loop.py` — modify
@@ -192,7 +192,7 @@ run leaves an empty `git diff packages/proto/gen/` (freshness — the CI `proto-
 
 ### Step 4 — test: `resolve_universe` branches, maskability round-trip, allowlist×signal_eligible reject
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
