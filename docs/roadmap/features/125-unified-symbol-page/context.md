@@ -470,3 +470,40 @@ architecture, then `/sdd-spec unified-symbol-page` to add implementation steps, 
 **Next**: `/sdd-spec unified-symbol-page` (add FR-6 steps: proto + buf-gen predecessor, analysis
 service + paired tests, UI overlay-panel component + wiring), then `/sdd-review impl-spec`, then
 `/sdd-execute`.
+
+## Session 2026-08-15 — sdd-spec (FR-6 re-spec)
+
+- Extended implementation-spec.md from 26 → **33 steps**, adding the FR-6 indicator-overlay-panel
+  block (Steps 27-33). No existing step (1-26) was renumbered or altered — the FR-6 steps are appended
+  and wired into the existing dependency graph via new `## Step Dependencies` lines.
+- New steps: **27** proto (`GetIndicatorSeries` RPC + `GetIndicatorSeriesRequest`/`Response`/
+  `ComponentSeries`/`NamedSeries` + `google/protobuf/wrappers.proto` import), **28** proto-gen, **29**
+  config (`analysis.series.max_concurrent_components` — CLAUDE.md row + config-governance
+  registered-keys entry, C-05), **30** analysis handler, **31** paired Python tests, **32** UI overlay
+  panels, **33** UI e2e + `indicatorSeries.ts` fixture.
+- Key codebase findings (re-verified fresh against the live tree, C-01):
+  - **Design Open Risk resolved**: `Bar` timestamp field is `time`, not `.timestamp` —
+    `packages/proto/marketdata/v1/marketdata.proto:46` (`google.protobuf.Timestamp time = 2`). The UI
+    reads `bar.time` to populate the request `times`.
+  - `analysis.proto`: `service AnalysisService` spans lines 12-42 (last RPC `GetStrategyAnalytics`
+    @41 — new RPC appends after it); imports @7-10 lack `wrappers.proto`; `StrategyComponent` @241-247,
+    `StrategyDefinition.components` @252; `ComponentKind` enum reused for `ComponentSeries.kind`.
+  - `servicer.py`: `EvaluateReadiness` handler @1959 is the exact skeleton the new handler reuses
+    (propagation_meta @1963-1967, `_strategies_repo is None`→UNAVAILABLE @1968-1970, `get_by_id`→None
+    →NOT_FOUND @1971-1976, `_row_to_strategy_definition` @1977, `StrategyEvaluator(self._indicators,
+    propagation_meta)` @1978); `__init__` @117 (self._cfg @129, _indicators @131, _strategies_repo
+    @150) hosts the new singleton `self._component_series_sem`.
+  - `evaluator.py`: `_compute_component` @215 (consumes only closes — verified), `align_indicator_points`
+    @295, `_finite_or_none` @39, `FormulaExecutionError` @27, `evaluate_conditions_traced` @171 (the
+    shared method the handler must NOT touch — 097's `ListOpportunities` exit trace).
+  - `screener.py:84-85` semaphore pattern mirrored for the config key
+    (`max(1, cfg.get_int("analysis.screener.max_concurrent_formula_evals", 4))`).
+  - UI: `useGetStrategy` @`hooks/useStrategyDefinitions.ts:25` (via `analysisClient`, cross-segment);
+    stacked-panels precedent `FormulaRunResult.tsx` (recharts `LineChart`+`ChartContainer`); bars
+    fetched+discarded at `page.tsx:86-96` (new state needed to retain closes+times — design confirmed);
+    analysis test homes `test_strategy_evaluator.py` (parity) + `test_analysis_servicer.py`
+    (fault-isolation/null-mapping).
+- Status stays `implementation-ready` (spec extended, not re-gated).
+
+**Next**: `/sdd-review unified-symbol-page impl-spec` (validate the 33-step spec), then `/sdd-execute
+unified-symbol-page`.
