@@ -520,18 +520,19 @@ unified-symbol-page`.
   `useStrategyDefinitions.ts:25` `useGetStrategy`, `FormulaRunResult.tsx` recharts, `analysis.proto`
   `ComponentKind`/`StrategyComponent`, `config-governance.md` registered-keys format). C-01/C-03/
   C-05/C-08/C-09/C-12/C-13/C-14/P-06 all satisfied; **no Floor (F-*) risk.**
-- Unresolved advisory notes carried into execution (all minor, none blocking):
-  - [ ] Step 30: `except (FormulaExecutionError, Exception)` is redundant (`Exception` subsumes
-    `FormulaExecutionError`) — tighten to `except Exception` (with a comment) at execute time.
-    Not a gate issue.
-  - [ ] Step 30: the `google_dot_protobuf_dot_wrappers__pb2.DoubleValue` alias is a generated symbol
-    that only exists after Step 28 runs — the spec correctly flags it for execute-time confirmation
-    (F-04, mirroring the approved Steps 1→3 pattern); **confirm the actual generated alias against
-    Step 28 output before writing Step 30's encoding line.**
-  - [ ] Step 31: the evaluator-level parity test (test 1) exercises pre-existing `_compute_component`
-    and may be GREEN pre-Step-30 — it is a regression/invariant guard, NOT the red-before-green
-    proof. The P-06 RED gate rests on the handler tests (2-3, fault-isolation + null→unset-DoubleValue,
-    which can't pass until the Step-30 handler exists). Don't mistake test 1 for the RED proof.
+- Advisory notes (cleared / accepted before execution, 2026-08-15):
+  - [x] Step 30: `except (FormulaExecutionError, Exception)` redundancy — **CLEARED**: spec Step 30
+    tightened to `except Exception as e:` with an explanatory comment (edit made pre-execution while
+    all steps still `pending`, in-bounds per F-09's during-execution scope).
+  - [x] Step 31: evaluator-level parity test (test 1) is an invariant guard, not the P-06 RED proof —
+    **CLEARED**: spec Step 31's TDD note now states explicitly that the RED gate rests on tests 2-3
+    (handler fault-isolation + null→unset-`DoubleValue`) and that test 1 is expected green pre-Step-30.
+  - [x] Step 30: `DoubleValue` generated-symbol alias — **ACCEPTED as an execute-time confirmation
+    (cannot be cleared earlier by nature)**: the alias does not exist until Step 28's `buf-gen` runs.
+    The spec already flags it (F-04). `/sdd-execute` MUST grep the regenerated stub for the real alias
+    before writing Step 30's encoding line — same pattern as the approved Steps 1→3 (`criterion_raw_values`
+    cited before Step 2 regenerates). Carried into execution as an accepted, spec-flagged confirmation,
+    not an unresolved warning.
 - Overlap pass (feature-overlap): **COLLISIONS FOUND, but ALL soft/rebase — zero FAIL-class.** No
   shared proto field number within any one message (`ScreenResult` `12`/`13` free — highest on trunk
   is `held=11`; `GetIndicatorSeries`/`ComponentSeries`/`NamedSeries` are net-new; 132/133 touch

@@ -1876,7 +1876,7 @@ determinism / no look-ahead bias; confirms the new handler's loop reuses `_compu
            component_series.append(
                analysis_pb2.ComponentSeries(ref_name=comp.ref_name, kind=comp.kind, series=named)
            )
-       except (FormulaExecutionError, Exception) as e:  # per-component fault isolation
+       except Exception as e:  # per-component fault isolation (catches FormulaExecutionError + any sandbox/RPC error; broad by design)
            component_series.append(
                analysis_pb2.ComponentSeries(ref_name=comp.ref_name, kind=comp.kind, error=str(e))
            )
@@ -1943,6 +1943,12 @@ Write the paired tests first (Step 31) so they fail against the pre-Step-30 tree
 
 **TDD**: `red-green required` (paired with Step 30; run against the pre-Step-30 tree first — the
 handler doesn't exist, so the servicer tests error/fail — before Step 30 lands, per P-06).
+**Which tests carry the RED gate**: the P-06 red-before-green proof rests on tests **2 and 3**
+(handler fault-isolation + null→unset-`DoubleValue`), which cannot pass until Step 30's
+`GetIndicatorSeries` handler exists — they must genuinely fail/error against the pre-Step-30 tree.
+Test **1** (evaluator-level parity) exercises the pre-existing `_compute_component` and is expected
+to pass pre-Step-30 — it is a regression/invariant guard, **not** the RED proof; do not treat its
+green as satisfying P-06 for this step.
 
 **Instructions**:
 Add three tests:
