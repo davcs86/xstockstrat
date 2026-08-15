@@ -22,8 +22,10 @@ test.describe('Signal detail readiness', () => {
     // Traced leaves from EvaluateReadiness.
     await expect(page.getByText('sma_fast', { exact: false })).toBeVisible();
     await expect(page.getByText('rsi', { exact: false })).toBeVisible();
-    // The picker reflects the threaded strategy.
-    await expect(page.getByText('Live Test Strategy')).toBeVisible();
+    // The picker reflects the threaded strategy. `.first()` scopes to the readiness picker,
+    // which renders above the feature-132 MuteForStrategy card (whose <select> also lists this
+    // strategy's display name) — both carry "Live Test Strategy", so a bare getByText is ambiguous.
+    await expect(page.getByText('Live Test Strategy').first()).toBeVisible();
     // The opportunity's source renders as a Badge (FR-7) — exact match to disambiguate from the
     // meta-info line below, which also joins in the same source string.
     await expect(page.getByText('unusual_whales', { exact: true })).toBeVisible();
@@ -54,5 +56,32 @@ test.describe('Signal detail readiness', () => {
     await expect(page.getByRole('option', { name: 'Live Test Strategy' })).toBeVisible();
     // "Inactive Strategy" (liveEnabled: false in the fixture) must not be a selectable option.
     await expect(page.getByRole('option', { name: 'Inactive Strategy' })).toHaveCount(0);
+  });
+
+  test('feature 132: the mute control sends a masked denied_symbols update appending this symbol', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    let captured: Record<string, unknown> | null = null;
+    await page.route('**/xstockstrat.analysis.v1.AnalysisService/ManageStrategy', async (route) => {
+      captured = JSON.parse(route.request().postData() ?? '{}');
+      await route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+    await page.goto('/insights/market/AMD');
+    const card = page.getByTestId('mute-for-strategy');
+    await expect(card).toBeVisible({ timeout: 8000 });
+    // strat-001 (Deny List Strategy) already denies TSLA — muting AMD appends to that list.
+    await card.getByTestId('mute-strategy-select').selectOption('strat-001');
+    await card.getByTestId('mute-submit').click();
+
+    await expect.poll(() => captured).not.toBeNull();
+    const body = captured as unknown as {
+      definition?: { strategyId?: string; deniedSymbols?: string[] };
+      updateMask?: unknown;
+    };
+    expect(body.definition?.strategyId).toBe('strat-001');
+    expect(body.definition?.deniedSymbols).toEqual(expect.arrayContaining(['TSLA', 'AMD']));
+    // Connect-JSON serializes a FieldMask as a camelCase, comma-joined string (protobuf-es).
+    expect(body.updateMask).toBe('deniedSymbols');
   });
 });

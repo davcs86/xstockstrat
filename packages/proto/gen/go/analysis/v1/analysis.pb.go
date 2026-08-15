@@ -2076,13 +2076,24 @@ type StrategyDefinition struct {
 	// permitted immediately, current behavior); negative → rejected at write time
 	// (INVALID_ARGUMENT).
 	ExitCooldownDays *int32 `protobuf:"varint,11,opt,name=exit_cooldown_days,json=exitCooldownDays,proto3,oneof" json:"exit_cooldown_days,omitempty"`
+	// Normalized-uppercase symbols this strategy must never evaluate FOR ENTRY (feature 132 —
+	// entry-only deny). A held position on a denied symbol keeps exit tracing (the deny suppresses
+	// only the entry edge, so an operator can always exit a position they already hold). Rides
+	// definition_json (no column); maskable via ManageStrategyRequest.update_mask.
+	DeniedSymbols []string `protobuf:"bytes,12,rep,name=denied_symbols,json=deniedSymbols,proto3" json:"denied_symbols,omitempty"`
 	// Owning user (feature 133). Server-authoritative: populated from the propagated
 	// x-user-id header on ManageStrategy REGISTER, never accepted from the request body
-	// (mirrors ListOpportunitiesRequest / portfolio ownership convention). Field 12 is
-	// reserved for feature 132's denied_symbols — do not reuse.
-	UserId        string `protobuf:"bytes,13,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// (mirrors ListOpportunitiesRequest / portfolio ownership convention).
+	UserId string `protobuf:"bytes,13,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	// Gates whether the platform-wide active-signal term joins this strategy's evaluation universe
+	// (feature 132). Plain bool (no optional) is intentional: absent ≡ false ≡ explicit-false resolve
+	// identically. A strategy that sets BOTH a non-empty signal_params.symbols allowlist AND
+	// signal_eligible=true is rejected INVALID_ARGUMENT at write time (the allowlist is already an
+	// explicit universe override; signals would be redundant/contradictory). Rides definition_json;
+	// maskable.
+	SignalEligible bool `protobuf:"varint,14,opt,name=signal_eligible,json=signalEligible,proto3" json:"signal_eligible,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *StrategyDefinition) Reset() {
@@ -2192,11 +2203,25 @@ func (x *StrategyDefinition) GetExitCooldownDays() int32 {
 	return 0
 }
 
+func (x *StrategyDefinition) GetDeniedSymbols() []string {
+	if x != nil {
+		return x.DeniedSymbols
+	}
+	return nil
+}
+
 func (x *StrategyDefinition) GetUserId() string {
 	if x != nil {
 		return x.UserId
 	}
 	return ""
+}
+
+func (x *StrategyDefinition) GetSignalEligible() bool {
+	if x != nil {
+		return x.SignalEligible
+	}
+	return false
 }
 
 type ManageStrategyRequest struct {
@@ -2215,7 +2240,7 @@ type ManageStrategyRequest struct {
 	//	           StrategyWizard, which always sends a complete definition) are unaffected.
 	//
 	// Allowed paths: display_name, components, entry_rule, exit_rule, signal_params, cooldown_days,
-	// exit_cooldown_days.
+	// exit_cooldown_days, denied_symbols, signal_eligible.
 	// strategy_id/active/live_enabled are column-authoritative and rejected with INVALID_ARGUMENT.
 	UpdateMask    *fieldmaskpb.FieldMask `protobuf:"bytes,3,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -3083,6 +3108,7 @@ type Opportunity struct {
 	ValidUntil        *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=valid_until,json=validUntil,proto3" json:"valid_until,omitempty"`
 	OpportunityKey    string                 `protobuf:"bytes,10,opt,name=opportunity_key,json=opportunityKey,proto3" json:"opportunity_key,omitempty"` // server-authoritative opaque key = user|symbol_norm|strategy_id (feature 097). Client echoes it verbatim to SetOpportunityAction, never derives it.
 	Provenance        []string               `protobuf:"bytes,11,rep,name=provenance,proto3" json:"provenance,omitempty"`                               // contributing origins for a de-duplicated row (signal source(s) / "position" / "watchlist")
+	Muted             bool                   `protobuf:"varint,12,opt,name=muted,proto3" json:"muted,omitempty"`                                        // feature 132 — the (symbol, strategy) pair is on the strategy's deny list; surfaced as an explicit muted row (never conviction=0)
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -3192,6 +3218,13 @@ func (x *Opportunity) GetProvenance() []string {
 		return x.Provenance
 	}
 	return nil
+}
+
+func (x *Opportunity) GetMuted() bool {
+	if x != nil {
+		return x.Muted
+	}
+	return false
 }
 
 // One evaluated condition leaf from the traced evaluator (feature 083).
@@ -3953,7 +3986,7 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x06params\x18\x05 \x03(\v26.xstockstrat.analysis.v1.StrategyComponent.ParamsEntryR\x06params\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\"\x94\x04\n" +
+	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\"\xe4\x04\n" +
 	"\x12StrategyDefinition\x12\x1f\n" +
 	"\vstrategy_id\x18\x01 \x01(\tR\n" +
 	"strategyId\x12!\n" +
@@ -3970,8 +4003,10 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\rcooldown_days\x18\t \x01(\x05H\x00R\fcooldownDays\x88\x01\x01\x12\x1a\n" +
 	"\bwarnings\x18\n" +
 	" \x03(\tR\bwarnings\x121\n" +
-	"\x12exit_cooldown_days\x18\v \x01(\x05H\x01R\x10exitCooldownDays\x88\x01\x01\x12\x17\n" +
-	"\auser_id\x18\r \x01(\tR\x06userIdB\x10\n" +
+	"\x12exit_cooldown_days\x18\v \x01(\x05H\x01R\x10exitCooldownDays\x88\x01\x01\x12%\n" +
+	"\x0edenied_symbols\x18\f \x03(\tR\rdeniedSymbols\x12\x17\n" +
+	"\auser_id\x18\r \x01(\tR\x06userId\x12'\n" +
+	"\x0fsignal_eligible\x18\x0e \x01(\bR\x0esignalEligibleB\x10\n" +
 	"\x0e_cooldown_daysB\x15\n" +
 	"\x13_exit_cooldown_days\"\xeb\x01\n" +
 	"\x15ManageStrategyRequest\x12H\n" +
@@ -4056,7 +4091,7 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	"\x0edeferred_count\x18\x05 \x01(\x05R\rdeferredCount\x12\x16\n" +
 	"\x06status\x18\x06 \x01(\tR\x06status\x12;\n" +
 	"\vfinished_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"finishedAt\"\xbd\x03\n" +
+	"finishedAt\"\xd3\x03\n" +
 	"\vOpportunity\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12E\n" +
 	"\x06action\x18\x02 \x01(\x0e2-.xstockstrat.analysis.v1.OpportunityActionTagR\x06action\x12\x1e\n" +
@@ -4075,7 +4110,8 @@ const file_analysis_v1_analysis_proto_rawDesc = "" +
 	" \x01(\tR\x0eopportunityKey\x12\x1e\n" +
 	"\n" +
 	"provenance\x18\v \x03(\tR\n" +
-	"provenance\"\xe8\x01\n" +
+	"provenance\x12\x14\n" +
+	"\x05muted\x18\f \x01(\bR\x05muted\"\xe8\x01\n" +
 	"\rConditionEval\x12\x19\n" +
 	"\bref_name\x18\x01 \x01(\tR\arefName\x12\x1b\n" +
 	"\tlhs_value\x18\x02 \x01(\x01R\blhsValue\x12\x1c\n" +

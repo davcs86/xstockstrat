@@ -6,33 +6,50 @@ cadence it evaluates every live-enabled strategy (``analysis.strategies.live_ena
 = TRUE``) against recent bars using the **shared 047 evaluator**, and emits an alert
 via xstockstrat-notify on entry/exit *transitions* (edge-triggered, FR-4).
 
-Safety (FR-6): this module never imports or calls any trading/portfolio RPC — it
-only reads market data / signals and writes alerts + ledger events.
+Safety (FR-6): this module never places orders or touches the trading write surface — it
+only reads market data / signals / portfolio (watchlist + held positions) and writes alerts
++ ledger events. The read-only portfolio query is feature 132 (owner-scoped universe).
 
-Symbols: ``StrategyDefinition`` has no dedicated symbols field, so the loop reads the
-per-strategy symbol universe from ``signal_params.symbols`` (a list set by the operator
-at registration time). Strategies with no symbols are skipped.
+Symbols (feature 132): each live strategy's evaluation universe is resolved by
+``resolve_universe`` from the owner's watchlist + held positions + (iff ``signal_eligible``)
+the platform-wide active signals, minus the strategy's ``denied_symbols`` deny list. A held +
+denied symbol is retained for exit only (entry-only deny). The pre-132 ``signal_params.symbols``
+list remains an explicit universe override when set.
 """
 
 import asyncio
 import logging
 import time
+from bisect import bisect_right
 from datetime import UTC, datetime, timedelta
+from typing import NamedTuple
 
 from gen.common.v1 import common_pb2
+from gen.ingest.v1 import ingest_pb2
 from gen.marketdata.v1 import marketdata_pb2
 from gen.notify.v1 import notify_pb2
+from gen.portfolio.v1 import portfolio_pb2
 from google.protobuf import json_format
 from google.protobuf.struct_pb2 import Struct
 from google.protobuf.timestamp_pb2 import Timestamp
+from opentelemetry import metrics
 
-from app.handlers.servicer import _row_to_strategy_definition
+from app.handlers.servicer import _normalize_symbol, _row_to_strategy_definition
 from app.repositories.strategies import LIVE_ENABLED_PREDICATE_SQL
 from app.services.cooldown import effective_cooldown_days, is_cooldown_active
 
 log = logging.getLogger(__name__)
 
 _LOOKBACK_DAYS = 365  # window of bars fetched per (strategy, symbol) for warm-up + evaluation
+_DRAIN_PAGES = 50  # max pages when draining owner-scoped positions/watchlists/signals per cycle
+_DRAIN_PAGE_SIZE = 1000
+
+# feature 132 — bounded observability for the fair-share scheduler: how many live (strategy, symbol)
+# pairs were deferred past max_strategies_per_cycle in a cycle (no-op meter when OTel is disabled).
+_TRUNCATION_COUNTER = metrics.get_meter(__name__).create_counter(
+    "analysis.live_loop.truncated_pairs",
+    description="Live (strategy, symbol) pairs deferred past max_strategies_per_cycle in one cycle",
+)
 
 
 def strategy_symbols(definition) -> list[str]:
@@ -48,6 +65,40 @@ def strategy_symbols(definition) -> list[str]:
     return [str(s) for s in (params.get("symbols") or [])]
 
 
+class ResolvedUniverse(NamedTuple):
+    """Owner-scoped evaluation universe for one strategy, deny list applied (feature 132)."""
+
+    universe: set  # entry-eligible: (union − denied) ∪ (held ∩ denied)
+    deny_entry: set  # held ∩ denied — entry edge suppressed, exit edge still traces
+    union: set  # pre-deny coverage (allowlist override, else watchlist∪held∪signals-if-eligible)
+    denied: set  # normalized denied_symbols
+
+
+def resolve_universe(definition, watchlist, held, signals) -> "ResolvedUniverse":
+    """Owner-scoped evaluation universe for a strategy, with the deny list applied (feature 132).
+
+    Supersedes the feature-089 ``strategy_symbols`` allowlist-only contract. ``watchlist`` /
+    ``held`` / ``signals`` are the caller's per-owner symbol sets (normalized here defensively).
+
+    - ``union`` (pre-deny coverage): a non-empty ``signal_params.symbols`` allowlist is an explicit
+      universe override (AC-5), used verbatim; otherwise
+      ``watchlist ∪ held ∪ (signals iff signal_eligible)``.
+    - ``denied``: normalized ``denied_symbols``.
+    - ``universe`` (entry-eligible): ``(union − denied) ∪ (held ∩ denied)`` — a held+denied symbol
+      is retained so its EXIT edge still traces (entry-only deny); caller suppresses only its entry.
+    - ``deny_entry``: ``held ∩ denied`` — held+denied members whose entry edge is muted.
+    """
+    denied = {_normalize_symbol(s) for s in definition.denied_symbols}
+    allowlist = {_normalize_symbol(s) for s in strategy_symbols(definition)}
+    watchlist = {_normalize_symbol(s) for s in watchlist}
+    held = {_normalize_symbol(s) for s in held}
+    signals = {_normalize_symbol(s) for s in signals}
+    union = allowlist or (watchlist | held | (signals if definition.signal_eligible else set()))
+    deny_entry = held & denied
+    universe = (union - denied) | deny_entry
+    return ResolvedUniverse(universe=universe, deny_entry=deny_entry, union=union, denied=denied)
+
+
 def _apply_transition(
     in_position: bool,
     entry_time: datetime | None,
@@ -56,6 +107,7 @@ def _apply_transition(
     bar_dt: datetime,
     cooldown_days: int,
     exit_cooldown_days: int,
+    deny_entry: bool = False,
 ) -> tuple[bool, datetime | None, datetime | None, str | None]:
     """Pure edge-triggered transition step — the ONE shared core for both the live bar
     (_eval_pair) and historical replay (_replay_state), so live/replay parity is structural
@@ -64,8 +116,16 @@ def _apply_transition(
     actual transition; None on steady state OR a gated (cooldown-suppressed) transition attempt
     — including the "known open, entry time unknown" skip (design.md round-4 correctness fix):
     a None entry_time while in_position is treated as an active gate, never as "never entered".
+
+    feature 132 — ``deny_entry`` (entry-only deny): when True the entry branch is short-circuited
+    (this symbol is on the strategy's deny list) while the exit branch is byte-for-byte untouched,
+    so a held position on a denied symbol can always still be exited. Historical replay
+    (_replay_state) never passes it (default False), so a held-denied symbol reconstructs a
+    truthful entry_time on restart and its exit still fires.
     """
     if not in_position and decision.entry:
+        if deny_entry:
+            return in_position, entry_time, last_exit_at, None
         if is_cooldown_active(last_exit_at, bar_dt, cooldown_days):
             return in_position, entry_time, last_exit_at, None
         return True, bar_dt, last_exit_at, "entry"
@@ -124,6 +184,7 @@ class LiveEvaluationLoop:
         ledger_stub,
         evaluator,
         cooldowns_repo=None,
+        portfolio_stub=None,
     ):
         self._cfg = config_watcher
         self._db = db_pool
@@ -131,6 +192,14 @@ class LiveEvaluationLoop:
         self._ingest = ingest_stub
         self._notify = notify_stub
         self._ledger = ledger_stub
+        # feature 132: owner-scoped universe resolution reads each owner's watchlist + held
+        # positions from portfolio (memoized per owner within a cycle). None keeps the pre-132
+        # constructor callers working (watchlist/held then resolve to empty).
+        self._portfolio = portfolio_stub
+        # feature 132: fair-share rotation cursor — the last (created_at, strategy_id, symbol)
+        # tuple processed, so the next cycle resumes just past it instead of always restarting at
+        # the oldest. In-memory (a restart resets it to None → resume at the oldest pair).
+        self._cursor_key: tuple | None = None
         self._evaluator = evaluator  # 047 shared StrategyEvaluator instance
         # feature 133: all live-loop state is keyed by the 3-tuple (user_id, strategy_id, symbol)
         # so two owners that register the same strategy_id never share transition/cooldown state.
@@ -186,31 +255,170 @@ class LiveEvaluationLoop:
                     log.error("live_loop: cycle error: %s", e)
 
     async def _run_cycle(self):
+        """One evaluation pass (feature 132 — fair-share rotation over owner-scoped universes).
+
+        Each live strategy's evaluation universe is resolved by ``resolve_universe`` from the
+        owner's watchlist + held positions + (iff ``signal_eligible``) the platform-wide active
+        signals, minus the strategy's deny list. All (strategy, symbol) pairs across every live
+        strategy are flattened, globally ordered by ``(created_at, strategy_id, symbol)``, and a
+        rotating cursor evaluates at most ``max_strategies_per_cycle`` of them per cycle — so a
+        large fleet is covered fairly across cycles instead of the first N always winning.
+        """
         max_pairs = self._cfg.get_int("analysis.engine.max_strategies_per_cycle", default=50)
         throttle = self._cfg.get_int("analysis.engine.alert_throttle_seconds", default=300)
         rows = await self._db.fetch(
-            f"SELECT * FROM analysis.strategies WHERE {LIVE_ENABLED_PREDICATE_SQL}"
+            f"SELECT * FROM analysis.strategies WHERE {LIVE_ENABLED_PREDICATE_SQL} "
+            "ORDER BY created_at, strategy_id"
         )
-        processed = 0
+        # Platform-wide active signals once per cycle (joined per-strategy iff signal_eligible).
+        signal_symbols = await self._drain_signals()
+        # Per-owner watchlist/held sets, memoized within this cycle so N strategies of one owner
+        # cost one ListPositions + one ListWatchlists, not N of each.
+        held_cache: dict[str, set] = {}
+        watch_cache: dict[str, set] = {}
+        # records: (created_at, strategy_id, symbol, definition, deny_entry) — carries the extra
+        # per-pair state alongside the sortable key so no (strategy_id, symbol) collision across
+        # owners can lose it.
+        records: list[tuple] = []
         for row in rows:
-            definition = _row_to_strategy_definition(dict(row))
-            for symbol in self._symbols_for(definition):
-                if processed >= max_pairs:
-                    return
-                processed += 1
-                try:  # FR-8 per-strategy isolation
-                    await self._eval_pair(definition, symbol, throttle)
-                except Exception as e:
-                    log.warning(
-                        "live_loop: (%s,%s) error: %s — continuing",
+            d = dict(row)
+            definition = _row_to_strategy_definition(d)
+            owner = definition.user_id
+            if owner not in held_cache:
+                held_cache[owner] = await self._drain_held(owner)
+                watch_cache[owner] = await self._drain_watchlist(owner)
+            resolved = resolve_universe(
+                definition, watch_cache[owner], held_cache[owner], signal_symbols
+            )
+            created_at = d.get("created_at")
+            for symbol in sorted(resolved.universe):
+                records.append(
+                    (
+                        created_at,
                         definition.strategy_id,
                         symbol,
-                        e,
+                        definition,
+                        symbol in resolved.deny_entry,
                     )
+                )
+        if not records:
+            return  # zero-guard: nothing live → leave the rotation cursor untouched
+        records.sort(key=lambda r: (r[0], r[1], r[2]))
+        pairs = [(r[0], r[1], r[2]) for r in records]
+        n = min(max_pairs, len(pairs))
+        if n == 0:
+            return  # max_pairs misconfigured to 0 → skip without touching the cursor
+        if len(pairs) > max_pairs:
+            # Bounded observability (once per cycle == once per eval_interval_seconds): a fleet
+            # larger than the per-cycle budget is expected to rotate, not to be silently dropped.
+            log.warning(
+                "live_loop: %d live (strategy,symbol) pairs exceed "
+                "max_strategies_per_cycle=%d — evaluating %d this cycle, rotating the rest",
+                len(pairs),
+                max_pairs,
+                n,
+            )
+            _TRUNCATION_COUNTER.add(len(pairs) - max_pairs)
+        start = bisect_right(pairs, self._cursor_key) if self._cursor_key is not None else 0
+        if start >= len(pairs):
+            start = 0  # cursor past the end (fleet shrank) → resume at the oldest
+        last_idx = None
+        for i in range(n):
+            idx = (start + i) % len(pairs)
+            _ca, strategy_id, symbol, definition, deny_entry = records[idx]
+            last_idx = idx
+            try:  # FR-8 per-pair isolation
+                await self._eval_pair(definition, symbol, throttle, deny_entry=deny_entry)
+            except Exception as e:
+                log.warning("live_loop: (%s,%s) error: %s — continuing", strategy_id, symbol, e)
+        self._cursor_key = pairs[last_idx]
 
-    def _symbols_for(self, definition) -> list[str]:
-        """Per-strategy symbol universe from signal_params.symbols (empty if unset)."""
-        return strategy_symbols(definition)
+    async def _drain_signals(self) -> set:
+        """Platform-wide active-signal symbols (normalized), once per cycle. Best-effort — an
+        ingest failure yields an empty set so signal-eligible strategies simply see no signals."""
+        if self._ingest is None:
+            return set()
+        now = Timestamp()
+        now.GetCurrentTime()
+        window = common_pb2.TimeRange(start=now, end=now)
+        out: set = set()
+        page_token = ""
+        for _ in range(_DRAIN_PAGES):
+            try:
+                resp = await self._ingest.QuerySignals(
+                    ingest_pb2.QuerySignalsRequest(
+                        active_window=window,
+                        page=common_pb2.PageRequest(
+                            page_size=_DRAIN_PAGE_SIZE, page_token=page_token
+                        ),
+                    ),
+                )
+            except Exception as e:  # best-effort — no grpc import in the loop
+                log.warning("live_loop: QuerySignals failed: %s", e)
+                return out
+            out.update(_normalize_symbol(s.symbol) for s in resp.signals)
+            page_token = resp.page.next_page_token
+            if not page_token:
+                break
+        return out
+
+    async def _drain_held(self, owner: str) -> set:
+        """Owner's held symbols (normalized). Synthetic ``x-user-id`` metadata scopes ownership
+        server-side (C-03; mirrors feature 133 / fundsignal_loop). Best-effort."""
+        if self._portfolio is None:
+            return set()
+        out: set = set()
+        page_token = ""
+        for _ in range(_DRAIN_PAGES):
+            try:
+                resp = await self._portfolio.ListPositions(
+                    portfolio_pb2.ListPositionsRequest(
+                        user_id=owner,
+                        page=common_pb2.PageRequest(
+                            page_size=_DRAIN_PAGE_SIZE, page_token=page_token
+                        ),
+                    ),
+                    metadata=[("x-user-id", owner)],
+                )
+            except Exception as e:
+                log.warning("live_loop: ListPositions(%s) failed: %s", owner, e)
+                return out
+            out.update(_normalize_symbol(p.symbol) for p in resp.positions)
+            page_token = resp.page.next_page_token
+            if not page_token:
+                break
+        return out
+
+    async def _drain_watchlist(self, owner: str) -> set:
+        """Owner's watchlisted symbols (normalized) across all their watchlists. Reads the
+        feature-097 ``bindings`` (symbol per binding), falling back to the deprecated flat
+        ``symbols`` mirror for legacy rows. Synthetic ``x-user-id`` metadata (C-03). Best-effort."""
+        if self._portfolio is None:
+            return set()
+        out: set = set()
+        page_token = ""
+        for _ in range(_DRAIN_PAGES):
+            try:
+                resp = await self._portfolio.ListWatchlists(
+                    portfolio_pb2.ListWatchlistsRequest(
+                        page=common_pb2.PageRequest(
+                            page_size=_DRAIN_PAGE_SIZE, page_token=page_token
+                        ),
+                    ),
+                    metadata=[("x-user-id", owner)],
+                )
+            except Exception as e:
+                log.warning("live_loop: ListWatchlists(%s) failed: %s", owner, e)
+                return out
+            for wl in resp.watchlists:
+                if wl.bindings:
+                    out.update(_normalize_symbol(b.symbol) for b in wl.bindings)
+                else:
+                    out.update(_normalize_symbol(s) for s in wl.symbols)
+            page_token = resp.page.next_page_token
+            if not page_token:
+                break
+        return out
 
     def _recent_range(self) -> common_pb2.TimeRange:
         end = Timestamp()
@@ -219,7 +427,7 @@ class LiveEvaluationLoop:
         start.FromDatetime(datetime.now(UTC) - timedelta(days=_LOOKBACK_DAYS))
         return common_pb2.TimeRange(start=start, end=end)
 
-    async def _eval_pair(self, definition, symbol, throttle):
+    async def _eval_pair(self, definition, symbol, throttle, deny_entry=False):
         bars_resp = await self._marketdata.GetBars(
             marketdata_pb2.GetBarsRequest(
                 symbol=symbol,
@@ -281,6 +489,7 @@ class LiveEvaluationLoop:
             current_bar_dt,
             cooldown_days,
             exit_cooldown_days,
+            deny_entry=deny_entry,
         )
 
         if trigger is None:

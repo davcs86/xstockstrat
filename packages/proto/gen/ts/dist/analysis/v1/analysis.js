@@ -3514,7 +3514,9 @@ function createBaseStrategyDefinition() {
         cooldownDays: undefined,
         warnings: [],
         exitCooldownDays: undefined,
+        deniedSymbols: [],
         userId: "",
+        signalEligible: false,
     };
 }
 exports.StrategyDefinition = {
@@ -3552,8 +3554,14 @@ exports.StrategyDefinition = {
         if (message.exitCooldownDays !== undefined) {
             writer.uint32(88).int32(message.exitCooldownDays);
         }
+        for (const v of message.deniedSymbols) {
+            writer.uint32(98).string(v);
+        }
         if (message.userId !== "") {
             writer.uint32(106).string(message.userId);
+        }
+        if (message.signalEligible !== false) {
+            writer.uint32(112).bool(message.signalEligible);
         }
         return writer;
     },
@@ -3641,11 +3649,25 @@ exports.StrategyDefinition = {
                     message.exitCooldownDays = reader.int32();
                     continue;
                 }
+                case 12: {
+                    if (tag !== 98) {
+                        break;
+                    }
+                    message.deniedSymbols.push(reader.string());
+                    continue;
+                }
                 case 13: {
                     if (tag !== 106) {
                         break;
                     }
                     message.userId = reader.string();
+                    continue;
+                }
+                case 14: {
+                    if (tag !== 112) {
+                        break;
+                    }
+                    message.signalEligible = reader.bool();
                     continue;
                 }
             }
@@ -3705,11 +3727,21 @@ exports.StrategyDefinition = {
                 : isSet(object.exit_cooldown_days)
                     ? globalThis.Number(object.exit_cooldown_days)
                     : undefined,
+            deniedSymbols: globalThis.Array.isArray(object?.deniedSymbols)
+                ? object.deniedSymbols.map((e) => globalThis.String(e))
+                : globalThis.Array.isArray(object?.denied_symbols)
+                    ? object.denied_symbols.map((e) => globalThis.String(e))
+                    : [],
             userId: isSet(object.userId)
                 ? globalThis.String(object.userId)
                 : isSet(object.user_id)
                     ? globalThis.String(object.user_id)
                     : "",
+            signalEligible: isSet(object.signalEligible)
+                ? globalThis.Boolean(object.signalEligible)
+                : isSet(object.signal_eligible)
+                    ? globalThis.Boolean(object.signal_eligible)
+                    : false,
         };
     },
     toJSON(message) {
@@ -3747,8 +3779,14 @@ exports.StrategyDefinition = {
         if (message.exitCooldownDays !== undefined) {
             obj.exitCooldownDays = Math.round(message.exitCooldownDays);
         }
+        if (message.deniedSymbols?.length) {
+            obj.deniedSymbols = message.deniedSymbols;
+        }
         if (message.userId !== "") {
             obj.userId = message.userId;
+        }
+        if (message.signalEligible !== false) {
+            obj.signalEligible = message.signalEligible;
         }
         return obj;
     },
@@ -3768,7 +3806,9 @@ exports.StrategyDefinition = {
         message.cooldownDays = object.cooldownDays ?? undefined;
         message.warnings = object.warnings?.map((e) => e) || [];
         message.exitCooldownDays = object.exitCooldownDays ?? undefined;
+        message.deniedSymbols = object.deniedSymbols?.map((e) => e) || [];
         message.userId = object.userId ?? "";
+        message.signalEligible = object.signalEligible ?? false;
         return message;
     },
 };
@@ -5276,6 +5316,7 @@ function createBaseOpportunity() {
         validUntil: undefined,
         opportunityKey: "",
         provenance: [],
+        muted: false,
     };
 }
 exports.Opportunity = {
@@ -5312,6 +5353,9 @@ exports.Opportunity = {
         }
         for (const v of message.provenance) {
             writer.uint32(90).string(v);
+        }
+        if (message.muted !== false) {
+            writer.uint32(96).bool(message.muted);
         }
         return writer;
     },
@@ -5399,6 +5443,13 @@ exports.Opportunity = {
                     message.provenance.push(reader.string());
                     continue;
                 }
+                case 12: {
+                    if (tag !== 96) {
+                        break;
+                    }
+                    message.muted = reader.bool();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -5444,6 +5495,7 @@ exports.Opportunity = {
             provenance: globalThis.Array.isArray(object?.provenance)
                 ? object.provenance.map((e) => globalThis.String(e))
                 : [],
+            muted: isSet(object.muted) ? globalThis.Boolean(object.muted) : false,
         };
     },
     toJSON(message) {
@@ -5481,6 +5533,9 @@ exports.Opportunity = {
         if (message.provenance?.length) {
             obj.provenance = message.provenance;
         }
+        if (message.muted !== false) {
+            obj.muted = message.muted;
+        }
         return obj;
     },
     create(base) {
@@ -5499,6 +5554,7 @@ exports.Opportunity = {
         message.validUntil = object.validUntil ?? undefined;
         message.opportunityKey = object.opportunityKey ?? "";
         message.provenance = object.provenance?.map((e) => e) || [];
+        message.muted = object.muted ?? false;
         return message;
     },
 };

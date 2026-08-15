@@ -1,6 +1,6 @@
 # Implementation Spec: strategy-symbol-denylist
 
-**Status**: `pending`
+**Status**: `done`
 **Created**: 2026-08-14
 **Feature**: `docs/roadmap/features/132-strategy-symbol-denylist/feature.md`
 **Total Steps**: 17
@@ -66,7 +66,7 @@ deferred.
 
 ### Step 1 — proto: add `denied_symbols`, `signal_eligible`, and `Opportunity.muted`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -107,7 +107,7 @@ Both pass (additive fields → no breaking change). Confirm the three new field 
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/**` — modify (generated; do not hand-edit)
@@ -138,7 +138,7 @@ run leaves an empty `git diff packages/proto/gen/` (freshness — the CI `proto-
 
 ### Step 3 — service: shared `resolve_universe()` helper, maskable paths, allowlist×signal_eligible reject
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/live_loop.py` — modify
@@ -192,7 +192,7 @@ run leaves an empty `git diff packages/proto/gen/` (freshness — the CI `proto-
 
 ### Step 4 — test: `resolve_universe` branches, maskability round-trip, allowlist×signal_eligible reject
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -238,7 +238,7 @@ Coverage ≥ 40%; the four assertions above fail on the pre-Step-3 tree (red) an
 
 ### Step 5 — service: entry-only deny + fair-share scheduler + owner-scoped universe in the live loop
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/live_loop.py` — modify
@@ -294,7 +294,7 @@ synthesizes `x-user-id = owner` per strategy owner.
 
 ### Step 6 — test: entry-only deny, fair-share rotation, owner-scoped universe
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_live_loop.py` — modify
@@ -336,7 +336,7 @@ Coverage ≥ 40%; assertions fail on the pre-Step-5 tree, pass after.
 
 ### Step 7 — service: muted rows in `_compute_opportunities` + read-query conviction-floor exemption
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -396,7 +396,7 @@ Coverage ≥ 40%; assertions fail on the pre-Step-5 tree, pass after.
 
 ### Step 8 — test: muted-row emission, mapper parity, read-filter exemption
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -434,7 +434,7 @@ Coverage ≥ 40%; assertions red before Step 7, green after.
 
 ### Step 9 — service: remove SetStrategyLive empty-symbol precondition + migrate `entry_backfill` to the resolved union
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -486,7 +486,7 @@ Coverage ≥ 40%; assertions red before Step 7, green after.
 
 ### Step 10 — test: precondition removal, union-sourced backfill, readiness gate
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -525,7 +525,7 @@ Coverage ≥ 40%; assertions red before Step 9, green after.
 
 ### Step 11 — service: agent `manage_strategy` exposes `denied_symbols` + `signal_eligible`; update `strat-lab` skill
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -570,7 +570,7 @@ Coverage ≥ 40%; assertions red before Step 9, green after.
 
 ### Step 12 — test: agent field-map forwarding + read-back round-trip
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_tools.py` — modify
@@ -609,7 +609,7 @@ ruff are the gate.)
 
 ### Step 13 — service: StrategyWizard deny-list chips editor + `signal_eligible` toggle + masked write plumbing
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/insights/StrategyWizard.tsx` — modify
@@ -652,7 +652,7 @@ Lint clean; the deny-list chips + toggle render and submit (behavioral proof in 
 
 ### Step 14 — service: Symbol detail page "mute this symbol for a strategy" control (masked write)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/market/[symbol]/page.tsx` — modify
@@ -687,7 +687,7 @@ Lint clean; behavioral proof in Step 16.
 
 ### Step 15 — service: Opportunities page muted-row treatment
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/opportunities/page.tsx` — modify
@@ -722,7 +722,7 @@ Lint clean; behavioral proof in Step 16.
 
 ### Step 16 — test: e2e specs + fixtures for the three UI surfaces (C-12)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify
@@ -773,7 +773,7 @@ Fixture imports confirmed: `grep -n "from '../fixtures'\|from './fixtures'\|help
 
 ### Step 17 — docs: update analysis service CLAUDE.md + mcp-tools reference
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` / `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
@@ -818,4 +818,35 @@ remains as the sole universe description.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### D-1 — `strategy_symbols` kept as `resolve_universe`'s allowlist extractor (Step 3)
+**Disposition**: applied — faithful to intent, keeps intermediate commits importable. Step 3 said
+"replace `strategy_symbols` with `resolve_universe`", but `strategy_symbols`'s 5 callers migrate across
+Steps 5/7/9. Rather than break the tree mid-stack, `resolve_universe` **reuses** `strategy_symbols`
+internally as its allowlist extractor; once every external caller migrated it is an internal-only
+helper (no dead code, no DRY duplication). No behavior change.
+
+### D-2 — `Opportunity.muted` mapper line pulled forward into Step 3 (parity gate)
+**Disposition**: applied. Adding `Opportunity.muted` in Step 1 immediately breaks the OR-F
+descriptor-parity test (`test_mapper_covers_every_proto_field`) — the same class as feature 134's agent
+projection. Pulled the one-line `_row_to_opportunity` mapper (and the `_MAPPED` set) forward into Step
+3 (inert — derives from the `"denied"` provenance marker, which nothing sets until Step 7) so steps 3–6
+stay green. Logged in `fails.md` under the existing "new proto field breaks a descriptor-parity test".
+
+### D-3 — entry_backfill readiness via the live loop's best-effort drains, not a channel_ready gate (Step 9)
+**Disposition**: applied — same accepted-residual contract, less plumbing (minimal-change / DRY). Step
+9.3 specified passing the portfolio **channel** into `entry_backfill` for an explicit
+`channel_ready()`+`RpcError`-retry gate (new `main.py` wiring). Instead the backfill reuses the live
+loop's own owner-scoped, best-effort drains (`_drain_held`/`_drain_watchlist`/`_drain_signals`, which
+already catch failures and return empty), so an allowlist-bearing strategy is backfilled even during a
+cold-boot portfolio outage (its `resolve_universe.union` ignores the empty drains) while an
+allowlist-free one is missed this boot and self-heals next boot — the design's exact accepted residual,
+with **no** new constructor deps or channel capture. Recorded because it departs from the spec's literal
+mechanism while preserving its contract (P-03: surfaced, not silent).
+
+### D-4 — FR-6 live-loop safety guard narrowed from "no portfolio" to "no trading write" (Steps 5/6)
+**Disposition**: applied — a sanctioned design change (decisions 5/6), not a scope creep. The live loop
+now performs a **read-only** portfolio query (owner watchlist/held) for owner-scoped universe
+resolution, so `test_no_trading_imports`'s forbidden set dropped `portfolio_pb2` (keeping `trading_pb2`/
+`PlaceOrder`/`CreateOrder`) and the module docstring/FR-6 wording changed from "never imports/calls any
+trading/portfolio RPC" to "never places orders / touches the trading write surface". The loop still
+never writes trades.
