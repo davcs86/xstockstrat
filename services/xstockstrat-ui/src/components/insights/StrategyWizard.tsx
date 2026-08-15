@@ -356,9 +356,10 @@ export function StrategyWizard({ mode, initial, onSubmitDone }: StrategyWizardPr
                     <p className="mt-1 text-xs text-destructive">{exitCooldownParsed.error}</p>
                   )}
                 </div>
-              </QuestionnaireItem>
-              <QuestionnaireItem name="deniedSymbols">
-                <div>
+                {/* feature 132 — deny list + signal-eligible live in the SAME sub-screen item as
+                    exit cooldown (a separate QuestionnaireItem would be hidden — the primitive
+                    shows one item at a time). */}
+                <div className="mt-4">
                   <label className="mb-1 block text-xs text-muted-foreground">
                     Denied symbols (entry-only — held positions still exit)
                   </label>

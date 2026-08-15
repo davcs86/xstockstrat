@@ -22,8 +22,10 @@ test.describe('Signal detail readiness', () => {
     // Traced leaves from EvaluateReadiness.
     await expect(page.getByText('sma_fast', { exact: false })).toBeVisible();
     await expect(page.getByText('rsi', { exact: false })).toBeVisible();
-    // The picker reflects the threaded strategy.
-    await expect(page.getByText('Live Test Strategy')).toBeVisible();
+    // The picker reflects the threaded strategy. `.first()` scopes to the readiness picker,
+    // which renders above the feature-132 MuteForStrategy card (whose <select> also lists this
+    // strategy's display name) — both carry "Live Test Strategy", so a bare getByText is ambiguous.
+    await expect(page.getByText('Live Test Strategy').first()).toBeVisible();
     // The opportunity's source renders as a Badge (FR-7) — exact match to disambiguate from the
     // meta-info line below, which also joins in the same source string.
     await expect(page.getByText('unusual_whales', { exact: true })).toBeVisible();
