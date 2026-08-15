@@ -271,6 +271,12 @@ export async function startMockBackend(): Promise<void> {
           }
           return held;
         },
+        async listWatchlists() {
+          // Default: no watchlists (feature 125 — the unified page's FR-11 gate then renders the
+          // Screening branch). Specs needing a watchlisted symbol override this per-test via
+          // page.route (see position-detail.spec.ts).
+          return { watchlists: [] };
+        },
       });
 
       // In-memory Copilot thread store (feature 083, Step 27) — the BFF rewrites the client

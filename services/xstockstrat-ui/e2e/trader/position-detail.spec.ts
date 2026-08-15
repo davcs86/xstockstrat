@@ -96,4 +96,49 @@ test.describe('Single Position page', () => {
     // A NotFound is not an error — the "Failed to load position" paragraph must not appear.
     await expect(page.getByText(/Failed to load position/)).toHaveCount(0);
   });
+
+  test('a watchlisted symbol renders the Opportunity + Readiness sections (FR-11 watchlisted branch)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // Seed AAPL into a watchlist (bound to a live strategy) so the FR-11 gate takes the
+    // watchlisted branch (Opportunity + Readiness), not the Screening branch.
+    await page.route(
+      '**/xstockstrat.portfolio.v1.PortfolioService/ListWatchlists',
+      async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            watchlists: [
+              {
+                watchlistId: 'wl-1',
+                name: 'My list',
+                symbols: ['AAPL'],
+                bindings: [{ symbol: 'AAPL', strategyId: 'strat-live-001' }],
+              },
+            ],
+          }),
+        });
+      },
+    );
+    await page.goto('/trader/positions/AAPL');
+
+    await expect(page.getByText('Opportunity').first()).toBeVisible({ timeout: 30000 });
+    await expect(page.getByText('Why this fired')).toBeVisible({ timeout: 10000 });
+  });
+
+  test('a non-watchlisted symbol hides the Opportunity + Readiness sections (FR-11 gate)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // Default mock returns no watchlists → AAPL is not watchlisted → the watchlisted branch's
+    // Opportunity/Readiness must be absent (the Screening branch arrives in Step 16).
+    await page.goto('/trader/positions/AAPL');
+
+    // Wait for the page to render (the position header), then assert the gated sections are absent.
+    await expect(page.getByText('Risk & exit')).toBeVisible({ timeout: 30000 });
+    await expect(page.getByText('Why this fired')).toHaveCount(0);
+    await expect(page.getByText('Opportunity', { exact: true })).toHaveCount(0);
+  });
 });
