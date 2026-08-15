@@ -211,7 +211,10 @@ test.describe('Single Position page', () => {
     await addAuthCookie(page);
     // ZZZZ is unheld (no orders → no owning strategy) and non-watchlisted → no strategy resolves.
     await page.goto('/trader/positions/ZZZZ');
-    await expect(page.getByText(/No strategy resolves for ZZZZ/)).toBeVisible({ timeout: 30000 });
+    // Backtests-specific phrasing (the Indicators section also shows a "No strategy resolves" note).
+    await expect(
+      page.getByText(/No strategy resolves for ZZZZ — add it to a watchlist/),
+    ).toBeVisible({ timeout: 30000 });
   });
 
   test('the Backfill section shows the ingested date span for a symbol with coverage (FR-10)', async ({
@@ -350,6 +353,43 @@ test.describe('Single Position page', () => {
       timeout: 10000,
     });
     await expect(page.getByText('Failed to evaluate readiness.')).toHaveCount(0);
+  });
+
+  test('the indicator overlay panels render one panel per component beneath the chart (FR-6)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // Watchlisted AAPL → boundStrategyId resolves; getStrategy returns a component so the series RPC
+    // fires; the mock returns INDICATOR_SERIES_AAPL (a multi-series macd + a failed component).
+    await watchlist(page, 'AAPL', 'strat-live-001');
+    await page.goto('/trader/positions/AAPL');
+
+    const panels = page.getByTestId('indicator-panels');
+    await expect(panels).toBeVisible({ timeout: 30000 });
+    // One chart panel (macd) + one error panel (brokenformula) — per-component fault isolation.
+    await expect(page.getByTestId('indicator-panel')).toHaveCount(1);
+    await expect(page.getByTestId('indicator-panel-error')).toHaveCount(1);
+    await expect(panels.getByText('macd')).toBeVisible();
+    // The failed component surfaces its error, never a chart.
+    await expect(page.getByText(/sandbox timeout/)).toBeVisible();
+    // All three named series of the macd component are drawn (value/signal/histogram) — no sub-series
+    // dropped (FR-12/P-03). The warm-up-head gaps are unset IndicatorValues (mapped to recharts null
+    // via `?? null`, connectNulls={false}), never a fabricated 0.0 — proven at the wire/handler layer
+    // by the analysis unit test (test_analysis_servicer.py::…none_maps_to_unset…).
+    await expect(page.getByTestId('indicator-panel').locator('.recharts-line')).toHaveCount(3);
+  });
+
+  test('the indicator panels show a no-data state (and skip the RPC) when no strategy resolves (FR-6)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // ZZZZ: unheld, non-watchlisted, no orders → no strategy resolves → explicit no-data state.
+    await page.goto('/trader/positions/ZZZZ');
+    const empty = page.getByTestId('indicator-panels-empty');
+    await expect(empty).toBeVisible({ timeout: 30000 });
+    await expect(empty).toContainText(/No strategy resolves for ZZZZ/);
+    // No panels rendered (the RPC was never called with an empty strategy).
+    await expect(page.getByTestId('indicator-panel')).toHaveCount(0);
   });
 });
 

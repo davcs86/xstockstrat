@@ -21,10 +21,13 @@ import { MuteForStrategy } from '@/components/insights/MuteForStrategy';
 import { useBacktestHistory } from '@/hooks/useStrategies';
 import { useRunBacktest } from '@/hooks/useBacktest';
 import { useBackfillJobs } from '@/hooks/useBackfills';
+import { useGetStrategy } from '@/hooks/useStrategyDefinitions';
+import { useIndicatorSeries, type IndicatorSeriesInput } from '@/hooks/useIndicatorSeries';
 import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { timestampToDate } from '@/lib/protoTime';
 import { SignalReadiness } from '@/components/insights/SignalReadiness';
 import { SymbolScreening } from '@/components/trader/SymbolScreening';
+import { IndicatorPanels } from '@/components/trader/IndicatorPanels';
 import { ConnectError } from '@connectrpc/connect';
 import type { Opportunity } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import {
@@ -88,6 +91,12 @@ export default function PositionDetailPage() {
   const { containerRef, seriesRef } = useCandlestickChart(260);
   const [timeframe, setTimeframe] = useState<Timeframe>('1Day');
   const [barsError, setBarsError] = useState<string | null>(null);
+  // Retain the fetched bars' closes + times (feature 125, FR-6) so the indicator overlay panels
+  // request the exact series the candlestick drew — parity-aligned x-axis, no second bars fetch.
+  const [barSeries, setBarSeries] = useState<{
+    closes: number[];
+    times: IndicatorSeriesInput['times'];
+  }>({ closes: [], times: [] });
   // Track created price lines so a symbol/timeframe refetch replaces rather than stacks them.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const priceLinesRef = useRef<any[]>([]);
@@ -148,6 +157,13 @@ export default function PositionDetailPage() {
       })
       .then((res) => {
         if (cancelled) return;
+        // Capture closes+times for the indicator panels first — independent of the lightweight
+        // chart's own readiness (bars with no timestamp are dropped to keep the two index-aligned).
+        const withTime = res.bars.filter((b) => b.time);
+        setBarSeries({
+          closes: withTime.map((b) => b.close),
+          times: withTime.map((b) => b.time!),
+        });
         const series = seriesRef.current;
         if (!series) return;
         series.setData(mapBars(res.bars));
@@ -230,6 +246,15 @@ export default function PositionDetailPage() {
           stop={stop}
           last={last}
           hasStop={hasStop}
+        />
+
+        {/* FR-6 indicator overlay panels beneath the price chart — the resolved strategy's declared
+            components charted over the exact bars above. Strategy resolves like Backtests/Readiness. */}
+        <IndicatorSection
+          symbol={symbol}
+          strategyId={boundStrategyId || owningStrategy}
+          closes={barSeries.closes}
+          times={barSeries.times}
         />
 
         <SymbolOrdersCard symbol={symbol} orders={orders} working={working} />
@@ -883,6 +908,58 @@ function BacktestsSection({ symbol, strategyId }: { symbol: string; strategyId: 
       </CardContent>
     </Card>
   );
+}
+
+// Indicator overlay panels section (FR-6) — resolves the FR-6 strategy (watchlist binding, else the
+// orders-derived owning strategy, same precedence as Backtests/Readiness), fetches its declared
+// components, and charts each component's series over the page's own bars. No fabricated panels: when
+// no strategy resolves or it has zero components, an explicit no-data state; the RPC never fires with
+// an empty strategy.
+function IndicatorSection({
+  symbol,
+  strategyId,
+  closes,
+  times,
+}: {
+  symbol: string;
+  strategyId: string;
+  closes: number[];
+  times: IndicatorSeriesInput['times'];
+}) {
+  const { data: strategy, isLoading: strategyLoading } = useGetStrategy(strategyId || undefined);
+  const hasComponents = (strategy?.components?.length ?? 0) > 0;
+  // Only fire the series RPC once we know the resolved strategy actually has components to chart.
+  const activeStrategyId = strategyId && hasComponents ? strategyId : '';
+  const { data: series, isLoading: seriesLoading } = useIndicatorSeries({
+    strategyId: activeStrategyId,
+    symbol,
+    closes,
+    times,
+  });
+
+  if (strategyId && strategyLoading) {
+    return <Skeleton className="h-40 w-full" data-testid="indicator-panels-loading" />;
+  }
+  if (!strategyId || !hasComponents) {
+    return (
+      <Card data-testid="indicator-panels-empty">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Indicators</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">
+            {strategyId
+              ? 'This strategy has no components to chart.'
+              : `No strategy resolves for ${symbol} to chart indicators.`}
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+  if (seriesLoading || !series) {
+    return <Skeleton className="h-40 w-full" data-testid="indicator-panels-loading" />;
+  }
+  return <IndicatorPanels components={series.components} />;
 }
 
 // Backfill coverage section (FR-10) — the symbol's ingested OHLCV date span, dates only (no chart).

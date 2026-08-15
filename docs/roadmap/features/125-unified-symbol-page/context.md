@@ -981,3 +981,35 @@ each checkpoint (C-02/P-03).
   `packages/proto/analysis/v1/analysis.proto`, `packages/proto/gen/**`,
   `services/xstockstrat-analysis/app/handlers/servicer.py`,
   `services/xstockstrat-analysis/tests/{test_strategy_evaluator,test_analysis_servicer}.py`
+
+### Steps 32–33 — indicator overlay panels UI + e2e [done] — 33/33 COMPLETE
+- **Step 32**: new `hooks/useIndicatorSeries.ts` (cross-segment `analysisClient`, enabled only when a
+  strategy resolves AND bars are present) + `components/trader/IndicatorPanels.tsx` (one stacked shadcn
+  `ChartContainer`+recharts `LineChart` per `ComponentSeries`, every `NamedSeries` its own `<Line>`; a
+  failed component → per-panel error state, not a chart). The page now RETAINS the fetched bars'
+  closes+times (new `barSeries` state in the existing getBars effect — no second fetch) and mounts
+  `<IndicatorSection>` beneath the price chart, resolving the FR-6 strategy like Backtests
+  (`boundStrategyId || owningStrategy`); no strategy / zero components → explicit no-data state, RPC
+  never fired empty. **Warm-up/gap points map via `?? null` + `connectNulls={false}`, never `?? 0`
+  (grep-guarded).**
+- **BFF registration gap fixed (spec miss).** The panels 501'd until I registered
+  `getIndicatorSeries` in `insightsBff.ts`'s AnalysisService forward block — the browser `analysisClient`
+  routes through `/insights/api`, so the INSIGHTS BFF must forward the method (Step 7's exception only
+  waived a *trader* BFF registration). Diagnosed via a network trace (501 Not Implemented from the BFF).
+- **Step 33**: new `e2e/fixtures/indicatorSeries.ts` (`INDICATOR_SERIES_AAPL` — a multi-series macd with
+  a warm-up gap + a failed component) + INVENTORY row; `getIndicatorSeries` mock handler; added `time`
+  to the getBars mock bars (the panels gate on bar timestamps). Two e2e: panels render (1 chart panel +
+  1 error panel, 3 macd lines via `.recharts-line`), and the no-strategy no-data state (RPC skipped).
+  Fixed a strict-mode collision — Backtests and Indicators both say "No strategy resolves for ZZZZ", so
+  the Step-19 Backtests assertion now uses the Backtests-specific phrasing.
+- Verify: tsc + lint clean; position-detail 23/23, mobile-overflow (AAPL) green.
+- Files: `src/hooks/useIndicatorSeries.ts` (new), `src/components/trader/IndicatorPanels.tsx` (new),
+  `src/app/trader/positions/[symbol]/page.tsx`, `src/lib/insightsBff.ts`, `e2e/fixtures/indicatorSeries.ts`
+  (new), `e2e/fixtures/INVENTORY.md`, `e2e/mock-backend.ts`, `e2e/trader/position-detail.spec.ts`
+
+### Feature 125 COMPLETE — all 33 steps done
+All sections shipped on the unified `/trader/positions/[symbol]` page: price chart + orders + trade
+widget (any symbol), watchlist-conditional Opportunity/Readiness/Fundamentals/Mute vs Screening,
+always-on Backtests + Backfill + FR-6 indicator overlay panels; old Signal-detail page retired to a
+redirect with its 132/138 controls absorbed. Backend: additive ScreenResult fields, GetPosition
+account_id fix, GetIndicatorSeries RPC. Ready for the final integration PR (#958).

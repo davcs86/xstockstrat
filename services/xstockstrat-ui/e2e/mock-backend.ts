@@ -52,6 +52,7 @@ import {
 } from './fixtures';
 import { criterionDetailRow } from './fixtures/screenResults';
 import { backfillJob } from './fixtures/backfillJobs';
+import { INDICATOR_SERIES_AAPL } from './fixtures/indicatorSeries';
 import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 
 export const TRADER_MOCK_PORT = 9091;
@@ -430,6 +431,9 @@ export async function startMockBackend(): Promise<void> {
             bars: [
               {
                 symbol: 'AAPL',
+                // Bar.time (feature 125 FR-6): the Symbol page reads these to build the
+                // GetIndicatorSeries request's parity-aligned x-axis.
+                time: { seconds: BigInt(1704067200), nanos: 0 }, // 2024-01-01
                 open: 188.0,
                 high: 190.5,
                 low: 187.2,
@@ -443,6 +447,7 @@ export async function startMockBackend(): Promise<void> {
               },
               {
                 symbol: 'AAPL',
+                time: { seconds: BigInt(1704153600), nanos: 0 }, // 2024-01-02
                 open: 189.8,
                 high: 192.0,
                 low: 188.5,
@@ -907,6 +912,15 @@ export async function startMockBackend(): Promise<void> {
               ? { signalParams: { symbols: ['AAPL', 'MSFT'] } }
               : {}),
           };
+        },
+        // feature 125 (FR-6): per-component indicator series for the Symbol page's overlay panels.
+        // AAPL → the canonical fixture (a multi-series MACD component with a warm-up gap + a failed
+        // component); any other symbol → no components.
+        async getIndicatorSeries(req) {
+          if (req.symbol === 'AAPL') {
+            return INDICATOR_SERIES_AAPL;
+          }
+          return { times: req.times, components: [] };
         },
       });
 

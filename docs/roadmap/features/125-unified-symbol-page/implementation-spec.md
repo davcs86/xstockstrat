@@ -1983,7 +1983,7 @@ Run once against the pre-Step-30 tree (confirm the servicer tests fail — handl
 
 ### Step 32 — service (xstockstrat-ui): indicator overlay panels beneath the price chart
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
@@ -2076,7 +2076,7 @@ Plus the e2e proof in Step 33.
 
 ### Step 33 — test (xstockstrat-ui): indicator overlay panels e2e
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/mock-backend.ts` — modify (add a `getIndicatorSeries` handler to the
