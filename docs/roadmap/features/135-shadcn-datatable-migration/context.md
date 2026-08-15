@@ -168,3 +168,44 @@ unrelated question, suspecting a parallel session. Investigated via `list_sessio
 `pull_request_read` — confirmed PR #960 is this session's own auto-created PR for
 `claude/migrate-tables-shadcn-datatable-jbccqa` (footer links to this session's own ID); no parallel
 session exists. Resolved as a stale/cached mobile-client render, not a collision. No action needed.
+
+## Session 2026-08-15 — sdd-spec
+
+- Generated `implementation-spec.md` with 33 steps. Status → `implementation-ready`. Consumed
+  `recon.md` + `design.md` directly (both present); re-read all 15 table call sites live (via `Read`,
+  not from recon's summary alone) to ground every step's Codebase Evidence and confirm recon/design's
+  claims still hold against current `main-dev` source.
+- Step structure: composite build + unit test (Steps 1–2) → `/config-ui` rows 12–14 (Steps 3–8) →
+  `/insights` rows 8–11 (Steps 9–16) → `/accounts` row 15 (Steps 17–18) → `/trader` rows 1, 4–7
+  (Steps 19–28) → isolated 19-column Exposure table row 2 (Steps 29–30) → design-excepted fill-lineage
+  row 3 (Steps 31–32) → full regression sweep (Step 33). Every `service` step paired 1:1 with an
+  immediately-following `test` step (C-08).
+- Key codebase findings confirmed live (beyond recon.md's summary):
+  - `mobile-overflow.spec.ts` `ROUTES` (`e2e/mobile-overflow.spec.ts:12-34`) already covers **14 of
+    the 15** migrated routes — only the bare `/trader` dashboard route (rows 6–7,
+    `LiveStrategiesPanel`/`OrderBook`) is a genuine gap, added in Step 25. This is a stronger result
+    than recon/design flagged — most FR-5 test steps need zero `ROUTES` changes, just a re-run of the
+    existing entry against the migrated markup.
+  - Row 4 (`positions/[symbol]/page.tsx:363`) and row 7 (`OrderBook.tsx:41`) both confirmed via direct
+    `Read` to carry `cursor-pointer` (row 7 also `hover:bg-accent/40`) with **zero** click handler
+    wired anywhere in either component — both dispositioned as "carried forward unchanged" per
+    design.md's default recommendation (Steps 21, 27).
+  - Row 6 (`LiveStrategiesPanel.tsx`): confirmed the exact keyboard double-fire bug design.md predicted
+    — the Enable/Disable button's `onClick` (`:78`) calls `stopPropagation()` but no `onKeyDown` exists
+    anywhere on that button, so a keyboard Enter today double-fires the mutation and the row's
+    `setSelectedId`. Migrating to the composite's shared `isInteractiveTarget`-on-both-`click`-and-
+    `keydown` guard (Step 25) is a genuine, intentional bug fix — Step 26 adds a red-before-green test
+    for it specifically.
+  - Row 3 (fill-lineage, `positions/page.tsx:578-604`): confirmed **zero** existing e2e coverage
+    (`grep -r "lineage" e2e/` returns nothing) — Step 32's Sheet-open-then-measure overflow test is
+    genuinely new coverage, not a preserved-behavior check, matching design.md's call-out that the
+    generic `mobile-overflow.spec.ts` sweep structurally cannot reach it (never clicks).
+  - No dedicated e2e spec was found asserting `/config-ui/audit`'s (row 14) or `OrderBook.tsx`'s
+    (row 7) rendered table content — both existing coverage was limited to overflow/nav/data-contract
+    checks. Steps 8 and 28 add the missing row-content assertions (both dispositioned as new coverage,
+    not regression fixtures).
+  - `@tanstack/react-table` pinned as `^8` (caret range, matching every other dependency in
+    `package.json`) rather than an exact version — consistent with the repo's existing convention, no
+    live-docs version check performed (not a functional-behavior claim requiring the 2026-08-10/
+    2026-08-13 ledger "verify against live docs" pattern — a caret range resolves at install time
+    either way).

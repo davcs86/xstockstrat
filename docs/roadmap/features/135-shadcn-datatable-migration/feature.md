@@ -1,6 +1,6 @@
 # Feature: shadcn-datatable-migration
 
-**Lifecycle Status**: `design-approved`
+**Lifecycle Status**: `implementation-ready`
 **Development Branch**: `feature/shadcn-datatable-migration`
 **Created**: 2026-08-15
 **Last Updated**: 2026-08-15
@@ -14,6 +14,7 @@
 | 2026-08-15 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-15 | `draft` → `spec-ready` | /sdd-review | Product spec approved (2 warnings; soft file-overlap with 124/125 noted, no blocking collision) |
 | 2026-08-15 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + design.md written. Zero Floor breaches. |
+| 2026-08-15 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 33 steps |
 
 ---
 
@@ -22,7 +23,7 @@
 - [Product Spec](product-spec.md) — requirements and governance
 - [Recon](recon.md) — grounded codebase dossier (15-table inventory, all 4 UI segments)
 - [Design](design.md) — debated, approved architecture (shared DataTable composite, onRowClick safety mechanism, row 2/3 exceptions)
-- [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec shadcn-datatable-migration`_
+- [Implementation Spec](implementation-spec.md) — 33 steps: composite build (2) + 15 table migrations (26, service+test pairs) + full regression sweep (1) — grounded evidence for every table site
 - [Context Log](context.md) — session history, decisions, deviations
 
 ---
@@ -42,4 +43,4 @@ narrow viewports (scrollable container, column priority, or stacked layout, as f
 
 ## Next Action
 
-`/sdd-spec shadcn-datatable-migration` — generate implementation spec from the approved design
+`/sdd-review shadcn-datatable-migration impl-spec` — validate implementation spec, then `/sdd-execute shadcn-datatable-migration`
