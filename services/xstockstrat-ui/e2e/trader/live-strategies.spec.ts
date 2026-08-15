@@ -57,7 +57,10 @@ test.describe('Live Strategies BFF', () => {
     expect(definition.liveEnabled).toBe(true);
   });
 
-  test('setStrategyLive is denied for non-admin', async ({ page }) => {
+  // feature 133: the trader BFF no longer admin-gates setStrategyLive. A non-admin OWNER may
+  // toggle their own strategy (strat-live-001 is owned by the default user); a non-owner is denied
+  // by the backend (covered in insights/strategy-ownership.spec.ts).
+  test('setStrategyLive succeeds for a non-admin owner (admin gate removed)', async ({ page }) => {
     await addAuthCookie(page);
     await page.goto('/trader/login');
 
@@ -70,11 +73,12 @@ test.describe('Live Strategies BFF', () => {
           body: JSON.stringify({ strategyId: 'strat-live-001', liveEnabled: true }),
         },
       );
-      return { status: res.status, body: await res.text() };
+      return { status: res.status, body: (await res.json()) as Record<string, unknown> };
     });
 
-    expect(result.status).not.toBe(200);
-    expect(result.body.toLowerCase()).toContain('permission');
+    expect(result.status).toBe(200);
+    const definition = result.body.definition as Record<string, unknown>;
+    expect(definition.strategyId).toBe('strat-live-001');
   });
 
   test('listAlerts returns strategy-category alerts with strategy_id tag', async ({ page }) => {

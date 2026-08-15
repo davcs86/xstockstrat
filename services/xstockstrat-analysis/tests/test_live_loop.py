@@ -63,7 +63,7 @@ class TestLiveEvaluationLoopStateTracking:
     @pytest.mark.asyncio
     async def test_entry_exit_edge_triggered(self):
         loop = _make_loop()
-        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", display_name="S1")
+        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", user_id="u1", display_name="S1")
 
         # 1. Entry transition (False → True) fires one alert.
         loop._evaluator.evaluate = AsyncMock(return_value=[_decision(True, False)])
@@ -83,7 +83,7 @@ class TestLiveEvaluationLoopStateTracking:
     async def test_no_bars_no_alert(self):
         loop = _make_loop()
         loop._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=[]))
-        defn = analysis_pb2.StrategyDefinition(strategy_id="s1")
+        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", user_id="u1")
         await loop._eval_pair(defn, "AAPL", throttle=0)
         loop._notify.EmitAlert.assert_not_called()
 
@@ -93,7 +93,7 @@ class TestLiveEvaluationLoopRequestShape:
     async def test_getbars_sends_canonical_string_and_enum(self):
         loop = _make_loop()
         loop._evaluator.evaluate = AsyncMock(return_value=[_decision(False, False)])
-        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", display_name="S1")
+        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", user_id="u1", display_name="S1")
 
         await loop._eval_pair(defn, "AAPL", throttle=0)
 
@@ -106,10 +106,10 @@ class TestLiveEvaluationLoopThrottle:
     @pytest.mark.asyncio
     async def test_alert_suppressed_within_throttle(self):
         loop = _make_loop()
-        defn = analysis_pb2.StrategyDefinition(strategy_id="s1")
+        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", user_id="u1")
         loop._evaluator.evaluate = AsyncMock(return_value=[_decision(True, False)])
         # Pretend an alert just fired for this pair.
-        loop._last_alert_ts[("s1", "AAPL")] = time.monotonic()
+        loop._last_alert_ts[("u1", "s1", "AAPL")] = time.monotonic()
         await loop._eval_pair(defn, "AAPL", throttle=10_000)
         loop._notify.EmitAlert.assert_not_called()
 
@@ -117,7 +117,10 @@ class TestLiveEvaluationLoopThrottle:
 class TestLiveEvaluationLoopSafety:
     def test_no_trading_imports(self):
         src = inspect.getsource(live_loop_module)
-        for forbidden in ("trading_pb2", "TradingService", "PlaceOrder", "portfolio_pb2"):
+        # FR-6: the loop never places orders / touches trading. feature 132 added a READ-ONLY
+        # portfolio query (owner watchlist/held for universe resolution), so portfolio_pb2 is no
+        # longer forbidden — but the trading write surface remains banned.
+        for forbidden in ("trading_pb2", "TradingService", "PlaceOrder", "CreateOrder"):
             assert forbidden not in src, f"FR-6 violation: {forbidden} present in live_loop"
 
 
@@ -125,21 +128,23 @@ class TestLiveEvaluationLoopIsolation:
     @pytest.mark.asyncio
     async def test_one_pair_error_does_not_block_others(self):
         loop = _make_loop()
+        # feature 132: universe now comes from resolve_universe — an explicit signal_params.symbols
+        # allowlist yields the {AAA, BBB} evaluation universe (sorted → AAA, BBB).
         loop._db.fetch = AsyncMock(
             return_value=[
                 {
                     "strategy_id": "s1",
+                    "user_id": "u1",
                     "display_name": "S1",
                     "active": True,
                     "live_enabled": True,
-                    "definition_json": {},
+                    "definition_json": {"signal_params": {"symbols": ["AAA", "BBB"]}},
                 }
             ]
         )
-        loop._symbols_for = MagicMock(return_value=["AAA", "BBB"])
         calls = []
 
-        async def fake_eval(defn, symbol, throttle):
+        async def fake_eval(defn, symbol, throttle, deny_entry=False):
             calls.append(symbol)
             if symbol == "AAA":
                 raise RuntimeError("boom")
@@ -159,14 +164,14 @@ class TestLiveEvaluationLoopIsolation:
             return_value=[
                 {
                     "strategy_id": "s1",
+                    "user_id": "u1",
                     "display_name": "S1",
                     "active": True,
                     "live_enabled": True,
-                    "definition_json": {},
+                    "definition_json": {"signal_params": {"symbols": ["AAA", "BBB"]}},
                 }
             ]
         )
-        loop._symbols_for = MagicMock(return_value=["AAA", "BBB"])
         # Force the alert throttle to 0 so the healthy pair's entry alert is not suppressed.
         # (_run_cycle reads alert_throttle_seconds, default 300; on a freshly-booted host
         # time.monotonic() can be < 300, which would throttle the first-ever alert and make
@@ -194,8 +199,8 @@ class TestLiveEvaluationLoopIsolation:
         # Both pairs attempted; the loop continued past the AAA formula error.
         assert evaluated == ["AAA", "BBB"]
         # The failed pair recorded no state; the healthy pair fired its entry alert.
-        assert ("s1", "AAA") not in loop._last_state
-        assert loop._last_state.get(("s1", "BBB")) is True
+        assert ("u1", "s1", "AAA") not in loop._last_state
+        assert loop._last_state.get(("u1", "s1", "BBB")) is True
         assert loop._notify.EmitAlert.await_count == 1
 
 
@@ -206,8 +211,10 @@ class TestLiveEvaluationLoopCooldown:
     async def test_entry_suppressed_inside_cooldown_window(self):
         """AC-4: an in-window re-entry emits no alert / no state flip; after the window it does."""
         loop = _make_loop()
-        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", display_name="S1")  # unset → 31
-        key = ("s1", "AAPL")
+        defn = analysis_pb2.StrategyDefinition(
+            strategy_id="s1", user_id="u1", display_name="S1"
+        )  # unset → 31
+        key = ("u1", "s1", "AAPL")
         last_exit = datetime(2026, 3, 1, tzinfo=UTC)
         loop._last_exit_at[key] = last_exit
         loop._evaluator.evaluate = AsyncMock(return_value=[_decision(True, False)])
@@ -238,8 +245,8 @@ class TestLiveEvaluationLoopCooldown:
         """An exit upserts the last-exit timestamp to the durable repo (bar time)."""
         repo = AsyncMock()
         loop = _make_loop(cooldowns_repo=repo)
-        defn = analysis_pb2.StrategyDefinition(strategy_id="s1")
-        loop._last_state[("s1", "AAPL")] = True  # currently in position
+        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", user_id="u1")
+        loop._last_state[("u1", "s1", "AAPL")] = True  # currently in position
         bar_dt = datetime(2026, 4, 1, tzinfo=UTC)
         # feature 116: mark this key as already-replayed so the replay-then-read step (which
         # would otherwise run on this key's first _eval_pair call and re-derive in_position from
@@ -247,27 +254,27 @@ class TestLiveEvaluationLoopCooldown:
         # wants to exercise the transition logic directly, not replay reconstruction. Also seed
         # a known entry anchor — an unresolved one would correctly trigger the skip-until-known
         # guard (Step 11 tests that mechanism directly), which is not what this test is about.
-        loop._replayed.add(("s1", "AAPL"))
-        loop._last_entry_at[("s1", "AAPL")] = bar_dt - timedelta(days=1)
+        loop._replayed.add(("u1", "s1", "AAPL"))
+        loop._last_entry_at[("u1", "s1", "AAPL")] = bar_dt - timedelta(days=1)
         loop._evaluator.evaluate = AsyncMock(return_value=[_decision(False, True)])
         loop._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=[_bar_at(bar_dt)]))
 
         await loop._eval_pair(defn, "AAPL", throttle=0)
         repo.upsert_exit.assert_awaited_once()
         args = repo.upsert_exit.await_args.args
-        assert args[0] == "s1" and args[1] == "AAPL" and args[2] == bar_dt
+        assert args[0] == "u1" and args[1] == "s1" and args[2] == "AAPL" and args[3] == bar_dt
 
     @pytest.mark.asyncio
     async def test_exit_persists_even_when_alert_throttled(self):
         """R1: the cooldown clock starts on the exit fact even when the alert is throttled."""
         repo = AsyncMock()
         loop = _make_loop(cooldowns_repo=repo)
-        defn = analysis_pb2.StrategyDefinition(strategy_id="s1")
-        loop._last_state[("s1", "AAPL")] = True
+        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", user_id="u1")
+        loop._last_state[("u1", "s1", "AAPL")] = True
         bar_dt = datetime(2026, 4, 1, tzinfo=UTC)
-        loop._replayed.add(("s1", "AAPL"))  # feature 116: bypass replay, see the sibling test
-        loop._last_entry_at[("s1", "AAPL")] = bar_dt - timedelta(days=1)  # known entry anchor
-        loop._last_alert_ts[("s1", "AAPL")] = time.monotonic()  # force throttle
+        loop._replayed.add(("u1", "s1", "AAPL"))  # feature 116: bypass replay, see the sibling test
+        loop._last_entry_at[("u1", "s1", "AAPL")] = bar_dt - timedelta(days=1)  # known entry anchor
+        loop._last_alert_ts[("u1", "s1", "AAPL")] = time.monotonic()  # force throttle
         loop._evaluator.evaluate = AsyncMock(return_value=[_decision(False, True)])
         loop._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=[_bar_at(bar_dt)]))
 
@@ -281,21 +288,21 @@ class TestLiveEvaluationLoopCooldown:
         repo = AsyncMock()
         repo.upsert_exit = AsyncMock(side_effect=RuntimeError("db down"))
         loop = _make_loop(cooldowns_repo=repo)
-        defn = analysis_pb2.StrategyDefinition(strategy_id="s1")
-        loop._last_state[("s1", "AAPL")] = True
+        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", user_id="u1")
+        loop._last_state[("u1", "s1", "AAPL")] = True
         bar_dt = datetime(2026, 4, 1, tzinfo=UTC)
         # feature 116: bypass replay (see test_exit_persists_cooldown_via_repo) — without this,
         # replay would reset in_position to False on an empty bars[:-1] window, the exit branch
         # would never fire, and this test would pass without ever exercising the write-failure
         # path it claims to test (a false-positive green). Also seed a known entry anchor — an
         # unresolved one would correctly trigger the skip-until-known guard instead.
-        loop._replayed.add(("s1", "AAPL"))
-        loop._last_entry_at[("s1", "AAPL")] = bar_dt - timedelta(days=1)
+        loop._replayed.add(("u1", "s1", "AAPL"))
+        loop._last_entry_at[("u1", "s1", "AAPL")] = bar_dt - timedelta(days=1)
         loop._evaluator.evaluate = AsyncMock(return_value=[_decision(False, True)])
         loop._marketdata.GetBars = AsyncMock(return_value=SimpleNamespace(bars=[_bar_at(bar_dt)]))
         await loop._eval_pair(defn, "AAPL", throttle=0)  # must not raise
         repo.upsert_exit.assert_awaited_once()  # the write was actually attempted (and failed)
-        assert loop._last_state[("s1", "AAPL")] is False  # state still flipped
+        assert loop._last_state[("u1", "s1", "AAPL")] is False  # state still flipped
 
     @pytest.mark.asyncio
     async def test_restart_durability_via_hydrate(self):
@@ -303,13 +310,15 @@ class TestLiveEvaluationLoopCooldown:
         last_exit = datetime(2026, 3, 1, tzinfo=UTC)
         repo = AsyncMock()
         repo.list_all = AsyncMock(
-            return_value=[{"strategy_id": "s1", "symbol": "AAPL", "last_exit_at": last_exit}]
+            return_value=[
+                {"user_id": "u1", "strategy_id": "s1", "symbol": "AAPL", "last_exit_at": last_exit}
+            ]
         )
         loop = _make_loop(cooldowns_repo=repo)  # simulates a restart — in-memory state empty
         await loop.hydrate_cooldowns()
-        assert loop._last_exit_at[("s1", "AAPL")] == last_exit
+        assert loop._last_exit_at[("u1", "s1", "AAPL")] == last_exit
 
-        defn = analysis_pb2.StrategyDefinition(strategy_id="s1")
+        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", user_id="u1")
         loop._evaluator.evaluate = AsyncMock(return_value=[_decision(True, False)])
         loop._marketdata.GetBars = AsyncMock(
             return_value=SimpleNamespace(bars=[_bar_at(last_exit + timedelta(days=5))])
@@ -342,8 +351,8 @@ class TestLiveEvaluationLoopExitCooldown:
     @pytest.mark.asyncio
     async def test_exit_suppressed_while_min_hold_active(self):
         loop = _make_loop()
-        key = ("s1", "AAPL")
-        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", display_name="S1")
+        key = ("u1", "s1", "AAPL")
+        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", user_id="u1", display_name="S1")
         defn.exit_cooldown_days = 5
         entry_dt = datetime(2026, 5, 1, tzinfo=UTC)
         loop._last_state[key] = True
@@ -362,8 +371,8 @@ class TestLiveEvaluationLoopExitCooldown:
     @pytest.mark.asyncio
     async def test_exit_allowed_once_min_hold_elapses(self):
         loop = _make_loop()
-        key = ("s1", "AAPL")
-        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", display_name="S1")
+        key = ("u1", "s1", "AAPL")
+        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", user_id="u1", display_name="S1")
         defn.exit_cooldown_days = 5
         entry_dt = datetime(2026, 5, 1, tzinfo=UTC)
         loop._last_state[key] = True
@@ -384,8 +393,8 @@ class TestLiveEvaluationLoopExitCooldown:
         """Required (a) — design.md's skip-until-known guard: a known-open pair whose entry
         anchor is still unresolved must not permit an ungated exit."""
         loop = _make_loop()
-        key = ("s1", "AAPL")
-        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", display_name="S1")
+        key = ("u1", "s1", "AAPL")
+        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", user_id="u1", display_name="S1")
         defn.exit_cooldown_days = 5
         loop._last_state[key] = True
         loop._replayed.add(key)  # in_position known; entry anchor deliberately NOT seeded
@@ -406,8 +415,8 @@ class TestLiveEvaluationLoopExitCooldown:
         """Required (b) — once the entry anchor becomes known (e.g. the boot-time backfill
         lands), the exit-cooldown gate evaluates normally on the next cycle."""
         loop = _make_loop()
-        key = ("s1", "AAPL")
-        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", display_name="S1")
+        key = ("u1", "s1", "AAPL")
+        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", user_id="u1", display_name="S1")
         defn.exit_cooldown_days = 5
         loop._last_state[key] = True
         loop._replayed.add(key)
@@ -433,8 +442,10 @@ class TestLiveEvaluationLoopExitCooldown:
         test_entry_suppressed_inside_cooldown_window exactly, just with an unresolved entry
         anchor present (and absent from _last_state) to prove it doesn't leak across branches."""
         loop = _make_loop()
-        key = ("s1", "AAPL")
-        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", display_name="S1")  # unset → 31
+        key = ("u1", "s1", "AAPL")
+        defn = analysis_pb2.StrategyDefinition(
+            strategy_id="s1", user_id="u1", display_name="S1"
+        )  # unset → 31
         last_exit = datetime(2026, 3, 1, tzinfo=UTC)
         loop._last_exit_at[key] = last_exit
         assert key not in loop._last_state
@@ -484,7 +495,7 @@ class TestLiveEvaluationLoopExitCooldown:
         """Replay reconstructing 'already in position' for a key's first-seen-since-restart
         cycle must not itself fire a spurious transition alert — only the seeding, no trigger."""
         loop = _make_loop()
-        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", display_name="S1")
+        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", user_id="u1", display_name="S1")
         base = datetime(2026, 6, 1, tzinfo=UTC)
         # bar0: entry (establishes in_position=True during replay). bar1: steady (still held).
         # bar2 (the "current"/latest bar): steady — no transition on this cycle.
@@ -498,8 +509,8 @@ class TestLiveEvaluationLoopExitCooldown:
 
         loop._notify.EmitAlert.assert_not_called()
         loop._ledger.AppendEvent.assert_not_called()
-        assert loop._last_state[("s1", "AAPL")] is True  # replay correctly resolved it open
-        assert ("s1", "AAPL") in loop._replayed
+        assert loop._last_state[("u1", "s1", "AAPL")] is True  # replay correctly resolved it open
+        assert ("u1", "s1", "AAPL") in loop._replayed
 
     @pytest.mark.asyncio
     async def test_replay_only_runs_once_per_key(self):
@@ -507,9 +518,9 @@ class TestLiveEvaluationLoopExitCooldown:
         from unittest.mock import patch
 
         loop = _make_loop()
-        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", display_name="S1")
+        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", user_id="u1", display_name="S1")
         loop._evaluator.evaluate = AsyncMock(return_value=[_decision(False, False)])
-        key = ("s1", "AAPL")
+        key = ("u1", "s1", "AAPL")
 
         with patch(
             "app.engine.live_loop._replay_state", wraps=live_loop_module._replay_state
@@ -520,3 +531,228 @@ class TestLiveEvaluationLoopExitCooldown:
 
             await loop._eval_pair(defn, "AAPL", throttle=0)
             assert spy.call_count == 1  # not re-run on the second cycle
+
+
+# ── feature 132 — deny list, fair-share rotation, owner-scoped universe ──────────
+
+
+def _live_row(
+    strategy_id, user_id, symbols=None, denied=None, signal_eligible=False, created_at=None
+):
+    """A live analysis.strategies row for _run_cycle (definition_json carries the 132 fields)."""
+    dj = {}
+    if symbols is not None:
+        dj["signal_params"] = {"symbols": list(symbols)}
+    if denied is not None:
+        dj["denied_symbols"] = list(denied)
+    if signal_eligible:
+        dj["signal_eligible"] = True
+    return {
+        "strategy_id": strategy_id,
+        "user_id": user_id,
+        "display_name": strategy_id.upper(),
+        "active": True,
+        "live_enabled": True,
+        "created_at": created_at or datetime(2024, 1, 1, tzinfo=UTC),
+        "definition_json": dj,
+    }
+
+
+class TestLiveLoopEntryOnlyDeny:
+    @pytest.mark.asyncio
+    async def test_deny_entry_suppresses_entry_but_allows_exit(self):
+        """AC (entry-only deny): deny_entry=True short-circuits the entry edge; the exit edge on a
+        held position still fires."""
+        loop = _make_loop()
+        defn = analysis_pb2.StrategyDefinition(strategy_id="s1", user_id="u1", display_name="S1")
+        key = ("u1", "s1", "TSLA")
+
+        # 1. Entry decision + deny_entry=True → no alert.
+        loop._evaluator.evaluate = AsyncMock(return_value=[_decision(True, False)])
+        await loop._eval_pair(defn, "TSLA", throttle=0, deny_entry=True)
+        assert loop._notify.EmitAlert.await_count == 0
+        assert loop._last_state.get(key) is False  # never entered
+
+        # 2. Seed a held position with a resolved entry time; exit decision + deny_entry=True → the
+        #    exit still fires (deny is entry-only).
+        loop._last_state[key] = True
+        loop._last_entry_at[key] = _DEFAULT_BAR_DT - timedelta(days=30)
+        loop._replayed.add(key)  # skip replay so the seeded state stands
+        loop._evaluator.evaluate = AsyncMock(return_value=[_decision(False, True)])
+        await loop._eval_pair(defn, "TSLA", throttle=0, deny_entry=True)
+        assert loop._notify.EmitAlert.await_count == 1  # exit fired despite deny_entry
+
+    def test_replay_state_ignores_deny_entry_by_default(self):
+        """_replay_state must reconstruct a truthful entry_time on restart for a held-denied symbol
+        (it never passes deny_entry → default False), so its live exit is not tripped by the
+        unresolved-entry-time skip."""
+        from app.engine.live_loop import _replay_state
+
+        bars = [_bar_at(_DEFAULT_BAR_DT - timedelta(days=5)), _bar_at(_DEFAULT_BAR_DT)]
+        decisions = [_decision(True, False), _decision(False, False)]
+        in_pos, entry_time, _last_exit = _replay_state(bars, decisions, 0, 0)
+        assert in_pos is True
+        assert entry_time is not None  # reconstructed despite the symbol being deny-listed live
+
+
+class TestLiveLoopFairShare:
+    def _cfg_max(self, loop, max_pairs):
+        loop._cfg.get_int = MagicMock(
+            side_effect=lambda key, default=0: (
+                max_pairs if key == "analysis.engine.max_strategies_per_cycle" else default
+            )
+        )
+
+    @pytest.mark.asyncio
+    async def test_rotation_covers_every_pair_across_cycles(self):
+        loop = _make_loop()
+        self._cfg_max(loop, 2)  # budget 2 pairs/cycle
+        loop._db.fetch = AsyncMock(
+            return_value=[_live_row("s1", "u1", symbols=["A", "B", "C", "D", "E"])]
+        )
+        seen = []
+
+        async def fake_eval(defn, symbol, throttle, deny_entry=False):
+            seen.append(symbol)
+
+        loop._eval_pair = fake_eval
+        for _ in range(3):  # ceil(5/2) = 3 cycles cover all 5
+            await loop._run_cycle()
+        assert set(seen) == {"A", "B", "C", "D", "E"}
+        assert seen[:2] == ["A", "B"]  # first cycle starts at the oldest
+        assert seen[2:4] == ["C", "D"]  # cursor advanced, not restarted
+
+    @pytest.mark.asyncio
+    async def test_empty_universe_leaves_cursor_untouched(self):
+        loop = _make_loop()
+        loop._db.fetch = AsyncMock(return_value=[])
+        loop._cursor_key = ("sentinel",)
+        await loop._run_cycle()
+        assert loop._cursor_key == ("sentinel",)  # zero-guard
+
+    @pytest.mark.asyncio
+    async def test_restart_resets_cursor_to_oldest(self):
+        loop = _make_loop()
+        self._cfg_max(loop, 2)
+        loop._db.fetch = AsyncMock(return_value=[_live_row("s1", "u1", symbols=["A", "B", "C"])])
+        seen = []
+
+        async def fake_eval(defn, symbol, throttle, deny_entry=False):
+            seen.append(symbol)
+
+        loop._eval_pair = fake_eval
+        await loop._run_cycle()  # A, B
+        loop._cursor_key = None  # simulate a restart
+        seen.clear()
+        await loop._run_cycle()
+        assert seen == ["A", "B"]  # resumes at the oldest, not mid-list
+
+    @pytest.mark.asyncio
+    async def test_truncation_warns_only_when_over_budget(self, caplog):
+        loop = _make_loop()
+
+        async def fake_eval(defn, symbol, throttle, deny_entry=False):
+            pass
+
+        loop._eval_pair = fake_eval
+        # Under budget → no warning.
+        self._cfg_max(loop, 50)
+        loop._db.fetch = AsyncMock(return_value=[_live_row("s1", "u1", symbols=["A", "B"])])
+        with caplog.at_level("WARNING"):
+            await loop._run_cycle()
+        assert not any("exceed max_strategies_per_cycle" in r.message for r in caplog.records)
+        # Over budget → one warning.
+        caplog.clear()
+        self._cfg_max(loop, 2)
+        loop._db.fetch = AsyncMock(
+            return_value=[_live_row("s1", "u1", symbols=["A", "B", "C", "D"])]
+        )
+        with caplog.at_level("WARNING"):
+            await loop._run_cycle()
+        assert sum("exceed max_strategies_per_cycle" in r.message for r in caplog.records) == 1
+
+
+class TestLiveLoopOwnerScoped:
+    def _wire(self, loop, positions_by_owner, signals=()):
+        loop._portfolio = AsyncMock()
+
+        async def _list_positions(req, metadata=None):
+            owner = req.user_id
+            syms = positions_by_owner.get(owner, [])
+            return SimpleNamespace(
+                positions=[SimpleNamespace(symbol=s) for s in syms],
+                page=SimpleNamespace(next_page_token=""),
+            )
+
+        loop._portfolio.ListPositions = AsyncMock(side_effect=_list_positions)
+        loop._portfolio.ListWatchlists = AsyncMock(
+            return_value=SimpleNamespace(watchlists=[], page=SimpleNamespace(next_page_token=""))
+        )
+        loop._ingest.QuerySignals = AsyncMock(
+            return_value=SimpleNamespace(
+                signals=[SimpleNamespace(symbol=s) for s in signals],
+                page=SimpleNamespace(next_page_token=""),
+            )
+        )
+
+    @pytest.mark.asyncio
+    async def test_memoized_per_owner_and_signals_once(self):
+        loop = _make_loop()
+        loop._db.fetch = AsyncMock(
+            return_value=[
+                _live_row("s1", "u1"),  # no allowlist, signal_eligible=false
+                _live_row("s2", "u1"),
+                _live_row("s3", "u2"),
+            ]
+        )
+        self._wire(loop, {"u1": ["AAA"], "u2": ["BBB"]}, signals=["ZZZ"])
+        seen = []
+
+        async def fake_eval(defn, symbol, throttle, deny_entry=False):
+            seen.append((defn.user_id, symbol))
+
+        loop._eval_pair = fake_eval
+        await loop._run_cycle()
+        # one ListPositions + one ListWatchlists per owner (memoized), QuerySignals once per cycle
+        assert loop._portfolio.ListPositions.await_count == 2
+        assert loop._portfolio.ListWatchlists.await_count == 2
+        assert loop._ingest.QuerySignals.await_count == 1
+        # signal_eligible=false → ZZZ excluded; each owner sees only its own held symbol
+        assert set(seen) == {("u1", "AAA"), ("u2", "BBB")}
+        # outbound x-user-id metadata equals the strategy owner (C-03)
+        owners = {
+            dict(c.kwargs["metadata"])["x-user-id"]
+            for c in loop._portfolio.ListPositions.await_args_list
+        }
+        assert owners == {"u1", "u2"}
+
+    @pytest.mark.asyncio
+    async def test_signal_eligible_true_joins_platform_signals(self):
+        loop = _make_loop()
+        loop._db.fetch = AsyncMock(return_value=[_live_row("s1", "u1", signal_eligible=True)])
+        self._wire(loop, {"u1": ["AAA"]}, signals=["ZZZ"])
+        seen = []
+
+        async def fake_eval(defn, symbol, throttle, deny_entry=False):
+            seen.append(symbol)
+
+        loop._eval_pair = fake_eval
+        await loop._run_cycle()
+        assert set(seen) == {"AAA", "ZZZ"}  # held ∪ platform signals (signal_eligible)
+
+    @pytest.mark.asyncio
+    async def test_held_denied_symbol_marked_deny_entry(self):
+        loop = _make_loop()
+        loop._db.fetch = AsyncMock(
+            return_value=[_live_row("s1", "u1", denied=["AAA"], signal_eligible=True)]
+        )
+        self._wire(loop, {"u1": ["AAA"]}, signals=[])
+        seen = {}
+
+        async def fake_eval(defn, symbol, throttle, deny_entry=False):
+            seen[symbol] = deny_entry
+
+        loop._eval_pair = fake_eval
+        await loop._run_cycle()
+        # AAA is held AND denied → retained in the universe but flagged deny_entry (exit-only)
+        assert seen == {"AAA": True}

@@ -378,6 +378,7 @@ def register_tools(server: MCPServer) -> None:
     # ever parameterized (`list[ContentBlock]`), which would build one by default.
     @server.tool(structured_output=False)
     async def run_backtest(
+        ctx: Context,
         strategy_id: str,
         symbols: list[str],
         initial_capital: float = 100000.0,
@@ -415,13 +416,21 @@ def register_tools(server: MCPServer) -> None:
         Note: 64-bit integer fields in the attached full result (e.g. per-bar `volume`, and
         `bars_have`/`bars_need` inside `coverage_gaps`) are serialized as JSON STRINGS, not
         numbers — parse them before arithmetic."""
-        result = await client.run_backtest(
-            strategy_id=strategy_id,
-            symbols=symbols,
-            initial_capital=initial_capital,
-            start=start,
-            end=end,
-        )
+        # feature 133: forward the caller's own user id so analysis resolves ownership from the
+        # header — a non-owner strategy_id_ref is rejected PERMISSION_DENIED there. Wrap the RPC so
+        # that denial surfaces as a tool-level error, not an unwrapped AioRpcError (AC-6).
+        user_id = _caller_user_id(ctx, "run_backtest")
+        try:
+            result = await client.run_backtest(
+                user_id=user_id,
+                strategy_id=strategy_id,
+                symbols=symbols,
+                initial_capital=initial_capital,
+                start=start,
+                end=end,
+            )
+        except grpc.aio.AioRpcError as e:
+            raise RuntimeError(_grpc_error_message(e, not_found="strategy not found")) from e
         # summarize() is deliberately OUTSIDE the try: a projection bug is a real failure. Only
         # attachment construction degrades.
         summary = backtest_view.summarize(result)
@@ -496,6 +505,8 @@ def register_tools(server: MCPServer) -> None:
         signal_params: dict | None = None,
         cooldown_days: int | None = None,
         exit_cooldown_days: int | None = None,
+        denied_symbols: list[str] | None = None,
+        signal_eligible: bool | None = None,
         clear_fields: list[str] | None = None,
     ) -> dict:
         """Register/update/deactivate/reactivate a stored strategy in xstockstrat-analysis.
@@ -539,6 +550,14 @@ def register_tools(server: MCPServer) -> None:
         exit_cooldown_days: optional per-symbol minimum holding period in calendar days before
             exit_rule may fire a sell — omit → platform default (0, no minimum hold); 0 → no
             minimum hold (immediate exit permitted); negative → rejected (INVALID_ARGUMENT).
+        denied_symbols: optional list of normalized-uppercase symbols this strategy must never
+            evaluate FOR ENTRY (feature 132 — entry-only deny). A held position on a denied symbol
+            keeps exit tracing, so an operator can always exit what they already hold; deny only
+            suppresses new entries. Omit to leave unchanged; pass [] (or clear_fields) to clear.
+        signal_eligible: optional bool gating whether the platform-wide active-signal term joins
+            this strategy's evaluation universe (feature 132; default false). Setting it true while
+            signal_params.symbols is a non-empty allowlist is rejected INVALID_ARGUMENT (the
+            allowlist is already an explicit universe override).
         clear_fields: optional list of field names to ERASE, e.g. ['exit_rule']. Use this to
             blank a rule or to revert cooldown_days to the platform default — passing a field
             with no value cannot express "erase" on its own.
@@ -577,6 +596,8 @@ def register_tools(server: MCPServer) -> None:
             "signal_params": signal_params,
             "cooldown_days": cooldown_days,
             "exit_cooldown_days": exit_cooldown_days,
+            "denied_symbols": denied_symbols,
+            "signal_eligible": signal_eligible,
         }
         mask = [name for name, value in supplied.items() if value is not None]
         for name in mask:
@@ -600,11 +621,18 @@ def register_tools(server: MCPServer) -> None:
                 )
             update_mask = mask
 
-        # feature 092: forward the caller's REAL derived scope (was a hardcoded admin 7); the
-        # analysis ManageStrategy backend enforces the ADMIN bit, so a non-admin is rejected there.
+        # feature 092: forward the caller's REAL derived scope (was a hardcoded admin 7). NOTE
+        # (feature 133): ManageStrategy is no longer admin-gated — it is ownership-gated. Analysis
+        # resolves the owner from the propagated x-user-id header and returns PERMISSION_DENIED for
+        # a non-owner; any authenticated caller acts on their OWN strategies regardless of admin.
+        # The scope is still forwarded (harmless defence-in-depth), but it is no longer the gate.
         access_scope = _caller_access_scope(ctx, "manage_strategy")
+        # feature 133: forward the caller's own user id so analysis resolves ownership from the
+        # header (never the request body) — a non-owner is rejected PERMISSION_DENIED there.
+        user_id = _caller_user_id(ctx, "manage_strategy")
         try:
             return await client.manage_strategy(
+                user_id=user_id,
                 operation=operation,
                 definition=definition,
                 update_mask=update_mask,
@@ -812,8 +840,12 @@ def register_tools(server: MCPServer) -> None:
         Returns a 4-field subset, NOT the full definition:
             {"strategy_id", "display_name", "live_enabled", "active"}."""
         access_scope = _caller_access_scope(ctx, "set_strategy_live")  # feature 092
+        # feature 133: forward the caller's own user id so analysis resolves ownership from the
+        # header — a non-owner is rejected PERMISSION_DENIED there.
+        user_id = _caller_user_id(ctx, "set_strategy_live")
         try:
             return await client.set_strategy_live(
+                user_id=user_id,
                 strategy_id=strategy_id,
                 live_enabled=live_enabled,
                 access_scope=access_scope,
@@ -933,18 +965,22 @@ def register_tools(server: MCPServer) -> None:
             raise RuntimeError(_grpc_error_message(e)) from e
 
     @server.tool()
-    async def list_strategies(include_inactive: bool = False) -> dict:
+    async def list_strategies(ctx: Context, include_inactive: bool = False) -> dict:
         """List stored strategy definitions from xstockstrat-analysis (read-only).
         include_inactive: also include deactivated strategies (default false).
         Returns {"strategies": [<definition>, ...]} — each definition is snake_case, matching
-            get_strategy (so a list → get → manage_strategy edit loop stays consistent)."""
+            get_strategy (so a list → get → manage_strategy edit loop stays consistent).
+        Only the calling user's OWN strategies are returned."""
+        # feature 133: forward the caller's own user id so analysis filters to the caller's
+        # strategies (never another user's) from the header.
+        user_id = _caller_user_id(ctx, "list_strategies")
         try:
-            return {"strategies": await client.list_strategy_definitions(include_inactive)}
+            return {"strategies": await client.list_strategy_definitions(user_id, include_inactive)}
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e)) from e
 
     @server.tool()
-    async def get_strategy(strategy_id: str) -> dict:
+    async def get_strategy(ctx: Context, strategy_id: str) -> dict:
         """Fetch a stored strategy's full definition from xstockstrat-analysis (read-only).
         strategy_id: the strategy identifier, e.g. 'range_mean_reversion_v3'.
         Returns the complete stored definition — display_name, every component with its
@@ -952,9 +988,13 @@ def register_tools(server: MCPServer) -> None:
         exit_cooldown_days, and the active/live_enabled flags.
         Use this before editing a strategy to see what is actually stored, and after editing to
         verify the change landed. Keys are snake_case, matching manage_strategy's input, so a
-        fetch → edit → resend round-trip works directly."""
+        fetch → edit → resend round-trip works directly.
+        Fetching a strategy the caller does not own is rejected PERMISSION_DENIED."""
+        # feature 133: forward the caller's own user id so analysis resolves ownership from the
+        # header — a non-owner is rejected PERMISSION_DENIED there.
+        user_id = _caller_user_id(ctx, "get_strategy")
         try:
-            return await client.get_strategy(strategy_id=strategy_id)
+            return await client.get_strategy(user_id=user_id, strategy_id=strategy_id)
         except grpc.aio.AioRpcError as e:
             raise RuntimeError(_grpc_error_message(e, not_found="strategy not found")) from e
 

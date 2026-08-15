@@ -80,7 +80,7 @@ for correctness and is intentionally out of scope here.
 
 ### Step 1 — proto: add `ingested_at` to `ExternalSignal`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/ingest/v1/ingest.proto` — modify
@@ -113,7 +113,7 @@ Both pass (additive field is non-breaking).
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/**` — modify (regenerated TS/Python/Go stubs — do not hand-edit)
@@ -142,7 +142,7 @@ After staging, `git status` shows the new field in the generated `ingest` stubs 
 
 ### Step 3 — service: expose `ingested_at` in ingest `QuerySignals`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -194,7 +194,7 @@ non-zero `ingested_at` (`sig.HasField("ingested_at")` true; `sig.ingested_at.sec
 
 ### Step 4 — test: ingest `QuerySignals` populates `ingested_at`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_ingest_servicer.py` — modify
@@ -228,7 +228,7 @@ Confirm ≥40% coverage and the new assertion passes (and failed before Step 3).
 
 ### Step 5 — service: zero-trap-safe config read + `signal_axis` decay in `_compute_opportunities`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/config/watcher.py` — modify
@@ -399,7 +399,7 @@ Plus the paired test in Step 6.
 
 ### Step 6 — test: `get_float_present` presence + `_compute_opportunities` decay
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_config_watcher.py` — modify
@@ -456,7 +456,7 @@ Confirm ≥40% coverage and every case above passes (each failed before Step 5).
 
 ### Step 7 — config: declare `analysis.scoring.signal_decay_half_life_hours` default
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
@@ -492,4 +492,28 @@ Row present, type `float`, default `24.0`, names `get_float_present` and the 0-d
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### D-1 — Step 5 rebased onto landed 134 (`× source_weight` factor added)
+**Disposition**: planned rebase per the `## Step Dependencies` hard constraint — resolved.
+At execute time both `134-signal-source-reliability-weight` (#953) and
+`131-live-strategy-opportunity-attribution` (#954) had landed and are ancestors of this branch. The
+landed `_compute_opportunities` signals-merge write site is
+`weighted = sig.conviction * source_weights.get(sig.source, 1.0)` /
+`c["signal_axis"] = max(c["signal_axis"], weighted)` (`servicer.py` §3 signals loop) — the real
+feature-134 `source_weights` symbol (drained via `_drain_source_weights` → `ListSignalSources`), not
+an invented `weight_for`. Step 5's `effective_conviction` therefore composes all three factors:
+`raw_conviction * source_weight * decay_multiplier`, and the DEBUG log gained a `source_weight` field.
+131's two-level `for key in targets: for sig in sigs:` nesting was re-confirmed intact, so the
+`sig_contribs` per-signal hoist applies as designed. The behavioral contract (decay once per signal,
+`now_utc` captured once after the drain, `HasField` guard, one aggregated WARNING, `isfinite` guard,
+thesis/direction on raw conviction) is unchanged.
+
+### D-2 — Step 6 `get_float_present` tests placed in `test_analysis_servicer.py`, not `test_config_watcher.py`
+**Disposition**: test-home correction (spec evidence drift) — no behavior change.
+Step 6's Codebase Evidence assumed the config-getter unit tests live in
+`tests/test_config_watcher.py`; in fact `test_config_watcher.py` covers only
+`resolve_environment`/`resolve_trading_mode`, while the sibling getter tests
+(`get_int`/`get_bool`/`get_float`, with the reusable `_StubWatcher`) all live in
+`TestConfigWatcherGetters` in `tests/test_analysis_servicer.py`. The four `get_float_present` cases
+were added there beside their siblings (DRY — reuses `_StubWatcher`) rather than re-creating a stub in
+`test_config_watcher.py`. The decay cases live in the same file's materialized-opportunity test class.
+`test_config_watcher.py` was left untouched.

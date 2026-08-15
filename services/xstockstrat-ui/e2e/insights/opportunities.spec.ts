@@ -86,6 +86,27 @@ test.describe('Opportunities queue', () => {
     await expect(card(page, 'AAPL')).toBeHidden();
   });
 
+  test('feature 132: a muted row renders muted, has no Snooze/Dismiss, and links to the deny editor', async ({
+    page,
+  }) => {
+    const amd = card(page, 'AMD');
+    await expect(amd).toBeVisible();
+    await expect(amd).toHaveAttribute('data-muted', 'true');
+    await expect(page.getByTestId('muted-badge-AMD')).toBeVisible();
+    // Action buttons are suppressed; only a "Manage deny list" link remains.
+    await expect(page.getByTestId('snooze-AMD')).toHaveCount(0);
+    await expect(page.getByTestId('dismiss-AMD')).toHaveCount(0);
+    await expect(page.getByTestId('manage-deny-AMD')).toBeVisible();
+  });
+
+  test('feature 132: a muted 0/0 row survives the min-conviction filter', async ({ page }) => {
+    await page.getByLabel('Minimum conviction').fill('80');
+    await expect(card(page, 'MSFT')).toBeHidden(); // 0.75 — filtered out
+    // GME is a muted, conviction-0 placeholder — it must NOT vanish behind the floor.
+    await expect(card(page, 'GME')).toBeVisible();
+    await expect(page.getByTestId('muted-badge-GME')).toBeVisible();
+  });
+
   test('Snooze persists server-side across a reload', async ({ page }) => {
     await expect(card(page, 'AAPL')).toBeVisible();
     await page.getByTestId('snooze-AAPL').click();

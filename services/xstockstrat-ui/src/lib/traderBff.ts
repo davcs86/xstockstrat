@@ -20,7 +20,6 @@ import {
   requireSession,
   backendHeaders,
   forward,
-  forwardAdmin,
 } from '@/lib/bffShared';
 import { COPILOT_STREAM_PREFIX, COPILOT_EVENT_TYPE, copilotStreamKey } from '@/lib/copilot';
 
@@ -120,8 +119,10 @@ router.service(AnalysisService, {
   listStrategyDefinitions: forward((req, opts) =>
     analysisClient.listStrategyDefinitions(req, opts),
   ),
-  // Admin scope gate — enforced server-side before forwarding to the gRPC service.
-  setStrategyLive: forwardAdmin((req, opts) => analysisClient.setStrategyLive(req, opts)),
+  // feature 133: no admin gate — strategy ownership is per-user; analysis resolves the caller from
+  // the propagated x-user-id header and returns PERMISSION_DENIED for a non-owner (design.md
+  // decision 4, C-10(a)). Mirrors the /insights setStrategyLive de-gating.
+  setStrategyLive: forward((req, opts) => analysisClient.setStrategyLive(req, opts)),
 });
 
 router.service(LedgerService, {

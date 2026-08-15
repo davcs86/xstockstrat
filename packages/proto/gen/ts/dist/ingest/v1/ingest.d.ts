@@ -143,6 +143,8 @@ export interface ExternalSignal {
     headline: string;
     rawUrl: string;
     tags: string[];
+    /** platform ingestion time (server-set, immune to source timestamp manipulation) — feature 022 */
+    ingestedAt?: Date | undefined;
 }
 export interface IngestSignalRequest {
     signal?: ExternalSignal | undefined;
@@ -193,6 +195,12 @@ export interface SignalSource {
     lastSeenAt?: Date | undefined;
     lastError: string;
     signalsFed: number;
+    /**
+     * reliability_weight ∈ [0.0, 1.0] — per-source ranking multiplier applied to signal
+     * conviction (feature 134). optional (explicit presence) so an omitted create-form field is
+     * distinguishable from an explicit 0.0. DB default 1.0 (neutral).
+     */
+    reliabilityWeight?: number | undefined;
 }
 export interface ListSignalSourcesRequest {
     includeInactive: boolean;

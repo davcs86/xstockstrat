@@ -1257,6 +1257,7 @@ function createBaseExternalSignal() {
         headline: "",
         rawUrl: "",
         tags: [],
+        ingestedAt: undefined,
     };
 }
 exports.ExternalSignal = {
@@ -1287,6 +1288,9 @@ exports.ExternalSignal = {
         }
         for (const v of message.tags) {
             writer.uint32(74).string(v);
+        }
+        if (message.ingestedAt !== undefined) {
+            timestamp_1.Timestamp.encode(toTimestamp(message.ingestedAt), writer.uint32(82).fork()).join();
         }
         return writer;
     },
@@ -1360,6 +1364,13 @@ exports.ExternalSignal = {
                     message.tags.push(reader.string());
                     continue;
                 }
+                case 10: {
+                    if (tag !== 82) {
+                        break;
+                    }
+                    message.ingestedAt = fromTimestamp(timestamp_1.Timestamp.decode(reader, reader.uint32()));
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1391,6 +1402,11 @@ exports.ExternalSignal = {
                     ? globalThis.String(object.raw_url)
                     : "",
             tags: globalThis.Array.isArray(object?.tags) ? object.tags.map((e) => globalThis.String(e)) : [],
+            ingestedAt: isSet(object.ingestedAt)
+                ? fromJsonTimestamp(object.ingestedAt)
+                : isSet(object.ingested_at)
+                    ? fromJsonTimestamp(object.ingested_at)
+                    : undefined,
         };
     },
     toJSON(message) {
@@ -1422,6 +1438,9 @@ exports.ExternalSignal = {
         if (message.tags?.length) {
             obj.tags = message.tags;
         }
+        if (message.ingestedAt !== undefined) {
+            obj.ingestedAt = message.ingestedAt.toISOString();
+        }
         return obj;
     },
     create(base) {
@@ -1438,6 +1457,7 @@ exports.ExternalSignal = {
         message.headline = object.headline ?? "";
         message.rawUrl = object.rawUrl ?? "";
         message.tags = object.tags?.map((e) => e) || [];
+        message.ingestedAt = object.ingestedAt ?? undefined;
         return message;
     },
 };
@@ -1772,6 +1792,7 @@ function createBaseSignalSource() {
         lastSeenAt: undefined,
         lastError: "",
         signalsFed: 0,
+        reliabilityWeight: undefined,
     };
 }
 exports.SignalSource = {
@@ -1808,6 +1829,9 @@ exports.SignalSource = {
         }
         if (message.signalsFed !== 0) {
             writer.uint32(88).int64(message.signalsFed);
+        }
+        if (message.reliabilityWeight !== undefined) {
+            writer.uint32(97).double(message.reliabilityWeight);
         }
         return writer;
     },
@@ -1895,6 +1919,13 @@ exports.SignalSource = {
                     message.signalsFed = longToNumber(reader.int64());
                     continue;
                 }
+                case 12: {
+                    if (tag !== 97) {
+                        break;
+                    }
+                    message.reliabilityWeight = reader.double();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -1950,6 +1981,11 @@ exports.SignalSource = {
                 : isSet(object.signals_fed)
                     ? globalThis.Number(object.signals_fed)
                     : 0,
+            reliabilityWeight: isSet(object.reliabilityWeight)
+                ? globalThis.Number(object.reliabilityWeight)
+                : isSet(object.reliability_weight)
+                    ? globalThis.Number(object.reliability_weight)
+                    : undefined,
         };
     },
     toJSON(message) {
@@ -1987,6 +2023,9 @@ exports.SignalSource = {
         if (message.signalsFed !== 0) {
             obj.signalsFed = Math.round(message.signalsFed);
         }
+        if (message.reliabilityWeight !== undefined) {
+            obj.reliabilityWeight = message.reliabilityWeight;
+        }
         return obj;
     },
     create(base) {
@@ -2005,6 +2044,7 @@ exports.SignalSource = {
         message.lastSeenAt = object.lastSeenAt ?? undefined;
         message.lastError = object.lastError ?? "";
         message.signalsFed = object.signalsFed ?? 0;
+        message.reliabilityWeight = object.reliabilityWeight ?? undefined;
         return message;
     },
 };

@@ -464,6 +464,7 @@ async def test_run_backtest_calls_grpc():
     with patch.object(client, "run_backtest", mock_backtest):
         server = _make_server()
         result = await _tool_fn(server, "run_backtest")(
+            ctx=_ctx(ADMIN),
             strategy_id="sma_crossover",
             symbols=["NVDA", "AAPL"],
             initial_capital=50000.0,
@@ -472,6 +473,8 @@ async def test_run_backtest_calls_grpc():
         summary = json.loads(result[0].text)
         assert summary["backtest_id"] == "bt-1"
         mock_backtest.assert_called_once_with(
+            # feature 133: the tool forwards the caller's own verified user id (ADMIN → "u-1").
+            user_id="u-1",
             strategy_id="sma_crossover",
             symbols=["NVDA", "AAPL"],
             initial_capital=50000.0,
@@ -480,6 +483,22 @@ async def test_run_backtest_calls_grpc():
             start=None,
             end=None,
         )
+
+
+@pytest.mark.asyncio
+async def test_run_backtest_maps_permission_denied_to_tool_error():
+    """feature 133 AC-6: a non-owner strategy_id_ref is rejected PERMISSION_DENIED by analysis;
+    the tool must surface that as a caller-facing tool error string, not leak the raw
+    grpc.aio.AioRpcError (matching manage_strategy/get_strategy)."""
+    import grpc  # noqa: PLC0415
+
+    err = _rpc_error(grpc.StatusCode.PERMISSION_DENIED, "not your strategy")
+    with patch.object(client, "run_backtest", AsyncMock(side_effect=err)):
+        server = _make_server()
+        with pytest.raises(RuntimeError, match="not your strategy"):
+            await _tool_fn(server, "run_backtest")(
+                ctx=_ctx(ADMIN), strategy_id="someone_elses", symbols=["AAPL"]
+            )
 
 
 class TestRunBacktestWindow:
@@ -491,6 +510,7 @@ class TestRunBacktestWindow:
         with patch.object(client, "run_backtest", mock_backtest):
             server = _make_server()
             await _tool_fn(server, "run_backtest")(
+                ctx=_ctx(ADMIN),
                 strategy_id="sma",
                 symbols=["NVDA"],
                 start="2024-01-01",
@@ -506,7 +526,7 @@ class TestRunBacktestWindow:
         with patch.object(client, "run_backtest", mock_backtest):
             server = _make_server()
             await _tool_fn(server, "run_backtest")(
-                strategy_id="sma", symbols=["NVDA"], start="2024-01-01"
+                ctx=_ctx(ADMIN), strategy_id="sma", symbols=["NVDA"], start="2024-01-01"
             )
         assert mock_backtest.call_args.kwargs["start"] == "2024-01-01"
         assert mock_backtest.call_args.kwargs["end"] is None
@@ -579,7 +599,9 @@ class TestRunBacktestAttachment:
     async def _call(result: dict):
         with patch.object(client, "run_backtest", AsyncMock(return_value=result)):
             server = _make_server()
-            return await _tool_fn(server, "run_backtest")(strategy_id="sma", symbols=["AAPL"])
+            return await _tool_fn(server, "run_backtest")(
+                ctx=_ctx(ADMIN), strategy_id="sma", symbols=["AAPL"]
+            )
 
     @pytest.mark.asyncio
     async def test_inline_summary_has_no_per_bar_detail(self):
@@ -635,7 +657,15 @@ class TestRunBacktestAttachment:
         """
         from mcp.types import EmbeddedResource, TextContent
 
-        with patch.object(client, "run_backtest", AsyncMock(return_value=self._result())):
+        from app import tools as tools_mod
+
+        # This test crosses the wire via server.call_tool, so the framework injects the ctx and no
+        # verified claims are present — patch _caller_user_id (feature 133) so the return-shape
+        # assertion, not identity resolution, is what this test exercises.
+        with (
+            patch.object(client, "run_backtest", AsyncMock(return_value=self._result())),
+            patch.object(tools_mod, "_caller_user_id", return_value="u-1"),
+        ):
             server = _make_server()
             args = {"strategy_id": "sma", "symbols": ["A"]}
             result = await server.call_tool("run_backtest", args)
@@ -774,6 +804,9 @@ class TestManageStrategyTool:
         kwargs = m.call_args.kwargs
         assert kwargs["operation"] == "register"
         assert kwargs["definition"]["strategy_id"] == "sma_x"
+        # feature 133: the caller's own verified user id is forwarded (ADMIN → "u-1") so analysis
+        # resolves ownership from the header, not the request body.
+        assert kwargs["user_id"] == "u-1"
 
     @pytest.mark.asyncio
     async def test_forwards_cooldown_days(self):
@@ -827,6 +860,47 @@ class TestManageStrategyTool:
                 ctx=_ctx(ADMIN), operation="register", strategy_id="s"
             )
             assert "exit_cooldown_days" not in m.call_args.kwargs["definition"]
+
+    @pytest.mark.asyncio
+    async def test_forwards_denied_symbols_and_signal_eligible(self):
+        """feature 132: denied_symbols / signal_eligible join the supplied field-map, the derived
+        update_mask, and the outbound definition; omitting them omits the keys (partial merge)."""
+        server = _make_server()
+        with patch.object(
+            client, "manage_strategy", AsyncMock(return_value={"strategy_id": "s"})
+        ) as m:
+            # Both forwarded, and present in the derived update_mask.
+            await _tool_fn(server, "manage_strategy")(
+                ctx=_ctx(ADMIN),
+                operation="update",
+                strategy_id="s",
+                denied_symbols=["TSLA", "NVDA"],
+                signal_eligible=True,
+            )
+            defn = m.call_args.kwargs["definition"]
+            assert defn["denied_symbols"] == ["TSLA", "NVDA"]
+            assert defn["signal_eligible"] is True
+            mask = m.call_args.kwargs["update_mask"]
+            assert "denied_symbols" in mask and "signal_eligible" in mask
+
+            # Explicit empty/false are forwarded (mask includes them → clears server-side).
+            await _tool_fn(server, "manage_strategy")(
+                ctx=_ctx(ADMIN),
+                operation="update",
+                strategy_id="s",
+                denied_symbols=[],
+                signal_eligible=False,
+            )
+            defn = m.call_args.kwargs["definition"]
+            assert defn["denied_symbols"] == [] and defn["signal_eligible"] is False
+
+            # Omitted → keys absent, and NOT in the mask (partial-merge preserves them).
+            await _tool_fn(server, "manage_strategy")(
+                ctx=_ctx(ADMIN), operation="update", strategy_id="s", cooldown_days=9
+            )
+            defn = m.call_args.kwargs["definition"]
+            assert "denied_symbols" not in defn and "signal_eligible" not in defn
+            assert "denied_symbols" not in (m.call_args.kwargs["update_mask"] or [])
 
     @pytest.mark.asyncio
     async def test_grpc_error_reraised_as_clear_message(self):
@@ -976,6 +1050,8 @@ class TestSetStrategyLiveTool:
         assert result == returned
         assert m.call_args.kwargs["strategy_id"] == "s1"
         assert m.call_args.kwargs["live_enabled"] is True
+        # feature 133: the caller's own verified user id is forwarded (ADMIN → "u-1").
+        assert m.call_args.kwargs["user_id"] == "u-1"
 
 
 @pytest.mark.asyncio
@@ -1010,7 +1086,9 @@ async def test_run_backtest_projects_full_result_with_diagnostics():
         patch.object(client.grpc.aio, "insecure_channel", return_value=_Chan()),
         patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=stub),
     ):
-        out = await client.run_backtest(strategy_id="s", symbols=["AAPL"], initial_capital=100000.0)
+        out = await client.run_backtest(
+            user_id="u-1", strategy_id="s", symbols=["AAPL"], initial_capital=100000.0
+        )
 
     assert out["backtest_id"] == "bt-9"
     # zero-valued metrics stay present (the "0 trades / 0% return" debugging case)
@@ -1051,11 +1129,17 @@ async def test_run_backtest_sends_strategy_id_ref_for_registered_definition():
         patch.object(client.grpc.aio, "insecure_channel", return_value=_Chan()),
         patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=stub),
     ):
-        await client.run_backtest(strategy_id="sma", symbols=["AAPL"], initial_capital=100000.0)
+        await client.run_backtest(
+            user_id="u-owner", strategy_id="sma", symbols=["AAPL"], initial_capital=100000.0
+        )
 
     sent = stub.RunBacktest.call_args.args[0]
     assert sent.strategy_id == "sma"
     assert sent.strategy_id_ref == "sma"
+    # feature 133: the caller's own user id is forwarded as an x-user-id metadata tuple so
+    # analysis resolves ownership from the header (never the request body).
+    metadata = stub.RunBacktest.call_args.kwargs["metadata"]
+    assert ("x-user-id", "u-owner") in metadata
 
 
 class TestRunBacktestRangeOnTheWire:
@@ -1092,7 +1176,7 @@ class TestRunBacktestRangeOnTheWire:
         from unset on the wire, but leaving the field unset keeps HasField honest."""
         stub, (p1, p2) = self._capture()
         with p1, p2:
-            await client.run_backtest(strategy_id="sma", symbols=["AAPL"])
+            await client.run_backtest(user_id="u-1", strategy_id="sma", symbols=["AAPL"])
         assert not stub.RunBacktest.call_args.args[0].HasField("range")
 
     @pytest.mark.asyncio
@@ -1100,7 +1184,11 @@ class TestRunBacktestRangeOnTheWire:
         stub, (p1, p2) = self._capture()
         with p1, p2:
             await client.run_backtest(
-                strategy_id="sma", symbols=["AAPL"], start="2024-01-01", end="2024-06-30"
+                user_id="u-1",
+                strategy_id="sma",
+                symbols=["AAPL"],
+                start="2024-01-01",
+                end="2024-06-30",
             )
         sent = stub.RunBacktest.call_args.args[0]
         assert sent.HasField("range")
@@ -1113,7 +1201,9 @@ class TestRunBacktestRangeOnTheWire:
         independently, so a one-sided range must not fabricate the missing side."""
         stub, (p1, p2) = self._capture()
         with p1, p2:
-            await client.run_backtest(strategy_id="sma", symbols=["AAPL"], start="2024-01-01")
+            await client.run_backtest(
+                user_id="u-1", strategy_id="sma", symbols=["AAPL"], start="2024-01-01"
+            )
         sent = stub.RunBacktest.call_args.args[0]
         assert sent.HasField("range")
         assert sent.range.start.seconds > 0
@@ -1126,10 +1216,12 @@ class TestRunBacktestRangeOnTheWire:
         stub, (p1, p2) = self._capture()
         with p1, p2:
             await client.run_backtest(
-                strategy_id="sma", symbols=["AAPL"], start="2024-01-01T00:00:00Z"
+                user_id="u-1", strategy_id="sma", symbols=["AAPL"], start="2024-01-01T00:00:00Z"
             )
             zulu = stub.RunBacktest.call_args.args[0].range.start.seconds
-            await client.run_backtest(strategy_id="sma", symbols=["AAPL"], start="2024-01-01")
+            await client.run_backtest(
+                user_id="u-1", strategy_id="sma", symbols=["AAPL"], start="2024-01-01"
+            )
             naive = stub.RunBacktest.call_args.args[0].range.start.seconds
         assert zulu == naive
 
@@ -1140,7 +1232,11 @@ class TestRunBacktestRangeOnTheWire:
         stub, (p1, p2) = self._capture()
         with p1, p2, pytest.raises(ValueError, match="start must not be after end"):
             await client.run_backtest(
-                strategy_id="sma", symbols=["AAPL"], start="2024-06-30", end="2024-01-01"
+                user_id="u-1",
+                strategy_id="sma",
+                symbols=["AAPL"],
+                start="2024-06-30",
+                end="2024-01-01",
             )
         stub.RunBacktest.assert_not_called()
 
@@ -1329,9 +1425,10 @@ class TestGetStrategyTool:
         server = _make_server()
         stored = {"strategy_id": "x", "entry_rule": "{}", "components": []}
         with patch.object(client, "get_strategy", AsyncMock(return_value=stored)) as m:
-            result = await _tool_fn(server, "get_strategy")(strategy_id="x")
+            result = await _tool_fn(server, "get_strategy")(ctx=_ctx(ADMIN), strategy_id="x")
         assert result == stored
-        m.assert_awaited_once_with(strategy_id="x")
+        # feature 133: the caller's own verified user id is forwarded (ADMIN → "u-1").
+        m.assert_awaited_once_with(user_id="u-1", strategy_id="x")
 
     @pytest.mark.asyncio
     async def test_not_found_is_a_clear_message(self):
@@ -1341,7 +1438,7 @@ class TestGetStrategyTool:
         err = _rpc_error(grpc.StatusCode.NOT_FOUND, "nope")
         with patch.object(client, "get_strategy", AsyncMock(side_effect=err)):
             with pytest.raises(RuntimeError, match="strategy not found"):
-                await _tool_fn(server, "get_strategy")(strategy_id="x")
+                await _tool_fn(server, "get_strategy")(ctx=_ctx(ADMIN), strategy_id="x")
 
 
 class TestAdditiveTools:
@@ -1372,9 +1469,13 @@ class TestAdditiveTools:
         server = _make_server()
         with patch.object(
             client, "list_strategy_definitions", AsyncMock(return_value=[{"strategy_id": "s1"}])
-        ):
-            result = await _tool_fn(server, "list_strategies")(include_inactive=True)
+        ) as m:
+            result = await _tool_fn(server, "list_strategies")(
+                ctx=_ctx(ADMIN), include_inactive=True
+            )
         assert result == {"strategies": [{"strategy_id": "s1"}]}
+        # feature 133: the caller's own verified user id is forwarded (ADMIN → "u-1").
+        m.assert_awaited_once_with("u-1", True)
 
     @pytest.mark.asyncio
     async def test_emit_alert_forwards_extra_fields(self):

@@ -51,7 +51,7 @@ RESOLVED"). No UI step is therefore required — this is a decision, not an omis
 
 ### Step 1 — service: `StrategiesRepository.list_live_enabled()` + shared predicate constant
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/strategies.py` — modify
@@ -104,7 +104,7 @@ Coverage + red-green enforced by the paired Step 2.
 
 ### Step 2 — test: `list_live_enabled()` predicate + single-source parity
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -145,7 +145,7 @@ Confirm the new test passes and coverage stays ≥ 40%.
 
 ### Step 3 — service: fold `live_by_symbol` into `_compute_opportunities`; widen `_drain_held_symbols`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -273,7 +273,7 @@ grep -n "list_live_enabled\|live_by_symbol\|is_live\|_capped_live\|held_value_by
 
 ### Step 4 — test: live-strategy attribution + mandatory harness extensions
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -345,7 +345,7 @@ tests pass, coverage ≥ 40%.
 
 ### Step 5 — config: register the three new keys + update attribution prose
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify
@@ -398,4 +398,36 @@ context docs and fix any grounded findings (or note in the PR body if the plugin
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### D-1 — `list_live_enabled` owner-scoped for the per-user compute (post-133 ownership)
+**Disposition**: fix-now (§5.7 Option A), applied not blocked — a single correct behavior, not a fork.
+131's spec predates feature 133 (strategy ownership, merged before 131 executes). `_compute_opportunities`
+is now **per-user**; a global `list_live_enabled()` would attribute *another* user's live strategy to
+this user's held/signal symbols — an IDOR leak (the other origins, held/watchlist, are already
+owner-scoped). Added an optional `user_id` param to `list_live_enabled` (Step 1): **no arg → global**
+(the live loop, deliberately global, keeps calling it with no arg — AC-5 unchanged); **user_id given →
+`AND user_id = $1`** (Step 3's compute passes the compute's `user_id`). Step 2 tests both paths.
+Recorded in `fails.md` (a spec written before a security-model feature lands must be re-owner-scoped).
+
+### D-2 — Step 4 harness fix: held-position mock needs `market_value` (Step 3 side effect)
+**Disposition**: applied — a mandatory harness fix implied by Step 3, beyond Step 4's written instructions.
+Step 3 instruction 1 widened `_drain_held_symbols` to sum `abs(Position.market_value)`, so the
+`_materialized_svc` `ListPositions` mock (which built `SimpleNamespace(symbol=s)` with no
+`market_value`) had to carry a value or every held test raises `AttributeError`. Extended the mock's
+`held` param to accept a plain symbol (default value `1000.0`) **or** a `(symbol, market_value)` tuple
+for the value-ranked live-budget path. Step 4's instructions named only the `list_live_enabled`
+default; this is the second implied harness break, recorded here (P-03: surfaced, not silently done).
+
+### D-3 — Step 3 screener call-site normalization (design-prose understatement)
+**Disposition**: applied as the spec's own Step 3 instruction 2 anticipated. `_drain_held_symbols` now
+keys by **normalized** symbol, so `ScreenSymbols`'s `if r.symbol in held:` membership test became
+`if _normalize_symbol(r.symbol) in held:` — preserving behavior for already-uppercase broker tickers,
+strictly more correct for a mixed-case one. design.md's "both call sites are dict-compatible with zero
+other changes" understated this one line; the impl-spec already flagged it (recorded here per that note).
+
+### D-4 — `_capped_live`/`max_live_strats` defined before the loops, not "alongside `max_universe`"
+**Disposition**: applied — faithful to intent, position adjusted for correctness. The spec (instruction 6,
+echoing design step 3) said to read the per-symbol cap "alongside `max_universe`", but `max_universe`
+is read **after** the attribution loops while `_capped_live` is consumed **inside** the held loop and
+the live-only step. Defined `max_live_strats` + `_capped_live` right after the `live_by_symbol` build
+(before the watchlist loop) so it exists at first use; still a single `get_int` read (F-07 satisfied).
+`max_universe` stays at its original site. No behavior change — purely ordering.

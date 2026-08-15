@@ -64,4 +64,14 @@ export const STRATEGY_DEF_INACTIVE = {
   liveEnabled: false,
 };
 
-export const STRATEGY_DEFINITIONS = [STRATEGY_DEF_LIVE, STRATEGY_DEF_INACTIVE];
+/** feature 132 — a definition carrying an entry-only deny list + signal_eligible (deny-list UI). */
+export const STRATEGY_DEF_DENY = {
+  strategyId: 'strat-001',
+  displayName: 'Deny List Strategy',
+  active: true,
+  liveEnabled: true,
+  deniedSymbols: ['TSLA'],
+  signalEligible: true,
+};
+
+export const STRATEGY_DEFINITIONS = [STRATEGY_DEF_LIVE, STRATEGY_DEF_INACTIVE, STRATEGY_DEF_DENY];

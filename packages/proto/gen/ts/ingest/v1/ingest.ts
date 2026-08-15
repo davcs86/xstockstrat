@@ -412,6 +412,8 @@ export interface ExternalSignal {
   headline: string;
   rawUrl: string;
   tags: string[];
+  /** platform ingestion time (server-set, immune to source timestamp manipulation) — feature 022 */
+  ingestedAt?: Date | undefined;
 }
 
 export interface IngestSignalRequest {
@@ -467,6 +469,12 @@ export interface SignalSource {
   lastSeenAt?: Date | undefined;
   lastError: string;
   signalsFed: number;
+  /**
+   * reliability_weight ∈ [0.0, 1.0] — per-source ranking multiplier applied to signal
+   * conviction (feature 134). optional (explicit presence) so an omitted create-form field is
+   * distinguishable from an explicit 0.0. DB default 1.0 (neutral).
+   */
+  reliabilityWeight?: number | undefined;
 }
 
 export interface ListSignalSourcesRequest {
@@ -1553,6 +1561,7 @@ function createBaseExternalSignal(): ExternalSignal {
     headline: "",
     rawUrl: "",
     tags: [],
+    ingestedAt: undefined,
   };
 }
 
@@ -1584,6 +1593,9 @@ export const ExternalSignal: MessageFns<ExternalSignal> = {
     }
     for (const v of message.tags) {
       writer.uint32(74).string(v!);
+    }
+    if (message.ingestedAt !== undefined) {
+      Timestamp.encode(toTimestamp(message.ingestedAt), writer.uint32(82).fork()).join();
     }
     return writer;
   },
@@ -1667,6 +1679,14 @@ export const ExternalSignal: MessageFns<ExternalSignal> = {
           message.tags.push(reader.string());
           continue;
         }
+        case 10: {
+          if (tag !== 82) {
+            break;
+          }
+
+          message.ingestedAt = fromTimestamp(Timestamp.decode(reader, reader.uint32()));
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -1699,6 +1719,11 @@ export const ExternalSignal: MessageFns<ExternalSignal> = {
         ? globalThis.String(object.raw_url)
         : "",
       tags: globalThis.Array.isArray(object?.tags) ? object.tags.map((e: any) => globalThis.String(e)) : [],
+      ingestedAt: isSet(object.ingestedAt)
+        ? fromJsonTimestamp(object.ingestedAt)
+        : isSet(object.ingested_at)
+        ? fromJsonTimestamp(object.ingested_at)
+        : undefined,
     };
   },
 
@@ -1731,6 +1756,9 @@ export const ExternalSignal: MessageFns<ExternalSignal> = {
     if (message.tags?.length) {
       obj.tags = message.tags;
     }
+    if (message.ingestedAt !== undefined) {
+      obj.ingestedAt = message.ingestedAt.toISOString();
+    }
     return obj;
   },
 
@@ -1748,6 +1776,7 @@ export const ExternalSignal: MessageFns<ExternalSignal> = {
     message.headline = object.headline ?? "";
     message.rawUrl = object.rawUrl ?? "";
     message.tags = object.tags?.map((e) => e) || [];
+    message.ingestedAt = object.ingestedAt ?? undefined;
     return message;
   },
 };
@@ -2117,6 +2146,7 @@ function createBaseSignalSource(): SignalSource {
     lastSeenAt: undefined,
     lastError: "",
     signalsFed: 0,
+    reliabilityWeight: undefined,
   };
 }
 
@@ -2154,6 +2184,9 @@ export const SignalSource: MessageFns<SignalSource> = {
     }
     if (message.signalsFed !== 0) {
       writer.uint32(88).int64(message.signalsFed);
+    }
+    if (message.reliabilityWeight !== undefined) {
+      writer.uint32(97).double(message.reliabilityWeight);
     }
     return writer;
   },
@@ -2253,6 +2286,14 @@ export const SignalSource: MessageFns<SignalSource> = {
           message.signalsFed = longToNumber(reader.int64());
           continue;
         }
+        case 12: {
+          if (tag !== 97) {
+            break;
+          }
+
+          message.reliabilityWeight = reader.double();
+          continue;
+        }
       }
       if ((tag & 7) === 4 || tag === 0) {
         break;
@@ -2309,6 +2350,11 @@ export const SignalSource: MessageFns<SignalSource> = {
         : isSet(object.signals_fed)
         ? globalThis.Number(object.signals_fed)
         : 0,
+      reliabilityWeight: isSet(object.reliabilityWeight)
+        ? globalThis.Number(object.reliabilityWeight)
+        : isSet(object.reliability_weight)
+        ? globalThis.Number(object.reliability_weight)
+        : undefined,
     };
   },
 
@@ -2347,6 +2393,9 @@ export const SignalSource: MessageFns<SignalSource> = {
     if (message.signalsFed !== 0) {
       obj.signalsFed = Math.round(message.signalsFed);
     }
+    if (message.reliabilityWeight !== undefined) {
+      obj.reliabilityWeight = message.reliabilityWeight;
+    }
     return obj;
   },
 
@@ -2366,6 +2415,7 @@ export const SignalSource: MessageFns<SignalSource> = {
     message.lastSeenAt = object.lastSeenAt ?? undefined;
     message.lastError = object.lastError ?? "";
     message.signalsFed = object.signalsFed ?? 0;
+    message.reliabilityWeight = object.reliabilityWeight ?? undefined;
     return message;
   },
 };

@@ -76,7 +76,12 @@ async function fillToReview(
 }
 
 test.describe('Strategy authoring — insights BFF', () => {
-  test('manageStrategy register is denied for non-admin', async ({ page }) => {
+  // feature 133: the insights BFF no longer admin-gates strategy mutations. A non-admin
+  // authenticated user registers their OWN new strategy successfully — ownership, not an admin
+  // role, is the boundary (cross-user denial is covered in strategy-ownership.spec.ts).
+  test('manageStrategy register succeeds for a non-admin owner (admin gate removed)', async ({
+    page,
+  }) => {
     await addAuthCookie(page);
     await page.goto('/insights/strategies');
     const result = await page.evaluate(async () => {
@@ -91,10 +96,10 @@ test.describe('Strategy authoring — insights BFF', () => {
           }),
         },
       );
-      return { status: res.status, body: await res.text() };
+      return { status: res.status, body: (await res.json()) as Record<string, unknown> };
     });
-    expect(result.status).not.toBe(200);
-    expect(result.body.toLowerCase()).toContain('permission');
+    expect(result.status).toBe(200);
+    expect(result.body.strategyId).toBe('demo');
   });
 
   test('strategies list Actions menu: Edit navigates to the edit page (FR-2)', async ({ page }) => {
@@ -142,7 +147,11 @@ test.describe('Strategy authoring — insights BFF', () => {
     expect(result.body.strategyId).toBe('demo');
   });
 
-  test('manageStrategy deactivate is denied for non-admin', async ({ page }) => {
+  // feature 133: deactivate is no longer admin-gated either — a non-admin owner may deactivate
+  // their own strategy. A non-owner is denied by the backend (strategy-ownership.spec.ts).
+  test('manageStrategy deactivate succeeds for a non-admin owner (admin gate removed)', async ({
+    page,
+  }) => {
     await addAuthCookie(page);
     await page.goto('/insights/strategies');
     const result = await page.evaluate(async () => {
@@ -157,10 +166,9 @@ test.describe('Strategy authoring — insights BFF', () => {
           }),
         },
       );
-      return { status: res.status, body: await res.text() };
+      return { status: res.status, body: (await res.json()) as Record<string, unknown> };
     });
-    expect(result.status).not.toBe(200);
-    expect(result.body.toLowerCase()).toContain('permission');
+    expect(result.status).toBe(200);
   });
 
   test('getStrategy is readable (no admin required)', async ({ page }) => {
@@ -263,6 +271,54 @@ test.describe('Strategy authoring — UI', () => {
     await expect(page.getByText('Step 4 — Review')).toBeVisible();
     await expect(page.getByText('Signal Params')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Create Strategy' })).toBeVisible();
+  });
+
+  test('feature 132: wizard deny-list chips + signal_eligible toggle add/remove and submit', async ({
+    page,
+  }) => {
+    await addAdminCookie(page);
+    await stubListFormulas(page);
+    const getCaptured = await captureManageStrategy(page);
+    await page.goto('/insights/strategies/new');
+
+    await expect(page.getByText('Step 1 — Identity')).toBeVisible({ timeout: 10000 });
+    const next = page.getByRole('button', { name: 'Next', exact: true });
+    await page.getByPlaceholder('e.g. sma_crossover').fill('deny_test');
+    await next.click(); // → display name
+    await page.getByPlaceholder('SMA Crossover').fill('Deny Test');
+    await next.click(); // → cooldown
+    await next.click(); // → exit cooldown (sub-screen 4 — deny-list editor lives here)
+
+    // Add two chips (normalized uppercase), remove one, toggle signal-eligible on.
+    await page.getByTestId('denied-input').fill('tsla');
+    await page.getByTestId('denied-add').click();
+    await page.getByTestId('denied-input').fill('nvda');
+    await page.getByTestId('denied-add').click();
+    await expect(page.getByTestId('denied-chip-TSLA')).toBeVisible();
+    await expect(page.getByTestId('denied-chip-NVDA')).toBeVisible();
+    await page.getByTestId('denied-chip-NVDA').getByRole('button', { name: 'Remove NVDA' }).click();
+    await expect(page.getByTestId('denied-chip-NVDA')).toHaveCount(0);
+    await page.getByTestId('signal-eligible-toggle').check();
+
+    await next.click(); // → Step 2 Components
+    await page.getByRole('button', { name: 'Add component' }).click();
+    await next.click(); // → Step 3 Rules
+    const jsonButtons = page.getByRole('tab', { name: 'JSON' });
+    await jsonButtons.nth(0).click();
+    await page.getByLabel('Entry rule JSON').fill('{"op":"and","conditions":[]}');
+    await jsonButtons.nth(1).click();
+    await page.getByLabel('Exit rule JSON').fill('{"op":"or","conditions":[]}');
+    await next.click(); // → Step 4 Review
+    await page.getByRole('button', { name: 'Create Strategy' }).click();
+
+    await expect.poll(() => getCaptured()).not.toBeNull();
+    const body = getCaptured() as {
+      definition?: { deniedSymbols?: string[]; signalEligible?: boolean };
+      updateMask?: unknown;
+    };
+    expect(body.definition?.deniedSymbols).toEqual(['TSLA']); // NVDA removed
+    expect(body.definition?.signalEligible).toBe(true);
+    expect(body.updateMask).toBeUndefined(); // wizard is a full replace, not a masked update
   });
 
   test('server validation error shows inline with a Go to Step link (AC-13)', async ({ page }) => {

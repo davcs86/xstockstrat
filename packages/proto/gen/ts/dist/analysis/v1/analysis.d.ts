@@ -139,6 +139,19 @@ export declare enum ConditionState {
 export declare function conditionStateFromJSON(object: any): ConditionState;
 export declare function conditionStateToJSON(object: ConditionState): string;
 export declare function conditionStateToNumber(object: ConditionState): number;
+/** Which rule tree EvaluateReadiness traces (feature 138). Closed set → enum (C-04). */
+export declare enum ReadinessRule {
+    /** READINESS_RULE_UNSPECIFIED - server treats as ENTRY (back-compat default) */
+    READINESS_RULE_UNSPECIFIED = "READINESS_RULE_UNSPECIFIED",
+    /** READINESS_RULE_ENTRY - trace the entry_rule (ENTER candidates, watchlist readiness) */
+    READINESS_RULE_ENTRY = "READINESS_RULE_ENTRY",
+    /** READINESS_RULE_EXIT - trace the exit_rule (held REDUCE/ADD opportunities) */
+    READINESS_RULE_EXIT = "READINESS_RULE_EXIT",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function readinessRuleFromJSON(object: any): ReadinessRule;
+export declare function readinessRuleToJSON(object: ReadinessRule): string;
+export declare function readinessRuleToNumber(object: ReadinessRule): number;
 /** The persisted per-user disposition of a queued opportunity (feature 097). Closed set → enum (C-04). */
 export declare enum OpportunityAction {
     OPPORTUNITY_ACTION_UNSPECIFIED = "OPPORTUNITY_ACTION_UNSPECIFIED",
@@ -383,6 +396,28 @@ export interface StrategyDefinition {
      * (INVALID_ARGUMENT).
      */
     exitCooldownDays?: number | undefined;
+    /**
+     * Normalized-uppercase symbols this strategy must never evaluate FOR ENTRY (feature 132 —
+     * entry-only deny). A held position on a denied symbol keeps exit tracing (the deny suppresses
+     * only the entry edge, so an operator can always exit a position they already hold). Rides
+     * definition_json (no column); maskable via ManageStrategyRequest.update_mask.
+     */
+    deniedSymbols: string[];
+    /**
+     * Owning user (feature 133). Server-authoritative: populated from the propagated
+     * x-user-id header on ManageStrategy REGISTER, never accepted from the request body
+     * (mirrors ListOpportunitiesRequest / portfolio ownership convention).
+     */
+    userId: string;
+    /**
+     * Gates whether the platform-wide active-signal term joins this strategy's evaluation universe
+     * (feature 132). Plain bool (no optional) is intentional: absent ≡ false ≡ explicit-false resolve
+     * identically. A strategy that sets BOTH a non-empty signal_params.symbols allowlist AND
+     * signal_eligible=true is rejected INVALID_ARGUMENT at write time (the allowlist is already an
+     * explicit universe override; signals would be redundant/contradictory). Rides definition_json;
+     * maskable.
+     */
+    signalEligible: boolean;
 }
 export interface ManageStrategyRequest {
     operation: StrategyOperation;
@@ -400,7 +435,7 @@ export interface ManageStrategyRequest {
      *              StrategyWizard, which always sends a complete definition) are unaffected.
      *
      * Allowed paths: display_name, components, entry_rule, exit_rule, signal_params, cooldown_days,
-     * exit_cooldown_days.
+     * exit_cooldown_days, denied_symbols, signal_eligible.
      * strategy_id/active/live_enabled are column-authoritative and rejected with INVALID_ARGUMENT.
      */
     updateMask?: string[] | undefined;
@@ -520,6 +555,8 @@ export interface Opportunity {
     opportunityKey: string;
     /** contributing origins for a de-duplicated row (signal source(s) / "position" / "watchlist") */
     provenance: string[];
+    /** feature 132 — the (symbol, strategy) pair is on the strategy's deny list; surfaced as an explicit muted row (never conviction=0) */
+    muted: boolean;
 }
 /** One evaluated condition leaf from the traced evaluator (feature 083). */
 export interface ConditionEval {
@@ -570,6 +607,13 @@ export interface ListOpportunitiesResponse {
 export interface EvaluateReadinessRequest {
     strategyId: string;
     symbols: string[];
+    /**
+     * feature 138 — which rule tree to trace. UNSPECIFIED == ENTRY (back-compat). The Signal-detail
+     * "Why this fired" panel requests EXIT for a held (REDUCE/ADD) opportunity so it explains the
+     * exit rule that actually fired, reconciling with the queue's exit-derived conviction; every
+     * other caller (watchlist readiness) leaves it unset and keeps entry-rule tracing.
+     */
+    rule: ReadinessRule;
 }
 export interface EvaluateReadinessResponse {
     readiness: SymbolReadiness[];

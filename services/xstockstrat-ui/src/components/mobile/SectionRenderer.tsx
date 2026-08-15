@@ -58,7 +58,16 @@ function SectionItem({ section: s }: { section: Section }) {
           <div className="min-w-0">
             <div className="flex items-center gap-2">
               <span className="font-mono font-semibold">{s.symbol}</span>
-              {s.badge && <EnumBadge render={s.badge} />}
+              {s.muted ? (
+                <span
+                  data-testid={`mobile-muted-${s.symbol}`}
+                  className="rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-muted-foreground"
+                >
+                  Muted
+                </span>
+              ) : (
+                s.badge && <EnumBadge render={s.badge} />
+              )}
             </div>
             {s.caption && <p className="truncate text-xs text-muted-foreground">{s.caption}</p>}
           </div>

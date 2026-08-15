@@ -24,27 +24,33 @@ class StrategyCooldownsRepository:
     def __init__(self, db_pool):
         self._db = db_pool
 
-    async def upsert_exit(self, strategy_id: str, symbol: str, last_exit_at: datetime) -> None:
+    async def upsert_exit(
+        self, user_id: str, strategy_id: str, symbol: str, last_exit_at: datetime
+    ) -> None:
         await self._db.execute(
             """
-            INSERT INTO analysis.strategy_cooldowns (strategy_id, symbol, last_exit_at)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (strategy_id, symbol) DO UPDATE SET
+            INSERT INTO analysis.strategy_cooldowns (user_id, strategy_id, symbol, last_exit_at)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (user_id, strategy_id, symbol) DO UPDATE SET
                 last_exit_at = EXCLUDED.last_exit_at
             """,
+            user_id,
             strategy_id,
             symbol,
             last_exit_at,
         )
 
-    async def upsert_entry(self, strategy_id: str, symbol: str, last_entry_at: datetime) -> None:
+    async def upsert_entry(
+        self, user_id: str, strategy_id: str, symbol: str, last_entry_at: datetime
+    ) -> None:
         await self._db.execute(
             """
-            INSERT INTO analysis.strategy_cooldowns (strategy_id, symbol, last_entry_at)
-            VALUES ($1, $2, $3)
-            ON CONFLICT (strategy_id, symbol) DO UPDATE SET
+            INSERT INTO analysis.strategy_cooldowns (user_id, strategy_id, symbol, last_entry_at)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (user_id, strategy_id, symbol) DO UPDATE SET
                 last_entry_at = EXCLUDED.last_entry_at
             """,
+            user_id,
             strategy_id,
             symbol,
             last_entry_at,
@@ -52,7 +58,7 @@ class StrategyCooldownsRepository:
 
     async def list_all(self) -> list[dict]:
         rows = await self._db.fetch(
-            "SELECT strategy_id, symbol, last_exit_at, last_entry_at "
+            "SELECT user_id, strategy_id, symbol, last_exit_at, last_entry_at "
             "FROM analysis.strategy_cooldowns"
         )
         return [dict(r) for r in rows]

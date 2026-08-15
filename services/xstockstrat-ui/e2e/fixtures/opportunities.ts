@@ -61,7 +61,61 @@ export const OPPORTUNITIES = [
     opportunityKey: 'u1|NVDA|',
     provenance: ['unusual_whales'],
   },
+  // feature 132 — a held+denied REDUCE row: muted, but keeps its real exit trace + strategy.
+  {
+    symbol: 'AMD',
+    action: OpportunityActionTag.REDUCE,
+    conviction: 0.55,
+    passingConditions: 1,
+    totalConditions: 1,
+    thesis: 'Deny-listed for entry; exit rule fired',
+    strategyId: 'strat-001',
+    source: '',
+    validUntil: VALID_UNTIL,
+    opportunityKey: 'u1|AMD|strat-001',
+    provenance: ['position', 'denied'],
+    muted: true,
+  },
+  // feature 132 — a standalone deny-listed 0/0 placeholder (conviction 0 — must survive the floor).
+  {
+    symbol: 'GME',
+    action: OpportunityActionTag.UNSPECIFIED,
+    conviction: 0,
+    passingConditions: 0,
+    totalConditions: 0,
+    thesis: '',
+    strategyId: 'strat-001',
+    source: '',
+    validUntil: VALID_UNTIL,
+    opportunityKey: 'u1|GME|strat-001',
+    provenance: ['denied'],
+    muted: true,
+  },
 ];
+
+/**
+ * feature 138 — an EXIT-rule SymbolReadiness for the Signal-detail mock. Distinct from the entry
+ * trace below (different leaf `refName`/threshold and a passing count) so the e2e can prove the
+ * panel traced the exit rule (not the entry rule) for a held opportunity.
+ */
+export function exitReadiness(symbol: string) {
+  return {
+    symbol,
+    conviction: 1.0,
+    passingConditions: 1,
+    totalConditions: 1,
+    conditions: [
+      {
+        refName: 'exit_z',
+        lhsValue: -2.1,
+        threshold: -2,
+        fn: '<',
+        state: 1,
+        distanceToThreshold: 0.05,
+      },
+    ],
+  };
+}
 
 /** A SymbolReadiness (traced condition leaves) for the Signal-detail EvaluateReadiness mock. */
 export function symbolReadiness(symbol: string) {

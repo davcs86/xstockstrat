@@ -43,7 +43,8 @@ async def get_active_source(db_pool, slug: str) -> dict | None:
 async def list_all_sources(db_pool, include_inactive: bool = False) -> list[dict]:
     cols = (
         "slug, display_name, source_type, extractor_module, credentials_ref,"
-        " active, config_json, created_at, last_seen_at, last_error, signals_fed"
+        " active, config_json, created_at, last_seen_at, last_error, signals_fed,"
+        " reliability_weight"
     )
     if include_inactive:
         rows = await db_pool.fetch(
@@ -101,15 +102,20 @@ async def insert_source(
     credentials_ref: str | None,
     config_json: dict | None,
     active: bool = True,
+    reliability_weight: float,
 ) -> dict:
     """Strict create (feature 088). Raises asyncpg.UniqueViolationError on an existing slug — the
-    servicer maps that to ALREADY_EXISTS. Replaces the old blind upsert on the register path."""
+    servicer maps that to ALREADY_EXISTS. Replaces the old blind upsert on the register path.
+
+    feature 134: reliability_weight is the trailing INSERT column/param ($8), placed after `active`
+    so the existing test's config_json positional index (6) is preserved."""
     # The pool has no JSONB codec, so asyncpg expects JSONB params as JSON text, not dicts.
     config_param = json.dumps(config_json) if config_json is not None else None
     row = await db_pool.fetchrow(
         "INSERT INTO ingest.signal_sources"
-        " (slug, display_name, source_type, extractor_module, credentials_ref, config_json, active)"
-        " VALUES ($1, $2, $3, $4, $5, $6, $7)"
+        " (slug, display_name, source_type, extractor_module, credentials_ref, config_json, active,"
+        " reliability_weight)"
+        " VALUES ($1, $2, $3, $4, $5, $6, $7, $8)"
         " RETURNING *",
         slug,
         display_name,
@@ -118,6 +124,7 @@ async def insert_source(
         credentials_ref,
         config_param,
         active,
+        reliability_weight,
     )
     return dict(row)
 
@@ -131,9 +138,12 @@ async def update_source(
     extractor_module: str,
     credentials_ref: str | None,
     config_json: dict | None,
+    reliability_weight: float,
 ) -> dict | None:
     """Write the already-merged columns for an existing source (feature 088). Never touches `active`
-    (lifecycle is reactivate/deactivate only). Returns None if the slug is gone."""
+    (lifecycle is reactivate/deactivate only). Returns None if the slug is gone.
+
+    feature 134: reliability_weight is the trailing SET column/param ($7)."""
     config_param = json.dumps(config_json) if config_json is not None else None
     row = await db_pool.fetchrow(
         "UPDATE ingest.signal_sources SET"
@@ -141,7 +151,8 @@ async def update_source(
         "   source_type = $3,"
         "   extractor_module = $4,"
         "   credentials_ref = $5,"
-        "   config_json = $6"
+        "   config_json = $6,"
+        "   reliability_weight = $7"
         " WHERE slug = $1"
         " RETURNING *",
         slug,
@@ -150,6 +161,7 @@ async def update_source(
         extractor_module,
         credentials_ref,
         config_param,
+        reliability_weight,
     )
     return dict(row) if row is not None else None
 

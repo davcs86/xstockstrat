@@ -170,12 +170,43 @@ function formFromSource(src: SignalSource): FormState {
 }
 
 export default function SourcesPage() {
-  const { sources, weights, isLoading: loading, error } = useSignalSources();
+  const { sources, isLoading: loading, error } = useSignalSources();
   const { mutate: manageMutate, isPending: saving } = useManageSignalSource();
 
   const [editingSlug, setEditingSlug] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // feature 134 — inline reliability-weight cell editing (separate from the full edit modal).
+  const [editingWeightSlug, setEditingWeightSlug] = useState<string | null>(null);
+  const [weightValue, setWeightValue] = useState('');
+  const [weightError, setWeightError] = useState<string | null>(null);
+
+  function openWeightEdit(slug: string, current: number) {
+    setEditingWeightSlug(slug);
+    setWeightValue(String(current));
+    setWeightError(null);
+  }
+
+  function saveWeight(slug: string) {
+    // Bespoke [0,1] scalar check — NOT validateFloatMap (that JSON.parses a map, not a scalar).
+    const parsed = Number(weightValue);
+    if (weightValue.trim() === '' || Number.isNaN(parsed) || parsed < 0 || parsed > 1) {
+      setWeightError('Weight must be a number in [0, 1]');
+      return;
+    }
+    manageMutate(
+      {
+        operation: 'update',
+        source: { slug, reliabilityWeight: parsed },
+        updateMask: { paths: ['reliability_weight'] },
+      },
+      {
+        onSuccess: () => setEditingWeightSlug(null),
+        onError: (e) => setWeightError(errMessage(e)),
+      },
+    );
+  }
 
   function openEdit(src: SignalSource) {
     setForm(formFromSource(src));
@@ -341,7 +372,44 @@ export default function SourcesPage() {
                   <TableCell className="font-mono tabular-nums">
                     {src.signalsFed ? src.signalsFed.toString() : '—'}
                   </TableCell>
-                  <TableCell>{weights[src.slug] ?? 1.0}</TableCell>
+                  <TableCell>
+                    {editingWeightSlug === src.slug ? (
+                      <div className="flex items-center gap-1.5">
+                        <Input
+                          type="number"
+                          step="0.1"
+                          min={0}
+                          max={1}
+                          value={weightValue}
+                          onChange={(e) => setWeightValue(e.target.value)}
+                          className="h-8 w-20"
+                          aria-label={`Weight for ${src.slug}`}
+                        />
+                        <Button size="sm" disabled={saving} onClick={() => saveWeight(src.slug)}>
+                          Save
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setEditingWeightSlug(null)}
+                        >
+                          Cancel
+                        </Button>
+                        {weightError && (
+                          <span className="text-xs text-destructive">{weightError}</span>
+                        )}
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="tabular-nums hover:underline"
+                        data-testid={`weight-${src.slug}`}
+                        onClick={() => openWeightEdit(src.slug, src.reliabilityWeight ?? 1.0)}
+                      >
+                        {src.reliabilityWeight ?? 1.0}
+                      </button>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

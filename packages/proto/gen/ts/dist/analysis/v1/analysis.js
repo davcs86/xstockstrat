@@ -5,8 +5,8 @@
 //   protoc               unknown
 // source: analysis/v1/analysis.proto
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.StrategyAnalytics = exports.SymbolReadiness = exports.ConditionEval = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.OpportunityAction = exports.ConditionState = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.BacktestStatus = exports.protobufPackage = void 0;
-exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = void 0;
+exports.SymbolReadiness = exports.ConditionEval = exports.Opportunity = exports.FundamentalsScanSummary = exports.RunFundamentalsScanRequest = exports.ScreenSymbolsResponse = exports.ScreenSymbolsRequest = exports.ScreenResult_CriterionScoresEntry = exports.ScreenResult = exports.ScreenCriterion = exports.SetStrategyLiveResponse = exports.SetStrategyLiveRequest = exports.ListStrategyDefinitionsResponse = exports.ListStrategyDefinitionsRequest = exports.GetStrategyRequest = exports.ManageStrategyRequest = exports.StrategyDefinition = exports.StrategyComponent_ParamsEntry = exports.StrategyComponent = exports.GetStrategyReportRequest = exports.ListStrategiesResponse = exports.ListStrategiesRequest = exports.GetBacktestRequest = exports.ListBacktestsResponse = exports.BacktestRunSummary = exports.ListBacktestsRequest = exports.StrategyReport = exports.StrategyScore_ComponentScoresEntry = exports.StrategyScore = exports.ScoreStrategyRequest = exports.SymbolDiagnostics = exports.BarDiagnostic_IndicatorsEntry = exports.BarDiagnostic = exports.TradeRecord = exports.BacktestResult = exports.CoverageGap = exports.RunBacktestRequest = exports.OpportunityAction = exports.ReadinessRule = exports.ConditionState = exports.OpportunityActionTag = exports.ScreenResultStatus = exports.ScreenKind = exports.Comparator = exports.StrategyOperation = exports.ComponentKind = exports.NoTradeReason = exports.BarAction = exports.BacktestStatus = exports.protobufPackage = void 0;
+exports.AnalysisServiceClient = exports.AnalysisServiceService = exports.GetStrategyAnalyticsRequest = exports.SetOpportunityActionResponse = exports.SetOpportunityActionRequest = exports.EvaluateReadinessResponse = exports.EvaluateReadinessRequest = exports.ListOpportunitiesResponse = exports.ListOpportunitiesRequest = exports.StrategyAnalytics = void 0;
 exports.backtestStatusFromJSON = backtestStatusFromJSON;
 exports.backtestStatusToJSON = backtestStatusToJSON;
 exports.backtestStatusToNumber = backtestStatusToNumber;
@@ -37,6 +37,9 @@ exports.opportunityActionTagToNumber = opportunityActionTagToNumber;
 exports.conditionStateFromJSON = conditionStateFromJSON;
 exports.conditionStateToJSON = conditionStateToJSON;
 exports.conditionStateToNumber = conditionStateToNumber;
+exports.readinessRuleFromJSON = readinessRuleFromJSON;
+exports.readinessRuleToJSON = readinessRuleToJSON;
+exports.readinessRuleToNumber = readinessRuleToNumber;
 exports.opportunityActionFromJSON = opportunityActionFromJSON;
 exports.opportunityActionToJSON = opportunityActionToJSON;
 exports.opportunityActionToNumber = opportunityActionToNumber;
@@ -689,6 +692,60 @@ function conditionStateToNumber(object) {
         case ConditionState.CONDITION_STATE_FAIL:
             return 3;
         case ConditionState.UNRECOGNIZED:
+        default:
+            return -1;
+    }
+}
+/** Which rule tree EvaluateReadiness traces (feature 138). Closed set → enum (C-04). */
+var ReadinessRule;
+(function (ReadinessRule) {
+    /** READINESS_RULE_UNSPECIFIED - server treats as ENTRY (back-compat default) */
+    ReadinessRule["READINESS_RULE_UNSPECIFIED"] = "READINESS_RULE_UNSPECIFIED";
+    /** READINESS_RULE_ENTRY - trace the entry_rule (ENTER candidates, watchlist readiness) */
+    ReadinessRule["READINESS_RULE_ENTRY"] = "READINESS_RULE_ENTRY";
+    /** READINESS_RULE_EXIT - trace the exit_rule (held REDUCE/ADD opportunities) */
+    ReadinessRule["READINESS_RULE_EXIT"] = "READINESS_RULE_EXIT";
+    ReadinessRule["UNRECOGNIZED"] = "UNRECOGNIZED";
+})(ReadinessRule || (exports.ReadinessRule = ReadinessRule = {}));
+function readinessRuleFromJSON(object) {
+    switch (object) {
+        case 0:
+        case "READINESS_RULE_UNSPECIFIED":
+            return ReadinessRule.READINESS_RULE_UNSPECIFIED;
+        case 1:
+        case "READINESS_RULE_ENTRY":
+            return ReadinessRule.READINESS_RULE_ENTRY;
+        case 2:
+        case "READINESS_RULE_EXIT":
+            return ReadinessRule.READINESS_RULE_EXIT;
+        case -1:
+        case "UNRECOGNIZED":
+        default:
+            return ReadinessRule.UNRECOGNIZED;
+    }
+}
+function readinessRuleToJSON(object) {
+    switch (object) {
+        case ReadinessRule.READINESS_RULE_UNSPECIFIED:
+            return "READINESS_RULE_UNSPECIFIED";
+        case ReadinessRule.READINESS_RULE_ENTRY:
+            return "READINESS_RULE_ENTRY";
+        case ReadinessRule.READINESS_RULE_EXIT:
+            return "READINESS_RULE_EXIT";
+        case ReadinessRule.UNRECOGNIZED:
+        default:
+            return "UNRECOGNIZED";
+    }
+}
+function readinessRuleToNumber(object) {
+    switch (object) {
+        case ReadinessRule.READINESS_RULE_UNSPECIFIED:
+            return 0;
+        case ReadinessRule.READINESS_RULE_ENTRY:
+            return 1;
+        case ReadinessRule.READINESS_RULE_EXIT:
+            return 2;
+        case ReadinessRule.UNRECOGNIZED:
         default:
             return -1;
     }
@@ -3514,6 +3571,9 @@ function createBaseStrategyDefinition() {
         cooldownDays: undefined,
         warnings: [],
         exitCooldownDays: undefined,
+        deniedSymbols: [],
+        userId: "",
+        signalEligible: false,
     };
 }
 exports.StrategyDefinition = {
@@ -3550,6 +3610,15 @@ exports.StrategyDefinition = {
         }
         if (message.exitCooldownDays !== undefined) {
             writer.uint32(88).int32(message.exitCooldownDays);
+        }
+        for (const v of message.deniedSymbols) {
+            writer.uint32(98).string(v);
+        }
+        if (message.userId !== "") {
+            writer.uint32(106).string(message.userId);
+        }
+        if (message.signalEligible !== false) {
+            writer.uint32(112).bool(message.signalEligible);
         }
         return writer;
     },
@@ -3637,6 +3706,27 @@ exports.StrategyDefinition = {
                     message.exitCooldownDays = reader.int32();
                     continue;
                 }
+                case 12: {
+                    if (tag !== 98) {
+                        break;
+                    }
+                    message.deniedSymbols.push(reader.string());
+                    continue;
+                }
+                case 13: {
+                    if (tag !== 106) {
+                        break;
+                    }
+                    message.userId = reader.string();
+                    continue;
+                }
+                case 14: {
+                    if (tag !== 112) {
+                        break;
+                    }
+                    message.signalEligible = reader.bool();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -3694,6 +3784,21 @@ exports.StrategyDefinition = {
                 : isSet(object.exit_cooldown_days)
                     ? globalThis.Number(object.exit_cooldown_days)
                     : undefined,
+            deniedSymbols: globalThis.Array.isArray(object?.deniedSymbols)
+                ? object.deniedSymbols.map((e) => globalThis.String(e))
+                : globalThis.Array.isArray(object?.denied_symbols)
+                    ? object.denied_symbols.map((e) => globalThis.String(e))
+                    : [],
+            userId: isSet(object.userId)
+                ? globalThis.String(object.userId)
+                : isSet(object.user_id)
+                    ? globalThis.String(object.user_id)
+                    : "",
+            signalEligible: isSet(object.signalEligible)
+                ? globalThis.Boolean(object.signalEligible)
+                : isSet(object.signal_eligible)
+                    ? globalThis.Boolean(object.signal_eligible)
+                    : false,
         };
     },
     toJSON(message) {
@@ -3731,6 +3836,15 @@ exports.StrategyDefinition = {
         if (message.exitCooldownDays !== undefined) {
             obj.exitCooldownDays = Math.round(message.exitCooldownDays);
         }
+        if (message.deniedSymbols?.length) {
+            obj.deniedSymbols = message.deniedSymbols;
+        }
+        if (message.userId !== "") {
+            obj.userId = message.userId;
+        }
+        if (message.signalEligible !== false) {
+            obj.signalEligible = message.signalEligible;
+        }
         return obj;
     },
     create(base) {
@@ -3749,6 +3863,9 @@ exports.StrategyDefinition = {
         message.cooldownDays = object.cooldownDays ?? undefined;
         message.warnings = object.warnings?.map((e) => e) || [];
         message.exitCooldownDays = object.exitCooldownDays ?? undefined;
+        message.deniedSymbols = object.deniedSymbols?.map((e) => e) || [];
+        message.userId = object.userId ?? "";
+        message.signalEligible = object.signalEligible ?? false;
         return message;
     },
 };
@@ -5256,6 +5373,7 @@ function createBaseOpportunity() {
         validUntil: undefined,
         opportunityKey: "",
         provenance: [],
+        muted: false,
     };
 }
 exports.Opportunity = {
@@ -5292,6 +5410,9 @@ exports.Opportunity = {
         }
         for (const v of message.provenance) {
             writer.uint32(90).string(v);
+        }
+        if (message.muted !== false) {
+            writer.uint32(96).bool(message.muted);
         }
         return writer;
     },
@@ -5379,6 +5500,13 @@ exports.Opportunity = {
                     message.provenance.push(reader.string());
                     continue;
                 }
+                case 12: {
+                    if (tag !== 96) {
+                        break;
+                    }
+                    message.muted = reader.bool();
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -5424,6 +5552,7 @@ exports.Opportunity = {
             provenance: globalThis.Array.isArray(object?.provenance)
                 ? object.provenance.map((e) => globalThis.String(e))
                 : [],
+            muted: isSet(object.muted) ? globalThis.Boolean(object.muted) : false,
         };
     },
     toJSON(message) {
@@ -5461,6 +5590,9 @@ exports.Opportunity = {
         if (message.provenance?.length) {
             obj.provenance = message.provenance;
         }
+        if (message.muted !== false) {
+            obj.muted = message.muted;
+        }
         return obj;
     },
     create(base) {
@@ -5479,6 +5611,7 @@ exports.Opportunity = {
         message.validUntil = object.validUntil ?? undefined;
         message.opportunityKey = object.opportunityKey ?? "";
         message.provenance = object.provenance?.map((e) => e) || [];
+        message.muted = object.muted ?? false;
         return message;
     },
 };
@@ -6062,7 +6195,7 @@ exports.ListOpportunitiesResponse = {
     },
 };
 function createBaseEvaluateReadinessRequest() {
-    return { strategyId: "", symbols: [] };
+    return { strategyId: "", symbols: [], rule: ReadinessRule.READINESS_RULE_UNSPECIFIED };
 }
 exports.EvaluateReadinessRequest = {
     encode(message, writer = new wire_1.BinaryWriter()) {
@@ -6071,6 +6204,9 @@ exports.EvaluateReadinessRequest = {
         }
         for (const v of message.symbols) {
             writer.uint32(18).string(v);
+        }
+        if (message.rule !== ReadinessRule.READINESS_RULE_UNSPECIFIED) {
+            writer.uint32(24).int32(readinessRuleToNumber(message.rule));
         }
         return writer;
     },
@@ -6095,6 +6231,13 @@ exports.EvaluateReadinessRequest = {
                     message.symbols.push(reader.string());
                     continue;
                 }
+                case 3: {
+                    if (tag !== 24) {
+                        break;
+                    }
+                    message.rule = readinessRuleFromJSON(reader.int32());
+                    continue;
+                }
             }
             if ((tag & 7) === 4 || tag === 0) {
                 break;
@@ -6111,6 +6254,7 @@ exports.EvaluateReadinessRequest = {
                     ? globalThis.String(object.strategy_id)
                     : "",
             symbols: globalThis.Array.isArray(object?.symbols) ? object.symbols.map((e) => globalThis.String(e)) : [],
+            rule: isSet(object.rule) ? readinessRuleFromJSON(object.rule) : ReadinessRule.READINESS_RULE_UNSPECIFIED,
         };
     },
     toJSON(message) {
@@ -6121,6 +6265,9 @@ exports.EvaluateReadinessRequest = {
         if (message.symbols?.length) {
             obj.symbols = message.symbols;
         }
+        if (message.rule !== ReadinessRule.READINESS_RULE_UNSPECIFIED) {
+            obj.rule = readinessRuleToJSON(message.rule);
+        }
         return obj;
     },
     create(base) {
@@ -6130,6 +6277,7 @@ exports.EvaluateReadinessRequest = {
         const message = createBaseEvaluateReadinessRequest();
         message.strategyId = object.strategyId ?? "";
         message.symbols = object.symbols?.map((e) => e) || [];
+        message.rule = object.rule ?? ReadinessRule.READINESS_RULE_UNSPECIFIED;
         return message;
     },
 };

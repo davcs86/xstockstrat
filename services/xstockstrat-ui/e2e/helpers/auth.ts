@@ -21,14 +21,19 @@ export const TEST_JWT_SECRET = 'test-jwt-secret-for-e2e-tests-min32c';
 export const BASE_URL = 'http://localhost:3000';
 
 /**
- * Signs a short-lived JWT for the canonical test user with the given roles.
+ * Signs a short-lived JWT with the given roles. Defaults to the canonical test user, so existing
+ * single-arg callers are unchanged; pass an explicit `user` (feature 133) to mint a token for a
+ * second identity in cross-user ownership tests.
  * Used by the cookie helpers below and by mock-backend.ts identity responses.
  */
-export async function signTestJwt(roles: string[] = []): Promise<string> {
+export async function signTestJwt(
+  roles: string[] = [],
+  user: { id: string; email: string } = { id: TEST_USER_ID, email: TEST_USER_EMAIL },
+): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   return new SignJWT({
-    user_id: TEST_USER_ID,
-    email: TEST_USER_EMAIL,
+    user_id: user.id,
+    email: user.email,
     roles,
     issued_at: now,
     expires_at: now + 3600,
@@ -43,8 +48,12 @@ export async function signTestJwt(roles: string[] = []): Promise<string> {
  * `access_token` cookie so the Next.js middleware treats the page as
  * authenticated (no redirect to `/auth/login`).
  */
-export async function addCookieWithRoles(page: Page, roles: string[]): Promise<void> {
-  const token = await signTestJwt(roles);
+export async function addCookieWithRoles(
+  page: Page,
+  roles: string[],
+  user?: { id: string; email: string },
+): Promise<void> {
+  const token = await signTestJwt(roles, user);
   await page
     .context()
     .addCookies([
