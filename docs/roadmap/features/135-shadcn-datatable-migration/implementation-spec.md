@@ -1,6 +1,6 @@
 # Implementation Spec: shadcn-datatable-migration
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-08-15
 **Feature**: `docs/roadmap/features/135-shadcn-datatable-migration/feature.md`
 **Total Steps**: 33
@@ -56,7 +56,7 @@ chrome around it.
 
 ### Step 1 — service: build the shared `DataTable` composite
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/data-table.tsx` — create

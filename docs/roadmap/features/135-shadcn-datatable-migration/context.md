@@ -331,9 +331,35 @@ clears it lands, rather than letting the warning go stale.
   commit (`git fetch origin main-dev` — no new commits), so §5.3 step 1's "merge current main-dev into
   `<dev-branch>`" is a no-op this session; `<dev-branch>` is already exactly `origin/main-dev` + the
   branch-correction commit.
-- Next: commit this re-spec (`respec(shadcn-datatable-migration): align steps 21-22 with current
-  codebase`), present the combined per-feature plan via the sequential-mode §5.4 up-front confirm, then
-  proceed to Tooling Setup and the step loop.
+- Re-spec committed and pushed (`24ff64a`). Presented the combined plan via §5.4 up-front confirm;
+  user approved and additionally requested: run the full 33-step sequence without pausing at periodic
+  checkpoints (§5.5b) — only stop for genuine blockers (§5.7) — and report all deviations at the end.
+  Adopting this for the remainder of the run: checkpoint reports still get logged into context.md at
+  each firing for the accountability trail, but do not gate on `AskUserQuestion`; blockers still do.
+- Tooling setup (all 33 steps are `xstockstrat-ui` service/test): node 22.22.2 ✓ · pnpm 9.15.0 ✓ ·
+  `pnpm install --frozen-lockfile` ⬇ (node_modules was absent) · chromium ✓ (pre-provisioned,
+  `/opt/pw-browsers`) · `pnpm run lint` sanity-checked clean (1 pre-existing unrelated a11y warning on
+  `insights/strategies/[id]/page.tsx:495`, not introduced by this session). Starting the step loop.
+
+### Step 1 — service: build the shared `DataTable` composite [done]
+- Added `@tanstack/react-table@^8` dependency. Built `src/components/ui/data-table.tsx`: exports
+  `isInteractiveTarget` (duck-typed `.closest()` guard) and `DataTable<TData, TValue>` (sorting via
+  `useReactTable`, conditional pagination, `meta.className` passthrough on head/cell, row `onClick`+
+  `onKeyDown` both guarded by `isInteractiveTarget`, empty-state via `emptyMessage`, Previous/Next
+  buttons when `enablePagination`).
+- TDD: combined with Step 2's red-green cycle per `reference/tdd-gate.md` ("write the paired test
+  first, regardless of step order"). Wrote `data-table.test.ts` (Step 2's file) before implementing;
+  red: `pnpm run test:unit -- data-table.test.ts` failed with "Cannot find module './data-table'" →
+  implemented `data-table.tsx` → green: 5/5 assertions pass (96/96 suite-wide, no regressions). Test
+  file left uncommitted at this step (belongs to Step 2's Files list per F-08); only staged here for
+  Step 1's own commit: `data-table.tsx` + `package.json` + `pnpm-lock.yaml` (sanctioned lockfile
+  staging exception, sequential-mode verification fallbacks).
+- Verification: `pnpm run lint` clean (fixed one unused-param lint error in the test file itself —
+  in-scope per HARD CONSTRAINTS' own-changed-lines exception), `tsc --noEmit` clean, both grep checks
+  pass.
+- Files modified: `services/xstockstrat-ui/src/components/ui/data-table.tsx` (new),
+  `services/xstockstrat-ui/package.json`, `pnpm-lock.yaml`
+- Deviations: none
 
 ## Session 2026-08-15 — sdd-execute boot (branch-topology correction)
 
