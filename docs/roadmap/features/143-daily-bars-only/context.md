@@ -169,3 +169,66 @@
   new dated entry since it recurred inside the *design* phase (proposer→adversary), not just
   execution, showing the trap applies to LLM-proposed refactors, not only human-authored
   specs. See `docs/roadmap/ledger/fails.md` new 2026-08-16 entry.
+
+## Session 2026-08-16T14:51:46Z — sdd-spec
+
+- Generated `implementation-spec.md` with 10 steps (proto → proto-gen → marketdata service+test →
+  ingest service+test → agent service+test → ui service+test). Status: `design-approved` →
+  `implementation-ready`.
+- `recon.md` was present and reused directly as Codebase Evidence per Step 1.5's "reuse first"
+  rule; only re-discovered detail `recon.md` didn't already cover at line-level (exact code
+  snippets for every edit site, test file contents, doc files not yet grepped).
+- **Three corrections to `design.md`, each independently grep/read-verified before being written
+  into the spec (not silently trusted)** — recorded in the spec's own Execution Summary so
+  `/sdd-execute` sees them without re-deriving:
+  1. `plugins/strat-lab/skills/backtest/reference/backfill.md` does **not** document `15m`/`1h` —
+     `grep -rniE "15m|1hour|15min|timeframe" plugins/` returns nothing. `design.md` § Chosen
+     Approach point 4 named this file as a same-PR edit target alongside `mcp-tools.md`; only
+     `mcp-tools.md` actually needs the edit (Step 7). Not editing a file with nothing to change
+     avoids an empty/no-op diff that would fail review scrutiny for touching an unrelated file.
+  2. `/insights/backfills/page.tsx`'s `TIMEFRAMES` const feeds **two** forms with opposite
+     requirements — the create-backfill form (must narrow per FR-5) and the delete-scope form
+     (must stay permissive per `design.md`'s own `DeleteBackfilledData`-stays-permissive
+     decision). `design.md` § Chosen Approach point 5 described a single uniform narrowing of
+     that const, which would have silently broken the delete-scope form's ability to target
+     historical `15m`/`1h` rows — contradicting `design.md`'s own stated intent one paragraph
+     earlier. Step 9 instructs removing the create-form's select entirely (hardcoding
+     `TIMEFRAME_1DAY`) while leaving the shared `TIMEFRAMES` const and the delete-scope select's 3
+     entries untouched.
+  3. Three more tests break than `design.md`'s named four:
+     `test_ingest_servicer.py::test_enum_only_request_persists_canonical_string` (sends a `15m`
+     enum-only request and asserts it's queued — inverted by Step 5's new rejection),
+     `chart-panel.spec.ts`'s `'1d is the active timeframe by default'` (a third test in that file
+     depending on the removed `Tabs`, not the two `design.md`/`recon.md` name), and
+     `chart.test.ts`'s `'maps each supported timeframe to its hardcoded proto enum'` (a vitest
+     unit test neither `recon.md` nor `design.md` mentions at all, breaks at `tsc` once
+     `Timeframe` narrows). Found by grepping each file directly rather than re-deriving
+     `design.md`'s reasoning — the same "count claims are absence claims" trap `fails.md`
+     (2026-07-30) already named for this exact feature area, now caught before execution instead
+     of during it.
+- Also verified (not just trusted) `design.md`'s own per-table alias-survivor plan before writing
+  Steps 5/7: confirmed `_canonical_timeframe` checks `_ENUM_TO_STR` (from the unchanged
+  `_STR_TO_ENUM`) before falling back to `_TF_ALIASES`, so narrowing `_TF_ALIASES` alone does
+  **not** gate acceptance — the new explicit `if canonical_tf != "1d": abort(...)` check in
+  `TriggerBackfill` (not named as its own mechanism in `design.md`'s prose, only implied by
+  "rejected... at the ingest handler's own validation point") is what actually gates it. Also
+  confirmed via `grep -rn "1Hour\|15Min" services/xstockstrat-ingest/` that no test/fixture/
+  migration in the repo ever exercises those two raw alias spellings as a stored value, making
+  `design.md`'s narrower `_TF_ALIASES` (keeping only `"1d"`/`"1Day"`) safe for the dual-purpose
+  `_row_timeframe` read path.
+- Key codebase findings not previously in `recon.md`:
+  - `services/xstockstrat-marketdata/internal/service/marketdata_service.go`'s `GetBars` calls
+    `s.markWarm(req.Symbol)` **before** resolving `canonicalTf` — the reject check requires
+    reordering `markWarm` to after resolution, not just inserting a check inline.
+  - `services/xstockstrat-ingest/app/repositories/backfill_chunks.py`'s `_BARS_PER_DAY.get(timeframe, 1)`
+    default (both call sites) means dropping `"15m"`/`"1h"` keys cannot `KeyError` — confirmed
+    `plan_chunks` is only reachable for a newly-planned job (never a resumed one), so after Step
+    5's reject check it is only ever called with `"1d"`.
+  - `services/xstockstrat-marketdata/CLAUDE.md`, `services/xstockstrat-marketdata/docs/context-constitution.md`
+    (`MARKETDATA-2`), `services/xstockstrat-ingest/CLAUDE.md`,
+    `services/xstockstrat-ingest/docs/context-constitution.md`, and `docs/runbooks/historical-backfill.md`
+    all document the pre-143 `15m,1d`/`15m`-accepting behavior and need same-PR updates (root
+    `CLAUDE.md`'s Teardown rule + the ledger's 2026-07-20 "five discovery surfaces" insight for
+    `trigger_backfill`) — folded into Steps 3, 5, and 7 respectively rather than left implicit.
+- No DB migration step — `design.md` explicitly rejected that alternative; historical `15m`/`1h`
+  rows stay inert, `GetDataCoverage`/`DeleteBackfilledData` stay permissive on purpose.
