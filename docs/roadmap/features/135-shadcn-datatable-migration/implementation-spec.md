@@ -982,7 +982,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 
 ### Step 21 — service: migrate `/trader/positions/[symbol]` orders sub-table (row 4) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
@@ -1053,7 +1053,7 @@ grep -n "DataTable" src/app/trader/positions/\[symbol\]/page.tsx
 
 ### Step 22 — test: verify `/trader/positions/[symbol]` migration preserves behavior
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify (if locators break)

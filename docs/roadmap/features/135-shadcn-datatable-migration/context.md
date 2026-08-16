@@ -634,6 +634,37 @@ clears it lands, rather than letting the warning go stale.
 - Files modified: none (no locator changes needed)
 - Deviations: none
 
+### Step 21 — service: migrate `/trader/positions/[symbol]` orders sub-table (row 4) to `DataTable` [done]
+- Used the re-spec'd Codebase Evidence from the §5.3 gate: the table now lives in `SymbolOrdersCard`
+  (`:391-479` after this edit), invoked unconditionally at `:260`. Defined
+  `SYMBOL_ORDERS_COLUMNS: ColumnDef<Order>[]` at **module scope** (no per-instance closures — matches
+  the re-spec's note that this differs from the other trader steps) reusing `OrderSideBadge`,
+  `TYPE_LABEL[OrderType[...]]`, `formatOrderPrice`, `OrderStatusBadge`, and the `strategyId ||
+  'Manual'` Origin fallback verbatim. Carried the dead `cursor-pointer` class forward unchanged via
+  `rowClassName` (no `onRowClick` — no handler exists pre- or post-migration, per the dead-affordance
+  disposition). Left the `orders.length === 0 ? <EmptyState/> : ` wrapper untouched, only replacing
+  the inner `<Table>` with `<DataTable columns={SYMBOL_ORDERS_COLUMNS} data={orders} getRowId={(o) =>
+  o.orderId} rowClassName={() => 'cursor-pointer'} />`.
+  **Kept the `Table` primitive import** — this file has a *second*, out-of-scope table
+  (`data-testid="backtests-table"`, feature 125's Backtests section, not in the 15-table inventory)
+  that still uses it directly; confirmed via grep before editing so it wasn't accidentally orphaned.
+- TDD: refactor, no new behavior — red N/A; green captured in Step 22.
+- Verification: `tsc --noEmit` clean; `pnpm run lint` clean (module-scope columns, no closures →
+  no exhaustive-deps warning); grep confirms `DataTable`.
+- Files modified: `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx`
+- Deviations: none (already captured via the §5.3 re-spec, not a fresh mid-step deviation)
+
+### Step 22 — test: verify `/trader/positions/[symbol]` migration preserves behavior [done]
+- Ran the full `e2e/trader/position-detail.spec.ts` suite (22 tests, per the re-spec's Instruction 1
+  — not just the two `SymbolOrdersCard`-specific tests): 19 clean, 3 cold-start-flaky-then-pass, 0
+  real failures. `'Orders & fills · AAPL'` (held) and `'Orders & fills · ZZZZ'` (unheld, proving
+  unconditional rendering) both still visible; `View →` link target unchanged; no test asserts the
+  row itself is clickable. Did not expand into the file's FR-6/7/9/10/11 sections, per the re-spec's
+  explicit out-of-scope note.
+- `mobile-overflow.spec.ts -g "trader/positions/AAPL"` — flaky-then-pass, green.
+- Files modified: none (no locator changes needed)
+- Deviations: none
+
 ## Session 2026-08-15 — sdd-execute boot (branch-topology correction)
 
 - Boot Step B3 (`git ls-remote --heads origin feature/shadcn-datatable-migration`) found the

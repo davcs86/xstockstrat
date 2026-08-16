@@ -50,6 +50,8 @@ import { Eyebrow } from '@/components/shared/Eyebrow';
 import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
 import { OrderForm } from '@/components/trader/OrderForm';
 import { isNotFoundError } from '@/lib/scoreDisplay';
+import type { ColumnDef } from '@tanstack/react-table';
+import { DataTable } from '@/components/ui/data-table';
 import {
   Table,
   TableHeader,
@@ -414,55 +416,72 @@ function SymbolOrdersCard({
             description="Orders you place for this position will appear here, traced to their origin signal."
           />
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Side</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead className="text-right">Qty</TableHead>
-                <TableHead className="text-right hidden sm:table-cell">Filled</TableHead>
-                <TableHead className="text-right">Avg fill</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="hidden md:table-cell">Origin</TableHead>
-                <TableHead className="sr-only">Open</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {orders.map((o) => (
-                <TableRow key={o.orderId} className="cursor-pointer">
-                  <TableCell>
-                    <OrderSideBadge side={o.side} />
-                  </TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">
-                    {TYPE_LABEL[OrderType[o.orderType]] ?? '—'}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{o.qty}</TableCell>
-                  <TableCell className="text-right tabular-nums hidden sm:table-cell text-muted-foreground">
-                    {o.filledQty}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatOrderPrice(o.filledAvgPrice)}
-                  </TableCell>
-                  <TableCell>
-                    <OrderStatusBadge status={o.status} intentState={o.intentState} />
-                  </TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground hidden md:table-cell">
-                    {o.strategyId || 'Manual'}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button asChild size="sm" variant="ghost" className="h-8">
-                      <Link href={`/trader/orders/${o.orderId}`}>View →</Link>
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <DataTable
+            columns={SYMBOL_ORDERS_COLUMNS}
+            data={orders}
+            getRowId={(o) => o.orderId}
+            rowClassName={() => 'cursor-pointer'}
+          />
         )}
       </CardContent>
     </Card>
   );
 }
+
+// Module scope: no per-instance closures — depends only on row.original + module-level helpers.
+const SYMBOL_ORDERS_COLUMNS: ColumnDef<Order>[] = [
+  {
+    id: 'side',
+    header: 'Side',
+    cell: ({ row }) => <OrderSideBadge side={row.original.side} />,
+  },
+  {
+    id: 'type',
+    header: 'Type',
+    meta: { className: 'font-mono text-xs text-muted-foreground' },
+    cell: ({ row }) => TYPE_LABEL[OrderType[row.original.orderType]] ?? '—',
+  },
+  {
+    accessorKey: 'qty',
+    header: 'Qty',
+    meta: { className: 'text-right tabular-nums' },
+  },
+  {
+    accessorKey: 'filledQty',
+    header: 'Filled',
+    meta: { className: 'text-right tabular-nums hidden sm:table-cell text-muted-foreground' },
+  },
+  {
+    id: 'avgFill',
+    header: 'Avg fill',
+    meta: { className: 'text-right tabular-nums' },
+    cell: ({ row }) => formatOrderPrice(row.original.filledAvgPrice),
+  },
+  {
+    id: 'status',
+    header: 'Status',
+    cell: ({ row }) => (
+      <OrderStatusBadge status={row.original.status} intentState={row.original.intentState} />
+    ),
+  },
+  {
+    id: 'origin',
+    header: 'Origin',
+    meta: { className: 'font-mono text-xs text-muted-foreground hidden md:table-cell' },
+    cell: ({ row }) => row.original.strategyId || 'Manual',
+  },
+  {
+    id: 'open',
+    header: () => <span className="sr-only">Open</span>,
+    enableSorting: false,
+    meta: { className: 'text-right' },
+    cell: ({ row }) => (
+      <Button asChild size="sm" variant="ghost" className="h-8">
+        <Link href={`/trader/orders/${row.original.orderId}`}>View →</Link>
+      </Button>
+    ),
+  },
+];
 
 // PositionBody renders the risk-framed detail once a Position is loaded — the stat-tile header and
 // the risk/manage/why/broker sidebar. The price chart, orders, and trade widget are hoisted to the
