@@ -172,7 +172,7 @@ git diff --stat packages/proto/gen/
 
 ### Step 3 — service: `xstockstrat-marketdata` rejects non-`1d` `GetBars`/`BackfillBars`, narrows the ingester default
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -275,7 +275,7 @@ Plus the paired Step 4 coverage command. Manually confirm (via `git diff`) that 
 
 ### Step 4 — test: `xstockstrat-marketdata` rejection coverage
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify
@@ -942,4 +942,33 @@ rewritten/new assertions pass; `backfills.spec.ts` passes unmodified, confirming
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### D-1 (Steps 3/4) — proto enum deprecation triggers Go `staticcheck` SA1019 at every remaining consumer
+**What**: Step 1 marked `TIMEFRAME_15MIN`/`TIMEFRAME_1HOUR` `[deprecated = true]`. That is
+comment/annotation-only and non-breaking at the buf level (Step 1's `buf lint`/`buf breaking` both
+passed), but Go's `staticcheck` (SA1019, enabled in every service's `.golangci.yml`) flags **every**
+remaining reference to those enum values as a lint error. The spec's Execution Summary did not
+anticipate this cross-cutting linter consequence — it only listed the *tests* whose assertions
+invert.
+**Blast radius**: confined to `xstockstrat-marketdata` (grep of all `services/**/*.go` outside
+`gen/` found no other service references those values). Six legitimate remaining sites:
+`internal/timeframe/timeframe.go` (2 — the `ToCanonical`/`FromString` switch arms the design
+**deliberately keeps** so the permissive `GetDataCoverage`/`DeleteBackfilledData` path can still
+resolve historical `15m`/`1h` rows), plus `internal/timeframe/timeframe_test.go`,
+`internal/alpaca/client_test.go`, and `internal/service/marketdata_service_test.go` (the new Step-4
+tests deliberately *send* a deprecated timeframe to prove rejection).
+**Disposition**: `//nolint:staticcheck // SA1019: …` added at each legitimate site with a reason —
+the exact idiom the codebase already uses for the deprecated string `timeframe` field. This expands
+Steps 3/4's file scope beyond their `**Files**` lists to include `internal/timeframe/timeframe.go`
+(Step 3) and `internal/timeframe/timeframe_test.go` + `internal/alpaca/client_test.go` (Step 4).
+Recorded here and surfaced in the checkpoint accountability block; a `fails.md` ledger entry
+captures the generalizable trap.
+
+### D-2 (Steps 3/4) — `TestResolveIngestTimeframes` default-fallback subtests broke, not in the spec's breaking-test list
+**What**: Step 3 narrowed `defaultBarIngestTimeframe` from `"15m,1d"` to `"1d"`. Two subtests of
+`TestResolveIngestTimeframes` (`marketdata_service_test.go`) assert the empty-input and
+wholly-unresolvable-input *fallback* returns `["15m","1d"]`; both now correctly return `["1d"]`. The
+spec's Execution Summary correction 3 enumerated breaking tests but missed these two (they assert
+the default *constant*, not a timeframe alias).
+**Disposition**: updated both subtests' expected value to `["1d"]` (warn counts unchanged). In
+scope for the Step 3/4 pair — the test file is in Step 4's `**Files**` list and the assertion
+directly verifies the constant Step 3 changed.

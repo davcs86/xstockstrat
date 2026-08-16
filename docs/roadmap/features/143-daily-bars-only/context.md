@@ -300,3 +300,29 @@ no feature code. Part of an operator-requested sequential run of 143 then 139, o
   confirmed deprecation-only.
 - Files modified: `packages/proto/gen/{go,python,ts}/common/v1/*`
 - Deviations: none. TDD: N/A (proto-gen — verified by deprecation-only diff).
+
+### Step 3 — marketdata rejects non-1d GetBars/BackfillBars, narrows ingester default [done]
+- GetBars: moved `markWarm` to AFTER the `canonicalTf` resolution + new reject check (so a rejected
+  request never marks a symbol warm / spends an Alpaca call). BackfillBars: reject before
+  `emitEvent` (no started/failed ledger pair for a never-run request). `defaultBarIngestTimeframe`
+  "15m,1d"→"1d" + rewritten comment. Added permissive-by-design doc comments to `GetDataCoverage`
+  and `resolveDeletePlan`. Updated marketdata CLAUDE.md (Timeframe vocabulary, bar_ingest_timeframe/
+  _lookback_ms config rows, WS-bar note, StartBarIngestPoller) + context-constitution.md MARKETDATA-2.
+- TDD: red → green. RED: `TestGetBars_RejectsNon1d` panicked in `markWarm` pre-reorder (proved the
+  request was accepted and reached markWarm); GREEN: both reject tests pass after the reorder+checks.
+- Verification: `golangci-lint run` (full module) 0 issues; full suite 63.8% coverage.
+- Files modified: `internal/service/marketdata_service.go`, `CLAUDE.md`,
+  `docs/context-constitution.md`, `internal/timeframe/timeframe.go` (D-1 nolint).
+- Deviations: **D-1** (proto deprecation → SA1019 nolint across marketdata; scope expanded to
+  `internal/timeframe/timeframe.go`), **D-2** (see Step 4). Full detail in Deviation Log.
+
+### Step 4 — marketdata rejection coverage [done]
+- Added `TestGetBars_RejectsNon1d` + `TestBackfillBars_RejectsNon1d` (InvalidArgument on 15m/1h).
+- Fixed `TestResolveIngestTimeframes`'s two default-fallback subtests → `["1d"]` (D-2, not in spec's
+  breaking list). Added `//nolint:staticcheck` to the deprecated-enum references in
+  `internal/timeframe/timeframe_test.go` + `internal/alpaca/client_test.go` (D-1).
+- Verification: full `go test ./... -race` green, total coverage 63.8% (≥40%).
+- Files modified: `internal/service/marketdata_service_test.go`,
+  `internal/timeframe/timeframe_test.go`, `internal/alpaca/client_test.go` (last two = D-1 scope
+  expansion).
+- Deviations: D-1, D-2.
