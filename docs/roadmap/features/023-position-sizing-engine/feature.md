@@ -6,6 +6,7 @@
 **Development Branch**: `feature/position-sizing-engine`
 **Created**: 2026-05-26
 **Last Updated**: 2026-08-07
+**Archived**: 2026-08-16
 
 ---
 
@@ -20,6 +21,7 @@
 | 2026-08-07 | `implementation-ready` → `code-completed` | /sdd-execute (sequential) | All 12 steps done. Stacked-branch build (per user directive) on top of `feature/exactly-once-order-intent` (feature 101, itself stacked on feature 100) — integration PR #881 targets that branch, not `main-dev` |
 
 | 2026-08-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #878; committed 856ad5a3a2ebc431c108cc7f508deb26885545c6 |
+| 2026-08-16 | launched (unchanged) | /sdd-archiver | Archived: synthesis written to context.md + Ledger, specs pruned. |
 ---
 
 ## Artifacts

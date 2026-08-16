@@ -7,6 +7,7 @@
 **Development Branch**: `feature/account-trading-halt-and-kill-switch`
 **Created**: 2026-08-04
 **Last Updated**: 2026-08-06
+**Archived**: 2026-08-16
 
 ---
 
@@ -23,6 +24,7 @@
 | 2026-08-07 | `in-progress` → `code-completed` | /sdd-execute (sequential) | All 13 steps done. Next: merge-order gate + integration PR to `main-dev` |
 
 | 2026-08-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #878; committed 856ad5a3a2ebc431c108cc7f508deb26885545c6 |
+| 2026-08-16 | launched (unchanged) | /sdd-archiver | Archived: synthesis written to context.md + Ledger, specs pruned. |
 ---
 
 ## Artifacts

@@ -5,6 +5,7 @@
 **Development Branch**: `feature/ingest-signal-dedup`
 **Created**: 2026-08-07
 **Last Updated**: 2026-08-07
+**Archived**: 2026-08-16
 
 ---
 
@@ -18,6 +19,7 @@
 | 2026-08-07 | `implementation-ready` → `code-completed` | manual execute (harness branch) | All 14 steps implemented directly on `claude/ingest-signal-dedup-ehhgy6` (not via per-step `feature/<slug>` branches — see context.md); 179/179 ingest tests + 201/201 agent tests pass, buf lint/breaking clean |
 
 | 2026-08-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #878; committed 856ad5a3a2ebc431c108cc7f508deb26885545c6 |
+| 2026-08-16 | launched (unchanged) | /sdd-archiver | Archived: synthesis written to context.md + Ledger, specs pruned. |
 ---
 
 ## Artifacts
