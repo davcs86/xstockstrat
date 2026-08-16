@@ -1,6 +1,6 @@
 # Implementation Spec: fix-opportunities-bars-fetch-oom
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-08-16
 **Feature**: `docs/roadmap/features/141-fix-opportunities-bars-fetch-oom/feature.md`
 **Total Steps**: 3
@@ -53,7 +53,7 @@ unchanged.
 
 ### Step 1 — service: per-pass bars dedup + process-lifetime bars-fetch semaphore
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -190,7 +190,7 @@ test — this step's own change has no independently-observable behavior without
 
 ### Step 2 — test: bars-fetch dedup, failed-fetch caching, and cross-user concurrency bound
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -389,7 +389,7 @@ candidates sharing a symbol within one pass) was assessed by design.md round 1 a
 
 ### Step 3 — config: register `analysis.opportunity.max_concurrent_bars_fetches`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/CLAUDE.md` — modify (§ Config Keys Consumed)
@@ -464,4 +464,30 @@ session.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Step 2 — read-side pagination truncated the scale-test assertion
+
+**Spec said**: `assert len(opps) >= 200` against the plain `_list_opps(svc)` call (no explicit
+`page_size`).
+**Actual**: `ListOpportunities` paginates its read at `_DEFAULT_OPP_PAGE_SIZE = 50`
+(`servicer.py:109,2245`) — a pre-existing, unrelated RPC behavior neither recon nor design.md
+surfaced. The unmodified test failed with `50 >= 200` false, even though
+`_compute_opportunities` had genuinely materialized 241 rows (confirmed via
+`svc._opportunities_repo.rows` — the compute-side fix was correct; only the read-side assertion
+was wrong). Fixed by requesting `page=common_pb2.PageRequest(page_size=300)` in the scale test
+so the assertion reflects what was computed, not an artifact of unrelated read pagination.
+**Reason**: A genuine gap in the original test-design reasoning (not caught by design.md's
+grilling rounds, since neither round read `ListOpportunities`'s own pagination logic — only
+`_compute_opportunities`). Caught by actually running red-before-green, not assumed. No change
+to the fix itself (Step 1) was needed.
+
+### Deviation: Step 3 — `/context-scrubber` unavailable
+
+**Spec said**: run `/context-scrubber scan`, scoped to `services/xstockstrat-analysis/CLAUDE.md`
+and `docs/patterns/config-governance.md`, and fix any grounded findings before marking done.
+**Actual**: The `context-scrubber` skill/plugin is not available in this execute session (absent
+from the session's skill list; no matching plugin installed under `.claude/`). Per root
+`CLAUDE.md` § Teardown, its unavailability is recorded here and will be stated in the eventual PR
+body rather than skipped silently.
+**Reason**: Environment/session constraint, not a scope decision. The two edited files were
+hand-reviewed for consistency with the rest of their own tables (matching the cited feature-125/
+`analysis.series.max_concurrent_components` row format exactly) as a partial substitute.
