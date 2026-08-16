@@ -877,6 +877,97 @@ clears it lands, rather than letting the warning go stale.
 - Deviations: none beyond Step 31's own (this step is the verification step that resolved Step 31's
   Instruction 3 outcome).
 
+## Session 2026-08-16 — Step 33 (regression sweep) finds a 16th table; Steps 34-35 added
+
+Step 33's own AC-1/AC-2 mechanical checks — the final verification step of the planned 32-step
+sequence — found a real gap: `src/components/trader/SymbolScreening.tsx` (a table-rendering component
+added by feature 125, the same sibling feature whose mid-session merge forced the Steps 21-22 re-spec)
+was never in recon's 15-site inventory. Root cause and full reasoning recorded in
+`implementation-spec.md` § Re-spec Log "Steps 34-35 added" and ledger `fails.md` 2026-08-16
+(`assumption` category) — in short, the Steps 21-22 re-spec's recon re-verification pass re-checked
+the *known* 15 sites against the post-125 tree, but never re-ran the *original unbounded* full-repo
+table-inventory grep, so a wholly new table (in a child component one import-hop from an already
+re-checked file) went unnoticed until this final sweep.
+
+Decided to migrate it now as new Steps 34-35 rather than defer or stop to ask — full reasoning in the
+Re-spec Log entry (small/low-risk/mechanically-identical fix, no design ambiguity, and the standing
+session instruction was to run the full sequence without stopping except for genuine blockers). This
+is prominently surfaced (Re-spec Log, `fails.md`, and the end-of-session accountability report) rather
+than silently absorbed into the step count.
+
+### Step 34 — service: migrate `SymbolScreening.tsx`'s results table to `DataTable` [done]
+- Confirmed the gap via triple-check: (1) grep across `recon.md`/`design.md`/`product-spec.md` for
+  "SymbolScreening" — zero matches; (2) `services/xstockstrat-ui/CLAUDE.md` § "0 no properties in
+  common"-class checks N/A here, straightforward measurement: 4 columns (at the FR-3 "≤4" boundary),
+  read-only (Pass/Fail badges only, no in-table actions), row count driven by `useCriteriaList()` with
+  **no cap** on `add` (grep confirmed no `MAX`/`slice`/length-guard) — fails FR-3's "row count
+  static/bounded ≤10" leg, so the exemption's required "all three" doesn't hold. Same FR-3 FAIL
+  verdict shape as all 15 already-migrated sites.
+- Defined `columns: ColumnDef<CriterionRow>[]` for Criterion/Raw/Threshold/Pass, `useMemo`-wrapped over
+  `[result]` (the mutation result the Raw/Pass columns read). Preserved the existing evaluated-lookup
+  em-dash fallback and `Pass`/`Fail` `Badge` variants verbatim. Replaced the `<Table
+  data-testid="symbol-screen-results">` JSX with `<DataTable columns={columns} data={ranCriteria}
+  getRowId={(c) => c.refName} tableTestId="symbol-screen-results" getRowProps={() => ({ 'data-testid':
+  'symbol-screen-row' })} />` — reusing the Step 9 `tableTestId`/`getRowProps` extension to preserve
+  both existing testids verbatim (`position-detail.spec.ts:174,178` depends on them). No `onRowClick`
+  (read-only). `ranCriteria` itself is `useState`-backed, already referentially stable — no `useMemo`
+  wrapping needed for the `data` prop (unlike `positions/page.tsx`'s `.filter()`-derived array).
+- Verification: `tsc --noEmit` clean; `pnpm run lint` clean, zero new warnings.
+- Files modified: `services/xstockstrat-ui/src/components/trader/SymbolScreening.tsx`
+- Deviations: this step's own existence is the deviation — see the Re-spec Log entry above and
+  Deviation Log below.
+
+### Step 35 — test: verify `SymbolScreening.tsx` migration preserves behavior [done]
+- Confirmed via `mock-backend.ts:279-284` that the default `listWatchlists` mock returns
+  `{ watchlists: [] }` — every symbol unwatchlisted unless a test overrides it — so
+  `/trader/positions/AAPL` (already in `mobile-overflow.spec.ts` `ROUTES` since Step 21) renders the
+  Screening section, including this table, by default. No `ROUTES` change needed; confirmed, not
+  assumed.
+- Ran `position-detail.spec.ts`'s FR-8 screening test in isolation (2/2 passed, clean) and the full
+  `position-detail.spec.ts` file plus the `/trader/positions/AAPL` mobile-overflow route together
+  (3/3 passed, clean, no retries needed) — testids preserved verbatim, no locator changes needed.
+- Files modified: none (verification only).
+- Deviations: none beyond Step 34's own.
+
+### Step 33 — test: full `xstockstrat-ui` regression sweep (AC-6) [done]
+- **AC-1 mechanical check** (`grep -rln "<Table\b" src/`, cross-referenced against the FR-1
+  inventory): found the Step 34/35 gap (`SymbolScreening.tsx`, see above) — migrated and closed
+  before finishing this step, so the final AC-1 check (below) reflects the true, complete state.
+- **AC-2 mechanical check, re-interpreted by evident intent**: literal grep for
+  `@tanstack/react-table` returns 16 files (composite + all 16 migrated call sites), not the spec's
+  literally-expected "exactly 2". Investigated rather than treated as a bare fail: every non-composite
+  file's import is `import type { ColumnDef } from '@tanstack/react-table'` (confirmed via grep,
+  zero exceptions) — an unavoidable consequence of the composite's own generic public API, not a
+  DRY-guard-rail violation. Confirmed the *runtime* API (`useReactTable`/`flexRender`/
+  `getCoreRowModel`/`getSortedRowModel`/`getPaginationRowModel`) has **zero** matches outside
+  `data-table.tsx` — AC-2's evident purpose (isolate the TanStack Table implementation) is satisfied.
+  Full reasoning in the Deviation Log.
+- **AC-3 check**: all 16 sites (15 original + `SymbolScreening.tsx`) confirmed mapped to exactly one
+  step pair each, cross-referenced against `recon.md`'s Full Table Inventory table (15 rows) plus the
+  Step 34/35 addition.
+- **AC-4 check**: all 16 sites confirmed covered — 13 routes in `mobile-overflow.spec.ts` `ROUTES`
+  (with `/trader` covering both `LiveStrategiesPanel` and `OrderBook`, and `/trader/positions/AAPL`
+  covering both the unified-symbol-page orders sub-table and `SymbolScreening`), plus Step 32's
+  bespoke Sheet-interaction test for the fill-lineage table.
+- **Vitest**: `pnpm run test:coverage` — 27 test files, 97 tests, all passed; 84.13% overall
+  statement/line coverage (well above the 40% `src/lib/**`-scoped threshold).
+- **Playwright**: ran the full suite once (322 tests, 2 workers) covering the pre-Step-34/35 state as
+  an interim regression signal — reached test 209/322 with zero non-flake failures observed (one early
+  cold-start-flaky-then-pass in `accounts/authorized-apps.spec.ts`, matching the established pattern)
+  before being stopped to free the mock-backend port for Steps 34/35's own targeted verification
+  (stop-hook required committing promptly; a stray `node` process from an earlier run was found
+  holding port 9091 and killed). Steps 34-35's own targeted runs (above) independently confirm the
+  16th table; the dead-code removal (below) was verified via `tsc`/`lint`/Vitest, all clean. The
+  complete, final full-suite run (all 16 tables + dead-code removal) is queued as the next action
+  before opening the integration PR — recorded honestly as pending here rather than claimed complete.
+- **Dead-code disposition**: removed `OrderSymbolCell`/`OrderSideCell`/`OrderStatusCell` from
+  `orderShared.tsx` (zero remaining call sites, confirmed via grep across `src/` and `e2e/`) — see
+  Deviation Log entry.
+- Files modified: `services/xstockstrat-ui/src/components/trader/orderShared.tsx` (dead-code
+  removal only — Step 33 itself is verification-only per its own Files section).
+- Deviations: AC-2 re-interpretation + `orderShared.tsx` dead-code removal — see Deviation Log
+  entries above.
+
 ## Session 2026-08-15 — sdd-execute boot (branch-topology correction)
 
 - Boot Step B3 (`git ls-remote --heads origin feature/shadcn-datatable-migration`) found the

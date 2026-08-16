@@ -1,7 +1,8 @@
 'use client';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Plus, Trash2, Play } from 'lucide-react';
 import { ConnectError } from '@connectrpc/connect';
+import type { ColumnDef } from '@tanstack/react-table';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -13,14 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from '@/components/ui/table';
+import { DataTable } from '@/components/ui/data-table';
 import { Eyebrow } from '@/components/shared/Eyebrow';
 import { useScreenSymbols, type ScreenSymbolsInput } from '@/hooks/useScreenSymbols';
 import {
@@ -80,6 +74,48 @@ export function SymbolScreening({ symbol }: { symbol: string }) {
     screen.error instanceof ConnectError
       ? screen.error.rawMessage
       : (screen.error?.message ?? null);
+
+  // criterion_raw_values / criterion_passed are keyed by ref_name; a skipped criterion
+  // (unavailable reading) is absent from both maps → render em-dashes.
+  const columns = useMemo<ColumnDef<CriterionRow>[]>(
+    () => [
+      {
+        id: 'criterion',
+        header: 'Criterion',
+        meta: { className: 'font-mono text-xs' },
+        cell: ({ row }) =>
+          `${row.original.metricName} ${comparatorGlyph(row.original.op)} ${row.original.threshold}`,
+      },
+      {
+        id: 'raw',
+        header: 'Raw',
+        meta: { className: 'text-right font-mono tabular-nums' },
+        cell: ({ row }) => {
+          if (!result) return '—';
+          const evaluated = row.original.refName in result.criterionRawValues;
+          const raw = result.criterionRawValues[row.original.refName];
+          return evaluated && raw !== undefined ? raw.toFixed(2) : '—';
+        },
+      },
+      {
+        accessorKey: 'threshold',
+        header: 'Threshold',
+        meta: { className: 'text-right font-mono tabular-nums' },
+      },
+      {
+        id: 'pass',
+        header: 'Pass',
+        cell: ({ row }) => {
+          if (!result) return '—';
+          const evaluated = row.original.refName in result.criterionRawValues;
+          if (!evaluated) return '—';
+          const passed = result.criterionPassed[row.original.refName];
+          return passed ? <Badge variant="buy">Pass</Badge> : <Badge variant="sell">Fail</Badge>;
+        },
+      },
+    ],
+    [result],
+  );
 
   return (
     <Card data-testid="symbol-screening">
@@ -221,47 +257,13 @@ export function SymbolScreening({ symbol }: { symbol: string }) {
               </span>
             </div>
           ) : (
-            <Table data-testid="symbol-screen-results">
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Criterion</TableHead>
-                  <TableHead className="text-right">Raw</TableHead>
-                  <TableHead className="text-right">Threshold</TableHead>
-                  <TableHead>Pass</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {ranCriteria.map((c) => {
-                  // criterion_raw_values / criterion_passed are keyed by ref_name; a skipped
-                  // criterion (unavailable reading) is absent from both maps → render em-dashes.
-                  const evaluated = c.refName in result.criterionRawValues;
-                  const raw = result.criterionRawValues[c.refName];
-                  const passed = result.criterionPassed[c.refName];
-                  return (
-                    <TableRow key={c.refName} data-testid="symbol-screen-row">
-                      <TableCell className="font-mono text-xs">
-                        {c.metricName} {comparatorGlyph(c.op)} {c.threshold}
-                      </TableCell>
-                      <TableCell className="text-right font-mono tabular-nums">
-                        {evaluated && raw !== undefined ? raw.toFixed(2) : '—'}
-                      </TableCell>
-                      <TableCell className="text-right font-mono tabular-nums">
-                        {c.threshold}
-                      </TableCell>
-                      <TableCell>
-                        {!evaluated ? (
-                          '—'
-                        ) : passed ? (
-                          <Badge variant="buy">Pass</Badge>
-                        ) : (
-                          <Badge variant="sell">Fail</Badge>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <DataTable
+              columns={columns}
+              data={ranCriteria}
+              getRowId={(c) => c.refName}
+              tableTestId="symbol-screen-results"
+              getRowProps={() => ({ 'data-testid': 'symbol-screen-row' })}
+            />
           ))}
       </CardContent>
     </Card>

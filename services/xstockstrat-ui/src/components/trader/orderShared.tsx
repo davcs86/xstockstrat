@@ -1,11 +1,14 @@
 // Shared order-table building blocks used by OrderBook, OrdersTable, and the order-detail
-// page: the status/type lookup tables, price formatting, and the recurring table cells.
+// page: the status/type lookup tables, price formatting, and the recurring badge cell content
+// (feature 135 migrated all `Table`-based consumers to the shared `DataTable` composite, whose
+// `ColumnDef.cell` renderers need bare content, not a `<TableCell>` wrapper — the pre-migration
+// `OrderSymbolCell`/`OrderSideCell`/`OrderStatusCell` wrappers were removed as dead code once
+// their last call sites (`OrdersTable.tsx`, `OrderBook.tsx`) migrated to inlined/bare-content
+// equivalents; `OrderSideBadge`/`OrderStatusBadge` below are the bare-content forms still in use).
 // Single source of truth (DRY guard rail — see docs/patterns/dry-guard-rail.md).
 
-import Link from 'next/link';
 import { OrderSide, OrderStatus, IntentState } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { Badge } from '../ui/badge';
-import { TableCell } from '../ui/table';
 
 export const STATUS_VARIANT: Record<
   string,
@@ -84,38 +87,5 @@ export function IntentStateBadge({ intentState }: { intentState: IntentState }) 
     >
       {r.label}
     </Badge>
-  );
-}
-
-/** Symbol cell linking to the order-detail page. */
-export function OrderSymbolCell({ order }: { order: { orderId: string; symbol: string } }) {
-  return (
-    <TableCell className="font-mono font-semibold">
-      <Link href={`/trader/orders/${order.orderId}`} className="hover:underline">
-        {order.symbol}
-      </Link>
-    </TableCell>
-  );
-}
-
-export function OrderSideCell({ side }: { side: OrderSide }) {
-  return (
-    <TableCell>
-      <OrderSideBadge side={side} />
-    </TableCell>
-  );
-}
-
-export function OrderStatusCell({
-  status,
-  intentState,
-}: {
-  status: OrderStatus;
-  intentState: IntentState;
-}) {
-  return (
-    <TableCell>
-      <OrderStatusBadge status={status} intentState={intentState} />
-    </TableCell>
   );
 }

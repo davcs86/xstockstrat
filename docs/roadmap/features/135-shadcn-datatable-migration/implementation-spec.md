@@ -1610,7 +1610,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/trader/positions.spe
 
 ### Step 33 — test: full `xstockstrat-ui` regression sweep (AC-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - None (verification-only step; no files modified unless the full-suite run surfaces a cross-step
@@ -1659,6 +1659,95 @@ grep -rln "@tanstack/react-table" src/ | sort
 
 ---
 
+### Step 34 — service: migrate `SymbolScreening.tsx`'s results table to `DataTable` (16th site, found during Step 33's AC-1 sweep)
+
+**Status**: `done`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/components/trader/SymbolScreening.tsx` — modify
+
+**Reviewers**: xstockstrat-ui service owner — Trading UI correctness, analytics display accuracy,
+config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values
+rendered in UI, no direct DB access (except audit log)
+
+**Codebase Evidence — a real inventory gap, not a re-spec of an existing step**: Step 33's own AC-1
+mechanical re-check (`grep -rln "<Table\b" src/` cross-referenced against the FR-1 inventory) found
+`src/components/trader/SymbolScreening.tsx` — a component added by **feature 125** (the same sibling
+feature whose mid-session merge already forced the Steps 21-22 re-spec), rendered inside
+`trader/positions/[symbol]/page.tsx` for a non-watchlisted symbol. It is never mentioned anywhere in
+this feature's `recon.md`/`design.md`/`product-spec.md` — recon's inventory (and the 3-agent re-verify
+pass before Steps 21-22) missed it, confirmed via grep across all three docs returning zero matches for
+"SymbolScreening". Measured against FR-3's fixed exemption threshold: 4 columns (Criterion/Raw/
+Threshold/Pass, at the "≤4" boundary), read-only (no in-table actions, only `Pass`/`Fail` badges), but
+row count is **not** provably bounded ≤10 — `useCriteriaList()`'s `add` has no cap
+(`src/lib/screenCriteria.ts:62`, confirmed via grep for `MAX`/`slice`/length-guards, none found), so a
+user can add arbitrarily many ad hoc criteria rows. Fails the "all three" AND requirement (row-count
+unbounded) — same FR-3 FAIL verdict shape as all 15 already-migrated sites, so this is a genuine
+migration candidate under this feature's own rule, not a borderline call.
+
+**TDD**: `red-green required`
+
+**Instructions**:
+1. Define `columns: ColumnDef<CriterionRow>[]` for Criterion (`` `${metricName} ${comparatorGlyph(op)}
+   ${threshold}` ``, `meta.className: 'font-mono text-xs'`), Raw (evaluated-lookup em-dash fallback,
+   `text-right font-mono tabular-nums`), Threshold (`accessorKey: 'threshold'`, same alignment class),
+   and Pass (`Pass`/`Fail` `Badge` or em-dash) — preserving the existing em-dash-on-unevaluated logic
+   and `Pass`/`Fail` `Badge` variants verbatim.
+2. Replace the `<Table data-testid="symbol-screen-results">...</Table>` JSX with `<DataTable
+   columns={columns} data={ranCriteria} getRowId={(c) => c.refName} tableTestId="symbol-screen-results"
+   getRowProps={() => ({ 'data-testid': 'symbol-screen-row' })} />` — reusing the composite's existing
+   `tableTestId`/`getRowProps` extension (Step 9) to preserve both existing testids verbatim, since
+   `position-detail.spec.ts:174,178` already depends on them. No `onRowClick` (read-only display).
+3. Responsive strategy (FR-4): no column-hiding existed pre-migration (4 narrow columns already fit);
+   keep the existing horizontal-scroll fallback unchanged. Record disposition: **migrated to
+   `DataTable`; responsive strategy (a) horizontal-scroll container, unchanged; sort-only, no
+   pagination (read-only ad hoc criteria list, not a browse surface)**.
+
+**Verification**:
+```
+cd services/xstockstrat-ui && pnpm run lint
+grep -n "DataTable" src/components/trader/SymbolScreening.tsx
+```
+
+---
+
+### Step 35 — test: verify `SymbolScreening.tsx` migration preserves behavior
+
+**Status**: `done`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify (if locators break)
+
+**Reviewers**: xstockstrat-ui service owner — Trading UI correctness, analytics display accuracy,
+config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values
+rendered in UI, no direct DB access (except audit log)
+
+**Codebase Evidence**:
+- `position-detail.spec.ts:158-183` — existing FR-8 test, asserts `symbol-screening` →
+  `run-symbol-screen` → `symbol-screen-results` → row text `42.50` + the row-scoped `Pass` badge
+  (scoped specifically because "Pass" also appears as a column header — a pre-existing locator
+  precision concern this step must not regress).
+
+**TDD**: `red-green required`
+
+**Instructions**:
+1. Re-run `position-detail.spec.ts`'s FR-8 screening test after Step 34 — the `symbol-screen-results`/
+   `symbol-screen-row` testids are preserved verbatim via the composite's `tableTestId`/`getRowProps`,
+   so no locator change is expected; confirm this rather than assume it.
+2. No `mobile-overflow.spec.ts` `ROUTES` change needed — `/trader/positions/AAPL` (Step 21's addition)
+   already covers this route. Confirmed via `mock-backend.ts:279-284`: the default `listWatchlists`
+   mock returns `{ watchlists: [] }` (every symbol unwatchlisted unless a test overrides it), so the
+   Screening section — including this table — renders by default at `/trader/positions/AAPL`, already
+   exercised by the existing overflow sweep.
+
+**Verification**:
+```
+cd services/xstockstrat-ui && pnpm run lint
+cd services/xstockstrat-ui && pnpm exec playwright test e2e/trader/position-detail.spec.ts --project=chromium --no-deps -g "Screening"
+```
+
+---
+
 ## Re-spec Log
 
 _Populated by /sdd-execute's sequential-mode re-spec gate (§5.3) before the step loop begins — the
@@ -1695,6 +1784,38 @@ re-verified all 15 table sites' Codebase Evidence against the post-125 codebase:
   Phase 1 discovery will simply not find a third assertion to preserve, which is not a blocker.
 
 Full agent findings recorded in `context.md` § Session 2026-08-16.
+
+### 2026-08-16 — Steps 34–35 added (Step 33's AC-1 sweep found a 16th table)
+
+Step 33's Instruction 3 (AC-2 mechanical grep check) surfaced a broader AC-1 question — a full
+`grep -rln "<Table\b" src/` cross-reference against the FR-1 inventory found
+`src/components/trader/SymbolScreening.tsx`: a component added by **feature 125** (the same sibling
+feature whose mid-session merge already forced the Steps 21-22 re-spec), never mentioned in this
+feature's `recon.md`/`design.md`/`product-spec.md`, and not a member of the approved 15-site inventory.
+Measured against FR-3's own fixed exemption threshold: 4 columns (at the boundary) and read-only both
+pass, but row count is **not** provably bounded ≤10 (`useCriteriaList().add()` has no cap) — it fails
+the exemption's "all three" AND requirement, the identical FR-3 FAIL shape as every other migrated site.
+
+**Decision**: migrate it now, as new Steps 34-35, rather than deferring to a follow-up feature or
+stopping to ask. Reasoning: (1) the fix is small, low-risk, and mechanically identical to a pattern
+already independently validated 15 times this session — no design ambiguity, only a coverage gap; (2)
+leaving it out would make this feature's own completion claim ("every qualifying table in
+`xstockstrat-ui` migrated") false by its own stated rule; (3) the standing session instruction was to
+run the full sequence without stopping except for genuine blockers, and this is not a design fork —
+the *what* and *how* are both already fully decided by this feature's existing, approved rule (FR-3's
+fixed threshold), only the *inventory completeness* was wrong. This is surfaced prominently here, in
+Steps 34-35's own entries, and in the end-of-session accountability report, rather than silently folded
+into the existing step count — a genuine scope addition, not a re-spec of an existing step's body.
+
+**Root cause**: recon (2026-08-15) and the Steps 21-22 re-spec's 3-agent re-verification pass
+(2026-08-16, earlier this session) both scoped their fresh grep sweeps to re-confirming the *known*
+15 sites' Codebase Evidence, not re-running an unbounded full-repo `<table`/`Table` import grep from
+scratch. `SymbolScreening.tsx` sits inside the exact file (`positions/[symbol]/page.tsx`, via
+`SymbolScreening` import) that Steps 21-22 already re-verified — but as a *child component's* table,
+not a table literally inside the re-verified file's own JSX, so a line-by-line re-check of that file
+alone would not have surfaced it either. Lesson for future recon passes on a feature with an in-flight
+sibling merge: a *full* inventory grep should be re-run, not just a re-verification of previously-found
+sites, when a merged sibling feature is known to have added new files/components in scope.
 
 ## Deviation Log
 
@@ -1898,3 +2019,43 @@ outcome branch. Also removed the now-fully-unused `Table`/`TableHeader`/`TableBo
 former `Table` consumers — Exposure (Step 29) and fill-lineage (this step) were both migrated; grep
 confirmed zero remaining `<Table`/`<TableHeader`/etc. JSX in the file before removing the import).
 **Disposition**: `services/xstockstrat-ui/src/app/trader/positions/page.tsx` only.
+
+### Deviation: Step 33 — AC-2's literal wording vs. its evident intent (type-only imports)
+**Spec said** (product-spec.md AC-2 / Step 33 Instruction 3 / Verification block): "zero files under
+`services/xstockstrat-ui/src` import `@tanstack/react-table` directly outside that one composite and
+its own test file" — verification expected "exactly: `data-table.test.ts`, `data-table.tsx`".
+**Actual**: `grep -rln "@tanstack/react-table" src/` returns 16 files — the composite plus all 15
+(now 16, see Step 34) migrated call sites, each with `import type { ColumnDef } from
+'@tanstack/react-table'`. This is required by the composite's own public API
+(`DataTableProps<TData, TValue>`'s `columns: ColumnDef<TData, TValue>[]` parameter) — every caller must
+independently type its own columns array using the library's own generic type; there is no way to
+define a typed `ColumnDef<T>[]` literal without importing the type. This has been the case since
+Step 1, used identically and consistently across every one of the 16 migrations, and never previously
+flagged. `data-table.test.ts` does not import `@tanstack/react-table` at all (it imports only
+`isInteractiveTarget` from `./data-table`, per its duck-typed-stub design) — so the Verification
+block's own expected file list was also imprecise.
+**Reason**: AC-2's evident purpose — confirmed by checking `useReactTable`/`flexRender`/
+`getCoreRowModel`/`getSortedRowModel`/`getPaginationRowModel` usage: **zero** matches outside
+`data-table.tsx` — is to keep the TanStack Table *runtime implementation* isolated to one composite,
+preventing every page from reimplementing table wiring (the actual DRY-guard-rail concern). A
+type-only import of `ColumnDef` is not runtime reimplementation; it's the unavoidable, by-design
+contract surface of a generic reusable composite. Re-interpreted AC-2 under this evident-intent
+reading (isolate the runtime API, not the type import) — satisfied: confirmed via the
+`useReactTable`/`flexRender`/etc. grep above.
+**Disposition**: no code change — a verification-methodology correction only. Documented here rather
+than silently treating the literal grep as pass/fail without explanation.
+
+### Deviation: Step 33 — `orderShared.tsx` dead-code removal (disposition resolved)
+**Spec said**: nothing explicit in Step 33's own Instructions — the dead-code question was deferred
+here by the Step 23 and Step 27 deviation entries ("flagged as a cleanup candidate for Step 33's
+regression sweep").
+**Actual**: confirmed via `grep -rn "OrderSymbolCell\|OrderSideCell\|OrderStatusCell" src/ e2e/` —
+zero remaining references anywhere outside their own definitions in `orderShared.tsx`. Removed all
+three functions plus their now-unused `Link`/`TableCell` imports; kept `OrderSideBadge`/
+`OrderStatusBadge`/`formatUsd`/`STATUS_VARIANT`/`TYPE_LABEL`/`IntentStateBadge`/`INTENT_STATE_RENDER`
+(all still in active use by `OrdersTable.tsx`/`OrderBook.tsx`/the order-detail page). Updated the
+file's own header comment to describe the post-migration shape instead of the removed pattern.
+**Reason**: CLAUDE.md's "clean up orphans *you* introduced" operating principle — this dead code was
+a direct, confirmed byproduct of this feature's own Steps 23 and 27, not pre-existing.
+**Disposition**: `services/xstockstrat-ui/src/components/trader/orderShared.tsx` only. `tsc --noEmit`
+and `pnpm run lint` both clean after removal.

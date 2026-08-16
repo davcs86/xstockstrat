@@ -1193,3 +1193,26 @@ ambiguity is logged here).
   blocks known interactive element types. A composite step's own unit test (Step 2 here) covered only
   the "blocks a nested interactive element" cases, not the "still fires for a plain click" case — the
   gap that let this ship silently through 12 steps before any code path exercised it.
+
+### 2026-08-16 — shadcn-datatable-migration — assumption
+- **Mistake**: recon's inventory (FR-1) claimed "15 sites, all four segments" via a full-repo grep,
+  but missed `src/components/trader/SymbolScreening.tsx` — a table-rendering component added by a
+  sibling feature (125) that merged mid-session, ahead of this feature's execution. The Steps 21-22
+  re-spec gate (triggered by that same sibling merge) ran a fresh 3-agent recon pass, but scoped it to
+  *re-verifying the already-known 15 sites'* Codebase Evidence against the post-merge tree — not to
+  re-running an unbounded full-repo `<table`/`Table`-import grep from scratch. The missed table sat
+  inside a *child component* (`SymbolScreening`) imported by a file the re-spec pass did re-check
+  (`positions/[symbol]/page.tsx`) — a line-by-line re-read of that one file's own JSX would not have
+  surfaced a table one import-hop away. Not found until Step 33's own final AC-1/AC-2 mechanical
+  cross-check, the very last step, several steps after the point (Steps 21-22) where re-grounding
+  against the sibling merge would have caught it cheaply.
+- **Evidence**: `docs/roadmap/features/135-shadcn-datatable-migration/implementation-spec.md` §
+  Re-spec Log, "Steps 34-35 added (Step 33's AC-1 sweep found a 16th table)"; the table now migrated
+  as Steps 34-35, `src/components/trader/SymbolScreening.tsx`.
+- **Rule it implies**: when a re-spec gate fires because a sibling feature merged mid-execution, the
+  re-grounding recon must re-run the *original, unbounded* discovery sweep (e.g. the full-repo grep
+  that built the inventory in the first place), not just re-verify the previously-found items against
+  the new tree state. A merged sibling feature can add wholly new instances of the thing being
+  inventoried, not just move the ones already known — re-verification-only recon is blind to that by
+  construction. Candidate for a binding note in the re-spec-gate section of `reference/sequential-mode.md`
+  (or the `/sdd-design` Phase 0 recon skill) if this recurs on a future feature.
