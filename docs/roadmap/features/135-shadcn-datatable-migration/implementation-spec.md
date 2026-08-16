@@ -283,7 +283,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 
 ### Step 5 — service: migrate `/config-ui/[namespace]` `NamespaceEditor` (row 13) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/[namespace]/NamespaceEditor.tsx` — modify
@@ -335,7 +335,7 @@ grep -n "DataTable" src/app/config-ui/\[namespace\]/NamespaceEditor.tsx
 
 ### Step 6 — test: verify `NamespaceEditor` migration preserves the SetConfig edit flow
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/config-ui/value-persists-after-save.spec.ts` — modify (if locators break)

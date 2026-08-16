@@ -402,6 +402,35 @@ clears it lands, rather than letting the warning go stale.
 - Files modified: none (no locator changes needed)
 - Deviations: none
 
+### Step 5 — service: migrate `NamespaceEditor` (row 13) to `DataTable` [done]
+- Defined `columns: ColumnDef<ConfigKeyRow>[]` via `useMemo` (closes over `editingKey`/`editValue`/
+  `editReason`/`validationError`/`saving`/`isNativeEnv`/`handleSave`) for Key/Value/Description/Actions,
+  preserving the Value cell's stateful conditional rendering (edit inputs vs. `[secret]` vs. plain
+  text) and the Actions cell's DropdownMenu-vs-Save/Cancel split verbatim. Carried the 3 fixed widths
+  (`w-[220px]`/`w-[200px]`/`w-[120px]`) and the `hidden md:table-cell` Description breakpoint through
+  `meta.className`. Replaced `<Table>` (confirmed exact-line by recon, no drift) with `<DataTable
+  columns={columns} data={keys} getRowId={(k) => k.key} emptyMessage="No config keys found for this
+  namespace" />`.
+- Also dropped the separate `{keys.length === 0 && <p>...}` paragraph below the table — routed the
+  same message through the composite's built-in `emptyMessage` (Step 1's own designed mechanism,
+  same pattern as Step 3) instead of doubling up an empty-table + a separate message. In scope: this
+  uses the composite the way it was built for, not a new behavior.
+- TDD: refactor, no new assertable behavior — red N/A (tdd-gate escape clause); green captured in
+  Step 6.
+- Verification: `tsc --noEmit` clean; `pnpm run lint` — 1 new expected `react-hooks/exhaustive-deps`
+  warning (same class as Step 3, non-blocking); grep confirms `DataTable` present.
+- Files modified: `services/xstockstrat-ui/src/app/config-ui/[namespace]/NamespaceEditor.tsx`
+- Deviations: none
+
+### Step 6 — test: verify `NamespaceEditor` migration preserves the SetConfig edit flow [done]
+- Re-ran `value-persists-after-save.spec.ts`, `env-gate.spec.ts`, `reason-capture.spec.ts` (7 tests) —
+  2 flaky-then-pass (same cold-start pattern as Step 4), 5 clean; all 7 pass. SetConfig payload
+  content, the reason-required gate, and the edit-in-place → DropdownMenu → Edit → inline Input →
+  Save → SetConfig round trip all unchanged.
+- `mobile-overflow.spec.ts -g "config-ui/platform"` — flaky-then-pass, green.
+- Files modified: none (no locator changes needed)
+- Deviations: none
+
 ## Session 2026-08-15 — sdd-execute boot (branch-topology correction)
 
 - Boot Step B3 (`git ls-remote --heads origin feature/shadcn-datatable-migration`) found the
