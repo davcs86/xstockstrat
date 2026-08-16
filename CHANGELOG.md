@@ -3,6 +3,33 @@
 All production promotions from `main-dev` to `main` are recorded here.
 Each entry corresponds to one `main-dev → main` PR merge.
 
+## 2026-08-16
+
+### Features
+- signal-time-decay: Adds exponential confidence decay to the Opportunities queue's `signal_axis` ranking (`_compute_opportunities`) so a signal loses ranking weight as it ages, instead of ranking equally with a fresh signal until it expires.
+- phase7-observability: Completes the pending Phase 7 implementation roadmap item: activates the OTel SDK already stubbed in every service, routes telemetry to Grafana Cloud via the OTLP collector, and delivers service health, latency, and signal pipeline throughput dashboards — providing operational visibility before live capital is at risk.
+- fmp-key-to-secret-env: Feature 059 routed the FMP API key through `xstockstrat-config` as `secret.marketdata.fmp.api_key` — the only credential on the platform stored that way, and the only `is_secret = TRUE` row.
+- fix-listkeys-wire-encoding: `ConfigService.ListKeys` built its response with **snake_case** field names and **numeric** enums, but ts-proto encodes **camelCase** and (`stringEnums=true`) string enum constants.
+- fix-config-scope-resolution: `ConfigService` resolved **every** request to the `('dev', 'all')` scope, whatever the caller asked for.
+- mcp-python-sdk-v2-upgrade: Upgrade `xstockstrat-agent` from the Python `mcp` SDK v1.27.1 to v2.0.0 (released 2026-07-28), a breaking rewrite: `FastMCP` → `MCPServer`, all 17 `@mcp.tool()` handlers gain an injected `ctx: Context` parameter, ASGI transport/mounting setup moves off the constructor (`mount_path` removed), `httpx`/`httpx-sse` are replaced by `httpx2`, the OAuth 2.1 edge-auth layer picks up several SEP-numbered behavior changes, and the protocol itself becomes stateless with no server-initiated back-channel (sampling/elicitation/roots deprecated).
+- fix-mcp-server-input-validation: Two small independent server guards: ingest range-validates conviction to INVALID_ARGUMENT (not INTERNAL/silent NULL), and notify rejects empty title/body (INVALID_ARGUMENT).
+- shadcn-migration-custom-composites: Fourth and final backlog feature from "The Component Ledger" shadcn/ui gap audit: close out the Combobox finding (already resolved by `119-shadcn-ui-migration` — verification only), consolidate the app's three independent charting approaches onto the official shadcn `Chart` primitive where the shape fits, extract a shared shadcn-primitive-based composite for the app's three repeatable-row editors (`OutputEditor`, `ParameterEditor`, `RuleEditor`'s condition builder), and adopt the shadcn `Questionnaire` primitive for `StrategyWizard`'s step shell.
+- live-strategy-opportunity-attribution: Attributes a held position or active signal in the Opportunities queue to a live-enabled strategy that already covers its symbol (via `signal_params.symbols`), instead of falling back to unattributed whenever the symbol isn't also watchlist-bound to that strategy.
+- strategy-symbol-denylist: Replaces the opt-in `signal_params.symbols` allowlist per strategy with a deny list: a live-enabled strategy's evaluation universe becomes `union(watchlist-bound symbols, held-position symbols, active-signal symbols)` minus its own deny list, edited from both the Symbol detail page and the Strategy edit page, with denied `(symbol, strategy)` pairs surfaced as explicit skipped/muted rows in the Opportunities queue rather than silently disappearing.
+- strategy-user-ownership: Makes `StrategyDefinition` user-owned: `strategy_id` becomes unique per-owner (not platform-wide), ownership gates every RPC that touches a strategy (including `RunBacktest`), and the live evaluation loop resolves each strategy's symbol universe (watchlist/held/signals) against its own owner — closing `132-strategy-symbol-denylist`'s cross-user-aggregation gap by construction instead of a new cross-user RPC.
+- signal-source-reliability-weight: Makes signal-source reliability a first-class property of `ingest.SignalSource` and applies it when the analysis opportunities queue (`ListOpportunities`, feature 097) ranks candidates by `signal_axis`, which today uses raw unweighted `signal.conviction`.
+- shadcn-datatable-migration: Migrate every table in `xstockstrat-ui` — native HTML markup, the shadcn `Table` primitive, or any other table implementation in use — to the shadcn `DataTable` pattern (`@tanstack/react-table` + `Table` primitive + column defs), and ensure every migrated table is horizontally responsive on narrow viewports (scrollable container, column priority, or stacked layout, as fits each table).
+- fix-signal-detail-readiness-rule: On the Signal-detail page, a held opportunity tagged `Reduce` shows a header conviction sourced from the queue's **exit-rule** trace (e.g.
+
+### Proto Changes
+- analysis/v1/analysis.proto
+- ingest/v1/ingest.proto
+
+### Summary
+13 commits, 1 feature merges since last promotion.
+
+---
+
 ## 2026-07-30
 
 ### Features
