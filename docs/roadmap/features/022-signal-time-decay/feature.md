@@ -5,6 +5,7 @@
 **Development Branch**: `feature/signal-time-decay`
 **Created**: 2026-05-26
 **Last Updated**: 2026-08-15
+**Archived**: 2026-08-16
 
 ---
 
@@ -20,6 +21,7 @@
 | 2026-08-15 | `implementation-ready` → `code-completed` | /sdd-execute | All 7 steps executed (stacked on landed 134/131). Step 5 rebased onto the real landed `source_weights` term (D-1): `effective_conviction = raw × source_weight × decay_multiplier`. Step 6 `get_float_present` tests placed beside their getter siblings in `test_analysis_servicer.py` (D-2). Analysis suite 487 passed (82.7% cov); ingest 191 passed (79.2% cov). |
 
 | 2026-08-16 | `code-completed` → `launched` | CI workflow | Promoted via PR #963; committed 94e4e24fa6ac41eb20bd16e1e9af15c8388e885a |
+| 2026-08-16 | launched (unchanged) | /sdd-archiver | Archived: synthesis written to context.md + Ledger, specs pruned. |
 ---
 
 ## Artifacts

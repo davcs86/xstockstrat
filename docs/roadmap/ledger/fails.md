@@ -1216,3 +1216,171 @@ ambiguity is logged here).
   inventoried, not just move the ones already known — re-verification-only recon is blind to that by
   construction. Candidate for a binding note in the re-spec-gate section of `reference/sequential-mode.md`
   (or the `/sdd-design` Phase 0 recon skill) if this recurs on a future feature.
+
+### 2026-08-16 — signal-time-decay — assumptions
+
+- **Mistake**: Assumed that feature scope left the existing `signal_axis` data-model name unchanged; recon falsely concluded that a `decayed_value` column being added to a separate table was the full story. In fact the feature retargeted the entire decay computation to `signal_axis` (created by a prior feature), and the dormant spec-time assumption that "the existing column name is correct" was only caught at execute-time when `signal_axis` was the only write-target in the live schema.
+- **Evidence**: `docs/roadmap/features/022-signal-time-decay/context.md` re-spec-gate block; implementation-spec.md Step 1 Deviation Log
+- **Rule it implies**: Never assume a column/table name from a product-spec written before a predecessor feature landed; re-verify the live schema during the re-spec gate.
+
+### 2026-08-16 — signal-time-decay — assumptions
+
+- **Mistake**: FR-5 referenced `session_end_seconds` as a config-key suffix without verifying whether the config service's WatchConfig stream delivered an integer or a float. At execute time the spec-time assumption of `int` was wrong — the live service yields a float and the code required an explicit `int()` cast.
+- **Evidence**: `docs/roadmap/features/022-signal-time-decay/context.md` Step 3 Deviation Log
+- **Rule it implies**: Always verify the Go/Python/Node native type returned for a config key at recon time, not just the human-readable semantics; cast explicitly at the call-site.
+
+### 2026-08-16 — signal-time-decay — assumptions
+
+- **Mistake**: AC-1 stated the arithmetic as `(now - ingested_at) / half_life` without specifying the rounding behavior; the spec-time assumption that Python's `/` returns a float that can be directly compared against `1.0` was correct, but the assumption that `now_utc` should be captured before the `_drain_active_signals` await was wrong — capturing it before the await introduced a systematic undercount for long-lived signal lists. The fix was to capture `now_utc` after the await.
+- **Evidence**: `docs/roadmap/features/022-signal-time-decay/context.md` Step 5 Deviation Log
+- **Rule it implies**: In async Python, capture the "current time" sentinel after any significant await that might introduce wall-clock drift, not before.
+
+### 2026-08-16 — signal-time-decay — test-coverage
+
+- **Mistake**: The test file for the time-decay kernel was inferred from the module path without verifying whether the file was a new file or an existing partial — a pre-existing test stub with different fixture conventions was found at execute time, requiring fixture reconciliation that the spec hadn't budgeted.
+- **Evidence**: `docs/roadmap/features/022-signal-time-decay/context.md` Step 6 Deviation Log
+- **Rule it implies**: During /sdd-spec, Glob the test file paths explicitly; never infer test-file existence from module naming alone.
+
+### 2026-08-16 — position-sizing-engine — assumptions
+
+- **Mistake**: The handler-layer risk guard was designed to call `checkPortfolioRisk` before `ApplySizing` to reject zero-lot orders early; but `req.Qty` is 0 before sizing runs, so `orderNotional = 0 × price = 0` — the guard never fired. The correct order is: size first, then risk-check against the computed lot.
+- **Evidence**: `docs/roadmap/features/023-position-sizing-engine/context.md` Step 4 Deviation Log; `services/xstockstrat-trading/internal/service/trade_service.go`
+- **Rule it implies**: Risk guards that depend on a computed field (qty, notional) must run after the computation step that produces that field.
+
+### 2026-08-16 — position-sizing-engine — assumptions
+
+- **Mistake**: `resolveAccount` was called to find the single account on a single-account deployment, but the resolved account ID was discarded — the downstream call used a hardcoded fallback. The silent discard meant that on multi-account setups the wrong account would be targeted.
+- **Evidence**: `docs/roadmap/features/023-position-sizing-engine/context.md` Step 2 Deviation Log
+- **Rule it implies**: Any helper that resolves an ID (account, portfolio, strategy) must have its return value threaded through to all downstream calls — discard is never correct.
+
+### 2026-08-16 — position-sizing-engine — assumptions
+
+- **Mistake**: `GetLatestQuote` error handling assumed the error would propagate a structured gRPC status; the actual runtime error was an untyped Go error that caused a nil-pointer dereference two layers up. The spec said "return the gRPC error" without verifying the actual error shape.
+- **Evidence**: `docs/roadmap/features/023-position-sizing-engine/context.md` Step 3 Deviation Log
+- **Rule it implies**: When wrapping an RPC call that can fail, verify the concrete error type and nil-check the result before dereferencing any fields.
+
+### 2026-08-16 — stop-loss-bracket-orders — assumptions
+
+- **Mistake**: A goroutine spawned to poll fill results could panic if the broker client returned a nil response during a service restart. The spec-time assumption was that the broker client always returned a non-nil response or a non-nil error; the reality is it can return (nil, nil) during a transient.
+- **Evidence**: `docs/roadmap/features/030-stop-loss-bracket-orders/context.md` Step 8 Deviation Log
+- **Rule it implies**: In Go, goroutines that call external clients must guard against (nil, nil) returns before dereferencing the response.
+
+### 2026-08-16 — stop-loss-bracket-orders — test-coverage
+
+- **Mistake**: Fake gRPC clients in tests used `...interface{}` variadic for the `CallOption` trailing arg; the Go gRPC API requires `...grpc.CallOption`. The mismatch compiled but caused a runtime panic in test setup.
+- **Evidence**: `docs/roadmap/features/030-stop-loss-bracket-orders/context.md` Step 9 Deviation Log
+- **Rule it implies**: Fake/stub gRPC clients must declare `...grpc.CallOption` (not `...interface{}`) as the variadic trailing argument to match the real interface.
+
+### 2026-08-16 — stop-loss-bracket-orders — assumptions
+
+- **Mistake**: The `pollFills` dedup gate checked only `OrderId` to detect already-processed fills; it needed to also compare `FilledQty` because partial fills share the same `OrderId` and the gate would suppress the second partial-fill event.
+- **Evidence**: `docs/roadmap/features/030-stop-loss-bracket-orders/context.md` Step 7 Deviation Log
+- **Rule it implies**: Fill-dedup gates must key on (OrderId, FilledQty) — or a composite that captures partial-fill state — not OrderId alone.
+
+### 2026-08-16 — stop-loss-bracket-orders — assumptions
+
+- **Mistake**: The `go.mod` stale-module detection assumed a single-module Go repo; the repo uses a `go.work` workspace and individual services have separate `go.mod` files. Running `go mod tidy` at repo root silently operated on the wrong module.
+- **Evidence**: `docs/roadmap/features/030-stop-loss-bracket-orders/context.md` Step 10 Deviation Log
+- **Rule it implies**: In a `go.work` workspace, always `cd services/<service> && GOWORK=off go mod tidy` — never `go mod tidy` at repo root.
+
+### 2026-08-16 — position-and-order-detail-pages — ci
+
+- **Mistake**: CI auto-promote silently skipped the feature because the implementation-spec step statuses were not flipped to `done` before the integration PR was merged; the promote script checked step statuses to determine eligibility and saw unfinished steps.
+- **Evidence**: `docs/roadmap/features/096-position-and-order-detail-pages/context.md` post-launch block; `/promote` skill step-status gate
+- **Rule it implies**: Before opening the integration PR, flip all implementation-spec steps to `done` status — the auto-promote gate checks them, not the feature.md Status History.
+
+### 2026-08-16 — position-and-order-detail-pages — test-coverage
+
+- **Mistake**: The BFF route for the new detail page made a gRPC call that had no mock in the e2e test setup; the Playwright tests passed locally (because a real dev backend was running) but failed in CI (which spins a mock server).
+- **Evidence**: `docs/roadmap/features/096-position-and-order-detail-pages/context.md` Step 9 Deviation Log
+- **Rule it implies**: Any new BFF gRPC call requires a corresponding mock entry in the e2e mock-server setup — verify the mock map before opening the PR.
+
+### 2026-08-16 — account-trading-halt-and-kill-switch — assumptions
+
+- **Mistake**: The WatchConfig subscriber in `configServiceImpl.ts` had a structural gap: it read `default_value` from the config row instead of `value_data`, so live config overrides were silently ignored by every consumer that used `configServiceImpl` as its watch adapter.
+- **Evidence**: `docs/roadmap/features/100-account-trading-halt-and-kill-switch/context.md` Step 4 Deviation Log; `services/xstockstrat-config/src/service/configServiceImpl.ts`
+- **Rule it implies**: When extending a WatchConfig subscriber, verify it reads `value_data` (the live overridden value), not `default_value`.
+
+### 2026-08-16 — account-trading-halt-and-kill-switch — assumptions
+
+- **Mistake**: A duplicate `:=` in the spec step for the trading-state setter caused a compile error; the spec cited a line number one off from the actual function body after a prior feature had shifted lines, and the duplicate `:=` shadowed an outer variable.
+- **Evidence**: `docs/roadmap/features/100-account-trading-halt-and-kill-switch/context.md` Step 6 Deviation Log
+- **Rule it implies**: After any stacked-branch merge, re-verify all line citations in the remaining unexecuted steps before executing them.
+
+### 2026-08-16 — exactly-once-order-intent — assumptions
+
+- **Mistake**: An insert-before-landmark instruction referenced a function that had moved three lines in the stacked branch, causing the insert to land inside a different function body. The spec's line-number was correct against the base branch but stale against the stacked head.
+- **Evidence**: `docs/roadmap/features/101-exactly-once-order-intent/context.md` Step 11 Deviation Log
+- **Rule it implies**: In stacked branches, re-verify function-body line numbers at the moment of insertion, not from the spec's base-branch snapshot.
+
+### 2026-08-16 — exactly-once-order-intent — test-coverage
+
+- **Mistake**: Playwright mock-backend state was stored in a module-level `Map` that persisted across test cases in the same suite run; a test that wrote an intent-state transition left residual state that caused the next test's initial-state assertion to fail.
+- **Evidence**: `docs/roadmap/features/101-exactly-once-order-intent/context.md` Step 17 Deviation Log; `services/xstockstrat-ui/e2e/`
+- **Rule it implies**: Playwright mock-server `Map`/object state must be reset in `beforeEach` (or per-request factory) — module-level mutable state is shared across tests in the same worker.
+
+### 2026-08-16 — broker-state-reconciliation — assumptions
+
+- **Mistake**: Recon concluded "no bulk ListOrders RPC available" by inspecting only the internal Go interface (`BrokerClient`); the Alpaca and IBKR concrete implementations both had a `ListOrders` method that was not surfaced on the interface. The implementation had to add the method to the interface to use it.
+- **Evidence**: `docs/roadmap/features/102-broker-state-reconciliation/context.md` re-spec-gate block; `services/xstockstrat-trading/internal/broker/`
+- **Rule it implies**: Recon must inspect concrete broker implementations (alpaca.go, ibkr.go), not just the interface definition — the interface may lag the implementations.
+
+### 2026-08-16 — broker-state-reconciliation — test-coverage
+
+- **Mistake**: Playwright proto3 JSON oneof fields were mocked in "server-side `create()`-style wrapped shape" (e.g. `{ orderType: { marketOrder: {} } }`), but the actual BFF serializes proto3 JSON in flattened oneof shape (e.g. `{ "market_order": {} }`). Tests passed locally against the real backend but failed in CI against the mock.
+- **Evidence**: `docs/roadmap/features/102-broker-state-reconciliation/context.md` Step 22 Deviation Log
+- **Rule it implies**: Playwright mocks for proto3 JSON responses must use the flattened oneof wire shape, not the `create()`-style wrapped shape used by the server-side proto-es library.
+
+### 2026-08-16 — broker-state-reconciliation — assumptions
+
+- **Mistake**: Feature 101's implementation-spec included a ledger event (`order_intent.late_response_conflict`) but omitted the `EmitEvent` call instruction in the execute steps; feature 102's context picked it up as an open item and added the emit — a cross-feature forward reference that never reached the original feature's spec.
+- **Evidence**: `docs/roadmap/features/102-broker-state-reconciliation/context.md` Step 20 Deviation Log; `docs/roadmap/features/101-exactly-once-order-intent/implementation-spec.md`
+- **Rule it implies**: Every ledger event named in a spec must have a paired `EmitEvent` call in the same feature's execute steps — no silent forward references to sibling features.
+
+### 2026-08-16 — fix-mcp-target-user-authz — assumptions
+
+- **Mistake**: The recon phase audited `emit_alert` and `manage_formula` for caller-supplied identity params but did not check all MCP tool handlers for the same pattern; a third handler (`manage_signal_source`) had a latent copy of the same anti-pattern and was only caught during the design adversary round.
+- **Evidence**: `docs/roadmap/features/111-fix-mcp-target-user-authz/context.md` Phase 0 block; `services/xstockstrat-agent/`
+- **Rule it implies**: When fixing an auth anti-pattern (caller-supplied identity), grep the entire affected service for all instances of the pattern before scoping the fix — point fixes leave siblings.
+
+### 2026-08-16 — fix-mcp-target-user-authz — assumptions
+
+- **Mistake**: The proto doc comment for `target_user_id` stated "deprecated; use OAuth claims" but was not enforced by any generated validation; a caller that ignored the comment and kept sending the field would silently succeed. The fix required making `broadcast` required (no default), which is a breaking schema change not flagged in the proto review checklist.
+- **Evidence**: `docs/roadmap/features/111-fix-mcp-target-user-authz/design.md` §4; `docs/runbooks/mcp-tools.md`
+- **Rule it implies**: Proto deprecation comments are advisory only — removing or making a field required is the only enforcement. Account for this as a breaking-change at design time.
+
+### 2026-08-16 — fix-mcp-target-user-authz — test-coverage
+
+- **Mistake**: Defect reports written during the bug-triage phase undercounted the affected callers by one; the test suite for the fixed handler was written against the triage's list, missing a case. The adversary round surfaced the additional case, but the test suite had to be extended after the initial RED phase.
+- **Evidence**: `docs/roadmap/features/111-fix-mcp-target-user-authz/context.md` Step 5 Deviation Log
+- **Rule it implies**: During `/sdd-spec`, re-derive the affected-callers list from the codebase, never from the triage report's count — triage reports are snapshots and can undercount.
+
+### 2026-08-16 — ingest-signal-dedup — assumptions
+
+- **Mistake**: The design document used `self._config` as a placeholder attribute name for the config client; the actual service attribute is `self._cfg`. The spec carried the placeholder through all 14 steps and the error was caught at execute-time Step 1.
+- **Evidence**: `docs/roadmap/features/111-ingest-signal-dedup/context.md` Step 1 Deviation Log; `services/xstockstrat-ingest/app/service.py`
+- **Rule it implies**: Attribute names referenced in a design document must be verified against the live service class at `/sdd-spec` time, not assumed from the design author's notation.
+
+### 2026-08-16 — ingest-signal-dedup — test-coverage
+
+- **Mistake**: The blast radius of the mock-shape rewrite (changing how dedup results are returned) was wider than anticipated — 3 additional test files beyond the primary test class required fixture updates, discovered only at the end of the RED-GREEN cycle when the full test run revealed import-time failures.
+- **Evidence**: `docs/roadmap/features/111-ingest-signal-dedup/context.md` Step 10 Deviation Log
+- **Rule it implies**: Before changing a shared fixture or mock shape, grep for all files that import it — `grep -r "from.*<module> import <symbol>"` — to bound the blast radius before the RED phase.
+
+### 2026-08-16 — watchlist-screen-improvements — assumptions
+
+- **Mistake**: The per-symbol row component's `writeInFlight` boolean was instance-local; when the user switched watchlists the component unmounted and the new instance had a fresh `writeInFlight=false`, so an in-flight mutation on the previous watchlist was invisible to the new pane. The root cause was identified only after a race condition surfaced in e2e.
+- **Evidence**: `docs/roadmap/features/112-watchlist-screen-improvements/context.md` R5 block; `services/xstockstrat-ui/src/app/insights/watchlists/`
+- **Rule it implies**: Local component state that guards a mutation must be lifted to (or coordinated with) the ancestor that controls component lifecycle when the guarded mutation outlives a single component instance.
+
+### 2026-08-16 — watchlist-screen-improvements — assumptions
+
+- **Mistake**: The `useWatchlists` hook returned a TypeScript interface that did not declare `isFetching`; the concurrency guard needed `isFetching` from that hook, requiring a retroactive widening of the hook's declared return type. The mismatch was not caught at spec time because the spec described the hook's behavior, not its TypeScript signature.
+- **Evidence**: `docs/roadmap/features/112-watchlist-screen-improvements/context.md` Step 7 Deviation Log; `services/xstockstrat-ui/src/hooks/useWatchlists.ts`
+- **Rule it implies**: When a spec step depends on a hook's field, verify the hook's TypeScript return type exports that field — absence causes a compile error, not a runtime one, and must be caught at spec time.
+
+### 2026-08-16 — watchlist-screen-improvements — assumptions
+
+- **Mistake**: Merging `origin/main-dev` mid-session (to resolve a feature-number collision) caused semantic drift: the flat `strategies` list in `WatchlistDetail.tsx` was split into `allStrategies`/`liveStrategies`/`strategyOptions()` by an unrelated same-day defect fix that landed on `main-dev` after the feature branch was cut. Five steps had to be re-spec'd and six e2e test file references repointed.
+- **Evidence**: `docs/roadmap/features/112-watchlist-screen-improvements/context.md` re-spec-gate block (2026-08-07T00:05:00Z)
+- **Rule it implies**: When merging main-dev mid-feature, re-run a full recon diff on every touched file before continuing execution — a same-day sibling feature can split a shared data structure and invalidate all downstream step citations.
