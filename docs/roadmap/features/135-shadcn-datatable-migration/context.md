@@ -749,6 +749,41 @@ clears it lands, rather than letting the warning go stale.
 - Deviations: corrected characterization of the pre-migration keyboard bug — see Deviation Log entry
   "Step 26 — corrected characterization of the pre-migration keyboard bug" (implementation-spec.md).
 
+### Step 27 — service: migrate `OrderBook.tsx` (row 7, bare `/trader`) to `DataTable` [done]
+- Defined `columns: ColumnDef<Order>[]` (Symbol/Side/Qty/Filled/Avg Price/Status), reusing
+  `formatUsd` verbatim. **Same cell-shape mismatch as Step 23**: `OrderSymbolCell`/`OrderSideCell`/
+  `OrderStatusCell` return full `<TableCell>` elements, not bare content — used the already-exported
+  bare-content `OrderSideBadge`/`OrderStatusBadge` instead, inlined the Symbol `Link` JSX. Zero
+  changes to `orderShared.tsx`.
+- No `onRowClick` wired (no click handler existed pre-migration) — carried the stray
+  `"cursor-pointer hover:bg-accent/40"` classes forward unchanged via `rowClassName`, per design.md's
+  dead-affordance disposition.
+- Added `tableTestId="order-book-table"` (Step 28 need — see below) to disambiguate from
+  `LiveStrategiesPanel`'s own "Status" column header on the same route.
+- Confirmed via grep: `OrderSymbolCell`/`OrderSideCell`/`OrderStatusCell` now have **zero remaining
+  call sites** anywhere in `src/` — flagged as a hard dead-code removal candidate for Step 33 (a
+  stronger signal than Step 23's "candidate pending Step 27" framing, since Step 27 is now done).
+- Verification: `tsc --noEmit` clean; `pnpm run lint` clean, zero new warnings.
+- Files modified: `services/xstockstrat-ui/src/components/trader/OrderBook.tsx`
+- Deviations: cell-shape mismatch (bare-content substitution, same class as Step 23) + `tableTestId`
+  addition — see Deviation Log entries above.
+
+### Step 28 — test: verify `OrderBook.tsx` migration preserves behavior [done]
+- Ran `api-smoke.spec.ts` (7 tests, `ListOrders` data-contract only): all passed, confirming the
+  presentation-layer change didn't touch the RPC call.
+- Added new coverage to `live-strategies.spec.ts` (no dedicated spec previously asserted
+  `OrderBook`'s rendered column headers/row content — only its data contract was covered) —
+  documented as new coverage, not a regression fixture, per the step's own note.
+- **Locator ambiguity found and fixed during verification**: an unscoped `getByRole('columnheader',
+  { name: 'Status' })` hit a Playwright strict-mode violation because `LiveStrategiesPanel` also
+  renders a "Status" column on the same `/trader` route. Scoped the new test to
+  `page.getByTestId('order-book-table')` (the `tableTestId` added in Step 27) instead of a
+  same-page text/role disambiguation trick.
+- Full re-run: `api-smoke.spec.ts` + `live-strategies.spec.ts` — 14/14 passed (two benign
+  `ECONNRESET` webServer log lines, the documented dev-server infra flake, non-fatal).
+- Files modified: `services/xstockstrat-ui/e2e/trader/live-strategies.spec.ts`
+- Deviations: `tableTestId` test-locator disambiguation — see Deviation Log entry above.
+
 ## Session 2026-08-15 — sdd-execute boot (branch-topology correction)
 
 - Boot Step B3 (`git ls-remote --heads origin feature/shadcn-datatable-migration`) found the

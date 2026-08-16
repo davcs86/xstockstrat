@@ -102,6 +102,32 @@ test.describe('Live Strategies BFF', () => {
   });
 });
 
+// Step 28: OrderBook.tsx renders on the same bare /trader route as LiveStrategiesPanel — added
+// here (rather than a new spec file) to avoid a third spec navigating to the same route. Closes
+// a coverage gap: api-smoke.spec.ts only asserts the ListOrders data contract, never the
+// rendered table's column headers or row content. This is new coverage, not a regression
+// fixture — the underlying markup already rendered this content pre-Step-27 migration too.
+test.describe('OrderBook — rendered table content at bare /trader (Step 28 coverage)', () => {
+  test('renders its column headers and the mock AAPL order row', async ({ page }) => {
+    await addAuthCookie(page);
+    await page.goto('/trader');
+
+    const orderBookTable = page.getByTestId('order-book-table');
+    await expect(orderBookTable).toBeVisible({ timeout: 10000 });
+
+    for (const header of ['Symbol', 'Side', 'Qty', 'Filled', 'Status']) {
+      await expect(
+        orderBookTable.getByRole('columnheader', { name: header, exact: true }),
+      ).toBeVisible();
+    }
+
+    const aaplRow = orderBookTable.getByRole('row').filter({ hasText: 'AAPL' });
+    await expect(aaplRow).toBeVisible();
+    await expect(aaplRow.getByText('BUY')).toBeVisible();
+    await expect(aaplRow.getByText('FILLED')).toBeVisible();
+  });
+});
+
 test.describe('LiveStrategiesPanel — clickable row keyboard activation (FR-5)', () => {
   test('a row opens the alert feed via Enter, matching the existing click behavior', async ({
     page,

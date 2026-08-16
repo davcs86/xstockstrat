@@ -1301,7 +1301,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 
 ### Step 27 — service: migrate `OrderBook.tsx` (row 7, bare `/trader`) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/OrderBook.tsx` — modify
@@ -1351,7 +1351,7 @@ grep -n "DataTable" src/components/trader/OrderBook.tsx
 
 ### Step 28 — test: verify `OrderBook.tsx` migration preserves behavior
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/api-smoke.spec.ts` — modify (if locators break; data-contract
@@ -1806,3 +1806,37 @@ describe the verified mechanism instead of the "double-fires" guess, and bounded
 wait to an explicit 5s timeout (`{ timeout: 5000 }`) so a future RED run fails fast/deterministically
 instead of riding out the full default test timeout. No composite or component change needed — this is
 a documentation/finding correction only.
+
+### Deviation: Step 27 — migrate `OrderBook.tsx` to `DataTable` (cell-component shape mismatch, same class as Step 23)
+**Spec said**: "reusing `OrderSymbolCell`, `OrderSideCell`, `formatUsd`, and `OrderStatusCell`
+verbatim."
+**Actual**: same root cause as the Step 23 deviation — `OrderSymbolCell`/`OrderSideCell`/
+`OrderStatusCell` (`orderShared.tsx`) each return a complete `<TableCell>` element, not bare
+content, so using them directly as a `ColumnDef`'s `cell` would nest a `<td>` inside the
+composite's own `<td>`. Used the bare-content `OrderSideBadge`/`OrderStatusBadge` exports instead
+(already existed, no `orderShared.tsx` edit needed) and inlined the Symbol cell's `Link` JSX
+verbatim (matching `OrderSymbolCell`'s body, minus the `<TableCell>` wrapper, expressed via the
+column's `meta.className`).
+**Reason**: matches the actual TanStack Table `ColumnDef.cell` contract; identical reasoning to the
+Step 23 deviation entry above, now confirmed as the correct pattern for both `orderShared.tsx`
+consumers.
+**Disposition**: with this step done, `OrderSymbolCell`/`OrderSideCell`/`OrderStatusCell`
+(`orderShared.tsx`) now have **zero remaining call sites** in the migrated tree (the order-detail
+page was out of scope for this feature and still uses the raw `Table` primitives directly, not
+these three helpers — confirmed via grep before flagging as dead code). Carried forward to Step
+33's regression-sweep disposition decision as originally planned, not removed here (touching
+`orderShared.tsx` is outside this step's Files section).
+
+### Deviation: Step 28 — added a `tableTestId` to `OrderBook.tsx`'s `DataTable` call (test-locator disambiguation)
+**Spec said**: nothing about `tableTestId` — Instruction 2 only called for a header/row-content
+assertion.
+**Actual**: `LiveStrategiesPanel` (Step 25) also renders a "Status" column header on the same bare
+`/trader` route. An unscoped `page.getByRole('columnheader', { name: 'Status' })` assertion hit a
+Playwright strict-mode violation (2 matching elements). Added `tableTestId="order-book-table"` to
+`OrderBook.tsx`'s `<DataTable>` call (the composite's existing `tableTestId` prop, extended in the
+Step 9 deviation) and scoped the new test's locators to `page.getByTestId('order-book-table')`.
+**Reason**: the composite already supports this exact extension point; no new composite change
+needed, and scoping the test to the specific table is more robust than a same-page text/role
+disambiguation trick.
+**Disposition**: no file-set change beyond `OrderBook.tsx` (already in Step 27's Files) and
+`live-strategies.spec.ts` (already in this step's Files).
