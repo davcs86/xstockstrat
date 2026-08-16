@@ -12,12 +12,15 @@
 |---|---|---|---|
 | 2026-08-16 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings: Open Questions deferred to design per repo precedent, minor template checkbox hygiene) |
+| 2026-08-16 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, quick mode + 1 extra round) and approved; recon.md + design.md written. Recon corrected product-spec.md's Affected Services/Consumer Surface(s) (added xstockstrat-ingest, xstockstrat-agent) |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon](recon.md) — grounded codebase dossier (Phase 0)
+- [Design](design.md) — debated, approved architecture (Phase 1)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec daily-bars-only`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -47,4 +50,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design daily-bars-only quick` — recon + one mandated adversarial round before /sdd-spec
+`/sdd-spec daily-bars-only` — generate implementation spec from the approved design

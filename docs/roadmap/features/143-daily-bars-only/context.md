@@ -133,3 +133,39 @@
   prior session's entry (a `system-reminder`-styled block encountered while this session's
   earlier `git merge`/renumbering ran concurrently) — no new occurrence this round; not
   repeated here beyond this pointer.
+
+## Session 2026-08-16 — sdd-design Phase 1 (grilling, 2 rounds)
+
+- **Round 1**: proposer laid out proto → marketdata → ingest → agent → UI with 3-layer
+  `INVALID_ARGUMENT` rejection, no migration, `internal/timeframe` untouched, UI selector
+  removed entirely. Adversary found (no Floor breach): `GetDataCoverage` was a third
+  timeframe-resolving RPC missing from the rejection scope; `docs/runbooks/mcp-tools.md` +
+  `plugins/strat-lab/skills/backtest/reference/backfill.md` needed same-PR updates (root
+  `CLAUDE.md`'s binding same-PR rule for `trigger_backfill`); ingest's chunk-retry loop
+  treats *any* exception (including a permanent `INVALID_ARGUMENT`) as transient and retries
+  it 3× — a real bug this feature's own new rejection would newly trigger. User chose "run
+  another round" at the round-1 gate rather than approving.
+- **Round 2**: proposer revised — GetDataCoverage back to permissive (FR-1/FR-2 don't name
+  it), step order reversed (UI/agent/ingest first, marketdata last, to avoid the retry-storm
+  window), and alias tables "shrunk to single-entry" as a DRY fix. Adversary **caught a real,
+  code-verified defect**: the single-entry claim would silently drop the legitimate `"1Day"`
+  alias spelling and break the historical/resumed-job read path (`_STR_TO_ENUM` is
+  dual-purposed), breaking 4 named existing tests. Adversary also argued the step-order
+  reversal was net-worse (leaves the authoritative RPC layer open longest, to *any*
+  uncovered caller, and doesn't touch the background poller) and recommended reverting to
+  round 1's order with the retry-fix pulled forward instead.
+- **Synthesis** (this session, not a subagent): kept round 1's step order (marketdata first,
+  retry-fix pulled forward) + round 2's GetDataCoverage-permissive call (cleaner
+  FR-1/FR-2-scoped reasoning, not the weaker "consistency with Delete" framing) + a corrected,
+  per-table alias-survivor spec (not literal single-entry) naming the exact 4 tests + 2
+  hardcoded strings to update. Presented to user; **approved** without a third round.
+- Constitution rules touched: C-01, C-04, C-05, C-09, C-14, P-02, P-03, F-04 (all honored, no
+  breach — see `design.md` § Constitution Rules Touched for how each was honored).
+- Floor breaches: none in either round.
+- Status: `spec-ready` → `design-approved`.
+- **Ledger write** (P-05, reusable pattern surfaced): the round-2 "single-entry alias table"
+  claim was a fresh, concrete recurrence of the exact absence-claim pattern
+  `080-fix-backfill-timeframe-enum` already named in `fails.md` — worth reinforcing with a
+  new dated entry since it recurred inside the *design* phase (proposer→adversary), not just
+  execution, showing the trap applies to LLM-proposed refactors, not only human-authored
+  specs. See `docs/roadmap/ledger/fails.md` new 2026-08-16 entry.
