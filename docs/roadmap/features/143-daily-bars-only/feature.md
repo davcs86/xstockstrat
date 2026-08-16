@@ -1,6 +1,5 @@
 # Feature: daily-bars-only
 
-**Lifecycle Status**: `draft`
 **Development Branch**: `feature/daily-bars-only`
 **Created**: 2026-08-16
 **Last Updated**: 2026-08-16
