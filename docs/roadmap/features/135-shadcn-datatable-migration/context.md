@@ -564,6 +564,34 @@ clears it lands, rather than letting the warning go stale.
 - Files modified: none (no locator changes needed)
 - Deviations: none
 
+### Step 15 — service: migrate `/insights/formulas` list table (row 11) to `DataTable` [done]
+- Defined `columns: ColumnDef<FormulaDefinition>[]` for the 4 columns, preserving the Name cell's
+  two-line name+description rendering, the Visibility Badge, and `formatDate`. Replaced the manual
+  `role="button"`/`onClick`/`onKeyDown` row wiring with the composite's `onRowClick` (benefits
+  immediately from Step 13's bug fix). Replaced `<Table>` with `<DataTable columns={columns}
+  data={filtered} getRowId={(f) => f.formulaId} onRowClick={...} rowClassName={() =>
+  'cursor-pointer'} enablePagination pageSize={50} emptyMessage={...} />`, matching the existing
+  server `pageSize 50` cap per design.md.
+- TDD: refactor, no new assertable behavior (pagination enabling is additive) — red N/A; green
+  captured in Step 16.
+- Verification: `tsc --noEmit` — one fix needed (`0n` bigint literal → `BigInt(0)`, ES2020 target
+  issue, not available at this tsconfig's target); clean after. `pnpm run lint` clean; grep confirms
+  `DataTable`/`onRowClick`/`enablePagination`.
+- Files modified: `services/xstockstrat-ui/src/app/insights/formulas/page.tsx`
+- Deviations: none
+
+### Step 16 — test: verify `/insights/formulas` migration preserves row-navigate + search/filter [done]
+- Ran `e2e/insights/formulas.spec.ts` (6 tests): 1 clean, 3 needed 2 retries to pass (not simple
+  cold-start — a distinct "row focus + Enter press → toHaveURL" timing pattern). **Verified this is
+  pre-existing, not a regression**: stashed the Step 15 migration to test the *original* unmigrated
+  code against the same scenario — it reproduced the identical 2-retry pattern (attempt 0: cold-start
+  goto timeout; attempt 1: `toHaveURL` timing miss; attempt 2: passes). Restored the migration after
+  confirming. The row-click-to-navigate behavior, Visibility filter, and both zero-results message
+  variants are all unchanged; client pagination (`pageSize={50}`) does not truncate the fixture set.
+- `mobile-overflow.spec.ts -g "insights/formulas"` — flaky-then-pass, green.
+- Files modified: none (no locator changes needed)
+- Deviations: none
+
 ## Session 2026-08-15 — sdd-execute boot (branch-topology correction)
 
 - Boot Step B3 (`git ls-remote --heads origin feature/shadcn-datatable-migration`) found the

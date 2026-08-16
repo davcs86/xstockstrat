@@ -747,7 +747,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 
 ### Step 15 — service: migrate `/insights/formulas` list table (row 11) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/formulas/page.tsx` — modify
@@ -798,7 +798,7 @@ grep -n "DataTable\|onRowClick\|enablePagination" src/app/insights/formulas/page
 
 ### Step 16 — test: verify `/insights/formulas` migration preserves row-navigate + search/filter
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/formulas.spec.ts` — modify (if locators break)
