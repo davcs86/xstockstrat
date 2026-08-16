@@ -47,3 +47,31 @@
   No merge-order row written (deps already landed; a blocking row would be born resolved).
 - **Design-phase carry-forward**: resolve the 4 Open Questions in recon.md/design.md; user has directed
   that `/sdd-design` chooses the nav pattern (proposer-vs-adversary debate decides).
+
+## Session 2026-08-16 — sdd-design
+
+- Phase 0 Recon: wrote recon.md (service: xstockstrat-ui). Key reuse: shadcn `ToggleGroup` segmented
+  control (`insights/opportunities/page.tsx:212`), existing fixtures, existing `position-detail.spec.ts`/
+  `mobile-overflow.spec.ts`. Headline finding: `position-detail.spec.ts` expects multiple sections
+  visible on one `page.goto`, so a hiding pattern (Tabs/Accordion) breaks it — anchor-nav (all mounted)
+  is forced. `scroll-area.tsx` absent; `role="tab"`/`aria-label="Section"` collisions to avoid.
+- Phase 1 Grilling: 2 rounds (full). **Chosen**: sticky segmented anchor-nav — new
+  `src/components/trader/SymbolSectionNav.tsx` (`ToggleGroup type="single"` in `<nav aria-label="Symbol
+  navigation">`, sticky `top-[49px] sm:top-[85px]` z-40 below the real header, all sections mounted +
+  wrapped in `<section id>`, `IntersectionObserver` scroll-spy for FR-2, click → `scrollIntoView` +
+  `history.replaceState(null,'','#id')` bare hash preserving `?strategy=`), placed after the `<h1>`,
+  gated on `!isLoading && !genuineError`. Groups: Overview/Trade/Research/Backtests/Coverage/Position
+  (Position conditional). **Rejected**: Tabs/Accordion (break position-detail.spec.ts + drop in-flight
+  fetches, FR-7); click-only active state (fails FR-2 under scroll); persistent-header held-body;
+  query-param deep-link; nav-above-breadcrumb.
+- R1 adversary found real defects (sticky offset behind header, scroll-mt too small, FR-2 needs
+  scroll-spy, 390px nesting). R2 proposer resolved all; R2 adversary confirmed 6/7 closed + 2 cheap
+  MEDIUM fixes (aria-label substring collision → "Symbol navigation"; nav placement → after `<h1>`),
+  both adopted. No Floor breach in either round.
+- **Approval basis**: user explicitly delegated the pattern decision ("Let /sdd-design decide") and
+  authorized the full run; recorded here as the P-04 sign-off for the design phase (C-11/P-04 —
+  overridable/decidable with recorded user consent, which the delegation constitutes).
+- Constitution rules touched: C-10, C-11/P-03, C-12/C-13, C-14, F-04. Floor breaches: none.
+- Open Risks (carry to /sdd-spec + execute): scroll-spy `rootMargin`/`threshold` empirical tuning; 1px
+  border-b under-shoot in scroll-mt; scroll-spy observer not recreated on `sm` resize.
+- Status: `spec-ready` → `design-approved`.

@@ -1739,3 +1739,21 @@ reusing.
 - **Pattern**: After running `npx shadcn add <component>`, audit the diff for collateral installs: shadcn's CLI may add peer primitives (e.g., `label.tsx` alongside `form.tsx`) or update `package.json` with new dependencies (e.g., `react-hook-form`, `@hookform/resolvers`, `zod`). Each collateral addition is a dependency the team must own; verify it is justified by the feature's actual call sites before committing.
 - **Evidence**: `docs/roadmap/features/122-shadcn-migration-low-confidence/context.md` sdd-design Rounds 1-2 (react-hook-form/zod dependency sweep; decision to decline `ui/form.tsx` in favor of `ui/field.tsx` to avoid a 2-call-site dependency)
 - **Rule it implies**: Treat `npx shadcn add` as a tentative installation; always review and trim collateral installs that the feature's actual call sites don't need before committing the result.
+
+### 2026-08-16 — symbol-page-section-nav — pattern
+
+- **Pattern**: For same-page section navigation over a long stack of cards, a sticky **anchor-nav**
+  (shadcn `ToggleGroup type="single"` + native `scrollIntoView` + an `IntersectionObserver` scroll-spy,
+  all sections left mounted) beats `Tabs`/`Accordion` when a large e2e suite already asserts multiple
+  sections visible on one `page.goto`: nothing unmounts, so those specs stay green, in-flight
+  polls/mutations survive (no FR-7 fetch-lifecycle work), and `?strategy=`-style URL seeds read on mount
+  keep working. `ToggleGroupItem` renders a `<button>` (not `role="tab"`), sidestepping the 2026-08-09
+  getByRole-substring trap. Two must-dos: put the sticky `top` offset **and** the section `scroll-mt` in
+  ONE co-located constants module keyed to the real header height (`PlatformHeader` is `sticky top-0 z-40`
+  ~85px/49px responsive), and give the nav an `aria-label` with **no "section" substring** (the header's
+  Row-2 nav is `aria-label="Section"`; Playwright name-match is case-insensitive substring).
+- **Evidence**: `docs/roadmap/features/139-symbol-page-section-nav/design.md` (2-round debate);
+  `services/xstockstrat-ui/src/components/ui/toggle-group.tsx:66`; `PlatformHeader.tsx:205-207,346,348`.
+- **Rule it implies**: reach for all-mounted anchor-nav (not Tabs) when hiding sections would break
+  existing "multiple sections visible" e2e or drop live queries; always co-locate sticky-offset +
+  scroll-margin constants and pick a collision-free nav `aria-label`.

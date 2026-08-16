@@ -12,12 +12,15 @@
 |---|---|---|---|
 | 2026-08-15 | `idea` → `draft` | /sdd-story | Product spec generated |
 | 2026-08-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS, 0 blockers, no Floor breach). Warnings: 4 Open Questions are legitimate /sdd-design deferrals; stale `PLATFORM_SUBNAV` term (live model is `NAV_GROUPS`). Overlap: soft/dependency only (deps 125 + 143 both already merged to main-dev); no FAIL-class collision. Spec assumptions verified accurate post-143. |
+| 2026-08-16 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. Chose sticky segmented anchor-nav (`ToggleGroup type="single"` + `scrollIntoView` + `IntersectionObserver` scroll-spy, all sections mounted, hash deep-link preserving `?strategy=`) over Tabs/Accordion (which break `position-detail.spec.ts` + FR-7). R2 fixes: `aria-label="Symbol navigation"` (avoids getByRole substring collision), nav placed after `<h1>`. No Floor breach. |
 
 ---
 
 ## Artifacts
 
 - [Product Spec](product-spec.md) — requirements and governance
+- [Recon](recon.md) — grounded codebase dossier (Phase 0)
+- [Design](design.md) — debated, approved architecture (Phase 1)
 - [Implementation Spec](implementation-spec.md) — _not yet generated — run `/sdd-spec symbol-page-section-nav`_
 - [Context Log](context.md) — session history, decisions, deviations
 
@@ -42,4 +45,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-design symbol-page-section-nav` — recon + design debate (resolve the nav-pattern fork) before /sdd-spec
+`/sdd-spec symbol-page-section-nav` — generate the implementation spec from the approved design
