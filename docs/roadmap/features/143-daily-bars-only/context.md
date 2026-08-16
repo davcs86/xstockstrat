@@ -403,3 +403,10 @@ no feature code. Part of an operator-requested sequential run of 143 then 139, o
   path) + the run note below.
 - Files modified: `src/lib/chart.test.ts`, `e2e/trader/chart-panel.spec.ts`.
 - Deviations: D-6 (e2e Chromium executable path env var). Full detail in Deviation Log.
+
+### Step 10 — e2e follow-up (real run, prebuilt harness)
+- Ran the two specs the way CI does (`NEXT_DISABLE_STANDALONE=1 pnpm build` → `CI=true E2E_PREBUILT=1
+  pnpm test:e2e`, Chromium at `/opt/pw-browsers/...`). First run: 15 passed / 1 failed — my AC-8
+  rewrite captured no GetBars (ChartPanel's mount fetch races the async chart-series init and isn't
+  retried). Fixed AC-8 to wait for `.tv-lightweight-charts` then change the bar-count selector as a
+  deterministic trigger. **Both specs now 16/16 green.** See Deviation Log D-6 (revised).

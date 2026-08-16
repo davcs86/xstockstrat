@@ -1005,21 +1005,23 @@ not `ValueError`) and are *rejected* after it. This gives a genuine red→green 
 feature's behavior (P-06/C-08). Confined to Step 8's file (`tests/test_client.py`); strictly
 stronger coverage than the specced change.
 
-### D-6 (Step 10) — e2e could not be run to green in this sandbox; CI-equivalent fallback used
-**What**: Running `pnpm test:e2e` for `chart-panel.spec.ts` + `backfills.spec.ts` was attempted three
-ways: (1) default — aborted in `global-setup.ts` because `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` was
-unset and the project's pinned `@playwright/test` couldn't launch the pre-provisioned browser;
-(2) with `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/opt/pw-browsers/chromium-1194/chrome-linux/chrome`
-(the config's documented override) — Chromium launched, but `e2e/warmup.setup.ts`'s "pre-warm SSR
-routes" setup test timed out at 10 s because the non-CI `pnpm dev` webServer compiles routes on first
-hit and that exceeds the setup test's timeout in this constrained sandbox; (3) with a raised
-`--timeout=120000` — the setup test's own 10 s timeout is not CLI-overridable, so it timed out again
-and the 15 real tests "did not run".
-**Disposition**: took the **sanctioned sequential-mode verification fallback** for a timing-out
-Playwright dev-server harness — `pnpm exec tsc --noEmit` (clean) + `pnpm run lint` (clean) +
-`pnpm run test:coverage -- chart.test.ts` (green, `chart.ts` 100%). The two e2e specs' new assertions
-are straightforward (`getByRole('tab').toHaveCount(0)`; `timeframeEnum === 'TIMEFRAME_1DAY'` on the
-mount's GetBars) and will execute in **CI's e2e job**, which serves a **prebuilt** bundle
-(`pnpm build && pnpm start`) rather than `pnpm dev` and so does not hit this dev-compile warmup
-timeout. `**Disposition**: CI-equivalent fallback` — no repo change; the timeout is an environment
-limitation, not a defect in the specs.
+### D-6 (Step 10) — e2e required the prebuilt (CI-mode) harness, not `pnpm dev`, and the AC-8 rewrite needed a real fix
+**What (harness)**: `pnpm test:e2e` under the default non-CI `pnpm dev` webServer could not run:
+(1) `global-setup.ts` aborted until `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` was set to the pre-installed
+Chromium (`/opt/pw-browsers/chromium-1194/chrome-linux/chrome`); (2) even then `e2e/warmup.setup.ts`
+timed out at 10 s because `pnpm dev` compiles routes on first hit. **Resolution**: ran the specs the way
+CI does — a `NEXT_DISABLE_STANDALONE=1 pnpm build` then `CI=true E2E_PREBUILT=1 pnpm test:e2e` (serves
+the prebuilt bundle via `pnpm start`; warmup pre-warmed 22/22 routes in ~0.4 s). No repo change for the
+harness; environment-only knobs.
+**What (real defect this surfaced)**: the first prebuilt run was **15 passed / 1 failed** — the AC-8
+test's own rewrite was wrong. It assumed the mount's GetBars would be captured, but `ChartPanel`
+auto-selects `list[0]` and its `fetchBars` early-returns until the async lightweight-charts series is
+ready; `seriesRef` is not a `fetchBars` effect dep, so a mount fetch that races ahead of the series is
+never retried and `capturedBody` stayed `undefined`. The original test had dodged this by waiting for
+`.tv-lightweight-charts` then clicking a timeframe tab; my rewrite removed that trigger with nothing in
+its place.
+**Disposition**: rewrote AC-8 to wait for `.tv-lightweight-charts` readiness, then change the
+still-present **bar-count** selector (100→200 — `barCount` is a `fetchBars` effect dep) to
+deterministically trigger a fresh GetBars, then assert `timeframeEnum === 'TIMEFRAME_1DAY'`. Both
+target specs now pass fully in the prebuilt harness (**16/16**). This is a genuine test-quality fix
+found by insisting on a real e2e run rather than accepting the dev-server-timeout fallback.

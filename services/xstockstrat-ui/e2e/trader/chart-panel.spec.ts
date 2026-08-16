@@ -151,10 +151,11 @@ test.describe('ChartPanel component — trading dashboard', () => {
   });
 
   test('sends timeframeEnum on the outbound GetBars request (AC-8)', async ({ page }) => {
-    // Intercept in-process — proves the CLIENT populates timeframeEnum on its one and only
-    // (mount-triggered) GetBars call, now that no tab click can trigger a second request.
-    // Route registration BEFORE the goto below is required so the mount's own request is
-    // captured (feature 143 removed the tab, so there is no click to observe a later request).
+    // Intercept in-process — proves the CLIENT populates timeframeEnum on its GetBars call. The
+    // timeframe tab is gone (feature 143), so instead of clicking a tab we trigger a deterministic
+    // fetch via the still-present bar-count selector (barCount is a fetchBars effect dependency).
+    // 'TIMEFRAME_1DAY' is hardcoded in the intercept assertion, never derived from TIMEFRAME_ENUM,
+    // so this can never assert the map against itself (feature 080 AC-8).
     let capturedBody: Record<string, unknown> | undefined;
     await page.route('**/xstockstrat.marketdata.v1.MarketDataService/GetBars', async (route) => {
       capturedBody = route.request().postDataJSON() as Record<string, unknown>;
@@ -181,10 +182,22 @@ test.describe('ChartPanel component — trading dashboard', () => {
       });
     });
 
-    // Re-navigate with the route already registered so the mount's own GetBars is captured
-    // (the describe's beforeEach navigated before this route existed). Cookies persist across
-    // the goto, so no re-auth is needed.
+    // Re-navigate with the route registered so it is active for every GetBars this page makes.
+    // Cookies persist across the goto, so no re-auth is needed.
     await page.goto('/trader/');
+
+    // Wait for the chart to finish its async lightweight-charts import before triggering a fetch:
+    // until the series exists, ChartPanel.fetchBars early-returns and the effect sends no GetBars
+    // (seriesRef is not an effect dep, so a mount fetch that raced ahead of the series is not
+    // retried). The injected .tv-lightweight-charts child signals the series is ready.
+    await expect(
+      page.locator('[data-testid="chart-container"] .tv-lightweight-charts'),
+    ).toBeVisible({ timeout: 15000 });
+
+    // Change the bar count (100 → 200) to deterministically trigger a fresh GetBars now that the
+    // series is ready — the tab click the original test used no longer exists.
+    await page.getByText('100 bars', { exact: true }).click();
+    await page.getByRole('option', { name: '200 bars' }).click();
 
     await expect.poll(() => capturedBody?.timeframeEnum, { timeout: 10000 }).toBe('TIMEFRAME_1DAY');
   });
