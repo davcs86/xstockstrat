@@ -2,6 +2,7 @@
 
 **Committed to main**: e9d8d9144fb228568b3d71d088ad0d4e26bd0c24
 **Launched date**: 2026-08-07
+**Archived**: 2026-08-16
 **Development Branch**: `feature/exit-cooldown`
 **Created**: 2026-08-07
 **Last Updated**: 2026-08-07
@@ -21,6 +22,7 @@
 | 2026-08-07 | `in-progress` → `code-completed` | /sdd-execute (sequential) | All 21 steps done; merge-order gate clear (no blocking dependency); opening integration PR |
 
 | 2026-08-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #896; committed e9d8d9144fb228568b3d71d088ad0d4e26bd0c24 |
+| 2026-08-16 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(1)/fails(1); pruned 4 specs |
 ---
 
 ## Artifacts
