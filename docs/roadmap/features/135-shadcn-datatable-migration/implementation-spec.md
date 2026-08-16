@@ -991,37 +991,55 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values
 rendered in UI, no direct DB access (except audit log)
 
-**Codebase Evidence**:
-- Confirmed via `Read`: `Table` at `positions/[symbol]/page.tsx:348`, 8 columns (Side, Type, Qty,
-  Filled, Avg fill, Status, Origin, Open), dynamic row count, no mutation actions (a `View →` link
-  button per row).
-- **Dead-class disposition (design.md Open Risk)**: `TableRow` at `:363` carries `className=
-  "cursor-pointer"` with **zero click handler wired anywhere** — confirmed by reading the full row
-  block (`:363-388`), only the `View →` `Link` button (`:384-386`) is clickable, the row itself is not.
-  Per design.md's default recommendation, carry the stray class forward unchanged (matches current
-  visual state — a dead affordance, not a new one) rather than dropping it as unrelated cleanup;
-  record this explicitly rather than silently resolving it either way.
+**Codebase Evidence** _(re-spec'd 2026-08-16 — feature 125 "unified Symbol page" landed in main-dev
+between /sdd-spec and /sdd-execute and hoisted this table into its own component; see `## Re-spec Log`
+below)_:
+- Confirmed via `Read`: the orders sub-table now lives in a standalone `SymbolOrdersCard({ symbol,
+  orders, working })` function component (`positions/[symbol]/page.tsx:391-465`), invoked
+  unconditionally at `:260` (`<SymbolOrdersCard symbol={symbol} orders={orders} working={working} />`)
+  — it renders for every symbol, not only when a position is held (feature 125's "hoisted to page
+  level" change; see the component's own doc comment at `:389-390`). The table itself is unchanged:
+  `<Table>` at `:417`, still 8 columns in the same order (Side `:420`, Type `:421`, Qty `:422`, Filled
+  `:423`, Avg fill `:424`, Status `:425`, Origin `:426`, Open `:427`), dynamic row count, no mutation
+  actions (a `View →` link button per row).
+- `SymbolOrdersCard` wraps the table in `orders.length === 0 ? <EmptyState title="No orders for this
+  symbol" description="Orders you place for this position will appear here, traced to their origin
+  signal." /> : <Table>...</Table>` (`:411-461`) — this conditional pre-dates and is **unrelated to**
+  the `DataTable` migration; leave it as-is and only replace the inner `<Table>...</Table>` block, not
+  the surrounding `EmptyState` branch (the composite's own `emptyMessage` prop is a single string in a
+  `TableCell`, not a match for this richer title+description empty state).
+- **Dead-class disposition (design.md Open Risk) — still holds**: `TableRow` at `:432` carries
+  `className="cursor-pointer"` with **zero click handler wired anywhere** — confirmed by reading the
+  full row block (`:431-458`), only the `View →` `Link` button (`:452-456`) is clickable, the row
+  itself is not. Per design.md's default recommendation, carry the stray class forward unchanged
+  (matches current visual state — a dead affordance, not a new one) rather than dropping it as
+  unrelated cleanup; record this explicitly rather than silently resolving it either way.
 - FR-3 verdict (recon.md row 4): FAIL (cols) — mandatory migration.
-- Reuses `OrderSideBadge`/`OrderStatusBadge`/`TYPE_LABEL`/`formatOrderPrice` — order/fill display logic
-  is unchanged, only the table chrome (per Execution Summary's trading-domain note).
+- Reuses `OrderSideBadge` (`:434`), `TYPE_LABEL[OrderType[o.orderType]]` (`:437`), `formatOrderPrice`
+  (`:444`), `OrderStatusBadge` (`:447`), and the `o.strategyId || 'Manual'` Origin fallback (`:450`) —
+  order/fill display logic is unchanged, only the table chrome (per Execution Summary's trading-domain
+  note). These imports live at `page.tsx:33-38` (unchanged).
 
 **TDD**: `red-green required`
 
 **Instructions**:
-1. Define `columns: ColumnDef<Order>[]` for the 8 columns, reusing `OrderSideBadge`, `TYPE_LABEL[
-   OrderType[o.orderType]]`, `formatOrderPrice`, `OrderStatusBadge`, and the `o.strategyId || 'Manual'`
-   Origin fallback verbatim as cell renderers. `Open` column (`id: 'open'`, `enableSorting: false`)
-   renders the existing `View →` `Button`+`Link`.
+1. Inside `SymbolOrdersCard` (`:391-465`), define `columns: ColumnDef<Order>[]` for the 8 columns,
+   reusing `OrderSideBadge`, `TYPE_LABEL[OrderType[o.orderType]]`, `formatOrderPrice`, `OrderStatusBadge`,
+   and the `o.strategyId || 'Manual'` Origin fallback verbatim as cell renderers. `Open` column
+   (`id: 'open'`, `enableSorting: false`) renders the existing `View →` `Button`+`Link`. A module-scope
+   array is sufficient — `SymbolOrdersCard`'s columns depend only on props/module-level helpers, no
+   enclosing-component state to close over.
 2. **Do not** wire `onRowClick` on this table — no click handler exists today; carry the
    `cursor-pointer` class forward via `rowClassName={() => 'cursor-pointer'}` on the `DataTable` (or
    directly on each row via the composite's row-class mechanism), unchanged from the pre-migration
    visual state. Record disposition explicitly: **migrated to `DataTable`; `cursor-pointer` class
    carried forward unchanged (pre-existing dead affordance, not new — no click handler added)**.
-3. Replace the `<Table>...</Table>` JSX (`:348-` through close) with `<DataTable columns={columns}
-   data={orders} rowClassName={() => 'cursor-pointer'} />`. Sorting only (no pagination — a single
-   position's order history is typically short).
+3. Replace the `<Table>...</Table>` JSX (`:417-460`) with `<DataTable columns={columns} data={orders}
+   rowClassName={() => 'cursor-pointer'} />`, leaving the `orders.length === 0 ? <EmptyState ... /> : `
+   wrapper at `:411` unchanged. Sorting only (no pagination — a single position's order history is
+   typically short).
 4. Responsive strategy (FR-4): keep the existing column-priority hiding (`hidden sm:table-cell` on
-   Filled, `hidden md:table-cell` on Origin — `:354,357`) via `meta.className`, unchanged. Record
+   Filled `:423`, `hidden md:table-cell` on Origin `:426`) via `meta.className`, unchanged. Record
    disposition: **migrated to `DataTable`; responsive strategy (b) column priority (existing 2-tier
    `hidden` breakpoint set)**.
 
@@ -1044,20 +1062,34 @@ grep -n "DataTable" src/app/trader/positions/\[symbol\]/page.tsx
 config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values
 rendered in UI, no direct DB access (except audit log)
 
-**Codebase Evidence**:
-- `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — existing suite for this route.
-- `mobile-overflow.spec.ts:33` already lists `{ path: '/trader/positions/AAPL' }` — **no `ROUTES`
-  change needed**.
+**Codebase Evidence** _(re-spec'd 2026-08-16 — see `## Re-spec Log` below)_:
+- `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` is now a 351-line, 5-test suite covering
+  the full unified Symbol page (feature 125) — not solely the orders table. The two tests that exercise
+  `SymbolOrdersCard` (Step 21) directly: `'renders the risk-framed header, stat grid, risk sidebar and
+  orders table'` asserts `getByText('Orders & fills · AAPL')` visible (`:40`, for a held position), and
+  `'an unheld symbol still renders the chart, orders and trade sections (feature 125)'` asserts
+  `getByText('Orders & fills · ZZZZ')` visible (`:82`, for a position-less symbol — proving
+  `SymbolOrdersCard`'s unconditional rendering). Neither test asserts individual order-row column
+  content by locator today — Step 21's 8-column table content itself has no dedicated per-column
+  assertion in this file to preserve beyond these two "card renders" checks; the mock backend's order
+  fixtures back both.
+- `mobile-overflow.spec.ts:34` (drifted from `:33`, feature 125 removed the `/insights/market/[symbol]`
+  entry ahead of it) still lists `{ path: '/trader/positions/AAPL' }` — **no `ROUTES` change needed**.
 
 **TDD**: `red-green required`
 
 **Instructions**:
-1. Re-run `position-detail.spec.ts` after Step 21. Fix any locator broken by the `DataTable`
-   restructuring; all 8 columns' rendered values and the `View →` link's target must be unchanged
-   (AC-5).
+1. Re-run the full `position-detail.spec.ts` suite (all 5 tests, not just the two above — Step 21 only
+   touches `SymbolOrdersCard`'s internals, but a full-file re-run catches any DOM-structure locator break
+   elsewhere in the file too) after Step 21. Fix any locator broken by the `DataTable` restructuring;
+   the `'Orders & fills · AAPL'` (`:40`) and `'Orders & fills · ZZZZ'` (`:82`) card-title assertions, and
+   the `View →` link's target, must be unchanged (AC-5).
 2. Confirm no test asserts the row itself is clickable (there is no such handler pre- or
    post-migration) — if one exists, it was already asserting dead behavior; do not add new
    click-to-navigate coverage here (out of scope — the dead class is carried forward, not activated).
+3. Do not expand this step to add coverage for the rest of `position-detail.spec.ts`'s FR-6/7/9/10/11
+   sections (price chart, trade widget, backtests, backfill, indicators) — those are feature 125's
+   scope, already covered by its own tests; this step's scope is limited to the orders sub-table.
 
 **Verification**:
 ```
@@ -1626,6 +1658,43 @@ grep -rln "@tanstack/react-table" src/ | sort
 ```
 
 ---
+
+## Re-spec Log
+
+_Populated by /sdd-execute's sequential-mode re-spec gate (§5.3) before the step loop begins — the
+sole sanctioned edit to step bodies outside step-status flips._
+
+### 2026-08-16 — Steps 21–22 re-spec'd (feature 125 merged ahead of execution)
+
+Between `/sdd-spec` (2026-08-15) and this execution session, **feature 125** ("unified Symbol page")
+merged into `main-dev` and rewrote `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx`
+(795-line diff) — the exact file Steps 21–22 target. Three parallel `codebase-discovery` recon agents
+re-verified all 15 table sites' Codebase Evidence against the post-125 codebase:
+
+- **13 of 15 sites (Steps 1–20, 23–32) held with no re-spec needed** — either exact-line CONFIRMED or a
+  trivial line-number drift with unchanged structure (e.g. `/config-ui/sources` Table moved 299→330 due
+  to an unrelated feature 134 change; `/insights/screener` Table moved 543→480). Phase 1 Discovery's own
+  fresh `Read` of each target file (HARD CONSTRAINT: "read each target file fully before editing")
+  resolves these without a spec edit — the step bodies' *structural* claims (column sets, cell logic,
+  test fixtures) all still hold.
+- **Steps 21–22 (row 4, `/trader/positions/[symbol]` orders sub-table) needed a real re-spec**: feature
+  125 hoisted the table into a new standalone `SymbolOrdersCard` component (`page.tsx:391-465`), now
+  invoked unconditionally for every symbol (not just held positions). The table's own content (8
+  columns, cell renderers, the dead `cursor-pointer` class) is byte-identical in substance — only its
+  structural home moved. Re-spec'd both steps' Codebase Evidence and Instructions to the new line
+  numbers/component context; the migration approach itself (define `ColumnDef`s, replace `<Table>` with
+  `<DataTable>`, no `onRowClick`, carry `cursor-pointer` forward) is unchanged. Step 22 additionally
+  corrected: `position-detail.spec.ts` grew from a narrow orders-table spec to a 351-line, 5-test
+  unified-page suite (feature 125's own tests) — re-pointed its evidence at the two tests that actually
+  assert `SymbolOrdersCard`'s rendering (`:40`, `:82`) and added an explicit out-of-scope note so this
+  step doesn't balloon into covering feature 125's other sections.
+- Also noted, not re-spec'd (pre-existing, unrelated to feature 125): Step 6's evidence cites a third
+  `/SetConfig` wait at `value-persists-after-save.spec.ts:95` that doesn't exist (file is 84 lines, only
+  2 waits at `:43,73`) — a citation inaccuracy predating this session. Does not block Step 6 (its
+  Instructions don't depend on that specific line). Left as-is per "targeted, minimal" re-spec scope;
+  Phase 1 discovery will simply not find a third assertion to preserve, which is not a blocker.
+
+Full agent findings recorded in `context.md` § Session 2026-08-16.
 
 ## Deviation Log
 

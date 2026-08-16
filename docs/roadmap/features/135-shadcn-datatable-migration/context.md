@@ -278,6 +278,63 @@ clears it lands, rather than letting the warning go stale.
   Proceeding with sequential-mode execution of all 33 implementation-spec steps on this branch; the
   final integration PR will target `main-dev` from here, same as every other artifact PR.
 
+## Session 2026-08-16 — sdd-execute sequential §5.3 re-spec gate (fresh recon before execution)
+
+- At the sequential-mode entry confirmation, user asked for "a new code recon" before executing,
+  because feature 125 ("unified Symbol page — sections, Signal-detail retirement, FR-6 indicator
+  charts," commit `d4c104b`, 71 files / 8229+/954-) merged into `main-dev` the same day this feature's
+  spec was written, and its diff includes `trader/positions/[symbol]/page.tsx` (795 lines) — exactly
+  the file Steps 21–22 (row 4) target.
+- Ran the sequential-mode re-spec gate (§5.3): 3 parallel `codebase-discovery` subagents re-verified
+  every one of the 15 table sites' Codebase Evidence against the current (post-125) codebase —
+  trader segment (rows 1–7, Steps 19–32), insights segment (rows 8–11, Steps 9–16), and
+  config-ui/accounts/composite (Steps 1–8, 17–18) — plus the full `mobile-overflow.spec.ts` `ROUTES`
+  array.
+- **Result: only Steps 21–22 needed a genuine re-spec.** Findings:
+  - **Row 4 (Steps 21–22, `/trader/positions/[symbol]`)** — structural change. The orders sub-table
+    was hoisted by feature 125 into a new standalone `SymbolOrdersCard({ symbol, orders, working })`
+    function component (`page.tsx:391-465`), now invoked unconditionally at `:260` (renders for every
+    symbol, not only held positions — part of feature 125's "hoisted to page level" restructure). The
+    table's own content is unchanged in substance: still 8 columns (Side/Type/Qty/Filled/Avg
+    fill/Status/Origin/Open) at `:417`, same `OrderSideBadge`/`OrderStatusBadge`/`TYPE_LABEL`/
+    `formatOrderPrice` cell renderers, same dead `cursor-pointer` class on `TableRow` (`:432`, still
+    zero click handler), same `View →` link. Re-spec'd Step 21's Codebase Evidence/Instructions to the
+    new line numbers and `SymbolOrdersCard` context; the migration approach itself is unchanged. Its
+    paired e2e spec, `e2e/trader/position-detail.spec.ts`, also grew from a narrow single-table spec
+    into a 351-line, 5-test suite covering feature 125's whole unified page (chart, orders, trade
+    widget, backtests, backfill, indicators) — re-spec'd Step 22 to point at the two tests that
+    actually assert `SymbolOrdersCard` rendering (`'Orders & fills · AAPL'` at `:40`, `'Orders & fills
+    · ZZZZ'` at `:82`, the latter proving the new unconditional-render behavior) and added an explicit
+    note that this step's scope stays limited to the orders table, not feature 125's other sections.
+  - **13 of 15 sites (Steps 1–20, 23–32) held with no re-spec** — either exact-line CONFIRMED or a
+    trivial line-drift with the underlying structure unchanged (e.g. `/config-ui/sources` Table moved
+    `:299`→`:330` due to an *unrelated* feature 134 change already on `main-dev`; `/insights/screener`
+    Table moved `:543`→`:480`; several e2e assertion line numbers shifted by a handful of lines from
+    intervening test additions). Per the re-spec gate's "targeted, minimal" directive, these were left
+    alone — Phase 1 Discovery's mandatory fresh `Read` of each target file (a HARD CONSTRAINT
+    regardless of re-spec) resolves line drift on its own; re-specifying every drifted citation would
+    have been unnecessary churn on step bodies that are otherwise still accurate.
+  - **One pre-existing evidence inaccuracy noted, not re-spec'd** (predates feature 125, already
+    flagged in the `/sdd-review impl-spec` unresolved-warnings list for Step 20's fixture-import claim
+    — same class of issue): Step 6's Codebase Evidence cites a third `/SetConfig` network wait at
+    `value-persists-after-save.spec.ts:95`; the file is only 84 lines with 2 waits (`:43,73`). Doesn't
+    block Step 6's Instructions (they don't depend on that specific citation); recorded for visibility.
+  - `mobile-overflow.spec.ts` `ROUTES`: confirmed the bare `/trader` entry is still absent (Step 25
+    still correctly adds it) and that feature 125 already removed the now-dead `/insights/market/
+    [symbol]` entry (folded into `/trader/positions/AAPL` coverage) — a few sibling entries' line
+    numbers shifted by one as a result, immaterial to any step's grep-based Verification commands
+    (which match on route-path strings, not line numbers).
+- Full re-spec detail lives in `implementation-spec.md` § Re-spec Log (new section, added this
+  session) — the step bodies themselves were edited per §5.3's sole sanctioned exception to step-body
+  immutability, before the step loop begins, on the feature branch.
+- Branch state: confirmed `origin/main-dev` had not moved since the prior branch-topology-correction
+  commit (`git fetch origin main-dev` — no new commits), so §5.3 step 1's "merge current main-dev into
+  `<dev-branch>`" is a no-op this session; `<dev-branch>` is already exactly `origin/main-dev` + the
+  branch-correction commit.
+- Next: commit this re-spec (`respec(shadcn-datatable-migration): align steps 21-22 with current
+  codebase`), present the combined per-feature plan via the sequential-mode §5.4 up-front confirm, then
+  proceed to Tooling Setup and the step loop.
+
 ## Session 2026-08-15 — sdd-execute boot (branch-topology correction)
 
 - Boot Step B3 (`git ls-remote --heads origin feature/shadcn-datatable-migration`) found the
