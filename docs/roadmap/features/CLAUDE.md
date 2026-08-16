@@ -64,7 +64,7 @@ across all `status.md` files — never `Read` each one individually in a loop:
 ```bash
 # All statuses, one call:
 egrep -H '' docs/roadmap/features/*/status.md
-# → docs/roadmap/features/031-foo/status.md:design-approved
+# → docs/roadmap/features/<NNN-slug>/status.md:design-approved
 
 # Filtered to one status, one call:
 egrep -l '^launched$' docs/roadmap/features/*/status.md
