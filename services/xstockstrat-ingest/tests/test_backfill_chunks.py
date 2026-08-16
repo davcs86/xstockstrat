@@ -33,22 +33,15 @@ class TestPlanChunks:
         for a, b in zip(chunks, chunks[1:]):
             assert a["range_end"] == b["range_start"]
 
-    def test_density_yields_more_chunks_for_15m_than_1d(self):
-        # Same symbols + range; a cap small enough that 15m (26 bars/day) must split symbols
-        # while 1d (1 bar/day) fits all symbols per window. 15m is the smallest interval.
-        symbols = ["AAPL", "TSLA", "MSFT"]
-        start, end = _dt(2023, 1, 1), _dt(2023, 4, 1)
-        cap = 2500
-        oneday = backfill_chunks.plan_chunks(symbols, "1d", start, end, 90, cap)
-        fifteenmin = backfill_chunks.plan_chunks(symbols, "15m", start, end, 90, cap)
-        assert len(fifteenmin) > len(oneday)
-
     def test_no_chunk_exceeds_bar_cap(self):
-        cap = 5000
+        # Feature 143: only "1d" is chunk-planned now (15m/1h are no longer requestable). A 90-day
+        # window is ~64 weekdays; cap=200 with 4 symbols yields max_syms = 200 // 64 = 3, splitting
+        # the 4 symbols into a 3-symbol chunk and a 1-symbol chunk per window.
+        cap = 200
         chunks = backfill_chunks.plan_chunks(
-            ["AAPL", "TSLA", "MSFT", "NVDA"], "1h", _dt(2022, 1, 1), _dt(2024, 1, 1), 90, cap
+            ["AAPL", "TSLA", "MSFT", "NVDA"], "1d", _dt(2022, 1, 1), _dt(2024, 1, 1), 90, cap
         )
-        bpd = backfill_chunks._BARS_PER_DAY["1h"]
+        bpd = backfill_chunks._BARS_PER_DAY["1d"]
         for c in chunks:
             wk = backfill_chunks._weekdays(c["range_start"], c["range_end"])
             assert len(c["symbols"]) * wk * bpd <= cap or len(c["symbols"]) == 1
