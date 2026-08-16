@@ -75,3 +75,16 @@
 - Open Risks (carry to /sdd-spec + execute): scroll-spy `rootMargin`/`threshold` empirical tuning; 1px
   border-b under-shoot in scroll-mt; scroll-spy observer not recreated on `sm` resize.
 - Status: `spec-ready` → `design-approved`.
+
+## Session 2026-08-16 — sdd-spec
+
+- Generated implementation-spec.md with 3 steps (all `xstockstrat-ui`, UI-only — no proto/config/DB/env/port). Status → `implementation-ready`.
+  - Step 1 [service]: create `src/components/trader/SymbolSectionNav.tsx` — the `ToggleGroup type="single"` sticky anchor-nav + co-located `STICKY_NAV_TOP`/`SECTION_SCROLL_MT` exports (single source of truth for offsets) + `IntersectionObserver` scroll-spy + bare-`#hash` `replaceState`.
+  - Step 2 [service]: wire into `page.tsx` — six `<section id>` wrappers (overview/trade/research/backtests/coverage/position), nav rendered after `<h1>` gated on `!isLoading && !genuineError`, `groups` appends Position only when `position?.symbol`. Zero JSX reorder (FR-3).
+  - Step 3 [test]: e2e — nav interaction added to `position-detail.spec.ts` (its 20 section assertions stay unchanged, all sections mounted), new `symbol-section-nav.spec.ts` for `#backtests` deep-link, `?strategy=` non-regression (AC-4), scroll-spy active flip; run broader trader+insights `-g` scope; `mobile-overflow.spec.ts` kept green.
+- Key codebase findings (grep/Read-verified this session):
+  - Page section DOM order confirmed in `src/app/trader/positions/[symbol]/page.tsx`: SymbolPriceChart `:240`, IndicatorSection `:252`, SymbolOrdersCard `:259`, inline Trade Card/OrderForm `:261-270`, watchlist-conditional block `:275-289`, BacktestsSection `:293`, BackfillSection `:296`, PositionBody `:298-303`, `positionNotFound` CardNotice `:305-311` (stays unwrapped). Wrapper `:215` `p-4 sm:p-6`, `<h1>` `:226`, gating `:210-211`. Section components are defined LOCALLY in page.tsx (`:322/473/806/921/971`).
+  - `cn` is NOT currently imported in page.tsx → Step 2 must add `import { cn } from '@/components/ui/utils'`.
+  - Radix `ToggleGroupItem` renders a `<button>` (not `role="tab"`/`radio`): proven by the existing `insights/opportunities` exemplar located via `getByRole('button', {name:'marketwatch'})` in `e2e/insights/opportunities.spec.ts:84,137,139` — validates the design's `getByRole('button', …)` chip locator and confirms the `fails.md` 2026-08-09 tab-collision is sidestepped.
+  - `SymbolSectionNav.tsx` filename is free (absent from `components/trader/`); `mobile-overflow.spec.ts:34,42` asserts `scrollWidth-clientWidth<=1` at 390px on `/trader/positions/AAPL` (no edit needed, keep green); `?strategy=` seed read on mount at `SignalReadiness.tsx:34` (`searchParams?.get('strategy') ?? ''`) — preserved by all-sections-mounted + bare-hash `replaceState`.
+  - `xstockstrat-ui` has no coverage threshold (e2e is the gate); single reviewer snapshot = `xstockstrat-ui` service owner across all 3 steps. No trading-domain step constraints apply (presentation only; no OrderType/BrokerType/OrderStatus/TRADING_MODE surface touched). C-14 consumer surface (UI `/trader`) covered; C-10(a) already satisfied (existing route, no new nav entry).
