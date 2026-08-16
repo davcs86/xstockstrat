@@ -361,3 +361,10 @@ numbers were stale, and it did not know 131 added a 5th `strategy_symbols` calle
 
 Teardown: `/context-scrubber` plugin not installed this session — touched context docs
 (`analysis/CLAUDE.md`, `mcp-tools.md`, strat-lab `SKILL.md`) reviewed by hand against the code.
+
+## Session 2026-08-16 (CI: feature status automation)
+
+- Promotion PR #963 merged to main
+- Feature promoted and committed: 94e4e24fa6ac41eb20bd16e1e9af15c8388e885a
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-16

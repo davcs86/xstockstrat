@@ -1,6 +1,5 @@
 # Feature: live-trading-game-day
 
-**Lifecycle Status**: `demoted/canceled`
 **Development Branch**: `feature/live-trading-game-day`
 **Created**: 2026-08-04
 **Last Updated**: 2026-08-04

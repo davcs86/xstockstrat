@@ -1,5 +1,6 @@
 'use client';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import type { ColumnDef } from '@tanstack/react-table';
 import {
   useLiveStrategyDefinitions,
   useSetStrategyLive,
@@ -8,7 +9,7 @@ import {
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
+import { DataTable } from '../ui/data-table';
 import { Collapsible, CollapsibleContent } from '../ui/collapsible';
 
 interface LiveStrategiesPanelProps {
@@ -22,6 +23,60 @@ export function LiveStrategiesPanel({ isAdmin }: LiveStrategiesPanelProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const strategies = data?.definitions ?? [];
 
+  type StrategyRow = (typeof strategies)[number];
+
+  const columns = useMemo<ColumnDef<StrategyRow>[]>(() => {
+    const base: ColumnDef<StrategyRow>[] = [
+      {
+        id: 'strategy',
+        header: 'Strategy',
+        accessorFn: (s) => s.displayName || s.strategyId,
+      },
+      {
+        id: 'status',
+        header: 'Status',
+        accessorFn: (s) => (s.active ? 'active' : 'inactive'),
+        cell: ({ row }) => (
+          <Badge variant={row.original.active ? 'default' : 'secondary'}>
+            {row.original.active ? 'active' : 'inactive'}
+          </Badge>
+        ),
+      },
+      {
+        id: 'live',
+        header: 'Live',
+        accessorFn: (s) => (s.liveEnabled ? 'on' : 'off'),
+        cell: ({ row }) => (
+          <Badge variant={row.original.liveEnabled ? 'default' : 'outline'}>
+            {row.original.liveEnabled ? 'on' : 'off'}
+          </Badge>
+        ),
+      },
+    ];
+    if (!isAdmin) return base;
+    const actionColumn: ColumnDef<StrategyRow> = {
+      id: 'action',
+      header: 'Action',
+      enableSorting: false,
+      cell: ({ row }) => {
+        const s = row.original;
+        return (
+          <Button
+            size="sm"
+            variant={s.liveEnabled ? 'outline' : 'default'}
+            disabled={setLive.isPending}
+            onClick={() =>
+              setLive.mutate({ strategyId: s.strategyId, liveEnabled: !s.liveEnabled })
+            }
+          >
+            {s.liveEnabled ? 'Disable' : 'Enable'}
+          </Button>
+        );
+      },
+    };
+    return [...base, actionColumn];
+  }, [isAdmin, setLive]);
+
   return (
     <Card>
       <CardHeader>
@@ -33,63 +88,13 @@ export function LiveStrategiesPanel({ isAdmin }: LiveStrategiesPanelProps) {
         ) : strategies.length === 0 ? (
           <p className="text-sm text-muted-foreground">No strategies defined.</p>
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Strategy</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Live</TableHead>
-                {isAdmin && <TableHead>Action</TableHead>}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {strategies.map((s) => (
-                <TableRow
-                  key={s.strategyId}
-                  className="cursor-pointer"
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setSelectedId(s.strategyId)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      setSelectedId(s.strategyId);
-                    }
-                  }}
-                >
-                  <TableCell>{s.displayName || s.strategyId}</TableCell>
-                  <TableCell>
-                    <Badge variant={s.active ? 'default' : 'secondary'}>
-                      {s.active ? 'active' : 'inactive'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={s.liveEnabled ? 'default' : 'outline'}>
-                      {s.liveEnabled ? 'on' : 'off'}
-                    </Badge>
-                  </TableCell>
-                  {isAdmin && (
-                    <TableCell>
-                      <Button
-                        size="sm"
-                        variant={s.liveEnabled ? 'outline' : 'default'}
-                        disabled={setLive.isPending}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setLive.mutate({
-                            strategyId: s.strategyId,
-                            liveEnabled: !s.liveEnabled,
-                          });
-                        }}
-                      >
-                        {s.liveEnabled ? 'Disable' : 'Enable'}
-                      </Button>
-                    </TableCell>
-                  )}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <DataTable
+            columns={columns}
+            data={strategies}
+            getRowId={(s) => s.strategyId}
+            onRowClick={(s) => setSelectedId(s.strategyId)}
+            rowClassName={() => 'cursor-pointer'}
+          />
         )}
         {setLive.isError && (
           <p className="text-sm text-destructive mt-2">

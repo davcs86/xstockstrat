@@ -1,6 +1,6 @@
 ---
 name: sdd-archiver
-description: Destructively archive completed SDD features — synthesize the what/why/how that CANNOT be recovered from code or specs, land it where agents actually read it, then prune the verbose artifacts. Usage — /sdd-archiver [<feature-slug> | all]. With no args it reports every terminal-state feature (launched, rolled-back, demoted/canceled) not yet archived and processes the next one; a slug archives one; `all` batches them (cap 10/run). Per feature it delegates read-only synthesis to the feature-synthesizer subagent, runs an adversarial completeness check, then (after a consent gate) distils generalizable lessons into the Ledger (insights.md/fails.md), rewrites context.md down to an `## Archive Synthesis` block, stamps `**Archived**` on feature.md, and DELETES product-spec.md / recon.md / design.md / implementation-spec.md — all through a docs-only PR to main-dev. Use this whenever completed feature artifacts are piling up with little value, when someone wants to clean up / declutter / tidy / garbage-collect / prune / reclaim stale or finished feature directories, after a promotion flips features to launched, to capture decision rationale / rejected alternatives / build scars / gotchas before they are forgotten or pruned, to run a retro / retrospective / post-mortem on a shipped or a rolled-back / demoted / abandoned feature, to distil / harvest / memorialize the lessons learned or institutional knowledge from finished work, to answer "what did we learn from feature X", or to reduce the accumulating pile of old SDD spec files. Never deletes feature.md, never changes lifecycle status, never rewrites git history.
+description: Destructively archive completed SDD features — synthesize the what/why/how that CANNOT be recovered from code or specs, land it where agents actually read it, then prune the verbose artifacts. Usage — /sdd-archiver [<feature-slug> | all]. With no args it reports every terminal-state feature (launched, rolled-back, demoted/canceled) not yet archived and processes the next one; a slug archives one; `all` batches them (cap 10/run). Per feature it delegates read-only synthesis to the feature-synthesizer subagent, runs an adversarial completeness check, then (after a consent gate) distils generalizable lessons into the Ledger (insights.md/fails.md), rewrites context.md down to an `## Archive Synthesis` block, stamps `**Archived**` on feature.md, and DELETES product-spec.md / recon.md / design.md / implementation-spec.md — all through a docs-only PR to main-dev. Use this whenever completed feature artifacts are piling up with little value, when someone wants to clean up / declutter / tidy / garbage-collect / prune / reclaim stale or finished feature directories, after a promotion flips features to launched, to capture decision rationale / rejected alternatives / build scars / gotchas before they are forgotten or pruned, to run a retro / retrospective / post-mortem on a shipped or a rolled-back / demoted / abandoned feature, to distil / harvest / memorialize the lessons learned or institutional knowledge from finished work, to answer "what did we learn from feature X", or to reduce the accumulating pile of old SDD spec files. Never deletes feature.md or status.md, never changes lifecycle status, never rewrites git history.
 argument-hint: "[<feature-slug> | all]"
 allowed-tools: Read Write Edit Task AskUserQuestion Bash(find *) Bash(grep *) Bash(ls *) Bash(date *) Bash(git fetch *) Bash(git show *) Bash(git ls-remote *) Bash(git status *) Bash(git checkout *) Bash(git branch *) Bash(git rm *) Bash(git add *) Bash(git commit *) Bash(git push *) Bash(gh pr *)
 effort: medium
@@ -37,14 +37,18 @@ Progressive disclosure: this SKILL.md is the router. Read
 
 ## PHASE 1 — ENUMERATE & DETECT
 
-Enumerate feature dirs and read each feature's authoritative `feature.md` from `origin/main-dev`;
-select terminal-state features that lack an `**Archived**:` marker:
+Enumerate feature dirs and read each feature's authoritative `status.md` + `feature.md` from
+`origin/main-dev`; select terminal-state features that lack an `**Archived**:` marker. Status
+comes from `status.md` (a one-line fetch, cheaper than parsing it out of `feature.md`) — see
+`docs/roadmap/features/CLAUDE.md` § Bulk Status Reads, Case 2 (this loop needs `origin/main-dev`
+as the authoritative source per feature, not a local-tree scan, so it stays a per-feature `git
+show` loop, but each iteration now fetches a tiny file instead of the full `feature.md`):
 
 ```bash
 for d in $(find docs/roadmap/features -maxdepth 1 -mindepth 1 -type d | sort); do
   slug=$(basename "$d" | sed 's/^[0-9][0-9][0-9]-//')
+  status=$(git show origin/main-dev:"$d/status.md" 2>/dev/null || cat "$d/status.md")
   fm=$(git show origin/main-dev:"$d/feature.md" 2>/dev/null || cat "$d/feature.md")
-  status=$(printf '%s\n' "$fm" | grep -m1 '\*\*Lifecycle Status\*\*:' | sed -E 's/.*`([^`]+)`.*/\1/')
   archived=$(printf '%s\n' "$fm" | grep -m1 '\*\*Archived\*\*:')
   case "$status" in
     launched|rolled-back|demoted/canceled)
@@ -56,10 +60,10 @@ done
 Single-slug resolve: `find docs/roadmap/features -maxdepth 1 -mindepth 1 -type d -name "*-$ARGUMENTS[0]"`.
 
 For each feature you will actually process, **detect non-standard artifacts** — anything in the dir
-that is not one of the six known SDD files — and carry them into the Phase 4b extras gate:
+that is not one of the seven known SDD files — and carry them into the Phase 4b extras gate:
 
 ```bash
-ls -A "$FEATURE_DIR" | grep -vxF -e feature.md -e product-spec.md -e recon.md -e design.md \
+ls -A "$FEATURE_DIR" | grep -vxF -e feature.md -e status.md -e product-spec.md -e recon.md -e design.md \
   -e implementation-spec.md -e context.md
 ```
 
@@ -164,8 +168,9 @@ Read `reference/write-formats.md` for the exact blocks. On a `claude/archive-<sl
    (append-only, newest at bottom, one lesson per entry, `path:line`-cited). Skip every `[DUP:...]`.
 2. **context.md.** Read it first (C-02), then **rewrite** it to the archived form (header +
    `## Archive Synthesis` block) using `templates/archive-synthesis.md`.
-3. **feature.md.** Add `**Archived**: <TODAY>` to the header (after the status block) and append one
-   `## Status History` row. **Do not change `**Lifecycle Status**`.**
+3. **feature.md.** Add `**Archived**: <TODAY>` to the header and append one `## Status History`
+   row. **Never touch `status.md`** — an archived `launched` feature's `status.md` still reads
+   `launched`; `**Archived**` is orthogonal to lifecycle status.
 4. **Prune.** `git rm` the allowlist files present (`product-spec.md`, `recon.md`, `design.md`,
    `implementation-spec.md`) **plus** any extra the human chose `Delete it` for at Phase 4b — and
    nothing else. Extras marked keep/relocate stay in place.
@@ -212,8 +217,8 @@ if the context-forge plugin is unavailable, note that in the PR body rather than
   rewrite, reorder, or dedup-by-deletion existing entries — `docs/roadmap/ledger/CLAUDE.md`.
 - **Never write `docs/context-constitution.md` or `-findings.md`.** Runtime invariants are emitted as
   recommendations to `/context-constitution` only.
-- **Never delete `feature.md`; never change lifecycle status.** `**Archived**` is orthogonal — an
-  archived `launched` feature stays `launched`.
+- **Never delete `feature.md` or `status.md`; never change lifecycle status (never write
+  `status.md`).** `**Archived**` is orthogonal — an archived `launched` feature stays `launched`.
 - **Never rewrite git history or force-push.** Pruned artifacts must stay recoverable via `git show`.
 - **Idempotent.** Skip any feature already carrying `**Archived**:`; never double-append to the Ledger.
 - **Docs-only, through a PR to `main-dev` from a `claude/*` branch.** Never push to `main-dev` /

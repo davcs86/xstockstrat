@@ -1,6 +1,5 @@
 # Feature: consolidate-watchlist-signal
 
-**Lifecycle Status**: `draft`
 **Development Branch**: `feature/consolidate-watchlist-signal`
 **Created**: 2026-08-11
 **Last Updated**: 2026-08-11

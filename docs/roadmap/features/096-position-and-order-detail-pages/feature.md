@@ -1,6 +1,5 @@
 # Feature: position-and-order-detail-pages
 
-**Lifecycle Status**: `launched`
 **Committed to main**: c1d1882
 **Launched date**: 2026-08-06
 **Development Branch**: `feature/position-and-order-detail-pages`

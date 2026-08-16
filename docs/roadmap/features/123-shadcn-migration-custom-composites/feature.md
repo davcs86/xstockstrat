@@ -1,6 +1,5 @@
 # Feature: shadcn-migration-custom-composites
 
-**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/shadcn-migration-custom-composites`
 **Created**: 2026-08-08
 **Last Updated**: 2026-08-09

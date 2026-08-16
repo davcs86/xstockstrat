@@ -1,6 +1,5 @@
 # Feature: options-trading-support
 
-**Lifecycle Status**: `demoted/canceled`
 **Development Branch**: _none — demoted before implementation_
 **Created**: 2026-05-26
 **Last Updated**: 2026-05-26

@@ -1,17 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { KeyRound, Copy, Check } from 'lucide-react';
+import type { ColumnDef } from '@tanstack/react-table';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from '@/components/ui/table';
+import { DataTable } from '@/components/ui/data-table';
 import {
   AlertDialog,
   AlertDialogTrigger,
@@ -96,6 +90,66 @@ export default function AuthorizedAppsPage() {
     }
   }
 
+  const columns = useMemo<ColumnDef<AuthorizedApp>[]>(
+    () => [
+      {
+        accessorKey: 'clientName',
+        header: 'App',
+        meta: { className: 'font-medium' },
+      },
+      {
+        accessorKey: 'clientId',
+        header: 'Client ID',
+        meta: { className: 'font-mono text-xs' },
+      },
+      {
+        accessorKey: 'authorizedAt',
+        header: 'Authorized',
+        cell: ({ row }) => formatDate(row.original.authorizedAt),
+      },
+      {
+        accessorKey: 'lastUsedAt',
+        header: 'Last refreshed',
+        cell: ({ row }) => formatDate(row.original.lastUsedAt),
+      },
+      {
+        id: 'actions',
+        header: 'Actions',
+        enableSorting: false,
+        meta: { className: 'text-right' },
+        cell: ({ row }) => {
+          const app = row.original;
+          return (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="sm" disabled={revoking === app.clientId}>
+                  {revoking === app.clientId ? 'Disconnecting…' : 'Disconnect'}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogDescription>
+                  Disconnect &quot;{app.clientName}&quot;? It will lose access until you
+                  re-authorize it.
+                </AlertDialogDescription>
+                <AlertDialogCancel disabled={revoking === app.clientId}>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={revoking === app.clientId}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    handleDisconnect(app);
+                  }}
+                >
+                  Confirm
+                </AlertDialogAction>
+              </AlertDialogContent>
+            </AlertDialog>
+          );
+        },
+      },
+    ],
+    [revoking],
+  );
+
   async function copyAgentUrl() {
     try {
       await navigator.clipboard.writeText(agentUrl);
@@ -131,58 +185,7 @@ export default function AuthorizedAppsPage() {
               You haven&apos;t authorized any apps yet. Use the section below to connect one.
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>App</TableHead>
-                  <TableHead>Client ID</TableHead>
-                  <TableHead>Authorized</TableHead>
-                  <TableHead>Last refreshed</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {apps.map((app) => (
-                  <TableRow key={app.clientId}>
-                    <TableCell className="font-medium">{app.clientName}</TableCell>
-                    <TableCell className="font-mono text-xs">{app.clientId}</TableCell>
-                    <TableCell>{formatDate(app.authorizedAt)}</TableCell>
-                    <TableCell>{formatDate(app.lastUsedAt)}</TableCell>
-                    <TableCell className="text-right">
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            disabled={revoking === app.clientId}
-                          >
-                            {revoking === app.clientId ? 'Disconnecting…' : 'Disconnect'}
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogDescription>
-                            Disconnect &quot;{app.clientName}&quot;? It will lose access until you
-                            re-authorize it.
-                          </AlertDialogDescription>
-                          <AlertDialogCancel disabled={revoking === app.clientId}>
-                            Cancel
-                          </AlertDialogCancel>
-                          <AlertDialogAction
-                            disabled={revoking === app.clientId}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              handleDisconnect(app);
-                            }}
-                          >
-                            Confirm
-                          </AlertDialogAction>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <DataTable columns={columns} data={apps} getRowId={(app) => app.clientId} />
           )}
         </CardContent>
       </Card>

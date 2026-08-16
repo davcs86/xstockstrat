@@ -358,3 +358,10 @@
 - Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `docs/patterns/config-governance.md`
 - Teardown: `/context-scrubber` plugin not installed in this session — touched context docs reviewed
   by hand against the code (noted in the integration PR body).
+
+## Session 2026-08-16 (CI: feature status automation)
+
+- Promotion PR #963 merged to main
+- Feature promoted and committed: 94e4e24fa6ac41eb20bd16e1e9af15c8388e885a
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-16

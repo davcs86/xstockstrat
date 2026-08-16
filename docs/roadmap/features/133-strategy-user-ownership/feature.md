@@ -1,6 +1,7 @@
 # Feature: strategy-user-ownership
 
-**Lifecycle Status**: `code-completed`
+**Committed to main**: 94e4e24fa6ac41eb20bd16e1e9af15c8388e885a
+**Launched date**: 2026-08-16
 **Development Branch**: `feature/strategy-user-ownership`
 **Created**: 2026-08-14
 **Last Updated**: 2026-08-15
@@ -18,6 +19,7 @@
 | 2026-08-14 | `implementation-ready` (unchanged) | /sdd-execute respec | Sequential-mode §5.3 re-spec gate: 16/17 steps' anchors confirmed against trunk. One corrected — Step 7's `BacktestRunsRepository.create` → `insert` (the real method name, `backtest_runs.py:25`); same intent (thread `user_id` into the backtest-run write). Anchor-only edit, no scope change. |
 | 2026-08-14 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started. Step 1 (proto: `StrategyDefinition.user_id = 13`) done — buf lint + buf breaking (vs main-dev, non-breaking) pass. |
 
+| 2026-08-16 | `code-completed` → `launched` | CI workflow | Promoted via PR #963; committed 94e4e24fa6ac41eb20bd16e1e9af15c8388e885a |
 ---
 
 ## Artifacts

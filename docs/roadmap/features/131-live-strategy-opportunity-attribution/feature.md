@@ -1,6 +1,7 @@
 # Feature: live-strategy-opportunity-attribution
 
-**Lifecycle Status**: `code-completed`
+**Committed to main**: 94e4e24fa6ac41eb20bd16e1e9af15c8388e885a
+**Launched date**: 2026-08-16
 **Development Branch**: `feature/live-strategy-opportunity-attribution`
 **Created**: 2026-08-13
 **Last Updated**: 2026-08-15
@@ -22,6 +23,7 @@
 | 2026-08-15 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential (stacked) execution started (Steps 1–2) |
 | 2026-08-15 | `in-progress` → `code-completed` | /sdd-execute | All 5 steps done (474 analysis tests pass, 82.6% cov); integration PR next |
 
+| 2026-08-16 | `code-completed` → `launched` | CI workflow | Promoted via PR #963; committed 94e4e24fa6ac41eb20bd16e1e9af15c8388e885a |
 ---
 
 ## Artifacts

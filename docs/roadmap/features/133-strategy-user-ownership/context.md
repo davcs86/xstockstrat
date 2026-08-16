@@ -464,3 +464,10 @@ TS plugins (pnpm) + `uv sync --extra dev` (analysis) all done. gettext-base inst
 ### Feature 133 — code-completed
 All 17 steps done. Analysis backend (auth core, 464 tests green), agent surface (219 tests green),
 UI BFF de-gating + cross-user isolation e2e (green), and same-PR docs. Ready for the integration PR.
+
+## Session 2026-08-16 (CI: feature status automation)
+
+- Promotion PR #963 merged to main
+- Feature promoted and committed: 94e4e24fa6ac41eb20bd16e1e9af15c8388e885a
+- Status updated: `code-completed` → `launched`
+- Launched date: 2026-08-16

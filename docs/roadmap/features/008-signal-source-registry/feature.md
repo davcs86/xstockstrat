@@ -1,6 +1,5 @@
 # Feature: signal-source-registry
 
-**Lifecycle Status**: `launched`
 **Committed to main**: c84aef67e8ee726451f0a1ecce8a477656cd0141
 **Launched date**: 2026-05-23
 **Development Branch**: `feature/signal-source-registry`

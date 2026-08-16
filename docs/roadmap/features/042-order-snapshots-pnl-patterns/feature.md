@@ -1,6 +1,5 @@
 # Feature: order-snapshots-pnl-patterns
 
-**Lifecycle Status**: `draft`
 **Development Branch**: `feature/order-snapshots-pnl-patterns`
 **Created**: 2026-05-26
 **Last Updated**: 2026-05-26

@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { EllipsisVertical } from 'lucide-react';
 import { ConnectError } from '@connectrpc/connect';
+import type { ColumnDef } from '@tanstack/react-table';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -14,14 +15,7 @@ import {
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
 import { PageBreadcrumb } from '@/components/shared/PageBreadcrumb';
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from '@/components/ui/table';
+import { DataTable } from '@/components/ui/data-table';
 import { useConfigKeys } from '@/app/config-ui/hooks/useConfigKeys';
 import { useSetConfig } from '@/app/config-ui/hooks/useSetConfig';
 
@@ -87,6 +81,7 @@ export function NamespaceEditor({ namespace, env, mode, nativeEnv }: Props) {
     tradingMode: number;
     validation?: { valueType: number; minValue: number; maxValue: number };
   }[];
+  type ConfigKeyRow = (typeof keys)[number];
 
   function handleSave(key: string) {
     const meta = keys.find((kk) => kk.key === key);
@@ -126,6 +121,125 @@ export function NamespaceEditor({ namespace, env, mode, nativeEnv }: Props) {
     );
   }
 
+  const columns = useMemo<ColumnDef<ConfigKeyRow>[]>(
+    () => [
+      {
+        accessorKey: 'key',
+        header: 'Key',
+        meta: { className: 'w-[220px] font-mono text-primary' },
+      },
+      {
+        id: 'value',
+        header: 'Value',
+        enableSorting: false,
+        meta: { className: 'w-[200px] font-mono' },
+        cell: ({ row }) => {
+          const k = row.original;
+          return editingKey === k.key ? (
+            <>
+              <Input
+                className="h-7 text-xs w-40"
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                onBlur={() => {
+                  if (k.validation?.valueType === 1) {
+                    setValidationError(
+                      validateFloatMap(editValue, k.validation.minValue, k.validation.maxValue),
+                    );
+                  }
+                }}
+                autoFocus
+              />
+              <Input
+                className="h-7 text-xs w-40 mt-1"
+                value={editReason}
+                onChange={(e) => setEditReason(e.target.value)}
+                placeholder="Reason for this change"
+              />
+              {validationError && editingKey === k.key && (
+                <p className="text-destructive text-xs mt-0.5">{validationError}</p>
+              )}
+            </>
+          ) : k.isSecret ? (
+            <span className="text-muted-foreground italic text-xs">[secret]</span>
+          ) : (
+            <span className="text-foreground/80">{k.currentValue || '—'}</span>
+          );
+        },
+      },
+      {
+        accessorKey: 'description',
+        header: 'Description',
+        meta: { className: 'hidden md:table-cell text-muted-foreground text-xs' },
+      },
+      {
+        id: 'actions',
+        header: 'Actions',
+        enableSorting: false,
+        meta: { className: 'w-[120px]' },
+        cell: ({ row }) => {
+          const k = row.original;
+          return (
+            <div className="flex items-center gap-1">
+              {!k.isSecret && editingKey !== k.key && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      aria-label="Actions"
+                      data-testid={`actions-${k.key}`}
+                    >
+                      <EllipsisVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() => {
+                        setEditingKey(k.key);
+                        setEditValue(k.currentValue);
+                        setEditReason('');
+                      }}
+                    >
+                      Edit
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+              {editingKey === k.key && (
+                <>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => handleSave(k.key)}
+                    disabled={saving || (editingKey === k.key && !!validationError) || !isNativeEnv}
+                    className="h-7 px-2 text-xs"
+                  >
+                    {saving ? 'Saving…' : 'Save'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setEditingKey(null);
+                      setValidationError(null);
+                    }}
+                    className="h-7 px-2 text-xs text-muted-foreground"
+                  >
+                    Cancel
+                  </Button>
+                </>
+              )}
+            </div>
+          );
+        },
+      },
+    ],
+    [editingKey, editValue, editReason, validationError, saving, isNativeEnv, handleSave],
+  );
+
   return (
     <div className="space-y-4">
       {/* Breadcrumb */}
@@ -163,126 +277,12 @@ export function NamespaceEditor({ namespace, env, mode, nativeEnv }: Props) {
       {!loading && !keysError && (
         <Card>
           <CardContent className="pt-4 p-0">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[220px]">Key</TableHead>
-                  <TableHead className="w-[200px]">Value</TableHead>
-                  <TableHead className="hidden md:table-cell">Description</TableHead>
-                  <TableHead className="w-[120px]">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {keys.map((k) => (
-                  <TableRow key={k.key}>
-                    <TableCell className="font-mono text-primary">{k.key}</TableCell>
-                    <TableCell className="font-mono">
-                      {editingKey === k.key ? (
-                        <>
-                          <Input
-                            className="h-7 text-xs w-40"
-                            value={editValue}
-                            onChange={(e) => setEditValue(e.target.value)}
-                            onBlur={() => {
-                              if (k.validation?.valueType === 1) {
-                                setValidationError(
-                                  validateFloatMap(
-                                    editValue,
-                                    k.validation.minValue,
-                                    k.validation.maxValue,
-                                  ),
-                                );
-                              }
-                            }}
-                            autoFocus
-                          />
-                          <Input
-                            className="h-7 text-xs w-40 mt-1"
-                            value={editReason}
-                            onChange={(e) => setEditReason(e.target.value)}
-                            placeholder="Reason for this change"
-                          />
-                          {validationError && editingKey === k.key && (
-                            <p className="text-destructive text-xs mt-0.5">{validationError}</p>
-                          )}
-                        </>
-                      ) : k.isSecret ? (
-                        <span className="text-muted-foreground italic text-xs">[secret]</span>
-                      ) : (
-                        <span className="text-foreground/80">{k.currentValue || '—'}</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="hidden md:table-cell text-muted-foreground text-xs">
-                      {k.description}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1">
-                        {!k.isSecret && editingKey !== k.key && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                className="h-7 w-7"
-                                aria-label="Actions"
-                                data-testid={`actions-${k.key}`}
-                              >
-                                <EllipsisVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={() => {
-                                  setEditingKey(k.key);
-                                  setEditValue(k.currentValue);
-                                  setEditReason('');
-                                }}
-                              >
-                                Edit
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        )}
-                        {editingKey === k.key && (
-                          <>
-                            <Button
-                              variant="default"
-                              size="sm"
-                              onClick={() => handleSave(k.key)}
-                              disabled={
-                                saving ||
-                                (editingKey === k.key && !!validationError) ||
-                                !isNativeEnv
-                              }
-                              className="h-7 px-2 text-xs"
-                            >
-                              {saving ? 'Saving…' : 'Save'}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setEditingKey(null);
-                                setValidationError(null);
-                              }}
-                              className="h-7 px-2 text-xs text-muted-foreground"
-                            >
-                              Cancel
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            {keys.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-8">
-                No config keys found for this namespace
-              </p>
-            )}
+            <DataTable
+              columns={columns}
+              data={keys}
+              getRowId={(k) => k.key}
+              emptyMessage="No config keys found for this namespace"
+            />
           </CardContent>
         </Card>
       )}

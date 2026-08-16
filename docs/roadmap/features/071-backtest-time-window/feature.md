@@ -1,6 +1,5 @@
 # Feature: backtest-time-window
 
-**Lifecycle Status**: `launched`
 **Committed to main**: 67bf345b917b05b869fc67cacff5d74365ba86b8
 **Launched date**: 2026-07-28
 **Development Branch**: `feature/backtest-time-window` (see context.md — implemented on the

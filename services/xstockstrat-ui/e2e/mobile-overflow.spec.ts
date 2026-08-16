@@ -32,6 +32,9 @@ const ROUTES: { path: string; admin?: boolean }[] = [
   { path: '/config-ui/audit' },
   { path: '/config-ui/platform' },
   { path: '/trader/positions/AAPL' },
+  // feature 135: the bare /trader dashboard route (LiveStrategiesPanel + OrderBook) was never in
+  // this sweep — a genuine ROUTES gap, not a redundant addition.
+  { path: '/trader' },
 ];
 
 async function horizontalOverflow(page: Page): Promise<number> {

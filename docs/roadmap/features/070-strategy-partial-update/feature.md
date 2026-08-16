@@ -1,6 +1,5 @@
 # Feature: strategy-partial-update
 
-**Lifecycle Status**: `launched`
 **Committed to main**: 67bf345b917b05b869fc67cacff5d74365ba86b8
 **Launched date**: 2026-07-28
 **Development Branch**: `feature/strategy-partial-update` (see context.md — implemented on the

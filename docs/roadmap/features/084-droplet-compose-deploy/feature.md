@@ -1,6 +1,5 @@
 # Feature: droplet-compose-deploy
 
-**Lifecycle Status**: `spec-ready`
 **Development Branch**: `feature/droplet-compose-deploy`
 **Created**: 2026-07-31
 **Last Updated**: 2026-07-31

@@ -1,6 +1,5 @@
 # Feature: exit-cooldown
 
-**Lifecycle Status**: `launched`
 **Committed to main**: e9d8d9144fb228568b3d71d088ad0d4e26bd0c24
 **Launched date**: 2026-08-07
 **Development Branch**: `feature/exit-cooldown`
