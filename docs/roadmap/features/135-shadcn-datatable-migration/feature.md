@@ -1,9 +1,9 @@
 # Feature: shadcn-datatable-migration
 
 **Lifecycle Status**: `implementation-ready`
-**Development Branch**: `claude/migrate-tables-shadcn-datatable-jbccqa`
+**Development Branch**: `claude/shadcn-datatable-migration-6f307n`
 **Created**: 2026-08-15
-**Last Updated**: 2026-08-15
+**Last Updated**: 2026-08-16
 
 ---
 
@@ -16,6 +16,7 @@
 | 2026-08-15 | `spec-ready` → `design-approved` | /sdd-design | Design debated (5 rounds, full) and approved; recon.md + design.md written. Zero Floor breaches. |
 | 2026-08-15 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 33 steps |
 | 2026-08-15 | `implementation-ready` (unchanged) | /sdd-execute (boot) | Corrected **Development Branch** `feature/shadcn-datatable-migration` → `claude/migrate-tables-shadcn-datatable-jbccqa` — session's harness assignment requires all work stay on the `claude/*` branch; every SDD artifact for this feature already lives (and is pushed) there. Same branch-topology-mismatch shape as ledger `fails.md` 2026-07-30 `082-fix-fmp-config-boot-only`, caught at boot instead of mid-execution. |
+| 2026-08-16 | `implementation-ready` (unchanged) | /sdd-execute (boot) | Corrected **Development Branch** `claude/migrate-tables-shadcn-datatable-jbccqa` → `claude/shadcn-datatable-migration-6f307n` — a new session got a new harness-assigned branch. PR #960 (the docs-only PR from the prior branch) had already merged into `main-dev`, so no work was lost: all SDD artifacts (`recon.md`, `design.md`, `implementation-spec.md`, this file) are already on `main-dev`. Reset the new branch to `origin/main-dev` (it existed but was stale/unused, no PR, fully an ancestor of `main-dev`) per the merged-PR-restart convention. Same recurring branch-topology-mismatch shape as ledger `fails.md` 2026-07-30 `082-fix-fmp-config-boot-only` and the row above — caught at boot again. |
 
 ---
 

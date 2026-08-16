@@ -254,6 +254,30 @@ Per this skill's own protocol, `/sdd-execute` must announce every `[ ] unaddress
 each checkpoint and at session end (P-03) — mark `[x]` here in the same block when the step that
 clears it lands, rather than letting the warning go stale.
 
+## Session 2026-08-16 — sdd-execute boot (branch-topology correction, take 2)
+
+- New session, new harness assignment: "Develop on branch `claude/shadcn-datatable-migration-6f307n`."
+  Boot Step B3/B4 found this differs from `feature.md`'s recorded Development Branch
+  (`claude/migrate-tables-shadcn-datatable-jbccqa`) — same recurring shape as the prior session's
+  boot correction (immediately above) and ledger `fails.md` 2026-07-30 `082-fix-fmp-config-boot-only`.
+- Checked whether prior work would be lost: `mcp__github__list_pull_requests` for
+  `claude/migrate-tables-shadcn-datatable-jbccqa` found PR #960 already merged into `main-dev`
+  (docs-only — all SDD artifacts for this feature, up to `implementation-ready`). Confirmed via
+  `git diff origin/main-dev origin/claude/migrate-tables-shadcn-datatable-jbccqa` (empty) that
+  `main-dev` already has everything from that branch. No code steps had been executed yet (all 33
+  implementation-spec steps still `pending`), so there was no implementation work at risk either way.
+- The newly assigned branch `claude/shadcn-datatable-migration-6f307n` already existed locally and
+  on `origin`, but was stale (based on an old `main-dev` commit from before feature 125 merged, no
+  unique commits, no PR ever opened from it — confirmed
+  `git merge-base --is-ancestor claude/shadcn-datatable-migration-6f307n main-dev` = true).
+  Applied the task instructions' "merged PR → restart" convention: `git checkout -B
+  claude/shadcn-datatable-migration-6f307n origin/main-dev` (force-with-lease-equivalent reset; safe,
+  since the branch carried only already-superseded history).
+- Corrected `feature.md`'s **Development Branch** to `claude/shadcn-datatable-migration-6f307n`
+  (Status History row added) rather than trying to keep working on the old, now-orphaned branch.
+  Proceeding with sequential-mode execution of all 33 implementation-spec steps on this branch; the
+  final integration PR will target `main-dev` from here, same as every other artifact PR.
+
 ## Session 2026-08-15 — sdd-execute boot (branch-topology correction)
 
 - Boot Step B3 (`git ls-remote --heads origin feature/shadcn-datatable-migration`) found the
