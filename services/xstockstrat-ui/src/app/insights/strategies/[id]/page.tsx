@@ -1,19 +1,13 @@
 'use client';
-import { useState, use } from 'react';
+import { useMemo, useState, use } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import type { ColumnDef } from '@tanstack/react-table';
 import { AppShell } from '@/components/insights/AppShell';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from '@/components/ui/table';
+import { DataTable } from '@/components/ui/data-table';
 import { cn } from '@/components/ui/utils';
 import { ConnectError } from '@connectrpc/connect';
 import { formatSymbolYears, isNotFoundError } from '@/lib/scoreDisplay';
@@ -124,6 +118,80 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
   // feature 065: the derived grade is cleared (NOT_FOUND) or absent for an unscored strategy — the
   // backtest form + Past Runs stay rendered so the user can earn evidence.
   const gradeCleared = isNotFoundError(reportError) || (!!report && !report.score);
+
+  type BacktestRun = (typeof pastRuns)[number];
+
+  const pastRunsColumns = useMemo<ColumnDef<BacktestRun>[]>(
+    () => [
+      {
+        id: 'when',
+        header: 'When',
+        accessorFn: (run) => timestampToDate(run.completedAt)?.getTime() ?? 0,
+        meta: { className: 'py-1.5 pr-3 text-muted-foreground whitespace-nowrap' },
+        cell: ({ row }) => timestampToDate(row.original.completedAt)?.toLocaleString() ?? '—',
+      },
+      {
+        id: 'symbols',
+        header: 'Symbols',
+        accessorFn: (run) => run.symbols.join(', '),
+        meta: { className: 'py-1.5 pr-3 font-mono text-xs' },
+        cell: ({ row }) => row.original.symbols.join(', ') || '—',
+      },
+      {
+        id: 'range',
+        header: 'Range',
+        enableSorting: false,
+        meta: { className: 'py-1.5 pr-3 text-xs text-muted-foreground whitespace-nowrap' },
+        cell: ({ row }) => {
+          const run = row.original;
+          return run.rangeStart && run.rangeEnd
+            ? `${timestampToDate(run.rangeStart)!.toISOString().slice(0, 10)}–${timestampToDate(run.rangeEnd)!.toISOString().slice(0, 10)}`
+            : '—';
+        },
+      },
+      {
+        id: 'return',
+        header: 'Return',
+        accessorFn: (run) => run.totalReturn ?? 0,
+        meta: { className: 'py-1.5 pr-3 text-right tabular-nums' },
+        cell: ({ row }) => {
+          const run = row.original;
+          return (
+            <span className={(run.totalReturn ?? 0) >= 0 ? 'text-buy' : 'text-destructive'}>
+              {((run.totalReturn ?? 0) * 100).toFixed(2)}%
+            </span>
+          );
+        },
+      },
+      {
+        id: 'sharpe',
+        header: 'Sharpe',
+        accessorFn: (run) => run.sharpeRatio ?? 0,
+        meta: { className: 'py-1.5 pr-3 text-right tabular-nums' },
+        cell: ({ row }) => (row.original.sharpeRatio ?? 0).toFixed(2),
+      },
+      {
+        id: 'trades',
+        header: 'Trades',
+        accessorFn: (run) => run.totalTrades ?? 0,
+        meta: { className: 'py-1.5 pr-3 text-right tabular-nums' },
+        cell: ({ row }) => String(row.original.totalTrades ?? 0),
+      },
+      {
+        id: 'runScore',
+        header: 'Run score',
+        accessorFn: (run) => run.rating ?? '',
+        meta: { className: 'py-1.5 text-right tabular-nums' },
+        cell: ({ row }) =>
+          row.original.rating ? (
+            <span className="font-semibold text-buy">{row.original.rating}</span>
+          ) : (
+            '—'
+          ),
+      },
+    ],
+    [],
+  );
 
   return (
     <AppShell>
@@ -478,79 +546,23 @@ export default function StrategyDetailPage({ params }: { params: Promise<{ id: s
                   <CardTitle>Past Runs</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <Table className="w-full text-sm">
-                    <TableHeader>
-                      <TableRow className="text-left text-xs text-muted-foreground">
-                        <TableHead className="py-1.5 pr-3 font-medium">When</TableHead>
-                        <TableHead className="py-1.5 pr-3 font-medium">Symbols</TableHead>
-                        <TableHead className="py-1.5 pr-3 font-medium">Range</TableHead>
-                        <TableHead className="py-1.5 pr-3 font-medium text-right">Return</TableHead>
-                        <TableHead className="py-1.5 pr-3 font-medium text-right">Sharpe</TableHead>
-                        <TableHead className="py-1.5 pr-3 font-medium text-right">Trades</TableHead>
-                        <TableHead className="py-1.5 font-medium text-right">Run score</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {pastRuns.map((run) => (
-                        <TableRow
-                          key={run.backtestId}
-                          data-testid="past-run-row"
-                          role="button"
-                          tabIndex={0}
-                          aria-selected={selectedRunId === run.backtestId}
-                          onClick={() => setSelectedRunId(run.backtestId)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              setSelectedRunId(run.backtestId);
-                            }
-                          }}
-                          className={cn(
-                            'border-t border-border cursor-pointer hover:bg-secondary/60',
-                            selectedRunId === run.backtestId && 'bg-secondary',
-                          )}
-                        >
-                          <TableCell className="py-1.5 pr-3 text-muted-foreground whitespace-nowrap">
-                            {timestampToDate(run.completedAt)?.toLocaleString() ?? '—'}
-                          </TableCell>
-                          <TableCell className="py-1.5 pr-3 font-mono text-xs">
-                            {run.symbols.join(', ') || '—'}
-                          </TableCell>
-                          {/* feature 065: the range each run covered; legacy rows have none. */}
-                          <TableCell className="py-1.5 pr-3 text-xs text-muted-foreground whitespace-nowrap">
-                            {run.rangeStart && run.rangeEnd
-                              ? `${timestampToDate(run.rangeStart)!
-                                  .toISOString()
-                                  .slice(0, 10)}–${timestampToDate(run.rangeEnd)!
-                                  .toISOString()
-                                  .slice(0, 10)}`
-                              : '—'}
-                          </TableCell>
-                          <TableCell
-                            className={cn(
-                              'py-1.5 pr-3 text-right tabular-nums',
-                              (run.totalReturn ?? 0) >= 0 ? 'text-buy' : 'text-destructive',
-                            )}
-                          >
-                            {((run.totalReturn ?? 0) * 100).toFixed(2)}%
-                          </TableCell>
-                          <TableCell className="py-1.5 pr-3 text-right tabular-nums">
-                            {(run.sharpeRatio ?? 0).toFixed(2)}
-                          </TableCell>
-                          <TableCell className="py-1.5 pr-3 text-right tabular-nums">
-                            {String(run.totalTrades ?? 0)}
-                          </TableCell>
-                          <TableCell className="py-1.5 text-right tabular-nums">
-                            {run.rating ? (
-                              <span className="font-semibold text-buy">{run.rating}</span>
-                            ) : (
-                              '—'
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                  <DataTable
+                    columns={pastRunsColumns}
+                    data={pastRuns}
+                    getRowId={(run) => run.backtestId}
+                    tableClassName="w-full text-sm"
+                    onRowClick={(run) => setSelectedRunId(run.backtestId)}
+                    rowClassName={(run) =>
+                      cn(
+                        'border-t border-border',
+                        selectedRunId === run.backtestId && 'bg-secondary',
+                      )
+                    }
+                    getRowProps={(run) => ({
+                      'data-testid': 'past-run-row',
+                      'aria-selected': selectedRunId === run.backtestId,
+                    })}
+                  />
                 </CardContent>
               </Card>
             )}

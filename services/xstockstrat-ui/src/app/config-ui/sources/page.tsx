@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { EllipsisVertical } from 'lucide-react';
 import { ConnectError } from '@connectrpc/connect';
 import type { JsonObject } from '@bufbuild/protobuf';
+import type { ColumnDef } from '@tanstack/react-table';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -15,14 +16,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from '@/components/ui/table';
+import { DataTable } from '@/components/ui/data-table';
 import {
   Select,
   SelectTrigger,
@@ -278,6 +272,140 @@ export default function SourcesPage() {
     });
   }
 
+  const columns = useMemo<ColumnDef<SignalSource>[]>(
+    () => [
+      {
+        accessorKey: 'slug',
+        header: 'Slug',
+        meta: { className: 'font-mono' },
+      },
+      {
+        accessorKey: 'displayName',
+        header: 'Display Name',
+      },
+      {
+        id: 'sourceType',
+        header: 'Source Type',
+        accessorFn: (src) => src.sourceType,
+        cell: ({ row }) => {
+          const src = row.original;
+          return (
+            <div className="flex items-center gap-1.5">
+              <span>{src.sourceType}</span>
+              {isMediatedType(src.sourceType as SourceType) && (
+                <Badge variant="info">Claude-mediated</Badge>
+              )}
+            </div>
+          );
+        },
+      },
+      {
+        id: 'active',
+        header: 'Active',
+        accessorFn: (src) => src.active,
+        cell: ({ row }) => (
+          <Badge variant={row.original.active ? 'default' : 'secondary'}>
+            {row.original.active ? 'Active' : 'Inactive'}
+          </Badge>
+        ),
+      },
+      {
+        id: 'health',
+        header: 'Health',
+        accessorFn: (src) => src.health,
+        cell: ({ row }) => (
+          <span title={row.original.lastError || undefined}>
+            <EnumBadge render={SOURCE_HEALTH[row.original.health]} />
+          </span>
+        ),
+      },
+      {
+        id: 'fed',
+        header: 'Fed',
+        accessorFn: (src) => Number(src.signalsFed ?? 0),
+        meta: { className: 'font-mono tabular-nums' },
+        cell: ({ row }) => (row.original.signalsFed ? row.original.signalsFed.toString() : '—'),
+      },
+      {
+        id: 'weight',
+        header: 'Weight',
+        accessorFn: (src) => src.reliabilityWeight ?? 1.0,
+        cell: ({ row }) => {
+          const src = row.original;
+          return editingWeightSlug === src.slug ? (
+            <div className="flex items-center gap-1.5">
+              <Input
+                type="number"
+                step="0.1"
+                min={0}
+                max={1}
+                value={weightValue}
+                onChange={(e) => setWeightValue(e.target.value)}
+                className="h-8 w-20"
+                aria-label={`Weight for ${src.slug}`}
+              />
+              <Button size="sm" disabled={saving} onClick={() => saveWeight(src.slug)}>
+                Save
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setEditingWeightSlug(null)}>
+                Cancel
+              </Button>
+              {weightError && <span className="text-xs text-destructive">{weightError}</span>}
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="tabular-nums hover:underline"
+              data-testid={`weight-${src.slug}`}
+              onClick={() => openWeightEdit(src.slug, src.reliabilityWeight ?? 1.0)}
+            >
+              {src.reliabilityWeight ?? 1.0}
+            </button>
+          );
+        },
+      },
+      {
+        id: 'actions',
+        header: 'Actions',
+        enableSorting: false,
+        cell: ({ row }) => {
+          const src = row.original;
+          return (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Actions"
+                  data-testid={`actions-${src.slug}`}
+                >
+                  <EllipsisVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem disabled={saving} onClick={() => handleToggle(src)}>
+                  {src.active ? 'Disable' : 'Enable'}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => openEdit(src)}>Edit</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          );
+        },
+      },
+    ],
+    [
+      editingWeightSlug,
+      weightValue,
+      weightError,
+      saving,
+      handleToggle,
+      openEdit,
+      openWeightEdit,
+      saveWeight,
+    ],
+  );
+
   if (loading) return <div className="text-sm text-muted-foreground">Loading sources…</div>;
   if (error) return <div className="text-sm text-destructive">Error: {errMessage(error)}</div>;
 
@@ -327,114 +455,7 @@ export default function SourcesPage() {
 
       <Card>
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Slug</TableHead>
-                <TableHead>Display Name</TableHead>
-                <TableHead>Source Type</TableHead>
-                <TableHead>Active</TableHead>
-                {/* feature 083 — source health + lifetime fed count. */}
-                <TableHead>Health</TableHead>
-                <TableHead>Fed</TableHead>
-                <TableHead>Weight</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sources.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center text-muted-foreground py-6">
-                    No sources registered yet.
-                  </TableCell>
-                </TableRow>
-              )}
-              {sources.map((src) => (
-                <TableRow key={src.slug}>
-                  <TableCell className="font-mono">{src.slug}</TableCell>
-                  <TableCell>{src.displayName}</TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-1.5">
-                      <span>{src.sourceType}</span>
-                      {isMediatedType(src.sourceType as SourceType) && (
-                        <Badge variant="info">Claude-mediated</Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={src.active ? 'default' : 'secondary'}>
-                      {src.active ? 'Active' : 'Inactive'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell title={src.lastError || undefined}>
-                    <EnumBadge render={SOURCE_HEALTH[src.health]} />
-                  </TableCell>
-                  <TableCell className="font-mono tabular-nums">
-                    {src.signalsFed ? src.signalsFed.toString() : '—'}
-                  </TableCell>
-                  <TableCell>
-                    {editingWeightSlug === src.slug ? (
-                      <div className="flex items-center gap-1.5">
-                        <Input
-                          type="number"
-                          step="0.1"
-                          min={0}
-                          max={1}
-                          value={weightValue}
-                          onChange={(e) => setWeightValue(e.target.value)}
-                          className="h-8 w-20"
-                          aria-label={`Weight for ${src.slug}`}
-                        />
-                        <Button size="sm" disabled={saving} onClick={() => saveWeight(src.slug)}>
-                          Save
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setEditingWeightSlug(null)}
-                        >
-                          Cancel
-                        </Button>
-                        {weightError && (
-                          <span className="text-xs text-destructive">{weightError}</span>
-                        )}
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        className="tabular-nums hover:underline"
-                        data-testid={`weight-${src.slug}`}
-                        onClick={() => openWeightEdit(src.slug, src.reliabilityWeight ?? 1.0)}
-                      >
-                        {src.reliabilityWeight ?? 1.0}
-                      </button>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          aria-label="Actions"
-                          data-testid={`actions-${src.slug}`}
-                        >
-                          <EllipsisVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem disabled={saving} onClick={() => handleToggle(src)}>
-                          {src.active ? 'Disable' : 'Enable'}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => openEdit(src)}>Edit</DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <DataTable columns={columns} data={sources} emptyMessage="No sources registered yet." />
         </CardContent>
       </Card>
 

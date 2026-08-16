@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, Play } from 'lucide-react';
 import { ConnectError } from '@connectrpc/connect';
 import { AppShell } from '@/components/insights/AppShell';
@@ -17,14 +17,8 @@ import {
 import { cn } from '@/components/ui/utils';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Slider } from '@/components/ui/slider';
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from '@/components/ui/table';
+import type { ColumnDef } from '@tanstack/react-table';
+import { DataTable } from '@/components/ui/data-table';
 import {
   useScreenSymbols,
   useScreenSymbolsPoll,
@@ -175,6 +169,105 @@ export default function ScreenerPage() {
     if (!targetListId || topNSymbols.length === 0) return;
     addSymbols.mutate({ watchlistId: targetListId, symbols: topNSymbols });
   }
+
+  type ScreenResultRow = ScreenSymbolsResult['results'][number];
+
+  const columns = useMemo<ColumnDef<ScreenResultRow>[]>(
+    () => [
+      {
+        id: 'rank',
+        header: 'Rank',
+        enableSorting: false,
+        meta: { className: 'p-3 whitespace-nowrap' },
+        cell: ({ row }) => row.index + 1,
+      },
+      {
+        accessorKey: 'symbol',
+        header: 'Symbol',
+        meta: { className: 'p-3 font-mono font-medium' },
+      },
+      {
+        accessorKey: 'score',
+        header: 'Score',
+        meta: { className: 'p-3 font-mono tabular-nums font-semibold' },
+        cell: ({ row }) => {
+          const r = row.original;
+          return (
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                aria-hidden
+                className={cn('inline-block h-2 w-2 rounded-full bg-current', scoreColor(r.score))}
+              />
+              <span className={scoreColor(r.score)}>{r.score.toFixed(3)}</span>
+            </span>
+          );
+        },
+      },
+      {
+        accessorKey: 'pe',
+        header: 'P/E',
+        meta: { className: 'p-3 font-mono tabular-nums' },
+        cell: ({ row }) => (row.original.pe ? row.original.pe.toFixed(1) : '—'),
+      },
+      {
+        accessorKey: 'rsi',
+        header: 'RSI',
+        meta: { className: 'p-3 font-mono tabular-nums' },
+        cell: ({ row }) => (row.original.rsi ? row.original.rsi.toFixed(0) : '—'),
+      },
+      {
+        accessorKey: 'atr',
+        header: () => <span title="ATR is a close-only approximation (not exact)">ATR</span>,
+        meta: { className: 'p-3 font-mono tabular-nums' },
+        cell: ({ row }) => (row.original.atr ? row.original.atr.toFixed(2) : '—'),
+      },
+      {
+        accessorKey: 'revGrowth',
+        header: 'Rev growth',
+        meta: { className: 'p-3 font-mono tabular-nums whitespace-nowrap' },
+        cell: ({ row }) =>
+          row.original.revGrowth ? `${(row.original.revGrowth * 100).toFixed(1)}%` : '—',
+      },
+      {
+        accessorKey: 'held',
+        header: 'Held',
+        meta: { className: 'p-3' },
+        cell: ({ row }) => (row.original.held ? <Badge variant="paper">Held</Badge> : '—'),
+      },
+      {
+        accessorKey: 'passed',
+        header: 'Passed',
+        meta: { className: 'p-3' },
+        cell: ({ row }) => (row.original.passed ? '✓' : '—'),
+      },
+      {
+        accessorKey: 'status',
+        header: 'Status',
+        meta: { className: 'p-3' },
+        cell: ({ row }) => {
+          const r = row.original;
+          return r.status === ScreenResultStatus.INSUFFICIENT_DATA ? (
+            r.gap ? (
+              <Badge variant="warning" data-testid="insufficient-data">
+                Insufficient data
+              </Badge>
+            ) : (
+              <Badge
+                variant="warning"
+                data-testid="fundamentals-pending"
+                title="The fundamentals data source is currently unavailable — this candidate will be re-scored on a later scan once it's back."
+              >
+                Fundamentals pending
+              </Badge>
+            )
+          ) : (
+            <Badge variant="info">OK</Badge>
+          );
+        },
+      },
+    ],
+    [],
+  );
 
   return (
     <AppShell>
@@ -477,84 +570,14 @@ export default function ScreenerPage() {
             <CardContent className="p-0">
               {/* Wide table → scroll horizontally within its own container so the phone frame
                   never overflows (the results table has 10 columns). */}
-              <Table className="min-w-[640px]" data-testid="screen-results">
-                <TableHeader>
-                  <TableRow className="border-b text-left text-muted-foreground">
-                    <TableHead className="p-3 whitespace-nowrap">Rank</TableHead>
-                    <TableHead className="p-3">Symbol</TableHead>
-                    <TableHead className="p-3">Score</TableHead>
-                    {/* feature 083 (FR-8) raw columns. ATR is a close-only approximation. */}
-                    <TableHead className="p-3">P/E</TableHead>
-                    <TableHead className="p-3">RSI</TableHead>
-                    <TableHead
-                      className="p-3"
-                      title="ATR is a close-only approximation (not exact)"
-                    >
-                      ATR
-                    </TableHead>
-                    <TableHead className="p-3 whitespace-nowrap">Rev growth</TableHead>
-                    <TableHead className="p-3">Held</TableHead>
-                    <TableHead className="p-3">Passed</TableHead>
-                    <TableHead className="p-3">Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {results.map((r, i) => (
-                    <TableRow key={r.symbol} className="border-b" data-testid="result-row">
-                      <TableCell className="p-3">{i + 1}</TableCell>
-                      <TableCell className="p-3 font-mono font-medium">{r.symbol}</TableCell>
-                      <TableCell className="p-3 font-mono tabular-nums font-semibold">
-                        {/* Colored strength dot via the canonical scoreColor helper (FR-7, DRY). */}
-                        <span className="inline-flex items-center gap-1.5">
-                          <span
-                            aria-hidden
-                            className={cn(
-                              'inline-block h-2 w-2 rounded-full bg-current',
-                              scoreColor(r.score),
-                            )}
-                          />
-                          <span className={scoreColor(r.score)}>{r.score.toFixed(3)}</span>
-                        </span>
-                      </TableCell>
-                      <TableCell className="p-3 font-mono tabular-nums">
-                        {r.pe ? r.pe.toFixed(1) : '—'}
-                      </TableCell>
-                      <TableCell className="p-3 font-mono tabular-nums">
-                        {r.rsi ? r.rsi.toFixed(0) : '—'}
-                      </TableCell>
-                      <TableCell className="p-3 font-mono tabular-nums">
-                        {r.atr ? r.atr.toFixed(2) : '—'}
-                      </TableCell>
-                      <TableCell className="p-3 font-mono tabular-nums">
-                        {r.revGrowth ? `${(r.revGrowth * 100).toFixed(1)}%` : '—'}
-                      </TableCell>
-                      <TableCell className="p-3">
-                        {r.held ? <Badge variant="paper">Held</Badge> : '—'}
-                      </TableCell>
-                      <TableCell className="p-3">{r.passed ? '✓' : '—'}</TableCell>
-                      <TableCell className="p-3">
-                        {r.status === ScreenResultStatus.INSUFFICIENT_DATA ? (
-                          r.gap ? (
-                            <Badge variant="warning" data-testid="insufficient-data">
-                              Insufficient data
-                            </Badge>
-                          ) : (
-                            <Badge
-                              variant="warning"
-                              data-testid="fundamentals-pending"
-                              title="The fundamentals data source is currently unavailable — this candidate will be re-scored on a later scan once it's back."
-                            >
-                              Fundamentals pending
-                            </Badge>
-                          )
-                        ) : (
-                          <Badge variant="info">OK</Badge>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <DataTable
+                columns={columns}
+                data={results}
+                getRowId={(r) => r.symbol}
+                tableClassName="min-w-[640px]"
+                tableTestId="screen-results"
+                getRowProps={() => ({ 'data-testid': 'result-row', className: 'border-b' })}
+              />
             </CardContent>
           </Card>
         )}
