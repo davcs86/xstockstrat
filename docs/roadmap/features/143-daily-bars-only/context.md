@@ -375,3 +375,31 @@ no feature code. Part of an operator-requested sequential run of 143 then 139, o
 - Verification: full agent suite 222 passed, 75.77% coverage (≥40%).
 - Files modified: `tests/test_client.py`.
 - Deviations: D-5. Full detail in Deviation Log.
+
+### Step 9 — UI removes 15m/1h chart + backfill-create options [done]
+- `chart.ts`: `Timeframe` narrowed to `'1Day'`; `TIMEFRAMES`/`TIMEFRAME_ENUM` to the single member.
+  `ChartPanel.tsx`: removed `POLL_INTERVALS_MS` + its auto-refresh effect, made `timeframe` a const,
+  deleted the `Tabs` selector + import. `positions/[symbol]/page.tsx`: `timeframe` const, removed
+  `timeframe`/`onTimeframe` props + types on `SymbolPriceChart`, deleted its `Tabs` block + the now
+  unused `Tabs`/`TIMEFRAMES` imports (kept `Timeframe`/`TIMEFRAME_ENUM`/`mapBars`).
+  `insights/backfills/page.tsx`: removed the create-form `<select>` + its `timeframe` state,
+  hardcoded `TIMEFRAME_1DAY` in `handleCreate`; left the top-level `TIMEFRAMES` const + the
+  delete-scope `<select>` untouched (DeleteBackfilledData stays permissive) with a clarifying comment.
+- TDD: red → green via the type-totality backstop. RED: after narrowing `chart.ts`, `tsc --noEmit`
+  failed ONLY on `chart.test.ts`'s `TIMEFRAME_ENUM['15Min']`/`['1Hour']` — every source consumer
+  compiled clean, proving all were updated. GREEN: after Step 10's test fix, `tsc` exit 0.
+- Verification: `tsc --noEmit` clean; `pnpm run lint` clean (remaining warnings are pre-existing in
+  untouched files).
+- Files modified: `src/lib/chart.ts`, `src/components/trader/ChartPanel.tsx`,
+  `src/app/trader/positions/[symbol]/page.tsx`, `src/app/insights/backfills/page.tsx`.
+
+### Step 10 — UI chart/backfill e2e + vitest coverage [done]
+- `chart.test.ts`: first `it` rewritten to assert the sole `'1Day'` mapping (second, generic
+  totality `it` unchanged). `chart-panel.spec.ts`: replaced the 3-buttons test with a
+  `getByRole('tab').toHaveCount(0)` assertion, deleted the "1d active by default" test, rewrote the
+  AC-8 test to intercept the mount's GetBars (route registered before a re-`goto('/trader/')`) and
+  assert `timeframeEnum === 'TIMEFRAME_1DAY'`. No change to `backfills.spec.ts` (confirmed unaffected).
+- Verification: `pnpm run test:coverage -- chart.test.ts` green (chart.ts 100%). e2e: see D-6 (Chromium
+  path) + the run note below.
+- Files modified: `src/lib/chart.test.ts`, `e2e/trader/chart-panel.spec.ts`.
+- Deviations: D-6 (e2e Chromium executable path env var). Full detail in Deviation Log.
