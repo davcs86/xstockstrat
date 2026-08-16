@@ -109,7 +109,7 @@ reference: `docs/runbooks/mcp-tools.md`.
 ```text
 trigger_backfill(
     symbols=["AAPL", "MSFT", "NVDA", "TSLA"],
-    timeframe="1d",                       # accepts 15m/15Min/1h/1Hour/1d/1Day
+    timeframe="1d",                       # "1d"/"1Day" only — only daily bars are supported
     start="2020-01-01T00:00:00Z",
     end="2024-12-31T00:00:00Z",
     overwrite=False,
@@ -190,19 +190,23 @@ ORDER BY missing_day;
 
 | Timeframe | Typical use | Data density |
 |---|---|---|
-| `15m` | Short-term momentum (smallest supported interval) | ~26 bars/day per symbol |
-| `1h` | Swing trading | ~7 bars/day |
 | `1d` | Position trading, backtesting | 1 bar/day |
 
-> **Smallest interval is 15m**: the free Alpaca data plan serves 15-minute-delayed data and the
-> platform is not a real-time trader, so sub-15m timeframes (`1m`/`5m`) were removed. The
-> `TIMEFRAME_1MIN`/`TIMEFRAME_5MIN` enum values remain in the proto for wire compatibility but are
-> deprecated and no longer resolvable — `TriggerBackfill` with them will not produce bars.
+> **Daily is the only requestable interval** (feature 143): every trading-path consumer (the live
+> loop, screener technical criteria, the default SMA strategy) evaluates daily bars only, so
+> `GetBars`/`BackfillBars`/`TriggerBackfill` reject any timeframe other than `1d`. The
+> `TIMEFRAME_15MIN`/`TIMEFRAME_1HOUR` enum values (and, before them, `TIMEFRAME_1MIN`/
+> `TIMEFRAME_5MIN`) remain in the proto for wire compatibility but are deprecated and
+> no-longer-requestable — `TriggerBackfill` with them returns `INVALID_ARGUMENT`. Historical
+> `15m`/`1h` rows already stored stay readable via `GetDataCoverage` and deletable via
+> `DeleteBackfilledData` (both deliberately permissive), just never refreshed.
 
-> **Canonical timeframe vocabulary** (feature 053): the strings above (`15m`/`1h`/`1d`) are the
-> canonical forms stored in `marketdata.ohlcv.timeframe`. A shared `common.v1.Timeframe` enum
+> **Canonical timeframe vocabulary** (feature 053): `1d` is the only requestable canonical form
+> (feature 143), while `15m`/`1h` remain canonical forms for already-stored historical rows in
+> `marketdata.ohlcv.timeframe`. A shared `common.v1.Timeframe` enum
 > (`TIMEFRAME_15MIN`/`_1HOUR`/`_1DAY`) is the **preferred** field on the marketdata,
-> ingest, and analysis messages (`timeframe_enum`); prefer it in new code. The legacy string
+> ingest, and analysis messages (`timeframe_enum`); prefer it in new code (`TIMEFRAME_15MIN`/
+> `_1HOUR` are deprecated-and-unrequestable per feature 143). The legacy string
 > `timeframe` fields remain for backward compatibility but are **deprecated for one release** (per
 > `proto-versioning.md`'s deprecation cycle) and will be removed in a future gated breaking change.
 > The marketdata `internal/timeframe` normalizer reconciles legacy aliases — notably `"1Day"`
@@ -215,7 +219,7 @@ ORDER BY missing_day;
 **Server-side chunking (feature 054)** — you no longer split large jobs by hand. A single
 `TriggerBackfill` over a wide range is planned by `xstockstrat-ingest` into chunks bounded by
 `ingest.backfill.chunk_window_days` (default 90) and `ingest.backfill.chunk_max_bars` (default
-200000, density-aware so 15m ranges produce more, smaller chunks than 1d). Chunks run in parallel up
+200000). Chunks run in parallel up
 to `ingest.backfill.max_concurrent_chunks` (default 3), per-chunk progress is tracked in
 `ingest.backfill_chunks`, and the job exposes `chunks_total` / `chunks_completed`.
 
@@ -226,8 +230,6 @@ to `ingest.backfill.max_concurrent_chunks` (default 3), per-chunk progress is tr
   symbol without re-downloading existing bars.
 - **Tuning**: lower `chunk_max_bars` for finer progress granularity / smaller Alpaca requests; raise
   `max_concurrent_chunks` to fetch faster (watch `marketdata.backfill.rate_limit_rps`).
-
-You still choose timeframe per job (run 1d first, then 1h, then 15m if you need multiple densities).
 
 ---
 

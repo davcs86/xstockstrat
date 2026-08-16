@@ -1,6 +1,6 @@
 # Implementation Spec: daily-bars-only
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-08-16
 **Feature**: `docs/roadmap/features/143-daily-bars-only/feature.md`
 **Total Steps**: 10
@@ -78,7 +78,7 @@ before being written below** (Constitution C-01/P-03 — an unexecuted claim is 
 
 ### Step 1 — proto: deprecate `TIMEFRAME_15MIN`/`TIMEFRAME_1HOUR`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/common/v1/common.proto` — modify
@@ -138,7 +138,7 @@ Both must pass with zero findings (comment-only change).
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/common/v1/` — modify (generated)
@@ -172,7 +172,7 @@ git diff --stat packages/proto/gen/
 
 ### Step 3 — service: `xstockstrat-marketdata` rejects non-`1d` `GetBars`/`BackfillBars`, narrows the ingester default
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service.go` — modify
@@ -275,7 +275,7 @@ Plus the paired Step 4 coverage command. Manually confirm (via `git diff`) that 
 
 ### Step 4 — test: `xstockstrat-marketdata` rejection coverage
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/service/marketdata_service_test.go` — modify
@@ -338,7 +338,7 @@ Confirm ≥ 40% and both new tests pass.
 
 ### Step 5 — service: `xstockstrat-ingest` rejects non-`1d` `TriggerBackfill`, stops retrying permanent rejections
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/app/handlers/servicer.py` — modify
@@ -454,7 +454,7 @@ Plus the paired Step 6 coverage command.
 
 ### Step 6 — test: `xstockstrat-ingest` rejection + retry-fix + chunk-density coverage
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ingest`
 **Files**:
 - `services/xstockstrat-ingest/tests/test_ingest_servicer.py` — modify
@@ -596,7 +596,7 @@ Confirm all four targeted tests pass and full-suite coverage stays ≥ 40%.
 
 ### Step 7 — service: `xstockstrat-agent` narrows `trigger_backfill`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/tools.py` — modify
@@ -687,7 +687,7 @@ Plus the paired Step 8 coverage command.
 
 ### Step 8 — test: `xstockstrat-agent` `trigger_backfill` narrowing coverage
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/test_client.py` — modify
@@ -726,7 +726,7 @@ pytest --cov=app --cov-fail-under=40
 
 ### Step 9 — service: `xstockstrat-ui` removes `15Min`/`1Hour` chart and backfill-trigger options
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/chart.ts` — modify
@@ -823,7 +823,7 @@ comment describes) and pass after. Plus the paired Step 10 e2e/vitest run.
 
 ### Step 10 — test: `xstockstrat-ui` chart/backfill e2e + vitest coverage
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/chart-panel.spec.ts` — modify
@@ -942,4 +942,86 @@ rewritten/new assertions pass; `backfills.spec.ts` passes unmodified, confirming
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### D-1 (Steps 3/4) — proto enum deprecation triggers Go `staticcheck` SA1019 at every remaining consumer
+**What**: Step 1 marked `TIMEFRAME_15MIN`/`TIMEFRAME_1HOUR` `[deprecated = true]`. That is
+comment/annotation-only and non-breaking at the buf level (Step 1's `buf lint`/`buf breaking` both
+passed), but Go's `staticcheck` (SA1019, enabled in every service's `.golangci.yml`) flags **every**
+remaining reference to those enum values as a lint error. The spec's Execution Summary did not
+anticipate this cross-cutting linter consequence — it only listed the *tests* whose assertions
+invert.
+**Blast radius**: confined to `xstockstrat-marketdata` (grep of all `services/**/*.go` outside
+`gen/` found no other service references those values). Six legitimate remaining sites:
+`internal/timeframe/timeframe.go` (2 — the `ToCanonical`/`FromString` switch arms the design
+**deliberately keeps** so the permissive `GetDataCoverage`/`DeleteBackfilledData` path can still
+resolve historical `15m`/`1h` rows), plus `internal/timeframe/timeframe_test.go`,
+`internal/alpaca/client_test.go`, and `internal/service/marketdata_service_test.go` (the new Step-4
+tests deliberately *send* a deprecated timeframe to prove rejection).
+**Disposition**: `//nolint:staticcheck // SA1019: …` added at each legitimate site with a reason —
+the exact idiom the codebase already uses for the deprecated string `timeframe` field. This expands
+Steps 3/4's file scope beyond their `**Files**` lists to include `internal/timeframe/timeframe.go`
+(Step 3) and `internal/timeframe/timeframe_test.go` + `internal/alpaca/client_test.go` (Step 4).
+Recorded here and surfaced in the checkpoint accountability block; a `fails.md` ledger entry
+captures the generalizable trap.
+
+### D-2 (Steps 3/4) — `TestResolveIngestTimeframes` default-fallback subtests broke, not in the spec's breaking-test list
+**What**: Step 3 narrowed `defaultBarIngestTimeframe` from `"15m,1d"` to `"1d"`. Two subtests of
+`TestResolveIngestTimeframes` (`marketdata_service_test.go`) assert the empty-input and
+wholly-unresolvable-input *fallback* returns `["15m","1d"]`; both now correctly return `["1d"]`. The
+spec's Execution Summary correction 3 enumerated breaking tests but missed these two (they assert
+the default *constant*, not a timeframe alias).
+**Disposition**: updated both subtests' expected value to `["1d"]` (warn counts unchanged). In
+scope for the Step 3/4 pair — the test file is in Step 4's `**Files**` list and the assertion
+directly verifies the constant Step 3 changed.
+
+### D-3 (Step 6) — `grpc.aio.AioRpcError` constructor requires metadata args positionally in the installed grpcio
+**What**: The spec's Step 6 test 3 code constructs
+`grpc.aio.AioRpcError(grpc.StatusCode.INVALID_ARGUMENT, details="…")`, relying on the signature the
+spec verified (`initial_metadata=None, trailing_metadata=None` optional). The grpcio version actually
+installed (per `uv.lock`) makes `initial_metadata`/`trailing_metadata` **required positional** args —
+the 2-arg form raises `TypeError: … missing 2 required positional arguments`.
+**Disposition**: construct it as
+`grpc.aio.AioRpcError(grpc.StatusCode.INVALID_ARGUMENT, grpc.aio.Metadata(), grpc.aio.Metadata(), details="…")`.
+Test-only, no production impact; the reject/retry logic under test is unchanged. Confined to
+`test_ingest_servicer.py` (already in Step 6's `**Files**`).
+
+### D-4 (Step 6) — used `_ctx("4")` for the rejection test's context, not a bare MagicMock
+**What**: The spec's Step 6 test 2 built a bare `MagicMock()` context. But `TriggerBackfill`'s
+admin gate (`_has_admin_scope`, feature 092) runs **before** the new feature-143 reject check, and a
+bare MagicMock's `invocation_metadata()` does not carry the ADMIN bit — so the admin gate would fire
+first with `PERMISSION_DENIED`, and the test's `INVALID_ARGUMENT` assertion would fail.
+**Disposition**: use the repo's centralized `_ctx("4")` builder (conftest, C-13) — admin scope set +
+`abort` raising — so the reject check (not the admin gate) is what fires. Test-only; confined to
+`test_ingest_servicer.py`.
+
+### D-5 (Step 8) — strengthened the agent validation test to a real red-before-green
+**What**: The spec's Step 8 changed only the `pytest.raises(match=...)` string from
+`"15m/15Min/1h/1Hour/1d/1Day"` to `"1d/1Day"` on a `timeframe="1w"` call. That produces **no RED**:
+`pytest.raises`' `match` is `re.search`, so `"1d/1Day"` is a substring of the *old* error message
+too, and `"1w"` is invalid under both the old and new alias sets — so the assertion passes before
+*and* after Step 7, testing nothing about the actual narrowing.
+**Disposition**: replaced the `"1w"` probe with `timeframe="15m"` **and** `timeframe="1h"` probes —
+values that were *accepted* before Step 7 (and would reach a live gRPC call, raising `AioRpcError`,
+not `ValueError`) and are *rejected* after it. This gives a genuine red→green that exercises the
+feature's behavior (P-06/C-08). Confined to Step 8's file (`tests/test_client.py`); strictly
+stronger coverage than the specced change.
+
+### D-6 (Step 10) — e2e required the prebuilt (CI-mode) harness, not `pnpm dev`, and the AC-8 rewrite needed a real fix
+**What (harness)**: `pnpm test:e2e` under the default non-CI `pnpm dev` webServer could not run:
+(1) `global-setup.ts` aborted until `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` was set to the pre-installed
+Chromium (`/opt/pw-browsers/chromium-1194/chrome-linux/chrome`); (2) even then `e2e/warmup.setup.ts`
+timed out at 10 s because `pnpm dev` compiles routes on first hit. **Resolution**: ran the specs the way
+CI does — a `NEXT_DISABLE_STANDALONE=1 pnpm build` then `CI=true E2E_PREBUILT=1 pnpm test:e2e` (serves
+the prebuilt bundle via `pnpm start`; warmup pre-warmed 22/22 routes in ~0.4 s). No repo change for the
+harness; environment-only knobs.
+**What (real defect this surfaced)**: the first prebuilt run was **15 passed / 1 failed** — the AC-8
+test's own rewrite was wrong. It assumed the mount's GetBars would be captured, but `ChartPanel`
+auto-selects `list[0]` and its `fetchBars` early-returns until the async lightweight-charts series is
+ready; `seriesRef` is not a `fetchBars` effect dep, so a mount fetch that races ahead of the series is
+never retried and `capturedBody` stayed `undefined`. The original test had dodged this by waiting for
+`.tv-lightweight-charts` then clicking a timeframe tab; my rewrite removed that trigger with nothing in
+its place.
+**Disposition**: rewrote AC-8 to wait for `.tv-lightweight-charts` readiness, then change the
+still-present **bar-count** selector (100→200 — `barCount` is a `fetchBars` effect dep) to
+deterministically trigger a fresh GetBars, then assert `timeframeEnum === 'TIMEFRAME_1DAY'`. Both
+target specs now pass fully in the prebuilt harness (**16/16**). This is a genuine test-quality fix
+found by insisting on a real e2e run rather than accepting the dev-server-timeout fallback.

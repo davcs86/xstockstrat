@@ -92,11 +92,14 @@ _HEALTH_ENUM = {
 # omitted so sub-15m intervals no longer resolve. 15MIN is enum value 5.
 _STR_TO_ENUM = {"15m": 5, "1h": 3, "1d": 4}
 _ENUM_TO_STR = {v: k for k, v in _STR_TO_ENUM.items()}
+# Only "1d" is a requestable timeframe going forward (feature 143) — TriggerBackfill's own
+# reject check above is the actual gate (it consults _ENUM_TO_STR first via
+# _canonical_timeframe, so this table's contents don't determine acceptance). This table's
+# remaining job is normalizing the "1Day" legacy spelling for the read path
+# (_row_timeframe) — kept because test_legacy_alias_row_resolves_but_string_is_untouched
+# proves real "1Day" rows exist. "15Min"/"1Hour" are dropped: no test, fixture, or
+# migration in this repo ever exercises those raw spellings as a stored value.
 _TF_ALIASES = {
-    "15m": "15m",
-    "15Min": "15m",
-    "1h": "1h",
-    "1Hour": "1h",
     "1d": "1d",
     "1Day": "1d",
 }
@@ -232,6 +235,14 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
         # _execute_backfill, so every UI-created row held '' and both the derived enum and the
         # resume path were wrong (a 15m job resumed as 1d).
         canonical_tf = _canonical_timeframe(request)
+        # Feature 143: only "1d" is a servable timeframe going forward — reject before persisting
+        # a job or spending any provider quota. Mirrors marketdata's own GetBars/BackfillBars gate.
+        if canonical_tf != "1d":
+            await context.abort(
+                grpc.StatusCode.INVALID_ARGUMENT,
+                f"timeframe {canonical_tf!r} not supported; only '1d' is servable",
+            )
+            return
         await backfill_jobs.insert_job(
             self._db,
             job_id=job_id,
@@ -552,6 +563,13 @@ class IngestServicer(ingest_pb2_grpc.IngestServiceServicer):
                         bars += resp.bars_written
                         failed = list(resp.failed_symbols)
                         last_exc = None
+                    except grpc.aio.AioRpcError as e:
+                        last_exc = e
+                        failed = remaining
+                        if e.code() == grpc.StatusCode.INVALID_ARGUMENT:
+                            # Permanent rejection (e.g. marketdata's 1d-only gate, feature
+                            # 143) — retrying the identical request cannot succeed.
+                            attempt = max_attempts
                     except Exception as e:  # transient RPC error — retry the whole chunk
                         last_exc = e
                         failed = remaining

@@ -14,6 +14,8 @@
 | 2026-08-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings: Open Questions deferred to design per repo precedent, minor template checkbox hygiene) |
 | 2026-08-16 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, quick mode + 1 extra round) and approved; recon.md + design.md written. Recon corrected product-spec.md's Affected Services/Consumer Surface(s) (added xstockstrat-ingest, xstockstrat-agent) |
 | 2026-08-16 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 10 steps. Corrected 3 design.md inaccuracies found via direct grep verification (a doc file wrongly named as needing edits; a shared UI const needing a split, not a uniform narrowing; 3 more breaking tests than design.md's 4-test list covered) |
+| 2026-08-16 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential-mode execution started on `feature/daily-bars-only`. Re-spec gate passed (all 10 steps' evidence, incl. Step 9 vs feature 125's landed symbol page, validated clean — no re-spec). Step 1 (proto deprecation) done. |
+| 2026-08-16 | `in-progress` → `code-completed` | /sdd-execute | All 10 steps done (proto → marketdata → ingest → agent → ui). Red-green TDD on all code steps; Go 63.8% / ingest 79.3% / agent 75.8% / UI chart.ts 100% coverage. Deviations D-1…D-6 logged (proto-deprecation staticcheck blast radius confined to marketdata; two spec-missed breaking tests; grpc AioRpcError ctor; admin-gate test context; e2e test-strengthening; e2e dev-server warmup timeout → CI-equivalent tsc+lint+vitest fallback, real e2e runs in CI's prebuilt job). |
 
 ---
 

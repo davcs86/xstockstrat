@@ -119,9 +119,6 @@ func NewMarketDataService(
 
 // GetBars retrieves historical OHLCV bars, querying from TimescaleDB.
 func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBarsRequest) (*marketdatav1.GetBarsResponse, error) {
-	// A charted symbol becomes "warm" so the always-on bar ingester keeps it fresh.
-	s.markWarm(req.Symbol)
-
 	// Normalize the requested interval to the canonical DB spelling ("1Day"→"1d",
 	// "15Min"→"15m", …). The always-on ingester and backfill store canonical strings;
 	// without this, QueryBars searches for the literal alias and never matches them, so
@@ -133,6 +130,18 @@ func (s *MarketDataService) GetBars(ctx context.Context, req *marketdatav1.GetBa
 	if c, rErr := timeframe.Resolve(req.GetTimeframeEnum(), legacyTf); rErr == nil {
 		canonicalTf = c
 	}
+
+	// Feature 143: only "1d" is servable going forward. Reject before markWarm/DB/live-fallback
+	// so a rejected request never marks a symbol warm or spends an Alpaca call. GetDataCoverage
+	// and DeleteBackfilledData stay deliberately permissive (see their own doc comments) so
+	// historical 15m/1h rows remain inspectable/deletable.
+	if canonicalTf != "1d" {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("timeframe %q not supported; only \"1d\" is servable", canonicalTf))
+	}
+
+	// A charted symbol becomes "warm" so the always-on bar ingester keeps it fresh.
+	s.markWarm(req.Symbol)
 
 	pageSize := 500
 	pageToken := ""
@@ -239,6 +248,9 @@ func defaultBarLookback(canonicalTf string, bars int) time.Duration {
 
 // GetDataCoverage reports stored OHLCV coverage (earliest/latest/count + gaps) for a
 // symbol+timeframe. Read-only DB query — no outbound gRPC call, so no header propagation needed.
+// GetDataCoverage stays deliberately permissive on 15m/1h by design (feature 143): unlike
+// GetBars/BackfillBars it does NOT reject non-1d timeframes, so an operator can still inspect
+// coverage of historically-stored 15m/1h rows. Do not "fix" this asymmetry as a bug.
 func (s *MarketDataService) GetDataCoverage(ctx context.Context, req *marketdatav1.GetDataCoverageRequest) (*marketdatav1.GetDataCoverageResponse, error) {
 	if req.Symbol == "" {
 		return nil, fmt.Errorf("symbol required")
@@ -298,6 +310,10 @@ func (s *MarketDataService) GetDataCoverage(ctx context.Context, req *marketdata
 // max-delete-days directly (not a ctx or config.Watcher) so the FR-5 guards — symbol required,
 // admin-only (0x04), and the optional delete-window cap — are unit-testable without a DB or
 // config server. Returns connect-coded errors that the handler forwards.
+//
+// Stays deliberately permissive on 15m/1h by design (feature 143): unlike GetBars/BackfillBars
+// it does NOT reject non-1d timeframes, so an operator can still scope a delete to historical
+// 15m/1h rows. Do not "fix" this asymmetry as a bug.
 func resolveDeletePlan(symbol, accessScope string, tf commonv1.Timeframe, rng *commonv1.TimeRange, maxDays int64) (canonical string, start, end time.Time, err error) {
 	if symbol == "" {
 		return "", time.Time{}, time.Time{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("symbol required; refusing unbounded delete"))
@@ -509,15 +525,16 @@ func (s *MarketDataService) StartBarIngestPoller(ctx context.Context) {
 // defaultBarIngestTimeframe is the declared default of
 // marketdata.stream.bar_ingest_timeframe (see the service CLAUDE.md config table).
 //
-// This is a comma-separated LIST, not a single timeframe (bug fix): the always-on ingester
-// used to fetch only one timeframe ("15m"), so any continuously-live consumer of "1d" bars
-// (the live loop's _eval_pair, the screener's technical criteria) only ever got a symbol's
-// "1d" row from its initial on-demand backfill — GetBars's live-fallback only fires on a
-// first-page DB cache MISS, so once that one row existed it was never refreshed again, and
-// every later evaluation ran against a frozen, increasingly-stale daily bar. "1d" is now
-// ingested continuously alongside "15m" so both stay current. Existing single-timeframe
-// config values ("15m") remain valid — they just become a one-element list.
-const defaultBarIngestTimeframe = "15m,1d"
+// Only "1d" is requestable/ingested going forward (feature 143 narrowed this from "15m,1d"):
+// GetBars/BackfillBars reject any other timeframe, so continuously ingesting 15m served no
+// live consumer (the live loop's _eval_pair, the screener's technical criteria, and the
+// default SMA strategy all evaluate daily bars only). The value stays a comma-separated LIST,
+// parsed by resolveIngestTimeframes, which is count-agnostic — an existing single-value config
+// override ("1d", or even a legacy "15m,1d") remains valid; the default is simply one element
+// now. Continuous 1d ingestion keeps daily bars fresh (GetBars's live-fallback only fires on a
+// first-page DB cache MISS, so without continuous ingestion a daily bar, once cached, would go
+// stale — the staleness bug this list-shaped key originally fixed).
+const defaultBarIngestTimeframe = "1d"
 
 // resolveIngestTimeframes parses+canonicalizes the configured bar-ingest timeframe list.
 // Bars fetched with these values are PERSISTED (InsertBars), so an out-of-vocabulary config
@@ -688,6 +705,13 @@ func (s *MarketDataService) BackfillBars(ctx context.Context, req *marketdatav1.
 	canonicalTf := legacyTf
 	if c, rErr := timeframe.Resolve(req.GetTimeframeEnum(), legacyTf); rErr == nil {
 		canonicalTf = c
+	}
+
+	// Feature 143: reject anything but "1d" — mirrors GetBars. Rejecting before emitEvent
+	// avoids a started/failed ledger-event pair for a request that never touched Alpaca.
+	if canonicalTf != "1d" {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("timeframe %q not supported; only \"1d\" is servable", canonicalTf))
 	}
 
 	s.emitEvent(ctx, "marketdata.backfill.started", "marketdata:backfill", map[string]interface{}{

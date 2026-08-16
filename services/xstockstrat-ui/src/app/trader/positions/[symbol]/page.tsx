@@ -8,8 +8,7 @@ import { useAccountContext } from '@/context/AccountContext';
 import { usePosition, usePortfolio } from '@/hooks/usePortfolio';
 import { useOrders } from '@/hooks/useOrders';
 import { useCandlestickChart } from '@/hooks/useCandlestickChart';
-import { type Timeframe, TIMEFRAMES, TIMEFRAME_ENUM, mapBars } from '@/lib/chart';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { type Timeframe, TIMEFRAME_ENUM, mapBars } from '@/lib/chart';
 import { marketDataClient } from '@/lib/browserClients/marketDataClient';
 import { fmtUsd, fmtSignedUsd, fmtPct, pnlClass } from '@/lib/money';
 import { openR, fmtR, sideLabel } from '@/lib/positionRisk';
@@ -91,7 +90,7 @@ export default function PositionDetailPage() {
 
   // Candlestick chart (marketdata bars) with avg-cost / stop reference overlays.
   const { containerRef, seriesRef } = useCandlestickChart(260);
-  const [timeframe, setTimeframe] = useState<Timeframe>('1Day');
+  const timeframe: Timeframe = '1Day';
   const [barsError, setBarsError] = useState<string | null>(null);
   // Retain the fetched bars' closes + times (feature 125, FR-6) so the indicator overlay panels
   // request the exact series the candlestick drew — parity-aligned x-axis, no second bars fetch.
@@ -241,8 +240,6 @@ export default function PositionDetailPage() {
         <SymbolPriceChart
           symbol={symbol}
           chartRef={containerRef}
-          timeframe={timeframe}
-          onTimeframe={setTimeframe}
           barsError={barsError}
           avg={avg}
           stop={stop}
@@ -325,8 +322,6 @@ export default function PositionDetailPage() {
 function SymbolPriceChart({
   symbol,
   chartRef,
-  timeframe,
-  onTimeframe,
   barsError,
   avg,
   stop,
@@ -335,8 +330,6 @@ function SymbolPriceChart({
 }: {
   symbol: string;
   chartRef: React.RefObject<HTMLDivElement>;
-  timeframe: Timeframe;
-  onTimeframe: (t: Timeframe) => void;
   barsError: string | null;
   avg: number;
   stop: number;
@@ -354,15 +347,6 @@ function SymbolPriceChart({
               {hasStop ? ` · stop ${fmtUsd(stop)}` : ''}
               {last > 0 ? ` · last ${fmtUsd(last)}` : ''}
             </span>
-            <Tabs value={timeframe} onValueChange={(v) => onTimeframe(v as Timeframe)}>
-              <TabsList>
-                {TIMEFRAMES.map(({ value, label }) => (
-                  <TabsTrigger key={value} value={value}>
-                    {label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
           </div>
         </div>
       </CardHeader>

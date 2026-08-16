@@ -738,6 +738,33 @@ func TestBackfillBars_EnumOnlyRequestResolves(t *testing.T) {
 	}
 }
 
+// TestGetBars_RejectsNon1d / TestBackfillBars_RejectsNon1d — feature 143: only "1d" is
+// servable going forward; GetBars/BackfillBars reject any other requested timeframe with
+// InvalidArgument.
+func TestGetBars_RejectsNon1d(t *testing.T) {
+	svc := &MarketDataService{registry: source.NewRegistry(), ledger: &fakeLedger{}}
+	req := &marketdatav1.GetBarsRequest{
+		Symbol:        "AAPL",
+		TimeframeEnum: commonv1.Timeframe_TIMEFRAME_15MIN, //nolint:staticcheck // SA1019: deliberately sends a now-deprecated (feature 143) timeframe to prove it is rejected
+	}
+	_, err := svc.GetBars(context.Background(), req)
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("want InvalidArgument, got %v (err=%v)", connect.CodeOf(err), err)
+	}
+}
+
+func TestBackfillBars_RejectsNon1d(t *testing.T) {
+	svc := &MarketDataService{registry: source.NewRegistry(), ledger: &fakeLedger{}}
+	req := &marketdatav1.BackfillBarsRequest{
+		Symbols:       []string{"AAPL"},
+		TimeframeEnum: commonv1.Timeframe_TIMEFRAME_1HOUR, //nolint:staticcheck // SA1019: deliberately sends a now-deprecated (feature 143) timeframe to prove it is rejected
+	}
+	_, err := svc.BackfillBars(context.Background(), req)
+	if connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("want InvalidArgument, got %v (err=%v)", connect.CodeOf(err), err)
+	}
+}
+
 // TestMinIngestLookback is the regression test for the second half of the OHLCV-staleness
 // bug fix: the configured marketdata.stream.bar_ingest_lookback_ms (900000ms = 15min
 // default) is sized for the "15m" timeframe and is far too short to ever re-cover a "1d"
@@ -796,7 +823,7 @@ func TestResolveIngestTimeframes(t *testing.T) {
 		want     []string
 		wantWarn int
 	}{
-		{"empty falls back to default list", "", []string{"15m", "1d"}, 0},
+		{"empty falls back to default list", "", []string{"1d"}, 0}, // feature 143: default narrowed 15m,1d → 1d
 		{"canonical 1d passes through", "1d", []string{"1d"}, 0},
 		{"canonical 1h passes through", "1h", []string{"1h"}, 0},
 		{"canonical 15m passes through", "15m", []string{"15m"}, 0},
@@ -807,7 +834,7 @@ func TestResolveIngestTimeframes(t *testing.T) {
 		{"comma list tolerates whitespace", "15m, 1d", []string{"15m", "1d"}, 0},
 		{"duplicates deduped", "15m,15m,1d", []string{"15m", "1d"}, 0},
 		{"unresolvable entry skipped, valid entries kept", "15m,10Min", []string{"15m"}, 1},
-		{"wholly unresolvable falls back to default and warns twice", "10Min", []string{"15m", "1d"}, 2},
+		{"wholly unresolvable falls back to default and warns twice", "10Min", []string{"1d"}, 2}, // feature 143: default narrowed 15m,1d → 1d
 	}
 
 	for _, tc := range cases {

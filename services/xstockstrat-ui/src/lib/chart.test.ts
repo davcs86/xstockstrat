@@ -3,9 +3,7 @@ import { Timeframe as PbTimeframe } from '@xstockstrat/proto/common/v1/common_pb
 import { TIMEFRAME_ENUM, TIMEFRAMES, mapBars } from './chart';
 
 describe('TIMEFRAME_ENUM', () => {
-  it('maps each supported timeframe to its hardcoded proto enum', () => {
-    expect(TIMEFRAME_ENUM['15Min']).toBe(PbTimeframe.TIMEFRAME_15MIN);
-    expect(TIMEFRAME_ENUM['1Hour']).toBe(PbTimeframe.TIMEFRAME_1HOUR);
+  it('maps the sole supported timeframe to its proto enum', () => {
     expect(TIMEFRAME_ENUM['1Day']).toBe(PbTimeframe.TIMEFRAME_1DAY);
   });
 

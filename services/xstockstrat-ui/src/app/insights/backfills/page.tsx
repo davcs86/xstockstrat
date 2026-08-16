@@ -27,6 +27,10 @@ import { BackfillStatus } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import type { BackfillJob } from '@xstockstrat/proto/ingest/v1/ingest_pb';
 import { Timeframe } from '@xstockstrat/proto/common/v1/common_pb';
 
+// Feature 143: used ONLY by the delete-scope <select> now (the create-form select was removed —
+// daily is the only backfillable timeframe). The three options remain here because
+// DeleteBackfilledData stays deliberately permissive: an operator must still be able to scope a
+// delete to historically-stored 15m/1h rows.
 const TIMEFRAMES: { label: string; value: Timeframe }[] = [
   { label: '1 day', value: Timeframe.TIMEFRAME_1DAY },
   { label: '1 hour', value: Timeframe.TIMEFRAME_1HOUR },
@@ -81,9 +85,9 @@ function buildRange(start: string, end: string) {
 export default function BackfillsPage() {
   const { data: isAdmin } = useIsAdmin();
 
-  // Create-form state (FR-1).
+  // Create-form state (FR-1). Feature 143: no timeframe selector — daily is the only servable
+  // interval, so create always sends TIMEFRAME_1DAY (the create-form <select> was removed).
   const [symbols, setSymbols] = useState('');
-  const [timeframe, setTimeframe] = useState<Timeframe>(Timeframe.TIMEFRAME_1DAY);
   const [createStart, setCreateStart] = useState('');
   const [createEnd, setCreateEnd] = useState('');
   const [overwrite, setOverwrite] = useState(false);
@@ -119,7 +123,7 @@ export default function BackfillsPage() {
     trigger.mutate(
       {
         symbols: list,
-        timeframeEnum: timeframe,
+        timeframeEnum: Timeframe.TIMEFRAME_1DAY,
         range: buildRange(createStart, createEnd),
         overwrite,
       },
@@ -235,17 +239,6 @@ export default function BackfillsPage() {
                   onChange={(e) => setSymbols(e.target.value)}
                   className="sm:col-span-2"
                 />
-                <select
-                  className="h-10 rounded-md border border-input bg-secondary px-3 text-sm"
-                  value={timeframe}
-                  onChange={(e) => setTimeframe(Number(e.target.value))}
-                >
-                  {TIMEFRAMES.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
                 <Input
                   type="date"
                   value={createStart}

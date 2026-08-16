@@ -262,3 +262,151 @@
   (`daily-bars-only` must wait for `unified-symbol-page`), per
   `.claude/skills/sdd-review/reference/overlap-check.md`'s router-owned write protocol.
 
+
+## Session 2026-08-16 — sdd-execute (sequential mode)
+
+Executing on `feature/daily-bars-only` (fresh branch off latest `origin/main-dev` @ `d53753f`).
+The prior-session note about landing on `claude/null-fundamentals-ohlcv-gaps-l2v4x5` is
+superseded — that bug-fix branch already merged (PR #971) with only 143's SDD artifacts on it,
+no feature code. Part of an operator-requested sequential run of 143 then 139, one PR per feature.
+
+- **Re-spec gate (directive: none): PASSED, no re-spec.** Re-ran every step's key Codebase
+  Evidence against the live tree. All anchors match — including Step 9's `SymbolPriceChart`/
+  `Timeframe`/`Tabs` citations in `positions/[symbol]/page.tsx`, which merge-order.md flagged for
+  re-verification against feature 125's landed restructuring (125 is `code-completed`, its markup
+  is on main-dev; the `timeframe`/`onTimeframe`/`Tabs` identifiers Step 9 targets are all present
+  at the specced lines). Minor ≤2-line offsets only; no evidence mismatch, so no blocker raised.
+- **Tooling setup (steps 1–10):** go1.25 ✓ · golangci-lint ✓ v2.5.0 · uv ✓ · ruff ✓ · pnpm ✓ 9.15.0
+  · node22 ✓ · buf ⬇ v1.69.0 (host, via `go install`) · protoc-gen-go ⬇ v1.36.11 ·
+  protoc-gen-go-grpc ⬇ v1.6.2 · protoc-gen-connect-go ⬇ v1.19.2 · grpcio-tools ⬇ 1.80.0 ·
+  TS proto plugins ⬇ (pnpm install). Provisioned the host codegen toolchain pinned to CI
+  `proto-freshness` versions per `docs/runbooks/codegen-toolchain-host-setup.md` (Docker present
+  but host install is more reliable for the pinned plugin set). Sanity-checked: `./scripts/buf-gen.sh`
+  on the unchanged tree produced an empty `packages/proto/gen/` diff — toolchain reproduces the
+  committed stubs exactly.
+
+### Step 1 — proto: deprecate TIMEFRAME_15MIN/TIMEFRAME_1HOUR [done]
+- Added `[deprecated = true]` + reason to both enum values and rewrote the enum doc comment to
+  state only `1d` is requestable. Comment/annotation-only, non-breaking.
+- Verification: `buf lint` PASS; `buf breaking --against feature/daily-bars-only` PASS (no findings).
+- Files modified: `packages/proto/common/v1/common.proto`
+- Deviations: none. TDD: N/A (proto — verified by buf lint/breaking).
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Ran `./scripts/buf-gen.sh`. Diff confined to `gen/*/common/v1/*` (8 files); field numbers
+  unchanged (15MIN=5, 1HOUR=3, 1DAY=4) — only `@deprecated`/deprecation-option annotations added
+  to the two enum members plus the enum doc comment. No renumbering, no other symbol change.
+- Verification: `git diff --stat packages/proto/gen/` shows only common/v1 files; substantive diff
+  confirmed deprecation-only.
+- Files modified: `packages/proto/gen/{go,python,ts}/common/v1/*`
+- Deviations: none. TDD: N/A (proto-gen — verified by deprecation-only diff).
+
+### Step 3 — marketdata rejects non-1d GetBars/BackfillBars, narrows ingester default [done]
+- GetBars: moved `markWarm` to AFTER the `canonicalTf` resolution + new reject check (so a rejected
+  request never marks a symbol warm / spends an Alpaca call). BackfillBars: reject before
+  `emitEvent` (no started/failed ledger pair for a never-run request). `defaultBarIngestTimeframe`
+  "15m,1d"→"1d" + rewritten comment. Added permissive-by-design doc comments to `GetDataCoverage`
+  and `resolveDeletePlan`. Updated marketdata CLAUDE.md (Timeframe vocabulary, bar_ingest_timeframe/
+  _lookback_ms config rows, WS-bar note, StartBarIngestPoller) + context-constitution.md MARKETDATA-2.
+- TDD: red → green. RED: `TestGetBars_RejectsNon1d` panicked in `markWarm` pre-reorder (proved the
+  request was accepted and reached markWarm); GREEN: both reject tests pass after the reorder+checks.
+- Verification: `golangci-lint run` (full module) 0 issues; full suite 63.8% coverage.
+- Files modified: `internal/service/marketdata_service.go`, `CLAUDE.md`,
+  `docs/context-constitution.md`, `internal/timeframe/timeframe.go` (D-1 nolint).
+- Deviations: **D-1** (proto deprecation → SA1019 nolint across marketdata; scope expanded to
+  `internal/timeframe/timeframe.go`), **D-2** (see Step 4). Full detail in Deviation Log.
+
+### Step 4 — marketdata rejection coverage [done]
+- Added `TestGetBars_RejectsNon1d` + `TestBackfillBars_RejectsNon1d` (InvalidArgument on 15m/1h).
+- Fixed `TestResolveIngestTimeframes`'s two default-fallback subtests → `["1d"]` (D-2, not in spec's
+  breaking list). Added `//nolint:staticcheck` to the deprecated-enum references in
+  `internal/timeframe/timeframe_test.go` + `internal/alpaca/client_test.go` (D-1).
+- Verification: full `go test ./... -race` green, total coverage 63.8% (≥40%).
+- Files modified: `internal/service/marketdata_service_test.go`,
+  `internal/timeframe/timeframe_test.go`, `internal/alpaca/client_test.go` (last two = D-1 scope
+  expansion).
+- Deviations: D-1, D-2.
+
+### Step 5 — ingest rejects non-1d TriggerBackfill, stops retrying permanent rejections [done]
+- `TriggerBackfill`: added `INVALID_ARGUMENT` reject after `_canonical_timeframe` and before
+  `insert_job` (after the admin gate). Narrowed `_TF_ALIASES` → `{"1d","1Day"}` (kept "1Day" for the
+  dual-purpose read path; dropped "15Min"/"1Hour" — no stored row uses them). Left `_STR_TO_ENUM`/
+  `_ENUM_TO_STR` unchanged (read-path dual purpose). Narrowed `backfill_chunks._BARS_PER_DAY` →
+  `{"1d":1}`. Retry loop: added `except grpc.aio.AioRpcError` BEFORE the broad `except Exception`,
+  forcing `attempt = max_attempts` on `INVALID_ARGUMENT` (no backoff on a permanent rejection).
+  Updated ingest CLAUDE.md (Authorization) + context-constitution.md (`_STR_TO_ENUM`/`_BARS_PER_DAY`
+  no-longer-aligned gotcha).
+- TDD: red → green. RED: `test_rejects_non_1d_timeframe` queued instead of aborting;
+  `test_invalid_argument_stops_retrying_immediately` retried 3× (await_count=3). GREEN: both pass.
+- Verification: `ruff check`/`ruff format --check` clean; full suite 192 passed, 79.26% coverage.
+- Files modified: `app/handlers/servicer.py`, `app/repositories/backfill_chunks.py`, `CLAUDE.md`,
+  `docs/context-constitution.md`.
+- Deviations: none for Step 5 itself (D-3/D-4 are Step-6 test-construction).
+
+### Step 6 — ingest rejection + retry-fix + chunk-density coverage [done]
+- Rewrote `test_enum_only_request_persists_canonical_string` (enum 5→4, "15m"→"1d"). Added
+  `test_rejects_non_1d_timeframe` and `test_invalid_argument_stops_retrying_immediately`. Deleted
+  `test_density_yields_more_chunks_for_15m_than_1d`; rewrote `test_no_chunk_exceeds_bar_cap` to "1d"
+  with cap=200 (forces a real 3+1 symbol split).
+- Deviations: **D-3** (AioRpcError needs metadata args positionally in the installed grpcio),
+  **D-4** (used `_ctx("4")` so the admin gate passes and the reject check is what fires). Both
+  test-only, confined to Step 6's files. Full detail in Deviation Log.
+- Files modified: `tests/test_ingest_servicer.py`, `tests/test_backfill_chunks.py`.
+
+### Step 7 — agent narrows trigger_backfill [done]
+- `client.py`: `_TF_ALIASES`→`{"1d","1Day"}`, `_TF_TO_ENUM`→`{"1d":4}`, mirror comment updated, error
+  string → "expected 1d/1Day". `tools.py`: docstring narrowed. Updated `docs/runbooks/mcp-tools.md`
+  (timeframe row) + `docs/runbooks/historical-backfill.md` (code comment, Timeframe Guide table +
+  callouts, chunk-density line, "choose timeframe per job" line removed, Canonical-vocabulary block).
+- Strat-lab governance: confirmed vacuously satisfied — `grep -rniE "15m|1hour|15min|timeframe"
+  plugins/` returns zero hits; `plugins/strat-lab/skills/backtest/reference/backfill.md` exists but
+  documents only the trigger→poll workflow, never a `timeframe` value → no plugin edit needed.
+- TDD: red → green (see Step 8 / D-5).
+- Verification: `ruff check`/`format --check` clean; no live "15m/1h accepted" claim remains
+  (only deliberate deprecation-context mentions of historical rows).
+- Files modified: `app/tools.py`, `app/client.py`, `docs/runbooks/mcp-tools.md`,
+  `docs/runbooks/historical-backfill.md`.
+
+### Step 8 — agent trigger_backfill narrowing coverage [done]
+- Strengthened `test_trigger_validation_valueerrors` per **D-5**: probes `timeframe="15m"`/`"1h"`
+  (now-rejected) instead of the always-invalid `"1w"`, so the assertion is a real red→green
+  (RED: 15m accepted → reached a live gRPC call raising AioRpcError, not ValueError; GREEN: rejected
+  with "expected 1d/1Day").
+- Verification: full agent suite 222 passed, 75.77% coverage (≥40%).
+- Files modified: `tests/test_client.py`.
+- Deviations: D-5. Full detail in Deviation Log.
+
+### Step 9 — UI removes 15m/1h chart + backfill-create options [done]
+- `chart.ts`: `Timeframe` narrowed to `'1Day'`; `TIMEFRAMES`/`TIMEFRAME_ENUM` to the single member.
+  `ChartPanel.tsx`: removed `POLL_INTERVALS_MS` + its auto-refresh effect, made `timeframe` a const,
+  deleted the `Tabs` selector + import. `positions/[symbol]/page.tsx`: `timeframe` const, removed
+  `timeframe`/`onTimeframe` props + types on `SymbolPriceChart`, deleted its `Tabs` block + the now
+  unused `Tabs`/`TIMEFRAMES` imports (kept `Timeframe`/`TIMEFRAME_ENUM`/`mapBars`).
+  `insights/backfills/page.tsx`: removed the create-form `<select>` + its `timeframe` state,
+  hardcoded `TIMEFRAME_1DAY` in `handleCreate`; left the top-level `TIMEFRAMES` const + the
+  delete-scope `<select>` untouched (DeleteBackfilledData stays permissive) with a clarifying comment.
+- TDD: red → green via the type-totality backstop. RED: after narrowing `chart.ts`, `tsc --noEmit`
+  failed ONLY on `chart.test.ts`'s `TIMEFRAME_ENUM['15Min']`/`['1Hour']` — every source consumer
+  compiled clean, proving all were updated. GREEN: after Step 10's test fix, `tsc` exit 0.
+- Verification: `tsc --noEmit` clean; `pnpm run lint` clean (remaining warnings are pre-existing in
+  untouched files).
+- Files modified: `src/lib/chart.ts`, `src/components/trader/ChartPanel.tsx`,
+  `src/app/trader/positions/[symbol]/page.tsx`, `src/app/insights/backfills/page.tsx`.
+
+### Step 10 — UI chart/backfill e2e + vitest coverage [done]
+- `chart.test.ts`: first `it` rewritten to assert the sole `'1Day'` mapping (second, generic
+  totality `it` unchanged). `chart-panel.spec.ts`: replaced the 3-buttons test with a
+  `getByRole('tab').toHaveCount(0)` assertion, deleted the "1d active by default" test, rewrote the
+  AC-8 test to intercept the mount's GetBars (route registered before a re-`goto('/trader/')`) and
+  assert `timeframeEnum === 'TIMEFRAME_1DAY'`. No change to `backfills.spec.ts` (confirmed unaffected).
+- Verification: `pnpm run test:coverage -- chart.test.ts` green (chart.ts 100%). e2e: see D-6 (Chromium
+  path) + the run note below.
+- Files modified: `src/lib/chart.test.ts`, `e2e/trader/chart-panel.spec.ts`.
+- Deviations: D-6 (e2e Chromium executable path env var). Full detail in Deviation Log.
+
+### Step 10 — e2e follow-up (real run, prebuilt harness)
+- Ran the two specs the way CI does (`NEXT_DISABLE_STANDALONE=1 pnpm build` → `CI=true E2E_PREBUILT=1
+  pnpm test:e2e`, Chromium at `/opt/pw-browsers/...`). First run: 15 passed / 1 failed — my AC-8
+  rewrite captured no GetBars (ChartPanel's mount fetch races the async chart-series init and isn't
+  retried). Fixed AC-8 to wait for `.tv-lightweight-charts` then change the bar-count selector as a
+  deterministic trigger. **Both specs now 16/16 green.** See Deviation Log D-6 (revised).

@@ -126,24 +126,12 @@ test.describe('ChartPanel component — trading dashboard', () => {
     await expect(page.getByRole('heading', { name: /chart/i })).toBeVisible({ timeout: 10000 });
   });
 
-  test('renders the 3 supported timeframe buttons', async ({ page }) => {
-    // The platform supports only 15m / 1h / 1d (common.v1.Timeframe = 15MIN/1HOUR/1DAY;
-    // 15m is the smallest interval the free Alpaca data plan serves). 10m/30m/1w/1mo have
-    // no backend support and are intentionally not offered.
-    const labels = ['15m', '1h', '1d'];
-    for (const label of labels) {
-      await expect(page.getByRole('tab', { name: label, exact: true })).toBeVisible({
-        timeout: 10000,
-      });
-    }
-    for (const label of ['10m', '30m', '1w', '1mo']) {
-      await expect(page.getByRole('tab', { name: label, exact: true })).toHaveCount(0);
-    }
-  });
-
-  test('1d is the active timeframe by default', async ({ page }) => {
-    const dayButton = page.getByRole('tab', { name: '1d' });
-    await expect(dayButton).toBeVisible({ timeout: 10000 });
+  test('renders no timeframe selector (single 1d-only support, feature 143)', async ({ page }) => {
+    // Chart panel loads with the chart card visible but no tab-role timeframe switcher —
+    // only 1d is supported platform-wide, so the selector was removed entirely (not left
+    // disabled with a single option).
+    await expect(page.getByRole('heading', { name: /chart/i })).toBeVisible({ timeout: 10000 });
+    await expect(page.getByRole('tab')).toHaveCount(0);
   });
 
   test('renders bar count selector with 50 / 100 / 200 options', async ({ page }) => {
@@ -163,13 +151,11 @@ test.describe('ChartPanel component — trading dashboard', () => {
   });
 
   test('sends timeframeEnum on the outbound GetBars request (AC-8)', async ({ page }) => {
-    // Intercept in-process (the mock backend runs in Playwright's globalSetup, a different
-    // process, so it cannot record what the component sends). Proves the CLIENT populates
-    // timeframeEnum, not just that chart.ts's map is correct (that's chart.test.ts's job).
-    // Registered after the initial mount's own fetch (untouched, uses the real mock) — the
-    // 1h timeframe button click below triggers a fresh GetBars this route can observe,
-    // avoiding the timing uncertainty of racing a full page reload against a multi-request
-    // client-side data-fetch cascade.
+    // Intercept in-process — proves the CLIENT populates timeframeEnum on its GetBars call. The
+    // timeframe tab is gone (feature 143), so instead of clicking a tab we trigger a deterministic
+    // fetch via the still-present bar-count selector (barCount is a fetchBars effect dependency).
+    // 'TIMEFRAME_1DAY' is hardcoded in the intercept assertion, never derived from TIMEFRAME_ENUM,
+    // so this can never assert the map against itself (feature 080 AC-8).
     let capturedBody: Record<string, unknown> | undefined;
     await page.route('**/xstockstrat.marketdata.v1.MarketDataService/GetBars', async (route) => {
       capturedBody = route.request().postDataJSON() as Record<string, unknown>;
@@ -187,8 +173,8 @@ test.describe('ChartPanel component — trading dashboard', () => {
               volume: '45000000',
               vwap: 189.1,
               tradeCount: 120000,
-              timeframe: '1h',
-              timeframeEnum: 'TIMEFRAME_1HOUR',
+              timeframe: '1d',
+              timeframeEnum: 'TIMEFRAME_1DAY',
               source: 'alpaca',
             },
           ],
@@ -196,19 +182,23 @@ test.describe('ChartPanel component — trading dashboard', () => {
       });
     });
 
-    // Wait for the chart to finish its async lightweight-charts import before clicking: until
-    // the series exists, ChartPanel.fetchBars early-returns and the click sends no GetBars,
-    // making this test flaky. The injected .tv-lightweight-charts child signals the series is ready.
+    // Re-navigate with the route registered so it is active for every GetBars this page makes.
+    // Cookies persist across the goto, so no re-auth is needed.
+    await page.goto('/trader/');
+
+    // Wait for the chart to finish its async lightweight-charts import before triggering a fetch:
+    // until the series exists, ChartPanel.fetchBars early-returns and the effect sends no GetBars
+    // (seriesRef is not an effect dep, so a mount fetch that raced ahead of the series is not
+    // retried). The injected .tv-lightweight-charts child signals the series is ready.
     await expect(
       page.locator('[data-testid="chart-container"] .tv-lightweight-charts'),
-    ).toBeVisible({ timeout: 10000 });
+    ).toBeVisible({ timeout: 15000 });
 
-    await page.getByRole('tab', { name: '1h', exact: true }).click();
+    // Change the bar count (100 → 200) to deterministically trigger a fresh GetBars now that the
+    // series is ready — the tab click the original test used no longer exists.
+    await page.getByText('100 bars', { exact: true }).click();
+    await page.getByRole('option', { name: '200 bars' }).click();
 
-    // 1h is the timeframe clicked above — hardcoded, not derived from TIMEFRAME_ENUM, so this
-    // can never assert the map against itself (feature 080 AC-8).
-    await expect
-      .poll(() => capturedBody?.timeframeEnum, { timeout: 10000 })
-      .toBe('TIMEFRAME_1HOUR');
+    await expect.poll(() => capturedBody?.timeframeEnum, { timeout: 10000 }).toBe('TIMEFRAME_1DAY');
   });
 });
