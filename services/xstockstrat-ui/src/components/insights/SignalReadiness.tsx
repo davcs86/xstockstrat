@@ -60,7 +60,7 @@ export function SignalReadiness({ symbol }: { symbol: string }) {
   const { data: analytics } = useStrategyAnalytics(strategyId || undefined);
 
   return (
-    <Card>
+    <Card data-testid="signal-readiness">
       <CardHeader>
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <CardTitle className="text-base">Why this fired</CardTitle>
