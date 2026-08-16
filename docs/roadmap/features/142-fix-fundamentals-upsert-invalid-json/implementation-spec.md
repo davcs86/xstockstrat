@@ -1,6 +1,6 @@
 # Implementation Spec: fix-fundamentals-upsert-invalid-json
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-08-16
 **Feature**: `docs/roadmap/features/142-fix-fundamentals-upsert-invalid-json/feature.md`
 **Total Steps**: 4
@@ -38,7 +38,7 @@ tripwire, not a substitute for the live repro. No proto, config, or migration ch
 
 ### Step 1 — test: Mandatory pre-merge repro — reproduce SQLSTATE 22P02 against unfixed code (RED)
 
-**Status**: `pending`
+**Status**: `blocked`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `docs/roadmap/features/142-fix-fundamentals-upsert-invalid-json/context.md` — modify (append the
@@ -139,7 +139,7 @@ implementation spec must be escalated back to `/sdd-design`, not carried forward
 
 ### Step 2 — service: Add `::jsonb` cast to the `extra_metrics` bind parameter (GREEN fix)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go` — modify
@@ -221,7 +221,7 @@ Step 3's re-run of the live repro, and Step 4's `pgxmock` pin.)
 
 ### Step 3 — test: Re-run the mandatory repro against the fixed code (GREEN) and record the result
 
-**Status**: `pending`
+**Status**: `blocked`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `docs/roadmap/features/142-fix-fundamentals-upsert-invalid-json/context.md` — modify (append the
@@ -268,7 +268,7 @@ Confirms the scratch repro was never committed (F-08) and the GREEN result is re
 
 ### Step 4 — test: `pgxmock` regression test pinning the `::jsonb` cast
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-marketdata`
 **Files**:
 - `services/xstockstrat-marketdata/internal/repository/marketdata_repo_test.go` — modify
@@ -368,4 +368,31 @@ broke.
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### Deviation: Steps 1 & 3 — blocked, no Docker daemon in this execute environment
+
+**Spec said**: Step 1 brings up local `docker-compose` TimescaleDB, applies migrations, and runs
+a throwaway repro program against the unfixed code to capture the RED-state `SQLSTATE 22P02`
+error text (design.md's mandatory pre-merge verification gate). Step 3 re-runs the identical
+repro against the fixed code to confirm GREEN and record both transcripts in `context.md` as the
+fix's real verification evidence.
+**Actual**: This execute session's sandbox has no running Docker daemon (`docker ps` →
+"failed to connect to the docker API... dial unix /var/run/docker.sock: connect: no such file or
+directory"). `sdd-execute`'s own HARD CONSTRAINTS explicitly forbid starting a database or other
+long-running service container to verify a step, with no carve-out for any mode — this is
+Floor-adjacent, not a judgment call. Both constraints point the same direction: do not attempt to
+start Postgres here.
+**Reason**: Environment constraint, escalated to the user via `AskUserQuestion` rather than
+silently skipped or faked. User chose: apply Steps 2 and 4 (both code-only, no live DB needed)
+now, and leave Steps 1 and 3 — the mandatory live-DB repro design.md itself requires before this
+fix's root-cause hypothesis is considered *confirmed* (not just plausible) — as `blocked` pending
+a session/environment with Docker access. **This means the fix has NOT yet been verified against
+the actual reported production error** — it rests on the driver/OID-inference hypothesis from
+recon.md and design.md's grilling rounds, which is well-evidenced (grep-confirmed no other jsonb
+bind exists platform-wide, confirmed `QueryExecModeExec` activation path) but explicitly
+unconfirmed against live Postgres. The `pgxmock` test (Step 4) only guards against someone
+deleting the cast later — per its own doc comment, it cannot itself prove the fix is correct.
+**Before this fix is considered production-ready**, Steps 1 and 3 must be completed in an
+environment with Docker access: run the repro against the unfixed code (`git show
+<pre-fix-commit>:services/xstockstrat-marketdata/internal/repository/marketdata_repo.go`) to
+confirm SQLSTATE 22P02 reproduces, then against the fixed code (this commit) to confirm it
+resolves, and record both transcripts in this feature's `context.md`.

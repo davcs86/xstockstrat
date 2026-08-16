@@ -63,3 +63,64 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
   - Not trading-domain-relevant (fundamentals JSON upsert, no `BrokerType`/`OrderType`/`TradingMode`
     touch) — `reference/step-constraints.md` §A skipped; §B (lint/coverage) applied to the service
     step.
+
+## Session 2026-08-16 — sdd-execute (sequential)
+
+- Tooling confirmed: Go 1.25.0, golangci-lint present.
+- Discovery (Phase 1): marketdata_repo.go matched implementation-spec.md's Codebase Evidence exactly.
+- **Steps 1 & 3 (manual live-DB repro) are BLOCKED**: this execute sandbox has no running Docker
+  daemon (`docker ps` → "failed to connect to the docker API... dial unix
+  /var/run/docker.sock: connect: no such file or directory"). sdd-execute's own HARD CONSTRAINTS
+  forbid starting a database container to verify a step, Floor-adjacent, no carve-out. Escalated to
+  the user via AskUserQuestion rather than silently skipped or faked. User chose: apply Steps 2 and
+  4 (code-only) now, leave Steps 1/3 as a required follow-up before this fix is considered fully
+  verified against the actual reported production error — see implementation-spec.md Deviation Log
+  for the full writeup. **The RED/GREEN error transcripts this section's Step 1/3 instructions call
+  for are NOT YET CAPTURED** — a future session with Docker access must run them and append the
+  transcripts here before this feature can honestly move past `in-progress`.
+
+### Step 2 — service: Add ::jsonb cast to the extra_metrics bind parameter [done]
+- Added `"github.com/jackc/pgx/v5/pgconn"` import, `execer` interface (`Exec` only), `db execer`
+  field on `MarketDataRepo` (alongside unchanged `pool`), `NewMarketDataRepo` sets `db: pool`.
+  Retargeted `UpsertFundamentals`'s `Exec` call onto `r.db`. Added `::jsonb` cast to the `$14`
+  bind parameter in the INSERT SQL text.
+- Verification: `GOWORK=off go build ./...` — clean. `grep '\$14::jsonb'` — present.
+- Files modified: `services/xstockstrat-marketdata/internal/repository/marketdata_repo.go`
+- Deviations: none.
+
+### Step 4 — test: pgxmock regression test pinning the ::jsonb cast [done]
+- Added `github.com/pashagolub/pgxmock/v4 v4.9.0` via `go get` + `go mod tidy` (matches
+  xstockstrat-portfolio's identical pin).
+- Wrote `TestUpsertFundamentals_CastsExtraMetricsToJSONB` in `marketdata_repo_test.go`.
+- One implementation fix beyond the spec's literal text: `pgxmock.ExpectExec(...)` defaults to
+  expecting **zero** args unless `.WithArgs(...)` is called — the spec's example omitted it,
+  causing `expected 0, but got 16 arguments`. Fixed by adding `.WithArgs(anyArgs...)` with 16
+  `pgxmock.AnyArg()` matchers (the test only cares about the SQL text/cast, not the specific
+  argument values). Mechanical pgxmock API detail, not a design change.
+- **Red-before-green (P-06), actually executed**:
+  - GREEN (post-Step-2 cast): test passes.
+  - RED (temporarily reverted the `::jsonb` cast back to bare `$14`, re-ran the identical test):
+    fails with `could not match actual sql: "...VALUES ($1,...,$14,...)..." with expected regexp
+    "\$14::jsonb"` — confirms the test genuinely requires the fix.
+  - Re-applied the cast; re-ran green — passed again.
+- `golangci-lint run --modules-download-mode=mod` — 0 issues. Full suite (`go test ./... -race
+  -count=1 -coverprofile=...`) — all packages `ok`. Total coverage 63.3% (`repository` package
+  excluded from `COVERPKGS` per spec, as expected).
+- Files modified: `services/xstockstrat-marketdata/internal/repository/marketdata_repo_test.go`,
+  `services/xstockstrat-marketdata/go.mod`, `services/xstockstrat-marketdata/go.sum`.
+- Deviations: pgxmock `.WithArgs` requirement (mechanical, documented above).
+
+**2 of 4 steps done (2, 4). Steps 1 and 3 blocked on Docker access. Feature status:
+implementation-ready → in-progress (NOT code-completed — genuine open verification gap).**
+
+## Session 2026-08-16 — sdd-execute (sequential) — session summary
+
+**Steps this session**: 2, 4 (done); 1, 3 (blocked)
+**Progress**: 2 done / 4 total (2 blocked)
+**Stopped at**: Steps 1 & 3 — no Docker daemon in this environment
+**Next**: In an environment with Docker access, run `/sdd-execute fix-fundamentals-upsert-invalid-json 1` then `... 3` to complete the mandatory repro gate design.md requires, then re-run `/sdd-execute fix-fundamentals-upsert-invalid-json` to close out the feature (advance to code-completed).
+
+Accountability:
+- Out-of-scope changes: none
+- Open questions / items: **the fix is unverified against the actual reported production error** — it rests on a well-evidenced but explicitly-unconfirmed hypothesis (recon.md, design.md). This is the single most important open item in this whole session's work and must not be lost track of before this fix is treated as done.
+- Unaddressed review warnings: none (Track C bug fix, never went through /sdd-review).
