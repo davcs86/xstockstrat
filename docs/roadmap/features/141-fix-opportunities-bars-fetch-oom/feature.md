@@ -1,7 +1,7 @@
 # Feature: fix-opportunities-bars-fetch-oom
 
 **Type**: bug
-**Lifecycle Status**: `implementation-ready`
+**Lifecycle Status**: `code-completed`
 **Development Branch**: `claude/commit-135-opportunities-strategies-0xjnxk`
 **GitHub Issue**: n/a — GitHub Issues are disabled on `davcs86/xstockstrat`; bug captured directly via `/sdd-triage` (Track C) from `docs/reports/2026-08-16-analysis-opportunities-bars-fetch-shared-memory-defect.md`
 **Severity**: SEV-2
@@ -18,6 +18,8 @@
 | 2026-08-16 | `draft` (unchanged) | /sdd-triage (boot correction) | Corrected **Development Branch** `feature/fix-opportunities-bars-fetch-oom` → `claude/commit-135-opportunities-strategies-0xjnxk` — session's harness assignment requires all work stay on the `claude/*` branch (same pattern as feature 135's own boot correction) |
 | 2026-08-16 | `draft` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. Chosen: per-symbol bars dedup + a process-lifetime semaphore (default 2) bounding cross-user concurrency. Unit-level test proof accepted as sufficient (no staging load-test gate). |
 | 2026-08-16 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 3 steps (service, test, config). |
+| 2026-08-16 | `implementation-ready` → `in-progress` | /sdd-execute | Sequential execution started on `claude/commit-135-opportunities-strategies-0xjnxk`. Step 1 done: bars_by_symbol dedup dict + self._bars_fetch_sem semaphore. Step 2 done: 3 tests, red-before-green confirmed. One deviation: read-side pagination (_DEFAULT_OPP_PAGE_SIZE=50, unrelated pre-existing behavior) required page_size=300 in the scale test. |
+| 2026-08-16 | `in-progress` → `code-completed` | /sdd-execute | Step 3 done: analysis.opportunity.max_concurrent_bars_fetches registered in CLAUDE.md + config-governance.md. /context-scrubber unavailable this session (recorded, not skipped silently). ruff clean; full suite 522 passed, 83.5% coverage. All 3 steps complete. |
 
 ---
 
@@ -52,5 +54,5 @@ Snapshot from `docs/runbooks/reviewer-registry.md` at `/sdd-spec` time (2026-08-
 
 ## Next Action
 
-`/sdd-review fix-opportunities-bars-fetch-oom impl-spec` — validate implementation spec, then
-`/sdd-execute fix-opportunities-bars-fetch-oom`
+Check `docs/roadmap/features/merge-order.md`, then open the final integration PR:
+`claude/commit-135-opportunities-strategies-0xjnxk → main-dev`

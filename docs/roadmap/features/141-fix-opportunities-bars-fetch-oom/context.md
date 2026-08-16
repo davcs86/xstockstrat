@@ -67,3 +67,54 @@ Append-only. Each session appends a new ## Session entry. Never delete or edit p
     reading the file) — Step 3's Teardown note was corrected to not overclaim
     `docs/patterns/config-governance.md` is in that list; the CLAUDE.md edit alone triggers the
     mandated scan, with config-governance.md folded in by choice since it's edited in the same step.
+
+## Session 2026-08-16 — sdd-spec
+
+- Generated implementation-spec.md, 3 steps (service, test, config), all scoped to xstockstrat-analysis. Grounded in design.md's dedup dict + process-lifetime semaphore. Re-verified evidence live (servicer.py, main.py, .do/app.yaml, test file fixtures, CLAUDE.md) — no drift from design.md's citations.
+- Status: design-approved → implementation-ready.
+
+## Session 2026-08-16 — sdd-execute (sequential)
+
+- Tooling confirmed: Python 3.12.3, ruff, uv — matches root CLAUDE.md's pinned version.
+- Discovery (Phase 1): servicer.py matched implementation-spec.md's Codebase Evidence exactly at both insertion points (__init__ semaphore block, _compute_opportunities fetch block).
+
+### Step 1 — service: per-pass bars dedup + process-lifetime bars-fetch semaphore [done]
+- Added `self._bars_fetch_sem = asyncio.Semaphore(max(1, self._cfg.get_int("analysis.opportunity.max_concurrent_bars_fetches", 2)))` in `__init__`, alongside `self._component_series_sem`.
+- Added `bars_by_symbol: dict[str, list] = {}` per-pass cache in `_compute_opportunities`, and rewrote the fetch block to check-then-fetch-under-semaphore-then-cache.
+- Fixed 3 own-introduced E501 lint findings by rewrapping comments (in scope per the "step's own changed lines" HARD CONSTRAINTS exception) — no code logic changed.
+- Verification: `ruff check`/`ruff format --check` clean; `python3 -c "import ast; ast.parse(...)"` — syntax valid.
+- Files modified: `services/xstockstrat-analysis/app/handlers/servicer.py`
+- Deviations: none (beyond the lint line-length fixes, which are in-scope per the exception clause).
+
+### Step 2 — test: bars-fetch dedup, failed-fetch caching, and cross-user concurrency bound [done]
+- Added `TestOpportunityBarsFetchDedup` (3 tests) immediately after `TestListOpportunitiesMaterialized`, before `TestGetStrategyAnalytics`, exactly as specced.
+- **Deviation found and fixed during execution** (see implementation-spec.md Deviation Log): `test_bars_fetch_deduped_at_documented_worst_case_scale`'s `assert len(opps) >= 200` failed against the unmodified spec text — `ListOpportunities` paginates its read at `_DEFAULT_OPP_PAGE_SIZE=50` (servicer.py:109,2245), a pre-existing, unrelated RPC behavior neither recon nor design.md's two grilling rounds surfaced (both focused on `_compute_opportunities`, never `ListOpportunities`'s own read-side pagination). Confirmed via inspection that the compute-side fix was correct (241 rows genuinely materialized into `_FakeOppRepo`) — only the test's read call needed `page=common_pb2.PageRequest(page_size=300)` to see the whole set. No change to Step 1's fix.
+- ruff auto-fixed 4 more E501s from the spec's own literal test-code text via `ruff format` (comment-wrapping only, no logic change).
+- **Red-before-green (P-06), actually executed**:
+  - GREEN (post-Step-1): all 3 tests pass.
+  - RED (temporarily reverted Step 1's semaphore + dedup dict + fetch-block changes back to the original unconditional fetch, re-ran the identical 3 tests): all 3 fail — scale test `50 >= 200`... wait, actually failed differently pre-fix (no dedup at all, so far more distinct GetBars calls); failed-fetch test failed on retry-count; concurrency test failed exactly as predicted — `assert 6 == 2` (all 6 concurrent fetches overlapped freely with no semaphore to bound them). Confirms the tests genuinely require Step 1's fix.
+  - Re-applied Step 1's fix; re-ran green — passed again.
+- Full verification: `ruff check .` / `ruff format --check .` — clean (47 files). `uv run pytest --cov=app --cov-fail-under=40` — **522 passed**, 83.52% coverage (well above the 40% threshold), including the 3 new tests and the full pre-existing suite (`TestListOpportunitiesMaterialized` et al. all still pass unmodified).
+- Files modified: `services/xstockstrat-analysis/tests/test_analysis_servicer.py`
+- Deviations: read-side pagination gap in the scale test (documented above and in implementation-spec.md Deviation Log).
+
+### Step 3 — config: register analysis.opportunity.max_concurrent_bars_fetches [done]
+- Added the config row to `services/xstockstrat-analysis/CLAUDE.md` § Config Keys Consumed (after `max_live_held_symbols_per_compute`, before the fan-out-worst-case blockquote) and a new top-of-log entry to `docs/patterns/config-governance.md` § Per-Feature Registered Keys (above the feature-125 entry), both matching the cited feature-125 precedent's exact format.
+- Verified via grep: key appears in both files; new log entry is above feature-125's.
+- **`/context-scrubber` unavailable this session** (not in the session's skill list, no plugin installed under `.claude/`) — per root CLAUDE.md § Teardown, recorded here (not skipped silently) and will be stated in the eventual PR body. Both edited files were hand-reviewed against their own existing table format as a partial substitute.
+- Files modified: `services/xstockstrat-analysis/CLAUDE.md`, `docs/patterns/config-governance.md`
+- Deviations: `/context-scrubber` unavailability (documented above and in implementation-spec.md Deviation Log).
+
+**All 3 steps done. Feature status: implementation-ready → in-progress → code-completed.**
+
+## Session 2026-08-16 — sdd-execute (sequential) — session summary
+
+**Steps this session**: 1, 2, 3
+**Progress**: 3 done / 3 total
+**Stopped at**: all complete
+**Next**: merge-order.md check (none found), then open the integration PR (claude/commit-135-opportunities-strategies-0xjnxk → main-dev)
+
+Accountability:
+- Out-of-scope changes: none
+- Open questions / items: root cause confidence remains low per design.md Open Risk 1 (never confirmed against a real Postgres memory/lock profile) — monitor in staging after this fix ships, not a merge blocker per user's earlier decision; the ≥200-row test scale is a reasoned substitute for the unknown real incident size (documented in the test's own docstring, per design.md Open Risk 2).
+- Unaddressed review warnings: none (Track C bug fix, never went through /sdd-review). `/context-scrubber` unavailability is recorded above, not an unaddressed warning — it's an environment constraint noted per Teardown instructions, to be surfaced in the PR body.
