@@ -159,3 +159,144 @@
     FR-4 replace, fixed in Step 11 (same-PR teardown rule).
   - C-12: signal-source mock is inline at `e2e/mock-backend.ts:882-923`, `INVENTORY.md:60` "not yet
     centralized" — this is the second consumer, so Step 9 creates `e2e/fixtures/signalSources.ts`.
+
+## Session 2026-08-15 — sdd-execute (sequential)
+
+### Step 1 — proto: add reliability_weight field [done]
+- Added `optional double reliability_weight = 12;` to `message SignalSource` in
+  `packages/proto/ingest/v1/ingest.proto` (after `signals_fed = 11`, field 12 was free, no reserved
+  block). Explicit presence (`optional`) so an omitted create-form field is distinguishable from an
+  explicit 0.0.
+- Files modified: `packages/proto/ingest/v1/ingest.proto`
+- Verify: `buf lint` clean; `buf breaking` (run from repo root, `--against .git#ref=HEAD,subdir=packages/proto`
+  since the fresh branch has no commits and HEAD==main-dev) exits 0 — additive field is non-breaking.
+  Note: the spec's `--against .git#branch=<branch>` form failed with a git-remote read error on a
+  brand-new local branch; the HEAD-ref form is the CI-equivalent baseline. Recorded as a benign
+  verification-form substitution (not a deviation — same non-breaking result).
+- Deviations: none.
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Ran `./scripts/buf-gen.sh` (Docker codegen available). Diff limited to 8 files under
+  `packages/proto/gen/{go,python,ts,ts/dist}/ingest/v1/` — the additive `reliability_weight`
+  accessor only, no unrelated churn. Present in Go/Python/TS stubs.
+- `uv lock --check` in ingest/analysis/indicators all pass (no grpcio floor bump this time — the
+  feature-007 trap did not recur; no uv.lock changes to commit).
+- Files modified: `packages/proto/gen/**` (generated)
+- Deviations: none.
+
+### Step 3 — migration: ingest signal_sources.reliability_weight column [done]
+- Created `010_add_signal_source_reliability_weight.{up,down}.sql`: up `ADD COLUMN reliability_weight
+  DOUBLE PRECISION NOT NULL DEFAULT 1.0 CHECK (reliability_weight BETWEEN 0 AND 1)`; down `DROP COLUMN`.
+  `010` confirmed free (highest was `009_signal_dedup_keys`). CHECK mirrors `conviction` in `001`.
+- Files modified: `services/xstockstrat-ingest/migrations/010_*.{up,down}.sql`
+- Verify (offline, no DB): both files exist; `.up` ADD reversed by `.down` DROP. Live apply runs in CI.
+- Deviations: none.
+
+### Step 4 — service: ingest persist/return reliability_weight [done]
+- `signal_sources.py`: `insert_source` gains required kwarg `reliability_weight` (trailing INSERT
+  column/param $8, after `active` — preserves the config_json positional index 6); `update_source`
+  gains it (SET `reliability_weight = $7`); `list_all_sources` cols string appends `reliability_weight`.
+- `servicer.py`: added `reliability_weight` to `_SS_MASKABLE_PATHS`; register branch validates
+  `HasField && [0,1]` (reject INVALID_ARGUMENT, mirrors conviction) then passes `weight` (1.0 default,
+  never None on the NOT NULL column); update branch rejects out-of-range and computes `merged_weight`
+  (masked+present → request value, else stored); both row builds (ManageSignalSource + ListSignalSources)
+  carry `reliability_weight`. Validation kept inline (no shared module — scope guard, mirrors conviction).
+- Files modified: `app/handlers/servicer.py`, `app/repositories/signal_sources.py`
+- TDD: red (7 failing — unknown kwarg + missing validation) → green (190 passed, 76.39%). Deviations: none.
+
+### Step 5 — test: ingest write-path coverage [done]
+- Updated the 3 existing repo tests to pass the now-required `reliability_weight=` kwarg; asserted the
+  trailing positional arg + `reliability_weight` in the SQL, and that config_json stays index 6.
+- Added `TestSignalSourceReliabilityWeight` (servicer): register explicit-0.0 persists as 0.0;
+  register without the field defaults to 1.0; register out-of-range (1.5) → INVALID_ARGUMENT; masked
+  update to 0.0 persists as 0.0. Added `reliability_weight` to the `_stored()` helper + fixed one
+  pre-existing register test's mocked INSERT-return row (row build now reads the column).
+- C-13 verdict: the slug/source_type literals are single-consumer (this module) → inline compliant.
+- Files modified: `tests/test_signal_sources.py`, `tests/test_ingest_servicer.py`
+- TDD: red (7 failing) → green (190 passed, 76.39%). Deviations: none.
+
+### Step 6 — service: analysis apply weight + FR-4 replace [done]
+- Added `_drain_source_weights(propagation_meta) -> dict[str,float]` (mirrors `_drain_active_signals`:
+  one unpaginated `ListSignalSources(include_inactive=True)`, best-effort `except grpc.RpcError → {}`,
+  returns `{slug: reliability_weight}`). Header propagation via `metadata=propagation_meta`.
+- `_compute_opportunities`: drains weights once alongside the other drains; the `signal_axis` write is
+  `max(signal_axis, sig.conviction * source_weights.get(sig.source, 1.0))` (neutral 1.0 default).
+- ScreenSymbols FR-4 genuine replace: removed the `self._cfg.get_str("analysis.signals.source_weights")`
+  read + JSON parse; `source_weights = await self._drain_source_weights(propagation_meta)`. Both read
+  paths now share the helper; `scoring.py`/`screener.py` untouched (dict shape unchanged).
+- NOTE (133 line-shift): the spec's line refs (:2163/:2358/:1890) were stale after 133 merged;
+  Phase-1 discovery relocated the symbols by name (:2285/:2484/:2005) — no guessing.
+- Files modified: `app/handlers/servicer.py`
+- TDD: red (3 new tests fail — no method / raw axis 0.9≠0.45 / config still read) → green (467 passed,
+  82.04%). Deviations: none (verification-form line-refs relocated by name, not a spec deviation).
+
+### Step 7 — test: analysis weighting + repoint coverage [done]
+- Updated `_materialized_svc` (+`source_weights` param, mocks `ListSignalSources`), `TestScreenSymbols._svc()`,
+  and `TestScreenSymbolsHeld` to mock `ListSignalSources` (empty→1.0, no behavior change for existing tests).
+- New: AC-2 half-weight (`signal_axis` = conviction*0.5 = half of the 1.0 case); `_drain_source_weights`
+  maps + best-effort {} on RpcError; ScreenSymbols repoint (ScreenerEngine receives the ingest-derived
+  map; the `analysis.signals.source_weights` config key is never consulted).
+- C-13 verdict: signal-source literals single-consumer (this module) → inline compliant.
+- Files modified: `tests/test_analysis_servicer.py`
+- TDD: red (3 failing) → green (467 passed, 82.04%). Deviations: none.
+
+### Step 8 — service: /config-ui Sources weight cell read/write [done]
+- `useSignalSources.ts`: dropped the `configClient.listKeys(...)` combine + `weights` map/parse; returns
+  just `sources` from `ingestClient.listSignalSources({includeInactive:true})` — the weight now lives on
+  each `SignalSource` as `reliabilityWeight`.
+- `sources/page.tsx`: replaced the read-only weight cell (`{weights[src.slug] ?? 1.0}`) with a
+  click-to-edit inline control (local `editingWeightSlug`/`weightValue`/`weightError` state, `<Input>`,
+  Save/Cancel). Display `src.reliabilityWeight ?? 1.0`. Bespoke `[0,1]` scalar validator (~2 lines, not
+  `validateFloatMap`). On Save → `useManageSignalSource().mutate` with `operation:'update'`,
+  `source:{slug, reliabilityWeight}`, `updateMask:{paths:['reliability_weight']}`. Full edit modal untouched.
+- Files modified: `src/app/config-ui/hooks/useSignalSources.ts`, `src/app/config-ui/sources/page.tsx`
+- TDD: red is structural — the Step 9 e2e drives DOM (`weight-<slug>` testid, the inline editor, the
+  `[0,1]` error) that only exists after Step 8; against the pre-Step-8 read-only cell it fails to find
+  them. green: 16/16 sources.spec.ts pass. Verify: `pnpm run lint` + `tsc --noEmit` clean.
+
+### Step 9 — test: /config-ui weight e2e + fixture centralization (C-12) [done]
+- Created `e2e/fixtures/signalSources.ts` (`SIGNAL_SOURCE_WEIGHTED` @0.5, `SIGNAL_SOURCE_NEUTRAL` @1.0,
+  `SIGNAL_SOURCES`) — distinct weights so the assertion is meaningful. `mock-backend.ts`
+  `listSignalSources`/`manageSignalSource` now import the fixtures; manage echoes the saved
+  `reliabilityWeight`. `INVENTORY.md` points Signal sources at the new module. Barrel re-exports it.
+- New `sources.spec.ts` tests: inline edit → Save sends `update` + `updateMask` + `reliabilityWeight` (the
+  FieldMask serializes camelCase on the wire — the Python server converts to snake_case; asserted the
+  wire form); an out-of-range value is rejected client-side with no ManageSignalSource call.
+- In-scope test churn from the 2nd fixture source: scoped the pre-existing "Live badge" assertion to
+  `.first()` (two LIVE sources now); made the 2nd source `hasCredentials:true`
+  (`authenticated_website`) so proto3 serializes the bool for the ListSignalSources contract test.
+- Files modified: `e2e/config-ui/sources.spec.ts`, `e2e/fixtures/signalSources.ts`,
+  `e2e/fixtures/index.ts`, `e2e/fixtures/INVENTORY.md`, `e2e/mock-backend.ts`
+- TDD: red (weight cell/editor absent pre-Step-8) → green (16/16 sources.spec.ts pass). Deviations: none.
+
+### Step 10 — migration: config source_weights description superseded [done]
+- Created `016_deprecate_analysis_signal_source_weights_desc.{up,down}.sql`: up UPDATEs the
+  `analysis.signals.source_weights` description to "SUPERSEDED (feature 134) … retained but no longer
+  read"; down restores the exact original 003 text. Description-only (value_type/value_data untouched).
+  `016` confirmed free (highest was `015_marketdata_finnhub`). F-01 respected (003 unedited; new migration).
+- Files modified: `services/xstockstrat-config/migrations/016_*.{up,down}.sql`
+- Verify (offline, no DB): both exist; `.up` UPDATE reversed by `.down`. Live apply runs in CI.
+- Deviations: none.
+
+### Step 11 — docs: fix FR-4 doc-drift [done]
+- `docs/patterns/config-governance.md` (feature-097 line): dropped "source_weights is unchanged (stays
+  the screener's)"; states it is superseded by `ingest.SignalSource.reliability_weight`, read via
+  `ListSignalSources` by both the queue and the screener.
+- `services/xstockstrat-analysis/CLAUDE.md`: the config-key row now says "Superseded (feature 134) —
+  retained but no longer read" (fixed the "clamped at read time" claim); the signal_rank_weight row's
+  "stays the screener's" mention corrected to "(feature-134-superseded)".
+- context-scrubber: context-forge plugin not installed this session (noted in the PR body per the
+  teardown rule); touched docs reviewed by hand against the code.
+- Files modified: `docs/patterns/config-governance.md`, `services/xstockstrat-analysis/CLAUDE.md`
+- Deviations: none.
+
+### Feature 134 — code-completed
+All 11 steps done. proto+codegen (1-2), ingest migration+service+tests (3-5, 190 green), analysis
+service+tests (6-7, 467 green), config-ui service+e2e (8-9, 16/16 green), config migration (10), docs (11).
+
+### Post-PR CI fix — agent SignalSource projection parity
+- CI on #953 caught a real regression the spec's C-14 scan missed: `xstockstrat-agent`
+  `list_signal_sources` hand-projects every `SignalSource` field and a descriptor-parity test
+  (`test_signal_source_projection.py`) fails when a new field is unprojected. Added
+  `"reliability_weight": src.reliability_weight` to the projection (`app/client.py`). Agent suite green
+  (219 passed). Not a new capability — a projection-parity fix for the proto field added in Step 1.

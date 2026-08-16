@@ -1522,6 +1522,10 @@ reusing.
 - **Evidence**: `services/xstockstrat-identity/src/grpc/authz.ts` (Step 4), `services/xstockstrat-ui/src/lib/restBackendHeaders.ts` (Step 7), design.md §R3 decisions.
 - **Rule it implies**: when adding self-management RPCs to a backend service, prefer replicating an existing service's `authz.ts` module over inventing a new pattern; for REST routes, extract shared header helpers on first use rather than waiting for the third copy.
 
+- **Superseding (not deleting) a config key** — when a value moves from a config key to a first-class proto/DB field, "genuine replace" beats leaving both live: retain the key, reword its registered description via a *new* migration (never edit the seed migration — F-01), repoint **every** reader onto the new source in the same PR (share one drain/read helper across all read paths), and fix the doc-drift the same PR. The key stays editable-but-inert; a future feature can drop it. (feature 134 — `analysis.signals.source_weights` → `ingest.SignalSource.reliability_weight`.)
+
+- **A shared owner-scoped `resolve_universe(definition, watchlist, held, signals)` helper unifies the live loop, the opportunity compute, and the boot backfill** — when a feature generalizes "which symbols does this strategy cover" (allowlist → watchlist∪held∪signals, minus a deny list), put it in ONE pure NamedTuple-returning helper and have every consumer call it. It kept live/compute/backfill parity structural (not test-asserted), let the entry-only deny live in exactly one place (`universe` vs `deny_entry`), and let the backfill reuse the live loop's own best-effort drains instead of new plumbing. (feature 132 — `live_loop.resolve_universe`; the allowlist-as-override branch made it a drop-in for 131's allowlist-only `strategy_symbols` with no 131-test churn.)
+
 ### 2026-08-15 — shadcn-datatable-migration — design
 - **Pattern**: A generic `onRowClick` prop on a shared table composite needs exactly one row-level
   guard, not per-cell `stopPropagation()` calls scattered across every interactive cell. The guard —

@@ -139,6 +139,19 @@ export declare enum ConditionState {
 export declare function conditionStateFromJSON(object: any): ConditionState;
 export declare function conditionStateToJSON(object: ConditionState): string;
 export declare function conditionStateToNumber(object: ConditionState): number;
+/** Which rule tree EvaluateReadiness traces (feature 138). Closed set → enum (C-04). */
+export declare enum ReadinessRule {
+    /** READINESS_RULE_UNSPECIFIED - server treats as ENTRY (back-compat default) */
+    READINESS_RULE_UNSPECIFIED = "READINESS_RULE_UNSPECIFIED",
+    /** READINESS_RULE_ENTRY - trace the entry_rule (ENTER candidates, watchlist readiness) */
+    READINESS_RULE_ENTRY = "READINESS_RULE_ENTRY",
+    /** READINESS_RULE_EXIT - trace the exit_rule (held REDUCE/ADD opportunities) */
+    READINESS_RULE_EXIT = "READINESS_RULE_EXIT",
+    UNRECOGNIZED = "UNRECOGNIZED"
+}
+export declare function readinessRuleFromJSON(object: any): ReadinessRule;
+export declare function readinessRuleToJSON(object: ReadinessRule): string;
+export declare function readinessRuleToNumber(object: ReadinessRule): number;
 /** The persisted per-user disposition of a queued opportunity (feature 097). Closed set → enum (C-04). */
 export declare enum OpportunityAction {
     OPPORTUNITY_ACTION_UNSPECIFIED = "OPPORTUNITY_ACTION_UNSPECIFIED",
@@ -383,6 +396,28 @@ export interface StrategyDefinition {
      * (INVALID_ARGUMENT).
      */
     exitCooldownDays?: number | undefined;
+    /**
+     * Normalized-uppercase symbols this strategy must never evaluate FOR ENTRY (feature 132 —
+     * entry-only deny). A held position on a denied symbol keeps exit tracing (the deny suppresses
+     * only the entry edge, so an operator can always exit a position they already hold). Rides
+     * definition_json (no column); maskable via ManageStrategyRequest.update_mask.
+     */
+    deniedSymbols: string[];
+    /**
+     * Owning user (feature 133). Server-authoritative: populated from the propagated
+     * x-user-id header on ManageStrategy REGISTER, never accepted from the request body
+     * (mirrors ListOpportunitiesRequest / portfolio ownership convention).
+     */
+    userId: string;
+    /**
+     * Gates whether the platform-wide active-signal term joins this strategy's evaluation universe
+     * (feature 132). Plain bool (no optional) is intentional: absent ≡ false ≡ explicit-false resolve
+     * identically. A strategy that sets BOTH a non-empty signal_params.symbols allowlist AND
+     * signal_eligible=true is rejected INVALID_ARGUMENT at write time (the allowlist is already an
+     * explicit universe override; signals would be redundant/contradictory). Rides definition_json;
+     * maskable.
+     */
+    signalEligible: boolean;
 }
 export interface ManageStrategyRequest {
     operation: StrategyOperation;
@@ -400,7 +435,7 @@ export interface ManageStrategyRequest {
      *              StrategyWizard, which always sends a complete definition) are unaffected.
      *
      * Allowed paths: display_name, components, entry_rule, exit_rule, signal_params, cooldown_days,
-     * exit_cooldown_days.
+     * exit_cooldown_days, denied_symbols, signal_eligible.
      * strategy_id/active/live_enabled are column-authoritative and rejected with INVALID_ARGUMENT.
      */
     updateMask?: string[] | undefined;
@@ -462,10 +497,30 @@ export interface ScreenResult {
     atr: number;
     revGrowth: number;
     held: boolean;
+    /**
+     * Per-criterion raw readings + pass/fail, for single-symbol screening where the universe-relative
+     * `score`/`criterion_scores` collapse to a content-free 0.5 (feature 125, FR-8). Populated from the
+     * same engine-internal values `criterion_scores` already draws from, exposed directly instead of
+     * normalized.
+     */
+    criterionRawValues: {
+        [key: string]: number;
+    };
+    criterionPassed: {
+        [key: string]: boolean;
+    };
 }
 export interface ScreenResult_CriterionScoresEntry {
     key: string;
     value: number;
+}
+export interface ScreenResult_CriterionRawValuesEntry {
+    key: string;
+    value: number;
+}
+export interface ScreenResult_CriterionPassedEntry {
+    key: string;
+    value: boolean;
 }
 export interface ScreenSymbolsRequest {
     symbols: string[];
@@ -520,6 +575,8 @@ export interface Opportunity {
     opportunityKey: string;
     /** contributing origins for a de-duplicated row (signal source(s) / "position" / "watchlist") */
     provenance: string[];
+    /** feature 132 — the (symbol, strategy) pair is on the strategy's deny list; surfaced as an explicit muted row (never conviction=0) */
+    muted: boolean;
 }
 /** One evaluated condition leaf from the traced evaluator (feature 083). */
 export interface ConditionEval {
@@ -570,6 +627,13 @@ export interface ListOpportunitiesResponse {
 export interface EvaluateReadinessRequest {
     strategyId: string;
     symbols: string[];
+    /**
+     * feature 138 — which rule tree to trace. UNSPECIFIED == ENTRY (back-compat). The Signal-detail
+     * "Why this fired" panel requests EXIT for a held (REDUCE/ADD) opportunity so it explains the
+     * exit rule that actually fired, reconciling with the queue's exit-derived conviction; every
+     * other caller (watchlist readiness) leaves it unset and keeps entry-rule tracing.
+     */
+    rule: ReadinessRule;
 }
 export interface EvaluateReadinessResponse {
     readiness: SymbolReadiness[];
@@ -589,6 +653,53 @@ export interface SetOpportunityActionResponse {
 }
 export interface GetStrategyAnalyticsRequest {
     strategyId: string;
+}
+export interface GetIndicatorSeriesRequest {
+    strategyId: string;
+    symbol: string;
+    /**
+     * The caller's own already-fetched candlestick closes + their timestamps (the page passes the
+     * exact bars it drew, so the x-axis is parity-aligned and no server re-fetch happens). closes
+     * and times are index-aligned and equal length.
+     */
+    closes: number[];
+    times: Date[];
+}
+export interface GetIndicatorSeriesResponse {
+    /** Echoes the request times, index-aligned across every series in every component. */
+    times: Date[];
+    components: ComponentSeries[];
+}
+export interface ComponentSeries {
+    refName: string;
+    kind: ComponentKind;
+    series: NamedSeries[];
+    /**
+     * Non-empty when this component failed to compute (soft-deleted formula, sandbox timeout, NaN
+     * output); series is then empty and the UI renders a per-panel error state. Per-component fault
+     * isolation — one bad component never fails the whole RPC.
+     */
+    error: string;
+}
+export interface NamedSeries {
+    /**
+     * "value" (primary) plus each secondary the component emits (bb.upper/bb.lower,
+     * macd.signal/macd.histogram, stoch.d, or custom-formula output keys).
+     */
+    name: string;
+    /**
+     * Index-aligned with the response times. Each point is an IndicatorValue whose `value` is UNSET
+     * for a warm-up-head or mid-series None, so a gap never round-trips as a fabricated 0.0 (feature
+     * 125, AC-4a/P-03). A bare `google.protobuf.DoubleValue` element cannot do this — in a repeated
+     * field an empty DoubleValue is byte-identical to DoubleValue(0.0) and serializes to JSON `0`, so
+     * the wrapper is a message with a proto3 `optional double` (explicit presence: HasField works and
+     * JSON omits an unset value) instead.
+     */
+    values: IndicatorValue[];
+}
+/** One point of an indicator series. `value` unset == a gap (warm-up head / NaN / None), never 0.0. */
+export interface IndicatorValue {
+    value?: number | undefined;
 }
 export declare const RunBacktestRequest: MessageFns<RunBacktestRequest>;
 export declare const CoverageGap: MessageFns<CoverageGap>;
@@ -620,6 +731,8 @@ export declare const SetStrategyLiveResponse: MessageFns<SetStrategyLiveResponse
 export declare const ScreenCriterion: MessageFns<ScreenCriterion>;
 export declare const ScreenResult: MessageFns<ScreenResult>;
 export declare const ScreenResult_CriterionScoresEntry: MessageFns<ScreenResult_CriterionScoresEntry>;
+export declare const ScreenResult_CriterionRawValuesEntry: MessageFns<ScreenResult_CriterionRawValuesEntry>;
+export declare const ScreenResult_CriterionPassedEntry: MessageFns<ScreenResult_CriterionPassedEntry>;
 export declare const ScreenSymbolsRequest: MessageFns<ScreenSymbolsRequest>;
 export declare const ScreenSymbolsResponse: MessageFns<ScreenSymbolsResponse>;
 export declare const RunFundamentalsScanRequest: MessageFns<RunFundamentalsScanRequest>;
@@ -635,6 +748,11 @@ export declare const EvaluateReadinessResponse: MessageFns<EvaluateReadinessResp
 export declare const SetOpportunityActionRequest: MessageFns<SetOpportunityActionRequest>;
 export declare const SetOpportunityActionResponse: MessageFns<SetOpportunityActionResponse>;
 export declare const GetStrategyAnalyticsRequest: MessageFns<GetStrategyAnalyticsRequest>;
+export declare const GetIndicatorSeriesRequest: MessageFns<GetIndicatorSeriesRequest>;
+export declare const GetIndicatorSeriesResponse: MessageFns<GetIndicatorSeriesResponse>;
+export declare const ComponentSeries: MessageFns<ComponentSeries>;
+export declare const NamedSeries: MessageFns<NamedSeries>;
+export declare const IndicatorValue: MessageFns<IndicatorValue>;
 export type AnalysisServiceService = typeof AnalysisServiceService;
 export declare const AnalysisServiceService: {
     readonly runBacktest: {
@@ -800,6 +918,21 @@ export declare const AnalysisServiceService: {
         readonly responseSerialize: (value: StrategyAnalytics) => Buffer;
         readonly responseDeserialize: (value: Buffer) => StrategyAnalytics;
     };
+    /**
+     * Per-component historical indicator series for a strategy over a caller-supplied bar window,
+     * for the unified Symbol page's overlay panels (feature 125, FR-6). Reuses the analysis
+     * evaluator's own _compute_component per declared component in a dedicated handler loop — never
+     * the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
+     */
+    readonly getIndicatorSeries: {
+        readonly path: "/xstockstrat.analysis.v1.AnalysisService/GetIndicatorSeries";
+        readonly requestStream: false;
+        readonly responseStream: false;
+        readonly requestSerialize: (value: GetIndicatorSeriesRequest) => Buffer;
+        readonly requestDeserialize: (value: Buffer) => GetIndicatorSeriesRequest;
+        readonly responseSerialize: (value: GetIndicatorSeriesResponse) => Buffer;
+        readonly responseDeserialize: (value: Buffer) => GetIndicatorSeriesResponse;
+    };
 };
 export interface AnalysisServiceServer extends UntypedServiceImplementation {
     runBacktest: handleUnaryCall<RunBacktestRequest, BacktestResult>;
@@ -837,6 +970,13 @@ export interface AnalysisServiceServer extends UntypedServiceImplementation {
     setOpportunityAction: handleUnaryCall<SetOpportunityActionRequest, SetOpportunityActionResponse>;
     /** Per-strategy analytics (expectancy / hit-rate / max-DD / signals / taken / queue-share). */
     getStrategyAnalytics: handleUnaryCall<GetStrategyAnalyticsRequest, StrategyAnalytics>;
+    /**
+     * Per-component historical indicator series for a strategy over a caller-supplied bar window,
+     * for the unified Symbol page's overlay panels (feature 125, FR-6). Reuses the analysis
+     * evaluator's own _compute_component per declared component in a dedicated handler loop — never
+     * the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
+     */
+    getIndicatorSeries: handleUnaryCall<GetIndicatorSeriesRequest, GetIndicatorSeriesResponse>;
 }
 export interface AnalysisServiceClient extends Client {
     runBacktest(request: RunBacktestRequest, callback: (error: ServiceError | null, response: BacktestResult) => void): ClientUnaryCall;
@@ -906,6 +1046,15 @@ export interface AnalysisServiceClient extends Client {
     getStrategyAnalytics(request: GetStrategyAnalyticsRequest, callback: (error: ServiceError | null, response: StrategyAnalytics) => void): ClientUnaryCall;
     getStrategyAnalytics(request: GetStrategyAnalyticsRequest, metadata: Metadata, callback: (error: ServiceError | null, response: StrategyAnalytics) => void): ClientUnaryCall;
     getStrategyAnalytics(request: GetStrategyAnalyticsRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: StrategyAnalytics) => void): ClientUnaryCall;
+    /**
+     * Per-component historical indicator series for a strategy over a caller-supplied bar window,
+     * for the unified Symbol page's overlay panels (feature 125, FR-6). Reuses the analysis
+     * evaluator's own _compute_component per declared component in a dedicated handler loop — never
+     * the shared evaluate_conditions_traced (which ListOpportunities' exit trace depends on).
+     */
+    getIndicatorSeries(request: GetIndicatorSeriesRequest, callback: (error: ServiceError | null, response: GetIndicatorSeriesResponse) => void): ClientUnaryCall;
+    getIndicatorSeries(request: GetIndicatorSeriesRequest, metadata: Metadata, callback: (error: ServiceError | null, response: GetIndicatorSeriesResponse) => void): ClientUnaryCall;
+    getIndicatorSeries(request: GetIndicatorSeriesRequest, metadata: Metadata, options: Partial<CallOptions>, callback: (error: ServiceError | null, response: GetIndicatorSeriesResponse) => void): ClientUnaryCall;
 }
 export declare const AnalysisServiceClient: {
     new (address: string, credentials: ChannelCredentials, options?: Partial<ClientOptions>): AnalysisServiceClient;

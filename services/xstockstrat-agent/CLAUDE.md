@@ -16,10 +16,11 @@ transport at `/sse` + `/messages` was **removed by feature 079**; those paths no
 naming the replacement URL. `MCP_TRANSPORT=sse` remains accepted as a deprecated alias for
 `http` (it logs a warning and starts the same server), as does `MCP_SSE_PORT` for
 `MCP_HTTP_PORT`. `MCP_TRANSPORT=stdio` is unaffected and stays for local use.
-Every management **write** tool forwards the **real caller's derived** `x-access-scope` so the
-backends' role checks *verify* admin (feature 092 generalized this from the feature-073
-`set_config`-only case; the old hardcoded admin scope was removed). See § Management-tool
-authorization.
+Management **write** tools forward the **real caller's derived** `x-access-scope` so the backends'
+role checks *verify* admin (feature 092 generalized this from the feature-073 `set_config`-only case;
+the old hardcoded admin scope was removed). The strategy tools (`manage_strategy`/`set_strategy_live`)
+are the exception since feature 133 — they are **ownership**-gated on the forwarded `x-user-id`, not
+admin-gated. See § Management-tool authorization.
 
 ## Language
 
@@ -59,18 +60,25 @@ reference):
 
 ### Management-tool authorization
 
-The four management **write** tools that hit a backend admin gate — `manage_strategy`,
-`manage_signal_source`, `set_strategy_live`, `trigger_backfill` — forward the **real calling
-user's** derived `x-access-scope` on their backend gRPC calls (feature 092; `set_config` has done
-this since feature 073). The scope is derived from the caller's identity roles by `app/scopes.py`
-`roles_to_access_scope` (a port of the UI's `rolesToAccessScope`) via the shared
-`app/tools.py` `_caller_access_scope(ctx, tool)` helper, so a **non-admin operator is rejected
-`PERMISSION_DENIED`** by the backend gate (analysis `ManageStrategy`/`SetStrategyLive`, ingest
-`ManageSignalSource`/`TriggerBackfill` — all check the ADMIN bit `0x04`) rather than silently
+Two management **write** tools still hit a backend **admin** gate — `manage_signal_source` and
+`trigger_backfill` — and forward the **real calling user's** derived `x-access-scope` on their
+backend gRPC calls (feature 092; `set_config` has done this since feature 073). The scope is derived
+from the caller's identity roles by `app/scopes.py` `roles_to_access_scope` (a port of the UI's
+`rolesToAccessScope`) via the shared `app/tools.py` `_caller_access_scope(ctx, tool)` helper, so a
+**non-admin operator is rejected `PERMISSION_DENIED`** by the backend gate (ingest
+`ManageSignalSource`/`TriggerBackfill` — both check the ADMIN bit `0x04`) rather than silently
 succeeding under a hardcoded admin override. The claims come from `app/main.py` `_authorized`, which
 publishes them on the request's ASGI scope under `MCP_CLAIMS_SCOPE_KEY`; each tool reads them via its
 injected `ctx: Context`. The old hardcoded `_admin_metadata()` (`x-access-scope=7`) tuple was
 **removed** by feature 092.
+
+**`manage_strategy` / `set_strategy_live` are now ownership-gated, not admin-gated (feature 133).**
+The analysis `ManageStrategy`/`SetStrategyLive` admin gate was **removed**: strategies are per-user
+(composite `(user_id, strategy_id)` PK), so **any authenticated caller acts on their OWN strategies**
+and a non-owner is rejected `PERMISSION_DENIED`. Both tools (and the read tools `run_backtest`,
+`get_strategy`, `list_strategies`) forward the caller's own **`x-user-id`** — resolved via
+`_caller_user_id(ctx, tool)` — so analysis resolves ownership from the header (never the request
+body). They still also forward `x-access-scope` for defence-in-depth, but it is no longer the gate.
 
 **`manage_formula` is different** — it forwards **no** admin scope (plain `_metadata()`); the
 indicators backend enforces an **author-ownership** check instead (admin is only an override there).

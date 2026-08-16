@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { addAdminCookie } from './helpers/auth';
+import { addAdminCookie, addAuthCookie } from './helpers/auth';
 
 /**
  * Nav-reachability (C-10(a), feature 083 Step 21). Closes the fails.md 2026-07-01 060 trap: a
@@ -87,5 +87,39 @@ test.describe('nav reachability', () => {
         );
       }
     }
+  });
+
+  test('the unified symbol page resolves to the Book group on both desktop and mobile (feature 125)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+
+    // Desktop: a dynamic route has no nav-menu link, so navigate directly and assert the Primary
+    // "Book" tab carries aria-current="page" (resolveActive classifies /trader/positions/[symbol]
+    // into Book once the old /insights/market special-case is gone — Step 23).
+    await page.goto('/trader/positions/AAPL');
+    await expect(
+      page
+        .getByRole('navigation', { name: 'Primary' })
+        .getByRole('link', { name: 'Book', exact: true }),
+    ).toHaveAttribute('aria-current', 'page', { timeout: 30000 });
+
+    // Mobile: below the sm breakpoint the BottomTabBar renders; its "Book" tab must be active too.
+    await page.setViewportSize({ width: 375, height: 800 });
+    await page.goto('/trader/positions/AAPL');
+    await expect(
+      page.getByTestId('mobile-tab-bar').getByRole('link', { name: 'Book' }),
+    ).toHaveAttribute('aria-current', 'page', { timeout: 30000 });
+  });
+
+  test('the retired Signal-detail route redirects to the unified symbol page (feature 125)', async ({
+    page,
+  }) => {
+    await addAuthCookie(page);
+    // /insights/market/[symbol] is now a redirect-only stub (Step 22).
+    await page.goto('/insights/market/AAPL?strategy=strat-live-001');
+    await expect(page).toHaveURL(/\/trader\/positions\/AAPL/, { timeout: 30000 });
+    // The forwarded query string survives the hop (seeds SignalReadiness).
+    await expect(page).toHaveURL(/strategy=strat-live-001/);
   });
 });

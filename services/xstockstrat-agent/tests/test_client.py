@@ -87,6 +87,7 @@ class TestManageStrategyClient:
             mock_grpc.aio.insecure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
                 result = await client.manage_strategy(
+                    user_id="u-owner",
                     operation="register",
                     definition={
                         "strategy_id": "x",
@@ -102,6 +103,9 @@ class TestManageStrategyClient:
         assert not any(k == "x-mcp-secret" for k, _ in meta)
         # feature 092: forwards the caller's derived scope (was a hardcoded 7).
         assert ("x-access-scope", "15") in meta
+        # feature 133: forwards the caller's own user id so analysis resolves ownership from the
+        # header (never the request body).
+        assert ("x-user-id", "u-owner") in meta
         assert not any(k == "authorization" for k, _ in meta)
         assert result["strategyId"] == "x"
 
@@ -117,7 +121,9 @@ class TestManageStrategyClient:
             with patch("app.client.grpc") as mock_grpc:
                 mock_grpc.aio.insecure_channel.return_value = _channel_cm()
                 with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
-                    await client.manage_strategy(operation="register", definition=defn)
+                    await client.manage_strategy(
+                        user_id="u-1", operation="register", definition=defn
+                    )
             return mock_stub.ManageStrategy.call_args.args[0].definition
 
         base = {"strategy_id": "x", "display_name": "X", "components": []}
@@ -144,7 +150,9 @@ class TestManageStrategyClient:
             with patch("app.client.grpc") as mock_grpc:
                 mock_grpc.aio.insecure_channel.return_value = _channel_cm()
                 with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
-                    await client.manage_strategy(operation="register", definition=defn)
+                    await client.manage_strategy(
+                        user_id="u-1", operation="register", definition=defn
+                    )
             return mock_stub.ManageStrategy.call_args.args[0].definition
 
         base = {"strategy_id": "x", "display_name": "X", "components": []}
@@ -161,7 +169,7 @@ class TestManageStrategyClient:
     @pytest.mark.asyncio
     async def test_unknown_operation_raises(self):
         with pytest.raises(ValueError):
-            await client.manage_strategy(operation="bogus", definition={})
+            await client.manage_strategy(user_id="u-1", operation="bogus", definition={})
 
     @pytest.mark.asyncio
     async def test_reactivate_maps_to_enum(self):
@@ -175,7 +183,9 @@ class TestManageStrategyClient:
             mock_grpc.aio.insecure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
                 await client.manage_strategy(
-                    operation="reactivate", definition={"strategy_id": "s1", "display_name": "S1"}
+                    user_id="u-1",
+                    operation="reactivate",
+                    definition={"strategy_id": "s1", "display_name": "S1"},
                 )
         sent = mock_stub.ManageStrategy.call_args[0][0]
         assert sent.operation == analysis_pb2.STRATEGY_OPERATION_REACTIVATE
@@ -394,11 +404,13 @@ class TestSetStrategyLiveClient:
             mock_grpc.aio.insecure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
                 result = await client.set_strategy_live(
-                    strategy_id="s1", live_enabled=True, access_scope=15
+                    user_id="u-owner", strategy_id="s1", live_enabled=True, access_scope=15
                 )
         assert mock_grpc.aio.insecure_channel.call_args[0][0] == client.ANALYSIS_ENDPOINT
         meta = mock_stub.SetStrategyLive.call_args.kwargs["metadata"]
         assert ("x-access-scope", "15") in meta  # feature 092: caller-derived scope
+        # feature 133: forwards the caller's own user id so analysis resolves ownership.
+        assert ("x-user-id", "u-owner") in meta
         assert not any(k == "authorization" for k, _ in meta)
         assert result["live_enabled"] is True
 
@@ -617,13 +629,16 @@ class TestManageStrategyUpdateMask:
             mock_grpc.aio.insecure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
                 await client.manage_strategy(
+                    user_id="u-1",
                     operation="update",
                     definition={"strategy_id": "x", "cooldown_days": 45},
                     update_mask=["cooldown_days"],
                 )
                 masked = mock_stub.ManageStrategy.call_args[0][0]
                 await client.manage_strategy(
-                    operation="update", definition={"strategy_id": "x", "display_name": "X"}
+                    user_id="u-1",
+                    operation="update",
+                    definition={"strategy_id": "x", "display_name": "X"},
                 )
                 maskless = mock_stub.ManageStrategy.call_args[0][0]
 
@@ -647,6 +662,7 @@ class TestManageStrategyUpdateMask:
             mock_grpc.aio.insecure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
                 await client.manage_strategy(
+                    user_id="u-1",
                     operation="update",
                     definition={"strategy_id": "x", "exit_cooldown_days": 7},
                     update_mask=["exit_cooldown_days"],
@@ -656,6 +672,62 @@ class TestManageStrategyUpdateMask:
         assert masked.HasField("update_mask") is True
         assert list(masked.update_mask.paths) == ["exit_cooldown_days"]
         assert masked.definition.exit_cooldown_days == 7
+
+    @pytest.mark.asyncio
+    async def test_denied_symbols_and_signal_eligible_reach_the_wire(self):
+        """feature 132 — denied_symbols/signal_eligible are constructed onto the outbound
+        StrategyDefinition and reach the wire under their own mask (round-trip is automatic via
+        MessageToDict(preserving_proto_field_name=True))."""
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+
+        mock_stub = MagicMock()
+        mock_stub.ManageStrategy = AsyncMock(
+            return_value=analysis_pb2.StrategyDefinition(
+                strategy_id="x", denied_symbols=["TSLA"], signal_eligible=True
+            )
+        )
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
+                result = await client.manage_strategy(
+                    user_id="u-1",
+                    operation="update",
+                    definition={
+                        "strategy_id": "x",
+                        "denied_symbols": ["TSLA"],
+                        "signal_eligible": True,
+                    },
+                    update_mask=["denied_symbols", "signal_eligible"],
+                )
+                masked = mock_stub.ManageStrategy.call_args[0][0]
+
+        assert list(masked.update_mask.paths) == ["denied_symbols", "signal_eligible"]
+        assert list(masked.definition.denied_symbols) == ["TSLA"]
+        assert masked.definition.signal_eligible is True
+        # manage_strategy echoes the response in camelCase (its documented casing); the snake_case
+        # AC-4 round-trip lives on get_strategy (preserving_proto_field_name=True), below.
+        assert result["deniedSymbols"] == ["TSLA"]
+        assert result["signalEligible"] is True
+
+    @pytest.mark.asyncio
+    async def test_get_strategy_round_trips_denied_symbols_snake_case(self):
+        """feature 132 AC-4: a get_strategy read reflects a set denied_symbols/signal_eligible in
+        snake_case (automatic via MessageToDict(preserving_proto_field_name=True))."""
+        from gen.analysis.v1 import analysis_pb2, analysis_pb2_grpc  # type: ignore
+
+        mock_stub = MagicMock()
+        mock_stub.GetStrategy = AsyncMock(
+            return_value=analysis_pb2.StrategyDefinition(
+                strategy_id="x", denied_symbols=["TSLA", "NVDA"], signal_eligible=True
+            )
+        )
+        with patch("app.client.grpc") as mock_grpc:
+            mock_grpc.aio.insecure_channel.return_value = _channel_cm()
+            with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
+                result = await client.get_strategy(user_id="u-1", strategy_id="x")
+
+        assert result["denied_symbols"] == ["TSLA", "NVDA"]
+        assert result["signal_eligible"] is True
 
     @pytest.mark.asyncio
     async def test_active_is_no_longer_injected(self):
@@ -671,7 +743,9 @@ class TestManageStrategyUpdateMask:
             mock_grpc.aio.insecure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
                 await client.manage_strategy(
-                    operation="register", definition={"strategy_id": "x", "display_name": "X"}
+                    user_id="u-1",
+                    operation="register",
+                    definition={"strategy_id": "x", "display_name": "X"},
                 )
                 sent = mock_stub.ManageStrategy.call_args[0][0]
 
@@ -832,9 +906,13 @@ class TestAdditiveClientFns:
         with patch("app.client.grpc") as mock_grpc:
             mock_grpc.aio.insecure_channel.return_value = _channel_cm()
             with patch.object(analysis_pb2_grpc, "AnalysisServiceStub", return_value=mock_stub):
-                result = await client.list_strategy_definitions()
+                result = await client.list_strategy_definitions(user_id="u-owner")
         assert result[0]["strategy_id"] == "s1"  # snake_case, not strategyId
         assert result[0]["live_enabled"] is True
+        # feature 133: forwards the caller's own user id so analysis filters to the caller's own
+        # strategies from the header.
+        meta = mock_stub.ListStrategyDefinitions.call_args.kwargs["metadata"]
+        assert ("x-user-id", "u-owner") in meta
 
     @pytest.mark.asyncio
     async def test_list_signal_sources_health_fields(self):

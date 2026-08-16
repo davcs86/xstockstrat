@@ -22,5 +22,7 @@ export * from './backtests';
 export * from './opportunities';
 export * from './copilotThread';
 export * from './positions';
+export * from './fundamentals';
 export * from './orders';
 export * from './configKeys';
+export * from './signalSources';

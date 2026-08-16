@@ -2,8 +2,6 @@ import { test, expect } from '@playwright/test';
 import { addAdminCookie } from '../helpers/auth';
 
 const PLATFORM_NAMESPACE_PAGE = '/config-ui/platform?env=dev&mode=paper';
-const ANALYSIS_NAMESPACE_PAGE = '/config-ui/analysis?env=dev&mode=paper';
-const SOURCES_PAGE = '/config-ui/sources';
 
 /**
  * Regression coverage for the config-ui "editing configs" bug: Save appeared to silently
@@ -12,8 +10,11 @@ const SOURCES_PAGE = '/config-ui/sources';
  * row's live `currentValue` (the `value_data` a SetConfig write actually updates). The write
  * itself succeeded; the UI just never displayed it, so a save looked like a no-op.
  *
- * These tests exercise the two `defaultValue`-reading consumers this bug affected:
- * NamespaceEditor's Value column/edit-prefill, and useSignalSources' weight-map parse.
+ * These tests exercise NamespaceEditor's Value column/edit-prefill, the consumer this bug
+ * affected. (The former `useSignalSources' weight-map parse` consumer was removed by feature
+ * 134 — signal-source reliability weight is now a first-class `SignalSource.reliabilityWeight`
+ * field, no longer parsed from the `analysis.signals.source_weights` config blob; the Sources
+ * page weight column is covered directly by `sources.spec.ts`.)
  */
 test.describe('config-ui — a saved value replaces the displayed value (not the seed default)', () => {
   // Uses platform.trading_state, not platform.log_level — reason-capture.spec.ts and
@@ -78,30 +79,5 @@ test.describe('config-ui — a saved value replaces the displayed value (not the
     await page.reload();
     const reloadedRow = page.locator('tr', { hasText: 'platform.maintenance_mode' });
     await expect(reloadedRow.getByRole('cell', { name: 'true', exact: true })).toBeVisible();
-  });
-
-  test('the Sources page weight column reflects a saved analysis.signals.source_weights edit', async ({
-    page,
-  }) => {
-    await addAdminCookie(page);
-    await page.goto(ANALYSIS_NAMESPACE_PAGE);
-
-    const row = page.locator('tr', { hasText: 'analysis.signals.source_weights' });
-    await row.getByRole('button', { name: 'Actions' }).click();
-    await page.getByRole('menuitem', { name: 'Edit' }).click();
-    await row.locator('input').first().fill('{"example_simple_email": 0.75}');
-
-    const respPromise = page.waitForResponse(
-      (r) => r.url().includes('/SetConfig') && r.status() === 200,
-    );
-    await row.getByRole('button', { name: 'Save' }).click();
-    await respPromise;
-
-    // useSignalSources() parses this same key's currentValue to populate the Sources page's
-    // Weight column — it used to parse defaultValue ('{}'), so the column never moved off 1.0.
-    await page.goto(SOURCES_PAGE);
-    await expect(page.getByRole('cell', { name: '0.75', exact: true })).toBeVisible({
-      timeout: 8000,
-    });
   });
 });

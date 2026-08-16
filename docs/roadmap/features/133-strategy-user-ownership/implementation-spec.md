@@ -69,7 +69,7 @@ strategies) is proven by the Step 16 cross-user e2e.
 
 ### Step 1 — proto: add `user_id` to `StrategyDefinition`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/analysis/v1/analysis.proto` — modify
@@ -114,7 +114,7 @@ non-breaking at the wire level — the behavioral break is documented in feature
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/**` — modify (generated; never hand-edit)
@@ -142,7 +142,7 @@ non-breaking at the wire level — the behavioral break is documented in feature
 
 ### Step 3 — migration: `013` add `user_id` to `analysis.strategies`, composite PK
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/013_strategies_user_id.up.sql` — create
@@ -218,7 +218,7 @@ ls services/xstockstrat-analysis/migrations/013_strategies_user_id.up.sql \
 
 ### Step 4 — migration: `014` add `user_id` to `analysis.strategy_cooldowns`, composite PK
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/014_strategy_cooldowns_user_id.up.sql` — create
@@ -265,7 +265,7 @@ ls services/xstockstrat-analysis/migrations/014_strategy_cooldowns_user_id.up.sq
 
 ### Step 5 — migration: `015` add `user_id` column to `analysis.backtest_runs`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/migrations/015_backtest_runs_user_id.up.sql` — create
@@ -310,7 +310,7 @@ ls services/xstockstrat-analysis/migrations/015_backtest_runs_user_id.up.sql \
 
 ### Step 6 — service: migration-tooling — seed-user templating + `SEED_USER_ID` wiring
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis` (migration tooling — repo-level scripts + deploy specs)
 **Files**:
 - `scripts/db-migrate.sh` — modify
@@ -392,7 +392,7 @@ bash -n scripts/db-migrate.sh   # syntax-check the script
 
 ### Step 7 — service: analysis repositories gain `user_id` scoping
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/repositories/strategies.py` — modify
@@ -411,8 +411,8 @@ ownership scoping at the SQL layer
 - `StrategyCooldownsRepository` (`strategy_cooldowns.py`): `upsert_exit` (`:27-38`), `upsert_entry`
   (`:40-51`), `list_all` (`:53-58`) — all keyed on `(strategy_id, symbol)`, `ON CONFLICT (strategy_id,
   symbol)`.
-- `BacktestRunsRepository` (`backtest_runs.py`): `create` INSERTs `(backtest_id, strategy_id, …)`
-  (`:29,40-49`); `list_by_strategy` `WHERE strategy_id = $1` (`:66-74`).
+- `BacktestRunsRepository` (`backtest_runs.py`): `insert` INSERTs `(backtest_id, strategy_id, …)`
+  (`:25`; there is **no** `create` method — re-spec 2026-08-14); `list_by_strategy` `WHERE strategy_id = $1` (`:66-74`).
 
 **TDD**: `red-green required` (covered by Step 10)
 
@@ -435,7 +435,7 @@ ownership scoping at the SQL layer
 2. `strategy_cooldowns.py`: add a `user_id` param to `upsert_exit`, `upsert_entry`; INSERT it and
    change `ON CONFLICT (strategy_id, symbol)` → `ON CONFLICT (user_id, strategy_id, symbol)`. Change
    `list_all` to also SELECT `user_id`.
-3. `backtest_runs.py`: add a `user_id` param to `create` (INSERT the column, nullable OK per Step 5);
+3. `backtest_runs.py`: add a `user_id` param to `insert` (the real method name; INSERT the column, nullable OK per Step 5);
    leave `list_by_strategy`'s `strategy_id` filter but confirm its callers pass an owner-scoped id
    (the `ListBacktests` gate in Step 8 already rejects non-owners before this read).
 
@@ -445,7 +445,7 @@ ownership scoping at the SQL layer
 
 ### Step 8 — service: analysis servicer ownership gating
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/handlers/servicer.py` — modify
@@ -523,7 +523,7 @@ ownership scoping at the SQL layer
 
 ### Step 9 — service: live-loop + entry-backfill owner-keying and identity mechanism
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/app/engine/live_loop.py` — modify
@@ -594,7 +594,7 @@ grep-confirmed there.
 
 ### Step 10 — test: analysis service (Steps 7/8/9)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-analysis`
 **Files**:
 - `services/xstockstrat-analysis/tests/test_analysis_servicer.py` — modify
@@ -642,7 +642,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check . \
 
 ### Step 11 — service: agent — forward real `x-user-id`, add missing `ctx`, wrap `run_backtest`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/app/client.py` — modify
@@ -692,7 +692,7 @@ cd services/xstockstrat-analysis && ruff check . && ruff format --check . \
 
 ### Step 12 — test: agent (Step 11)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-agent`
 **Files**:
 - `services/xstockstrat-agent/tests/` — modify (the tool tests; e.g. `test_tools_endpoint.py` / the
@@ -724,7 +724,7 @@ cd services/xstockstrat-agent && ruff check . && ruff format --check . \
 
 ### Step 13 — service: UI BFF — remove admin gates from strategy mutations (`/insights` + `/trader`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/lib/insightsBff.ts` — modify
@@ -770,7 +770,7 @@ grep -n "forwardAdmin" src/lib/traderBff.ts
 
 ### Step 14 — test: UI second test-user fixture (infrastructure for Step 16)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/fixtures/users.ts` — modify
@@ -804,7 +804,7 @@ cd services/xstockstrat-ui && pnpm run lint
 
 ### Step 15 — test: UI cross-user strategy isolation e2e (covers Step 13, C-14 `/insights`)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/strategy-ownership.spec.ts` — create
@@ -838,7 +838,7 @@ cd services/xstockstrat-ui && pnpm test:e2e -- strategy-ownership
 
 ### Step 16 — docs: strat-lab skill + agent/analysis doc corrections (same-PR)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `docs` / plugins
 **Files**:
 - `plugins/strat-lab/skills/backtest/SKILL.md` — modify
@@ -881,7 +881,8 @@ grep -n "admin gate\|ADMIN bit" services/xstockstrat-agent/CLAUDE.md services/xs
 
 ### Step 17 — docs: record the live-loop `x-user-id` impersonation finding (design.md Open Risk 1)
 
-**Status**: `pending`
+**Status**: `done` (recorded as **deferred to feature 132** per D-1 — 133 is identity-only and
+introduces no synthetic-header call site; the analysis findings doc carries the forward-pointer)
 **Service**: `docs`
 **Files**:
 - `services/xstockstrat-analysis/docs/context-constitution-findings.md` — modify
@@ -914,4 +915,33 @@ grep -n "x-user-id\|live_loop\|feature 133" services/xstockstrat-analysis/docs/c
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### D-1 — Step 9 sub-step 3 (owner-scoped symbol universe) DEFERRED to feature 132
+**Disposition**: user-approved scope change (execute-time confirmation, design Open Risk 1 / P-03).
+The live-loop owner-union symbol-universe composition (`ListPositions(user_id=owner)` +
+synthetic-header `ListWatchlists` + union) is **not** built in 133. User decision (recorded in
+context.md): 133 threads **identity only** — the six live-loop state dicts + entry_backfill are
+owner-keyed to `(user_id, strategy_id, symbol)` (sub-steps 1-2, done), but the firing universe stays
+`signal_params.symbols` (feature 089's `SetStrategyLive` no-symbols precondition stays). The
+owner-scoped union is feature 132's `resolve_universe` (the single shared builder). Consequently the
+synthetic outbound `x-user-id` call is **not** introduced by 133, so **Step 17's impersonation
+finding also moves to 132** (recorded on Step 17). AC-4's owner-union firing is satisfied by 132, not
+133.
+
+### D-2 — Step 8 score-cache multi-tenancy closed at the RPC layer (no strategy_scores migration)
+**Disposition**: user-approved (blocker, Option A). The in-memory `_strategies` cache +
+`analysis.strategy_scores` table remain keyed by bare `strategy_id`; ListStrategies/GetStrategyReport/
+ListBacktests/`_recompute_headline` cross-check ownership against the repo instead of re-keying the
+scoring subsystem. Accepted limitation: two users sharing a `strategy_id` share one cached grade value
+(a derived cache) — candidate follow-up. IDOR (cross-user enumeration/read) fully closed.
+
+### D-3 — GetStrategyAnalytics + ListBacktests owner pre-checks added
+**Disposition**: in-intent (both are in the spec's stated "gated RPC set", Step 8 Codebase Evidence);
+Step 8 instructions under-specified them (only named the ListOrders internal leak). Added the
+`get_by_owner_and_id` pre-check for IDOR completeness — not scope creep.
+
+### D-4 — backtest_runs.user_id left NULL for new runs
+**Disposition**: spec-aligned. Migration 015 backfills historical `user_id` via the strategies join;
+`insert` accepts a nullable `user_id` (Step 7). New RunBacktest inserts do not thread it — the table
+is explicitly "attribution-only, not an ownership boundary" (Step 5 / design decision), and the
+ownership gate is RunBacktest's owner-scoped strategy resolution + ListBacktests' owner pre-check, not
+this column. `insert(user_id=...)` stays available for a future attribution pass.

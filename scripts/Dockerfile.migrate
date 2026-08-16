@@ -1,6 +1,6 @@
 FROM postgres:16-alpine
 
-RUN apk add --no-cache bash curl
+RUN apk add --no-cache bash curl gettext
 
 # Pin version for reproducibility — bump here when upgrading golang-migrate
 ARG MIGRATE_VERSION=4.17.1

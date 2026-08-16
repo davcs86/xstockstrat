@@ -20,7 +20,6 @@ import {
   requireSession,
   backendHeaders,
   forward,
-  forwardAdmin,
 } from '@/lib/bffShared';
 import { COPILOT_STREAM_PREFIX, COPILOT_EVENT_TYPE, copilotStreamKey } from '@/lib/copilot';
 
@@ -103,6 +102,9 @@ router.service(PortfolioService, {
 router.service(MarketDataService, {
   getBars: forward((req, opts) => marketDataClient.getBars(req, opts)),
   listAssets: forward((req, opts) => marketDataClient.listAssets(req, opts)),
+  // feature 125 (FR-7) — read-only, ungated (matches GetFundamentals' backend contract); the one
+  // genuinely new BFF registration this feature needs (absent from both trader and insights BFFs).
+  getFundamentals: forward((req, opts) => marketDataClient.getFundamentals(req, opts)),
 });
 
 router.service(NotifyService, {
@@ -120,8 +122,10 @@ router.service(AnalysisService, {
   listStrategyDefinitions: forward((req, opts) =>
     analysisClient.listStrategyDefinitions(req, opts),
   ),
-  // Admin scope gate — enforced server-side before forwarding to the gRPC service.
-  setStrategyLive: forwardAdmin((req, opts) => analysisClient.setStrategyLive(req, opts)),
+  // feature 133: no admin gate — strategy ownership is per-user; analysis resolves the caller from
+  // the propagated x-user-id header and returns PERMISSION_DENIED for a non-owner (design.md
+  // decision 4, C-10(a)). Mirrors the /insights setStrategyLive de-gating.
+  setStrategyLive: forward((req, opts) => analysisClient.setStrategyLive(req, opts)),
 });
 
 router.service(LedgerService, {

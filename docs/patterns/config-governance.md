@@ -77,6 +77,35 @@ without this convention, both look identical (fails.md 2026-07-01).
 
 Append-only log — one entry per feature that registered new keys. Newest first. Don't edit past entries; superseding a key's behavior gets a new entry, not a rewrite of the old one.
 
+### feature 125 — unified-symbol-page (`xstockstrat-analysis`)
+
+Adds one process-lifetime singleton semaphore key for the FR-6 indicator-overlay-panel RPC
+`GetIndicatorSeries`. New `analysis.series.*` category (distinct from `analysis.readiness.*` — this
+is not readiness — and from the `xstockstrat-indicators` service's own `indicators.sandbox.*`
+namespace). Read once at servicer construction, not live.
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.series.max_concurrent_components` | int | `4` | Bounds concurrent per-component `ComputeIndicator`/`ExecuteFormula` execution across simultaneous `GetIndicatorSeries` calls, so a routinely-visited Symbol page can't starve the analysis live loop. `max(1, get_int(...))` clamp. |
+
+### feature 131 — live-strategy-opportunity-attribution (`xstockstrat-analysis`)
+
+Adds live-strategy symbol-coverage attribution to the Opportunities compute (`_compute_opportunities`):
+a held/signal symbol inside a `live_enabled=TRUE AND active=TRUE` strategy's universe now surfaces
+that strategy's readiness trace instead of falling through to unattributed. Three compute-fan-out caps
+bound the new attribution. All three are read **live** via `self._cfg.get_int(...)` (F-07), with **no
+config-service seed migration** — mirroring the existing `analysis.opportunity.*` no-seed pattern (the
+keys resolve to the code defaults below until an operator sets them).
+
+| Key | Type | Default | Description |
+|---|---|---|---|
+| `analysis.opportunity.max_live_strategies_per_symbol` | int | `5` | Per-symbol cap: how many live-enabled strategies may **newly** attribute to one symbol via live-coverage (candidate-creation sites only; tagging an existing curated row is uncapped). Tiebreak `created_at` ascending. AC-7. |
+| `analysis.opportunity.max_live_only_symbols_per_compute` | int | `20` | Cap on distinct **non-held** signal+live-covered symbols that get a new candidate row per compute pass. Composes multiplicatively with the per-symbol cap. AC-8. |
+| `analysis.opportunity.max_live_held_symbols_per_compute` | int | `20` | Cap on distinct **held** symbols that may receive a new live-only strategy attribution per compute pass (does not bound the held-row count itself). AC-9. |
+
+Compound worst case at defaults: `5 × (20 + 20) = 200` newly-attributed live rows across the two
+disjoint pools — no single key is *the* row ceiling.
+
 ### feature 129 — fundamentals-provider-alternative (`xstockstrat-marketdata`)
 
 Adds Finnhub as a second `source.FundamentalsSource`, switchable-not-replacing FMP via
@@ -165,7 +194,7 @@ an operator can halt live trading during an incident while paper testing continu
 
 ### feature 097 — opportunity-universe-unification (`xstockstrat-analysis`)
 
-Config surface for the materialized opportunity queue (lazy compute-on-read + stale-while-revalidate + a daily refresh). `analysis.signals.source_weights` is **unchanged** (stays the screener's); the queue's independent signal ranking axis is the new scalar `analysis.opportunity.signal_rank_weight`.
+Config surface for the materialized opportunity queue (lazy compute-on-read + stale-while-revalidate + a daily refresh). The queue's independent signal ranking axis is the new scalar `analysis.opportunity.signal_rank_weight`. (Feature 134 note: `analysis.signals.source_weights` is now **superseded** — per-source reliability weight lives on `ingest.SignalSource.reliability_weight` and both analysis read paths, the queue and the screener, read it via `ListSignalSources`; the config key is retained but no longer read.)
 
 | Key | Type | Default | Description |
 |---|---|---|---|

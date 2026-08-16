@@ -37,10 +37,20 @@ export function useManageStrategy() {
     mutationFn: ({
       operation,
       definition,
+      updateMask,
     }: {
       operation: StrategyOperation;
       definition: StrategyDefinitionInit;
-    }) => analysisClient.manageStrategy({ operation, definition }),
+      // feature 132: an optional field-mask for a partial (masked) update — the wizard leaves it
+      // undefined (full replace, unchanged), the Symbol-page mute control sets it to
+      // ['denied_symbols'] so it touches only the deny list.
+      updateMask?: string[];
+    }) =>
+      analysisClient.manageStrategy({
+        operation,
+        definition,
+        ...(updateMask ? { updateMask: { paths: updateMask } } : {}),
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['analysis-strategy-definitions'] });
       qc.invalidateQueries({ queryKey: ['analysis-strategies'] });

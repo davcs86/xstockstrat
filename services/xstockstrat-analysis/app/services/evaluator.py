@@ -358,6 +358,20 @@ def _validate_definition(definition, formula_outputs: dict | None = None) -> Non
     if definition.HasField("exit_cooldown_days") and definition.exit_cooldown_days < 0:
         raise ValueError("exit_cooldown_days must be >= 0")
 
+    # Deny list × signal eligibility (feature 132, design decision 4): a non-empty
+    # signal_params.symbols allowlist is already an explicit universe override, so pairing it with
+    # signal_eligible=true (which folds in the platform-wide active-signal term) is contradictory.
+    # Rejected at write time. Runs on the MERGED definition (servicer passes to_write), so a
+    # two-step masked update — set the allowlist in call 1, flip the flag in call 2 — is caught.
+    _allowlist = []
+    if definition.HasField("signal_params"):
+        _allowlist = MessageToDict(definition.signal_params).get("symbols") or []
+    if _allowlist and definition.signal_eligible:
+        raise ValueError(
+            "signal_eligible=true conflicts with a non-empty signal_params.symbols allowlist "
+            "(the allowlist is already an explicit universe override)"
+        )
+
     # Validate rule JSON parsability and ref_name references
     for rule_name, rule_json in [
         ("entry_rule", definition.entry_rule),
