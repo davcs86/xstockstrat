@@ -3,6 +3,7 @@
 **Type**: bug
 **Committed to main**: e9d8d9144fb228568b3d71d088ad0d4e26bd0c24
 **Launched date**: 2026-08-07
+**Archived**: 2026-08-16
 **Development Branch**: `feature/fix-config-ui-env`
 **GitHub Issue**: docs/reports/2026-08-07-config-ui-cross-environment-toggle-defect.md (GitHub Issues disabled on this repo — see `docs/CLAUDE.md`)
 **Severity**: SEV-2
@@ -24,6 +25,7 @@
 | 2026-08-07 | `in-progress` → `code-completed` | /sdd-execute | All 8 steps done; no merge-order.md blockers; opening the single integration PR to `main-dev` |
 
 | 2026-08-07 | `code-completed` → `launched` | CI workflow | Promoted via PR #896; committed e9d8d9144fb228568b3d71d088ad0d4e26bd0c24 |
+| 2026-08-16 | `launched` | /sdd-archiver | Archived: synthesis → context.md + Ledger insights(3)/fails(2); pruned 4 specs |
 ---
 
 ## Artifacts

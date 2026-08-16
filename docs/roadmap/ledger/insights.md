@@ -1684,3 +1684,58 @@ reusing.
 - **Pattern**: A `key`-remounted detail component discards its own `writeInFlight` boolean on switch-away. Close the residual cross-instance race with a two-layer guard: (1) local `writeInFlight` boolean for intra-pane races; (2) shared `mutationKey` on relevant mutation hooks + `useIsMutating` at the ancestor that owns the switch control, additionally gated on `isFetching` because `invalidateQueries` in `onSuccess` is not awaited and a mutation can report "done" before its refetch settles.
 - **Evidence**: context.md 2026-08-07T00:20:00Z R5-R6; `docs/roadmap/features/112-watchlist-screen-improvements/design.md` §5; `services/xstockstrat-ui/src/hooks/useInvalidatingMutation.ts`
 - **Rule it implies**: A key-remounted component requires a two-layer concurrency guard: local `writeInFlight` + ancestor `useIsMutating` || `isFetching`.
+
+### 2026-08-16 — fix-config-ui-env — design
+- **Pattern**: When gating a config write to only the native deployment environment, enforce at both (1) the BFF layer (the single choke point all browser writes flow through) and (2) the UI presentation layer (badge + disabled form). BFF-only leaves the UI misleading; UI-only leaves every direct-URL/stale-tab/bookmark access path wide open. The decisive test: identify the single choke point all writes pass through and put the enforcement there, then add UI gating as a clear signal to the user.
+- **Evidence**: `docs/roadmap/features/115-fix-config-ui-env/context.md` sdd-design round 1 (switcher-only rejected), round 2 (BFF guard); `services/xstockstrat-ui/src/lib/configUiBff.ts` (setConfig guard); `services/xstockstrat-ui/src/app/config-ui/page.tsx` (EnvModeSwitcher gating)
+- **Rule it implies**: Deployment-context writes must be enforced at the BFF-layer choke point; UI gating is complementary, never a substitute.
+
+### 2026-08-16 — fix-config-ui-env — design
+- **Pattern**: Use `Code.FailedPrecondition` (→ HTTP 400) for a "wrong deployment configuration" error, not `Code.PermissionDenied` (→ HTTP 403). Topology mismatch is not an authorization failure — the caller has full credentials but has invoked the operation from the wrong deployment. PermissionDenied implies the caller needs different credentials; FailedPrecondition implies the system state must change first.
+- **Evidence**: `docs/roadmap/features/115-fix-config-ui-env/context.md` sdd-design round 2 (PermissionDenied rejected by adversary); `docs/roadmap/features/115-fix-config-ui-env/design.md` §Rejected Alternatives
+- **Rule it implies**: Map topology-mismatch errors to `Code.FailedPrecondition`, not `Code.PermissionDenied`; reserve PermissionDenied for missing auth scope.
+
+### 2026-08-16 — fix-config-ui-env — design
+- **Pattern**: When a Next.js page needs a server-only env var (not `NEXT_PUBLIC_*`) to gate UI behavior, wrap the Client Component in a thin Server Component that reads the env var at request time and passes the computed boolean as a plain prop. Avoids exposing the variable to the client bundle and eliminates the network round-trip a `getServerSideProps`-style API route would introduce.
+- **Evidence**: `docs/roadmap/features/115-fix-config-ui-env/context.md` Steps 7-8 (NamespaceEditor.tsx Server/Client split); `services/xstockstrat-ui/src/app/config-ui/[namespace]/page.tsx` (thin Server Component wrapper) and `NamespaceEditor.tsx` (Client Component child receiving `isNativeEnv` prop)
+- **Rule it implies**: To gate Client Component behavior on a server-only env var, use a Server Component wrapper that passes the resolved boolean as a prop — never read `process.env.NON_PUBLIC_VAR` inside a Client Component.
+
+### 2026-08-16 — exit-cooldown — design
+- **Pattern**: A state-replay fold that reconstructs cooldown anchors (e.g., `_last_entry_at`) from historical bars must start from a **hydrated** initial state drawn from the DB (last known anchors), not from blank identity. Starting from identity silently discards all currently-active cooldowns and treats the first qualifying bar as the anchor — incorrect for positions open before the replay window. The deciding test: does the fold reset or reconstruct? If reconstruct, the identity initial state is wrong.
+- **Evidence**: `docs/roadmap/features/116-exit-cooldown/context.md` sdd-design session rounds 3-4 (async-backfill race closure); `services/xstockstrat-analysis/app/engine/live_loop.py` (`_replay_state` fold, `hydrate_cooldowns`); `docs/roadmap/features/116-exit-cooldown/design.md` §Chosen Approach (fold design, skip-until-known guard)
+- **Rule it implies**: When designing a state-replay fold that reconstructs prior transitions, seed the fold with the last DB-persisted state, not a blank initial value — folding from identity silently discards active states.
+
+### 2026-08-16 — screener-fundamental-metric-selector — design
+- **Pattern**: When a catalog item's default is load-bearing in runtime behavior (the backend validates against it; an unexpected value causes silent validation errors), extract it as a named constant (`DEFAULT_FUNDAMENTAL_METRIC = 'pe_ratio'`) rather than deriving it from array position (`FUNDAMENTAL_METRICS[0].name`). Position-derived defaults break silently if the array is reordered; named constants break loudly in code search. Use array position only when the array's order is genuinely incidental.
+- **Evidence**: `docs/roadmap/features/117-screener-fundamental-metric-selector/context.md` sdd-design session (adversary objection 2: "FR-3's correctness is load-bearing on the default staying `pe_ratio`"); `services/xstockstrat-ui/src/lib/strategyCatalog.ts` (`DEFAULT_FUNDAMENTAL_METRIC`)
+- **Rule it implies**: Use a named constant for any default that is a business requirement, not a convenience; use array-position derivation only when order is incidental.
+
+### 2026-08-16 — screener-fundamental-metric-selector — design
+- **Pattern**: When a UI catalog (`strategyCatalog.ts`) and a backend validator (`screener.py`'s `_FUNDAMENTAL_FIELDS`) share an enumerated value set, extend the existing "keep in sync" doc comment on the catalog to name the backend file. The comment already existed for the Technical indicator catalog — extending it to include a second backend source costs nothing and prevents silent drift when the backend adds a new fundamental metric name.
+- **Evidence**: `docs/roadmap/features/117-screener-fundamental-metric-selector/context.md` sdd-review session (FR-5 doc-comment note); `services/xstockstrat-ui/src/lib/strategyCatalog.ts` (`FUNDAMENTAL_METRICS` "keep in sync" comment)
+- **Rule it implies**: Every UI catalog that mirrors a backend enum or constant set must carry a "keep in sync with <path>" doc comment naming each backend source — add it when creating the catalog, not retroactively when drift is detected.
+
+### 2026-08-16 — screener-fundamental-metric-selector — reuse
+- **Pattern**: In an e2e test for a form with multiple similar rows (e.g., Screener criteria rows), scope selectors to the row's `data-testid` wrapper rather than using `nth()` index or a plain `getByLabel`/`getByRole` call. `nth()` breaks when rows are reordered; unscoped `getByRole('option', ...)` inside a `Select` can match across multiple open `Select` portals.
+- **Evidence**: `docs/roadmap/features/117-screener-fundamental-metric-selector/context.md` sdd-design session (adversary objection 4: "`aria-label='metric'` collision risk across mixed-kind multi-criteria rows"); `services/xstockstrat-ui/e2e/insights/screener.spec.ts` (row-wrapper scoping)
+- **Rule it implies**: In Screener (and similar multi-row) e2e tests, always scope Radix Select assertions to the criterion row's `data-testid` wrapper, never use bare `getByLabel` or `nth()`.
+
+### 2026-08-16 — shadcn-migration-low-confidence — design
+- **Pattern**: In zod v4, `.and()` is deprecated for composing object schemas; use `.merge()` instead. `.merge()` performs a true object merge, preserving all field definitions from both schemas with the right-hand schema taking precedence for shared keys. Using the deprecated `.and()` produces a runtime warning and may break in a future zod release.
+- **Evidence**: `docs/roadmap/features/122-shadcn-migration-low-confidence/context.md` sdd-execute steps; `services/xstockstrat-ui/src/components/insights/account-management/AddAccountForm.tsx` (credentialSchema `.merge()` call)
+- **Rule it implies**: In zod v4+, use `.merge()` not `.and()` for object schema composition — `.and()` is deprecated and will fail in a future version.
+
+### 2026-08-16 — shadcn-migration-low-confidence — design
+- **Pattern**: When a form's validation schema depends on a runtime value that changes (e.g., broker type selection), store the current schema in a React ref and pass a resolver to `useForm` that reads from the ref on each validation call. This avoids resetting the entire form (losing field values) when the schema changes — the ref update is synchronous, so the next validation call sees the new schema without a remount.
+- **Evidence**: `docs/roadmap/features/122-shadcn-migration-low-confidence/context.md` sdd-execute steps (ref-based lazy resolver for `AddAccountForm`); `services/xstockstrat-ui/src/components/insights/account-management/AddAccountForm.tsx`
+- **Rule it implies**: For forms whose validation schema depends on a changing runtime value, use a ref-based lazy resolver rather than recreating `useForm` or resetting on schema change — this pattern applies to `AddAccountForm` only (where broker type drives schema shape), not to forms with a fixed schema like `EditCredentialsForm`.
+
+### 2026-08-16 — shadcn-migration-low-confidence — reuse
+- **Pattern**: When testing form cleanup on dialog close, assert that the form element is removed from the DOM (`not.toBeVisible()` / `not.toBeInTheDocument()`), not that its inputs are empty. An unmounted form cannot have stale values — checking for empty inputs is a weaker assertion that would pass even if the form remounts with stale state.
+- **Evidence**: `docs/roadmap/features/122-shadcn-migration-low-confidence/context.md` sdd-design Round 1 (adversary objection b: `EditCredentialsForm` zero e2e parity coverage rationale); `services/xstockstrat-ui/e2e/trader/account-selector.spec.ts:63-92`
+- **Rule it implies**: In dialog/form e2e tests, assert removal from the DOM to test cleanup; asserting that inputs are empty is a weaker check that would pass even on a remount with stale state.
+
+### 2026-08-16 — shadcn-migration-low-confidence — ordering
+- **Pattern**: After running `npx shadcn add <component>`, audit the diff for collateral installs: shadcn's CLI may add peer primitives (e.g., `label.tsx` alongside `form.tsx`) or update `package.json` with new dependencies (e.g., `react-hook-form`, `@hookform/resolvers`, `zod`). Each collateral addition is a dependency the team must own; verify it is justified by the feature's actual call sites before committing.
+- **Evidence**: `docs/roadmap/features/122-shadcn-migration-low-confidence/context.md` sdd-design Rounds 1-2 (react-hook-form/zod dependency sweep; decision to decline `ui/form.tsx` in favor of `ui/field.tsx` to avoid a 2-call-site dependency)
+- **Rule it implies**: Treat `npx shadcn add` as a tentative installation; always review and trim collateral installs that the feature's actual call sites don't need before committing the result.
