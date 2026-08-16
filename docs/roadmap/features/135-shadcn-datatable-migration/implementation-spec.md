@@ -564,7 +564,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 
 ### Step 11 — service: migrate `/insights/strategies` list table (row 9) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/strategies/page.tsx` — modify
@@ -620,7 +620,7 @@ grep -n "DataTable" src/app/insights/strategies/page.tsx
 
 ### Step 12 — test: verify `/insights/strategies` migration preserves Edit/Deactivate flow
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/strategy-authoring.spec.ts` — modify (if locators break)

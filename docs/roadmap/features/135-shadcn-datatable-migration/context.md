@@ -493,6 +493,35 @@ clears it lands, rather than letting the warning go stale.
 - Files modified: none (no locator changes needed)
 - Deviations: none
 
+### Step 11 — service: migrate `/insights/strategies` list table (row 9) to `DataTable` [done]
+- Defined `columns: ColumnDef<StrategyDefinition>[]` for the 9 columns. Per design.md's mandate,
+  replaced the old per-row `StrategyRow` component (which called `useStrategyAnalytics` once and read
+  it across 6 `<TableCell>`s) with a small `AnalyticsCell` component that each of the 6
+  Signals/Taken/Hit-rate/Expectancy/Max-DD columns' `cell` renders independently — each calls
+  `useStrategyAnalytics(strategyId)` itself; React Query dedupes the identical concurrent query by
+  key, so it's still one network round-trip. Extracted the Actions cell (DropdownMenu +
+  Edit/Deactivate + confirmation AlertDialog) into its own `StrategyActionsCell` component,
+  preserving the `{isAdmin ? 'Actions' : ''}` header text. Replaced `<Table>` (confirmed exact-line)
+  with `<DataTable columns={columns} data={definitions} getRowId={(d) => d.strategyId} />`.
+- TDD: refactor, no new behavior (sorting on Strategy/State/Score is additive, not asserted by Step
+  12) — red N/A; green captured in Step 12.
+- Verification: `tsc --noEmit` clean; `pnpm run lint` — fixed one real error (`StrategyScore` import
+  now unused, removed) and 2 expected exhaustive-deps warnings (same class as prior steps,
+  non-blocking); grep confirms `DataTable`.
+- Files modified: `services/xstockstrat-ui/src/app/insights/strategies/page.tsx`
+- Deviations: none
+
+### Step 12 — test: verify `/insights/strategies` migration preserves Edit/Deactivate flow [done]
+- Ran `e2e/insights/strategy-authoring.spec.ts` (33 tests): 17 clean, 8 cold-start-flaky-then-pass.
+  2 needed isolated re-verification (`Edit navigates to the edit page`, `server validation error
+  shows inline`) — both confirmed exit-0/eventually-pass under `--retries=3` in isolation, and both
+  are unrelated to the migrated list table (the second is on the `/insights/strategies/new` wizard
+  page, never touched by Step 11). The Deactivate confirmation-dialog flow and all 6 per-cell
+  `useStrategyAnalytics` values render unchanged.
+- `mobile-overflow.spec.ts -g "insights/strategies\$"` — flaky-then-pass, green.
+- Files modified: none (no locator changes needed)
+- Deviations: none
+
 ## Session 2026-08-15 — sdd-execute boot (branch-topology correction)
 
 - Boot Step B3 (`git ls-remote --heads origin feature/shadcn-datatable-migration`) found the

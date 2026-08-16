@@ -1,21 +1,15 @@
 'use client';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Plus, EllipsisVertical } from 'lucide-react';
+import type { ColumnDef } from '@tanstack/react-table';
 import { AppShell } from '@/components/insights/AppShell';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { StatTile } from '@/components/shared/StatTile';
-import {
-  Table,
-  TableHeader,
-  TableBody,
-  TableRow,
-  TableHead,
-  TableCell,
-} from '@/components/ui/table';
+import { DataTable } from '@/components/ui/data-table';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -34,7 +28,7 @@ import { useStrategyDefinitions, useManageStrategy } from '@/hooks/useStrategyDe
 import { useIsAdmin } from '@/hooks/useLiveStrategies';
 import { useStrategyAnalytics } from '@/hooks/useOpportunities';
 import { StrategyOperation } from '@xstockstrat/proto/analysis/v1/analysis_pb';
-import type { StrategyDefinition, StrategyScore } from '@xstockstrat/proto/analysis/v1/analysis_pb';
+import type { StrategyDefinition } from '@xstockstrat/proto/analysis/v1/analysis_pb';
 import { scoreColor } from '@/lib/scoreDisplay';
 
 export default function StrategiesPage() {
@@ -66,6 +60,137 @@ export default function StrategiesPage() {
   function handleDeactivate(strategyId: string) {
     manage.mutate({ operation: StrategyOperation.DEACTIVATE, definition: { strategyId } });
   }
+
+  const columns = useMemo<ColumnDef<StrategyDefinition>[]>(
+    () => [
+      {
+        id: 'strategy',
+        header: 'Strategy',
+        accessorFn: (d) => d.displayName || d.strategyId,
+        meta: { className: 'font-mono font-semibold' },
+        cell: ({ row }) => {
+          const d = row.original;
+          return (
+            <Link href={`/insights/strategies/${d.strategyId}`} className="hover:underline">
+              {d.displayName || d.strategyId}
+            </Link>
+          );
+        },
+      },
+      {
+        id: 'state',
+        header: 'State',
+        accessorFn: (d) => (!d.active ? 'Off' : d.liveEnabled ? 'Active' : 'Paused'),
+        cell: ({ row }) => {
+          const d = row.original;
+          const state = !d.active ? 'Off' : d.liveEnabled ? 'Active' : 'Paused';
+          const stateVariant = !d.active ? 'secondary' : d.liveEnabled ? 'buy' : 'warning';
+          return <Badge variant={stateVariant}>{state}</Badge>;
+        },
+      },
+      {
+        id: 'signals30d',
+        header: 'Signals 30d',
+        enableSorting: false,
+        meta: { className: 'text-right hidden sm:table-cell' },
+        cell: ({ row }) => (
+          <AnalyticsCell
+            strategyId={row.original.strategyId}
+            render={(a) => (a ? a.signals30d : '—')}
+          />
+        ),
+      },
+      {
+        id: 'taken',
+        header: 'Taken',
+        enableSorting: false,
+        meta: { className: 'text-right hidden md:table-cell text-muted-foreground' },
+        cell: ({ row }) => (
+          <AnalyticsCell strategyId={row.original.strategyId} render={(a) => (a ? a.taken : '—')} />
+        ),
+      },
+      {
+        id: 'hitRate',
+        header: 'Hit rate',
+        enableSorting: false,
+        meta: { className: 'text-right tabular-nums' },
+        cell: ({ row }) => (
+          <AnalyticsCell
+            strategyId={row.original.strategyId}
+            render={(a) => (a ? `${(a.blendedHitRate * 100).toFixed(0)}%` : '—')}
+          />
+        ),
+      },
+      {
+        id: 'expectancy',
+        header: 'Expectancy',
+        enableSorting: false,
+        meta: { className: 'text-right tabular-nums' },
+        cell: ({ row }) => (
+          <AnalyticsCell
+            strategyId={row.original.strategyId}
+            render={(a) => (
+              <span className={a ? (a.expectancy >= 0 ? 'text-buy' : 'text-destructive') : ''}>
+                {a ? `${a.expectancy >= 0 ? '+' : ''}${a.expectancy.toFixed(2)}` : '—'}
+              </span>
+            )}
+          />
+        ),
+      },
+      {
+        id: 'maxDD',
+        header: 'Max DD',
+        enableSorting: false,
+        meta: { className: 'text-right hidden lg:table-cell text-destructive' },
+        cell: ({ row }) => (
+          <AnalyticsCell
+            strategyId={row.original.strategyId}
+            render={(a) => (a ? `-${(a.maxDrawdown * 100).toFixed(0)}%` : '—')}
+          />
+        ),
+      },
+      {
+        id: 'score',
+        header: 'Score',
+        accessorFn: (d) => scoreById.get(d.strategyId)?.overallScore ?? -1,
+        meta: { className: 'text-right tabular-nums font-semibold' },
+        cell: ({ row }) => {
+          const score = scoreById.get(row.original.strategyId);
+          return (
+            <span className={score ? scoreColor(score.overallScore) : ''}>
+              {score ? `${(score.overallScore * 100).toFixed(0)}%` : '—'}
+            </span>
+          );
+        },
+      },
+      {
+        id: 'actions',
+        header: isAdmin ? 'Actions' : '',
+        enableSorting: false,
+        meta: { className: 'text-right whitespace-nowrap' },
+        cell: ({ row }) => {
+          const d = row.original;
+          return isAdmin ? (
+            <StrategyActionsCell
+              strategyId={d.strategyId}
+              active={d.active}
+              deactivating={manage.isPending}
+              onEdit={() => router.push(`/insights/strategies/${d.strategyId}/edit`)}
+              onDeactivate={() => handleDeactivate(d.strategyId)}
+            />
+          ) : (
+            <Link
+              href={`/insights/strategies/${d.strategyId}`}
+              className="text-sm text-primary hover:underline"
+            >
+              Open →
+            </Link>
+          );
+        },
+      },
+    ],
+    [scoreById, isAdmin, manage.isPending, router, handleDeactivate],
+  );
 
   return (
     <AppShell>
@@ -121,34 +246,7 @@ export default function StrategiesPage() {
         {defsData && definitions.length > 0 && (
           <Card>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Strategy</TableHead>
-                    <TableHead>State</TableHead>
-                    <TableHead className="text-right hidden sm:table-cell">Signals 30d</TableHead>
-                    <TableHead className="text-right hidden md:table-cell">Taken</TableHead>
-                    <TableHead className="text-right">Hit rate</TableHead>
-                    <TableHead className="text-right">Expectancy</TableHead>
-                    <TableHead className="text-right hidden lg:table-cell">Max DD</TableHead>
-                    <TableHead className="text-right">Score</TableHead>
-                    <TableHead className="text-right">{isAdmin ? 'Actions' : ''}</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {definitions.map((d) => (
-                    <StrategyRow
-                      key={d.strategyId}
-                      def={d}
-                      score={scoreById.get(d.strategyId)}
-                      isAdmin={!!isAdmin}
-                      deactivating={manage.isPending}
-                      onEdit={() => router.push(`/insights/strategies/${d.strategyId}/edit`)}
-                      onDeactivate={() => handleDeactivate(d.strategyId)}
-                    />
-                  ))}
-                </TableBody>
-              </Table>
+              <DataTable columns={columns} data={definitions} getRowId={(d) => d.strategyId} />
             </CardContent>
           </Card>
         )}
@@ -157,120 +255,87 @@ export default function StrategiesPage() {
   );
 }
 
-/** One strategy row backed by per-strategy analytics (Signals/Taken/Hit-rate/Expectancy/Max-DD). */
-function StrategyRow({
-  def: d,
-  score,
-  isAdmin,
+/**
+ * Per-cell strategy-analytics reader. Each of the 6 analytics columns renders its own instance
+ * rather than hoisting `useStrategyAnalytics` above the row loop (design.md) — React Query
+ * dedupes identical concurrent queries by key, so 6 independent calls with the same `strategyId`
+ * cost one network round-trip, not six.
+ */
+function AnalyticsCell({
+  strategyId,
+  render,
+}: {
+  strategyId: string;
+  render: (a: ReturnType<typeof useStrategyAnalytics>['data']) => React.ReactNode;
+}) {
+  const { data: a } = useStrategyAnalytics(strategyId);
+  return <>{render(a)}</>;
+}
+
+/** Actions cell: Edit/Deactivate `DropdownMenu` + confirmation `AlertDialog` (admin only). */
+function StrategyActionsCell({
+  strategyId,
+  active,
   deactivating,
   onEdit,
   onDeactivate,
 }: {
-  def: StrategyDefinition;
-  score: StrategyScore | undefined;
-  isAdmin: boolean;
+  strategyId: string;
+  active: boolean;
   deactivating: boolean;
   onEdit: () => void;
   onDeactivate: () => void;
 }) {
-  const { data: a } = useStrategyAnalytics(d.strategyId);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const state = !d.active ? 'Off' : d.liveEnabled ? 'Active' : 'Paused';
-  const stateVariant = !d.active ? 'secondary' : d.liveEnabled ? 'buy' : 'warning';
   return (
-    <TableRow>
-      <TableCell className="font-mono font-semibold">
-        <Link href={`/insights/strategies/${d.strategyId}`} className="hover:underline">
-          {d.displayName || d.strategyId}
-        </Link>
-      </TableCell>
-      <TableCell>
-        <Badge variant={stateVariant}>{state}</Badge>
-      </TableCell>
-      <TableCell className="text-right tabular-nums hidden sm:table-cell">
-        {a ? a.signals30d : '—'}
-      </TableCell>
-      <TableCell className="text-right tabular-nums hidden md:table-cell text-muted-foreground">
-        {a ? a.taken : '—'}
-      </TableCell>
-      <TableCell className="text-right tabular-nums">
-        {a ? `${(a.blendedHitRate * 100).toFixed(0)}%` : '—'}
-      </TableCell>
-      <TableCell
-        className={`text-right tabular-nums ${
-          a ? (a.expectancy >= 0 ? 'text-buy' : 'text-destructive') : ''
-        }`}
-      >
-        {a ? `${a.expectancy >= 0 ? '+' : ''}${a.expectancy.toFixed(2)}` : '—'}
-      </TableCell>
-      <TableCell className="text-right tabular-nums hidden lg:table-cell text-destructive">
-        {a ? `-${(a.maxDrawdown * 100).toFixed(0)}%` : '—'}
-      </TableCell>
-      <TableCell
-        className={`text-right tabular-nums font-semibold ${score ? scoreColor(score.overallScore) : ''}`}
-      >
-        {score ? `${(score.overallScore * 100).toFixed(0)}%` : '—'}
-      </TableCell>
-      <TableCell className="text-right whitespace-nowrap">
-        {isAdmin ? (
-          <>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Actions"
-                  data-testid={`actions-${d.strategyId}`}
-                >
-                  <EllipsisVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={onEdit}>Edit</DropdownMenuItem>
-                {d.active && (
-                  <DropdownMenuItem
-                    disabled={deactivating}
-                    variant="destructive"
-                    onSelect={(e) => {
-                      e.preventDefault();
-                      setConfirmOpen(true);
-                    }}
-                  >
-                    Deactivate
-                  </DropdownMenuItem>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-              <AlertDialogContent>
-                <AlertDialogDescription>
-                  Deactivate strategy &quot;{d.strategyId}&quot;? It will no longer appear in the
-                  active list.
-                </AlertDialogDescription>
-                <AlertDialogCancel disabled={deactivating}>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  disabled={deactivating}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    onDeactivate();
-                    setConfirmOpen(false);
-                  }}
-                >
-                  Confirm
-                </AlertDialogAction>
-              </AlertDialogContent>
-            </AlertDialog>
-          </>
-        ) : (
-          <Link
-            href={`/insights/strategies/${d.strategyId}`}
-            className="text-sm text-primary hover:underline"
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Actions"
+            data-testid={`actions-${strategyId}`}
           >
-            Open →
-          </Link>
-        )}
-      </TableCell>
-    </TableRow>
+            <EllipsisVertical className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={onEdit}>Edit</DropdownMenuItem>
+          {active && (
+            <DropdownMenuItem
+              disabled={deactivating}
+              variant="destructive"
+              onSelect={(e) => {
+                e.preventDefault();
+                setConfirmOpen(true);
+              }}
+            >
+              Deactivate
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogDescription>
+            Deactivate strategy &quot;{strategyId}&quot;? It will no longer appear in the active
+            list.
+          </AlertDialogDescription>
+          <AlertDialogCancel disabled={deactivating}>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={deactivating}
+            onClick={(e) => {
+              e.preventDefault();
+              onDeactivate();
+              setConfirmOpen(false);
+            }}
+          >
+            Confirm
+          </AlertDialogAction>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
