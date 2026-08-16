@@ -88,3 +88,26 @@
   - Radix `ToggleGroupItem` renders a `<button>` (not `role="tab"`/`radio`): proven by the existing `insights/opportunities` exemplar located via `getByRole('button', {name:'marketwatch'})` in `e2e/insights/opportunities.spec.ts:84,137,139` — validates the design's `getByRole('button', …)` chip locator and confirms the `fails.md` 2026-08-09 tab-collision is sidestepped.
   - `SymbolSectionNav.tsx` filename is free (absent from `components/trader/`); `mobile-overflow.spec.ts:34,42` asserts `scrollWidth-clientWidth<=1` at 390px on `/trader/positions/AAPL` (no edit needed, keep green); `?strategy=` seed read on mount at `SignalReadiness.tsx:34` (`searchParams?.get('strategy') ?? ''`) — preserved by all-sections-mounted + bare-hash `replaceState`.
   - `xstockstrat-ui` has no coverage threshold (e2e is the gate); single reviewer snapshot = `xstockstrat-ui` service owner across all 3 steps. No trading-domain step constraints apply (presentation only; no OrderType/BrokerType/OrderStatus/TRADING_MODE surface touched). C-14 consumer surface (UI `/trader`) covered; C-10(a) already satisfied (existing route, no new nav entry).
+
+## Session 2026-08-16 — sdd-review impl-spec (advisory)
+
+- Result: 0 failures, 1 warning, 1 NOTE (advisory — did not block). Overall PASS. Overlap: CLEAN.
+- Criteria (spec-reviewer): every path/symbol/line anchor verified in the current tree. C-08 pairing
+  (Step 3 tests Steps 1-2), C-12/C-13 fixture reuse (existing auth/AAPL/MSFT/ZZZZ fixtures, `?strategy=`/
+  `#hash` inline as scenario one-offs), C-14 surface coverage, P-06 red-before-green all confirmed.
+  `ToggleGroupItem` renders `<button>` (no `role="tab"`) — tab-collision avoidance real. All 3 design
+  Open Risks represented in Step 1 with "record in Deviation Log" instructions. No Floor risk.
+- Unresolved ⚠ / NOTE carried into execution:
+  - Step 3: `[x]` NOTE — no `--cov-fail-under` assertion, correctly N/A (xstockstrat-ui e2e is the gate,
+    vitest coverage is `src/lib`-only). Not a defect; `pnpm test:e2e` is the runnable gate. — resolved.
+  - Cross-file line-anchor drift (non-material, C-01): a few citations point at the enclosing `test(...)`
+    line vs the exact call (e.g. opportunities.spec.ts marketwatch clicks are :84/:139; mobile-overflow
+    goto :51). Symbols/paths all real; substance holds. — [ ] cosmetic, verify anchors at wiring, non-blocking.
+- Overlap (feature-overlap): CLEAN — no proto/config/migration surface (UI-only); the 4 target files are
+  touched only by already-merged deps (125, 143) or launched trunk features (119/120/124/135); no
+  non-merged in-flight feature edits them; the 2 new files are unique to 139. No merge-order entry needed.
+- **Section-preservation check (operator request)**: independently enumerated all 17 rendered elements in
+  `page.tsx:215-313` against the group map — every section/panel accounted for, nothing dropped. Two
+  wiring rules enforced at execute: `#research` wraps the ENTIRE watchlist ternary (both branches +
+  loading); `#position` wraps only `PositionBody` (the `positionNotFound` CardNotice stays unwrapped,
+  still renders when unheld).
