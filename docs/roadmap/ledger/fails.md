@@ -1166,3 +1166,53 @@ ambiguity is logged here).
 - **A feature specced before a security-model feature lands must be re-owner-scoped at execute time** — feature 131 (live-strategy opportunity attribution) was specced before 133 (strategy ownership) merged; its global `list_live_enabled()` would have attributed another user's live strategy to this user's opportunity queue (IDOR) because `_compute_opportunities` became per-user under 133. When the merge order puts a security/ownership feature *before* a feature that reads the same data, re-verify every new cross-entity read is owner-scoped — don't trust the pre-security spec. (feature 131 D-1 — added a `user_id` owner-scope param to `list_live_enabled`.)
 
 - **Removing a UI behavior (a "genuine replace") leaves an e2e that still asserts the removed behavior** — feature 134's FR-4 dropped `useSignalSources`' `analysis.signals.source_weights` config-blob parse (weight moved onto `SignalSource.reliabilityWeight`), but a separate spec (`value-persists-after-save.spec.ts`) still saved that config key and asserted the Sources weight column reflected it. It passed in isolation while the parse existed and only went red in CI once the parse was gone. When a step *removes* a data path a UI reads, grep the whole e2e suite for the removed key/behavior — the coverage for the removed path is a regression to delete, not just the new path to add. (feature 134 — caught by CI on the stacked 131 branch, not by the Step 8/9 UI work.)
+
+### 2026-08-16 — shadcn-datatable-migration — correctness
+- **Mistake**: a shared `DataTable` composite's row-click "interactive target" guard used the CSS
+  selector `'a, button, [role="button"], [data-row-click-ignore]'` to detect a nested interactive
+  element and skip firing `onRowClick`. But the composite *also* puts `role="button"` on the row
+  itself (for a11y, when `onRowClick` is set) — so `.closest()` called from *any* click target inside
+  the row, including plain non-interactive cell text, walks up and matches the row itself as the
+  nearest `[role="button"]` ancestor-or-self. This made the guard return `true` unconditionally for
+  every click in every `onRowClick`-enabled row, permanently short-circuiting `onRowClick` — a
+  correctness bug shipped in the composite's first commit but invisible for 12 further migration
+  steps because none of them happened to use `onRowClick` yet. Only surfaced when the first
+  `onRowClick` consumer (the 13th step) exercised the path and its e2e suite failed 5/10 tests.
+- **Evidence**: `docs/roadmap/features/135-shadcn-datatable-migration/context.md` Step 13 entry;
+  `docs/roadmap/features/135-shadcn-datatable-migration/implementation-spec.md` Deviation Log "Step
+  13 — composite `onRowClick` bug"; `services/xstockstrat-ui/src/components/ui/data-table.tsx`
+  (`isInteractiveTarget`); confirmed genuine (not flake) via `git stash`/`pop` isolating the pre-fix
+  composite and re-running `e2e/insights/backtest-coverage.spec.ts` — same assertion failure every
+  time regardless of retries.
+- **Rule it implies**: when a shared interaction guard checks "is this target inside an interactive
+  ancestor" via a CSS selector, and the *container itself* is also marked with one of the guard's own
+  matched roles/attributes for its own accessibility semantics (row gets `role="button"` for
+  keyboard activation, guard also matches `[role="button"]`), the guard will self-match the container
+  on its very first use — write a test that clicks a genuinely *non-interactive* cell inside an
+  `onRowClick`-enabled row and asserts the row handler *does* fire, not just tests proving the guard
+  blocks known interactive element types. A composite step's own unit test (Step 2 here) covered only
+  the "blocks a nested interactive element" cases, not the "still fires for a plain click" case — the
+  gap that let this ship silently through 12 steps before any code path exercised it.
+
+### 2026-08-16 — shadcn-datatable-migration — assumption
+- **Mistake**: recon's inventory (FR-1) claimed "15 sites, all four segments" via a full-repo grep,
+  but missed `src/components/trader/SymbolScreening.tsx` — a table-rendering component added by a
+  sibling feature (125) that merged mid-session, ahead of this feature's execution. The Steps 21-22
+  re-spec gate (triggered by that same sibling merge) ran a fresh 3-agent recon pass, but scoped it to
+  *re-verifying the already-known 15 sites'* Codebase Evidence against the post-merge tree — not to
+  re-running an unbounded full-repo `<table`/`Table`-import grep from scratch. The missed table sat
+  inside a *child component* (`SymbolScreening`) imported by a file the re-spec pass did re-check
+  (`positions/[symbol]/page.tsx`) — a line-by-line re-read of that one file's own JSX would not have
+  surfaced a table one import-hop away. Not found until Step 33's own final AC-1/AC-2 mechanical
+  cross-check, the very last step, several steps after the point (Steps 21-22) where re-grounding
+  against the sibling merge would have caught it cheaply.
+- **Evidence**: `docs/roadmap/features/135-shadcn-datatable-migration/implementation-spec.md` §
+  Re-spec Log, "Steps 34-35 added (Step 33's AC-1 sweep found a 16th table)"; the table now migrated
+  as Steps 34-35, `src/components/trader/SymbolScreening.tsx`.
+- **Rule it implies**: when a re-spec gate fires because a sibling feature merged mid-execution, the
+  re-grounding recon must re-run the *original, unbounded* discovery sweep (e.g. the full-repo grep
+  that built the inventory in the first place), not just re-verify the previously-found items against
+  the new tree state. A merged sibling feature can add wholly new instances of the thing being
+  inventoried, not just move the ones already known — re-verification-only recon is blind to that by
+  construction. Candidate for a binding note in the re-spec-gate section of `reference/sequential-mode.md`
+  (or the `/sdd-design` Phase 0 recon skill) if this recurs on a future feature.

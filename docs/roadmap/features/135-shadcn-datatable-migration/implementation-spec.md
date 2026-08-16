@@ -1,6 +1,6 @@
 # Implementation Spec: shadcn-datatable-migration
 
-**Status**: `pending`
+**Status**: `in-progress`
 **Created**: 2026-08-15
 **Feature**: `docs/roadmap/features/135-shadcn-datatable-migration/feature.md`
 **Total Steps**: 33
@@ -56,7 +56,7 @@ chrome around it.
 
 ### Step 1 — service: build the shared `DataTable` composite
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/data-table.tsx` — create
@@ -139,7 +139,7 @@ grep -n "export function isInteractiveTarget\|export function DataTable" src/com
 
 ### Step 2 — test: unit-test the `DataTable` composite's `isInteractiveTarget` guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/ui/data-table.test.ts` — create
@@ -184,7 +184,7 @@ pre-Step-1 tree, then pass after).
 
 ### Step 3 — service: migrate `/config-ui/sources` (row 12) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/sources/page.tsx` — modify
@@ -238,7 +238,7 @@ grep -n "@tanstack/react-table" src/app/config-ui/sources/page.tsx  # expect NO 
 
 ### Step 4 — test: verify `/config-ui/sources` migration preserves behavior
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/config-ui/sources.spec.ts` — modify (only if an assertion targets
@@ -283,7 +283,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 
 ### Step 5 — service: migrate `/config-ui/[namespace]` `NamespaceEditor` (row 13) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/[namespace]/NamespaceEditor.tsx` — modify
@@ -335,7 +335,7 @@ grep -n "DataTable" src/app/config-ui/\[namespace\]/NamespaceEditor.tsx
 
 ### Step 6 — test: verify `NamespaceEditor` migration preserves the SetConfig edit flow
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/config-ui/value-persists-after-save.spec.ts` — modify (if locators break)
@@ -378,7 +378,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 
 ### Step 7 — service: migrate `/config-ui/audit` (row 14) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/audit/page.tsx` — modify
@@ -423,7 +423,7 @@ grep -n "DataTable" src/app/config-ui/audit/page.tsx
 
 ### Step 8 — test: add coverage for `/config-ui/audit` table content and sorting
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/config-ui/audit.spec.ts` — create
@@ -470,7 +470,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/config-ui/audit.spec
 
 ### Step 9 — service: migrate `/insights/screener` results table (row 8) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/screener/page.tsx` — modify
@@ -527,7 +527,7 @@ grep -n 'data-testid="screen-results"\|data-testid="result-row"' src/app/insight
 
 ### Step 10 — test: verify `/insights/screener` migration preserves the known-trap fix + behavior
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/screener.spec.ts` — modify (if locators break)
@@ -564,7 +564,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 
 ### Step 11 — service: migrate `/insights/strategies` list table (row 9) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/strategies/page.tsx` — modify
@@ -620,7 +620,7 @@ grep -n "DataTable" src/app/insights/strategies/page.tsx
 
 ### Step 12 — test: verify `/insights/strategies` migration preserves Edit/Deactivate flow
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/strategy-authoring.spec.ts` — modify (if locators break)
@@ -658,7 +658,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 
 ### Step 13 — service: migrate `/insights/strategies/[id]` Past Runs table (row 10) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/strategies/[id]/page.tsx` — modify
@@ -710,7 +710,7 @@ grep -n "DataTable\|onRowClick" src/app/insights/strategies/\[id\]/page.tsx
 
 ### Step 14 — test: verify `/insights/strategies/[id]` Past Runs migration preserves row-select
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/backtest-coverage.spec.ts` — modify (if locators break)
@@ -747,7 +747,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 
 ### Step 15 — service: migrate `/insights/formulas` list table (row 11) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/insights/formulas/page.tsx` — modify
@@ -798,7 +798,7 @@ grep -n "DataTable\|onRowClick\|enablePagination" src/app/insights/formulas/page
 
 ### Step 16 — test: verify `/insights/formulas` migration preserves row-navigate + search/filter
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/insights/formulas.spec.ts` — modify (if locators break)
@@ -837,7 +837,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 
 ### Step 17 — service: migrate `/accounts/authorized-apps` table (row 15) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/accounts/authorized-apps/page.tsx` — modify
@@ -876,7 +876,7 @@ grep -n "DataTable" src/app/accounts/authorized-apps/page.tsx
 
 ### Step 18 — test: verify `/accounts/authorized-apps` migration preserves the Revoke flow
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/accounts/authorized-apps.spec.ts` — modify (if locators break)
@@ -911,7 +911,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 
 ### Step 19 — service: migrate `/trader/portfolio` broker-reported positions table (row 1) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/portfolio/page.tsx` — modify
@@ -950,7 +950,7 @@ grep -n "DataTable" src/app/trader/portfolio/page.tsx
 
 ### Step 20 — test: verify `/trader/portfolio` migration preserves behavior
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/portfolio.spec.ts` — modify (if locators break)
@@ -982,7 +982,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 
 ### Step 21 — service: migrate `/trader/positions/[symbol]` orders sub-table (row 4) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
@@ -991,37 +991,55 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values
 rendered in UI, no direct DB access (except audit log)
 
-**Codebase Evidence**:
-- Confirmed via `Read`: `Table` at `positions/[symbol]/page.tsx:348`, 8 columns (Side, Type, Qty,
-  Filled, Avg fill, Status, Origin, Open), dynamic row count, no mutation actions (a `View →` link
-  button per row).
-- **Dead-class disposition (design.md Open Risk)**: `TableRow` at `:363` carries `className=
-  "cursor-pointer"` with **zero click handler wired anywhere** — confirmed by reading the full row
-  block (`:363-388`), only the `View →` `Link` button (`:384-386`) is clickable, the row itself is not.
-  Per design.md's default recommendation, carry the stray class forward unchanged (matches current
-  visual state — a dead affordance, not a new one) rather than dropping it as unrelated cleanup;
-  record this explicitly rather than silently resolving it either way.
+**Codebase Evidence** _(re-spec'd 2026-08-16 — feature 125 "unified Symbol page" landed in main-dev
+between /sdd-spec and /sdd-execute and hoisted this table into its own component; see `## Re-spec Log`
+below)_:
+- Confirmed via `Read`: the orders sub-table now lives in a standalone `SymbolOrdersCard({ symbol,
+  orders, working })` function component (`positions/[symbol]/page.tsx:391-465`), invoked
+  unconditionally at `:260` (`<SymbolOrdersCard symbol={symbol} orders={orders} working={working} />`)
+  — it renders for every symbol, not only when a position is held (feature 125's "hoisted to page
+  level" change; see the component's own doc comment at `:389-390`). The table itself is unchanged:
+  `<Table>` at `:417`, still 8 columns in the same order (Side `:420`, Type `:421`, Qty `:422`, Filled
+  `:423`, Avg fill `:424`, Status `:425`, Origin `:426`, Open `:427`), dynamic row count, no mutation
+  actions (a `View →` link button per row).
+- `SymbolOrdersCard` wraps the table in `orders.length === 0 ? <EmptyState title="No orders for this
+  symbol" description="Orders you place for this position will appear here, traced to their origin
+  signal." /> : <Table>...</Table>` (`:411-461`) — this conditional pre-dates and is **unrelated to**
+  the `DataTable` migration; leave it as-is and only replace the inner `<Table>...</Table>` block, not
+  the surrounding `EmptyState` branch (the composite's own `emptyMessage` prop is a single string in a
+  `TableCell`, not a match for this richer title+description empty state).
+- **Dead-class disposition (design.md Open Risk) — still holds**: `TableRow` at `:432` carries
+  `className="cursor-pointer"` with **zero click handler wired anywhere** — confirmed by reading the
+  full row block (`:431-458`), only the `View →` `Link` button (`:452-456`) is clickable, the row
+  itself is not. Per design.md's default recommendation, carry the stray class forward unchanged
+  (matches current visual state — a dead affordance, not a new one) rather than dropping it as
+  unrelated cleanup; record this explicitly rather than silently resolving it either way.
 - FR-3 verdict (recon.md row 4): FAIL (cols) — mandatory migration.
-- Reuses `OrderSideBadge`/`OrderStatusBadge`/`TYPE_LABEL`/`formatOrderPrice` — order/fill display logic
-  is unchanged, only the table chrome (per Execution Summary's trading-domain note).
+- Reuses `OrderSideBadge` (`:434`), `TYPE_LABEL[OrderType[o.orderType]]` (`:437`), `formatOrderPrice`
+  (`:444`), `OrderStatusBadge` (`:447`), and the `o.strategyId || 'Manual'` Origin fallback (`:450`) —
+  order/fill display logic is unchanged, only the table chrome (per Execution Summary's trading-domain
+  note). These imports live at `page.tsx:33-38` (unchanged).
 
 **TDD**: `red-green required`
 
 **Instructions**:
-1. Define `columns: ColumnDef<Order>[]` for the 8 columns, reusing `OrderSideBadge`, `TYPE_LABEL[
-   OrderType[o.orderType]]`, `formatOrderPrice`, `OrderStatusBadge`, and the `o.strategyId || 'Manual'`
-   Origin fallback verbatim as cell renderers. `Open` column (`id: 'open'`, `enableSorting: false`)
-   renders the existing `View →` `Button`+`Link`.
+1. Inside `SymbolOrdersCard` (`:391-465`), define `columns: ColumnDef<Order>[]` for the 8 columns,
+   reusing `OrderSideBadge`, `TYPE_LABEL[OrderType[o.orderType]]`, `formatOrderPrice`, `OrderStatusBadge`,
+   and the `o.strategyId || 'Manual'` Origin fallback verbatim as cell renderers. `Open` column
+   (`id: 'open'`, `enableSorting: false`) renders the existing `View →` `Button`+`Link`. A module-scope
+   array is sufficient — `SymbolOrdersCard`'s columns depend only on props/module-level helpers, no
+   enclosing-component state to close over.
 2. **Do not** wire `onRowClick` on this table — no click handler exists today; carry the
    `cursor-pointer` class forward via `rowClassName={() => 'cursor-pointer'}` on the `DataTable` (or
    directly on each row via the composite's row-class mechanism), unchanged from the pre-migration
    visual state. Record disposition explicitly: **migrated to `DataTable`; `cursor-pointer` class
    carried forward unchanged (pre-existing dead affordance, not new — no click handler added)**.
-3. Replace the `<Table>...</Table>` JSX (`:348-` through close) with `<DataTable columns={columns}
-   data={orders} rowClassName={() => 'cursor-pointer'} />`. Sorting only (no pagination — a single
-   position's order history is typically short).
+3. Replace the `<Table>...</Table>` JSX (`:417-460`) with `<DataTable columns={columns} data={orders}
+   rowClassName={() => 'cursor-pointer'} />`, leaving the `orders.length === 0 ? <EmptyState ... /> : `
+   wrapper at `:411` unchanged. Sorting only (no pagination — a single position's order history is
+   typically short).
 4. Responsive strategy (FR-4): keep the existing column-priority hiding (`hidden sm:table-cell` on
-   Filled, `hidden md:table-cell` on Origin — `:354,357`) via `meta.className`, unchanged. Record
+   Filled `:423`, `hidden md:table-cell` on Origin `:426`) via `meta.className`, unchanged. Record
    disposition: **migrated to `DataTable`; responsive strategy (b) column priority (existing 2-tier
    `hidden` breakpoint set)**.
 
@@ -1035,7 +1053,7 @@ grep -n "DataTable" src/app/trader/positions/\[symbol\]/page.tsx
 
 ### Step 22 — test: verify `/trader/positions/[symbol]` migration preserves behavior
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify (if locators break)
@@ -1044,20 +1062,34 @@ grep -n "DataTable" src/app/trader/positions/\[symbol\]/page.tsx
 config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values
 rendered in UI, no direct DB access (except audit log)
 
-**Codebase Evidence**:
-- `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — existing suite for this route.
-- `mobile-overflow.spec.ts:33` already lists `{ path: '/trader/positions/AAPL' }` — **no `ROUTES`
-  change needed**.
+**Codebase Evidence** _(re-spec'd 2026-08-16 — see `## Re-spec Log` below)_:
+- `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` is now a 351-line, 5-test suite covering
+  the full unified Symbol page (feature 125) — not solely the orders table. The two tests that exercise
+  `SymbolOrdersCard` (Step 21) directly: `'renders the risk-framed header, stat grid, risk sidebar and
+  orders table'` asserts `getByText('Orders & fills · AAPL')` visible (`:40`, for a held position), and
+  `'an unheld symbol still renders the chart, orders and trade sections (feature 125)'` asserts
+  `getByText('Orders & fills · ZZZZ')` visible (`:82`, for a position-less symbol — proving
+  `SymbolOrdersCard`'s unconditional rendering). Neither test asserts individual order-row column
+  content by locator today — Step 21's 8-column table content itself has no dedicated per-column
+  assertion in this file to preserve beyond these two "card renders" checks; the mock backend's order
+  fixtures back both.
+- `mobile-overflow.spec.ts:34` (drifted from `:33`, feature 125 removed the `/insights/market/[symbol]`
+  entry ahead of it) still lists `{ path: '/trader/positions/AAPL' }` — **no `ROUTES` change needed**.
 
 **TDD**: `red-green required`
 
 **Instructions**:
-1. Re-run `position-detail.spec.ts` after Step 21. Fix any locator broken by the `DataTable`
-   restructuring; all 8 columns' rendered values and the `View →` link's target must be unchanged
-   (AC-5).
+1. Re-run the full `position-detail.spec.ts` suite (all 5 tests, not just the two above — Step 21 only
+   touches `SymbolOrdersCard`'s internals, but a full-file re-run catches any DOM-structure locator break
+   elsewhere in the file too) after Step 21. Fix any locator broken by the `DataTable` restructuring;
+   the `'Orders & fills · AAPL'` (`:40`) and `'Orders & fills · ZZZZ'` (`:82`) card-title assertions, and
+   the `View →` link's target, must be unchanged (AC-5).
 2. Confirm no test asserts the row itself is clickable (there is no such handler pre- or
    post-migration) — if one exists, it was already asserting dead behavior; do not add new
    click-to-navigate coverage here (out of scope — the dead class is carried forward, not activated).
+3. Do not expand this step to add coverage for the rest of `position-detail.spec.ts`'s FR-6/7/9/10/11
+   sections (price chart, trade widget, backtests, backfill, indicators) — those are feature 125's
+   scope, already covered by its own tests; this step's scope is limited to the orders sub-table.
 
 **Verification**:
 ```
@@ -1070,7 +1102,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 
 ### Step 23 — service: migrate `OrdersTable.tsx` (row 5, `/trader/orders`) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/OrdersTable.tsx` — modify
@@ -1126,7 +1158,7 @@ grep -n "DataTable" src/components/trader/OrdersTable.tsx
 
 ### Step 24 — test: verify `OrdersTable.tsx` migration preserves Edit/Cancel + the 1280px regression guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/orders.spec.ts` — modify (if locators break)
@@ -1166,7 +1198,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 
 ### Step 25 — service: migrate `LiveStrategiesPanel.tsx` (row 6, bare `/trader`) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/LiveStrategiesPanel.tsx` — modify
@@ -1229,7 +1261,7 @@ grep -n "{ path: '/trader' }" e2e/mobile-overflow.spec.ts
 
 ### Step 26 — test: verify `LiveStrategiesPanel.tsx` migration fixes the keyboard double-fire + covers bare `/trader`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/live-strategies.spec.ts` — modify
@@ -1269,7 +1301,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 
 ### Step 27 — service: migrate `OrderBook.tsx` (row 7, bare `/trader`) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/OrderBook.tsx` — modify
@@ -1319,7 +1351,7 @@ grep -n "DataTable" src/components/trader/OrderBook.tsx
 
 ### Step 28 — test: verify `OrderBook.tsx` migration preserves behavior
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/api-smoke.spec.ts` — modify (if locators break; data-contract
@@ -1366,7 +1398,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/trader/api-smoke.spe
 
 ### Step 29 — service: migrate `/trader/positions` Exposure table (row 2, 19 cols) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/page.tsx` — modify
@@ -1432,7 +1464,7 @@ grep -n "DataTable\|onRowClick\|enablePagination" src/app/trader/positions/page.
 
 ### Step 30 — test: verify the Exposure table migration preserves behavior + adds keyboard row-activation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/positions.spec.ts` — modify
@@ -1481,7 +1513,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 
 ### Step 31 — service: migrate the nested-Sheet fill-lineage table (row 3) to `DataTable` (design exception)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/page.tsx` — modify
@@ -1532,7 +1564,7 @@ grep -n "DataTable" src/app/trader/positions/page.tsx
 
 ### Step 32 — test: bespoke Sheet-interaction overflow test for the fill-lineage table (row 3)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/positions.spec.ts` — modify (add a Sheet-open-then-measure
@@ -1578,7 +1610,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/trader/positions.spe
 
 ### Step 33 — test: full `xstockstrat-ui` regression sweep (AC-6)
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - None (verification-only step; no files modified unless the full-suite run surfaces a cross-step
@@ -1627,6 +1659,422 @@ grep -rln "@tanstack/react-table" src/ | sort
 
 ---
 
+### Step 34 — service: migrate `SymbolScreening.tsx`'s results table to `DataTable` (16th site, found during Step 33's AC-1 sweep)
+
+**Status**: `done`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/src/components/trader/SymbolScreening.tsx` — modify
+
+**Reviewers**: xstockstrat-ui service owner — Trading UI correctness, analytics display accuracy,
+config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values
+rendered in UI, no direct DB access (except audit log)
+
+**Codebase Evidence — a real inventory gap, not a re-spec of an existing step**: Step 33's own AC-1
+mechanical re-check (`grep -rln "<Table\b" src/` cross-referenced against the FR-1 inventory) found
+`src/components/trader/SymbolScreening.tsx` — a component added by **feature 125** (the same sibling
+feature whose mid-session merge already forced the Steps 21-22 re-spec), rendered inside
+`trader/positions/[symbol]/page.tsx` for a non-watchlisted symbol. It is never mentioned anywhere in
+this feature's `recon.md`/`design.md`/`product-spec.md` — recon's inventory (and the 3-agent re-verify
+pass before Steps 21-22) missed it, confirmed via grep across all three docs returning zero matches for
+"SymbolScreening". Measured against FR-3's fixed exemption threshold: 4 columns (Criterion/Raw/
+Threshold/Pass, at the "≤4" boundary), read-only (no in-table actions, only `Pass`/`Fail` badges), but
+row count is **not** provably bounded ≤10 — `useCriteriaList()`'s `add` has no cap
+(`src/lib/screenCriteria.ts:62`, confirmed via grep for `MAX`/`slice`/length-guards, none found), so a
+user can add arbitrarily many ad hoc criteria rows. Fails the "all three" AND requirement (row-count
+unbounded) — same FR-3 FAIL verdict shape as all 15 already-migrated sites, so this is a genuine
+migration candidate under this feature's own rule, not a borderline call.
+
+**TDD**: `red-green required`
+
+**Instructions**:
+1. Define `columns: ColumnDef<CriterionRow>[]` for Criterion (`` `${metricName} ${comparatorGlyph(op)}
+   ${threshold}` ``, `meta.className: 'font-mono text-xs'`), Raw (evaluated-lookup em-dash fallback,
+   `text-right font-mono tabular-nums`), Threshold (`accessorKey: 'threshold'`, same alignment class),
+   and Pass (`Pass`/`Fail` `Badge` or em-dash) — preserving the existing em-dash-on-unevaluated logic
+   and `Pass`/`Fail` `Badge` variants verbatim.
+2. Replace the `<Table data-testid="symbol-screen-results">...</Table>` JSX with `<DataTable
+   columns={columns} data={ranCriteria} getRowId={(c) => c.refName} tableTestId="symbol-screen-results"
+   getRowProps={() => ({ 'data-testid': 'symbol-screen-row' })} />` — reusing the composite's existing
+   `tableTestId`/`getRowProps` extension (Step 9) to preserve both existing testids verbatim, since
+   `position-detail.spec.ts:174,178` already depends on them. No `onRowClick` (read-only display).
+3. Responsive strategy (FR-4): no column-hiding existed pre-migration (4 narrow columns already fit);
+   keep the existing horizontal-scroll fallback unchanged. Record disposition: **migrated to
+   `DataTable`; responsive strategy (a) horizontal-scroll container, unchanged; sort-only, no
+   pagination (read-only ad hoc criteria list, not a browse surface)**.
+
+**Verification**:
+```
+cd services/xstockstrat-ui && pnpm run lint
+grep -n "DataTable" src/components/trader/SymbolScreening.tsx
+```
+
+---
+
+### Step 35 — test: verify `SymbolScreening.tsx` migration preserves behavior
+
+**Status**: `done`
+**Service**: `xstockstrat-ui`
+**Files**:
+- `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify (if locators break)
+
+**Reviewers**: xstockstrat-ui service owner — Trading UI correctness, analytics display accuracy,
+config mutation safety, Connect-RPC call safety, environment scope correctness, no secret values
+rendered in UI, no direct DB access (except audit log)
+
+**Codebase Evidence**:
+- `position-detail.spec.ts:158-183` — existing FR-8 test, asserts `symbol-screening` →
+  `run-symbol-screen` → `symbol-screen-results` → row text `42.50` + the row-scoped `Pass` badge
+  (scoped specifically because "Pass" also appears as a column header — a pre-existing locator
+  precision concern this step must not regress).
+
+**TDD**: `red-green required`
+
+**Instructions**:
+1. Re-run `position-detail.spec.ts`'s FR-8 screening test after Step 34 — the `symbol-screen-results`/
+   `symbol-screen-row` testids are preserved verbatim via the composite's `tableTestId`/`getRowProps`,
+   so no locator change is expected; confirm this rather than assume it.
+2. No `mobile-overflow.spec.ts` `ROUTES` change needed — `/trader/positions/AAPL` (Step 21's addition)
+   already covers this route. Confirmed via `mock-backend.ts:279-284`: the default `listWatchlists`
+   mock returns `{ watchlists: [] }` (every symbol unwatchlisted unless a test overrides it), so the
+   Screening section — including this table — renders by default at `/trader/positions/AAPL`, already
+   exercised by the existing overflow sweep.
+
+**Verification**:
+```
+cd services/xstockstrat-ui && pnpm run lint
+cd services/xstockstrat-ui && pnpm exec playwright test e2e/trader/position-detail.spec.ts --project=chromium --no-deps -g "Screening"
+```
+
+---
+
+## Re-spec Log
+
+_Populated by /sdd-execute's sequential-mode re-spec gate (§5.3) before the step loop begins — the
+sole sanctioned edit to step bodies outside step-status flips._
+
+### 2026-08-16 — Steps 21–22 re-spec'd (feature 125 merged ahead of execution)
+
+Between `/sdd-spec` (2026-08-15) and this execution session, **feature 125** ("unified Symbol page")
+merged into `main-dev` and rewrote `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx`
+(795-line diff) — the exact file Steps 21–22 target. Three parallel `codebase-discovery` recon agents
+re-verified all 15 table sites' Codebase Evidence against the post-125 codebase:
+
+- **13 of 15 sites (Steps 1–20, 23–32) held with no re-spec needed** — either exact-line CONFIRMED or a
+  trivial line-number drift with unchanged structure (e.g. `/config-ui/sources` Table moved 299→330 due
+  to an unrelated feature 134 change; `/insights/screener` Table moved 543→480). Phase 1 Discovery's own
+  fresh `Read` of each target file (HARD CONSTRAINT: "read each target file fully before editing")
+  resolves these without a spec edit — the step bodies' *structural* claims (column sets, cell logic,
+  test fixtures) all still hold.
+- **Steps 21–22 (row 4, `/trader/positions/[symbol]` orders sub-table) needed a real re-spec**: feature
+  125 hoisted the table into a new standalone `SymbolOrdersCard` component (`page.tsx:391-465`), now
+  invoked unconditionally for every symbol (not just held positions). The table's own content (8
+  columns, cell renderers, the dead `cursor-pointer` class) is byte-identical in substance — only its
+  structural home moved. Re-spec'd both steps' Codebase Evidence and Instructions to the new line
+  numbers/component context; the migration approach itself (define `ColumnDef`s, replace `<Table>` with
+  `<DataTable>`, no `onRowClick`, carry `cursor-pointer` forward) is unchanged. Step 22 additionally
+  corrected: `position-detail.spec.ts` grew from a narrow orders-table spec to a 351-line, 5-test
+  unified-page suite (feature 125's own tests) — re-pointed its evidence at the two tests that actually
+  assert `SymbolOrdersCard`'s rendering (`:40`, `:82`) and added an explicit out-of-scope note so this
+  step doesn't balloon into covering feature 125's other sections.
+- Also noted, not re-spec'd (pre-existing, unrelated to feature 125): Step 6's evidence cites a third
+  `/SetConfig` wait at `value-persists-after-save.spec.ts:95` that doesn't exist (file is 84 lines, only
+  2 waits at `:43,73`) — a citation inaccuracy predating this session. Does not block Step 6 (its
+  Instructions don't depend on that specific line). Left as-is per "targeted, minimal" re-spec scope;
+  Phase 1 discovery will simply not find a third assertion to preserve, which is not a blocker.
+
+Full agent findings recorded in `context.md` § Session 2026-08-16.
+
+### 2026-08-16 — Steps 34–35 added (Step 33's AC-1 sweep found a 16th table)
+
+Step 33's Instruction 3 (AC-2 mechanical grep check) surfaced a broader AC-1 question — a full
+`grep -rln "<Table\b" src/` cross-reference against the FR-1 inventory found
+`src/components/trader/SymbolScreening.tsx`: a component added by **feature 125** (the same sibling
+feature whose mid-session merge already forced the Steps 21-22 re-spec), never mentioned in this
+feature's `recon.md`/`design.md`/`product-spec.md`, and not a member of the approved 15-site inventory.
+Measured against FR-3's own fixed exemption threshold: 4 columns (at the boundary) and read-only both
+pass, but row count is **not** provably bounded ≤10 (`useCriteriaList().add()` has no cap) — it fails
+the exemption's "all three" AND requirement, the identical FR-3 FAIL shape as every other migrated site.
+
+**Decision**: migrate it now, as new Steps 34-35, rather than deferring to a follow-up feature or
+stopping to ask. Reasoning: (1) the fix is small, low-risk, and mechanically identical to a pattern
+already independently validated 15 times this session — no design ambiguity, only a coverage gap; (2)
+leaving it out would make this feature's own completion claim ("every qualifying table in
+`xstockstrat-ui` migrated") false by its own stated rule; (3) the standing session instruction was to
+run the full sequence without stopping except for genuine blockers, and this is not a design fork —
+the *what* and *how* are both already fully decided by this feature's existing, approved rule (FR-3's
+fixed threshold), only the *inventory completeness* was wrong. This is surfaced prominently here, in
+Steps 34-35's own entries, and in the end-of-session accountability report, rather than silently folded
+into the existing step count — a genuine scope addition, not a re-spec of an existing step's body.
+
+**Root cause**: recon (2026-08-15) and the Steps 21-22 re-spec's 3-agent re-verification pass
+(2026-08-16, earlier this session) both scoped their fresh grep sweeps to re-confirming the *known*
+15 sites' Codebase Evidence, not re-running an unbounded full-repo `<table`/`Table` import grep from
+scratch. `SymbolScreening.tsx` sits inside the exact file (`positions/[symbol]/page.tsx`, via
+`SymbolScreening` import) that Steps 21-22 already re-verified — but as a *child component's* table,
+not a table literally inside the re-verified file's own JSX, so a line-by-line re-check of that file
+alone would not have surfaced it either. Lesson for future recon passes on a feature with an in-flight
+sibling merge: a *full* inventory grep should be re-run, not just a re-verification of previously-found
+sites, when a merged sibling feature is known to have added new files/components in scope.
+
 ## Deviation Log
 
 _Populated by /sdd-execute as implementation proceeds._
+
+### Deviation: Step 9 — migrate `/insights/screener` results table to `DataTable`
+**Spec said**: "pass through a `rowClassName`/row-props mechanism, or extend `DataTableProps` with an
+optional `getRowProps?: (row: TData) => React.HTMLAttributes<HTMLTableRowElement>` if the composite
+doesn't already support per-row `data-testid` — confirm against Step 1's actual shipped API and note
+any composite extension needed here."
+**Actual**: Step 1's shipped composite did not support per-row or root-table `data-testid` passthrough.
+Per the `/sdd-review impl-spec` unresolved warning (Steps 9/13/23 all anticipated this same gap) and a
+sequential-mode blocker (`AskUserQuestion`, user selected the recommended "fix now" option), extended
+`services/xstockstrat-ui/src/components/ui/data-table.tsx` (outside Step 9's original `**Files**`
+section) with two new optional `DataTableProps` fields: `tableTestId?: string` (rendered as
+`data-testid` on the root `<Table>`) and `getRowProps?: (row: TData) =>
+React.HTMLAttributes<HTMLTableRowElement>` (spread onto each `<TableRow>`, merged after
+`rowClassName`). Used both in Step 9 (`tableTestId="screen-results"`,
+`getRowProps={() => ({ 'data-testid': 'result-row', className: 'border-b' })}`).
+**Reason**: A composite extension needed by 3 separate steps (9, 13, 23) is a one-time, narrow,
+mechanical addition — not a design fork — so fixing it once now (rather than deferring or dropping the
+testids) avoids re-deciding the same gap twice more and avoids rewriting existing e2e locators that
+depend on these testids. **Side effect**: Step 9's own `**Verification**` grep
+(`grep -n 'data-testid="screen-results"\|data-testid="result-row"'`) no longer matches literal source
+text, since both testids are now indirected through composite props rather than hardcoded JSX
+attributes — the actual rendered DOM still carries both attributes (confirmed via
+`e2e/insights/screener.spec.ts`'s `getByTestId('screen-results'|'result-row')` assertions, all passing).
+**Disposition**: composite extension, staged under Step 9 (`data-table.tsx` added to its effective file
+set) with this Deviation Log entry as the F-08 exception record.
+
+### Deviation: Step 13 — migrate Past Runs table to `DataTable` (composite `onRowClick` bug)
+**Spec said**: Step 1's Instructions specified the row-click guard as "the row gets `role="button"`...
+an `onClick` handler that calls `isInteractiveTarget(...)` and only invokes `onRowClick(row.original)`
+when it returns `false`."
+**Actual**: Step 13 is the composite's **first `onRowClick` consumer** (Steps 1–12 never used it).
+`e2e/insights/backtest-coverage.spec.ts` caught a genuine functional bug on first use: the guard's
+selector, `'a, button, [role="button"], [data-row-click-ignore]'`, also matches the row's own
+`role="button"` attribute (added by the composite itself when `onRowClick` is set) — `.closest()`
+called from *any* click target inside the row, including plain non-interactive cell text, walks up
+and matches the row itself as the nearest `[role="button"]` ancestor-or-self. This made
+`isInteractiveTarget` return `true` unconditionally for every click in an `onRowClick` row, so
+`onRowClick` never fired at all. 5 of 10 `backtest-coverage.spec.ts` tests failed reproducibly
+(confirmed via stash/pop against the pre-fix composite, not cold-start flake — isolated re-runs with
+`--retries=2` still failed on the same assertion). Fixed `data-table.tsx`: the row now also carries a
+`data-datatable-row` marker, and the guard's selector became
+`'a, button, [role="button"]:not([data-datatable-row]), [data-row-click-ignore]'` — excludes the row's
+own marked `role="button"` while still catching a genuinely nested `[role="button"]` element. Added a
+regression-guard unit test to `data-table.test.ts` (red-before-green: failed against the pre-fix
+selector, passed after).
+**Reason**: A correctness bug in shared infrastructure, caught by the first consumer that exercises the
+affected code path — fixing it here (rather than working around it per-call-site) benefits every
+subsequent `onRowClick` step (15, 21, 25, 27, 29) without them needing to re-discover or re-fix it.
+**Disposition**: composite bug fix, staged under Step 13 (`data-table.tsx` + `data-table.test.ts` added
+to its effective file set) with this Deviation Log entry as the F-08 exception record. Steps 1–12 never
+pass `onRowClick`, so the fix (an added `data-datatable-row` marker + a `:not()` clause scoped to that
+marker) cannot change their behavior — the marker/exclusion only exist on rows where `onRowClick` is
+set. Spot-checked one unaffected step's suite (`sources.spec.ts`, Step 3/4) after the fix to confirm
+no incidental regression; see context.md.
+
+### Deviation: Step 23 — migrate `OrdersTable.tsx` to `DataTable` (cell-component shape mismatch)
+**Spec said**: "reusing `OrderSymbolCell`, `TYPE_LABEL[OrderType[typeName]]`, `formatUsd`,
+`OrderStatusCell`, the strategyId Link/Manual fallback... verbatim as cell renderers."
+**Actual**: `OrderSymbolCell`/`OrderSideCell`/`OrderStatusCell` (`orderShared.tsx`) each return a
+*complete* `<TableCell>` element, not bare content — using them as a `ColumnDef`'s `cell` would nest a
+`<td>` inside the composite's own `<td>` (invalid HTML, breaks column alignment). Used the
+already-separately-exported bare-content versions instead: `OrderSideBadge`/`OrderStatusBadge` (no
+`orderShared.tsx` edit needed — these already existed as standalone exports), and inlined the Symbol
+cell's `Link` JSX directly (matching `OrderSymbolCell`'s body exactly, minus the wrapping
+`<TableCell className="font-mono font-semibold">`, expressed instead via the column's `meta.className`).
+No change to `orderShared.tsx` was needed or made.
+**Reason**: matches the actual TanStack Table `ColumnDef.cell` contract (bare content, not a `<td>`);
+the "verbatim" instruction is satisfied at the JSX-content level even though the specific named helper
+functions aren't invoked directly.
+**Disposition**: no file-set change — `OrdersTable.tsx` only. Note for Step 27 (`OrderBook.tsx`, the
+only other consumer of the `*Cell`-wrapped versions): once it also migrates, `OrderSymbolCell`/
+`OrderSideCell`/`OrderStatusCell` become fully unused exports in `orderShared.tsx` — flagged as a
+cleanup candidate for Step 33's regression sweep, not fixed here (touching `orderShared.tsx` is
+outside both steps' Files sections and the dead code doesn't break anything left un-migrated).
+Also widened `data-table.tsx`'s `getRowProps` return type to `React.HTMLAttributes<HTMLTableRowElement>
+& { [key: \`data-${string}\`]: ... }` — a bare `{ 'data-testid': ... }` object (no other HTMLAttributes
+member present) failed TS2322 ("no properties in common") even though React renders `data-*` fine on
+any DOM element. Minor type-only widening of the Step 9 composite extension; not a new deviation
+category, noted here for completeness.
+
+### Deviation: Step 26 — corrected characterization of the pre-migration keyboard bug
+**Spec said** (Step 25 Codebase Evidence, design.md): pre-migration, a keyboard Enter on the nested
+Enable/Disable `Button` "double-fires both the button's `setLive.mutate` action **and** the row's
+`setSelectedId`" — i.e. both handlers run.
+**Actual** (found during Step 26's RED-capture verification, `git stash` isolation of the pre-migration
+file): the row's `onKeyDown` calls `e.preventDefault()` on the bubbling keydown event *before* calling
+`setSelectedId`. Per the DOM spec, `preventDefault()` on a cancelable event cancels its default action
+regardless of which listener/phase called it — so this `preventDefault()` cancels the browser's own
+native "Enter activates the focused button" default action entirely. Pre-migration, keyboard Enter on
+the button therefore **never fires the button's own click/mutation at all**; only the row's handler
+fires (wrongly opening the alert feed instead of toggling live status). This is a single mis-fire, not
+a double-fire. The regression test's first RED attempt (`page.waitForResponse` for `SetStrategyLive`)
+timed out rather than failing on the expected "alert feed opened" assertion, because the mutation
+request the test waited for pre-migration never went out — confirmed correct (not a test-authoring bug)
+by reading `useSetStrategyLive`'s `mutationFn` (`src/hooks/useLiveStrategies.ts:16-17`), which posts to
+exactly the URL the test's `waitForResponse` predicate matches.
+**Reason**: the composite's `handleRowKeyDown` (`data-table.tsx`) checks `isInteractiveTarget` *before*
+calling `preventDefault()`/`onRowClick` — a keydown originating inside a nested `<button>` returns early
+without ever calling `preventDefault()`, leaving the browser's native button-Enter-activation intact.
+This is why the migration still fixes the bug (confirmed GREEN with all 7 `live-strategies.spec.ts`
+tests passing, including the corrected regression test), just via a different actual mechanism than
+design.md assumed.
+**Disposition**: no code change beyond the test itself — updated `live-strategies.spec.ts`'s comment to
+describe the verified mechanism instead of the "double-fires" guess, and bounded the `waitForResponse`
+wait to an explicit 5s timeout (`{ timeout: 5000 }`) so a future RED run fails fast/deterministically
+instead of riding out the full default test timeout. No composite or component change needed — this is
+a documentation/finding correction only.
+
+### Deviation: Step 27 — migrate `OrderBook.tsx` to `DataTable` (cell-component shape mismatch, same class as Step 23)
+**Spec said**: "reusing `OrderSymbolCell`, `OrderSideCell`, `formatUsd`, and `OrderStatusCell`
+verbatim."
+**Actual**: same root cause as the Step 23 deviation — `OrderSymbolCell`/`OrderSideCell`/
+`OrderStatusCell` (`orderShared.tsx`) each return a complete `<TableCell>` element, not bare
+content, so using them directly as a `ColumnDef`'s `cell` would nest a `<td>` inside the
+composite's own `<td>`. Used the bare-content `OrderSideBadge`/`OrderStatusBadge` exports instead
+(already existed, no `orderShared.tsx` edit needed) and inlined the Symbol cell's `Link` JSX
+verbatim (matching `OrderSymbolCell`'s body, minus the `<TableCell>` wrapper, expressed via the
+column's `meta.className`).
+**Reason**: matches the actual TanStack Table `ColumnDef.cell` contract; identical reasoning to the
+Step 23 deviation entry above, now confirmed as the correct pattern for both `orderShared.tsx`
+consumers.
+**Disposition**: with this step done, `OrderSymbolCell`/`OrderSideCell`/`OrderStatusCell`
+(`orderShared.tsx`) now have **zero remaining call sites** in the migrated tree (the order-detail
+page was out of scope for this feature and still uses the raw `Table` primitives directly, not
+these three helpers — confirmed via grep before flagging as dead code). Carried forward to Step
+33's regression-sweep disposition decision as originally planned, not removed here (touching
+`orderShared.tsx` is outside this step's Files section).
+
+### Deviation: Step 28 — added a `tableTestId` to `OrderBook.tsx`'s `DataTable` call (test-locator disambiguation)
+**Spec said**: nothing about `tableTestId` — Instruction 2 only called for a header/row-content
+assertion.
+**Actual**: `LiveStrategiesPanel` (Step 25) also renders a "Status" column header on the same bare
+`/trader` route. An unscoped `page.getByRole('columnheader', { name: 'Status' })` assertion hit a
+Playwright strict-mode violation (2 matching elements). Added `tableTestId="order-book-table"` to
+`OrderBook.tsx`'s `<DataTable>` call (the composite's existing `tableTestId` prop, extended in the
+Step 9 deviation) and scoped the new test's locators to `page.getByTestId('order-book-table')`.
+**Reason**: the composite already supports this exact extension point; no new composite change
+needed, and scoping the test to the specific table is more robust than a same-page text/role
+disambiguation trick.
+**Disposition**: no file-set change beyond `OrderBook.tsx` (already in Step 27's Files) and
+`live-strategies.spec.ts` (already in this step's Files).
+
+### Deviation: Step 29 — migrate `/trader/positions` Exposure table to `DataTable` (dynamic per-row className + referential-stability fix)
+**Spec said**: "each carrying its existing `meta.className` unchanged."
+**Actual**: 5 of the 19 columns (Today's P/L ($)/(%), Total P/L ($)/(%), Open R) computed their
+pre-migration `<TableCell>` className *dynamically per row* via `pnlClass(p.dayPnl)`/
+`pnlClass(p.unrealizedPnl)`/`pnlClass(openR(p))` (sign-dependent color). `ColumnDef.meta.className`
+is a static per-column string in the composite (`data-table.tsx`'s `TableCell` reads
+`cell.column.columnDef.meta?.className`, fixed at column-definition time, not per-row) — it cannot
+express a per-row-value-dependent class. Moved the dynamic color class onto an inner `<span
+className={pnlClass(...)}>` wrapping the formatted value inside each of those 5 columns' `cell`
+renderers; `meta.className` on those columns keeps only the static alignment/weight/breakpoint
+classes (`text-right tabular-nums font-semibold`, etc.). Verified visually equivalent — same
+classes render, just on an inline `<span>` instead of the `<td>` itself, no layout difference.
+**Reason**: matches the actual `ColumnDef.meta` contract (static per column); the composite has no
+per-row-value cell-styling hook, and adding one for a single call site would be scope creep the
+task didn't ask for (CLAUDE.md "write the minimum that solves the stated problem").
+**Disposition**: no composite change — component-level adaptation only, confined to
+`positions/page.tsx`.
+
+**Second deviation, same step**: also wrapped the `positions` filtered array (`rawPositions.filter(...)`)
+in `useMemo` — not explicitly instructed, but the pre-existing plain `.filter()` recomputed a new
+array reference on every render, which is exactly the TanStack Table referential-stability gotcha
+`data-table.tsx`'s own JSDoc warns about (ledger `fails.md` 2026-08-08, already fixed once in Step 23
+for `OrdersTable.tsx`'s `merged` array). Passing `data={positions}` to the composite without this fix
+risked spurious internal row-model resets on every render (losing sort state, in-flight interactions).
+**Disposition**: `services/xstockstrat-ui/src/app/trader/positions/page.tsx` only — no other file
+touched for this fix.
+
+### Deviation: Step 30 — `getByRole('row', ...)` broken by the composite's `role="button"` override
+**Spec said**: "Fix any locator broken by the `DataTable` restructuring."
+**Actual**: `positions.spec.ts` (5 occurrences) and `valuation-parity.spec.ts` (1 of its 2
+`getByRole('row', ...)` calls — the Exposure-table one, not the unaffected Portfolio-table one)
+used `page.getByRole('row', { name: /AAPL|MSFT/ })`. The composite sets `role="button"` on every
+`onRowClick`-enabled `<tr>` (for a11y — the row is now a keyboard-activatable control), which
+overrides the element's native implicit `row` ARIA role. All 6 occurrences were changed to
+`getByRole('button', { name: ... })`, matching the row's actual accessible role post-migration.
+This is the anticipated, spec-called-out class of locator breakage, not a surprise finding.
+**Disposition**: `services/xstockstrat-ui/e2e/trader/positions.spec.ts`,
+`services/xstockstrat-ui/e2e/trader/valuation-parity.spec.ts` — both already in this step's Files
+(`positions.spec.ts` explicitly; `valuation-parity.spec.ts` under its "if locators break" clause).
+
+### Deviation: Step 31 — fill-lineage table stacked-layout question resolved by measurement (Instruction 3)
+**Spec said**: apply a stacked (definition-list-like) `meta.className` presentation below a
+breakpoint *if* the 3 columns don't already fit the `Sheet`'s narrowest width without truncation —
+"verify visually... Record whichever outcome is actually verified, not assumed."
+**Actual**: verified via Step 32's overflow test (390px viewport, `Sheet` open, a *stress-test*
+fixture with a 65-character `order_id` — not the default mock's short `mock-order-001`, which would
+have passed vacuously): `document.documentElement.scrollWidth - clientWidth <= 1` held with no
+stacked-layout CSS applied. The 3 short/numeric columns (Order/Qty/Fill price, `text-xs`) fit the
+`Sheet`'s narrowest width without truncation even under a deliberately-long order id, because the
+`Table`/`DataTable`'s own `overflow-x-auto` wrapper (`ui/table.tsx`'s `data-slot="table-container"`)
+absorbs any residual width pressure inside the Sheet's own scroll container rather than the page body.
+**Disposition**: no stacked-layout CSS added — matches the spec's own "not needed in practice"
+outcome branch. Also removed the now-fully-unused `Table`/`TableHeader`/`TableBody`/`TableRow`/
+`TableHead`/`TableCell` import from `positions/page.tsx` (this was the last of the file's three
+former `Table` consumers — Exposure (Step 29) and fill-lineage (this step) were both migrated; grep
+confirmed zero remaining `<Table`/`<TableHeader`/etc. JSX in the file before removing the import).
+**Disposition**: `services/xstockstrat-ui/src/app/trader/positions/page.tsx` only.
+
+### Deviation: Step 33 — AC-2's literal wording vs. its evident intent (type-only imports)
+**Spec said** (product-spec.md AC-2 / Step 33 Instruction 3 / Verification block): "zero files under
+`services/xstockstrat-ui/src` import `@tanstack/react-table` directly outside that one composite and
+its own test file" — verification expected "exactly: `data-table.test.ts`, `data-table.tsx`".
+**Actual**: `grep -rln "@tanstack/react-table" src/` returns 16 files — the composite plus all 15
+(now 16, see Step 34) migrated call sites, each with `import type { ColumnDef } from
+'@tanstack/react-table'`. This is required by the composite's own public API
+(`DataTableProps<TData, TValue>`'s `columns: ColumnDef<TData, TValue>[]` parameter) — every caller must
+independently type its own columns array using the library's own generic type; there is no way to
+define a typed `ColumnDef<T>[]` literal without importing the type. This has been the case since
+Step 1, used identically and consistently across every one of the 16 migrations, and never previously
+flagged. `data-table.test.ts` does not import `@tanstack/react-table` at all (it imports only
+`isInteractiveTarget` from `./data-table`, per its duck-typed-stub design) — so the Verification
+block's own expected file list was also imprecise.
+**Reason**: AC-2's evident purpose — confirmed by checking `useReactTable`/`flexRender`/
+`getCoreRowModel`/`getSortedRowModel`/`getPaginationRowModel` usage: **zero** matches outside
+`data-table.tsx` — is to keep the TanStack Table *runtime implementation* isolated to one composite,
+preventing every page from reimplementing table wiring (the actual DRY-guard-rail concern). A
+type-only import of `ColumnDef` is not runtime reimplementation; it's the unavoidable, by-design
+contract surface of a generic reusable composite. Re-interpreted AC-2 under this evident-intent
+reading (isolate the runtime API, not the type import) — satisfied: confirmed via the
+`useReactTable`/`flexRender`/etc. grep above.
+**Disposition**: no code change — a verification-methodology correction only. Documented here rather
+than silently treating the literal grep as pass/fail without explanation.
+
+### Deviation: Step 33 — `orderShared.tsx` dead-code removal (disposition resolved)
+**Spec said**: nothing explicit in Step 33's own Instructions — the dead-code question was deferred
+here by the Step 23 and Step 27 deviation entries ("flagged as a cleanup candidate for Step 33's
+regression sweep").
+**Actual**: confirmed via `grep -rn "OrderSymbolCell\|OrderSideCell\|OrderStatusCell" src/ e2e/` —
+zero remaining references anywhere outside their own definitions in `orderShared.tsx`. Removed all
+three functions plus their now-unused `Link`/`TableCell` imports; kept `OrderSideBadge`/
+`OrderStatusBadge`/`formatUsd`/`STATUS_VARIANT`/`TYPE_LABEL`/`IntentStateBadge`/`INTENT_STATE_RENDER`
+(all still in active use by `OrdersTable.tsx`/`OrderBook.tsx`/the order-detail page). Updated the
+file's own header comment to describe the post-migration shape instead of the removed pattern.
+**Reason**: CLAUDE.md's "clean up orphans *you* introduced" operating principle — this dead code was
+a direct, confirmed byproduct of this feature's own Steps 23 and 27, not pre-existing.
+**Disposition**: `services/xstockstrat-ui/src/components/trader/orderShared.tsx` only. `tsc --noEmit`
+and `pnpm run lint` both clean after removal.
+
+### Deviation: Step 33 — AC-6 satisfied modulo one confirmed pre-existing, unrelated failure
+**Spec said**: "Full `xstockstrat-ui` Playwright + Vitest suites pass (exit code 0) after migration."
+**Actual**: the final, definitive full Playwright run (322 tests, all 16 migrated tables + the
+dead-code removal) returned 310 passed, 11 flaky-then-pass (all resolved on retry — the established
+cold-start/concurrent-worker pattern), and **1 hard failure**: `nav-reachability.spec.ts:60`. This
+test asserts nav-shell/breadcrumb active-state behavior and touches zero table code. Investigated
+rather than waived: (1) `git diff --stat origin/main-dev..HEAD` confirms this PR touches neither the
+test file nor any shared-shell/navigation component; (2) re-ran in isolation — reproduced identically
+(not resource contention from the parallel suite); (3) checked out unmodified `origin/main-dev` in a
+`git worktree` and ran the identical test — **the identical failure reproduces there**, byte-identical
+error messages. Confirmed pre-existing, confirmed unrelated to this PR.
+**Reason**: a base-branch bug/flake that predates this feature and is out of scope for a table-
+migration PR to fix (per CLAUDE.md's PR-activity guidance: "if a CI failure reproduces on the base
+branch and predates your changes, say so once in the thread" rather than either silently ignoring it
+or scope-creeping into an unrelated fix).
+**Disposition**: no code change. Noted on the integration PR; not fixed as part of this feature.
+Vitest (97/97) and every other Playwright test are unaffected — this is the one honest caveat on an
+otherwise clean AC-6 gate.

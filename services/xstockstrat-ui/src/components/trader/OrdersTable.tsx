@@ -1,7 +1,8 @@
 'use client';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { EllipsisVertical } from 'lucide-react';
+import type { ColumnDef } from '@tanstack/react-table';
 import type { Order } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { OrderStatus, OrderType } from '@xstockstrat/proto/trading/v1/trading_pb';
 import { BASE_PATH_INSIGHTS } from '@/lib/basepath';
@@ -9,7 +10,7 @@ import { useOrderUpdates } from '@/hooks/useOrderUpdates';
 import { useCancelOrder } from '@/hooks/useCancelOrder';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../ui/table';
+import { DataTable } from '../ui/data-table';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -24,13 +25,7 @@ import {
 } from '../ui/alert-dialog';
 import { EditOrderDialog } from './EditOrderDialog';
 import { QueryStateMessages } from '../shared/QueryStateMessages';
-import {
-  TYPE_LABEL,
-  formatUsd,
-  OrderSymbolCell,
-  OrderSideCell,
-  OrderStatusCell,
-} from './orderShared';
+import { TYPE_LABEL, formatUsd, OrderSideBadge, OrderStatusBadge } from './orderShared';
 
 // `HH:MM` local time an order was placed, from a protobuf-es Timestamp ({ seconds: bigint }).
 function placedLabel(createdAt: { seconds: bigint } | undefined): string {
@@ -66,7 +61,139 @@ export function OrdersTable({
   const [editing, setEditing] = useState<Order | null>(null);
   const [cancelling, setCancelling] = useState<Order | null>(null);
 
-  const merged = orders.map((o) => liveUpdates[o.orderId] ?? o);
+  // Wrapped in useMemo — TanStack Table requires a referentially-stable `data` array (ledger
+  // fails.md 2026-08-08); this was previously recomputed inline on every render.
+  const merged = useMemo(
+    () => orders.map((o) => liveUpdates[o.orderId] ?? o),
+    [orders, liveUpdates],
+  );
+
+  const columns = useMemo<ColumnDef<Order>[]>(
+    () => [
+      {
+        id: 'symbol',
+        header: 'Symbol',
+        meta: { className: 'font-mono font-semibold' },
+        cell: ({ row }) => (
+          <Link href={`/trader/orders/${row.original.orderId}`} className="hover:underline">
+            {row.original.symbol}
+          </Link>
+        ),
+      },
+      {
+        id: 'side',
+        header: 'Side',
+        cell: ({ row }) => <OrderSideBadge side={row.original.side} />,
+      },
+      {
+        id: 'type',
+        header: 'Type',
+        meta: { className: 'hidden sm:table-cell text-muted-foreground' },
+        cell: ({ row }) => {
+          const typeName = OrderType[row.original.orderType] ?? 'UNKNOWN';
+          return TYPE_LABEL[typeName] ?? typeName;
+        },
+      },
+      {
+        accessorKey: 'qty',
+        header: 'Qty',
+        meta: { className: 'text-right' },
+      },
+      {
+        id: 'filled',
+        header: 'Filled',
+        accessorFn: (o) => o.filledQty ?? 0,
+        meta: { className: 'text-right text-muted-foreground' },
+      },
+      {
+        id: 'avgPrice',
+        header: 'Avg Price',
+        accessorFn: (o) => o.filledAvgPrice,
+        meta: { className: 'text-right hidden md:table-cell' },
+        cell: ({ row }) => formatUsd(row.original.filledAvgPrice),
+      },
+      {
+        id: 'status',
+        header: 'Status',
+        cell: ({ row }) => (
+          <OrderStatusBadge status={row.original.status} intentState={row.original.intentState} />
+        ),
+      },
+      {
+        id: 'fromSignal',
+        header: 'From signal',
+        meta: { className: 'hidden lg:table-cell text-muted-foreground' },
+        cell: ({ row }) => {
+          const order = row.original;
+          return order.strategyId ? (
+            <Link
+              href={`${BASE_PATH_INSIGHTS}/strategies/${encodeURIComponent(order.strategyId)}`}
+              className="text-primary hover:underline"
+              title="Why? — the strategy that originated this order"
+              data-testid={`order-origin-${order.orderId}`}
+            >
+              {order.strategyId}
+            </Link>
+          ) : (
+            <span data-testid={`order-origin-${order.orderId}`}>Manual</span>
+          );
+        },
+      },
+      {
+        id: 'placed',
+        header: 'Placed',
+        accessorFn: (o) => o.createdAt?.seconds ?? BigInt(0),
+        meta: { className: 'text-right tabular-nums text-muted-foreground hidden md:table-cell' },
+        cell: ({ row }) => placedLabel(row.original.createdAt),
+      },
+      {
+        id: 'actions',
+        header: 'Actions',
+        enableSorting: false,
+        meta: { className: 'text-right whitespace-nowrap' },
+        cell: ({ row }) => {
+          const order = row.original;
+          const isTerminal = TERMINAL.has(order.status);
+          return (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Actions"
+                  data-testid={`actions-${order.orderId}`}
+                >
+                  <EllipsisVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  disabled={isTerminal}
+                  onClick={() => setEditing(order)}
+                  data-testid={`edit-${order.orderId}`}
+                >
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={isTerminal}
+                  variant="destructive"
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    setCancelling(order);
+                  }}
+                  data-testid={`cancel-${order.orderId}`}
+                >
+                  Cancel
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          );
+        },
+      },
+    ],
+    [],
+  );
 
   return (
     <Card>
@@ -76,98 +203,12 @@ export function OrdersTable({
       <CardContent>
         <QueryStateMessages isLoading={isLoading} error={error} errorText="Failed to load orders" />
         {!isLoading && !error && (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Symbol</TableHead>
-                <TableHead>Side</TableHead>
-                <TableHead className="hidden sm:table-cell">Type</TableHead>
-                <TableHead className="text-right">Qty</TableHead>
-                <TableHead className="text-right">Filled</TableHead>
-                <TableHead className="text-right hidden md:table-cell">Avg Price</TableHead>
-                <TableHead>Status</TableHead>
-                {/* feature 083 — order origin (strategy-or-Manual) + Why? trace link. */}
-                <TableHead className="hidden lg:table-cell">From signal</TableHead>
-                <TableHead className="text-right hidden md:table-cell">Placed</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {merged.map((order) => {
-                const typeName = OrderType[order.orderType] ?? 'UNKNOWN';
-                const isTerminal = TERMINAL.has(order.status);
-                return (
-                  <TableRow key={order.orderId} data-testid={`order-row-${order.orderId}`}>
-                    <OrderSymbolCell order={order} />
-                    <OrderSideCell side={order.side} />
-                    <TableCell className="hidden sm:table-cell text-muted-foreground">
-                      {TYPE_LABEL[typeName] ?? typeName}
-                    </TableCell>
-                    <TableCell className="text-right">{order.qty}</TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      {order.filledQty ?? 0}
-                    </TableCell>
-                    <TableCell className="text-right hidden md:table-cell">
-                      {formatUsd(order.filledAvgPrice)}
-                    </TableCell>
-                    <OrderStatusCell status={order.status} intentState={order.intentState} />
-                    <TableCell className="hidden lg:table-cell text-muted-foreground">
-                      {order.strategyId ? (
-                        <Link
-                          href={`${BASE_PATH_INSIGHTS}/strategies/${encodeURIComponent(order.strategyId)}`}
-                          className="text-primary hover:underline"
-                          title="Why? — the strategy that originated this order"
-                          data-testid={`order-origin-${order.orderId}`}
-                        >
-                          {order.strategyId}
-                        </Link>
-                      ) : (
-                        <span data-testid={`order-origin-${order.orderId}`}>Manual</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums text-muted-foreground hidden md:table-cell">
-                      {placedLabel(order.createdAt)}
-                    </TableCell>
-                    <TableCell className="text-right whitespace-nowrap">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            aria-label="Actions"
-                            data-testid={`actions-${order.orderId}`}
-                          >
-                            <EllipsisVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            disabled={isTerminal}
-                            onClick={() => setEditing(order)}
-                            data-testid={`edit-${order.orderId}`}
-                          >
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            disabled={isTerminal}
-                            variant="destructive"
-                            onSelect={(e) => {
-                              e.preventDefault();
-                              setCancelling(order);
-                            }}
-                            data-testid={`cancel-${order.orderId}`}
-                          >
-                            Cancel
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
+          <DataTable
+            columns={columns}
+            data={merged}
+            getRowId={(order) => order.orderId}
+            getRowProps={(order) => ({ 'data-testid': `order-row-${order.orderId}` })}
+          />
         )}
         {!isLoading && !error && merged.length === 0 && (
           <p className="text-sm text-muted-foreground text-center py-6">{emptyLabel}</p>
