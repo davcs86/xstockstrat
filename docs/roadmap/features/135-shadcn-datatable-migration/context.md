@@ -370,6 +370,38 @@ clears it lands, rather than letting the warning go stale.
 - Files modified: `services/xstockstrat-ui/src/components/ui/data-table.test.ts` (new)
 - Deviations: none
 
+### Step 3 — service: migrate `/config-ui/sources` (row 12) to `DataTable` [done]
+- Defined `columns: ColumnDef<SignalSource>[]` via `useMemo` (closes over `editingWeightSlug`,
+  `weightValue`, `weightError`, `saving`, and the handlers, per the step's own instruction) for all 8
+  columns, preserving the Weight column's inline-edit stateful cell (feature 134) verbatim and the
+  Actions `DropdownMenu` verbatim, including both `data-testid` attributes. Replaced the `<Table>`
+  block (now at `:330`, drifted from the spec's `:299` per the Re-spec Log's "13 sites held, line-only
+  drift" finding — Phase 1's fresh `Read` picked it up correctly) with `<DataTable columns={columns}
+  data={sources} emptyMessage="No sources registered yet." />`.
+- TDD: refactor with no new behavior (composite's baseline sorting is additive, not asserted by any
+  step-4 instruction) — red N/A per `reference/tdd-gate.md`'s escape clause; captured the green
+  characterization run instead (see Step 4).
+- Verification: `tsc --noEmit` clean; `pnpm run lint` — 4 new `react-hooks/exhaustive-deps` warnings
+  on the pre-existing handler functions the `useMemo` now closes over (expected side effect of the
+  spec-mandated closure pattern; warnings don't fail the lint script, exit 0; not fixed — would require
+  wrapping 4 pre-existing handlers in `useCallback`, outside this step's edit).
+- Files modified: `services/xstockstrat-ui/src/app/config-ui/sources/page.tsx`
+- Deviations: none
+
+### Step 4 — test: verify `/config-ui/sources` migration preserves behavior [done]
+- Re-ran `e2e/config-ui/sources.spec.ts` against the migrated markup — no locator changes needed.
+- **Environment note** (not a code deviation): the local sandbox's Next dev server pays a one-time
+  cold-compile tax on the very first `page.goto` of any fresh `playwright test` process — observed
+  consistently as the first-declared test in a file timing out at the local 10s default, then passing
+  on `--retries=1` (Playwright itself reports it as "flaky", not "failed"). Reproduced this
+  independently of my changes (same shape on the file's first test regardless of which route). CI runs
+  with `isCI` (30s test timeout) and a prebuilt bundle (`E2E_PREBUILT`, skips dev-server compile), so
+  this should not reproduce there. 15/15 tests pass overall (14 clean + 1 flaky-then-pass).
+- `pnpm exec playwright test e2e/mobile-overflow.spec.ts -g "config-ui/sources"` — same flaky-then-pass
+  shape, then green (no horizontal overflow at 390px).
+- Files modified: none (no locator changes needed)
+- Deviations: none
+
 ## Session 2026-08-15 — sdd-execute boot (branch-topology correction)
 
 - Boot Step B3 (`git ls-remote --heads origin feature/shadcn-datatable-migration`) found the

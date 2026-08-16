@@ -184,7 +184,7 @@ pre-Step-1 tree, then pass after).
 
 ### Step 3 — service: migrate `/config-ui/sources` (row 12) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/config-ui/sources/page.tsx` — modify
@@ -238,7 +238,7 @@ grep -n "@tanstack/react-table" src/app/config-ui/sources/page.tsx  # expect NO 
 
 ### Step 4 — test: verify `/config-ui/sources` migration preserves behavior
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/config-ui/sources.spec.ts` — modify (only if an assertion targets
