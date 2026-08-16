@@ -1,6 +1,5 @@
 # Feature: backfill-management-ui
 
-**Lifecycle Status**: `launched`
 **Committed to main**: f516e7aee1d11461d78a4540a94463a7a101df2f
 **Launched date**: 2026-06-12
 **Development Branch**: `feature/backfill-management-ui`

@@ -1,6 +1,5 @@
 # Feature: trader-chart-panel
 
-**Lifecycle Status**: `launched`
 **Committed to main**: e991fcb52eeda41985c6403983a2b20cb6f9a04b
 **Launched date**: 2026-05-24
 **Development Branch**: `feature/trader-chart-panel`

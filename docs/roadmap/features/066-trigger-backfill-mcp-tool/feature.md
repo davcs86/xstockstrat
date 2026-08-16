@@ -1,6 +1,5 @@
 # Feature: trigger-backfill-mcp-tool
 
-**Lifecycle Status**: `launched`
 **Committed to main**: 52adaa26702553f9d51f3cf458479a9b7729f930
 **Launched date**: 2026-07-21
 **Development Branch**: `feature/trigger-backfill-mcp-tool`

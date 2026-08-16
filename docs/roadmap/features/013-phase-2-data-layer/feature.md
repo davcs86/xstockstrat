@@ -1,6 +1,5 @@
 # Feature: phase-2-data-layer
 
-**Lifecycle Status**: `launched`
 **Committed to main**: 1ff20d531e007cc519788dc50af97b4317cfc381
 **Launched date**: 2026-05-22
 **Development Branch**: `feature/phase-2-data-layer`

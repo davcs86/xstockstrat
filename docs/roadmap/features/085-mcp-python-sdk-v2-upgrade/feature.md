@@ -1,6 +1,5 @@
 # Feature: mcp-python-sdk-v2-upgrade
 
-**Lifecycle Status**: `code-completed`
 **Development Branch**: `claude/mcp-2-upgrade-e3v1uy` (harness-assigned; see context.md for the branch-handling deviation from the standard `feature/mcp-python-sdk-v2-upgrade` model)
 **Created**: 2026-07-30
 **Last Updated**: 2026-07-30

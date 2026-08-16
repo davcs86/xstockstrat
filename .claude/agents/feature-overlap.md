@@ -28,8 +28,11 @@ already on the trunk, and you return a **concrete, deduplicated collision report
 ## Where to look
 
 - Other features: `docs/roadmap/features/*/` (skip the one under review). Read their
-  `product-spec.md` / `implementation-spec.md`. Honor lifecycle: a `demoted/canceled`
-  feature is not a live collision — note it as historical only.
+  `product-spec.md` / `implementation-spec.md`. Honor lifecycle: a `demoted/canceled` feature is
+  not a live collision — note it as historical only. A feature's current lifecycle status lives
+  in its `status.md` (a single-line plain string, e.g. `demoted/canceled`) — find every
+  demoted/canceled feature in one call with a single `Grep` across
+  `docs/roadmap/features/*/status.md` rather than reading each one individually.
 - Merge ordering: `docs/roadmap/features/merge-order.md` (does an entry already exist?).
 - Trunk reality: grep the live code under `services/` and `packages/proto/` for the same
   config keys / proto field numbers / migration prefixes the feature introduces.

@@ -1,6 +1,5 @@
 # Feature: signal-performance-attribution
 
-**Lifecycle Status**: `draft`
 **Development Branch**: `feature/signal-performance-attribution`
 **Created**: 2026-05-26
 **Last Updated**: 2026-05-26

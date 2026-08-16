@@ -1,7 +1,6 @@
 # Feature: fix-listkeys-wire-encoding
 
 **Type**: bug
-**Lifecycle Status**: `code-completed`
 **Development Branch**: `feature/fix-listkeys-wire-encoding` (this run: `claude/feature-073-mcp-config`)
 **GitHub Issue**: n/a — GitHub Issues are disabled on `davcs86/xstockstrat`
 **Severity**: SEV-2

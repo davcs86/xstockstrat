@@ -1,6 +1,5 @@
 # Feature: account-trading-halt-and-kill-switch
 
-**Lifecycle Status**: `launched`
 **Committed to main**: 856ad5a3a2ebc431c108cc7f508deb26885545c6
 **Launched date**: 2026-08-07
 **Priority**: `P0` — blocking live-capital expansion; rescoped 2026-08-04 to hardening the

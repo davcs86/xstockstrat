@@ -4,12 +4,24 @@ This is a template for creating new feature tracking documents. Copy to `NNN-<sl
 
 ---
 
+## status.md (sibling file, create alongside feature.md)
+
+Current lifecycle status lives in `status.md`, not in `feature.md` — a single line, plain
+string, nothing else:
+
+```
+draft
+```
+
+No backticks, no bold, no other content. This is the canonical status; `feature.md` never
+repeats it (see `docs/roadmap/features/CLAUDE.md` § Bulk Status Reads for how skills should read
+it in bulk across features).
+
 ## Minimal Header (all features must have)
 
 ```markdown
 # Feature: <slug>
 
-**Lifecycle Status**: `<status>`
 **Development Branch**: `feature/<slug>`
 **Created**: YYYY-MM-DD
 **Last Updated**: YYYY-MM-DD
@@ -96,17 +108,22 @@ Brief description of what's needed next, or "— launched in production" if done
 
 ## Lifecycle Statuses Reference
 
+Each status transition below writes the new value to `status.md` (overwrite, plain string) AND
+appends a row to `feature.md`'s `## Status History` table — the two representations serve
+different purposes (current state vs. audit trail), not the same fact twice.
+
 | Status | Meaning | Auto-updated by |
 |---|---|---|
 | `idea` | Captured, no spec yet | — (manual) |
 | `draft` | Product spec written | /sdd-story |
 | `spec-ready` | Product spec approved | /sdd-review |
+| `design-approved` | Design debated and approved | /sdd-design |
 | `implementation-ready` | Implementation spec ready | /sdd-spec |
 | `in-progress` | Execution started | /sdd-execute |
 | `code-completed` | All steps done | /sdd-execute |
 | `launched` | Live in production | CI workflow (on promotion PR merge) |
-| `rolled-back` | Deployed but reverted | — (manual) |
-| `demoted/canceled` | Not going forward | — (manual) |
+| `rolled-back` | Deployed but reverted | — (manual, edit `status.md` directly) |
+| `demoted/canceled` | Not going forward | — (manual, edit `status.md` directly) |
 
 ---
 

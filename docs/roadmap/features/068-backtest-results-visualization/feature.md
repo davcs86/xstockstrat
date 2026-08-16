@@ -1,6 +1,5 @@
 # Feature: backtest-results-visualization
 
-**Lifecycle Status**: `launched`
 **Committed to main**: 026bbf512990c5b63986d3c7449351638c1b8993
 **Launched date**: 2026-07-24
 **Development Branch**: `feature/backtest-results-visualization`

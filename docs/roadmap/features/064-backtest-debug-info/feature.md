@@ -1,6 +1,5 @@
 # Feature: backtest-debug-info
 
-**Lifecycle Status**: `launched`
 **Committed to main**: 6fab9e323637aa00e0ad5fc09bb68a1ab6c5a529
 **Launched date**: 2026-07-12
 **Development Branch**: `feature/backtest-debug-info`

@@ -94,11 +94,13 @@ The state machine that follows applies to features and Track-C bugs identically.
 | **Trigger skill** | `/sdd-story <slug> [story text]` |
 | **Side effects** | Creates `docs/roadmap/features/NNN-<slug>/feature.md` and `product-spec.md`. NNN is auto-assigned by counting existing dirs. |
 | **Status History row appended** | `\| YYYY-MM-DD \| idea → draft \| /sdd-story \| Product spec generated \|` |
-| **Files written** | `feature.md` (cover sheet, lifecycle = `draft`, branch = `feature/<slug>`), `product-spec.md` (requirements with FR-1, FR-2, …, governance gates, acceptance criteria) |
+| **Files written** | `status.md` (canonical status, plain string: `draft`), `feature.md` (cover sheet, branch = `feature/<slug>`), `product-spec.md` (requirements with FR-1, FR-2, …, governance gates, acceptance criteria) |
 | **Files read** | `docs/runbooks/reviewer-registry.md` (to populate the Reviewers snapshot section), `docs/runbooks/feature-workflow.md` (governance fields) |
 | **Branch operations** | None — `/sdd-story` is doc-only. The feature branch is created later in `/sdd-execute`. |
 
-**Note:** the cover sheet on `feature.md` always lists `**Lifecycle Status**: draft` after this transition. There is no actual `idea` row written to disk — `idea` is a conceptual placeholder for "a user has the idea but hasn't run `/sdd-story` yet."
+**Note:** `status.md` always reads `draft` after this transition — a single-line plain string, no
+markdown. There is no actual `idea` row written to disk — `idea` is a conceptual placeholder for "a
+user has the idea but hasn't run `/sdd-story` yet."
 
 ---
 

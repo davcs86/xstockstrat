@@ -47,29 +47,26 @@ jobs:
             echo "✓ Detected promotion PR merge: $CURRENT_SHA"
             echo "Previous commit: $PREVIOUS_SHA"
 
-            # Find all features at code-completed and check if they're in the promotion commits
+            # Find all features at code-completed (single bulk egrep over status.md — see
+            # docs/roadmap/features/CLAUDE.md § Bulk Status Reads, Case 1) and check if they're
+            # in the promotion commits
             PROMOTED_FEATURES=()
 
-            while IFS= read -r feature_file; do
-              if [ -z "$feature_file" ]; then continue; fi
+            while IFS= read -r status_file; do
+              if [ -z "$status_file" ]; then continue; fi
 
-              feature_dir=$(dirname "$feature_file")
+              feature_dir=$(dirname "$status_file")
               feature_name=$(basename "$feature_dir")
 
-              # Check if status is code-completed
-              status=$(sed -n 's/.*\*\*Lifecycle Status\*\*[^`]*`\([^`]*\)`.*/\1/p' "$feature_file" | head -1)
+              # Check if any commits between PREVIOUS_SHA and CURRENT_SHA match this feature
+              # by looking for the feature branch or feature name in the commit log
+              feature_slug=$(echo "$feature_name" | sed 's/^[0-9]\+-//')
 
-              if [ "$status" = "code-completed" ]; then
-                # Check if any commits between PREVIOUS_SHA and CURRENT_SHA match this feature
-                # by looking for the feature branch or feature name in the commit log
-                feature_slug=$(echo "$feature_name" | sed 's/^[0-9]\+-//')
-
-                if git log $PREVIOUS_SHA..$CURRENT_SHA --oneline --all-match --grep="$feature_slug" | grep -q .; then
-                  PROMOTED_FEATURES+=("$feature_dir")
-                  echo "  → Detected promoted feature: $feature_name"
-                fi
+              if git log $PREVIOUS_SHA..$CURRENT_SHA --oneline --all-match --grep="$feature_slug" | grep -q .; then
+                PROMOTED_FEATURES+=("$feature_dir")
+                echo "  → Detected promoted feature: $feature_name"
               fi
-            done < <(find docs/roadmap/features -name "feature.md" -type f)
+            done < <(egrep -l '^code-completed$' docs/roadmap/features/*/status.md 2>/dev/null)
 
             # Update each promoted feature's status
             if [ ${#PROMOTED_FEATURES[@]} -gt 0 ]; then
@@ -81,16 +78,17 @@ jobs:
 
               for feature_dir in "${PROMOTED_FEATURES[@]}"; do
                 feature_md="$feature_dir/feature.md"
+                status_md="$feature_dir/status.md"
                 context_md="$feature_dir/context.md"
 
                 echo "  Updating: $feature_md"
 
-                # Update lifecycle status in feature.md
-                sed -i "s/\*\*Lifecycle Status\*\*: \`code-completed\`/\*\*Lifecycle Status\*\*: \`launched\`/" "$feature_md"
+                # Overwrite the canonical status file (plain string, no markdown)
+                printf '%s\n' "launched" > "$status_md"
 
-                # Add Committed to main field (after Lifecycle Status)
+                # Add Committed to main field (after Development Branch/Created/Last Updated header)
                 if ! grep -q "^\*\*Committed to main\*\*:" "$feature_md"; then
-                  sed -i "/^\*\*Lifecycle Status\*\*/a **Committed to main**: $CURRENT_SHA" "$feature_md"
+                  sed -i "/^\*\*Last Updated\*\*/a **Committed to main**: $CURRENT_SHA" "$feature_md"
                 fi
 
                 # Add Launched date field
@@ -119,7 +117,7 @@ jobs:
               done
 
               # Commit and push changes
-              git add docs/roadmap/features/*/feature.md docs/roadmap/features/*/context.md
+              git add docs/roadmap/features/*/feature.md docs/roadmap/features/*/status.md docs/roadmap/features/*/context.md
               git commit -m "chore: auto-update feature statuses for promotion PR #$PROMOTION_PR" || true
               git push
 
@@ -163,18 +161,18 @@ jobs:
             fi
 
             # Directories are named NNN-<slug>; try glob match first
-            feature_md=$(ls "docs/roadmap/features/"*"-${slug}/feature.md" 2>/dev/null | head -1)
-            if [ -z "$feature_md" ]; then
-              feature_md="docs/roadmap/features/$slug/feature.md"
+            status_md=$(ls "docs/roadmap/features/"*"-${slug}/status.md" 2>/dev/null | head -1)
+            if [ -z "$status_md" ]; then
+              status_md="docs/roadmap/features/$slug/status.md"
             fi
 
-            if [ ! -f "$feature_md" ]; then
-              echo "  ⚠ $branch: no feature.md for slug '$slug' — skipping"
+            if [ ! -f "$status_md" ]; then
+              echo "  ⚠ $branch: no status.md for slug '$slug' — skipping"
               SKIPPED=$((SKIPPED + 1))
               continue
             fi
 
-            status=$(sed -n 's/.*\*\*Lifecycle Status\*\*[^`]*`\([^`]*\)`.*/\1/p' "$feature_md" | head -1)
+            status=$(cat "$status_md")
 
             case "$status" in
               launched|rolled-back|demoted/canceled)

@@ -1,6 +1,5 @@
 # Feature: timescaledb-retention
 
-**Lifecycle Status**: `idea`
 **Development Branch**: `feature/timescaledb-retention`
 **Created**: 2026-05-27
 **Last Updated**: 2026-05-27

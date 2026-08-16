@@ -403,7 +403,8 @@ Phases 0–7 are all **DONE** — see `docs/roadmap/implementation-roadmap.md` f
 
 Active and completed feature implementations are tracked under `docs/roadmap/features/`. Feature directories are named `NNN-<slug>` (e.g. `001-add-ikbr-account-support`) where `NNN` is a zero-padded sequence number. **Numbering rule:** the next number is `max(existing NNN) + 1` — never reuse a number, never backfill a gap, and once a feature reaches `launched` its number is immutable. If two `/sdd-story` runs race and collide on a number, renumber the later one to the next free `NNN` (see `docs/runbooks/feature-workflow.md` § Feature Numbering). Git branches use only the slug: `feature/<slug>`. Each feature directory contains:
 
-- `feature.md` — lifecycle status (see `docs/roadmap/features/CLAUDE.md` § Feature Lifecycle Statuses for the full enum), links to all artifacts
+- `status.md` — canonical current lifecycle status, a single-line plain string (see `docs/roadmap/features/CLAUDE.md` § Feature Lifecycle Statuses for the full enum)
+- `feature.md` — Status History audit log, links to all artifacts
 - `product-spec.md` — requirements, affected services, governance gates
 - `implementation-spec.md` — numbered steps with concrete code references and statuses
 - `context.md` — append-only session log of decisions, deviations, files modified
@@ -433,7 +434,9 @@ sign-off, recorded in the feature's `context.md`.
 ### Feature Status — Single Source of Truth
 
 **Do not maintain a feature-status table here.** It drifts the moment a feature lands. The authoritative
-status of every feature is the `**Lifecycle Status**` field in `docs/roadmap/features/<NNN-slug>/feature.md`.
+status of every feature is the plain-string content of `docs/roadmap/features/<NNN-slug>/status.md`
+(never duplicated into `feature.md` — see `docs/roadmap/features/CLAUDE.md` § Bulk Status Reads for
+how to check status across many features without reading each one individually).
 Run `/sdd-status` for a live, computed view across all features, or `/sdd-status <slug>` for one.
 
 **When starting any session involving an in-progress feature:**

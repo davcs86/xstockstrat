@@ -1,6 +1,5 @@
 # Feature: screener-data-readiness-polling
 
-**Lifecycle Status**: `launched`
 **Committed to main**: fb8a987e22cd4cd242fcc9077e0a1d312a89bb1f
 **Launched date**: 2026-08-09
 **Development Branch**: `feature/screener-data-readiness-polling`
