@@ -1,9 +1,14 @@
 package repository
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/pashagolub/pgxmock/v4"
+
+	"github.com/xstockstrat/marketdata/internal/source"
 )
 
 // TestBuildDeleteBarsQuery verifies the scoped DELETE predicate building for DeleteBars (FR-5).
@@ -82,5 +87,41 @@ func TestBuildDeleteBarsQuery(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestUpsertFundamentals_CastsExtraMetricsToJSONB is a SQL-text pin, not a live-Postgres
+// proof — pgxmock never runs pgx's real extended-protocol encoder or talks to real
+// Postgres, so it structurally cannot catch the OID-inference bug class this feature
+// fixes (see the feature's context.md for the live-DB repro that actually proved the
+// fix — feature 142). This test only guards against someone deleting the ::jsonb cast
+// later.
+func TestUpsertFundamentals_CastsExtraMetricsToJSONB(t *testing.T) {
+	mock, err := pgxmock.NewPool()
+	if err != nil {
+		t.Fatalf("pgxmock.NewPool: %v", err)
+	}
+	defer mock.Close()
+
+	repo := &MarketDataRepo{db: mock}
+
+	anyArgs := make([]any, 16)
+	for i := range anyArgs {
+		anyArgs[i] = pgxmock.AnyArg()
+	}
+	mock.ExpectExec(`\$14::jsonb`).
+		WithArgs(anyArgs...).
+		WillReturnResult(pgxmock.NewResult("INSERT", 1))
+
+	err = repo.UpsertFundamentals(context.Background(), &source.Fundamentals{
+		Symbol:       "UPRO",
+		ExtraMetrics: map[string]float64{},
+		Source:       "finnhub",
+	})
+	if err != nil {
+		t.Fatalf("UpsertFundamentals: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("pgxmock expectations unmet (query text missing the ::jsonb cast): %v", err)
 	}
 }

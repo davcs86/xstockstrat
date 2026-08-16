@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -16,9 +17,20 @@ import (
 	tfpkg "github.com/xstockstrat/marketdata/internal/timeframe"
 )
 
+// execer is the subset of *pgxpool.Pool that UpsertFundamentals needs, extracted so
+// its ::jsonb-cast SQL text can be exercised with pgxmock (this service has no
+// live-DB test harness and CI provisions no database). Both *pgxpool.Pool and
+// pgxmock.PgxPoolIface satisfy it; production wires it to the real pool.
+type execer interface {
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
 // MarketDataRepo handles TimescaleDB reads and writes for OHLCV bars and quotes.
 type MarketDataRepo struct {
 	pool *pgxpool.Pool
+	// db is the query surface UpsertFundamentals executes against — the same
+	// *pgxpool.Pool in production, a pgxmock in the repository test.
+	db execer
 }
 
 // NewMarketDataRepo opens a pgx connection pool.
@@ -30,7 +42,7 @@ func NewMarketDataRepo(connStr string) (*MarketDataRepo, error) {
 	if err := pool.Ping(context.Background()); err != nil {
 		return nil, fmt.Errorf("db ping: %w", err)
 	}
-	return &MarketDataRepo{pool: pool}, nil
+	return &MarketDataRepo{pool: pool, db: pool}, nil
 }
 
 // InsertBars bulk-upserts OHLCV bars into the marketdata.ohlcv hypertable.
@@ -313,7 +325,7 @@ func (r *MarketDataRepo) UpsertFundamentals(ctx context.Context, f *source.Funda
 		INSERT INTO marketdata.fundamentals
 		  (symbol, as_of, market_cap, pe_ratio, pb_ratio, dividend_yield, eps, beta, roe,
 		   debt_to_equity, price, year_high, year_low, extra_metrics, currency, source, fetched_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16, now())
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,$15,$16, now())
 		ON CONFLICT (symbol) DO UPDATE SET
 		  as_of=EXCLUDED.as_of, market_cap=EXCLUDED.market_cap, pe_ratio=EXCLUDED.pe_ratio,
 		  pb_ratio=EXCLUDED.pb_ratio, dividend_yield=EXCLUDED.dividend_yield, eps=EXCLUDED.eps,
@@ -325,7 +337,7 @@ func (r *MarketDataRepo) UpsertFundamentals(ctx context.Context, f *source.Funda
 	if asOf.IsZero() {
 		asOf = time.Now().UTC()
 	}
-	_, err = r.pool.Exec(ctx, q,
+	_, err = r.db.Exec(ctx, q,
 		f.Symbol, asOf, f.MarketCap, f.PERatio, f.PBRatio, f.DividendYield, f.EPS, f.Beta, f.ROE,
 		f.DebtToEquity, f.Price, f.YearHigh, f.YearLow, extraJSON, f.Currency, src)
 	if err != nil {
