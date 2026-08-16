@@ -1198,7 +1198,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 
 ### Step 25 — service: migrate `LiveStrategiesPanel.tsx` (row 6, bare `/trader`) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/LiveStrategiesPanel.tsx` — modify
@@ -1261,7 +1261,7 @@ grep -n "{ path: '/trader' }" e2e/mobile-overflow.spec.ts
 
 ### Step 26 — test: verify `LiveStrategiesPanel.tsx` migration fixes the keyboard double-fire + covers bare `/trader`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/live-strategies.spec.ts` — modify
@@ -1778,3 +1778,31 @@ Also widened `data-table.tsx`'s `getRowProps` return type to `React.HTMLAttribut
 member present) failed TS2322 ("no properties in common") even though React renders `data-*` fine on
 any DOM element. Minor type-only widening of the Step 9 composite extension; not a new deviation
 category, noted here for completeness.
+
+### Deviation: Step 26 — corrected characterization of the pre-migration keyboard bug
+**Spec said** (Step 25 Codebase Evidence, design.md): pre-migration, a keyboard Enter on the nested
+Enable/Disable `Button` "double-fires both the button's `setLive.mutate` action **and** the row's
+`setSelectedId`" — i.e. both handlers run.
+**Actual** (found during Step 26's RED-capture verification, `git stash` isolation of the pre-migration
+file): the row's `onKeyDown` calls `e.preventDefault()` on the bubbling keydown event *before* calling
+`setSelectedId`. Per the DOM spec, `preventDefault()` on a cancelable event cancels its default action
+regardless of which listener/phase called it — so this `preventDefault()` cancels the browser's own
+native "Enter activates the focused button" default action entirely. Pre-migration, keyboard Enter on
+the button therefore **never fires the button's own click/mutation at all**; only the row's handler
+fires (wrongly opening the alert feed instead of toggling live status). This is a single mis-fire, not
+a double-fire. The regression test's first RED attempt (`page.waitForResponse` for `SetStrategyLive`)
+timed out rather than failing on the expected "alert feed opened" assertion, because the mutation
+request the test waited for pre-migration never went out — confirmed correct (not a test-authoring bug)
+by reading `useSetStrategyLive`'s `mutationFn` (`src/hooks/useLiveStrategies.ts:16-17`), which posts to
+exactly the URL the test's `waitForResponse` predicate matches.
+**Reason**: the composite's `handleRowKeyDown` (`data-table.tsx`) checks `isInteractiveTarget` *before*
+calling `preventDefault()`/`onRowClick` — a keydown originating inside a nested `<button>` returns early
+without ever calling `preventDefault()`, leaving the browser's native button-Enter-activation intact.
+This is why the migration still fixes the bug (confirmed GREEN with all 7 `live-strategies.spec.ts`
+tests passing, including the corrected regression test), just via a different actual mechanism than
+design.md assumed.
+**Disposition**: no code change beyond the test itself — updated `live-strategies.spec.ts`'s comment to
+describe the verified mechanism instead of the "double-fires" guess, and bounded the `waitForResponse`
+wait to an explicit 5s timeout (`{ timeout: 5000 }`) so a future RED run fails fast/deterministically
+instead of riding out the full default test timeout. No composite or component change needed — this is
+a documentation/finding correction only.

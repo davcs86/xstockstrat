@@ -706,6 +706,49 @@ clears it lands, rather than letting the warning go stale.
 - Files modified: none (no locator changes needed)
 - Deviations: none
 
+### Step 25 — service: migrate `LiveStrategiesPanel.tsx` (row 6, bare `/trader`) to `DataTable` [done]
+- Defined `columns: ColumnDef<StrategyRow>[]` (Strategy/Status/Live, conditional Action column
+  built via `isAdmin ? [...base, actionColumn] : base`, `useMemo`-wrapped over `[isAdmin, setLive]`).
+  Replaced the manual `role="button"`/`onClick`/`onKeyDown` row wiring with
+  `<DataTable ... onRowClick={(s) => setSelectedId(s.strategyId)} rowClassName={() => 'cursor-pointer'} />`.
+  Removed the Enable/Disable button's now-unnecessary `e.stopPropagation()` — the composite's shared
+  `isInteractiveTarget` guard matches the native `<button>` directly.
+- Added `{ path: '/trader' }` to `mobile-overflow.spec.ts`'s `ROUTES` (Instruction 5) — closes the
+  bare-dashboard-route gap flagged in recon (also covers `OrderBook`, Step 27).
+- Verification: `tsc --noEmit` clean; `pnpm run lint` clean, zero new warnings (only the pre-existing
+  accepted `react-hooks/exhaustive-deps` warnings from earlier steps' files).
+- Files modified: `services/xstockstrat-ui/src/components/trader/LiveStrategiesPanel.tsx`,
+  `services/xstockstrat-ui/e2e/mobile-overflow.spec.ts`
+- Deviations: none in the component itself — see Step 26 for a correction to design.md's
+  characterization of the keyboard bug this step fixes.
+
+### Step 26 — test: verify `LiveStrategiesPanel.tsx` migration fixes the keyboard bug + covers bare `/trader` [done]
+- Added a regression-guard test to `live-strategies.spec.ts` asserting keyboard Enter on the
+  Enable/Disable button fires only its own `SetStrategyLive` mutation, not the row's `onRowClick`.
+- **RED-verification anomaly, resolved**: capturing RED via `git stash` of the Step 25 migration
+  produced a `page.waitForResponse` timeout (not the "alert feed opens while mutation also fires"
+  failure design.md's "double-fires" framing predicted). Investigated rather than assumed away:
+  confirmed the test's URL predicate is correct by reading `useSetStrategyLive`'s `mutationFn`
+  (`src/hooks/useLiveStrategies.ts:16-17` — posts to exactly
+  `/xstockstrat.analysis.v1.AnalysisService/SetStrategyLive`, matching the predicate). Root cause is
+  a DOM-spec fact: pre-migration, the row's `onKeyDown` calls `e.preventDefault()` on the bubbling
+  keydown event *before* `setSelectedId`; `preventDefault()` on a cancelable event cancels its
+  default action regardless of which phase/listener called it, so this cancels the browser's own
+  native "Enter activates the focused button" default action — pre-migration, keyboard Enter on the
+  button never fires the button's own mutation at all, it only (wrongly) fires the row's handler.
+  A single mis-fire, not a double-fire. Full detail recorded as a Deviation Log entry (implementation-
+  spec.md) rather than silently correcting design.md's prose. Updated the test's own comment to match
+  the verified mechanism and bounded `waitForResponse` to `{ timeout: 5000 }` so a future RED run
+  fails fast instead of riding the full default test timeout.
+- Restored the Step 25 migration (`git stash pop`) and re-ran `live-strategies.spec.ts`: all 7 tests
+  passed (1 cold-start-flaky-then-pass on an unrelated pre-existing test, matching this session's
+  established cold-start pattern; the new regression test itself passed clean on the first attempt —
+  no retry needed).
+- Ran the new bare-`/trader` `mobile-overflow.spec.ts` entry: passed (390px, no horizontal overflow).
+- Files modified: `services/xstockstrat-ui/e2e/trader/live-strategies.spec.ts`
+- Deviations: corrected characterization of the pre-migration keyboard bug — see Deviation Log entry
+  "Step 26 — corrected characterization of the pre-migration keyboard bug" (implementation-spec.md).
+
 ## Session 2026-08-15 — sdd-execute boot (branch-topology correction)
 
 - Boot Step B3 (`git ls-remote --heads origin feature/shadcn-datatable-migration`) found the
