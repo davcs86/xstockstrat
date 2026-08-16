@@ -222,6 +222,52 @@ async def test_fundamental_hard_filter_missing_for_one_symbol_fails_closed():
     assert by_symbol["BBB"].passed is False
 
 
+async def test_fundamental_hard_filter_missing_field_fails_closed_not_lte_zero():
+    """Bug fix: a known fundamental field the provider never supplied (marked via
+    `missing_metrics`, wire-default 0.0) must never be read as a real 0.0 — an `lte` hard
+    filter comparing a missing value against a positive threshold used to evaluate
+    `0.0 <= threshold` and silently "pass" a symbol whose metric was never actually fetched.
+    """
+    md = AsyncMock()
+    md.GetBars = AsyncMock(return_value=bars([1.0, 2.0, 3.0]))
+    md.GetFundamentalsMulti = AsyncMock(
+        return_value=SimpleNamespace(
+            fundamentals=[
+                # pe_ratio never supplied by the provider — wire value defaults to 0.0,
+                # which `0.0 <= 20.0` would satisfy if missing_metrics weren't checked.
+                marketdata_pb2.Fundamentals(symbol="AAA", missing_metrics=["pe_ratio"]),
+                # BBB genuinely has pe_ratio == 0.0 (present, not missing) and must still pass.
+                marketdata_pb2.Fundamentals(symbol="BBB", pe_ratio=0.0),
+            ]
+        )
+    )
+    ind = AsyncMock()
+    engine = make_engine(md, ind)
+
+    req = analysis_pb2.ScreenSymbolsRequest(
+        symbols=["AAA", "BBB"],
+        criteria=[
+            analysis_pb2.ScreenCriterion(
+                ref_name="cheap",
+                kind=analysis_pb2.SCREEN_KIND_FUNDAMENTAL,
+                metric_name="pe_ratio",
+                op=analysis_pb2.COMPARATOR_LTE,
+                threshold=20.0,
+                hard_filter=True,
+            )
+        ],
+    )
+    resp = await engine.screen(req)
+    by_symbol = {r.symbol: r for r in resp.results}
+    # AAA's pe_ratio was never fetched — the hard filter must fail closed, not silently pass.
+    assert "cheap" not in by_symbol["AAA"].criterion_scores
+    assert by_symbol["AAA"].status == analysis_pb2.SCREEN_RESULT_STATUS_OK  # not a batch outage
+    assert by_symbol["AAA"].passed is False
+    # BBB's pe_ratio is a genuine 0.0 (present) — must still evaluate and pass normally.
+    assert "cheap" in by_symbol["BBB"].criterion_scores
+    assert by_symbol["BBB"].passed is True
+
+
 # ── FR-6: universe min-max normalization ──────────────────────────────────────
 
 

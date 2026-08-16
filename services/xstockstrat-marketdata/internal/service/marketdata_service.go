@@ -508,30 +508,77 @@ func (s *MarketDataService) StartBarIngestPoller(ctx context.Context) {
 
 // defaultBarIngestTimeframe is the declared default of
 // marketdata.stream.bar_ingest_timeframe (see the service CLAUDE.md config table).
-const defaultBarIngestTimeframe = "15m"
+//
+// This is a comma-separated LIST, not a single timeframe (bug fix): the always-on ingester
+// used to fetch only one timeframe ("15m"), so any continuously-live consumer of "1d" bars
+// (the live loop's _eval_pair, the screener's technical criteria) only ever got a symbol's
+// "1d" row from its initial on-demand backfill — GetBars's live-fallback only fires on a
+// first-page DB cache MISS, so once that one row existed it was never refreshed again, and
+// every later evaluation ran against a frozen, increasingly-stale daily bar. "1d" is now
+// ingested continuously alongside "15m" so both stay current. Existing single-timeframe
+// config values ("15m") remain valid — they just become a one-element list.
+const defaultBarIngestTimeframe = "15m,1d"
 
-// resolveIngestTimeframe canonicalizes the configured bar-ingest timeframe. Bars fetched
-// with this value are PERSISTED (InsertBars), so an out-of-vocabulary config value would
-// write rows that no GetBars query can ever match (MARKETDATA-1). Empty means "not
-// configured" and falls back silently; a non-empty unresolvable value falls back and WARNs
-// once per cycle. The documented way to pause ingestion is
-// bar_ingest_interval_ms <= 0 (MARKETDATA-5), never a bogus timeframe.
-func resolveIngestTimeframe(raw string) string {
+// resolveIngestTimeframes parses+canonicalizes the configured bar-ingest timeframe list.
+// Bars fetched with these values are PERSISTED (InsertBars), so an out-of-vocabulary config
+// entry would write rows that no GetBars query can ever match (MARKETDATA-1). Empty means
+// "not configured" and falls back silently; an unresolvable entry is skipped with a WARN
+// (once per cycle) rather than aborting the whole list. If nothing resolves, falls back to
+// the default list. Dedupes so a caller listing the same timeframe twice doesn't double-fetch.
+// The documented way to pause ingestion is bar_ingest_interval_ms <= 0 (MARKETDATA-5), never
+// a bogus timeframe.
+func resolveIngestTimeframes(raw string) []string {
 	if raw == "" {
-		return defaultBarIngestTimeframe
+		raw = defaultBarIngestTimeframe
 	}
-	if c, err := timeframe.Resolve(commonv1.Timeframe_TIMEFRAME_UNSPECIFIED, raw); err == nil {
-		return c
+	seen := map[string]bool{}
+	var out []string
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		c, err := timeframe.Resolve(commonv1.Timeframe_TIMEFRAME_UNSPECIFIED, part)
+		if err != nil {
+			slog.Warn("bar ingest: unresolvable entry in bar_ingest_timeframe, skipping",
+				"configured", part)
+			continue
+		}
+		if !seen[c] {
+			seen[c] = true
+			out = append(out, c)
+		}
 	}
-	slog.Warn("bar ingest: unresolvable bar_ingest_timeframe, using default",
-		"configured", raw, "default", defaultBarIngestTimeframe)
-	return defaultBarIngestTimeframe
+	if len(out) == 0 {
+		slog.Warn("bar ingest: no resolvable timeframe in bar_ingest_timeframe, using default",
+			"configured", raw, "default", defaultBarIngestTimeframe)
+		return resolveIngestTimeframes(defaultBarIngestTimeframe)
+	}
+	return out
 }
 
-// ingestRecentBars fetches the recent bar window for every warm symbol and upserts it.
-// The lookback (marketdata.stream.bar_ingest_lookback_ms, default 15m) is re-fetched each
-// cycle; overlap is harmless because InsertBars upserts, and a window wider than the poll
-// interval lets the feed self-heal after a brief pause or restart.
+// minIngestLookback is the floor lookback window for a given canonical timeframe,
+// regardless of the configured marketdata.stream.bar_ingest_lookback_ms: that key is sized
+// for the 15m default (900000ms = 15min) and is far too short to ever re-cover a "1d" bar
+// (whose own interval is 24h) — using it unmodified for "1d" would ingest an empty window on
+// almost every cycle and reproduce this same staleness bug for daily bars. 2x the
+// timeframe's own interval comfortably covers the current (possibly still-open) session
+// plus the prior one, so a weekend/holiday gap still self-heals on the next trading day.
+func minIngestLookback(canonicalTf string) time.Duration {
+	interval := timeframe.Interval(canonicalTf)
+	if interval <= 0 {
+		return 0
+	}
+	return 2 * interval
+}
+
+// ingestRecentBars fetches the recent bar window for every warm symbol, for every
+// configured ingest timeframe, and upserts it. The lookback
+// (marketdata.stream.bar_ingest_lookback_ms, default 15m) is re-fetched each cycle;
+// overlap is harmless because InsertBars upserts, and a window wider than the poll interval
+// lets the feed self-heal after a brief pause or restart. Each timeframe's actual window is
+// at least minIngestLookback(tf) — see its doc comment for why the flat configured value
+// alone isn't sufficient for anything coarser than "15m".
 func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
 	s.warmMu.Lock()
 	symbols := make([]string, 0, len(s.warmSymbols))
@@ -546,13 +593,25 @@ func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
 	if err != nil {
 		return
 	}
-	tf := resolveIngestTimeframe(s.cfg.GetString("marketdata.stream.bar_ingest_timeframe", defaultBarIngestTimeframe))
+	tfs := resolveIngestTimeframes(s.cfg.GetString("marketdata.stream.bar_ingest_timeframe", defaultBarIngestTimeframe))
 	lookbackMs := s.cfg.GetInt("marketdata.stream.bar_ingest_lookback_ms", 900000)
 	if lookbackMs <= 0 {
 		lookbackMs = 900000
 	}
+	configuredLookback := time.Duration(lookbackMs) * time.Millisecond
 	end := time.Now().UTC()
-	start := end.Add(-time.Duration(lookbackMs) * time.Millisecond)
+	for _, tf := range tfs {
+		lookback := configuredLookback
+		if floor := minIngestLookback(tf); floor > lookback {
+			lookback = floor
+		}
+		s.ingestRecentBarsForTimeframe(ctx, src, symbols, tf, end.Add(-lookback), end)
+	}
+}
+
+// ingestRecentBarsForTimeframe is ingestRecentBars' per-timeframe body, split out so the
+// caller can size each timeframe's window independently (see minIngestLookback).
+func (s *MarketDataService) ingestRecentBarsForTimeframe(ctx context.Context, src source.DataSourceClient, symbols []string, tf string, start, end time.Time) {
 	// Prefer one multi-symbol request per cycle; fall back to per-symbol.
 	if ms, ok := src.(source.MultiSymbolSource); ok {
 		if barsBySym, err := ms.GetBarsMulti(ctx, symbols, tf, start, end); err == nil {
@@ -561,12 +620,12 @@ func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
 					continue
 				}
 				if err := s.repo.InsertBars(ctx, bars); err != nil {
-					slog.Warn("bar ingest: insert failed", "symbol", sym, "error", err)
+					slog.Warn("bar ingest: insert failed", "symbol", sym, "timeframe", tf, "error", err)
 				}
 			}
 			return
 		} else {
-			slog.Warn("bar ingest: multi-bar fetch failed, falling back to per-symbol", "error", err)
+			slog.Warn("bar ingest: multi-bar fetch failed, falling back to per-symbol", "timeframe", tf, "error", err)
 		}
 	}
 	for _, sym := range symbols {
@@ -579,7 +638,7 @@ func (s *MarketDataService) ingestRecentBars(ctx context.Context) {
 			continue
 		}
 		if err := s.repo.InsertBars(ctx, bars); err != nil {
-			slog.Warn("bar ingest: insert failed", "symbol", sym, "error", err)
+			slog.Warn("bar ingest: insert failed", "symbol", sym, "timeframe", tf, "error", err)
 		}
 	}
 }
@@ -771,9 +830,12 @@ func (s *MarketDataService) StartBarStream(ctx context.Context, symbols []string
 	})
 	go func() {
 		// Streamed bars are Alpaca's native 1-minute bars (see alpaca.streamBarTimeframe);
-		// they are forwarded to live subscribers only. Persisting the platform's 15m/1h/1d
-		// OHLCV is owned by the always-on REST bar ingester (StartBarIngestPoller), so we do
-		// not write streamed minute bars into the ohlcv table here.
+		// they are forwarded to live subscribers only. Persisting the platform's continuously
+		// ingested timeframes (marketdata.stream.bar_ingest_timeframe, default "15m,1d") is
+		// owned by the always-on REST bar ingester (StartBarIngestPoller), so we do not write
+		// streamed minute bars into the ohlcv table here. "1h" is not continuously ingested —
+		// it is only ever populated on demand (GetBars' live-fallback) or by an explicit
+		// backfill.
 		for bar := range feed {
 			s.mu.RLock()
 			for _, ch := range s.barSubs {
@@ -1036,6 +1098,25 @@ func (s *MarketDataService) emitWarning(ctx context.Context, msg string) {
 	}
 }
 
+// fundamentalMetricPtr names one of source.Fundamentals' 11 nullable metric fields
+// alongside its canonical wire name (matches marketdata.proto's field names verbatim,
+// which in turn matches analysis' screener `_FUNDAMENTAL_FIELDS` metric_name set).
+type fundamentalMetricPtr struct {
+	name string
+	val  *float64
+}
+
+// derefOrZero reads a nullable metric for the proto's plain-double field — the wire
+// value is 0.0 when nil, exactly like before this fix. The actual presence signal is
+// missing_metrics, appended separately by toProtoFundamentals; callers must not infer
+// "present" from a non-zero reading alone.
+func derefOrZero(p *float64) float64 {
+	if p == nil {
+		return 0
+	}
+	return *p
+}
+
 // toProtoFundamentals maps the internal source.Fundamentals to the wire message. It is
 // a method (not a free function) so its empty-Source fallback can name the actually
 // active provider (feature 129) instead of hardcoding "fmp".
@@ -1047,23 +1128,43 @@ func (s *MarketDataService) toProtoFundamentals(f *source.Fundamentals, stale bo
 	if src == "" {
 		src = s.fundProvider
 	}
+	metrics := []fundamentalMetricPtr{
+		{"market_cap", f.MarketCap},
+		{"pe_ratio", f.PERatio},
+		{"pb_ratio", f.PBRatio},
+		{"dividend_yield", f.DividendYield},
+		{"eps", f.EPS},
+		{"beta", f.Beta},
+		{"roe", f.ROE},
+		{"debt_to_equity", f.DebtToEquity},
+		{"price", f.Price},
+		{"year_high", f.YearHigh},
+		{"year_low", f.YearLow},
+	}
+	var missing []string
+	for _, m := range metrics {
+		if m.val == nil {
+			missing = append(missing, m.name)
+		}
+	}
 	pb := &marketdatav1.Fundamentals{
-		Symbol:        f.Symbol,
-		MarketCap:     f.MarketCap,
-		PeRatio:       f.PERatio,
-		PbRatio:       f.PBRatio,
-		DividendYield: f.DividendYield,
-		Eps:           f.EPS,
-		Beta:          f.Beta,
-		Roe:           f.ROE,
-		DebtToEquity:  f.DebtToEquity,
-		Price:         f.Price,
-		YearHigh:      f.YearHigh,
-		YearLow:       f.YearLow,
-		ExtraMetrics:  f.ExtraMetrics,
-		Currency:      f.Currency,
-		Source:        src,
-		Stale:         stale,
+		Symbol:         f.Symbol,
+		MarketCap:      derefOrZero(f.MarketCap),
+		PeRatio:        derefOrZero(f.PERatio),
+		PbRatio:        derefOrZero(f.PBRatio),
+		DividendYield:  derefOrZero(f.DividendYield),
+		Eps:            derefOrZero(f.EPS),
+		Beta:           derefOrZero(f.Beta),
+		Roe:            derefOrZero(f.ROE),
+		DebtToEquity:   derefOrZero(f.DebtToEquity),
+		Price:          derefOrZero(f.Price),
+		YearHigh:       derefOrZero(f.YearHigh),
+		YearLow:        derefOrZero(f.YearLow),
+		ExtraMetrics:   f.ExtraMetrics,
+		Currency:       f.Currency,
+		Source:         src,
+		Stale:          stale,
+		MissingMetrics: missing,
 	}
 	if !f.AsOf.IsZero() {
 		pb.AsOf = timestamppb.New(f.AsOf)

@@ -199,18 +199,40 @@ type finnhubMetricResponse struct {
 }
 
 // finnhubMetric carries the valuation/profitability ratios. The debt-to-equity field
-// name contains a literal "/" — this is Finnhub's actual JSON key, not a typo.
+// name contains a literal "/" — this is Finnhub's actual JSON key, not a typo. Fields are
+// pointers: Finnhub commonly omits a key entirely for smaller-cap/foreign symbols, and an
+// omitted/null key must decode to nil, not Go's float64 zero value (bug fix).
 type finnhubMetric struct {
-	YearHigh            float64 `json:"52WeekHigh"`
-	YearLow             float64 `json:"52WeekLow"`
-	Beta                float64 `json:"beta"`
-	PERatioTTM          float64 `json:"peTTM"`
-	PBRatio             float64 `json:"pb"`
-	EPSTTM              float64 `json:"epsTTM"`
-	ROETTM              float64 `json:"roeTTM"`
-	DebtToEquityQuarter float64 `json:"totalDebt/totalEquityQuarterly"`
-	MarketCapMillions   float64 `json:"marketCapitalization"`
-	DividendYieldTTM    float64 `json:"currentDividendYieldTTM"`
+	YearHigh            *float64 `json:"52WeekHigh"`
+	YearLow             *float64 `json:"52WeekLow"`
+	Beta                *float64 `json:"beta"`
+	PERatioTTM          *float64 `json:"peTTM"`
+	PBRatio             *float64 `json:"pb"`
+	EPSTTM              *float64 `json:"epsTTM"`
+	ROETTM              *float64 `json:"roeTTM"`
+	DebtToEquityQuarter *float64 `json:"totalDebt/totalEquityQuarterly"`
+	MarketCapMillions   *float64 `json:"marketCapitalization"`
+	DividendYieldTTM    *float64 `json:"currentDividendYieldTTM"`
+}
+
+// scale100 divides a percentage-point pointer by 100 to match FMP's fraction convention,
+// preserving nil (unlike a plain `*v / 100`, which would need a nil check at every call
+// site — this centralizes it once).
+func scale100(v *float64) *float64 {
+	if v == nil {
+		return nil
+	}
+	scaled := *v / 100
+	return &scaled
+}
+
+// millionsToDollars converts a *float64 in millions of USD to raw dollars, preserving nil.
+func millionsToDollars(v *float64) *float64 {
+	if v == nil {
+		return nil
+	}
+	dollars := *v * 1_000_000
+	return &dollars
 }
 
 func (m *finnhubMetric) apply(f *source.Fundamentals) {
@@ -220,15 +242,15 @@ func (m *finnhubMetric) apply(f *source.Fundamentals) {
 	f.PERatio = m.PERatioTTM
 	f.PBRatio = m.PBRatio
 	f.EPS = m.EPSTTM
-	f.ROE = m.ROETTM / 100 // percentage-points -> fraction (matches FMP)
+	f.ROE = scale100(m.ROETTM) // percentage-points -> fraction (matches FMP)
 	f.DebtToEquity = m.DebtToEquityQuarter
-	f.MarketCap = m.MarketCapMillions * 1_000_000 // millions -> raw dollars (matches FMP)
-	f.DividendYield = m.DividendYieldTTM / 100    // percentage-points -> fraction (matches FMP)
+	f.MarketCap = millionsToDollars(m.MarketCapMillions) // millions -> raw dollars (matches FMP)
+	f.DividendYield = scale100(m.DividendYieldTTM)       // percentage-points -> fraction (matches FMP)
 }
 
 // finnhubQuote is the /quote response — current price only, no symbol echo.
 type finnhubQuote struct {
-	Price float64 `json:"c"`
+	Price *float64 `json:"c"`
 }
 
 func (q *finnhubQuote) apply(f *source.Fundamentals) {

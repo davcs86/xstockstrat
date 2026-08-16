@@ -185,18 +185,20 @@ func (c *Client) fetchProfile(ctx context.Context, symbol string) (*fmpProfile, 
 
 // ── FMP response shapes ──────────────────────────────────────────────────────
 
-// fmpQuote is the subset of the /stable/quote object carrying core metrics.
+// fmpQuote is the subset of the /stable/quote object carrying core metrics. The metric
+// fields are pointers so a key FMP omits (or sends `null`) decodes to nil — distinct from
+// a genuine `0` — rather than silently collapsing to Go's float64 zero value (bug fix).
 type fmpQuote struct {
-	Symbol    string  `json:"symbol"`
-	Price     float64 `json:"price"`
-	MarketCap float64 `json:"marketCap"`
-	PE        float64 `json:"pe"`
-	EPS       float64 `json:"eps"`
-	YearHigh  float64 `json:"yearHigh"`
-	YearLow   float64 `json:"yearLow"`
-	Volume    float64 `json:"volume"`
-	Change    float64 `json:"change"`
-	Exchange  string  `json:"exchange"`
+	Symbol    string   `json:"symbol"`
+	Price     *float64 `json:"price"`
+	MarketCap *float64 `json:"marketCap"`
+	PE        *float64 `json:"pe"`
+	EPS       *float64 `json:"eps"`
+	YearHigh  *float64 `json:"yearHigh"`
+	YearLow   *float64 `json:"yearLow"`
+	Volume    float64  `json:"volume"`
+	Change    float64  `json:"change"`
+	Exchange  string   `json:"exchange"`
 }
 
 func (q fmpQuote) toFundamentals(now time.Time) *source.Fundamentals {
@@ -222,11 +224,12 @@ func (q fmpQuote) toFundamentals(now time.Time) *source.Fundamentals {
 }
 
 // fmpRatios is the subset of /stable/ratios-ttm carrying extended valuation ratios.
+// Pointer fields for the same reason as fmpQuote — an omitted/null ratio must stay nil.
 type fmpRatios struct {
-	PriceToBookTTM    float64 `json:"priceToBookRatioTTM"`
-	DividendYieldTTM  float64 `json:"dividendYieldTTM"`
-	ReturnOnEquityTTM float64 `json:"returnOnEquityTTM"`
-	DebtToEquityTTM   float64 `json:"debtToEquityRatioTTM"`
+	PriceToBookTTM    *float64 `json:"priceToBookRatioTTM"`
+	DividendYieldTTM  *float64 `json:"dividendYieldTTM"`
+	ReturnOnEquityTTM *float64 `json:"returnOnEquityTTM"`
+	DebtToEquityTTM   *float64 `json:"debtToEquityRatioTTM"`
 }
 
 func (r *fmpRatios) apply(f *source.Fundamentals) {
@@ -238,8 +241,8 @@ func (r *fmpRatios) apply(f *source.Fundamentals) {
 
 // fmpProfile is the subset of /stable/profile carrying beta + currency.
 type fmpProfile struct {
-	Beta     float64 `json:"beta"`
-	Currency string  `json:"currency"`
+	Beta     *float64 `json:"beta"`
+	Currency string   `json:"currency"`
 }
 
 func (p *fmpProfile) apply(f *source.Fundamentals) {

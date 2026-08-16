@@ -1108,6 +1108,18 @@ func (x *DeleteBackfilledDataResponse) GetRowsDeleted() int64 {
 
 // Fundamentals (feature 059; provider made switchable by feature 129) — cached fundamental
 // metrics for a symbol, sourced from the active marketdata.fundamentals.provider.
+//
+// The 11 metric fields below have no wire presence (proto3 implicit presence, unchanged —
+// switching them to `optional` was tried and reverted: it changes field cardinality, which
+// `buf breaking` flags and which needs proto-approval-matrix sign-off this fix does not
+// have). Instead, `missing_metrics` (field 18) is a fully-additive list of the canonical
+// snake_case field names (matching `market_cap`, `pe_ratio`, … verbatim) that the active
+// provider did NOT supply for this symbol — a genuinely-missing value is distinguishable
+// from a real `0.0` (e.g. a zero-debt company's `debt_to_equity`, or a non-dividend-payer's
+// `dividend_yield`) by checking membership in this list, not by reading the numeric field.
+// A consumer MUST check `missing_metrics` before treating a `0.0` reading as data; comparing
+// an absent value against a threshold (e.g. a screener `lte` hard filter) must fail closed,
+// not silently pass on the wire-default zero (bug fix).
 type Fundamentals struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Symbol        string                 `protobuf:"bytes,1,opt,name=symbol,proto3" json:"symbol,omitempty"`
@@ -1123,13 +1135,15 @@ type Fundamentals struct {
 	YearHigh      float64                `protobuf:"fixed64,11,opt,name=year_high,json=yearHigh,proto3" json:"year_high,omitempty"`
 	YearLow       float64                `protobuf:"fixed64,12,opt,name=year_low,json=yearLow,proto3" json:"year_low,omitempty"`
 	// The active provider's open-ended metric set (keys are provider-specific field names)
-	ExtraMetrics  map[string]float64     `protobuf:"bytes,13,rep,name=extra_metrics,json=extraMetrics,proto3" json:"extra_metrics,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"fixed64,2,opt,name=value"`
-	AsOf          *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=as_of,json=asOf,proto3" json:"as_of,omitempty"`
-	Currency      string                 `protobuf:"bytes,15,opt,name=currency,proto3" json:"currency,omitempty"`
-	Source        string                 `protobuf:"bytes,16,opt,name=source,proto3" json:"source,omitempty"` // e.g. "fmp" or "finnhub" — the provider that produced this row
-	Stale         bool                   `protobuf:"varint,17,opt,name=stale,proto3" json:"stale,omitempty"`  // true when served past TTL under quota exhaustion (FR-4)
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ExtraMetrics map[string]float64     `protobuf:"bytes,13,rep,name=extra_metrics,json=extraMetrics,proto3" json:"extra_metrics,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"fixed64,2,opt,name=value"`
+	AsOf         *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=as_of,json=asOf,proto3" json:"as_of,omitempty"`
+	Currency     string                 `protobuf:"bytes,15,opt,name=currency,proto3" json:"currency,omitempty"`
+	Source       string                 `protobuf:"bytes,16,opt,name=source,proto3" json:"source,omitempty"` // e.g. "fmp" or "finnhub" — the provider that produced this row
+	Stale        bool                   `protobuf:"varint,17,opt,name=stale,proto3" json:"stale,omitempty"`  // true when served past TTL under quota exhaustion (FR-4)
+	// Canonical field names (of the 11 above) the provider did not supply for this symbol.
+	MissingMetrics []string `protobuf:"bytes,18,rep,name=missing_metrics,json=missingMetrics,proto3" json:"missing_metrics,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Fundamentals) Reset() {
@@ -1279,6 +1293,13 @@ func (x *Fundamentals) GetStale() bool {
 		return x.Stale
 	}
 	return false
+}
+
+func (x *Fundamentals) GetMissingMetrics() []string {
+	if x != nil {
+		return x.MissingMetrics
+	}
+	return nil
 }
 
 type GetFundamentalsRequest struct {
@@ -1542,7 +1563,7 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\x05range\x18\x02 \x01(\v2 .xstockstrat.common.v1.TimeRangeR\x05range\x12>\n" +
 	"\ttimeframe\x18\x03 \x01(\x0e2 .xstockstrat.common.v1.TimeframeR\ttimeframe\"A\n" +
 	"\x1cDeleteBackfilledDataResponse\x12!\n" +
-	"\frows_deleted\x18\x01 \x01(\x03R\vrowsDeleted\"\xea\x04\n" +
+	"\frows_deleted\x18\x01 \x01(\x03R\vrowsDeleted\"\x93\x05\n" +
 	"\fFundamentals\x12\x16\n" +
 	"\x06symbol\x18\x01 \x01(\tR\x06symbol\x12\x1d\n" +
 	"\n" +
@@ -1562,7 +1583,8 @@ const file_marketdata_v1_marketdata_proto_rawDesc = "" +
 	"\x05as_of\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\x04asOf\x12\x1a\n" +
 	"\bcurrency\x18\x0f \x01(\tR\bcurrency\x12\x16\n" +
 	"\x06source\x18\x10 \x01(\tR\x06source\x12\x14\n" +
-	"\x05stale\x18\x11 \x01(\bR\x05stale\x1a?\n" +
+	"\x05stale\x18\x11 \x01(\bR\x05stale\x12'\n" +
+	"\x0fmissing_metrics\x18\x12 \x03(\tR\x0emissingMetrics\x1a?\n" +
 	"\x11ExtraMetricsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\"0\n" +
