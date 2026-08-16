@@ -78,7 +78,7 @@ before being written below** (Constitution C-01/P-03 — an unexecuted claim is 
 
 ### Step 1 — proto: deprecate `TIMEFRAME_15MIN`/`TIMEFRAME_1HOUR`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/common/v1/common.proto` — modify

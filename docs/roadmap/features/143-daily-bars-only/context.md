@@ -262,3 +262,32 @@
   (`daily-bars-only` must wait for `unified-symbol-page`), per
   `.claude/skills/sdd-review/reference/overlap-check.md`'s router-owned write protocol.
 
+
+## Session 2026-08-16 — sdd-execute (sequential mode)
+
+Executing on `feature/daily-bars-only` (fresh branch off latest `origin/main-dev` @ `d53753f`).
+The prior-session note about landing on `claude/null-fundamentals-ohlcv-gaps-l2v4x5` is
+superseded — that bug-fix branch already merged (PR #971) with only 143's SDD artifacts on it,
+no feature code. Part of an operator-requested sequential run of 143 then 139, one PR per feature.
+
+- **Re-spec gate (directive: none): PASSED, no re-spec.** Re-ran every step's key Codebase
+  Evidence against the live tree. All anchors match — including Step 9's `SymbolPriceChart`/
+  `Timeframe`/`Tabs` citations in `positions/[symbol]/page.tsx`, which merge-order.md flagged for
+  re-verification against feature 125's landed restructuring (125 is `code-completed`, its markup
+  is on main-dev; the `timeframe`/`onTimeframe`/`Tabs` identifiers Step 9 targets are all present
+  at the specced lines). Minor ≤2-line offsets only; no evidence mismatch, so no blocker raised.
+- **Tooling setup (steps 1–10):** go1.25 ✓ · golangci-lint ✓ v2.5.0 · uv ✓ · ruff ✓ · pnpm ✓ 9.15.0
+  · node22 ✓ · buf ⬇ v1.69.0 (host, via `go install`) · protoc-gen-go ⬇ v1.36.11 ·
+  protoc-gen-go-grpc ⬇ v1.6.2 · protoc-gen-connect-go ⬇ v1.19.2 · grpcio-tools ⬇ 1.80.0 ·
+  TS proto plugins ⬇ (pnpm install). Provisioned the host codegen toolchain pinned to CI
+  `proto-freshness` versions per `docs/runbooks/codegen-toolchain-host-setup.md` (Docker present
+  but host install is more reliable for the pinned plugin set). Sanity-checked: `./scripts/buf-gen.sh`
+  on the unchanged tree produced an empty `packages/proto/gen/` diff — toolchain reproduces the
+  committed stubs exactly.
+
+### Step 1 — proto: deprecate TIMEFRAME_15MIN/TIMEFRAME_1HOUR [done]
+- Added `[deprecated = true]` + reason to both enum values and rewrote the enum doc comment to
+  state only `1d` is requestable. Comment/annotation-only, non-breaking.
+- Verification: `buf lint` PASS; `buf breaking --against feature/daily-bars-only` PASS (no findings).
+- Files modified: `packages/proto/common/v1/common.proto`
+- Deviations: none. TDD: N/A (proto — verified by buf lint/breaking).
