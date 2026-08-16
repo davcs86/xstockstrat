@@ -1102,7 +1102,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 
 ### Step 23 — service: migrate `OrdersTable.tsx` (row 5, `/trader/orders`) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/OrdersTable.tsx` — modify
@@ -1158,7 +1158,7 @@ grep -n "DataTable" src/components/trader/OrdersTable.tsx
 
 ### Step 24 — test: verify `OrdersTable.tsx` migration preserves Edit/Cancel + the 1280px regression guard
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/orders.spec.ts` — modify (if locators break)
@@ -1753,3 +1753,28 @@ pass `onRowClick`, so the fix (an added `data-datatable-row` marker + a `:not()`
 marker) cannot change their behavior — the marker/exclusion only exist on rows where `onRowClick` is
 set. Spot-checked one unaffected step's suite (`sources.spec.ts`, Step 3/4) after the fix to confirm
 no incidental regression; see context.md.
+
+### Deviation: Step 23 — migrate `OrdersTable.tsx` to `DataTable` (cell-component shape mismatch)
+**Spec said**: "reusing `OrderSymbolCell`, `TYPE_LABEL[OrderType[typeName]]`, `formatUsd`,
+`OrderStatusCell`, the strategyId Link/Manual fallback... verbatim as cell renderers."
+**Actual**: `OrderSymbolCell`/`OrderSideCell`/`OrderStatusCell` (`orderShared.tsx`) each return a
+*complete* `<TableCell>` element, not bare content — using them as a `ColumnDef`'s `cell` would nest a
+`<td>` inside the composite's own `<td>` (invalid HTML, breaks column alignment). Used the
+already-separately-exported bare-content versions instead: `OrderSideBadge`/`OrderStatusBadge` (no
+`orderShared.tsx` edit needed — these already existed as standalone exports), and inlined the Symbol
+cell's `Link` JSX directly (matching `OrderSymbolCell`'s body exactly, minus the wrapping
+`<TableCell className="font-mono font-semibold">`, expressed instead via the column's `meta.className`).
+No change to `orderShared.tsx` was needed or made.
+**Reason**: matches the actual TanStack Table `ColumnDef.cell` contract (bare content, not a `<td>`);
+the "verbatim" instruction is satisfied at the JSX-content level even though the specific named helper
+functions aren't invoked directly.
+**Disposition**: no file-set change — `OrdersTable.tsx` only. Note for Step 27 (`OrderBook.tsx`, the
+only other consumer of the `*Cell`-wrapped versions): once it also migrates, `OrderSymbolCell`/
+`OrderSideCell`/`OrderStatusCell` become fully unused exports in `orderShared.tsx` — flagged as a
+cleanup candidate for Step 33's regression sweep, not fixed here (touching `orderShared.tsx` is
+outside both steps' Files sections and the dead code doesn't break anything left un-migrated).
+Also widened `data-table.tsx`'s `getRowProps` return type to `React.HTMLAttributes<HTMLTableRowElement>
+& { [key: \`data-${string}\`]: ... }` — a bare `{ 'data-testid': ... }` object (no other HTMLAttributes
+member present) failed TS2322 ("no properties in common") even though React renders `data-*` fine on
+any DOM element. Minor type-only widening of the Step 9 composite extension; not a new deviation
+category, noted here for completeness.

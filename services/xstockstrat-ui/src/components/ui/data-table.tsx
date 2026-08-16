@@ -66,8 +66,16 @@ export interface DataTableProps<TData, TValue> {
   tableClassName?: string;
   /** Root `<table>` `data-testid`, for call sites migrating an existing testid-bearing table. */
   tableTestId?: string;
-  /** Extra attributes (e.g. `data-testid`) merged onto each row's `<tr>`. */
-  getRowProps?: (row: TData) => React.HTMLAttributes<HTMLTableRowElement>;
+  /**
+   * Extra attributes (e.g. `data-testid`) merged onto each row's `<tr>`. The `data-${string}`
+   * index signature is needed because `React.HTMLAttributes` has no built-in data-attribute
+   * support — an object with only `data-*` keys (no other `HTMLAttributes` member) would
+   * otherwise fail TS2322 ("no properties in common") even though React renders `data-*`
+   * attributes on any DOM element fine.
+   */
+  getRowProps?: (row: TData) => React.HTMLAttributes<HTMLTableRowElement> & {
+    [key: `data-${string}`]: string | number | boolean | undefined;
+  };
 }
 
 export function DataTable<TData, TValue>({

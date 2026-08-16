@@ -665,6 +665,47 @@ clears it lands, rather than letting the warning go stale.
 - Files modified: none (no locator changes needed)
 - Deviations: none
 
+### Step 23 — service: migrate `OrdersTable.tsx` (row 5, `/trader/orders`) to `DataTable` [done]
+- **Cell-shape mismatch found**: `OrderSymbolCell`/`OrderSideCell`/`OrderStatusCell` each return a
+  full `<TableCell>`, not bare content — unusable directly as a `ColumnDef.cell` (would nest `<td>`
+  inside `<td>`). Used the already-exported bare-content `OrderSideBadge`/`OrderStatusBadge` instead,
+  and inlined the Symbol cell's `Link` JSX (matching `OrderSymbolCell`'s body exactly, sans the
+  `<TableCell>` wrapper). Zero changes to `orderShared.tsx`. Full detail in the Deviation Log; flagged
+  the resulting dead-code question (the 3 `*Cell` wrappers become unused once Step 27 also migrates)
+  as a Step 33 cleanup candidate, not fixed here.
+- Wrapped `merged` in `useMemo` (Step 1's own doc-commented requirement, applied here per Step
+  Dependencies). Defined `columns: ColumnDef<Order>[]` for the 10 columns, preserving `TYPE_LABEL`,
+  `formatUsd`, the strategyId Link/Manual fallback (with its `data-testid`), `placedLabel`, and the
+  Actions column's DropdownMenu+AlertDialog Edit/Cancel flow verbatim (gated by
+  `TERMINAL.has(order.status)`). Preserved `data-testid={`order-row-${order.orderId}`}` via
+  `getRowProps` and the `actions-`/`edit-`/`cancel-` testids on the Actions cell's own controls
+  (unchanged, since those are still literal JSX attributes in the cell renderer). Replaced `<Table>`
+  with `<DataTable columns={columns} data={merged} getRowId={(order) => order.orderId}
+  getRowProps={(order) => ({ 'data-testid': `order-row-${order.orderId}` })} />`.
+- **Composite type widening**: `getRowProps`'s return type only had `React.HTMLAttributes<...>`,
+  which failed TS2322 ("no properties in common") for an object containing only `data-testid` (no
+  other `HTMLAttributes` member). Widened to include a `` `data-${string}` `` index signature — a
+  minor type-only fix to the same Step 9/13 composite extension, not a new deviation category.
+- TDD: `useMemo` wrapping is a referential-stability fix with no behavior change; the column
+  migration itself is a refactor — red N/A; green captured in Step 24.
+- Verification: `tsc --noEmit` clean (after the type widening); `pnpm run lint` clean (no closures
+  needing exhaustive-deps — `setEditing`/`setCancelling` are stable setState refs, `TERMINAL`/
+  `BASE_PATH_INSIGHTS` are module-scope); grep confirms `useMemo`/`DataTable`.
+- Files modified: `services/xstockstrat-ui/src/components/trader/OrdersTable.tsx`,
+  `services/xstockstrat-ui/src/components/ui/data-table.tsx` (type widening only)
+- Deviations: cell-shape mismatch (bare-content substitution) + composite type widening — see
+  Deviation Log entries above.
+
+### Step 24 — test: verify `OrdersTable.tsx` migration preserves Edit/Cancel + the 1280px regression guard [done]
+- Ran `e2e/trader/orders.spec.ts` + `e2e/trader/order-parity.spec.ts` (8 tests): 6 clean, 2
+  cold-start-flaky-then-pass. Edit/Cancel `DropdownMenu` flow, live-update merge behavior (the
+  `useMemo` fix), and all 10 columns' rendered values unchanged.
+- `mobile-overflow.spec.ts -g "trader/orders|1280px"` — both flaky-then-pass, including the critical
+  1280px `lg:`-grid-split regression guard (feature 124's fix) — confirms the `useMemo` fix prevents
+  the row-model-reset-under-live-update-churn flake this test specifically guards against.
+- Files modified: none (no locator changes needed)
+- Deviations: none
+
 ## Session 2026-08-15 — sdd-execute boot (branch-topology correction)
 
 - Boot Step B3 (`git ls-remote --heads origin feature/shadcn-datatable-migration`) found the
