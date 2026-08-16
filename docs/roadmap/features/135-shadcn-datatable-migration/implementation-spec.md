@@ -911,7 +911,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 
 ### Step 19 — service: migrate `/trader/portfolio` broker-reported positions table (row 1) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/portfolio/page.tsx` — modify
@@ -950,7 +950,7 @@ grep -n "DataTable" src/app/trader/portfolio/page.tsx
 
 ### Step 20 — test: verify `/trader/portfolio` migration preserves behavior
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/portfolio.spec.ts` — modify (if locators break)

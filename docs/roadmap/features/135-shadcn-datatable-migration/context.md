@@ -610,6 +610,30 @@ clears it lands, rather than letting the warning go stale.
 - Files modified: none (no locator changes needed)
 - Deviations: none
 
+### Step 19 — service: migrate `/trader/portfolio` broker-reported positions table (row 1) to `DataTable` [done]
+- Defined `columns: ColumnDef<PositionRow>[]` for the 7 columns, preserving the Symbol cell's `Link`
+  (no `onRowClick` — plain in-cell link, per design.md), the `accountName(p.accountId)` helper, and
+  the `pnlClass`-driven conditional styling on Unrealized/Day P&L. Replaced `<Table>` (confirmed
+  exact-line) with `<DataTable columns={columns} data={positions} getRowId={(p) =>
+  \`${p.accountId}-${p.symbol}\`} />`.
+- TDD: refactor, no new behavior — red N/A; green captured in Step 20.
+- Verification: `tsc --noEmit` clean; `pnpm run lint` — 1 expected exhaustive-deps warning
+  (non-blocking); grep confirms `DataTable`.
+- Files modified: `services/xstockstrat-ui/src/app/trader/portfolio/page.tsx`
+- Deviations: none
+
+### Step 20 — test: verify `/trader/portfolio` migration preserves behavior [done]
+- Ran `e2e/trader/portfolio.spec.ts` (2 tests): both cold-start-flaky-then-pass, exit 0. Symbol-link
+  navigation and all 7 columns' rendered values unchanged. (Note: as flagged in the impl-spec
+  review's unresolved warnings, the spec's Codebase Evidence claim that this file imports
+  `POSITION_AAPL`/`POSITION_MSFT`/`POSITIONS` directly does not hold — those fixtures are consumed
+  indirectly via `e2e/mock-backend.ts`, a pre-existing citation inaccuracy unrelated to this step.)
+- `mobile-overflow.spec.ts -g "trader/portfolio"` — needed 2 retries (`WebServer uncaughtException:
+  ECONNRESET` on attempts 0–1, a dev-server connection-reset infra flake, not a content/overflow
+  assertion failure), passed on attempt 3.
+- Files modified: none (no locator changes needed)
+- Deviations: none
+
 ## Session 2026-08-15 — sdd-execute boot (branch-topology correction)
 
 - Boot Step B3 (`git ls-remote --heads origin feature/shadcn-datatable-migration`) found the
