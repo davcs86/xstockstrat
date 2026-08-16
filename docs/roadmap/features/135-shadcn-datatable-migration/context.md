@@ -592,6 +592,24 @@ clears it lands, rather than letting the warning go stale.
 - Files modified: none (no locator changes needed)
 - Deviations: none
 
+### Step 17 — service: migrate `/accounts/authorized-apps` table (row 15) to `DataTable` [done]
+- Defined `columns: ColumnDef<AuthorizedApp>[]` for the 5 columns, preserving `formatDate` and the
+  per-row `AlertDialog` (Disconnect confirmation) verbatim, keyed off `revoking === app.clientId`.
+  Replaced `<Table>` (confirmed exact-line) with `<DataTable columns={columns} data={apps}
+  getRowId={(app) => app.clientId} />`.
+- TDD: refactor, no new behavior — red N/A; green captured in Step 18.
+- Verification: `tsc --noEmit` clean; `pnpm run lint` — 1 expected exhaustive-deps warning
+  (non-blocking); grep confirms `DataTable`.
+- Files modified: `services/xstockstrat-ui/src/app/accounts/authorized-apps/page.tsx`
+- Deviations: none
+
+### Step 18 — test: verify `/accounts/authorized-apps` migration preserves the Revoke flow [done]
+- Ran `e2e/accounts/authorized-apps.spec.ts` (5 tests): 3 clean, 2 cold-start-flaky-then-pass. The
+  Disconnect AlertDialog confirm/cancel flow and the pending-state label ('Disconnecting…') unchanged.
+- `mobile-overflow.spec.ts -g "authorized-apps"` — flaky-then-pass, green.
+- Files modified: none (no locator changes needed)
+- Deviations: none
+
 ## Session 2026-08-15 — sdd-execute boot (branch-topology correction)
 
 - Boot Step B3 (`git ls-remote --heads origin feature/shadcn-datatable-migration`) found the

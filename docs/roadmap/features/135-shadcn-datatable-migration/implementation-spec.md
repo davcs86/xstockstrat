@@ -837,7 +837,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/mobile-overflow.spec
 
 ### Step 17 — service: migrate `/accounts/authorized-apps` table (row 15) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/accounts/authorized-apps/page.tsx` — modify
@@ -876,7 +876,7 @@ grep -n "DataTable" src/app/accounts/authorized-apps/page.tsx
 
 ### Step 18 — test: verify `/accounts/authorized-apps` migration preserves the Revoke flow
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/accounts/authorized-apps.spec.ts` — modify (if locators break)
