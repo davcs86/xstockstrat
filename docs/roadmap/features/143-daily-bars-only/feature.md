@@ -11,6 +11,7 @@
 | Date | Status | Updated by | Note |
 |---|---|---|---|
 | 2026-08-16 | `idea` → `draft` | /sdd-story | Product spec generated |
+| 2026-08-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved (3 warnings: Open Questions deferred to design per repo precedent, minor template checkbox hygiene) |
 
 ---
 
@@ -44,4 +45,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review daily-bars-only product-spec` — AI review of product spec before running /sdd-spec
+`/sdd-design daily-bars-only quick` — recon + one mandated adversarial round before /sdd-spec

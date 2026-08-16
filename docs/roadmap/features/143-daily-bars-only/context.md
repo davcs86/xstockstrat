@@ -66,3 +66,38 @@
   session's precursor bug fix (`null-fundamentals-ohlcv-gaps`) and this feature both concern
   — so no semantic conflict with feature 141/142's changes exists beyond the numbering
   collision itself.
+
+## Session 2026-08-16 — sdd-review product-spec
+
+- Product spec approved. Status: `draft` → `spec-ready`.
+- Criteria pass (spec-reviewer): PASS WITH WARNINGS, no blockers, no Constitution Floor
+  (`F-*`) breach. Every code-checkable claim verified against the actual repo (config key
+  default, proto enum deprecation state, hardcoded `timeframe="1d"` call sites). Warnings
+  (all advisory, non-blocking): (1) the 4 `## Open Questions` remain literally unresolved —
+  judged acceptable per repo precedent (`139-symbol-page-section-nav/product-spec.md`
+  explicitly defers Open Questions to `/sdd-design` the same way); (2) the Database Changes
+  section leaves both template checkboxes unchecked in favor of the Open Questions pointer;
+  (3) the Config Key Changes section uses a non-template checkbox label. No trading-domain
+  (`C-1`…`C-5`) findings — the "Alpaca"/"market"/"fill" substring matches were false
+  positives (marketdata's data feed, not trading's broker/order surface).
+- Overlap pass (feature-overlap): CLEAN — no FAIL-level collision (config key, proto field
+  number, migration `NNN`, or landed source-file edit) against any in-flight feature.
+  Rebase-risk note (not a collision): `ChartPanel.tsx` and
+  `e2e/insights/backfills.spec.ts` are also touched by `125-unified-symbol-page`
+  (`in-progress`, most steps `done`) for unrelated reasons (chart-library retention,
+  fixture centralization) — re-verify line numbers against 125's landed state at
+  `/sdd-spec` time.
+- **Note on subagent tool-output anomaly:** both the `spec-reviewer` and `feature-overlap`
+  subagents independently reported encountering a `system-reminder`-styled block in tool
+  output while this session's `git merge`/`git mv` renumbering (previous session entry) was
+  running concurrently in the same working tree — i.e. a real race between my foreground
+  file mutations and their background reads, not a fabricated appearance. One agent noted a
+  message purporting to instruct it not to inform the user of a docs change. Both agents
+  correctly declined to act on it and surfaced it in their reports instead. Independently
+  verified: the underlying substance (the `status.md` lifecycle-status convention) is
+  genuinely real, current repo state — confirmed directly via `git show
+  origin/main-dev:docs/roadmap/features/CLAUDE.md` and by reading multiple existing
+  `status.md` files — so no incorrect fact reached this spec's review outcome. The unusual
+  "don't tell the user" framing itself does not match this harness's normal
+  system-reminder format; flagged here for visibility, not acted on, and did not change any
+  review verdict above.
