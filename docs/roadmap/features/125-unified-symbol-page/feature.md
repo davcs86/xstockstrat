@@ -2,7 +2,7 @@
 
 **Development Branch**: `feature/unified-symbol-page`
 **Created**: 2026-08-10
-**Last Updated**: 2026-08-15 (sequential execution started)
+**Last Updated**: 2026-08-16 (status corrected to `code-completed` — PR #958 merged)
 
 ---
 
@@ -19,6 +19,7 @@
 | 2026-08-15 | `implementation-ready` (unchanged — design.md amended with an FR-6 addendum, not re-gated; the feature was already past `design-approved`) | /sdd-design | **FR-6 design debated (3 rounds, full — user escalated from `quick` after round 1) and approved by user @ 2026-08-15.** recon.md gained an FR-6 addendum; design.md gained a "Design Addendum — FR-6 Indicator Overlay Panels" section. Chosen: a new additive `AnalysisService.GetIndicatorSeries` RPC whose handler reuses `StrategyEvaluator._compute_component`/`align_indicator_points` in its OWN loop (not the shared `evaluate_conditions_traced` — structural isolation from launched feature 097's `ListOpportunities` exit trace, the decisive round-2→3 reversal); client supplies the candlestick's own closes+times (no server re-fetch; verified `_compute_component` needs only closes); null-safe `google.protobuf.DoubleValue` wire encoding; per-component fault isolation; process-lifetime singleton semaphore `analysis.series.max_concurrent_components` (default 4, `max(1,…)` clamp); stacked `recharts` panels; evaluator-level parity test (not cross-RPC — flaky under differing bar windows). No Floor breach in any of the 3 rounds. product-spec.md FR-6/Affected Services/Proto Contract Changes/Config Key Changes/AC-4a corrected in lockstep (they had been written pre-debate assuming UI-direct indicator calls). **Two additive proto changes now pending for `/sdd-spec`**: the existing `ScreenResult` fields (FR-8) + the new `GetIndicatorSeries` RPC (FR-6). Next: re-run `/sdd-spec unified-symbol-page` to add the FR-6 implementation steps (proto step + analysis service/test steps + UI step), then `/sdd-execute`. |
 | 2026-08-15 | `implementation-ready` (unchanged — spec extended, not re-gated) | /sdd-spec | **FR-6 implementation steps added (re-spec).** Grew implementation-spec.md from 26 to 33 steps: Step 27 (proto — additive `GetIndicatorSeries` RPC + `GetIndicatorSeriesRequest`/`Response`/`ComponentSeries`/`NamedSeries` messages + `google/protobuf/wrappers.proto` import), Step 28 (proto-gen), Step 29 (config — `analysis.series.max_concurrent_components`, C-05 CLAUDE.md row + config-governance registered-keys entry), Step 30 (analysis handler — own `_compute_component` loop, singleton semaphore, null→unset `DoubleValue` encoding, per-component fault isolation), Step 31 (paired Python tests — evaluator-level parity + fault-isolation + null-mapping), Step 32 (UI — retain candlestick bars, `useGetStrategy` components, `useIndicatorSeries`, stacked `recharts` `IndicatorPanels`), Step 33 (UI e2e + new `indicatorSeries.ts` fixture). The FR-6 block is additive on top of the existing 25 core steps and their dependencies — no existing step renumbered. **Design Open Risk resolved during spec-writing**: the `Bar` timestamp field is confirmed `time` (`marketdata.proto:46` — `google.protobuf.Timestamp time = 2`), not `.timestamp`. All FR-6 analysis-side anchors (`servicer.py` EvaluateReadiness skeleton @1959, `__init__` @117, `_compute_component`/`align_indicator_points`/`_finite_or_none` in `evaluator.py`, `screener.py:84-85` semaphore) re-verified fresh against the live tree. |
 | 2026-08-15 | `implementation-ready` → `in-progress` | /sdd-execute | **Sequential execution started** (full feature, one commit per step, single integration PR #958). Executing on `claude/strategy-charts-symbol-page-itodkw` (harness-pinned; `feature/unified-symbol-page` absent on origin). Toolchain provisioned + codegen validated (empty stub diff). Step 1 done: additive `ScreenResult.criterion_raw_values`/`criterion_passed` (fields 12/13) — buf lint + buf breaking pass. |
+| 2026-08-16 | `in-progress` → `code-completed` | /sdd-sync (session, manual correction) | **Status correction — `status.md`/history had never advanced past Step 1.** All 33 implementation steps actually completed (confirmed via `context.md`'s "Feature 125 COMPLETE — all 33 steps done" checkpoint on `claude/strategy-charts-symbol-page-itodkw`), and the single integration PR #958 was squash-merged into `main-dev` on 2026-08-15T23:42:47Z (commit `d4c104b`). `/sdd-sync` found no `feature/unified-symbol-page` branch to reconcile against (squash-merge left none), so this row/`status.md` were corrected by hand instead. No `merge-order.md` blocking entry for this slug. Next: `/promote` will pick this up for the next production promotion. |
 
 ---
 
@@ -57,6 +58,5 @@ _Snapshot finalized by /sdd-spec (2026-08-10; re-spec 2026-08-15 added the FR-6 
 
 ## Next Action
 
-`/sdd-review unified-symbol-page impl-spec` — the FR-6 steps (27-33) are now in
-implementation-spec.md (33 steps total); validate the extended spec, then `/sdd-execute
-unified-symbol-page`.
+Code-completed and merged to `main-dev` (PR #958). No `merge-order.md` blocker. Awaiting the next
+production promotion — run `/promote` to include it.
