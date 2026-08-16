@@ -232,3 +232,33 @@
     `trigger_backfill`) — folded into Steps 3, 5, and 7 respectively rather than left implicit.
 - No DB migration step — `design.md` explicitly rejected that alternative; historical `15m`/`1h`
   rows stay inert, `GetDataCoverage`/`DeleteBackfilledData` stay permissive on purpose.
+
+## Session 2026-08-16 — sdd-review impl-spec (advisory)
+
+- Result: 1 Floor-adjacent finding, 3 warnings, 0 other failures (advisory — did not block).
+  All fixed in-place in `implementation-spec.md` before execution starts (no step has run yet,
+  so editing step bodies here is not an F-09 immutable-during-execution violation):
+  - Step 7: **[x] fixed** — `**Files**` list was missing `docs/runbooks/historical-backfill.md`
+    despite Instructions step 5 requiring edits to it (F-08/F-09 risk: `/sdd-execute` may only
+    stage files listed in a step's Files section). Added.
+  - Step 7: **[x] fixed** — added an explicit one-line acknowledgment that the strat-lab
+    same-PR governance rule (root `CLAUDE.md`) was checked against this step's narrowing of
+    `trigger_backfill`'s contract and found vacuously satisfied (the target file doesn't exist
+    and no `plugins/strat-lab/` file mentions timeframe values).
+  - Step 10: **[x] fixed** — Verification used `pnpm run test:unit` (no coverage enforcement);
+    swapped for `pnpm run test:coverage`, matching Steps 4/6/8's explicit-threshold pattern.
+  - Step 2: **[x] no action needed** — directory-vs-file paths in a proto-gen step's Files list
+    is inherent to codegen (the generated file set isn't enumerable pre-generation); the
+    Verification step's `git diff --stat` bounds the diff scope precisely. Advisory only.
+- Overlap findings: **FAIL-level file collision** — `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx`
+  is targeted by this feature's Step 9 (removes the `timeframe`/`onTimeframe`/`Tabs` selector
+  from `SymbolPriceChart`) and by `125-unified-symbol-page` (in-progress, most steps `done`,
+  8 separate steps list this file as modify — including Step 8, which restructures the exact
+  same `SymbolPriceChart` component signature/JSX region this feature's Step 9 also edits).
+  Confirmed live on the current checkout that 125's restructuring has already landed while the
+  `timeframe`/`onTimeframe`/`Tabs` identifiers 143's Step 9 targets are still present — not a
+  disjoint textual rebase, a same-region conflict. **User confirmed via `AskUserQuestion`** —
+  added a blocking row to `docs/roadmap/features/merge-order.md`
+  (`daily-bars-only` must wait for `unified-symbol-page`), per
+  `.claude/skills/sdd-review/reference/overlap-check.md`'s router-owned write protocol.
+
