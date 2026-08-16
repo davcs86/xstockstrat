@@ -1,6 +1,6 @@
 # Implementation Spec: symbol-page-section-nav
 
-**Status**: `pending`
+**Status**: `complete`
 **Created**: 2026-08-16
 **Feature**: `docs/roadmap/features/139-symbol-page-section-nav/feature.md`
 **Total Steps**: 3
@@ -52,7 +52,7 @@ widget and orders card are moved into a `<section>` wrapper unchanged).
 
 ### Step 1 — service: Create the `SymbolSectionNav` presentational component + sticky-offset constants
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/components/trader/SymbolSectionNav.tsx` — create
@@ -170,7 +170,7 @@ Confirm: nav uses `aria-label="Symbol navigation"` (not "Section"); `STICKY_NAV_
 
 ### Step 2 — service: Wire `SymbolSectionNav` into the Symbol page and wrap sections in anchored `<section>`s
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/[symbol]/page.tsx` — modify
@@ -258,7 +258,7 @@ Confirm: the nav renders once, after `<h1>`, gated on `!isLoading && !genuineErr
 
 ### Step 3 — test: e2e for nav interaction, `#hash` deep-link, `?strategy=` non-regression, and scroll-spy
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/position-detail.spec.ts` — modify (add nav-interaction cases;
@@ -357,4 +357,39 @@ Confirm: the two targeted specs pass; `mobile-overflow.spec.ts` stays green for
 
 ## Deviation Log
 
-_Populated by /sdd-execute as implementation proceeds._
+### D-1 (Step 1) — the three design Open Risks, resolved at wiring time
+Not spec deviations — the design flagged these as wiring-time tuning to decide + record here:
+- **Scroll-spy `rootMargin` bottom inset** kept at `-55%` (top inset = the `93/129px` header+nav
+  offset). Empirically fine in the e2e (the active chip flips correctly, incl. reaching Coverage);
+  left as a code comment for future tuning.
+- **`scroll-mt` vs the nav's 1px `border-b`**: accepted the ≤1px under-shoot as cosmetic (a
+  jumped-to heading lands ~1px under the bar) rather than padding the constant — not worth a
+  magic-number bump.
+- **Observer stale offset on `sm` resize**: **resolved properly** (not merely noted) — the scroll-spy
+  effect subscribes to `window.matchMedia('(min-width: 640px)')` `change` and re-creates the
+  `IntersectionObserver` with the correct `93`/`129px` inset when the breakpoint crosses.
+
+### D-2 (Step 2) — `sectionGroups` array literal + scroll-spy effect dependency
+`sectionGroups` is a fresh array literal each render, so keying the scroll-spy `useEffect` on it
+directly would re-subscribe the observer every render. **Disposition**: the component derives a stable
+`groupKey = groups.map(g => g.id).join(',')` string and depends the effect on `[groupKey]`, so the
+observer is re-created only when the actual group set changes (e.g. Position appears once a position
+loads) — not on every render. In-scope for Step 1 (component internal); no page change.
+
+### D-3 (Step 3) — `ToggleGroup type="single"` renders `role="radiogroup"`/`radio`, not `button`
+**What**: The spec/recon's locator plan asserted the nav chips via `getByRole('button', { name })`,
+citing the `insights/opportunities/page.tsx:212` ToggleGroup exemplar (located that way in e2e). But
+that exemplar is `type="multiple"` (toggle buttons → `role="button"`), whereas feature 139's nav is
+`type="single"` — Radix renders those items as a `role="radiogroup"` of `role="radio"` items (a
+single-select segmented control). The first GREEN e2e run caught this: the nav landmark was found and
+visible, but `getByRole('button', {name:'Overview'})` matched nothing (the Playwright aria snapshot
+showed `radiogroup` → `radio "Overview" [checked]`).
+**Disposition**: fixed the e2e locators (Step 3 files only — the component is correct and more
+accessible as a proper single-select group): `getByRole('button', …)` → `getByRole('radio', …)`, and
+the active-state assertion `toHaveAttribute('data-state','on')` → the role-idiomatic `toBeChecked()`
+(absence stays `toHaveCount(0)`). No component/page change. Radio role is still collision-free — it is
+scoped within the `Symbol navigation` landmark and its names (Overview/Trade/…) don't clash with the
+page's other radiogroup (OrderForm's BUY/SELL). This is exactly the class of assumption a real e2e run
+exists to catch — the red-green cycle (RED: nav absent; GREEN: correct role) surfaced it before merge.
+**Note**: the scroll-spy FR-2 e2e is mildly flaky (retry-passes) — the empirical `rootMargin` timing
+called out in design.md Open Risks / D-1; CI retries cover it.

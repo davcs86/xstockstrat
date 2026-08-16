@@ -14,6 +14,7 @@
 | 2026-08-16 | `draft` → `spec-ready` | /sdd-review | Product spec approved (PASS WITH WARNINGS, 0 blockers, no Floor breach). Warnings: 4 Open Questions are legitimate /sdd-design deferrals; stale `PLATFORM_SUBNAV` term (live model is `NAV_GROUPS`). Overlap: soft/dependency only (deps 125 + 143 both already merged to main-dev); no FAIL-class collision. Spec assumptions verified accurate post-143. |
 | 2026-08-16 | `spec-ready` → `design-approved` | /sdd-design | Design debated (2 rounds, full) and approved; recon.md + design.md written. Chose sticky segmented anchor-nav (`ToggleGroup type="single"` + `scrollIntoView` + `IntersectionObserver` scroll-spy, all sections mounted, hash deep-link preserving `?strategy=`) over Tabs/Accordion (which break `position-detail.spec.ts` + FR-7). R2 fixes: `aria-label="Symbol navigation"` (avoids getByRole substring collision), nav placed after `<h1>`. No Floor breach. |
 | 2026-08-16 | `design-approved` → `implementation-ready` | /sdd-spec | Implementation spec generated with 3 steps (all `xstockstrat-ui`, UI-only). Step 1: new `SymbolSectionNav.tsx` component + co-located `STICKY_NAV_TOP`/`SECTION_SCROLL_MT` constants. Step 2: wire into `page.tsx` (six `<section id>` wrappers, nav after `<h1>` gated on `!isLoading && !genuineError`, zero JSX reorder). Step 3: e2e (nav interaction, `#hash` deep-link, `?strategy=` non-regression, scroll-spy) at a broader `-g` scope, `mobile-overflow.spec.ts` kept green. No proto/config/DB/env step. |
+| 2026-08-16 | `implementation-ready` → `code-completed` | /sdd-execute | All 3 steps done (sequential mode, feature branch). Red→green verified via a real prebuilt-harness e2e run: RED = 5 nav tests fail (nav absent) → GREEN = 228-test trader+insights suite passes, `mobile-overflow` green at 390px, no role/label collision. Deviations: D-1 (design Open Risks resolved — scroll-spy resize re-subscribe done, rootMargin/scroll-mt cosmetic), D-2 (`groupKey` stable effect dep), D-3 (ToggleGroup `type="single"` renders `radiogroup`/`radio` not `button` — e2e locators fixed to `getByRole('radio')`+`toBeChecked()`; caught by the first GREEN run). Scroll-spy FR-2 e2e retry-passes (logged Open Risk). |
 
 ---
 
@@ -46,4 +47,4 @@ re-run /sdd-spec if the registry changes.)_
 
 ## Next Action
 
-`/sdd-review symbol-page-section-nav impl-spec` — validate the implementation spec, then `/sdd-execute symbol-page-section-nav`
+`/promote` (or await CI) — feature code-complete; open the integration PR to `main-dev`

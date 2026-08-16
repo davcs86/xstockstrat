@@ -111,3 +111,45 @@
   wiring rules enforced at execute: `#research` wraps the ENTIRE watchlist ternary (both branches +
   loading); `#position` wraps only `PositionBody` (the `positionNotFound` CardNotice stays unwrapped,
   still renders when unheld).
+
+## Session 2026-08-16 — sdd-execute (sequential mode)
+
+Executed all 3 steps on `feature/symbol-page-section-nav` (off latest main-dev, post-143). Status:
+`implementation-ready` → `code-completed`.
+
+### Step 1 — SymbolSectionNav component [done]
+- Created `src/components/trader/SymbolSectionNav.tsx`: `'use client'` presentational nav —
+  `ToggleGroup type="single"` in `<nav aria-label="Symbol navigation">`, sticky `top-[49px]
+  sm:top-[85px]` z-40, exported `STICKY_NAV_TOP`/`SECTION_SCROLL_MT` (single source of truth),
+  mount `#hash` effect, `IntersectionObserver` scroll-spy (re-subscribes on `sm` breakpoint change —
+  D-1), bare-`#id` `history.replaceState` click handler. Effect keyed on stable `groupKey` (D-2).
+- Verification: `tsc --noEmit` clean, `pnpm run lint` clean.
+
+### Step 2 — wire into page.tsx [done]
+- Added `SymbolSectionNav`/`SECTION_SCROLL_MT` + `cn` imports; wrapped the six section runs in
+  `<section id className={cn('space-y-4', SECTION_SCROLL_MT)}>` (overview/trade/research/backtests/
+  coverage/position) with ZERO JSX reorder and every gating expression verbatim (FR-3). `#research`
+  wraps the WHOLE watchlist ternary; `#position` wraps only `PositionBody` (the not-found CardNotice
+  stays unwrapped). Built `sectionGroups` (Position appended only when `position?.symbol`). Rendered
+  the nav after `<h1>`, gated on `!isLoading && !genuineError`.
+- **Section-preservation confirmed** (operator request): all 17 rendered elements map into a group;
+  nothing dropped (verified against `page.tsx:215-313`).
+
+### Step 3 — e2e [done]
+- Added nav-interaction cases to `position-detail.spec.ts` (its 20 section assertions unchanged — all
+  sections stay mounted, so they still pass); created `symbol-section-nav.spec.ts` (deep-link `#hash`,
+  `?strategy=` non-regression, scroll-spy flip).
+- **TDD red→green (real prebuilt e2e run)**: RED = 5 new nav tests fail against the nav-less build
+  (`Symbol navigation` landmark absent), 25 existing pass. GREEN (after Steps 1-2 + a rebuild) = the
+  full trader+insights suite **228 passed**, `mobile-overflow.spec.ts` green at 390px, no role/label
+  collision on any sibling spec.
+- **D-3**: the first GREEN run caught that `ToggleGroup type="single"` renders `role="radiogroup"`/
+  `radio` (not `button` — the recon's `getByRole('button')` evidence was from a `type="multiple"`
+  exemplar). Fixed the locators to `getByRole('radio')` + `toBeChecked()` (test-only). Ledger
+  `fails.md` entry added.
+- Scroll-spy FR-2 e2e retry-passes (the empirical `rootMargin` timing Open Risk from design.md/D-1);
+  CI retries cover it.
+
+**Accountability**: out-of-scope changes: none (D-1/D-2 are Step-1 component internals; D-3 is
+Step-3 test-only). Open items: none. Unaddressed review warnings: none (the impl-spec advisory
+line-anchor drift was cosmetic; the coverage-threshold NOTE was N/A). Next: integration PR → main-dev.
