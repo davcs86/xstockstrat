@@ -368,6 +368,36 @@ broke.
 
 ## Deviation Log
 
+### Deviation: Step 2 — instruction #7 was wrong; `extraJSON` must NOT stay `[]byte`
+
+**Spec said** (Step 2, Instruction 7): "`extraJSON` (`:301-307`) stays `[]byte`, unchanged — the
+cast is purely SQL text, per design.md."
+**Actual**: This was incorrect and the resulting fix did not resolve the bug. PR #967 (containing
+only the `::jsonb` cast, `extraJSON` still `[]byte`) merged and deployed to `xstockstrat-staging`.
+Post-deploy logs showed the **identical** `SQLSTATE 22P02` error for symbol UPRO, confirming the
+cast-only fix was insufficient. Root cause, corrected: pgx's `QueryExecModeExec` (active under
+`DB_PGBOUNCER=true`) infers each parameter's wire type from its Go type with no server
+round-trip. A `[]byte` argument is encoded as `bytea`; `bytea::jsonb` does not decode the bytes
+as UTF-8 text — it casts through bytea's hex-escaped text representation (e.g. `\x7b7d`), which
+is never valid JSON, producing the exact same SQLSTATE 22P02 regardless of the `::jsonb` cast.
+Confirmed against pgx v5's own documentation (`conn.go`'s `QueryExecModeSimpleProtocol` doc
+comment, which `QueryExecModeExec` explicitly shares behavior with): "`string` must be used
+instead for text type values including json and jsonb." Corrected fix: bind `string(extraJSON)`
+instead of the raw `[]byte`.
+**Reason**: The original design/spec grilling rounds correctly identified the OID-inference
+mechanism (`[]byte` → `bytea`) but the proposed remedy (`::jsonb` cast alone) didn't actually
+address it — a cast can't make Postgres decode a bytea's hex representation as UTF-8 JSON text.
+This is precisely the gap design.md's own mandatory live-Postgres repro (Steps 1/3, blocked on no
+Docker daemon in every execute session so far) was meant to catch before merge — it didn't run,
+and the bug shipped. The `pgxmock` test from Step 4 was also strengthened with a custom
+`isStringArg` matcher on the `extra_metrics` argument (confirmed red against `[]byte`, green
+against `string`) since the original test only pinned the SQL text and would have passed either
+way — a real coverage gap now closed.
+**Still blocked**: Steps 1 and 3's live-Postgres repro has still not run in any session so far
+(no Docker daemon available). The corrected fix is pgxmock-verified and grounded in pgx's own
+documented behavior, but per this feature's own standard, it should not be called fully confirmed
+until either the repro runs, or a subsequent staging deployment's logs show no recurrence.
+
 ### Deviation: Steps 1 & 3 — blocked, no Docker daemon in this execute environment
 
 **Spec said**: Step 1 brings up local `docker-compose` TimescaleDB, applies migrations, and runs
