@@ -138,7 +138,7 @@ Both must pass with zero findings (comment-only change).
 
 ### Step 2 — proto-gen: regenerate stubs
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `packages/proto`
 **Files**:
 - `packages/proto/gen/go/common/v1/` — modify (generated)

@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file common/v1/common.proto.
  */
 export const file_common_v1_common: GenFile = /*@__PURE__*/
-  fileDesc("ChZjb21tb24vdjEvY29tbW9uLnByb3RvEhV4c3RvY2tzdHJhdC5jb21tb24udjEiNAoLUGFnZVJlcXVlc3QSEQoJcGFnZV9zaXplGAEgASgFEhIKCnBhZ2VfdG9rZW4YAiABKAkiPAoMUGFnZVJlc3BvbnNlEhcKD25leHRfcGFnZV90b2tlbhgBIAEoCRITCgt0b3RhbF9jb3VudBgCIAEoBSKSAQoFRXJyb3ISDAoEY29kZRgBIAEoCRIPCgdtZXNzYWdlGAIgASgJEjoKB2RldGFpbHMYAyADKAsyKS54c3RvY2tzdHJhdC5jb21tb24udjEuRXJyb3IuRGV0YWlsc0VudHJ5Gi4KDERldGFpbHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIjkKB0RlY2ltYWwSDQoFdW5pdHMYASABKAMSDQoFbmFub3MYAiABKAUSEAoIY3VycmVuY3kYAyABKAkiPgoFQXNzZXQSDgoGc3ltYm9sGAEgASgJEhAKCGV4Y2hhbmdlGAIgASgJEhMKC2Fzc2V0X2NsYXNzGAMgASgJIl8KCVRpbWVSYW5nZRIpCgVzdGFydBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJwoDZW5kGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCpaCgtUcmFkaW5nTW9kZRIcChhUUkFESU5HX01PREVfVU5TUEVDSUZJRUQQABIWChJUUkFESU5HX01PREVfUEFQRVIQARIVChFUUkFESU5HX01PREVfTElWRRACKlsKC0Vudmlyb25tZW50EhsKF0VOVklST05NRU5UX1VOU1BFQ0lGSUVEEAASEwoPRU5WSVJPTk1FTlRfREVWEAESGgoWRU5WSVJPTk1FTlRfUFJPRFVDVElPThACKlcKCkJyb2tlclR5cGUSGwoXQlJPS0VSX1RZUEVfVU5TUEVDSUZJRUQQABIWChJCUk9LRVJfVFlQRV9BTFBBQ0EQARIUChBCUk9LRVJfVFlQRV9JQktSEAIqlAEKCVRpbWVmcmFtZRIZChVUSU1FRlJBTUVfVU5TUEVDSUZJRUQQABITCg9USU1FRlJBTUVfMTVNSU4QBRITCg9USU1FRlJBTUVfMUhPVVIQAxISCg5USU1FRlJBTUVfMURBWRAEEhYKDlRJTUVGUkFNRV8xTUlOEAEaAggBEhYKDlRJTUVGUkFNRV81TUlOEAIaAggBQjxaOmdpdGh1Yi5jb20veHN0b2Nrc3RyYXQvY29udHJhY3RzL2dlbi9nby9jb21tb24vdjE7Y29tbW9udjFiBnByb3RvMw", [file_google_protobuf_timestamp]);
+  fileDesc("ChZjb21tb24vdjEvY29tbW9uLnByb3RvEhV4c3RvY2tzdHJhdC5jb21tb24udjEiNAoLUGFnZVJlcXVlc3QSEQoJcGFnZV9zaXplGAEgASgFEhIKCnBhZ2VfdG9rZW4YAiABKAkiPAoMUGFnZVJlc3BvbnNlEhcKD25leHRfcGFnZV90b2tlbhgBIAEoCRITCgt0b3RhbF9jb3VudBgCIAEoBSKSAQoFRXJyb3ISDAoEY29kZRgBIAEoCRIPCgdtZXNzYWdlGAIgASgJEjoKB2RldGFpbHMYAyADKAsyKS54c3RvY2tzdHJhdC5jb21tb24udjEuRXJyb3IuRGV0YWlsc0VudHJ5Gi4KDERldGFpbHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIjkKB0RlY2ltYWwSDQoFdW5pdHMYASABKAMSDQoFbmFub3MYAiABKAUSEAoIY3VycmVuY3kYAyABKAkiPgoFQXNzZXQSDgoGc3ltYm9sGAEgASgJEhAKCGV4Y2hhbmdlGAIgASgJEhMKC2Fzc2V0X2NsYXNzGAMgASgJIl8KCVRpbWVSYW5nZRIpCgVzdGFydBgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJwoDZW5kGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCpaCgtUcmFkaW5nTW9kZRIcChhUUkFESU5HX01PREVfVU5TUEVDSUZJRUQQABIWChJUUkFESU5HX01PREVfUEFQRVIQARIVChFUUkFESU5HX01PREVfTElWRRACKlsKC0Vudmlyb25tZW50EhsKF0VOVklST05NRU5UX1VOU1BFQ0lGSUVEEAASEwoPRU5WSVJPTk1FTlRfREVWEAESGgoWRU5WSVJPTk1FTlRfUFJPRFVDVElPThACKlcKCkJyb2tlclR5cGUSGwoXQlJPS0VSX1RZUEVfVU5TUEVDSUZJRUQQABIWChJCUk9LRVJfVFlQRV9BTFBBQ0EQARIUChBCUk9LRVJfVFlQRV9JQktSEAIqnAEKCVRpbWVmcmFtZRIZChVUSU1FRlJBTUVfVU5TUEVDSUZJRUQQABIXCg9USU1FRlJBTUVfMTVNSU4QBRoCCAESFwoPVElNRUZSQU1FXzFIT1VSEAMaAggBEhIKDlRJTUVGUkFNRV8xREFZEAQSFgoOVElNRUZSQU1FXzFNSU4QARoCCAESFgoOVElNRUZSQU1FXzVNSU4QAhoCCAFCPFo6Z2l0aHViLmNvbS94c3RvY2tzdHJhdC9jb250cmFjdHMvZ2VuL2dvL2NvbW1vbi92MTtjb21tb252MWIGcHJvdG8z", [file_google_protobuf_timestamp]);
 
 /**
  * Pagination
@@ -269,10 +269,11 @@ export const BrokerTypeSchema: GenEnum<BrokerType> = /*@__PURE__*/
  * Timeframe is the canonical OHLCV bar interval, shared by marketdata + analysis + ingest.
  * Replaces the free-text "1d"/"1Day"/"1m" strings that previously mismatched across services.
  *
- * 15 minutes is the smallest supported interval: the free Alpaca market-data plan serves
- * 15-minute-delayed data, and the platform is not a real-time trader. TIMEFRAME_1MIN and
- * TIMEFRAME_5MIN are deprecated — no longer ingested or selectable — but retained (not
- * deleted) so the change stays wire- and source-compatible.
+ * Only TIMEFRAME_1DAY is requestable (feature 143) — GetBars/BackfillBars reject anything
+ * else. TIMEFRAME_15MIN/TIMEFRAME_1HOUR are deprecated but retained (not deleted, not
+ * renumbered) for wire compatibility with historically-stored 15m/1h rows, mirroring how
+ * TIMEFRAME_1MIN/TIMEFRAME_5MIN were already handled when sub-15m intervals stopped being
+ * selectable.
  *
  * @generated from enum xstockstrat.common.v1.Timeframe
  */
@@ -283,14 +284,18 @@ export enum Timeframe {
   TIMEFRAME_UNSPECIFIED = 0,
 
   /**
-   * smallest supported interval
+   * deprecated: only 1d is requestable (feature 143)
    *
-   * @generated from enum value: TIMEFRAME_15MIN = 5;
+   * @generated from enum value: TIMEFRAME_15MIN = 5 [deprecated = true];
+   * @deprecated
    */
   TIMEFRAME_15MIN = 5,
 
   /**
-   * @generated from enum value: TIMEFRAME_1HOUR = 3;
+   * deprecated: only 1d is requestable (feature 143)
+   *
+   * @generated from enum value: TIMEFRAME_1HOUR = 3 [deprecated = true];
+   * @deprecated
    */
   TIMEFRAME_1HOUR = 3,
 

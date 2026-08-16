@@ -291,3 +291,12 @@ no feature code. Part of an operator-requested sequential run of 143 then 139, o
 - Verification: `buf lint` PASS; `buf breaking --against feature/daily-bars-only` PASS (no findings).
 - Files modified: `packages/proto/common/v1/common.proto`
 - Deviations: none. TDD: N/A (proto — verified by buf lint/breaking).
+
+### Step 2 — proto-gen: regenerate stubs [done]
+- Ran `./scripts/buf-gen.sh`. Diff confined to `gen/*/common/v1/*` (8 files); field numbers
+  unchanged (15MIN=5, 1HOUR=3, 1DAY=4) — only `@deprecated`/deprecation-option annotations added
+  to the two enum members plus the enum doc comment. No renumbering, no other symbol change.
+- Verification: `git diff --stat packages/proto/gen/` shows only common/v1 files; substantive diff
+  confirmed deprecation-only.
+- Files modified: `packages/proto/gen/{go,python,ts}/common/v1/*`
+- Deviations: none. TDD: N/A (proto-gen — verified by deprecation-only diff).
