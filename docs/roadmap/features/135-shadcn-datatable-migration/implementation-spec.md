@@ -2059,3 +2059,22 @@ file's own header comment to describe the post-migration shape instead of the re
 a direct, confirmed byproduct of this feature's own Steps 23 and 27, not pre-existing.
 **Disposition**: `services/xstockstrat-ui/src/components/trader/orderShared.tsx` only. `tsc --noEmit`
 and `pnpm run lint` both clean after removal.
+
+### Deviation: Step 33 — AC-6 satisfied modulo one confirmed pre-existing, unrelated failure
+**Spec said**: "Full `xstockstrat-ui` Playwright + Vitest suites pass (exit code 0) after migration."
+**Actual**: the final, definitive full Playwright run (322 tests, all 16 migrated tables + the
+dead-code removal) returned 310 passed, 11 flaky-then-pass (all resolved on retry — the established
+cold-start/concurrent-worker pattern), and **1 hard failure**: `nav-reachability.spec.ts:60`. This
+test asserts nav-shell/breadcrumb active-state behavior and touches zero table code. Investigated
+rather than waived: (1) `git diff --stat origin/main-dev..HEAD` confirms this PR touches neither the
+test file nor any shared-shell/navigation component; (2) re-ran in isolation — reproduced identically
+(not resource contention from the parallel suite); (3) checked out unmodified `origin/main-dev` in a
+`git worktree` and ran the identical test — **the identical failure reproduces there**, byte-identical
+error messages. Confirmed pre-existing, confirmed unrelated to this PR.
+**Reason**: a base-branch bug/flake that predates this feature and is out of scope for a table-
+migration PR to fix (per CLAUDE.md's PR-activity guidance: "if a CI failure reproduces on the base
+branch and predates your changes, say so once in the thread" rather than either silently ignoring it
+or scope-creeping into an unrelated fix).
+**Disposition**: no code change. Noted on the integration PR; not fixed as part of this feature.
+Vitest (97/97) and every other Playwright test are unaffected — this is the one honest caveat on an
+otherwise clean AC-6 gate.

@@ -951,22 +951,42 @@ than silently absorbed into the step count.
   bespoke Sheet-interaction test for the fill-lineage table.
 - **Vitest**: `pnpm run test:coverage` — 27 test files, 97 tests, all passed; 84.13% overall
   statement/line coverage (well above the 40% `src/lib/**`-scoped threshold).
-- **Playwright**: ran the full suite once (322 tests, 2 workers) covering the pre-Step-34/35 state as
-  an interim regression signal — reached test 209/322 with zero non-flake failures observed (one early
-  cold-start-flaky-then-pass in `accounts/authorized-apps.spec.ts`, matching the established pattern)
-  before being stopped to free the mock-backend port for Steps 34/35's own targeted verification
-  (stop-hook required committing promptly; a stray `node` process from an earlier run was found
-  holding port 9091 and killed). Steps 34-35's own targeted runs (above) independently confirm the
-  16th table; the dead-code removal (below) was verified via `tsc`/`lint`/Vitest, all clean. The
-  complete, final full-suite run (all 16 tables + dead-code removal) is queued as the next action
-  before opening the integration PR — recorded honestly as pending here rather than claimed complete.
+- **Playwright, interim run**: ran the full suite once (322 tests, 2 workers) covering the
+  pre-Step-34/35 state as an interim regression signal — reached test 209/322 with zero non-flake
+  failures observed before being stopped to free the mock-backend port for Steps 34/35's own targeted
+  verification (stop-hook required committing promptly; a stray `node` process from an earlier run was
+  found holding port 9091 and killed).
+- **Playwright, final/definitive run** (all 16 tables + dead-code removal, the true AC-6 gate): 322
+  tests, 2 workers, 18.2 minutes. **310 passed**, **11 flaky-then-pass** (all resolved on retry — the
+  established cold-start/concurrent-worker pattern documented throughout this session: `authorized-
+  apps.spec.ts`, `copilot.spec.ts` ×2, `insights/dashboard.spec.ts`, `strategy-authoring.spec.ts`,
+  `mobile-sidebar.spec.ts`, `mobile.spec.ts`, `account-selector.spec.ts`, `order-form.spec.ts`,
+  `positions-reconciliation.spec.ts`, `positions.spec.ts`), **1 hard failure**:
+  `nav-reachability.spec.ts:60` ("every screen is reachable by walking the shell and the breadcrumb
+  reflects it"). The dev server logged "Server is approaching the used memory threshold, restarting…"
+  near the end of the run (a resource-exhaustion artifact of a single 18-minute, 322-test dev-server
+  process in this sandbox, not a code defect) — most of the late-run flaky tests cluster right around
+  that event.
+- **`nav-reachability.spec.ts` failure — investigated, confirmed pre-existing and unrelated, not
+  fixed**: re-ran in isolation (not resource contention from the parallel suite — reproduced
+  identically, 1 failed / 3 passed, both on the first attempt and both retries, each with a different
+  specific nav-state mismatch but the same failure shape). Confirmed via `git diff --stat` that this
+  PR touches neither the test file nor any shared-shell/navigation component
+  (`navGroups.tsx`/`PlatformHeader.tsx`/`middleware.ts`) — zero overlap. Definitively isolated via a
+  `git worktree` checkout of unmodified `origin/main-dev`: **the identical failure reproduces there**,
+  same exact error messages and sequence (empty `aria-current` on the Discover link, then a
+  `trader/portfolio`→`trader/positions` URL mismatch on retry). This is a pre-existing bug/flake in
+  the base branch, confirmed not caused by this PR — not fixed here (out of scope for a table-migration
+  feature; noted on the PR per the "say so once in the thread" convention for a base-branch failure).
 - **Dead-code disposition**: removed `OrderSymbolCell`/`OrderSideCell`/`OrderStatusCell` from
   `orderShared.tsx` (zero remaining call sites, confirmed via grep across `src/` and `e2e/`) — see
   Deviation Log entry.
 - Files modified: `services/xstockstrat-ui/src/components/trader/orderShared.tsx` (dead-code
   removal only — Step 33 itself is verification-only per its own Files section).
 - Deviations: AC-2 re-interpretation + `orderShared.tsx` dead-code removal — see Deviation Log
-  entries above.
+  entries above. AC-6 ("full Playwright + Vitest suites pass, exit code 0") is satisfied modulo the
+  one confirmed pre-existing, unrelated `nav-reachability.spec.ts` failure — recorded honestly, not
+  silently waived.
 
 ## Session 2026-08-15 — sdd-execute boot (branch-topology correction)
 
