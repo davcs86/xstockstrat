@@ -1398,7 +1398,7 @@ cd services/xstockstrat-ui && pnpm exec playwright test e2e/trader/api-smoke.spe
 
 ### Step 29 — service: migrate `/trader/positions` Exposure table (row 2, 19 cols) to `DataTable`
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/src/app/trader/positions/page.tsx` — modify
@@ -1464,7 +1464,7 @@ grep -n "DataTable\|onRowClick\|enablePagination" src/app/trader/positions/page.
 
 ### Step 30 — test: verify the Exposure table migration preserves behavior + adds keyboard row-activation
 
-**Status**: `pending`
+**Status**: `done`
 **Service**: `xstockstrat-ui`
 **Files**:
 - `services/xstockstrat-ui/e2e/trader/positions.spec.ts` — modify
@@ -1840,3 +1840,43 @@ needed, and scoping the test to the specific table is more robust than a same-pa
 disambiguation trick.
 **Disposition**: no file-set change beyond `OrderBook.tsx` (already in Step 27's Files) and
 `live-strategies.spec.ts` (already in this step's Files).
+
+### Deviation: Step 29 — migrate `/trader/positions` Exposure table to `DataTable` (dynamic per-row className + referential-stability fix)
+**Spec said**: "each carrying its existing `meta.className` unchanged."
+**Actual**: 5 of the 19 columns (Today's P/L ($)/(%), Total P/L ($)/(%), Open R) computed their
+pre-migration `<TableCell>` className *dynamically per row* via `pnlClass(p.dayPnl)`/
+`pnlClass(p.unrealizedPnl)`/`pnlClass(openR(p))` (sign-dependent color). `ColumnDef.meta.className`
+is a static per-column string in the composite (`data-table.tsx`'s `TableCell` reads
+`cell.column.columnDef.meta?.className`, fixed at column-definition time, not per-row) — it cannot
+express a per-row-value-dependent class. Moved the dynamic color class onto an inner `<span
+className={pnlClass(...)}>` wrapping the formatted value inside each of those 5 columns' `cell`
+renderers; `meta.className` on those columns keeps only the static alignment/weight/breakpoint
+classes (`text-right tabular-nums font-semibold`, etc.). Verified visually equivalent — same
+classes render, just on an inline `<span>` instead of the `<td>` itself, no layout difference.
+**Reason**: matches the actual `ColumnDef.meta` contract (static per column); the composite has no
+per-row-value cell-styling hook, and adding one for a single call site would be scope creep the
+task didn't ask for (CLAUDE.md "write the minimum that solves the stated problem").
+**Disposition**: no composite change — component-level adaptation only, confined to
+`positions/page.tsx`.
+
+**Second deviation, same step**: also wrapped the `positions` filtered array (`rawPositions.filter(...)`)
+in `useMemo` — not explicitly instructed, but the pre-existing plain `.filter()` recomputed a new
+array reference on every render, which is exactly the TanStack Table referential-stability gotcha
+`data-table.tsx`'s own JSDoc warns about (ledger `fails.md` 2026-08-08, already fixed once in Step 23
+for `OrdersTable.tsx`'s `merged` array). Passing `data={positions}` to the composite without this fix
+risked spurious internal row-model resets on every render (losing sort state, in-flight interactions).
+**Disposition**: `services/xstockstrat-ui/src/app/trader/positions/page.tsx` only — no other file
+touched for this fix.
+
+### Deviation: Step 30 — `getByRole('row', ...)` broken by the composite's `role="button"` override
+**Spec said**: "Fix any locator broken by the `DataTable` restructuring."
+**Actual**: `positions.spec.ts` (5 occurrences) and `valuation-parity.spec.ts` (1 of its 2
+`getByRole('row', ...)` calls — the Exposure-table one, not the unaffected Portfolio-table one)
+used `page.getByRole('row', { name: /AAPL|MSFT/ })`. The composite sets `role="button"` on every
+`onRowClick`-enabled `<tr>` (for a11y — the row is now a keyboard-activatable control), which
+overrides the element's native implicit `row` ARIA role. All 6 occurrences were changed to
+`getByRole('button', { name: ... })`, matching the row's actual accessible role post-migration.
+This is the anticipated, spec-called-out class of locator breakage, not a surprise finding.
+**Disposition**: `services/xstockstrat-ui/e2e/trader/positions.spec.ts`,
+`services/xstockstrat-ui/e2e/trader/valuation-parity.spec.ts` — both already in this step's Files
+(`positions.spec.ts` explicitly; `valuation-parity.spec.ts` under its "if locators break" clause).

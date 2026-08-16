@@ -784,6 +784,57 @@ clears it lands, rather than letting the warning go stale.
 - Files modified: `services/xstockstrat-ui/e2e/trader/live-strategies.spec.ts`
 - Deviations: `tableTestId` test-locator disambiguation — see Deviation Log entry above.
 
+### Step 29 — service: migrate `/trader/positions` Exposure table (row 2, 19 cols) to `DataTable` [done]
+- Defined `columns: ColumnDef<Position>[]` for all 19 columns, `useMemo`-wrapped over `[weight]`,
+  preserving every formatting helper (`fmtUsd`/`fmtSignedUsd`/`fmtPct`/`fmtR`/`pnlClass`/`weight`/
+  `openR`/`EnumBadge`) and both existing `stopPropagation` handlers (Symbol link, Trade button)
+  verbatim, per Codebase Evidence.
+- **Dynamic per-row className found**: 5 columns (both P/L pairs + Open R) computed their
+  pre-migration cell className *per row* (`pnlClass(...)`, sign-dependent) — `meta.className` is
+  static per-column, so moved the dynamic color class onto an inner `<span>` inside those 5
+  columns' `cell` renderers. Visually identical. Full detail in the Deviation Log.
+  Trade column set `enableSorting: false` (matches the `Actions` column precedent from Step 23) with
+  a `header: () => <span className="sr-only">Trade</span>` to preserve the original visually-hidden
+  label.
+- **Also wrapped `positions` in `useMemo`** (not explicitly instructed) — the pre-existing plain
+  `.filter()` produced a fresh array reference every render, the exact TanStack referential-stability
+  gotcha already fixed once in Step 23. Recorded as a second deviation on this step.
+- Replaced the `<Table>...</Table>` JSX with `<DataTable columns={columns} data={positions}
+  getRowId={...} onRowClick={(p) => setSelected(p)} rowClassName={() => 'cursor-pointer'} />`
+  (`enablePagination` omitted — composite default `false`, existing server-side keyset Prev/Next
+  block left untouched outside the `DataTable`, per Instruction 2).
+- The nested-Sheet fill-lineage table (`:578-604` pre-edit, Step 31's target) was left untouched —
+  confirmed out of scope for this step; kept the `Table`/`TableHeader`/etc. imports for it.
+- Verification: `tsc --noEmit` clean; `pnpm run lint` — 2 new warnings, both the same accepted
+  `react-hooks/exhaustive-deps` class present throughout this migration (`rawPositions`/`weight`
+  closures recreated each render — harmless, matches precedent in 5 other already-migrated files).
+- Files modified: `services/xstockstrat-ui/src/app/trader/positions/page.tsx`
+- Deviations: dynamic per-row className handling + `positions` referential-stability fix — see
+  Deviation Log entries above.
+
+### Step 30 — test: verify the Exposure table migration preserves behavior + adds keyboard row-activation [done]
+- **Real locator breakage found and fixed** (anticipated by the step's own instructions, not a
+  surprise): `positions.spec.ts` (5×) and `valuation-parity.spec.ts` (1×, the Exposure-table
+  occurrence only — its Portfolio-table `getByRole('row', ...)` is unaffected, that table has no
+  `onRowClick`) used `getByRole('row', { name: /AAPL|MSFT/ })`. The composite sets `role="button"`
+  on every `onRowClick`-enabled row, overriding the native `row` ARIA role — changed all 6
+  occurrences to `getByRole('button', { name: ... })`. Confirmed via the Playwright error-context
+  snapshot that the AAPL row genuinely rendered fine (all 19 cells correct) — the locator, not the
+  markup, was the problem.
+- Added the two new-coverage assertions per Instructions 2–3: keyboard Enter on the row opens the
+  detail Sheet (new accessibility capability — pre-migration was mouse-only); keyboard Enter on the
+  Symbol link/Trade button fires only its own action (Trade link navigation), not also the row's
+  `onRowClick` (row-2 instance of the Step 25/26 bug class).
+- Full re-run: `positions.spec.ts` + `valuation-parity.spec.ts` + `positions-reconciliation.spec.ts`
+  — 11/11 passed (1 cold-start-flaky-then-pass on the new keyboard test, matching this session's
+  established pattern; the ECONNRESET webServer log line is the same documented infra flake).
+- `mobile-overflow.spec.ts -g "trader/positions$"` — passed (390px, no horizontal overflow); no
+  `ROUTES` change needed, confirmed pre-existing entry already covered this route.
+- Files modified: `services/xstockstrat-ui/e2e/trader/positions.spec.ts`,
+  `services/xstockstrat-ui/e2e/trader/valuation-parity.spec.ts`
+- Deviations: `getByRole('row', ...)` → `getByRole('button', ...)` locator fix — see Deviation Log
+  entry above.
+
 ## Session 2026-08-15 — sdd-execute boot (branch-topology correction)
 
 - Boot Step B3 (`git ls-remote --heads origin feature/shadcn-datatable-migration`) found the
