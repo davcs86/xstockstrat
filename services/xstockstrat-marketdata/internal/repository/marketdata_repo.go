@@ -281,26 +281,23 @@ func (r *MarketDataRepo) GetFundamentals(ctx context.Context, symbol string) (f 
 	if len(extraJSON) > 0 {
 		_ = json.Unmarshal(extraJSON, &extra)
 	}
-	deref := func(p *float64) float64 {
-		if p == nil {
-			return 0
-		}
-		return *p
-	}
+	// The scanned locals are already *float64 (NULL-preserving) — pass them straight
+	// through instead of collapsing a real SQL NULL to 0.0 (bug fix; source.Fundamentals'
+	// metric fields are pointers for exactly this reason).
 	return &source.Fundamentals{
 		Symbol:        sym,
 		AsOf:          asOf,
-		MarketCap:     deref(marketCap),
-		PERatio:       deref(pe),
-		PBRatio:       deref(pb),
-		DividendYield: deref(divYield),
-		EPS:           deref(eps),
-		Beta:          deref(beta),
-		ROE:           deref(roe),
-		DebtToEquity:  deref(dte),
-		Price:         deref(price),
-		YearHigh:      deref(yHigh),
-		YearLow:       deref(yLow),
+		MarketCap:     marketCap,
+		PERatio:       pe,
+		PBRatio:       pb,
+		DividendYield: divYield,
+		EPS:           eps,
+		Beta:          beta,
+		ROE:           roe,
+		DebtToEquity:  dte,
+		Price:         price,
+		YearHigh:      yHigh,
+		YearLow:       yLow,
 		ExtraMetrics:  extra,
 		Currency:      currency,
 		Source:        src,

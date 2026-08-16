@@ -31,19 +31,27 @@ type MultiSymbolSource interface {
 // Fundamentals is the internal, provider-agnostic fundamental-metrics model
 // (feature 059). The FMP client and the repository depend on this struct rather than
 // the generated proto type, so neither imports gen/go marketdata types.
+//
+// The 11 metric fields are `*float64`, not `float64`: a nil pointer means the active
+// provider genuinely did not supply that metric for this symbol (or, for FMP, that the
+// metric's tier — core vs extended — was never fetched), distinct from a real `0.0`
+// (bug fix — see marketdata.proto's `Fundamentals.missing_metrics` doc comment). Every
+// producer (fmp_client.go, finnhub_client.go, marketdata_repo.go) must leave the pointer
+// nil rather than defaulting to a zero value, and toProtoFundamentals derives
+// missing_metrics from exactly these nils.
 type Fundamentals struct {
 	Symbol        string
-	MarketCap     float64
-	PERatio       float64
-	PBRatio       float64
-	DividendYield float64
-	EPS           float64
-	Beta          float64
-	ROE           float64
-	DebtToEquity  float64
-	Price         float64
-	YearHigh      float64
-	YearLow       float64
+	MarketCap     *float64
+	PERatio       *float64
+	PBRatio       *float64
+	DividendYield *float64
+	EPS           *float64
+	Beta          *float64
+	ROE           *float64
+	DebtToEquity  *float64
+	Price         *float64
+	YearHigh      *float64
+	YearLow       *float64
 	ExtraMetrics  map[string]float64
 	AsOf          time.Time
 	Currency      string

@@ -18,6 +18,12 @@ evaluated). The same fail-closed rule applies per-symbol when fundamentals were 
 batch but a specific symbol's value is still missing (e.g. FMP omitted that symbol, or the metric
 is an ``extra_metrics`` key that symbol doesn't carry): a hard-filter criterion with no raw value
 never silently passes.
+
+A *known* field (``_FUNDAMENTAL_FIELDS``) that is present for the symbol but individually
+missing from the provider (e.g. ``dividend_yield`` never fetched because the extended metric
+tier was off) is also fail-closed rather than read as its wire-default ``0.0`` (bug fix — a
+known field has no wire presence, so the marketdata proto instead marks per-field absence via
+``Fundamentals.missing_metrics``; ``_fundamental_value`` checks it before reading).
 """
 
 import asyncio
@@ -379,6 +385,15 @@ class ScreenerEngine:
         if fund is None or not metric_name:
             return None
         if metric_name in _FUNDAMENTAL_FIELDS:
+            # A known field has no wire presence (plain double) — the provider marks a
+            # genuinely-missing value via `missing_metrics` instead (bug fix: previously
+            # this unconditionally read the field, so a missing value's wire-default 0.0
+            # was indistinguishable from a real 0.0, and an `lte` hard filter silently
+            # "passed" data that was never actually fetched). None here routes through the
+            # same fail-closed path `_eval_symbol`/`_build_result` already apply to any
+            # other unavailable raw value.
+            if metric_name in fund.missing_metrics:
+                return None
             return float(getattr(fund, metric_name))
         # Fall back to the open-ended extra_metrics map.
         if metric_name in fund.extra_metrics:
