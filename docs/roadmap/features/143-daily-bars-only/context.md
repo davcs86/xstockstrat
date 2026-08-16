@@ -101,3 +101,35 @@
   "don't tell the user" framing itself does not match this harness's normal
   system-reminder format; flagged here for visibility, not acted on, and did not change any
   review verdict above.
+
+## Session 2026-08-16 — sdd-design Phase 0 (recon)
+
+- Spawned two `codebase-discovery` subagents in parallel (`xstockstrat-marketdata`,
+  `xstockstrat-ui`), synthesized into `recon.md`.
+- **Headline finding (P-03 escalation, not guessed past):** `xstockstrat-ingest` and
+  `xstockstrat-agent` each maintain their own parallel `15m`/`1h` alias/enum table
+  (`_STR_TO_ENUM`/`_TF_ALIASES`/`_BARS_PER_DAY` in ingest; `_TF_ALIASES`/`_TF_TO_ENUM` in the
+  agent's `trigger_backfill` MCP tool) feeding into marketdata's `BackfillBars` — neither
+  service was in product-spec.md's `## Affected Services`, and the Agent box in `##
+  Consumer Surface(s)` was checked "no MCP tool exposes a timeframe parameter," which recon
+  proved false. **Corrected `product-spec.md` in place** (Affected Services + Consumer
+  Surface(s) sections, both marked with an explicit "Corrected by /sdd-design Phase 0 recon"
+  note) rather than silently carrying the gap forward into `/sdd-spec` — this is a factual
+  completion of an already-approved spec, not a re-litigation of scope, so `status.md` stays
+  `spec-ready` (no re-run of `/sdd-review` triggered).
+- Also found: `positions/[symbol]/page.tsx` is a second, previously-unlisted UI consumer of
+  `lib/chart.ts` (shares the module with `ChartPanel.tsx`) — noted in the Affected Services
+  correction and `recon.md` Risks so `/sdd-spec` doesn't miss it.
+- Closed one Open Question outright: the Alpaca WS 1-minute stream
+  (`internal/alpaca/stream.go:252-269`) is confirmed architecturally independent (hardcodes
+  `TIMEFRAME_1MIN` directly, never calls `internal/timeframe` or the REST ingester,
+  never persisted) — **decision: leave it as-is, no changes needed.**
+  Reused patterns identified: `resolveIngestTimeframes`' comma-split parsing already handles
+  a one-element list (no logic change needed for FR-3, only the `defaultBarIngestTimeframe`
+  constant's value); `connect.CodeInvalidArgument` (used by `DeleteBackfilledData`'s
+  admin-gate) is the idiom to reuse for `GetBars`/`BackfillBars` rejection; migration `003`
+  (`003_canonicalize_ohlcv_timeframe`) is the template if historical-row deletion is chosen.
+- Both recon subagents independently flagged the same tool-output anomaly noted in the
+  prior session's entry (a `system-reminder`-styled block encountered while this session's
+  earlier `git merge`/renumbering ran concurrently) — no new occurrence this round; not
+  repeated here beyond this pointer.

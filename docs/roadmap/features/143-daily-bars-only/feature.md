@@ -40,8 +40,10 @@ re-run /sdd-spec if the registry changes.)_
 |---|---|
 | `xstockstrat-marketdata` service owner | OHLCV ingestion integrity, TimescaleDB hypertable partitioning, Alpaca feed idempotency |
 | `xstockstrat-ui` service owner | Trading UI correctness, Connect-RPC call safety |
+| `xstockstrat-ingest` service owner **(added by recon)** | Signal normalization correctness, idempotent ingestion — its own timeframe alias tables (`_STR_TO_ENUM`/`_TF_ALIASES`) proxy to `BackfillBars` |
+| `xstockstrat-agent` service owner **(added by recon)** | MCP tool contract stability — `trigger_backfill`'s `timeframe` param/docstring |
 | Proto Reviewer | Field number uniqueness, backward compatibility (no field removal or type change without deprecation), naming conventions — applies if `Timeframe` enum values are touched (deprecation comments, request-time rejection) |
-| Platform Lead | Cross-service architecture — this spans marketdata's RPC surface, config, and the UI in one behavior removal |
+| Platform Lead | Cross-service architecture — this spans marketdata's RPC surface, config, ingest, the agent, and the UI in one behavior removal |
 
 ## Next Action
 

@@ -64,19 +64,38 @@ requestable (root `CLAUDE.md` marketdata service registry note, `services/xstock
 
 ## Affected Services
 
+**Corrected by `/sdd-design` Phase 0 recon (2026-08-16)** — the original list below omitted
+two services that each maintain their own parallel timeframe alias/enum table feeding into
+`BackfillBars`; see `recon.md` § Risks and `context.md` for the finding. Left uncorrected,
+`15m`/`1h` requests could still reach a newly-rejecting `BackfillBars` through these paths, or
+(worse) the `trigger_backfill` MCP tool could remain an undetected back door to a timeframe
+the rest of the platform no longer supports.
+
 - `xstockstrat-marketdata` — `GetBars`/`BackfillBars` RPC handlers, `StartBarIngestPoller`/
   `ingestRecentBars`, `internal/timeframe` canonicalization, config keys, migrations (if the
   Open Question below resolves toward deleting historical non-1d rows)
-- `xstockstrat-ui` — `/trader` `ChartPanel.tsx`/`lib/chart.ts`, `/insights/backfills`
+- `xstockstrat-ui` — `/trader` `ChartPanel.tsx`/`lib/chart.ts`/`positions/[symbol]/page.tsx`
+  (recon found this second consumer of `lib/chart.ts` not named in the original draft),
+  `/insights/backfills`
 - `packages/proto` — `Timeframe` enum deprecation comments only (no field/value removal)
+- `xstockstrat-ingest` **(added by recon)** — `app/handlers/servicer.py`'s `_STR_TO_ENUM`/
+  `_TF_ALIASES`, `app/repositories/backfill_chunks.py`'s `_BARS_PER_DAY`, all of which
+  validate/alias a timeframe string before proxying to marketdata's `BackfillBars`
+- `xstockstrat-agent` **(added by recon)** — `app/tools.py`'s `trigger_backfill` MCP tool
+  (`timeframe` param, default `"1d"`, docstring currently advertises `15m`/`1h` as valid) and
+  `app/client.py`'s own `_TF_ALIASES`/`_TF_TO_ENUM`
 
 ## Consumer Surface(s)
 
-- [x] **UI** — `xstockstrat-ui` segments: `/trader` (chart panel timeframe selector loses
-  `15Min`/`1Hour`), `/insights` (`/insights/backfills` timeframe dropdown loses `15 min`/
-  `1 hour`)
-- [ ] **Agent** — no `xstockstrat-agent` MCP tool exposes a timeframe parameter for OHLCV bars
-  today (confirm at `/sdd-spec` time)
+**Corrected by `/sdd-design` Phase 0 recon (2026-08-16)** — the original Agent box below was
+checked "no MCP tool exposes a timeframe parameter"; recon found this false.
+
+- [x] **UI** — `xstockstrat-ui` segments: `/trader` (chart panel timeframe selector **and**
+  the position-detail page's own selector lose `15Min`/`1Hour`), `/insights`
+  (`/insights/backfills` timeframe dropdown loses `15 min`/`1 hour`)
+- [x] **Agent** — `xstockstrat-agent` MCP tool `trigger_backfill`: its `timeframe` param
+  (`app/tools.py:860`) and docstring (`:868`, currently `"one of
+  15m/15Min/1h/1Hour/1d/1Day"`) narrow to `1d`-only
 - [ ] **None**
 
 ## Proto Contract Changes
